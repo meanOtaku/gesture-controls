@@ -209,11 +209,13 @@ Do not communicate directly with the headphones.
 Use the local JSON UDP stream provided by the tool.
 
 Pin the automatic launcher integration to upstream release `v2.2.0`. On macOS
-and Windows, `npm start` must download the official release only when no cached
-or explicitly configured tracker executable exists, verify its committed
-SHA-256 digest before extraction, run the read-only `probe` preflight, and
-launch it in `bridge --port 4242` mode only when a verified tracker is present.
-Keep downloaded tools outside version control. Support
+and Windows x64, `npm start` must download the official release only when no
+valid cached or explicitly configured tracker executable exists, verify the
+committed archive and executable SHA-256 digests, extract into a temporary
+directory, and atomically promote a completion-marked installation. Revalidate
+the manifest and executable digest on every cached use. Run the read-only
+`probe` preflight and launch `bridge --port 4242` only when a verified tracker
+is present. Keep downloaded tools outside version control. Support
 `SONY_HEAD_TRACKER_BIN` as an explicit executable override.
 
 Default JSON port:
