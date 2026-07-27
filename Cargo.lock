@@ -1198,7 +1198,6 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "serde_json",
- "sony-head-tracker-sys",
  "spatial-protocol",
  "thiserror 2.0.19",
  "tokio",
@@ -2798,13 +2797,6 @@ dependencies = [
  "wasm-bindgen",
  "web-sys",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "sony-head-tracker-sys"
-version = "0.1.0"
-dependencies = [
- "cc",
 ]
 
 [[package]]

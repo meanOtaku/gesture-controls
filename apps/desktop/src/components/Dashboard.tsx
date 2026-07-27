@@ -1,38 +1,33 @@
-import type { HeadTrackerRuntimeStatus, HeadTrackerStatus } from "../protocol/events";
+import type { HeadTrackerStatus } from "../protocol/events";
 
 interface DashboardProps {
   status: HeadTrackerStatus | null;
-  runtime: HeadTrackerRuntimeStatus;
-  onRecenter: () => void;
 }
 
 const number = (value: number, digits = 2) => value.toFixed(digits);
 const vector = (values: readonly number[] | null, digits = 3) =>
   values ? `[${values.map((value) => number(value, digits)).join(", ")}]` : "Unavailable";
 
-export function Dashboard({ status, runtime, onRecenter }: DashboardProps) {
-  const connected = status?.connected === true || runtime.state === "connected";
-  const connectionLabel = connected ? "Connected" : runtime.message;
-  const canRecenter = connected && runtime.canRecenter;
-
+export function Dashboard({ status }: DashboardProps) {
+  const connected = status?.connected === true;
   return (
     <main className="shell">
       <header className="hero">
         <div>
           <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Head tracker telemetry</h1>
-          <p className="subtitle">Sony orientation data, captured inside this app and ready for calibration.</p>
+          <p className="subtitle">Sony orientation data, received locally and ready for calibration.</p>
         </div>
         <div className={`connection ${connected ? "online" : "offline"}`}>
           <span className="pulse" />
-          {connectionLabel}
+          {connected ? "Connected" : "Waiting for Sony tracker"}
         </div>
       </header>
 
       <section className="device-card">
         <div>
           <span className="label">Active device</span>
-          <strong>{status?.device ?? runtime.device ?? "No device detected"}</strong>
+          <strong>{status?.device ?? "No device detected"}</strong>
         </div>
         <div className="rate">
           <span>{status ? number(status.packetsPerSecond, 1) : "—"}</span>
@@ -54,18 +49,14 @@ export function Dashboard({ status, runtime, onRecenter }: DashboardProps) {
         <VectorRow label="Gyroscope" value={vector(status?.gyroscope ?? null)} />
       </section>
 
-      <section className="settings tracker-runtime">
+      <section className="settings">
         <div>
-          <p className="eyebrow">Tracker runtime</p>
-          <h2>Built-in Sony tracker</h2>
+          <p className="eyebrow">Settings</p>
+          <h2>Sony UDP input</h2>
         </div>
-        <div className="runtime-state">
-          <span className="label">State</span>
-          <strong>{runtime.state}</strong>
-          <small>{runtime.message}</small>
-        </div>
-        <button type="button" onClick={onRecenter} disabled={!canRecenter}>Recenter</button>
-        <p className="hint">Tauri discovers and manages the headset directly. No separate tracker application is required.</p>
+        <label>Host<input value="127.0.0.1" readOnly /></label>
+        <label>JSON port<input value="4243" readOnly /></label>
+        <p className="hint">Loopback-only by design. Start sony-head-tracker with JSON output enabled.</p>
       </section>
     </main>
   );

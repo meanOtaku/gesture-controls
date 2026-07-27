@@ -1,10 +1,5 @@
 [workspace]
-members = [
-  "apps/desktop/src-tauri",
-  "crates/protocol",
-  "crates/head-tracking",
-  "crates/sony-head-tracker-sys",
-]
+members = ["apps/desktop/src-tauri", "crates/protocol", "crates/head-tracking"]
 resolver = "2"
 
 [workspace.package]

@@ -27,9 +27,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "resources": {
-      "../../../third_party/sony-head-tracker/LICENSE": "licenses/sony-head-tracker-MIT.txt"
-    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -38,9 +35,6 @@
       "icons/icon.ico"
     ],
     "category": "Utility",
-    "shortDescription": "Control spatial interactions with Sony head tracking and wearable gestures.",
-    "macOS": {
-      "minimumSystemVersion": "14.0"
-    }
+    "shortDescription": "Control spatial interactions with Sony head tracking and wearable gestures."
   }
 }
