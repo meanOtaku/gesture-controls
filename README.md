@@ -21,12 +21,10 @@ npm start
 `npm start` runs `scripts/run-system.mjs`, which:
 
 1. Selects the committed upstream v2.2.0 prebuild for macOS universal or Windows x64.
-2. Runs the tracker's read-only `probe`; if no verified sensor is available, it
-   keeps the diagnostics visible and does not start Tauri.
-3. Starts the external tracker in `bridge --port 4242` mode; its protocol-v2
-   JSON stream is therefore sent to `127.0.0.1:4243`.
-4. Starts the Tauri application.
-5. Stops both process trees when either application exits or the launcher receives Ctrl+C.
+2. Opens the native Sony Head Tracker UI, which discovers the sensor and emits
+   its protocol-v2 JSON stream on `127.0.0.1:4243` while open.
+3. Starts the Tauri application.
+4. Stops both process trees when either application exits or the launcher receives Ctrl+C.
 
 The tracker is deliberately not compiled into, bundled with, or owned by the Tauri binary. The launcher is only an operator convenience around two independent processes.
 
@@ -34,14 +32,15 @@ To use an existing or custom tracker build instead of the committed prebuild:
 
 ```bash
 # macOS/Linux shell
-SONY_HEAD_TRACKER_BIN=/absolute/path/to/sony-head-tracker-macos npm start
+SONY_HEAD_TRACKER_BIN=/absolute/path/to/SonyHeadTracker.app/Contents/MacOS/SonyHeadTracker npm start
 
 # Windows PowerShell
 $env:SONY_HEAD_TRACKER_BIN = "C:\absolute\path\sony-head-tracker.exe"
 npm start
 ```
 
-The override must be an executable that supports `bridge --port 4242`.
+The override must open the Sony Head Tracker UI and stream JSON when launched
+without command-line arguments.
 
 ## Current capabilities
 
@@ -84,7 +83,8 @@ head-tracking/             compatibility tests, sample sender, and reference wor
 ### macOS
 
 - Requires macOS 14 or newer for upstream Sony Head Tracker.
-- Grant Input Monitoring to `assets/pre-builds/sony-head-tracker-v2.2.0-macos-universal/sony-head-tracker-macos`, then stop and rerun `npm start`.
+- Grant Input Monitoring to Sony Head Tracker from the committed
+  `SonyHeadTracker.app`, then stop and rerun `npm start`.
 - Tracker startup requires no download or build step.
 
 ### Windows x64

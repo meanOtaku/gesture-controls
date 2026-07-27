@@ -191,7 +191,7 @@ It receives head orientation from `sony-head-tracker`, receives watch data over 
 
 Sony Head Tracker remains an independent executable rather than being compiled
 into the Tauri binary. A repository launcher must provide one-command operation:
-it starts the external tracker bridge and Tauri together, and stops both process
+it starts the native Sony Head Tracker UI and Tauri together, and stops both process
 trees on exit.
 
 ---
@@ -211,8 +211,8 @@ Use the local JSON UDP stream provided by the tool.
 Pin the launcher integration to upstream release `v2.2.0`. Keep the official
 macOS universal and Windows x64 prebuilt executables under `assets/pre-builds/`
 and run the matching committed executable directly, without a download, cache,
-or extraction step. Run the read-only `probe` preflight and launch
-`bridge --port 4242` only when a verified tracker is present. Support
+or extraction step. Launch the native UI without command-line arguments so it
+can discover or repair the tracker and stream data while open. Support
 `SONY_HEAD_TRACKER_BIN` as an explicit executable override.
 
 Default JSON port:
@@ -1685,8 +1685,8 @@ Implement:
 * Display quaternion
 * Display packet rate
 * Detect reset-counter changes
-* One-command launcher for the separate Sony bridge and Tauri application
-* Pinned, SHA-256-verified automatic tracker setup on macOS and Windows x64
+* One-command launcher for the separate Sony Head Tracker UI and Tauri application
+* Committed Sony Head Tracker UI prebuilds for macOS universal and Windows x64
 
 Success criterion:
 

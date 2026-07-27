@@ -8,7 +8,7 @@ Run the whole development system from the repository root with:
 npm start
 ```
 
-The launcher selects the committed upstream v2.2.0 prebuild for the current host, then starts the external bridge and Tauri together. It does not compile Sony HID code into the Tauri binary.
+The launcher selects the committed upstream v2.2.0 UI prebuild for the current host, then starts the native Sony Head Tracker UI and Tauri together. It does not compile Sony HID code into the Tauri binary.
 
 ## Contents
 
@@ -27,7 +27,7 @@ npm run tauri -- dev
 python3 head-tracking/scripts/send_sample.py
 ```
 
-The simulator is development-only. Real production samples come from the separate upstream bridge.
+The simulator is development-only. Real production samples come from the separate upstream UI process.
 
 ## Boundary
 

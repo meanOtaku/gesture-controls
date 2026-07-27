@@ -38,22 +38,11 @@ The repository includes the official Sony Head Tracker v2.2.0 prebuilds under:
 
   assets/pre-builds/
 
-The launcher selects the macOS universal or Windows x64 executable directly.
+The launcher selects the macOS universal or Windows x64 UI executable directly.
 There is no download, cache, extraction, or separate setup command.
-The launcher runs the tracker as:
-
-  probe
-
-and only after that succeeds:
-
-  bridge --port 4242
-
-The upstream bridge emits OpenTrack data on port 4242 and protocol-v2 JSON on
-port 4243. Tauri listens only on 127.0.0.1:4243.
-
-The read-only probe must find a verified Android Head Tracker collection before
-Tauri is started. Failed probe diagnostics remain visible in the terminal rather
-than being reduced to the dashboard's generic waiting state.
+The UI is started without command-line arguments. While open, it discovers the
+headset, displays live diagnostics, emits OpenTrack data on port 4242, and emits
+protocol-v2 JSON on port 4243. Tauri listens only on 127.0.0.1:4243.
 
 Ctrl+C, closing Tauri, or a tracker failure causes the launcher to stop both
 process trees. Sony Head Tracker remains a separate executable; it is not linked
@@ -63,21 +52,20 @@ into or bundled inside the Tauri binary.
 2. OPTIONAL TRACKER OVERRIDE
 ----------------------------
 
-Set SONY_HEAD_TRACKER_BIN to use an existing compatible CLI instead of the
+Set SONY_HEAD_TRACKER_BIN to use an existing compatible UI executable instead of the
 committed prebuild.
 
 macOS:
 
-  SONY_HEAD_TRACKER_BIN=/absolute/path/to/sony-head-tracker-macos npm start
+  SONY_HEAD_TRACKER_BIN=/absolute/path/to/SonyHeadTracker.app/Contents/MacOS/SonyHeadTracker npm start
 
 Windows PowerShell:
 
   $env:SONY_HEAD_TRACKER_BIN = "C:\absolute\path\sony-head-tracker.exe"
   npm start
 
-Paths containing spaces are supported. The executable must accept:
-
-  bridge --port 4242
+Paths containing spaces are supported. The executable must open its UI and begin
+streaming when launched without command-line arguments.
 
 
 3. macOS SETUP
@@ -96,14 +84,19 @@ Then run:
 
   npm start
 
-On first tracker launch:
+Before the first launcher run, right-click this app and choose Open to approve
+the ad-hoc-signed upstream build:
+
+  assets/pre-builds/sony-head-tracker-v2.2.0-macos-universal/SonyHeadTracker.app
+
+Then run npm start. On first tracker launch:
 
 1. Open System Settings -> Privacy & Security -> Input Monitoring.
-2. Enable assets/pre-builds/sony-head-tracker-v2.2.0-macos-universal/sony-head-tracker-macos.
+2. Enable Sony Head Tracker.
 3. Fully stop the launcher with Ctrl+C.
 4. Run npm start again.
 
-The committed executable stays at a stable repository path, so the permission
+The committed UI executable stays at a stable repository path, so the permission
 does not normally need to be granted again. If a custom SONY_HEAD_TRACKER_BIN is
 used, grant permission to that executable instead.
 
@@ -246,7 +239,7 @@ If Tauri says Waiting for Sony tracker:
 - Read the Sony Head Tracker output in the same terminal.
 - Confirm the tracker reports a verified device and live samples.
 - Confirm no other process is bound to UDP port 4243.
-- Confirm the bridge uses base port 4242; JSON is emitted on 4243.
+- Confirm the Sony Head Tracker UI is open; it emits JSON on port 4243.
 - Confirm the packet schema is protocol version 2.
 - On macOS, verify Input Monitoring for the stable tracker executable.
 - On Windows, run upstream Repair Tracker if the sensor node is absent.

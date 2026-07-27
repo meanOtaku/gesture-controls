@@ -19,9 +19,9 @@ The external upstream process owns HID discovery, descriptor validation,
 permissions, recovery, orientation, and UDP serialization. The Tauri application
 does not import IOHID/Windows HID APIs or link Sony acquisition code.
 
-`scripts/run-system.mjs` is an operator launcher, not a provider. It performs a
-verified setup and read-only probe, then starts the two independent process trees
-and cleans them up together.
+`scripts/run-system.mjs` is an operator launcher, not a provider. It selects the
+committed native UI prebuild, starts it alongside Tauri, and cleans both process
+trees up together.
 
 ## Provider boundary
 

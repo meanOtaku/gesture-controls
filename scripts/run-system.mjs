@@ -8,11 +8,8 @@ const RELEASE_VERSION = "2.2.0";
 
 export function bundledTrackerPath(prebuildsRoot, platform, arch) {
   if (platform === "darwin" && (arch === "arm64" || arch === "x64")) {
-    return join(
-      prebuildsRoot,
-      `sony-head-tracker-v${RELEASE_VERSION}-macos-universal`,
-      "sony-head-tracker-macos",
-    );
+    const root = join(prebuildsRoot, `sony-head-tracker-v${RELEASE_VERSION}-macos-universal`);
+    return join(root, "SonyHeadTracker.app", "Contents", "MacOS", "SonyHeadTracker");
   }
   if (platform === "win32" && arch === "x64") {
     return join(
@@ -28,11 +25,7 @@ const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_PREBUILDS_ROOT = join(PROJECT_ROOT, "assets", "pre-builds");
 
 export function buildTrackerInvocation(executable) {
-  return { command: executable, args: ["bridge", "--port", "4242"] };
-}
-
-export function buildProbeInvocation(executable) {
-  return { command: executable, args: ["probe"] };
+  return { command: executable, args: [] };
 }
 
 async function isExecutable(path, platform) {
@@ -56,7 +49,7 @@ export async function ensureTracker({
 
   if (!override && platform === "darwin") await chmod(executable, 0o755).catch(() => {});
   if (!(await isExecutable(executable, platform))) {
-    const source = override ? "SONY_HEAD_TRACKER_BIN" : "Bundled Sony Head Tracker";
+    const source = override ? "SONY_HEAD_TRACKER_BIN" : "Bundled Sony Head Tracker UI";
     throw new Error(`${source} is missing or not executable: ${executable}`);
   }
   return executable;
@@ -188,26 +181,14 @@ export function superviseChildren({
 export async function runSystem({
   platform = process.platform,
   ensure = ensureTracker,
-  run = runCommand,
   spawnChild = spawn,
 } = {}) {
   const executable = await ensure({ platform });
-  const probeSpec = buildProbeInvocation(executable);
   const trackerSpec = buildTrackerInvocation(executable);
   const tauriSpec = tauriInvocation(platform);
   const detached = platform !== "win32";
 
-  console.log("[system] Checking for a verified Sony head-tracker sensor");
-  try {
-    await run(probeSpec.command, probeSpec.args);
-  } catch (error) {
-    throw new Error(
-      `Sony tracker preflight failed; Tauri was not started: ${error.message}`,
-      { cause: error },
-    );
-  }
-
-  console.log(`[system] Starting external Sony Head Tracker v${RELEASE_VERSION}`);
+  console.log(`[system] Starting Sony Head Tracker v${RELEASE_VERSION} UI`);
   const tracker = spawnChild(trackerSpec.command, trackerSpec.args, {
     stdio: "inherit",
     detached,
