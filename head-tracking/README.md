@@ -8,7 +8,7 @@ Run the whole development system from the repository root with:
 npm start
 ```
 
-The launcher downloads and verifies the pinned upstream v2.2.0 release when necessary, then starts the external bridge and Tauri together. It does not compile Sony HID code into the Tauri binary.
+The launcher selects the committed upstream v2.2.0 prebuild for the current host, then starts the external bridge and Tauri together. It does not compile Sony HID code into the Tauri binary.
 
 ## Contents
 

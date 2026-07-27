@@ -47,9 +47,6 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
       - run: npm ci
       - run: npm run test:launcher
-      - name: Verify pinned Sony tracker download and extraction
-        if: runner.os != 'Linux'
-        run: npm run setup:sony
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

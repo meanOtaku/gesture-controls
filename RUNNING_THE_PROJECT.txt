@@ -34,15 +34,12 @@ Run the complete system:
 
   npm start
 
-The first macOS or Windows x64 run downloads Sony Head Tracker v2.2.0 from its
-official GitHub release, verifies its SHA-256 checksum, and extracts it under:
+The repository includes the official Sony Head Tracker v2.2.0 prebuilds under:
 
-  .tools/sony-head-tracker/v2.2.0/
+  assets/pre-builds/
 
-That directory is ignored by Git. Setup extracts to a temporary directory,
-verifies both archive and executable digests, writes a completion manifest, and
-atomically promotes the installation. Later runs revalidate the manifest and
-executable SHA-256 before reuse.
+The launcher selects the macOS universal or Windows x64 executable directly.
+There is no download, cache, extraction, or separate setup command.
 The launcher runs the tracker as:
 
   probe
@@ -66,8 +63,8 @@ into or bundled inside the Tauri binary.
 2. OPTIONAL TRACKER OVERRIDE
 ----------------------------
 
-Set SONY_HEAD_TRACKER_BIN to use an existing compatible CLI instead of the pinned
-automatic download.
+Set SONY_HEAD_TRACKER_BIN to use an existing compatible CLI instead of the
+committed prebuild.
 
 macOS:
 
@@ -102,13 +99,13 @@ Then run:
 On first tracker launch:
 
 1. Open System Settings -> Privacy & Security -> Input Monitoring.
-2. Enable the downloaded sony-head-tracker-macos executable.
+2. Enable assets/pre-builds/sony-head-tracker-v2.2.0-macos-universal/sony-head-tracker-macos.
 3. Fully stop the launcher with Ctrl+C.
 4. Run npm start again.
 
-The executable stays at a stable path under .tools so the permission does not
-normally need to be granted again. If a custom SONY_HEAD_TRACKER_BIN is used,
-grant permission to that executable instead.
+The committed executable stays at a stable repository path, so the permission
+does not normally need to be granted again. If a custom SONY_HEAD_TRACKER_BIN is
+used, grant permission to that executable instead.
 
 If no verified tracker appears:
 
@@ -226,21 +223,19 @@ Python compatibility tests:
   uv run --directory head-tracking --with pytest pytest -q
 
 
-8. DOWNLOAD SECURITY AND OFFLINE USE
-------------------------------------
+8. BUNDLED TRACKER ASSETS AND OFFLINE USE
+-----------------------------------------
 
 Pinned release:
 
   NicholasSlattery/sony-head-tracker v2.2.0
 
-The launcher contains the official macOS and Windows x64 archive URLs plus the
-expected archive and executable SHA-256 digests. A mismatched download or cached
-executable is rejected. Extraction is staged and promoted atomically only after
-verification. The first automatic setup requires access to GitHub. A valid
-cached installation works offline and is rehashed on every npm start.
+The official macOS universal and Windows x64 prebuilt executables, documentation,
+and MIT license are committed under assets/pre-builds. The launcher performs no
+network request or extraction, so the tracker is available on the first offline
+run after cloning the repository.
 
-For a fully offline first run, place a trusted compatible executable on disk and
-set SONY_HEAD_TRACKER_BIN.
+To use a separately reviewed compatible executable, set SONY_HEAD_TRACKER_BIN.
 
 
 9. CONNECTION TROUBLESHOOTING

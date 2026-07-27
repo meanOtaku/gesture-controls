@@ -1,34 +1,31 @@
-import { createHash } from "node:crypto";
-import { access, chmod, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { access, chmod } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 
 const RELEASE_VERSION = "2.2.0";
-const RELEASE_BASE =
-  `https://github.com/NicholasSlattery/sony-head-tracker/releases/download/v${RELEASE_VERSION}`;
 
-export const RELEASES = Object.freeze({
-  version: RELEASE_VERSION,
-  darwin: Object.freeze({
-    url: `${RELEASE_BASE}/sony-head-tracker-v${RELEASE_VERSION}-macos-universal.zip`,
-    sha256: "9a3d0418a9bda4073a1312ce0622264b6cef7989cd0050a67361e44634eb2d2e",
-    executableSha256: "396897fc98415992c816952fa47ad59b2074a7b69b87ff1991083b94cd9faf93",
-  }),
-  win32: Object.freeze({
-    url: `${RELEASE_BASE}/sony-head-tracker-v${RELEASE_VERSION}-windows-x64.zip`,
-    sha256: "ff75f6b2bae17535c6ac8a2860129ee2b27e710972423efd64655f9d2488598e",
-    executableSha256: "1a6c308e2c02f1039d837311eba81d1f562d0b60ec66e6f71e1b7933f2e46a55",
-  }),
-});
-
-export function verifySha256(bytes, expected) {
-  const actual = createHash("sha256").update(bytes).digest("hex");
-  if (actual !== expected) {
-    throw new Error(`Sony Head Tracker checksum mismatch: expected ${expected}, received ${actual}`);
+export function bundledTrackerPath(prebuildsRoot, platform, arch) {
+  if (platform === "darwin" && (arch === "arm64" || arch === "x64")) {
+    return join(
+      prebuildsRoot,
+      `sony-head-tracker-v${RELEASE_VERSION}-macos-universal`,
+      "sony-head-tracker-macos",
+    );
   }
+  if (platform === "win32" && arch === "x64") {
+    return join(
+      prebuildsRoot,
+      `sony-head-tracker-v${RELEASE_VERSION}-windows-x64`,
+      "sony-head-tracker.exe",
+    );
+  }
+  throw new Error(`No bundled Sony Head Tracker is available for ${platform}/${arch}`);
 }
+
+const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const DEFAULT_PREBUILDS_ROOT = join(PROJECT_ROOT, "assets", "pre-builds");
 
 export function buildTrackerInvocation(executable) {
   return { command: executable, args: ["bridge", "--port", "4242"] };
@@ -47,58 +44,22 @@ async function isExecutable(path, platform) {
   }
 }
 
-async function exists(path) {
-  try {
-    await access(path, fsConstants.F_OK);
-    return true;
-  } catch {
-    return false;
+export async function ensureTracker({
+  platform = process.platform,
+  arch = process.arch,
+  override = process.env.SONY_HEAD_TRACKER_BIN,
+  prebuildsRoot = DEFAULT_PREBUILDS_ROOT,
+} = {}) {
+  const executable = override
+    ? resolve(override)
+    : bundledTrackerPath(prebuildsRoot, platform, arch);
+
+  if (!override && platform === "darwin") await chmod(executable, 0o755).catch(() => {});
+  if (!(await isExecutable(executable, platform))) {
+    const source = override ? "SONY_HEAD_TRACKER_BIN" : "Bundled Sony Head Tracker";
+    throw new Error(`${source} is missing or not executable: ${executable}`);
   }
-}
-
-export async function findTrackerExecutable(root, platform) {
-  const candidates = platform === "darwin"
-    ? [
-        join(
-          root,
-          `sony-head-tracker-v${RELEASE_VERSION}-macos-universal`,
-          "sony-head-tracker-macos",
-        ),
-        join(root, "sony-head-tracker-macos"),
-      ]
-    : platform === "win32"
-      ? [join(root, "sony-head-tracker.exe")]
-      : [];
-
-  for (const candidate of candidates) {
-    if (await exists(candidate)) return candidate;
-  }
-  return null;
-}
-
-async function sha256File(path) {
-  return createHash("sha256").update(await readFile(path)).digest("hex");
-}
-
-export async function verifyCachedTracker(root, platform, releases = RELEASES) {
-  const release = releases[platform];
-  const executable = await findTrackerExecutable(root, platform);
-  if (!release || !executable) return null;
-
-  try {
-    const manifest = JSON.parse(await readFile(join(root, ".verified.json"), "utf8"));
-    if (
-      manifest.version !== releases.version
-      || manifest.archiveSha256 !== release.sha256
-      || manifest.executableSha256 !== release.executableSha256
-      || await sha256File(executable) !== release.executableSha256
-    ) {
-      return null;
-    }
-    return executable;
-  } catch {
-    return null;
-  }
+  return executable;
 }
 
 function runCommand(command, args, options = {}) {
@@ -110,163 +71,6 @@ function runCommand(command, args, options = {}) {
       else reject(new Error(`${command} failed (${signal ?? `exit ${code}`})`));
     });
   });
-}
-
-async function extractArchive(archive, destination, platform) {
-  if (platform === "darwin") {
-    await runCommand("/usr/bin/ditto", ["-x", "-k", archive, destination]);
-    return;
-  }
-  if (platform === "win32") {
-    const powershell = join(
-      process.env.SystemRoot ?? "C:\\Windows",
-      "System32",
-      "WindowsPowerShell",
-      "v1.0",
-      "powershell.exe",
-    );
-    const escapedArchive = archive.replaceAll("'", "''");
-    const escapedDestination = destination.replaceAll("'", "''");
-    await runCommand(powershell, [
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      `Expand-Archive -LiteralPath '${escapedArchive}' -DestinationPath '${escapedDestination}' -Force`,
-    ]);
-    return;
-  }
-  throw new Error("Automatic Sony Head Tracker setup supports macOS and Windows x64 only");
-}
-
-async function downloadRelease(release) {
-  console.log(`[system] Downloading Sony Head Tracker v${RELEASE_VERSION}...`);
-  const response = await fetch(release.url, { redirect: "follow" });
-  if (!response.ok) {
-    throw new Error(`Sony Head Tracker download failed: HTTP ${response.status}`);
-  }
-  const bytes = Buffer.from(await response.arrayBuffer());
-  verifySha256(bytes, release.sha256);
-  return bytes;
-}
-
-async function acquireInstallLock(toolsRoot) {
-  const lockRoot = `${toolsRoot}.lock`;
-  await mkdir(dirname(toolsRoot), { recursive: true });
-  const deadline = Date.now() + 30_000;
-
-  while (Date.now() < deadline) {
-    try {
-      await mkdir(lockRoot);
-      await writeFile(join(lockRoot, "owner.json"), JSON.stringify({ pid: process.pid }), { mode: 0o600 });
-      return async () => rm(lockRoot, { recursive: true, force: true });
-    } catch (error) {
-      if (error?.code !== "EEXIST") throw error;
-      try {
-        const owner = JSON.parse(await readFile(join(lockRoot, "owner.json"), "utf8"));
-        process.kill(owner.pid, 0);
-      } catch (ownerError) {
-        if (ownerError?.code === "ESRCH") {
-          await rm(lockRoot, { recursive: true, force: true });
-          continue;
-        }
-        if (ownerError?.code === "ENOENT" || ownerError instanceof SyntaxError) {
-          const lockStats = await stat(lockRoot).catch(() => null);
-          if (!lockStats) continue;
-          const ageMs = Date.now() - lockStats.mtimeMs;
-          if (ageMs > 10_000) {
-            await rm(lockRoot, { recursive: true, force: true });
-            continue;
-          }
-        }
-      }
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
-    }
-  }
-  throw new Error("Timed out waiting for Sony Head Tracker setup lock");
-}
-
-export async function ensureTracker({
-  platform = process.platform,
-  override = process.env.SONY_HEAD_TRACKER_BIN,
-  toolsRoot = resolve(".tools", "sony-head-tracker", `v${RELEASE_VERSION}`),
-} = {}) {
-  if (override) {
-    const executable = resolve(override);
-    if (!(await isExecutable(executable, platform))) {
-      throw new Error(`SONY_HEAD_TRACKER_BIN is not executable: ${executable}`);
-    }
-    return executable;
-  }
-
-  const release = RELEASES[platform];
-  if (!release) {
-    throw new Error(
-      "Direct Sony tracking is unavailable on Linux. Use the UDP sample sender or set SONY_HEAD_TRACKER_BIN.",
-    );
-  }
-
-  const existing = await verifyCachedTracker(toolsRoot, platform);
-  if (existing) {
-    if (platform === "darwin") await chmod(existing, 0o755);
-    if (!(await isExecutable(existing, platform))) {
-      throw new Error(`Cached Sony Head Tracker is not executable: ${existing}`);
-    }
-    return existing;
-  }
-
-  const releaseLock = await acquireInstallLock(toolsRoot);
-  try {
-    const concurrentInstall = await verifyCachedTracker(toolsRoot, platform);
-    if (concurrentInstall) {
-      if (platform === "darwin") await chmod(concurrentInstall, 0o755);
-      return concurrentInstall;
-    }
-
-    await rm(toolsRoot, { recursive: true, force: true });
-    await mkdir(dirname(toolsRoot), { recursive: true });
-    const stagingRoot = await mkdtemp(`${toolsRoot}.install-`);
-    const archive = join(stagingRoot, `sony-head-tracker-v${RELEASE_VERSION}.zip`);
-
-    try {
-    const bytes = await downloadRelease(release);
-    await writeFile(archive, bytes, { mode: 0o600 });
-    await extractArchive(archive, stagingRoot, platform);
-    await rm(archive, { force: true });
-
-    const executable = await findTrackerExecutable(stagingRoot, platform);
-    if (!executable) {
-      throw new Error("Downloaded Sony Head Tracker archive did not contain the expected executable");
-    }
-    if (platform === "darwin") await chmod(executable, 0o755);
-    if (await sha256File(executable) !== release.executableSha256) {
-      throw new Error("Downloaded Sony Head Tracker executable checksum mismatch");
-    }
-    if (!(await isExecutable(executable, platform))) {
-      throw new Error(`Downloaded Sony Head Tracker is not executable: ${executable}`);
-    }
-
-    await writeFile(join(stagingRoot, ".verified.json"), JSON.stringify({
-      version: RELEASE_VERSION,
-      archiveSha256: release.sha256,
-      executableSha256: release.executableSha256,
-    }), { mode: 0o600 });
-
-      try {
-        await rename(stagingRoot, toolsRoot);
-        const installed = await verifyCachedTracker(toolsRoot, platform);
-        if (!installed) throw new Error("Installed Sony Head Tracker failed cache verification");
-        return installed;
-      } catch (error) {
-        const winner = await verifyCachedTracker(toolsRoot, platform);
-        if (winner) return winner;
-        throw error;
-      }
-    } finally {
-      await rm(stagingRoot, { recursive: true, force: true });
-    }
-  } finally {
-    await releaseLock();
-  }
 }
 
 function tauriInvocation(platform) {
@@ -419,12 +223,7 @@ export async function runSystem({
 
 const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : "";
 if (invokedPath === import.meta.url) {
-  const action = process.argv.includes("--setup-only")
-    ? ensureTracker().then((executable) => {
-        console.log(`[system] Verified Sony Head Tracker: ${executable}`);
-      })
-    : runSystem();
-  action.catch((error) => {
+  runSystem().catch((error) => {
     console.error(`[system] ${error.message}`);
     process.exitCode = 1;
   });
