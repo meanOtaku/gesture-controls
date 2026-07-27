@@ -1,0 +1,22 @@
+# JavaScript
+node_modules/
+dist/
+*.tsbuildinfo
+apps/desktop/vite.config.js
+apps/desktop/vite.config.d.ts
+
+# Rust
+/target/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Generated Tauri artifacts
+apps/desktop/src-tauri/gen/

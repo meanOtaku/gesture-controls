@@ -1,0 +1,13 @@
+[package]
+name = "head-tracking"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+serde_json.workspace = true
+spatial-protocol = { path = "../protocol" }
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true

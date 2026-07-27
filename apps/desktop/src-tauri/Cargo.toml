@@ -1,0 +1,21 @@
+[package]
+name = "spatial-gesture-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "spatial_gesture_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+head-tracking = { path = "../../../crates/head-tracking" }
+spatial-protocol = { path = "../../../crates/protocol" }
+serde.workspace = true
+tauri = { version = "2", features = [] }
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
