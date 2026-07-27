@@ -5,7 +5,9 @@
   "scripts": {
     "build": "npm run build --workspace @spatial-gesture/desktop",
     "check:tauri-icons": "node scripts/check-tauri-icons.mjs",
-    "test": "npm run test --workspace @spatial-gesture/desktop && npm run check:tauri-icons",
+    "start": "node scripts/run-system.mjs",
+    "test": "npm run test --workspace @spatial-gesture/desktop && npm run test:launcher && npm run check:tauri-icons",
+    "test:launcher": "node --test scripts/run-system.test.mjs",
     "typecheck": "npm run typecheck --workspace @spatial-gesture/desktop",
     "tauri": "npm run tauri --workspace @spatial-gesture/desktop --"
   }

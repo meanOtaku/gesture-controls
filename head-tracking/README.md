@@ -1,36 +1,40 @@
-# Spatial Head Tracking
+# Head-tracking reference and compatibility tooling
 
-First-party head-tracking application for the Spatial Gesture Volume
-Controller. It connects directly to the Android Head Tracker HID sensor exposed
-by compatible Sony headphones. It does **not** require SonyHeadTracker.app, a
-UDP bridge, or the Samsung Health Sensor SDK.
+Production Sony acquisition is handled by the separate MIT-licensed [`sony-head-tracker`](https://github.com/NicholasSlattery/sony-head-tracker) process. Spatial Gesture Control receives its protocol-v2 JSON stream over loopback UDP port 4243.
 
-## Projects
+Run the whole development system from the repository root with:
 
-- `native-macos/` — native SwiftUI application and macOS IOHID backend
-- `src/sony_head_tracking/` — earlier UDP protocol monitor, retained only as a
-  development and interoperability tool
+```bash
+npm start
+```
 
-## Native macOS application
+The launcher downloads and verifies the pinned upstream v2.2.0 release when necessary, then starts the external bridge and Tauri together. It does not compile Sony HID code into the Tauri binary.
 
-The application is being built around the protocol rather than Sony model
-numbers:
+## Contents
 
-- HID usage page `0x20`
-- top-level usage `0xE1`
-- `#AndroidHeadTracker#` sensor-description marker
-- rotation-vector usage `0x0544`
-- angular-velocity usage `0x0545`
-- reset-counter usage `0x0546`
+- `scripts/send_sample.py` — sends a protocol-v2 compatibility packet to the Tauri UDP provider
+- `src/sony_head_tracking/` — earlier Python protocol monitor and interoperability code
+- `native-macos/` — earlier first-party Swift/IOHID investigation retained as reference material, not the production provider
+- `tests/` — Python protocol compatibility tests
+- `THIRD_PARTY_NOTICES.md` — upstream attribution and MIT notice
 
-See [native-macos/README.md](native-macos/README.md) for setup.
+## Manual simulator
 
-## Independence and attribution
+On systems without Sony Head Tracker hardware support, run Tauri and the simulator separately:
 
-The design is informed by the MIT-licensed
-[`sony-head-tracker`](https://github.com/NicholasSlattery/sony-head-tracker)
-project and Android's public Head Tracker HID specification. Any adapted source
-will retain the required MIT notice in `THIRD_PARTY_NOTICES.md`.
+```bash
+npm run tauri -- dev
+python3 head-tracking/scripts/send_sample.py
+```
 
-This is an unofficial application and is not affiliated with or endorsed by
-Sony.
+The simulator is development-only. Real production samples come from the separate upstream bridge.
+
+## Boundary
+
+```text
+Sony headset -> external sony-head-tracker -> UDP 127.0.0.1:4243 -> Tauri
+```
+
+Only Tauri binds the receiving JSON port. The external tracker owns HID discovery, permissions, recovery, recentering, and hardware-specific behavior.
+
+This is an unofficial project and is not affiliated with or endorsed by Sony.

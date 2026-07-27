@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Dashboard } from "./Dashboard";
 import type { HeadTrackerStatus } from "../protocol/events";
@@ -26,8 +26,10 @@ describe("Dashboard", () => {
     }
   });
 
-  it("shows a clear waiting state before the first packet", () => {
-    render(<Dashboard status={null} />);
-    expect(screen.getByText("Waiting for Sony tracker")).toBeInTheDocument();
+  it("shows a clear waiting state and one-command launch guidance before the first packet", () => {
+    const { container } = render(<Dashboard status={null} />);
+    const dashboard = within(container);
+    expect(dashboard.getByText("Waiting for Sony tracker")).toBeInTheDocument();
+    expect(dashboard.getByText(/npm start launches both applications/i)).toBeInTheDocument();
   });
 });

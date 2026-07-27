@@ -1,65 +1,148 @@
 SPATIAL GESTURE CONTROL - RUNNING THE PROJECT
 ================================================
 
-This guide covers development and local builds on Windows, macOS, and Linux.
-Run all project commands from the repository root unless stated otherwise.
+The production development workflow uses two independent processes:
+
+1. Sony Head Tracker owns Bluetooth/HID access and sends protocol-v2 JSON to
+   127.0.0.1:4243.
+2. The Tauri application owns the UDP listener, pose state, and user interface.
+
+You do not need to start them separately. The repository launcher starts and
+stops both with one command.
 
 Repository:
 https://github.com/meanOtaku/gesture-controls
-
-Official Tauri prerequisite reference:
-https://v2.tauri.app/start/prerequisites/
 
 
 1. COMMON REQUIREMENTS
 ----------------------
 
-All operating systems require:
+All systems require:
 
 - Git
-- Node.js 20 or newer (Node.js 22 LTS is recommended)
+- Node.js 20 or newer; Node.js 22 LTS is recommended
 - npm
-- The current stable Rust toolchain installed through rustup
-- A graphical desktop session when launching the Tauri window
+- Current stable Rust installed through rustup
+- Tauri 2 prerequisites for the host OS
+- A graphical desktop session
 
-Confirm the tools are available:
+Install repository dependencies once:
 
-  git --version
-  node --version
-  npm --version
-  rustc --version
-  cargo --version
+  npm ci
 
-If Rust is not installed:
+Run the complete system:
 
-Linux/macOS:
+  npm start
 
-  curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
+The first macOS or Windows run downloads Sony Head Tracker v2.2.0 from its
+official GitHub release, verifies its SHA-256 checksum, and extracts it under:
+
+  .tools/sony-head-tracker/v2.2.0/
+
+That directory is ignored by Git. Later runs reuse the verified executable.
+The launcher runs the tracker as:
+
+  probe
+
+and only after that succeeds:
+
+  bridge --port 4242
+
+The upstream bridge emits OpenTrack data on port 4242 and protocol-v2 JSON on
+port 4243. Tauri listens only on 127.0.0.1:4243.
+
+The read-only probe must find a verified Android Head Tracker collection before
+Tauri is started. Failed probe diagnostics remain visible in the terminal rather
+than being reduced to the dashboard's generic waiting state.
+
+Ctrl+C, closing Tauri, or a tracker failure causes the launcher to stop both
+process trees. Sony Head Tracker remains a separate executable; it is not linked
+into or bundled inside the Tauri binary.
+
+
+2. OPTIONAL TRACKER OVERRIDE
+----------------------------
+
+Set SONY_HEAD_TRACKER_BIN to use an existing compatible CLI instead of the pinned
+automatic download.
+
+macOS:
+
+  SONY_HEAD_TRACKER_BIN=/absolute/path/to/sony-head-tracker-macos npm start
 
 Windows PowerShell:
 
-  winget install --id Rustlang.Rustup
+  $env:SONY_HEAD_TRACKER_BIN = "C:\absolute\path\sony-head-tracker.exe"
+  npm start
 
-Restart the terminal after installing Node.js, Rust, or system build tools.
+Paths containing spaces are supported. The executable must accept:
 
-
-2. GET THE SOURCE AND INSTALL JAVASCRIPT DEPENDENCIES
------------------------------------------------------
-
-  git clone https://github.com/meanOtaku/gesture-controls.git
-  cd gesture-controls
-  npm install
-
-For an existing checkout, use the reproducible lockfile installation:
-
-  git pull
-  npm ci
+  bridge --port 4242
 
 
-3. LINUX SETUP
+3. macOS SETUP
 --------------
 
-Debian / Ubuntu:
+Requirements:
+
+- macOS 14 or newer for Sony Head Tracker
+- Xcode Command Line Tools
+
+Install the command-line tools if necessary:
+
+  xcode-select --install
+
+Then run:
+
+  npm start
+
+On first tracker launch:
+
+1. Open System Settings -> Privacy & Security -> Input Monitoring.
+2. Enable the downloaded sony-head-tracker-macos executable.
+3. Fully stop the launcher with Ctrl+C.
+4. Run npm start again.
+
+The executable stays at a stable path under .tools so the permission does not
+normally need to be granted again. If a custom SONY_HEAD_TRACKER_BIN is used,
+grant permission to that executable instead.
+
+If no verified tracker appears:
+
+- Confirm the headset is paired and connected.
+- Update its firmware using Sony Sound Connect.
+- Temporarily disconnect phones or other multipoint hosts.
+- Power-cycle the headset.
+- Use the upstream probe and troubleshooting documentation when necessary.
+
+The tracker owns macOS HID permissions and recovery behavior. Tauri does not
+request Input Monitoring or communicate directly with the headset.
+
+
+4. WINDOWS SETUP
+----------------
+
+Requirements:
+
+- Windows 11
+- Microsoft C++ Build Tools with Desktop development with C++
+- Microsoft Edge WebView2 Evergreen Runtime
+- Rust through rustup
+
+After installing prerequisites, open a new PowerShell window and run:
+
+  npm ci
+  npm start
+
+If Windows pairs the headset but does not create the head-tracker sensor node,
+follow Sony Head Tracker's Repair Tracker instructions. The one-command launcher
+does not silently perform elevated driver repair.
+
+
+5. LINUX SETUP
+--------------
+
+Install the normal Tauri dependencies for your distribution. Debian/Ubuntu:
 
   sudo apt update
   sudo apt install -y \
@@ -75,223 +158,97 @@ Debian / Ubuntu:
     patchelf \
     pkg-config
 
-Fedora:
+Upstream Sony Head Tracker v2.2.0 has no Linux hardware backend, so npm start
+reports that automatic Sony setup is unsupported. For UI/UDP development use:
 
-  sudo dnf check-update
-  sudo dnf install -y \
-    webkit2gtk4.1-devel \
-    openssl-devel \
-    curl \
-    wget \
-    file \
-    libappindicator-gtk3-devel \
-    librsvg2-devel \
-    libxdo-devel
-  sudo dnf group install "c-development"
+Terminal 1:
 
-Arch Linux:
+  npm run tauri -- dev
 
-  sudo pacman -Syu
-  sudo pacman -S --needed \
-    webkit2gtk-4.1 \
-    base-devel \
-    curl \
-    wget \
-    file \
-    openssl \
-    appmenu-gtk-module \
-    libappindicator-gtk3 \
-    librsvg \
-    xdotool
-
-Start the development application:
-
-  npm run tauri dev
-
-Build installable Linux packages:
-
-  npm run tauri build
-
-Linux notes:
-
-- The Tauri window cannot open from a headless SSH-only terminal without a
-  graphical X11 or Wayland session.
-- If pkg-config reports that webkit2gtk-4.1, librsvg, or appindicator is
-  missing, install the corresponding development package for your distribution.
-
-
-4. macOS SETUP
---------------
-
-Supported development systems should use macOS Catalina 10.15 or newer.
-Install the Xcode Command Line Tools:
-
-  xcode-select --install
-
-Alternatively, install full Xcode and launch it once to finish setup.
-
-Start the development application:
-
-  npm run tauri dev
-
-Build the macOS application and disk image:
-
-  npm run tauri build
-
-macOS notes:
-
-- The first build can take several minutes while Rust compiles dependencies.
-- macOS may warn about unsigned local builds. Code signing and notarization are
-  separate release-distribution steps and are not needed for normal development.
-- Apple Silicon and Intel Macs use the same project commands; build on the target
-  architecture unless you intentionally configure cross-compilation.
-
-
-5. WINDOWS SETUP
-----------------
-
-Install these Windows dependencies:
-
-1. Microsoft C++ Build Tools:
-   https://visualstudio.microsoft.com/visual-cpp-build-tools/
-
-   In the installer, select "Desktop development with C++".
-
-2. Microsoft Edge WebView2 Evergreen Runtime:
-   https://developer.microsoft.com/en-us/microsoft-edge/webview2/
-
-3. Rust through rustup, if it is not already installed:
-
-   winget install --id Rustlang.Rustup
-
-Open a new PowerShell terminal after installation.
-
-Clone and install, if not already done:
-
-  git clone https://github.com/meanOtaku/gesture-controls.git
-  cd gesture-controls
-  npm install
-
-Start the development application:
-
-  npm run tauri dev
-
-Build the Windows executable and installers:
-
-  npm run tauri build
-
-Windows notes:
-
-- If MSI creation fails while running light.exe, enable the Windows VBSCRIPT
-  optional feature under Settings -> Apps -> Optional features -> More Windows
-  features, then restart Windows if prompted.
-- WebView2 is included with many current Windows installations, but installing
-  the Evergreen Runtime explicitly avoids missing-runtime failures.
-
-
-6. PROVIDE HEAD-TRACKING DATA
------------------------------
-
-The desktop backend listens only on:
-
-  127.0.0.1:4243/UDP
-
-For real tracking, run sony-head-tracker on the same computer and configure it
-to emit protocol-version-2 JSON UDP packets to 127.0.0.1:4243:
-
-  https://github.com/NicholasSlattery/sony-head-tracker
-
-Start the tracker before or after the desktop application. The dashboard changes
-to Connected after receiving its first valid packet.
-
-To test the dashboard without headphones, leave the desktop app running and send
-the included simulated packet from a second terminal.
-
-Linux/macOS:
+Terminal 2:
 
   python3 head-tracking/scripts/send_sample.py
 
-Windows PowerShell:
-
-  py head-tracking/scripts/send_sample.py
-
-The sample sends one packet, so the dashboard will briefly connect and then
-return to its waiting state. Run it repeatedly to send additional samples.
-
-If the dashboard never connects:
-
-- Confirm both programs are on the same machine.
-- Confirm the sender targets 127.0.0.1 UDP port 4243.
-- Check that no other process is already bound to UDP port 4243.
-- Check the terminal running Tauri for malformed-packet or version errors.
-- Confirm the JSON packet uses protocol version 2 and includes all required
-  metrics.
+The sample sends one packet. Run it repeatedly to keep producing updates.
 
 
-7. RUN TESTS AND QUALITY CHECKS
--------------------------------
+6. MANUAL DEVELOPMENT COMMANDS
+------------------------------
 
-Frontend tests plus Tauri icon/config validation:
+Run only Tauri, without managing a tracker:
+
+  npm run tauri -- dev
+
+Build the desktop application for the current platform:
+
+  npm run tauri -- build
+
+Preview only the React frontend:
+
+  npm run dev --workspace @spatial-gesture/desktop
+
+Frontend preview does not start Rust, UDP, Tauri IPC, or Sony Head Tracker.
+
+
+7. TESTS AND QUALITY CHECKS
+---------------------------
+
+Frontend, launcher, icon, and resource tests:
 
   npm test
 
-TypeScript checking:
+Launcher tests only:
+
+  npm run test:launcher
+
+TypeScript and frontend production build:
 
   npm run typecheck
-
-Production frontend build:
-
   npm run build
 
 Rust protocol and UDP provider tests:
 
   cargo test -p spatial-protocol -p head-tracking --all-targets
 
-Rust formatting check:
+Rust formatting and linting:
 
   cargo fmt --all -- --check
-
-Rust linting:
-
   cargo clippy -p spatial-protocol -p head-tracking \
     --all-targets --all-features -- -D warnings
 
-Existing Python interoperability tests (requires uv):
+Python compatibility tests:
 
   uv run --directory head-tracking --with pytest pytest -q
 
 
-8. BUILD OUTPUT
----------------
+8. DOWNLOAD SECURITY AND OFFLINE USE
+------------------------------------
 
-After this command:
+Pinned release:
 
-  npm run tauri build
+  NicholasSlattery/sony-head-tracker v2.2.0
 
-Tauri prints the exact generated artifact paths. Build products are normally
-placed under:
+The launcher contains the official macOS and Windows archive URLs plus their
+expected SHA-256 digests. A mismatched download is rejected before extraction.
+The first automatic setup requires access to GitHub. Once .tools contains the
+verified executable, npm start works without downloading it again.
 
-  target/release/bundle/
-
-The platform-specific folders may contain Linux packages, a macOS app/DMG, or
-Windows MSI/NSIS installers depending on the host OS.
-
-Native desktop installers should normally be built on their target operating
-system. The GitHub Actions workflow also builds the project on Ubuntu, macOS,
-and Windows to catch platform-specific failures.
+For a fully offline first run, place a trusted compatible executable on disk and
+set SONY_HEAD_TRACKER_BIN.
 
 
-9. FRONTEND-ONLY PREVIEW
-------------------------
+9. CONNECTION TROUBLESHOOTING
+-----------------------------
 
-To preview only the React dashboard without compiling or launching Tauri:
+If Tauri says Waiting for Sony tracker:
 
-  npm run dev --workspace @spatial-gesture/desktop
+- Read the Sony Head Tracker output in the same terminal.
+- Confirm the tracker reports a verified device and live samples.
+- Confirm no other process is bound to UDP port 4243.
+- Confirm the bridge uses base port 4242; JSON is emitted on 4243.
+- Confirm the packet schema is protocol version 2.
+- On macOS, verify Input Monitoring for the stable tracker executable.
+- On Windows, run upstream Repair Tracker if the sensor node is absent.
 
-Then open:
-
-  http://127.0.0.1:1420
-
-This mode is useful for UI development, but it does not start the Rust UDP
-listener or expose native Tauri functionality. Use "npm run tauri dev" for the
-complete application.
+A working Bluetooth audio connection does not by itself prove that the operating
+system exposed the Android Head Tracker HID sensor.

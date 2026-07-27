@@ -182,6 +182,11 @@ The Tauri desktop application is the central source of truth.
 
 It receives head orientation from `sony-head-tracker`, receives watch data over WebSocket, controls the interaction state machine, renders the overlay, and changes system volume.
 
+Sony Head Tracker remains an independent executable rather than being compiled
+into the Tauri binary. A repository launcher must provide one-command operation:
+it starts the external tracker bridge and Tauri together, and stops both process
+trees on exit.
+
 ---
 
 # Sony Head Tracking
@@ -195,6 +200,14 @@ https://github.com/NicholasSlattery/sony-head-tracker
 Do not communicate directly with the headphones.
 
 Use the local JSON UDP stream provided by the tool.
+
+Pin the automatic launcher integration to upstream release `v2.2.0`. On macOS
+and Windows, `npm start` must download the official release only when no cached
+or explicitly configured tracker executable exists, verify its committed
+SHA-256 digest before extraction, run the read-only `probe` preflight, and
+launch it in `bridge --port 4242` mode only when a verified tracker is present.
+Keep downloaded tools outside version control. Support
+`SONY_HEAD_TRACKER_BIN` as an explicit executable override.
 
 Default JSON port:
 
@@ -281,8 +294,8 @@ Create a replaceable interface:
 
 ```rust
 pub trait HeadPoseProvider: Send + Sync {
-    fn start(&self) -> Result<(), HeadPoseError>;
-    fn stop(&self) -> Result<(), HeadPoseError>;
+    async fn start(&self) -> Result<(), HeadPoseError>;
+    async fn stop(&self) -> Result<(), HeadPoseError>;
 }
 ```
 
@@ -1666,11 +1679,14 @@ Implement:
 * Display quaternion
 * Display packet rate
 * Detect reset-counter changes
+* One-command launcher for the separate Sony bridge and Tauri application
+* Pinned, SHA-256-verified automatic tracker setup on macOS and Windows
 
 Success criterion:
 
 ```text
-Moving the XM5 updates live data in the Tauri UI.
+`npm start` launches both processes, and moving the XM5 updates live data in the
+Tauri UI.
 ```
 
 ## Milestone 3: Head Calibration
