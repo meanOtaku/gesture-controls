@@ -25,4 +25,13 @@ for (const extension of [".png", ".ico", ".icns"]) {
   }
 }
 
-console.log(`validated ${icons.length} configured Tauri desktop icons`);
+const resources = config.bundle?.resources;
+const sonyLicense = "../../../third_party/sony-head-tracker/LICENSE";
+if (!resources || typeof resources !== "object" || Array.isArray(resources) || !(sonyLicense in resources)) {
+  throw new Error("tauri.conf.json bundle.resources must package the vendored Sony tracker MIT license");
+}
+if (!existsSync(resolve(tauriDir, sonyLicense))) {
+  throw new Error("configured vendored Sony tracker MIT license does not exist");
+}
+
+console.log(`validated ${icons.length} configured Tauri desktop icons and Sony tracker license resource`);

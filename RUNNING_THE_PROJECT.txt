@@ -123,8 +123,7 @@ Linux notes:
 4. macOS SETUP
 --------------
 
-Supported development systems should use macOS Catalina 10.15 or newer.
-Install the Xcode Command Line Tools:
+For built-in Sony tracking, use macOS 14 or newer. Install the Xcode Command Line Tools:
 
   xcode-select --install
 
@@ -189,43 +188,68 @@ Windows notes:
   the Evergreen Runtime explicitly avoids missing-runtime failures.
 
 
-6. PROVIDE HEAD-TRACKING DATA
------------------------------
+6. USE THE BUILT-IN SONY HEAD TRACKER
+-------------------------------------
 
-The desktop backend listens only on:
+The production tracker is part of the Tauri process. Do not install or launch the
+upstream sony-head-tracker GUI, bridge, CLI, or a sidecar.
 
-  127.0.0.1:4243/UDP
+Windows 11:
 
-For real tracking, run sony-head-tracker on the same computer and configure it
-to emit protocol-version-2 JSON UDP packets to 127.0.0.1:4243:
+1. Pair and connect the Sony headset in Windows Bluetooth settings.
+2. Start this Tauri application.
+3. The built-in engine first tries descriptor-verified HID access and can fall
+   back to the Windows Sensor API.
+4. Use the Recenter button while facing forward.
 
-  https://github.com/NicholasSlattery/sony-head-tracker
+macOS 14 or newer:
 
-Start the tracker before or after the desktop application. The dashboard changes
-to Connected after receiving its first valid packet.
+1. Pair and connect the Sony headset in System Settings -> Bluetooth.
+2. Start this Tauri application.
+3. If macOS requests Input Monitoring access, grant it to this Tauri app and
+   restart the app. The tracker code runs in-process, so there is no second
+   executable to authorize.
+4. Use the Recenter button while facing forward.
 
-To test the dashboard without headphones, leave the desktop app running and send
-the included simulated packet from a second terminal.
+Linux:
 
-Linux/macOS:
+The desktop application builds and runs, but direct Sony hardware acquisition is
+reported as unsupported until a Linux backend has been validated with physical
+hardware. Use the compatibility simulator below when developing on Linux.
+
+COMPATIBILITY SIMULATOR
+
+The former JSON UDP receiver is disabled by default. Select it explicitly before
+starting Tauri; it binds only to 127.0.0.1:4243.
+
+Linux/macOS terminal 1:
+
+  SGC_HEAD_TRACKER_SOURCE=udp npm run tauri dev
+
+Linux/macOS terminal 2:
 
   python3 head-tracking/scripts/send_sample.py
 
-Windows PowerShell:
+Windows PowerShell terminal 1:
 
-  py head-tracking/scripts/send_sample.py
+  $env:SGC_HEAD_TRACKER_SOURCE = "udp"
+  npm run tauri dev
 
-The sample sends one packet, so the dashboard will briefly connect and then
-return to its waiting state. Run it repeatedly to send additional samples.
+Windows PowerShell terminal 2:
 
-If the dashboard never connects:
+  py head-tracking\scripts\send_sample.py
 
-- Confirm both programs are on the same machine.
-- Confirm the sender targets 127.0.0.1 UDP port 4243.
-- Check that no other process is already bound to UDP port 4243.
-- Check the terminal running Tauri for malformed-packet or version errors.
-- Confirm the JSON packet uses protocol version 2 and includes all required
-  metrics.
+The sample sends one packet, so the dashboard briefly connects and returns to its
+waiting state. Run it repeatedly for additional samples.
+
+If direct tracking never connects:
+
+- Confirm the headset is paired, connected, and supports Android Head Tracker HID.
+- On macOS, verify Input Monitoring permission for this application.
+- Check the Tauri terminal and the built-in runtime status shown in the dashboard.
+- Disconnect other applications that may have exclusive access to the sensor.
+- Use the compatibility simulator to distinguish UI/event problems from native
+  device-discovery problems.
 
 
 7. RUN TESTS AND QUALITY CHECKS
@@ -243,9 +267,9 @@ Production frontend build:
 
   npm run build
 
-Rust protocol and UDP provider tests:
+Rust protocol, direct native provider, and UDP compatibility tests:
 
-  cargo test -p spatial-protocol -p head-tracking --all-targets
+  cargo test --workspace --all-targets
 
 Rust formatting check:
 
@@ -253,8 +277,7 @@ Rust formatting check:
 
 Rust linting:
 
-  cargo clippy -p spatial-protocol -p head-tracking \
-    --all-targets --all-features -- -D warnings
+  cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 Existing Python interoperability tests (requires uv):
 
@@ -292,6 +315,6 @@ Then open:
 
   http://127.0.0.1:1420
 
-This mode is useful for UI development, but it does not start the Rust UDP
-listener or expose native Tauri functionality. Use "npm run tauri dev" for the
-complete application.
+This mode is useful for UI development, but it does not start the built-in Sony
+tracking engine or expose native Tauri functionality. Use "npm run tauri dev"
+for the complete application.

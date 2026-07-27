@@ -50,7 +50,7 @@ Vite
 
 Rust handles:
 
-* Sony head-tracking UDP input
+* In-process Sony head-tracker discovery, decoding, and lifecycle
 * Galaxy Watch WebSocket communication
 * State machine
 * Quaternion and sensor calculations
@@ -162,12 +162,11 @@ Sony WH-1000XM5
         │
         │ Android Head Tracker HID protocol
         ▼
-sony-head-tracker
-        │
-        │ UDP JSON
-        │ localhost:4243
-        ▼
 Tauri 2 Desktop Coordinator
+        │
+        ├── in-process Sony tracker engine
+        │   ├── Windows HID / Sensor API backend
+        │   └── macOS IOHID backend
         ▲
         │
         │ WebSocket over local Wi-Fi
@@ -180,35 +179,23 @@ PPG + IMU + gesture events
 
 The Tauri desktop application is the central source of truth.
 
-It receives head orientation from `sony-head-tracker`, receives watch data over WebSocket, controls the interaction state machine, renders the overlay, and changes system volume.
+It owns the Sony head-tracker runtime in-process, receives watch data over WebSocket, controls the interaction state machine, renders the overlay, and changes system volume. Users must not need to install, launch, or manage a separate Sony tracking application.
 
 ---
 
 # Sony Head Tracking
 
-Use:
+Base the implementation on the protocol and platform work from:
 
 ```text
 https://github.com/NicholasSlattery/sony-head-tracker
 ```
 
-Do not communicate directly with the headphones.
+Vendor and pin the required MIT-licensed engine source, compile it into the Tauri backend, and expose it through a narrow callback-based C ABI and safe Rust wrapper.
 
-Use the local JSON UDP stream provided by the tool.
+Production tracking must run inside the Tauri process. Do not require or spawn the upstream GUI, CLI bridge, sidecar, or a loopback UDP process. Tauri owns discovery, connection, samples, recentering, reconnection, and shutdown.
 
-Default JSON port:
-
-```text
-127.0.0.1:4243
-```
-
-The default OpenTrack binary stream is on:
-
-```text
-127.0.0.1:4242
-```
-
-Use port `4243`.
+The former JSON UDP protocol-v2 receiver may remain as compatibility and simulator tooling, but it is not the default packaged runtime.
 
 Example Sony packet:
 
@@ -258,20 +245,23 @@ pub struct SonyHeadSample {
 }
 ```
 
-The UDP reader should:
+The integrated provider should:
 
-* Bind to `127.0.0.1:4243`
-* Parse one JSON object per datagram
-* Ignore unknown JSON fields
-* Validate the schema version
+* Discover a descriptor-verified Android Head Tracker HID collection
+* Configure reporting using descriptor metadata rather than hard-coded report IDs
+* Decode rotation, gyroscope, accelerometer, and reset-counter fields
+* Convert samples into the generic Rust `HeadPose` type
 * Track packet rate
 * Detect missing tracker data
 * Detect reset-counter changes
 * Publish head-pose events internally
+* Reconnect after device loss without restarting Tauri
+* Stop and release native resources when Tauri exits
+* Support start, stop, and start again in the same process
 
-Only one process should bind to the Sony JSON port.
+Windows 11 uses the validated HID backend with Sensor API fallback. macOS 14 or later uses IOHID and must surface Input Monitoring permission guidance through the Tauri UI. Linux builds must remain functional and report direct-tracker support accurately until a hardware-validated Linux transport is available.
 
-The Tauri application should be that process.
+The Tauri application is the only user-facing tracker application.
 
 ---
 
@@ -280,17 +270,24 @@ The Tauri application should be that process.
 Create a replaceable interface:
 
 ```rust
+#[async_trait]
 pub trait HeadPoseProvider: Send + Sync {
-    fn start(&self) -> Result<(), HeadPoseError>;
-    fn stop(&self) -> Result<(), HeadPoseError>;
+    async fn start(&self) -> Result<(), HeadPoseError>;
+    async fn stop(&self) -> Result<(), HeadPoseError>;
+    fn subscribe(&self) -> broadcast::Receiver<HeadPoseEvent>;
+    fn is_connected(&self) -> bool;
+    fn snapshot(&self) -> HeadPoseProviderSnapshot;
+    fn recenter(&self) -> Result<(), HeadPoseError>;
 }
 ```
 
-The initial implementation is:
+The packaged implementation is:
 
 ```text
-SonyUdpHeadPoseProvider
+SonyDirectHeadPoseProvider
 ```
+
+`SonyUdpHeadPoseProvider` is retained only for compatibility tests and simulated development input.
 
 Possible future implementations:
 
@@ -1495,8 +1492,8 @@ Example:
 ```json
 {
   "sony": {
-    "host": "127.0.0.1",
-    "jsonPort": 4243
+    "source": "builtIn",
+    "reconnect": true
   },
   "watch": {
     "webSocketPort": 8766,
@@ -1607,9 +1604,9 @@ The application must fail gracefully.
 
 # Security
 
-Sony UDP input is loopback-only.
+The integrated Sony engine communicates only with descriptor-verified Android Head Tracker HID collections. It must not install a custom kernel driver, alter headset firmware, or expose raw device access to the webview.
 
-Do not expose the Sony UDP port over the network.
+The compatibility UDP receiver remains loopback-only and must never be exposed over the network.
 
 The Galaxy Watch WebSocket should initially be local-network-only.
 
@@ -1655,22 +1652,26 @@ Success criterion:
 Application builds and starts on the current platform.
 ```
 
-## Milestone 2: Sony UDP Reader
+## Milestone 2: Integrated Sony Head Tracker
 
 Implement:
 
-* UDP listener on port 4243
-* Sony JSON parsing
+* Tauri-owned, in-process Sony tracker engine
+* Descriptor-verified Android Head Tracker HID discovery
+* Native Windows HID/Sensor API and macOS IOHID adapters
+* Safe Rust wrapper and replaceable `HeadPoseProvider`
+* Automatic reconnect and deterministic shutdown
 * Device connection status
 * Display yaw, pitch, roll
 * Display quaternion
 * Display packet rate
 * Detect reset-counter changes
+* Compatibility-only protocol-v2 UDP simulator path
 
 Success criterion:
 
 ```text
-Moving the XM5 updates live data in the Tauri UI.
+Launching only the Tauri app is sufficient; moving the XM5 updates live data in its UI without a separately installed or running tracker application.
 ```
 
 ## Milestone 3: Head Calibration
@@ -1877,7 +1878,8 @@ Add:
 Test:
 
 ```text
-Sony JSON parsing
+Sony native sample conversion and lifecycle snapshots
+Sony protocol-v2 JSON parsing for compatibility tooling
 Quaternion angular distance
 Target detection
 State transitions
@@ -1892,7 +1894,8 @@ Configuration loading
 Test:
 
 ```text
-Mock Sony UDP stream
+Mock Sony native engine lifecycle and callback stream
+Mock Sony UDP stream for compatibility regressions
 Mock watch WebSocket client
 Head target activation
 Button-grab workflow
@@ -1961,7 +1964,7 @@ Order:
 
 ```text
 1. Create Tauri 2 application
-2. Implement Sony UDP receiver
+2. Integrate the in-process Sony native tracking engine
 3. Display head orientation
 4. Add head calibration
 5. Detect top-right activation
@@ -1989,8 +1992,8 @@ Required output:
 Tauri 2 desktop app
 React + TypeScript frontend
 Rust backend
-Sony UDP listener on 127.0.0.1:4243
-Strongly typed Sony JSON parser
+Built-in Sony HID/Sensor API tracking owned by Tauri
+Compatibility-only UDP listener and strongly typed protocol-v2 JSON parser
 Tauri events from Rust to React
 Dashboard showing:
 - Sony connection status
