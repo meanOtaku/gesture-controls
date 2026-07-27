@@ -19,6 +19,7 @@
 #include <SetupAPI.h>
 #include <cfgmgr32.h>
 #include <devpkey.h>
+#include <hidusage.h>
 #include <hidpi.h>
 #include <hidsdi.h>
 #include <Sensors.h>

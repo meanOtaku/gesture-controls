@@ -23,7 +23,8 @@
 #include "sony_head_tracker/sensor_api_backend.hpp"
 #include <Windows.h>
 #elif defined(__APPLE__)
-#include <IOKit/hid/IOHIDLib.h>
+#include <IOKit/hid/IOHIDManager.h>
+#include <IOKit/hidsystem/IOHIDLib.h>
 #endif
 
 namespace {
