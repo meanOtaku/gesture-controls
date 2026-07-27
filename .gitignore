@@ -6,7 +6,7 @@ apps/desktop/vite.config.js
 apps/desktop/vite.config.d.ts
 
 # Rust
-/target/
+**/target/
 
 # Python
 .venv/
