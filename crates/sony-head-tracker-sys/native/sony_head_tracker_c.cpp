@@ -29,8 +29,10 @@
 
 namespace {
 
+#if !defined(_WIN32) && !defined(__APPLE__)
 constexpr const char* kUnsupportedMessage =
     "Sony head tracking is supported only on Windows 11 and macOS 14 or newer";
+#endif
 
 class Engine {
 public:
