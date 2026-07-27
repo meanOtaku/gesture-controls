@@ -1,6 +1,7 @@
-//! Replaceable head-pose providers and the Sony JSON UDP implementation.
+//! Replaceable head-pose providers for the built-in Sony engine and compatibility UDP input.
 
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -17,7 +18,40 @@ pub enum HeadPoseEvent {
     Connected,
     Disconnected,
     Pose(HeadPose),
-    ResetCounterChanged { previous: u64, current: u64 },
+    ResetCounterChanged {
+        previous: u64,
+        current: u64,
+    },
+    RuntimeStatus {
+        state: HeadTrackerRuntimeState,
+        message: String,
+        device: Option<String>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HeadTrackerRuntimeState {
+    Starting,
+    Searching,
+    Connected,
+    Reconnecting,
+    PermissionRequired,
+    Unsupported,
+    Error,
+    Stopped,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HeadTrackerRuntimeStatus {
+    pub state: HeadTrackerRuntimeState,
+    pub message: String,
+    pub device: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HeadPoseProviderSnapshot {
+    pub runtime: HeadTrackerRuntimeStatus,
+    pub reset_counter: Option<u64>,
 }
 
 #[derive(Debug, Error)]
@@ -28,6 +62,14 @@ pub enum HeadPoseError {
     AlreadyRunning,
     #[error("head-pose provider state lock was poisoned")]
     StatePoisoned,
+    #[error("head tracking is unsupported on this platform")]
+    UnsupportedPlatform,
+    #[error("this head-pose source does not support {0}")]
+    UnsupportedOperation(&'static str),
+    #[error("native Sony tracker failed: {0}")]
+    Native(#[from] sony_head_tracker_sys::EngineError),
+    #[error("head-pose provider task failed: {0}")]
+    Task(#[from] tokio::task::JoinError),
 }
 
 #[async_trait]
@@ -36,7 +78,15 @@ pub trait HeadPoseProvider: Send + Sync {
     async fn start(&self) -> Result<(), HeadPoseError>;
     /// Stops receiving samples and waits for the receive task to terminate.
     async fn stop(&self) -> Result<(), HeadPoseError>;
+    fn subscribe(&self) -> broadcast::Receiver<HeadPoseEvent>;
+    fn is_connected(&self) -> bool;
+    /// Returns persisted lifecycle/reset state so consumers can recover after event lag.
+    fn snapshot(&self) -> HeadPoseProviderSnapshot;
+    fn recenter(&self) -> Result<(), HeadPoseError>;
 }
+
+mod direct;
+pub use direct::SonyDirectHeadPoseProvider;
 
 #[derive(Debug)]
 pub struct TrackerMonitor {
@@ -74,6 +124,9 @@ pub struct SonyUdpHeadPoseProvider {
     task: Mutex<Option<JoinHandle<()>>>,
     events: broadcast::Sender<HeadPoseEvent>,
     disconnect_timeout: Duration,
+    connected: Arc<AtomicBool>,
+    runtime: Arc<Mutex<HeadTrackerRuntimeStatus>>,
+    reset_counter: Arc<Mutex<Option<u64>>>,
 }
 
 impl SonyUdpHeadPoseProvider {
@@ -94,6 +147,13 @@ impl SonyUdpHeadPoseProvider {
             task: Mutex::new(None),
             events,
             disconnect_timeout,
+            connected: Arc::new(AtomicBool::new(false)),
+            runtime: Arc::new(Mutex::new(HeadTrackerRuntimeStatus {
+                state: HeadTrackerRuntimeState::Stopped,
+                message: "Compatibility UDP provider is stopped".to_owned(),
+                device: None,
+            })),
+            reset_counter: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -116,6 +176,17 @@ impl HeadPoseProvider for SonyUdpHeadPoseProvider {
         let socket = Arc::clone(&self.socket);
         let events = self.events.clone();
         let disconnect_timeout = self.disconnect_timeout;
+        let connection_state = Arc::clone(&self.connected);
+        let runtime = Arc::clone(&self.runtime);
+        let reset_counter = Arc::clone(&self.reset_counter);
+        *runtime.lock().map_err(|_| HeadPoseError::StatePoisoned)? = HeadTrackerRuntimeStatus {
+            state: HeadTrackerRuntimeState::Searching,
+            message: format!("Waiting for simulator data on {}", self.local_addr),
+            device: None,
+        };
+        *reset_counter
+            .lock()
+            .map_err(|_| HeadPoseError::StatePoisoned)? = None;
 
         *task_guard = Some(tokio::spawn(async move {
             let mut buffer = vec![0_u8; 65_536];
@@ -141,10 +212,22 @@ impl HeadPoseProvider for SonyUdpHeadPoseProvider {
                                 continue;
                             }
                         };
+                        let device = sample.device.clone();
                         let now = Instant::now();
                         let reset_changed = monitor.observe(now, sample.reset_counter);
+                        if let Ok(mut current_reset) = reset_counter.lock() {
+                            *current_reset = Some(sample.reset_counter);
+                        }
+                        if let Ok(mut current_runtime) = runtime.lock() {
+                            *current_runtime = HeadTrackerRuntimeStatus {
+                                state: HeadTrackerRuntimeState::Connected,
+                                message: "Compatibility simulator connected".to_owned(),
+                                device,
+                            };
+                        }
                         if !connected {
                             connected = true;
+                            connection_state.store(true, Ordering::Release);
                             let _ = events.send(HeadPoseEvent::Connected);
                         }
                         if reset_changed && let Some(previous) = previous_reset {
@@ -169,6 +252,15 @@ impl HeadPoseProvider for SonyUdpHeadPoseProvider {
                     Err(_) => {
                         if connected {
                             connected = false;
+                            connection_state.store(false, Ordering::Release);
+                            if let Ok(mut current_runtime) = runtime.lock() {
+                                *current_runtime = HeadTrackerRuntimeStatus {
+                                    state: HeadTrackerRuntimeState::Reconnecting,
+                                    message: "Simulator data timed out; waiting for new samples"
+                                        .to_owned(),
+                                    device: None,
+                                };
+                            }
                             let _ = events.send(HeadPoseEvent::Disconnected);
                             debug!("Sony head tracker timed out");
                         }
@@ -188,8 +280,52 @@ impl HeadPoseProvider for SonyUdpHeadPoseProvider {
         if let Some(task) = task {
             task.abort();
             let _ = task.await;
+            self.connected.store(false, Ordering::Release);
             let _ = self.events.send(HeadPoseEvent::Disconnected);
         }
+        *self
+            .runtime
+            .lock()
+            .map_err(|_| HeadPoseError::StatePoisoned)? = HeadTrackerRuntimeStatus {
+            state: HeadTrackerRuntimeState::Stopped,
+            message: "Compatibility UDP provider stopped".to_owned(),
+            device: None,
+        };
         Ok(())
+    }
+
+    fn subscribe(&self) -> broadcast::Receiver<HeadPoseEvent> {
+        self.events.subscribe()
+    }
+
+    fn is_connected(&self) -> bool {
+        self.connected.load(Ordering::Acquire)
+    }
+
+    fn snapshot(&self) -> HeadPoseProviderSnapshot {
+        let runtime =
+            self.runtime
+                .lock()
+                .map(|value| value.clone())
+                .unwrap_or(HeadTrackerRuntimeStatus {
+                    state: HeadTrackerRuntimeState::Error,
+                    message: "Compatibility provider state lock was poisoned".to_owned(),
+                    device: None,
+                });
+        let reset_counter = self
+            .reset_counter
+            .lock()
+            .map(|value| *value)
+            .unwrap_or(None);
+        HeadPoseProviderSnapshot {
+            runtime,
+            reset_counter,
+        }
+    }
+
+    fn recenter(&self) -> Result<(), HeadPoseError> {
+        Err(HeadPoseError::UnsupportedOperation(
+            "recenter for compatibility UDP input",
+        ))
     }
 }
