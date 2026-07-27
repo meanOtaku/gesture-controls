@@ -1,63 +1,36 @@
-# Sony Head Tracking
+# Spatial Head Tracking
 
-Python receiver for head-orientation data from Sony WH-1000XM5 headphones.
-This is the first project in the Spatial Gesture Volume Controller monorepo.
+First-party head-tracking application for the Spatial Gesture Volume
+Controller. It connects directly to the Android Head Tracker HID sensor exposed
+by compatible Sony headphones. It does **not** require SonyHeadTracker.app, a
+UDP bridge, or the Samsung Health Sensor SDK.
 
-The headphones are read by
-[`sony-head-tracker`](https://github.com/NicholasSlattery/sony-head-tracker).
-That application sends one JSON sample per UDP datagram to
-`127.0.0.1:4243`. This project consumes those samples; it does not communicate
-with the headphones directly.
+## Projects
 
-The Samsung Health Sensor SDK is reserved for the Galaxy Watch gesture project
-and is not a dependency of this project.
+- `native-macos/` — native SwiftUI application and macOS IOHID backend
+- `src/sony_head_tracking/` — earlier UDP protocol monitor, retained only as a
+  development and interoperability tool
 
-## Requirements
+## Native macOS application
 
-- Python 3.11 or newer
-- Sony Head Tracker running in GUI or bridge mode
+The application is being built around the protocol rather than Sony model
+numbers:
 
-## Run
+- HID usage page `0x20`
+- top-level usage `0xE1`
+- `#AndroidHeadTracker#` sensor-description marker
+- rotation-vector usage `0x0544`
+- angular-velocity usage `0x0545`
+- reset-counter usage `0x0546`
 
-From this directory:
+See [native-macos/README.md](native-macos/README.md) for setup.
 
-```bash
-python3 -m venv .venv
-.venv/bin/pip install --editable .
-.venv/bin/sony-head-tracking
-```
+## Independence and attribution
 
-The terminal updates with the headset name, yaw, pitch, roll, sample rate, and
-receive latency. Stop it with `Ctrl+C`.
+The design is informed by the MIT-licensed
+[`sony-head-tracker`](https://github.com/NicholasSlattery/sony-head-tracker)
+project and Android's public Head Tracker HID specification. Any adapted source
+will retain the required MIT notice in `THIRD_PARTY_NOTICES.md`.
 
-To use a different host or port:
-
-```bash
-.venv/bin/sony-head-tracking --host 127.0.0.1 --port 4243
-```
-
-## Test without headphones
-
-Terminal 1:
-
-```bash
-.venv/bin/sony-head-tracking
-```
-
-Terminal 2:
-
-```bash
-python3 scripts/send_sample.py
-```
-
-## Tests
-
-```bash
-PYTHONPATH=src python3 -m unittest discover -s tests -v
-```
-
-## Next milestones
-
-- Store center and screen-corner calibration poses
-- Detect top-right activation using quaternion similarity
-- Publish normalized head-pose events to the desktop coordinator
+This is an unofficial application and is not affiliated with or endorsed by
+Sony.

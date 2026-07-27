@@ -1,0 +1,2 @@
+[console_scripts]
+sony-head-tracking = sony_head_tracking.cli:main
