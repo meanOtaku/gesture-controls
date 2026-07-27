@@ -2,8 +2,12 @@
 
 ## Sony Head Tracker
 
-Design and protocol implementation references:
+Production runtime dependency and protocol implementation reference:
 <https://github.com/NicholasSlattery/sony-head-tracker>
+
+The one-command launcher downloads the official release `v2.2.0` on supported
+macOS and Windows x64 hosts, verifies its pinned checksums, and runs it as a
+separate process under the following MIT license.
 
 MIT License
 

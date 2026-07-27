@@ -141,6 +141,13 @@ Linux x86-64
 Linux ARM64
 ```
 
+These are release-roadmap targets. During Milestones 1–2, CI validates one
+host architecture per operating-system runner. ARM64 packaging remains a later
+release task until dedicated runners are added. The pinned Sony Head Tracker
+release currently provides a Windows x64 executable and a macOS universal
+binary. Automatic Windows tracker setup is supported on x64 hosts; Windows
+ARM64 and x64-emulation behavior are not currently verified.
+
 Maintain one codebase but produce separate native builds for every operating system and architecture.
 
 Build each platform on a compatible CI runner:
@@ -1680,7 +1687,7 @@ Implement:
 * Display packet rate
 * Detect reset-counter changes
 * One-command launcher for the separate Sony bridge and Tauri application
-* Pinned, SHA-256-verified automatic tracker setup on macOS and Windows
+* Pinned, SHA-256-verified automatic tracker setup on macOS and Windows x64
 
 Success criterion:
 

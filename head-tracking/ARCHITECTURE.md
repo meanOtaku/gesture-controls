@@ -1,58 +1,44 @@
 # Head-tracking architecture
 
+## Active production boundary
+
 ```text
-WH-1000XM5
-    │ Bluetooth HID
+Sony headset
+    │ Android Head Tracker HID
     ▼
-macOS IOHID backend
-    │ raw descriptor values
+external sony-head-tracker v2.2.0
+    │ protocol-v2 JSON over 127.0.0.1:4243/UDP
     ▼
-Head Tracker protocol decoder
-    │ rotation vector + gyroscope
+SonyUdpHeadPoseProvider
+    │ provider-neutral HeadPose events
     ▼
-Orientation engine
-    │ quaternion + yaw/pitch/roll
-    ├──► SwiftUI diagnostics and calibration UI
-    └──► Desktop coordinator event interface
+Tauri coordinator -> React diagnostics and later calibration
 ```
 
-## Module boundaries
+The external upstream process owns HID discovery, descriptor validation,
+permissions, recovery, orientation, and UDP serialization. The Tauri application
+does not import IOHID/Windows HID APIs or link Sony acquisition code.
 
-### `HeadTrackingCore`
+`scripts/run-system.mjs` is an operator launcher, not a provider. It performs a
+verified setup and read-only probe, then starts the two independent process trees
+and cleans them up together.
 
-Platform-independent value types and math:
+## Provider boundary
 
-- raw motion samples
-- quaternion normalization and composition
-- axis mapping
-- recentering
-- Euler-angle conversion
-- smoothing
+`crates/head-tracking` defines the replaceable provider interface and currently
+implements `SonyUdpHeadPoseProvider`. `crates/protocol` validates protocol-v2
+Sony packets and converts them into provider-neutral pose values.
 
-### `MacHeadTracking`
+Future providers can implement the same interface without changing calibration
+or interaction logic:
 
-macOS hardware implementation:
+- webcam pose
+- phone IMU
+- ESP32 pose
 
-- discover usage `0x20:0xE1` with `IOHIDManager`
-- verify the `#AndroidHeadTracker#` marker
-- inspect descriptor-defined feature and input elements
-- configure power, event reporting, and sample interval
-- capture rotation-vector and gyroscope reports
-- surface permission, disconnection, and stalled-stream errors
+## Historical native experiment
 
-### `SpatialHeadTrackingApp`
-
-Our SwiftUI application:
-
-- connection state and device inspection
-- live orientation visualization
-- yaw, pitch, roll, gyro, sample rate, and latency
-- recenter action
-- center and corner calibration
-- activation-zone preview
-
-## Cross-platform direction
-
-The protocol decoder and orientation engine must not import Apple frameworks.
-A future Windows backend can implement the same sensor-provider interface using
-Windows HID APIs without changing calibration or interaction logic.
+`head-tracking/native-macos/` contains an earlier first-party Swift/IOHID
+experiment. Its modules (`HeadTrackingCore`, `MacHeadTracking`, and
+`SpatialHeadTrackingApp`) are retained only as protocol and UI reference
+material. They are not built, launched, or packaged by the active system.

@@ -1,40 +1,36 @@
-# Spatial Head Tracking for macOS
+# Historical native macOS head-tracking experiment
 
-Native macOS application that captures compatible headphone motion data
-directly through IOHID and renders our own SwiftUI interface.
+> Reference-only: this Swift/IOHID application is not the production provider,
+> is not started by `npm start`, and is not packaged with Tauri.
 
-## Development requirements
+The active architecture uses the separate upstream `sony-head-tracker` v2.2.0
+process and receives its protocol-v2 JSON stream over loopback UDP. See
+[`../ARCHITECTURE.md`](../ARCHITECTURE.md).
+
+This directory preserves an earlier experiment that captures compatible
+headphone motion directly through IOHID and renders a SwiftUI interface. Keep it
+for protocol comparison and possible future research; do not treat it as setup
+instructions for the complete Spatial Gesture Control system.
+
+## Historical development requirements
 
 - macOS 14 or newer
 - full Xcode
-- a paired WH-1000XM5 with current firmware
+- a paired compatible Sony headset with current firmware
 - Input Monitoring permission
+- XcodeGen
 
-The current machine has Command Line Tools selected, not full Xcode. After
-installing Xcode, select it:
-
-```bash
-sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
-```
-
-Then verify:
+Historical project generation flow:
 
 ```bash
-xcodebuild -version
-```
-
-## Planned build flow
-
-The checked-in XcodeGen specification is the source of truth for the project:
-
-```bash
-cd native-macos
+cd head-tracking/native-macos
 xcodegen generate
 open SpatialHeadTracking.xcodeproj
 ```
 
-The application requires:
+For the supported external-process workflow, return to the repository root and
+run:
 
-**System Settings → Privacy & Security → Input Monitoring**
-
-Restart the application after granting permission.
+```bash
+npm start
+```

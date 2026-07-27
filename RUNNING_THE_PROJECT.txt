@@ -34,12 +34,15 @@ Run the complete system:
 
   npm start
 
-The first macOS or Windows run downloads Sony Head Tracker v2.2.0 from its
+The first macOS or Windows x64 run downloads Sony Head Tracker v2.2.0 from its
 official GitHub release, verifies its SHA-256 checksum, and extracts it under:
 
   .tools/sony-head-tracker/v2.2.0/
 
-That directory is ignored by Git. Later runs reuse the verified executable.
+That directory is ignored by Git. Setup extracts to a temporary directory,
+verifies both archive and executable digests, writes a completion manifest, and
+atomically promotes the installation. Later runs revalidate the manifest and
+executable SHA-256 before reuse.
 The launcher runs the tracker as:
 
   probe
@@ -119,12 +122,12 @@ The tracker owns macOS HID permissions and recovery behavior. Tauri does not
 request Input Monitoring or communicate directly with the headset.
 
 
-4. WINDOWS SETUP
-----------------
+4. WINDOWS x64 SETUP
+--------------------
 
 Requirements:
 
-- Windows 11
+- Windows 11 x64 (the pinned upstream Windows release is x64-only)
 - Microsoft C++ Build Tools with Desktop development with C++
 - Microsoft Edge WebView2 Evergreen Runtime
 - Rust through rustup
@@ -133,6 +136,8 @@ After installing prerequisites, open a new PowerShell window and run:
 
   npm ci
   npm start
+
+Windows ARM64 and x64-emulation behavior are not currently verified.
 
 If Windows pairs the headset but does not create the head-tracker sensor node,
 follow Sony Head Tracker's Repair Tracker instructions. The one-command launcher
@@ -228,10 +233,11 @@ Pinned release:
 
   NicholasSlattery/sony-head-tracker v2.2.0
 
-The launcher contains the official macOS and Windows archive URLs plus their
-expected SHA-256 digests. A mismatched download is rejected before extraction.
-The first automatic setup requires access to GitHub. Once .tools contains the
-verified executable, npm start works without downloading it again.
+The launcher contains the official macOS and Windows x64 archive URLs plus the
+expected archive and executable SHA-256 digests. A mismatched download or cached
+executable is rejected. Extraction is staged and promoted atomically only after
+verification. The first automatic setup requires access to GitHub. A valid
+cached installation works offline and is rehashed on every npm start.
 
 For a fully offline first run, place a trusted compatible executable on disk and
 set SONY_HEAD_TRACKER_BIN.

@@ -6,6 +6,7 @@
     "build": "npm run build --workspace @spatial-gesture/desktop",
     "check:tauri-icons": "node scripts/check-tauri-icons.mjs",
     "start": "node scripts/run-system.mjs",
+    "setup:sony": "node scripts/run-system.mjs --setup-only",
     "test": "npm run test --workspace @spatial-gesture/desktop && npm run test:launcher && npm run check:tauri-icons",
     "test:launcher": "node --test scripts/run-system.test.mjs",
     "typecheck": "npm run typecheck --workspace @spatial-gesture/desktop",

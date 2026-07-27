@@ -12,7 +12,7 @@ Install the JavaScript dependencies once:
 npm ci
 ```
 
-Then use one command on macOS 14+ or Windows 11:
+Then use one command on macOS 14+ or Windows 11 x64:
 
 ```bash
 npm start
@@ -22,13 +22,15 @@ npm start
 
 1. Locates Sony Head Tracker or downloads the pinned upstream v2.2.0 release on first use.
 2. Verifies the release archive against a hard-coded SHA-256 digest before extraction.
-3. Stores the ignored tool under `.tools/sony-head-tracker/v2.2.0/` so its macOS permission identity and path remain stable.
-4. Runs the tracker's read-only `probe`; if no verified sensor is available, it
+3. Extracts into a temporary directory, verifies the executable digest, and
+   atomically installs it under `.tools/sony-head-tracker/v2.2.0/`.
+4. Revalidates the completion manifest and executable SHA-256 on every cached use.
+5. Runs the tracker's read-only `probe`; if no verified sensor is available, it
    keeps the diagnostics visible and does not start Tauri.
-5. Starts the external tracker in `bridge --port 4242` mode; its protocol-v2
+6. Starts the external tracker in `bridge --port 4242` mode; its protocol-v2
    JSON stream is therefore sent to `127.0.0.1:4243`.
-6. Starts the Tauri application.
-7. Stops both process trees when either application exits or the launcher receives Ctrl+C.
+7. Starts the Tauri application.
+8. Stops both process trees when either application exits or the launcher receives Ctrl+C.
 
 The tracker is deliberately not compiled into, bundled with, or owned by the Tauri binary. The launcher is only an operator convenience around two independent processes.
 
@@ -50,7 +52,7 @@ The override must be an executable that supports `bridge --port 4242`.
 - Tauri 2 desktop shell with a React, TypeScript, and Vite frontend
 - Loopback-only Sony protocol-v2 JSON listener on `127.0.0.1:4243`
 - Separate Sony Head Tracker process with one-command orchestration
-- Pinned, checksum-verified automatic tracker setup for macOS and Windows
+- Pinned, checksum-verified automatic tracker setup for macOS and Windows x64
 - Provider-neutral Rust pose types and `SonyUdpHeadPoseProvider`
 - Strict schema validation, connection timeout, and reset-counter detection
 - Live device, orientation, quaternion, gyroscope, packet-rate, and latency diagnostics
@@ -89,9 +91,10 @@ head-tracking/             compatibility tests, sample sender, and reference wor
 - Grant Input Monitoring to the stable CLI under `.tools/sony-head-tracker/v2.2.0/`, then stop and rerun `npm start`.
 - The first download may require network access; later runs use the verified local copy.
 
-### Windows
+### Windows x64
 
-- Requires Windows 11 and the usual Tauri C++/WebView2 prerequisites.
+- Requires Windows 11 x64 and the usual Tauri C++/WebView2 prerequisites.
+- The pinned upstream Windows artifact is x64-only; Windows ARM64 is not currently verified.
 - If Windows has not created the headset sensor node, use the upstream tracker’s documented Repair Tracker flow, then rerun `npm start`.
 
 ### Linux
@@ -119,7 +122,9 @@ For complete prerequisites, troubleshooting, build commands, and launcher detail
 
 - Upstream: <https://github.com/NicholasSlattery/sony-head-tracker>
 - Pinned launcher version: `2.2.0`
-- Downloads use the official GitHub release assets and are accepted only when their SHA-256 matches the digest committed in `scripts/run-system.mjs`.
+- Downloads use the official GitHub release assets and are accepted only when
+  the archive and extracted executable SHA-256 values match the digests committed
+  in `scripts/run-system.mjs`. Cached executables are rehashed on every use.
 - Tracker telemetry stays on loopback.
 - Downloaded tools and archives are excluded from Git.
 
