@@ -2,9 +2,6 @@
 // The upstream GUI, Bluetooth repair, Winsock, and shell headers are intentionally omitted.
 #pragma once
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -16,12 +13,15 @@
 #endif
 
 #include <Windows.h>
+#ifndef _NTDEF_
+typedef LONG NTSTATUS;
+#endif
 #include <SetupAPI.h>
 #include <cfgmgr32.h>
 #include <devpkey.h>
 #include <hidusage.h>
-#include <hidpi.h>
 #include <hidsdi.h>
+#include <hidpi.h>
 #include <Sensors.h>
 #include <SensorsApi.h>
 #include <PortableDeviceTypes.h>
