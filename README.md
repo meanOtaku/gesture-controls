@@ -58,6 +58,8 @@ See the official Tauri prerequisites if your distribution uses different package
 
 ## Install and run
 
+For complete Windows, macOS, and Linux setup instructions, see [`RUNNING_THE_PROJECT.txt`](RUNNING_THE_PROJECT.txt).
+
 ```bash
 npm install
 npm run tauri dev
