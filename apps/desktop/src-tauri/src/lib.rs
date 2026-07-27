@@ -1,9 +1,12 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
+use calibration::CalibrationRuntime;
 use head_tracking::{HeadPoseEvent, HeadPoseProvider, SonyUdpHeadPoseProvider};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tracing::{error, info, warn};
+
+mod calibration;
 
 const SONY_JSON_ADDRESS: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 4243);
 const CONNECTION_EVENT: &str = "head-tracker-connection";
@@ -19,6 +22,12 @@ pub fn run() {
         .ok();
 
     tauri::Builder::default()
+        .manage(CalibrationRuntime::default())
+        .invoke_handler(tauri::generate_handler![
+            calibration::get_calibration_state,
+            calibration::capture_calibration_target,
+            calibration::update_calibration_config,
+        ])
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -52,15 +61,28 @@ pub fn run() {
                         }
                         Ok(HeadPoseEvent::Disconnected) => {
                             warn!("Sony head tracker disconnected");
+                            match handle.state::<CalibrationRuntime>().disconnect(&handle) {
+                                Ok(()) => {}
+                                Err(error) => warn!(%error, "failed to suspend head calibration"),
+                            }
                             let _ = handle.emit(CONNECTION_EVENT, false);
                         }
                         Ok(HeadPoseEvent::Pose(pose)) => {
+                            match handle.state::<CalibrationRuntime>().observe(&handle, pose.quaternion) {
+                                Ok(()) => {}
+                                Err(error) => warn!(%error, "failed to evaluate head calibration"),
+                            }
                             if let Err(error) = handle.emit(POSE_EVENT, pose) {
                                 warn!(%error, "failed to emit head-pose event");
                             }
                         }
                         Ok(HeadPoseEvent::ResetCounterChanged { previous, current }) => {
                             warn!(previous, current, "Sony reference frame reset");
+                            let runtime = handle.state::<CalibrationRuntime>();
+                            match runtime.invalidate(&handle) {
+                                Ok(_) => {}
+                                Err(error) => warn!(%error, "failed to invalidate calibration"),
+                            }
                             let _ = handle.emit(RESET_EVENT, (previous, current));
                         }
                         Err(error) => {

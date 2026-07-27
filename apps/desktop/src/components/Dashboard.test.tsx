@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Dashboard } from "./Dashboard";
 import type { HeadTrackerStatus } from "../protocol/events";
@@ -24,6 +24,42 @@ describe("Dashboard", () => {
     for (const label of ["Yaw", "Pitch", "Roll", "Quaternion", "Gyroscope", "Packet rate", "Receive latency", "Reset counter"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
+  });
+
+  it("guides center and top-right calibration and reports an active target", () => {
+    const captures: string[] = [];
+    const settings: Array<[number, number]> = [];
+    const { container } = render(
+      <Dashboard
+        status={connected}
+        calibration={{
+          centerCalibrated: true,
+          topRightCalibrated: false,
+          requiresRecalibration: true,
+          activationThresholdDegrees: 12,
+          dwellMs: 400,
+          activeTarget: "topRight",
+        }}
+        onCaptureTarget={(target) => captures.push(target)}
+        onUpdateCalibration={(threshold, dwell) => settings.push([threshold, dwell])}
+      />,
+    );
+
+    const dashboard = within(container);
+    expect(dashboard.getByText("Calibration required")).toBeInTheDocument();
+    expect(dashboard.getByText("Top-right active")).toBeInTheDocument();
+    fireEvent.click(dashboard.getByRole("button", { name: /Capture center/ }));
+    fireEvent.click(dashboard.getByRole("button", { name: /Capture top-right/ }));
+    expect(captures).toEqual(["center", "topRight"]);
+
+    const threshold = dashboard.getByLabelText("Activation threshold degrees");
+    fireEvent.change(threshold, { target: { value: "18" } });
+    expect(settings).toEqual([]);
+    fireEvent.blur(threshold);
+    const dwell = dashboard.getByLabelText("Activation dwell milliseconds");
+    fireEvent.change(dwell, { target: { value: "650" } });
+    fireEvent.blur(dwell);
+    expect(settings).toEqual([[18, 400], [18, 650]]);
   });
 
   it("shows a clear waiting state and one-command launch guidance before the first packet", () => {

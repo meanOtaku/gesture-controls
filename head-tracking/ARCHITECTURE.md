@@ -12,7 +12,10 @@ external sony-head-tracker v2.2.0
 SonyUdpHeadPoseProvider
     │ provider-neutral HeadPose events
     ▼
-Tauri coordinator -> React diagnostics and later calibration
+interaction-engine quaternion calibration and dwell detection
+    │ HeadTargetEntered / HeadTargetExited
+    ▼
+Tauri coordinator -> React diagnostics and calibration workflow
 ```
 
 The external upstream process owns HID discovery, descriptor validation,
@@ -28,6 +31,10 @@ trees up together.
 `crates/head-tracking` defines the replaceable provider interface and currently
 implements `SonyUdpHeadPoseProvider`. `crates/protocol` validates protocol-v2
 Sony packets and converts them into provider-neutral pose values.
+`crates/interaction-engine` stores center/top-right calibration quaternions,
+computes shortest quaternion angular distance with `nalgebra`, applies the
+configurable activation threshold and dwell, and invalidates calibration when
+the Sony reference frame resets.
 
 Future providers can implement the same interface without changing calibration
 or interaction logic:

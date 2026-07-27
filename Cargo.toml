@@ -1,5 +1,10 @@
 [workspace]
-members = ["apps/desktop/src-tauri", "crates/protocol", "crates/head-tracking"]
+members = [
+  "apps/desktop/src-tauri",
+  "crates/protocol",
+  "crates/head-tracking",
+  "crates/interaction-engine",
+]
 resolver = "2"
 
 [workspace.package]

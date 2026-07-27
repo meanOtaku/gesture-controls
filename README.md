@@ -2,7 +2,7 @@
 
 A cross-platform Tauri 2 desktop coordinator for spatial controls using Sony headset orientation and, in later milestones, Samsung Galaxy Watch gestures.
 
-The repository currently implements Milestones 1 and 2 from [`PROJECT_BRIEF.md`](PROJECT_BRIEF.md): the desktop foundation and the Sony JSON UDP input. Sony Head Tracker remains a separate process, while one launcher starts and stops both applications together.
+The repository currently implements Milestones 1–3 from [`PROJECT_BRIEF.md`](PROJECT_BRIEF.md): the desktop foundation, Sony JSON UDP input, and head calibration. Sony Head Tracker remains a separate process, while one launcher starts and stops both applications together.
 
 ## Run the complete system
 
@@ -51,6 +51,10 @@ without command-line arguments.
 - Provider-neutral Rust pose types and `SonyUdpHeadPoseProvider`
 - Strict schema validation, connection timeout, and reset-counter detection
 - Live device, orientation, quaternion, gyroscope, packet-rate, and latency diagnostics
+- Guided center/top-right quaternion calibration using `nalgebra`
+- Adjustable activation threshold and dwell duration (400 ms by default)
+- `head-target-entered` / `head-target-exited` events for calibrated targets
+- Automatic recalibration prompt after Sony reference-frame resets
 - React, Rust, UDP integration, launcher, Python compatibility, and packaging tests
 
 ## Architecture
@@ -65,7 +69,10 @@ sony-head-tracker v2.2.0       separate process
 SonyUdpHeadPoseProvider
     │ generic HeadPose events
     ▼
-Tauri event bridge ──► React diagnostics dashboard
+interaction-engine calibration + dwell detection
+    │ target entered / exited events
+    ▼
+Tauri event bridge ──► React diagnostics and calibration dashboard
 ```
 
 Sony wire types are converted immediately into a generic `HeadPose`, so calibration and future providers do not depend on Sony packet structures.
@@ -74,6 +81,7 @@ Sony wire types are converted immediately into a generic `HeadPose`, so calibrat
 apps/desktop/              React frontend + Tauri application
 crates/protocol/           Sony wire types and generic pose domain types
 crates/head-tracking/      Provider abstraction and strict UDP listener
+crates/interaction-engine/ Quaternion calibration and target dwell state
 scripts/run-system.mjs     one-command external-process orchestrator
 head-tracking/             compatibility tests, sample sender, and reference work
 ```
@@ -108,8 +116,8 @@ python3 head-tracking/scripts/send_sample.py
 npm test
 npm run typecheck
 npm run build
-cargo test -p spatial-protocol -p head-tracking --all-targets
-cargo clippy -p spatial-protocol -p head-tracking --all-targets --all-features -- -D warnings
+cargo test -p spatial-protocol -p head-tracking -p interaction-engine --all-targets
+cargo clippy -p spatial-protocol -p head-tracking -p interaction-engine --all-targets --all-features -- -D warnings
 ```
 
 For complete prerequisites, troubleshooting, build commands, and launcher details, see [`RUNNING_THE_PROJECT.txt`](RUNNING_THE_PROJECT.txt).

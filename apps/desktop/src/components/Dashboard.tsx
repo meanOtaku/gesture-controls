@@ -1,15 +1,48 @@
-import type { HeadTrackerStatus } from "../protocol/events";
+import { useRef } from "react";
+import type {
+  CalibrationState,
+  CalibrationTarget,
+  HeadTrackerStatus,
+} from "../protocol/events";
 
 interface DashboardProps {
   status: HeadTrackerStatus | null;
+  calibration?: CalibrationState | null;
+  calibrationError?: string | null;
+  onCaptureTarget?: (target: CalibrationTarget) => void;
+  onUpdateCalibration?: (activationThresholdDegrees: number, dwellMs: number) => void;
 }
 
 const number = (value: number, digits = 2) => value.toFixed(digits);
 const vector = (values: readonly number[] | null, digits = 3) =>
   values ? `[${values.map((value) => number(value, digits)).join(", ")}]` : "Unavailable";
 
-export function Dashboard({ status }: DashboardProps) {
+export function Dashboard({
+  status,
+  calibration,
+  calibrationError,
+  onCaptureTarget = () => undefined,
+  onUpdateCalibration = () => undefined,
+}: DashboardProps) {
   const connected = status?.connected === true;
+  const thresholdInput = useRef<HTMLInputElement>(null);
+  const dwellInput = useRef<HTMLInputElement>(null);
+  const calibrationState = calibration ?? {
+    centerCalibrated: false,
+    topRightCalibrated: false,
+    requiresRecalibration: true,
+    activationThresholdDegrees: 12,
+    dwellMs: 400,
+    activeTarget: null,
+  };
+  const commitCalibrationSettings = () => {
+    const threshold = Number(thresholdInput.current?.value);
+    const dwell = Number(dwellInput.current?.value);
+    if (Number.isFinite(threshold) && threshold >= 1 && threshold <= 180
+      && Number.isInteger(dwell) && dwell >= 50 && dwell <= 5000) {
+      onUpdateCalibration(threshold, dwell);
+    }
+  };
   return (
     <main className="shell">
       <header className="hero">
@@ -47,6 +80,69 @@ export function Dashboard({ status }: DashboardProps) {
       <section className="vectors">
         <VectorRow label="Quaternion" value={vector(status?.quaternion ?? null)} />
         <VectorRow label="Gyroscope" value={vector(status?.gyroscope ?? null)} />
+      </section>
+
+      <section className="calibration-card" aria-label="Head calibration">
+        <div className="calibration-heading">
+          <div>
+            <p className="eyebrow">Head calibration</p>
+            <h2>{calibrationState.requiresRecalibration ? "Calibration required" : "Calibration ready"}</h2>
+          </div>
+          <strong className={`target-state ${calibrationState.activeTarget ? "active" : ""}`}>
+            {calibrationState.activeTarget === "topRight"
+              ? "Top-right active"
+              : calibrationState.activeTarget === "center"
+                ? "Center active"
+                : "No active target"}
+          </strong>
+        </div>
+        {calibrationState.requiresRecalibration && (
+          <p className="calibration-warning">
+            Face the screen center, capture it, then look at the top-right corner and capture again.
+            A tracker reset clears both targets.
+          </p>
+        )}
+        {calibrationError && <p className="calibration-error" role="alert">{calibrationError}</p>}
+        <div className="calibration-actions">
+          <button disabled={!connected} onClick={() => onCaptureTarget("center")}>
+            Capture center
+            <small>{calibrationState.centerCalibrated ? "Saved" : "Not saved"}</small>
+          </button>
+          <button disabled={!connected} onClick={() => onCaptureTarget("topRight")}>
+            Capture top-right
+            <small>{calibrationState.topRightCalibrated ? "Saved" : "Not saved"}</small>
+          </button>
+          <label>
+            Threshold
+            <input
+              aria-label="Activation threshold degrees"
+              type="number"
+              min="1"
+              max="180"
+              step="1"
+              ref={thresholdInput}
+              key={`threshold-${calibrationState.activationThresholdDegrees}`}
+              defaultValue={calibrationState.activationThresholdDegrees}
+              onBlur={commitCalibrationSettings}
+            />
+            <small>degrees</small>
+          </label>
+          <label>
+            Dwell
+            <input
+              aria-label="Activation dwell milliseconds"
+              type="number"
+              min="50"
+              max="5000"
+              step="50"
+              ref={dwellInput}
+              key={`dwell-${calibrationState.dwellMs}`}
+              defaultValue={calibrationState.dwellMs}
+              onBlur={commitCalibrationSettings}
+            />
+            <small>milliseconds</small>
+          </label>
+        </div>
       </section>
 
       <section className="settings">
