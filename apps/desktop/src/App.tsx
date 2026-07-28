@@ -80,6 +80,8 @@ function MainApp() {
   const [calibration, setCalibration] = useState<CalibrationState | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
   const calibrationEventVersion = useRef(0);
+  const overlayEventVersion = useRef(0);
+  const overlayVisible = useRef(false);
   const inTauri = "__TAURI_INTERNALS__" in window;
 
   useEffect(() => {
@@ -88,6 +90,11 @@ function MainApp() {
     let cancelled = false;
     const hideOverlay = () => { if (!cancelled) void invoke("hide_overlay"); };
     const listenerRegistrations = [
+      listen<OverlayState>(OVERLAY_STATE_EVENT, ({ payload }) => {
+        if (cancelled) return;
+        overlayEventVersion.current += 1;
+        overlayVisible.current = payload.visible;
+      }),
       listen<HeadPosePayload>(HEAD_POSE_EVENT, ({ payload }) => {
         if (!cancelled) setStatus({ ...payload, connected: true });
       }),
@@ -120,6 +127,16 @@ function MainApp() {
       if (!cancelled && failures.length > 0) {
         setCalibrationError(`Failed to subscribe to ${failures.length} application event(s)`);
       }
+      const requestedOverlayVersion = overlayEventVersion.current;
+      void invoke<OverlayState>("get_overlay_state")
+        .then((state) => {
+          if (!cancelled && overlayEventVersion.current === requestedOverlayVersion) {
+            overlayVisible.current = state.visible;
+          }
+        })
+        .catch((error) => {
+          if (!cancelled) setCalibrationError(String(error));
+        });
       const requestedVersion = calibrationEventVersion.current;
       void invoke<CalibrationState>("get_calibration_state")
         .then((state) => {
@@ -141,7 +158,7 @@ function MainApp() {
       const delta = event.key === "ArrowUp" || event.key === "ArrowRight" || event.key === "+" ? 5
         : event.key === "ArrowDown" || event.key === "ArrowLeft" || event.key === "-" ? -5
           : null;
-      if (delta !== null) {
+      if (delta !== null && overlayVisible.current) {
         event.preventDefault();
         void invoke("adjust_simulated_volume", { delta });
       } else if (event.key === "Escape") {
@@ -152,6 +169,7 @@ function MainApp() {
 
     return () => {
       cancelled = true;
+      overlayVisible.current = false;
       window.removeEventListener("keydown", handleKeyboard);
       void unlisteners.then((items) => items.forEach((unlisten) => unlisten()));
     };

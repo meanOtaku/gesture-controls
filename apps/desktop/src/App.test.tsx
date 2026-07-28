@@ -39,6 +39,9 @@ beforeEach(() => {
         activeTarget: null,
       });
     }
+    if (command === "get_overlay_state") {
+      return Promise.resolve({ visible: false, grabbed: false, volume: 50, rotationAngle: 0, screenX: 0, screenY: 0 });
+    }
     return Promise.resolve(undefined);
   });
 });
@@ -49,12 +52,74 @@ afterEach(() => {
 });
 
 describe("App overlay integration", () => {
+  it("ignores volume keys while the overlay is hidden", async () => {
+    render(<App />);
+    await waitFor(() => expect(listeners.has(HEAD_TARGET_ENTERED_EVENT)).toBe(true));
+    invoke.mockClear();
+
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+
+    expect(invoke).not.toHaveBeenCalledWith("adjust_simulated_volume", expect.anything());
+  });
+
+  it("reconciles an already-visible overlay before handling volume keys", async () => {
+    invoke.mockImplementation((command: string) => {
+      if (command === "get_calibration_state") {
+        return Promise.resolve({
+          centerCalibrated: true,
+          topRightCalibrated: true,
+          requiresRecalibration: false,
+          activationThresholdDegrees: 12,
+          dwellMs: 400,
+          activeTarget: null,
+        });
+      }
+      if (command === "get_overlay_state") return Promise.resolve({ visible: true, volume: 50 });
+      return Promise.resolve(undefined);
+    });
+
+    render(<App />);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("get_overlay_state"));
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+
+    expect(invoke).toHaveBeenCalledWith("adjust_simulated_volume", { delta: 5 });
+  });
+
+  it("does not let an older main-window overlay snapshot hide a newer visible event", async () => {
+    let resolveOverlaySnapshot: (state: unknown) => void = () => undefined;
+    invoke.mockImplementation((command: string) => {
+      if (command === "get_calibration_state") {
+        return Promise.resolve({
+          centerCalibrated: true,
+          topRightCalibrated: true,
+          requiresRecalibration: false,
+          activationThresholdDegrees: 12,
+          dwellMs: 400,
+          activeTarget: null,
+        });
+      }
+      if (command === "get_overlay_state") {
+        return new Promise((resolve) => { resolveOverlaySnapshot = resolve; });
+      }
+      return Promise.resolve(undefined);
+    });
+
+    render(<App />);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("get_overlay_state"));
+    await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: true } }));
+    await act(async () => resolveOverlaySnapshot({ visible: false, volume: 50 }));
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+
+    expect(invoke).toHaveBeenCalledWith("adjust_simulated_volume", { delta: 5 });
+  });
+
   it("shows the knob for the top-right target and supports keyboard volume simulation", async () => {
     render(<App />);
     await waitFor(() => expect(listeners.has(HEAD_TARGET_ENTERED_EVENT)).toBe(true));
 
     await act(async () => listeners.get(HEAD_TARGET_ENTERED_EVENT)?.({ payload: "topRight" }));
     expect(invoke).toHaveBeenCalledWith("show_overlay");
+    await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: true } }));
 
     fireEvent.keyDown(window, { key: "ArrowUp" });
     expect(invoke).toHaveBeenCalledWith("adjust_simulated_volume", { delta: 5 });
