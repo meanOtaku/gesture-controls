@@ -152,7 +152,7 @@ export function Dashboard({
         </div>
         <label>Host<input value="127.0.0.1" readOnly /></label>
         <label>JSON port<input value="4243" readOnly /></label>
-        <p className="hint">Loopback-only by design. On macOS or Windows x64, npm start launches both applications.</p>
+        <p className="hint">Loopback-only by design. Use the arrow or +/- keys to simulate volume while the knob is visible.</p>
       </section>
     </main>
   );

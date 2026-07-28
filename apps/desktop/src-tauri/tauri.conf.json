@@ -10,14 +10,30 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
+        "label": "main",
         "title": "Spatial Gesture Control",
         "width": 1180,
         "height": 820,
         "minWidth": 720,
         "minHeight": 620,
         "resizable": true
+      },
+      {
+        "label": "overlay",
+        "url": "index.html?window=overlay",
+        "title": "Volume",
+        "width": 320,
+        "height": 320,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "visible": false,
+        "focus": false,
+        "skipTaskbar": true
       }
     ],
     "security": {

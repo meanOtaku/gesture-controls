@@ -243,3 +243,55 @@ fn validate_config(config: CalibrationConfig) -> Result<(), CalibrationError> {
     }
     Ok(())
 }
+
+pub fn commit_visibility_after<E>(
+    current: &mut bool,
+    visible: bool,
+    transition: impl FnOnce() -> Result<(), E>,
+) -> Result<(), E> {
+    transition()?;
+    *current = visible;
+    Ok(())
+}
+
+#[derive(Debug, Error, PartialEq)]
+#[error("volume must be a finite value")]
+pub struct VolumeError;
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct VolumeSimulation {
+    current: f32,
+}
+
+impl Default for VolumeSimulation {
+    fn default() -> Self {
+        Self { current: 50.0 }
+    }
+}
+
+impl VolumeSimulation {
+    pub fn new(initial: f32) -> Result<Self, VolumeError> {
+        let mut simulation = Self::default();
+        simulation.set(initial)?;
+        Ok(simulation)
+    }
+
+    pub fn current(&self) -> f32 {
+        self.current
+    }
+
+    pub fn set(&mut self, volume: f32) -> Result<f32, VolumeError> {
+        if !volume.is_finite() {
+            return Err(VolumeError);
+        }
+        self.current = volume.clamp(0.0, 100.0);
+        Ok(self.current)
+    }
+
+    pub fn adjust(&mut self, delta: f32) -> f32 {
+        if delta.is_finite() {
+            self.current = (self.current + delta).clamp(0.0, 100.0);
+        }
+        self.current
+    }
+}

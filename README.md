@@ -2,7 +2,7 @@
 
 A cross-platform Tauri 2 desktop coordinator for spatial controls using Sony headset orientation and, in later milestones, Samsung Galaxy Watch gestures.
 
-The repository currently implements Milestones 1–3 from [`PROJECT_BRIEF.md`](PROJECT_BRIEF.md): the desktop foundation, Sony JSON UDP input, and head calibration. Sony Head Tracker remains a separate process, while one launcher starts and stops both applications together.
+The repository currently implements Milestones 1–4 from [`PROJECT_BRIEF.md`](PROJECT_BRIEF.md): the desktop foundation, Sony JSON UDP input, head calibration, and the virtual volume knob. Sony Head Tracker remains a separate process, while one launcher starts and stops both applications together.
 
 ## Run the complete system
 
@@ -25,6 +25,8 @@ npm start
    its protocol-v2 JSON stream on `127.0.0.1:4243` while open.
 3. Starts the Tauri application.
 4. Stops both process trees when either application exits or the launcher receives Ctrl+C.
+
+After center and top-right calibration, hold your gaze on the top-right target for the configured dwell time. The dedicated volume overlay appears without taking focus. Use the arrow keys or `+`/`-` in the main window to simulate volume changes; leaving the target, losing Sony tracking, or pressing Escape hides it.
 
 The tracker is deliberately not compiled into, bundled with, or owned by the Tauri binary. The launcher is only an operator convenience around two independent processes.
 
@@ -54,6 +56,9 @@ without command-line arguments.
 - Guided center/top-right quaternion calibration using `nalgebra`
 - Adjustable activation threshold and dwell duration (400 ms by default)
 - `head-target-entered` / `head-target-exited` events for calibrated targets
+- Dedicated transparent, borderless, click-through, always-on-top volume overlay
+- Automatic knob display when the calibrated top-right target activates
+- Keyboard volume simulation with arrow or +/- keys, clamped from 0–100%
 - Automatic recalibration prompt after Sony reference-frame resets
 - React, Rust, UDP integration, launcher, Python compatibility, and packaging tests
 
@@ -69,10 +74,10 @@ sony-head-tracker v2.2.0       separate process
 SonyUdpHeadPoseProvider
     │ generic HeadPose events
     ▼
-interaction-engine calibration + dwell detection
+interaction-engine calibration + dwell detection + simulated volume
     │ target entered / exited events
     ▼
-Tauri event bridge ──► React diagnostics and calibration dashboard
+Tauri event bridge ──► React dashboard + dedicated volume overlay
 ```
 
 Sony wire types are converted immediately into a generic `HeadPose`, so calibration and future providers do not depend on Sony packet structures.

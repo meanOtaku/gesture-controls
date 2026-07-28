@@ -66,6 +66,6 @@ describe("Dashboard", () => {
     const { container } = render(<Dashboard status={null} />);
     const dashboard = within(container);
     expect(dashboard.getByText("Waiting for Sony tracker")).toBeInTheDocument();
-    expect(dashboard.getByText(/on macOS or Windows x64, npm start launches both applications/i)).toBeInTheDocument();
+    expect(dashboard.getByText(/use the arrow or \+\/- keys to simulate volume/i)).toBeInTheDocument();
   });
 });

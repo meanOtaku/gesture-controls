@@ -7,6 +7,7 @@ use tauri::{Emitter, Manager};
 use tracing::{error, info, warn};
 
 mod calibration;
+mod overlay;
 
 const SONY_JSON_ADDRESS: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 4243);
 const CONNECTION_EVENT: &str = "head-tracker-connection";
@@ -23,13 +24,19 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(CalibrationRuntime::default())
+        .manage(overlay::OverlayRuntime::default())
         .invoke_handler(tauri::generate_handler![
             calibration::get_calibration_state,
             calibration::capture_calibration_target,
             calibration::update_calibration_config,
+            overlay::get_overlay_state,
+            overlay::show_overlay,
+            overlay::hide_overlay,
+            overlay::adjust_simulated_volume,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
+            overlay::prepare_window(&handle).map_err(std::io::Error::other)?;
             tauri::async_runtime::spawn(async move {
                 let provider = match SonyUdpHeadPoseProvider::bind(
                     SONY_JSON_ADDRESS,
