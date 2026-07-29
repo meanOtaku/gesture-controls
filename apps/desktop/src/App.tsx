@@ -79,20 +79,55 @@ function MainApp() {
   const [status, setStatus] = useState<HeadTrackerStatus | null>(null);
   const [calibration, setCalibration] = useState<CalibrationState | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
+  const [volumeError, setVolumeError] = useState<string | null>(null);
   const calibrationEventVersion = useRef(0);
   const overlayEventVersion = useRef(0);
   const overlayVisible = useRef(false);
+  const overlayDesiredVisible = useRef<boolean | null>(null);
+  const volumeAdjustmentInFlight = useRef(false);
+  const volumeRequestVersion = useRef(0);
   const inTauri = "__TAURI_INTERNALS__" in window;
 
   useEffect(() => {
     if (!inTauri) return;
 
     let cancelled = false;
-    const hideOverlay = () => { if (!cancelled) void invoke("hide_overlay"); };
+    const hideOverlay = () => {
+      if (cancelled) return;
+      overlayDesiredVisible.current = false;
+      overlayVisible.current = false;
+      const requestVersion = ++volumeRequestVersion.current;
+      void invoke("hide_overlay")
+        .then(() => {
+          if (!cancelled && volumeRequestVersion.current === requestVersion) setVolumeError(null);
+        })
+        .catch((error) => {
+          if (!cancelled && volumeRequestVersion.current === requestVersion) {
+            setVolumeError(`Volume overlay failed to hide: ${String(error)}`);
+          }
+        });
+    };
+    const showOverlay = () => {
+      if (cancelled) return;
+      overlayDesiredVisible.current = true;
+      const requestVersion = ++volumeRequestVersion.current;
+      void invoke("show_overlay")
+        .then(() => {
+          if (!cancelled && volumeRequestVersion.current === requestVersion) setVolumeError(null);
+        })
+        .catch((error) => {
+          if (!cancelled && volumeRequestVersion.current === requestVersion) {
+            overlayDesiredVisible.current = false;
+            overlayVisible.current = false;
+            setVolumeError(`Volume control failed: ${String(error)}`);
+          }
+        });
+    };
     const listenerRegistrations = [
       listen<OverlayState>(OVERLAY_STATE_EVENT, ({ payload }) => {
         if (cancelled) return;
         overlayEventVersion.current += 1;
+        if (payload.visible && overlayDesiredVisible.current === false) return;
         overlayVisible.current = payload.visible;
       }),
       listen<HeadPosePayload>(HEAD_POSE_EVENT, ({ payload }) => {
@@ -112,7 +147,7 @@ function MainApp() {
         if (cancelled) return;
         calibrationEventVersion.current += 1;
         setCalibration((current) => current ? { ...current, activeTarget: payload } : current);
-        if (payload === "topRight") void invoke("show_overlay");
+        if (payload === "topRight") showOverlay();
       }),
       listen<CalibrationTarget>(HEAD_TARGET_EXITED_EVENT, ({ payload }) => {
         if (cancelled) return;
@@ -130,7 +165,9 @@ function MainApp() {
       const requestedOverlayVersion = overlayEventVersion.current;
       void invoke<OverlayState>("get_overlay_state")
         .then((state) => {
-          if (!cancelled && overlayEventVersion.current === requestedOverlayVersion) {
+          if (!cancelled
+            && overlayEventVersion.current === requestedOverlayVersion
+            && !(state.visible && overlayDesiredVisible.current === false)) {
             overlayVisible.current = state.visible;
           }
         })
@@ -142,7 +179,7 @@ function MainApp() {
         .then((state) => {
           if (!cancelled && calibrationEventVersion.current === requestedVersion) {
             setCalibration(state);
-            if (state.activeTarget === "topRight") void invoke("show_overlay");
+            if (state.activeTarget === "topRight") showOverlay();
           }
         })
         .catch((error) => {
@@ -160,7 +197,19 @@ function MainApp() {
           : null;
       if (delta !== null && overlayVisible.current) {
         event.preventDefault();
-        void invoke("adjust_simulated_volume", { delta });
+        if (volumeAdjustmentInFlight.current) return;
+        volumeAdjustmentInFlight.current = true;
+        const requestVersion = ++volumeRequestVersion.current;
+        void invoke("adjust_system_volume", { delta })
+          .then(() => {
+            if (!cancelled && volumeRequestVersion.current === requestVersion) setVolumeError(null);
+          })
+          .catch((error) => {
+            if (!cancelled && volumeRequestVersion.current === requestVersion) {
+              setVolumeError(`Volume control failed: ${String(error)}`);
+            }
+          })
+          .finally(() => { volumeAdjustmentInFlight.current = false; });
       } else if (event.key === "Escape") {
         hideOverlay();
       }
@@ -169,6 +218,8 @@ function MainApp() {
 
     return () => {
       cancelled = true;
+      volumeRequestVersion.current += 1;
+      overlayDesiredVisible.current = false;
       overlayVisible.current = false;
       window.removeEventListener("keydown", handleKeyboard);
       void unlisteners.then((items) => items.forEach((unlisten) => unlisten()));
@@ -198,11 +249,15 @@ function MainApp() {
     }
   };
 
+  const applicationError = [calibrationError, volumeError]
+    .filter((error): error is string => error !== null)
+    .join(" · ") || null;
+
   return (
     <Dashboard
       status={status}
       calibration={calibration}
-      calibrationError={calibrationError}
+      calibrationError={applicationError}
       onCaptureTarget={(target) => { void captureTarget(target); }}
       onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }}
     />

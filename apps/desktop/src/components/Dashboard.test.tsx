@@ -66,6 +66,6 @@ describe("Dashboard", () => {
     const { container } = render(<Dashboard status={null} />);
     const dashboard = within(container);
     expect(dashboard.getByText("Waiting for Sony tracker")).toBeInTheDocument();
-    expect(dashboard.getByText(/use the arrow or \+\/- keys to simulate volume/i)).toBeInTheDocument();
+    expect(dashboard.getByText(/on macos, use the arrow or \+\/- keys to change system volume/i)).toBeInTheDocument();
   });
 });

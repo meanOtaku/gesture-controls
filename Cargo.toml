@@ -4,6 +4,7 @@ members = [
   "crates/protocol",
   "crates/head-tracking",
   "crates/interaction-engine",
+  "crates/volume-control",
 ]
 resolver = "2"
 

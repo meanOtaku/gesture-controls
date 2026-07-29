@@ -14,6 +14,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 head-tracking = { path = "../../../crates/head-tracking" }
 interaction-engine = { path = "../../../crates/interaction-engine" }
+volume-control = { path = "../../../crates/volume-control" }
 spatial-protocol = { path = "../../../crates/protocol" }
 serde.workspace = true
 tauri = { version = "2", features = ["macos-private-api"] }

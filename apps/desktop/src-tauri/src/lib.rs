@@ -26,6 +26,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(CalibrationRuntime::default())
         .manage(overlay::OverlayRuntime::default())
+        .manage(overlay::VolumeRuntime::default())
         .invoke_handler(tauri::generate_handler![
             calibration::get_calibration_state,
             calibration::capture_calibration_target,
@@ -33,7 +34,7 @@ pub fn run() {
             overlay::get_overlay_state,
             overlay::show_overlay,
             overlay::hide_overlay,
-            overlay::adjust_simulated_volume,
+            overlay::adjust_system_volume,
         ])
         .on_window_event(|window, event| {
             if window.label() == MAIN_WINDOW

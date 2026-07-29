@@ -46,3 +46,18 @@ test("closing the main UI exits Tauri even while the hidden overlay window exist
     "the main window close request must terminate the full Tauri process",
   );
 });
+
+test("wires keyboard adjustments to the platform volume controller", async () => {
+  const [libSource, overlaySource] = await Promise.all([
+    readFile(libSourceUrl, "utf8"),
+    readFile(overlaySourceUrl, "utf8"),
+  ]);
+
+  assert.match(libSource, /manage\(overlay::VolumeRuntime::default\(\)\)/);
+  assert.match(libSource, /overlay::adjust_system_volume/);
+  assert.match(
+    overlaySource,
+    /pub fn adjust_system_volume[\s\S]*runtime\.adjust_system_volume/,
+    "the Tauri command must delegate through the serialized overlay runtime",
+  );
+});

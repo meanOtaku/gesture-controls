@@ -3,6 +3,10 @@ use std::sync::Mutex;
 use interaction_engine::{VolumeSimulation, commit_visibility_after, top_right_overlay_position};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow};
+use volume_control::{
+    VolumeController, VolumeError, adjust_system_volume as adjust_native_volume,
+    platform_volume_controller,
+};
 
 pub const OVERLAY_STATE_EVENT: &str = "overlay-state";
 const MAIN_WINDOW: &str = "main";
@@ -35,6 +39,28 @@ impl Default for OverlayState {
 
 pub struct OverlayRuntime(Mutex<OverlayState>);
 
+pub struct VolumeRuntime(Box<dyn VolumeController>);
+
+impl Default for VolumeRuntime {
+    fn default() -> Self {
+        Self(platform_volume_controller())
+    }
+}
+
+impl VolumeRuntime {
+    fn controller(&self) -> &dyn VolumeController {
+        self.0.as_ref()
+    }
+
+    fn available_volume(&self) -> Result<Option<f32>, String> {
+        match self.controller().get_volume() {
+            Ok(volume) => Ok(Some(volume)),
+            Err(VolumeError::UnsupportedPlatform) => Ok(None),
+            Err(error) => Err(error.to_string()),
+        }
+    }
+}
+
 impl Default for OverlayRuntime {
     fn default() -> Self {
         Self(Mutex::new(OverlayState::default()))
@@ -49,7 +75,11 @@ impl OverlayRuntime {
             .map_err(|_| "overlay state lock was poisoned".to_string())
     }
 
-    fn show(&self, app: &AppHandle) -> Result<OverlayState, String> {
+    fn show(
+        &self,
+        app: &AppHandle,
+        volume_runtime: &VolumeRuntime,
+    ) -> Result<OverlayState, String> {
         let window = app
             .get_webview_window(OVERLAY_WINDOW)
             .ok_or("overlay window is not configured")?;
@@ -57,6 +87,9 @@ impl OverlayRuntime {
             .0
             .lock()
             .map_err(|_| "overlay state lock was poisoned")?;
+        if let Some(volume) = volume_runtime.available_volume()? {
+            state.volume = volume * 100.0;
+        }
         prepare_window(app)?;
         position_window_at_top_right(app, &window)?;
         commit_visibility_after(&mut state.visible, true, || {
@@ -83,13 +116,19 @@ impl OverlayRuntime {
         Ok(snapshot)
     }
 
-    fn adjust(&self, app: &AppHandle, delta: f32) -> Result<OverlayState, String> {
+    fn adjust_system_volume(
+        &self,
+        app: &AppHandle,
+        delta: f32,
+        volume_runtime: &VolumeRuntime,
+    ) -> Result<OverlayState, String> {
         let mut state = self
             .0
             .lock()
             .map_err(|_| "overlay state lock was poisoned")?;
-        let mut volume = VolumeSimulation::new(state.volume).map_err(|error| error.to_string())?;
-        state.volume = volume.adjust(delta);
+        let normalized = adjust_native_volume(volume_runtime.controller(), state.visible, delta)
+            .map_err(|error| error.to_string())?;
+        state.volume = normalized * 100.0;
         let snapshot = *state;
         let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
         Ok(snapshot)
@@ -158,8 +197,9 @@ pub fn get_overlay_state(runtime: State<'_, OverlayRuntime>) -> Result<OverlaySt
 pub fn show_overlay(
     app: AppHandle,
     runtime: State<'_, OverlayRuntime>,
+    volume_runtime: State<'_, VolumeRuntime>,
 ) -> Result<OverlayState, String> {
-    runtime.show(&app)
+    runtime.show(&app, &volume_runtime)
 }
 
 #[tauri::command]
@@ -171,13 +211,11 @@ pub fn hide_overlay(
 }
 
 #[tauri::command]
-pub fn adjust_simulated_volume(
+pub fn adjust_system_volume(
     delta: f32,
     app: AppHandle,
     runtime: State<'_, OverlayRuntime>,
+    volume_runtime: State<'_, VolumeRuntime>,
 ) -> Result<OverlayState, String> {
-    if !delta.is_finite() {
-        return Err("volume adjustment must be finite".to_string());
-    }
-    runtime.adjust(&app, delta)
+    runtime.adjust_system_volume(&app, delta, &volume_runtime)
 }

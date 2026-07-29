@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { VolumeKnob } from "./VolumeKnob";
 
 describe("VolumeKnob", () => {
-  it("renders the simulated volume as an accessible animated dial", () => {
+  it("renders system volume as an accessible animated dial", () => {
     const { container } = render(<VolumeKnob volume={64} />);
 
     expect(screen.getByRole("meter", { name: "Current volume" })).toHaveAttribute("aria-valuenow", "64");

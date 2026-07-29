@@ -2,7 +2,7 @@
 
 A cross-platform Tauri 2 desktop coordinator for spatial controls using Sony headset orientation and, in later milestones, Samsung Galaxy Watch gestures.
 
-The repository currently implements Milestones 1–4 from [`PROJECT_BRIEF.md`](PROJECT_BRIEF.md): the desktop foundation, Sony JSON UDP input, head calibration, and the virtual volume knob. Sony Head Tracker remains a separate process, while one launcher starts and stops both applications together.
+The repository currently implements Milestones 1–5 from [`PROJECT_BRIEF.md`](PROJECT_BRIEF.md): the desktop foundation, Sony JSON UDP input, head calibration, the volume overlay, and real macOS system-volume control. Sony Head Tracker remains a separate process, while one launcher starts and stops both applications together.
 
 ## Run the complete system
 
@@ -26,7 +26,7 @@ npm start
 3. Starts the Tauri application.
 4. Stops both process trees when either application exits or the launcher receives Ctrl+C.
 
-After center and top-right calibration, hold your gaze on the top-right target for the configured dwell time. The dedicated volume overlay appears without taking focus. Use the arrow keys or `+`/`-` in the main window to simulate volume changes; leaving the target, losing Sony tracking, or pressing Escape hides it.
+After center and top-right calibration, hold your gaze on the top-right target for the configured dwell time. The dedicated volume overlay appears without taking focus. On macOS, use the arrow keys or `+`/`-` in the main window to change the real system output volume; leaving the target, losing Sony tracking, or pressing Escape hides it. Other platforms currently keep the overlay available but report native volume control as unsupported until their Milestone 12 adapters land.
 
 The tracker is deliberately not compiled into, bundled with, or owned by the Tauri binary. The launcher is only an operator convenience around two independent processes.
 
@@ -58,7 +58,7 @@ without command-line arguments.
 - `head-target-entered` / `head-target-exited` events for calibrated targets
 - Dedicated transparent, borderless, click-through, always-on-top volume overlay
 - Automatic knob display when the calibrated top-right target activates
-- Keyboard volume simulation with arrow or +/- keys, clamped from 0–100%
+- Keyboard control of real macOS system output volume with arrow or +/- keys, clamped from 0–100%
 - Automatic recalibration prompt after Sony reference-frame resets
 - React, Rust, UDP integration, launcher, Python compatibility, and packaging tests
 
@@ -74,10 +74,13 @@ sony-head-tracker v2.2.0       separate process
 SonyUdpHeadPoseProvider
     │ generic HeadPose events
     ▼
-interaction-engine calibration + dwell detection + simulated volume
+interaction-engine calibration + dwell detection
     │ target entered / exited events
     ▼
 Tauri event bridge ──► React dashboard + dedicated volume overlay
+    │
+    ▼
+volume-control trait ──► macOS AppleScript system-volume adapter
 ```
 
 Sony wire types are converted immediately into a generic `HeadPose`, so calibration and future providers do not depend on Sony packet structures.
@@ -87,6 +90,7 @@ apps/desktop/              React frontend + Tauri application
 crates/protocol/           Sony wire types and generic pose domain types
 crates/head-tracking/      Provider abstraction and strict UDP listener
 crates/interaction-engine/ Quaternion calibration and target dwell state
+crates/volume-control/      Normalized controller trait and macOS adapter
 scripts/run-system.mjs     one-command external-process orchestrator
 head-tracking/             compatibility tests, sample sender, and reference work
 ```
@@ -121,8 +125,8 @@ python3 head-tracking/scripts/send_sample.py
 npm test
 npm run typecheck
 npm run build
-cargo test -p spatial-protocol -p head-tracking -p interaction-engine --all-targets
-cargo clippy -p spatial-protocol -p head-tracking -p interaction-engine --all-targets --all-features -- -D warnings
+cargo test -p spatial-protocol -p head-tracking -p interaction-engine -p volume-control --all-targets
+cargo clippy -p spatial-protocol -p head-tracking -p interaction-engine -p volume-control --all-targets --all-features -- -D warnings
 ```
 
 For complete prerequisites, troubleshooting, build commands, and launcher details, see [`RUNNING_THE_PROJECT.txt`](RUNNING_THE_PROJECT.txt).

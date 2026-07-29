@@ -24,8 +24,8 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: uv run --directory head-tracking --with pytest pytest -q
       - run: cargo fmt --all -- --check
-      - run: cargo test -p spatial-protocol -p head-tracking -p interaction-engine
-      - run: cargo clippy -p spatial-protocol -p head-tracking -p interaction-engine --all-targets -- -D warnings
+      - run: cargo test -p spatial-protocol -p head-tracking -p interaction-engine -p volume-control
+      - run: cargo clippy -p spatial-protocol -p head-tracking -p interaction-engine -p volume-control --all-targets -- -D warnings
 
   desktop-build:
     strategy:
@@ -47,6 +47,7 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
       - run: npm ci
       - run: npm run test:launcher
+      - run: cargo test -p volume-control
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

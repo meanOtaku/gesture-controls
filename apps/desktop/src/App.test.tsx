@@ -59,7 +59,7 @@ describe("App overlay integration", () => {
 
     fireEvent.keyDown(window, { key: "ArrowUp" });
 
-    expect(invoke).not.toHaveBeenCalledWith("adjust_simulated_volume", expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith("adjust_system_volume", expect.anything());
   });
 
   it("reconciles an already-visible overlay before handling volume keys", async () => {
@@ -82,7 +82,7 @@ describe("App overlay integration", () => {
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("get_overlay_state"));
     fireEvent.keyDown(window, { key: "ArrowUp" });
 
-    expect(invoke).toHaveBeenCalledWith("adjust_simulated_volume", { delta: 5 });
+    expect(invoke).toHaveBeenCalledWith("adjust_system_volume", { delta: 5 });
   });
 
   it("does not let an older main-window overlay snapshot hide a newer visible event", async () => {
@@ -110,10 +110,10 @@ describe("App overlay integration", () => {
     await act(async () => resolveOverlaySnapshot({ visible: false, volume: 50 }));
     fireEvent.keyDown(window, { key: "ArrowUp" });
 
-    expect(invoke).toHaveBeenCalledWith("adjust_simulated_volume", { delta: 5 });
+    expect(invoke).toHaveBeenCalledWith("adjust_system_volume", { delta: 5 });
   });
 
-  it("shows the knob for the top-right target and supports keyboard volume simulation", async () => {
+  it("shows the knob for the top-right target and supports keyboard system volume control", async () => {
     render(<App />);
     await waitFor(() => expect(listeners.has(HEAD_TARGET_ENTERED_EVENT)).toBe(true));
 
@@ -122,10 +122,222 @@ describe("App overlay integration", () => {
     await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: true } }));
 
     fireEvent.keyDown(window, { key: "ArrowUp" });
-    expect(invoke).toHaveBeenCalledWith("adjust_simulated_volume", { delta: 5 });
+    expect(invoke).toHaveBeenCalledWith("adjust_system_volume", { delta: 5 });
 
     await act(async () => listeners.get(HEAD_TRACKER_CONNECTION_EVENT)?.({ payload: false }));
     expect(invoke).toHaveBeenCalledWith("hide_overlay");
+  });
+
+  it("limits key repeat to one native volume adjustment at a time", async () => {
+    let resolveAdjustment: (() => void) | undefined;
+    const adjustment = new Promise<void>((resolve) => { resolveAdjustment = resolve; });
+    invoke.mockImplementation((command: string) => {
+      if (command === "get_calibration_state") {
+        return Promise.resolve({
+          centerCalibrated: true,
+          topRightCalibrated: true,
+          requiresRecalibration: false,
+          activationThresholdDegrees: 12,
+          dwellMs: 400,
+          activeTarget: null,
+        });
+      }
+      if (command === "get_overlay_state") return Promise.resolve({ visible: false, volume: 50 });
+      if (command === "adjust_system_volume") return adjustment;
+      return Promise.resolve(undefined);
+    });
+
+    render(<App />);
+    await waitFor(() => expect(listeners.has(OVERLAY_STATE_EVENT)).toBe(true));
+    await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: true } }));
+    invoke.mockClear();
+
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+
+    expect(invoke.mock.calls.filter(([command]) => command === "adjust_system_volume")).toHaveLength(1);
+
+    await act(async () => resolveAdjustment?.());
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    expect(invoke.mock.calls.filter(([command]) => command === "adjust_system_volume")).toHaveLength(2);
+  });
+
+  it("surfaces hide failures and keeps keyboard fail-closed after stale visible events", async () => {
+    let rejectHide: ((error: Error) => void) | undefined;
+    const hideRequest = new Promise<void>((_resolve, reject) => { rejectHide = reject; });
+    invoke.mockImplementation((command: string) => {
+      if (command === "get_calibration_state") return Promise.resolve({
+        centerCalibrated: true,
+        topRightCalibrated: true,
+        requiresRecalibration: false,
+        activationThresholdDegrees: 12,
+        dwellMs: 400,
+        activeTarget: null,
+      });
+      if (command === "get_overlay_state") return Promise.resolve({ visible: false, volume: 50 });
+      if (command === "hide_overlay") return hideRequest;
+      return Promise.resolve(undefined);
+    });
+
+    render(<App />);
+    await waitFor(() => expect(listeners.has(OVERLAY_STATE_EVENT)).toBe(true));
+    await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: true } }));
+    fireEvent.keyDown(window, { key: "Escape" });
+    await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: true } }));
+    await act(async () => rejectHide?.(new Error("window refused to hide")));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /volume overlay failed to hide.*window refused to hide/i,
+    );
+    invoke.mockClear();
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    expect(invoke).not.toHaveBeenCalledWith("adjust_system_volume", expect.anything());
+  });
+
+  it("keeps a newer volume failure when an older request succeeds later", async () => {
+    let resolveFirst: (() => void) | undefined;
+    const firstShow = new Promise<void>((resolve) => { resolveFirst = resolve; });
+    let showCalls = 0;
+    invoke.mockImplementation((command: string) => {
+      if (command === "get_calibration_state") return Promise.resolve({
+        centerCalibrated: true,
+        topRightCalibrated: true,
+        requiresRecalibration: false,
+        activationThresholdDegrees: 12,
+        dwellMs: 400,
+        activeTarget: null,
+      });
+      if (command === "get_overlay_state") return Promise.resolve({ visible: false, volume: 50 });
+      if (command === "show_overlay") {
+        showCalls += 1;
+        return showCalls === 1 ? firstShow : Promise.reject(new Error("newer volume failure"));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    render(<App />);
+    await waitFor(() => expect(listeners.has(HEAD_TARGET_ENTERED_EVENT)).toBe(true));
+    await act(async () => listeners.get(HEAD_TARGET_ENTERED_EVENT)?.({ payload: "topRight" }));
+    await act(async () => listeners.get(HEAD_TARGET_ENTERED_EVENT)?.({ payload: "topRight" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/newer volume failure/i);
+
+    await act(async () => resolveFirst?.());
+    expect(screen.getByRole("alert")).toHaveTextContent(/newer volume failure/i);
+  });
+
+  it("ignores an older volume failure after a newer request succeeds", async () => {
+    let rejectFirst: ((error: Error) => void) | undefined;
+    const firstShow = new Promise<void>((_resolve, reject) => { rejectFirst = reject; });
+    let showCalls = 0;
+    invoke.mockImplementation((command: string) => {
+      if (command === "get_calibration_state") return Promise.resolve({
+        centerCalibrated: true,
+        topRightCalibrated: true,
+        requiresRecalibration: false,
+        activationThresholdDegrees: 12,
+        dwellMs: 400,
+        activeTarget: null,
+      });
+      if (command === "get_overlay_state") return Promise.resolve({ visible: false, volume: 50 });
+      if (command === "show_overlay") {
+        showCalls += 1;
+        return showCalls === 1 ? firstShow : Promise.resolve(undefined);
+      }
+      return Promise.resolve(undefined);
+    });
+
+    render(<App />);
+    await waitFor(() => expect(listeners.has(HEAD_TARGET_ENTERED_EVENT)).toBe(true));
+    await act(async () => listeners.get(HEAD_TARGET_ENTERED_EVENT)?.({ payload: "topRight" }));
+    await act(async () => listeners.get(HEAD_TARGET_ENTERED_EVENT)?.({ payload: "topRight" }));
+
+    await act(async () => rejectFirst?.(new Error("stale volume failure")));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows calibration and volume failures together", async () => {
+    invoke.mockImplementation((command: string) => {
+      if (command === "get_calibration_state") return Promise.resolve({
+        centerCalibrated: true,
+        topRightCalibrated: true,
+        requiresRecalibration: false,
+        activationThresholdDegrees: 12,
+        dwellMs: 400,
+        activeTarget: null,
+      });
+      if (command === "get_overlay_state") return Promise.resolve({ visible: false, volume: 50 });
+      if (command === "adjust_system_volume") return Promise.reject(new Error("volume unavailable"));
+      if (command === "capture_calibration_target") return Promise.reject(new Error("calibration unavailable"));
+      return Promise.resolve(undefined);
+    });
+
+    render(<App />);
+    await waitFor(() => expect(listeners.has(OVERLAY_STATE_EVENT)).toBe(true));
+    await act(async () => listeners.get(HEAD_TRACKER_CONNECTION_EVENT)?.({ payload: true }));
+    await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: true } }));
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    expect(await screen.findByRole("alert")).toHaveTextContent(/volume unavailable/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /capture center/i }));
+    await waitFor(() => {
+      const alert = screen.getByRole("alert");
+      expect(alert).toHaveTextContent(/volume unavailable/i);
+      expect(alert).toHaveTextContent(/calibration unavailable/i);
+    });
+  });
+
+  it("surfaces failure to read system volume when opening the overlay", async () => {
+    invoke.mockImplementation((command: string) => {
+      if (command === "get_calibration_state") {
+        return Promise.resolve({
+          centerCalibrated: true,
+          topRightCalibrated: true,
+          requiresRecalibration: false,
+          activationThresholdDegrees: 12,
+          dwellMs: 400,
+          activeTarget: null,
+        });
+      }
+      if (command === "get_overlay_state") return Promise.resolve({ visible: false, volume: 50 });
+      if (command === "show_overlay") return Promise.reject(new Error("cannot read output volume"));
+      return Promise.resolve(undefined);
+    });
+
+    render(<App />);
+    await waitFor(() => expect(listeners.has(HEAD_TARGET_ENTERED_EVENT)).toBe(true));
+    await act(async () => listeners.get(HEAD_TARGET_ENTERED_EVENT)?.({ payload: "topRight" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /volume control failed.*cannot read output volume/i,
+    );
+  });
+
+  it("surfaces native volume backend failures", async () => {
+    invoke.mockImplementation((command: string) => {
+      if (command === "get_calibration_state") {
+        return Promise.resolve({
+          centerCalibrated: true,
+          topRightCalibrated: true,
+          requiresRecalibration: false,
+          activationThresholdDegrees: 12,
+          dwellMs: 400,
+          activeTarget: null,
+        });
+      }
+      if (command === "get_overlay_state") return Promise.resolve({ visible: false, volume: 50 });
+      if (command === "adjust_system_volume") return Promise.reject(new Error("audio device unavailable"));
+      return Promise.resolve(undefined);
+    });
+
+    render(<App />);
+    await waitFor(() => expect(listeners.has(OVERLAY_STATE_EVENT)).toBe(true));
+    await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: true } }));
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /volume control failed.*audio device unavailable/i,
+    );
   });
 
   it("reconciles an already-active top-right target after listeners register", async () => {
