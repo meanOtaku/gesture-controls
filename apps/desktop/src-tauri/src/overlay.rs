@@ -1,11 +1,13 @@
 use std::sync::Mutex;
 
-use interaction_engine::{VolumeSimulation, commit_visibility_after};
+use interaction_engine::{VolumeSimulation, commit_visibility_after, top_right_overlay_position};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow};
 
 pub const OVERLAY_STATE_EVENT: &str = "overlay-state";
+const MAIN_WINDOW: &str = "main";
 const OVERLAY_WINDOW: &str = "overlay";
+const SCREEN_EDGE_MARGIN: f64 = 16.0;
 
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -56,6 +58,7 @@ impl OverlayRuntime {
             .lock()
             .map_err(|_| "overlay state lock was poisoned")?;
         prepare_window(app)?;
+        position_window_at_top_right(app, &window)?;
         commit_visibility_after(&mut state.visible, true, || {
             window.show().map_err(|error| error.to_string())
         })?;
@@ -107,6 +110,43 @@ pub fn prepare_window(app: &AppHandle) -> Result<(), String> {
         .set_always_on_top(true)
         .map_err(|error| error.to_string())?;
     Ok(())
+}
+
+fn position_window_at_top_right(app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
+    let main_monitor = app
+        .get_webview_window(MAIN_WINDOW)
+        .map(|main| main.current_monitor())
+        .transpose()
+        .map_err(|error| error.to_string())?
+        .flatten();
+    let monitor = match main_monitor {
+        Some(monitor) => Some(monitor),
+        None => window
+            .current_monitor()
+            .map_err(|error| error.to_string())?
+            .or(window
+                .primary_monitor()
+                .map_err(|error| error.to_string())?),
+    }
+    .ok_or("no monitor is available for the volume overlay")?;
+
+    let work_area = monitor.work_area();
+    let current_scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
+    let logical_window_size = window
+        .outer_size()
+        .map_err(|error| error.to_string())?
+        .to_logical::<f64>(current_scale_factor);
+    let (x, y) = top_right_overlay_position(
+        (work_area.position.x, work_area.position.y),
+        (work_area.size.width, work_area.size.height),
+        (logical_window_size.width, logical_window_size.height),
+        monitor.scale_factor(),
+        SCREEN_EDGE_MARGIN,
+    )
+    .ok_or("invalid monitor or overlay geometry")?;
+    window
+        .set_position(PhysicalPosition::new(x, y))
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

@@ -254,6 +254,54 @@ pub fn commit_visibility_after<E>(
     Ok(())
 }
 
+pub fn top_right_overlay_position(
+    work_area_origin: (i32, i32),
+    work_area_size: (u32, u32),
+    logical_window_size: (f64, f64),
+    destination_scale_factor: f64,
+    logical_margin: f64,
+) -> Option<(i32, i32)> {
+    if !destination_scale_factor.is_finite()
+        || destination_scale_factor <= 0.0
+        || !logical_window_size.0.is_finite()
+        || logical_window_size.0 < 0.0
+        || !logical_window_size.1.is_finite()
+        || logical_window_size.1 < 0.0
+        || !logical_margin.is_finite()
+        || logical_margin < 0.0
+    {
+        return None;
+    }
+
+    let physical_window_width =
+        rounded_nonnegative_i64(logical_window_size.0 * destination_scale_factor)?;
+    let physical_margin = rounded_nonnegative_i64(logical_margin * destination_scale_factor)?;
+    let work_x = i64::from(work_area_origin.0);
+    let work_y = i64::from(work_area_origin.1);
+    let work_width = i64::from(work_area_size.0);
+    let margin_within_work_area = physical_margin.min(work_width);
+    let left_bound = work_x.checked_add(margin_within_work_area)?;
+    let right_aligned = work_x
+        .checked_add(work_width)?
+        .checked_sub(physical_window_width)?
+        .checked_sub(physical_margin)?;
+    let x = right_aligned.max(left_bound);
+    let y = work_y.checked_add(i64::from(work_area_size.1).min(physical_margin))?;
+
+    Some((clamp_i64_to_i32(x), clamp_i64_to_i32(y)))
+}
+
+fn rounded_nonnegative_i64(value: f64) -> Option<i64> {
+    if !value.is_finite() || !(0.0..=i64::MAX as f64).contains(&value) {
+        return None;
+    }
+    Some(value.round() as i64)
+}
+
+fn clamp_i64_to_i32(value: i64) -> i32 {
+    value.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
+}
+
 #[derive(Debug, Error, PartialEq)]
 #[error("volume must be a finite value")]
 pub struct VolumeError;

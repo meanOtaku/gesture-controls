@@ -10,6 +10,7 @@ mod calibration;
 mod overlay;
 
 const SONY_JSON_ADDRESS: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 4243);
+const MAIN_WINDOW: &str = "main";
 const CONNECTION_EVENT: &str = "head-tracker-connection";
 const POSE_EVENT: &str = "head-pose-updated";
 const RESET_EVENT: &str = "head-tracker-reset";
@@ -34,6 +35,13 @@ pub fn run() {
             overlay::hide_overlay,
             overlay::adjust_simulated_volume,
         ])
+        .on_window_event(|window, event| {
+            if window.label() == MAIN_WINDOW
+                && matches!(event, tauri::WindowEvent::CloseRequested { .. })
+            {
+                window.app_handle().exit(0);
+            }
+        })
         .setup(|app| {
             let handle = app.handle().clone();
             overlay::prepare_window(&handle).map_err(std::io::Error::other)?;
