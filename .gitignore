@@ -21,3 +21,11 @@ __pycache__/
 
 # Generated Tauri artifacts
 apps/desktop/src-tauri/gen/
+
+# Local Android Studio / Gradle state
+android-wearos/.gradle/
+android-wearos/app/build/
+android-wearos/local.properties
+
+# Regenerable local code graph shared by coding agents
+graphify-out/

@@ -99,7 +99,9 @@ head-tracking/             compatibility tests, sample sender, and reference wor
 The desktop listens for one Galaxy Watch client at `ws://DESKTOP_IP:8766/ws/watch`.
 It publishes connection, IMU, heartbeat, and clock-synchronization status in the
 dashboard. The versioned message contract is documented in
-[`docs/watch-websocket-protocol.md`](docs/watch-websocket-protocol.md).
+[`docs/watch-websocket-protocol.md`](docs/watch-websocket-protocol.md). The Wear OS
+client that implements this protocol lives in
+[`android-wearos/`](android-wearos/README.md), a standalone Gradle project.
 
 ## Platform notes
 
