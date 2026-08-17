@@ -312,10 +312,16 @@ fn run_command_with_timeout(
     let _execution = COMMAND_EXECUTION_LOCK
         .lock()
         .map_err(|_| VolumeError::Backend("native command lock was poisoned".to_string()))?;
-    if DEFERRED_REAP_ACTIVE.load(Ordering::Acquire) && !reap_deferred_children_once() {
-        return Err(VolumeError::Backend(
-            "a previous native volume command is still being reaped".to_string(),
-        ));
+    if DEFERRED_REAP_ACTIVE.load(Ordering::Acquire) {
+        let cleanup_started = Instant::now();
+        while DEFERRED_REAP_ACTIVE.load(Ordering::Acquire) && !reap_deferred_children_once() {
+            if cleanup_started.elapsed() >= COMMAND_CLEANUP_TIMEOUT {
+                return Err(VolumeError::Backend(
+                    "a previous native volume command is still being reaped".to_string(),
+                ));
+            }
+            thread::sleep(COMMAND_POLL_INTERVAL);
+        }
     }
 
     let mut child = ChildGuard::spawn(command)?;
