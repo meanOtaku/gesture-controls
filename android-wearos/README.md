@@ -57,7 +57,7 @@ android-wearos/
 ## Requirements
 
 - Android Studio (Koala/2024.1 or newer recommended)
-- JDK 17 through 25 (Android Studio may use Java 25 for Gradle)
+- JDK 17
 - A Wear OS device or emulator running **API 30+** (Wear OS 3), e.g. a Galaxy Watch 4
 
 No API key, Play services, or companion phone app is required — the manifest declares
@@ -68,7 +68,7 @@ watch.
 
 1. Launch Android Studio → **Open** → select the `android-wearos/` directory (not the
    repo root — this is a separate Gradle project from the Tauri/Rust code).
-2. Android Studio will use the committed Gradle wrapper (Gradle 9.3.1). Let the first
+2. Android Studio will use the committed Gradle wrapper (Gradle 8.7). Let the first
    sync download the Android Gradle Plugin and dependencies, then finish.
 3. Select the `app` run configuration.
 
