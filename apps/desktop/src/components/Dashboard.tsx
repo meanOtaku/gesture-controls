@@ -3,12 +3,14 @@ import type {
   CalibrationState,
   CalibrationTarget,
   HeadTrackerStatus,
+  WatchStatus,
 } from "../protocol/events";
 
 interface DashboardProps {
   status: HeadTrackerStatus | null;
   calibration?: CalibrationState | null;
   calibrationError?: string | null;
+  watchStatus?: WatchStatus | null;
   onCaptureTarget?: (target: CalibrationTarget) => void;
   onUpdateCalibration?: (activationThresholdDegrees: number, dwellMs: number) => void;
 }
@@ -21,6 +23,7 @@ export function Dashboard({
   status,
   calibration,
   calibrationError,
+  watchStatus,
   onCaptureTarget = () => undefined,
   onUpdateCalibration = () => undefined,
 }: DashboardProps) {
@@ -145,6 +148,42 @@ export function Dashboard({
         </div>
       </section>
 
+      <section className="watch-card" aria-label="Watch connection">
+        <div className="calibration-heading">
+          <div>
+            <p className="eyebrow">Galaxy Watch</p>
+            <h2>{watchStatus?.connected ? "Watch connected" : "Waiting for watch"}</h2>
+          </div>
+          <div className={`connection ${watchStatus?.connected ? "online" : "offline"}`}>
+            <span className="pulse" />
+            {watchStatus?.connected ? "Streaming" : "Disconnected"}
+          </div>
+        </div>
+        <section className="metric-grid" aria-label="Watch telemetry">
+          <Metric
+            label="Battery"
+            value={watchStatus?.lastHeartbeat ? `${number(watchStatus.lastHeartbeat.batteryPercent ?? 0, 0)}%` : "—"}
+          />
+          <Metric
+            label="Sequence"
+            value={watchStatus?.lastOrientation ? String(watchStatus.lastOrientation.sequence) : "—"}
+          />
+          <Metric
+            label="Clock offset"
+            value={watchStatus?.clockOffsetNs != null ? `${number(watchStatus.clockOffsetNs / 1_000_000, 2)} ms` : "—"}
+          />
+          <Metric
+            label="Round trip"
+            value={watchStatus?.roundTripNs != null ? `${number(watchStatus.roundTripNs / 1_000_000, 2)} ms` : "—"}
+          />
+        </section>
+        <div className="vectors">
+          <VectorRow label="Quaternion" value={vector(watchStatus?.lastOrientation?.quaternion ?? null)} />
+          <VectorRow label="Accelerometer" value={vector(watchStatus?.lastOrientation?.accelerometer ?? null)} />
+          <VectorRow label="Gyroscope" value={vector(watchStatus?.lastOrientation?.gyroscope ?? null)} />
+        </div>
+      </section>
+
       <section className="settings">
         <div>
           <p className="eyebrow">Settings</p>
@@ -152,6 +191,7 @@ export function Dashboard({
         </div>
         <label>Host<input value="127.0.0.1" readOnly /></label>
         <label>JSON port<input value="4243" readOnly /></label>
+        <label>Watch WebSocket<input value="0.0.0.0:8766/ws/watch" readOnly /></label>
         <p className="hint">Loopback-only by design. On macOS, use the arrow or +/- keys to change system volume while the knob is visible.</p>
       </section>
     </main>

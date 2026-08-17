@@ -91,9 +91,15 @@ crates/protocol/           Sony wire types and generic pose domain types
 crates/head-tracking/      Provider abstraction and strict UDP listener
 crates/interaction-engine/ Quaternion calibration and target dwell state
 crates/volume-control/      Normalized controller trait and macOS adapter
+crates/watch-bridge/        Local-network Galaxy Watch WebSocket intake
 scripts/run-system.mjs     one-command external-process orchestrator
 head-tracking/             compatibility tests, sample sender, and reference work
 ```
+
+The desktop listens for one Galaxy Watch client at `ws://DESKTOP_IP:8766/ws/watch`.
+It publishes connection, IMU, heartbeat, and clock-synchronization status in the
+dashboard. The versioned message contract is documented in
+[`docs/watch-websocket-protocol.md`](docs/watch-websocket-protocol.md).
 
 ## Platform notes
 

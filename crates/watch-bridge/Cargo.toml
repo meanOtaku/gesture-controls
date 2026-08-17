@@ -1,0 +1,15 @@
+[package]
+name = "watch-bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+axum.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+spatial-protocol = { path = "../protocol" }
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true

@@ -37,6 +37,30 @@ export interface OverlayState {
   screenY: number;
 }
 
+export interface WatchOrientationSample {
+  deviceId: string;
+  sequence: number;
+  timestampNs: number;
+  quaternion: Quaternion;
+  accelerometer: Vector3 | null;
+  gyroscope: Vector3 | null;
+}
+
+export interface WatchHeartbeatSample {
+  deviceId: string;
+  sequence: number;
+  timestampNs: number;
+  batteryPercent: number | null;
+}
+
+export interface WatchStatus {
+  connected: boolean;
+  lastOrientation: WatchOrientationSample | null;
+  lastHeartbeat: WatchHeartbeatSample | null;
+  clockOffsetNs: number | null;
+  roundTripNs: number | null;
+}
+
 export const HEAD_POSE_EVENT = "head-pose-updated";
 export const HEAD_TRACKER_CONNECTION_EVENT = "head-tracker-connection";
 export const HEAD_TRACKER_RESET_EVENT = "head-tracker-reset";
@@ -44,3 +68,4 @@ export const CALIBRATION_STATE_EVENT = "head-calibration-state";
 export const HEAD_TARGET_ENTERED_EVENT = "head-target-entered";
 export const HEAD_TARGET_EXITED_EVENT = "head-target-exited";
 export const OVERLAY_STATE_EVENT = "overlay-state";
+export const WATCH_STATUS_EVENT = "watch-status";

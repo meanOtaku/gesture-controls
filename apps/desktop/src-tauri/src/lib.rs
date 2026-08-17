@@ -5,11 +5,16 @@ use calibration::CalibrationRuntime;
 use head_tracking::{HeadPoseEvent, HeadPoseProvider, SonyUdpHeadPoseProvider};
 use tauri::{Emitter, Manager};
 use tracing::{error, info, warn};
+use watch_bridge::WatchBridgeServer;
 
 mod calibration;
 mod overlay;
+mod watch;
 
 const SONY_JSON_ADDRESS: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 4243);
+const WATCH_WEBSOCKET_ADDRESS: SocketAddr =
+    SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 8766);
+const WATCH_HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(3);
 const MAIN_WINDOW: &str = "main";
 const CONNECTION_EVENT: &str = "head-tracker-connection";
 const POSE_EVENT: &str = "head-pose-updated";
@@ -27,6 +32,7 @@ pub fn run() {
         .manage(CalibrationRuntime::default())
         .manage(overlay::OverlayRuntime::default())
         .manage(overlay::VolumeRuntime::default())
+        .manage(watch::WatchRuntime::default())
         .invoke_handler(tauri::generate_handler![
             calibration::get_calibration_state,
             calibration::capture_calibration_target,
@@ -36,6 +42,7 @@ pub fn run() {
             overlay::hide_overlay,
             overlay::adjust_system_volume,
             overlay::refresh_system_volume,
+            watch::get_watch_status,
         ])
         .on_window_event(|window, event| {
             if window.label() == MAIN_WINDOW
@@ -104,6 +111,43 @@ pub fn run() {
                         }
                         Err(error) => {
                             warn!(%error, "head-pose event receiver lagged or closed");
+                        }
+                    }
+                }
+            });
+
+            let watch_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let server = match WatchBridgeServer::bind(
+                    WATCH_WEBSOCKET_ADDRESS,
+                    WATCH_HEARTBEAT_TIMEOUT,
+                )
+                .await
+                {
+                    Ok(server) => server,
+                    Err(error) => {
+                        error!(%error, address = %WATCH_WEBSOCKET_ADDRESS, "watch WebSocket listener failed to bind");
+                        return;
+                    }
+                };
+
+                let mut events = server.subscribe();
+                if let Err(error) = server.start().await {
+                    error!(%error, "watch bridge server failed to start");
+                    return;
+                }
+                info!(address = %WATCH_WEBSOCKET_ADDRESS, "watch WebSocket server started");
+
+                let runtime = watch_handle.state::<watch::WatchRuntime>();
+                loop {
+                    match events.recv().await {
+                        Ok(event) => {
+                            if let Err(error) = runtime.apply(&watch_handle, event) {
+                                warn!(%error, "failed to apply watch event");
+                            }
+                        }
+                        Err(error) => {
+                            warn!(%error, "watch event receiver lagged or closed");
                         }
                     }
                 }

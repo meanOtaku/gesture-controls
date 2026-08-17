@@ -10,11 +10,13 @@ import {
   HEAD_TARGET_EXITED_EVENT,
   HEAD_TRACKER_CONNECTION_EVENT,
   OVERLAY_STATE_EVENT,
+  WATCH_STATUS_EVENT,
   type CalibrationState,
   type CalibrationTarget,
   type HeadPosePayload,
   type HeadTrackerStatus,
   type OverlayState,
+  type WatchStatus,
 } from "./protocol/events";
 
 const emptyStatus: HeadTrackerStatus = {
@@ -37,6 +39,14 @@ const emptyOverlay: OverlayState = {
   rotationAngle: 0,
   screenX: 0,
   screenY: 0,
+};
+
+const emptyWatchStatus: WatchStatus = {
+  connected: false,
+  lastOrientation: null,
+  lastHeartbeat: null,
+  clockOffsetNs: null,
+  roundTripNs: null,
 };
 
 export default function App() {
@@ -100,6 +110,7 @@ function MainApp() {
   const [calibration, setCalibration] = useState<CalibrationState | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
   const [volumeError, setVolumeError] = useState<string | null>(null);
+  const [watchStatus, setWatchStatus] = useState<WatchStatus>(emptyWatchStatus);
   const calibrationEventVersion = useRef(0);
   const overlayEventVersion = useRef(0);
   const overlayVisible = useRef(false);
@@ -246,6 +257,25 @@ function MainApp() {
     };
   }, [inTauri]);
 
+  useEffect(() => {
+    if (!inTauri) return;
+
+    let cancelled = false;
+    const registration = listen<WatchStatus>(WATCH_STATUS_EVENT, ({ payload }) => {
+      if (!cancelled) setWatchStatus(payload);
+    });
+    void registration.then(() =>
+      invoke<WatchStatus>("get_watch_status").then((state) => {
+        if (!cancelled) setWatchStatus(state);
+      })
+    ).catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+      void registration.then((unlisten) => unlisten());
+    };
+  }, [inTauri]);
+
   const captureTarget = async (target: CalibrationTarget) => {
     if (!inTauri) return;
     try {
@@ -278,6 +308,7 @@ function MainApp() {
       status={status}
       calibration={calibration}
       calibrationError={applicationError}
+      watchStatus={watchStatus}
       onCaptureTarget={(target) => { void captureTarget(target); }}
       onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }}
     />

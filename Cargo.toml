@@ -5,6 +5,7 @@ members = [
   "crates/head-tracking",
   "crates/interaction-engine",
   "crates/volume-control",
+  "crates/watch-bridge",
 ]
 resolver = "2"
 
@@ -17,6 +18,8 @@ repository = "https://github.com/meanOtaku/gesture-controls"
 [workspace.dependencies]
 anyhow = "1"
 async-trait = "0.1"
+axum = { version = "0.8", default-features = false, features = ["ws", "tokio", "http1"] }
+futures-util = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
