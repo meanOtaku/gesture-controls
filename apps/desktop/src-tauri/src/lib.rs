@@ -35,6 +35,7 @@ pub fn run() {
             overlay::show_overlay,
             overlay::hide_overlay,
             overlay::adjust_system_volume,
+            overlay::refresh_system_volume,
         ])
         .on_window_event(|window, event| {
             if window.label() == MAIN_WINDOW

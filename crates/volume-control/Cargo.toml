@@ -6,3 +6,8 @@ license.workspace = true
 
 [dependencies]
 thiserror.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+command-group = "5.0.1"
+libc = "0.2"
+tempfile = "3.27.0"

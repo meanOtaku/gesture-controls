@@ -1,8 +1,11 @@
 use std::sync::Mutex;
 
+#[cfg(not(unix))]
+use volume_control::OsascriptRunner;
+#[cfg(not(target_os = "macos"))]
+use volume_control::platform_volume_controller;
 use volume_control::{
     AppleScriptRunner, MacOsVolumeController, VolumeController, VolumeError, adjust_system_volume,
-    platform_volume_controller,
 };
 
 #[derive(Default)]
@@ -137,6 +140,15 @@ fn default_controller_reports_the_platform_as_unsupported() {
     let controller = platform_volume_controller();
     assert!(matches!(
         controller.get_volume(),
+        Err(VolumeError::UnsupportedPlatform)
+    ));
+}
+
+#[cfg(not(unix))]
+#[test]
+fn osascript_runner_does_not_spawn_native_commands() {
+    assert!(matches!(
+        OsascriptRunner.run("", &[]),
         Err(VolumeError::UnsupportedPlatform)
     ));
 }

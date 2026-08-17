@@ -46,6 +46,7 @@ export default function App() {
 
 function OverlayApp() {
   const [overlay, setOverlay] = useState<OverlayState>(emptyOverlay);
+  const volumeRefreshInFlight = useRef(false);
   const inTauri = "__TAURI_INTERNALS__" in window;
 
   useEffect(() => {
@@ -71,6 +72,25 @@ function OverlayApp() {
       void registration.then((unlisten) => unlisten());
     };
   }, [inTauri]);
+
+  useEffect(() => {
+    if (!inTauri || !overlay.visible) return;
+
+    let cancelled = false;
+    const refresh = () => {
+      if (cancelled || volumeRefreshInFlight.current) return;
+      volumeRefreshInFlight.current = true;
+      void invoke("refresh_system_volume")
+        .catch(() => undefined)
+        .finally(() => { volumeRefreshInFlight.current = false; });
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 400);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [inTauri, overlay.visible]);
 
   return <main className="overlay-shell"><VolumeKnob volume={overlay.volume} /></main>;
 }

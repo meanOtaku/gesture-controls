@@ -372,6 +372,40 @@ describe("App overlay integration", () => {
     expect(screen.getByRole("meter", { name: "Current volume" })).toHaveAttribute("aria-valuenow", "77");
   });
 
+  it("refreshes native system volume while the overlay is visible", async () => {
+    window.history.replaceState({}, "", "/?window=overlay");
+    invoke.mockImplementation((command: string) => {
+      if (command === "get_overlay_state") return Promise.resolve({ visible: true, volume: 42 });
+      if (command === "refresh_system_volume") return Promise.resolve({ visible: true, volume: 73 });
+      return Promise.resolve(undefined);
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole("meter", { name: "Current volume" })).toHaveAttribute("aria-valuenow", "42");
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("refresh_system_volume"));
+    await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: true, volume: 73 } }));
+    expect(screen.getByRole("meter", { name: "Current volume" })).toHaveAttribute("aria-valuenow", "73");
+  });
+
+  it("keeps one native refresh in flight across rapid hide and show events", async () => {
+    window.history.replaceState({}, "", "/?window=overlay");
+    const refreshRequest = new Promise(() => undefined);
+    invoke.mockImplementation((command: string) => {
+      if (command === "get_overlay_state") return Promise.resolve({ visible: true, volume: 42 });
+      if (command === "refresh_system_volume") return refreshRequest;
+      return Promise.resolve(undefined);
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(invoke.mock.calls.filter(([command]) => command === "refresh_system_volume")).toHaveLength(1));
+    await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: false, volume: 42 } }));
+    await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: true, volume: 42 } }));
+
+    expect(invoke.mock.calls.filter(([command]) => command === "refresh_system_volume")).toHaveLength(1);
+  });
+
   it("renders and updates the dedicated overlay window", async () => {
     window.history.replaceState({}, "", "/?window=overlay");
     invoke.mockImplementation((command: string) => command === "get_overlay_state"

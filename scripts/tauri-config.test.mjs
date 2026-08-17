@@ -37,6 +37,25 @@ test("positions the volume overlay at the active screen's top-right before showi
   );
 });
 
+test("commits refreshed show state only after fallible window operations succeed", async () => {
+  const overlaySource = await readFile(overlaySourceUrl, "utf8");
+  const showBody = overlaySource.match(/fn show\([\s\S]*?\n    }\n\n    fn hide/);
+
+  assert.ok(showBody, "the overlay show implementation exists");
+  assert.ok(
+    showBody[0].indexOf(".lock()") < showBody[0].indexOf("available_volume"),
+    "show must serialize its native volume read with overlay mutations",
+  );
+  assert.ok(
+    showBody[0].indexOf("commit_visibility_after") < showBody[0].indexOf("state.volume ="),
+    "show must not mutate volume before prepare, position, and native show have succeeded",
+  );
+  assert.ok(
+    showBody[0].indexOf("state.volume =") < showBody[0].indexOf("state_generation.fetch_add"),
+    "show must invalidate admitted refreshes after committing its volume",
+  );
+});
+
 test("closing the main UI exits Tauri even while the hidden overlay window exists", async () => {
   const libSource = await readFile(libSourceUrl, "utf8");
 
@@ -47,7 +66,7 @@ test("closing the main UI exits Tauri even while the hidden overlay window exist
   );
 });
 
-test("wires keyboard adjustments to the platform volume controller", async () => {
+test("wires keyboard adjustments and live refresh to the platform volume controller", async () => {
   const [libSource, overlaySource] = await Promise.all([
     readFile(libSourceUrl, "utf8"),
     readFile(overlaySourceUrl, "utf8"),
@@ -55,9 +74,38 @@ test("wires keyboard adjustments to the platform volume controller", async () =>
 
   assert.match(libSource, /manage\(overlay::VolumeRuntime::default\(\)\)/);
   assert.match(libSource, /overlay::adjust_system_volume/);
+  assert.match(libSource, /overlay::refresh_system_volume/);
   assert.match(
     overlaySource,
     /pub fn adjust_system_volume[\s\S]*runtime\.adjust_system_volume/,
-    "the Tauri command must delegate through the serialized overlay runtime",
+    "the Tauri adjustment command must delegate through the serialized overlay runtime",
+  );
+  assert.match(
+    overlaySource,
+    /pub async fn refresh_system_volume[\s\S]*runtime\.refresh_system_volume/,
+    "the refresh command must delegate through the serialized overlay runtime",
+  );
+  assert.match(
+    overlaySource,
+    /pub async fn refresh_system_volume[\s\S]*compare_exchange[\s\S]*state_generation[\s\S]*\};[\s\S]*spawn_blocking/,
+    "refresh admission must be gated and overlay state scoped before a blocking task is spawned",
+  );
+  assert.match(
+    overlaySource,
+    /fn refresh_system_volume[\s\S]*available_volume[\s\S]*state_generation/,
+    "refresh must validate its generation after reading native volume",
+  );
+  const adjustBody = overlaySource.match(
+    /fn adjust_system_volume\([\s\S]*?\n    }\n\n    fn refresh_system_volume/,
+  );
+  assert.ok(adjustBody, "the overlay adjustment implementation exists");
+  assert.ok(
+    adjustBody[0].indexOf("state_generation.fetch_add") <
+      adjustBody[0].indexOf("adjust_native_volume"),
+    "an adjustment attempt must invalidate older refreshes before native I/O can partially succeed",
+  );
+  assert.ok(
+    adjustBody[0].indexOf("adjust_native_volume") < adjustBody[0].indexOf("state.volume ="),
+    "adjustment state must commit only after native I/O succeeds",
   );
 });
