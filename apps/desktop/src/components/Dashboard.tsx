@@ -48,12 +48,12 @@ export function Dashboard({
       <header className="hero">
         <div>
           <p className="eyebrow">Spatial Gesture Control</p>
-          <h1>Head tracker telemetry</h1>
-          <p className="subtitle">Sony orientation data, received locally and ready for calibration.</p>
+          <h1>Head tracker</h1>
+          <p className="subtitle">Sony CLI bridge data, received locally and ready for calibration.</p>
         </div>
         <div className={`connection ${connected ? "online" : "offline"}`}>
           <span className="pulse" />
-          {connected ? "Connected" : "Waiting for Sony tracker"}
+          {connected ? "Bridge connected" : "Waiting for Sony bridge"}
         </div>
       </header>
 

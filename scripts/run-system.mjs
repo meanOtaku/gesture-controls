@@ -9,7 +9,7 @@ const RELEASE_VERSION = "2.2.0";
 export function bundledTrackerPath(prebuildsRoot, platform, arch) {
   if (platform === "darwin" && (arch === "arm64" || arch === "x64")) {
     const root = join(prebuildsRoot, `sony-head-tracker-v${RELEASE_VERSION}-macos-universal`);
-    return join(root, "SonyHeadTracker.app", "Contents", "MacOS", "SonyHeadTracker");
+    return join(root, "sony-head-tracker-macos");
   }
   if (platform === "win32" && arch === "x64") {
     return join(
@@ -25,7 +25,7 @@ const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_PREBUILDS_ROOT = join(PROJECT_ROOT, "assets", "pre-builds");
 
 export function buildTrackerInvocation(executable) {
-  return { command: executable, args: [] };
+  return { command: executable, args: ["bridge"] };
 }
 
 async function isExecutable(path, platform) {
@@ -49,7 +49,7 @@ export async function ensureTracker({
 
   if (!override && platform === "darwin") await chmod(executable, 0o755).catch(() => {});
   if (!(await isExecutable(executable, platform))) {
-    const source = override ? "SONY_HEAD_TRACKER_BIN" : "Bundled Sony Head Tracker UI";
+    const source = override ? "SONY_HEAD_TRACKER_BIN" : "Bundled Sony Head Tracker CLI bridge";
     throw new Error(`${source} is missing or not executable: ${executable}`);
   }
   return executable;
@@ -159,7 +159,7 @@ export function superviseChildren({
     host.once("SIGTERM", onSigterm);
 
     tracker.once("error", (error) => {
-      console.error(`[system] Sony Head Tracker failed to start: ${error.message}`);
+      console.error(`[system] Sony Head Tracker CLI bridge failed to start: ${error.message}`);
       void stop(1);
     });
     tauri.once("error", (error) => {
@@ -168,7 +168,7 @@ export function superviseChildren({
     });
     tracker.once("exit", (code, signal) => {
       if (!stopping) {
-        console.error(`[system] Sony Head Tracker stopped (${signal ?? `exit ${code}`})`);
+        console.error(`[system] Sony Head Tracker CLI bridge stopped (${signal ?? `exit ${code}`})`);
         void stop(code || 1);
       }
     });
@@ -188,7 +188,7 @@ export async function runSystem({
   const tauriSpec = tauriInvocation(platform);
   const detached = platform !== "win32";
 
-  console.log(`[system] Starting Sony Head Tracker v${RELEASE_VERSION} UI`);
+  console.log(`[system] Starting Sony Head Tracker v${RELEASE_VERSION} CLI bridge`);
   const tracker = spawnChild(trackerSpec.command, trackerSpec.args, {
     stdio: "inherit",
     detached,

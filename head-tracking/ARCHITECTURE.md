@@ -23,8 +23,9 @@ permissions, recovery, orientation, and UDP serialization. The Tauri application
 does not import IOHID/Windows HID APIs or link Sony acquisition code.
 
 `scripts/run-system.mjs` is an operator launcher, not a provider. It selects the
-committed native UI prebuild, starts it alongside Tauri, and cleans both process
-trees up together.
+committed native CLI bridge prebuild, starts it in the background alongside
+Tauri, and cleans both process trees up together. Tauri owns the visible tracker
+diagnostics and calibration UI.
 
 ## Provider boundary
 

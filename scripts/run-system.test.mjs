@@ -13,15 +13,12 @@ import {
   superviseChildren,
 } from "./run-system.mjs";
 
-test("selects the committed Sony Head Tracker UI for each supported host", () => {
+test("selects the committed Sony Head Tracker CLI bridge for each supported host", () => {
   const prebuilds = join("repo", "assets", "pre-builds");
   const macos = join(
     prebuilds,
     "sony-head-tracker-v2.2.0-macos-universal",
-    "SonyHeadTracker.app",
-    "Contents",
-    "MacOS",
-    "SonyHeadTracker",
+    "sony-head-tracker-macos",
   );
   assert.equal(bundledTrackerPath(prebuilds, "darwin", "arm64"), macos);
   assert.equal(bundledTrackerPath(prebuilds, "darwin", "x64"), macos);
@@ -34,12 +31,12 @@ test("selects the committed Sony Head Tracker UI for each supported host", () =>
   assert.equal(bundledTrackerPath(prebuilds, "win32", "x64"), windows);
 });
 
-test("repository contains usable UI prebuilds for every supported host", async () => {
+test("repository contains usable CLI bridge prebuilds for every supported host", async () => {
   const macos = await ensureTracker({ platform: "darwin", arch: "arm64", override: "" });
   const windows = await ensureTracker({ platform: "win32", arch: "x64", override: "" });
   assert.match(
     macos.replaceAll("\\", "/"),
-    /sony-head-tracker-v2\.2\.0-macos-universal\/SonyHeadTracker\.app\/Contents\/MacOS\/SonyHeadTracker$/,
+    /sony-head-tracker-v2\.2\.0-macos-universal\/sony-head-tracker-macos$/,
   );
   assert.match(
     windows.replaceAll("\\", "/"),
@@ -47,7 +44,7 @@ test("repository contains usable UI prebuilds for every supported host", async (
   );
 });
 
-test("uses the committed UI prebuild without downloading or copying it", async () => {
+test("uses the committed CLI bridge prebuild without downloading or copying it", async () => {
   const prebuildsRoot = await mkdtemp(join(tmpdir(), "sony-prebuilds-"));
   const executable = bundledTrackerPath(prebuildsRoot, "darwin", "arm64");
   await mkdir(join(executable, ".."), { recursive: true });
@@ -64,9 +61,9 @@ test("uses the committed UI prebuild without downloading or copying it", async (
   );
 });
 
-test("accepts a Sony UI override path containing spaces", async () => {
-  const root = await mkdtemp(join(tmpdir(), "Sony Tracker UI "));
-  const executable = join(root, "SonyHeadTracker UI");
+test("accepts a Sony CLI bridge override path containing spaces", async () => {
+  const root = await mkdtemp(join(tmpdir(), "Sony Tracker Bridge "));
+  const executable = join(root, "sony-head-tracker macos");
   await writeFile(executable, "fixture", { mode: 0o755 });
 
   assert.equal(
@@ -75,20 +72,20 @@ test("accepts a Sony UI override path containing spaces", async () => {
   );
 });
 
-test("launches the Sony Head Tracker UI without CLI bridge arguments", () => {
-  assert.deepEqual(buildTrackerInvocation("/tmp/SonyHeadTracker UI"), {
-    command: "/tmp/SonyHeadTracker UI",
-    args: [],
+test("launches the Sony Head Tracker CLI bridge with the bridge argument", () => {
+  assert.deepEqual(buildTrackerInvocation("/tmp/sony-head-tracker-macos"), {
+    command: "/tmp/sony-head-tracker-macos",
+    args: ["bridge"],
   });
 });
 
-test("starts the bundled UI directly before Tauri", async () => {
+test("starts the bundled CLI bridge directly before Tauri", async () => {
   const events = [];
   let spawnCount = 0;
 
   await runSystem({
     platform: "darwin",
-    ensure: async () => "/tmp/SonyHeadTracker UI",
+    ensure: async () => "/tmp/sony-head-tracker-macos",
     spawnChild: (command, args) => {
       events.push(["spawn", command, ...args]);
       const child = fakeChild();
@@ -99,12 +96,12 @@ test("starts the bundled UI directly before Tauri", async () => {
   });
 
   assert.deepEqual(events, [
-    ["spawn", "/tmp/SonyHeadTracker UI"],
+    ["spawn", "/tmp/sony-head-tracker-macos", "bridge"],
     ["spawn", "npm", "run", "tauri", "--", "dev"],
   ]);
 });
 
-test("starts the bundled Windows UI without CLI arguments", async () => {
+test("starts the bundled Windows CLI bridge with the bridge argument", async () => {
   const events = [];
   let spawnCount = 0;
 
@@ -120,7 +117,7 @@ test("starts the bundled Windows UI without CLI arguments", async () => {
     },
   });
 
-  assert.deepEqual(events[0], ["C:\\prebuilds\\sony-head-tracker.exe"]);
+  assert.deepEqual(events[0], ["C:\\prebuilds\\sony-head-tracker.exe", "bridge"]);
   assert.equal(events[1][0], process.env.ComSpec ?? "cmd.exe");
 });
 

@@ -2,7 +2,7 @@
 
 A cross-platform Tauri 2 desktop coordinator for spatial controls using Sony headset orientation and, in later milestones, Samsung Galaxy Watch gestures.
 
-The repository currently implements Milestones 1–5 from [`PROJECT_BRIEF.md`](PROJECT_BRIEF.md): the desktop foundation, Sony JSON UDP input, head calibration, the volume overlay, and real macOS system-volume control. Sony Head Tracker remains a separate process, while one launcher starts and stops both applications together.
+The repository currently implements Milestones 1–5 from [`PROJECT_BRIEF.md`](PROJECT_BRIEF.md): the desktop foundation, Sony JSON UDP input, head calibration, the volume overlay, and real macOS system-volume control. Sony Head Tracker remains a background CLI bridge, while the Tauri dashboard is the only tracker window.
 
 ## Run the complete system
 
@@ -21,8 +21,8 @@ npm start
 `npm start` runs `scripts/run-system.mjs`, which:
 
 1. Selects the committed upstream v2.2.0 prebuild for macOS universal or Windows x64.
-2. Opens the native Sony Head Tracker UI, which discovers the sensor and emits
-   its protocol-v2 JSON stream on `127.0.0.1:4243` while open.
+2. Starts the native Sony Head Tracker CLI bridge in the background. It discovers
+   the sensor and emits its protocol-v2 JSON stream on `127.0.0.1:4243`.
 3. Starts the Tauri application.
 4. Stops both process trees when either application exits or the launcher receives Ctrl+C.
 
@@ -34,21 +34,21 @@ To use an existing or custom tracker build instead of the committed prebuild:
 
 ```bash
 # macOS/Linux shell
-SONY_HEAD_TRACKER_BIN=/absolute/path/to/SonyHeadTracker.app/Contents/MacOS/SonyHeadTracker npm start
+SONY_HEAD_TRACKER_BIN=/absolute/path/to/sony-head-tracker-macos npm start
 
 # Windows PowerShell
 $env:SONY_HEAD_TRACKER_BIN = "C:\absolute\path\sony-head-tracker.exe"
 npm start
 ```
 
-The override must open the Sony Head Tracker UI and stream JSON when launched
-without command-line arguments.
+The override must be the upstream CLI executable; the launcher invokes it with
+the `bridge` argument to stream JSON without opening a second window.
 
 ## Current capabilities
 
 - Tauri 2 desktop shell with a React, TypeScript, and Vite frontend
 - Loopback-only Sony protocol-v2 JSON listener on `127.0.0.1:4243`
-- Separate Sony Head Tracker process with one-command orchestration
+- Background Sony Head Tracker CLI bridge with one-command orchestration and a single Tauri tracker UI
 - Committed upstream v2.2.0 tracker prebuilds for macOS universal and Windows x64
 - Provider-neutral Rust pose types and `SonyUdpHeadPoseProvider`
 - Strict schema validation, connection timeout, and reset-counter detection
@@ -100,8 +100,8 @@ head-tracking/             compatibility tests, sample sender, and reference wor
 ### macOS
 
 - Requires macOS 14 or newer for upstream Sony Head Tracker.
-- Grant Input Monitoring to Sony Head Tracker from the committed
-  `SonyHeadTracker.app`, then stop and rerun `npm start`.
+- Grant Input Monitoring to the committed `sony-head-tracker-macos` CLI bridge,
+  then stop and rerun `npm start`.
 - Tracker startup requires no download or build step.
 
 ### Windows x64
