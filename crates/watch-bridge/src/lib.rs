@@ -15,7 +15,8 @@ use futures_util::StreamExt;
 use spatial_protocol::{
     DESKTOP_CONNECTED_TYPE, DESKTOP_TIME_SYNC_TYPE, DesktopConnectedPayload,
     DesktopOutboundEnvelope, DesktopTimeSyncPayload, WatchEnvelope, WatchHeartbeatSample,
-    WatchInboundMessage, WatchOrientationSample, WatchTimeSyncSample,
+    WatchInboundMessage, WatchOrientationSample, WatchPpgBatchSample, WatchPpgStatusSample,
+    WatchTimeSyncSample,
 };
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -35,6 +36,8 @@ pub enum WatchEvent {
     Orientation(WatchOrientationSample),
     Heartbeat(WatchHeartbeatSample),
     ClockOffsetUpdated(ClockOffsetEstimate),
+    Ppg(WatchPpgBatchSample),
+    PpgStatusUpdated(WatchPpgStatusSample),
     InvalidMessage { reason: String },
 }
 
@@ -292,6 +295,12 @@ fn handle_inbound(
                 estimate.offset_ns = median_clock_offset(clock_offset_samples);
                 let _ = shared.events.send(WatchEvent::ClockOffsetUpdated(estimate));
             }
+        }
+        Ok(WatchInboundMessage::PpgBatch(sample)) => {
+            let _ = shared.events.send(WatchEvent::Ppg(sample));
+        }
+        Ok(WatchInboundMessage::PpgStatus(sample)) => {
+            let _ = shared.events.send(WatchEvent::PpgStatusUpdated(sample));
         }
         Err(error) => {
             warn!(%error, "ignoring unparseable watch message payload");

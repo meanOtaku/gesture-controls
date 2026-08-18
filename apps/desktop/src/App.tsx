@@ -47,6 +47,9 @@ const emptyWatchStatus: WatchStatus = {
   lastHeartbeat: null,
   clockOffsetNs: null,
   roundTripNs: null,
+  ppgState: null,
+  ppgLastSample: null,
+  ppgRateHz: null,
 };
 
 export default function App() {

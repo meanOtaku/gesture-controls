@@ -4,7 +4,9 @@ Standalone Gradle/Kotlin Wear OS app that implements the watch side of
 [`docs/watch-websocket-protocol.md`](../docs/watch-websocket-protocol.md). It streams
 `TYPE_ROTATION_VECTOR` (as a quaternion) plus accelerometer and gyroscope readings to
 the desktop's `ws://DESKTOP_IP:8766/ws/watch` endpoint, answers `desktop.time_sync`
-immediately, and sends `watch.heartbeat` once a second.
+immediately, and sends `watch.heartbeat` once a second. On a **Galaxy Watch 4 or
+later running Samsung Wear OS**, it also streams raw green/red/IR PPG via the
+[Samsung Health Sensor SDK](../1.4.1) — see [Raw PPG](#raw-ppg-galaxy-watch-4-samsung-wear-os-only) below.
 
 This module is self-contained: it does not depend on, and is not referenced by,
 `apps/desktop` or the Rust crates. The desktop only ever sees the WebSocket wire
@@ -22,8 +24,9 @@ android-wearos/
 │       ├── AndroidManifest.xml
 │       ├── java/com/gesturecontrols/wearwatch/
 │       │   ├── MainActivity.kt        UI, lifecycle, wiring
-│       │   ├── WatchLinkManager.kt    OkHttp WebSocket, sequencing, heartbeat, reconnect
+│       │   ├── WatchLinkManager.kt    OkHttp WebSocket, sequencing, heartbeat, reconnect, PPG batching
 │       │   ├── SensorCollector.kt     SensorManager (rotation vector, accel, gyro)
+│       │   ├── PpgCollector.kt        Samsung Health Sensor SDK PPG_CONTINUOUS lifecycle
 │       │   ├── WatchProtocol.kt       v1 envelope encode/decode (org.json)
 │       │   └── ConnectionPrefs.kt     SharedPreferences endpoint persistence
 │       └── res/                       layout, strings, theme
@@ -53,6 +56,9 @@ android-wearos/
 - **Lifecycle**: `onPause` stops the sensor listeners and closes the socket without
   forgetting the user's intent to be connected; `onResume` reopens the socket and
   restarts sensors if a connection was requested; `onDestroy` cancels everything.
+- **PpgCollector**: on Galaxy Watch 4+, wraps the Samsung Health Sensor SDK's
+  `HealthTrackingService` to stream `HealthTrackerType.PPG_CONTINUOUS`. See
+  [Raw PPG](#raw-ppg-galaxy-watch-4-samsung-wear-os-only) below.
 
 ## Requirements
 
@@ -162,6 +168,30 @@ Once connected, the desktop's Tauri dashboard ("Watch connection" card) should s
   the watch. Accelerometer/gyroscope may briefly read `—` immediately after connecting
   until the first reading of each sensor type arrives.
 
+## Raw PPG (Galaxy Watch 4+ Samsung Wear OS only)
+
+`PpgCollector` wraps the vendored [Samsung Health Sensor SDK 1.4.1](../1.4.1)
+(`1.4.1/libs/samsung-health-sensor-api-1.4.1.aar`, added as a local `files()`
+dependency in `app/build.gradle.kts`, not published to any repository). This is
+**wellness data, not a medical measurement**.
+
+- Connects via `HealthTrackingService(ConnectionListener, Context)`, checks
+  `HealthTrackerCapability` for `HealthTrackerType.PPG_CONTINUOUS`, then requests
+  the tracker with `getHealthTracker(PPG_CONTINUOUS, EnumSet.of(PpgType.GREEN,
+  PpgType.RED, PpgType.IR))`.
+- Each `DataPoint` reads `ValueKey.PpgSet.PPG_GREEN` / `PPG_RED` / `PPG_IR` and
+  their `*_STATUS` companions, timestamped by the SDK.
+- Requires the Android runtime permission `android.permission.BODY_SENSORS`
+  (`MainActivity` requests it on first Connect if not already granted) **and**
+  the Samsung Health Sensor SDK's own consent prompt, surfaced asynchronously as
+  `HealthTracker.TrackerError.PERMISSION_ERROR`.
+- On hardware without `PPG_CONTINUOUS` support, or without the Samsung Health
+  app installed, `PpgCollector` reports `PpgState.UNAVAILABLE` and the rest of
+  the app (orientation streaming) keeps working normally.
+- Samples are buffered in `WatchLinkManager` and flushed as `watch.ppg_batch`
+  messages (see [`docs/watch-websocket-protocol.md`](../docs/watch-websocket-protocol.md#raw-ppg-galaxy-watch-4-samsung-wear-os-only));
+  `PpgState` transitions are sent separately as `watch.ppg_status`.
+
 ## Limitations
 
 - **One watch at a time**: the desktop bridge accepts a single connection; a second
@@ -177,6 +207,9 @@ Once connected, the desktop's Tauri dashboard ("Watch connection" card) should s
   connection, orientation/heartbeat/time-sync streaming) only. Button-grab
   interaction, wrist-rotation gestures, and on-device pinch inference are later
   milestones and are not implemented here.
+- **Raw PPG is hardware-gated**: only Galaxy Watch 4+ on Samsung Wear OS exposes
+  `PPG_CONTINUOUS`; other watches run normally with `PpgState.UNAVAILABLE` and no
+  PPG data in `watch.ppg_batch`.
 - **Bounded reconnect**: after 8 failed reconnect attempts (capped at 30s backoff
   each) the app stops retrying automatically and shows `Failed`; tap **Connect** again
   once the issue (Wi-Fi, firewall, desktop app) is resolved.

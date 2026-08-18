@@ -3,8 +3,22 @@ import type {
   CalibrationState,
   CalibrationTarget,
   HeadTrackerStatus,
+  PpgState,
   WatchStatus,
 } from "../protocol/events";
+
+const PPG_STATE_LABELS: Record<PpgState, string> = {
+  idle: "PPG idle",
+  permission_required: "PPG permission required",
+  connecting: "PPG connecting",
+  streaming: "PPG streaming",
+  unavailable: "PPG unavailable",
+  error: "PPG error",
+};
+
+function ppgStateLabel(state: PpgState | null): string {
+  return state ? PPG_STATE_LABELS[state] : "No PPG data";
+}
 
 interface DashboardProps {
   status: HeadTrackerStatus | null;
@@ -181,6 +195,32 @@ export function Dashboard({
           <VectorRow label="Quaternion" value={vector(watchStatus?.lastOrientation?.quaternion ?? null)} />
           <VectorRow label="Accelerometer" value={vector(watchStatus?.lastOrientation?.accelerometer ?? null)} />
           <VectorRow label="Gyroscope" value={vector(watchStatus?.lastOrientation?.gyroscope ?? null)} />
+        </div>
+      </section>
+
+      <section className="watch-card" aria-label="Watch PPG">
+        <div className="calibration-heading">
+          <div>
+            <p className="eyebrow">Raw PPG · wellness only, not a medical measurement</p>
+            <h2>{ppgStateLabel(watchStatus?.ppgState ?? null)}</h2>
+          </div>
+        </div>
+        <p className="hint">Galaxy Watch 4+ on Samsung Wear OS only (Samsung Health Sensor SDK). Streams while the watch requests a desktop connection.</p>
+        <section className="metric-grid" aria-label="PPG telemetry">
+          <Metric label="Rate" value={watchStatus?.ppgRateHz != null ? `${number(watchStatus.ppgRateHz, 1)} Hz` : "—"} />
+          <Metric label="Green" value={watchStatus?.ppgLastSample ? String(watchStatus.ppgLastSample.green) : "—"} />
+          <Metric label="Red" value={watchStatus?.ppgLastSample ? String(watchStatus.ppgLastSample.red) : "—"} />
+          <Metric label="IR" value={watchStatus?.ppgLastSample ? String(watchStatus.ppgLastSample.ir) : "—"} />
+        </section>
+        <div className="vectors">
+          <VectorRow
+            label="Channel status (green/red/ir)"
+            value={
+              watchStatus?.ppgLastSample
+                ? `[${watchStatus.ppgLastSample.greenStatus}, ${watchStatus.ppgLastSample.redStatus}, ${watchStatus.ppgLastSample.irStatus}]`
+                : "Unavailable"
+            }
+          />
         </div>
       </section>
 

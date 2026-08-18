@@ -8,11 +8,20 @@
     <!-- Keeps the CPU awake while a streaming session is active so orientation
          samples keep flowing once the screen dims. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Runtime-requested before starting the Samsung Health Sensor SDK's
+         PPG_CONTINUOUS tracker; see PpgCollector.kt. -->
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
 
     <uses-feature android:name="android.hardware.type.watch" />
     <uses-feature
         android:name="android.hardware.sensor.gyroscope"
         android:required="true" />
+    <!-- Raw PPG is Galaxy Watch 4+ Samsung Wear OS only; not required so the
+         app still installs on watches without it (PpgCollector reports
+         "unavailable" at runtime instead). -->
+    <uses-feature
+        android:name="android.hardware.sensor.heartrate"
+        android:required="false" />
 
     <application
         android:allowBackup="false"

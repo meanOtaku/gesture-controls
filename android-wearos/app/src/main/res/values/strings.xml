@@ -11,4 +11,10 @@
     <string name="status_failed">Failed</string>
     <string name="sensors_idle">Sensors idle</string>
     <string name="sensors_streaming">Streaming</string>
+    <string name="ppg_idle">PPG idle</string>
+    <string name="ppg_permission_required">PPG needs body sensors permission</string>
+    <string name="ppg_connecting">PPG connecting…</string>
+    <string name="ppg_streaming">PPG streaming</string>
+    <string name="ppg_unavailable">PPG unavailable on this watch</string>
+    <string name="ppg_error">PPG error</string>
 </resources>

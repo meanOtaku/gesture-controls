@@ -40,4 +40,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Samsung Health Sensor SDK 1.4.1, vendored under the repo-root `1.4.1/` drop
+    // (not duplicated into this module). Provides raw PPG_CONTINUOUS on Galaxy
+    // Watch 4+ Samsung Wear OS; see PpgCollector.kt.
+    implementation(files("../../1.4.1/libs/samsung-health-sensor-api-1.4.1.aar"))
 }

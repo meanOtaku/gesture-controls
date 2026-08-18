@@ -35,6 +35,8 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
     private var webSocket: WebSocket? = null
     private var heartbeatJob: Job? = null
     private var reconnectJob: Job? = null
+    private var ppgFlushJob: Job? = null
+    private val ppgBuffer = mutableListOf<PpgSample>()
     private val sequence = AtomicLong(0)
     private var attempt = 0
     private var userRequestedConnection = false
@@ -121,6 +123,22 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         _lastOrientationSequence.value = seq
     }
 
+    /** Buffers raw PPG samples for the next flush tick; dropped if not connected. */
+    fun enqueuePpgSamples(samples: List<PpgSample>) {
+        if (samples.isEmpty()) return
+        if (_state.value != ConnectionState.CONNECTED) return
+        synchronized(ppgBuffer) { ppgBuffer.addAll(samples) }
+    }
+
+    /** Reports [PpgState] to the desktop; independent of the PPG sample buffer. */
+    fun sendPpgStatus(state: String) {
+        val socket = webSocket ?: return
+        if (_state.value != ConnectionState.CONNECTED) return
+        val timestampNs = SystemClock.elapsedRealtimeNanos()
+        val seq = sequence.incrementAndGet()
+        socket.send(WatchProtocol.ppgStatusMessage(deviceId, seq, timestampNs, state))
+    }
+
     private fun openSocket(url: String) {
         closeSocket()
         _state.value = if (attempt == 0) ConnectionState.CONNECTING else ConnectionState.RECONNECTING
@@ -131,6 +149,9 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
     private fun closeSocket() {
         heartbeatJob?.cancel()
         heartbeatJob = null
+        ppgFlushJob?.cancel()
+        ppgFlushJob = null
+        synchronized(ppgBuffer) { ppgBuffer.clear() }
         if (webSocket != null) {
             closeExpected = true
         }
@@ -145,6 +166,7 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
                 sequence.set(0)
                 _state.value = ConnectionState.CONNECTED
                 startHeartbeat()
+                startPpgFlushTimer()
             }
         }
 
@@ -194,6 +216,31 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         }
     }
 
+    private fun startPpgFlushTimer() {
+        ppgFlushJob?.cancel()
+        ppgFlushJob = scope.launch {
+            while (isActive) {
+                delay(PPG_BATCH_INTERVAL_MS)
+                flushPpgBuffer()
+            }
+        }
+    }
+
+    private fun flushPpgBuffer() {
+        val batch = synchronized(ppgBuffer) {
+            if (ppgBuffer.isEmpty()) return
+            val copy = ppgBuffer.toList()
+            ppgBuffer.clear()
+            copy
+        }
+        val socket = webSocket ?: return
+        for (chunk in batch.chunked(PPG_BATCH_MAX_SAMPLES)) {
+            val timestampNs = SystemClock.elapsedRealtimeNanos()
+            val seq = sequence.incrementAndGet()
+            socket.send(WatchProtocol.ppgBatchMessage(deviceId, seq, timestampNs, chunk))
+        }
+    }
+
     private fun handleDisconnect() {
         heartbeatJob?.cancel()
         heartbeatJob = null
@@ -233,5 +280,7 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         private const val INITIAL_BACKOFF_MS = 1000L
         private const val MAX_BACKOFF_MS = 30_000L
         private const val MAX_RECONNECT_ATTEMPTS = 8
+        private const val PPG_BATCH_INTERVAL_MS = 200L
+        private const val PPG_BATCH_MAX_SAMPLES = 32
     }
 }

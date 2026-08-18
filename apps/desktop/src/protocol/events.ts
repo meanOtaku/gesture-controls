@@ -53,12 +53,39 @@ export interface WatchHeartbeatSample {
   batteryPercent: number | null;
 }
 
+/**
+ * Watch-reported `PpgCollector` state (see docs/watch-websocket-protocol.md).
+ * Distinct from the WebSocket connection: the watch can be connected with PPG
+ * unavailable (non–Galaxy Watch 4+ hardware) or awaiting the Samsung Health
+ * permission grant.
+ */
+export type PpgState =
+  | "idle"
+  | "permission_required"
+  | "connecting"
+  | "streaming"
+  | "unavailable"
+  | "error";
+
+export interface PpgSampleSnapshot {
+  timestampNs: number;
+  green: number;
+  greenStatus: number;
+  red: number;
+  redStatus: number;
+  ir: number;
+  irStatus: number;
+}
+
 export interface WatchStatus {
   connected: boolean;
   lastOrientation: WatchOrientationSample | null;
   lastHeartbeat: WatchHeartbeatSample | null;
   clockOffsetNs: number | null;
   roundTripNs: number | null;
+  ppgState: PpgState | null;
+  ppgLastSample: PpgSampleSnapshot | null;
+  ppgRateHz: number | null;
 }
 
 export const HEAD_POSE_EVENT = "head-pose-updated";

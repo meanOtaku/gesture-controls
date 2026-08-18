@@ -1,11 +1,13 @@
 package com.gesturecontrols.wearwatch
 
+import android.Manifest
 import android.content.Context
 import android.os.BatteryManager
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -20,9 +22,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var connectionStatusText: TextView
     private lateinit var sensorStatusText: TextView
     private lateinit var detailText: TextView
+    private lateinit var ppgStatusText: TextView
 
     private val watchLink = WatchLinkManager()
     private lateinit var sensorCollector: SensorCollector
+    private lateinit var ppgCollector: PpgCollector
+
+    // Samsung Health Sensor SDK's own consent flow is separate from this; see
+    // PpgCollector's kdoc. Must be registered before onStart, so it's a field.
+    private val requestBodySensorsPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) ppgCollector.start()
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,6 +45,7 @@ class MainActivity : AppCompatActivity() {
         connectionStatusText = findViewById(R.id.connectionStatusText)
         sensorStatusText = findViewById(R.id.sensorStatusText)
         detailText = findViewById(R.id.detailText)
+        ppgStatusText = findViewById(R.id.ppgStatusText)
 
         endpointInput.setText(prefs.endpoint.orEmpty())
 
@@ -42,6 +54,7 @@ class MainActivity : AppCompatActivity() {
         sensorCollector = SensorCollector(this) { quaternion, accelerometer, gyroscope, timestampNs ->
             watchLink.sendOrientation(quaternion, accelerometer, gyroscope, timestampNs)
         }
+        ppgCollector = PpgCollector(this) { samples -> watchLink.enqueuePpgSamples(samples) }
 
         connectButton.setOnClickListener { onConnectButtonClicked() }
 
@@ -57,6 +70,7 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
+                launch { ppgCollector.state.collect { renderPpgState(it) } }
             }
         }
     }
@@ -64,6 +78,7 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         sensorCollector.stop()
+        ppgCollector.stop()
         watchLink.pauseForLifecycle()
         sensorStatusText.setText(R.string.sensors_idle)
     }
@@ -77,12 +92,14 @@ class MainActivity : AppCompatActivity() {
         ) {
             sensorCollector.start()
             sensorStatusText.setText(R.string.sensors_streaming)
+            startPpgCollection()
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         sensorCollector.stop()
+        ppgCollector.stop()
         watchLink.shutdown()
     }
 
@@ -93,6 +110,7 @@ class MainActivity : AppCompatActivity() {
             currentState == ConnectionState.RECONNECTING
         ) {
             sensorCollector.stop()
+            ppgCollector.stop()
             watchLink.disconnect()
             sensorStatusText.setText(R.string.sensors_idle)
             return
@@ -107,6 +125,16 @@ class MainActivity : AppCompatActivity() {
         sensorCollector.start()
         sensorStatusText.setText(R.string.sensors_streaming)
         watchLink.connect(url)
+        startPpgCollection()
+    }
+
+    /** Starts PPG_CONTINUOUS if BODY_SENSORS is already granted, else requests it first. */
+    private fun startPpgCollection() {
+        if (ppgCollector.hasBodySensorsPermission()) {
+            ppgCollector.start()
+        } else {
+            requestBodySensorsPermission.launch(Manifest.permission.BODY_SENSORS)
+        }
     }
 
     private fun renderState(state: ConnectionState) {
@@ -125,8 +153,21 @@ class MainActivity : AppCompatActivity() {
         }
         if (state == ConnectionState.DISCONNECTED || state == ConnectionState.FAILED) {
             sensorCollector.stop()
+            ppgCollector.stop()
             sensorStatusText.setText(R.string.sensors_idle)
         }
+    }
+
+    private fun renderPpgState(state: PpgState) {
+        ppgStatusText.text = when (state) {
+            PpgState.IDLE -> getString(R.string.ppg_idle)
+            PpgState.PERMISSION_REQUIRED -> getString(R.string.ppg_permission_required)
+            PpgState.CONNECTING -> getString(R.string.ppg_connecting)
+            PpgState.STREAMING -> getString(R.string.ppg_streaming)
+            PpgState.UNAVAILABLE -> getString(R.string.ppg_unavailable)
+            PpgState.ERROR -> getString(R.string.ppg_error)
+        }
+        watchLink.sendPpgStatus(state.wireValue())
     }
 
     private fun readBatteryPercent(): Int? {
