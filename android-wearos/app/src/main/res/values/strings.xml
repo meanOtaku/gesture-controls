@@ -11,7 +11,10 @@
     <string name="discovery_searching">Searching for desktop…</string>
     <string name="endpoint_source_discovered">Automatic (discovered)</string>
     <string name="endpoint_source_persisted">Saved endpoint (fallback)</string>
-    <string name="endpoint_source_desktop">Automatic (desktop pairing)</string>
+    <string name="endpoint_source_desktop">Desktop-initiated pairing</string>
+    <string name="streaming_notification_channel">Desktop streaming</string>
+    <string name="streaming_notification_title">Streaming gesture data</string>
+    <string name="streaming_notification_text">Gesture Watch is connected to your desktop</string>
     <string name="sensors_idle">Sensors idle</string>
     <string name="sensors_streaming">Streaming</string>
     <string name="ppg_idle">PPG idle</string>

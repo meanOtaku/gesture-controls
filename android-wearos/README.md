@@ -50,6 +50,10 @@ android-wearos/
 - **MainActivity**: a Find desktop/Disconnect button; live discovery and connection
   status (with a short transition trail and a failure/retry reason); an endpoint-source
   label; live sensor status and last-sent sequence number.
+- **StreamingForegroundService**: starts only while a desktop connection is requested.
+  It posts the persistent Android streaming notification and holds a partial wake lock,
+  so the app continues to sample and send data after the watch display sleeps. Tapping
+  Disconnect or exhausting reconnect attempts stops it to avoid unnecessary battery use.
 - **SensorCollector**: registers `TYPE_ROTATION_VECTOR`, `TYPE_ACCELEROMETER`,
   `TYPE_GYROSCOPE` at `SENSOR_DELAY_GAME`. Every rotation-vector sample is converted to
   a `[w, x, y, z]` quaternion via `SensorManager.getQuaternionFromVector` and paired
@@ -261,6 +265,7 @@ dependency in `app/build.gradle.kts`, not published to any repository). This is
   each) the app stops retrying automatically and shows `Failed`, with the last
   failure category (e.g. `Connection refused`, `Timed out`) shown alongside it; tap
   **Connect** again once the issue (Wi-Fi, firewall, desktop app) is resolved.
-- **Ambient/Doze**: this app has no foreground service. If the watch enters deep
-  ambient or the app is backgrounded, `onPause` stops sensors and the socket; bring
-  the app back to the foreground to resume streaming.
+- **Battery use**: active desktop streaming intentionally keeps a foreground service
+  and partial wake lock while connected, so it continues after the display sleeps.
+  Disconnect when not using gesture input. System battery restrictions can still stop
+  the service under severe memory or power pressure.

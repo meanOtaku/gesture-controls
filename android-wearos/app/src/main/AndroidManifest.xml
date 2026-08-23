@@ -10,6 +10,8 @@
     <!-- Keeps the CPU awake while a streaming session is active so orientation
          samples keep flowing once the screen dims. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- Runtime-requested before starting the Samsung Health Sensor SDK's
          PPG_CONTINUOUS tracker; see PpgCollector.kt. -->
     <uses-permission android:name="android.permission.BODY_SENSORS" />
@@ -45,5 +47,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".StreamingForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

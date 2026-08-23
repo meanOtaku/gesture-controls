@@ -158,26 +158,11 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         releaseStemButtonIfPressed()
-        sensorCollector.stop()
-        ppgCollector.stop()
-        medicalCollector.stop()
-        onDemandSampler.stopAll()
-        watchLink.pauseForLifecycle()
-        sensorStatusText.setText(R.string.sensors_idle)
     }
 
     override fun onResume() {
         super.onResume()
         pairingServer.start()
-        watchLink.resumeForLifecycle()
-        if (watchLink.state.value == ConnectionState.CONNECTED ||
-            watchLink.state.value == ConnectionState.CONNECTING ||
-            watchLink.state.value == ConnectionState.RECONNECTING
-        ) {
-            sensorCollector.start()
-            sensorStatusText.setText(R.string.sensors_streaming)
-            startBodySensorCollection()
-        }
     }
 
     override fun onDestroy() {
@@ -190,6 +175,7 @@ class MainActivity : AppCompatActivity() {
         desktopDiscovery.stop()
         pairingServer.stop()
         watchLink.shutdown()
+        StreamingForegroundService.stop(this)
     }
 
     /**
@@ -233,6 +219,7 @@ class MainActivity : AppCompatActivity() {
             medicalCollector.stop()
             onDemandSampler.stopAll()
             watchLink.disconnect()
+            StreamingForegroundService.stop(this)
             sensorStatusText.setText(R.string.sensors_idle)
             return
         }
@@ -273,6 +260,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun connectToDesktop(url: String) {
+        StreamingForegroundService.start(this)
         sensorCollector.start()
         sensorStatusText.setText(R.string.sensors_streaming)
         watchLink.connect(url)
@@ -290,6 +278,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderState(state: ConnectionState) {
+        if (state == ConnectionState.FAILED) {
+            sensorCollector.stop()
+            ppgCollector.stop()
+            medicalCollector.stop()
+            onDemandSampler.stopAll()
+            StreamingForegroundService.stop(this)
+            sensorStatusText.setText(R.string.sensors_idle)
+        }
         connectionStatusText.text = when (state) {
             ConnectionState.DISCONNECTED -> getString(R.string.status_disconnected)
             ConnectionState.CONNECTING -> getString(R.string.status_connecting)
