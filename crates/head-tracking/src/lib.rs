@@ -122,6 +122,11 @@ impl HeadPoseProvider for SonyUdpHeadPoseProvider {
             let mut monitor = TrackerMonitor::new(disconnect_timeout);
             let mut connected = false;
             let mut previous_reset = None;
+            // A loopback UDP port can receive packets from more than one
+            // tracker process. Latch the first sender for this connection so
+            // interleaved streams cannot make the displayed pose jump between
+            // two independent reference frames.
+            let mut accepted_source: Option<SocketAddr> = None;
 
             loop {
                 let receive_timeout = if connected {
@@ -141,6 +146,14 @@ impl HeadPoseProvider for SonyUdpHeadPoseProvider {
                                 continue;
                             }
                         };
+                        match accepted_source {
+                            Some(accepted) if accepted != source => {
+                                debug!(%source, %accepted, "ignoring head-tracker datagram from a second sender");
+                                continue;
+                            }
+                            None => accepted_source = Some(source),
+                            _ => {}
+                        }
                         let now = Instant::now();
                         let reset_changed = monitor.observe(now, sample.reset_counter);
                         if !connected {
@@ -169,6 +182,7 @@ impl HeadPoseProvider for SonyUdpHeadPoseProvider {
                     Err(_) => {
                         if connected {
                             connected = false;
+                            accepted_source = None;
                             let _ = events.send(HeadPoseEvent::Disconnected);
                             debug!("Sony head tracker timed out");
                         }
