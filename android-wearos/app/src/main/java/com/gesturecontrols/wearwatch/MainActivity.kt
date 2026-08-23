@@ -142,7 +142,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 launch {
                     ppgCollector.state.collect { state ->
-                        renderPpgState(state)
+                        renderPpgState(state, ppgCollector.diagnostic.value)
                         if (!medicalCollectorsStarted &&
                             (state == PpgState.STREAMING || state == PpgState.UNAVAILABLE || state == PpgState.ERROR)
                         ) {
@@ -329,8 +329,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun renderPpgState(state: PpgState) {
-        ppgStatusText.text = when (state) {
+    private fun renderPpgState(state: PpgState, diagnostic: String?) {
+        val label = when (state) {
             PpgState.IDLE -> getString(R.string.ppg_idle)
             PpgState.PERMISSION_REQUIRED -> getString(R.string.ppg_permission_required)
             PpgState.CONNECTING -> getString(R.string.ppg_connecting)
@@ -338,6 +338,7 @@ class MainActivity : AppCompatActivity() {
             PpgState.UNAVAILABLE -> getString(R.string.ppg_unavailable)
             PpgState.ERROR -> getString(R.string.ppg_error)
         }
+        ppgStatusText.text = diagnostic?.let { "$label\n$it" } ?: label
         watchLink.sendPpgStatus(state.wireValue())
     }
 

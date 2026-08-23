@@ -76,12 +76,15 @@ class PpgCollector(
             service?.disconnectService()
             service = null
             started = false
+            _diagnostic.value = "Samsung Health Sensor Service did not respond. Enable Health Sensor Service developer mode for this development build."
             _state.value = PpgState.UNAVAILABLE
         }
     }
 
     private val _state = MutableStateFlow(PpgState.IDLE)
     val state: StateFlow<PpgState> = _state.asStateFlow()
+    private val _diagnostic = MutableStateFlow<String?>(null)
+    val diagnostic: StateFlow<String?> = _diagnostic.asStateFlow()
 
     fun hasBodySensorsPermission(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.BODY_SENSORS) ==
@@ -91,10 +94,12 @@ class PpgCollector(
     fun start() {
         if (started) return
         if (!hasBodySensorsPermission()) {
+            _diagnostic.value = "Android BODY_SENSORS permission is required."
             _state.value = PpgState.PERMISSION_REQUIRED
             return
         }
         started = true
+        _diagnostic.value = null
         _state.value = PpgState.CONNECTING
         val svc = HealthTrackingService(connectionListener, context)
         service = svc
@@ -126,6 +131,7 @@ class PpgCollector(
                 false
             }
             if (!supported) {
+                _diagnostic.value = "PPG_CONTINUOUS is not available. Enable Health Sensor Service developer mode, or register this app's package and signing certificate with Samsung."
                 _state.value = PpgState.UNAVAILABLE
                 started = false
                 svc.disconnectService()
@@ -157,6 +163,7 @@ class PpgCollector(
             mainHandler.removeCallbacks(connectionTimeout)
             started = false
             service = null
+            _diagnostic.value = "Samsung Health Sensor Service rejected the connection (${exception.javaClass.simpleName}). Enable developer mode for local testing."
             _state.value = PpgState.UNAVAILABLE
         }
     }
@@ -186,8 +193,14 @@ class PpgCollector(
         override fun onError(error: HealthTracker.TrackerError) {
             mainHandler.post {
                 _state.value = when (error) {
-                    HealthTracker.TrackerError.PERMISSION_ERROR -> PpgState.PERMISSION_REQUIRED
-                    HealthTracker.TrackerError.SDK_POLICY_ERROR -> PpgState.UNAVAILABLE
+                    HealthTracker.TrackerError.PERMISSION_ERROR -> {
+                        _diagnostic.value = "Samsung Health Sensor consent is required on the watch."
+                        PpgState.PERMISSION_REQUIRED
+                    }
+                    HealthTracker.TrackerError.SDK_POLICY_ERROR -> {
+                        _diagnostic.value = "Samsung SDK policy denied this build. Enable Health Sensor Service developer mode or register the app with Samsung."
+                        PpgState.UNAVAILABLE
+                    }
                     else -> PpgState.ERROR
                 }
             }
