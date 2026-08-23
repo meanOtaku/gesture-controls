@@ -73,6 +73,7 @@ interface LiveTelemetryProps {
 export function LiveTelemetry({ status, watchStatus }: LiveTelemetryProps) {
   const [headPoints, setHeadPoints] = useState<SeriesPoint[]>([]);
   const [watchPoints, setWatchPoints] = useState<SeriesPoint[]>([]);
+  const [ppgPoints, setPpgPoints] = useState<SeriesPoint[]>([]);
   const [heartRatePoints, setHeartRatePoints] = useState<SeriesPoint[]>([]);
   const [temperaturePoints, setTemperaturePoints] = useState<SeriesPoint[]>([]);
   const [edaPoints, setEdaPoints] = useState<SeriesPoint[]>([]);
@@ -126,6 +127,15 @@ export function LiveTelemetry({ status, watchStatus }: LiveTelemetryProps) {
       },
     });
   }, [recording, watchStatus]);
+
+  useEffect(() => {
+    const sample = watchStatus?.ppgLastSample;
+    if (!sample) return;
+    setPpgPoints((points) => pushPoint(points, {
+      at: Date.now(),
+      values: [sample.green, sample.red, sample.ir],
+    }));
+  }, [watchStatus?.ppgLastSample?.timestampNs]);
 
   useEffect(() => {
     const at = Date.now();
@@ -198,6 +208,7 @@ export function LiveTelemetry({ status, watchStatus }: LiveTelemetryProps) {
     </section>
     <TimeChart title="Headphone orientation" points={headPoints} labels={["Yaw", "Pitch", "Roll"]} colors={["#65e6ff", "#b88cff", "#ffb45d"]} />
     <TimeChart title="Watch gyroscope" points={watchPoints} labels={["X", "Y", "Z"]} colors={["#4ff0b7", "#65e6ff", "#ff7da5"]} />
+    <TimeChart title="Raw PPG" points={ppgPoints} labels={["Green", "Red", "IR"]} colors={["#4ff0b7", "#ff7da5", "#b88cff"]} />
     <TimeChart title="Heart rate" points={heartRatePoints} labels={["BPM"]} colors={["#ff7da5"]} />
     <TimeChart title="Skin temperature" points={temperaturePoints} labels={["Object °C", "Ambient °C"]} colors={["#ffb45d", "#65e6ff"]} />
     <TimeChart title="Electrodermal activity" points={edaPoints} labels={["µS"]} colors={["#b88cff"]} />
