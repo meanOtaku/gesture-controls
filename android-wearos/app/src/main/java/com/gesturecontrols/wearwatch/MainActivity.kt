@@ -5,9 +5,7 @@ import android.content.Context
 import android.os.BatteryManager
 import android.os.Bundle
 import android.view.KeyEvent
-import android.view.View
 import android.widget.Button
-import android.widget.EditText
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -19,16 +17,15 @@ import kotlinx.coroutines.launch
 class MainActivity : AppCompatActivity() {
 
     /** Where the currently active/last-attempted endpoint came from, for the UI label. */
-    private enum class EndpointSource { DISCOVERED, PERSISTED_FALLBACK, MANUAL }
+    private enum class EndpointSource { DISCOVERED, PERSISTED_FALLBACK, DESKTOP_INITIATED }
 
     private lateinit var prefs: ConnectionPrefs
-    private lateinit var endpointInput: EditText
     private lateinit var connectButton: Button
     private lateinit var connectionStatusText: TextView
     private lateinit var discoveryStatusText: TextView
     private lateinit var discoveryHistoryText: TextView
     private lateinit var endpointSourceText: TextView
-    private lateinit var useAutoDiscoveryLink: TextView
+
     private lateinit var linkDiagnosticsText: TextView
     private lateinit var sensorStatusText: TextView
     private lateinit var detailText: TextView
@@ -36,11 +33,7 @@ class MainActivity : AppCompatActivity() {
 
     private val watchLink = WatchLinkManager()
     private lateinit var desktopDiscovery: DesktopDiscovery
-    // True only for an explicit manual Connect (typed endpoint + tap); blocks
-    // discovery from overriding it until the user asks to go back to
-    // automatic via [useAutoDiscoveryLink]. A persisted-fallback reconnect on
-    // startup does NOT set this, so discovery can still replace it.
-    private var manualEndpointSelected = false
+    private lateinit var pairingServer: WatchPairingServer
     private var endpointSource: EndpointSource = EndpointSource.DISCOVERED
     private lateinit var sensorCollector: SensorCollector
     private lateinit var ppgCollector: PpgCollector
@@ -66,30 +59,25 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         prefs = ConnectionPrefs(this)
-        endpointInput = findViewById(R.id.endpointInput)
         connectButton = findViewById(R.id.connectButton)
         connectionStatusText = findViewById(R.id.connectionStatusText)
         discoveryStatusText = findViewById(R.id.discoveryStatusText)
         discoveryHistoryText = findViewById(R.id.discoveryHistoryText)
         endpointSourceText = findViewById(R.id.endpointSourceText)
-        useAutoDiscoveryLink = findViewById(R.id.useAutoDiscoveryLink)
+
         linkDiagnosticsText = findViewById(R.id.linkDiagnosticsText)
         sensorStatusText = findViewById(R.id.sensorStatusText)
         detailText = findViewById(R.id.detailText)
         ppgStatusText = findViewById(R.id.ppgStatusText)
 
         val persistedEndpoint = prefs.endpoint
-        endpointInput.setText(persistedEndpoint.orEmpty())
-        useAutoDiscoveryLink.setOnClickListener { switchToAutomaticDiscovery() }
         renderEndpointSource()
 
         watchLink.batteryPercentProvider = { readBatteryPercent() }
         desktopDiscovery = DesktopDiscovery(
             this,
             onEndpoint = { endpoint ->
-                runOnUiThread {
-                    if (!manualEndpointSelected) connectDiscoveredDesktop(endpoint)
-                }
+                runOnUiThread { connectDiscoveredDesktop(endpoint) }
             },
             onStatus = { status ->
                 runOnUiThread {
@@ -97,6 +85,11 @@ class MainActivity : AppCompatActivity() {
                     discoveryHistoryText.text = desktopDiscovery.history().joinToString(" › ")
                 }
             },
+        )
+        pairingServer = WatchPairingServer(
+            this,
+            onPairRequest = { endpoint -> runOnUiThread { connectDesktopInitiated(endpoint) } },
+            onStatus = { status -> runOnUiThread { discoveryStatusText.text = status } },
         )
 
         sensorCollector = SensorCollector(this) { quaternion, accelerometer, gyroscope, timestampNs ->
@@ -122,6 +115,7 @@ class MainActivity : AppCompatActivity() {
 
         connectButton.setOnClickListener { onConnectButtonClicked() }
         desktopDiscovery.start()
+        pairingServer.start()
 
         // Durable pairing fallback: reconnect to whatever we last used, right
         // away, so the watch doesn't sit idle waiting on a fresh mDNS
@@ -174,6 +168,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        pairingServer.start()
         watchLink.resumeForLifecycle()
         if (watchLink.state.value == ConnectionState.CONNECTED ||
             watchLink.state.value == ConnectionState.CONNECTING ||
@@ -193,6 +188,7 @@ class MainActivity : AppCompatActivity() {
         medicalCollector.stop()
         onDemandSampler.stopAll()
         desktopDiscovery.stop()
+        pairingServer.stop()
         watchLink.shutdown()
     }
 
@@ -241,50 +237,38 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val url = endpointInput.text.toString().trim()
-        if (url.isEmpty() || !url.startsWith("ws://")) {
-            connectionStatusText.text = "Enter a ws:// endpoint"
-            return
-        }
-        manualEndpointSelected = true
-        endpointSource = EndpointSource.MANUAL
-        renderEndpointSource()
-        prefs.endpoint = url
-        connectToDesktop(url)
+        connectionStatusText.text = "Looking for desktop…"
+        desktopDiscovery.refresh()
+        pairingServer.start()
     }
 
     private fun connectDiscoveredDesktop(url: String) {
-        endpointInput.setText(url)
+        if (watchLink.state.value == ConnectionState.CONNECTED ||
+            watchLink.state.value == ConnectionState.CONNECTING ||
+            watchLink.state.value == ConnectionState.RECONNECTING
+        ) return
         endpointSource = EndpointSource.DISCOVERED
         renderEndpointSource()
         prefs.endpoint = url
         connectToDesktop(url)
     }
 
-    /** Drops the manual override so the next discovery result is used again. */
-    private fun switchToAutomaticDiscovery() {
-        manualEndpointSelected = false
-        endpointSource = EndpointSource.DISCOVERED
+    private fun connectDesktopInitiated(url: String) {
+        if (watchLink.state.value == ConnectionState.CONNECTED ||
+            watchLink.state.value == ConnectionState.CONNECTING ||
+            watchLink.state.value == ConnectionState.RECONNECTING
+        ) return
+        endpointSource = EndpointSource.DESKTOP_INITIATED
         renderEndpointSource()
-        watchLink.disconnect()
-        sensorCollector.stop()
-        ppgCollector.stop()
-        medicalCollector.stop()
-        onDemandSampler.stopAll()
-        sensorStatusText.setText(R.string.sensors_idle)
-        desktopDiscovery.refresh()
+        prefs.endpoint = url
+        connectToDesktop(url)
     }
 
     private fun renderEndpointSource() {
         endpointSourceText.text = when (endpointSource) {
             EndpointSource.DISCOVERED -> getString(R.string.endpoint_source_discovered)
             EndpointSource.PERSISTED_FALLBACK -> getString(R.string.endpoint_source_persisted)
-            EndpointSource.MANUAL -> getString(R.string.endpoint_source_manual)
-        }
-        useAutoDiscoveryLink.visibility = if (endpointSource == EndpointSource.MANUAL) {
-            View.VISIBLE
-        } else {
-            View.GONE
+            EndpointSource.DESKTOP_INITIATED -> getString(R.string.endpoint_source_desktop)
         }
     }
 

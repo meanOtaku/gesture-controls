@@ -97,6 +97,8 @@ head-tracking/             compatibility tests, sample sender, and reference wor
 ```
 
 The desktop listens for one Galaxy Watch client at `ws://DESKTOP_IP:8766/ws/watch`.
+The desktop and watch automatically discover each other with local mDNS/DNS-SD;
+the desktop can request the watch to connect without either device typing an IP.
 It publishes connection, IMU, heartbeat, and clock-synchronization status in the
 dashboard. The versioned message contract is documented in
 [`docs/watch-websocket-protocol.md`](docs/watch-websocket-protocol.md). The Wear OS

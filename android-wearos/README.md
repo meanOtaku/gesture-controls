@@ -28,7 +28,8 @@ android-wearos/
 │       │   ├── SensorCollector.kt     SensorManager (rotation vector, accel, gyro)
 │       │   ├── PpgCollector.kt        Samsung Health Sensor SDK PPG_CONTINUOUS lifecycle
 │       │   ├── WatchProtocol.kt       v1 envelope encode/decode (org.json)
-│       │   └── ConnectionPrefs.kt     SharedPreferences endpoint persistence
+│       │   ├── ConnectionPrefs.kt     SharedPreferences endpoint persistence
+│       │   └── WatchPairingServer.kt  Desktop-initiated LAN pairing callback
 │       └── res/                       layout, strings, theme
 ```
 
@@ -43,11 +44,12 @@ android-wearos/
   duplicate scans. Resolved endpoints prefer an IPv4 address when the service
   advertises one; an IPv6 fallback is bracketed and zone-id-encoded per RFC 3986/6874
   (e.g. `ws://[fe80::1%25wlan0]:8766/ws/watch`) so link-local addresses are usable
-  too. The endpoint field and Connect button remain a manual fallback.
-- **MainActivity**: text field for the desktop endpoint (`ws://LAN-IP:8766/ws/watch`),
-  persisted in `SharedPreferences` across restarts; a Connect/Disconnect button; live
-  discovery and connection status (with a short transition trail and a failure/retry
-  reason); an endpoint-source label; live sensor status and last-sent sequence number.
+  too. It also advertises `_gesture-watch._tcp.local.` while the app is open. A
+  desktop that resolves that service sends its `/pair` request to the watch, whose
+  source address becomes the desktop WebSocket endpoint — no typed IP is required.
+- **MainActivity**: a Find desktop/Disconnect button; live discovery and connection
+  status (with a short transition trail and a failure/retry reason); an endpoint-source
+  label; live sensor status and last-sent sequence number.
 - **SensorCollector**: registers `TYPE_ROTATION_VECTOR`, `TYPE_ACCELEROMETER`,
   `TYPE_GYROSCOPE` at `SENSOR_DELAY_GAME`. Every rotation-vector sample is converted to
   a `[w, x, y, z]` quaternion via `SensorManager.getQuaternionFromVector` and paired
@@ -132,24 +134,19 @@ Start the desktop app (`npm start` from the repo root). Its watch bridge listens
 devices on the same Wi-Fi/LAN, the watch finds the service, resolves its current IP,
 and starts streaming automatically.
 
-### 6. Confirm automatic discovery or enter a manual fallback endpoint
+### 6. Confirm automatic pairing
 
-In the app on the watch, enter:
-
-```text
-ws://<desktop-lan-ip>:8766/ws/watch
-```
-
-The watch normally fills this endpoint and connects automatically. If discovery is
-unavailable, enter it manually (for example `ws://192.168.1.42:8766/ws/watch`) and
-tap **Connect**. The status text should move from `Connecting…` to `Connected`, and
-the detail line below it should start counting up a sequence number as orientation
-samples stream out.
+Open the watch app and desktop app while they share the same Wi-Fi/LAN. No IP entry
+is required: the watch browses the desktop's `_gesture-controls._tcp.local.` service,
+and it also advertises `_gesture-watch._tcp.local.`. The desktop resolves that watch
+service and requests pairing; the watch then connects back to the source desktop at
+`ws://<desktop-lan-ip>:8766/ws/watch`. The status text should move from
+`Looking for desktop…` to `Connected`, and the detail line below it should start
+counting up a sequence number as orientation samples stream out.
 
 ### Discovery/pairing status reference
 
-Below the endpoint field, the app shows two independent status lines plus an
-endpoint-source label:
+The app shows two independent status lines plus an endpoint-source label:
 
 - **Discovery status** (`Wi-Fi unavailable` → `Searching for desktop…` → `Desktop
   service found; resolving…` → `Desktop resolved`, or `Desktop resolve failed;
@@ -159,17 +156,15 @@ endpoint-source label:
   same as before) plus, only when relevant, a one-line failure/retry reason such as
   `Connection refused — retrying (2/8)` or `Timed out — gave up after 8 attempts`.
   The reason is a short category, never a raw exception message, so it won't echo
-  anything beyond what's already visible in the endpoint field.
-- **Endpoint source** — `Automatic (discovered)`, `Saved endpoint (fallback)`, or
-  `Manual override` — labels where the active endpoint came from:
+  anything beyond the connection state shown in the app.
+- **Endpoint source** — `Automatic (discovered)`, `Desktop-initiated pairing`, or
+  `Saved endpoint (fallback)` — labels where the active endpoint came from:
   - On a cold start with a previously saved endpoint, the app reconnects to it
     immediately as a **fallback** (label `Saved endpoint (fallback)`) instead of
     waiting on a fresh mDNS resolve; a discovery result that arrives afterward is
     still free to replace it.
-  - Typing an endpoint and tapping **Connect** is a **manual override** (label
-    `Manual override`); it blocks discovery from replacing it and shows a **"Use
-    automatic discovery"** link to hand control back to mDNS.
-  - Whatever discovery resolves is always labeled `Automatic (discovered)`.
+  - A desktop pairing request is labeled `Desktop-initiated pairing`.
+  - A direct watch mDNS resolve is labeled `Automatic (discovered)`.
 
 ### Why no UDP broadcast discovery fallback
 
@@ -180,9 +175,8 @@ to keep in sync with the mDNS one, a second unauthenticated listener on the desk
 that answers unsolicited LAN broadcasts (a bigger footprint than the existing
 plain-`ws://`, LAN-only model this app already documents as trusted-network-only),
 and no coverage benefit — the networks that block mDNS (guest SSIDs, client-isolated
-Wi-Fi, VLANs) block generic UDP broadcast just as often. mDNS discovery plus the
-persisted-endpoint fallback above is the supported, reliable pairing strategy; the
-manual endpoint field remains the escape hatch for anything both miss.
+Wi-Fi, VLANs) block generic UDP broadcast just as often. Bidirectional mDNS/DNS-SD
+is the supported pairing strategy.
 
 ### 7. Firewall
 
@@ -255,8 +249,7 @@ dependency in `app/build.gradle.kts`, not published to any repository). This is
   LAN.
 - **mDNS is local-only**: automatic discovery requires the watch and desktop to share
   a Wi-Fi/LAN multicast domain. It does not cross guest networks, client-isolated
-  SSIDs, most VLANs/subnets, or the internet. The manual endpoint field remains the
-  fallback for networks that block mDNS.
+  SSIDs, most VLANs/subnets, or the internet.
 - **Button grab only**: Milestone 7 maps the Wear OS `STEM_1` hardware key to a
   press-and-hold volume-overlay grab after the desktop has shown that overlay. It
   does not intercept Back, Home, or Power. Wrist-rotation volume control and

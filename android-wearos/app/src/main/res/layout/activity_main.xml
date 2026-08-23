@@ -18,20 +18,10 @@
             android:padding="16dp"
             android:gravity="center_horizontal">
 
-            <EditText
-                android:id="@+id/endpointInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="@string/endpoint_hint"
-                android:inputType="textUri"
-                android:maxLines="1"
-                android:textSize="12sp" />
-
             <Button
                 android:id="@+id/connectButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
                 android:text="@string/action_connect" />
 
             <TextView
@@ -69,15 +59,6 @@
                 android:textColor="#AAAAAA"
                 android:textSize="10sp" />
 
-            <TextView
-                android:id="@+id/useAutoDiscoveryLink"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
-                android:text="@string/action_use_auto_discovery"
-                android:textColor="#6FA8FF"
-                android:textSize="10sp"
-                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/linkDiagnosticsText"

@@ -10,11 +10,13 @@ After the listener starts, the desktop advertises a DNS-SD service as
 bound port. The Wear OS app browses and resolves this service with Android's
 `NsdManager`, then connects to the resolved `ws://HOST:PORT/ws/watch` endpoint.
 
-Discovery is limited to the local multicast domain: the watch and desktop must
-be on the same Wi-Fi/LAN and client isolation, guest networks, VLAN boundaries,
-or multicast-blocking routers can prevent it. The app retains its endpoint field
-and Connect button as a manual fallback. A rediscovered service reconnects using
-its new resolved address after a laptop DHCP address change.
+Discovery is bidirectional. While open, the Wear OS app also advertises a
+`_gesture-watch._tcp.local.` pairing service. The desktop browses that service,
+opens its local `/pair` endpoint, and the watch uses the request's source address
+to connect back to the desktop WebSocket automatically. This avoids typing either
+device's IP address. Both mechanisms remain local multicast only: the watch and
+desktop must share a Wi-Fi/LAN and client isolation, guest networks, VLAN
+boundaries, or multicast-blocking routers can prevent pairing.
 
 ## Watch messages
 

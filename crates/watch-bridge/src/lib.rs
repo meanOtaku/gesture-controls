@@ -1,9 +1,11 @@
 //! Axum WebSocket server that accepts a single Galaxy Watch connection.
 
-use std::collections::VecDeque;
-use std::net::SocketAddr;
+use std::collections::{HashMap, VecDeque};
+use std::io::{Read, Write};
+use std::net::{SocketAddr, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::Router;
@@ -12,7 +14,7 @@ use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use axum::routing::get;
 use futures_util::StreamExt;
-use mdns_sd::{ServiceDaemon, ServiceInfo};
+use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use spatial_protocol::{
     DESKTOP_CONNECTED_TYPE, DESKTOP_START_MEASUREMENT_TYPE, DESKTOP_STOP_MEASUREMENT_TYPE,
     DESKTOP_TIME_SYNC_TYPE, DesktopConnectedPayload, DesktopMeasurementCommandPayload,
@@ -32,9 +34,12 @@ use tracing::{debug, info, warn};
 pub const WATCH_WEBSOCKET_PATH: &str = "/ws/watch";
 /// Stable DNS-SD service type this bridge advertises itself under on the LAN.
 pub const MDNS_SERVICE_TYPE: &str = "_gesture-controls._tcp.local.";
+pub const WATCH_PAIRING_SERVICE_TYPE: &str = "_gesture-watch._tcp.local.";
 const MDNS_INSTANCE_NAME: &str = "galaxy-watch-bridge";
 const MDNS_HOST_NAME: &str = "gesture-controls-desktop.local.";
 const MDNS_UNREGISTER_TIMEOUT: Duration = Duration::from_millis(500);
+const PAIRING_CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
+const PAIRING_RETRY_INTERVAL: Duration = Duration::from_secs(10);
 const TIME_SYNC_INTERVAL: Duration = Duration::from_secs(5);
 const CLOCK_OFFSET_SAMPLE_COUNT: usize = 5;
 const DEVICE_ALREADY_CONNECTED_CLOSE_CODE: u16 = 4409;
@@ -90,6 +95,8 @@ pub enum WatchBridgeError {
     MdnsServiceInfoFailed(#[source] mdns_sd::Error),
     #[error("failed to register mDNS service: {0}")]
     MdnsRegisterFailed(#[source] mdns_sd::Error),
+    #[error("failed to browse for watch pairing services: {0}")]
+    MdnsBrowseFailed(#[source] mdns_sd::Error),
     #[error("no watch is currently connected")]
     NoActiveConnection,
     #[error("'{0}' is not a valid on-demand medical tracker id")]
@@ -109,11 +116,20 @@ struct MdnsAdvertisement {
     fullname: String,
 }
 
+/// Browses for the watch's local pairing service and asks it to connect back
+/// to this desktop bridge. The outgoing request lets the watch derive the
+/// correct LAN address from the TCP peer, avoiding typed IP addresses.
+struct WatchPairingDiscovery {
+    daemon: ServiceDaemon,
+    task: thread::JoinHandle<()>,
+}
+
 pub struct WatchBridgeServer {
     local_addr: SocketAddr,
     listener: Mutex<Option<TcpListener>>,
     task: Mutex<Option<JoinHandle<()>>>,
     mdns: Mutex<Option<MdnsAdvertisement>>,
+    pairing_discovery: Mutex<Option<WatchPairingDiscovery>>,
     shared: Arc<SharedState>,
 }
 
@@ -136,6 +152,7 @@ impl WatchBridgeServer {
             listener: Mutex::new(Some(listener)),
             task: Mutex::new(None),
             mdns: Mutex::new(None),
+            pairing_discovery: Mutex::new(None),
             shared: Arc::new(SharedState {
                 events,
                 commands,
@@ -207,6 +224,46 @@ impl WatchBridgeServer {
         if let Err(error) = self.advertise() {
             warn!(%error, "failed to advertise watch bridge via mDNS");
         }
+        if let Err(error) = self.start_pairing_discovery() {
+            warn!(%error, "failed to browse for watch pairing services");
+        }
+        Ok(())
+    }
+
+    fn start_pairing_discovery(&self) -> Result<(), WatchBridgeError> {
+        let daemon = ServiceDaemon::new().map_err(WatchBridgeError::MdnsDaemonFailed)?;
+        let receiver = daemon
+            .browse(WATCH_PAIRING_SERVICE_TYPE)
+            .map_err(WatchBridgeError::MdnsBrowseFailed)?;
+        let task = thread::spawn(move || {
+            let mut last_attempt: HashMap<SocketAddr, Instant> = HashMap::new();
+            while let Ok(event) = receiver.recv() {
+                let ServiceEvent::ServiceResolved(service) = event else {
+                    continue;
+                };
+                let Some(address) = service.get_addresses_v4().into_iter().min() else {
+                    continue;
+                };
+                let watch = SocketAddr::from((address, service.get_port()));
+                let now = Instant::now();
+                if last_attempt
+                    .get(&watch)
+                    .is_some_and(|previous| now.duration_since(*previous) < PAIRING_RETRY_INTERVAL)
+                {
+                    continue;
+                }
+                last_attempt.insert(watch, now);
+                match request_watch_pairing(watch) {
+                    Ok(()) => info!(%watch, "requested watch pairing via mDNS discovery"),
+                    Err(error) => warn!(%watch, %error, "watch pairing request failed"),
+                }
+            }
+        });
+        *self
+            .pairing_discovery
+            .lock()
+            .map_err(|_| WatchBridgeError::StatePoisoned)? =
+            Some(WatchPairingDiscovery { daemon, task });
         Ok(())
     }
 
@@ -276,7 +333,36 @@ impl WatchBridgeServer {
             })
             .await;
         }
+
+        let pairing_discovery = self
+            .pairing_discovery
+            .lock()
+            .map_err(|_| WatchBridgeError::StatePoisoned)?
+            .take();
+        if let Some(WatchPairingDiscovery { daemon, task }) = pairing_discovery {
+            let _ = tokio::task::spawn_blocking(move || {
+                let _ = daemon.shutdown();
+                let _ = task.join();
+            })
+            .await;
+        }
         Ok(())
+    }
+}
+
+fn request_watch_pairing(watch: SocketAddr) -> std::io::Result<()> {
+    let mut stream = TcpStream::connect_timeout(&watch, PAIRING_CONNECT_TIMEOUT)?;
+    stream.set_read_timeout(Some(PAIRING_CONNECT_TIMEOUT))?;
+    stream.set_write_timeout(Some(PAIRING_CONNECT_TIMEOUT))?;
+    stream.write_all(
+        b"GET /pair HTTP/1.1\r\nHost: gesture-watch.local\r\nConnection: close\r\n\r\n",
+    )?;
+    let mut response = [0_u8; 128];
+    let bytes_read = stream.read(&mut response)?;
+    if response[..bytes_read].starts_with(b"HTTP/1.1 2") {
+        Ok(())
+    } else {
+        Err(std::io::Error::other("watch rejected pairing request"))
     }
 }
 

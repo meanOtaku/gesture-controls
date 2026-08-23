@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Gesture Watch</string>
-    <string name="endpoint_hint">ws://192.168.1.42:8766/ws/watch</string>
-    <string name="action_connect">Connect</string>
+    <string name="action_connect">Find desktop</string>
     <string name="action_disconnect">Disconnect</string>
     <string name="status_disconnected">Disconnected</string>
     <string name="status_connecting">Connecting…</string>
@@ -10,10 +9,9 @@
     <string name="status_reconnecting">Reconnecting…</string>
     <string name="status_failed">Failed</string>
     <string name="discovery_searching">Searching for desktop…</string>
-    <string name="action_use_auto_discovery">Use automatic discovery</string>
     <string name="endpoint_source_discovered">Automatic (discovered)</string>
     <string name="endpoint_source_persisted">Saved endpoint (fallback)</string>
-    <string name="endpoint_source_manual">Manual override</string>
+    <string name="endpoint_source_desktop">Automatic (desktop pairing)</string>
     <string name="sensors_idle">Sensors idle</string>
     <string name="sensors_streaming">Streaming</string>
     <string name="ppg_idle">PPG idle</string>
