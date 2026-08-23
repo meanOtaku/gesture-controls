@@ -327,7 +327,7 @@ function MainApp() {
       <button className={activeTab === "watch" ? "active" : ""} onClick={() => setActiveTab("watch")}>Watch</button>
       <button className={activeTab === "telemetry" ? "active" : ""} onClick={() => setActiveTab("telemetry")}>Live data</button>
     </nav>
-    <div hidden={activeTab !== "main"}>
+    {activeTab === "main" && (
       <Dashboard
         view="main"
         status={status}
@@ -337,15 +337,15 @@ function MainApp() {
         onCaptureTarget={(target) => { void captureTarget(target); }}
         onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }}
       />
-    </div>
-    <div hidden={activeTab !== "headphone"}>
+    )}
+    {activeTab === "headphone" && (
       <Dashboard view="headphone" status={status} calibration={calibration} calibrationError={applicationError} watchStatus={watchStatus} onCaptureTarget={(target) => { void captureTarget(target); }} onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }} />
-    </div>
-    <div hidden={activeTab !== "watch"}>
+    )}
+    {activeTab === "watch" && (
       <Dashboard view="watch" status={status} calibration={calibration} calibrationError={applicationError} watchStatus={watchStatus} onCaptureTarget={(target) => { void captureTarget(target); }} onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }} />
-    </div>
-    <div hidden={activeTab !== "telemetry"}>
+    )}
+    {activeTab === "telemetry" && (
       <LiveTelemetry status={status} watchStatus={watchStatus} />
-    </div>
+    )}
   </>;
 }

@@ -67,9 +67,11 @@ class MainActivity : AppCompatActivity() {
         desktopDiscovery = DesktopDiscovery(
             this,
             onEndpoint = { endpoint ->
-                if (!manualEndpointSelected) connectDiscoveredDesktop(endpoint)
+                runOnUiThread {
+                    if (!manualEndpointSelected) connectDiscoveredDesktop(endpoint)
+                }
             },
-            onStatus = { status -> discoveryStatusText.text = status },
+            onStatus = { status -> runOnUiThread { discoveryStatusText.text = status } },
         )
 
         sensorCollector = SensorCollector(this) { quaternion, accelerometer, gyroscope, timestampNs ->

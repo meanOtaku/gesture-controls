@@ -70,9 +70,11 @@ export function Dashboard({
           <h1>{view === "main" ? "Control center" : view === "headphone" ? "Headphones" : "Galaxy Watch"}</h1>
           <p className="subtitle">{view === "main" ? "Connection status and controls for your gesture-control devices." : view === "headphone" ? "Sony head-tracker telemetry and calibration." : "Watch connection, sensor streams, and button status."}</p>
         </div>
-        <div className={`connection ${connected ? "online" : "offline"}`}>
+        <div className={`connection ${view === "watch" ? (watchStatus?.connected ? "online" : "offline") : (connected ? "online" : "offline")}`}>
           <span className="pulse" />
-          {connected ? "Bridge connected" : "Waiting for Sony bridge"}
+          {view === "watch"
+            ? (watchStatus?.connected ? "Watch connected" : "Waiting for watch")
+            : (connected ? "Bridge connected" : "Waiting for Sony bridge")}
         </div>
       </header>
 
@@ -82,7 +84,7 @@ export function Dashboard({
         <article className="overview-card"><span className="label">Volume gesture</span><strong>{calibrationState.requiresRecalibration ? "Set up" : "Ready"}</strong><small>{calibrationState.requiresRecalibration ? "Calibrate headphones in their tab" : "Look top-right to open the knob"}</small></article>
       </section>}
 
-      <section hidden={view !== "headphone"} className="device-card">
+      {view === "headphone" && <section className="device-card">
         <div>
           <span className="label">Active device</span>
           <strong>{status?.device ?? "No device detected"}</strong>
@@ -91,23 +93,23 @@ export function Dashboard({
           <span>{status ? number(status.packetsPerSecond, 1) : "—"}</span>
           <small>packets / sec</small>
         </div>
-      </section>
+      </section>}
 
-      <section hidden={view !== "headphone"} className="metric-grid" aria-label="Sony telemetry">
+      {view === "headphone" && <section className="metric-grid" aria-label="Sony telemetry">
         <Metric label="Yaw" value={status ? `${number(status.yawDeg)}°` : "—"} accent="cyan" />
         <Metric label="Pitch" value={status ? `${number(status.pitchDeg)}°` : "—"} accent="violet" />
         <Metric label="Roll" value={status ? `${number(status.rollDeg)}°` : "—"} accent="amber" />
         <Metric label="Packet rate" value={status ? `${number(status.packetsPerSecond, 1)} Hz` : "—"} />
         <Metric label="Receive latency" value={status ? `${number(status.receiveLatencyMs, 1)} ms` : "—"} />
         <Metric label="Reset counter" value={status ? String(status.resetCounter) : "—"} />
-      </section>
+      </section>}
 
-      <section hidden={view !== "headphone"} className="vectors">
+      {view === "headphone" && <section className="vectors">
         <VectorRow label="Quaternion" value={vector(status?.quaternion ?? null)} />
         <VectorRow label="Gyroscope" value={vector(status?.gyroscope ?? null)} />
-      </section>
+      </section>}
 
-      <section hidden={view !== "headphone"} className="calibration-card" aria-label="Head calibration">
+      {view === "headphone" && <section className="calibration-card" aria-label="Head calibration">
         <div className="calibration-heading">
           <div>
             <p className="eyebrow">Head calibration</p>
@@ -168,9 +170,9 @@ export function Dashboard({
             <small>milliseconds</small>
           </label>
         </div>
-      </section>
+      </section>}
 
-      <section hidden={view !== "watch"} className="watch-card" aria-label="Watch connection">
+      {view === "watch" && <section className="watch-card" aria-label="Watch connection">
         <div className="calibration-heading">
           <div>
             <p className="eyebrow">Galaxy Watch</p>
@@ -212,9 +214,9 @@ export function Dashboard({
           <VectorRow label="Accelerometer" value={vector(watchStatus?.lastOrientation?.accelerometer ?? null)} />
           <VectorRow label="Gyroscope" value={vector(watchStatus?.lastOrientation?.gyroscope ?? null)} />
         </div>
-      </section>
+      </section>}
 
-      <section hidden={view !== "watch"} className="watch-card" aria-label="Watch PPG">
+      {view === "watch" && <section className="watch-card" aria-label="Watch PPG">
         <div className="calibration-heading">
           <div>
             <p className="eyebrow">Raw PPG · wellness only, not a medical measurement</p>
@@ -238,9 +240,9 @@ export function Dashboard({
             }
           />
         </div>
-      </section>
+      </section>}
 
-      <section hidden={view !== "main"} className="settings">
+      {view === "main" && <section className="settings">
         <div>
           <p className="eyebrow">Settings</p>
           <h2>Sony UDP input</h2>
@@ -249,7 +251,7 @@ export function Dashboard({
         <label>JSON port<input value="4243" readOnly /></label>
         <label>Watch WebSocket<input value="0.0.0.0:8766/ws/watch" readOnly /></label>
         <p className="hint">Loopback-only by design. On macOS, use the arrow or +/- keys to change system volume while the knob is visible.</p>
-      </section>
+      </section>}
     </main>
   );
 }
