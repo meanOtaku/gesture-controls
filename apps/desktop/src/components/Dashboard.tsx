@@ -242,6 +242,22 @@ export function Dashboard({
         </div>
       </section>}
 
+      {view === "watch" && <section className="watch-card" aria-label="Watch health sensors">
+        <div className="calibration-heading"><div><p className="eyebrow">Samsung Health Sensor SDK</p><h2>Health sensors</h2></div></div>
+        <section className="metric-grid" aria-label="Health sensor telemetry">
+          <Metric label="Heart rate" value={watchStatus?.heartRateLast ? `${number(watchStatus.heartRateLast.heartRate, 0)} bpm` : "—"} />
+          <Metric label="Skin temperature" value={watchStatus?.skinTemperatureLast ? `${number(watchStatus.skinTemperatureLast.objectTemperatureCelsius, 1)} °C` : "—"} />
+          <Metric label="EDA" value={watchStatus?.edaLast ? `${number(watchStatus.edaLast.skinConductanceMicrosiemens, 2)} µS` : "—"} />
+          <Metric label="SpO₂" value={watchStatus?.spo2Last ? `${number(watchStatus.spo2Last.spo2, 1)}%` : "On-demand"} />
+          <Metric label="ECG" value={watchStatus?.ecgLast ? "Session received" : "On-demand"} />
+          <Metric label="BIA" value={watchStatus?.biaLast?.bodyFatRatio != null ? `${number(watchStatus.biaLast.bodyFatRatio * 100, 1)}% fat` : "On-demand"} />
+        </section>
+        <div className="vectors">
+          {Object.entries(watchStatus?.medicalStatus ?? {}).map(([tracker, state]) => <VectorRow key={tracker} label={tracker.replaceAll("_", " ")} value={state} />)}
+          {Object.keys(watchStatus?.medicalStatus ?? {}).length === 0 && <VectorRow label="SDK capability" value="Waiting for watch sensor status" />}
+        </div>
+      </section>}
+
       {view === "main" && <section className="settings">
         <div>
           <p className="eyebrow">Settings</p>
