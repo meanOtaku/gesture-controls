@@ -39,6 +39,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var ppgCollector: PpgCollector
     private lateinit var medicalCollector: MedicalContinuousCollector
     private lateinit var onDemandSampler: OnDemandMedicalSampler
+    private var medicalCollectorsStarted = false
 
     // Tracks whether we've sent a button-down without a matching button-up yet,
     // so backgrounding the activity mid-hold can't leave the desktop overlay grabbed.
@@ -50,7 +51,6 @@ class MainActivity : AppCompatActivity() {
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) {
                 ppgCollector.start()
-                medicalCollector.start()
             }
         }
 
@@ -140,7 +140,17 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
-                launch { ppgCollector.state.collect { renderPpgState(it) } }
+                launch {
+                    ppgCollector.state.collect { state ->
+                        renderPpgState(state)
+                        if (!medicalCollectorsStarted &&
+                            (state == PpgState.STREAMING || state == PpgState.UNAVAILABLE || state == PpgState.ERROR)
+                        ) {
+                            medicalCollectorsStarted = true
+                            medicalCollector.start()
+                        }
+                    }
+                }
                 launch {
                     medicalCollector.state.collect { statuses ->
                         statuses.forEach { (tracker, state) -> watchLink.sendMedicalStatus(tracker, state.wireValue()) }
@@ -162,7 +172,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        pairingServer.start()
+        if (watchLink.state.value != ConnectionState.CONNECTED) {
+            desktopDiscovery.start()
+            pairingServer.start()
+        }
     }
 
     override fun onDestroy() {
@@ -225,6 +238,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         connectionStatusText.text = "Looking for desktop…"
+        desktopDiscovery.start()
         desktopDiscovery.refresh()
         pairingServer.start()
     }
@@ -271,17 +285,23 @@ class MainActivity : AppCompatActivity() {
     private fun startBodySensorCollection() {
         if (ppgCollector.hasBodySensorsPermission()) {
             ppgCollector.start()
-            medicalCollector.start()
         } else {
             requestBodySensorsPermission.launch(Manifest.permission.BODY_SENSORS)
         }
     }
 
     private fun renderState(state: ConnectionState) {
+        if (state == ConnectionState.CONNECTED) {
+            desktopDiscovery.stop(showWifiStatus = false)
+            pairingServer.stop()
+            discoveryStatusText.text = "Connected to desktop"
+            discoveryHistoryText.text = ""
+        }
         if (state == ConnectionState.FAILED) {
             sensorCollector.stop()
             ppgCollector.stop()
             medicalCollector.stop()
+            medicalCollectorsStarted = false
             onDemandSampler.stopAll()
             StreamingForegroundService.stop(this)
             sensorStatusText.setText(R.string.sensors_idle)
@@ -303,6 +323,7 @@ class MainActivity : AppCompatActivity() {
             sensorCollector.stop()
             ppgCollector.stop()
             medicalCollector.stop()
+            medicalCollectorsStarted = false
             onDemandSampler.stopAll()
             sensorStatusText.setText(R.string.sensors_idle)
         }

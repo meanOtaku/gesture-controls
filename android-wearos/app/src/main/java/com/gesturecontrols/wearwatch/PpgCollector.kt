@@ -70,7 +70,15 @@ class PpgCollector(
 
     private var service: HealthTrackingService? = null
     private var tracker: HealthTracker? = null
-    private var started = false
+    private var started: Boolean = false
+    private val connectionTimeout = Runnable {
+        if (started && _state.value == PpgState.CONNECTING) {
+            service?.disconnectService()
+            service = null
+            started = false
+            _state.value = PpgState.UNAVAILABLE
+        }
+    }
 
     private val _state = MutableStateFlow(PpgState.IDLE)
     val state: StateFlow<PpgState> = _state.asStateFlow()
@@ -90,10 +98,12 @@ class PpgCollector(
         _state.value = PpgState.CONNECTING
         val svc = HealthTrackingService(connectionListener, context)
         service = svc
+        mainHandler.postDelayed(connectionTimeout, CONNECTION_TIMEOUT_MS)
         svc.connectService()
     }
 
     fun stop() {
+        mainHandler.removeCallbacks(connectionTimeout)
         started = false
         tracker?.unsetEventListener()
         tracker = null
@@ -104,6 +114,7 @@ class PpgCollector(
 
     private val connectionListener = object : ConnectionListener {
         override fun onConnectionSuccess() {
+            mainHandler.removeCallbacks(connectionTimeout)
             val svc = service
             if (!started || svc == null) {
                 svc?.disconnectService()
@@ -131,6 +142,7 @@ class PpgCollector(
         }
 
         override fun onConnectionEnded() {
+            mainHandler.removeCallbacks(connectionTimeout)
             tracker = null
             if (started) {
                 // The service ended the connection on its own (e.g. Samsung Health
@@ -142,6 +154,7 @@ class PpgCollector(
         }
 
         override fun onConnectionFailed(exception: HealthTrackerException) {
+            mainHandler.removeCallbacks(connectionTimeout)
             started = false
             service = null
             _state.value = PpgState.UNAVAILABLE
@@ -179,5 +192,9 @@ class PpgCollector(
                 }
             }
         }
+    }
+
+    private companion object {
+        const val CONNECTION_TIMEOUT_MS = 12_000L
     }
 }

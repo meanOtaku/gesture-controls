@@ -23,7 +23,7 @@ class WatchPairingServer(
     private val onStatus: (String) -> Unit,
 ) {
     private val nsdManager = context.getSystemService(NsdManager::class.java)
-    private val executor: ExecutorService = Executors.newSingleThreadExecutor()
+    private var executor: ExecutorService? = null
     private var serverSocket: ServerSocket? = null
     private var registrationListener: NsdManager.RegistrationListener? = null
 
@@ -33,7 +33,8 @@ class WatchPairingServer(
             val socket = ServerSocket(0).apply { reuseAddress = true }
             serverSocket = socket
             registerService(socket.localPort)
-            executor.execute { acceptConnections(socket) }
+            Executors.newSingleThreadExecutor().also { executor = it }
+                .execute { acceptConnections(socket) }
         } catch (error: Exception) {
             serverSocket = null
             onStatus("Desktop pairing unavailable: ${error.javaClass.simpleName}")
@@ -51,7 +52,8 @@ class WatchPairingServer(
             }
         }
         registrationListener = null
-        executor.shutdownNow()
+        executor?.shutdownNow()
+        executor = null
     }
 
     private fun registerService(port: Int) {

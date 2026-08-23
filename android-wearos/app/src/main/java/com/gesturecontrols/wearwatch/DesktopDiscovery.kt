@@ -70,7 +70,7 @@ class DesktopDiscovery(
     }
 
     /** Full teardown: stops discovery and stops watching connectivity. Call from onDestroy. */
-    fun stop() {
+    fun stop(showWifiStatus: Boolean = true) {
         networkCallback?.let { callback ->
             try {
                 connectivityManager.unregisterNetworkCallback(callback)
@@ -80,7 +80,7 @@ class DesktopDiscovery(
         }
         networkCallback = null
         synchronized(wifiNetworks) { wifiNetworks.clear() }
-        suspendDiscovery()
+        suspendDiscovery(showWifiStatus)
     }
 
     /** Restarts the current scan when the user returns from a manual override. */
@@ -165,7 +165,7 @@ class DesktopDiscovery(
     }
 
     /** Stops the active NSD scan (if any) without forgetting connectivity watching. */
-    private fun suspendDiscovery() {
+    private fun suspendDiscovery(showWifiStatus: Boolean = true) {
         mainHandler.removeCallbacksAndMessages(null)
         retryScheduled = false
         val listener = discoveryListener
@@ -181,7 +181,7 @@ class DesktopDiscovery(
         }
         multicastLock?.let { lock -> if (lock.isHeld) lock.release() }
         multicastLock = null
-        if (networkCallback != null) {
+        if (showWifiStatus && networkCallback != null) {
             emitStatus("Wi-Fi unavailable")
         }
     }
