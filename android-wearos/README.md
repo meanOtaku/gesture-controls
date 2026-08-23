@@ -54,11 +54,11 @@ android-wearos/
   It posts the persistent Android streaming notification and holds a partial wake lock,
   so the app continues to sample and send data after the watch display sleeps. Tapping
   Disconnect or exhausting reconnect attempts stops it to avoid unnecessary battery use.
-- **SensorCollector**: registers `TYPE_ROTATION_VECTOR`, `TYPE_ACCELEROMETER`,
-  `TYPE_GYROSCOPE` at `SENSOR_DELAY_GAME`. Every rotation-vector sample is converted to
-  a `[w, x, y, z]` quaternion via `SensorManager.getQuaternionFromVector` and paired
-  with the most recent accelerometer/gyroscope reading (`null` until the first sample
-  of that sensor arrives, matching the protocol's nullable vectors).
+- **SensorCollector**: registers `TYPE_ROTATION_VECTOR`, gravity-compensated
+  `TYPE_LINEAR_ACCELERATION` (falling back to `TYPE_ACCELEROMETER`), and
+  `TYPE_GYROSCOPE` at `SENSOR_DELAY_GAME`. Accelerometer and gyro vectors are
+  low-pass filtered and omitted when stale, then paired with each rotation-vector
+  sample using the sensor event timestamp.
 - **WatchLinkManager**: owns the single OkHttp `WebSocket`. Maintains one
   connection-wide, strictly increasing `sequence` counter shared by every outbound
   message type (orientation, heartbeat, time sync) — the desktop bridge tracks a
@@ -69,9 +69,8 @@ android-wearos/
   `watchTimeNs`. Reconnects with capped exponential backoff (1s → 2s → 4s → … → 30s
   cap) for up to 8 attempts while the user has requested a connection; after that it
   surfaces `Failed` and waits for the user to tap Connect again.
-- **Lifecycle**: `onPause` stops the sensor listeners and closes the socket without
-  forgetting the user's intent to be connected; `onResume` reopens the socket and
-  restarts sensors if a connection was requested; `onDestroy` cancels everything.
+- **Lifecycle**: screen sleep no longer stops the sensor listeners or socket while
+  streaming is active; `onDestroy` cancels everything.
 - **PpgCollector**: on Galaxy Watch 4+, wraps the Samsung Health Sensor SDK's
   `HealthTrackingService` to stream `HealthTrackerType.PPG_CONTINUOUS`. See
   [Raw PPG](#raw-ppg-galaxy-watch-4-samsung-wear-os-only) below.

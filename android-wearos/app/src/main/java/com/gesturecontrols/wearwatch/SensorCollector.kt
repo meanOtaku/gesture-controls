@@ -5,13 +5,13 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.os.SystemClock
+
 
 /**
  * Wraps SensorManager for the three IMU inputs the protocol cares about.
- * Accelerometer and gyroscope readings are cached and attached to the next
- * rotation-vector sample, since desktop consumes one orientation message per
- * quaternion update with optional accompanying vectors.
+ * Linear acceleration and gyroscope readings are filtered, freshness-checked,
+ * and attached to the next rotation-vector sample. This keeps gravity and stale
+ * sensor samples from appearing as erratic watch motion on the desktop.
  */
 class SensorCollector(
     context: Context,
@@ -20,11 +20,17 @@ class SensorCollector(
 
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val rotationVectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
-    private val accelerometerSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    // `TYPE_ACCELEROMETER` includes gravity, which changes markedly as the wrist
+    // rotates. Prefer the fused gravity-compensated sensor and retain the raw
+    // accelerometer only as a hardware fallback.
+    private val accelerometerSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
+        ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private val gyroscopeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
 
     private var lastAccelerometer: FloatArray? = null
     private var lastGyroscope: FloatArray? = null
+    private var lastAccelerometerTimestampNs = Long.MIN_VALUE
+    private var lastGyroscopeTimestampNs = Long.MIN_VALUE
     private val quaternionBuffer = FloatArray(4)
 
     var isRegistered = false
@@ -54,23 +60,44 @@ class SensorCollector(
 
     override fun onSensorChanged(event: SensorEvent) {
         when (event.sensor.type) {
-            Sensor.TYPE_ACCELEROMETER -> {
-                lastAccelerometer = event.values.copyOf(3)
+            Sensor.TYPE_LINEAR_ACCELERATION, Sensor.TYPE_ACCELEROMETER -> {
+                lastAccelerometer = smooth(lastAccelerometer, event.values, ACCELERATION_ALPHA)
+                lastAccelerometerTimestampNs = event.timestamp
             }
             Sensor.TYPE_GYROSCOPE -> {
-                lastGyroscope = event.values.copyOf(3)
+                lastGyroscope = smooth(lastGyroscope, event.values, GYROSCOPE_ALPHA)
+                lastGyroscopeTimestampNs = event.timestamp
             }
             Sensor.TYPE_ROTATION_VECTOR -> {
                 SensorManager.getQuaternionFromVector(quaternionBuffer, event.values)
                 onOrientation(
                     quaternionBuffer.copyOf(4),
-                    lastAccelerometer,
-                    lastGyroscope,
-                    SystemClock.elapsedRealtimeNanos(),
+                    freshSample(lastAccelerometer, lastAccelerometerTimestampNs, event.timestamp),
+                    freshSample(lastGyroscope, lastGyroscopeTimestampNs, event.timestamp),
+                    event.timestamp,
                 )
             }
         }
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+
+    private fun smooth(previous: FloatArray?, current: FloatArray, alpha: Float): FloatArray {
+        val currentThreeAxis = current.copyOf(3)
+        if (previous == null) return currentThreeAxis
+        return FloatArray(3) { index ->
+            previous[index] + alpha * (currentThreeAxis[index] - previous[index])
+        }
+    }
+
+    private fun freshSample(sample: FloatArray?, sampleTimestampNs: Long, orientationTimestampNs: Long): FloatArray? {
+        if (sample == null || orientationTimestampNs - sampleTimestampNs > MAX_COMPANION_SENSOR_AGE_NS) return null
+        return sample.copyOf()
+    }
+
+    private companion object {
+        const val ACCELERATION_ALPHA = 0.2f
+        const val GYROSCOPE_ALPHA = 0.15f
+        const val MAX_COMPANION_SENSOR_AGE_NS = 100_000_000L
+    }
 }
