@@ -21,6 +21,7 @@ function ppgStateLabel(state: PpgState | null): string {
 }
 
 interface DashboardProps {
+  view?: "main" | "headphone" | "watch";
   status: HeadTrackerStatus | null;
   calibration?: CalibrationState | null;
   calibrationError?: string | null;
@@ -34,6 +35,7 @@ const vector = (values: readonly number[] | null, digits = 3) =>
   values ? `[${values.map((value) => number(value, digits)).join(", ")}]` : "Unavailable";
 
 export function Dashboard({
+  view = "main",
   status,
   calibration,
   calibrationError,
@@ -65,8 +67,8 @@ export function Dashboard({
       <header className="hero">
         <div>
           <p className="eyebrow">Spatial Gesture Control</p>
-          <h1>Head tracker</h1>
-          <p className="subtitle">Sony CLI bridge data, received locally and ready for calibration.</p>
+          <h1>{view === "main" ? "Control center" : view === "headphone" ? "Headphones" : "Galaxy Watch"}</h1>
+          <p className="subtitle">{view === "main" ? "Connection status and controls for your gesture-control devices." : view === "headphone" ? "Sony head-tracker telemetry and calibration." : "Watch connection, sensor streams, and button status."}</p>
         </div>
         <div className={`connection ${connected ? "online" : "offline"}`}>
           <span className="pulse" />
@@ -74,7 +76,13 @@ export function Dashboard({
         </div>
       </header>
 
-      <section className="device-card">
+      {view === "main" && <section className="overview-grid" aria-label="Device overview">
+        <article className="overview-card"><span className="label">Headphones</span><strong>{connected ? "Connected" : "Waiting"}</strong><small>{status?.device ?? "Sony bridge not detected"}</small></article>
+        <article className="overview-card"><span className="label">Galaxy Watch</span><strong>{watchStatus?.connected ? "Connected" : "Waiting"}</strong><small>{watchStatus?.connected ? "Streaming to this desktop" : "Searching for desktop"}</small></article>
+        <article className="overview-card"><span className="label">Volume gesture</span><strong>{calibrationState.requiresRecalibration ? "Set up" : "Ready"}</strong><small>{calibrationState.requiresRecalibration ? "Calibrate headphones in their tab" : "Look top-right to open the knob"}</small></article>
+      </section>}
+
+      <section hidden={view !== "headphone"} className="device-card">
         <div>
           <span className="label">Active device</span>
           <strong>{status?.device ?? "No device detected"}</strong>
@@ -85,7 +93,7 @@ export function Dashboard({
         </div>
       </section>
 
-      <section className="metric-grid" aria-label="Sony telemetry">
+      <section hidden={view !== "headphone"} className="metric-grid" aria-label="Sony telemetry">
         <Metric label="Yaw" value={status ? `${number(status.yawDeg)}°` : "—"} accent="cyan" />
         <Metric label="Pitch" value={status ? `${number(status.pitchDeg)}°` : "—"} accent="violet" />
         <Metric label="Roll" value={status ? `${number(status.rollDeg)}°` : "—"} accent="amber" />
@@ -94,12 +102,12 @@ export function Dashboard({
         <Metric label="Reset counter" value={status ? String(status.resetCounter) : "—"} />
       </section>
 
-      <section className="vectors">
+      <section hidden={view !== "headphone"} className="vectors">
         <VectorRow label="Quaternion" value={vector(status?.quaternion ?? null)} />
         <VectorRow label="Gyroscope" value={vector(status?.gyroscope ?? null)} />
       </section>
 
-      <section className="calibration-card" aria-label="Head calibration">
+      <section hidden={view !== "headphone"} className="calibration-card" aria-label="Head calibration">
         <div className="calibration-heading">
           <div>
             <p className="eyebrow">Head calibration</p>
@@ -162,7 +170,7 @@ export function Dashboard({
         </div>
       </section>
 
-      <section className="watch-card" aria-label="Watch connection">
+      <section hidden={view !== "watch"} className="watch-card" aria-label="Watch connection">
         <div className="calibration-heading">
           <div>
             <p className="eyebrow">Galaxy Watch</p>
@@ -190,6 +198,14 @@ export function Dashboard({
             label="Round trip"
             value={watchStatus?.roundTripNs != null ? `${number(watchStatus.roundTripNs / 1_000_000, 2)} ms` : "—"}
           />
+          <Metric
+            label="STEM button"
+            value={
+              watchStatus?.lastButtonState === "down" ? "Held"
+                : watchStatus?.lastButtonState === "up" ? "Released"
+                  : "—"
+            }
+          />
         </section>
         <div className="vectors">
           <VectorRow label="Quaternion" value={vector(watchStatus?.lastOrientation?.quaternion ?? null)} />
@@ -198,7 +214,7 @@ export function Dashboard({
         </div>
       </section>
 
-      <section className="watch-card" aria-label="Watch PPG">
+      <section hidden={view !== "watch"} className="watch-card" aria-label="Watch PPG">
         <div className="calibration-heading">
           <div>
             <p className="eyebrow">Raw PPG · wellness only, not a medical measurement</p>
@@ -224,7 +240,7 @@ export function Dashboard({
         </div>
       </section>
 
-      <section className="settings">
+      <section hidden={view !== "main"} className="settings">
         <div>
           <p className="eyebrow">Settings</p>
           <h2>Sony UDP input</h2>

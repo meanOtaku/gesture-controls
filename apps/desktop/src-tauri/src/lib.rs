@@ -1,11 +1,13 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::sync::Arc;
 use std::time::Duration;
 
 use calibration::CalibrationRuntime;
 use head_tracking::{HeadPoseEvent, HeadPoseProvider, SonyUdpHeadPoseProvider};
+use spatial_protocol::{BUTTON_STATE_DOWN, BUTTON_STATE_UP, STEM_PRIMARY_BUTTON_ID};
 use tauri::{Emitter, Manager};
 use tracing::{error, info, warn};
-use watch_bridge::WatchBridgeServer;
+use watch_bridge::{WatchBridgeServer, WatchEvent};
 
 mod calibration;
 mod overlay;
@@ -43,12 +45,24 @@ pub fn run() {
             overlay::adjust_system_volume,
             overlay::refresh_system_volume,
             watch::get_watch_status,
+            watch::get_medical_tracker_ids,
+            watch::start_measurement,
+            watch::stop_measurement,
         ])
         .on_window_event(|window, event| {
             if window.label() == MAIN_WINDOW
-                && matches!(event, tauri::WindowEvent::CloseRequested { .. })
+                && let tauri::WindowEvent::CloseRequested { api, .. } = event
             {
-                window.app_handle().exit(0);
+                api.prevent_close();
+                let handle = window.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Some(server) = handle.try_state::<Arc<WatchBridgeServer>>()
+                        && let Err(error) = server.stop().await
+                    {
+                        warn!(%error, "failed to stop watch bridge server during teardown");
+                    }
+                    handle.exit(0);
+                });
             }
         })
         .setup(|app| {
@@ -137,11 +151,37 @@ pub fn run() {
                     return;
                 }
                 info!(address = %WATCH_WEBSOCKET_ADDRESS, "watch WebSocket server started");
+                watch_handle.manage(Arc::new(server));
 
                 let runtime = watch_handle.state::<watch::WatchRuntime>();
                 loop {
                     match events.recv().await {
                         Ok(event) => {
+                            let overlay = watch_handle.state::<overlay::OverlayRuntime>();
+                            match &event {
+                                WatchEvent::Button(sample)
+                                    if sample.button == STEM_PRIMARY_BUTTON_ID
+                                        && sample.state == BUTTON_STATE_DOWN =>
+                                {
+                                    if let Err(error) = overlay.grab(&watch_handle) {
+                                        warn!(%error, "failed to grab volume overlay");
+                                    }
+                                }
+                                WatchEvent::Button(sample)
+                                    if sample.button == STEM_PRIMARY_BUTTON_ID
+                                        && sample.state == BUTTON_STATE_UP =>
+                                {
+                                    if let Err(error) = overlay.release(&watch_handle) {
+                                        warn!(%error, "failed to release volume overlay");
+                                    }
+                                }
+                                WatchEvent::Disconnected => {
+                                    if let Err(error) = overlay.release(&watch_handle) {
+                                        warn!(%error, "failed to release volume overlay on watch disconnect");
+                                    }
+                                }
+                                _ => {}
+                            }
                             if let Err(error) = runtime.apply(&watch_handle, event) {
                                 warn!(%error, "failed to apply watch event");
                             }

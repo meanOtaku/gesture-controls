@@ -12,11 +12,16 @@ use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use axum::routing::get;
 use futures_util::StreamExt;
+use mdns_sd::{ServiceDaemon, ServiceInfo};
 use spatial_protocol::{
-    DESKTOP_CONNECTED_TYPE, DESKTOP_TIME_SYNC_TYPE, DesktopConnectedPayload,
-    DesktopOutboundEnvelope, DesktopTimeSyncPayload, WatchEnvelope, WatchHeartbeatSample,
-    WatchInboundMessage, WatchOrientationSample, WatchPpgBatchSample, WatchPpgStatusSample,
-    WatchTimeSyncSample,
+    DESKTOP_CONNECTED_TYPE, DESKTOP_START_MEASUREMENT_TYPE, DESKTOP_STOP_MEASUREMENT_TYPE,
+    DESKTOP_TIME_SYNC_TYPE, DesktopConnectedPayload, DesktopMeasurementCommandPayload,
+    DesktopOutboundEnvelope, DesktopTimeSyncPayload, ON_DEMAND_MEDICAL_TRACKER_IDS,
+    WATCH_PROTOCOL_VERSION, WatchBiaResultSample, WatchButtonSample, WatchEcgBatchSample,
+    WatchEdaBatchSample, WatchEnvelope, WatchHeartRateBatchSample, WatchHeartbeatSample,
+    WatchInboundMessage, WatchMedicalStatusSample, WatchOrientationSample, WatchPpgBatchSample,
+    WatchPpgStatusSample, WatchSkinTemperatureBatchSample, WatchSpo2BatchSample,
+    WatchSweatLossBatchSample, WatchTimeSyncSample,
 };
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -25,6 +30,11 @@ use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
 pub const WATCH_WEBSOCKET_PATH: &str = "/ws/watch";
+/// Stable DNS-SD service type this bridge advertises itself under on the LAN.
+pub const MDNS_SERVICE_TYPE: &str = "_gesture-controls._tcp.local.";
+const MDNS_INSTANCE_NAME: &str = "galaxy-watch-bridge";
+const MDNS_HOST_NAME: &str = "gesture-controls-desktop.local.";
+const MDNS_UNREGISTER_TIMEOUT: Duration = Duration::from_millis(500);
 const TIME_SYNC_INTERVAL: Duration = Duration::from_secs(5);
 const CLOCK_OFFSET_SAMPLE_COUNT: usize = 5;
 const DEVICE_ALREADY_CONNECTED_CLOSE_CODE: u16 = 4409;
@@ -38,7 +48,24 @@ pub enum WatchEvent {
     ClockOffsetUpdated(ClockOffsetEstimate),
     Ppg(WatchPpgBatchSample),
     PpgStatusUpdated(WatchPpgStatusSample),
+    Button(WatchButtonSample),
+    HeartRate(WatchHeartRateBatchSample),
+    SkinTemperature(WatchSkinTemperatureBatchSample),
+    Eda(WatchEdaBatchSample),
+    Spo2(WatchSpo2BatchSample),
+    Ecg(WatchEcgBatchSample),
+    BiaResult(WatchBiaResultSample),
+    SweatLoss(WatchSweatLossBatchSample),
+    MedicalStatusUpdated(WatchMedicalStatusSample),
     InvalidMessage { reason: String },
+}
+
+/// A desktop-initiated command to start or stop a bounded on-demand medical
+/// measurement session on the watch (see [`ON_DEMAND_MEDICAL_TRACKER_IDS`]).
+#[derive(Debug, Clone, PartialEq)]
+pub enum MeasurementCommand {
+    Start(String),
+    Stop(String),
 }
 
 /// Round-trip clock-offset estimate, computed from one desktop/watch time-sync exchange.
@@ -57,18 +84,36 @@ pub enum WatchBridgeError {
     AlreadyRunning,
     #[error("watch bridge server state lock was poisoned")]
     StatePoisoned,
+    #[error("failed to start mDNS daemon: {0}")]
+    MdnsDaemonFailed(#[source] mdns_sd::Error),
+    #[error("failed to build mDNS service info: {0}")]
+    MdnsServiceInfoFailed(#[source] mdns_sd::Error),
+    #[error("failed to register mDNS service: {0}")]
+    MdnsRegisterFailed(#[source] mdns_sd::Error),
+    #[error("no watch is currently connected")]
+    NoActiveConnection,
+    #[error("'{0}' is not a valid on-demand medical tracker id")]
+    UnknownMeasurementTracker(String),
 }
 
 struct SharedState {
     events: broadcast::Sender<WatchEvent>,
+    commands: broadcast::Sender<MeasurementCommand>,
     active: AtomicBool,
     heartbeat_timeout: Duration,
+}
+
+/// A registered mDNS/DNS-SD advertisement, kept alive until unregistered.
+struct MdnsAdvertisement {
+    daemon: ServiceDaemon,
+    fullname: String,
 }
 
 pub struct WatchBridgeServer {
     local_addr: SocketAddr,
     listener: Mutex<Option<TcpListener>>,
     task: Mutex<Option<JoinHandle<()>>>,
+    mdns: Mutex<Option<MdnsAdvertisement>>,
     shared: Arc<SharedState>,
 }
 
@@ -85,12 +130,15 @@ impl WatchBridgeServer {
             .local_addr()
             .map_err(WatchBridgeError::SocketBindFailed)?;
         let (events, _) = broadcast::channel(256);
+        let (commands, _) = broadcast::channel(16);
         Ok(Self {
             local_addr,
             listener: Mutex::new(Some(listener)),
             task: Mutex::new(None),
+            mdns: Mutex::new(None),
             shared: Arc::new(SharedState {
                 events,
+                commands,
                 active: AtomicBool::new(false),
                 heartbeat_timeout,
             }),
@@ -103,6 +151,28 @@ impl WatchBridgeServer {
 
     pub fn subscribe(&self) -> broadcast::Receiver<WatchEvent> {
         self.shared.events.subscribe()
+    }
+
+    /// Sends a [`MeasurementCommand`] to the connected watch, starting or
+    /// stopping a bounded on-demand medical measurement session. Errors if no
+    /// watch is connected or `tracker` isn't one of
+    /// [`ON_DEMAND_MEDICAL_TRACKER_IDS`] — this never applies to the
+    /// continuous trackers, which start automatically alongside PPG.
+    pub fn send_measurement_command(
+        &self,
+        command: MeasurementCommand,
+    ) -> Result<(), WatchBridgeError> {
+        let tracker = match &command {
+            MeasurementCommand::Start(tracker) | MeasurementCommand::Stop(tracker) => tracker,
+        };
+        if !ON_DEMAND_MEDICAL_TRACKER_IDS.contains(&tracker.as_str()) {
+            return Err(WatchBridgeError::UnknownMeasurementTracker(tracker.clone()));
+        }
+        if !self.shared.active.load(Ordering::Acquire) {
+            return Err(WatchBridgeError::NoActiveConnection);
+        }
+        let _ = self.shared.commands.send(command);
+        Ok(())
     }
 
     pub async fn start(&self) -> Result<(), WatchBridgeError> {
@@ -129,6 +199,53 @@ impl WatchBridgeServer {
                 warn!(%error, "watch WebSocket server terminated");
             }
         }));
+        drop(task_guard);
+
+        // Advertisement is best-effort: a network that blocks multicast (or a
+        // platform without it) shouldn't prevent the WebSocket server itself
+        // from serving a manually entered endpoint.
+        if let Err(error) = self.advertise() {
+            warn!(%error, "failed to advertise watch bridge via mDNS");
+        }
+        Ok(())
+    }
+
+    /// Publishes this server under [`MDNS_SERVICE_TYPE`] so LAN clients can discover it
+    /// automatically. Only call once the listener is confirmed bound and serving.
+    fn advertise(&self) -> Result<(), WatchBridgeError> {
+        let daemon = ServiceDaemon::new().map_err(WatchBridgeError::MdnsDaemonFailed)?;
+        let version = WATCH_PROTOCOL_VERSION.to_string();
+        let txt = [
+            ("protocol", "ws"),
+            ("path", WATCH_WEBSOCKET_PATH),
+            ("version", version.as_str()),
+        ];
+        let service = ServiceInfo::new(
+            MDNS_SERVICE_TYPE,
+            MDNS_INSTANCE_NAME,
+            MDNS_HOST_NAME,
+            "",
+            self.local_addr.port(),
+            &txt[..],
+        )
+        .map_err(WatchBridgeError::MdnsServiceInfoFailed)?
+        .enable_addr_auto();
+        let fullname = service.get_fullname().to_string();
+
+        daemon
+            .register(service)
+            .map_err(WatchBridgeError::MdnsRegisterFailed)?;
+        info!(
+            service_type = MDNS_SERVICE_TYPE,
+            port = self.local_addr.port(),
+            "advertising watch bridge via mDNS"
+        );
+
+        *self
+            .mdns
+            .lock()
+            .map_err(|_| WatchBridgeError::StatePoisoned)? =
+            Some(MdnsAdvertisement { daemon, fullname });
         Ok(())
     }
 
@@ -141,6 +258,23 @@ impl WatchBridgeServer {
         if let Some(task) = task {
             task.abort();
             let _ = task.await;
+        }
+
+        let advertisement = self
+            .mdns
+            .lock()
+            .map_err(|_| WatchBridgeError::StatePoisoned)?
+            .take();
+        if let Some(MdnsAdvertisement { daemon, fullname }) = advertisement {
+            let _ = tokio::task::spawn_blocking(move || {
+                if let Ok(receiver) = daemon.unregister(&fullname) {
+                    let _ = receiver.recv_timeout(MDNS_UNREGISTER_TIMEOUT);
+                }
+                if let Ok(receiver) = daemon.shutdown() {
+                    let _ = receiver.recv_timeout(MDNS_UNREGISTER_TIMEOUT);
+                }
+            })
+            .await;
         }
         Ok(())
     }
@@ -193,6 +327,7 @@ async fn run_connection(socket: &mut WebSocket, shared: &Arc<SharedState>) {
     let mut time_sync_ticker = tokio::time::interval(TIME_SYNC_INTERVAL);
     let mut pending_time_sync_at: Option<u64> = None;
     let mut clock_offset_samples = VecDeque::with_capacity(CLOCK_OFFSET_SAMPLE_COUNT);
+    let mut commands = shared.commands.subscribe();
 
     loop {
         let remaining = shared
@@ -215,6 +350,21 @@ async fn run_connection(socket: &mut WebSocket, shared: &Arc<SharedState>) {
                     break;
                 }
                 pending_time_sync_at = Some(desktop_time_ns);
+            }
+            command = commands.recv() => {
+                let (message_type, tracker) = match command {
+                    Ok(MeasurementCommand::Start(tracker)) => (DESKTOP_START_MEASUREMENT_TYPE, tracker),
+                    Ok(MeasurementCommand::Stop(tracker)) => (DESKTOP_STOP_MEASUREMENT_TYPE, tracker),
+                    Err(_) => continue,
+                };
+                let request = DesktopOutboundEnvelope::new(
+                    message_type,
+                    now_ns(),
+                    DesktopMeasurementCommandPayload { tracker },
+                );
+                if send_json(socket, &request).await.is_err() {
+                    break;
+                }
             }
             message = tokio::time::timeout(remaining, socket.next()) => {
                 match message {
@@ -301,6 +451,33 @@ fn handle_inbound(
         }
         Ok(WatchInboundMessage::PpgStatus(sample)) => {
             let _ = shared.events.send(WatchEvent::PpgStatusUpdated(sample));
+        }
+        Ok(WatchInboundMessage::Button(sample)) => {
+            let _ = shared.events.send(WatchEvent::Button(sample));
+        }
+        Ok(WatchInboundMessage::HeartRateBatch(sample)) => {
+            let _ = shared.events.send(WatchEvent::HeartRate(sample));
+        }
+        Ok(WatchInboundMessage::SkinTemperatureBatch(sample)) => {
+            let _ = shared.events.send(WatchEvent::SkinTemperature(sample));
+        }
+        Ok(WatchInboundMessage::EdaBatch(sample)) => {
+            let _ = shared.events.send(WatchEvent::Eda(sample));
+        }
+        Ok(WatchInboundMessage::Spo2Batch(sample)) => {
+            let _ = shared.events.send(WatchEvent::Spo2(sample));
+        }
+        Ok(WatchInboundMessage::EcgBatch(sample)) => {
+            let _ = shared.events.send(WatchEvent::Ecg(sample));
+        }
+        Ok(WatchInboundMessage::BiaResult(sample)) => {
+            let _ = shared.events.send(WatchEvent::BiaResult(sample));
+        }
+        Ok(WatchInboundMessage::SweatLossBatch(sample)) => {
+            let _ = shared.events.send(WatchEvent::SweatLoss(sample));
+        }
+        Ok(WatchInboundMessage::MedicalStatus(sample)) => {
+            let _ = shared.events.send(WatchEvent::MedicalStatusUpdated(sample));
         }
         Err(error) => {
             warn!(%error, "ignoring unparseable watch message payload");

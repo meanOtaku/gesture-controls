@@ -45,6 +45,15 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/discoveryStatusText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="@string/discovery_searching"
+                android:textColor="#AAAAAA"
+                android:textSize="11sp" />
+
+            <TextView
                 android:id="@+id/sensorStatusText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

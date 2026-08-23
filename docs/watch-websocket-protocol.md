@@ -2,6 +2,20 @@
 
 The desktop listens on `ws://DESKTOP_IP:8766/ws/watch` on the local network. Only one watch connection is accepted at a time. The desktop disconnects a silent client after three seconds.
 
+## Local discovery
+
+After the listener starts, the desktop advertises a DNS-SD service as
+`_gesture-controls._tcp.local.`. Its TXT metadata is `protocol=ws`,
+`path=/ws/watch`, and `version=1`; the advertised port is the listener's actual
+bound port. The Wear OS app browses and resolves this service with Android's
+`NsdManager`, then connects to the resolved `ws://HOST:PORT/ws/watch` endpoint.
+
+Discovery is limited to the local multicast domain: the watch and desktop must
+be on the same Wi-Fi/LAN and client isolation, guest networks, VLAN boundaries,
+or multicast-blocking routers can prevent it. The app retains its endpoint field
+and Connect button as a manual fallback. A rediscovered service reconnects using
+its new resolved address after a laptop DHCP address change.
+
 ## Watch messages
 
 All messages are UTF-8 JSON with the required envelope fields `type`, `version` (`1`), `deviceId`, `sequence`, `timestampNs`, and `payload`. `timestampNs` is the watch monotonic-clock timestamp. Sequences must increase across a connection.
@@ -13,6 +27,27 @@ All messages are UTF-8 JSON with the required envelope fields `type`, `version` 
 ```
 
 `watch.heartbeat` carries an optional `batteryPercent` value. Send it at least once every three seconds, including while no IMU samples are available.
+
+## Volume overlay grab (STEM button)
+
+When the head tracker dwells on the calibrated top-right target, the desktop
+shows its volume overlay. Holding the watch's STEM_1 hardware key (Wear OS's
+customizable button, distinct from Back/Home/Power) while the overlay is shown
+grabs it; releasing the key releases the grab and hides the overlay. Only this
+one button is dispatched in this milestone — no pinch gesture or wrist-rotation
+volume control yet.
+
+`watch.button` reports a press or release:
+
+```json
+{"type":"watch.button","version":1,"deviceId":"galaxy-watch-4","sequence":5,"timestampNs":127,"payload":{"button":"stem_primary","state":"down"}}
+```
+
+`payload.button` is currently always `stem_primary`; `payload.state` is
+`down` or `up`. The desktop ignores a `down` while the overlay isn't shown,
+and always clears the grab and hides the overlay on `up` or on watch
+disconnect, so a lost connection mid-hold can never leave the overlay stuck
+grabbed.
 
 ## Time synchronization
 

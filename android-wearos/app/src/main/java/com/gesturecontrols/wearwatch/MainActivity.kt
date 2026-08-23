@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.os.BatteryManager
 import android.os.Bundle
+import android.view.KeyEvent
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -20,19 +21,31 @@ class MainActivity : AppCompatActivity() {
     private lateinit var endpointInput: EditText
     private lateinit var connectButton: Button
     private lateinit var connectionStatusText: TextView
+    private lateinit var discoveryStatusText: TextView
     private lateinit var sensorStatusText: TextView
     private lateinit var detailText: TextView
     private lateinit var ppgStatusText: TextView
 
     private val watchLink = WatchLinkManager()
+    private lateinit var desktopDiscovery: DesktopDiscovery
+    private var manualEndpointSelected = false
     private lateinit var sensorCollector: SensorCollector
     private lateinit var ppgCollector: PpgCollector
+    private lateinit var medicalCollector: MedicalContinuousCollector
+    private lateinit var onDemandSampler: OnDemandMedicalSampler
+
+    // Tracks whether we've sent a button-down without a matching button-up yet,
+    // so backgrounding the activity mid-hold can't leave the desktop overlay grabbed.
+    private var stemButtonPressed = false
 
     // Samsung Health Sensor SDK's own consent flow is separate from this; see
     // PpgCollector's kdoc. Must be registered before onStart, so it's a field.
     private val requestBodySensorsPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) ppgCollector.start()
+            if (granted) {
+                ppgCollector.start()
+                medicalCollector.start()
+            }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,6 +56,7 @@ class MainActivity : AppCompatActivity() {
         endpointInput = findViewById(R.id.endpointInput)
         connectButton = findViewById(R.id.connectButton)
         connectionStatusText = findViewById(R.id.connectionStatusText)
+        discoveryStatusText = findViewById(R.id.discoveryStatusText)
         sensorStatusText = findViewById(R.id.sensorStatusText)
         detailText = findViewById(R.id.detailText)
         ppgStatusText = findViewById(R.id.ppgStatusText)
@@ -50,13 +64,37 @@ class MainActivity : AppCompatActivity() {
         endpointInput.setText(prefs.endpoint.orEmpty())
 
         watchLink.batteryPercentProvider = { readBatteryPercent() }
+        desktopDiscovery = DesktopDiscovery(
+            this,
+            onEndpoint = { endpoint ->
+                if (!manualEndpointSelected) connectDiscoveredDesktop(endpoint)
+            },
+            onStatus = { status -> discoveryStatusText.text = status },
+        )
 
         sensorCollector = SensorCollector(this) { quaternion, accelerometer, gyroscope, timestampNs ->
             watchLink.sendOrientation(quaternion, accelerometer, gyroscope, timestampNs)
         }
         ppgCollector = PpgCollector(this) { samples -> watchLink.enqueuePpgSamples(samples) }
+        medicalCollector = MedicalContinuousCollector(
+            this,
+            onHeartRate = { samples -> watchLink.enqueueHeartRateSamples(samples) },
+            onSkinTemperature = { samples -> watchLink.enqueueSkinTemperatureSamples(samples) },
+            onEda = { samples -> watchLink.enqueueEdaSamples(samples) },
+        )
+        onDemandSampler = OnDemandMedicalSampler(
+            this,
+            onSpo2 = { samples -> watchLink.sendSpo2Samples(samples) },
+            onEcg = { samples -> watchLink.sendEcgSamples(samples) },
+            onBiaResult = { result -> watchLink.sendBiaResult(result) },
+            onSweatLoss = { samples -> watchLink.sendSweatLossSamples(samples) },
+        )
+        watchLink.onMeasurementCommand = { tracker, start ->
+            if (start) onDemandSampler.start(tracker) else onDemandSampler.stop(tracker)
+        }
 
         connectButton.setOnClickListener { onConnectButtonClicked() }
+        desktopDiscovery.start()
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -71,14 +109,27 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 launch { ppgCollector.state.collect { renderPpgState(it) } }
+                launch {
+                    medicalCollector.state.collect { statuses ->
+                        statuses.forEach { (tracker, state) -> watchLink.sendMedicalStatus(tracker, state.wireValue()) }
+                    }
+                }
+                launch {
+                    onDemandSampler.state.collect { statuses ->
+                        statuses.forEach { (tracker, state) -> watchLink.sendMedicalStatus(tracker, state.wireValue()) }
+                    }
+                }
             }
         }
     }
 
     override fun onPause() {
         super.onPause()
+        releaseStemButtonIfPressed()
         sensorCollector.stop()
         ppgCollector.stop()
+        medicalCollector.stop()
+        onDemandSampler.stopAll()
         watchLink.pauseForLifecycle()
         sensorStatusText.setText(R.string.sensors_idle)
     }
@@ -92,15 +143,49 @@ class MainActivity : AppCompatActivity() {
         ) {
             sensorCollector.start()
             sensorStatusText.setText(R.string.sensors_streaming)
-            startPpgCollection()
+            startBodySensorCollection()
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        releaseStemButtonIfPressed()
         sensorCollector.stop()
         ppgCollector.stop()
+        medicalCollector.stop()
+        onDemandSampler.stopAll()
+        desktopDiscovery.stop()
         watchLink.shutdown()
+    }
+
+    /**
+     * Only the STEM_1 hardware key grabs the volume overlay; Back/Home and every
+     * other key fall through to the default behavior (e.g. Back still exits).
+     */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_STEM_1) {
+            if (event?.repeatCount == 0 && !stemButtonPressed) {
+                stemButtonPressed = true
+                watchLink.sendButtonEvent(pressed = true)
+            }
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_STEM_1) {
+            releaseStemButtonIfPressed()
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
+    }
+
+    private fun releaseStemButtonIfPressed() {
+        if (stemButtonPressed) {
+            stemButtonPressed = false
+            watchLink.sendButtonEvent(pressed = false)
+        }
     }
 
     private fun onConnectButtonClicked() {
@@ -111,6 +196,8 @@ class MainActivity : AppCompatActivity() {
         ) {
             sensorCollector.stop()
             ppgCollector.stop()
+            medicalCollector.stop()
+            onDemandSampler.stopAll()
             watchLink.disconnect()
             sensorStatusText.setText(R.string.sensors_idle)
             return
@@ -121,17 +208,29 @@ class MainActivity : AppCompatActivity() {
             connectionStatusText.text = "Enter a ws:// endpoint"
             return
         }
+        manualEndpointSelected = true
         prefs.endpoint = url
+        connectToDesktop(url)
+    }
+
+    private fun connectDiscoveredDesktop(url: String) {
+        endpointInput.setText(url)
+        prefs.endpoint = url
+        connectToDesktop(url)
+    }
+
+    private fun connectToDesktop(url: String) {
         sensorCollector.start()
         sensorStatusText.setText(R.string.sensors_streaming)
         watchLink.connect(url)
-        startPpgCollection()
+        startBodySensorCollection()
     }
 
-    /** Starts PPG_CONTINUOUS if BODY_SENSORS is already granted, else requests it first. */
-    private fun startPpgCollection() {
+    /** Starts PPG_CONTINUOUS and the continuous medical trackers if BODY_SENSORS is already granted, else requests it first. */
+    private fun startBodySensorCollection() {
         if (ppgCollector.hasBodySensorsPermission()) {
             ppgCollector.start()
+            medicalCollector.start()
         } else {
             requestBodySensorsPermission.launch(Manifest.permission.BODY_SENSORS)
         }
@@ -154,6 +253,8 @@ class MainActivity : AppCompatActivity() {
         if (state == ConnectionState.DISCONNECTED || state == ConnectionState.FAILED) {
             sensorCollector.stop()
             ppgCollector.stop()
+            medicalCollector.stop()
+            onDemandSampler.stopAll()
             sensorStatusText.setText(R.string.sensors_idle)
         }
     }

@@ -77,6 +77,14 @@ export interface PpgSampleSnapshot {
   irStatus: number;
 }
 
+export interface HeartRateSampleSnapshot { timestampNs: number; heartRate: number; heartRateStatus: number; ibiMs: number[]; ibiStatus: number[]; }
+export interface SkinTemperatureSampleSnapshot { timestampNs: number; objectTemperatureCelsius: number; ambientTemperatureCelsius: number; status: number; }
+export interface EdaSampleSnapshot { timestampNs: number; skinConductanceMicrosiemens: number; status: number; }
+export interface Spo2SampleSnapshot { timestampNs: number; spo2: number; heartRate: number; accuracyFlag: number; status: number; }
+export interface EcgSampleSnapshot { timestampNs: number; ecgMillivolts: number; leadOff: number; sequenceNumber: number; maxThresholdMillivolts: number; minThresholdMillivolts: number; }
+export interface BiaResultSnapshot { progressPercent: number; status: number; bodyFatRatio: number | null; bodyFatMassKg: number | null; totalBodyWaterKg: number | null; skeletalMuscleRatio: number | null; skeletalMuscleMassKg: number | null; basalMetabolicRateKcal: number | null; fatFreeRatio: number | null; fatFreeMassKg: number | null; bodyImpedanceMagnitudeOhm: number | null; bodyImpedanceDegreeDeg: number | null; }
+export interface SweatLossSampleSnapshot { timestampNs: number; sweatLossMilliliters: number; status: number; }
+
 export interface WatchStatus {
   connected: boolean;
   lastOrientation: WatchOrientationSample | null;
@@ -86,6 +94,19 @@ export interface WatchStatus {
   ppgState: PpgState | null;
   ppgLastSample: PpgSampleSnapshot | null;
   ppgRateHz: number | null;
+  /** Latest `watch.button` state ("down"/"up") for the STEM button that grabs the volume overlay. */
+  lastButtonState: "down" | "up" | null;
+  medicalStatus: Record<string, string>;
+  heartRateLast: HeartRateSampleSnapshot | null;
+  heartRateRateHz: number | null;
+  skinTemperatureLast: SkinTemperatureSampleSnapshot | null;
+  skinTemperatureRateHz: number | null;
+  edaLast: EdaSampleSnapshot | null;
+  edaRateHz: number | null;
+  spo2Last: Spo2SampleSnapshot | null;
+  ecgLast: EcgSampleSnapshot | null;
+  biaLast: BiaResultSnapshot | null;
+  sweatLossLast: SweatLossSampleSnapshot | null;
 }
 
 export const HEAD_POSE_EVENT = "head-pose-updated";

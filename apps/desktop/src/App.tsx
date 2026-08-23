@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
 import { Dashboard } from "./components/Dashboard";
+import { LiveTelemetry } from "./components/LiveTelemetry";
 import { VolumeKnob } from "./components/VolumeKnob";
 import {
   CALIBRATION_STATE_EVENT,
@@ -50,6 +51,18 @@ const emptyWatchStatus: WatchStatus = {
   ppgState: null,
   ppgLastSample: null,
   ppgRateHz: null,
+  lastButtonState: null,
+  medicalStatus: {},
+  heartRateLast: null,
+  heartRateRateHz: null,
+  skinTemperatureLast: null,
+  skinTemperatureRateHz: null,
+  edaLast: null,
+  edaRateHz: null,
+  spo2Last: null,
+  ecgLast: null,
+  biaLast: null,
+  sweatLossLast: null,
 };
 
 export default function App() {
@@ -105,7 +118,7 @@ function OverlayApp() {
     };
   }, [inTauri, overlay.visible]);
 
-  return <main className="overlay-shell"><VolumeKnob volume={overlay.volume} /></main>;
+  return <main className="overlay-shell"><VolumeKnob volume={overlay.volume} grabbed={overlay.grabbed} /></main>;
 }
 
 function MainApp() {
@@ -114,6 +127,7 @@ function MainApp() {
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
   const [volumeError, setVolumeError] = useState<string | null>(null);
   const [watchStatus, setWatchStatus] = useState<WatchStatus>(emptyWatchStatus);
+  const [activeTab, setActiveTab] = useState<"main" | "headphone" | "watch" | "telemetry">("main");
   const calibrationEventVersion = useRef(0);
   const overlayEventVersion = useRef(0);
   const overlayVisible = useRef(false);
@@ -306,14 +320,32 @@ function MainApp() {
     .filter((error): error is string => error !== null)
     .join(" · ") || null;
 
-  return (
-    <Dashboard
-      status={status}
-      calibration={calibration}
-      calibrationError={applicationError}
-      watchStatus={watchStatus}
-      onCaptureTarget={(target) => { void captureTarget(target); }}
-      onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }}
-    />
-  );
+  return <>
+    <nav className="app-tabs" aria-label="Application views">
+      <button className={activeTab === "main" ? "active" : ""} onClick={() => setActiveTab("main")}>Main</button>
+      <button className={activeTab === "headphone" ? "active" : ""} onClick={() => setActiveTab("headphone")}>Headphones</button>
+      <button className={activeTab === "watch" ? "active" : ""} onClick={() => setActiveTab("watch")}>Watch</button>
+      <button className={activeTab === "telemetry" ? "active" : ""} onClick={() => setActiveTab("telemetry")}>Live data</button>
+    </nav>
+    <div hidden={activeTab !== "main"}>
+      <Dashboard
+        view="main"
+        status={status}
+        calibration={calibration}
+        calibrationError={applicationError}
+        watchStatus={watchStatus}
+        onCaptureTarget={(target) => { void captureTarget(target); }}
+        onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }}
+      />
+    </div>
+    <div hidden={activeTab !== "headphone"}>
+      <Dashboard view="headphone" status={status} calibration={calibration} calibrationError={applicationError} watchStatus={watchStatus} onCaptureTarget={(target) => { void captureTarget(target); }} onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }} />
+    </div>
+    <div hidden={activeTab !== "watch"}>
+      <Dashboard view="watch" status={status} calibration={calibration} calibrationError={applicationError} watchStatus={watchStatus} onCaptureTarget={(target) => { void captureTarget(target); }} onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }} />
+    </div>
+    <div hidden={activeTab !== "telemetry"}>
+      <LiveTelemetry status={status} watchStatus={watchStatus} />
+    </div>
+  </>;
 }

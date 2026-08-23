@@ -9,6 +9,7 @@
     <string name="status_connected">Connected</string>
     <string name="status_reconnecting">Reconnecting…</string>
     <string name="status_failed">Failed</string>
+    <string name="discovery_searching">Searching for desktop…</string>
     <string name="sensors_idle">Sensors idle</string>
     <string name="sensors_streaming">Streaming</string>
     <string name="ppg_idle">PPG idle</string>

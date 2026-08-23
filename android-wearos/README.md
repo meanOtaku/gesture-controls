@@ -34,10 +34,13 @@ android-wearos/
 
 ## What it implements
 
+- **Desktop discovery**: the app uses Android `NsdManager` to browse the desktop's
+  `_gesture-controls._tcp.local.` mDNS/DNS-SD advertisement, resolves its current
+  host and port, persists the endpoint, and begins streaming automatically. The
+  endpoint field and Connect button remain a manual fallback.
 - **MainActivity**: text field for the desktop endpoint (`ws://LAN-IP:8766/ws/watch`),
   persisted in `SharedPreferences` across restarts; a Connect/Disconnect button; live
-  connection status (`Disconnected` / `Connecting…` / `Connected` / `Reconnecting…` /
-  `Failed`); live sensor status and last-sent sequence number.
+  discovery and connection status; live sensor status and last-sent sequence number.
 - **SensorCollector**: registers `TYPE_ROTATION_VECTOR`, `TYPE_ACCELEROMETER`,
   `TYPE_GYROSCOPE` at `SENSOR_DELAY_GAME`. Every rotation-vector sample is converted to
   a `[w, x, y, z]` quaternion via `SensorManager.getQuaternionFromVector` and paired
@@ -115,14 +118,14 @@ With the watch selected as the deployment target (it should now appear in Androi
 Studio's device dropdown), click **Run ▶**. Android Studio builds the APK, installs
 it, and launches `MainActivity` on the watch.
 
-### 5. Find your desktop's LAN IP and start the desktop app
+### 5. Start the desktop app
 
-On the desktop, find the LAN IP of the machine running `npm start` (e.g.
-`ifconfig` / `ip addr` on macOS/Linux, `ipconfig` on Windows — look for the Wi-Fi/LAN
-adapter address, not `127.0.0.1`). Start the desktop app (`npm start` from the repo
-root) so its watch bridge is listening on `0.0.0.0:8766`.
+Start the desktop app (`npm start` from the repo root). Its watch bridge listens on
+`0.0.0.0:8766` and advertises itself as `_gesture-controls._tcp.local.`. With both
+devices on the same Wi-Fi/LAN, the watch finds the service, resolves its current IP,
+and starts streaming automatically.
 
-### 6. Enter the endpoint on the watch and connect
+### 6. Confirm automatic discovery or enter a manual fallback endpoint
 
 In the app on the watch, enter:
 
@@ -130,9 +133,11 @@ In the app on the watch, enter:
 ws://<desktop-lan-ip>:8766/ws/watch
 ```
 
-for example `ws://192.168.1.42:8766/ws/watch`, then tap **Connect**. The status text
-should move from `Connecting…` to `Connected`, and the detail line below it should
-start counting up a sequence number as orientation samples stream out.
+The watch normally fills this endpoint and connects automatically. If discovery is
+unavailable, enter it manually (for example `ws://192.168.1.42:8766/ws/watch`) and
+tap **Connect**. The status text should move from `Connecting…` to `Connected`, and
+the detail line below it should start counting up a sequence number as orientation
+samples stream out.
 
 ### 7. Firewall
 
@@ -203,10 +208,14 @@ dependency in `app/build.gradle.kts`, not published to any repository). This is
 - **Plain `ws://`, LAN-only**: there is no TLS and no authentication. This is
   appropriate for a trusted local network only; do not expose port 8766 beyond your
   LAN.
-- **No gesture/button/ML features yet**: this client covers Milestone 6 (WebSocket
-  connection, orientation/heartbeat/time-sync streaming) only. Button-grab
-  interaction, wrist-rotation gestures, and on-device pinch inference are later
-  milestones and are not implemented here.
+- **mDNS is local-only**: automatic discovery requires the watch and desktop to share
+  a Wi-Fi/LAN multicast domain. It does not cross guest networks, client-isolated
+  SSIDs, most VLANs/subnets, or the internet. The manual endpoint field remains the
+  fallback for networks that block mDNS.
+- **Button grab only**: Milestone 7 maps the Wear OS `STEM_1` hardware key to a
+  press-and-hold volume-overlay grab after the desktop has shown that overlay. It
+  does not intercept Back, Home, or Power. Wrist-rotation volume control and
+  on-device pinch inference remain later milestones.
 - **Raw PPG is hardware-gated**: only Galaxy Watch 4+ on Samsung Wear OS exposes
   `PPG_CONTINUOUS`; other watches run normally with `PpgState.UNAVAILABLE` and no
   PPG data in `watch.ppg_batch`.

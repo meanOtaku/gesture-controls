@@ -127,6 +127,47 @@ impl OverlayRuntime {
             .state
             .lock()
             .map_err(|_| "overlay state lock was poisoned")?;
+        state.grabbed = false;
+        commit_visibility_after(&mut state.visible, false, || {
+            window.hide().map_err(|error| error.to_string())
+        })?;
+        self.state_generation.fetch_add(1, Ordering::AcqRel);
+        let snapshot = *state;
+        let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
+        Ok(snapshot)
+    }
+
+    /// Marks the overlay grabbed by a held watch button. A no-op unless the
+    /// overlay is currently shown (dwelling on the calibrated top-right target).
+    pub(crate) fn grab(&self, app: &AppHandle) -> Result<OverlayState, String> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "overlay state lock was poisoned")?;
+        if !state.visible || state.grabbed {
+            return Ok(*state);
+        }
+        state.grabbed = true;
+        self.state_generation.fetch_add(1, Ordering::AcqRel);
+        let snapshot = *state;
+        let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
+        Ok(snapshot)
+    }
+
+    /// Releases a watch-button grab and hides the overlay, so a button-up or a
+    /// watch disconnect can never leave the overlay stuck grabbed/visible.
+    pub(crate) fn release(&self, app: &AppHandle) -> Result<OverlayState, String> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "overlay state lock was poisoned")?;
+        if !state.grabbed && !state.visible {
+            return Ok(*state);
+        }
+        let window = app
+            .get_webview_window(OVERLAY_WINDOW)
+            .ok_or("overlay window is not configured")?;
+        state.grabbed = false;
         commit_visibility_after(&mut state.visible, false, || {
             window.hide().map_err(|error| error.to_string())
         })?;

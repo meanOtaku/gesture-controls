@@ -2,17 +2,18 @@ import type { CSSProperties } from "react";
 
 interface VolumeKnobProps {
   volume: number;
+  grabbed?: boolean;
 }
 
 type KnobStyle = CSSProperties & { "--volume-progress": number };
 
-export function VolumeKnob({ volume }: VolumeKnobProps) {
+export function VolumeKnob({ volume, grabbed = false }: VolumeKnobProps) {
   const boundedVolume = Math.min(100, Math.max(0, Math.round(volume)));
   const style: KnobStyle = { "--volume-progress": boundedVolume };
 
   return (
     <section
-      className="volume-knob"
+      className={grabbed ? "volume-knob grabbed" : "volume-knob"}
       role="meter"
       aria-label="Current volume"
       aria-valuemin={0}

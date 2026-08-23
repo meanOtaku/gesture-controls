@@ -18,6 +18,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import org.json.JSONObject
 
 enum class ConnectionState { DISCONNECTED, CONNECTING, CONNECTED, RECONNECTING, FAILED }
 
@@ -37,6 +38,10 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
     private var reconnectJob: Job? = null
     private var ppgFlushJob: Job? = null
     private val ppgBuffer = mutableListOf<PpgSample>()
+    private var medicalFlushJob: Job? = null
+    private val heartRateBuffer = mutableListOf<HeartRateSample>()
+    private val skinTemperatureBuffer = mutableListOf<SkinTemperatureSample>()
+    private val edaBuffer = mutableListOf<EdaSample>()
     private val sequence = AtomicLong(0)
     private var attempt = 0
     private var userRequestedConnection = false
@@ -48,6 +53,9 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
 
     /** Supplies battery percent for outgoing heartbeats; wired by MainActivity. */
     var batteryPercentProvider: (() -> Int?)? = null
+
+    /** Forwards a `desktop.start_measurement`/`desktop.stop_measurement` command; wired by MainActivity to [OnDemandMedicalSampler]. */
+    var onMeasurementCommand: ((tracker: String, start: Boolean) -> Unit)? = null
 
     private val _state = MutableStateFlow(ConnectionState.DISCONNECTED)
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
@@ -139,6 +147,91 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         socket.send(WatchProtocol.ppgStatusMessage(deviceId, seq, timestampNs, state))
     }
 
+    /** Sends a STEM button press/release, grabbing or releasing the desktop's volume overlay. */
+    fun sendButtonEvent(pressed: Boolean) {
+        val socket = webSocket ?: return
+        if (_state.value != ConnectionState.CONNECTED) return
+        val timestampNs = SystemClock.elapsedRealtimeNanos()
+        val seq = sequence.incrementAndGet()
+        val buttonState = if (pressed) WatchProtocol.BUTTON_STATE_DOWN else WatchProtocol.BUTTON_STATE_UP
+        socket.send(WatchProtocol.buttonMessage(deviceId, seq, timestampNs, buttonState))
+    }
+
+    /** Buffers HEART_RATE_CONTINUOUS samples for the next medical flush tick; dropped if not connected. */
+    fun enqueueHeartRateSamples(samples: List<HeartRateSample>) {
+        if (samples.isEmpty()) return
+        if (_state.value != ConnectionState.CONNECTED) return
+        synchronized(heartRateBuffer) { heartRateBuffer.addAll(samples) }
+    }
+
+    /** Buffers SKIN_TEMPERATURE_CONTINUOUS samples for the next medical flush tick; dropped if not connected. */
+    fun enqueueSkinTemperatureSamples(samples: List<SkinTemperatureSample>) {
+        if (samples.isEmpty()) return
+        if (_state.value != ConnectionState.CONNECTED) return
+        synchronized(skinTemperatureBuffer) { skinTemperatureBuffer.addAll(samples) }
+    }
+
+    /** Buffers EDA_CONTINUOUS samples for the next medical flush tick; dropped if not connected. */
+    fun enqueueEdaSamples(samples: List<EdaSample>) {
+        if (samples.isEmpty()) return
+        if (_state.value != ConnectionState.CONNECTED) return
+        synchronized(edaBuffer) { edaBuffer.addAll(samples) }
+    }
+
+    /** Sends a bounded SPO2_ON_DEMAND session's samples immediately; on-demand data is low-volume, unlike the continuous trackers. */
+    fun sendSpo2Samples(samples: List<Spo2Sample>) {
+        if (samples.isEmpty()) return
+        val socket = webSocket ?: return
+        if (_state.value != ConnectionState.CONNECTED) return
+        for (chunk in samples.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
+            val timestampNs = SystemClock.elapsedRealtimeNanos()
+            val seq = sequence.incrementAndGet()
+            socket.send(WatchProtocol.spo2BatchMessage(deviceId, seq, timestampNs, chunk))
+        }
+    }
+
+    /** Sends a bounded ECG_ON_DEMAND session's samples immediately; see [sendSpo2Samples]. */
+    fun sendEcgSamples(samples: List<EcgSample>) {
+        if (samples.isEmpty()) return
+        val socket = webSocket ?: return
+        if (_state.value != ConnectionState.CONNECTED) return
+        for (chunk in samples.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
+            val timestampNs = SystemClock.elapsedRealtimeNanos()
+            val seq = sequence.incrementAndGet()
+            socket.send(WatchProtocol.ecgBatchMessage(deviceId, seq, timestampNs, chunk))
+        }
+    }
+
+    /** Sends a bounded SWEAT_LOSS session's samples immediately; see [sendSpo2Samples]. */
+    fun sendSweatLossSamples(samples: List<SweatLossSample>) {
+        if (samples.isEmpty()) return
+        val socket = webSocket ?: return
+        if (_state.value != ConnectionState.CONNECTED) return
+        for (chunk in samples.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
+            val timestampNs = SystemClock.elapsedRealtimeNanos()
+            val seq = sequence.incrementAndGet()
+            socket.send(WatchProtocol.sweatLossBatchMessage(deviceId, seq, timestampNs, chunk))
+        }
+    }
+
+    /** Sends a BIA_ON_DEMAND progress/result update from the current bounded session. */
+    fun sendBiaResult(result: BiaResult) {
+        val socket = webSocket ?: return
+        if (_state.value != ConnectionState.CONNECTED) return
+        val timestampNs = SystemClock.elapsedRealtimeNanos()
+        val seq = sequence.incrementAndGet()
+        socket.send(WatchProtocol.biaResultMessage(deviceId, seq, timestampNs, result))
+    }
+
+    /** Reports a medical tracker's [MedicalTrackerState.wireValue], continuous or on-demand, supported or not. */
+    fun sendMedicalStatus(tracker: String, state: String) {
+        val socket = webSocket ?: return
+        if (_state.value != ConnectionState.CONNECTED) return
+        val timestampNs = SystemClock.elapsedRealtimeNanos()
+        val seq = sequence.incrementAndGet()
+        socket.send(WatchProtocol.medicalStatusMessage(deviceId, seq, timestampNs, tracker, state))
+    }
+
     private fun openSocket(url: String) {
         closeSocket()
         _state.value = if (attempt == 0) ConnectionState.CONNECTING else ConnectionState.RECONNECTING
@@ -152,6 +245,11 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         ppgFlushJob?.cancel()
         ppgFlushJob = null
         synchronized(ppgBuffer) { ppgBuffer.clear() }
+        medicalFlushJob?.cancel()
+        medicalFlushJob = null
+        synchronized(heartRateBuffer) { heartRateBuffer.clear() }
+        synchronized(skinTemperatureBuffer) { skinTemperatureBuffer.clear() }
+        synchronized(edaBuffer) { edaBuffer.clear() }
         if (webSocket != null) {
             closeExpected = true
         }
@@ -167,6 +265,7 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
                 _state.value = ConnectionState.CONNECTED
                 startHeartbeat()
                 startPpgFlushTimer()
+                startMedicalFlushTimer()
             }
         }
 
@@ -189,13 +288,27 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
 
     private fun handleInbound(text: String) {
         val message = WatchProtocol.parseInbound(text) ?: return
-        if (message.type != WatchProtocol.TYPE_DESKTOP_TIME_SYNC) return
-        val desktopTimeNs = message.payload.optLong("desktopTimeNs", -1L)
+        when (message.type) {
+            WatchProtocol.TYPE_DESKTOP_TIME_SYNC -> handleTimeSync(message.payload)
+            WatchProtocol.TYPE_DESKTOP_START_MEASUREMENT -> dispatchMeasurementCommand(message.payload, start = true)
+            WatchProtocol.TYPE_DESKTOP_STOP_MEASUREMENT -> dispatchMeasurementCommand(message.payload, start = false)
+        }
+    }
+
+    private fun handleTimeSync(payload: JSONObject) {
+        val desktopTimeNs = payload.optLong("desktopTimeNs", -1L)
         if (desktopTimeNs < 0) return
         val watchTimeNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
         val reply = WatchProtocol.timeSyncMessage(deviceId, seq, watchTimeNs, desktopTimeNs, watchTimeNs)
         webSocket?.send(reply)
+    }
+
+    /** Forwards a `desktop.start_measurement`/`desktop.stop_measurement` command to [onMeasurementCommand]; ignored if `tracker` is missing. */
+    private fun dispatchMeasurementCommand(payload: JSONObject, start: Boolean) {
+        val tracker = payload.optString("tracker", "")
+        if (tracker.isEmpty()) return
+        onMeasurementCommand?.invoke(tracker, start)
     }
 
     private fun startHeartbeat() {
@@ -241,6 +354,56 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         }
     }
 
+    private fun startMedicalFlushTimer() {
+        medicalFlushJob?.cancel()
+        medicalFlushJob = scope.launch {
+            while (isActive) {
+                delay(PPG_BATCH_INTERVAL_MS)
+                flushMedicalBuffers()
+            }
+        }
+    }
+
+    private fun flushMedicalBuffers() {
+        val socket = webSocket ?: return
+        val heartRateBatch = synchronized(heartRateBuffer) {
+            if (heartRateBuffer.isEmpty()) null else heartRateBuffer.toList().also { heartRateBuffer.clear() }
+        }
+        heartRateBatch?.let { batch ->
+            for (chunk in batch.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
+                val timestampNs = SystemClock.elapsedRealtimeNanos()
+                val seq = sequence.incrementAndGet()
+                socket.send(WatchProtocol.heartRateBatchMessage(deviceId, seq, timestampNs, chunk))
+            }
+        }
+
+        val skinTemperatureBatch = synchronized(skinTemperatureBuffer) {
+            if (skinTemperatureBuffer.isEmpty()) {
+                null
+            } else {
+                skinTemperatureBuffer.toList().also { skinTemperatureBuffer.clear() }
+            }
+        }
+        skinTemperatureBatch?.let { batch ->
+            for (chunk in batch.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
+                val timestampNs = SystemClock.elapsedRealtimeNanos()
+                val seq = sequence.incrementAndGet()
+                socket.send(WatchProtocol.skinTemperatureBatchMessage(deviceId, seq, timestampNs, chunk))
+            }
+        }
+
+        val edaBatch = synchronized(edaBuffer) {
+            if (edaBuffer.isEmpty()) null else edaBuffer.toList().also { edaBuffer.clear() }
+        }
+        edaBatch?.let { batch ->
+            for (chunk in batch.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
+                val timestampNs = SystemClock.elapsedRealtimeNanos()
+                val seq = sequence.incrementAndGet()
+                socket.send(WatchProtocol.edaBatchMessage(deviceId, seq, timestampNs, chunk))
+            }
+        }
+    }
+
     private fun handleDisconnect() {
         heartbeatJob?.cancel()
         heartbeatJob = null
@@ -282,5 +445,6 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         private const val MAX_RECONNECT_ATTEMPTS = 8
         private const val PPG_BATCH_INTERVAL_MS = 200L
         private const val PPG_BATCH_MAX_SAMPLES = 32
+        private const val MEDICAL_BATCH_MAX_SAMPLES = 32
     }
 }
