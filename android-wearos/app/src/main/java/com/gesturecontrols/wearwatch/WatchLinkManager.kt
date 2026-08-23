@@ -63,10 +63,18 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
     private val _lastOrientationSequence = MutableStateFlow(0L)
     val lastOrientationSequence: StateFlow<Long> = _lastOrientationSequence.asStateFlow()
 
+    // Short, sanitized category (never a raw exception message/stack trace,
+    // which could echo internal detail beyond the LAN endpoint already shown
+    // in the UI) describing the most recent socket failure/retry.
+    private val _lastFailureReason = MutableStateFlow<String?>(null)
+    val lastFailureReason: StateFlow<String?> = _lastFailureReason.asStateFlow()
+    private var pendingFailureCategory: String = "Connection closed"
+
     fun connect(url: String) {
         userRequestedConnection = true
         currentUrl = url
         attempt = 0
+        _lastFailureReason.value = null
         reconnectJob?.cancel()
         openSocket(url)
     }
@@ -78,6 +86,7 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         reconnectJob = null
         closeSocket()
         _state.value = ConnectionState.DISCONNECTED
+        _lastFailureReason.value = null
     }
 
     /** Call from Activity#onDestroy to release the coroutine scope and client threads. */
@@ -263,6 +272,7 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
                 attempt = 0
                 sequence.set(0)
                 _state.value = ConnectionState.CONNECTED
+                _lastFailureReason.value = null
                 startHeartbeat()
                 startPpgFlushTimer()
                 startMedicalFlushTimer()
@@ -278,12 +288,23 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            pendingFailureCategory = if (code == 1000) "Connection closed" else "Server closed connection"
             scope.launch { handleDisconnect() }
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            pendingFailureCategory = classifyFailure(t)
             scope.launch { handleDisconnect() }
         }
+    }
+
+    /** Maps a socket exception to a short, sanitized category — no message/stack trace. */
+    private fun classifyFailure(t: Throwable): String = when (t) {
+        is java.net.ConnectException -> "Connection refused"
+        is java.net.UnknownHostException -> "Host not found"
+        is java.net.SocketTimeoutException -> "Timed out"
+        is java.io.EOFException -> "Connection closed unexpectedly"
+        else -> "Connection error"
     }
 
     private fun handleInbound(text: String) {
@@ -414,15 +435,18 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         }
         if (!userRequestedConnection) {
             _state.value = ConnectionState.DISCONNECTED
+            _lastFailureReason.value = null
             return
         }
         if (attempt >= MAX_RECONNECT_ATTEMPTS) {
             _state.value = ConnectionState.FAILED
+            _lastFailureReason.value = "$pendingFailureCategory — gave up after $MAX_RECONNECT_ATTEMPTS attempts"
             return
         }
         val delayMs = backoffDelayMs(attempt)
         attempt += 1
         _state.value = ConnectionState.RECONNECTING
+        _lastFailureReason.value = "$pendingFailureCategory — retrying ($attempt/$MAX_RECONNECT_ATTEMPTS)"
         reconnectJob?.cancel()
         reconnectJob = scope.launch {
             delay(delayMs)

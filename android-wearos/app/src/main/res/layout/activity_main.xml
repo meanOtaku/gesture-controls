@@ -54,6 +54,40 @@
                 android:textSize="11sp" />
 
             <TextView
+                android:id="@+id/discoveryHistoryText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textColor="#666666"
+                android:textSize="9sp" />
+
+            <TextView
+                android:id="@+id/endpointSourceText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textColor="#AAAAAA"
+                android:textSize="10sp" />
+
+            <TextView
+                android:id="@+id/useAutoDiscoveryLink"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:text="@string/action_use_auto_discovery"
+                android:textColor="#6FA8FF"
+                android:textSize="10sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/linkDiagnosticsText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textColor="#CC7A7A"
+                android:textSize="10sp" />
+
+            <TextView
                 android:id="@+id/sensorStatusText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

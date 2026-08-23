@@ -10,6 +10,10 @@
     <string name="status_reconnecting">Reconnecting…</string>
     <string name="status_failed">Failed</string>
     <string name="discovery_searching">Searching for desktop…</string>
+    <string name="action_use_auto_discovery">Use automatic discovery</string>
+    <string name="endpoint_source_discovered">Automatic (discovered)</string>
+    <string name="endpoint_source_persisted">Saved endpoint (fallback)</string>
+    <string name="endpoint_source_manual">Manual override</string>
     <string name="sensors_idle">Sensors idle</string>
     <string name="sensors_streaming">Streaming</string>
     <string name="ppg_idle">PPG idle</string>

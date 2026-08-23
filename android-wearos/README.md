@@ -36,11 +36,18 @@ android-wearos/
 
 - **Desktop discovery**: the app uses Android `NsdManager` to browse the desktop's
   `_gesture-controls._tcp.local.` mDNS/DNS-SD advertisement, resolves its current
-  host and port, persists the endpoint, and begins streaming automatically. The
-  endpoint field and Connect button remain a manual fallback.
+  host and port, persists the endpoint, and begins streaming automatically. Discovery
+  is gated by Wi-Fi: a `ConnectivityManager.NetworkCallback` starts the NSD scan only
+  while a Wi-Fi network is up, stops it (and releases the multicast lock) the moment
+  Wi-Fi drops, and restarts it automatically when Wi-Fi comes back — no polling, no
+  duplicate scans. Resolved endpoints prefer an IPv4 address when the service
+  advertises one; an IPv6 fallback is bracketed and zone-id-encoded per RFC 3986/6874
+  (e.g. `ws://[fe80::1%25wlan0]:8766/ws/watch`) so link-local addresses are usable
+  too. The endpoint field and Connect button remain a manual fallback.
 - **MainActivity**: text field for the desktop endpoint (`ws://LAN-IP:8766/ws/watch`),
   persisted in `SharedPreferences` across restarts; a Connect/Disconnect button; live
-  discovery and connection status; live sensor status and last-sent sequence number.
+  discovery and connection status (with a short transition trail and a failure/retry
+  reason); an endpoint-source label; live sensor status and last-sent sequence number.
 - **SensorCollector**: registers `TYPE_ROTATION_VECTOR`, `TYPE_ACCELEROMETER`,
   `TYPE_GYROSCOPE` at `SENSOR_DELAY_GAME`. Every rotation-vector sample is converted to
   a `[w, x, y, z]` quaternion via `SensorManager.getQuaternionFromVector` and paired
@@ -139,6 +146,44 @@ tap **Connect**. The status text should move from `Connecting…` to `Connected`
 the detail line below it should start counting up a sequence number as orientation
 samples stream out.
 
+### Discovery/pairing status reference
+
+Below the endpoint field, the app shows two independent status lines plus an
+endpoint-source label:
+
+- **Discovery status** (`Wi-Fi unavailable` → `Searching for desktop…` → `Desktop
+  service found; resolving…` → `Desktop resolved`, or `Desktop resolve failed;
+  retrying…` / `Desktop lost; searching…` on a hiccup) with a small trail of the last
+  few transitions underneath it, so a stuck scan is diagnosable without adb logcat.
+- **Connection status** (`Connecting…` / `Connected` / `Reconnecting…` / `Failed`,
+  same as before) plus, only when relevant, a one-line failure/retry reason such as
+  `Connection refused — retrying (2/8)` or `Timed out — gave up after 8 attempts`.
+  The reason is a short category, never a raw exception message, so it won't echo
+  anything beyond what's already visible in the endpoint field.
+- **Endpoint source** — `Automatic (discovered)`, `Saved endpoint (fallback)`, or
+  `Manual override` — labels where the active endpoint came from:
+  - On a cold start with a previously saved endpoint, the app reconnects to it
+    immediately as a **fallback** (label `Saved endpoint (fallback)`) instead of
+    waiting on a fresh mDNS resolve; a discovery result that arrives afterward is
+    still free to replace it.
+  - Typing an endpoint and tapping **Connect** is a **manual override** (label
+    `Manual override`); it blocks discovery from replacing it and shows a **"Use
+    automatic discovery"** link to hand control back to mDNS.
+  - Whatever discovery resolves is always labeled `Automatic (discovered)`.
+
+### Why no UDP broadcast discovery fallback
+
+A UDP broadcast fallback was considered and deliberately left out. mDNS/DNS-SD
+already covers the target environment (watch + desktop on the same Wi-Fi/LAN
+segment), and a homemade broadcast protocol would add a second discovery mechanism
+to keep in sync with the mDNS one, a second unauthenticated listener on the desktop
+that answers unsolicited LAN broadcasts (a bigger footprint than the existing
+plain-`ws://`, LAN-only model this app already documents as trusted-network-only),
+and no coverage benefit — the networks that block mDNS (guest SSIDs, client-isolated
+Wi-Fi, VLANs) block generic UDP broadcast just as often. mDNS discovery plus the
+persisted-endpoint fallback above is the supported, reliable pairing strategy; the
+manual endpoint field remains the escape hatch for anything both miss.
+
 ### 7. Firewall
 
 The desktop's watch bridge binds `0.0.0.0:8766` (all interfaces), so the OS firewall
@@ -220,8 +265,9 @@ dependency in `app/build.gradle.kts`, not published to any repository). This is
   `PPG_CONTINUOUS`; other watches run normally with `PpgState.UNAVAILABLE` and no
   PPG data in `watch.ppg_batch`.
 - **Bounded reconnect**: after 8 failed reconnect attempts (capped at 30s backoff
-  each) the app stops retrying automatically and shows `Failed`; tap **Connect** again
-  once the issue (Wi-Fi, firewall, desktop app) is resolved.
+  each) the app stops retrying automatically and shows `Failed`, with the last
+  failure category (e.g. `Connection refused`, `Timed out`) shown alongside it; tap
+  **Connect** again once the issue (Wi-Fi, firewall, desktop app) is resolved.
 - **Ambient/Doze**: this app has no foreground service. If the watch enters deep
   ambient or the app is backgrounded, `onPause` stops sensors and the socket; bring
   the app back to the foreground to resume streaming.
