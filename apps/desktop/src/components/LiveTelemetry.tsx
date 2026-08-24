@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { HeadTrackerStatus, WatchStatus } from "../protocol/events";
 
 type SeriesPoint = { at: number; values: number[] };
@@ -13,37 +13,9 @@ type CsvRow = {
 
 const MAX_VISIBLE_SAMPLES = 600;
 
-/**
- * Backing state for one chart series. Incoming samples are coalesced into a
- * ref and flushed to React state at most once per animation frame, so bursts
- * of telemetry events don't each trigger their own array copy + re-render.
- * No sample is dropped by the coalescing (only the trim to MAX_VISIBLE_SAMPLES
- * discards data, exactly as before).
- */
-function useSeriesPoints(): [SeriesPoint[], (point: SeriesPoint) => void] {
-  const [points, setPoints] = useState<SeriesPoint[]>([]);
-  const pendingRef = useRef<SeriesPoint[]>([]);
-  const frameRef = useRef<number | null>(null);
-
-  const push = useCallback((point: SeriesPoint) => {
-    pendingRef.current.push(point);
-    if (frameRef.current != null) return;
-    frameRef.current = requestAnimationFrame(() => {
-      frameRef.current = null;
-      const pending = pendingRef.current;
-      pendingRef.current = [];
-      setPoints((current) => {
-        const next = current.concat(pending);
-        return next.length > MAX_VISIBLE_SAMPLES ? next.slice(-MAX_VISIBLE_SAMPLES) : next;
-      });
-    });
-  }, []);
-
-  useEffect(() => () => {
-    if (frameRef.current != null) cancelAnimationFrame(frameRef.current);
-  }, []);
-
-  return [points, push];
+function pushPoint(points: SeriesPoint[], point: SeriesPoint): SeriesPoint[] {
+  const next = [...points, point];
+  return next.length > MAX_VISIBLE_SAMPLES ? next.slice(-MAX_VISIBLE_SAMPLES) : next;
 }
 
 function number(value: number | null | undefined): string {
@@ -55,34 +27,22 @@ function csvEscape(value: string): string {
 }
 
 function chartPath(points: SeriesPoint[], index: number, width: number, height: number): string {
-  if (points.length < 2) return "";
-  let min = Infinity;
-  let max = -Infinity;
-  let finiteCount = 0;
-  for (let i = 0; i < points.length; i++) {
-    const value = points[i].values[index];
-    if (Number.isFinite(value)) {
-      finiteCount++;
-      if (value < min) min = value;
-      if (value > max) max = value;
-    }
-  }
-  if (finiteCount < 2) return "";
+  const values = points.map((point) => point.values[index]).filter(Number.isFinite);
+  if (values.length < 2 || points.length < 2) return "";
+  const min = Math.min(...values);
+  const max = Math.max(...values);
   const span = max - min || 1;
   const start = points[0].at;
   const duration = Math.max(points[points.length - 1].at - start, 1);
-  const segments = new Array<string>(points.length);
-  for (let i = 0; i < points.length; i++) {
-    const point = points[i];
+  return points.map((point, pointIndex) => {
     const value = point.values[index];
     const x = ((point.at - start) / duration) * width;
     const y = height - ((value - min) / span) * height;
-    segments[i] = `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-  }
-  return segments.join(" ");
+    return `${pointIndex === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
 }
 
-const TimeChart = memo(function TimeChart({ title, points, labels, colors }: {
+function TimeChart({ title, points, labels, colors }: {
   title: string;
   points: SeriesPoint[];
   labels: string[];
@@ -103,7 +63,7 @@ const TimeChart = memo(function TimeChart({ title, points, labels, colors }: {
       {labels.map((_, index) => <path key={index} d={chartPath(points, index, width, height)} stroke={colors[index]} />)}
     </svg>
   </section>;
-});
+}
 
 interface LiveTelemetryProps {
   status: HeadTrackerStatus | null;
@@ -111,14 +71,14 @@ interface LiveTelemetryProps {
 }
 
 export function LiveTelemetry({ status, watchStatus }: LiveTelemetryProps) {
-  const [headPoints, pushHeadPoint] = useSeriesPoints();
-  const [watchPoints, pushWatchPoint] = useSeriesPoints();
-  const [ppgPoints, pushPpgPoint] = useSeriesPoints();
-  const [heartRatePoints, pushHeartRatePoint] = useSeriesPoints();
-  const [temperaturePoints, pushTemperaturePoint] = useSeriesPoints();
-  const [edaPoints, pushEdaPoint] = useSeriesPoints();
-  const [spo2Points, pushSpo2Point] = useSeriesPoints();
-  const [ecgPoints, pushEcgPoint] = useSeriesPoints();
+  const [headPoints, setHeadPoints] = useState<SeriesPoint[]>([]);
+  const [watchPoints, setWatchPoints] = useState<SeriesPoint[]>([]);
+  const [ppgPoints, setPpgPoints] = useState<SeriesPoint[]>([]);
+  const [heartRatePoints, setHeartRatePoints] = useState<SeriesPoint[]>([]);
+  const [temperaturePoints, setTemperaturePoints] = useState<SeriesPoint[]>([]);
+  const [edaPoints, setEdaPoints] = useState<SeriesPoint[]>([]);
+  const [spo2Points, setSpo2Points] = useState<SeriesPoint[]>([]);
+  const [ecgPoints, setEcgPoints] = useState<SeriesPoint[]>([]);
   const [recording, setRecording] = useState(false);
   const [savedCount, setSavedCount] = useState(0);
   const rows = useRef<CsvRow[]>([]);
@@ -126,7 +86,7 @@ export function LiveTelemetry({ status, watchStatus }: LiveTelemetryProps) {
   useEffect(() => {
     if (!status?.connected) return;
     const at = Date.now();
-    pushHeadPoint({ at, values: [status.yawDeg, status.pitchDeg, status.rollDeg] });
+    setHeadPoints((points) => pushPoint(points, { at, values: [status.yawDeg, status.pitchDeg, status.rollDeg] }));
     if (recording) rows.current.push({
       recordedAt: new Date(at).toISOString(),
       source: "headphone",
@@ -148,7 +108,7 @@ export function LiveTelemetry({ status, watchStatus }: LiveTelemetryProps) {
     if (!watchStatus?.connected || !orientation) return;
     const at = Date.now();
     const gyroscope = orientation.gyroscope;
-    pushWatchPoint({ at, values: gyroscope ?? [0, 0, 0] });
+    setWatchPoints((points) => pushPoint(points, { at, values: gyroscope ?? [0, 0, 0] }));
     if (recording) rows.current.push({
       recordedAt: new Date(at).toISOString(),
       source: "watch",
@@ -171,10 +131,10 @@ export function LiveTelemetry({ status, watchStatus }: LiveTelemetryProps) {
   useEffect(() => {
     const sample = watchStatus?.ppgLastSample;
     if (!sample) return;
-    pushPpgPoint({
+    setPpgPoints((points) => pushPoint(points, {
       at: Date.now(),
       values: [sample.green, sample.red, sample.ir],
-    });
+    }));
   }, [watchStatus?.ppgLastSample?.timestampNs]);
 
   useEffect(() => {
@@ -184,11 +144,11 @@ export function LiveTelemetry({ status, watchStatus }: LiveTelemetryProps) {
     const eda = watchStatus?.edaLast;
     const spo2 = watchStatus?.spo2Last;
     const ecg = watchStatus?.ecgLast;
-    if (heartRate) pushHeartRatePoint({ at, values: [heartRate.heartRate] });
-    if (temperature) pushTemperaturePoint({ at, values: [temperature.objectTemperatureCelsius, temperature.ambientTemperatureCelsius] });
-    if (eda) pushEdaPoint({ at, values: [eda.skinConductanceMicrosiemens] });
-    if (spo2) pushSpo2Point({ at, values: [spo2.spo2, spo2.heartRate] });
-    if (ecg) pushEcgPoint({ at, values: [ecg.ecgMillivolts] });
+    if (heartRate) setHeartRatePoints((points) => pushPoint(points, { at, values: [heartRate.heartRate] }));
+    if (temperature) setTemperaturePoints((points) => pushPoint(points, { at, values: [temperature.objectTemperatureCelsius, temperature.ambientTemperatureCelsius] }));
+    if (eda) setEdaPoints((points) => pushPoint(points, { at, values: [eda.skinConductanceMicrosiemens] }));
+    if (spo2) setSpo2Points((points) => pushPoint(points, { at, values: [spo2.spo2, spo2.heartRate] }));
+    if (ecg) setEcgPoints((points) => pushPoint(points, { at, values: [ecg.ecgMillivolts] }));
     if (!recording) return;
     const sample = heartRate ?? temperature ?? eda ?? spo2 ?? ecg;
     if (!sample) return;
