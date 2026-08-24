@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter, State};
 use watch_bridge::{ClockOffsetEstimate, MeasurementCommand, WatchBridgeServer, WatchEvent};
 
 pub const WATCH_STATUS_EVENT: &str = "watch-status";
+pub const WATCH_PPG_BATCH_EVENT: &str = "watch-ppg-batch";
 
 /// Distilled last sample from a `watch.ppg_batch` for dashboard display; the
 /// full per-batch channel arrays aren't retained in runtime state.
@@ -170,6 +171,7 @@ impl WatchRuntime {
                 state.round_trip_ns = Some(round_trip_ns);
             }
             WatchEvent::Ppg(sample) => {
+                let _ = app.emit(WATCH_PPG_BATCH_EVENT, &sample);
                 state.connected = true;
                 if let (Some(&first), Some(&last)) =
                     (sample.timestamps_ns.first(), sample.timestamps_ns.last())

@@ -125,4 +125,13 @@ export const CALIBRATION_STATE_EVENT = "head-calibration-state";
 export const HEAD_TARGET_ENTERED_EVENT = "head-target-entered";
 export const HEAD_TARGET_EXITED_EVENT = "head-target-exited";
 export const OVERLAY_STATE_EVENT = "overlay-state";
+export interface WatchPpgBatch {
+  sequence: number;
+  timestampsNs: number[];
+  green: number[];
+  red: number[];
+  ir: number[];
+}
+
+export const WATCH_PPG_BATCH_EVENT = "watch-ppg-batch";
 export const WATCH_STATUS_EVENT = "watch-status";

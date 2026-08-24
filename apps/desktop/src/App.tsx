@@ -11,12 +11,14 @@ import {
   HEAD_TARGET_EXITED_EVENT,
   HEAD_TRACKER_CONNECTION_EVENT,
   OVERLAY_STATE_EVENT,
+  WATCH_PPG_BATCH_EVENT,
   WATCH_STATUS_EVENT,
   type CalibrationState,
   type CalibrationTarget,
   type HeadPosePayload,
   type HeadTrackerStatus,
   type OverlayState,
+  type WatchPpgBatch,
   type WatchStatus,
 } from "./protocol/events";
 
@@ -127,6 +129,7 @@ function MainApp() {
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
   const [volumeError, setVolumeError] = useState<string | null>(null);
   const [watchStatus, setWatchStatus] = useState<WatchStatus>(emptyWatchStatus);
+  const [ppgBatch, setPpgBatch] = useState<WatchPpgBatch | null>(null);
   const [activeTab, setActiveTab] = useState<"main" | "headphone" | "watch" | "telemetry">("main");
   const calibrationEventVersion = useRef(0);
   const overlayEventVersion = useRef(0);
@@ -281,6 +284,9 @@ function MainApp() {
     const registration = listen<WatchStatus>(WATCH_STATUS_EVENT, ({ payload }) => {
       if (!cancelled) setWatchStatus(payload);
     });
+    const ppgRegistration = listen<WatchPpgBatch>(WATCH_PPG_BATCH_EVENT, ({ payload }) => {
+      if (!cancelled) setPpgBatch(payload);
+    });
     void registration.then(() =>
       invoke<WatchStatus>("get_watch_status").then((state) => {
         if (!cancelled) setWatchStatus(state);
@@ -290,6 +296,7 @@ function MainApp() {
     return () => {
       cancelled = true;
       void registration.then((unlisten) => unlisten());
+      void ppgRegistration.then((unlisten) => unlisten());
     };
   }, [inTauri]);
 
@@ -345,7 +352,7 @@ function MainApp() {
       <Dashboard view="watch" status={status} calibration={calibration} calibrationError={applicationError} watchStatus={watchStatus} onCaptureTarget={(target) => { void captureTarget(target); }} onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }} />
     )}
     {activeTab === "telemetry" && (
-      <LiveTelemetry status={status} watchStatus={watchStatus} />
+      <LiveTelemetry status={status} watchStatus={watchStatus} ppgBatch={ppgBatch} />
     )}
   </>;
 }

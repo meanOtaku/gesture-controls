@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import { quaternionToEulerDegrees } from "../protocol/events";
-import type { HeadTrackerStatus, WatchStatus } from "../protocol/events";
+import type { HeadTrackerStatus, WatchPpgBatch, WatchStatus } from "../protocol/events";
 
 type SeriesPoint = { at: number; values: number[] };
 type CsvRow = {
@@ -69,9 +69,10 @@ function TimeChart({ title, points, labels, colors }: {
 interface LiveTelemetryProps {
   status: HeadTrackerStatus | null;
   watchStatus: WatchStatus | null;
+  ppgBatch: WatchPpgBatch | null;
 }
 
-export function LiveTelemetry({ status, watchStatus }: LiveTelemetryProps) {
+export function LiveTelemetry({ status, watchStatus, ppgBatch }: LiveTelemetryProps) {
   const [headPoints, setHeadPoints] = useState<SeriesPoint[]>([]);
   const [watchPoints, setWatchPoints] = useState<SeriesPoint[]>([]);
   const [watchOrientationPoints, setWatchOrientationPoints] = useState<SeriesPoint[]>([]);
@@ -136,13 +137,14 @@ export function LiveTelemetry({ status, watchStatus }: LiveTelemetryProps) {
   }, [recording, watchStatus]);
 
   useEffect(() => {
-    const sample = watchStatus?.ppgLastSample;
-    if (!sample) return;
-    setPpgPoints((points) => pushPoint(points, {
-      at: Date.now(),
-      values: [sample.green, sample.red, sample.ir],
-    }));
-  }, [watchStatus?.ppgLastSample?.timestampNs]);
+    if (!ppgBatch?.timestampsNs.length) return;
+    const lastTimestampNs = ppgBatch.timestampsNs[ppgBatch.timestampsNs.length - 1];
+    const receivedAt = Date.now();
+    setPpgPoints((points) => ppgBatch.timestampsNs.reduce((next, timestampNs, index) => pushPoint(next, {
+      at: receivedAt - (lastTimestampNs - timestampNs) / 1_000_000,
+      values: [ppgBatch.green[index] ?? 0, ppgBatch.red[index] ?? 0, ppgBatch.ir[index] ?? 0],
+    }), points));
+  }, [ppgBatch]);
 
   useEffect(() => {
     const at = Date.now();
