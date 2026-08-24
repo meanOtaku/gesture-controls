@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
+import { quaternionToEulerDegrees } from "../protocol/events";
 import type { HeadTrackerStatus, WatchStatus } from "../protocol/events";
 
 type SeriesPoint = { at: number; values: number[] };
@@ -73,6 +74,7 @@ interface LiveTelemetryProps {
 export function LiveTelemetry({ status, watchStatus }: LiveTelemetryProps) {
   const [headPoints, setHeadPoints] = useState<SeriesPoint[]>([]);
   const [watchPoints, setWatchPoints] = useState<SeriesPoint[]>([]);
+  const [watchOrientationPoints, setWatchOrientationPoints] = useState<SeriesPoint[]>([]);
   const [ppgPoints, setPpgPoints] = useState<SeriesPoint[]>([]);
   const [heartRatePoints, setHeartRatePoints] = useState<SeriesPoint[]>([]);
   const [temperaturePoints, setTemperaturePoints] = useState<SeriesPoint[]>([]);
@@ -108,13 +110,18 @@ export function LiveTelemetry({ status, watchStatus }: LiveTelemetryProps) {
     if (!watchStatus?.connected || !orientation) return;
     const at = Date.now();
     const gyroscope = orientation.gyroscope;
+    const euler = quaternionToEulerDegrees(orientation.quaternion);
     setWatchPoints((points) => pushPoint(points, { at, values: gyroscope ?? [0, 0, 0] }));
+    setWatchOrientationPoints((points) => pushPoint(points, { at, values: euler }));
     if (recording) rows.current.push({
       recordedAt: new Date(at).toISOString(),
       source: "watch",
       sourceTimestampNs: String(orientation.timestampNs),
       sequence: String(orientation.sequence),
       values: {
+        yawDeg: euler[0],
+        pitchDeg: euler[1],
+        rollDeg: euler[2],
         accelX: orientation.accelerometer?.[0] ?? null,
         accelY: orientation.accelerometer?.[1] ?? null,
         accelZ: orientation.accelerometer?.[2] ?? null,
@@ -207,6 +214,7 @@ export function LiveTelemetry({ status, watchStatus }: LiveTelemetryProps) {
       <div className="recording-actions"><button className={recording ? "recording" : ""} onClick={toggleRecording}>{recording ? "Stop recording" : "Start recording"}</button><button disabled={rows.current.length === 0} onClick={saveCsv}>Save CSV</button></div>
     </section>
     <TimeChart title="Headphone orientation" points={headPoints} labels={["Yaw", "Pitch", "Roll"]} colors={["#65e6ff", "#b88cff", "#ffb45d"]} />
+    <TimeChart title="Watch orientation" points={watchOrientationPoints} labels={["Yaw", "Pitch", "Roll"]} colors={["#65e6ff", "#b88cff", "#ffb45d"]} />
     <TimeChart title="Watch gyroscope" points={watchPoints} labels={["X", "Y", "Z"]} colors={["#4ff0b7", "#65e6ff", "#ff7da5"]} />
     <TimeChart title="Raw PPG" points={ppgPoints} labels={["Green", "Red", "IR"]} colors={["#4ff0b7", "#ff7da5", "#b88cff"]} />
     <TimeChart title="Heart rate" points={heartRatePoints} labels={["BPM"]} colors={["#ff7da5"]} />
