@@ -11,7 +11,7 @@ type CsvRow = {
   values: Record<string, number | null>;
 };
 
-const MAX_VISIBLE_SAMPLES = 600;
+const MAX_VISIBLE_SAMPLES = 150;
 
 function pushPoint(points: SeriesPoint[], point: SeriesPoint): SeriesPoint[] {
   const next = [...points, point];
@@ -74,6 +74,7 @@ export function LiveTelemetry({ status, watchStatus }: LiveTelemetryProps) {
   const [headPoints, setHeadPoints] = useState<SeriesPoint[]>([]);
   const [watchPoints, setWatchPoints] = useState<SeriesPoint[]>([]);
   const [ppgPoints, setPpgPoints] = useState<SeriesPoint[]>([]);
+  const lastPpgTimestampNs = useRef(0);
   const [heartRatePoints, setHeartRatePoints] = useState<SeriesPoint[]>([]);
   const [temperaturePoints, setTemperaturePoints] = useState<SeriesPoint[]>([]);
   const [edaPoints, setEdaPoints] = useState<SeriesPoint[]>([]);
@@ -129,13 +130,16 @@ export function LiveTelemetry({ status, watchStatus }: LiveTelemetryProps) {
   }, [recording, watchStatus]);
 
   useEffect(() => {
-    const sample = watchStatus?.ppgLastSample;
-    if (!sample) return;
-    setPpgPoints((points) => pushPoint(points, {
-      at: Date.now(),
+    const samples = watchStatus?.ppgRecentSamples?.filter((sample) => sample.timestampNs > lastPpgTimestampNs.current);
+    if (!samples?.length) return;
+    lastPpgTimestampNs.current = samples[samples.length - 1].timestampNs;
+    const lastTimestampNs = lastPpgTimestampNs.current;
+    const now = Date.now();
+    setPpgPoints((points) => samples.reduce((next, sample) => pushPoint(next, {
+      at: now - (lastTimestampNs - sample.timestampNs) / 1_000_000,
       values: [sample.green, sample.red, sample.ir],
-    }));
-  }, [watchStatus?.ppgLastSample?.timestampNs]);
+    }), points));
+  }, [watchStatus?.ppgRecentSamples]);
 
   useEffect(() => {
     const at = Date.now();
