@@ -98,8 +98,6 @@ pub struct WatchStatus {
     /// permission/availability of Samsung Health Sensor SDK raw PPG.
     pub ppg_state: Option<String>,
     pub ppg_last_sample: Option<PpgSampleSnapshot>,
-    /// Every sample in the most recently received PPG batch, preserving the watch's 25 Hz timestamps for graphing and CSV capture.
-    pub ppg_recent_samples: Vec<PpgSampleSnapshot>,
     /// Sample rate in Hz, derived from the first/last timestamp within the
     /// most recent PPG batch.
     pub ppg_rate_hz: Option<f64>,
@@ -173,19 +171,6 @@ impl WatchRuntime {
             }
             WatchEvent::Ppg(sample) => {
                 state.connected = true;
-                state.ppg_recent_samples = (0..sample.sample_count as usize)
-                    .filter_map(|index| {
-                        Some(PpgSampleSnapshot {
-                            timestamp_ns: *sample.timestamps_ns.get(index)?,
-                            green: *sample.green.get(index)?,
-                            green_status: *sample.green_status.get(index)?,
-                            red: *sample.red.get(index)?,
-                            red_status: *sample.red_status.get(index)?,
-                            ir: *sample.ir.get(index)?,
-                            ir_status: *sample.ir_status.get(index)?,
-                        })
-                    })
-                    .collect();
                 if let (Some(&first), Some(&last)) =
                     (sample.timestamps_ns.first(), sample.timestamps_ns.last())
                     && sample.sample_count > 1

@@ -50,7 +50,6 @@ const emptyWatchStatus: WatchStatus = {
   roundTripNs: null,
   ppgState: null,
   ppgLastSample: null,
-  ppgRecentSamples: [],
   ppgRateHz: null,
   lastButtonState: null,
   medicalStatus: {},

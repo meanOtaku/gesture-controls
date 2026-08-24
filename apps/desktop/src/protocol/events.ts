@@ -93,7 +93,6 @@ export interface WatchStatus {
   roundTripNs: number | null;
   ppgState: PpgState | null;
   ppgLastSample: PpgSampleSnapshot | null;
-  ppgRecentSamples: PpgSampleSnapshot[];
   ppgRateHz: number | null;
   /** Latest `watch.button` state ("down"/"up") for the STEM button that grabs the volume overlay. */
   lastButtonState: "down" | "up" | null;
