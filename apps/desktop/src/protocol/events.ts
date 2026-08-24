@@ -1,6 +1,15 @@
 export type Vector3 = [number, number, number];
 export type Quaternion = [number, number, number, number];
 
+/** Converts Android's [w, x, y, z] rotation-vector quaternion to yaw/pitch/roll degrees. */
+export function quaternionToEulerDegrees([w, x, y, z]: Quaternion): Vector3 {
+  const yaw = Math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z));
+  const pitch = Math.asin(Math.max(-1, Math.min(1, 2 * (w * y - z * x))));
+  const roll = Math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y));
+  const degrees = 180 / Math.PI;
+  return [yaw * degrees, pitch * degrees, roll * degrees];
+}
+
 export interface HeadPosePayload {
   device: string | null;
   quaternion: Quaternion;

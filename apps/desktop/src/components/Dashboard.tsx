@@ -1,4 +1,7 @@
 import { useRef } from "react";
+import {
+  quaternionToEulerDegrees,
+} from "../protocol/events";
 import type {
   CalibrationState,
   CalibrationTarget,
@@ -62,6 +65,10 @@ export function Dashboard({
       onUpdateCalibration(threshold, dwell);
     }
   };
+  const watchEuler = watchStatus?.lastOrientation
+    ? quaternionToEulerDegrees(watchStatus.lastOrientation.quaternion)
+    : null;
+
   return (
     <main className="shell">
       <header className="hero">
@@ -211,6 +218,7 @@ export function Dashboard({
         </section>
         <div className="vectors">
           <VectorRow label="Quaternion" value={vector(watchStatus?.lastOrientation?.quaternion ?? null)} />
+          <VectorRow label="Yaw / pitch / roll" value={vector(watchEuler, 1)} />
           <VectorRow label="Accelerometer" value={vector(watchStatus?.lastOrientation?.accelerometer ?? null)} />
           <VectorRow label="Gyroscope" value={vector(watchStatus?.lastOrientation?.gyroscope ?? null)} />
         </div>
