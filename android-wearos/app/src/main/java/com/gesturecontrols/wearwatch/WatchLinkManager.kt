@@ -38,6 +38,7 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
     private var reconnectJob: Job? = null
     private var ppgFlushJob: Job? = null
     private val ppgBuffer = mutableListOf<PpgSample>()
+    @Volatile private var lastPpgStatus: String? = null
     private var medicalFlushJob: Job? = null
     private val heartRateBuffer = mutableListOf<HeartRateSample>()
     private val skinTemperatureBuffer = mutableListOf<SkinTemperatureSample>()
@@ -149,6 +150,12 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
 
     /** Reports [PpgState] to the desktop; independent of the PPG sample buffer. */
     fun sendPpgStatus(state: String) {
+        lastPpgStatus = state
+        sendStoredPpgStatus()
+    }
+
+    private fun sendStoredPpgStatus() {
+        val state = lastPpgStatus ?: return
         val socket = webSocket ?: return
         if (_state.value != ConnectionState.CONNECTED) return
         val timestampNs = SystemClock.elapsedRealtimeNanos()
@@ -273,6 +280,7 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
                 sequence.set(0)
                 _state.value = ConnectionState.CONNECTED
                 _lastFailureReason.value = null
+                sendStoredPpgStatus()
                 startHeartbeat()
                 startPpgFlushTimer()
                 startMedicalFlushTimer()
@@ -467,7 +475,7 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         private const val INITIAL_BACKOFF_MS = 1000L
         private const val MAX_BACKOFF_MS = 30_000L
         private const val MAX_RECONNECT_ATTEMPTS = 8
-        private const val PPG_BATCH_INTERVAL_MS = 200L
+        private const val PPG_BATCH_INTERVAL_MS = 100L
         private const val PPG_BATCH_MAX_SAMPLES = 32
         private const val MEDICAL_BATCH_MAX_SAMPLES = 32
     }
