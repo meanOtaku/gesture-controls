@@ -362,7 +362,7 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         ppgFlushJob?.cancel()
         ppgFlushJob = scope.launch {
             while (isActive) {
-                delay(PPG_BATCH_INTERVAL_MS)
+                delay(PPG_DELIVERY_INTERVAL_MS)
                 flushPpgBuffer()
             }
         }
@@ -475,6 +475,7 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         private const val INITIAL_BACKOFF_MS = 1000L
         private const val MAX_BACKOFF_MS = 30_000L
         private const val MAX_RECONNECT_ATTEMPTS = 8
+        private const val PPG_DELIVERY_INTERVAL_MS = 40L
         private const val PPG_BATCH_INTERVAL_MS = 100L
         private const val PPG_BATCH_MAX_SAMPLES = 32
         private const val MEDICAL_BATCH_MAX_SAMPLES = 32

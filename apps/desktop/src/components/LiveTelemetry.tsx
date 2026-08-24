@@ -144,7 +144,14 @@ export function LiveTelemetry({ status, watchStatus, ppgBatch }: LiveTelemetryPr
       at: receivedAt - (lastTimestampNs - timestampNs) / 1_000_000,
       values: [ppgBatch.green[index] ?? 0, ppgBatch.red[index] ?? 0, ppgBatch.ir[index] ?? 0],
     }), points));
-  }, [ppgBatch]);
+    if (recording) {
+      ppgBatch.timestampsNs.forEach((timestampNs, index) => rows.current.push({
+        recordedAt: new Date(receivedAt - (lastTimestampNs - timestampNs) / 1_000_000).toISOString(),
+        source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(ppgBatch.sequence),
+        values: { ppgGreen: ppgBatch.green[index] ?? null, ppgRed: ppgBatch.red[index] ?? null, ppgIr: ppgBatch.ir[index] ?? null },
+      }));
+    }
+  }, [ppgBatch, recording]);
 
   useEffect(() => {
     const at = Date.now();
