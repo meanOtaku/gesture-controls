@@ -83,13 +83,12 @@ class SensorCollector(
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
     private fun smooth(previous: FloatArray?, current: FloatArray, alpha: Float): FloatArray {
-        val currentThreeAxis = current.copyOf(3)
-        if (previous == null) return currentThreeAxis
-        return FloatArray(3) { index ->
-            previous[index] + alpha * (currentThreeAxis[index] - previous[index])
+        val smoothed = previous ?: FloatArray(3)
+        for (index in 0 until 3) {
+            smoothed[index] += alpha * (current[index] - smoothed[index])
         }
+        return smoothed
     }
-
     private fun freshSample(sample: FloatArray?, sampleTimestampNs: Long, orientationTimestampNs: Long): FloatArray? {
         if (sample == null || orientationTimestampNs - sampleTimestampNs > MAX_COMPANION_SENSOR_AGE_NS) return null
         return sample.copyOf()
