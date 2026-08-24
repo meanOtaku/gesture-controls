@@ -13,6 +13,7 @@ const val TRACKER_SPO2_ON_DEMAND = "spo2_on_demand"
 const val TRACKER_ECG_ON_DEMAND = "ecg_on_demand"
 const val TRACKER_BIA_ON_DEMAND = "bia_on_demand"
 const val TRACKER_SWEAT_LOSS_ON_DEMAND = "sweat_loss_on_demand"
+const val TRACKER_PPG_ON_DEMAND = "ppg_on_demand"
 
 /** Every on-demand tracker id mapped to its Samsung Health Sensor SDK type; see [OnDemandMedicalSampler]. */
 val ON_DEMAND_TRACKER_TYPES: Map<String, HealthTrackerType> = mapOf(
@@ -20,6 +21,7 @@ val ON_DEMAND_TRACKER_TYPES: Map<String, HealthTrackerType> = mapOf(
     TRACKER_ECG_ON_DEMAND to HealthTrackerType.ECG_ON_DEMAND,
     TRACKER_BIA_ON_DEMAND to HealthTrackerType.BIA_ON_DEMAND,
     TRACKER_SWEAT_LOSS_ON_DEMAND to HealthTrackerType.SWEAT_LOSS,
+    TRACKER_PPG_ON_DEMAND to HealthTrackerType.PPG_ON_DEMAND,
 )
 
 /**
