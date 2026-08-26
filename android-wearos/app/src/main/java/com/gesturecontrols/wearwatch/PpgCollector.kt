@@ -86,6 +86,20 @@ class PpgCollector(
     private val _diagnostic = MutableStateFlow<String?>(null)
     val diagnostic: StateFlow<String?> = _diagnostic.asStateFlow()
 
+    // Event counters, main-handler-only: flush requests/completions can drift
+    // apart (a flush exception skips the completion callback), so both are
+    // tracked separately rather than assumed to match.
+    private var flushRequestedCount = 0
+    private var flushCompletedCount = 0
+    private var callbackCount = 0
+    private var sampleCount = 0
+
+    /** Must only run on [mainHandler]'s thread. Rebuilds the compact counter line and tags on the triggering event. */
+    private fun updateDiagnostic(event: String) {
+        _diagnostic.value =
+            "flush=$flushRequestedCount/$flushCompletedCount cb=$callbackCount samples=$sampleCount · $event"
+    }
+
     fun hasBodySensorsPermission(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.BODY_SENSORS) ==
             PackageManager.PERMISSION_GRANTED
@@ -99,6 +113,10 @@ class PpgCollector(
             return
         }
         started = true
+        flushRequestedCount = 0
+        flushCompletedCount = 0
+        callbackCount = 0
+        sampleCount = 0
         _diagnostic.value = null
         _state.value = PpgState.CONNECTING
         val svc = HealthTrackingService(connectionListener, context)
@@ -129,10 +147,15 @@ class PpgCollector(
      */
     private val flushTick = object : Runnable {
         override fun run() {
+            flushRequestedCount++
             try {
                 tracker?.flush()
+                updateDiagnostic("flush requested")
             } catch (error: Exception) {
-                // Best-effort: the SDK connection may already be gone.
+                // The SDK connection may already be gone; still surface it
+                // instead of swallowing it, since a silent flush failure
+                // looks identical to a healthy but quiet stream.
+                updateDiagnostic("flush failed: ${error.javaClass.simpleName}: ${error.message}")
             }
             mainHandler.postDelayed(this, FLUSH_INTERVAL_MS)
         }
@@ -210,23 +233,36 @@ class PpgCollector(
             // The SDK's callback thread isn't documented as the main looper;
             // hop explicitly so callers can treat onSamples like SensorCollector's
             // main-thread callback.
-            mainHandler.post { onSamples(samples) }
+            mainHandler.post {
+                callbackCount++
+                sampleCount += samples.size
+                updateDiagnostic("data callback")
+                onSamples(samples)
+            }
         }
 
-        override fun onFlushCompleted() = Unit
+        override fun onFlushCompleted() {
+            mainHandler.post {
+                flushCompletedCount++
+                updateDiagnostic("flush completed")
+            }
+        }
 
         override fun onError(error: HealthTracker.TrackerError) {
             mainHandler.post {
-                _state.value = when (error) {
+                when (error) {
                     HealthTracker.TrackerError.PERMISSION_ERROR -> {
-                        _diagnostic.value = "Samsung Health Sensor consent is required on the watch."
-                        PpgState.PERMISSION_REQUIRED
+                        _state.value = PpgState.PERMISSION_REQUIRED
+                        updateDiagnostic("tracker error: Samsung Health Sensor consent is required on the watch.")
                     }
                     HealthTracker.TrackerError.SDK_POLICY_ERROR -> {
-                        _diagnostic.value = "Samsung SDK policy denied this build. Enable Health Sensor Service developer mode or register the app with Samsung."
-                        PpgState.UNAVAILABLE
+                        _state.value = PpgState.UNAVAILABLE
+                        updateDiagnostic("tracker error: Samsung SDK policy denied this build. Enable Health Sensor Service developer mode or register the app with Samsung.")
                     }
-                    else -> PpgState.ERROR
+                    else -> {
+                        _state.value = PpgState.ERROR
+                        updateDiagnostic("tracker error: ${error.name}")
+                    }
                 }
             }
         }

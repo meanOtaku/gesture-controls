@@ -166,6 +166,9 @@ class MainActivity : AppCompatActivity() {
                     ppgCollector.state.collect { state -> renderPpgState(state, ppgCollector.diagnostic.value) }
                 }
                 launch {
+                    ppgCollector.diagnostic.collect { diagnostic -> renderPpgState(ppgCollector.state.value, diagnostic) }
+                }
+                launch {
                     medicalCollector.state.collect { statuses ->
                         statuses.forEach { (tracker, state) -> watchLink.sendMedicalStatus(tracker, state.wireValue()) }
                     }
