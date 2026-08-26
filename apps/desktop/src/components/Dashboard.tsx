@@ -11,10 +11,10 @@ import type {
 } from "../protocol/events";
 
 const PPG_STATE_LABELS: Record<PpgState, string> = {
-  idle: "PPG idle (100Hz capture)",
+  idle: "PPG idle (25Hz continuous)",
   permission_required: "PPG permission required",
-  connecting: "PPG connecting (100Hz capture)",
-  streaming: "PPG streaming (100Hz capture)",
+  connecting: "PPG connecting (25Hz continuous)",
+  streaming: "PPG streaming (25Hz continuous)",
   unavailable: "PPG unavailable",
   error: "PPG error",
 };
@@ -240,11 +240,11 @@ export function Dashboard({
       {view === "watch" && <section className="watch-card" aria-label="Watch PPG">
         <div className="calibration-heading">
           <div>
-            <p className="eyebrow">Raw PPG · 100Hz capture · wellness only, not a medical measurement</p>
+            <p className="eyebrow">Raw PPG · 25Hz continuous · wellness only, not a medical measurement</p>
             <h2>{ppgStateLabel(watchStatus?.ppgState ?? null)}</h2>
           </div>
         </div>
-        <p className="hint">Galaxy Watch 4+ on Samsung Wear OS only (Samsung Health Sensor SDK). The 100Hz PPG capture starts automatically when the watch connects and can remain active while the Watch app is backgrounded.</p>
+        <p className="hint">Galaxy Watch 4+ on Samsung Wear OS only (Samsung Health Sensor SDK). Streams at 25Hz while the watch requests a desktop connection. The separate PPG_ON_DEMAND capture below runs foreground-only at 100Hz.</p>
         <section className="metric-grid" aria-label="PPG telemetry">
           <Metric label="Rate" value={watchStatus?.ppgRateHz != null ? `${number(watchStatus.ppgRateHz, 1)} Hz` : "—"} />
           <Metric label="Green" value={watchStatus?.ppgLastSample ? String(watchStatus.ppgLastSample.green) : "—"} />
