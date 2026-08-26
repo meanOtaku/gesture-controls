@@ -71,14 +71,17 @@ class PpgCollector(
     private var service: HealthTrackingService? = null
     private var tracker: HealthTracker? = null
     private var started: Boolean = false
+    private var retryAttempt: Int = 0
+    private var retryScheduled: Boolean = false
     private val connectionTimeout = Runnable {
         if (started && _state.value == PpgState.CONNECTING) {
             service?.disconnectService()
-            service = null
-            started = false
-            _diagnostic.value = "Samsung Health Sensor Service did not respond. Enable Health Sensor Service developer mode for this development build."
-            _state.value = PpgState.UNAVAILABLE
+            scheduleRetryOrGiveUp("Samsung Health Sensor Service did not respond within ${CONNECTION_TIMEOUT_MS}ms")
         }
+    }
+    private val retryRunnable = Runnable {
+        retryScheduled = false
+        if (started) connect()
     }
 
     private val _state = MutableStateFlow(PpgState.IDLE)
@@ -117,7 +120,27 @@ class PpgCollector(
         flushCompletedCount = 0
         callbackCount = 0
         sampleCount = 0
+        retryAttempt = 0
+        retryScheduled = false
         _diagnostic.value = null
+        connect()
+    }
+
+    fun stop() {
+        mainHandler.removeCallbacks(connectionTimeout)
+        mainHandler.removeCallbacks(flushTick)
+        mainHandler.removeCallbacks(retryRunnable)
+        retryAttempt = 0
+        retryScheduled = false
+        started = false
+        tracker?.unsetEventListener()
+        tracker = null
+        service?.disconnectService()
+        service = null
+        _state.value = PpgState.IDLE
+    }
+
+    private fun connect() {
         _state.value = PpgState.CONNECTING
         val svc = HealthTrackingService(connectionListener, context)
         service = svc
@@ -125,15 +148,30 @@ class PpgCollector(
         svc.connectService()
     }
 
-    fun stop() {
-        mainHandler.removeCallbacks(connectionTimeout)
-        mainHandler.removeCallbacks(flushTick)
-        started = false
-        tracker?.unsetEventListener()
-        tracker = null
-        service?.disconnectService()
+    /**
+     * Transient connect-phase failure (service didn't respond, or rejected the
+     * connection for a reason other than permission/policy). Retries with
+     * exponential backoff up to [MAX_RETRY_ATTEMPTS] while PPG is still desired
+     * ([started]); beyond that, or once [stop] runs, this gives up rather than
+     * looping forever.
+     */
+    private fun scheduleRetryOrGiveUp(reason: String) {
         service = null
-        _state.value = PpgState.IDLE
+        tracker = null
+        if (!started) return
+        if (retryScheduled) return
+        if (retryAttempt >= MAX_RETRY_ATTEMPTS) {
+            started = false
+            _diagnostic.value = "$reason · giving up after $retryAttempt retries"
+            _state.value = PpgState.UNAVAILABLE
+            return
+        }
+        val delayMs = (RETRY_BASE_DELAY_MS shl retryAttempt).coerceAtMost(RETRY_MAX_DELAY_MS)
+        retryAttempt++
+        retryScheduled = true
+        _diagnostic.value = "$reason · retry $retryAttempt/$MAX_RETRY_ATTEMPTS in ${delayMs}ms"
+        _state.value = PpgState.CONNECTING
+        mainHandler.postDelayed(retryRunnable, delayMs)
     }
 
     /**
@@ -164,10 +202,17 @@ class PpgCollector(
     private val connectionListener = object : ConnectionListener {
         override fun onConnectionSuccess() {
             mainHandler.removeCallbacks(connectionTimeout)
+            retryScheduled = false
+            retryAttempt = 0
             val svc = service
             if (!started || svc == null) {
                 svc?.disconnectService()
                 return
+            }
+            val capability = try {
+                svc.trackingCapability.supportHealthTrackerTypes.toString()
+            } catch (error: Exception) {
+                "capability query failed: ${error.javaClass.simpleName}: ${error.message}"
             }
             val supported = try {
                 svc.trackingCapability.supportHealthTrackerTypes.contains(HealthTrackerType.PPG_CONTINUOUS)
@@ -175,7 +220,7 @@ class PpgCollector(
                 false
             }
             if (!supported) {
-                _diagnostic.value = "PPG_CONTINUOUS is not available. Enable Health Sensor Service developer mode, or register this app's package and signing certificate with Samsung."
+                _diagnostic.value = "PPG_CONTINUOUS not in supported tracker types: $capability"
                 _state.value = PpgState.UNAVAILABLE
                 started = false
                 svc.disconnectService()
@@ -198,21 +243,16 @@ class PpgCollector(
             mainHandler.removeCallbacks(flushTick)
             tracker = null
             if (started) {
-                // The service ended the connection on its own (e.g. Samsung Health
-                // process died); reflect that PPG stopped without flipping
-                // `started`, so a future start() attempt still works normally.
-                started = false
-                _state.value = PpgState.IDLE
+                scheduleRetryOrGiveUp("Samsung Health Sensor Service connection ended")
             }
         }
 
         override fun onConnectionFailed(exception: HealthTrackerException) {
             mainHandler.removeCallbacks(connectionTimeout)
             mainHandler.removeCallbacks(flushTick)
-            started = false
-            service = null
-            _diagnostic.value = "Samsung Health Sensor Service rejected the connection (${exception.javaClass.simpleName}). Enable developer mode for local testing."
-            _state.value = PpgState.UNAVAILABLE
+            scheduleRetryOrGiveUp(
+                "connection failed: ${exception.javaClass.simpleName}: ${exception.message} (errorCode=${exception.errorCode})",
+            )
         }
     }
 
@@ -253,11 +293,11 @@ class PpgCollector(
                 when (error) {
                     HealthTracker.TrackerError.PERMISSION_ERROR -> {
                         _state.value = PpgState.PERMISSION_REQUIRED
-                        updateDiagnostic("tracker error: Samsung Health Sensor consent is required on the watch.")
+                        updateDiagnostic("tracker error: PERMISSION_ERROR — Samsung Health Sensor consent required")
                     }
                     HealthTracker.TrackerError.SDK_POLICY_ERROR -> {
                         _state.value = PpgState.UNAVAILABLE
-                        updateDiagnostic("tracker error: Samsung SDK policy denied this build. Enable Health Sensor Service developer mode or register the app with Samsung.")
+                        updateDiagnostic("tracker error: SDK_POLICY_ERROR")
                     }
                     else -> {
                         _state.value = PpgState.ERROR
@@ -271,5 +311,8 @@ class PpgCollector(
     private companion object {
         const val CONNECTION_TIMEOUT_MS = 12_000L
         const val FLUSH_INTERVAL_MS = 1_000L
+        const val MAX_RETRY_ATTEMPTS = 5
+        const val RETRY_BASE_DELAY_MS = 1_000L
+        const val RETRY_MAX_DELAY_MS = 16_000L
     }
 }
