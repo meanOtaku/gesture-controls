@@ -120,7 +120,6 @@ pub const TRACKER_SPO2_ON_DEMAND: &str = "spo2_on_demand";
 pub const TRACKER_ECG_ON_DEMAND: &str = "ecg_on_demand";
 pub const TRACKER_BIA_ON_DEMAND: &str = "bia_on_demand";
 pub const TRACKER_SWEAT_LOSS_ON_DEMAND: &str = "sweat_loss_on_demand";
-pub const TRACKER_PPG_ON_DEMAND: &str = "ppg_on_demand";
 
 /// IMU sensor ids individually controllable via `desktop.set_sensor`/
 /// `watch.sensor_status`, mirroring the physical inputs `SensorCollector`
@@ -156,7 +155,6 @@ pub const MEDICAL_TRACKER_IDS: &[&str] = &[
     TRACKER_ECG_ON_DEMAND,
     TRACKER_BIA_ON_DEMAND,
     TRACKER_SWEAT_LOSS_ON_DEMAND,
-    TRACKER_PPG_ON_DEMAND,
 ];
 
 /// The subset of [`MEDICAL_TRACKER_IDS`] that must never be started other
@@ -167,7 +165,6 @@ pub const ON_DEMAND_MEDICAL_TRACKER_IDS: &[&str] = &[
     TRACKER_ECG_ON_DEMAND,
     TRACKER_BIA_ON_DEMAND,
     TRACKER_SWEAT_LOSS_ON_DEMAND,
-    TRACKER_PPG_ON_DEMAND,
 ];
 
 /// Valid `payload.state` values for `watch.medical_status`. Continuous

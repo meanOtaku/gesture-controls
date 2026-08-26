@@ -244,7 +244,7 @@ export function Dashboard({
             <h2>{ppgStateLabel(watchStatus?.ppgState ?? null)}</h2>
           </div>
         </div>
-        <p className="hint">Galaxy Watch 4+ on Samsung Wear OS only (Samsung Health Sensor SDK). Streams at 25Hz while the watch requests a desktop connection. The separate PPG_ON_DEMAND capture below runs foreground-only at 100Hz.</p>
+        <p className="hint">Galaxy Watch 4+ on Samsung Wear OS only (Samsung Health Sensor SDK). Streams at 25Hz while the watch requests a desktop connection.</p>
         <section className="metric-grid" aria-label="PPG telemetry">
           <Metric label="Rate" value={watchStatus?.ppgRateHz != null ? `${number(watchStatus.ppgRateHz, 1)} Hz` : "—"} />
           <Metric label="Green" value={watchStatus?.ppgLastSample ? String(watchStatus.ppgLastSample.green) : "—"} />

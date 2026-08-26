@@ -391,12 +391,12 @@ export function LiveTelemetry({
     <section className="recording-card medical-controls">
       <div><span className="label">On-demand wellness captures</span><strong>Foreground-only, one at a time, and limited by the Watch SDK</strong><small>Not diagnostic measurements.</small></div>
       <div className="recording-actions">
-        {["spo2_on_demand", "ecg_on_demand", "bia_on_demand", "sweat_loss_on_demand", "ppg_on_demand"].map((tracker) => {
+        {["spo2_on_demand", "ecg_on_demand", "bia_on_demand", "sweat_loss_on_demand"].map((tracker) => {
           const state = watchStatus?.medicalStatus?.[tracker] ?? "unavailable";
           const measuring = state === "measuring";
           const anotherMeasurementActive = Object.entries(watchStatus?.medicalStatus ?? {})
             .some(([id, trackerState]) => id !== tracker && trackerState === "measuring");
-          const label = tracker === "ppg_on_demand" ? "PPG capture (100Hz foreground)" : tracker.replaceAll("_", " ");
+          const label = tracker.replaceAll("_", " ");
           return <button key={tracker} disabled={!watchStatus?.connected || anotherMeasurementActive || (state !== "idle" && !measuring)} onClick={() => void invoke(measuring ? "stop_measurement" : "start_measurement", { tracker })}>{measuring ? `Stop ${label}` : `Start ${label} (${state})`}</button>;
         })}
       </div>

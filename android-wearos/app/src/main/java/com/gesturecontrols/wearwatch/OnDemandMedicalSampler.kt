@@ -12,9 +12,7 @@ import com.samsung.android.service.health.tracking.HealthTrackerException
 import com.samsung.android.service.health.tracking.HealthTrackingService
 import com.samsung.android.service.health.tracking.data.DataPoint
 import com.samsung.android.service.health.tracking.data.HealthTrackerType
-import com.samsung.android.service.health.tracking.data.PpgType
 import com.samsung.android.service.health.tracking.data.ValueKey
-import java.util.EnumSet
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -77,8 +75,8 @@ private fun <T> DataPoint.valueOrNull(key: ValueKey<T>): T? =
 
 /**
  * Wraps Samsung Health Sensor SDK 1.4.1's bounded, on-demand medical
- * trackers: `SPO2_ON_DEMAND`, `ECG_ON_DEMAND`, `BIA_ON_DEMAND`, `PPG_ON_DEMAND`,
- * and `SWEAT_LOSS` (session-scoped despite lacking an `_ON_DEMAND` suffix in the
+ * trackers: `SPO2_ON_DEMAND`, `ECG_ON_DEMAND`, `BIA_ON_DEMAND`, and
+ * `SWEAT_LOSS` (session-scoped despite lacking an `_ON_DEMAND` suffix in the
  * SDK's own [HealthTrackerType] enum — see [ON_DEMAND_TRACKER_TYPES]). None
  * of these run continuously or bypass Samsung Health's consent flow:
  * [start] opens a session for exactly the tracker id the caller names
@@ -103,7 +101,6 @@ class OnDemandMedicalSampler(
     private val onEcg: (List<EcgSample>) -> Unit,
     private val onBiaResult: (BiaResult) -> Unit,
     private val onSweatLoss: (List<SweatLossSample>) -> Unit,
-    private val onPpg: (List<PpgSample>) -> Unit,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val sessions = mutableMapOf<String, Session>()
@@ -186,11 +183,7 @@ class OnDemandMedicalSampler(
                     setState(trackerId, MedicalTrackerState.UNAVAILABLE)
                     return
                 }
-                val newTracker = if (type == HealthTrackerType.PPG_ON_DEMAND) {
-                    svc.getHealthTracker(type, EnumSet.of(PpgType.GREEN, PpgType.RED, PpgType.IR))
-                } else {
-                    svc.getHealthTracker(type)
-                }
+                val newTracker = svc.getHealthTracker(type)
                 tracker = newTracker
                 newTracker.setEventListener(eventListener(trackerId))
                 setState(trackerId, MedicalTrackerState.MEASURING)
@@ -290,19 +283,6 @@ class OnDemandMedicalSampler(
                         timestampNs = point.timestamp,
                         sweatLossMilliliters = point.getValue(ValueKey.SweatLossSet.SWEAT_LOSS).toDouble(),
                         status = point.getValue(ValueKey.SweatLossSet.STATUS),
-                    )
-                },
-            )
-            TRACKER_PPG_ON_DEMAND -> onPpg(
-                dataPoints.map { point ->
-                    PpgSample(
-                        timestampNs = point.timestamp,
-                        green = point.getValue(ValueKey.PpgSet.PPG_GREEN),
-                        greenStatus = point.getValue(ValueKey.PpgSet.GREEN_STATUS),
-                        red = point.getValue(ValueKey.PpgSet.PPG_RED),
-                        redStatus = point.getValue(ValueKey.PpgSet.RED_STATUS),
-                        ir = point.getValue(ValueKey.PpgSet.PPG_IR),
-                        irStatus = point.getValue(ValueKey.PpgSet.IR_STATUS),
                     )
                 },
             )

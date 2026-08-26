@@ -30,7 +30,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sensorStatusText: TextView
     private lateinit var detailText: TextView
     private lateinit var ppgStatusText: TextView
-    private lateinit var ppgOnDemandButton: Button
     private lateinit var spo2Button: Button
     private lateinit var ecgButton: Button
     private lateinit var biaButton: Button
@@ -74,7 +73,6 @@ class MainActivity : AppCompatActivity() {
         sensorStatusText = findViewById(R.id.sensorStatusText)
         detailText = findViewById(R.id.detailText)
         ppgStatusText = findViewById(R.id.ppgStatusText)
-        ppgOnDemandButton = findViewById(R.id.ppgOnDemandButton)
         spo2Button = findViewById(R.id.spo2Button)
         ecgButton = findViewById(R.id.ecgButton)
         biaButton = findViewById(R.id.biaButton)
@@ -118,7 +116,6 @@ class MainActivity : AppCompatActivity() {
             onEcg = { samples -> watchLink.sendEcgSamples(samples) },
             onBiaResult = { result -> watchLink.sendBiaResult(result) },
             onSweatLoss = { samples -> watchLink.sendSweatLossSamples(samples) },
-            onPpg = { samples -> watchLink.enqueuePpgSamples(samples) },
         )
         watchLink.onMeasurementCommand = { tracker, start ->
             if (start) onDemandSampler.start(tracker) else onDemandSampler.stop(tracker)
@@ -135,7 +132,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         connectButton.setOnClickListener { onConnectButtonClicked() }
-        ppgOnDemandButton.setOnClickListener { onOnDemandButtonClicked(TRACKER_PPG_ON_DEMAND) }
         spo2Button.setOnClickListener { onOnDemandButtonClicked(TRACKER_SPO2_ON_DEMAND) }
         ecgButton.setOnClickListener { onOnDemandButtonClicked(TRACKER_ECG_ON_DEMAND) }
         biaButton.setOnClickListener { onOnDemandButtonClicked(TRACKER_BIA_ON_DEMAND) }
@@ -335,7 +331,6 @@ class MainActivity : AppCompatActivity() {
             button.text = if (measuring) "Stop $name" else "$name (${state.wireValue()})"
             button.isEnabled = !anotherActive && (state == MedicalTrackerState.IDLE || measuring)
         }
-        apply(ppgOnDemandButton, TRACKER_PPG_ON_DEMAND, "PPG")
         apply(spo2Button, TRACKER_SPO2_ON_DEMAND, "SpO2")
         apply(ecgButton, TRACKER_ECG_ON_DEMAND, "ECG")
         apply(biaButton, TRACKER_BIA_ON_DEMAND, "BIA")
