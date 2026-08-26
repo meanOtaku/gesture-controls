@@ -36,8 +36,14 @@ class SensorCollector(
     var isRegistered = false
         private set
 
+    /** True when only [startMonitoring]'s reduced-rate listener is active, not full active capture. */
+    var isMonitoring = false
+        private set
+
+    /** Full-rate active capture: all three IMU inputs at SENSOR_DELAY_GAME. Never reduced. */
     fun start() {
-        if (isRegistered) return
+        if (isRegistered && !isMonitoring) return
+        if (isRegistered) sensorManager.unregisterListener(this)
         rotationVectorSensor?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
         }
@@ -48,6 +54,21 @@ class SensorCollector(
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
         }
         isRegistered = true
+        isMonitoring = false
+    }
+
+    /**
+     * Low-power background mode: rotation vector only, at a slower sensor delay, and
+     * without the streaming foreground service's wake lock. Never used in place of
+     * [start] while a capture session is active-only when idle and backgrounded.
+     */
+    fun startMonitoring() {
+        if (isRegistered) return
+        rotationVectorSensor?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+        }
+        isRegistered = true
+        isMonitoring = true
     }
 
     fun stop() {
@@ -56,6 +77,7 @@ class SensorCollector(
         lastAccelerometer = null
         lastGyroscope = null
         isRegistered = false
+        isMonitoring = false
     }
 
     override fun onSensorChanged(event: SensorEvent) {

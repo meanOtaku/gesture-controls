@@ -155,11 +155,18 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         releaseStemButtonIfPressed()
+        // Not actively capturing: drop to a low-rate, wakelock-free monitor mode instead
+        // of leaving sensors idle while backgrounded. Active capture (sensorCollector.start(),
+        // full SENSOR_DELAY_GAME rate + StreamingForegroundService's wake lock) is untouched.
+        if (watchLink.state.value != ConnectionState.CONNECTED) {
+            sensorCollector.startMonitoring()
+        }
     }
 
     override fun onResume() {
         super.onResume()
         if (watchLink.state.value != ConnectionState.CONNECTED) {
+            sensorCollector.stop()
             desktopDiscovery.start()
             pairingServer.start()
         }
