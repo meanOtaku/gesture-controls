@@ -99,6 +99,15 @@ pub const WATCH_MEDICAL_STATUS_TYPE: &str = "watch.medical_status";
 pub const DESKTOP_START_MEASUREMENT_TYPE: &str = "desktop.start_measurement";
 pub const DESKTOP_STOP_MEASUREMENT_TYPE: &str = "desktop.stop_measurement";
 
+/// Generic enable/disable command for [`CONTROLLABLE_SENSOR_IDS`] — unlike
+/// `desktop.start_measurement`, this toggles an always-available input on or
+/// off rather than opening a bounded on-demand session.
+pub const DESKTOP_SET_SENSOR_TYPE: &str = "desktop.set_sensor";
+/// The watch's reply reporting an IMU sensor's current enabled state (see
+/// [`IMU_SENSOR_IDS`]). Continuous medical trackers report via
+/// `watch.medical_status` instead.
+pub const WATCH_SENSOR_STATUS_TYPE: &str = "watch.sensor_status";
+
 /// Continuously-accessible trackers, capability-gated and auto-started
 /// alongside `PPG_CONTINUOUS` (see `MedicalContinuousCollector.kt`).
 pub const TRACKER_HEART_RATE_CONTINUOUS: &str = "heart_rate_continuous";
@@ -112,6 +121,32 @@ pub const TRACKER_ECG_ON_DEMAND: &str = "ecg_on_demand";
 pub const TRACKER_BIA_ON_DEMAND: &str = "bia_on_demand";
 pub const TRACKER_SWEAT_LOSS_ON_DEMAND: &str = "sweat_loss_on_demand";
 pub const TRACKER_PPG_ON_DEMAND: &str = "ppg_on_demand";
+
+/// IMU sensor ids individually controllable via `desktop.set_sensor`/
+/// `watch.sensor_status`, mirroring the physical inputs `SensorCollector`
+/// bundles into `watch.orientation` (rotation vector, linear acceleration,
+/// gyroscope). Disabling [`SENSOR_ORIENTATION`] stops every IMU sample,
+/// since acceleration/gyroscope readings are only ever sent attached to a
+/// rotation-vector event.
+pub const SENSOR_ORIENTATION: &str = "orientation";
+pub const SENSOR_ACCELERATION: &str = "acceleration";
+pub const SENSOR_GYROSCOPE: &str = "gyroscope";
+
+pub const IMU_SENSOR_IDS: &[&str] = &[SENSOR_ORIENTATION, SENSOR_ACCELERATION, SENSOR_GYROSCOPE];
+
+/// Every sensor controllable via the generic `desktop.set_sensor` command:
+/// the three IMU inputs plus the continuously-accessible medical trackers.
+/// On-demand trackers are excluded — they use bounded
+/// `desktop.start_measurement`/`desktop.stop_measurement` sessions instead
+/// (see [`ON_DEMAND_MEDICAL_TRACKER_IDS`]).
+pub const CONTROLLABLE_SENSOR_IDS: &[&str] = &[
+    SENSOR_ORIENTATION,
+    SENSOR_ACCELERATION,
+    SENSOR_GYROSCOPE,
+    TRACKER_HEART_RATE_CONTINUOUS,
+    TRACKER_SKIN_TEMPERATURE_CONTINUOUS,
+    TRACKER_EDA_CONTINUOUS,
+];
 
 pub const MEDICAL_TRACKER_IDS: &[&str] = &[
     TRACKER_HEART_RATE_CONTINUOUS,
@@ -219,6 +254,8 @@ pub enum WatchPacketError {
     UnknownMedicalTracker(String),
     #[error("watch medical status has an unknown state '{0}'")]
     UnknownMedicalState(String),
+    #[error("watch sensor status has an unknown sensor id '{0}'")]
+    UnknownSensorId(String),
 }
 
 impl WatchEnvelope {
@@ -509,6 +546,20 @@ impl WatchEnvelope {
                         state: payload.state,
                     },
                 ))
+            }
+            WATCH_SENSOR_STATUS_TYPE => {
+                let payload: WatchSensorStatusPayload = serde_json::from_value(self.payload)
+                    .map_err(WatchPacketError::InvalidPayload)?;
+                if !IMU_SENSOR_IDS.contains(&payload.sensor.as_str()) {
+                    return Err(WatchPacketError::UnknownSensorId(payload.sensor));
+                }
+                Ok(WatchInboundMessage::SensorStatus(WatchSensorStatusSample {
+                    device_id: self.device_id,
+                    sequence: self.sequence,
+                    timestamp_ns: self.timestamp_ns,
+                    sensor: payload.sensor,
+                    enabled: payload.enabled,
+                }))
             }
             other => Err(WatchPacketError::UnknownMessageType(other.to_string())),
         }
@@ -877,6 +928,26 @@ pub struct WatchMedicalStatusSample {
     pub state: String,
 }
 
+/// `watch.sensor_status` payload: `sensor` is one of [`IMU_SENSOR_IDS`],
+/// `enabled` reflects whether `SensorCollector` currently has that physical
+/// sensor registered.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WatchSensorStatusPayload {
+    pub sensor: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WatchSensorStatusSample {
+    pub device_id: String,
+    pub sequence: u64,
+    pub timestamp_ns: u64,
+    pub sensor: String,
+    pub enabled: bool,
+}
+
 /// `watch.button` payload: `button` identifies the physical key (currently
 /// only [`STEM_PRIMARY_BUTTON_ID`]), `state` is one of [`BUTTON_STATES`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -942,6 +1013,7 @@ pub enum WatchInboundMessage {
     BiaResult(WatchBiaResultSample),
     SweatLossBatch(WatchSweatLossBatchSample),
     MedicalStatus(WatchMedicalStatusSample),
+    SensorStatus(WatchSensorStatusSample),
 }
 
 /// Generic desktop-to-watch envelope for `desktop.connected` / `desktop.time_sync`.
@@ -986,4 +1058,15 @@ pub struct DesktopTimeSyncPayload {
 #[serde(rename_all = "camelCase")]
 pub struct DesktopMeasurementCommandPayload {
     pub tracker: String,
+}
+
+/// `desktop.set_sensor` payload: `sensor` must be one of
+/// [`CONTROLLABLE_SENSOR_IDS`]. Enables or disables an IMU input or
+/// continuous medical tracker in place, without tearing down the underlying
+/// sensor connection.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopSensorControlPayload {
+    pub sensor: String,
+    pub enabled: bool,
 }

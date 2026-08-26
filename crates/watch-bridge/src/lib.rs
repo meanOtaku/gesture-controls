@@ -16,14 +16,15 @@ use axum::routing::get;
 use futures_util::StreamExt;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use spatial_protocol::{
-    DESKTOP_CONNECTED_TYPE, DESKTOP_START_MEASUREMENT_TYPE, DESKTOP_STOP_MEASUREMENT_TYPE,
-    DESKTOP_TIME_SYNC_TYPE, DesktopConnectedPayload, DesktopMeasurementCommandPayload,
-    DesktopOutboundEnvelope, DesktopTimeSyncPayload, ON_DEMAND_MEDICAL_TRACKER_IDS,
+    CONTROLLABLE_SENSOR_IDS, DESKTOP_CONNECTED_TYPE, DESKTOP_SET_SENSOR_TYPE,
+    DESKTOP_START_MEASUREMENT_TYPE, DESKTOP_STOP_MEASUREMENT_TYPE, DESKTOP_TIME_SYNC_TYPE,
+    DesktopConnectedPayload, DesktopMeasurementCommandPayload, DesktopOutboundEnvelope,
+    DesktopSensorControlPayload, DesktopTimeSyncPayload, ON_DEMAND_MEDICAL_TRACKER_IDS,
     WATCH_PROTOCOL_VERSION, WatchBiaResultSample, WatchButtonSample, WatchEcgBatchSample,
     WatchEdaBatchSample, WatchEnvelope, WatchHeartRateBatchSample, WatchHeartbeatSample,
     WatchInboundMessage, WatchMedicalStatusSample, WatchOrientationSample, WatchPpgBatchSample,
-    WatchPpgStatusSample, WatchSkinTemperatureBatchSample, WatchSpo2BatchSample,
-    WatchSweatLossBatchSample, WatchTimeSyncSample,
+    WatchPpgStatusSample, WatchSensorStatusSample, WatchSkinTemperatureBatchSample,
+    WatchSpo2BatchSample, WatchSweatLossBatchSample, WatchTimeSyncSample,
 };
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -62,6 +63,7 @@ pub enum WatchEvent {
     BiaResult(WatchBiaResultSample),
     SweatLoss(WatchSweatLossBatchSample),
     MedicalStatusUpdated(WatchMedicalStatusSample),
+    SensorStatusUpdated(WatchSensorStatusSample),
     InvalidMessage { reason: String },
 }
 
@@ -71,6 +73,15 @@ pub enum WatchEvent {
 pub enum MeasurementCommand {
     Start(String),
     Stop(String),
+}
+
+/// A desktop-initiated command to enable or disable an always-available IMU
+/// input or continuous medical tracker (see [`CONTROLLABLE_SENSOR_IDS`]),
+/// unlike [`MeasurementCommand`]'s bounded on-demand sessions.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SensorControlCommand {
+    Enable(String),
+    Disable(String),
 }
 
 /// Round-trip clock-offset estimate, computed from one desktop/watch time-sync exchange.
@@ -101,11 +112,14 @@ pub enum WatchBridgeError {
     NoActiveConnection,
     #[error("'{0}' is not a valid on-demand medical tracker id")]
     UnknownMeasurementTracker(String),
+    #[error("'{0}' is not a valid controllable sensor id")]
+    UnknownControllableSensor(String),
 }
 
 struct SharedState {
     events: broadcast::Sender<WatchEvent>,
     commands: broadcast::Sender<MeasurementCommand>,
+    sensor_commands: broadcast::Sender<SensorControlCommand>,
     active: AtomicBool,
     heartbeat_timeout: Duration,
 }
@@ -147,6 +161,7 @@ impl WatchBridgeServer {
             .map_err(WatchBridgeError::SocketBindFailed)?;
         let (events, _) = broadcast::channel(256);
         let (commands, _) = broadcast::channel(16);
+        let (sensor_commands, _) = broadcast::channel(16);
         Ok(Self {
             local_addr,
             listener: Mutex::new(Some(listener)),
@@ -156,6 +171,7 @@ impl WatchBridgeServer {
             shared: Arc::new(SharedState {
                 events,
                 commands,
+                sensor_commands,
                 active: AtomicBool::new(false),
                 heartbeat_timeout,
             }),
@@ -189,6 +205,29 @@ impl WatchBridgeServer {
             return Err(WatchBridgeError::NoActiveConnection);
         }
         let _ = self.shared.commands.send(command);
+        Ok(())
+    }
+
+    /// Sends a [`SensorControlCommand`] to the connected watch, enabling or
+    /// disabling an IMU input or continuous medical tracker. Errors if no
+    /// watch is connected or `sensor` isn't one of [`CONTROLLABLE_SENSOR_IDS`]
+    /// — on-demand trackers use [`send_measurement_command`] instead.
+    ///
+    /// [`send_measurement_command`]: Self::send_measurement_command
+    pub fn send_sensor_control_command(
+        &self,
+        command: SensorControlCommand,
+    ) -> Result<(), WatchBridgeError> {
+        let sensor = match &command {
+            SensorControlCommand::Enable(sensor) | SensorControlCommand::Disable(sensor) => sensor,
+        };
+        if !CONTROLLABLE_SENSOR_IDS.contains(&sensor.as_str()) {
+            return Err(WatchBridgeError::UnknownControllableSensor(sensor.clone()));
+        }
+        if !self.shared.active.load(Ordering::Acquire) {
+            return Err(WatchBridgeError::NoActiveConnection);
+        }
+        let _ = self.shared.sensor_commands.send(command);
         Ok(())
     }
 
@@ -414,6 +453,7 @@ async fn run_connection(socket: &mut WebSocket, shared: &Arc<SharedState>) {
     let mut pending_time_sync_at: Option<u64> = None;
     let mut clock_offset_samples = VecDeque::with_capacity(CLOCK_OFFSET_SAMPLE_COUNT);
     let mut commands = shared.commands.subscribe();
+    let mut sensor_commands = shared.sensor_commands.subscribe();
 
     loop {
         let remaining = shared
@@ -447,6 +487,21 @@ async fn run_connection(socket: &mut WebSocket, shared: &Arc<SharedState>) {
                     message_type,
                     now_ns(),
                     DesktopMeasurementCommandPayload { tracker },
+                );
+                if send_json(socket, &request).await.is_err() {
+                    break;
+                }
+            }
+            command = sensor_commands.recv() => {
+                let (sensor, enabled) = match command {
+                    Ok(SensorControlCommand::Enable(sensor)) => (sensor, true),
+                    Ok(SensorControlCommand::Disable(sensor)) => (sensor, false),
+                    Err(_) => continue,
+                };
+                let request = DesktopOutboundEnvelope::new(
+                    DESKTOP_SET_SENSOR_TYPE,
+                    now_ns(),
+                    DesktopSensorControlPayload { sensor, enabled },
                 );
                 if send_json(socket, &request).await.is_err() {
                     break;
@@ -564,6 +619,9 @@ fn handle_inbound(
         }
         Ok(WatchInboundMessage::MedicalStatus(sample)) => {
             let _ = shared.events.send(WatchEvent::MedicalStatusUpdated(sample));
+        }
+        Ok(WatchInboundMessage::SensorStatus(sample)) => {
+            let _ = shared.events.send(WatchEvent::SensorStatusUpdated(sample));
         }
         Err(error) => {
             warn!(%error, "ignoring unparseable watch message payload");

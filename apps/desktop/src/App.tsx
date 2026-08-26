@@ -55,6 +55,7 @@ const emptyWatchStatus: WatchStatus = {
   ppgRateHz: null,
   lastButtonState: null,
   medicalStatus: {},
+  sensorStatus: {},
   heartRateLast: null,
   heartRateRateHz: null,
   skinTemperatureLast: null,
@@ -128,6 +129,7 @@ function MainApp() {
   const [calibration, setCalibration] = useState<CalibrationState | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
   const [volumeError, setVolumeError] = useState<string | null>(null);
+  const [sensorControlError, setSensorControlError] = useState<string | null>(null);
   const [watchStatus, setWatchStatus] = useState<WatchStatus>(emptyWatchStatus);
   const [ppgBatch, setPpgBatch] = useState<WatchPpgBatch | null>(null);
   const [activeTab, setActiveTab] = useState<"main" | "headphone" | "watch" | "telemetry">("main");
@@ -323,7 +325,17 @@ function MainApp() {
     }
   };
 
-  const applicationError = [calibrationError, volumeError]
+  const setSensorEnabled = async (sensor: string, enabled: boolean) => {
+    if (!inTauri) return;
+    try {
+      setSensorControlError(null);
+      await invoke("set_sensor_enabled", { sensor, enabled });
+    } catch (error) {
+      setSensorControlError(String(error));
+    }
+  };
+
+  const applicationError = [calibrationError, volumeError, sensorControlError]
     .filter((error): error is string => error !== null)
     .join(" · ") || null;
 
@@ -349,7 +361,7 @@ function MainApp() {
       <Dashboard view="headphone" status={status} calibration={calibration} calibrationError={applicationError} watchStatus={watchStatus} onCaptureTarget={(target) => { void captureTarget(target); }} onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }} />
     )}
     {activeTab === "watch" && (
-      <Dashboard view="watch" status={status} calibration={calibration} calibrationError={applicationError} watchStatus={watchStatus} onCaptureTarget={(target) => { void captureTarget(target); }} onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }} />
+      <Dashboard view="watch" status={status} calibration={calibration} calibrationError={applicationError} watchStatus={watchStatus} onCaptureTarget={(target) => { void captureTarget(target); }} onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }} onSetSensorEnabled={(sensor, enabled) => { void setSensorEnabled(sensor, enabled); }} />
     )}
     {activeTab === "telemetry" && (
       <LiveTelemetry status={status} watchStatus={watchStatus} ppgBatch={ppgBatch} />

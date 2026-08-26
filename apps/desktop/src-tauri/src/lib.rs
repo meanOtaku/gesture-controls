@@ -48,6 +48,8 @@ pub fn run() {
             watch::get_medical_tracker_ids,
             watch::start_measurement,
             watch::stop_measurement,
+            watch::get_controllable_sensor_ids,
+            watch::set_sensor_enabled,
         ])
         .on_window_event(|window, event| {
             if window.label() == MAIN_WINDOW

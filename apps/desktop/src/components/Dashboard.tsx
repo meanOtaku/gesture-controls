@@ -31,7 +31,19 @@ interface DashboardProps {
   watchStatus?: WatchStatus | null;
   onCaptureTarget?: (target: CalibrationTarget) => void;
   onUpdateCalibration?: (activationThresholdDegrees: number, dwellMs: number) => void;
+  onSetSensorEnabled?: (sensor: string, enabled: boolean) => void;
 }
+
+/** Mirrors `spatial_protocol::IMU_SENSOR_IDS` / `CONTROLLABLE_SENSOR_IDS`. */
+const IMU_SENSOR_IDS = new Set(["orientation", "acceleration", "gyroscope"]);
+const CONTROLLABLE_SENSORS: Array<{ id: string; label: string }> = [
+  { id: "orientation", label: "Orientation (rotation vector)" },
+  { id: "acceleration", label: "Accelerometer" },
+  { id: "gyroscope", label: "Gyroscope" },
+  { id: "heart_rate_continuous", label: "Heart rate" },
+  { id: "skin_temperature_continuous", label: "Skin temperature" },
+  { id: "eda_continuous", label: "EDA" },
+];
 
 const number = (value: number, digits = 2) => value.toFixed(digits);
 const vector = (values: readonly number[] | null, digits = 3) =>
@@ -45,6 +57,7 @@ export function Dashboard({
   watchStatus,
   onCaptureTarget = () => undefined,
   onUpdateCalibration = () => undefined,
+  onSetSensorEnabled = () => undefined,
 }: DashboardProps) {
   const connected = status?.connected === true;
   const thresholdInput = useRef<HTMLInputElement>(null);
@@ -263,6 +276,28 @@ export function Dashboard({
         <div className="vectors">
           {Object.entries(watchStatus?.medicalStatus ?? {}).map(([tracker, state]) => <VectorRow key={tracker} label={tracker.replaceAll("_", " ")} value={state} />)}
           {Object.keys(watchStatus?.medicalStatus ?? {}).length === 0 && <VectorRow label="SDK capability" value="Waiting for watch sensor status" />}
+        </div>
+      </section>}
+
+      {view === "watch" && <section className="watch-card" aria-label="Watch sensor controls">
+        <div className="calibration-heading"><div><p className="eyebrow">Desktop control</p><h2>Sensor controls</h2></div></div>
+        <div className="vectors">
+          {CONTROLLABLE_SENSORS.map(({ id, label }) => {
+            const enabled = IMU_SENSOR_IDS.has(id)
+              ? watchStatus?.sensorStatus?.[id] ?? true
+              : watchStatus?.medicalStatus?.[id] !== "idle";
+            return (
+              <div className="vector-row sensor-toggle-row" key={id}>
+                <span className="label">{label}</span>
+                <span>{enabled ? "Enabled" : "Disabled"}</span>
+                <div className="recording-actions">
+                  <button onClick={() => onSetSensorEnabled(id, !enabled)}>
+                    {enabled ? "Disable" : "Enable"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>}
 

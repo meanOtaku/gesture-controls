@@ -3,10 +3,13 @@ use std::sync::Mutex;
 
 use serde::Serialize;
 use spatial_protocol::{
-    MEDICAL_TRACKER_IDS, WatchBiaResultSample, WatchHeartbeatSample, WatchOrientationSample,
+    CONTROLLABLE_SENSOR_IDS, MEDICAL_TRACKER_IDS, WatchBiaResultSample, WatchHeartbeatSample,
+    WatchOrientationSample,
 };
 use tauri::{AppHandle, Emitter, State};
-use watch_bridge::{ClockOffsetEstimate, MeasurementCommand, WatchBridgeServer, WatchEvent};
+use watch_bridge::{
+    ClockOffsetEstimate, MeasurementCommand, SensorControlCommand, WatchBridgeServer, WatchEvent,
+};
 
 pub const WATCH_STATUS_EVENT: &str = "watch-status";
 pub const WATCH_PPG_BATCH_EVENT: &str = "watch-ppg-batch";
@@ -110,6 +113,10 @@ pub struct WatchStatus {
     /// Populated for every supported *and* unsupported tracker the watch
     /// reports on, not just the ones currently streaming.
     pub medical_status: HashMap<String, String>,
+    /// Latest `watch.sensor_status` per IMU sensor id (see
+    /// `spatial_protocol::IMU_SENSOR_IDS`). Continuous medical trackers'
+    /// enabled state is read from `medical_status` instead (`"streaming"`).
+    pub sensor_status: HashMap<String, bool>,
     pub heart_rate_last: Option<HeartRateSampleSnapshot>,
     pub heart_rate_rate_hz: Option<f64>,
     pub skin_temperature_last: Option<SkinTemperatureSampleSnapshot>,
@@ -352,6 +359,10 @@ impl WatchRuntime {
                 state.connected = true;
                 state.medical_status.insert(sample.tracker, sample.state);
             }
+            WatchEvent::SensorStatusUpdated(sample) => {
+                state.connected = true;
+                state.sensor_status.insert(sample.sensor, sample.enabled);
+            }
             WatchEvent::InvalidMessage { .. } => {
                 return Ok(state.clone());
             }
@@ -402,5 +413,31 @@ pub fn stop_measurement(
 ) -> Result<(), String> {
     server
         .send_measurement_command(MeasurementCommand::Stop(tracker))
+        .map_err(|error| error.to_string())
+}
+
+/// Every sensor id controllable via [`set_sensor_enabled`]
+/// (`spatial_protocol::CONTROLLABLE_SENSOR_IDS`): the IMU inputs plus the
+/// continuous medical trackers.
+#[tauri::command]
+pub fn get_controllable_sensor_ids() -> Vec<&'static str> {
+    CONTROLLABLE_SENSOR_IDS.to_vec()
+}
+
+/// Enables or disables an IMU input or continuous medical tracker in place.
+/// Rejects on-demand trackers and unknown ids; see `SensorControlCommand`.
+#[tauri::command]
+pub fn set_sensor_enabled(
+    server: State<'_, std::sync::Arc<WatchBridgeServer>>,
+    sensor: String,
+    enabled: bool,
+) -> Result<(), String> {
+    let command = if enabled {
+        SensorControlCommand::Enable(sensor)
+    } else {
+        SensorControlCommand::Disable(sensor)
+    };
+    server
+        .send_sensor_control_command(command)
         .map_err(|error| error.to_string())
 }

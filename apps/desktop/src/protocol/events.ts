@@ -106,6 +106,7 @@ export interface WatchStatus {
   /** Latest `watch.button` state ("down"/"up") for the STEM button that grabs the volume overlay. */
   lastButtonState: "down" | "up" | null;
   medicalStatus: Record<string, string>;
+  sensorStatus: Record<string, boolean>;
   heartRateLast: HeartRateSampleSnapshot | null;
   heartRateRateHz: number | null;
   skinTemperatureLast: SkinTemperatureSampleSnapshot | null;

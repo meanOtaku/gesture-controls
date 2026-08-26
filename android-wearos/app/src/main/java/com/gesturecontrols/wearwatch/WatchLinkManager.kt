@@ -58,6 +58,9 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
     /** Forwards a `desktop.start_measurement`/`desktop.stop_measurement` command; wired by MainActivity to [OnDemandMedicalSampler]. */
     var onMeasurementCommand: ((tracker: String, start: Boolean) -> Unit)? = null
 
+    /** Forwards a `desktop.set_sensor` command; wired by MainActivity to [SensorCollector]/[MedicalContinuousCollector]. */
+    var onSensorControlCommand: ((sensor: String, enabled: Boolean) -> Unit)? = null
+
     private val _state = MutableStateFlow(ConnectionState.DISCONNECTED)
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
 
@@ -248,6 +251,15 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         socket.send(WatchProtocol.medicalStatusMessage(deviceId, seq, timestampNs, tracker, state))
     }
 
+    /** Reports an IMU sensor's current enabled state ([SENSOR_ORIENTATION] etc.). */
+    fun sendSensorStatus(sensor: String, enabled: Boolean) {
+        val socket = webSocket ?: return
+        if (_state.value != ConnectionState.CONNECTED) return
+        val timestampNs = SystemClock.elapsedRealtimeNanos()
+        val seq = sequence.incrementAndGet()
+        socket.send(WatchProtocol.sensorStatusMessage(deviceId, seq, timestampNs, sensor, enabled))
+    }
+
     private fun openSocket(url: String) {
         closeSocket()
         _state.value = if (attempt == 0) ConnectionState.CONNECTING else ConnectionState.RECONNECTING
@@ -321,6 +333,7 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
             WatchProtocol.TYPE_DESKTOP_TIME_SYNC -> handleTimeSync(message.payload)
             WatchProtocol.TYPE_DESKTOP_START_MEASUREMENT -> dispatchMeasurementCommand(message.payload, start = true)
             WatchProtocol.TYPE_DESKTOP_STOP_MEASUREMENT -> dispatchMeasurementCommand(message.payload, start = false)
+            WatchProtocol.TYPE_DESKTOP_SET_SENSOR -> dispatchSensorControlCommand(message.payload)
         }
     }
 
@@ -338,6 +351,14 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         val tracker = payload.optString("tracker", "")
         if (tracker.isEmpty()) return
         onMeasurementCommand?.invoke(tracker, start)
+    }
+
+    /** Forwards a `desktop.set_sensor` command to [onSensorControlCommand]; ignored if `sensor` is missing. */
+    private fun dispatchSensorControlCommand(payload: JSONObject) {
+        val sensor = payload.optString("sensor", "")
+        if (sensor.isEmpty()) return
+        val enabled = payload.optBoolean("enabled", true)
+        onSensorControlCommand?.invoke(sensor, enabled)
     }
 
     private fun startHeartbeat() {

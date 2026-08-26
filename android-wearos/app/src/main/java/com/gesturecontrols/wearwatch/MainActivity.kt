@@ -110,6 +110,16 @@ class MainActivity : AppCompatActivity() {
         watchLink.onMeasurementCommand = { tracker, start ->
             if (start) onDemandSampler.start(tracker) else onDemandSampler.stop(tracker)
         }
+        watchLink.onSensorControlCommand = { sensor, enabled ->
+            when (sensor) {
+                SENSOR_ORIENTATION, SENSOR_ACCELERATION, SENSOR_GYROSCOPE -> {
+                    sensorCollector.setSensorEnabled(sensor, enabled)
+                    watchLink.sendSensorStatus(sensor, enabled)
+                }
+                TRACKER_HEART_RATE_CONTINUOUS, TRACKER_SKIN_TEMPERATURE_CONTINUOUS, TRACKER_EDA_CONTINUOUS ->
+                    medicalCollector.setTrackerEnabled(sensor, enabled)
+            }
+        }
 
         connectButton.setOnClickListener { onConnectButtonClicked() }
         desktopDiscovery.start()

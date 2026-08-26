@@ -33,6 +33,20 @@ class SensorCollector(
     private var lastGyroscopeTimestampNs = Long.MIN_VALUE
     private val quaternionBuffer = FloatArray(4)
 
+    // Desktop-controlled per-sensor toggles (`desktop.set_sensor`); all on by
+    // default so existing start()/startMonitoring()/stop() behavior is
+    // unchanged until the desktop explicitly disables one.
+    private var orientationEnabled = true
+    private var accelerationEnabled = true
+    private var gyroscopeEnabled = true
+
+    // Tracks which physical sensors are actually registered right now, kept
+    // separate from the enabled flags above so toggling one sensor never
+    // double-registers or unregisters the other two.
+    private var orientationRegistered = false
+    private var accelerationRegistered = false
+    private var gyroscopeRegistered = false
+
     var isRegistered = false
         private set
 
@@ -40,44 +54,114 @@ class SensorCollector(
     var isMonitoring = false
         private set
 
-    /** Full-rate active capture: all three IMU inputs at SENSOR_DELAY_GAME. Never reduced. */
+    /** Full-rate active capture: all three IMU inputs at SENSOR_DELAY_GAME, each gated by [setSensorEnabled]. Never reduced. */
     fun start() {
         if (isRegistered && !isMonitoring) return
-        if (isRegistered) sensorManager.unregisterListener(this)
-        rotationVectorSensor?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
-        }
-        accelerometerSensor?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
-        }
-        gyroscopeSensor?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
-        }
+        if (isRegistered) unregisterAll()
+        applyOrientationRegistration(SensorManager.SENSOR_DELAY_GAME)
+        applyAccelerationRegistration(SensorManager.SENSOR_DELAY_GAME)
+        applyGyroscopeRegistration(SensorManager.SENSOR_DELAY_GAME)
         isRegistered = true
         isMonitoring = false
     }
 
     /**
-     * Low-power background mode: rotation vector only, at a slower sensor delay, and
-     * without the streaming foreground service's wake lock. Never used in place of
-     * [start] while a capture session is active-only when idle and backgrounded.
+     * Low-power background mode: rotation vector only (if [SENSOR_ORIENTATION] is
+     * enabled), at a slower sensor delay, and without the streaming foreground
+     * service's wake lock. Never used in place of [start] while a capture session
+     * is active-only when idle and backgrounded.
      */
     fun startMonitoring() {
         if (isRegistered) return
-        rotationVectorSensor?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
-        }
+        applyOrientationRegistration(SensorManager.SENSOR_DELAY_UI)
         isRegistered = true
         isMonitoring = true
     }
 
     fun stop() {
         if (!isRegistered) return
-        sensorManager.unregisterListener(this)
+        unregisterAll()
         lastAccelerometer = null
         lastGyroscope = null
         isRegistered = false
         isMonitoring = false
+    }
+
+    /**
+     * Desktop-controlled enable/disable for a single IMU input
+     * ([SENSOR_ORIENTATION], [SENSOR_ACCELERATION], [SENSOR_GYROSCOPE]),
+     * applied immediately if a capture/monitoring session is active, and
+     * remembered for the next [start]/[startMonitoring] otherwise. Disabling
+     * [SENSOR_ORIENTATION] stops every IMU sample, since acceleration/gyroscope
+     * are only ever sent attached to a rotation-vector event.
+     */
+    fun setSensorEnabled(sensorId: String, enabled: Boolean) {
+        when (sensorId) {
+            SENSOR_ORIENTATION -> {
+                orientationEnabled = enabled
+                if (isRegistered) {
+                    applyOrientationRegistration(
+                        if (isMonitoring) SensorManager.SENSOR_DELAY_UI else SensorManager.SENSOR_DELAY_GAME,
+                    )
+                }
+            }
+            SENSOR_ACCELERATION -> {
+                accelerationEnabled = enabled
+                if (isRegistered && !isMonitoring) applyAccelerationRegistration(SensorManager.SENSOR_DELAY_GAME)
+            }
+            SENSOR_GYROSCOPE -> {
+                gyroscopeEnabled = enabled
+                if (isRegistered && !isMonitoring) applyGyroscopeRegistration(SensorManager.SENSOR_DELAY_GAME)
+            }
+        }
+    }
+
+    private fun unregisterAll() {
+        sensorManager.unregisterListener(this)
+        orientationRegistered = false
+        accelerationRegistered = false
+        gyroscopeRegistered = false
+    }
+
+    private fun applyOrientationRegistration(rate: Int) {
+        val sensor = rotationVectorSensor ?: return
+        if (orientationEnabled) {
+            if (!orientationRegistered) {
+                sensorManager.registerListener(this, sensor, rate)
+                orientationRegistered = true
+            }
+        } else if (orientationRegistered) {
+            sensorManager.unregisterListener(this, sensor)
+            orientationRegistered = false
+        }
+    }
+
+    private fun applyAccelerationRegistration(rate: Int) {
+        val sensor = accelerometerSensor ?: return
+        if (accelerationEnabled) {
+            if (!accelerationRegistered) {
+                sensorManager.registerListener(this, sensor, rate)
+                accelerationRegistered = true
+            }
+        } else if (accelerationRegistered) {
+            sensorManager.unregisterListener(this, sensor)
+            accelerationRegistered = false
+            lastAccelerometer = null
+        }
+    }
+
+    private fun applyGyroscopeRegistration(rate: Int) {
+        val sensor = gyroscopeSensor ?: return
+        if (gyroscopeEnabled) {
+            if (!gyroscopeRegistered) {
+                sensorManager.registerListener(this, sensor, rate)
+                gyroscopeRegistered = true
+            }
+        } else if (gyroscopeRegistered) {
+            sensorManager.unregisterListener(this, sensor)
+            gyroscopeRegistered = false
+            lastGyroscope = null
+        }
     }
 
     override fun onSensorChanged(event: SensorEvent) {

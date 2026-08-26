@@ -69,6 +69,19 @@ class MedicalContinuousCollector(
     private var edaTracker: HealthTracker? = null
     private var started = false
 
+    // Desktop-controlled per-tracker toggles (`desktop.set_sensor`); all on by
+    // default so existing start()/stop() behavior is unchanged until the
+    // desktop explicitly disables one. Persisted across stop()/start() like
+    // SensorCollector's IMU enabled flags.
+    private var heartRateEnabled = true
+    private var skinTemperatureEnabled = true
+    private var edaEnabled = true
+
+    // Populated from the SDK's capability query on each connection, so a
+    // later setTrackerEnabled() re-enable can re-acquire a tracker without
+    // reconnecting the whole service.
+    private var supportedTypes: Set<HealthTrackerType> = emptySet()
+
     private val _state = MutableStateFlow(
         mapOf(
             TRACKER_HEART_RATE_CONTINUOUS to MedicalTrackerState.IDLE,
@@ -104,9 +117,88 @@ class MedicalContinuousCollector(
         skinTemperatureTracker = null
         edaTracker?.unsetEventListener()
         edaTracker = null
+        supportedTypes = emptySet()
         service?.disconnectService()
         service = null
         setAllStates(MedicalTrackerState.IDLE)
+    }
+
+    /**
+     * Desktop-controlled enable/disable for a single continuous tracker
+     * ([TRACKER_HEART_RATE_CONTINUOUS] etc.), applied immediately if a
+     * connection is active, and remembered for the next [start] otherwise.
+     * Disabling reports [MedicalTrackerState.IDLE], mirroring how the desktop
+     * reads a continuous tracker's enabled state off `medical_status` rather
+     * than a separate `watch.sensor_status` message.
+     */
+    fun setTrackerEnabled(trackerId: String, enabled: Boolean) {
+        when (trackerId) {
+            TRACKER_HEART_RATE_CONTINUOUS -> {
+                heartRateEnabled = enabled
+                applyHeartRateTracker()
+            }
+            TRACKER_SKIN_TEMPERATURE_CONTINUOUS -> {
+                skinTemperatureEnabled = enabled
+                applySkinTemperatureTracker()
+            }
+            TRACKER_EDA_CONTINUOUS -> {
+                edaEnabled = enabled
+                applyEdaTracker()
+            }
+        }
+    }
+
+    private fun applyHeartRateTracker() {
+        val svc = service
+        if (!started || svc == null) return
+        if (heartRateEnabled) {
+            if (heartRateTracker == null && supportedTypes.contains(HealthTrackerType.HEART_RATE_CONTINUOUS)) {
+                val tracker = svc.getHealthTracker(HealthTrackerType.HEART_RATE_CONTINUOUS)
+                heartRateTracker = tracker
+                tracker.setEventListener(heartRateEventListener)
+                setState(TRACKER_HEART_RATE_CONTINUOUS, MedicalTrackerState.STREAMING)
+            }
+        } else {
+            heartRateTracker?.unsetEventListener()
+            heartRateTracker = null
+            setState(TRACKER_HEART_RATE_CONTINUOUS, MedicalTrackerState.IDLE)
+        }
+    }
+
+    private fun applySkinTemperatureTracker() {
+        val svc = service
+        if (!started || svc == null) return
+        if (skinTemperatureEnabled) {
+            if (skinTemperatureTracker == null &&
+                supportedTypes.contains(HealthTrackerType.SKIN_TEMPERATURE_CONTINUOUS)
+            ) {
+                val tracker = svc.getHealthTracker(HealthTrackerType.SKIN_TEMPERATURE_CONTINUOUS)
+                skinTemperatureTracker = tracker
+                tracker.setEventListener(skinTemperatureEventListener)
+                setState(TRACKER_SKIN_TEMPERATURE_CONTINUOUS, MedicalTrackerState.STREAMING)
+            }
+        } else {
+            skinTemperatureTracker?.unsetEventListener()
+            skinTemperatureTracker = null
+            setState(TRACKER_SKIN_TEMPERATURE_CONTINUOUS, MedicalTrackerState.IDLE)
+        }
+    }
+
+    private fun applyEdaTracker() {
+        val svc = service
+        if (!started || svc == null) return
+        if (edaEnabled) {
+            if (edaTracker == null && supportedTypes.contains(HealthTrackerType.EDA_CONTINUOUS)) {
+                val tracker = svc.getHealthTracker(HealthTrackerType.EDA_CONTINUOUS)
+                edaTracker = tracker
+                tracker.setEventListener(edaEventListener)
+                setState(TRACKER_EDA_CONTINUOUS, MedicalTrackerState.STREAMING)
+            }
+        } else {
+            edaTracker?.unsetEventListener()
+            edaTracker = null
+            setState(TRACKER_EDA_CONTINUOUS, MedicalTrackerState.IDLE)
+        }
     }
 
     private fun setAllStates(state: MedicalTrackerState) {
@@ -124,32 +216,23 @@ class MedicalContinuousCollector(
                 svc?.disconnectService()
                 return
             }
-            val supported = try {
-                svc.trackingCapability.supportHealthTrackerTypes
+            supportedTypes = try {
+                svc.trackingCapability.supportHealthTrackerTypes.toSet()
             } catch (error: Exception) {
-                emptyList()
+                emptySet()
             }
-            if (supported.contains(HealthTrackerType.HEART_RATE_CONTINUOUS)) {
-                val tracker = svc.getHealthTracker(HealthTrackerType.HEART_RATE_CONTINUOUS)
-                heartRateTracker = tracker
-                tracker.setEventListener(heartRateEventListener)
-                setState(TRACKER_HEART_RATE_CONTINUOUS, MedicalTrackerState.STREAMING)
+            if (supportedTypes.contains(HealthTrackerType.HEART_RATE_CONTINUOUS)) {
+                applyHeartRateTracker()
             } else {
                 setState(TRACKER_HEART_RATE_CONTINUOUS, MedicalTrackerState.UNAVAILABLE)
             }
-            if (supported.contains(HealthTrackerType.SKIN_TEMPERATURE_CONTINUOUS)) {
-                val tracker = svc.getHealthTracker(HealthTrackerType.SKIN_TEMPERATURE_CONTINUOUS)
-                skinTemperatureTracker = tracker
-                tracker.setEventListener(skinTemperatureEventListener)
-                setState(TRACKER_SKIN_TEMPERATURE_CONTINUOUS, MedicalTrackerState.STREAMING)
+            if (supportedTypes.contains(HealthTrackerType.SKIN_TEMPERATURE_CONTINUOUS)) {
+                applySkinTemperatureTracker()
             } else {
                 setState(TRACKER_SKIN_TEMPERATURE_CONTINUOUS, MedicalTrackerState.UNAVAILABLE)
             }
-            if (supported.contains(HealthTrackerType.EDA_CONTINUOUS)) {
-                val tracker = svc.getHealthTracker(HealthTrackerType.EDA_CONTINUOUS)
-                edaTracker = tracker
-                tracker.setEventListener(edaEventListener)
-                setState(TRACKER_EDA_CONTINUOUS, MedicalTrackerState.STREAMING)
+            if (supportedTypes.contains(HealthTrackerType.EDA_CONTINUOUS)) {
+                applyEdaTracker()
             } else {
                 setState(TRACKER_EDA_CONTINUOUS, MedicalTrackerState.UNAVAILABLE)
             }

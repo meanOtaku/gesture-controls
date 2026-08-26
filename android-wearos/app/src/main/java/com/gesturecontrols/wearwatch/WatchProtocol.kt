@@ -33,6 +33,11 @@ object WatchProtocol {
     const val TYPE_DESKTOP_START_MEASUREMENT = "desktop.start_measurement"
     const val TYPE_DESKTOP_STOP_MEASUREMENT = "desktop.stop_measurement"
 
+    /** Generic enable/disable command for an IMU input or continuous tracker; see [SensorCollector], [MedicalContinuousCollector]. */
+    const val TYPE_DESKTOP_SET_SENSOR = "desktop.set_sensor"
+    /** Reports an IMU sensor's current enabled state ([SENSOR_ORIENTATION] etc.); continuous trackers report via [TYPE_MEDICAL_STATUS] instead. */
+    const val TYPE_SENSOR_STATUS = "watch.sensor_status"
+
     /** Identifies this app to the desktop; matches the sample deviceId in the protocol doc. */
     const val DEVICE_ID = "galaxy-watch-4"
 
@@ -281,6 +286,20 @@ object WatchProtocol {
         payload.put("tracker", tracker)
         payload.put("state", state)
         return envelope(TYPE_MEDICAL_STATUS, deviceId, sequence, timestampNs, payload)
+    }
+
+    /** Encodes an IMU sensor's current enabled state ([SENSOR_ORIENTATION] etc.). */
+    fun sensorStatusMessage(
+        deviceId: String,
+        sequence: Long,
+        timestampNs: Long,
+        sensor: String,
+        enabled: Boolean,
+    ): String {
+        val payload = JSONObject()
+        payload.put("sensor", sensor)
+        payload.put("enabled", enabled)
+        return envelope(TYPE_SENSOR_STATUS, deviceId, sequence, timestampNs, payload)
     }
 
     /** Parsed subset of an inbound desktop-to-watch envelope; null fields mean "not present". */
