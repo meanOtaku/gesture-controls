@@ -54,7 +54,7 @@ class MainActivity : AppCompatActivity() {
     private val requestBodySensorsPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) {
-                ppgCollector.start()
+                onDemandSampler.start(TRACKER_PPG_ON_DEMAND)
                 medicalCollector.start()
             }
         }
@@ -167,9 +167,6 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 launch {
-                    ppgCollector.state.collect { state -> renderPpgState(state, ppgCollector.diagnostic.value) }
-                }
-                launch {
                     medicalCollector.state.collect { statuses ->
                         statuses.forEach { (tracker, state) -> watchLink.sendMedicalStatus(tracker, state.wireValue()) }
                     }
@@ -178,6 +175,7 @@ class MainActivity : AppCompatActivity() {
                     onDemandSampler.state.collect { statuses ->
                         statuses.forEach { (tracker, state) -> watchLink.sendMedicalStatus(tracker, state.wireValue()) }
                         updateOnDemandButtons(statuses)
+                        statuses[TRACKER_PPG_ON_DEMAND]?.let { renderPpgState(it) }
                     }
                 }
             }
@@ -307,17 +305,23 @@ class MainActivity : AppCompatActivity() {
         startBodySensorCollection()
     }
 
-    /** Starts PPG_CONTINUOUS and the continuous medical trackers if BODY_SENSORS is already granted, else requests it first. */
+    /**
+     * Starts PPG_ON_DEMAND (100Hz, kept running by [StreamingForegroundService]'s
+     * wake lock even once the screen sleeps — see [onOnDemandButtonClicked]'s
+     * kdoc) and the continuous medical trackers if BODY_SENSORS is already
+     * granted, else requests it first. PPG_CONTINUOUS is never started
+     * automatically, so the two never compete for the watch's PPG hardware.
+     */
     private fun startBodySensorCollection() {
         if (ppgCollector.hasBodySensorsPermission()) {
-            ppgCollector.start()
+            onDemandSampler.start(TRACKER_PPG_ON_DEMAND)
             medicalCollector.start()
         } else {
             requestBodySensorsPermission.launch(Manifest.permission.BODY_SENSORS)
         }
     }
 
-    /** Same foreground, single-session start/stop the desktop drives via `desktop.start_measurement`; see [OnDemandMedicalSampler]. */
+    /** Same-session start/stop the desktop drives via `desktop.start_measurement`; see [OnDemandMedicalSampler]. Simultaneous trackers are allowed, each with its own session. */
     private fun onOnDemandButtonClicked(trackerId: String) {
         if (onDemandSampler.state.value[trackerId] == MedicalTrackerState.MEASURING) {
             onDemandSampler.stop(trackerId)
@@ -326,14 +330,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Mirrors the desktop's on-demand button enablement (LiveTelemetry.tsx): only one tracker may measure at a time. */
+    /** Mirrors the desktop's on-demand button enablement (LiveTelemetry.tsx): every tracker measures independently, so no button is disabled by another tracker's state. */
     private fun updateOnDemandButtons(statuses: Map<String, MedicalTrackerState>) {
         fun apply(button: Button, trackerId: String, name: String) {
             val state = statuses[trackerId] ?: MedicalTrackerState.IDLE
             val measuring = state == MedicalTrackerState.MEASURING
-            val anotherActive = statuses.any { (id, other) -> id != trackerId && other == MedicalTrackerState.MEASURING }
             button.text = if (measuring) "Stop $name" else "$name (${state.wireValue()})"
-            button.isEnabled = !anotherActive && (state == MedicalTrackerState.IDLE || measuring)
+            button.isEnabled = state == MedicalTrackerState.IDLE || measuring
         }
         apply(ppgOnDemandButton, TRACKER_PPG_ON_DEMAND, "PPG")
         apply(spo2Button, TRACKER_SPO2_ON_DEMAND, "SpO2")
@@ -379,8 +382,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun renderPpgState(state: PpgState, diagnostic: String?) {
-        val label = when (state) {
+    /** PPG_ON_DEMAND is the default PPG source now, so its status (from [onDemandSampler]) drives [ppgStatusText]/`sendPpgStatus`, not the unused [ppgCollector]. */
+    private fun renderPpgState(state: MedicalTrackerState) {
+        val ppgState = when (state) {
+            MedicalTrackerState.MEASURING -> PpgState.STREAMING
+            MedicalTrackerState.CONNECTING -> PpgState.CONNECTING
+            MedicalTrackerState.IDLE -> PpgState.IDLE
+            MedicalTrackerState.UNAVAILABLE -> PpgState.UNAVAILABLE
+            MedicalTrackerState.ERROR -> PpgState.ERROR
+            MedicalTrackerState.PERMISSION_REQUIRED -> PpgState.PERMISSION_REQUIRED
+            MedicalTrackerState.STREAMING -> PpgState.STREAMING
+        }
+        ppgStatusText.text = when (ppgState) {
             PpgState.IDLE -> getString(R.string.ppg_idle)
             PpgState.PERMISSION_REQUIRED -> getString(R.string.ppg_permission_required)
             PpgState.CONNECTING -> getString(R.string.ppg_connecting)
@@ -388,8 +401,7 @@ class MainActivity : AppCompatActivity() {
             PpgState.UNAVAILABLE -> getString(R.string.ppg_unavailable)
             PpgState.ERROR -> getString(R.string.ppg_error)
         }
-        ppgStatusText.text = diagnostic?.let { "$label\n$it" } ?: label
-        watchLink.sendPpgStatus(state.wireValue())
+        watchLink.sendPpgStatus(ppgState.wireValue())
     }
 
     private fun readBatteryPercent(): Int? {

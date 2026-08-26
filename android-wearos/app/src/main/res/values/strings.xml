@@ -23,5 +23,5 @@
     <string name="ppg_streaming">PPG streaming</string>
     <string name="ppg_unavailable">PPG unavailable on this watch</string>
     <string name="ppg_error">PPG error</string>
-    <string name="on_demand_heading">On-demand (foreground only, one at a time)</string>
+    <string name="on_demand_heading">Measurement controls</string>
 </resources>

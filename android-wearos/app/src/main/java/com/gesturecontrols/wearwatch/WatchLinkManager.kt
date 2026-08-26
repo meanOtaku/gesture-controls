@@ -23,6 +23,38 @@ import org.json.JSONObject
 enum class ConnectionState { DISCONNECTED, CONNECTING, CONNECTED, RECONNECTING, FAILED }
 
 /**
+ * Fixed-capacity queue for one sensor's outgoing samples. Under socket
+ * backpressure or a stalled flush timer, [addAll] drops the *oldest* queued
+ * samples first so the buffer can't grow without bound while multiple
+ * simultaneous streams (continuous + several on-demand trackers) are all
+ * enqueuing at once — bounded memory matters more here than replaying every
+ * sample that arrived faster than the socket could drain.
+ */
+private class BoundedSampleQueue<T>(private val capacity: Int) {
+    private val items = ArrayDeque<T>()
+
+    @Synchronized
+    fun addAll(samples: List<T>) {
+        items.addAll(samples)
+        while (items.size > capacity) items.removeFirst()
+    }
+
+    /** Removes and returns every queued sample, oldest first; empty list if none are queued. */
+    @Synchronized
+    fun drain(): List<T> {
+        if (items.isEmpty()) return emptyList()
+        val copy = items.toList()
+        items.clear()
+        return copy
+    }
+
+    @Synchronized
+    fun clear() {
+        items.clear()
+    }
+}
+
+/**
  * Owns the single WebSocket connection to the desktop watch bridge
  * (docs/watch-websocket-protocol.md). Reconnects with a capped exponential
  * backoff for as long as the user has asked to stay connected, and gives up
@@ -37,12 +69,12 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
     private var heartbeatJob: Job? = null
     private var reconnectJob: Job? = null
     private var ppgFlushJob: Job? = null
-    private val ppgBuffer = mutableListOf<PpgSample>()
+    private val ppgBuffer = BoundedSampleQueue<PpgSample>(PPG_QUEUE_CAPACITY)
     @Volatile private var lastPpgStatus: String? = null
     private var medicalFlushJob: Job? = null
-    private val heartRateBuffer = mutableListOf<HeartRateSample>()
-    private val skinTemperatureBuffer = mutableListOf<SkinTemperatureSample>()
-    private val edaBuffer = mutableListOf<EdaSample>()
+    private val heartRateBuffer = BoundedSampleQueue<HeartRateSample>(MEDICAL_QUEUE_CAPACITY)
+    private val skinTemperatureBuffer = BoundedSampleQueue<SkinTemperatureSample>(MEDICAL_QUEUE_CAPACITY)
+    private val edaBuffer = BoundedSampleQueue<EdaSample>(MEDICAL_QUEUE_CAPACITY)
     private val sequence = AtomicLong(0)
     private var attempt = 0
     private var userRequestedConnection = false
@@ -144,11 +176,11 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         _lastOrientationSequence.value = seq
     }
 
-    /** Buffers raw PPG samples for the next flush tick; dropped if not connected. */
+    /** Buffers raw PPG samples for the next flush tick; dropped if not connected or if [PPG_QUEUE_CAPACITY] is exceeded. */
     fun enqueuePpgSamples(samples: List<PpgSample>) {
         if (samples.isEmpty()) return
         if (_state.value != ConnectionState.CONNECTED) return
-        synchronized(ppgBuffer) { ppgBuffer.addAll(samples) }
+        ppgBuffer.addAll(samples)
     }
 
     /** Reports [PpgState] to the desktop; independent of the PPG sample buffer. */
@@ -176,25 +208,25 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         socket.send(WatchProtocol.buttonMessage(deviceId, seq, timestampNs, buttonState))
     }
 
-    /** Buffers HEART_RATE_CONTINUOUS samples for the next medical flush tick; dropped if not connected. */
+    /** Buffers HEART_RATE_CONTINUOUS samples for the next medical flush tick; dropped if not connected or if [MEDICAL_QUEUE_CAPACITY] is exceeded. */
     fun enqueueHeartRateSamples(samples: List<HeartRateSample>) {
         if (samples.isEmpty()) return
         if (_state.value != ConnectionState.CONNECTED) return
-        synchronized(heartRateBuffer) { heartRateBuffer.addAll(samples) }
+        heartRateBuffer.addAll(samples)
     }
 
-    /** Buffers SKIN_TEMPERATURE_CONTINUOUS samples for the next medical flush tick; dropped if not connected. */
+    /** Buffers SKIN_TEMPERATURE_CONTINUOUS samples for the next medical flush tick; dropped if not connected or if [MEDICAL_QUEUE_CAPACITY] is exceeded. */
     fun enqueueSkinTemperatureSamples(samples: List<SkinTemperatureSample>) {
         if (samples.isEmpty()) return
         if (_state.value != ConnectionState.CONNECTED) return
-        synchronized(skinTemperatureBuffer) { skinTemperatureBuffer.addAll(samples) }
+        skinTemperatureBuffer.addAll(samples)
     }
 
-    /** Buffers EDA_CONTINUOUS samples for the next medical flush tick; dropped if not connected. */
+    /** Buffers EDA_CONTINUOUS samples for the next medical flush tick; dropped if not connected or if [MEDICAL_QUEUE_CAPACITY] is exceeded. */
     fun enqueueEdaSamples(samples: List<EdaSample>) {
         if (samples.isEmpty()) return
         if (_state.value != ConnectionState.CONNECTED) return
-        synchronized(edaBuffer) { edaBuffer.addAll(samples) }
+        edaBuffer.addAll(samples)
     }
 
     /** Sends a bounded SPO2_ON_DEMAND session's samples immediately; on-demand data is low-volume, unlike the continuous trackers. */
@@ -272,12 +304,12 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         heartbeatJob = null
         ppgFlushJob?.cancel()
         ppgFlushJob = null
-        synchronized(ppgBuffer) { ppgBuffer.clear() }
+        ppgBuffer.clear()
         medicalFlushJob?.cancel()
         medicalFlushJob = null
-        synchronized(heartRateBuffer) { heartRateBuffer.clear() }
-        synchronized(skinTemperatureBuffer) { skinTemperatureBuffer.clear() }
-        synchronized(edaBuffer) { edaBuffer.clear() }
+        heartRateBuffer.clear()
+        skinTemperatureBuffer.clear()
+        edaBuffer.clear()
         if (webSocket != null) {
             closeExpected = true
         }
@@ -390,12 +422,8 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
     }
 
     private fun flushPpgBuffer() {
-        val batch = synchronized(ppgBuffer) {
-            if (ppgBuffer.isEmpty()) return
-            val copy = ppgBuffer.toList()
-            ppgBuffer.clear()
-            copy
-        }
+        val batch = ppgBuffer.drain()
+        if (batch.isEmpty()) return
         val socket = webSocket ?: return
         for (chunk in batch.chunked(PPG_BATCH_MAX_SAMPLES)) {
             val timestampNs = SystemClock.elapsedRealtimeNanos()
@@ -416,41 +444,26 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
 
     private fun flushMedicalBuffers() {
         val socket = webSocket ?: return
-        val heartRateBatch = synchronized(heartRateBuffer) {
-            if (heartRateBuffer.isEmpty()) null else heartRateBuffer.toList().also { heartRateBuffer.clear() }
-        }
-        heartRateBatch?.let { batch ->
-            for (chunk in batch.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
-                val timestampNs = SystemClock.elapsedRealtimeNanos()
-                val seq = sequence.incrementAndGet()
-                socket.send(WatchProtocol.heartRateBatchMessage(deviceId, seq, timestampNs, chunk))
-            }
+
+        val heartRateBatch = heartRateBuffer.drain()
+        for (chunk in heartRateBatch.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
+            val timestampNs = SystemClock.elapsedRealtimeNanos()
+            val seq = sequence.incrementAndGet()
+            socket.send(WatchProtocol.heartRateBatchMessage(deviceId, seq, timestampNs, chunk))
         }
 
-        val skinTemperatureBatch = synchronized(skinTemperatureBuffer) {
-            if (skinTemperatureBuffer.isEmpty()) {
-                null
-            } else {
-                skinTemperatureBuffer.toList().also { skinTemperatureBuffer.clear() }
-            }
-        }
-        skinTemperatureBatch?.let { batch ->
-            for (chunk in batch.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
-                val timestampNs = SystemClock.elapsedRealtimeNanos()
-                val seq = sequence.incrementAndGet()
-                socket.send(WatchProtocol.skinTemperatureBatchMessage(deviceId, seq, timestampNs, chunk))
-            }
+        val skinTemperatureBatch = skinTemperatureBuffer.drain()
+        for (chunk in skinTemperatureBatch.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
+            val timestampNs = SystemClock.elapsedRealtimeNanos()
+            val seq = sequence.incrementAndGet()
+            socket.send(WatchProtocol.skinTemperatureBatchMessage(deviceId, seq, timestampNs, chunk))
         }
 
-        val edaBatch = synchronized(edaBuffer) {
-            if (edaBuffer.isEmpty()) null else edaBuffer.toList().also { edaBuffer.clear() }
-        }
-        edaBatch?.let { batch ->
-            for (chunk in batch.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
-                val timestampNs = SystemClock.elapsedRealtimeNanos()
-                val seq = sequence.incrementAndGet()
-                socket.send(WatchProtocol.edaBatchMessage(deviceId, seq, timestampNs, chunk))
-            }
+        val edaBatch = edaBuffer.drain()
+        for (chunk in edaBatch.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
+            val timestampNs = SystemClock.elapsedRealtimeNanos()
+            val seq = sequence.incrementAndGet()
+            socket.send(WatchProtocol.edaBatchMessage(deviceId, seq, timestampNs, chunk))
         }
     }
 
@@ -500,5 +513,9 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         private const val PPG_BATCH_INTERVAL_MS = 100L
         private const val PPG_BATCH_MAX_SAMPLES = 32
         private const val MEDICAL_BATCH_MAX_SAMPLES = 32
+        // A few seconds of headroom at each sensor's typical rate, so a slow
+        // socket drains a backlog instead of growing it without bound.
+        private const val PPG_QUEUE_CAPACITY = 800
+        private const val MEDICAL_QUEUE_CAPACITY = 300
     }
 }

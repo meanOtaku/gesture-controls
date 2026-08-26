@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { ReactNode } from "react";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { quaternionToEulerDegrees } from "../protocol/events";
 import type {
@@ -98,18 +99,22 @@ function chartPath(points: SeriesPoint[], index: number, width: number, height: 
   }).join(" ");
 }
 
-function TimeChart({ title, points, labels, colors }: {
+function TimeChart({ title, points, labels, colors, controls }: {
   title: string;
   points: SeriesPoint[];
   labels: string[];
   colors: string[];
+  controls?: ReactNode;
 }) {
   const width = 720;
   const height = 180;
   return <section className="telemetry-chart" aria-label={title}>
     <div className="telemetry-chart-heading">
       <div><span className="label">Live time series</span><h2>{title}</h2></div>
-      <span className="telemetry-count">{points.length} samples</span>
+      <div className="telemetry-chart-actions recording-actions">
+        <span className="telemetry-count">{points.length} samples</span>
+        {controls}
+      </div>
     </div>
     <div className="telemetry-legend">
       {labels.map((label, index) => <span key={label}><i style={{ background: colors[index] }} />{label}</span>)}
@@ -119,6 +124,42 @@ function TimeChart({ title, points, labels, colors }: {
       {labels.map((_, index) => <path key={index} d={chartPath(points, index, width, height)} stroke={colors[index]} />)}
     </svg>
   </section>;
+}
+
+/** Result/status card for an on-demand tracker with no time-series graph of its own (BIA, sweat loss). */
+function ResultCard({ title, subtitle, controls, children }: {
+  title: string;
+  subtitle: string;
+  controls: ReactNode;
+  children: ReactNode;
+}) {
+  return <section className="telemetry-chart" aria-label={title}>
+    <div className="telemetry-chart-heading">
+      <div><span className="label">{subtitle}</span><h2>{title}</h2></div>
+      <div className="telemetry-chart-actions recording-actions">{controls}</div>
+    </div>
+    <div className="vectors">{children}</div>
+  </section>;
+}
+
+function ResultRow({ label, value }: { label: string; value: string }) {
+  return <div className="vector-row"><span className="label">{label}</span><code>{value}</code></div>;
+}
+
+/** Start/stop button for one on-demand tracker; trackers measure independently, so no tracker's button is gated on another's state. */
+function OnDemandControl({ trackerId, label, connected, state }: {
+  trackerId: string;
+  label: string;
+  connected: boolean;
+  state: string;
+}) {
+  const measuring = state === "measuring";
+  return <button
+    disabled={!connected || (state !== "idle" && !measuring)}
+    onClick={() => void invoke(measuring ? "stop_measurement" : "start_measurement", { tracker: trackerId })}
+  >
+    {measuring ? `Stop ${label}` : `Start ${label} (${state})`}
+  </button>;
 }
 
 interface LiveTelemetryProps {
@@ -138,7 +179,26 @@ export function LiveTelemetry({
   skinTemperatureBatch,
   edaBatch,
 }: LiveTelemetryProps) {
+  // Multiple simultaneous streams (continuous + several on-demand trackers)
+  // can each push a new sample within the same frame; a naive forceRender()
+  // per event would re-render (and re-draw every SVG path) once per sample.
+  // Instead, mark the frame dirty and repaint at most once per animation
+  // frame, batching however many samples arrived since the last paint.
   const [, forceRender] = useReducer((tick: number) => tick + 1, 0);
+  const dirtyRef = useRef(false);
+  const markDirty = () => {
+    dirtyRef.current = true;
+  };
+  useEffect(() => {
+    let frame = requestAnimationFrame(function repaint() {
+      if (dirtyRef.current) {
+        dirtyRef.current = false;
+        forceRender();
+      }
+      frame = requestAnimationFrame(repaint);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   const headPoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
   const watchPoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
@@ -180,7 +240,7 @@ export function LiveTelemetry({
         gyroZ: status.gyroscope?.[2] ?? null,
       },
     });
-    forceRender();
+    markDirty();
   }, [status]);
 
   useEffect(() => {
@@ -211,7 +271,7 @@ export function LiveTelemetry({
         ppgIr: watchStatus.ppgLastSample?.ir ?? null,
       },
     });
-    forceRender();
+    markDirty();
   }, [watchStatus]);
 
   useEffect(() => {
@@ -231,7 +291,7 @@ export function LiveTelemetry({
         values: { ppgGreen: ppgBatch.green[index] ?? null, ppgRed: ppgBatch.red[index] ?? null, ppgIr: ppgBatch.ir[index] ?? null },
       }));
     }
-    forceRender();
+    markDirty();
   }, [ppgBatch]);
 
   useEffect(() => {
@@ -250,7 +310,7 @@ export function LiveTelemetry({
         values: { heartRateBpm: heartRateBatch.heartRate[index] ?? null, ibiMs: heartRateBatch.ibiMs[index]?.[0] ?? null },
       }));
     }
-    forceRender();
+    markDirty();
   }, [heartRateBatch]);
 
   useEffect(() => {
@@ -273,7 +333,7 @@ export function LiveTelemetry({
         },
       }));
     }
-    forceRender();
+    markDirty();
   }, [skinTemperatureBatch]);
 
   useEffect(() => {
@@ -293,7 +353,7 @@ export function LiveTelemetry({
         values: { edaMicrosiemens: edaBatch.skinConductanceMicrosiemens[index] ?? null },
       }));
     }
-    forceRender();
+    markDirty();
   }, [edaBatch]);
 
   useEffect(() => {
@@ -314,7 +374,7 @@ export function LiveTelemetry({
         },
       });
     }
-    forceRender();
+    markDirty();
   }, [watchStatus]);
 
   const toggleRecording = () => {
@@ -381,26 +441,50 @@ export function LiveTelemetry({
     <TimeChart title="Headphone orientation" points={headPoints.toArray()} labels={["Yaw", "Pitch", "Roll"]} colors={["#65e6ff", "#b88cff", "#ffb45d"]} />
     {orientationEnabled && <TimeChart title="Watch orientation" points={watchOrientationPoints.toArray()} labels={["Yaw", "Pitch", "Roll"]} colors={["#65e6ff", "#b88cff", "#ffb45d"]} />}
     {gyroscopeEnabled && <TimeChart title="Watch gyroscope" points={watchPoints.toArray()} labels={["X", "Y", "Z"]} colors={["#4ff0b7", "#65e6ff", "#ff7da5"]} />}
-    <TimeChart title="Raw PPG" points={ppgPoints.toArray()} labels={["Green", "Red", "IR"]} colors={["#4ff0b7", "#ff7da5", "#b88cff"]} />
+    <TimeChart
+      title="Raw PPG"
+      points={ppgPoints.toArray()}
+      labels={["Green", "Red", "IR"]}
+      colors={["#4ff0b7", "#ff7da5", "#b88cff"]}
+      controls={<OnDemandControl trackerId="ppg_on_demand" label="PPG capture (100Hz)" connected={watchStatus?.connected ?? false} state={watchStatus?.medicalStatus?.ppg_on_demand ?? "unavailable"} />}
+    />
     {heartRateStreaming && <TimeChart title="Heart rate" points={heartRatePoints.toArray()} labels={["BPM"]} colors={["#ff7da5"]} />}
     {heartRateStreaming && <TimeChart title="Heart rate IBI" points={ibiPoints.toArray()} labels={["IBI ms"]} colors={["#4ff0b7"]} />}
     {skinTemperatureStreaming && <TimeChart title="Skin temperature" points={temperaturePoints.toArray()} labels={["Object °C", "Ambient °C"]} colors={["#ffb45d", "#65e6ff"]} />}
     {edaStreaming && <TimeChart title="Electrodermal activity" points={edaPoints.toArray()} labels={["µS"]} colors={["#b88cff"]} />}
-    <TimeChart title="Blood oxygen (on-demand)" points={spo2Points.toArray()} labels={["SpO₂ %", "HR BPM"]} colors={["#4ff0b7", "#ff7da5"]} />
-    <TimeChart title="ECG (on-demand)" points={ecgPoints.toArray()} labels={["mV"]} colors={["#ffb45d"]} />
-    <section className="recording-card medical-controls">
-      <div><span className="label">On-demand wellness captures</span><strong>Foreground-only, one at a time, and limited by the Watch SDK</strong><small>Not diagnostic measurements.</small></div>
-      <div className="recording-actions">
-        {["spo2_on_demand", "ecg_on_demand", "bia_on_demand", "sweat_loss_on_demand", "ppg_on_demand"].map((tracker) => {
-          const state = watchStatus?.medicalStatus?.[tracker] ?? "unavailable";
-          const measuring = state === "measuring";
-          const anotherMeasurementActive = Object.entries(watchStatus?.medicalStatus ?? {})
-            .some(([id, trackerState]) => id !== tracker && trackerState === "measuring");
-          const label = tracker === "ppg_on_demand" ? "PPG capture (100Hz foreground)" : tracker.replaceAll("_", " ");
-          return <button key={tracker} disabled={!watchStatus?.connected || anotherMeasurementActive || (state !== "idle" && !measuring)} onClick={() => void invoke(measuring ? "stop_measurement" : "start_measurement", { tracker })}>{measuring ? `Stop ${label}` : `Start ${label} (${state})`}</button>;
-        })}
-      </div>
-    </section>
-    <p className="hint telemetry-note">Graphs retain the latest {MAX_VISIBLE_SAMPLES} points. CSV recording is bounded to the most recent {MAX_CSV_ROWS.toLocaleString()} rows (~{formatBytes(MAX_CSV_ROWS * ESTIMATED_BYTES_PER_CSV_ROW)} max); files download through the desktop WebView.</p>
+    <TimeChart
+      title="Blood oxygen"
+      points={spo2Points.toArray()}
+      labels={["SpO₂ %", "HR BPM"]}
+      colors={["#4ff0b7", "#ff7da5"]}
+      controls={<OnDemandControl trackerId="spo2_on_demand" label="SpO2 capture" connected={watchStatus?.connected ?? false} state={watchStatus?.medicalStatus?.spo2_on_demand ?? "unavailable"} />}
+    />
+    <TimeChart
+      title="ECG"
+      points={ecgPoints.toArray()}
+      labels={["mV"]}
+      colors={["#ffb45d"]}
+      controls={<OnDemandControl trackerId="ecg_on_demand" label="ECG capture" connected={watchStatus?.connected ?? false} state={watchStatus?.medicalStatus?.ecg_on_demand ?? "unavailable"} />}
+    />
+    <ResultCard
+      title="Body composition (BIA)"
+      subtitle="On-demand result"
+      controls={<OnDemandControl trackerId="bia_on_demand" label="BIA capture" connected={watchStatus?.connected ?? false} state={watchStatus?.medicalStatus?.bia_on_demand ?? "unavailable"} />}
+    >
+      <ResultRow label="Progress" value={watchStatus?.biaLast ? `${watchStatus.biaLast.progressPercent}%` : "—"} />
+      <ResultRow label="Body fat" value={watchStatus?.biaLast?.bodyFatRatio != null ? `${watchStatus.biaLast.bodyFatRatio}%` : "—"} />
+      <ResultRow label="Total body water" value={watchStatus?.biaLast?.totalBodyWaterKg != null ? `${watchStatus.biaLast.totalBodyWaterKg} kg` : "—"} />
+      <ResultRow label="Skeletal muscle mass" value={watchStatus?.biaLast?.skeletalMuscleMassKg != null ? `${watchStatus.biaLast.skeletalMuscleMassKg} kg` : "—"} />
+      <ResultRow label="Basal metabolic rate" value={watchStatus?.biaLast?.basalMetabolicRateKcal != null ? `${watchStatus.biaLast.basalMetabolicRateKcal} kcal` : "—"} />
+      <ResultRow label="Body impedance" value={watchStatus?.biaLast?.bodyImpedanceMagnitudeOhm != null ? `${watchStatus.biaLast.bodyImpedanceMagnitudeOhm} Ω` : "—"} />
+    </ResultCard>
+    <ResultCard
+      title="Sweat loss"
+      subtitle="On-demand result"
+      controls={<OnDemandControl trackerId="sweat_loss_on_demand" label="Sweat loss capture" connected={watchStatus?.connected ?? false} state={watchStatus?.medicalStatus?.sweat_loss_on_demand ?? "unavailable"} />}
+    >
+      <ResultRow label="Sweat loss" value={watchStatus?.sweatLossLast ? `${watchStatus.sweatLossLast.sweatLossMilliliters} mL` : "—"} />
+    </ResultCard>
+    <p className="hint telemetry-note">On-demand captures run independently and are not diagnostic measurements. Graphs retain the latest {MAX_VISIBLE_SAMPLES} points. CSV recording is bounded to the most recent {MAX_CSV_ROWS.toLocaleString()} rows (~{formatBytes(MAX_CSV_ROWS * ESTIMATED_BYTES_PER_CSV_ROW)} max); files download through the desktop WebView.</p>
   </main>;
 }

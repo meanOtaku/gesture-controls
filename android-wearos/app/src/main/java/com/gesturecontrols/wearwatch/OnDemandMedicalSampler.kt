@@ -117,17 +117,15 @@ class OnDemandMedicalSampler(
         ContextCompat.checkSelfPermission(context, Manifest.permission.BODY_SENSORS) ==
             PackageManager.PERMISSION_GRANTED
 
-    /** Starts a bounded session for [trackerId] (a key of [ON_DEMAND_TRACKER_TYPES]). No-op for an unknown id or an already-active session. */
+    /**
+     * Starts a bounded session for [trackerId] (a key of [ON_DEMAND_TRACKER_TYPES]).
+     * No-op for an unknown id or an already-active session for that same tracker.
+     * Each tracker owns its own [HealthTrackingService] connection, so distinct
+     * trackers may run simultaneous sessions.
+     */
     fun start(trackerId: String) {
         val type = ON_DEMAND_TRACKER_TYPES[trackerId] ?: return
         if (sessions.containsKey(trackerId)) return
-        // Samsung's on-demand trackers are foreground, mutually exclusive
-        // measurements. Do not overlap sessions even if the desktop sends
-        // multiple commands before it receives the first status update.
-        if (sessions.isNotEmpty()) {
-            setState(trackerId, MedicalTrackerState.ERROR)
-            return
-        }
         if (!hasBodySensorsPermission()) {
             setState(trackerId, MedicalTrackerState.PERMISSION_REQUIRED)
             return
