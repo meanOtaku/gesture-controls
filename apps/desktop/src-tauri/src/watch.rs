@@ -13,6 +13,9 @@ use watch_bridge::{
 
 pub const WATCH_STATUS_EVENT: &str = "watch-status";
 pub const WATCH_PPG_BATCH_EVENT: &str = "watch-ppg-batch";
+pub const WATCH_HEART_RATE_BATCH_EVENT: &str = "watch-heart-rate-batch";
+pub const WATCH_SKIN_TEMPERATURE_BATCH_EVENT: &str = "watch-skin-temperature-batch";
+pub const WATCH_EDA_BATCH_EVENT: &str = "watch-eda-batch";
 
 /// Distilled last sample from a `watch.ppg_batch` for dashboard display; the
 /// full per-batch channel arrays aren't retained in runtime state.
@@ -225,6 +228,7 @@ impl WatchRuntime {
                 state.last_button_state = Some(sample.state);
             }
             WatchEvent::HeartRate(sample) => {
+                let _ = app.emit(WATCH_HEART_RATE_BATCH_EVENT, &sample);
                 state.connected = true;
                 state.heart_rate_rate_hz = batch_rate_hz(&sample.timestamps_ns);
                 if let (
@@ -250,6 +254,7 @@ impl WatchRuntime {
                 }
             }
             WatchEvent::SkinTemperature(sample) => {
+                let _ = app.emit(WATCH_SKIN_TEMPERATURE_BATCH_EVENT, &sample);
                 state.connected = true;
                 state.skin_temperature_rate_hz = batch_rate_hz(&sample.timestamps_ns);
                 if let (
@@ -272,6 +277,7 @@ impl WatchRuntime {
                 }
             }
             WatchEvent::Eda(sample) => {
+                let _ = app.emit(WATCH_EDA_BATCH_EVENT, &sample);
                 state.connected = true;
                 state.eda_rate_hz = batch_rate_hz(&sample.timestamps_ns);
                 if let (Some(&timestamp_ns), Some(&skin_conductance_microsiemens), Some(&status)) = (

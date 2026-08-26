@@ -1,7 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { quaternionToEulerDegrees } from "../protocol/events";
-import type { HeadTrackerStatus, WatchPpgBatch, WatchStatus } from "../protocol/events";
+import type {
+  HeadTrackerStatus,
+  WatchEdaBatch,
+  WatchHeartRateBatch,
+  WatchPpgBatch,
+  WatchSkinTemperatureBatch,
+  WatchStatus,
+} from "../protocol/events";
 
 type SeriesPoint = { at: number; values: number[] };
 type CsvRow = {
@@ -118,9 +125,19 @@ interface LiveTelemetryProps {
   status: HeadTrackerStatus | null;
   watchStatus: WatchStatus | null;
   ppgBatch: WatchPpgBatch | null;
+  heartRateBatch: WatchHeartRateBatch | null;
+  skinTemperatureBatch: WatchSkinTemperatureBatch | null;
+  edaBatch: WatchEdaBatch | null;
 }
 
-export function LiveTelemetry({ status, watchStatus, ppgBatch }: LiveTelemetryProps) {
+export function LiveTelemetry({
+  status,
+  watchStatus,
+  ppgBatch,
+  heartRateBatch,
+  skinTemperatureBatch,
+  edaBatch,
+}: LiveTelemetryProps) {
   const [, forceRender] = useReducer((tick: number) => tick + 1, 0);
 
   const headPoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
@@ -128,6 +145,7 @@ export function LiveTelemetry({ status, watchStatus, ppgBatch }: LiveTelemetryPr
   const watchOrientationPoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
   const ppgPoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
   const heartRatePoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
+  const ibiPoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
   const temperaturePoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
   const edaPoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
   const spo2Points = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
@@ -217,25 +235,79 @@ export function LiveTelemetry({ status, watchStatus, ppgBatch }: LiveTelemetryPr
   }, [ppgBatch]);
 
   useEffect(() => {
+    if (!heartRateBatch?.timestampsNs.length) return;
+    const lastTimestampNs = heartRateBatch.timestampsNs[heartRateBatch.timestampsNs.length - 1];
+    const receivedAt = Date.now();
+    heartRateBatch.timestampsNs.forEach((timestampNs, index) => {
+      const at = receivedAt - (lastTimestampNs - timestampNs) / 1_000_000;
+      heartRatePoints.push({ at, values: [heartRateBatch.heartRate[index] ?? 0] });
+      (heartRateBatch.ibiMs[index] ?? []).forEach((ibiMs) => ibiPoints.push({ at, values: [ibiMs] }));
+    });
+    if (recordingRef.current) {
+      heartRateBatch.timestampsNs.forEach((timestampNs, index) => rows.push({
+        recordedAt: new Date(receivedAt - (lastTimestampNs - timestampNs) / 1_000_000).toISOString(),
+        source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(heartRateBatch.sequence),
+        values: { heartRateBpm: heartRateBatch.heartRate[index] ?? null, ibiMs: heartRateBatch.ibiMs[index]?.[0] ?? null },
+      }));
+    }
+    forceRender();
+  }, [heartRateBatch]);
+
+  useEffect(() => {
+    if (!skinTemperatureBatch?.timestampsNs.length) return;
+    const lastTimestampNs = skinTemperatureBatch.timestampsNs[skinTemperatureBatch.timestampsNs.length - 1];
+    const receivedAt = Date.now();
+    skinTemperatureBatch.timestampsNs.forEach((timestampNs, index) => {
+      temperaturePoints.push({
+        at: receivedAt - (lastTimestampNs - timestampNs) / 1_000_000,
+        values: [skinTemperatureBatch.objectTemperatureCelsius[index] ?? 0, skinTemperatureBatch.ambientTemperatureCelsius[index] ?? 0],
+      });
+    });
+    if (recordingRef.current) {
+      skinTemperatureBatch.timestampsNs.forEach((timestampNs, index) => rows.push({
+        recordedAt: new Date(receivedAt - (lastTimestampNs - timestampNs) / 1_000_000).toISOString(),
+        source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(skinTemperatureBatch.sequence),
+        values: {
+          skinTemperatureCelsius: skinTemperatureBatch.objectTemperatureCelsius[index] ?? null,
+          ambientTemperatureCelsius: skinTemperatureBatch.ambientTemperatureCelsius[index] ?? null,
+        },
+      }));
+    }
+    forceRender();
+  }, [skinTemperatureBatch]);
+
+  useEffect(() => {
+    if (!edaBatch?.timestampsNs.length) return;
+    const lastTimestampNs = edaBatch.timestampsNs[edaBatch.timestampsNs.length - 1];
+    const receivedAt = Date.now();
+    edaBatch.timestampsNs.forEach((timestampNs, index) => {
+      edaPoints.push({
+        at: receivedAt - (lastTimestampNs - timestampNs) / 1_000_000,
+        values: [edaBatch.skinConductanceMicrosiemens[index] ?? 0],
+      });
+    });
+    if (recordingRef.current) {
+      edaBatch.timestampsNs.forEach((timestampNs, index) => rows.push({
+        recordedAt: new Date(receivedAt - (lastTimestampNs - timestampNs) / 1_000_000).toISOString(),
+        source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(edaBatch.sequence),
+        values: { edaMicrosiemens: edaBatch.skinConductanceMicrosiemens[index] ?? null },
+      }));
+    }
+    forceRender();
+  }, [edaBatch]);
+
+  useEffect(() => {
     const at = Date.now();
-    const heartRate = watchStatus?.heartRateLast;
-    const temperature = watchStatus?.skinTemperatureLast;
-    const eda = watchStatus?.edaLast;
     const spo2 = watchStatus?.spo2Last;
     const ecg = watchStatus?.ecgLast;
-    if (heartRate) heartRatePoints.push({ at, values: [heartRate.heartRate] });
-    if (temperature) temperaturePoints.push({ at, values: [temperature.objectTemperatureCelsius, temperature.ambientTemperatureCelsius] });
-    if (eda) edaPoints.push({ at, values: [eda.skinConductanceMicrosiemens] });
     if (spo2) spo2Points.push({ at, values: [spo2.spo2, spo2.heartRate] });
     if (ecg) ecgPoints.push({ at, values: [ecg.ecgMillivolts] });
     if (recordingRef.current) {
-      const sample = heartRate ?? temperature ?? eda ?? spo2 ?? ecg;
+      const sample = spo2 ?? ecg;
       if (sample) rows.push({
         recordedAt: new Date(at).toISOString(), source: "watch", sourceTimestampNs: String(sample.timestampNs), sequence: "",
         values: {
-          heartRateBpm: heartRate?.heartRate ?? null, ibiMs: heartRate?.ibiMs[0] ?? null,
-          skinTemperatureCelsius: temperature?.objectTemperatureCelsius ?? null, ambientTemperatureCelsius: temperature?.ambientTemperatureCelsius ?? null,
-          edaMicrosiemens: eda?.skinConductanceMicrosiemens ?? null, spo2Percent: spo2?.spo2 ?? null,
+          spo2Percent: spo2?.spo2 ?? null,
           spo2HeartRateBpm: spo2?.heartRate ?? null, ecgMillivolts: ecg?.ecgMillivolts ?? null,
           biaProgressPercent: watchStatus?.biaLast?.progressPercent ?? null,
           sweatLossMilliliters: watchStatus?.sweatLossLast?.sweatLossMilliliters ?? null,
@@ -311,6 +383,7 @@ export function LiveTelemetry({ status, watchStatus, ppgBatch }: LiveTelemetryPr
     {gyroscopeEnabled && <TimeChart title="Watch gyroscope" points={watchPoints.toArray()} labels={["X", "Y", "Z"]} colors={["#4ff0b7", "#65e6ff", "#ff7da5"]} />}
     <TimeChart title="Raw PPG" points={ppgPoints.toArray()} labels={["Green", "Red", "IR"]} colors={["#4ff0b7", "#ff7da5", "#b88cff"]} />
     {heartRateStreaming && <TimeChart title="Heart rate" points={heartRatePoints.toArray()} labels={["BPM"]} colors={["#ff7da5"]} />}
+    {heartRateStreaming && <TimeChart title="Heart rate IBI" points={ibiPoints.toArray()} labels={["IBI ms"]} colors={["#4ff0b7"]} />}
     {skinTemperatureStreaming && <TimeChart title="Skin temperature" points={temperaturePoints.toArray()} labels={["Object °C", "Ambient °C"]} colors={["#ffb45d", "#65e6ff"]} />}
     {edaStreaming && <TimeChart title="Electrodermal activity" points={edaPoints.toArray()} labels={["µS"]} colors={["#b88cff"]} />}
     <TimeChart title="Blood oxygen (on-demand)" points={spo2Points.toArray()} labels={["SpO₂ %", "HR BPM"]} colors={["#4ff0b7", "#ff7da5"]} />

@@ -135,4 +135,32 @@ export interface WatchPpgBatch {
 }
 
 export const WATCH_PPG_BATCH_EVENT = "watch-ppg-batch";
+
+export interface WatchHeartRateBatch {
+  sequence: number;
+  timestampsNs: number[];
+  heartRate: number[];
+  heartRateStatus: number[];
+  ibiMs: number[][];
+  ibiStatus: number[][];
+}
+
+export interface WatchSkinTemperatureBatch {
+  sequence: number;
+  timestampsNs: number[];
+  objectTemperatureCelsius: number[];
+  ambientTemperatureCelsius: number[];
+  status: number[];
+}
+
+export interface WatchEdaBatch {
+  sequence: number;
+  timestampsNs: number[];
+  skinConductanceMicrosiemens: number[];
+  status: number[];
+}
+
+export const WATCH_HEART_RATE_BATCH_EVENT = "watch-heart-rate-batch";
+export const WATCH_SKIN_TEMPERATURE_BATCH_EVENT = "watch-skin-temperature-batch";
+export const WATCH_EDA_BATCH_EVENT = "watch-eda-batch";
 export const WATCH_STATUS_EVENT = "watch-status";

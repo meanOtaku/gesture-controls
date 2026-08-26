@@ -11,14 +11,20 @@ import {
   HEAD_TARGET_EXITED_EVENT,
   HEAD_TRACKER_CONNECTION_EVENT,
   OVERLAY_STATE_EVENT,
+  WATCH_EDA_BATCH_EVENT,
+  WATCH_HEART_RATE_BATCH_EVENT,
   WATCH_PPG_BATCH_EVENT,
+  WATCH_SKIN_TEMPERATURE_BATCH_EVENT,
   WATCH_STATUS_EVENT,
   type CalibrationState,
   type CalibrationTarget,
   type HeadPosePayload,
   type HeadTrackerStatus,
   type OverlayState,
+  type WatchEdaBatch,
+  type WatchHeartRateBatch,
   type WatchPpgBatch,
+  type WatchSkinTemperatureBatch,
   type WatchStatus,
 } from "./protocol/events";
 
@@ -132,6 +138,9 @@ function MainApp() {
   const [sensorControlError, setSensorControlError] = useState<string | null>(null);
   const [watchStatus, setWatchStatus] = useState<WatchStatus>(emptyWatchStatus);
   const [ppgBatch, setPpgBatch] = useState<WatchPpgBatch | null>(null);
+  const [heartRateBatch, setHeartRateBatch] = useState<WatchHeartRateBatch | null>(null);
+  const [skinTemperatureBatch, setSkinTemperatureBatch] = useState<WatchSkinTemperatureBatch | null>(null);
+  const [edaBatch, setEdaBatch] = useState<WatchEdaBatch | null>(null);
   const [activeTab, setActiveTab] = useState<"main" | "headphone" | "watch" | "telemetry">("main");
   const calibrationEventVersion = useRef(0);
   const overlayEventVersion = useRef(0);
@@ -289,6 +298,15 @@ function MainApp() {
     const ppgRegistration = listen<WatchPpgBatch>(WATCH_PPG_BATCH_EVENT, ({ payload }) => {
       if (!cancelled) setPpgBatch(payload);
     });
+    const heartRateRegistration = listen<WatchHeartRateBatch>(WATCH_HEART_RATE_BATCH_EVENT, ({ payload }) => {
+      if (!cancelled) setHeartRateBatch(payload);
+    });
+    const skinTemperatureRegistration = listen<WatchSkinTemperatureBatch>(WATCH_SKIN_TEMPERATURE_BATCH_EVENT, ({ payload }) => {
+      if (!cancelled) setSkinTemperatureBatch(payload);
+    });
+    const edaRegistration = listen<WatchEdaBatch>(WATCH_EDA_BATCH_EVENT, ({ payload }) => {
+      if (!cancelled) setEdaBatch(payload);
+    });
     void registration.then(() =>
       invoke<WatchStatus>("get_watch_status").then((state) => {
         if (!cancelled) setWatchStatus(state);
@@ -299,6 +317,9 @@ function MainApp() {
       cancelled = true;
       void registration.then((unlisten) => unlisten());
       void ppgRegistration.then((unlisten) => unlisten());
+      void heartRateRegistration.then((unlisten) => unlisten());
+      void skinTemperatureRegistration.then((unlisten) => unlisten());
+      void edaRegistration.then((unlisten) => unlisten());
     };
   }, [inTauri]);
 
@@ -364,7 +385,14 @@ function MainApp() {
       <Dashboard view="watch" status={status} calibration={calibration} calibrationError={applicationError} watchStatus={watchStatus} onCaptureTarget={(target) => { void captureTarget(target); }} onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }} onSetSensorEnabled={(sensor, enabled) => { void setSensorEnabled(sensor, enabled); }} />
     )}
     {activeTab === "telemetry" && (
-      <LiveTelemetry status={status} watchStatus={watchStatus} ppgBatch={ppgBatch} />
+      <LiveTelemetry
+        status={status}
+        watchStatus={watchStatus}
+        ppgBatch={ppgBatch}
+        heartRateBatch={heartRateBatch}
+        skinTemperatureBatch={skinTemperatureBatch}
+        edaBatch={edaBatch}
+      />
     )}
   </>;
 }
