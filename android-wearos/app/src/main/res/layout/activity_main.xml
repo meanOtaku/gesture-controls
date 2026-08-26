@@ -96,6 +96,50 @@
                 android:textColor="#AAAAAA"
                 android:textSize="12sp" />
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:text="@string/on_demand_heading"
+                android:textColor="#888888"
+                android:textSize="10sp" />
+
+            <Button
+                android:id="@+id/ppgOnDemandButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="PPG" />
+
+            <Button
+                android:id="@+id/spo2Button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="SpO2" />
+
+            <Button
+                android:id="@+id/ecgButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="ECG" />
+
+            <Button
+                android:id="@+id/biaButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="BIA" />
+
+            <Button
+                android:id="@+id/sweatLossButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Sweat loss" />
+
         </LinearLayout>
     </ScrollView>
 </androidx.wear.widget.BoxInsetLayout>

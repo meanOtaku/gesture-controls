@@ -30,6 +30,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sensorStatusText: TextView
     private lateinit var detailText: TextView
     private lateinit var ppgStatusText: TextView
+    private lateinit var ppgOnDemandButton: Button
+    private lateinit var spo2Button: Button
+    private lateinit var ecgButton: Button
+    private lateinit var biaButton: Button
+    private lateinit var sweatLossButton: Button
 
     private val watchLink = WatchLinkManager()
     private lateinit var desktopDiscovery: DesktopDiscovery
@@ -67,6 +72,11 @@ class MainActivity : AppCompatActivity() {
         sensorStatusText = findViewById(R.id.sensorStatusText)
         detailText = findViewById(R.id.detailText)
         ppgStatusText = findViewById(R.id.ppgStatusText)
+        ppgOnDemandButton = findViewById(R.id.ppgOnDemandButton)
+        spo2Button = findViewById(R.id.spo2Button)
+        ecgButton = findViewById(R.id.ecgButton)
+        biaButton = findViewById(R.id.biaButton)
+        sweatLossButton = findViewById(R.id.sweatLossButton)
 
         val persistedEndpoint = prefs.endpoint
         renderEndpointSource()
@@ -122,6 +132,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         connectButton.setOnClickListener { onConnectButtonClicked() }
+        ppgOnDemandButton.setOnClickListener { onOnDemandButtonClicked(TRACKER_PPG_ON_DEMAND) }
+        spo2Button.setOnClickListener { onOnDemandButtonClicked(TRACKER_SPO2_ON_DEMAND) }
+        ecgButton.setOnClickListener { onOnDemandButtonClicked(TRACKER_ECG_ON_DEMAND) }
+        biaButton.setOnClickListener { onOnDemandButtonClicked(TRACKER_BIA_ON_DEMAND) }
+        sweatLossButton.setOnClickListener { onOnDemandButtonClicked(TRACKER_SWEAT_LOSS_ON_DEMAND) }
         desktopDiscovery.start()
         pairingServer.start()
 
@@ -156,6 +171,7 @@ class MainActivity : AppCompatActivity() {
                 launch {
                     onDemandSampler.state.collect { statuses ->
                         statuses.forEach { (tracker, state) -> watchLink.sendMedicalStatus(tracker, state.wireValue()) }
+                        updateOnDemandButtons(statuses)
                     }
                 }
             }
@@ -290,6 +306,31 @@ class MainActivity : AppCompatActivity() {
         } else {
             requestBodySensorsPermission.launch(Manifest.permission.BODY_SENSORS)
         }
+    }
+
+    /** Same foreground, single-session start/stop the desktop drives via `desktop.start_measurement`; see [OnDemandMedicalSampler]. */
+    private fun onOnDemandButtonClicked(trackerId: String) {
+        if (onDemandSampler.state.value[trackerId] == MedicalTrackerState.MEASURING) {
+            onDemandSampler.stop(trackerId)
+        } else {
+            onDemandSampler.start(trackerId)
+        }
+    }
+
+    /** Mirrors the desktop's on-demand button enablement (LiveTelemetry.tsx): only one tracker may measure at a time. */
+    private fun updateOnDemandButtons(statuses: Map<String, MedicalTrackerState>) {
+        fun apply(button: Button, trackerId: String, name: String) {
+            val state = statuses[trackerId] ?: MedicalTrackerState.IDLE
+            val measuring = state == MedicalTrackerState.MEASURING
+            val anotherActive = statuses.any { (id, other) -> id != trackerId && other == MedicalTrackerState.MEASURING }
+            button.text = if (measuring) "Stop $name" else "$name (${state.wireValue()})"
+            button.isEnabled = !anotherActive && (state == MedicalTrackerState.IDLE || measuring)
+        }
+        apply(ppgOnDemandButton, TRACKER_PPG_ON_DEMAND, "PPG")
+        apply(spo2Button, TRACKER_SPO2_ON_DEMAND, "SpO2")
+        apply(ecgButton, TRACKER_ECG_ON_DEMAND, "ECG")
+        apply(biaButton, TRACKER_BIA_ON_DEMAND, "BIA")
+        apply(sweatLossButton, TRACKER_SWEAT_LOSS_ON_DEMAND, "Sweat loss")
     }
 
     private fun renderState(state: ConnectionState) {

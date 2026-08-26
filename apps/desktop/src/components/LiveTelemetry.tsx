@@ -281,6 +281,14 @@ export function LiveTelemetry({ status, watchStatus, ppgBatch }: LiveTelemetryPr
   const rowCount = rows.length;
   const bufferFull = rowCount >= MAX_CSV_ROWS;
 
+  // Mirrors Dashboard.tsx's IMU_SENSOR_IDS default-enabled read and the
+  // continuous-tracker "idle means disabled" convention.
+  const orientationEnabled = watchStatus?.sensorStatus?.orientation ?? true;
+  const gyroscopeEnabled = watchStatus?.sensorStatus?.gyroscope ?? true;
+  const heartRateStreaming = watchStatus?.medicalStatus?.heart_rate_continuous === "streaming";
+  const skinTemperatureStreaming = watchStatus?.medicalStatus?.skin_temperature_continuous === "streaming";
+  const edaStreaming = watchStatus?.medicalStatus?.eda_continuous === "streaming";
+
   return <main className="shell telemetry-shell">
     <header className="hero">
       <div><p className="eyebrow">Spatial Gesture Control</p><h1>Live telemetry</h1><p className="subtitle">Raw motion samples from the Sony headphones and Galaxy Watch.</p></div>
@@ -299,12 +307,12 @@ export function LiveTelemetry({ status, watchStatus, ppgBatch }: LiveTelemetryPr
       <div className="recording-actions"><button className={recording ? "recording" : ""} onClick={toggleRecording}>{recording ? "Stop recording" : "Start recording"}</button><button disabled={rowCount === 0} onClick={saveCsv}>Save CSV</button></div>
     </section>
     <TimeChart title="Headphone orientation" points={headPoints.toArray()} labels={["Yaw", "Pitch", "Roll"]} colors={["#65e6ff", "#b88cff", "#ffb45d"]} />
-    <TimeChart title="Watch orientation" points={watchOrientationPoints.toArray()} labels={["Yaw", "Pitch", "Roll"]} colors={["#65e6ff", "#b88cff", "#ffb45d"]} />
-    <TimeChart title="Watch gyroscope" points={watchPoints.toArray()} labels={["X", "Y", "Z"]} colors={["#4ff0b7", "#65e6ff", "#ff7da5"]} />
+    {orientationEnabled && <TimeChart title="Watch orientation" points={watchOrientationPoints.toArray()} labels={["Yaw", "Pitch", "Roll"]} colors={["#65e6ff", "#b88cff", "#ffb45d"]} />}
+    {gyroscopeEnabled && <TimeChart title="Watch gyroscope" points={watchPoints.toArray()} labels={["X", "Y", "Z"]} colors={["#4ff0b7", "#65e6ff", "#ff7da5"]} />}
     <TimeChart title="Raw PPG" points={ppgPoints.toArray()} labels={["Green", "Red", "IR"]} colors={["#4ff0b7", "#ff7da5", "#b88cff"]} />
-    <TimeChart title="Heart rate" points={heartRatePoints.toArray()} labels={["BPM"]} colors={["#ff7da5"]} />
-    <TimeChart title="Skin temperature" points={temperaturePoints.toArray()} labels={["Object °C", "Ambient °C"]} colors={["#ffb45d", "#65e6ff"]} />
-    <TimeChart title="Electrodermal activity" points={edaPoints.toArray()} labels={["µS"]} colors={["#b88cff"]} />
+    {heartRateStreaming && <TimeChart title="Heart rate" points={heartRatePoints.toArray()} labels={["BPM"]} colors={["#ff7da5"]} />}
+    {skinTemperatureStreaming && <TimeChart title="Skin temperature" points={temperaturePoints.toArray()} labels={["Object °C", "Ambient °C"]} colors={["#ffb45d", "#65e6ff"]} />}
+    {edaStreaming && <TimeChart title="Electrodermal activity" points={edaPoints.toArray()} labels={["µS"]} colors={["#b88cff"]} />}
     <TimeChart title="Blood oxygen (on-demand)" points={spo2Points.toArray()} labels={["SpO₂ %", "HR BPM"]} colors={["#4ff0b7", "#ff7da5"]} />
     <TimeChart title="ECG (on-demand)" points={ecgPoints.toArray()} labels={["mV"]} colors={["#ffb45d"]} />
     <section className="recording-card medical-controls">
