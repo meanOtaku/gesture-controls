@@ -323,7 +323,8 @@ export function LiveTelemetry({ status, watchStatus, ppgBatch }: LiveTelemetryPr
           const measuring = state === "measuring";
           const anotherMeasurementActive = Object.entries(watchStatus?.medicalStatus ?? {})
             .some(([id, trackerState]) => id !== tracker && trackerState === "measuring");
-          return <button key={tracker} disabled={!watchStatus?.connected || anotherMeasurementActive || (state !== "idle" && !measuring)} onClick={() => void invoke(measuring ? "stop_measurement" : "start_measurement", { tracker })}>{measuring ? `Stop ${tracker.replaceAll("_", " ")}` : `Start ${tracker.replaceAll("_", " ")} (${state})`}</button>;
+          const label = tracker === "ppg_on_demand" ? "PPG capture (100Hz foreground)" : tracker.replaceAll("_", " ");
+          return <button key={tracker} disabled={!watchStatus?.connected || anotherMeasurementActive || (state !== "idle" && !measuring)} onClick={() => void invoke(measuring ? "stop_measurement" : "start_measurement", { tracker })}>{measuring ? `Stop ${label}` : `Start ${label} (${state})`}</button>;
         })}
       </div>
     </section>

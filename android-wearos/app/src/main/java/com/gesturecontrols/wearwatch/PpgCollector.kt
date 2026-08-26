@@ -109,12 +109,33 @@ class PpgCollector(
 
     fun stop() {
         mainHandler.removeCallbacks(connectionTimeout)
+        mainHandler.removeCallbacks(flushTick)
         started = false
         tracker?.unsetEventListener()
         tracker = null
         service?.disconnectService()
         service = null
         _state.value = PpgState.IDLE
+    }
+
+    /**
+     * `PPG_CONTINUOUS` is in `HealthTracker.flush()`'s allowlist (verified via
+     * the AAR's own bytecode, since its HTML docs are an empty JS shell — see
+     * [OnDemandMedicalSampler]'s kdoc), unlike most continuous trackers.
+     * Calling it forces the SDK to deliver its buffered samples immediately
+     * instead of waiting for the screen to turn back on. Never runs faster
+     * than [FLUSH_INTERVAL_MS] — the SDK doesn't need it more often, and nothing
+     * here calls it off this one schedule.
+     */
+    private val flushTick = object : Runnable {
+        override fun run() {
+            try {
+                tracker?.flush()
+            } catch (error: Exception) {
+                // Best-effort: the SDK connection may already be gone.
+            }
+            mainHandler.postDelayed(this, FLUSH_INTERVAL_MS)
+        }
     }
 
     private val connectionListener = object : ConnectionListener {
@@ -145,10 +166,13 @@ class PpgCollector(
             tracker = newTracker
             newTracker.setEventListener(trackerEventListener)
             _state.value = PpgState.STREAMING
+            mainHandler.removeCallbacks(flushTick)
+            mainHandler.postDelayed(flushTick, FLUSH_INTERVAL_MS)
         }
 
         override fun onConnectionEnded() {
             mainHandler.removeCallbacks(connectionTimeout)
+            mainHandler.removeCallbacks(flushTick)
             tracker = null
             if (started) {
                 // The service ended the connection on its own (e.g. Samsung Health
@@ -161,6 +185,7 @@ class PpgCollector(
 
         override fun onConnectionFailed(exception: HealthTrackerException) {
             mainHandler.removeCallbacks(connectionTimeout)
+            mainHandler.removeCallbacks(flushTick)
             started = false
             service = null
             _diagnostic.value = "Samsung Health Sensor Service rejected the connection (${exception.javaClass.simpleName}). Enable developer mode for local testing."
@@ -209,5 +234,6 @@ class PpgCollector(
 
     private companion object {
         const val CONNECTION_TIMEOUT_MS = 12_000L
+        const val FLUSH_INTERVAL_MS = 1_000L
     }
 }

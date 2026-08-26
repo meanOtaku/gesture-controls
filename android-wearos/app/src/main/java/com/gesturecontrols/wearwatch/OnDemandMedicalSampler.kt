@@ -85,9 +85,13 @@ private fun <T> DataPoint.valueOrNull(key: ValueKey<T>): T? =
  * (`desktop.start_measurement`/an on-watch trigger), never all four, and
  * [stop] gracefully ends it via `HealthTracker.flush()` before tearing the
  * connection down. `flush()` is confirmed (via the AAR's own bytecode, since
- * its HTML docs are an empty JS shell) to reject the continuous tracker
- * types this app also uses, which is exactly why [MedicalContinuousCollector]
- * and [PpgCollector] never call it — it is the on-demand-only stop primitive.
+ * its HTML docs are an empty JS shell) to only be a no-op for tracker types
+ * outside its allowlist (`ACCELEROMETER`, `PPG_GREEN`, `HEART_RATE`,
+ * `SKIN_TEMPERATURE_CONTINUOUS`, `PPG_CONTINUOUS`, `EDA_CONTINUOUS`); every
+ * on-demand type here is outside that allowlist, so `flush()` here is purely
+ * the graceful stop primitive. [PpgCollector] calls the same method for a
+ * different reason: forcing batched `PPG_CONTINUOUS` delivery while the
+ * screen is off, since it's in the allowlist.
  *
  * Each tracker gets its own [HealthTrackingService] connection, opened only
  * while that tracker has an active session, so no on-demand tracker is ever

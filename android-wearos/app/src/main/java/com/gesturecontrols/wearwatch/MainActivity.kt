@@ -41,6 +41,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var pairingServer: WatchPairingServer
     private var endpointSource: EndpointSource = EndpointSource.DISCOVERED
     private lateinit var sensorCollector: SensorCollector
+    private lateinit var ppgCollector: PpgCollector
     private lateinit var medicalCollector: MedicalContinuousCollector
     private lateinit var onDemandSampler: OnDemandMedicalSampler
 
@@ -49,10 +50,11 @@ class MainActivity : AppCompatActivity() {
     private var stemButtonPressed = false
 
     // Samsung Health Sensor SDK's own consent flow is separate from this; see
-    // OnDemandMedicalSampler's kdoc. Must be registered before onStart, so it's a field.
+    // PpgCollector's kdoc. Must be registered before onStart, so it's a field.
     private val requestBodySensorsPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) {
+                ppgCollector.start()
                 medicalCollector.start()
             }
         }
@@ -103,6 +105,7 @@ class MainActivity : AppCompatActivity() {
         sensorCollector = SensorCollector(this) { quaternion, accelerometer, gyroscope, timestampNs ->
             watchLink.sendOrientation(quaternion, accelerometer, gyroscope, timestampNs)
         }
+        ppgCollector = PpgCollector(this) { samples -> watchLink.enqueuePpgSamples(samples) }
         medicalCollector = MedicalContinuousCollector(
             this,
             onHeartRate = { samples -> watchLink.enqueueHeartRateSamples(samples) },
@@ -164,6 +167,9 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 launch {
+                    ppgCollector.state.collect { state -> renderPpgState(state, ppgCollector.diagnostic.value) }
+                }
+                launch {
                     medicalCollector.state.collect { statuses ->
                         statuses.forEach { (tracker, state) -> watchLink.sendMedicalStatus(tracker, state.wireValue()) }
                     }
@@ -202,6 +208,7 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         releaseStemButtonIfPressed()
         sensorCollector.stop()
+        ppgCollector.stop()
         medicalCollector.stop()
         onDemandSampler.stopAll()
         desktopDiscovery.stop()
@@ -247,6 +254,7 @@ class MainActivity : AppCompatActivity() {
             currentState == ConnectionState.RECONNECTING
         ) {
             sensorCollector.stop()
+            ppgCollector.stop()
             medicalCollector.stop()
             onDemandSampler.stopAll()
             watchLink.disconnect()
@@ -299,9 +307,10 @@ class MainActivity : AppCompatActivity() {
         startBodySensorCollection()
     }
 
-    /** Starts the continuous medical trackers if BODY_SENSORS is already granted, else requests it first. PPG is foreground on-demand only, started by an explicit `desktop.start_measurement`. */
+    /** Starts PPG_CONTINUOUS and the continuous medical trackers if BODY_SENSORS is already granted, else requests it first. */
     private fun startBodySensorCollection() {
-        if (onDemandSampler.hasBodySensorsPermission()) {
+        if (ppgCollector.hasBodySensorsPermission()) {
+            ppgCollector.start()
             medicalCollector.start()
         } else {
             requestBodySensorsPermission.launch(Manifest.permission.BODY_SENSORS)
@@ -342,6 +351,7 @@ class MainActivity : AppCompatActivity() {
         }
         if (state == ConnectionState.FAILED) {
             sensorCollector.stop()
+            ppgCollector.stop()
             medicalCollector.stop()
             onDemandSampler.stopAll()
             StreamingForegroundService.stop(this)
@@ -362,10 +372,24 @@ class MainActivity : AppCompatActivity() {
         }
         if (state == ConnectionState.DISCONNECTED || state == ConnectionState.FAILED) {
             sensorCollector.stop()
+            ppgCollector.stop()
             medicalCollector.stop()
             onDemandSampler.stopAll()
             sensorStatusText.setText(R.string.sensors_idle)
         }
+    }
+
+    private fun renderPpgState(state: PpgState, diagnostic: String?) {
+        val label = when (state) {
+            PpgState.IDLE -> getString(R.string.ppg_idle)
+            PpgState.PERMISSION_REQUIRED -> getString(R.string.ppg_permission_required)
+            PpgState.CONNECTING -> getString(R.string.ppg_connecting)
+            PpgState.STREAMING -> getString(R.string.ppg_streaming)
+            PpgState.UNAVAILABLE -> getString(R.string.ppg_unavailable)
+            PpgState.ERROR -> getString(R.string.ppg_error)
+        }
+        ppgStatusText.text = diagnostic?.let { "$label\n$it" } ?: label
+        watchLink.sendPpgStatus(state.wireValue())
     }
 
     private fun readBatteryPercent(): Int? {
