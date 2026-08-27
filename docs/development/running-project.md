@@ -1,0 +1,248 @@
+SPATIAL GESTURE CONTROL - RUNNING THE PROJECT
+================================================
+
+The production development workflow uses two independent processes:
+
+1. Sony Head Tracker owns Bluetooth/HID access and sends protocol-v2 JSON to
+   127.0.0.1:4243.
+2. The Tauri application owns the UDP listener, pose state, and user interface.
+
+You do not need to start them separately. The repository launcher starts and
+stops both with one command.
+
+Repository:
+https://github.com/meanOtaku/gesture-controls
+
+
+1. COMMON REQUIREMENTS
+----------------------
+
+All systems require:
+
+- Git
+- Node.js 20 or newer; Node.js 22 LTS is recommended
+- npm
+- Current stable Rust installed through rustup
+- Tauri 2 prerequisites for the host OS
+- A graphical desktop session
+
+Install repository dependencies once:
+
+  npm ci
+
+Run the complete system:
+
+  npm start
+
+The repository includes the official Sony Head Tracker v2.2.0 prebuilds under:
+
+  tools/sony-head-tracker/prebuilds/
+
+The launcher selects the macOS universal or Windows x64 UI executable directly.
+There is no download, cache, extraction, or separate setup command.
+The UI is started without command-line arguments. While open, it discovers the
+headset, displays live diagnostics, emits OpenTrack data on port 4242, and emits
+protocol-v2 JSON on port 4243. Tauri listens only on 127.0.0.1:4243.
+
+Ctrl+C, closing Tauri, or a tracker failure causes the launcher to stop both
+process trees. Sony Head Tracker remains a separate executable; it is not linked
+into or bundled inside the Tauri binary.
+
+
+2. OPTIONAL TRACKER OVERRIDE
+----------------------------
+
+Set SONY_HEAD_TRACKER_BIN to use an existing compatible UI executable instead of the
+committed prebuild.
+
+macOS:
+
+  SONY_HEAD_TRACKER_BIN=/absolute/path/to/SonyHeadTracker.app/Contents/MacOS/SonyHeadTracker npm start
+
+Windows PowerShell:
+
+  $env:SONY_HEAD_TRACKER_BIN = "C:\absolute\path\sony-head-tracker.exe"
+  npm start
+
+Paths containing spaces are supported. The executable must open its UI and begin
+streaming when launched without command-line arguments.
+
+
+3. macOS SETUP
+--------------
+
+Requirements:
+
+- macOS 14 or newer for Sony Head Tracker
+- Xcode Command Line Tools
+
+Install the command-line tools if necessary:
+
+  xcode-select --install
+
+Then run:
+
+  npm start
+
+Before the first launcher run, right-click this app and choose Open to approve
+the ad-hoc-signed upstream build:
+
+  tools/sony-head-tracker/prebuilds/sony-head-tracker-v2.2.0-macos-universal/SonyHeadTracker.app
+
+Then run npm start. On first tracker launch:
+
+1. Open System Settings -> Privacy & Security -> Input Monitoring.
+2. Enable Sony Head Tracker.
+3. Fully stop the launcher with Ctrl+C.
+4. Run npm start again.
+
+The committed UI executable stays at a stable repository path, so the permission
+does not normally need to be granted again. If a custom SONY_HEAD_TRACKER_BIN is
+used, grant permission to that executable instead.
+
+If no verified tracker appears:
+
+- Confirm the headset is paired and connected.
+- Update its firmware using Sony Sound Connect.
+- Temporarily disconnect phones or other multipoint hosts.
+- Power-cycle the headset.
+- Use the upstream probe and troubleshooting documentation when necessary.
+
+The tracker owns macOS HID permissions and recovery behavior. Tauri does not
+request Input Monitoring or communicate directly with the headset.
+
+
+4. WINDOWS x64 SETUP
+--------------------
+
+Requirements:
+
+- Windows 11 x64 (the pinned upstream Windows release is x64-only)
+- Microsoft C++ Build Tools with Desktop development with C++
+- Microsoft Edge WebView2 Evergreen Runtime
+- Rust through rustup
+
+After installing prerequisites, open a new PowerShell window and run:
+
+  npm ci
+  npm start
+
+Windows ARM64 and x64-emulation behavior are not currently verified.
+
+If Windows pairs the headset but does not create the head-tracker sensor node,
+follow Sony Head Tracker's Repair Tracker instructions. The one-command launcher
+does not silently perform elevated driver repair.
+
+
+5. LINUX SETUP
+--------------
+
+Install the normal Tauri dependencies for your distribution. Debian/Ubuntu:
+
+  sudo apt update
+  sudo apt install -y \
+    libwebkit2gtk-4.1-dev \
+    build-essential \
+    curl \
+    wget \
+    file \
+    libxdo-dev \
+    libssl-dev \
+    libayatana-appindicator3-dev \
+    librsvg2-dev \
+    patchelf \
+    pkg-config
+
+Upstream Sony Head Tracker v2.2.0 has no Linux hardware backend, so npm start
+reports that automatic Sony setup is unsupported. For UI/UDP development use:
+
+Terminal 1:
+
+  npm run tauri -- dev
+
+Terminal 2:
+
+  python3 tools/sony-head-tracker/scripts/send_sample.py
+
+The sample sends one packet. Run it repeatedly to keep producing updates.
+
+
+6. MANUAL DEVELOPMENT COMMANDS
+------------------------------
+
+Run only Tauri, without managing a tracker:
+
+  npm run tauri -- dev
+
+Build the desktop application for the current platform:
+
+  npm run tauri -- build
+
+Preview only the React frontend:
+
+  npm run dev --workspace @spatial-gesture/desktop
+
+Frontend preview does not start Rust, UDP, Tauri IPC, or Sony Head Tracker.
+
+
+7. TESTS AND QUALITY CHECKS
+---------------------------
+
+Frontend, launcher, icon, and resource tests:
+
+  npm test
+
+Launcher tests only:
+
+  npm run test:launcher
+
+TypeScript and frontend production build:
+
+  npm run typecheck
+  npm run build
+
+Rust protocol and UDP provider tests:
+
+  cargo test -p spatial-protocol -p head-tracking --all-targets
+
+Rust formatting and linting:
+
+  cargo fmt --all -- --check
+  cargo clippy -p spatial-protocol -p head-tracking \
+    --all-targets --all-features -- -D warnings
+
+Python compatibility tests:
+
+  uv run --directory tools/sony-head-tracker --with pytest pytest -q
+
+
+8. BUNDLED TRACKER ASSETS AND OFFLINE USE
+-----------------------------------------
+
+Pinned release:
+
+  NicholasSlattery/sony-head-tracker v2.2.0
+
+The official macOS universal and Windows x64 prebuilt executables, documentation,
+and MIT license are committed under tools/sony-head-tracker/prebuilds. The launcher performs no
+network request or extraction, so the tracker is available on the first offline
+run after cloning the repository.
+
+To use a separately reviewed compatible executable, set SONY_HEAD_TRACKER_BIN.
+
+
+9. CONNECTION TROUBLESHOOTING
+-----------------------------
+
+If Tauri says Waiting for Sony tracker:
+
+- Read the Sony Head Tracker output in the same terminal.
+- Confirm the tracker reports a verified device and live samples.
+- Confirm no other process is bound to UDP port 4243.
+- Confirm the Sony Head Tracker UI is open; it emits JSON on port 4243.
+- Confirm the packet schema is protocol version 2.
+- On macOS, verify Input Monitoring for the stable tracker executable.
+- On Windows, run upstream Repair Tracker if the sensor node is absent.
+
+A working Bluetooth audio connection does not by itself prove that the operating
+system exposed the Android Head Tracker HID sensor.

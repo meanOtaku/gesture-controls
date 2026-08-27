@@ -14,7 +14,7 @@ import {
 } from "./run-system.mjs";
 
 test("selects the committed Sony Head Tracker CLI bridge for each supported host", () => {
-  const prebuilds = join("repo", "assets", "pre-builds");
+  const prebuilds = join("repo", "tools", "sony-head-tracker", "prebuilds");
   const macos = join(
     prebuilds,
     "sony-head-tracker-v2.2.0-macos-universal",

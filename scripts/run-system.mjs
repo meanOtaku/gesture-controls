@@ -22,7 +22,9 @@ export function bundledTrackerPath(prebuildsRoot, platform, arch) {
 }
 
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const DEFAULT_PREBUILDS_ROOT = join(PROJECT_ROOT, "assets", "pre-builds");
+// Keep the root `npm start` contract stable while implementation assets live
+// with the Sony compatibility tool they belong to.
+const DEFAULT_PREBUILDS_ROOT = join(PROJECT_ROOT, "tools", "sony-head-tracker", "prebuilds");
 
 export function buildTrackerInvocation(executable) {
   return { command: executable, args: ["bridge"] };

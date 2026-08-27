@@ -2,7 +2,7 @@
 
 A cross-platform Tauri 2 desktop coordinator for spatial controls using Sony headset orientation and, in later milestones, Samsung Galaxy Watch gestures.
 
-The repository currently implements Milestones 1–5 from [`PROJECT_BRIEF.md`](PROJECT_BRIEF.md): the desktop foundation, Sony JSON UDP input, head calibration, the volume overlay, and real macOS system-volume control. Sony Head Tracker remains a background CLI bridge, while the Tauri dashboard is the only tracker window.
+The repository currently implements Milestones 1–5 from [`docs/architecture/project-brief.md`](docs/architecture/project-brief.md): the desktop foundation, Sony JSON UDP input, head calibration, the volume overlay, and real macOS system-volume control. Sony Head Tracker remains a background CLI bridge, while the Tauri dashboard is the only tracker window.
 
 ## Run the complete system
 
@@ -93,7 +93,7 @@ crates/interaction-engine/ Quaternion calibration and target dwell state
 crates/volume-control/      Normalized controller trait and macOS adapter
 crates/watch-bridge/        Local-network Galaxy Watch WebSocket intake
 scripts/run-system.mjs     one-command external-process orchestrator
-head-tracking/             compatibility tests, sample sender, and reference work
+tools/sony-head-tracker/   compatibility tests, sample sender, and reference work
 ```
 
 The desktop listens for one Galaxy Watch client at `ws://DESKTOP_IP:8766/ws/watch`.
@@ -101,9 +101,9 @@ The desktop and watch automatically discover each other with local mDNS/DNS-SD;
 the desktop can request the watch to connect without either device typing an IP.
 It publishes connection, IMU, heartbeat, and clock-synchronization status in the
 dashboard. The versioned message contract is documented in
-[`docs/watch-websocket-protocol.md`](docs/watch-websocket-protocol.md). The Wear OS
+[`docs/protocols/watch-websocket-protocol.md`](docs/protocols/watch-websocket-protocol.md). The Wear OS
 client that implements this protocol lives in
-[`android-wearos/`](android-wearos/README.md), a standalone Gradle project.
+[`apps/watch/`](apps/watch/README.md), a standalone Gradle project.
 
 ## Platform notes
 
@@ -126,7 +126,7 @@ The Tauri app and UDP provider remain buildable, but upstream Sony Head Tracker 
 
 ```bash
 npm run tauri -- dev
-python3 head-tracking/scripts/send_sample.py
+python3 tools/sony-head-tracker/scripts/send_sample.py
 ```
 
 ## Testing
@@ -139,16 +139,16 @@ cargo test -p spatial-protocol -p head-tracking -p interaction-engine -p volume-
 cargo clippy -p spatial-protocol -p head-tracking -p interaction-engine -p volume-control --all-targets --all-features -- -D warnings
 ```
 
-For complete prerequisites, troubleshooting, build commands, and launcher details, see [`RUNNING_THE_PROJECT.txt`](RUNNING_THE_PROJECT.txt).
+For complete prerequisites, troubleshooting, build commands, and launcher details, see [`docs/development/running-project.md`](docs/development/running-project.md).
 
 ## Security and provenance
 
 - Upstream: <https://github.com/NicholasSlattery/sony-head-tracker>
 - Pinned launcher version: `2.2.0`
 - Official upstream prebuilt executables and their license/documentation are
-  committed under `assets/pre-builds/` and reviewed through normal Git history.
+  committed under `tools/sony-head-tracker/prebuilds/` and reviewed through normal Git history.
 - Tracker telemetry stays on loopback.
 
 ## License
 
-MIT. This is an unofficial project and is not affiliated with or endorsed by Sony or Samsung. See [`head-tracking/THIRD_PARTY_NOTICES.md`](head-tracking/THIRD_PARTY_NOTICES.md) for upstream attribution.
+MIT. This is an unofficial project and is not affiliated with or endorsed by Sony or Samsung. See [`tools/sony-head-tracker/THIRD_PARTY_NOTICES.md`](tools/sony-head-tracker/THIRD_PARTY_NOTICES.md) for upstream attribution.

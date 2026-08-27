@@ -63,7 +63,7 @@ export interface WatchHeartbeatSample {
 }
 
 /**
- * Watch-reported `PpgCollector` state (see docs/watch-websocket-protocol.md).
+ * Watch-reported `PpgCollector` state (see docs/protocols/watch-websocket-protocol.md).
  * Distinct from the WebSocket connection: the watch can be connected with PPG
  * unavailable (non–Galaxy Watch 4+ hardware) or awaiting the Samsung Health
  * permission grant.
