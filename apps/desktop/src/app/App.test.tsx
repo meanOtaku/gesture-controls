@@ -5,7 +5,9 @@ import {
   HEAD_TARGET_ENTERED_EVENT,
   HEAD_TRACKER_CONNECTION_EVENT,
   OVERLAY_STATE_EVENT,
+  WATCH_PPG_BATCH_EVENT,
 } from "../shared/protocol/events";
+import { telemetryStore } from "../features/telemetry/store/telemetryStore";
 
 const { invoke, listeners, listen } = vi.hoisted(() => {
   const eventListeners = new Map<string, (event: { payload: unknown }) => void>();
@@ -23,6 +25,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen }));
 
 beforeEach(() => {
+  telemetryStore.reset();
   Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
   window.history.replaceState({}, "", "/");
   listeners.clear();
@@ -56,6 +59,42 @@ function openHeadphoneTab(): void {
 }
 
 describe("App overlay integration", () => {
+  it("retains graph samples while switching away from the live-data tab", async () => {
+    render(<App />);
+    await waitFor(() => expect(listeners.has(WATCH_PPG_BATCH_EVENT)).toBe(true));
+
+    await act(async () => listeners.get(WATCH_PPG_BATCH_EVENT)?.({
+      payload: {
+        sampleCount: 2,
+        timestampsNs: [1_000_000_000, 1_040_000_000],
+        green: [1, 2],
+        greenStatus: [0, 0],
+        red: [3, 4],
+        redStatus: [0, 0],
+        ir: [5, 6],
+        irStatus: [0, 0],
+      },
+    }));
+    fireEvent.click(screen.getByRole("button", { name: "Live data" }));
+    await waitFor(() => expect(screen.getAllByText("2 samples").length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByRole("button", { name: "Main" }));
+    await act(async () => listeners.get(WATCH_PPG_BATCH_EVENT)?.({
+      payload: {
+        sampleCount: 1,
+        timestampsNs: [1_080_000_000],
+        green: [7],
+        greenStatus: [0],
+        red: [8],
+        redStatus: [0],
+        ir: [9],
+        irStatus: [0],
+      },
+    }));
+    fireEvent.click(screen.getByRole("button", { name: "Live data" }));
+    await waitFor(() => expect(screen.getAllByText("3 samples").length).toBeGreaterThan(0));
+  });
+
   it("ignores volume keys while the overlay is hidden", async () => {
     render(<App />);
     await waitFor(() => expect(listeners.has(HEAD_TARGET_ENTERED_EVENT)).toBe(true));

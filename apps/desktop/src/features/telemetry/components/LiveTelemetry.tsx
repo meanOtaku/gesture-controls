@@ -1,73 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useReducer, useRef, useState } from "react";
-import { quaternionToEulerDegrees } from "../../../shared/protocol/events";
-import type {
-  HeadTrackerStatus,
-  WatchEdaBatch,
-  WatchHeartRateBatch,
-  WatchPpgBatch,
-  WatchSkinTemperatureBatch,
-  WatchStatus,
-} from "../../../shared/protocol/events";
-
-type SeriesPoint = { at: number; values: number[] };
-type CsvRow = {
-  recordedAt: string;
-  source: "headphone" | "watch";
-  sourceTimestampNs: string;
-  sequence: string;
-  values: Record<string, number | null>;
-};
-
-const MAX_VISIBLE_SAMPLES = 600;
-const MAX_CSV_ROWS = 200_000;
-const ESTIMATED_BYTES_PER_CSV_ROW = 200;
-
-/**
- * Fixed-capacity circular buffer. Bounds memory to `capacity` items and pushes
- * in O(1) without reallocating/copying the whole backing array, unlike
- * `[...arr, item].slice(-n)`.
- */
-class RingBuffer<T> {
-  private readonly slots: (T | undefined)[];
-  private start = 0;
-  private count = 0;
-
-  constructor(private readonly capacity: number) {
-    this.slots = new Array(capacity);
-  }
-
-  push(item: T): void {
-    const index = (this.start + this.count) % this.capacity;
-    this.slots[index] = item;
-    if (this.count < this.capacity) {
-      this.count += 1;
-    } else {
-      this.start = (this.start + 1) % this.capacity;
-    }
-  }
-
-  clear(): void {
-    this.start = 0;
-    this.count = 0;
-  }
-
-  toArray(): T[] {
-    const out = new Array<T>(this.count);
-    for (let i = 0; i < this.count; i += 1) out[i] = this.slots[(this.start + i) % this.capacity] as T;
-    return out;
-  }
-
-  get length(): number {
-    return this.count;
-  }
-}
-
-function useRingBuffer<T>(capacity: number): RingBuffer<T> {
-  const ref = useRef<RingBuffer<T> | undefined>(undefined);
-  if (!ref.current) ref.current = new RingBuffer<T>(capacity);
-  return ref.current;
-}
+import { useSyncExternalStore } from "react";
+import {
+  ESTIMATED_BYTES_PER_CSV_ROW,
+  MAX_CSV_ROWS,
+  MAX_VISIBLE_SAMPLES,
+  telemetryStore,
+  type SeriesPoint,
+} from "../store/telemetryStore";
 
 function number(value: number | null | undefined): string {
   return value == null ? "" : String(value);
@@ -121,207 +60,22 @@ function TimeChart({ title, points, labels, colors }: {
   </section>;
 }
 
-interface LiveTelemetryProps {
-  status: HeadTrackerStatus | null;
-  watchStatus: WatchStatus | null;
-  ppgBatch: WatchPpgBatch | null;
-  heartRateBatch: WatchHeartRateBatch | null;
-  skinTemperatureBatch: WatchSkinTemperatureBatch | null;
-  edaBatch: WatchEdaBatch | null;
-}
+export function LiveTelemetry() {
+  useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
+  const watchStatus = telemetryStore.getWatchStatus();
+  const recording = telemetryStore.getRecording();
+  const savedCount = telemetryStore.getSavedCount();
+  const headPoints = telemetryStore.getSeries("head");
+  const watchOrientationPoints = telemetryStore.getSeries("watchOrientation");
+  const ppgPoints = telemetryStore.getSeries("ppg");
+  const heartRatePoints = telemetryStore.getSeries("heartRate");
+  const ibiPoints = telemetryStore.getSeries("ibi");
+  const temperaturePoints = telemetryStore.getSeries("temperature");
+  const edaPoints = telemetryStore.getSeries("eda");
+  const spo2Points = telemetryStore.getSeries("spo2");
+  const ecgPoints = telemetryStore.getSeries("ecg");
 
-export function LiveTelemetry({
-  status,
-  watchStatus,
-  ppgBatch,
-  heartRateBatch,
-  skinTemperatureBatch,
-  edaBatch,
-}: LiveTelemetryProps) {
-  const [, forceRender] = useReducer((tick: number) => tick + 1, 0);
-
-  const headPoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
-  const watchOrientationPoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
-  const ppgPoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
-  const heartRatePoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
-  const ibiPoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
-  const temperaturePoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
-  const edaPoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
-  const spo2Points = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
-  const ecgPoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
-  const rows = useRingBuffer<CsvRow>(MAX_CSV_ROWS);
-
-  const [recording, setRecording] = useState(false);
-  const [savedCount, setSavedCount] = useState(0);
-  // Read inside data effects instead of depending on `recording` state, so
-  // toggling recording doesn't re-run those effects and double-append the
-  // latest sample to the graphs/CSV.
-  const recordingRef = useRef(false);
-  useEffect(() => {
-    recordingRef.current = recording;
-  }, [recording]);
-
-  useEffect(() => {
-    if (!status?.connected) return;
-    const at = Date.now();
-    headPoints.push({ at, values: [status.yawDeg, status.pitchDeg, status.rollDeg] });
-    if (recordingRef.current) rows.push({
-      recordedAt: new Date(at).toISOString(),
-      source: "headphone",
-      sourceTimestampNs: "",
-      sequence: "",
-      values: {
-        yawDeg: status.yawDeg,
-        pitchDeg: status.pitchDeg,
-        rollDeg: status.rollDeg,
-        gyroX: status.gyroscope?.[0] ?? null,
-        gyroY: status.gyroscope?.[1] ?? null,
-        gyroZ: status.gyroscope?.[2] ?? null,
-      },
-    });
-    forceRender();
-  }, [status]);
-
-  useEffect(() => {
-    const orientation = watchStatus?.lastOrientation;
-    if (!watchStatus?.connected || !orientation) return;
-    const at = Date.now();
-    const gyroscope = orientation.gyroscope;
-    const euler = quaternionToEulerDegrees(orientation.quaternion);
-    watchOrientationPoints.push({ at, values: euler });
-    if (recordingRef.current) rows.push({
-      recordedAt: new Date(at).toISOString(),
-      source: "watch",
-      sourceTimestampNs: String(orientation.timestampNs),
-      sequence: String(orientation.sequence),
-      values: {
-        yawDeg: euler[0],
-        pitchDeg: euler[1],
-        rollDeg: euler[2],
-        accelX: orientation.accelerometer?.[0] ?? null,
-        accelY: orientation.accelerometer?.[1] ?? null,
-        accelZ: orientation.accelerometer?.[2] ?? null,
-        gyroX: gyroscope?.[0] ?? null,
-        gyroY: gyroscope?.[1] ?? null,
-        gyroZ: gyroscope?.[2] ?? null,
-        ppgGreen: watchStatus.ppgLastSample?.green ?? null,
-        ppgRed: watchStatus.ppgLastSample?.red ?? null,
-        ppgIr: watchStatus.ppgLastSample?.ir ?? null,
-      },
-    });
-    forceRender();
-  }, [watchStatus]);
-
-  useEffect(() => {
-    if (!ppgBatch?.timestampsNs.length) return;
-    const lastTimestampNs = ppgBatch.timestampsNs[ppgBatch.timestampsNs.length - 1];
-    const receivedAt = Date.now();
-    ppgBatch.timestampsNs.forEach((timestampNs, index) => {
-      ppgPoints.push({
-        at: receivedAt - (lastTimestampNs - timestampNs) / 1_000_000,
-        values: [ppgBatch.green[index] ?? 0, ppgBatch.red[index] ?? 0, ppgBatch.ir[index] ?? 0],
-      });
-    });
-    if (recordingRef.current) {
-      ppgBatch.timestampsNs.forEach((timestampNs, index) => rows.push({
-        recordedAt: new Date(receivedAt - (lastTimestampNs - timestampNs) / 1_000_000).toISOString(),
-        source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(ppgBatch.sequence),
-        values: { ppgGreen: ppgBatch.green[index] ?? null, ppgRed: ppgBatch.red[index] ?? null, ppgIr: ppgBatch.ir[index] ?? null },
-      }));
-    }
-    forceRender();
-  }, [ppgBatch]);
-
-  useEffect(() => {
-    if (!heartRateBatch?.timestampsNs.length) return;
-    const lastTimestampNs = heartRateBatch.timestampsNs[heartRateBatch.timestampsNs.length - 1];
-    const receivedAt = Date.now();
-    heartRateBatch.timestampsNs.forEach((timestampNs, index) => {
-      const at = receivedAt - (lastTimestampNs - timestampNs) / 1_000_000;
-      heartRatePoints.push({ at, values: [heartRateBatch.heartRate[index] ?? 0] });
-      (heartRateBatch.ibiMs[index] ?? []).forEach((ibiMs) => ibiPoints.push({ at, values: [ibiMs] }));
-    });
-    if (recordingRef.current) {
-      heartRateBatch.timestampsNs.forEach((timestampNs, index) => rows.push({
-        recordedAt: new Date(receivedAt - (lastTimestampNs - timestampNs) / 1_000_000).toISOString(),
-        source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(heartRateBatch.sequence),
-        values: { heartRateBpm: heartRateBatch.heartRate[index] ?? null, ibiMs: heartRateBatch.ibiMs[index]?.[0] ?? null },
-      }));
-    }
-    forceRender();
-  }, [heartRateBatch]);
-
-  useEffect(() => {
-    if (!skinTemperatureBatch?.timestampsNs.length) return;
-    const lastTimestampNs = skinTemperatureBatch.timestampsNs[skinTemperatureBatch.timestampsNs.length - 1];
-    const receivedAt = Date.now();
-    skinTemperatureBatch.timestampsNs.forEach((timestampNs, index) => {
-      temperaturePoints.push({
-        at: receivedAt - (lastTimestampNs - timestampNs) / 1_000_000,
-        values: [skinTemperatureBatch.objectTemperatureCelsius[index] ?? 0, skinTemperatureBatch.ambientTemperatureCelsius[index] ?? 0],
-      });
-    });
-    if (recordingRef.current) {
-      skinTemperatureBatch.timestampsNs.forEach((timestampNs, index) => rows.push({
-        recordedAt: new Date(receivedAt - (lastTimestampNs - timestampNs) / 1_000_000).toISOString(),
-        source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(skinTemperatureBatch.sequence),
-        values: {
-          skinTemperatureCelsius: skinTemperatureBatch.objectTemperatureCelsius[index] ?? null,
-          ambientTemperatureCelsius: skinTemperatureBatch.ambientTemperatureCelsius[index] ?? null,
-        },
-      }));
-    }
-    forceRender();
-  }, [skinTemperatureBatch]);
-
-  useEffect(() => {
-    if (!edaBatch?.timestampsNs.length) return;
-    const lastTimestampNs = edaBatch.timestampsNs[edaBatch.timestampsNs.length - 1];
-    const receivedAt = Date.now();
-    edaBatch.timestampsNs.forEach((timestampNs, index) => {
-      edaPoints.push({
-        at: receivedAt - (lastTimestampNs - timestampNs) / 1_000_000,
-        values: [edaBatch.skinConductanceMicrosiemens[index] ?? 0],
-      });
-    });
-    if (recordingRef.current) {
-      edaBatch.timestampsNs.forEach((timestampNs, index) => rows.push({
-        recordedAt: new Date(receivedAt - (lastTimestampNs - timestampNs) / 1_000_000).toISOString(),
-        source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(edaBatch.sequence),
-        values: { edaMicrosiemens: edaBatch.skinConductanceMicrosiemens[index] ?? null },
-      }));
-    }
-    forceRender();
-  }, [edaBatch]);
-
-  useEffect(() => {
-    const at = Date.now();
-    const spo2 = watchStatus?.spo2Last;
-    const ecg = watchStatus?.ecgLast;
-    if (spo2) spo2Points.push({ at, values: [spo2.spo2, spo2.heartRate] });
-    if (ecg) ecgPoints.push({ at, values: [ecg.ecgMillivolts] });
-    if (recordingRef.current) {
-      const sample = spo2 ?? ecg;
-      if (sample) rows.push({
-        recordedAt: new Date(at).toISOString(), source: "watch", sourceTimestampNs: String(sample.timestampNs), sequence: "",
-        values: {
-          spo2Percent: spo2?.spo2 ?? null,
-          spo2HeartRateBpm: spo2?.heartRate ?? null, ecgMillivolts: ecg?.ecgMillivolts ?? null,
-          biaProgressPercent: watchStatus?.biaLast?.progressPercent ?? null,
-          sweatLossMilliliters: watchStatus?.sweatLossLast?.sweatLossMilliliters ?? null,
-        },
-      });
-    }
-    forceRender();
-  }, [watchStatus]);
-
-  const toggleRecording = () => {
-    if (!recording) {
-      rows.clear();
-      setSavedCount(0);
-    }
-    setRecording((current) => !current);
-  };
+  const toggleRecording = () => telemetryStore.toggleRecording();
 
   const saveCsv = () => {
     const headers = [
@@ -330,7 +84,7 @@ export function LiveTelemetry({
       "gyro_x", "gyro_y", "gyro_z", "ppg_green", "ppg_red", "ppg_ir",
       "heart_rate_bpm", "ibi_ms", "skin_temperature_celsius", "ambient_temperature_celsius", "eda_microsiemens", "spo2_percent", "spo2_heart_rate_bpm", "ecg_millivolts", "bia_progress_percent", "sweat_loss_milliliters",
     ];
-    const retained = rows.toArray();
+    const retained = telemetryStore.getRows();
     const csv = [headers.join(","), ...retained.map((row) => [
       row.recordedAt, row.source, row.sourceTimestampNs, row.sequence,
       number(row.values.yawDeg), number(row.values.pitchDeg), number(row.values.rollDeg),
@@ -345,10 +99,10 @@ export function LiveTelemetry({
     download.download = `gesture-telemetry-${new Date().toISOString().replaceAll(":", "-")}.csv`;
     download.click();
     URL.revokeObjectURL(url);
-    setSavedCount(retained.length);
+    telemetryStore.setSavedCount(retained.length);
   };
 
-  const rowCount = rows.length;
+  const rowCount = telemetryStore.getRowCount();
   const bufferFull = rowCount >= MAX_CSV_ROWS;
 
   // Mirrors Dashboard.tsx's IMU_SENSOR_IDS default-enabled read and the
@@ -375,15 +129,15 @@ export function LiveTelemetry({
       </div>
       <div className="recording-actions"><button className={recording ? "recording" : ""} onClick={toggleRecording}>{recording ? "Stop recording" : "Start recording"}</button><button disabled={rowCount === 0} onClick={saveCsv}>Save CSV</button></div>
     </section>
-    <TimeChart title="Headphone orientation" points={headPoints.toArray()} labels={["Yaw", "Pitch", "Roll"]} colors={["#65e6ff", "#b88cff", "#ffb45d"]} />
-    {orientationEnabled && <TimeChart title="Watch orientation" points={watchOrientationPoints.toArray()} labels={["Yaw", "Pitch", "Roll"]} colors={["#65e6ff", "#b88cff", "#ffb45d"]} />}
-    <TimeChart title="Raw PPG" points={ppgPoints.toArray()} labels={["Green", "Red", "IR"]} colors={["#4ff0b7", "#ff7da5", "#b88cff"]} />
-    {heartRateStreaming && <TimeChart title="Heart rate" points={heartRatePoints.toArray()} labels={["BPM"]} colors={["#ff7da5"]} />}
-    {heartRateStreaming && <TimeChart title="Heart rate IBI" points={ibiPoints.toArray()} labels={["IBI ms"]} colors={["#4ff0b7"]} />}
-    {skinTemperatureStreaming && <TimeChart title="Skin temperature" points={temperaturePoints.toArray()} labels={["Object °C", "Ambient °C"]} colors={["#ffb45d", "#65e6ff"]} />}
-    {edaStreaming && <TimeChart title="Electrodermal activity" points={edaPoints.toArray()} labels={["µS"]} colors={["#b88cff"]} />}
-    <TimeChart title="Blood oxygen (on-demand)" points={spo2Points.toArray()} labels={["SpO₂ %", "HR BPM"]} colors={["#4ff0b7", "#ff7da5"]} />
-    <TimeChart title="ECG (on-demand)" points={ecgPoints.toArray()} labels={["mV"]} colors={["#ffb45d"]} />
+    <TimeChart title="Headphone orientation" points={headPoints} labels={["Yaw", "Pitch", "Roll"]} colors={["#65e6ff", "#b88cff", "#ffb45d"]} />
+    {orientationEnabled && <TimeChart title="Watch orientation" points={watchOrientationPoints} labels={["Yaw", "Pitch", "Roll"]} colors={["#65e6ff", "#b88cff", "#ffb45d"]} />}
+    <TimeChart title="Raw PPG" points={ppgPoints} labels={["Green", "Red", "IR"]} colors={["#4ff0b7", "#ff7da5", "#b88cff"]} />
+    {heartRateStreaming && <TimeChart title="Heart rate" points={heartRatePoints} labels={["BPM"]} colors={["#ff7da5"]} />}
+    {heartRateStreaming && <TimeChart title="Heart rate IBI" points={ibiPoints} labels={["IBI ms"]} colors={["#4ff0b7"]} />}
+    {skinTemperatureStreaming && <TimeChart title="Skin temperature" points={temperaturePoints} labels={["Object °C", "Ambient °C"]} colors={["#ffb45d", "#65e6ff"]} />}
+    {edaStreaming && <TimeChart title="Electrodermal activity" points={edaPoints} labels={["µS"]} colors={["#b88cff"]} />}
+    <TimeChart title="Blood oxygen (on-demand)" points={spo2Points} labels={["SpO₂ %", "HR BPM"]} colors={["#4ff0b7", "#ff7da5"]} />
+    <TimeChart title="ECG (on-demand)" points={ecgPoints} labels={["mV"]} colors={["#ffb45d"]} />
     <section className="recording-card medical-controls">
       <div><span className="label">On-demand wellness captures</span><strong>Foreground-only, one at a time, and limited by the Watch SDK</strong><small>Not diagnostic measurements.</small></div>
       <div className="recording-actions">

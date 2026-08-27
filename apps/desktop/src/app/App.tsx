@@ -1,8 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Dashboard } from "../features/dashboard/components/Dashboard";
 import { LiveTelemetry } from "../features/telemetry/components/LiveTelemetry";
+import { telemetryStore } from "../features/telemetry/store/telemetryStore";
 import { VolumeKnob } from "../features/overlay/components/VolumeKnob";
 import {
   CALIBRATION_STATE_EVENT,
@@ -19,7 +20,7 @@ import {
   type CalibrationState,
   type CalibrationTarget,
   type HeadPosePayload,
-  type HeadTrackerStatus,
+
   type OverlayState,
   type WatchEdaBatch,
   type WatchHeartRateBatch,
@@ -27,19 +28,6 @@ import {
   type WatchSkinTemperatureBatch,
   type WatchStatus,
 } from "../shared/protocol/events";
-
-const emptyStatus: HeadTrackerStatus = {
-  connected: false,
-  device: null,
-  quaternion: [1, 0, 0, 0],
-  yawDeg: 0,
-  pitchDeg: 0,
-  rollDeg: 0,
-  gyroscope: null,
-  packetsPerSecond: 0,
-  receiveLatencyMs: -1,
-  resetCounter: 0,
-};
 
 const emptyOverlay: OverlayState = {
   visible: false,
@@ -50,29 +38,7 @@ const emptyOverlay: OverlayState = {
   screenY: 0,
 };
 
-const emptyWatchStatus: WatchStatus = {
-  connected: false,
-  lastOrientation: null,
-  lastHeartbeat: null,
-  clockOffsetNs: null,
-  roundTripNs: null,
-  ppgState: null,
-  ppgLastSample: null,
-  ppgRateHz: null,
-  lastButtonState: null,
-  medicalStatus: {},
-  sensorStatus: {},
-  heartRateLast: null,
-  heartRateRateHz: null,
-  skinTemperatureLast: null,
-  skinTemperatureRateHz: null,
-  edaLast: null,
-  edaRateHz: null,
-  spo2Last: null,
-  ecgLast: null,
-  biaLast: null,
-  sweatLossLast: null,
-};
+
 
 export default function App() {
   const overlayWindow = new URLSearchParams(window.location.search).get("window") === "overlay";
@@ -131,16 +97,14 @@ function OverlayApp() {
 }
 
 function MainApp() {
-  const [status, setStatus] = useState<HeadTrackerStatus | null>(null);
+  useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
+  const status = telemetryStore.getHeadStatus();
+  const watchStatus = telemetryStore.getWatchStatus();
   const [calibration, setCalibration] = useState<CalibrationState | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
   const [volumeError, setVolumeError] = useState<string | null>(null);
   const [sensorControlError, setSensorControlError] = useState<string | null>(null);
-  const [watchStatus, setWatchStatus] = useState<WatchStatus>(emptyWatchStatus);
-  const [ppgBatch, setPpgBatch] = useState<WatchPpgBatch | null>(null);
-  const [heartRateBatch, setHeartRateBatch] = useState<WatchHeartRateBatch | null>(null);
-  const [skinTemperatureBatch, setSkinTemperatureBatch] = useState<WatchSkinTemperatureBatch | null>(null);
-  const [edaBatch, setEdaBatch] = useState<WatchEdaBatch | null>(null);
+
   const [activeTab, setActiveTab] = useState<"main" | "headphone" | "watch" | "telemetry">("main");
   const calibrationEventVersion = useRef(0);
   const overlayEventVersion = useRef(0);
@@ -193,11 +157,11 @@ function MainApp() {
         overlayVisible.current = payload.visible;
       }),
       listen<HeadPosePayload>(HEAD_POSE_EVENT, ({ payload }) => {
-        if (!cancelled) setStatus({ ...payload, connected: true });
+        if (!cancelled) telemetryStore.ingestHeadPose(payload);
       }),
       listen<boolean>(HEAD_TRACKER_CONNECTION_EVENT, ({ payload }) => {
         if (cancelled) return;
-        setStatus((current) => ({ ...(current ?? emptyStatus), connected: payload }));
+        telemetryStore.setHeadConnected(payload);
         if (!payload) hideOverlay();
       }),
       listen<CalibrationState>(CALIBRATION_STATE_EVENT, ({ payload }) => {
@@ -293,23 +257,23 @@ function MainApp() {
 
     let cancelled = false;
     const registration = listen<WatchStatus>(WATCH_STATUS_EVENT, ({ payload }) => {
-      if (!cancelled) setWatchStatus(payload);
+      if (!cancelled) telemetryStore.ingestWatchStatus(payload);
     });
     const ppgRegistration = listen<WatchPpgBatch>(WATCH_PPG_BATCH_EVENT, ({ payload }) => {
-      if (!cancelled) setPpgBatch(payload);
+      if (!cancelled) telemetryStore.ingestPpgBatch(payload);
     });
     const heartRateRegistration = listen<WatchHeartRateBatch>(WATCH_HEART_RATE_BATCH_EVENT, ({ payload }) => {
-      if (!cancelled) setHeartRateBatch(payload);
+      if (!cancelled) telemetryStore.ingestHeartRateBatch(payload);
     });
     const skinTemperatureRegistration = listen<WatchSkinTemperatureBatch>(WATCH_SKIN_TEMPERATURE_BATCH_EVENT, ({ payload }) => {
-      if (!cancelled) setSkinTemperatureBatch(payload);
+      if (!cancelled) telemetryStore.ingestSkinTemperatureBatch(payload);
     });
     const edaRegistration = listen<WatchEdaBatch>(WATCH_EDA_BATCH_EVENT, ({ payload }) => {
-      if (!cancelled) setEdaBatch(payload);
+      if (!cancelled) telemetryStore.ingestEdaBatch(payload);
     });
     void registration.then(() =>
       invoke<WatchStatus>("get_watch_status").then((state) => {
-        if (!cancelled) setWatchStatus(state);
+        if (!cancelled) telemetryStore.ingestWatchStatus(state);
       })
     ).catch(() => undefined);
 
@@ -385,14 +349,7 @@ function MainApp() {
       <Dashboard view="watch" status={status} calibration={calibration} calibrationError={applicationError} watchStatus={watchStatus} onCaptureTarget={(target) => { void captureTarget(target); }} onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }} onSetSensorEnabled={(sensor, enabled) => { void setSensorEnabled(sensor, enabled); }} />
     )}
     {activeTab === "telemetry" && (
-      <LiveTelemetry
-        status={status}
-        watchStatus={watchStatus}
-        ppgBatch={ppgBatch}
-        heartRateBatch={heartRateBatch}
-        skinTemperatureBatch={skinTemperatureBatch}
-        edaBatch={edaBatch}
-      />
+      <LiveTelemetry />
     )}
   </>;
 }
