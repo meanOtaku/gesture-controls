@@ -66,6 +66,9 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
     /** Forwards a `desktop.set_sensor` command; wired by MainActivity to [SensorCollector]/[MedicalContinuousCollector]. */
     var onSensorControlCommand: ((sensor: String, enabled: Boolean) -> Unit)? = null
 
+    /** Forwards a `desktop.set_sensor_rate` command; wired by MainActivity to [SensorCollector]. */
+    var onSensorRateCommand: ((sensor: String, rateHz: Double) -> Unit)? = null
+
     private val _state = MutableStateFlow(ConnectionState.DISCONNECTED)
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
 
@@ -339,6 +342,7 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
             WatchProtocol.TYPE_DESKTOP_START_MEASUREMENT -> dispatchMeasurementCommand(message.payload, start = true)
             WatchProtocol.TYPE_DESKTOP_STOP_MEASUREMENT -> dispatchMeasurementCommand(message.payload, start = false)
             WatchProtocol.TYPE_DESKTOP_SET_SENSOR -> dispatchSensorControlCommand(message.payload)
+            WatchProtocol.TYPE_DESKTOP_SET_SENSOR_RATE -> dispatchSensorRateCommand(message.payload)
         }
     }
 
@@ -364,6 +368,15 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         if (sensor.isEmpty()) return
         val enabled = payload.optBoolean("enabled", true)
         onSensorControlCommand?.invoke(sensor, enabled)
+    }
+
+    /** Forwards a `desktop.set_sensor_rate` command to [onSensorRateCommand]; ignored if `sensor`/`rateHz` are missing or non-positive. */
+    private fun dispatchSensorRateCommand(payload: JSONObject) {
+        val sensor = payload.optString("sensor", "")
+        if (sensor.isEmpty()) return
+        val rateHz = payload.optDouble("rateHz", -1.0)
+        if (rateHz <= 0.0 || rateHz.isNaN()) return
+        onSensorRateCommand?.invoke(sensor, rateHz)
     }
 
     private fun startHeartbeat() {

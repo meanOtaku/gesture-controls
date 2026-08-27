@@ -47,6 +47,16 @@ class SensorCollector(
     private var accelerationRegistered = false
     private var gyroscopeRegistered = false
 
+    // Desktop-controlled per-sensor rate (`desktop.set_sensor_rate`), in
+    // microseconds for SensorManager#registerListener. Null until the
+    // desktop sends a rate for that sensor, at which point [start] falls
+    // back to SENSOR_DELAY_GAME. `startMonitoring`'s reduced-rate listener
+    // is intentionally unaffected, since it exists for background power
+    // savings rather than configured live capture.
+    private var orientationRateUs: Int? = null
+    private var accelerationRateUs: Int? = null
+    private var gyroscopeRateUs: Int? = null
+
     var isRegistered = false
         private set
 
@@ -58,9 +68,9 @@ class SensorCollector(
     fun start() {
         if (isRegistered && !isMonitoring) return
         if (isRegistered) unregisterAll()
-        applyOrientationRegistration(SensorManager.SENSOR_DELAY_GAME)
-        applyAccelerationRegistration(SensorManager.SENSOR_DELAY_GAME)
-        applyGyroscopeRegistration(SensorManager.SENSOR_DELAY_GAME)
+        applyOrientationRegistration(orientationRateUs ?: SensorManager.SENSOR_DELAY_GAME)
+        applyAccelerationRegistration(accelerationRateUs ?: SensorManager.SENSOR_DELAY_GAME)
+        applyGyroscopeRegistration(gyroscopeRateUs ?: SensorManager.SENSOR_DELAY_GAME)
         isRegistered = true
         isMonitoring = false
     }
@@ -101,17 +111,49 @@ class SensorCollector(
                 orientationEnabled = enabled
                 if (isRegistered) {
                     applyOrientationRegistration(
-                        if (isMonitoring) SensorManager.SENSOR_DELAY_UI else SensorManager.SENSOR_DELAY_GAME,
+                        if (isMonitoring) SensorManager.SENSOR_DELAY_UI else orientationRateUs ?: SensorManager.SENSOR_DELAY_GAME,
                     )
                 }
             }
             SENSOR_ACCELERATION -> {
                 accelerationEnabled = enabled
-                if (isRegistered && !isMonitoring) applyAccelerationRegistration(SensorManager.SENSOR_DELAY_GAME)
+                if (isRegistered && !isMonitoring) {
+                    applyAccelerationRegistration(accelerationRateUs ?: SensorManager.SENSOR_DELAY_GAME)
+                }
             }
             SENSOR_GYROSCOPE -> {
                 gyroscopeEnabled = enabled
-                if (isRegistered && !isMonitoring) applyGyroscopeRegistration(SensorManager.SENSOR_DELAY_GAME)
+                if (isRegistered && !isMonitoring) {
+                    applyGyroscopeRegistration(gyroscopeRateUs ?: SensorManager.SENSOR_DELAY_GAME)
+                }
+            }
+        }
+    }
+
+    /**
+     * Desktop-controlled live sampling-rate update for a single IMU input
+     * (`desktop.set_sensor_rate`). Re-registers only the changed physical
+     * sensor, at the new [SensorManager.registerListener] `samplingPeriodUs`
+     * derived from [hz], without touching the other two sensors or
+     * restarting the overall stream. Ignored while in [startMonitoring]'s
+     * reduced-rate mode; the requested rate is still remembered for the
+     * next [start].
+     */
+    fun setSensorRateHz(sensorId: String, hz: Double) {
+        if (hz < MIN_SENSOR_RATE_HZ || hz > MAX_SENSOR_RATE_HZ || hz.isNaN()) return
+        val periodUs = (1_000_000.0 / hz).toInt().coerceAtLeast(1)
+        when (sensorId) {
+            SENSOR_ORIENTATION -> {
+                orientationRateUs = periodUs
+                if (isRegistered && !isMonitoring) applyOrientationRegistration(periodUs)
+            }
+            SENSOR_ACCELERATION -> {
+                accelerationRateUs = periodUs
+                if (isRegistered && !isMonitoring) applyAccelerationRegistration(periodUs)
+            }
+            SENSOR_GYROSCOPE -> {
+                gyroscopeRateUs = periodUs
+                if (isRegistered && !isMonitoring) applyGyroscopeRegistration(periodUs)
             }
         }
     }
@@ -123,13 +165,15 @@ class SensorCollector(
         gyroscopeRegistered = false
     }
 
+    // Always unregisters before re-registering when enabled (rather than
+    // skipping when already registered) so a rate-only change while the
+    // sensor is already active still takes effect immediately.
     private fun applyOrientationRegistration(rate: Int) {
         val sensor = rotationVectorSensor ?: return
         if (orientationEnabled) {
-            if (!orientationRegistered) {
-                sensorManager.registerListener(this, sensor, rate)
-                orientationRegistered = true
-            }
+            sensorManager.unregisterListener(this, sensor)
+            sensorManager.registerListener(this, sensor, rate)
+            orientationRegistered = true
         } else if (orientationRegistered) {
             sensorManager.unregisterListener(this, sensor)
             orientationRegistered = false
@@ -139,10 +183,9 @@ class SensorCollector(
     private fun applyAccelerationRegistration(rate: Int) {
         val sensor = accelerometerSensor ?: return
         if (accelerationEnabled) {
-            if (!accelerationRegistered) {
-                sensorManager.registerListener(this, sensor, rate)
-                accelerationRegistered = true
-            }
+            sensorManager.unregisterListener(this, sensor)
+            sensorManager.registerListener(this, sensor, rate)
+            accelerationRegistered = true
         } else if (accelerationRegistered) {
             sensorManager.unregisterListener(this, sensor)
             accelerationRegistered = false
@@ -153,10 +196,9 @@ class SensorCollector(
     private fun applyGyroscopeRegistration(rate: Int) {
         val sensor = gyroscopeSensor ?: return
         if (gyroscopeEnabled) {
-            if (!gyroscopeRegistered) {
-                sensorManager.registerListener(this, sensor, rate)
-                gyroscopeRegistered = true
-            }
+            sensorManager.unregisterListener(this, sensor)
+            sensorManager.registerListener(this, sensor, rate)
+            gyroscopeRegistered = true
         } else if (gyroscopeRegistered) {
             sensorManager.unregisterListener(this, sensor)
             gyroscopeRegistered = false

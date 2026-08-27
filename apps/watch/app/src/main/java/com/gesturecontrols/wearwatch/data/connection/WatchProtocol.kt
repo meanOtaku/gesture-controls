@@ -40,6 +40,8 @@ object WatchProtocol {
     const val TYPE_DESKTOP_SET_SENSOR = "desktop.set_sensor"
     /** Reports an IMU sensor's current enabled state ([SENSOR_ORIENTATION] etc.); continuous trackers report via [TYPE_MEDICAL_STATUS] instead. */
     const val TYPE_SENSOR_STATUS = "watch.sensor_status"
+    /** Sets an IMU sensor's requested sampling rate ([SENSOR_ORIENTATION] etc.); see [SensorCollector.setSensorRateHz]. */
+    const val TYPE_DESKTOP_SET_SENSOR_RATE = "desktop.set_sensor_rate"
 
     /** Identifies this app to the desktop; matches the sample deviceId in the protocol doc. */
     const val DEVICE_ID = "galaxy-watch-4"

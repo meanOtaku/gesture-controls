@@ -164,3 +164,22 @@ export const WATCH_HEART_RATE_BATCH_EVENT = "watch-heart-rate-batch";
 export const WATCH_SKIN_TEMPERATURE_BATCH_EVENT = "watch-skin-temperature-batch";
 export const WATCH_EDA_BATCH_EVENT = "watch-eda-batch";
 export const WATCH_STATUS_EVENT = "watch-status";
+
+/**
+ * Runtime-configurable settings, persisted by the desktop as JSON. Mirrors
+ * `AppSettings` in `apps/desktop/src-tauri/src/settings.rs` field-for-field
+ * (camelCase). Fetched via `get_settings`, changed via `update_settings`/
+ * `reset_settings`, and pushed live on `SETTINGS_UPDATED_EVENT`.
+ */
+export interface AppSettings {
+  headphonesEnabled: boolean;
+  headphonesRateHz: number;
+  recordingRateHz: number;
+  graphRefreshRateHz: number;
+  watchOrientationRateHz: number;
+  watchAccelerationRateHz: number;
+  watchGyroscopeRateHz: number;
+  watchSensorsEnabled: Record<string, boolean>;
+}
+
+export const SETTINGS_UPDATED_EVENT = "settings-updated";

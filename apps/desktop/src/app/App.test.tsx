@@ -431,7 +431,8 @@ describe("App overlay integration", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("meter", { name: "Current volume" })).toHaveAttribute("aria-valuenow", "42");
+    const meter = await screen.findByRole("meter", { name: "Current volume" });
+    await waitFor(() => expect(meter).toHaveAttribute("aria-valuenow", "42"));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("refresh_system_volume"));
     await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: true, volume: 73 } }));
     expect(screen.getByRole("meter", { name: "Current volume" })).toHaveAttribute("aria-valuenow", "73");

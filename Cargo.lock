@@ -3175,6 +3175,7 @@ dependencies = [
  "head-tracking",
  "interaction-engine",
  "serde",
+ "serde_json",
  "spatial-protocol",
  "tauri",
  "tauri-build",

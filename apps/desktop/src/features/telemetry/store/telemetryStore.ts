@@ -32,7 +32,8 @@ export type TelemetrySeries =
 export const MAX_VISIBLE_SAMPLES = 600;
 export const MAX_CSV_ROWS = 200_000;
 export const ESTIMATED_BYTES_PER_CSV_ROW = 200;
-const PUBLISH_INTERVAL_MS = 66;
+const DEFAULT_PUBLISH_INTERVAL_MS = 66;
+const DEFAULT_RECORDING_RATE_HZ = 30;
 
 export const EMPTY_HEAD_STATUS: HeadTrackerStatus = {
   connected: false,
@@ -121,6 +122,14 @@ class TelemetryStore {
   private lastWatchOrientationSequence: number | null = null;
   private lastSpo2TimestampNs: number | null = null;
   private lastEcgTimestampNs: number | null = null;
+  // "Graph refresh rate" setting: how often listeners are notified, not a
+  // data-loss gate — the series ring buffers still receive every accepted
+  // sample immediately, independent of this timer.
+  private publishIntervalMs = DEFAULT_PUBLISH_INTERVAL_MS;
+  // "Recording rate" setting: an independent per-channel throttle on what
+  // gets pushed into the CSV `rows` buffer, applied on top of `recording`.
+  private recordingMinIntervalMs = 1000 / DEFAULT_RECORDING_RATE_HZ;
+  private readonly lastRecordedAtByChannel = new Map<string, number>();
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -166,9 +175,22 @@ class TelemetryStore {
     if (!this.recording) {
       this.rows.clear();
       this.savedCount = 0;
+      this.lastRecordedAtByChannel.clear();
     }
     this.recording = !this.recording;
     this.publishNow();
+  }
+
+  /** Graph refresh rate: how often subscribers are notified of new samples. */
+  setGraphRefreshRateHz(hz: number): void {
+    if (!Number.isFinite(hz) || hz <= 0) return;
+    this.publishIntervalMs = 1000 / hz;
+  }
+
+  /** Recording rate: max per-channel frequency at which accepted samples are written to the CSV rows buffer. */
+  setRecordingRateHz(hz: number): void {
+    if (!Number.isFinite(hz) || hz <= 0) return;
+    this.recordingMinIntervalMs = 1000 / hz;
   }
 
   ingestHeadPose(payload: HeadPosePayload): void {
@@ -176,7 +198,7 @@ class TelemetryStore {
     this.headStatus = status;
     const at = Date.now();
     this.series.get("head")?.push({ at, values: [status.yawDeg, status.pitchDeg, status.rollDeg] });
-    if (this.recording) this.rows.push({
+    if (this.canRecord("head", at)) this.rows.push({
       recordedAt: new Date(at).toISOString(),
       source: "headphone",
       sourceTimestampNs: "",
@@ -206,7 +228,7 @@ class TelemetryStore {
       const at = Date.now();
       const euler = quaternionToEulerDegrees(orientation.quaternion);
       this.series.get("watchOrientation")?.push({ at, values: euler });
-      if (this.recording) this.rows.push({
+      if (this.canRecord("watchOrientation", at)) this.rows.push({
         recordedAt: new Date(at).toISOString(),
         source: "watch",
         sourceTimestampNs: String(orientation.timestampNs),
@@ -234,7 +256,7 @@ class TelemetryStore {
   ingestPpgBatch(batch: WatchPpgBatch): void {
     this.ingestTimestampedBatch(batch.timestampsNs, (timestampNs, index, at) => {
       this.series.get("ppg")?.push({ at, values: [batch.green[index] ?? 0, batch.red[index] ?? 0, batch.ir[index] ?? 0] });
-      if (this.recording) this.rows.push({
+      if (this.canRecord("ppg", at)) this.rows.push({
         recordedAt: new Date(at).toISOString(), source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(batch.sequence),
         values: { ppgGreen: batch.green[index] ?? null, ppgRed: batch.red[index] ?? null, ppgIr: batch.ir[index] ?? null },
       });
@@ -245,7 +267,7 @@ class TelemetryStore {
     this.ingestTimestampedBatch(batch.timestampsNs, (timestampNs, index, at) => {
       this.series.get("heartRate")?.push({ at, values: [batch.heartRate[index] ?? 0] });
       (batch.ibiMs[index] ?? []).forEach((ibiMs) => this.series.get("ibi")?.push({ at, values: [ibiMs] }));
-      if (this.recording) this.rows.push({
+      if (this.canRecord("heartRate", at)) this.rows.push({
         recordedAt: new Date(at).toISOString(), source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(batch.sequence),
         values: { heartRateBpm: batch.heartRate[index] ?? null, ibiMs: batch.ibiMs[index]?.[0] ?? null },
       });
@@ -255,7 +277,7 @@ class TelemetryStore {
   ingestSkinTemperatureBatch(batch: WatchSkinTemperatureBatch): void {
     this.ingestTimestampedBatch(batch.timestampsNs, (timestampNs, index, at) => {
       this.series.get("temperature")?.push({ at, values: [batch.objectTemperatureCelsius[index] ?? 0, batch.ambientTemperatureCelsius[index] ?? 0] });
-      if (this.recording) this.rows.push({
+      if (this.canRecord("temperature", at)) this.rows.push({
         recordedAt: new Date(at).toISOString(), source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(batch.sequence),
         values: {
           skinTemperatureCelsius: batch.objectTemperatureCelsius[index] ?? null,
@@ -268,7 +290,7 @@ class TelemetryStore {
   ingestEdaBatch(batch: WatchEdaBatch): void {
     this.ingestTimestampedBatch(batch.timestampsNs, (timestampNs, index, at) => {
       this.series.get("eda")?.push({ at, values: [batch.skinConductanceMicrosiemens[index] ?? 0] });
-      if (this.recording) this.rows.push({
+      if (this.canRecord("eda", at)) this.rows.push({
         recordedAt: new Date(at).toISOString(), source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(batch.sequence),
         values: { edaMicrosiemens: batch.skinConductanceMicrosiemens[index] ?? null },
       });
@@ -287,7 +309,17 @@ class TelemetryStore {
     this.lastWatchOrientationSequence = null;
     this.lastSpo2TimestampNs = null;
     this.lastEcgTimestampNs = null;
+    this.lastRecordedAtByChannel.clear();
     this.publishNow();
+  }
+
+  /** True (and records `at` as the channel's last-recorded time) if `channel` may write a row now: recording is on and the configured recording rate's interval has elapsed for that channel. */
+  private canRecord(channel: string, at: number): boolean {
+    if (!this.recording) return false;
+    const last = this.lastRecordedAtByChannel.get(channel);
+    if (last !== undefined && at - last < this.recordingMinIntervalMs) return false;
+    this.lastRecordedAtByChannel.set(channel, at);
+    return true;
   }
 
   private ingestTimestampedBatch(
@@ -309,7 +341,7 @@ class TelemetryStore {
     if (spo2 && spo2.timestampNs !== this.lastSpo2TimestampNs) {
       this.lastSpo2TimestampNs = spo2.timestampNs;
       this.series.get("spo2")?.push({ at, values: [spo2.spo2, spo2.heartRate] });
-      if (this.recording) this.rows.push({
+      if (this.canRecord("spo2", at)) this.rows.push({
         recordedAt: new Date(at).toISOString(), source: "watch", sourceTimestampNs: String(spo2.timestampNs), sequence: "",
         values: { spo2Percent: spo2.spo2, spo2HeartRateBpm: spo2.heartRate },
       });
@@ -318,7 +350,7 @@ class TelemetryStore {
     if (ecg && ecg.timestampNs !== this.lastEcgTimestampNs) {
       this.lastEcgTimestampNs = ecg.timestampNs;
       this.series.get("ecg")?.push({ at, values: [ecg.ecgMillivolts] });
-      if (this.recording) this.rows.push({
+      if (this.canRecord("ecg", at)) this.rows.push({
         recordedAt: new Date(at).toISOString(), source: "watch", sourceTimestampNs: String(ecg.timestampNs), sequence: "",
         values: {
           ecgMillivolts: ecg.ecgMillivolts,
@@ -334,7 +366,7 @@ class TelemetryStore {
     this.publishTimer = setTimeout(() => {
       this.publishTimer = null;
       this.publishNow();
-    }, PUBLISH_INTERVAL_MS);
+    }, this.publishIntervalMs);
   }
 
   private publishNow(): void {

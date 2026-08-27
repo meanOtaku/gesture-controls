@@ -11,6 +11,7 @@ use watch_bridge::{WatchBridgeServer, WatchEvent};
 
 mod calibration;
 mod overlay;
+mod settings;
 mod watch;
 
 const SONY_JSON_ADDRESS: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 4243);
@@ -50,6 +51,10 @@ pub fn run() {
             watch::stop_measurement,
             watch::get_controllable_sensor_ids,
             watch::set_sensor_enabled,
+            watch::set_sensor_rate,
+            settings::get_settings,
+            settings::update_settings,
+            settings::reset_settings,
         ])
         .on_window_event(|window, event| {
             if window.label() == MAIN_WINDOW
@@ -69,6 +74,7 @@ pub fn run() {
         })
         .setup(|app| {
             let handle = app.handle().clone();
+            app.manage(settings::SettingsRuntime::load(&handle));
             overlay::prepare_window(&handle).map_err(std::io::Error::other)?;
             tauri::async_runtime::spawn(async move {
                 let provider = match SonyUdpHeadPoseProvider::bind(
@@ -112,7 +118,9 @@ pub fn run() {
                                 Ok(()) => {}
                                 Err(error) => warn!(%error, "failed to evaluate head calibration"),
                             }
-                            if let Err(error) = handle.emit(POSE_EVENT, pose) {
+                            if handle.state::<settings::SettingsRuntime>().accept_headphones_pose()
+                                && let Err(error) = handle.emit(POSE_EVENT, pose)
+                            {
                                 warn!(%error, "failed to emit head-pose event");
                             }
                         }
@@ -161,6 +169,14 @@ pub fn run() {
                         Ok(event) => {
                             let overlay = watch_handle.state::<overlay::OverlayRuntime>();
                             match &event {
+                                WatchEvent::Connected => {
+                                    if let (Ok(settings), Some(server)) = (
+                                        watch_handle.state::<settings::SettingsRuntime>().get(),
+                                        watch_handle.try_state::<Arc<WatchBridgeServer>>(),
+                                    ) {
+                                        settings::apply_watch_settings(&server, &settings);
+                                    }
+                                }
                                 WatchEvent::Button(sample)
                                     if sample.button == STEM_PRIMARY_BUTTON_ID
                                         && sample.state == BUTTON_STATE_DOWN =>

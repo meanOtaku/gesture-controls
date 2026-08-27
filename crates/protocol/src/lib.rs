@@ -108,6 +108,21 @@ pub const DESKTOP_SET_SENSOR_TYPE: &str = "desktop.set_sensor";
 /// `watch.medical_status` instead.
 pub const WATCH_SENSOR_STATUS_TYPE: &str = "watch.sensor_status";
 
+/// Per-sensor sampling-rate request for [`IMU_SENSOR_IDS`], added after the
+/// v1 rollout — still `WATCH_PROTOCOL_VERSION == 1`, since it is a new
+/// message type rather than a change to an existing one. Applied live by
+/// `SensorCollector` via `SensorManager.registerListener(listener, sensor,
+/// samplingPeriodUs)`, re-registering only the affected physical sensor.
+/// Medical trackers are out of scope: Samsung Health Sensor SDK owns their
+/// physical sampling rate and it is never requested or overridden here.
+pub const DESKTOP_SET_SENSOR_RATE_TYPE: &str = "desktop.set_sensor_rate";
+
+/// Inclusive bounds for [`DesktopSensorRateCommandPayload::rate_hz`],
+/// mirrored by `MIN_SENSOR_RATE_HZ`/`MAX_SENSOR_RATE_HZ` in
+/// `MotionSensorProtocol.kt`.
+pub const MIN_SENSOR_RATE_HZ: f64 = 1.0;
+pub const MAX_SENSOR_RATE_HZ: f64 = 200.0;
+
 /// Continuously-accessible trackers, capability-gated and auto-started
 /// alongside `PPG_CONTINUOUS` (see `MedicalContinuousCollector.kt`).
 pub const TRACKER_HEART_RATE_CONTINUOUS: &str = "heart_rate_continuous";
@@ -1066,4 +1081,16 @@ pub struct DesktopMeasurementCommandPayload {
 pub struct DesktopSensorControlPayload {
     pub sensor: String,
     pub enabled: bool,
+}
+
+/// `desktop.set_sensor_rate` payload: `sensor` must be one of
+/// [`IMU_SENSOR_IDS`] (medical trackers are never rate-controlled — Samsung
+/// Health Sensor SDK owns their sampling behavior). `rate_hz` must fall
+/// within [`MIN_SENSOR_RATE_HZ`]..=[`MAX_SENSOR_RATE_HZ`]; `SensorCollector`
+/// converts it to `samplingPeriodUs` and re-registers only that sensor.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopSensorRateCommandPayload {
+    pub sensor: String,
+    pub rate_hz: f64,
 }

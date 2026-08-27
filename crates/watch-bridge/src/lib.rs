@@ -16,15 +16,17 @@ use axum::routing::get;
 use futures_util::StreamExt;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use spatial_protocol::{
-    CONTROLLABLE_SENSOR_IDS, DESKTOP_CONNECTED_TYPE, DESKTOP_SET_SENSOR_TYPE,
-    DESKTOP_START_MEASUREMENT_TYPE, DESKTOP_STOP_MEASUREMENT_TYPE, DESKTOP_TIME_SYNC_TYPE,
-    DesktopConnectedPayload, DesktopMeasurementCommandPayload, DesktopOutboundEnvelope,
-    DesktopSensorControlPayload, DesktopTimeSyncPayload, ON_DEMAND_MEDICAL_TRACKER_IDS,
-    WATCH_PROTOCOL_VERSION, WatchBiaResultSample, WatchButtonSample, WatchEcgBatchSample,
-    WatchEdaBatchSample, WatchEnvelope, WatchHeartRateBatchSample, WatchHeartbeatSample,
-    WatchInboundMessage, WatchMedicalStatusSample, WatchOrientationSample, WatchPpgBatchSample,
-    WatchPpgStatusSample, WatchSensorStatusSample, WatchSkinTemperatureBatchSample,
-    WatchSpo2BatchSample, WatchSweatLossBatchSample, WatchTimeSyncSample,
+    CONTROLLABLE_SENSOR_IDS, DESKTOP_CONNECTED_TYPE, DESKTOP_SET_SENSOR_RATE_TYPE,
+    DESKTOP_SET_SENSOR_TYPE, DESKTOP_START_MEASUREMENT_TYPE, DESKTOP_STOP_MEASUREMENT_TYPE,
+    DESKTOP_TIME_SYNC_TYPE, DesktopConnectedPayload, DesktopMeasurementCommandPayload,
+    DesktopOutboundEnvelope, DesktopSensorControlPayload, DesktopSensorRateCommandPayload,
+    DesktopTimeSyncPayload, IMU_SENSOR_IDS, MAX_SENSOR_RATE_HZ, MIN_SENSOR_RATE_HZ,
+    ON_DEMAND_MEDICAL_TRACKER_IDS, WATCH_PROTOCOL_VERSION, WatchBiaResultSample, WatchButtonSample,
+    WatchEcgBatchSample, WatchEdaBatchSample, WatchEnvelope, WatchHeartRateBatchSample,
+    WatchHeartbeatSample, WatchInboundMessage, WatchMedicalStatusSample, WatchOrientationSample,
+    WatchPpgBatchSample, WatchPpgStatusSample, WatchSensorStatusSample,
+    WatchSkinTemperatureBatchSample, WatchSpo2BatchSample, WatchSweatLossBatchSample,
+    WatchTimeSyncSample,
 };
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -84,6 +86,14 @@ pub enum SensorControlCommand {
     Disable(String),
 }
 
+/// A desktop-initiated per-sensor sampling-rate request for [`IMU_SENSOR_IDS`]
+/// (see `desktop.set_sensor_rate`). Medical trackers are never rate-controlled.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SensorRateCommand {
+    pub sensor: String,
+    pub rate_hz: f64,
+}
+
 /// Round-trip clock-offset estimate, computed from one desktop/watch time-sync exchange.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ClockOffsetEstimate {
@@ -114,12 +124,17 @@ pub enum WatchBridgeError {
     UnknownMeasurementTracker(String),
     #[error("'{0}' is not a valid controllable sensor id")]
     UnknownControllableSensor(String),
+    #[error("'{0}' is not a rate-controllable IMU sensor id")]
+    UnknownRateControllableSensor(String),
+    #[error("sensor rate {0}Hz is outside the {MIN_SENSOR_RATE_HZ}..={MAX_SENSOR_RATE_HZ}Hz range")]
+    SensorRateOutOfRange(f64),
 }
 
 struct SharedState {
     events: broadcast::Sender<WatchEvent>,
     commands: broadcast::Sender<MeasurementCommand>,
     sensor_commands: broadcast::Sender<SensorControlCommand>,
+    sensor_rate_commands: broadcast::Sender<SensorRateCommand>,
     active: AtomicBool,
     heartbeat_timeout: Duration,
 }
@@ -162,6 +177,7 @@ impl WatchBridgeServer {
         let (events, _) = broadcast::channel(256);
         let (commands, _) = broadcast::channel(16);
         let (sensor_commands, _) = broadcast::channel(16);
+        let (sensor_rate_commands, _) = broadcast::channel(16);
         Ok(Self {
             local_addr,
             listener: Mutex::new(Some(listener)),
@@ -172,6 +188,7 @@ impl WatchBridgeServer {
                 events,
                 commands,
                 sensor_commands,
+                sensor_rate_commands,
                 active: AtomicBool::new(false),
                 heartbeat_timeout,
             }),
@@ -228,6 +245,30 @@ impl WatchBridgeServer {
             return Err(WatchBridgeError::NoActiveConnection);
         }
         let _ = self.shared.sensor_commands.send(command);
+        Ok(())
+    }
+
+    /// Sends a [`SensorRateCommand`] to the connected watch, requesting a new
+    /// sampling rate for one IMU sensor (see [`IMU_SENSOR_IDS`]). Errors if no
+    /// watch is connected, `sensor` isn't IMU-controllable, or `rate_hz` falls
+    /// outside [`MIN_SENSOR_RATE_HZ`]..=[`MAX_SENSOR_RATE_HZ`]. Medical
+    /// trackers are never rate-controlled.
+    pub fn send_sensor_rate_command(
+        &self,
+        command: SensorRateCommand,
+    ) -> Result<(), WatchBridgeError> {
+        if !IMU_SENSOR_IDS.contains(&command.sensor.as_str()) {
+            return Err(WatchBridgeError::UnknownRateControllableSensor(
+                command.sensor.clone(),
+            ));
+        }
+        if !(MIN_SENSOR_RATE_HZ..=MAX_SENSOR_RATE_HZ).contains(&command.rate_hz) {
+            return Err(WatchBridgeError::SensorRateOutOfRange(command.rate_hz));
+        }
+        if !self.shared.active.load(Ordering::Acquire) {
+            return Err(WatchBridgeError::NoActiveConnection);
+        }
+        let _ = self.shared.sensor_rate_commands.send(command);
         Ok(())
     }
 
@@ -454,6 +495,7 @@ async fn run_connection(socket: &mut WebSocket, shared: &Arc<SharedState>) {
     let mut clock_offset_samples = VecDeque::with_capacity(CLOCK_OFFSET_SAMPLE_COUNT);
     let mut commands = shared.commands.subscribe();
     let mut sensor_commands = shared.sensor_commands.subscribe();
+    let mut sensor_rate_commands = shared.sensor_rate_commands.subscribe();
 
     loop {
         let remaining = shared
@@ -502,6 +544,20 @@ async fn run_connection(socket: &mut WebSocket, shared: &Arc<SharedState>) {
                     DESKTOP_SET_SENSOR_TYPE,
                     now_ns(),
                     DesktopSensorControlPayload { sensor, enabled },
+                );
+                if send_json(socket, &request).await.is_err() {
+                    break;
+                }
+            }
+            command = sensor_rate_commands.recv() => {
+                let SensorRateCommand { sensor, rate_hz } = match command {
+                    Ok(command) => command,
+                    Err(_) => continue,
+                };
+                let request = DesktopOutboundEnvelope::new(
+                    DESKTOP_SET_SENSOR_RATE_TYPE,
+                    now_ns(),
+                    DesktopSensorRateCommandPayload { sensor, rate_hz },
                 );
                 if send_json(socket, &request).await.is_err() {
                     break;

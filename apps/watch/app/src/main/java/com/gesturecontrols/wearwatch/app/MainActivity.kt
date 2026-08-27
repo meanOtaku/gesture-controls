@@ -139,6 +139,9 @@ class MainActivity : AppCompatActivity() {
                     medicalCollector.setTrackerEnabled(sensor, enabled)
             }
         }
+        watchLink.onSensorRateCommand = { sensor, rateHz ->
+            sensorCollector.setSensorRateHz(sensor, rateHz)
+        }
 
         connectButton.setOnClickListener { onConnectButtonClicked() }
         spo2Button.setOnClickListener { onOnDemandButtonClicked(TRACKER_SPO2_ON_DEMAND) }

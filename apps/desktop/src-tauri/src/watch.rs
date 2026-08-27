@@ -8,7 +8,8 @@ use spatial_protocol::{
 };
 use tauri::{AppHandle, Emitter, State};
 use watch_bridge::{
-    ClockOffsetEstimate, MeasurementCommand, SensorControlCommand, WatchBridgeServer, WatchEvent,
+    ClockOffsetEstimate, MeasurementCommand, SensorControlCommand, SensorRateCommand,
+    WatchBridgeServer, WatchEvent,
 };
 
 pub const WATCH_STATUS_EVENT: &str = "watch-status";
@@ -445,5 +446,18 @@ pub fn set_sensor_enabled(
     };
     server
         .send_sensor_control_command(command)
+        .map_err(|error| error.to_string())
+}
+
+/// Requests a new sampling rate for one IMU sensor (`spatial_protocol::IMU_SENSOR_IDS`).
+/// Rejects medical trackers and out-of-range rates; see `SensorRateCommand`.
+#[tauri::command]
+pub fn set_sensor_rate(
+    server: State<'_, std::sync::Arc<WatchBridgeServer>>,
+    sensor: String,
+    rate_hz: f64,
+) -> Result<(), String> {
+    server
+        .send_sensor_rate_command(SensorRateCommand { sensor, rate_hz })
         .map_err(|error| error.to_string())
 }

@@ -18,6 +18,7 @@ volume-control = { path = "../../../crates/volume-control" }
 spatial-protocol = { path = "../../../crates/protocol" }
 watch-bridge = { path = "../../../crates/watch-bridge" }
 serde.workspace = true
+serde_json.workspace = true
 tauri = { version = "2", features = ["macos-private-api"] }
 tokio.workspace = true
 tracing.workspace = true

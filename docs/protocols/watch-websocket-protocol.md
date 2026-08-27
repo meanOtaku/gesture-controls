@@ -61,6 +61,26 @@ The desktop sends `desktop.time_sync` every five seconds. Echo its `payload.desk
 
 The watch should also handle the initial `desktop.connected` acknowledgement, which contains the session identifier and desktop timestamp.
 
+## Desktop runtime controls
+
+The desktop can change active Watch inputs without reconnecting. `desktop.set_sensor`
+enables or disables one of `orientation`, `acceleration`, `gyroscope`,
+`heart_rate_continuous`, `skin_temperature_continuous`, or `eda_continuous`.
+
+The desktop can also request an independent Android sampling rate for each IMU
+input with `desktop.set_sensor_rate`:
+
+```json
+{"type":"desktop.set_sensor_rate","version":1,"timestampNs":456,"payload":{"sensor":"gyroscope","rateHz":75}}
+```
+
+`payload.sensor` must be `orientation`, `acceleration`, or `gyroscope`, and
+`payload.rateHz` must be finite and between 1 and 200 Hz. The Watch converts the
+requested value to `SensorManager.registerListener`'s sampling period and
+re-registers only that physical sensor. The value is a requested Android delivery
+rate; hardware and Android may deliver a different measured rate. These controls
+do not change Samsung Health tracker sampling or callback cadence.
+
 ## Raw PPG (Galaxy Watch 4+ Samsung Wear OS only)
 
 Raw green/red/IR PPG is available only on Galaxy Watch 4 or later running Samsung

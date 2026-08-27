@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Dashboard } from "../features/dashboard/components/Dashboard";
 import { LiveTelemetry } from "../features/telemetry/components/LiveTelemetry";
+import { Settings } from "../features/settings/components/Settings";
 import { telemetryStore } from "../features/telemetry/store/telemetryStore";
 import { VolumeKnob } from "../features/overlay/components/VolumeKnob";
 import {
@@ -12,11 +13,13 @@ import {
   HEAD_TARGET_EXITED_EVENT,
   HEAD_TRACKER_CONNECTION_EVENT,
   OVERLAY_STATE_EVENT,
+  SETTINGS_UPDATED_EVENT,
   WATCH_EDA_BATCH_EVENT,
   WATCH_HEART_RATE_BATCH_EVENT,
   WATCH_PPG_BATCH_EVENT,
   WATCH_SKIN_TEMPERATURE_BATCH_EVENT,
   WATCH_STATUS_EVENT,
+  type AppSettings,
   type CalibrationState,
   type CalibrationTarget,
   type HeadPosePayload,
@@ -104,14 +107,17 @@ function MainApp() {
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
   const [volumeError, setVolumeError] = useState<string | null>(null);
   const [sensorControlError, setSensorControlError] = useState<string | null>(null);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<"main" | "headphone" | "watch" | "telemetry">("main");
+  const [activeTab, setActiveTab] = useState<"main" | "headphone" | "watch" | "telemetry" | "settings">("main");
   const calibrationEventVersion = useRef(0);
   const overlayEventVersion = useRef(0);
   const overlayVisible = useRef(false);
   const overlayDesiredVisible = useRef<boolean | null>(null);
   const volumeAdjustmentInFlight = useRef(false);
   const volumeRequestVersion = useRef(0);
+  const settingsWriteChain = useRef<Promise<void>>(Promise.resolve());
   const inTauri = "__TAURI_INTERNALS__" in window;
 
   useEffect(() => {
@@ -287,6 +293,56 @@ function MainApp() {
     };
   }, [inTauri]);
 
+  const applyLiveSettings = (next: AppSettings) => {
+    telemetryStore.setGraphRefreshRateHz(next.graphRefreshRateHz);
+    telemetryStore.setRecordingRateHz(next.recordingRateHz);
+    setSettings(next);
+  };
+
+  const queueSettingsWrite = (write: () => Promise<AppSettings>) => {
+    settingsWriteChain.current = settingsWriteChain.current
+      .catch(() => undefined)
+      .then(async () => {
+        try {
+          setSettingsError(null);
+          applyLiveSettings(await write());
+        } catch (error) {
+          setSettingsError(String(error));
+        }
+      });
+  };
+
+  const updateSettings = (next: AppSettings) => {
+    if (!inTauri) return;
+    queueSettingsWrite(() => invoke<AppSettings>("update_settings", { settings: next }));
+  };
+
+  const resetSettings = () => {
+    if (!inTauri) return;
+    queueSettingsWrite(() => invoke<AppSettings>("reset_settings"));
+  };
+
+  useEffect(() => {
+    if (!inTauri) return;
+
+    let cancelled = false;
+    const registration = listen<AppSettings>(SETTINGS_UPDATED_EVENT, ({ payload }) => {
+      if (!cancelled) applyLiveSettings(payload);
+    });
+    void registration.then(() =>
+      invoke<AppSettings>("get_settings").then((state) => {
+        if (!cancelled) applyLiveSettings(state);
+      })
+    ).catch((error) => {
+      if (!cancelled) setSettingsError(String(error));
+    });
+
+    return () => {
+      cancelled = true;
+      void registration.then((unlisten) => unlisten());
+    };
+  }, [inTauri]);
+
   const captureTarget = async (target: CalibrationTarget) => {
     if (!inTauri) return;
     try {
@@ -330,6 +386,7 @@ function MainApp() {
       <button className={activeTab === "headphone" ? "active" : ""} onClick={() => setActiveTab("headphone")}>Headphones</button>
       <button className={activeTab === "watch" ? "active" : ""} onClick={() => setActiveTab("watch")}>Watch</button>
       <button className={activeTab === "telemetry" ? "active" : ""} onClick={() => setActiveTab("telemetry")}>Live data</button>
+      <button className={activeTab === "settings" ? "active" : ""} onClick={() => setActiveTab("settings")}>Settings</button>
     </nav>
     {activeTab === "main" && (
       <Dashboard
@@ -350,6 +407,14 @@ function MainApp() {
     )}
     {activeTab === "telemetry" && (
       <LiveTelemetry />
+    )}
+    {activeTab === "settings" && (
+      <Settings
+        settings={settings}
+        error={settingsError}
+        onUpdate={(next) => { void updateSettings(next); }}
+        onReset={() => { void resetSettings(); }}
+      />
     )}
   </>;
 }
