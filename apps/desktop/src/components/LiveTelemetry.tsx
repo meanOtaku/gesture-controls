@@ -141,7 +141,6 @@ export function LiveTelemetry({
   const [, forceRender] = useReducer((tick: number) => tick + 1, 0);
 
   const headPoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
-  const watchPoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
   const watchOrientationPoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
   const ppgPoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
   const heartRatePoints = useRingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES);
@@ -189,7 +188,6 @@ export function LiveTelemetry({
     const at = Date.now();
     const gyroscope = orientation.gyroscope;
     const euler = quaternionToEulerDegrees(orientation.quaternion);
-    watchPoints.push({ at, values: gyroscope ?? [0, 0, 0] });
     watchOrientationPoints.push({ at, values: euler });
     if (recordingRef.current) rows.push({
       recordedAt: new Date(at).toISOString(),
@@ -356,7 +354,6 @@ export function LiveTelemetry({
   // Mirrors Dashboard.tsx's IMU_SENSOR_IDS default-enabled read and the
   // continuous-tracker "idle means disabled" convention.
   const orientationEnabled = watchStatus?.sensorStatus?.orientation ?? true;
-  const gyroscopeEnabled = watchStatus?.sensorStatus?.gyroscope ?? true;
   const heartRateStreaming = watchStatus?.medicalStatus?.heart_rate_continuous === "streaming";
   const skinTemperatureStreaming = watchStatus?.medicalStatus?.skin_temperature_continuous === "streaming";
   const edaStreaming = watchStatus?.medicalStatus?.eda_continuous === "streaming";
@@ -380,7 +377,6 @@ export function LiveTelemetry({
     </section>
     <TimeChart title="Headphone orientation" points={headPoints.toArray()} labels={["Yaw", "Pitch", "Roll"]} colors={["#65e6ff", "#b88cff", "#ffb45d"]} />
     {orientationEnabled && <TimeChart title="Watch orientation" points={watchOrientationPoints.toArray()} labels={["Yaw", "Pitch", "Roll"]} colors={["#65e6ff", "#b88cff", "#ffb45d"]} />}
-    {gyroscopeEnabled && <TimeChart title="Watch gyroscope" points={watchPoints.toArray()} labels={["X", "Y", "Z"]} colors={["#4ff0b7", "#65e6ff", "#ff7da5"]} />}
     <TimeChart title="Raw PPG" points={ppgPoints.toArray()} labels={["Green", "Red", "IR"]} colors={["#4ff0b7", "#ff7da5", "#b88cff"]} />
     {heartRateStreaming && <TimeChart title="Heart rate" points={heartRatePoints.toArray()} labels={["BPM"]} colors={["#ff7da5"]} />}
     {heartRateStreaming && <TimeChart title="Heart rate IBI" points={ibiPoints.toArray()} labels={["IBI ms"]} colors={["#4ff0b7"]} />}
