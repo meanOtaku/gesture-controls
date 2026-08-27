@@ -14,15 +14,6 @@ const val TRACKER_ECG_ON_DEMAND = "ecg_on_demand"
 const val TRACKER_BIA_ON_DEMAND = "bia_on_demand"
 const val TRACKER_SWEAT_LOSS_ON_DEMAND = "sweat_loss_on_demand"
 
-/**
- * IMU sensor ids individually controllable via `desktop.set_sensor`/
- * `watch.sensor_status`, matching `spatial_protocol::IMU_SENSOR_IDS` exactly.
- * See [SensorCollector].
- */
-const val SENSOR_ORIENTATION = "orientation"
-const val SENSOR_ACCELERATION = "acceleration"
-const val SENSOR_GYROSCOPE = "gyroscope"
-
 /** Every on-demand tracker id mapped to its Samsung Health Sensor SDK type; see [OnDemandMedicalSampler]. */
 val ON_DEMAND_TRACKER_TYPES: Map<String, HealthTrackerType> = mapOf(
     TRACKER_SPO2_ON_DEMAND to HealthTrackerType.SPO2_ON_DEMAND,

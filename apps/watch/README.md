@@ -77,8 +77,8 @@ apps/watch/
 
 ## Requirements
 
-- Android Studio (Koala/2024.1 or newer recommended)
-- JDK 17
+- Android Studio Quail 3/2026.1.3 or newer
+- JDK 21 for Gradle (the app's Java/Kotlin bytecode target remains 17 for Android compatibility)
 - A Wear OS device or emulator running **API 30+** (Wear OS 3), e.g. a Galaxy Watch 4
 
 No API key, Play services, or companion phone app is required — the manifest declares
@@ -89,8 +89,9 @@ watch.
 
 1. Launch Android Studio → **Open** → select the `apps/watch/` directory (not the
    repo root — this is a separate Gradle project from the Tauri/Rust code).
-2. Android Studio will use the committed Gradle wrapper (Gradle 8.7). Let the first
-   sync download the Android Gradle Plugin and dependencies, then finish.
+2. Set **Gradle JDK** to JDK 21. Android Studio will use the committed Gradle 9.5
+   wrapper and Android Gradle Plugin 9.3. Let the first sync download dependencies,
+   then finish.
 3. Select the `app` run configuration.
 
 For a command-line build, run `./gradlew :app:assembleDebug` on macOS/Linux or
