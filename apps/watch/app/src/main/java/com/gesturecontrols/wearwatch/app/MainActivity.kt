@@ -94,7 +94,7 @@ class MainActivity : AppCompatActivity() {
         desktopDiscovery = DesktopDiscovery(
             this,
             onEndpoint = { endpoint ->
-                runOnUiThread { connectDiscoveredDesktop(endpoint) }
+                runOnUiThread { connectDesktop(endpoint, EndpointSource.DISCOVERED) }
             },
             onStatus = { status ->
                 runOnUiThread {
@@ -105,7 +105,7 @@ class MainActivity : AppCompatActivity() {
         )
         pairingServer = WatchPairingServer(
             this,
-            onPairRequest = { endpoint -> runOnUiThread { connectDesktopInitiated(endpoint) } },
+            onPairRequest = { endpoint -> runOnUiThread { connectDesktop(endpoint, EndpointSource.DESKTOP_INITIATED) } },
             onStatus = { status -> runOnUiThread { discoveryStatusText.text = status } },
         )
 
@@ -215,10 +215,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         releaseStemButtonIfPressed()
-        sensorCollector.stop()
-        ppgCollector.stop()
-        medicalCollector.stop()
-        onDemandSampler.stopAll()
+        stopSensorCollection()
         desktopDiscovery.stop()
         pairingServer.stop()
         watchLink.shutdown()
@@ -256,15 +253,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onConnectButtonClicked() {
-        val currentState = watchLink.state.value
-        if (currentState == ConnectionState.CONNECTED ||
-            currentState == ConnectionState.CONNECTING ||
-            currentState == ConnectionState.RECONNECTING
-        ) {
-            sensorCollector.stop()
-            ppgCollector.stop()
-            medicalCollector.stop()
-            onDemandSampler.stopAll()
+        if (watchLink.state.value.isConnectionActive()) {
+            stopSensorCollection()
             watchLink.disconnect()
             StreamingForegroundService.stop(this)
             sensorStatusText.setText(R.string.sensors_idle)
@@ -277,23 +267,9 @@ class MainActivity : AppCompatActivity() {
         pairingServer.start()
     }
 
-    private fun connectDiscoveredDesktop(url: String) {
-        if (watchLink.state.value == ConnectionState.CONNECTED ||
-            watchLink.state.value == ConnectionState.CONNECTING ||
-            watchLink.state.value == ConnectionState.RECONNECTING
-        ) return
-        endpointSource = EndpointSource.DISCOVERED
-        renderEndpointSource()
-        prefs.endpoint = url
-        connectToDesktop(url)
-    }
-
-    private fun connectDesktopInitiated(url: String) {
-        if (watchLink.state.value == ConnectionState.CONNECTED ||
-            watchLink.state.value == ConnectionState.CONNECTING ||
-            watchLink.state.value == ConnectionState.RECONNECTING
-        ) return
-        endpointSource = EndpointSource.DESKTOP_INITIATED
+    private fun connectDesktop(url: String, source: EndpointSource) {
+        if (watchLink.state.value.isConnectionActive()) return
+        endpointSource = source
         renderEndpointSource()
         prefs.endpoint = url
         connectToDesktop(url)
@@ -324,6 +300,18 @@ class MainActivity : AppCompatActivity() {
             requestBodySensorsPermission.launch(Manifest.permission.BODY_SENSORS)
         }
     }
+
+    private fun stopSensorCollection() {
+        sensorCollector.stop()
+        ppgCollector.stop()
+        medicalCollector.stop()
+        onDemandSampler.stopAll()
+    }
+
+    private fun ConnectionState.isConnectionActive(): Boolean =
+        this == ConnectionState.CONNECTED ||
+            this == ConnectionState.CONNECTING ||
+            this == ConnectionState.RECONNECTING
 
     /** Same foreground, single-session start/stop the desktop drives via `desktop.start_measurement`; see [OnDemandMedicalSampler]. */
     private fun onOnDemandButtonClicked(trackerId: String) {
@@ -357,12 +345,7 @@ class MainActivity : AppCompatActivity() {
             discoveryHistoryText.text = ""
         }
         if (state == ConnectionState.FAILED) {
-            sensorCollector.stop()
-            ppgCollector.stop()
-            medicalCollector.stop()
-            onDemandSampler.stopAll()
             StreamingForegroundService.stop(this)
-            sensorStatusText.setText(R.string.sensors_idle)
         }
         connectionStatusText.text = when (state) {
             ConnectionState.DISCONNECTED -> getString(R.string.status_disconnected)
@@ -378,10 +361,7 @@ class MainActivity : AppCompatActivity() {
                 getString(R.string.action_connect)
         }
         if (state == ConnectionState.DISCONNECTED || state == ConnectionState.FAILED) {
-            sensorCollector.stop()
-            ppgCollector.stop()
-            medicalCollector.stop()
-            onDemandSampler.stopAll()
+            stopSensorCollection()
             sensorStatusText.setText(R.string.sensors_idle)
         }
     }
