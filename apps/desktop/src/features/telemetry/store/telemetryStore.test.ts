@@ -44,6 +44,19 @@ describe("telemetryStore", () => {
     unsubscribe();
   });
 
+  it("applies Samsung stream acceptance rates without altering source timestamps", () => {
+    telemetryStore.setHealthAcceptanceRatesHz({ ppg: 10, heartRate: 200, temperature: 200, eda: 200 });
+    telemetryStore.ingestPpgBatch({
+      sequence: 1,
+      timestampsNs: [0, 40_000_000, 80_000_000, 120_000_000, 160_000_000],
+      green: [1, 2, 3, 4, 5],
+      red: [1, 2, 3, 4, 5],
+      ir: [1, 2, 3, 4, 5],
+    });
+
+    expect(telemetryStore.getSeries("ppg").map((point) => point.values[0])).toEqual([1, 4]);
+  });
+
   it("does not duplicate the last orientation when unrelated status events repeat it", () => {
     const orientation = {
       deviceId: "watch-test",

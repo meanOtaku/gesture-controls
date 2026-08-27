@@ -130,6 +130,8 @@ class TelemetryStore {
   // gets pushed into the CSV `rows` buffer, applied on top of `recording`.
   private recordingMinIntervalMs = 1000 / DEFAULT_RECORDING_RATE_HZ;
   private readonly lastRecordedAtByChannel = new Map<string, number>();
+  private readonly healthAcceptanceMinIntervalMs = new Map<string, number>();
+  private readonly lastAcceptedAtByChannel = new Map<string, number>();
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -191,6 +193,22 @@ class TelemetryStore {
   setRecordingRateHz(hz: number): void {
     if (!Number.isFinite(hz) || hz <= 0) return;
     this.recordingMinIntervalMs = 1000 / hz;
+  }
+
+  /**
+   * Desktop acceptance rates for Samsung SDK-controlled continuous streams.
+   * Every callback/sample reaches this store first; these values only gate
+   * graph/CSV acceptance and never claim to change physical tracker cadence.
+   */
+  setHealthAcceptanceRatesHz(rates: {
+    ppg: number;
+    heartRate: number;
+    temperature: number;
+    eda: number;
+  }): void {
+    Object.entries(rates).forEach(([channel, hz]) => {
+      if (Number.isFinite(hz) && hz > 0) this.healthAcceptanceMinIntervalMs.set(channel, 1000 / hz);
+    });
   }
 
   ingestHeadPose(payload: HeadPosePayload): void {
@@ -255,6 +273,7 @@ class TelemetryStore {
 
   ingestPpgBatch(batch: WatchPpgBatch): void {
     this.ingestTimestampedBatch(batch.timestampsNs, (timestampNs, index, at) => {
+      if (!this.canAcceptHealth("ppg", at)) return;
       this.series.get("ppg")?.push({ at, values: [batch.green[index] ?? 0, batch.red[index] ?? 0, batch.ir[index] ?? 0] });
       if (this.canRecord("ppg", at)) this.rows.push({
         recordedAt: new Date(at).toISOString(), source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(batch.sequence),
@@ -265,6 +284,7 @@ class TelemetryStore {
 
   ingestHeartRateBatch(batch: WatchHeartRateBatch): void {
     this.ingestTimestampedBatch(batch.timestampsNs, (timestampNs, index, at) => {
+      if (!this.canAcceptHealth("heartRate", at)) return;
       this.series.get("heartRate")?.push({ at, values: [batch.heartRate[index] ?? 0] });
       (batch.ibiMs[index] ?? []).forEach((ibiMs) => this.series.get("ibi")?.push({ at, values: [ibiMs] }));
       if (this.canRecord("heartRate", at)) this.rows.push({
@@ -276,6 +296,7 @@ class TelemetryStore {
 
   ingestSkinTemperatureBatch(batch: WatchSkinTemperatureBatch): void {
     this.ingestTimestampedBatch(batch.timestampsNs, (timestampNs, index, at) => {
+      if (!this.canAcceptHealth("temperature", at)) return;
       this.series.get("temperature")?.push({ at, values: [batch.objectTemperatureCelsius[index] ?? 0, batch.ambientTemperatureCelsius[index] ?? 0] });
       if (this.canRecord("temperature", at)) this.rows.push({
         recordedAt: new Date(at).toISOString(), source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(batch.sequence),
@@ -289,6 +310,7 @@ class TelemetryStore {
 
   ingestEdaBatch(batch: WatchEdaBatch): void {
     this.ingestTimestampedBatch(batch.timestampsNs, (timestampNs, index, at) => {
+      if (!this.canAcceptHealth("eda", at)) return;
       this.series.get("eda")?.push({ at, values: [batch.skinConductanceMicrosiemens[index] ?? 0] });
       if (this.canRecord("eda", at)) this.rows.push({
         recordedAt: new Date(at).toISOString(), source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(batch.sequence),
@@ -310,7 +332,17 @@ class TelemetryStore {
     this.lastSpo2TimestampNs = null;
     this.lastEcgTimestampNs = null;
     this.lastRecordedAtByChannel.clear();
+    this.lastAcceptedAtByChannel.clear();
     this.publishNow();
+  }
+
+  private canAcceptHealth(channel: string, at: number): boolean {
+    const minIntervalMs = this.healthAcceptanceMinIntervalMs.get(channel);
+    if (minIntervalMs === undefined) return true;
+    const last = this.lastAcceptedAtByChannel.get(channel);
+    if (last !== undefined && at - last < minIntervalMs) return false;
+    this.lastAcceptedAtByChannel.set(channel, at);
+    return true;
   }
 
   /** True (and records `at` as the channel's last-recorded time) if `channel` may write a row now: recording is on and the configured recording rate's interval has elapsed for that channel. */

@@ -22,6 +22,8 @@ pub const MIN_RECORDING_RATE_HZ: f64 = 1.0;
 pub const MAX_RECORDING_RATE_HZ: f64 = 200.0;
 pub const MIN_GRAPH_REFRESH_RATE_HZ: f64 = 1.0;
 pub const MAX_GRAPH_REFRESH_RATE_HZ: f64 = 60.0;
+pub const MIN_HEALTH_ACCEPTANCE_RATE_HZ: f64 = 0.1;
+pub const MAX_HEALTH_ACCEPTANCE_RATE_HZ: f64 = 200.0;
 
 /// Runtime-configurable settings, persisted as JSON in the Tauri app config
 /// directory. `watchSensorsEnabled` mirrors the existing `desktop.set_sensor`
@@ -38,6 +40,14 @@ pub struct AppSettings {
     pub watch_orientation_rate_hz: f64,
     pub watch_acceleration_rate_hz: f64,
     pub watch_gyroscope_rate_hz: f64,
+    #[serde(default = "default_health_acceptance_rate_hz")]
+    pub watch_ppg_acceptance_rate_hz: f64,
+    #[serde(default = "default_health_acceptance_rate_hz")]
+    pub watch_heart_rate_acceptance_rate_hz: f64,
+    #[serde(default = "default_health_acceptance_rate_hz")]
+    pub watch_skin_temperature_acceptance_rate_hz: f64,
+    #[serde(default = "default_health_acceptance_rate_hz")]
+    pub watch_eda_acceptance_rate_hz: f64,
     pub watch_sensors_enabled: HashMap<String, bool>,
 }
 
@@ -51,12 +61,22 @@ impl Default for AppSettings {
             watch_orientation_rate_hz: 50.0,
             watch_acceleration_rate_hz: 50.0,
             watch_gyroscope_rate_hz: 50.0,
+            // Samsung controls physical sampling/callback cadence. Defaults at
+            // the acceptance ceiling preserve every callback sample.
+            watch_ppg_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
+            watch_heart_rate_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
+            watch_skin_temperature_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
+            watch_eda_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
             watch_sensors_enabled: CONTROLLABLE_SENSOR_IDS
                 .iter()
                 .map(|&sensor| (sensor.to_string(), true))
                 .collect(),
         }
     }
+}
+
+fn default_health_acceptance_rate_hz() -> f64 {
+    MAX_HEALTH_ACCEPTANCE_RATE_HZ
 }
 
 impl AppSettings {
@@ -97,6 +117,31 @@ impl AppSettings {
             MIN_SENSOR_RATE_HZ,
             MAX_SENSOR_RATE_HZ,
         )?;
+        for (name, value) in [
+            (
+                "watchPpgAcceptanceRateHz",
+                self.watch_ppg_acceptance_rate_hz,
+            ),
+            (
+                "watchHeartRateAcceptanceRateHz",
+                self.watch_heart_rate_acceptance_rate_hz,
+            ),
+            (
+                "watchSkinTemperatureAcceptanceRateHz",
+                self.watch_skin_temperature_acceptance_rate_hz,
+            ),
+            (
+                "watchEdaAcceptanceRateHz",
+                self.watch_eda_acceptance_rate_hz,
+            ),
+        ] {
+            in_range(
+                name,
+                value,
+                MIN_HEALTH_ACCEPTANCE_RATE_HZ,
+                MAX_HEALTH_ACCEPTANCE_RATE_HZ,
+            )?;
+        }
         for sensor in self.watch_sensors_enabled.keys() {
             if !CONTROLLABLE_SENSOR_IDS.contains(&sensor.as_str()) {
                 return Err(format!("'{sensor}' is not a controllable sensor id"));

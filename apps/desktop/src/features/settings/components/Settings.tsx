@@ -27,6 +27,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   watchOrientationRateHz: 50,
   watchAccelerationRateHz: 50,
   watchGyroscopeRateHz: 50,
+  watchPpgAcceptanceRateHz: 200,
+  watchHeartRateAcceptanceRateHz: 200,
+  watchSkinTemperatureAcceptanceRateHz: 200,
+  watchEdaAcceptanceRateHz: 200,
   watchSensorsEnabled: Object.fromEntries(CONTROLLABLE_SENSORS.map(({ id }) => [id, true])),
 };
 
@@ -43,6 +47,10 @@ export function Settings({ settings, error, onUpdate, onReset }: SettingsProps) 
   const watchOrientationRateInput = useRef<HTMLInputElement>(null);
   const watchAccelerationRateInput = useRef<HTMLInputElement>(null);
   const watchGyroscopeRateInput = useRef<HTMLInputElement>(null);
+  const watchPpgAcceptanceRateInput = useRef<HTMLInputElement>(null);
+  const watchHeartRateAcceptanceRateInput = useRef<HTMLInputElement>(null);
+  const watchSkinTemperatureAcceptanceRateInput = useRef<HTMLInputElement>(null);
+  const watchEdaAcceptanceRateInput = useRef<HTMLInputElement>(null);
 
   const commitRates = () => {
     onUpdate({
@@ -53,6 +61,10 @@ export function Settings({ settings, error, onUpdate, onReset }: SettingsProps) 
       watchOrientationRateHz: clamp(watchOrientationRateInput.current?.value, 1, 200, current.watchOrientationRateHz),
       watchAccelerationRateHz: clamp(watchAccelerationRateInput.current?.value, 1, 200, current.watchAccelerationRateHz),
       watchGyroscopeRateHz: clamp(watchGyroscopeRateInput.current?.value, 1, 200, current.watchGyroscopeRateHz),
+      watchPpgAcceptanceRateHz: clamp(watchPpgAcceptanceRateInput.current?.value, 0.1, 200, current.watchPpgAcceptanceRateHz),
+      watchHeartRateAcceptanceRateHz: clamp(watchHeartRateAcceptanceRateInput.current?.value, 0.1, 200, current.watchHeartRateAcceptanceRateHz),
+      watchSkinTemperatureAcceptanceRateHz: clamp(watchSkinTemperatureAcceptanceRateInput.current?.value, 0.1, 200, current.watchSkinTemperatureAcceptanceRateHz),
+      watchEdaAcceptanceRateHz: clamp(watchEdaAcceptanceRateInput.current?.value, 0.1, 200, current.watchEdaAcceptanceRateHz),
     });
   };
 
@@ -190,6 +202,43 @@ export function Settings({ settings, error, onUpdate, onReset }: SettingsProps) 
               defaultValue={current.watchGyroscopeRateHz}
               onChange={commitRates}
             />
+            <small>Hz</small>
+          </label>
+        </div>
+      </section>
+
+      <section className="calibration-card" aria-label="Samsung health acceptance rates">
+        <div className="calibration-heading">
+          <div><p className="eyebrow">Galaxy Watch</p><h2>Samsung health acceptance rates</h2></div>
+        </div>
+        <p className="hint">These controls change desktop graph and recording acceptance immediately. Samsung controls the physical tracker and callback cadence.</p>
+        <div className="calibration-actions">
+          <label>
+            Raw PPG
+            <input aria-label="Watch PPG acceptance rate Hz" type="number" min="0.1" max="200" step="0.1"
+              ref={watchPpgAcceptanceRateInput} key={`watch-ppg-acceptance-${current.watchPpgAcceptanceRateHz}`}
+              defaultValue={current.watchPpgAcceptanceRateHz} onChange={commitRates} />
+            <small>Hz</small>
+          </label>
+          <label>
+            Heart rate
+            <input aria-label="Watch heart rate acceptance rate Hz" type="number" min="0.1" max="200" step="0.1"
+              ref={watchHeartRateAcceptanceRateInput} key={`watch-heart-rate-acceptance-${current.watchHeartRateAcceptanceRateHz}`}
+              defaultValue={current.watchHeartRateAcceptanceRateHz} onChange={commitRates} />
+            <small>Hz</small>
+          </label>
+          <label>
+            Skin temperature
+            <input aria-label="Watch skin temperature acceptance rate Hz" type="number" min="0.1" max="200" step="0.1"
+              ref={watchSkinTemperatureAcceptanceRateInput} key={`watch-temperature-acceptance-${current.watchSkinTemperatureAcceptanceRateHz}`}
+              defaultValue={current.watchSkinTemperatureAcceptanceRateHz} onChange={commitRates} />
+            <small>Hz</small>
+          </label>
+          <label>
+            EDA
+            <input aria-label="Watch EDA acceptance rate Hz" type="number" min="0.1" max="200" step="0.1"
+              ref={watchEdaAcceptanceRateInput} key={`watch-eda-acceptance-${current.watchEdaAcceptanceRateHz}`}
+              defaultValue={current.watchEdaAcceptanceRateHz} onChange={commitRates} />
             <small>Hz</small>
           </label>
         </div>

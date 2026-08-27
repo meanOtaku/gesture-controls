@@ -179,6 +179,10 @@ export interface AppSettings {
   watchOrientationRateHz: number;
   watchAccelerationRateHz: number;
   watchGyroscopeRateHz: number;
+  watchPpgAcceptanceRateHz: number;
+  watchHeartRateAcceptanceRateHz: number;
+  watchSkinTemperatureAcceptanceRateHz: number;
+  watchEdaAcceptanceRateHz: number;
   watchSensorsEnabled: Record<string, boolean>;
 }
 

@@ -296,6 +296,12 @@ function MainApp() {
   const applyLiveSettings = (next: AppSettings) => {
     telemetryStore.setGraphRefreshRateHz(next.graphRefreshRateHz);
     telemetryStore.setRecordingRateHz(next.recordingRateHz);
+    telemetryStore.setHealthAcceptanceRatesHz({
+      ppg: next.watchPpgAcceptanceRateHz,
+      heartRate: next.watchHeartRateAcceptanceRateHz,
+      temperature: next.watchSkinTemperatureAcceptanceRateHz,
+      eda: next.watchEdaAcceptanceRateHz,
+    });
     setSettings(next);
   };
 
