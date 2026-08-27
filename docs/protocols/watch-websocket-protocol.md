@@ -67,19 +67,22 @@ The desktop can change active Watch inputs without reconnecting. `desktop.set_se
 enables or disables one of `orientation`, `acceleration`, `gyroscope`,
 `heart_rate_continuous`, `skin_temperature_continuous`, or `eda_continuous`.
 
-The desktop can also request an independent Android sampling rate for each IMU
-input with `desktop.set_sensor_rate`:
+The desktop can request an independent Android sampling rate for each IMU input
+with `desktop.set_sensor_rate`:
 
 ```json
 {"type":"desktop.set_sensor_rate","version":1,"timestampNs":456,"payload":{"sensor":"gyroscope","rateHz":75}}
 ```
 
-`payload.sensor` must be `orientation`, `acceleration`, or `gyroscope`, and
-`payload.rateHz` must be finite and between 1 and 200 Hz. The Watch converts the
-requested value to `SensorManager.registerListener`'s sampling period and
-re-registers only that physical sensor. The value is a requested Android delivery
-rate; hardware and Android may deliver a different measured rate. These controls
-do not change Samsung Health tracker sampling or callback cadence.
+For `orientation`, `acceleration`, and `gyroscope`, `payload.rateHz` must be finite
+and between 1 and 200 Hz. The Watch converts it to
+`SensorManager.registerListener`'s sampling period and re-registers only that
+physical sensor. Hardware and Android may deliver a different measured rate.
+
+The same command accepts `sensor: "ppg_continuous"` with 0.1–10 Hz to change the
+existing `HealthTracker.flush()` schedule at runtime. This only controls how often
+the Watch asks Samsung's SDK to release buffered raw PPG callbacks; it does not
+change physical PPG sampling or manufacture callback cadence.
 
 ## Raw PPG (Galaxy Watch 4+ Samsung Wear OS only)
 

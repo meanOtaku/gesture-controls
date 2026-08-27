@@ -140,7 +140,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
         watchLink.onSensorRateCommand = { sensor, rateHz ->
-            sensorCollector.setSensorRateHz(sensor, rateHz)
+            if (sensor == TRACKER_PPG_CONTINUOUS) {
+                ppgCollector.setFlushRateHz(rateHz)
+            } else {
+                sensorCollector.setSensorRateHz(sensor, rateHz)
+            }
         }
 
         connectButton.setOnClickListener { onConnectButtonClicked() }

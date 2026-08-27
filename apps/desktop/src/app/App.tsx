@@ -16,6 +16,7 @@ import {
   SETTINGS_UPDATED_EVENT,
   WATCH_EDA_BATCH_EVENT,
   WATCH_HEART_RATE_BATCH_EVENT,
+  WATCH_ORIENTATION_EVENT,
   WATCH_PPG_BATCH_EVENT,
   WATCH_SKIN_TEMPERATURE_BATCH_EVENT,
   WATCH_STATUS_EVENT,
@@ -27,6 +28,7 @@ import {
   type OverlayState,
   type WatchEdaBatch,
   type WatchHeartRateBatch,
+  type WatchOrientationSample,
   type WatchPpgBatch,
   type WatchSkinTemperatureBatch,
   type WatchStatus,
@@ -265,6 +267,9 @@ function MainApp() {
     const registration = listen<WatchStatus>(WATCH_STATUS_EVENT, ({ payload }) => {
       if (!cancelled) telemetryStore.ingestWatchStatus(payload);
     });
+    const orientationRegistration = listen<WatchOrientationSample>(WATCH_ORIENTATION_EVENT, ({ payload }) => {
+      if (!cancelled) telemetryStore.ingestWatchOrientation(payload);
+    });
     const ppgRegistration = listen<WatchPpgBatch>(WATCH_PPG_BATCH_EVENT, ({ payload }) => {
       if (!cancelled) telemetryStore.ingestPpgBatch(payload);
     });
@@ -286,6 +291,7 @@ function MainApp() {
     return () => {
       cancelled = true;
       void registration.then((unlisten) => unlisten());
+      void orientationRegistration.then((unlisten) => unlisten());
       void ppgRegistration.then((unlisten) => unlisten());
       void heartRateRegistration.then((unlisten) => unlisten());
       void skinTemperatureRegistration.then((unlisten) => unlisten());
@@ -297,7 +303,6 @@ function MainApp() {
     telemetryStore.setGraphRefreshRateHz(next.graphRefreshRateHz);
     telemetryStore.setRecordingRateHz(next.recordingRateHz);
     telemetryStore.setHealthAcceptanceRatesHz({
-      ppg: next.watchPpgAcceptanceRateHz,
       heartRate: next.watchHeartRateAcceptanceRateHz,
       temperature: next.watchSkinTemperatureAcceptanceRateHz,
       eda: next.watchEdaAcceptanceRateHz,

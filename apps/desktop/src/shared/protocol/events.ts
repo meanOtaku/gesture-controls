@@ -164,6 +164,7 @@ export const WATCH_HEART_RATE_BATCH_EVENT = "watch-heart-rate-batch";
 export const WATCH_SKIN_TEMPERATURE_BATCH_EVENT = "watch-skin-temperature-batch";
 export const WATCH_EDA_BATCH_EVENT = "watch-eda-batch";
 export const WATCH_STATUS_EVENT = "watch-status";
+export const WATCH_ORIENTATION_EVENT = "watch-orientation";
 
 /**
  * Runtime-configurable settings, persisted by the desktop as JSON. Mirrors
@@ -179,7 +180,7 @@ export interface AppSettings {
   watchOrientationRateHz: number;
   watchAccelerationRateHz: number;
   watchGyroscopeRateHz: number;
-  watchPpgAcceptanceRateHz: number;
+  watchPpgFlushRateHz: number;
   watchHeartRateAcceptanceRateHz: number;
   watchSkinTemperatureAcceptanceRateHz: number;
   watchEdaAcceptanceRateHz: number;

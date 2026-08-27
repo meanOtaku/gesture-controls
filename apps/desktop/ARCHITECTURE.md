@@ -22,7 +22,7 @@ Rules:
 - Runtime settings are validated and atomically persisted by Tauri as `settings.json`
   in the platform app-config directory; React applies graph/recording rates locally
   while Tauri replays Watch controls after reconnection.
-- Samsung PPG, heart-rate, skin-temperature, and EDA rate controls are desktop
-  acceptance limits. Samsung's SDK remains authoritative for physical sampling
-  and callback cadence, and every callback reaches the ingestion boundary.
+- The Samsung PPG rate controls the Watch's existing `HealthTracker.flush()`
+  schedule. Heart-rate, skin-temperature, and EDA rates are desktop acceptance
+  limits. Samsung remains authoritative for physical sampling and callback cadence.
 - Keep tests colocated with the component or composition root they verify.

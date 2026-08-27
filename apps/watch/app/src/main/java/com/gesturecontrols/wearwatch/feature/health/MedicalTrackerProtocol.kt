@@ -7,6 +7,7 @@ import com.samsung.android.service.health.tracking.data.HealthTrackerType
  * `spatial_protocol::MEDICAL_TRACKER_IDS` exactly (docs/protocols/watch-websocket-protocol.md).
  */
 const val TRACKER_HEART_RATE_CONTINUOUS = "heart_rate_continuous"
+const val TRACKER_PPG_CONTINUOUS = "ppg_continuous"
 const val TRACKER_SKIN_TEMPERATURE_CONTINUOUS = "skin_temperature_continuous"
 const val TRACKER_EDA_CONTINUOUS = "eda_continuous"
 const val TRACKER_SPO2_ON_DEMAND = "spo2_on_demand"

@@ -13,6 +13,7 @@ use watch_bridge::{
 };
 
 pub const WATCH_STATUS_EVENT: &str = "watch-status";
+pub const WATCH_ORIENTATION_EVENT: &str = "watch-orientation";
 pub const WATCH_PPG_BATCH_EVENT: &str = "watch-ppg-batch";
 pub const WATCH_HEART_RATE_BATCH_EVENT: &str = "watch-heart-rate-batch";
 pub const WATCH_SKIN_TEMPERATURE_BATCH_EVENT: &str = "watch-skin-temperature-batch";
@@ -167,6 +168,7 @@ impl WatchRuntime {
             }
             WatchEvent::Orientation(sample) => {
                 state.connected = true;
+                let _ = app.emit(WATCH_ORIENTATION_EVENT, &sample);
                 state.last_orientation = Some(sample);
             }
             WatchEvent::Heartbeat(sample) => {

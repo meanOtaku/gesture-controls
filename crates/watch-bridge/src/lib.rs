@@ -20,8 +20,9 @@ use spatial_protocol::{
     DESKTOP_SET_SENSOR_TYPE, DESKTOP_START_MEASUREMENT_TYPE, DESKTOP_STOP_MEASUREMENT_TYPE,
     DESKTOP_TIME_SYNC_TYPE, DesktopConnectedPayload, DesktopMeasurementCommandPayload,
     DesktopOutboundEnvelope, DesktopSensorControlPayload, DesktopSensorRateCommandPayload,
-    DesktopTimeSyncPayload, IMU_SENSOR_IDS, MAX_SENSOR_RATE_HZ, MIN_SENSOR_RATE_HZ,
-    ON_DEMAND_MEDICAL_TRACKER_IDS, WATCH_PROTOCOL_VERSION, WatchBiaResultSample, WatchButtonSample,
+    DesktopTimeSyncPayload, MAX_PPG_FLUSH_RATE_HZ, MAX_SENSOR_RATE_HZ, MIN_PPG_FLUSH_RATE_HZ,
+    MIN_SENSOR_RATE_HZ, ON_DEMAND_MEDICAL_TRACKER_IDS, RATE_CONTROLLABLE_SENSOR_IDS,
+    SENSOR_PPG_FLUSH, WATCH_PROTOCOL_VERSION, WatchBiaResultSample, WatchButtonSample,
     WatchEcgBatchSample, WatchEdaBatchSample, WatchEnvelope, WatchHeartRateBatchSample,
     WatchHeartbeatSample, WatchInboundMessage, WatchMedicalStatusSample, WatchOrientationSample,
     WatchPpgBatchSample, WatchPpgStatusSample, WatchSensorStatusSample,
@@ -124,9 +125,9 @@ pub enum WatchBridgeError {
     UnknownMeasurementTracker(String),
     #[error("'{0}' is not a valid controllable sensor id")]
     UnknownControllableSensor(String),
-    #[error("'{0}' is not a rate-controllable IMU sensor id")]
+    #[error("'{0}' is not a rate-controllable sensor id")]
     UnknownRateControllableSensor(String),
-    #[error("sensor rate {0}Hz is outside the {MIN_SENSOR_RATE_HZ}..={MAX_SENSOR_RATE_HZ}Hz range")]
+    #[error("sensor rate {0}Hz is outside the allowed range for that control")]
     SensorRateOutOfRange(f64),
 }
 
@@ -257,12 +258,17 @@ impl WatchBridgeServer {
         &self,
         command: SensorRateCommand,
     ) -> Result<(), WatchBridgeError> {
-        if !IMU_SENSOR_IDS.contains(&command.sensor.as_str()) {
+        if !RATE_CONTROLLABLE_SENSOR_IDS.contains(&command.sensor.as_str()) {
             return Err(WatchBridgeError::UnknownRateControllableSensor(
                 command.sensor.clone(),
             ));
         }
-        if !(MIN_SENSOR_RATE_HZ..=MAX_SENSOR_RATE_HZ).contains(&command.rate_hz) {
+        let range = if command.sensor == SENSOR_PPG_FLUSH {
+            MIN_PPG_FLUSH_RATE_HZ..=MAX_PPG_FLUSH_RATE_HZ
+        } else {
+            MIN_SENSOR_RATE_HZ..=MAX_SENSOR_RATE_HZ
+        };
+        if !command.rate_hz.is_finite() || !range.contains(&command.rate_hz) {
             return Err(WatchBridgeError::SensorRateOutOfRange(command.rate_hz));
         }
         if !self.shared.active.load(Ordering::Acquire) {

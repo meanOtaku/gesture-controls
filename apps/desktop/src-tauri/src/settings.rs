@@ -6,8 +6,9 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use spatial_protocol::{
-    CONTROLLABLE_SENSOR_IDS, MAX_SENSOR_RATE_HZ, MIN_SENSOR_RATE_HZ, SENSOR_ACCELERATION,
-    SENSOR_GYROSCOPE, SENSOR_ORIENTATION,
+    CONTROLLABLE_SENSOR_IDS, MAX_PPG_FLUSH_RATE_HZ, MAX_SENSOR_RATE_HZ, MIN_PPG_FLUSH_RATE_HZ,
+    MIN_SENSOR_RATE_HZ, SENSOR_ACCELERATION, SENSOR_GYROSCOPE, SENSOR_ORIENTATION,
+    SENSOR_PPG_FLUSH,
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 use tracing::{debug, warn};
@@ -40,8 +41,11 @@ pub struct AppSettings {
     pub watch_orientation_rate_hz: f64,
     pub watch_acceleration_rate_hz: f64,
     pub watch_gyroscope_rate_hz: f64,
-    #[serde(default = "default_health_acceptance_rate_hz")]
-    pub watch_ppg_acceptance_rate_hz: f64,
+    #[serde(
+        default = "default_ppg_flush_rate_hz",
+        alias = "watchPpgAcceptanceRateHz"
+    )]
+    pub watch_ppg_flush_rate_hz: f64,
     #[serde(default = "default_health_acceptance_rate_hz")]
     pub watch_heart_rate_acceptance_rate_hz: f64,
     #[serde(default = "default_health_acceptance_rate_hz")]
@@ -63,7 +67,7 @@ impl Default for AppSettings {
             watch_gyroscope_rate_hz: 50.0,
             // Samsung controls physical sampling/callback cadence. Defaults at
             // the acceptance ceiling preserve every callback sample.
-            watch_ppg_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
+            watch_ppg_flush_rate_hz: default_ppg_flush_rate_hz(),
             watch_heart_rate_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
             watch_skin_temperature_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
             watch_eda_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
@@ -77,6 +81,10 @@ impl Default for AppSettings {
 
 fn default_health_acceptance_rate_hz() -> f64 {
     MAX_HEALTH_ACCEPTANCE_RATE_HZ
+}
+
+fn default_ppg_flush_rate_hz() -> f64 {
+    1.0
 }
 
 impl AppSettings {
@@ -117,11 +125,13 @@ impl AppSettings {
             MIN_SENSOR_RATE_HZ,
             MAX_SENSOR_RATE_HZ,
         )?;
+        in_range(
+            "watchPpgFlushRateHz",
+            self.watch_ppg_flush_rate_hz,
+            MIN_PPG_FLUSH_RATE_HZ,
+            MAX_PPG_FLUSH_RATE_HZ,
+        )?;
         for (name, value) in [
-            (
-                "watchPpgAcceptanceRateHz",
-                self.watch_ppg_acceptance_rate_hz,
-            ),
             (
                 "watchHeartRateAcceptanceRateHz",
                 self.watch_heart_rate_acceptance_rate_hz,
@@ -315,6 +325,7 @@ pub fn apply_watch_settings(server: &WatchBridgeServer, settings: &AppSettings) 
         (SENSOR_ORIENTATION, settings.watch_orientation_rate_hz),
         (SENSOR_ACCELERATION, settings.watch_acceleration_rate_hz),
         (SENSOR_GYROSCOPE, settings.watch_gyroscope_rate_hz),
+        (SENSOR_PPG_FLUSH, settings.watch_ppg_flush_rate_hz),
     ];
     for (sensor, rate_hz) in rates {
         let command = SensorRateCommand {

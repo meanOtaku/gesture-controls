@@ -96,6 +96,20 @@ class PpgCollector(
     private var flushCompletedCount = 0
     private var callbackCount = 0
     private var sampleCount = 0
+    private var flushIntervalMs = DEFAULT_FLUSH_INTERVAL_MS
+
+    /** Changes only the existing HealthTracker.flush() schedule; Samsung remains authoritative for physical PPG sampling. */
+    fun setFlushRateHz(rateHz: Double) {
+        if (!rateHz.isFinite() || rateHz < MIN_FLUSH_RATE_HZ || rateHz > MAX_FLUSH_RATE_HZ) return
+        val intervalMs = (1_000.0 / rateHz).toLong().coerceAtLeast(1L)
+        mainHandler.post {
+            flushIntervalMs = intervalMs
+            if (started && tracker != null) {
+                mainHandler.removeCallbacks(flushTick)
+                mainHandler.postDelayed(flushTick, flushIntervalMs)
+            }
+        }
+    }
 
     /** Must only run on [mainHandler]'s thread. Rebuilds the compact counter line and tags on the triggering event. */
     private fun updateDiagnostic(event: String) {
@@ -180,7 +194,7 @@ class PpgCollector(
      * [OnDemandMedicalSampler]'s kdoc), unlike most continuous trackers.
      * Calling it forces the SDK to deliver its buffered samples immediately
      * instead of waiting for the screen to turn back on. Never runs faster
-     * than [FLUSH_INTERVAL_MS] — the SDK doesn't need it more often, and nothing
+     * than the configured [flushIntervalMs] — nothing
      * here calls it off this one schedule.
      */
     private val flushTick = object : Runnable {
@@ -195,7 +209,7 @@ class PpgCollector(
                 // looks identical to a healthy but quiet stream.
                 updateDiagnostic("flush failed: ${error.javaClass.simpleName}: ${error.message}")
             }
-            mainHandler.postDelayed(this, FLUSH_INTERVAL_MS)
+            mainHandler.postDelayed(this, flushIntervalMs)
         }
     }
 
@@ -235,7 +249,7 @@ class PpgCollector(
             newTracker.setEventListener(trackerEventListener)
             _state.value = PpgState.STREAMING
             mainHandler.removeCallbacks(flushTick)
-            mainHandler.postDelayed(flushTick, FLUSH_INTERVAL_MS)
+            mainHandler.postDelayed(flushTick, flushIntervalMs)
         }
 
         override fun onConnectionEnded() {
@@ -310,7 +324,9 @@ class PpgCollector(
 
     private companion object {
         const val CONNECTION_TIMEOUT_MS = 12_000L
-        const val FLUSH_INTERVAL_MS = 1_000L
+        const val DEFAULT_FLUSH_INTERVAL_MS = 1_000L
+        const val MIN_FLUSH_RATE_HZ = 0.1
+        const val MAX_FLUSH_RATE_HZ = 10.0
         const val MAX_RETRY_ATTEMPTS = 5
         const val RETRY_BASE_DELAY_MS = 1_000L
         const val RETRY_MAX_DELAY_MS = 16_000L

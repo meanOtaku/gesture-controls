@@ -27,7 +27,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   watchOrientationRateHz: 50,
   watchAccelerationRateHz: 50,
   watchGyroscopeRateHz: 50,
-  watchPpgAcceptanceRateHz: 200,
+  watchPpgFlushRateHz: 1,
   watchHeartRateAcceptanceRateHz: 200,
   watchSkinTemperatureAcceptanceRateHz: 200,
   watchEdaAcceptanceRateHz: 200,
@@ -47,7 +47,7 @@ export function Settings({ settings, error, onUpdate, onReset }: SettingsProps) 
   const watchOrientationRateInput = useRef<HTMLInputElement>(null);
   const watchAccelerationRateInput = useRef<HTMLInputElement>(null);
   const watchGyroscopeRateInput = useRef<HTMLInputElement>(null);
-  const watchPpgAcceptanceRateInput = useRef<HTMLInputElement>(null);
+  const watchPpgFlushRateInput = useRef<HTMLInputElement>(null);
   const watchHeartRateAcceptanceRateInput = useRef<HTMLInputElement>(null);
   const watchSkinTemperatureAcceptanceRateInput = useRef<HTMLInputElement>(null);
   const watchEdaAcceptanceRateInput = useRef<HTMLInputElement>(null);
@@ -61,7 +61,7 @@ export function Settings({ settings, error, onUpdate, onReset }: SettingsProps) 
       watchOrientationRateHz: clamp(watchOrientationRateInput.current?.value, 1, 200, current.watchOrientationRateHz),
       watchAccelerationRateHz: clamp(watchAccelerationRateInput.current?.value, 1, 200, current.watchAccelerationRateHz),
       watchGyroscopeRateHz: clamp(watchGyroscopeRateInput.current?.value, 1, 200, current.watchGyroscopeRateHz),
-      watchPpgAcceptanceRateHz: clamp(watchPpgAcceptanceRateInput.current?.value, 0.1, 200, current.watchPpgAcceptanceRateHz),
+      watchPpgFlushRateHz: clamp(watchPpgFlushRateInput.current?.value, 0.1, 10, current.watchPpgFlushRateHz),
       watchHeartRateAcceptanceRateHz: clamp(watchHeartRateAcceptanceRateInput.current?.value, 0.1, 200, current.watchHeartRateAcceptanceRateHz),
       watchSkinTemperatureAcceptanceRateHz: clamp(watchSkinTemperatureAcceptanceRateInput.current?.value, 0.1, 200, current.watchSkinTemperatureAcceptanceRateHz),
       watchEdaAcceptanceRateHz: clamp(watchEdaAcceptanceRateInput.current?.value, 0.1, 200, current.watchEdaAcceptanceRateHz),
@@ -81,7 +81,7 @@ export function Settings({ settings, error, onUpdate, onReset }: SettingsProps) 
         <div>
           <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Settings</h1>
-          <p className="subtitle">Acceptance, recording, and sampling rates. Changes apply immediately, no restart required.</p>
+          <p className="subtitle">Edit acceptance, recording, and sampling rates, then apply them together without restarting. Sensor switches remain immediate.</p>
         </div>
       </header>
 
@@ -108,7 +108,6 @@ export function Settings({ settings, error, onUpdate, onReset }: SettingsProps) 
               ref={headphonesRateInput}
               key={`headphones-rate-${current.headphonesRateHz}`}
               defaultValue={current.headphonesRateHz}
-              onChange={commitRates}
             />
             <small>Hz</small>
           </label>
@@ -131,7 +130,6 @@ export function Settings({ settings, error, onUpdate, onReset }: SettingsProps) 
               ref={recordingRateInput}
               key={`recording-rate-${current.recordingRateHz}`}
               defaultValue={current.recordingRateHz}
-              onChange={commitRates}
             />
             <small>Hz, per channel</small>
           </label>
@@ -146,7 +144,6 @@ export function Settings({ settings, error, onUpdate, onReset }: SettingsProps) 
               ref={graphRefreshRateInput}
               key={`graph-refresh-rate-${current.graphRefreshRateHz}`}
               defaultValue={current.graphRefreshRateHz}
-              onChange={commitRates}
             />
             <small>Hz</small>
           </label>
@@ -170,7 +167,6 @@ export function Settings({ settings, error, onUpdate, onReset }: SettingsProps) 
               ref={watchOrientationRateInput}
               key={`watch-orientation-rate-${current.watchOrientationRateHz}`}
               defaultValue={current.watchOrientationRateHz}
-              onChange={commitRates}
             />
             <small>Hz</small>
           </label>
@@ -185,7 +181,6 @@ export function Settings({ settings, error, onUpdate, onReset }: SettingsProps) 
               ref={watchAccelerationRateInput}
               key={`watch-acceleration-rate-${current.watchAccelerationRateHz}`}
               defaultValue={current.watchAccelerationRateHz}
-              onChange={commitRates}
             />
             <small>Hz</small>
           </label>
@@ -200,45 +195,44 @@ export function Settings({ settings, error, onUpdate, onReset }: SettingsProps) 
               ref={watchGyroscopeRateInput}
               key={`watch-gyroscope-rate-${current.watchGyroscopeRateHz}`}
               defaultValue={current.watchGyroscopeRateHz}
-              onChange={commitRates}
             />
             <small>Hz</small>
           </label>
         </div>
       </section>
 
-      <section className="calibration-card" aria-label="Samsung health acceptance rates">
+      <section className="calibration-card" aria-label="Samsung health delivery controls">
         <div className="calibration-heading">
-          <div><p className="eyebrow">Galaxy Watch</p><h2>Samsung health acceptance rates</h2></div>
+          <div><p className="eyebrow">Galaxy Watch</p><h2>Samsung health delivery controls</h2></div>
         </div>
-        <p className="hint">These controls change desktop graph and recording acceptance immediately. Samsung controls the physical tracker and callback cadence.</p>
+        <p className="hint">PPG controls the existing HealthTracker.flush() frequency. The other values limit desktop graph and recording acceptance. Samsung still controls physical sampling.</p>
         <div className="calibration-actions">
           <label>
-            Raw PPG
-            <input aria-label="Watch PPG acceptance rate Hz" type="number" min="0.1" max="200" step="0.1"
-              ref={watchPpgAcceptanceRateInput} key={`watch-ppg-acceptance-${current.watchPpgAcceptanceRateHz}`}
-              defaultValue={current.watchPpgAcceptanceRateHz} onChange={commitRates} />
+            Raw PPG flush
+            <input aria-label="Watch PPG flush rate Hz" type="number" min="0.1" max="10" step="0.1"
+              ref={watchPpgFlushRateInput} key={`watch-ppg-flush-${current.watchPpgFlushRateHz}`}
+              defaultValue={current.watchPpgFlushRateHz} />
             <small>Hz</small>
           </label>
           <label>
             Heart rate
             <input aria-label="Watch heart rate acceptance rate Hz" type="number" min="0.1" max="200" step="0.1"
               ref={watchHeartRateAcceptanceRateInput} key={`watch-heart-rate-acceptance-${current.watchHeartRateAcceptanceRateHz}`}
-              defaultValue={current.watchHeartRateAcceptanceRateHz} onChange={commitRates} />
+              defaultValue={current.watchHeartRateAcceptanceRateHz} />
             <small>Hz</small>
           </label>
           <label>
             Skin temperature
             <input aria-label="Watch skin temperature acceptance rate Hz" type="number" min="0.1" max="200" step="0.1"
               ref={watchSkinTemperatureAcceptanceRateInput} key={`watch-temperature-acceptance-${current.watchSkinTemperatureAcceptanceRateHz}`}
-              defaultValue={current.watchSkinTemperatureAcceptanceRateHz} onChange={commitRates} />
+              defaultValue={current.watchSkinTemperatureAcceptanceRateHz} />
             <small>Hz</small>
           </label>
           <label>
             EDA
             <input aria-label="Watch EDA acceptance rate Hz" type="number" min="0.1" max="200" step="0.1"
               ref={watchEdaAcceptanceRateInput} key={`watch-eda-acceptance-${current.watchEdaAcceptanceRateHz}`}
-              defaultValue={current.watchEdaAcceptanceRateHz} onChange={commitRates} />
+              defaultValue={current.watchEdaAcceptanceRateHz} />
             <small>Hz</small>
           </label>
         </div>
@@ -262,12 +256,14 @@ export function Settings({ settings, error, onUpdate, onReset }: SettingsProps) 
         </div>
       </section>
 
-      <section className="settings" aria-label="Reset settings">
+      <section className="settings" aria-label="Apply or reset settings">
         <div>
-          <p className="eyebrow">Defaults</p>
-          <h2>Reset all settings</h2>
+          <p className="eyebrow">Runtime configuration</p>
+          <h2>Apply rate changes</h2>
+          <p className="hint">Applies every edited rate to its corresponding desktop or Watch stream.</p>
         </div>
         <div className="recording-actions">
+          <button onClick={commitRates}>Apply rates</button>
           <button onClick={onReset}>Reset to defaults</button>
         </div>
       </section>

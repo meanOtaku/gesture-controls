@@ -4,6 +4,7 @@ import type {
   HeadTrackerStatus,
   WatchEdaBatch,
   WatchHeartRateBatch,
+  WatchOrientationSample,
   WatchPpgBatch,
   WatchSkinTemperatureBatch,
   WatchStatus,
@@ -201,7 +202,6 @@ class TelemetryStore {
    * graph/CSV acceptance and never claim to change physical tracker cadence.
    */
   setHealthAcceptanceRatesHz(rates: {
-    ppg: number;
     heartRate: number;
     temperature: number;
     eda: number;
@@ -241,39 +241,39 @@ class TelemetryStore {
   ingestWatchStatus(status: WatchStatus): void {
     this.watchStatus = status;
     const orientation = status.lastOrientation;
-    if (status.connected && orientation && orientation.sequence !== this.lastWatchOrientationSequence) {
-      this.lastWatchOrientationSequence = orientation.sequence;
-      const at = Date.now();
-      const euler = quaternionToEulerDegrees(orientation.quaternion);
-      this.series.get("watchOrientation")?.push({ at, values: euler });
-      if (this.canRecord("watchOrientation", at)) this.rows.push({
-        recordedAt: new Date(at).toISOString(),
-        source: "watch",
-        sourceTimestampNs: String(orientation.timestampNs),
-        sequence: String(orientation.sequence),
-        values: {
-          yawDeg: euler[0],
-          pitchDeg: euler[1],
-          rollDeg: euler[2],
-          accelX: orientation.accelerometer?.[0] ?? null,
-          accelY: orientation.accelerometer?.[1] ?? null,
-          accelZ: orientation.accelerometer?.[2] ?? null,
-          gyroX: orientation.gyroscope?.[0] ?? null,
-          gyroY: orientation.gyroscope?.[1] ?? null,
-          gyroZ: orientation.gyroscope?.[2] ?? null,
-          ppgGreen: status.ppgLastSample?.green ?? null,
-          ppgRed: status.ppgLastSample?.red ?? null,
-          ppgIr: status.ppgLastSample?.ir ?? null,
-        },
-      });
-    }
+    if (status.connected && orientation) this.ingestWatchOrientation(orientation);
     this.ingestOnDemand(status);
+    this.schedulePublish();
+  }
+
+  ingestWatchOrientation(orientation: WatchOrientationSample): void {
+    if (orientation.sequence === this.lastWatchOrientationSequence) return;
+    this.lastWatchOrientationSequence = orientation.sequence;
+    const at = Date.now();
+    const euler = quaternionToEulerDegrees(orientation.quaternion);
+    this.series.get("watchOrientation")?.push({ at, values: euler });
+    if (this.canRecord("watchOrientation", at)) this.rows.push({
+      recordedAt: new Date(at).toISOString(),
+      source: "watch",
+      sourceTimestampNs: String(orientation.timestampNs),
+      sequence: String(orientation.sequence),
+      values: {
+        yawDeg: euler[0],
+        pitchDeg: euler[1],
+        rollDeg: euler[2],
+        accelX: orientation.accelerometer?.[0] ?? null,
+        accelY: orientation.accelerometer?.[1] ?? null,
+        accelZ: orientation.accelerometer?.[2] ?? null,
+        gyroX: orientation.gyroscope?.[0] ?? null,
+        gyroY: orientation.gyroscope?.[1] ?? null,
+        gyroZ: orientation.gyroscope?.[2] ?? null,
+      },
+    });
     this.schedulePublish();
   }
 
   ingestPpgBatch(batch: WatchPpgBatch): void {
     this.ingestTimestampedBatch(batch.timestampsNs, (timestampNs, index, at) => {
-      if (!this.canAcceptHealth("ppg", at)) return;
       this.series.get("ppg")?.push({ at, values: [batch.green[index] ?? 0, batch.red[index] ?? 0, batch.ir[index] ?? 0] });
       if (this.canRecord("ppg", at)) this.rows.push({
         recordedAt: new Date(at).toISOString(), source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(batch.sequence),

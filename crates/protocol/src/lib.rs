@@ -122,6 +122,8 @@ pub const DESKTOP_SET_SENSOR_RATE_TYPE: &str = "desktop.set_sensor_rate";
 /// `MotionSensorProtocol.kt`.
 pub const MIN_SENSOR_RATE_HZ: f64 = 1.0;
 pub const MAX_SENSOR_RATE_HZ: f64 = 200.0;
+pub const MIN_PPG_FLUSH_RATE_HZ: f64 = 0.1;
+pub const MAX_PPG_FLUSH_RATE_HZ: f64 = 10.0;
 
 /// Continuously-accessible trackers, capability-gated and auto-started
 /// alongside `PPG_CONTINUOUS` (see `MedicalContinuousCollector.kt`).
@@ -145,8 +147,15 @@ pub const TRACKER_SWEAT_LOSS_ON_DEMAND: &str = "sweat_loss_on_demand";
 pub const SENSOR_ORIENTATION: &str = "orientation";
 pub const SENSOR_ACCELERATION: &str = "acceleration";
 pub const SENSOR_GYROSCOPE: &str = "gyroscope";
+pub const SENSOR_PPG_FLUSH: &str = "ppg_continuous";
 
 pub const IMU_SENSOR_IDS: &[&str] = &[SENSOR_ORIENTATION, SENSOR_ACCELERATION, SENSOR_GYROSCOPE];
+pub const RATE_CONTROLLABLE_SENSOR_IDS: &[&str] = &[
+    SENSOR_ORIENTATION,
+    SENSOR_ACCELERATION,
+    SENSOR_GYROSCOPE,
+    SENSOR_PPG_FLUSH,
+];
 
 /// Every sensor controllable via the generic `desktop.set_sensor` command:
 /// the three IMU inputs plus the continuously-accessible medical trackers.
@@ -1084,8 +1093,9 @@ pub struct DesktopSensorControlPayload {
 }
 
 /// `desktop.set_sensor_rate` payload: `sensor` must be one of
-/// [`IMU_SENSOR_IDS`] (medical trackers are never rate-controlled — Samsung
-/// Health Sensor SDK owns their sampling behavior). `rate_hz` must fall
+/// [`RATE_CONTROLLABLE_SENSOR_IDS`]. IMU values request Android delivery rates;
+/// `ppg_continuous` controls the existing `HealthTracker.flush()` schedule and
+/// never overrides Samsung's physical sampling behavior. `rate_hz` must fall
 /// within [`MIN_SENSOR_RATE_HZ`]..=[`MAX_SENSOR_RATE_HZ`]; `SensorCollector`
 /// converts it to `samplingPeriodUs` and re-registers only that sensor.
 #[derive(Debug, Clone, Serialize)]
