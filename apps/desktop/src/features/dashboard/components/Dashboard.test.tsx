@@ -18,8 +18,8 @@ const connected: HeadTrackerStatus = {
 
 describe("Dashboard", () => {
   it("shows connection and all required Sony diagnostics", () => {
-    render(<Dashboard status={connected} />);
-    expect(screen.getByText("Connected")).toBeInTheDocument();
+    render(<Dashboard view="headphone" status={connected} />);
+    expect(screen.getByText("Bridge connected")).toBeInTheDocument();
     expect(screen.getByText("WH-1000XM5")).toBeInTheDocument();
     for (const label of ["Yaw", "Pitch", "Roll", "Quaternion", "Gyroscope", "Packet rate", "Receive latency", "Reset counter"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
@@ -31,6 +31,7 @@ describe("Dashboard", () => {
     const settings: Array<[number, number]> = [];
     const { container } = render(
       <Dashboard
+        view="headphone"
         status={connected}
         calibration={{
           centerCalibrated: true,
@@ -65,7 +66,8 @@ describe("Dashboard", () => {
   it("shows a clear waiting state and one-command launch guidance before the first packet", () => {
     const { container } = render(<Dashboard status={null} />);
     const dashboard = within(container);
-    expect(dashboard.getByText("Waiting for Sony tracker")).toBeInTheDocument();
+    expect(dashboard.getByText("Waiting for Sony bridge")).toBeInTheDocument();
+    expect(dashboard.getByText("Sony bridge not detected")).toBeInTheDocument();
     expect(dashboard.getByText(/on macos, use the arrow or \+\/- keys to change system volume/i)).toBeInTheDocument();
   });
 });

@@ -56,13 +56,13 @@ test("commits refreshed show state only after fallible window operations succeed
   );
 });
 
-test("closing the main UI exits Tauri even while the hidden overlay window exists", async () => {
+test("closing the main UI stops the watch bridge and exits Tauri", async () => {
   const libSource = await readFile(libSourceUrl, "utf8");
 
   assert.match(
     libSource,
-    /on_window_event[\s\S]*label\(\)\s*==\s*MAIN_WINDOW[\s\S]*CloseRequested[\s\S]*app_handle\(\)\.exit\(0\)/,
-    "the main window close request must terminate the full Tauri process",
+    /on_window_event[\s\S]*label\(\)\s*==\s*MAIN_WINDOW[\s\S]*CloseRequested[\s\S]*prevent_close\(\)[\s\S]*WatchBridgeServer[\s\S]*server\.stop\(\)\.await[\s\S]*handle\.exit\(0\)/,
+    "the main window close request must stop the watch bridge before terminating Tauri",
   );
 });
 

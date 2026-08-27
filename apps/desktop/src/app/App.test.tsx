@@ -51,6 +51,10 @@ afterEach(() => {
   Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
 });
 
+function openHeadphoneTab(): void {
+  fireEvent.click(screen.getByRole("button", { name: "Headphones" }));
+}
+
 describe("App overlay integration", () => {
   it("ignores volume keys while the overlay is hidden", async () => {
     render(<App />);
@@ -187,6 +191,7 @@ describe("App overlay integration", () => {
     await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: true } }));
     await act(async () => rejectHide?.(new Error("window refused to hide")));
 
+    openHeadphoneTab();
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /volume overlay failed to hide.*window refused to hide/i,
     );
@@ -220,6 +225,7 @@ describe("App overlay integration", () => {
     await waitFor(() => expect(listeners.has(HEAD_TARGET_ENTERED_EVENT)).toBe(true));
     await act(async () => listeners.get(HEAD_TARGET_ENTERED_EVENT)?.({ payload: "topRight" }));
     await act(async () => listeners.get(HEAD_TARGET_ENTERED_EVENT)?.({ payload: "topRight" }));
+    openHeadphoneTab();
     expect(await screen.findByRole("alert")).toHaveTextContent(/newer volume failure/i);
 
     await act(async () => resolveFirst?.());
@@ -253,6 +259,7 @@ describe("App overlay integration", () => {
     await act(async () => listeners.get(HEAD_TARGET_ENTERED_EVENT)?.({ payload: "topRight" }));
 
     await act(async () => rejectFirst?.(new Error("stale volume failure")));
+    openHeadphoneTab();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
@@ -277,6 +284,7 @@ describe("App overlay integration", () => {
     await act(async () => listeners.get(HEAD_TRACKER_CONNECTION_EVENT)?.({ payload: true }));
     await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: true } }));
     fireEvent.keyDown(window, { key: "ArrowUp" });
+    openHeadphoneTab();
     expect(await screen.findByRole("alert")).toHaveTextContent(/volume unavailable/i);
 
     fireEvent.click(screen.getByRole("button", { name: /capture center/i }));
@@ -308,6 +316,7 @@ describe("App overlay integration", () => {
     await waitFor(() => expect(listeners.has(HEAD_TARGET_ENTERED_EVENT)).toBe(true));
     await act(async () => listeners.get(HEAD_TARGET_ENTERED_EVENT)?.({ payload: "topRight" }));
 
+    openHeadphoneTab();
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /volume control failed.*cannot read output volume/i,
     );
@@ -335,6 +344,7 @@ describe("App overlay integration", () => {
     await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: true } }));
     fireEvent.keyDown(window, { key: "ArrowUp" });
 
+    openHeadphoneTab();
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /volume control failed.*audio device unavailable/i,
     );
