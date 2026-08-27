@@ -1,4 +1,4 @@
-package com.gesturecontrols.wearwatch
+package com.gesturecontrols.wearwatch.feature.health
 
 import com.samsung.android.service.health.tracking.data.HealthTrackerType
 

@@ -1,4 +1,7 @@
-package com.gesturecontrols.wearwatch
+package com.gesturecontrols.wearwatch.data.discovery
+
+import com.gesturecontrols.wearwatch.data.connection.*
+import com.gesturecontrols.wearwatch.data.preferences.*
 
 import android.content.Context
 import android.net.ConnectivityManager

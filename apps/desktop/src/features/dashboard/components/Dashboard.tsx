@@ -1,14 +1,14 @@
 import { useRef } from "react";
 import {
   quaternionToEulerDegrees,
-} from "../protocol/events";
+} from "../../../shared/protocol/events";
 import type {
   CalibrationState,
   CalibrationTarget,
   HeadTrackerStatus,
   PpgState,
   WatchStatus,
-} from "../protocol/events";
+} from "../../../shared/protocol/events";
 
 const PPG_STATE_LABELS: Record<PpgState, string> = {
   idle: "PPG idle (25Hz continuous)",

@@ -1,4 +1,4 @@
-package com.gesturecontrols.wearwatch
+package com.gesturecontrols.wearwatch.data.preferences
 
 import android.content.Context
 

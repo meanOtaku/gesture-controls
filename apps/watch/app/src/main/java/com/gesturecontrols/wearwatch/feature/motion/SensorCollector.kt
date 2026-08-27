@@ -1,4 +1,4 @@
-package com.gesturecontrols.wearwatch
+package com.gesturecontrols.wearwatch.feature.motion
 
 import android.content.Context
 import android.hardware.Sensor

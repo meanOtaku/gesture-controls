@@ -1,4 +1,7 @@
-package com.gesturecontrols.wearwatch
+package com.gesturecontrols.wearwatch.data.connection
+
+import com.gesturecontrols.wearwatch.feature.health.*
+import com.gesturecontrols.wearwatch.feature.motion.*
 
 import org.json.JSONArray
 import org.json.JSONObject

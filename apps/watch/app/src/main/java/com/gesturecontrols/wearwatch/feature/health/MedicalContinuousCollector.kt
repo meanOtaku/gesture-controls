@@ -1,4 +1,4 @@
-package com.gesturecontrols.wearwatch
+package com.gesturecontrols.wearwatch.feature.health
 
 import android.Manifest
 import android.content.Context

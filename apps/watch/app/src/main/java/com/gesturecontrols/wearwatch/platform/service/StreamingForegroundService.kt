@@ -1,4 +1,6 @@
-package com.gesturecontrols.wearwatch
+package com.gesturecontrols.wearwatch.platform.service
+
+import com.gesturecontrols.wearwatch.R
 
 import android.app.Notification
 import android.app.NotificationChannel

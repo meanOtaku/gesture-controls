@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Dashboard } from "./Dashboard";
-import type { HeadTrackerStatus } from "../protocol/events";
+import type { HeadTrackerStatus } from "../../../shared/protocol/events";
 
 const connected: HeadTrackerStatus = {
   connected: true,

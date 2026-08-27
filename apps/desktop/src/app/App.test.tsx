@@ -5,7 +5,7 @@ import {
   HEAD_TARGET_ENTERED_EVENT,
   HEAD_TRACKER_CONNECTION_EVENT,
   OVERLAY_STATE_EVENT,
-} from "./protocol/events";
+} from "../shared/protocol/events";
 
 const { invoke, listeners, listen } = vi.hoisted(() => {
   const eventListeners = new Map<string, (event: { payload: unknown }) => void>();

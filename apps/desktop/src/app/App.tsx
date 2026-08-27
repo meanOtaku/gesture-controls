@@ -1,9 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
-import { Dashboard } from "./components/Dashboard";
-import { LiveTelemetry } from "./components/LiveTelemetry";
-import { VolumeKnob } from "./components/VolumeKnob";
+import { Dashboard } from "../features/dashboard/components/Dashboard";
+import { LiveTelemetry } from "../features/telemetry/components/LiveTelemetry";
+import { VolumeKnob } from "../features/overlay/components/VolumeKnob";
 import {
   CALIBRATION_STATE_EVENT,
   HEAD_POSE_EVENT,
@@ -26,7 +26,7 @@ import {
   type WatchPpgBatch,
   type WatchSkinTemperatureBatch,
   type WatchStatus,
-} from "./protocol/events";
+} from "../shared/protocol/events";
 
 const emptyStatus: HeadTrackerStatus = {
   connected: false,

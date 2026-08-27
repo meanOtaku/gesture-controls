@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useReducer, useRef, useState } from "react";
-import { quaternionToEulerDegrees } from "../protocol/events";
+import { quaternionToEulerDegrees } from "../../../shared/protocol/events";
 import type {
   HeadTrackerStatus,
   WatchEdaBatch,
@@ -8,7 +8,7 @@ import type {
   WatchPpgBatch,
   WatchSkinTemperatureBatch,
   WatchStatus,
-} from "../protocol/events";
+} from "../../../shared/protocol/events";
 
 type SeriesPoint = { at: number; values: number[] };
 type CsvRow = {

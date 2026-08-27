@@ -1,4 +1,13 @@
-package com.gesturecontrols.wearwatch
+package com.gesturecontrols.wearwatch.app
+
+import com.gesturecontrols.wearwatch.R
+
+import com.gesturecontrols.wearwatch.data.connection.*
+import com.gesturecontrols.wearwatch.data.discovery.*
+import com.gesturecontrols.wearwatch.data.preferences.*
+import com.gesturecontrols.wearwatch.feature.health.*
+import com.gesturecontrols.wearwatch.feature.motion.*
+import com.gesturecontrols.wearwatch.platform.service.*
 
 import android.Manifest
 import android.content.Context
