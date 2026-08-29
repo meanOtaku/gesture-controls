@@ -343,3 +343,146 @@ impl VolumeSimulation {
         self.current
     }
 }
+
+/// Maps relative watch orientation around the local forearm (Y) axis to
+/// bounded, smoothed incremental volume-point changes.
+#[derive(Debug, Clone, Copy)]
+pub struct WristRotationConfig {
+    pub dead_zone_degrees: f64,
+    pub smoothing_alpha: f64,
+    pub volume_points_per_degree: f64,
+    pub max_angular_velocity_degrees_per_second: f64,
+    pub max_volume_points_per_second: f64,
+}
+
+impl Default for WristRotationConfig {
+    fn default() -> Self {
+        Self {
+            dead_zone_degrees: 3.0,
+            smoothing_alpha: 0.2,
+            volume_points_per_degree: 1.0 / 3.0,
+            max_angular_velocity_degrees_per_second: 360.0,
+            max_volume_points_per_second: 30.0,
+        }
+    }
+}
+
+#[derive(Debug, Error, PartialEq)]
+pub enum WristRotationError {
+    #[error("invalid wrist rotation configuration")]
+    InvalidConfiguration,
+    #[error("orientation timestamp must increase while grabbed")]
+    NonMonotonicTimestamp,
+    #[error(transparent)]
+    InvalidQuaternion(#[from] CalibrationError),
+}
+
+#[derive(Debug, Default)]
+pub struct WristRotation {
+    config: WristRotationConfig,
+    start: Option<Quaternion<f64>>,
+    previous_raw_degrees: Option<f64>,
+    smoothed_degrees: f64,
+    applied_degrees: f64,
+    last_timestamp_ns: Option<u64>,
+}
+
+impl WristRotation {
+    pub fn new(config: WristRotationConfig) -> Result<Self, WristRotationError> {
+        validate_wrist_config(config)?;
+        Ok(Self {
+            config,
+            ..Self::default()
+        })
+    }
+
+    pub fn update_config(&mut self, config: WristRotationConfig) -> Result<(), WristRotationError> {
+        validate_wrist_config(config)?;
+        self.config = config;
+        Ok(())
+    }
+
+    pub fn begin(
+        &mut self,
+        quaternion: [f64; 4],
+        timestamp_ns: u64,
+    ) -> Result<(), WristRotationError> {
+        self.start = Some(normalized_quaternion(quaternion)?);
+        self.previous_raw_degrees = None;
+        self.smoothed_degrees = 0.0;
+        self.applied_degrees = 0.0;
+        self.last_timestamp_ns = Some(timestamp_ns);
+        Ok(())
+    }
+
+    pub fn end(&mut self) {
+        self.start = None;
+        self.previous_raw_degrees = None;
+        self.last_timestamp_ns = None;
+    }
+
+    /// Ignores high-velocity orientation outliers rather than risking a jump.
+    pub fn observe(
+        &mut self,
+        quaternion: [f64; 4],
+        timestamp_ns: u64,
+    ) -> Result<f64, WristRotationError> {
+        let Some(start) = self.start else {
+            return Ok(0.0);
+        };
+        let previous_timestamp = self
+            .last_timestamp_ns
+            .ok_or(WristRotationError::NonMonotonicTimestamp)?;
+        if timestamp_ns <= previous_timestamp {
+            return Err(WristRotationError::NonMonotonicTimestamp);
+        }
+        let current = normalized_quaternion(quaternion)?;
+        let relative = start.conjugate() * current;
+        let mut raw_degrees = (2.0 * relative.j.atan2(relative.w)).to_degrees();
+        if raw_degrees > 180.0 {
+            raw_degrees -= 360.0;
+        }
+        if raw_degrees < -180.0 {
+            raw_degrees += 360.0;
+        }
+        let elapsed_seconds = (timestamp_ns - previous_timestamp) as f64 / 1_000_000_000.0;
+        if let Some(previous) = self.previous_raw_degrees
+            && (raw_degrees - previous).abs() / elapsed_seconds
+                > self.config.max_angular_velocity_degrees_per_second
+        {
+            self.last_timestamp_ns = Some(timestamp_ns);
+            return Ok(0.0);
+        }
+        self.previous_raw_degrees = Some(raw_degrees);
+        self.last_timestamp_ns = Some(timestamp_ns);
+        let dead_zoned = if raw_degrees.abs() <= self.config.dead_zone_degrees {
+            0.0
+        } else {
+            raw_degrees - self.config.dead_zone_degrees.copysign(raw_degrees)
+        };
+        self.smoothed_degrees += self.config.smoothing_alpha * (dead_zoned - self.smoothed_degrees);
+        let desired_delta = self.smoothed_degrees - self.applied_degrees;
+        let maximum_delta = self.config.max_volume_points_per_second * elapsed_seconds
+            / self.config.volume_points_per_degree;
+        let applied_delta = desired_delta.clamp(-maximum_delta, maximum_delta);
+        self.applied_degrees += applied_delta;
+        Ok(applied_delta * self.config.volume_points_per_degree)
+    }
+}
+
+fn validate_wrist_config(config: WristRotationConfig) -> Result<(), WristRotationError> {
+    if !config.dead_zone_degrees.is_finite()
+        || !(0.0..90.0).contains(&config.dead_zone_degrees)
+        || !config.smoothing_alpha.is_finite()
+        || !(0.0..=1.0).contains(&config.smoothing_alpha)
+        || !config.volume_points_per_degree.is_finite()
+        || config.volume_points_per_degree <= 0.0
+        || !config.max_angular_velocity_degrees_per_second.is_finite()
+        || config.max_angular_velocity_degrees_per_second <= 0.0
+        || !config.max_volume_points_per_second.is_finite()
+        || config.max_volume_points_per_second <= 0.0
+    {
+        return Err(WristRotationError::InvalidConfiguration);
+    }
+    Ok(())
+}

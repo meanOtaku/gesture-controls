@@ -183,6 +183,10 @@ pub fn run() {
                                 {
                                     if let Err(error) = overlay.grab(&watch_handle) {
                                         warn!(%error, "failed to grab volume overlay");
+                                    } else if let Ok(Some(sample)) = runtime.latest_orientation()
+                                        && let Err(error) = overlay.begin_wrist_rotation(&sample)
+                                    {
+                                        warn!(%error, "failed to establish wrist rotation reference pose");
                                     }
                                 }
                                 WatchEvent::Button(sample)
@@ -196,6 +200,12 @@ pub fn run() {
                                 WatchEvent::Disconnected => {
                                     if let Err(error) = overlay.release(&watch_handle) {
                                         warn!(%error, "failed to release volume overlay on watch disconnect");
+                                    }
+                                }
+                                WatchEvent::Orientation(sample) => {
+                                    let volume_runtime = watch_handle.state::<overlay::VolumeRuntime>();
+                                    if let Err(error) = overlay.apply_wrist_rotation(&watch_handle, sample, &volume_runtime) {
+                                        warn!(%error, "failed to apply wrist rotation to volume");
                                     }
                                 }
                                 _ => {}

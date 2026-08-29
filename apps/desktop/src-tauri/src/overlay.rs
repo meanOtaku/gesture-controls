@@ -1,8 +1,11 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use interaction_engine::{VolumeSimulation, commit_visibility_after, top_right_overlay_position};
+use interaction_engine::{
+    VolumeSimulation, WristRotation, commit_visibility_after, top_right_overlay_position,
+};
 use serde::Serialize;
+use spatial_protocol::WatchOrientationSample;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow};
 use volume_control::{
     VolumeController, VolumeError, adjust_system_volume as adjust_native_volume,
@@ -40,6 +43,7 @@ impl Default for OverlayState {
 
 pub struct OverlayRuntime {
     state: Mutex<OverlayState>,
+    wrist_rotation: Mutex<WristRotation>,
     state_generation: AtomicU64,
     refresh_in_flight: AtomicBool,
 }
@@ -78,6 +82,7 @@ impl Default for OverlayRuntime {
     fn default() -> Self {
         Self {
             state: Mutex::new(OverlayState::default()),
+            wrist_rotation: Mutex::new(WristRotation::default()),
             state_generation: AtomicU64::new(0),
             refresh_in_flight: AtomicBool::new(false),
         }
@@ -168,6 +173,10 @@ impl OverlayRuntime {
             .get_webview_window(OVERLAY_WINDOW)
             .ok_or("overlay window is not configured")?;
         state.grabbed = false;
+        self.wrist_rotation
+            .lock()
+            .map_err(|_| "wrist rotation lock was poisoned")?
+            .end();
         commit_visibility_after(&mut state.visible, false, || {
             window.hide().map_err(|error| error.to_string())
         })?;
@@ -175,6 +184,36 @@ impl OverlayRuntime {
         let snapshot = *state;
         let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
         Ok(snapshot)
+    }
+
+    pub(crate) fn begin_wrist_rotation(
+        &self,
+        sample: &WatchOrientationSample,
+    ) -> Result<(), String> {
+        self.wrist_rotation
+            .lock()
+            .map_err(|_| "wrist rotation lock was poisoned")?
+            .begin(sample.quaternion, sample.timestamp_ns)
+            .map_err(|error| error.to_string())
+    }
+
+    pub(crate) fn apply_wrist_rotation(
+        &self,
+        app: &AppHandle,
+        sample: &WatchOrientationSample,
+        volume_runtime: &VolumeRuntime,
+    ) -> Result<OverlayState, String> {
+        let delta = self
+            .wrist_rotation
+            .lock()
+            .map_err(|_| "wrist rotation lock was poisoned")?
+            .observe(sample.quaternion, sample.timestamp_ns)
+            .map_err(|error| error.to_string())? as f32;
+        let state = self.state()?;
+        if !state.grabbed || delta.abs() < f32::EPSILON {
+            return Ok(state);
+        }
+        self.adjust_system_volume(app, delta, volume_runtime)
     }
 
     fn adjust_system_volume(

@@ -151,6 +151,13 @@ pub struct WatchRuntime {
 }
 
 impl WatchRuntime {
+    pub fn latest_orientation(&self) -> Result<Option<WatchOrientationSample>, String> {
+        self.state
+            .lock()
+            .map(|state| state.last_orientation.clone())
+            .map_err(|_| "watch status lock was poisoned".to_string())
+    }
+
     pub fn apply(&self, app: &AppHandle, event: WatchEvent) -> Result<WatchStatus, String> {
         let mut state = self
             .state
