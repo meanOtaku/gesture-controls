@@ -16,16 +16,17 @@ use axum::routing::get;
 use futures_util::StreamExt;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use spatial_protocol::{
-    CONTROLLABLE_SENSOR_IDS, DESKTOP_CONNECTED_TYPE, DESKTOP_SET_SENSOR_RATE_TYPE,
-    DESKTOP_SET_SENSOR_TYPE, DESKTOP_START_MEASUREMENT_TYPE, DESKTOP_STOP_MEASUREMENT_TYPE,
-    DESKTOP_TIME_SYNC_TYPE, DesktopConnectedPayload, DesktopMeasurementCommandPayload,
-    DesktopOutboundEnvelope, DesktopSensorControlPayload, DesktopSensorRateCommandPayload,
-    DesktopTimeSyncPayload, MAX_PPG_FLUSH_RATE_HZ, MAX_SENSOR_RATE_HZ, MIN_PPG_FLUSH_RATE_HZ,
-    MIN_SENSOR_RATE_HZ, ON_DEMAND_MEDICAL_TRACKER_IDS, RATE_CONTROLLABLE_SENSOR_IDS,
-    SENSOR_PPG_FLUSH, WATCH_PROTOCOL_VERSION, WatchBiaResultSample, WatchButtonSample,
-    WatchEcgBatchSample, WatchEdaBatchSample, WatchEnvelope, WatchHeartRateBatchSample,
-    WatchHeartbeatSample, WatchInboundMessage, WatchMedicalStatusSample, WatchOrientationSample,
-    WatchPpgBatchSample, WatchPpgStatusSample, WatchSensorStatusSample,
+    CONTROLLABLE_SENSOR_IDS, DESKTOP_CONNECTED_TYPE, DESKTOP_HAPTIC_TYPE,
+    DESKTOP_SET_SENSOR_RATE_TYPE, DESKTOP_SET_SENSOR_TYPE, DESKTOP_START_MEASUREMENT_TYPE,
+    DESKTOP_STOP_MEASUREMENT_TYPE, DESKTOP_TIME_SYNC_TYPE, DesktopConnectedPayload,
+    DesktopHapticPayload, DesktopMeasurementCommandPayload, DesktopOutboundEnvelope,
+    DesktopSensorControlPayload, DesktopSensorRateCommandPayload, DesktopTimeSyncPayload,
+    MAX_HAPTIC_DURATION_MS, MAX_PPG_FLUSH_RATE_HZ, MAX_SENSOR_RATE_HZ, MIN_HAPTIC_DURATION_MS,
+    MIN_PPG_FLUSH_RATE_HZ, MIN_SENSOR_RATE_HZ, ON_DEMAND_MEDICAL_TRACKER_IDS,
+    RATE_CONTROLLABLE_SENSOR_IDS, SENSOR_PPG_FLUSH, WATCH_PROTOCOL_VERSION, WatchBiaResultSample,
+    WatchButtonSample, WatchEcgBatchSample, WatchEdaBatchSample, WatchEnvelope,
+    WatchHeartRateBatchSample, WatchHeartbeatSample, WatchInboundMessage, WatchMedicalStatusSample,
+    WatchOrientationSample, WatchPpgBatchSample, WatchPpgStatusSample, WatchSensorStatusSample,
     WatchSkinTemperatureBatchSample, WatchSpo2BatchSample, WatchSweatLossBatchSample,
     WatchTimeSyncSample,
 };
@@ -95,6 +96,13 @@ pub struct SensorRateCommand {
     pub rate_hz: f64,
 }
 
+/// A desktop-initiated short haptic pulse on the watch (see `desktop.haptic`).
+/// `duration_ms` is bounded by [`MIN_HAPTIC_DURATION_MS`]..=[`MAX_HAPTIC_DURATION_MS`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HapticCommand {
+    pub duration_ms: u32,
+}
+
 /// Round-trip clock-offset estimate, computed from one desktop/watch time-sync exchange.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ClockOffsetEstimate {
@@ -129,6 +137,8 @@ pub enum WatchBridgeError {
     UnknownRateControllableSensor(String),
     #[error("sensor rate {0}Hz is outside the allowed range for that control")]
     SensorRateOutOfRange(f64),
+    #[error("haptic duration {0}ms is outside the allowed range")]
+    HapticDurationOutOfRange(u32),
 }
 
 struct SharedState {
@@ -136,6 +146,7 @@ struct SharedState {
     commands: broadcast::Sender<MeasurementCommand>,
     sensor_commands: broadcast::Sender<SensorControlCommand>,
     sensor_rate_commands: broadcast::Sender<SensorRateCommand>,
+    haptic_commands: broadcast::Sender<HapticCommand>,
     active: AtomicBool,
     heartbeat_timeout: Duration,
 }
@@ -179,6 +190,7 @@ impl WatchBridgeServer {
         let (commands, _) = broadcast::channel(16);
         let (sensor_commands, _) = broadcast::channel(16);
         let (sensor_rate_commands, _) = broadcast::channel(16);
+        let (haptic_commands, _) = broadcast::channel(16);
         Ok(Self {
             local_addr,
             listener: Mutex::new(Some(listener)),
@@ -190,6 +202,7 @@ impl WatchBridgeServer {
                 commands,
                 sensor_commands,
                 sensor_rate_commands,
+                haptic_commands,
                 active: AtomicBool::new(false),
                 heartbeat_timeout,
             }),
@@ -275,6 +288,22 @@ impl WatchBridgeServer {
             return Err(WatchBridgeError::NoActiveConnection);
         }
         let _ = self.shared.sensor_rate_commands.send(command);
+        Ok(())
+    }
+
+    /// Sends a [`HapticCommand`] to the connected watch, triggering a short,
+    /// bounded haptic pulse. Errors if no watch is connected or `duration_ms`
+    /// falls outside [`MIN_HAPTIC_DURATION_MS`]..=[`MAX_HAPTIC_DURATION_MS`].
+    pub fn send_haptic_command(&self, command: HapticCommand) -> Result<(), WatchBridgeError> {
+        if !(MIN_HAPTIC_DURATION_MS..=MAX_HAPTIC_DURATION_MS).contains(&command.duration_ms) {
+            return Err(WatchBridgeError::HapticDurationOutOfRange(
+                command.duration_ms,
+            ));
+        }
+        if !self.shared.active.load(Ordering::Acquire) {
+            return Err(WatchBridgeError::NoActiveConnection);
+        }
+        let _ = self.shared.haptic_commands.send(command);
         Ok(())
     }
 
@@ -502,6 +531,7 @@ async fn run_connection(socket: &mut WebSocket, shared: &Arc<SharedState>) {
     let mut commands = shared.commands.subscribe();
     let mut sensor_commands = shared.sensor_commands.subscribe();
     let mut sensor_rate_commands = shared.sensor_rate_commands.subscribe();
+    let mut haptic_commands = shared.haptic_commands.subscribe();
 
     loop {
         let remaining = shared
@@ -564,6 +594,20 @@ async fn run_connection(socket: &mut WebSocket, shared: &Arc<SharedState>) {
                     DESKTOP_SET_SENSOR_RATE_TYPE,
                     now_ns(),
                     DesktopSensorRateCommandPayload { sensor, rate_hz },
+                );
+                if send_json(socket, &request).await.is_err() {
+                    break;
+                }
+            }
+            command = haptic_commands.recv() => {
+                let HapticCommand { duration_ms } = match command {
+                    Ok(command) => command,
+                    Err(_) => continue,
+                };
+                let request = DesktopOutboundEnvelope::new(
+                    DESKTOP_HAPTIC_TYPE,
+                    now_ns(),
+                    DesktopHapticPayload { duration_ms },
                 );
                 if send_json(socket, &request).await.is_err() {
                     break;

@@ -69,6 +69,9 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
     /** Forwards a `desktop.set_sensor_rate` command; wired by MainActivity to [SensorCollector]. */
     var onSensorRateCommand: ((sensor: String, rateHz: Double) -> Unit)? = null
 
+    /** Forwards a validated `desktop.haptic` command; wired by MainActivity to a context-owned Vibrator. */
+    var onHapticCommand: ((durationMs: Int) -> Unit)? = null
+
     private val _state = MutableStateFlow(ConnectionState.DISCONNECTED)
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
 
@@ -343,6 +346,7 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
             WatchProtocol.TYPE_DESKTOP_STOP_MEASUREMENT -> dispatchMeasurementCommand(message.payload, start = false)
             WatchProtocol.TYPE_DESKTOP_SET_SENSOR -> dispatchSensorControlCommand(message.payload)
             WatchProtocol.TYPE_DESKTOP_SET_SENSOR_RATE -> dispatchSensorRateCommand(message.payload)
+            WatchProtocol.TYPE_DESKTOP_HAPTIC -> dispatchHapticCommand(message.payload)
         }
     }
 
@@ -377,6 +381,13 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         val rateHz = payload.optDouble("rateHz", -1.0)
         if (rateHz <= 0.0 || rateHz.isNaN()) return
         onSensorRateCommand?.invoke(sensor, rateHz)
+    }
+
+    /** Forwards a `desktop.haptic` command to [onHapticCommand]; ignored if `durationMs` is missing or outside the protocol's allowed bounds. */
+    private fun dispatchHapticCommand(payload: JSONObject) {
+        val durationMs = payload.optInt("durationMs", -1)
+        if (durationMs < WatchProtocol.MIN_HAPTIC_DURATION_MS || durationMs > WatchProtocol.MAX_HAPTIC_DURATION_MS) return
+        onHapticCommand?.invoke(durationMs)
     }
 
     private fun startHeartbeat() {

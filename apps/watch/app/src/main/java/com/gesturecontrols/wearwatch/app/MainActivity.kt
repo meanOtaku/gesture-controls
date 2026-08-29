@@ -12,7 +12,11 @@ import com.gesturecontrols.wearwatch.platform.service.*
 import android.Manifest
 import android.content.Context
 import android.os.BatteryManager
+import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.view.KeyEvent
 import android.widget.Button
 import android.widget.TextView
@@ -45,6 +49,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sweatLossButton: Button
 
     private val watchLink = WatchLinkManager()
+
+    // Obtained lazily (not in onCreate) so system-service lookup happens once, off
+    // the Activity instance itself — resistant to leaking the Activity across
+    // config changes since we never hold anything but applicationContext here.
+    private val vibrator: Vibrator? by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (applicationContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            applicationContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+    }
     private lateinit var desktopDiscovery: DesktopDiscovery
     private lateinit var pairingServer: WatchPairingServer
     private var endpointSource: EndpointSource = EndpointSource.DISCOVERED
@@ -146,6 +162,7 @@ class MainActivity : AppCompatActivity() {
                 sensorCollector.setSensorRateHz(sensor, rateHz)
             }
         }
+        watchLink.onHapticCommand = { durationMs -> triggerHaptic(durationMs) }
 
         connectButton.setOnClickListener { onConnectButtonClicked() }
         spo2Button.setOnClickListener { onOnDemandButtonClicked(TRACKER_SPO2_ON_DEMAND) }
@@ -384,6 +401,13 @@ class MainActivity : AppCompatActivity() {
         }
         ppgStatusText.text = diagnostic?.let { "$label\n$it" } ?: label
         watchLink.sendPpgStatus(state.wireValue())
+    }
+
+    /** Fires a single short vibration for a `desktop.haptic` command; [durationMs] is already bounds-checked by WatchLinkManager. */
+    private fun triggerHaptic(durationMs: Int) {
+        val device = vibrator ?: return
+        if (!device.hasVibrator()) return
+        device.vibrate(VibrationEffect.createOneShot(durationMs.toLong(), VibrationEffect.DEFAULT_AMPLITUDE))
     }
 
     private fun readBatteryPercent(): Int? {

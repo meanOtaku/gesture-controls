@@ -15,6 +15,8 @@
     <!-- Runtime-requested before starting the Samsung Health Sensor SDK's
          PPG_CONTINUOUS tracker; see PpgCollector.kt. -->
     <uses-permission android:name="android.permission.BODY_SENSORS" />
+    <!-- Short haptic pulse for desktop-driven feedback (e.g. wrist-rotation volume); see WatchLinkManager#onHapticCommand. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <uses-feature android:name="android.hardware.type.watch" />
     <uses-feature

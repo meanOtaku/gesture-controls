@@ -1,5 +1,7 @@
+use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 use interaction_engine::{
     VolumeSimulation, WristRotation, WristRotationConfig, commit_visibility_after,
@@ -8,15 +10,19 @@ use interaction_engine::{
 use serde::Serialize;
 use spatial_protocol::WatchOrientationSample;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow};
+use tracing::warn;
 use volume_control::{
     VolumeController, VolumeError, adjust_system_volume as adjust_native_volume,
     platform_volume_controller,
 };
+use watch_bridge::{HapticCommand, WatchBridgeServer};
 
 pub const OVERLAY_STATE_EVENT: &str = "overlay-state";
 const MAIN_WINDOW: &str = "main";
 const OVERLAY_WINDOW: &str = "overlay";
 const SCREEN_EDGE_MARGIN: f64 = 16.0;
+const WRIST_ROTATION_HAPTIC_DURATION_MS: u32 = 20;
+const WRIST_ROTATION_HAPTIC_MIN_INTERVAL: Duration = Duration::from_millis(125);
 
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,6 +53,7 @@ pub struct OverlayRuntime {
     wrist_rotation: Mutex<WristRotation>,
     state_generation: AtomicU64,
     refresh_in_flight: AtomicBool,
+    last_wrist_rotation_haptic_at: Mutex<Option<Instant>>,
 }
 
 struct RefreshGuard<'a>(&'a AtomicBool);
@@ -86,6 +93,7 @@ impl Default for OverlayRuntime {
             wrist_rotation: Mutex::new(WristRotation::default()),
             state_generation: AtomicU64::new(0),
             refresh_in_flight: AtomicBool::new(false),
+            last_wrist_rotation_haptic_at: Mutex::new(None),
         }
     }
 }
@@ -225,7 +233,36 @@ impl OverlayRuntime {
         if !state.grabbed || delta.abs() < f32::EPSILON {
             return Ok(state);
         }
-        self.adjust_system_volume(app, delta, volume_runtime)
+        let applied = self.adjust_system_volume(app, delta, volume_runtime)?;
+        if (applied.volume - state.volume).abs() >= f32::EPSILON {
+            self.notify_wrist_rotation_haptic(app);
+        }
+        Ok(applied)
+    }
+
+    /// Best-effort haptic pulse confirming a wrist-rotation volume adjustment
+    /// was actually applied. Rate-limited so a fast orientation stream can't
+    /// spam the watch with pulses; never allowed to fail volume control.
+    fn notify_wrist_rotation_haptic(&self, app: &AppHandle) {
+        let Some(server) = app.try_state::<Arc<WatchBridgeServer>>() else {
+            return;
+        };
+        let Ok(mut last_sent) = self.last_wrist_rotation_haptic_at.lock() else {
+            return;
+        };
+        let now = Instant::now();
+        if last_sent.is_some_and(|previous| {
+            now.duration_since(previous) < WRIST_ROTATION_HAPTIC_MIN_INTERVAL
+        }) {
+            return;
+        }
+        *last_sent = Some(now);
+        drop(last_sent);
+        if let Err(error) = server.send_haptic_command(HapticCommand {
+            duration_ms: WRIST_ROTATION_HAPTIC_DURATION_MS,
+        }) {
+            warn!(%error, "failed to send wrist rotation haptic pulse");
+        }
     }
 
     fn adjust_system_volume(

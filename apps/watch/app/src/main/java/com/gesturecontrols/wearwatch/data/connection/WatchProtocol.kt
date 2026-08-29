@@ -43,6 +43,12 @@ object WatchProtocol {
     /** Sets an IMU sensor's requested sampling rate ([SENSOR_ORIENTATION] etc.); see [SensorCollector.setSensorRateHz]. */
     const val TYPE_DESKTOP_SET_SENSOR_RATE = "desktop.set_sensor_rate"
 
+    /** A short, bounded haptic pulse (e.g. wrist-rotation volume feedback); see [WatchLinkManager.onHapticCommand]. */
+    const val TYPE_DESKTOP_HAPTIC = "desktop.haptic"
+    /** Inclusive bounds for `desktop.haptic`'s `durationMs`; mirrors `MIN_HAPTIC_DURATION_MS`/`MAX_HAPTIC_DURATION_MS` in spatial_protocol. */
+    const val MIN_HAPTIC_DURATION_MS = 10
+    const val MAX_HAPTIC_DURATION_MS = 200
+
     /** Identifies this app to the desktop; matches the sample deviceId in the protocol doc. */
     const val DEVICE_ID = "galaxy-watch-4"
 

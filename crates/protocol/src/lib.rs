@@ -99,6 +99,16 @@ pub const WATCH_MEDICAL_STATUS_TYPE: &str = "watch.medical_status";
 pub const DESKTOP_START_MEASUREMENT_TYPE: &str = "desktop.start_measurement";
 pub const DESKTOP_STOP_MEASUREMENT_TYPE: &str = "desktop.stop_measurement";
 
+/// A short, bounded haptic pulse on the watch, e.g. feedback for a wrist-rotation
+/// volume adjustment. Never used for sustained/looping vibration.
+pub const DESKTOP_HAPTIC_TYPE: &str = "desktop.haptic";
+
+/// Inclusive bounds for [`DesktopHapticPayload::duration_ms`], mirrored by
+/// `MIN_HAPTIC_DURATION_MS`/`MAX_HAPTIC_DURATION_MS` in `WatchProtocol.kt`.
+/// Kept short so a haptic command can never be (ab)used as a sustained buzz.
+pub const MIN_HAPTIC_DURATION_MS: u32 = 10;
+pub const MAX_HAPTIC_DURATION_MS: u32 = 200;
+
 /// Generic enable/disable command for [`CONTROLLABLE_SENSOR_IDS`] — unlike
 /// `desktop.start_measurement`, this toggles an always-available input on or
 /// off rather than opening a bounded on-demand session.
@@ -1103,4 +1113,12 @@ pub struct DesktopSensorControlPayload {
 pub struct DesktopSensorRateCommandPayload {
     pub sensor: String,
     pub rate_hz: f64,
+}
+
+/// `desktop.haptic` payload: `duration_ms` must fall within
+/// [`MIN_HAPTIC_DURATION_MS`]..=[`MAX_HAPTIC_DURATION_MS`].
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopHapticPayload {
+    pub duration_ms: u32,
 }
