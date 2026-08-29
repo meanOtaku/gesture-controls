@@ -183,6 +183,16 @@ pub fn run() {
                                 {
                                     if let Err(error) = overlay.grab(&watch_handle) {
                                         warn!(%error, "failed to grab volume overlay");
+                                    } else if let Ok(settings) = watch_handle.state::<settings::SettingsRuntime>().get()
+                                        && let Err(error) = overlay.configure_wrist_rotation(interaction_engine::WristRotationConfig {
+                                            dead_zone_degrees: settings.wrist_dead_zone_degrees,
+                                            smoothing_alpha: settings.wrist_smoothing_alpha,
+                                            volume_points_per_degree: settings.wrist_volume_points_per_degree,
+                                            max_angular_velocity_degrees_per_second: settings.wrist_max_angular_velocity_degrees_per_second,
+                                            max_volume_points_per_second: settings.wrist_max_volume_points_per_second,
+                                        })
+                                    {
+                                        warn!(%error, "failed to apply wrist rotation settings");
                                     } else if let Ok(Some(sample)) = runtime.latest_orientation()
                                         && let Err(error) = overlay.begin_wrist_rotation(&sample)
                                     {

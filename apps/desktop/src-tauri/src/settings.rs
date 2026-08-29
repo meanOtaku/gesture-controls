@@ -25,6 +25,16 @@ pub const MIN_GRAPH_REFRESH_RATE_HZ: f64 = 1.0;
 pub const MAX_GRAPH_REFRESH_RATE_HZ: f64 = 60.0;
 pub const MIN_HEALTH_ACCEPTANCE_RATE_HZ: f64 = 0.1;
 pub const MAX_HEALTH_ACCEPTANCE_RATE_HZ: f64 = 200.0;
+pub const MIN_WRIST_DEAD_ZONE_DEGREES: f64 = 0.0;
+pub const MAX_WRIST_DEAD_ZONE_DEGREES: f64 = 45.0;
+pub const MIN_WRIST_SMOOTHING_ALPHA: f64 = 0.01;
+pub const MAX_WRIST_SMOOTHING_ALPHA: f64 = 1.0;
+pub const MIN_WRIST_VOLUME_POINTS_PER_DEGREE: f64 = 0.01;
+pub const MAX_WRIST_VOLUME_POINTS_PER_DEGREE: f64 = 5.0;
+pub const MIN_WRIST_ANGULAR_VELOCITY_DEGREES_PER_SECOND: f64 = 1.0;
+pub const MAX_WRIST_ANGULAR_VELOCITY_DEGREES_PER_SECOND: f64 = 2_000.0;
+pub const MIN_WRIST_VOLUME_POINTS_PER_SECOND: f64 = 1.0;
+pub const MAX_WRIST_VOLUME_POINTS_PER_SECOND: f64 = 100.0;
 
 /// Runtime-configurable settings, persisted as JSON in the Tauri app config
 /// directory. `watchSensorsEnabled` mirrors the existing `desktop.set_sensor`
@@ -52,6 +62,16 @@ pub struct AppSettings {
     pub watch_skin_temperature_acceptance_rate_hz: f64,
     #[serde(default = "default_health_acceptance_rate_hz")]
     pub watch_eda_acceptance_rate_hz: f64,
+    #[serde(default = "default_wrist_dead_zone_degrees")]
+    pub wrist_dead_zone_degrees: f64,
+    #[serde(default = "default_wrist_smoothing_alpha")]
+    pub wrist_smoothing_alpha: f64,
+    #[serde(default = "default_wrist_volume_points_per_degree")]
+    pub wrist_volume_points_per_degree: f64,
+    #[serde(default = "default_wrist_max_angular_velocity_degrees_per_second")]
+    pub wrist_max_angular_velocity_degrees_per_second: f64,
+    #[serde(default = "default_wrist_max_volume_points_per_second")]
+    pub wrist_max_volume_points_per_second: f64,
     pub watch_sensors_enabled: HashMap<String, bool>,
 }
 
@@ -71,6 +91,12 @@ impl Default for AppSettings {
             watch_heart_rate_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
             watch_skin_temperature_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
             watch_eda_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
+            wrist_dead_zone_degrees: default_wrist_dead_zone_degrees(),
+            wrist_smoothing_alpha: default_wrist_smoothing_alpha(),
+            wrist_volume_points_per_degree: default_wrist_volume_points_per_degree(),
+            wrist_max_angular_velocity_degrees_per_second:
+                default_wrist_max_angular_velocity_degrees_per_second(),
+            wrist_max_volume_points_per_second: default_wrist_max_volume_points_per_second(),
             watch_sensors_enabled: CONTROLLABLE_SENSOR_IDS
                 .iter()
                 .map(|&sensor| (sensor.to_string(), true))
@@ -85,6 +111,22 @@ fn default_health_acceptance_rate_hz() -> f64 {
 
 fn default_ppg_flush_rate_hz() -> f64 {
     1.0
+}
+
+fn default_wrist_dead_zone_degrees() -> f64 {
+    3.0
+}
+fn default_wrist_smoothing_alpha() -> f64 {
+    0.2
+}
+fn default_wrist_volume_points_per_degree() -> f64 {
+    1.0 / 3.0
+}
+fn default_wrist_max_angular_velocity_degrees_per_second() -> f64 {
+    360.0
+}
+fn default_wrist_max_volume_points_per_second() -> f64 {
+    30.0
 }
 
 impl AppSettings {
@@ -156,6 +198,40 @@ impl AppSettings {
             if !CONTROLLABLE_SENSOR_IDS.contains(&sensor.as_str()) {
                 return Err(format!("'{sensor}' is not a controllable sensor id"));
             }
+        }
+        for (name, value, min, max) in [
+            (
+                "wristDeadZoneDegrees",
+                self.wrist_dead_zone_degrees,
+                MIN_WRIST_DEAD_ZONE_DEGREES,
+                MAX_WRIST_DEAD_ZONE_DEGREES,
+            ),
+            (
+                "wristSmoothingAlpha",
+                self.wrist_smoothing_alpha,
+                MIN_WRIST_SMOOTHING_ALPHA,
+                MAX_WRIST_SMOOTHING_ALPHA,
+            ),
+            (
+                "wristVolumePointsPerDegree",
+                self.wrist_volume_points_per_degree,
+                MIN_WRIST_VOLUME_POINTS_PER_DEGREE,
+                MAX_WRIST_VOLUME_POINTS_PER_DEGREE,
+            ),
+            (
+                "wristMaxAngularVelocityDegreesPerSecond",
+                self.wrist_max_angular_velocity_degrees_per_second,
+                MIN_WRIST_ANGULAR_VELOCITY_DEGREES_PER_SECOND,
+                MAX_WRIST_ANGULAR_VELOCITY_DEGREES_PER_SECOND,
+            ),
+            (
+                "wristMaxVolumePointsPerSecond",
+                self.wrist_max_volume_points_per_second,
+                MIN_WRIST_VOLUME_POINTS_PER_SECOND,
+                MAX_WRIST_VOLUME_POINTS_PER_SECOND,
+            ),
+        ] {
+            in_range(name, value, min, max)?;
         }
         Ok(())
     }

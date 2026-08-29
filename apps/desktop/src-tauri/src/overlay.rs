@@ -2,7 +2,8 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use interaction_engine::{
-    VolumeSimulation, WristRotation, commit_visibility_after, top_right_overlay_position,
+    VolumeSimulation, WristRotation, WristRotationConfig, commit_visibility_after,
+    top_right_overlay_position,
 };
 use serde::Serialize;
 use spatial_protocol::WatchOrientationSample;
@@ -194,6 +195,17 @@ impl OverlayRuntime {
             .lock()
             .map_err(|_| "wrist rotation lock was poisoned")?
             .begin(sample.quaternion, sample.timestamp_ns)
+            .map_err(|error| error.to_string())
+    }
+
+    pub(crate) fn configure_wrist_rotation(
+        &self,
+        config: WristRotationConfig,
+    ) -> Result<(), String> {
+        self.wrist_rotation
+            .lock()
+            .map_err(|_| "wrist rotation lock was poisoned")?
+            .update_config(config)
             .map_err(|error| error.to_string())
     }
 

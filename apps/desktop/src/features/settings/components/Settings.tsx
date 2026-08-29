@@ -31,6 +31,11 @@ const DEFAULT_SETTINGS: AppSettings = {
   watchHeartRateAcceptanceRateHz: 200,
   watchSkinTemperatureAcceptanceRateHz: 200,
   watchEdaAcceptanceRateHz: 200,
+  wristDeadZoneDegrees: 3,
+  wristSmoothingAlpha: 0.2,
+  wristVolumePointsPerDegree: 1 / 3,
+  wristMaxAngularVelocityDegreesPerSecond: 360,
+  wristMaxVolumePointsPerSecond: 30,
   watchSensorsEnabled: Object.fromEntries(CONTROLLABLE_SENSORS.map(({ id }) => [id, true])),
 };
 
@@ -51,6 +56,11 @@ export function Settings({ settings, error, onUpdate, onReset }: SettingsProps) 
   const watchHeartRateAcceptanceRateInput = useRef<HTMLInputElement>(null);
   const watchSkinTemperatureAcceptanceRateInput = useRef<HTMLInputElement>(null);
   const watchEdaAcceptanceRateInput = useRef<HTMLInputElement>(null);
+  const wristDeadZoneInput = useRef<HTMLInputElement>(null);
+  const wristSmoothingInput = useRef<HTMLInputElement>(null);
+  const wristSensitivityInput = useRef<HTMLInputElement>(null);
+  const wristVelocityInput = useRef<HTMLInputElement>(null);
+  const wristVolumeRateInput = useRef<HTMLInputElement>(null);
 
   const commitRates = () => {
     onUpdate({
@@ -65,6 +75,11 @@ export function Settings({ settings, error, onUpdate, onReset }: SettingsProps) 
       watchHeartRateAcceptanceRateHz: clamp(watchHeartRateAcceptanceRateInput.current?.value, 0.1, 200, current.watchHeartRateAcceptanceRateHz),
       watchSkinTemperatureAcceptanceRateHz: clamp(watchSkinTemperatureAcceptanceRateInput.current?.value, 0.1, 200, current.watchSkinTemperatureAcceptanceRateHz),
       watchEdaAcceptanceRateHz: clamp(watchEdaAcceptanceRateInput.current?.value, 0.1, 200, current.watchEdaAcceptanceRateHz),
+      wristDeadZoneDegrees: clamp(wristDeadZoneInput.current?.value, 0, 45, current.wristDeadZoneDegrees),
+      wristSmoothingAlpha: clamp(wristSmoothingInput.current?.value, 0.01, 1, current.wristSmoothingAlpha),
+      wristVolumePointsPerDegree: clamp(wristSensitivityInput.current?.value, 0.01, 5, current.wristVolumePointsPerDegree),
+      wristMaxAngularVelocityDegreesPerSecond: clamp(wristVelocityInput.current?.value, 1, 2000, current.wristMaxAngularVelocityDegreesPerSecond),
+      wristMaxVolumePointsPerSecond: clamp(wristVolumeRateInput.current?.value, 1, 100, current.wristMaxVolumePointsPerSecond),
     });
   };
 
@@ -111,6 +126,18 @@ export function Settings({ settings, error, onUpdate, onReset }: SettingsProps) 
             />
             <small>Hz</small>
           </label>
+        </div>
+      </section>
+
+      <section className="calibration-card" aria-label="Wrist rotation controls">
+        <div className="calibration-heading"><div><p className="eyebrow">Volume gesture</p><h2>Wrist rotation tuning</h2></div></div>
+        <p className="hint">Applied on the next STEM-button grab. Defaults give 30 volume points for a 90° twist.</p>
+        <div className="calibration-actions">
+          <label>Dead zone<input aria-label="Wrist rotation dead zone degrees" type="number" min="0" max="45" step="0.5" ref={wristDeadZoneInput} key={`wrist-dead-zone-${current.wristDeadZoneDegrees}`} defaultValue={current.wristDeadZoneDegrees} /><small>degrees</small></label>
+          <label>Smoothing<input aria-label="Wrist rotation smoothing" type="number" min="0.01" max="1" step="0.01" ref={wristSmoothingInput} key={`wrist-smoothing-${current.wristSmoothingAlpha}`} defaultValue={current.wristSmoothingAlpha} /><small>alpha</small></label>
+          <label>Sensitivity<input aria-label="Wrist rotation volume points per degree" type="number" min="0.01" max="5" step="0.01" ref={wristSensitivityInput} key={`wrist-sensitivity-${current.wristVolumePointsPerDegree}`} defaultValue={current.wristVolumePointsPerDegree} /><small>points / degree</small></label>
+          <label>Max angular velocity<input aria-label="Wrist rotation max angular velocity" type="number" min="1" max="2000" step="1" ref={wristVelocityInput} key={`wrist-velocity-${current.wristMaxAngularVelocityDegreesPerSecond}`} defaultValue={current.wristMaxAngularVelocityDegreesPerSecond} /><small>degrees / second</small></label>
+          <label>Max volume rate<input aria-label="Wrist rotation max volume rate" type="number" min="1" max="100" step="1" ref={wristVolumeRateInput} key={`wrist-volume-rate-${current.wristMaxVolumePointsPerSecond}`} defaultValue={current.wristMaxVolumePointsPerSecond} /><small>points / second</small></label>
         </div>
       </section>
 
