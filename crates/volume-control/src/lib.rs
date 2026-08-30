@@ -313,15 +313,9 @@ fn run_command_with_timeout(
         .lock()
         .map_err(|_| VolumeError::Backend("native command lock was poisoned".to_string()))?;
     if DEFERRED_REAP_ACTIVE.load(Ordering::Acquire) {
-        let cleanup_started = Instant::now();
-        while DEFERRED_REAP_ACTIVE.load(Ordering::Acquire) && !reap_deferred_children_once() {
-            if cleanup_started.elapsed() >= COMMAND_CLEANUP_TIMEOUT {
-                return Err(VolumeError::Backend(
-                    "a previous native volume command is still being reaped".to_string(),
-                ));
-            }
-            thread::sleep(COMMAND_POLL_INTERVAL);
-        }
+        wait_for_deferred_reap(|| {
+            !DEFERRED_REAP_ACTIVE.load(Ordering::Acquire) || reap_deferred_children_once()
+        })?;
     }
 
     let mut child = ChildGuard::spawn(command)?;
@@ -356,6 +350,20 @@ fn run_command_with_timeout(
             }
         }
     }
+}
+
+#[cfg(unix)]
+fn wait_for_deferred_reap(mut reap_once: impl FnMut() -> bool) -> Result<(), VolumeError> {
+    let cleanup_started = Instant::now();
+    while !reap_once() {
+        if cleanup_started.elapsed() >= DEFERRED_REAP_TIMEOUT {
+            return Err(VolumeError::Backend(
+                "a previous native volume command is still being reaped".to_string(),
+            ));
+        }
+        thread::sleep(COMMAND_POLL_INTERVAL);
+    }
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -506,7 +514,7 @@ mod timeout_tests {
     use std::process::{Command, Stdio};
     use std::time::{Duration, Instant};
 
-    use super::{VolumeError, run_command_with_timeout};
+    use super::{VolumeError, run_command_with_timeout, wait_for_deferred_reap};
 
     fn process_exists(pid: &str) -> bool {
         Command::new("/bin/kill")
@@ -596,6 +604,13 @@ mod timeout_tests {
             let _ = Command::new("/bin/kill").args(["-9", pid.trim()]).status();
         }
         assert!(!still_running, "timed-out descendants must not be orphaned");
+    }
+
+    #[test]
+    fn deferred_reap_wait_uses_the_full_reaper_lifetime() {
+        let started = Instant::now();
+        wait_for_deferred_reap(|| started.elapsed() >= Duration::from_millis(400)).unwrap();
+        assert!(started.elapsed() >= Duration::from_millis(400));
     }
 
     #[test]
