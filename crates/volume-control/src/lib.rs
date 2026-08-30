@@ -1,21 +1,23 @@
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 use std::fs::File;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 use std::io::{Read, Seek, SeekFrom};
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 use std::os::unix::process::ExitStatusExt;
+#[cfg(all(unix, not(target_os = "macos")))]
+use std::process::ExitStatus;
 #[cfg(unix)]
-use std::process::{Command, ExitStatus, Output, Stdio};
-#[cfg(unix)]
+use std::process::{Command, Output, Stdio};
+#[cfg(all(unix, not(target_os = "macos")))]
 use std::sync::atomic::{AtomicBool, Ordering};
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 use std::sync::{Mutex, OnceLock};
 #[cfg(unix)]
 use std::thread;
 #[cfg(unix)]
 use std::time::{Duration, Instant};
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 use command_group::{CommandGroup, GroupChild};
 use thiserror::Error;
 
@@ -28,16 +30,16 @@ const SET_MUTED_SCRIPT: &str = "on run argv\nif item 1 of argv is \"true\" then\
 const NATIVE_COMMAND_TIMEOUT: Duration = Duration::from_secs(2);
 #[cfg(unix)]
 const COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(10);
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 const COMMAND_CLEANUP_TIMEOUT: Duration = Duration::from_millis(250);
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 const DEFERRED_REAP_TIMEOUT: Duration = Duration::from_secs(5);
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 static COMMAND_EXECUTION_LOCK: Mutex<()> = Mutex::new(());
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 static DEFERRED_REAP_ACTIVE: AtomicBool = AtomicBool::new(false);
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 static DEFERRED_CHILDREN: OnceLock<Mutex<Vec<GroupChild>>> = OnceLock::new();
 
 #[derive(Debug, Error, PartialEq)]
@@ -70,14 +72,14 @@ pub trait AppleScriptRunner: Send + Sync {
 #[derive(Debug, Default)]
 pub struct OsascriptRunner;
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 struct ChildGuard {
     child: Option<GroupChild>,
     stdout: File,
     stderr: File,
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 impl ChildGuard {
     fn spawn(command: &mut Command) -> Result<Self, VolumeError> {
         let stdout = tempfile::tempfile()
@@ -204,7 +206,7 @@ impl ChildGuard {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 impl Drop for ChildGuard {
     fn drop(&mut self) {
         if self.child.is_some() {
@@ -213,7 +215,7 @@ impl Drop for ChildGuard {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn leader_exited_without_reaping(child: &mut GroupChild) -> std::io::Result<bool> {
     let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
     // SAFETY: `info` points to writable siginfo_t storage, the PID belongs to
@@ -239,7 +241,7 @@ fn leader_exited_without_reaping(child: &mut GroupChild) -> std::io::Result<bool
     Ok(exited_pid != 0)
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn try_reap_leader(child: &mut GroupChild) -> std::io::Result<Option<ExitStatus>> {
     let mut status = 0;
     // SAFETY: status points to valid writable storage, and child.id() is the PID
@@ -254,7 +256,7 @@ fn try_reap_leader(child: &mut GroupChild) -> std::io::Result<Option<ExitStatus>
     Ok(Some(ExitStatus::from_raw(status)))
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn reap_deferred_children_once() -> bool {
     let Some(slot) = DEFERRED_CHILDREN.get() else {
         DEFERRED_REAP_ACTIVE.store(false, Ordering::Release);
@@ -278,7 +280,7 @@ fn reap_deferred_children_once() -> bool {
     empty
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn reap_deferred_children() {
     let started = Instant::now();
     loop {
@@ -289,7 +291,7 @@ fn reap_deferred_children() {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn read_capture(file: &mut File, stream: &str) -> Result<Vec<u8>, VolumeError> {
     file.seek(SeekFrom::Start(0))
         .and_then(|_| {
@@ -299,12 +301,12 @@ fn read_capture(file: &mut File, stream: &str) -> Result<Vec<u8>, VolumeError> {
         .map_err(|error| VolumeError::Backend(format!("failed to read {stream}: {error}")))
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn process_group_is_absent(error: &std::io::Error) -> bool {
     error.raw_os_error() == Some(libc::ESRCH)
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn run_command_with_timeout(
     command: &mut Command,
     timeout: Duration,
@@ -352,7 +354,7 @@ fn run_command_with_timeout(
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn wait_for_deferred_reap(mut reap_once: impl FnMut() -> bool) -> Result<(), VolumeError> {
     let cleanup_started = Instant::now();
     while !reap_once() {
@@ -364,6 +366,54 @@ fn wait_for_deferred_reap(mut reap_once: impl FnMut() -> bool) -> Result<(), Vol
         thread::sleep(COMMAND_POLL_INTERVAL);
     }
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn run_command_with_timeout(
+    command: &mut Command,
+    timeout: Duration,
+) -> Result<Output, VolumeError> {
+    // macOS can return EPERM from killpg/waitid on a command_group process
+    // group leader in sandboxed/hardened-runtime contexts, which previously
+    // spun the deferred-reap loop forever while holding the execution lock
+    // and froze the UI. A plain std child is always killable/waitable by its
+    // direct parent, so osascript never needs process-group semantics here.
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| VolumeError::Backend(error.to_string()))?;
+
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_status)) => {
+                return child.wait_with_output().map_err(|error| {
+                    VolumeError::Backend(format!(
+                        "failed to read native volume command output: {error}"
+                    ))
+                });
+            }
+            Ok(None) if started.elapsed() < timeout => {
+                thread::sleep(COMMAND_POLL_INTERVAL.min(timeout));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(VolumeError::Backend(format!(
+                    "native volume command timed out after {} ms",
+                    timeout.as_millis()
+                )));
+            }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(VolumeError::Backend(format!(
+                    "failed to read native volume command status: {error}"
+                )));
+            }
+        }
+    }
 }
 
 #[cfg(unix)]
@@ -509,7 +559,7 @@ fn validate_volume(volume: f32) -> Result<(), VolumeError> {
     }
 }
 
-#[cfg(all(test, unix))]
+#[cfg(all(test, unix, not(target_os = "macos")))]
 mod timeout_tests {
     use std::process::{Command, Stdio};
     use std::time::{Duration, Instant};
