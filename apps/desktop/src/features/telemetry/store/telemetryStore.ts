@@ -2,6 +2,8 @@ import { quaternionToEulerDegrees } from "../../../shared/protocol/events";
 import type {
   HeadPosePayload,
   HeadTrackerStatus,
+  Quaternion,
+  Vector3,
   WatchEdaBatch,
   WatchHeartRateBatch,
   WatchOrientationSample,
@@ -18,6 +20,61 @@ export type CsvRow = {
   sequence: string;
   values: Record<string, number | null>;
 };
+
+/** Fixed label set for the desktop-side labeled gesture dataset recorder (Milestone 9). */
+export const GESTURE_DATASET_LABELS = [
+  "idle",
+  "pinch_start",
+  "pinch_hold",
+  "pinch_release",
+  "walking",
+  "typing",
+  "using_mouse",
+  "touching_face",
+  "adjusting_headphones",
+  "picking_up_cup",
+  "scratching",
+  "normal_wrist_rotation",
+  "standing",
+  "sitting",
+] as const;
+export type GestureDatasetLabel = (typeof GESTURE_DATASET_LABELS)[number];
+
+/** Captured once at `startDatasetRecording()` and never mutated by later label changes. */
+export type DatasetSessionMetadata = {
+  label: GestureDatasetLabel;
+  startedAtIso: string;
+};
+
+export type DatasetRow = {
+  timestampNs: string;
+  sequence: string;
+  ppgGreen: number | null;
+  ppgRed: number | null;
+  ppgIr: number | null;
+  accelX: number | null;
+  accelY: number | null;
+  accelZ: number | null;
+  gyroX: number | null;
+  gyroY: number | null;
+  gyroZ: number | null;
+  quatW: number | null;
+  quatX: number | null;
+  quatY: number | null;
+  quatZ: number | null;
+  contactQuality: number | null;
+  label: GestureDatasetLabel;
+};
+
+export const DATASET_CSV_COLUMNS = [
+  "timestamp_ns", "sequence", "ppg_green", "ppg_red", "ppg_ir",
+  "accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z",
+  "quat_w", "quat_x", "quat_y", "quat_z", "contact_quality", "label",
+] as const;
+
+function datasetCsvValue(value: number | null): string {
+  return value == null ? "" : String(value);
+}
 
 export type TelemetrySeries =
   | "head"
@@ -134,6 +191,25 @@ class TelemetryStore {
   private readonly healthAcceptanceMinIntervalMs = new Map<string, number>();
   private readonly lastAcceptedAtByChannel = new Map<string, number>();
 
+  // Labeled gesture dataset recorder: independent of `recording`/`rows` above,
+  // built on the same raw watch ingest path but fused into one row per
+  // accepted sample, carrying forward the other channel's last known values.
+  private selectedLabel: GestureDatasetLabel = "idle";
+  private datasetRecording = false;
+  private datasetSession: DatasetSessionMetadata | null = null;
+  private readonly datasetRows = new RingBuffer<DatasetRow>(MAX_CSV_ROWS);
+  private lastKnownOrientationSample: { accel: Vector3 | null; gyro: Vector3 | null; quat: Quaternion | null } = {
+    accel: null,
+    gyro: null,
+    quat: null,
+  };
+  private lastKnownPpgSample: { green: number | null; red: number | null; ir: number | null; contactQuality: number | null } = {
+    green: null,
+    red: null,
+    ir: null,
+    contactQuality: null,
+  };
+
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -182,6 +258,87 @@ class TelemetryStore {
     }
     this.recording = !this.recording;
     this.publishNow();
+  }
+
+  getSelectedLabel(): GestureDatasetLabel {
+    return this.selectedLabel;
+  }
+
+  selectDatasetLabel(label: GestureDatasetLabel): void {
+    this.selectedLabel = label;
+    this.publishNow();
+  }
+
+  getDatasetRecording(): boolean {
+    return this.datasetRecording;
+  }
+
+  getDatasetSession(): DatasetSessionMetadata | null {
+    return this.datasetSession;
+  }
+
+  getDatasetRowCount(): number {
+    return this.datasetRows.length;
+  }
+
+  getDatasetRows(): DatasetRow[] {
+    return this.datasetRows.toArray();
+  }
+
+  /** Starts a new labeled session, snapshotting `selectedLabel` immutably for the session's lifetime. */
+  startDatasetRecording(): void {
+    if (this.datasetRecording) return;
+    this.datasetRows.clear();
+    this.datasetSession = { label: this.selectedLabel, startedAtIso: new Date().toISOString() };
+    this.datasetRecording = true;
+    this.publishNow();
+  }
+
+  /** Stops accepting new rows but keeps the buffered session so it can still be exported. */
+  stopDatasetRecording(): void {
+    if (!this.datasetRecording) return;
+    this.datasetRecording = false;
+    this.publishNow();
+  }
+
+  /** Abandons the current session: stops recording and drops buffered rows/metadata. */
+  discardDatasetRecording(): void {
+    this.datasetRecording = false;
+    this.datasetSession = null;
+    this.datasetRows.clear();
+    this.publishNow();
+  }
+
+  /** Renders the buffered labeled session as CSV text: leading `#` metadata comment lines, then the header, then rows. */
+  generateDatasetCsv(): string {
+    const session = this.datasetSession;
+    const rows = this.datasetRows.toArray();
+    const metadataLines = [
+      "# gesture-dataset-export: 1",
+      `# label: ${session?.label ?? this.selectedLabel}`,
+      `# started_at: ${session?.startedAtIso ?? ""}`,
+      `# row_count: ${rows.length}`,
+    ];
+    const dataLines = rows.map((row) => [
+      row.timestampNs,
+      row.sequence,
+      datasetCsvValue(row.ppgGreen),
+      datasetCsvValue(row.ppgRed),
+      datasetCsvValue(row.ppgIr),
+      datasetCsvValue(row.accelX),
+      datasetCsvValue(row.accelY),
+      datasetCsvValue(row.accelZ),
+      datasetCsvValue(row.gyroX),
+      datasetCsvValue(row.gyroY),
+      datasetCsvValue(row.gyroZ),
+      datasetCsvValue(row.quatW),
+      datasetCsvValue(row.quatX),
+      datasetCsvValue(row.quatY),
+      datasetCsvValue(row.quatZ),
+      datasetCsvValue(row.contactQuality),
+      row.label,
+    ].join(","));
+    return [...metadataLines, DATASET_CSV_COLUMNS.join(","), ...dataLines].join("\n");
   }
 
   /** Graph refresh rate: how often subscribers are notified of new samples. */
@@ -269,6 +426,30 @@ class TelemetryStore {
         gyroZ: orientation.gyroscope?.[2] ?? null,
       },
     });
+    this.lastKnownOrientationSample = {
+      accel: orientation.accelerometer,
+      gyro: orientation.gyroscope,
+      quat: orientation.quaternion,
+    };
+    if (this.datasetRecording && this.datasetSession) this.datasetRows.push({
+      timestampNs: String(orientation.timestampNs),
+      sequence: String(orientation.sequence),
+      ppgGreen: this.lastKnownPpgSample.green,
+      ppgRed: this.lastKnownPpgSample.red,
+      ppgIr: this.lastKnownPpgSample.ir,
+      accelX: orientation.accelerometer?.[0] ?? null,
+      accelY: orientation.accelerometer?.[1] ?? null,
+      accelZ: orientation.accelerometer?.[2] ?? null,
+      gyroX: orientation.gyroscope?.[0] ?? null,
+      gyroY: orientation.gyroscope?.[1] ?? null,
+      gyroZ: orientation.gyroscope?.[2] ?? null,
+      quatW: orientation.quaternion[0],
+      quatX: orientation.quaternion[1],
+      quatY: orientation.quaternion[2],
+      quatZ: orientation.quaternion[3],
+      contactQuality: this.lastKnownPpgSample.contactQuality,
+      label: this.datasetSession.label,
+    });
     this.schedulePublish();
   }
 
@@ -278,6 +459,34 @@ class TelemetryStore {
       if (this.canRecord("ppg", at)) this.rows.push({
         recordedAt: new Date(at).toISOString(), source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(batch.sequence),
         values: { ppgGreen: batch.green[index] ?? null, ppgRed: batch.red[index] ?? null, ppgIr: batch.ir[index] ?? null },
+      });
+      const green = batch.green[index] ?? null;
+      const red = batch.red[index] ?? null;
+      const ir = batch.ir[index] ?? null;
+      const contactQuality = Math.max(
+        batch.greenStatus?.[index] ?? 0,
+        batch.redStatus?.[index] ?? 0,
+        batch.irStatus?.[index] ?? 0,
+      );
+      this.lastKnownPpgSample = { green, red, ir, contactQuality };
+      if (this.datasetRecording && this.datasetSession) this.datasetRows.push({
+        timestampNs: String(timestampNs),
+        sequence: String(batch.sequence),
+        ppgGreen: green,
+        ppgRed: red,
+        ppgIr: ir,
+        accelX: this.lastKnownOrientationSample.accel?.[0] ?? null,
+        accelY: this.lastKnownOrientationSample.accel?.[1] ?? null,
+        accelZ: this.lastKnownOrientationSample.accel?.[2] ?? null,
+        gyroX: this.lastKnownOrientationSample.gyro?.[0] ?? null,
+        gyroY: this.lastKnownOrientationSample.gyro?.[1] ?? null,
+        gyroZ: this.lastKnownOrientationSample.gyro?.[2] ?? null,
+        quatW: this.lastKnownOrientationSample.quat?.[0] ?? null,
+        quatX: this.lastKnownOrientationSample.quat?.[1] ?? null,
+        quatY: this.lastKnownOrientationSample.quat?.[2] ?? null,
+        quatZ: this.lastKnownOrientationSample.quat?.[3] ?? null,
+        contactQuality,
+        label: this.datasetSession.label,
       });
     });
   }
@@ -333,6 +542,12 @@ class TelemetryStore {
     this.lastEcgTimestampNs = null;
     this.lastRecordedAtByChannel.clear();
     this.lastAcceptedAtByChannel.clear();
+    this.selectedLabel = "idle";
+    this.datasetRecording = false;
+    this.datasetSession = null;
+    this.datasetRows.clear();
+    this.lastKnownOrientationSample = { accel: null, gyro: null, quat: null };
+    this.lastKnownPpgSample = { green: null, red: null, ir: null, contactQuality: null };
     this.publishNow();
   }
 

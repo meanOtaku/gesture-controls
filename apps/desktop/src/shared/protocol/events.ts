@@ -130,8 +130,12 @@ export interface WatchPpgBatch {
   sequence: number;
   timestampsNs: number[];
   green: number[];
+  /** Samsung Health Sensor SDK per-sample PPG status (0 = good contact); used as the dataset "contact quality" signal. */
+  greenStatus: number[];
   red: number[];
+  redStatus: number[];
   ir: number[];
+  irStatus: number[];
 }
 
 export const WATCH_PPG_BATCH_EVENT = "watch-ppg-batch";

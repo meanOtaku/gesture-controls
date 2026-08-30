@@ -2,9 +2,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { useSyncExternalStore } from "react";
 import {
   ESTIMATED_BYTES_PER_CSV_ROW,
+  GESTURE_DATASET_LABELS,
   MAX_CSV_ROWS,
   MAX_VISIBLE_SAMPLES,
   telemetryStore,
+  type GestureDatasetLabel,
   type SeriesPoint,
 } from "../store/telemetryStore";
 
@@ -105,6 +107,22 @@ export function LiveTelemetry() {
   const rowCount = telemetryStore.getRowCount();
   const bufferFull = rowCount >= MAX_CSV_ROWS;
 
+  const selectedLabel = telemetryStore.getSelectedLabel();
+  const datasetRecording = telemetryStore.getDatasetRecording();
+  const datasetSession = telemetryStore.getDatasetSession();
+  const datasetRowCount = telemetryStore.getDatasetRowCount();
+
+  const exportDatasetCsv = () => {
+    const csv = telemetryStore.generateDatasetCsv();
+    const download = document.createElement("a");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    download.href = url;
+    const label = datasetSession?.label ?? selectedLabel;
+    download.download = `gesture-dataset-${label}-${new Date().toISOString().replaceAll(":", "-")}.csv`;
+    download.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Mirrors Dashboard.tsx's IMU_SENSOR_IDS default-enabled read and the
   // continuous-tracker "idle means disabled" convention.
   const orientationEnabled = watchStatus?.sensorStatus?.orientation ?? true;
@@ -128,6 +146,29 @@ export function LiveTelemetry() {
         </small>
       </div>
       <div className="recording-actions"><button className={recording ? "recording" : ""} onClick={toggleRecording}>{recording ? "Stop recording" : "Start recording"}</button><button disabled={rowCount === 0} onClick={saveCsv}>Save CSV</button></div>
+    </section>
+    <section className="recording-card dataset-card">
+      <div>
+        <span className="label">Labeled dataset recorder</span>
+        <strong>{datasetRecording ? `Recording "${datasetSession?.label}"` : "Select a label, then start a labeled capture"}</strong>
+        <small>
+          {datasetRowCount.toLocaleString()} rows buffered
+          {datasetSession ? ` · session label: ${datasetSession.label}` : ""}
+        </small>
+      </div>
+      <div className="recording-actions">
+        <select
+          value={selectedLabel}
+          disabled={datasetRecording}
+          onChange={(event) => telemetryStore.selectDatasetLabel(event.target.value as GestureDatasetLabel)}
+        >
+          {GESTURE_DATASET_LABELS.map((label) => <option key={label} value={label}>{label.replaceAll("_", " ")}</option>)}
+        </select>
+        <button disabled={datasetRecording} onClick={() => telemetryStore.startDatasetRecording()}>Start</button>
+        <button disabled={!datasetRecording} onClick={() => telemetryStore.stopDatasetRecording()}>Stop</button>
+        <button disabled={!datasetSession} onClick={() => telemetryStore.discardDatasetRecording()}>Discard</button>
+        <button disabled={datasetRowCount === 0} onClick={exportDatasetCsv}>Export Dataset CSV</button>
+      </div>
     </section>
     <TimeChart title="Headphone orientation" points={headPoints} labels={["Yaw", "Pitch", "Roll"]} colors={["#65e6ff", "#b88cff", "#ffb45d"]} />
     {orientationEnabled && <TimeChart title="Watch orientation" points={watchOrientationPoints} labels={["Yaw", "Pitch", "Roll"]} colors={["#65e6ff", "#b88cff", "#ffb45d"]} />}
