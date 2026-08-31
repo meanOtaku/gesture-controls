@@ -18,6 +18,7 @@ repository = "https://github.com/meanOtaku/gesture-controls"
 [workspace.dependencies]
 anyhow = "1"
 async-trait = "0.1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 axum = { version = "0.8", default-features = false, features = ["ws", "tokio", "http1"] }
 futures-util = "0.3"
 mdns-sd = "0.21"
@@ -27,3 +28,4 @@ thiserror = "2"
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4"] }

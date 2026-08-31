@@ -12,6 +12,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+chrono.workspace = true
 head-tracking = { path = "../../../crates/head-tracking" }
 interaction-engine = { path = "../../../crates/interaction-engine" }
 volume-control = { path = "../../../crates/volume-control" }
@@ -23,3 +24,4 @@ tauri = { version = "2", features = ["macos-private-api"] }
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+uuid.workspace = true

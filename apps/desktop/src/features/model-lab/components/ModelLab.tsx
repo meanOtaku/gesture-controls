@@ -1,3 +1,5 @@
+import { invoke } from "@tauri-apps/api/core";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { GESTURE_DATASET_LABELS, type GestureDatasetLabel } from "../../telemetry/store/telemetryStore";
 
 /** Milestone 10 desktop slice: no managed runner exists yet, so every control that would launch,
@@ -22,7 +24,86 @@ const ROLE_COPY: Record<LabelRole, string> = {
   negative: "Negative / background",
 };
 
+/** Mirrors `DatasetSummary` in src-tauri/src/model_lab.rs (serde camelCase). */
+interface DatasetSummary {
+  id: string;
+  originalFilename: string;
+  importedAt: string;
+  label: string;
+  rowCount: number;
+}
+
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error("failed to read dataset CSV"));
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.readAsText(file);
+  });
+}
+
 export function ModelLab() {
+  const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const refreshDatasets = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await invoke<DatasetSummary[]>("list_model_datasets");
+      setDatasets(result);
+      setError(null);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshDatasets();
+  }, [refreshDatasets]);
+
+  const handleFileChange = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = "";
+      if (!file) return;
+      setImporting(true);
+      try {
+        const csvContent = await readFileAsText(file);
+        await invoke("import_model_dataset", { filename: file.name, csvContent });
+        setError(null);
+        await refreshDatasets();
+      } catch (err) {
+        setError(String(err));
+      } finally {
+        setImporting(false);
+      }
+    },
+    [refreshDatasets],
+  );
+
+  const handleDelete = useCallback(
+    async (id: string) => {
+      try {
+        await invoke("delete_model_dataset", { id });
+        setError(null);
+        await refreshDatasets();
+      } catch (err) {
+        setError(String(err));
+      }
+    },
+    [refreshDatasets],
+  );
+
+  const coverageByLabel = new Map<string, number>();
+  for (const dataset of datasets) {
+    coverageByLabel.set(dataset.label, (coverageByLabel.get(dataset.label) ?? 0) + 1);
+  }
+
   return (
     <main className="shell model-lab-shell">
       <header className="hero">
@@ -49,10 +130,40 @@ export function ModelLab() {
           start recording, perform the gesture (or the background activity), stop, then Export Dataset CSV. Each
           exported file is one recording session, labeled uniformly for its whole duration.
         </p>
-        <p className="hint">
-          No dataset sessions are stored or imported here yet &mdash; this tab does not read exported CSVs back
-          in from disk. Collect sessions with the recorder, then point the offline CLI at the exported files.
-        </p>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv"
+          hidden
+          onChange={(event) => {
+            void handleFileChange(event);
+          }}
+        />
+        <div className="recording-actions">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+          >
+            {importing ? "Importing…" : "Import dataset CSV"}
+          </button>
+        </div>
+        {error && <p className="calibration-error" role="alert">{error}</p>}
+        {loading ? (
+          <p className="hint">Loading imported sessions&hellip;</p>
+        ) : datasets.length === 0 ? (
+          <p className="hint">No dataset sessions imported yet. Export a CSV from the Live data tab, then import it here.</p>
+        ) : (
+          <div className="vectors model-lab-datasets">
+            {datasets.map((dataset) => (
+              <div className="vector-row model-lab-label-row" key={dataset.id}>
+                <span className="label">
+                  {dataset.originalFilename} &mdash; {dataset.label.replaceAll("_", " ")} ({dataset.rowCount} rows)
+                </span>
+                <button onClick={() => void handleDelete(dataset.id)}>Delete</button>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="calibration-card" aria-label="Label coverage">
@@ -67,9 +178,11 @@ export function ModelLab() {
         <div className="vectors model-lab-labels">
           {GESTURE_DATASET_LABELS.map((label) => {
             const role = roleFor(label);
+            const count = coverageByLabel.get(label) ?? 0;
             return (
               <div className="vector-row model-lab-label-row" key={label}>
                 <span className="label">{label.replaceAll("_", " ")}</span>
+                <span className="model-lab-coverage-count">{count} session{count === 1 ? "" : "s"}</span>
                 <span className={`model-lab-chip model-lab-chip--${role}`}>{ROLE_COPY[role]}</span>
               </div>
             );

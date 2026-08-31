@@ -3172,6 +3172,7 @@ dependencies = [
 name = "spatial-gesture-desktop"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "head-tracking",
  "interaction-engine",
  "serde",
@@ -3182,6 +3183,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uuid",
  "volume-control",
  "watch-bridge",
 ]

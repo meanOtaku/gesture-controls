@@ -10,6 +10,7 @@ use tracing::{error, info, warn};
 use watch_bridge::{WatchBridgeServer, WatchEvent};
 
 mod calibration;
+mod model_lab;
 mod overlay;
 mod settings;
 mod watch;
@@ -36,6 +37,7 @@ pub fn run() {
         .manage(overlay::OverlayRuntime::default())
         .manage(overlay::VolumeRuntime::default())
         .manage(watch::WatchRuntime::default())
+        .manage(model_lab::ModelLabRuntime::default())
         .invoke_handler(tauri::generate_handler![
             calibration::get_calibration_state,
             calibration::capture_calibration_target,
@@ -55,6 +57,9 @@ pub fn run() {
             settings::get_settings,
             settings::update_settings,
             settings::reset_settings,
+            model_lab::import_model_dataset,
+            model_lab::list_model_datasets,
+            model_lab::delete_model_dataset,
         ])
         .on_window_event(|window, event| {
             if window.label() == MAIN_WINDOW
