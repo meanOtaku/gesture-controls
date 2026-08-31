@@ -1,11 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { GESTURE_DATASET_LABELS, type GestureDatasetLabel } from "../../telemetry/store/telemetryStore";
 
-/** Milestone 10 desktop slice: no managed runner exists yet, so every control that would launch,
- * cancel, or export a real training run stays disabled with this reason instead of pretending to work. */
-export const RUNNER_UNAVAILABLE_REASON =
-  "Managed Tauri runner is the next integration slice. Training, cancelling, and exporting only work today through the offline tools/pinch-classifier CLI.";
+/** Mirrors `model_lab::TRAINING_EVENT` in src-tauri/src/model_lab.rs. */
+const TRAINING_EVENT = "model-lab-training-event";
+
+/** This is a local development runner, not a packaged app feature: the desktop app shells
+ * out to `uv run --project tools/pinch-classifier pinch-classifier-train`, so training only
+ * works from a full repository checkout with uv (https://docs.astral.sh/uv/) on PATH. */
+export const DEV_RUNNER_NOTICE =
+  "Training runs through a local development runner: the desktop app shells out to " +
+  "`uv run --project tools/pinch-classifier pinch-classifier-train`. It only works from a full " +
+  "repository checkout with uv (https://docs.astral.sh/uv/) installed and on PATH.";
+
+export const EXPORT_UNAVAILABLE_REASON =
+  "Model export and on-device deploy are not implemented in this slice; only training and " +
+  "evaluation run through the desktop app today.";
 
 type LabelRole = "positive" | "hold" | "negative";
 
@@ -33,6 +44,42 @@ interface DatasetSummary {
   rowCount: number;
 }
 
+/** Mirrors `TrainingStatus` in src-tauri/src/model_lab.rs (serde tag "phase", camelCase). */
+type TrainingStatus =
+  | { phase: "idle" }
+  | { phase: "running"; jobId: string; datasetIds: string[]; startedAt: string }
+  | { phase: "completed"; jobId: string; modelId: string; modelCard: ModelCard }
+  | { phase: "failed"; jobId: string; message: string };
+
+/** Mirrors `TrainingEvent` in src-tauri/src/model_lab.rs (serde tag "kind", camelCase). */
+type TrainingEventPayload =
+  | { kind: "started"; jobId: string; datasetIds: string[] }
+  | { kind: "log"; jobId: string; message: string }
+  | { kind: "completed"; jobId: string; modelId: string; modelCard: ModelCard }
+  | { kind: "failed"; jobId: string; message: string }
+  | { kind: "cancelled"; jobId: string };
+
+/** Loose shape of model_card.json, written by tools/pinch-classifier/src/pinch_classifier/train.py. */
+interface ModelCard {
+  created_at?: string;
+  classes?: string[];
+  n_windows_train?: number;
+  n_windows_test?: number;
+  metrics?: {
+    accuracy?: number;
+    macro_f1?: number;
+    false_activation_count?: number;
+    false_activation_total_negative_windows?: number;
+    false_activation_rate?: number | null;
+  };
+}
+
+/** Mirrors `TrainedModelSummary` in src-tauri/src/model_lab.rs (serde camelCase). */
+interface TrainedModelSummary {
+  id: string;
+  modelCard: ModelCard;
+}
+
 function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -42,11 +89,20 @@ function readFileAsText(file: File): Promise<string> {
   });
 }
 
+function formatPercent(value: number | null | undefined): string {
+  return value == null ? "n/a" : `${(value * 100).toFixed(1)}%`;
+}
+
 export function ModelLab() {
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedDatasetIds, setSelectedDatasetIds] = useState<Set<string>>(new Set());
+  const [status, setStatus] = useState<TrainingStatus>({ phase: "idle" });
+  const [logs, setLogs] = useState<string[]>([]);
+  const [trainedModels, setTrainedModels] = useState<TrainedModelSummary[]>([]);
+  const [trainingError, setTrainingError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const refreshDatasets = useCallback(async () => {
@@ -62,9 +118,75 @@ export function ModelLab() {
     }
   }, []);
 
+  const refreshTrainingStatus = useCallback(async () => {
+    try {
+      const result = await invoke<TrainingStatus>("get_training_status");
+      setStatus(result);
+    } catch (err) {
+      setTrainingError(String(err));
+    }
+  }, []);
+
+  const refreshTrainedModels = useCallback(async () => {
+    try {
+      const result = await invoke<TrainedModelSummary[]>("list_trained_models");
+      setTrainedModels(result);
+    } catch (err) {
+      setTrainingError(String(err));
+    }
+  }, []);
+
   useEffect(() => {
     void refreshDatasets();
   }, [refreshDatasets]);
+
+  useEffect(() => {
+    void refreshTrainingStatus();
+    void refreshTrainedModels();
+  }, [refreshTrainingStatus, refreshTrainedModels]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void listen<TrainingEventPayload>(TRAINING_EVENT, ({ payload }) => {
+      switch (payload.kind) {
+        case "started":
+          setStatus({
+            phase: "running",
+            jobId: payload.jobId,
+            datasetIds: payload.datasetIds,
+            startedAt: new Date().toISOString(),
+          });
+          setLogs([]);
+          setTrainingError(null);
+          break;
+        case "log":
+          setLogs((prev) => [...prev, payload.message]);
+          break;
+        case "completed":
+          setStatus({ phase: "completed", jobId: payload.jobId, modelId: payload.modelId, modelCard: payload.modelCard });
+          void refreshTrainedModels();
+          break;
+        case "failed":
+          setStatus({ phase: "failed", jobId: payload.jobId, message: payload.message });
+          break;
+        case "cancelled":
+          setLogs((prev) => [...prev, "Training cancelled."]);
+          setStatus({ phase: "idle" });
+          break;
+      }
+    }).then((fn) => {
+      if (cancelled) {
+        fn();
+        return;
+      }
+      unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [refreshTrainedModels]);
 
   const handleFileChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -92,6 +214,12 @@ export function ModelLab() {
         await invoke("delete_model_dataset", { id });
         setError(null);
         await refreshDatasets();
+        setSelectedDatasetIds((prev) => {
+          if (!prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
       } catch (err) {
         setError(String(err));
       }
@@ -99,10 +227,47 @@ export function ModelLab() {
     [refreshDatasets],
   );
 
+  const toggleDatasetSelected = useCallback((id: string) => {
+    setSelectedDatasetIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleStartTraining = useCallback(async () => {
+    const datasetIds = Array.from(selectedDatasetIds);
+    if (datasetIds.length === 0 || status.phase === "running") return;
+    setTrainingError(null);
+    try {
+      await invoke<string>("start_training_job", { datasetIds });
+    } catch (err) {
+      setTrainingError(String(err));
+    }
+  }, [selectedDatasetIds, status.phase]);
+
+  const handleCancelTraining = useCallback(async () => {
+    if (status.phase !== "running") return;
+    try {
+      await invoke("cancel_training_job", { jobId: status.jobId });
+    } catch (err) {
+      setTrainingError(String(err));
+    }
+  }, [status]);
+
   const coverageByLabel = new Map<string, number>();
   for (const dataset of datasets) {
     coverageByLabel.set(dataset.label, (coverageByLabel.get(dataset.label) ?? 0) + 1);
   }
+
+  const isRunning = status.phase === "running";
+  const sortedTrainedModels = [...trainedModels].sort((a, b) =>
+    (b.modelCard.created_at ?? "").localeCompare(a.modelCard.created_at ?? ""),
+  );
 
   return (
     <main className="shell model-lab-shell">
@@ -112,14 +277,17 @@ export function ModelLab() {
           <h1>Model Lab</h1>
           <p className="subtitle">
             Turns labeled dataset recordings from the Live data tab into a trained pinch_start / pinch_release
-            classifier. This slice documents the real workflow end to end; it does not run training, evaluation,
-            or export from inside the desktop app yet.
+            classifier. Training and evaluation run in-app through a local development runner; model export and
+            on-device deploy are not implemented yet.
           </p>
         </div>
-        <div className="connection offline"><span className="pulse" />No trained model</div>
+        <div className={`connection ${trainedModels.length > 0 ? "online" : "offline"}`}>
+          <span className="pulse" />
+          {trainedModels.length > 0
+            ? `${trainedModels.length} trained model${trainedModels.length === 1 ? "" : "s"}`
+            : "No trained model"}
+        </div>
       </header>
-
-      <p className="calibration-warning" role="status">{RUNNER_UNAVAILABLE_REASON}</p>
 
       <section className="calibration-card" aria-label="Dataset">
         <div className="calibration-heading">
@@ -128,7 +296,8 @@ export function ModelLab() {
         <p className="hint">
           Use the Live data tab&apos;s labeled dataset recorder to capture one CSV per session: pick a label,
           start recording, perform the gesture (or the background activity), stop, then Export Dataset CSV. Each
-          exported file is one recording session, labeled uniformly for its whole duration.
+          exported file is one recording session, labeled uniformly for its whole duration. Check the sessions you
+          want to train on below.
         </p>
         <input
           ref={fileInputRef}
@@ -156,9 +325,17 @@ export function ModelLab() {
           <div className="vectors model-lab-datasets">
             {datasets.map((dataset) => (
               <div className="vector-row model-lab-label-row" key={dataset.id}>
-                <span className="label">
-                  {dataset.originalFilename} &mdash; {dataset.label.replaceAll("_", " ")} ({dataset.rowCount} rows)
-                </span>
+                <label className="model-lab-dataset-select">
+                  <input
+                    type="checkbox"
+                    checked={selectedDatasetIds.has(dataset.id)}
+                    onChange={() => toggleDatasetSelected(dataset.id)}
+                    aria-label={`Select ${dataset.originalFilename}`}
+                  />
+                  <span className="label">
+                    {dataset.originalFilename} &mdash; {dataset.label.replaceAll("_", " ")} ({dataset.rowCount} rows)
+                  </span>
+                </label>
                 <button onClick={() => void handleDelete(dataset.id)}>Delete</button>
               </div>
             ))}
@@ -201,21 +378,38 @@ export function ModelLab() {
         <div className="calibration-heading">
           <div><p className="eyebrow">Step 3</p><h2>Training</h2></div>
         </div>
-        <p className="hint">Run the baseline trainer against your exported sessions from a terminal:</p>
-        <div className="vector-row">
-          <code>pinch-classifier-train --input session1.csv session2.csv --output-dir artifacts/</code>
-        </div>
+        <p className="hint" role="status">{DEV_RUNNER_NOTICE}</p>
         <p className="hint">
           Defaults: 500&nbsp;ms windows, 150&nbsp;ms stride, 250&nbsp;ms max gap before splitting a session,
           3-sample minimum per window, <code>pinch_hold</code> excluded (change with{" "}
           <code>--hold-handling exclude|negative|class</code>), 25% of sessions held out, 200-tree RandomForest.
-          Run <code>pinch-classifier-train --help</code> for the full flag list.
+          You can also run the trainer manually from a terminal:
         </p>
-        <div className="recording-actions">
-          <button disabled title={RUNNER_UNAVAILABLE_REASON}>Start training</button>
-          <button disabled title={RUNNER_UNAVAILABLE_REASON}>Cancel</button>
+        <div className="vector-row">
+          <code>pinch-classifier-train --input session1.csv session2.csv --output-dir artifacts/</code>
         </div>
-        <p className="hint">{RUNNER_UNAVAILABLE_REASON}</p>
+        <div className="recording-actions">
+          <button onClick={() => void handleStartTraining()} disabled={selectedDatasetIds.size === 0 || isRunning}>
+            {isRunning ? "Training…" : "Start training"}
+          </button>
+          <button onClick={() => void handleCancelTraining()} disabled={!isRunning}>Cancel</button>
+        </div>
+        {status.phase === "running" && (
+          <p className="hint">
+            Running job {status.jobId} on {status.datasetIds.length} dataset{status.datasetIds.length === 1 ? "" : "s"},
+            started {status.startedAt}.
+          </p>
+        )}
+        {status.phase === "completed" && (
+          <p className="hint">Job {status.jobId} completed &mdash; trained model {status.modelId}.</p>
+        )}
+        {status.phase === "failed" && (
+          <p className="calibration-error" role="alert">Training job {status.jobId} failed: {status.message}</p>
+        )}
+        {trainingError && <p className="calibration-error" role="alert">{trainingError}</p>}
+        {logs.length > 0 && (
+          <pre className="model-lab-log" aria-label="Training log">{logs.join("\n")}</pre>
+        )}
       </section>
 
       <section className="calibration-card" aria-label="Evaluation">
@@ -229,11 +423,25 @@ export function ModelLab() {
           <code>false_activation_count</code>, <code>false_activation_total_negative_windows</code>, and{" "}
           <code>false_activation_rate</code> (negative test windows the model wrongly called an activation).
         </p>
-        <p className="hint">
-          No trained model exists yet, so there are no metrics to show. This tab does not parse or display{" "}
-          <code>model_card.json</code> in this slice &mdash; read it directly from the CLI&apos;s output
-          directory.
-        </p>
+        {sortedTrainedModels.length === 0 ? (
+          <p className="hint">No trained models yet. Start a training run above to produce one.</p>
+        ) : (
+          <div className="vectors model-lab-models">
+            {sortedTrainedModels.map((model) => (
+              <div className="vector-row model-lab-label-row" key={model.id}>
+                <span className="label">
+                  {model.id}
+                  {model.modelCard.created_at ? ` — ${model.modelCard.created_at}` : ""}
+                </span>
+                <span className="model-lab-coverage-count">
+                  accuracy {formatPercent(model.modelCard.metrics?.accuracy)}, macro F1{" "}
+                  {formatPercent(model.modelCard.metrics?.macro_f1)}, false-activation rate{" "}
+                  {formatPercent(model.modelCard.metrics?.false_activation_rate)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="calibration-card" aria-label="Export and deploy">
@@ -247,10 +455,10 @@ export function ModelLab() {
           is nothing to deploy to headphones or the watch from this app yet.
         </p>
         <div className="recording-actions">
-          <button disabled title={RUNNER_UNAVAILABLE_REASON}>Export model</button>
-          <button disabled title={RUNNER_UNAVAILABLE_REASON}>Deploy to device</button>
+          <button disabled title={EXPORT_UNAVAILABLE_REASON}>Export model</button>
+          <button disabled title={EXPORT_UNAVAILABLE_REASON}>Deploy to device</button>
         </div>
-        <p className="hint">{RUNNER_UNAVAILABLE_REASON}</p>
+        <p className="hint">{EXPORT_UNAVAILABLE_REASON}</p>
       </section>
     </main>
   );

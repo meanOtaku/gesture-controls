@@ -60,6 +60,10 @@ pub fn run() {
             model_lab::import_model_dataset,
             model_lab::list_model_datasets,
             model_lab::delete_model_dataset,
+            model_lab::start_training_job,
+            model_lab::cancel_training_job,
+            model_lab::get_training_status,
+            model_lab::list_trained_models,
         ])
         .on_window_event(|window, event| {
             if window.label() == MAIN_WINDOW
