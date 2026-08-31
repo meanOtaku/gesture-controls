@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Dashboard } from "../features/dashboard/components/Dashboard";
 import { LiveTelemetry } from "../features/telemetry/components/LiveTelemetry";
+import { ModelLab } from "../features/model-lab/components/ModelLab";
 import { Settings } from "../features/settings/components/Settings";
 import { telemetryStore } from "../features/telemetry/store/telemetryStore";
 import { VolumeKnob } from "../features/overlay/components/VolumeKnob";
@@ -112,7 +113,7 @@ function MainApp() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<"main" | "headphone" | "watch" | "telemetry" | "settings">("main");
+  const [activeTab, setActiveTab] = useState<"main" | "headphone" | "watch" | "telemetry" | "modelLab" | "settings">("main");
   const calibrationEventVersion = useRef(0);
   const overlayEventVersion = useRef(0);
   const overlayVisible = useRef(false);
@@ -397,6 +398,7 @@ function MainApp() {
       <button className={activeTab === "headphone" ? "active" : ""} onClick={() => setActiveTab("headphone")}>Headphones</button>
       <button className={activeTab === "watch" ? "active" : ""} onClick={() => setActiveTab("watch")}>Watch</button>
       <button className={activeTab === "telemetry" ? "active" : ""} onClick={() => setActiveTab("telemetry")}>Live data</button>
+      <button className={activeTab === "modelLab" ? "active" : ""} onClick={() => setActiveTab("modelLab")}>Model Lab</button>
       <button className={activeTab === "settings" ? "active" : ""} onClick={() => setActiveTab("settings")}>Settings</button>
     </nav>
     {activeTab === "main" && (
@@ -418,6 +420,9 @@ function MainApp() {
     )}
     {activeTab === "telemetry" && (
       <LiveTelemetry />
+    )}
+    {activeTab === "modelLab" && (
+      <ModelLab />
     )}
     {activeTab === "settings" && (
       <Settings
