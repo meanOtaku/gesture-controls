@@ -26,9 +26,9 @@ use spatial_protocol::{
     RATE_CONTROLLABLE_SENSOR_IDS, SENSOR_PPG_FLUSH, WATCH_PROTOCOL_VERSION, WatchBiaResultSample,
     WatchButtonSample, WatchEcgBatchSample, WatchEdaBatchSample, WatchEnvelope,
     WatchHeartRateBatchSample, WatchHeartbeatSample, WatchInboundMessage, WatchMedicalStatusSample,
-    WatchOrientationSample, WatchPpgBatchSample, WatchPpgStatusSample, WatchSensorStatusSample,
-    WatchSkinTemperatureBatchSample, WatchSpo2BatchSample, WatchSweatLossBatchSample,
-    WatchTimeSyncSample,
+    WatchOrientationSample, WatchPinchSample, WatchPpgBatchSample, WatchPpgStatusSample,
+    WatchSensorStatusSample, WatchSkinTemperatureBatchSample, WatchSpo2BatchSample,
+    WatchSweatLossBatchSample, WatchTimeSyncSample,
 };
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -59,6 +59,7 @@ pub enum WatchEvent {
     Ppg(WatchPpgBatchSample),
     PpgStatusUpdated(WatchPpgStatusSample),
     Button(WatchButtonSample),
+    Pinch(WatchPinchSample),
     HeartRate(WatchHeartRateBatchSample),
     SkinTemperature(WatchSkinTemperatureBatchSample),
     Eda(WatchEdaBatchSample),
@@ -701,6 +702,9 @@ fn handle_inbound(
         }
         Ok(WatchInboundMessage::Button(sample)) => {
             let _ = shared.events.send(WatchEvent::Button(sample));
+        }
+        Ok(WatchInboundMessage::Pinch(sample)) => {
+            let _ = shared.events.send(WatchEvent::Pinch(sample));
         }
         Ok(WatchInboundMessage::HeartRateBatch(sample)) => {
             let _ = shared.events.send(WatchEvent::HeartRate(sample));

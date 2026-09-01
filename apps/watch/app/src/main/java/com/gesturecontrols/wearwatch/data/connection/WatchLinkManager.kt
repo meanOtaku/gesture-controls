@@ -187,6 +187,28 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         socket.send(WatchProtocol.buttonMessage(deviceId, seq, timestampNs, buttonState))
     }
 
+    /** Sends an already-classified pinch transition; no local or desktop control behavior is implied. */
+    fun sendPinchEvent(
+        phase: WatchProtocol.PinchPhase,
+        confidence: Double,
+        modelId: String,
+        timestampNs: Long,
+    ) {
+        val socket = webSocket ?: return
+        if (_state.value != ConnectionState.CONNECTED) return
+        val seq = sequence.incrementAndGet()
+        socket.send(
+            WatchProtocol.pinchMessage(
+                deviceId,
+                seq,
+                timestampNs,
+                phase,
+                confidence,
+                modelId,
+            ),
+        )
+    }
+
     /** Buffers HEART_RATE_CONTINUOUS samples for the next medical flush tick; dropped if not connected. */
     fun enqueueHeartRateSamples(samples: List<HeartRateSample>) {
         if (samples.isEmpty()) return

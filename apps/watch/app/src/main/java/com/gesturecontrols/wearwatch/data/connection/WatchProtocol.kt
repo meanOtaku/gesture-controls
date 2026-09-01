@@ -20,6 +20,7 @@ object WatchProtocol {
     const val TYPE_PPG_BATCH = "watch.ppg_batch"
     const val TYPE_PPG_STATUS = "watch.ppg_status"
     const val TYPE_BUTTON = "watch.button"
+    const val TYPE_PINCH = "watch.pinch"
     const val TYPE_DESKTOP_CONNECTED = "desktop.connected"
     const val TYPE_DESKTOP_TIME_SYNC = "desktop.time_sync"
 
@@ -56,6 +57,12 @@ object WatchProtocol {
     const val BUTTON_ID_STEM_PRIMARY = "stem_primary"
     const val BUTTON_STATE_DOWN = "down"
     const val BUTTON_STATE_UP = "up"
+
+    enum class PinchPhase(val wireValue: String) {
+        STARTED("started"),
+        HELD("held"),
+        RELEASED("released"),
+    }
 
     private fun envelope(
         type: String,
@@ -162,6 +169,27 @@ object WatchProtocol {
         payload.put("button", BUTTON_ID_STEM_PRIMARY)
         payload.put("state", state)
         return envelope(TYPE_BUTTON, deviceId, sequence, timestampNs, payload)
+    }
+
+    /** Encodes a model-produced pinch transition without assigning it any desktop behavior. */
+    fun pinchMessage(
+        deviceId: String,
+        sequence: Long,
+        timestampNs: Long,
+        phase: PinchPhase,
+        confidence: Double,
+        modelId: String,
+    ): String {
+        require(confidence.isFinite() && confidence in 0.0..1.0) {
+            "confidence must be finite and between 0 and 1"
+        }
+        require(modelId.isNotBlank()) { "modelId must not be blank" }
+
+        val payload = JSONObject()
+        payload.put("phase", phase.wireValue)
+        payload.put("confidence", confidence)
+        payload.put("modelId", modelId)
+        return envelope(TYPE_PINCH, deviceId, sequence, timestampNs, payload)
     }
 
     /** Encodes a batch of HEART_RATE_CONTINUOUS samples as parallel per-sample arrays. */

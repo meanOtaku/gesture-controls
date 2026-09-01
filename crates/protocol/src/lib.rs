@@ -83,6 +83,7 @@ pub const WATCH_TIME_SYNC_TYPE: &str = "watch.time_sync";
 pub const WATCH_PPG_BATCH_TYPE: &str = "watch.ppg_batch";
 pub const WATCH_PPG_STATUS_TYPE: &str = "watch.ppg_status";
 pub const WATCH_BUTTON_TYPE: &str = "watch.button";
+pub const WATCH_PINCH_TYPE: &str = "watch.pinch";
 pub const DESKTOP_CONNECTED_TYPE: &str = "desktop.connected";
 pub const DESKTOP_TIME_SYNC_TYPE: &str = "desktop.time_sync";
 
@@ -279,6 +280,10 @@ pub enum WatchPacketError {
     UnknownPpgState(String),
     #[error("watch button message has an unknown state '{0}'")]
     UnknownButtonState(String),
+    #[error("watch pinch confidence must be finite and between 0 and 1")]
+    InvalidPinchConfidence,
+    #[error("watch pinch message has an empty modelId")]
+    MissingPinchModelId,
     #[error("watch medical batch is malformed: {0}")]
     InvalidMedicalBatch(String),
     #[error("watch medical status has an unknown tracker '{0}'")]
@@ -381,6 +386,24 @@ impl WatchEnvelope {
                     timestamp_ns: self.timestamp_ns,
                     button: payload.button,
                     state: payload.state,
+                }))
+            }
+            WATCH_PINCH_TYPE => {
+                let payload: WatchPinchPayload = serde_json::from_value(self.payload)
+                    .map_err(WatchPacketError::InvalidPayload)?;
+                if !payload.confidence.is_finite() || !(0.0..=1.0).contains(&payload.confidence) {
+                    return Err(WatchPacketError::InvalidPinchConfidence);
+                }
+                if payload.model_id.trim().is_empty() {
+                    return Err(WatchPacketError::MissingPinchModelId);
+                }
+                Ok(WatchInboundMessage::Pinch(WatchPinchSample {
+                    device_id: self.device_id,
+                    sequence: self.sequence,
+                    timestamp_ns: self.timestamp_ns,
+                    phase: payload.phase,
+                    confidence: payload.confidence,
+                    model_id: payload.model_id,
                 }))
             }
             WATCH_HEART_RATE_BATCH_TYPE => {
@@ -998,6 +1021,36 @@ pub struct WatchButtonSample {
     pub state: String,
 }
 
+/// Typed lifecycle of a model-produced pinch transition.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WatchPinchPhase {
+    Started,
+    Held,
+    Released,
+}
+
+/// `watch.pinch` payload. The envelope timestamp is the watch monotonic-clock
+/// time at which this transition occurred.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WatchPinchPayload {
+    pub phase: WatchPinchPhase,
+    pub confidence: f64,
+    pub model_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WatchPinchSample {
+    pub device_id: String,
+    pub sequence: u64,
+    pub timestamp_ns: u64,
+    pub phase: WatchPinchPhase,
+    pub confidence: f64,
+    pub model_id: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WatchOrientationSample {
@@ -1036,6 +1089,7 @@ pub enum WatchInboundMessage {
     PpgBatch(WatchPpgBatchSample),
     PpgStatus(WatchPpgStatusSample),
     Button(WatchButtonSample),
+    Pinch(WatchPinchSample),
     HeartRateBatch(WatchHeartRateBatchSample),
     SkinTemperatureBatch(WatchSkinTemperatureBatchSample),
     EdaBatch(WatchEdaBatchSample),

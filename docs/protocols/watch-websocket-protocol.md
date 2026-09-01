@@ -51,6 +51,22 @@ and always clears the grab and hides the overlay on `up` or on watch
 disconnect, so a lost connection mid-hold can never leave the overlay stuck
 grabbed.
 
+## Typed pinch transitions
+
+`watch.pinch` carries an already-classified pinch transition. This protocol
+message is additive and does not select an input mode or trigger any desktop
+control behavior:
+
+```json
+{"type":"watch.pinch","version":1,"deviceId":"galaxy-watch-4","sequence":6,"timestampNs":128,"payload":{"phase":"started","confidence":0.94,"modelId":"pinch-v1"}}
+```
+
+`payload.phase` is exactly `started`, `held`, or `released`.
+`payload.confidence` must be finite and in the inclusive range `[0, 1]`, and
+`payload.modelId` must be nonempty (whitespace-only values are rejected).
+The envelope `timestampNs` is the watch monotonic-clock time at which the
+transition occurred. Unknown phases and malformed values are rejected.
+
 ## Time synchronization
 
 The desktop sends `desktop.time_sync` every five seconds. Echo its `payload.desktopTimeNs` immediately in a `watch.time_sync` message and add the current watch monotonic time as `payload.watchTimeNs`. The desktop calculates round-trip latency and uses the median of its latest five offset samples.
