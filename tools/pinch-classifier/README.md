@@ -1,10 +1,9 @@
 # pinch-classifier
 
-Offline training package for the `pinch_start` / `pinch_release` gesture
-classifier (Milestone 10, slice 1). This slice trains and evaluates a
-scikit-learn `RandomForestClassifier` baseline from CSV exports produced by
-the Milestone 9 desktop dataset recorder. **It does not export TFLite or
-LiteRT models** — see [TFLite/LiteRT export](#tflitelitert-export) below.
+Offline training package for the Milestone 10 pinch classifier. It retains the
+scikit-learn `RandomForestClassifier` baseline and adds a neural three-class
+(`negative`, `pinch_start`, `pinch_release`) path that exports a validated
+TFLite/LiteRT deployment bundle from Milestone 9 CSV recordings.
 
 ## Setup
 
@@ -14,7 +13,8 @@ Requires Python >=3.11.
 cd tools/pinch-classifier
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev]"              # baseline and tests
+pip install -e ".[dev,tensorflow]"   # also train/export TFLite
 ```
 
 ## Running tests
@@ -23,7 +23,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-## Training
+## Baseline training (scikit-learn)
 
 ```bash
 pinch-classifier-train --input session1.csv session2.csv ... --output-dir artifacts/
@@ -43,7 +43,8 @@ used), or a mix of both. Useful flags:
 | `--random-seed` | 42 | Random seed for the split and the classifier |
 | `--n-estimators` | 200 | Number of trees in the RandomForest |
 
-Run `pinch-classifier-train --help` for the full list.
+Run `pinch-classifier-train --help` for the full list. This existing path is
+unchanged and continues to write `model.joblib` and `model_card.json`.
 
 ## CSV contract
 
@@ -112,10 +113,55 @@ card's `metrics` includes, alongside `accuracy`, `macro_f1`,
 - `false_activation_rate` — `false_activation_count / false_activation_total_negative_windows`,
   or `null` if the test set contained no negative windows.
 
-## TFLite/LiteRT export
+## Neural TFLite/LiteRT training and export
 
-This slice trains and evaluates the scikit-learn baseline only. It does
-**not** convert or export a TFLite/LiteRT model — `model_card.json`'s
-`tflite_export` field says so explicitly (`"not yet implemented — this
-slice only trains and evaluates the scikit-learn baseline"`). On-device
-conversion is a later milestone step, out of scope here.
+Install the optional TensorFlow dependency and run:
+
+```bash
+pinch-classifier-train-tflite \
+  --input session1.csv session2.csv recordings/ \
+  --output-dir artifacts/pinch-tflite
+```
+
+The command uses the same CSV parser, 55-feature contract, windowing, and
+session-grouped holdout as the baseline. `pinch_hold` windows are excluded so
+the deployment output always has exactly these ordered output probabilities:
+
+1. `negative`
+2. `pinch_start`
+3. `pinch_release`
+
+The small Keras MLP embeds a `Normalization` layer fitted only on training
+sessions, then converts it to float32 TFLite. Training requires that the
+training side of the grouped split contain all three classes. If it does not,
+add recording sessions or adjust `--random-seed`/`--test-size`; the command
+fails rather than exporting an incomplete classifier.
+
+Useful neural flags:
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--epochs` | 30 | Neural training epochs |
+| `--batch-size` | 32 | Training batch size |
+| `--learning-rate` | 0.001 | Adam learning rate |
+| `--parity-atol` | 0.00001 | Maximum allowed source/TFLite probability error |
+
+The output directory is the deployment bundle:
+
+- `model.tflite` — float32 TFLite flatbuffer with preprocessing embedded.
+- `metadata.json` — validated inference contract containing ordered classes,
+  ordered 55-feature names, tensor shapes/dtypes, windowing and preprocessing
+  policy, grouped split, metrics, TensorFlow/training details, conversion parity,
+  and the lowercase SHA-256 digest of `model.tflite`.
+
+Before metadata is accepted, the exporter loads the converted model with the
+TFLite interpreter and runs every held-out feature row through both Keras and
+TFLite. Export fails unless class argmax agrees for every row and maximum
+absolute probability error is within `--parity-atol`. The metadata is then
+written, loaded back, schema-validated, and checked against the model bytes'
+SHA-256. Consumers should perform the same metadata and digest checks before
+loading a deployed model.
+
+TensorFlow is deliberately optional: baseline users do not install the large
+runtime, and the ordinary test suite skips real conversion tests when the
+`tensorflow` extra is absent.

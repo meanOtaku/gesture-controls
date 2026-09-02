@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pinch-classifier"
 version = "0.1.0"
-description = "Offline training package for the pinch_start / pinch_release gesture classifier (Milestone 10, slice 1). scikit-learn baseline only; TFLite/LiteRT export is a later conversion step."
+description = "Offline baseline and TFLite/LiteRT training tools for the three-class pinch gesture classifier."
 requires-python = ">=3.11"
 dependencies = [
     "numpy>=1.26",
@@ -14,9 +14,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+tensorflow = ["tensorflow>=2.16,<2.22"]
 
 [project.scripts]
 pinch-classifier-train = "pinch_classifier.train:main"
+pinch-classifier-train-tflite = "pinch_classifier.train_tflite:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
