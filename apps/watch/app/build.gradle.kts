@@ -2,11 +2,6 @@ plugins {
     id("com.android.application")
 }
 
-val watchInputMode = providers.gradleProperty("watchInputMode").orElse("button").get()
-require(watchInputMode == "button" || watchInputMode == "pinch") {
-    "-PwatchInputMode must be 'button' or 'pinch'"
-}
-
 android {
     namespace = "com.gesturecontrols.wearwatch"
     compileSdk = 34
@@ -18,7 +13,6 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-        buildConfigField("String", "WATCH_INPUT_MODE", "\"$watchInputMode\"")
     }
 
     buildTypes {
@@ -30,10 +24,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    buildFeatures {
-        buildConfig = true
     }
 
 }
@@ -52,7 +42,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("org.tensorflow:tensorflow-lite:2.17.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
     // Samsung Health Sensor SDK 1.4.1, vendored under `vendor/` at the repo root

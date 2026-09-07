@@ -216,25 +216,6 @@ pub fn run() {
                                         warn!(%error, "failed to release volume overlay");
                                     }
                                 }
-                                WatchEvent::Pinch(sample) => {
-                                    match sample.phase {
-                                        spatial_protocol::WatchPinchPhase::Started => {
-                                            if let Err(error) = overlay.grab(&watch_handle) {
-                                                warn!(%error, "failed to grab volume overlay from pinch");
-                                            } else if let Ok(Some(orientation)) = runtime.latest_orientation()
-                                                && let Err(error) = overlay.begin_wrist_rotation(&orientation)
-                                            {
-                                                warn!(%error, "failed to establish wrist rotation reference pose from pinch");
-                                            }
-                                        }
-                                        spatial_protocol::WatchPinchPhase::Released => {
-                                            if let Err(error) = overlay.release(&watch_handle) {
-                                                warn!(%error, "failed to release volume overlay from pinch");
-                                            }
-                                        }
-                                        spatial_protocol::WatchPinchPhase::Held => {}
-                                    }
-                                }
                                 WatchEvent::Disconnected => {
                                     if let Err(error) = overlay.release(&watch_handle) {
                                         warn!(%error, "failed to release volume overlay on watch disconnect");

@@ -10,13 +10,7 @@ class ConnectionPrefs(context: Context) {
         get() = prefs.getString(KEY_ENDPOINT, null)
         set(value) = prefs.edit().putString(KEY_ENDPOINT, value).apply()
 
-    /** Explicitly opt-in; button control remains the safe default. */
-    var inputMode: String
-        get() = prefs.getString(KEY_INPUT_MODE, "button") ?: "button"
-        set(value) = prefs.edit().putString(KEY_INPUT_MODE, value).apply()
-
     companion object {
         private const val KEY_ENDPOINT = "endpoint"
-        private const val KEY_INPUT_MODE = "input_mode"
     }
 }
