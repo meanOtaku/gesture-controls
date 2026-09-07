@@ -1803,7 +1803,7 @@ Wrist rotation controls the volume smoothly.
 
 ## Milestone 9: Dataset Recorder
 
-Implement on-watch recording:
+Implement desktop-managed labelled recording from sensor-only devices:
 
 * PPG
 * Accelerometer
@@ -1812,6 +1812,7 @@ Implement on-watch recording:
 * Labels
 * CSV export
 * Session metadata
+* Source-timestamp preservation
 
 Success criterion:
 
@@ -1821,7 +1822,7 @@ Labeled gesture datasets can be collected and exported.
 
 ## Milestone 10: Pinch Classifier
 
-Implement:
+Implement the desktop model-development platform:
 
 * Preprocessing
 * Windowing
@@ -1829,16 +1830,23 @@ Implement:
 * Evaluation
 * False-activation testing
 * TFLite or LiteRT export
+* Model Lab lifecycle: Draft, Evaluated, Approved, Active, Archived
+* Model integrity, activation, rollback, thresholds, and monitor-only mode
 
 Success criterion:
 
 ```text
-Pinch start and release are detected with acceptable false-positive rates.
+A versioned desktop-deployable LiteRT bundle can be trained, evaluated,
+approved, activated, and rolled back. Real recordings establish acceptable
+false-positive rates before live control is enabled.
 ```
 
-## Milestone 11: On-Watch Inference
+## Milestone 11: Desktop Inference and Gesture Policy
 
-Replace button events with:
+Watch and headphones remain sensor-only sources. The desktop receives their raw
+timestamped telemetry, fuses it, and runs the active LiteRT model locally.
+
+Implement:
 
 ```text
 PinchStarted
@@ -1846,10 +1854,20 @@ PinchHeld
 PinchReleased
 ```
 
+Add:
+
+* Sensor freshness/contact-quality gates
+* Explicit desktop gesture policy, separate from model probabilities
+* Monitor-only and Live activation modes
+* Replay, comparison, and live inference observability
+* Safe forced release on stale data, disconnect, or model/runtime failure
+* Dedicated Watch button fallback until the desktop model is validated
+
 Success criterion:
 
 ```text
-Complete interaction works without touching the watch screen.
+Complete interaction works without touching the Watch screen while all AI and
+gesture decisions run on the desktop.
 ```
 
 ## Milestone 12: Cross-Platform Adapters
