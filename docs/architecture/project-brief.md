@@ -1809,7 +1809,8 @@ Implement desktop-managed labelled recording from sensor-only devices:
 * Accelerometer
 * Gyroscope
 * Quaternion
-* Labels
+* Built-in and user-defined labels with stable IDs, display names, descriptions, colours, and archive states
+* Label roles: positive gesture, negative/background, or calibration-only
 * CSV export
 * Session metadata
 * Source-timestamp preservation
@@ -1817,7 +1818,8 @@ Implement desktop-managed labelled recording from sensor-only devices:
 Success criterion:
 
 ```text
-Labeled gesture datasets can be collected and exported.
+Labeled gesture datasets can be collected and exported without losing the
+meaning of user-defined labels or archived historical labels.
 ```
 
 ## Milestone 10: Pinch Classifier
@@ -1826,19 +1828,22 @@ Implement the desktop model-development platform:
 
 * Preprocessing
 * Windowing
-* Baseline model
+* Baseline and custom-gesture models
 * Evaluation
 * False-activation testing
 * TFLite or LiteRT export
 * Model Lab lifecycle: Draft, Evaluated, Approved, Active, Archived
 * Model integrity, activation, rollback, thresholds, and monitor-only mode
+* Model-versioned class-to-intent mapping
+* Custom-label management and coverage reporting
 
 Success criterion:
 
 ```text
 A versioned desktop-deployable LiteRT bundle can be trained, evaluated,
 approved, activated, and rolled back. Real recordings establish acceptable
-false-positive rates before live control is enabled.
+false-positive rates before live control is enabled. Each class retains its
+model-versioned label meaning and explicit desktop intent.
 ```
 
 ## Milestone 11: Desktop Inference and Gesture Policy
@@ -1858,6 +1863,9 @@ Add:
 
 * Sensor freshness/contact-quality gates
 * Explicit desktop gesture policy, separate from model probabilities
+* Safe custom gesture-intent bindings such as volume grab/release, mute,
+  play/pause, previous/next track, or no action; labels never execute arbitrary
+  commands directly
 * Monitor-only and Live activation modes
 * Replay, comparison, and live inference observability
 * Safe forced release on stale data, disconnect, or model/runtime failure
