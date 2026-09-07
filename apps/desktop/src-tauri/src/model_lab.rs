@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 const DATASETS_DIR_NAME: &str = "datasets";
 const MODELS_DIR_NAME: &str = "models";
-const MODEL_LAB_DIR_NAME: &str = "model-lab";
+pub(crate) const MODEL_LAB_DIR_NAME: &str = "model-lab";
 const INDEX_FILE_NAME: &str = "index.json";
 const MODEL_CARD_FILE_NAME: &str = "model_card.json";
 const MAX_DATASET_CSV_BYTES: usize = 20 * 1024 * 1024;
@@ -92,6 +92,29 @@ struct DatasetIndex {
     datasets: Vec<DatasetSummary>,
 }
 
+/// Which trainer console script a job runs. `Sklearn` produces
+/// `model.joblib` + `model_card.json` (baseline, cannot be activated for
+/// desktop inference). `Tflite` produces a validated `model.tflite` +
+/// `metadata.json` bundle (see `bundle.py`) — the only artifact shape
+/// [`crate::model_registry`] allows activating, since
+/// `DesktopPinchRuntime`/`desktop_runtime.py` requires that exact contract.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TrainingBackend {
+    #[default]
+    Sklearn,
+    Tflite,
+}
+
+impl TrainingBackend {
+    fn console_script(self) -> &'static str {
+        match self {
+            TrainingBackend::Sklearn => "pinch-classifier-train",
+            TrainingBackend::Tflite => "pinch-classifier-train-tflite",
+        }
+    }
+}
+
 /// Current state of the single allowed training job. Mirrors the
 /// `model-lab-training-event` "phase" a client would derive from the event
 /// stream, so a client that (re)opens the tab mid-run can catch up via
@@ -104,11 +127,13 @@ pub enum TrainingStatus {
     Running {
         job_id: String,
         dataset_ids: Vec<String>,
+        backend: TrainingBackend,
         started_at: String,
     },
     Completed {
         job_id: String,
         model_id: String,
+        backend: TrainingBackend,
         model_card: serde_json::Value,
     },
     Failed {
@@ -126,6 +151,7 @@ enum TrainingEvent {
     Started {
         job_id: String,
         dataset_ids: Vec<String>,
+        backend: TrainingBackend,
     },
     Log {
         job_id: String,
@@ -134,6 +160,7 @@ enum TrainingEvent {
     Completed {
         job_id: String,
         model_id: String,
+        backend: TrainingBackend,
         model_card: serde_json::Value,
     },
     Failed {
@@ -427,7 +454,7 @@ pub fn delete_model_dataset(
     Ok(())
 }
 
-fn models_dir(app: &AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn models_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let base = app
         .path()
         .app_data_dir()
@@ -464,17 +491,24 @@ fn resolve_training_inputs(
 }
 
 fn read_model_card(output_dir: &std::path::Path) -> Result<serde_json::Value, String> {
-    let path = output_dir.join(MODEL_CARD_FILE_NAME);
+    read_json_artifact(output_dir, MODEL_CARD_FILE_NAME)
+}
+
+fn read_json_artifact(output_dir: &std::path::Path, filename: &str) -> Result<serde_json::Value, String> {
+    let path = output_dir.join(filename);
     let contents = fs::read_to_string(&path)
-        .map_err(|error| format!("failed to read model card at {}: {error}", path.display()))?;
-    serde_json::from_str(&contents).map_err(|error| format!("failed to parse model card: {error}"))
+        .map_err(|error| format!("failed to read {filename} at {}: {error}", path.display()))?;
+    serde_json::from_str(&contents).map_err(|error| format!("failed to parse {filename}: {error}"))
 }
 
 /// Best-effort scan of the models directory: each subdirectory is one
-/// completed training run, named by model id, holding `model.joblib` and
-/// `model_card.json`. Entries with an unreadable card are skipped (logged)
-/// rather than failing the whole list.
-fn read_trained_models(dir: &std::path::Path) -> Vec<TrainedModelSummary> {
+/// completed training run, named by model id, holding either a sklearn
+/// `model_card.json` or a validated TFLite `metadata.json` (see
+/// `TrainingBackend`). Entries with neither are skipped (logged) rather than
+/// failing the whole list.
+pub(crate) fn read_trained_models(dir: &std::path::Path) -> Vec<TrainedModelSummary> {
+    use crate::model_registry::TFLITE_METADATA_FILE_NAME;
+
     let Ok(entries) = fs::read_dir(dir) else {
         return Vec::new();
     };
@@ -487,14 +521,20 @@ fn read_trained_models(dir: &std::path::Path) -> Vec<TrainedModelSummary> {
         let Some(id) = path.file_name().and_then(|name| name.to_str()) else {
             continue;
         };
-        match read_model_card(&path) {
-            Ok(model_card) => models.push(TrainedModelSummary {
+        if let Ok(model_card) = read_model_card(&path) {
+            models.push(TrainedModelSummary {
                 id: id.to_string(),
+                backend: TrainingBackend::Sklearn,
                 model_card,
-            }),
-            Err(error) => {
-                warn!(%error, model_id = id, "skipping trained model with unreadable model card");
-            }
+            });
+        } else if let Ok(metadata) = read_json_artifact(&path, TFLITE_METADATA_FILE_NAME) {
+            models.push(TrainedModelSummary {
+                id: id.to_string(),
+                backend: TrainingBackend::Tflite,
+                model_card: metadata,
+            });
+        } else {
+            warn!(model_id = id, "skipping trained model with no readable model_card.json or metadata.json");
         }
     }
     models.sort_by(|a, b| a.id.cmp(&b.id));
@@ -505,6 +545,7 @@ fn read_trained_models(dir: &std::path::Path) -> Vec<TrainedModelSummary> {
 #[serde(rename_all = "camelCase")]
 pub struct TrainedModelSummary {
     pub id: String,
+    pub backend: TrainingBackend,
     pub model_card: serde_json::Value,
 }
 
@@ -539,16 +580,22 @@ async fn run_training_job(
     app: AppHandle,
     job_id: String,
     model_id: String,
+    backend: TrainingBackend,
     output_dir: PathBuf,
     mut child: tokio::process::Child,
     cancel_rx: tokio::sync::oneshot::Receiver<()>,
 ) {
+    let artifact_filename = match backend {
+        TrainingBackend::Sklearn => MODEL_CARD_FILE_NAME,
+        TrainingBackend::Tflite => crate::model_registry::TFLITE_METADATA_FILE_NAME,
+    };
     let event = tokio::select! {
         result = child.wait() => match result {
-            Ok(status) if status.success() => match read_model_card(&output_dir) {
+            Ok(status) if status.success() => match read_json_artifact(&output_dir, artifact_filename) {
                 Ok(model_card) => TrainingEvent::Completed {
                     job_id: job_id.clone(),
                     model_id: model_id.clone(),
+                    backend,
                     model_card,
                 },
                 Err(error) => TrainingEvent::Failed {
@@ -576,10 +623,12 @@ async fn run_training_job(
         TrainingEvent::Completed {
             job_id,
             model_id,
+            backend,
             model_card,
         } => TrainingStatus::Completed {
             job_id: job_id.clone(),
             model_id: model_id.clone(),
+            backend: *backend,
             model_card: model_card.clone(),
         },
         TrainingEvent::Failed { job_id, message } => TrainingStatus::Failed {
@@ -599,6 +648,11 @@ async fn run_training_job(
         *status = new_status;
     }
 
+    if matches!(event, TrainingEvent::Completed { .. }) {
+        let registry = app.state::<crate::model_registry::ModelRegistryRuntime>();
+        crate::model_registry::register_trained_model(&app, &registry, &model_id);
+    }
+
     emit_training_event(&app, &event);
 }
 
@@ -611,9 +665,11 @@ async fn run_training_job(
 #[tauri::command]
 pub async fn start_training_job(
     dataset_ids: Vec<String>,
+    backend: Option<TrainingBackend>,
     app: AppHandle,
     runtime: State<'_, ModelLabRuntime>,
 ) -> Result<String, String> {
+    let backend = backend.unwrap_or_default();
     {
         let active = runtime
             .active_job
@@ -638,7 +694,7 @@ pub async fn start_training_job(
         .arg("run")
         .arg("--project")
         .arg(PINCH_CLASSIFIER_PROJECT_DIR)
-        .arg("pinch-classifier-train")
+        .arg(backend.console_script())
         .arg("--input")
         .args(&input_paths)
         .arg("--output-dir")
@@ -683,6 +739,7 @@ pub async fn start_training_job(
         *status = TrainingStatus::Running {
             job_id: job_id.clone(),
             dataset_ids: dataset_ids.clone(),
+            backend,
             started_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
         };
     }
@@ -691,6 +748,7 @@ pub async fn start_training_job(
         &TrainingEvent::Started {
             job_id: job_id.clone(),
             dataset_ids,
+            backend,
         },
     );
 
@@ -699,7 +757,7 @@ pub async fn start_training_job(
 
     let job_id_for_task = job_id.clone();
     tauri::async_runtime::spawn(async move {
-        run_training_job(app, job_id_for_task, model_id, output_dir, child, cancel_rx).await;
+        run_training_job(app, job_id_for_task, model_id, backend, output_dir, child, cancel_rx).await;
     });
 
     Ok(job_id)

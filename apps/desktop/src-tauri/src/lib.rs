@@ -11,6 +11,7 @@ use watch_bridge::{WatchBridgeServer, WatchEvent};
 
 mod calibration;
 mod model_lab;
+mod model_registry;
 mod overlay;
 mod settings;
 mod watch;
@@ -38,6 +39,7 @@ pub fn run() {
         .manage(overlay::VolumeRuntime::default())
         .manage(watch::WatchRuntime::default())
         .manage(model_lab::ModelLabRuntime::default())
+        .manage(model_registry::ModelRegistryRuntime::default())
         .invoke_handler(tauri::generate_handler![
             calibration::get_calibration_state,
             calibration::capture_calibration_target,
@@ -64,6 +66,13 @@ pub fn run() {
             model_lab::cancel_training_job,
             model_lab::get_training_status,
             model_lab::list_trained_models,
+            model_registry::get_model_registry,
+            model_registry::transition_model_state,
+            model_registry::update_model_thresholds,
+            model_registry::update_model_quality_gate,
+            model_registry::activate_model,
+            model_registry::rollback_active_model,
+            model_registry::set_inference_mode,
         ])
         .on_window_event(|window, event| {
             if window.label() == MAIN_WINDOW
