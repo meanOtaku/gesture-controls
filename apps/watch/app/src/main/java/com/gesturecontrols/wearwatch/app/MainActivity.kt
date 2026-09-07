@@ -7,6 +7,8 @@ import com.gesturecontrols.wearwatch.data.discovery.*
 import com.gesturecontrols.wearwatch.data.preferences.*
 import com.gesturecontrols.wearwatch.feature.health.*
 import com.gesturecontrols.wearwatch.feature.motion.*
+import com.gesturecontrols.wearwatch.feature.pinch.PinchInferenceEngine
+import com.gesturecontrols.wearwatch.feature.pinch.WatchInputMode
 import com.gesturecontrols.wearwatch.platform.service.*
 
 import android.Manifest
@@ -68,6 +70,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var ppgCollector: PpgCollector
     private lateinit var medicalCollector: MedicalContinuousCollector
     private lateinit var onDemandSampler: OnDemandMedicalSampler
+    private var pinchInference: PinchInferenceEngine? = null
 
     // Tracks whether we've sent a button-down without a matching button-up yet,
     // so backgrounding the activity mid-hold can't leave the desktop overlay grabbed.
@@ -88,6 +91,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         prefs = ConnectionPrefs(this)
+        configurePinchInference()
         connectButton = findViewById(R.id.connectButton)
         connectionStatusText = findViewById(R.id.connectionStatusText)
         discoveryStatusText = findViewById(R.id.discoveryStatusText)
@@ -127,8 +131,12 @@ class MainActivity : AppCompatActivity() {
 
         sensorCollector = SensorCollector(this) { quaternion, accelerometer, gyroscope, timestampNs ->
             watchLink.sendOrientation(quaternion, accelerometer, gyroscope, timestampNs)
+            pinchInference?.onMotion(quaternion, accelerometer, gyroscope, timestampNs)
         }
-        ppgCollector = PpgCollector(this) { samples -> watchLink.enqueuePpgSamples(samples) }
+        ppgCollector = PpgCollector(this) { samples ->
+            watchLink.enqueuePpgSamples(samples)
+            pinchInference?.onPpgSamples(samples)
+        }
         medicalCollector = MedicalContinuousCollector(
             this,
             onHeartRate = { samples -> watchLink.enqueueHeartRateSamples(samples) },
@@ -243,6 +251,7 @@ class MainActivity : AppCompatActivity() {
         desktopDiscovery.stop()
         pairingServer.stop()
         watchLink.shutdown()
+        pinchInference?.close()
         StreamingForegroundService.stop(this)
     }
 
@@ -330,6 +339,24 @@ class MainActivity : AppCompatActivity() {
         ppgCollector.stop()
         medicalCollector.stop()
         onDemandSampler.stopAll()
+        pinchInference?.reset(System.nanoTime())
+    }
+
+    private fun configurePinchInference() {
+        val inputMode = runCatching { WatchInputMode.parse(prefs.inputMode) }
+            .getOrDefault(WatchInputMode.BUTTON)
+        if (inputMode != WatchInputMode.PINCH_INFERENCE) return
+        pinchInference = PinchInferenceEngine.create(
+            java.io.File(filesDir, PinchInferenceEngine.BUNDLE_DIRECTORY),
+            System.nanoTime(),
+        ) { transition ->
+            watchLink.sendPinchEvent(
+                transition.phase,
+                transition.confidence,
+                transition.modelId,
+                transition.timestampNs,
+            )
+        }
     }
 
     private fun ConnectionState.isConnectionActive(): Boolean =
