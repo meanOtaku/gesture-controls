@@ -67,18 +67,33 @@ interface EnvironmentDiagnostic {
   action: string | null;
 }
 
+/** Mirrors `TrainingBackend` in src-tauri/src/model_lab.rs (serde camelCase, unit variants). */
+type TrainingBackend = "sklearn" | "tflite";
+
+const TRAINING_BACKEND_COPY: Record<TrainingBackend, { label: string; hint: string }> = {
+  tflite: {
+    label: "TFLite (deployable)",
+    hint: "Produces a validated LiteRT bundle that can be bound, approved, and activated for desktop inference.",
+  },
+  sklearn: {
+    label: "scikit-learn (baseline only)",
+    hint: "A quick RandomForest baseline for offline evaluation only. It has no LiteRT bundle, so it can never " +
+      "be bound to intents or activated on this desktop.",
+  },
+};
+
 /** Mirrors `TrainingStatus` in src-tauri/src/model_lab.rs (serde tag "phase", camelCase). */
 type TrainingStatus =
   | { phase: "idle" }
-  | { phase: "running"; jobId: string; datasetIds: string[]; startedAt: string }
-  | { phase: "completed"; jobId: string; modelId: string; modelCard: ModelCard }
+  | { phase: "running"; jobId: string; datasetIds: string[]; backend: TrainingBackend; startedAt: string }
+  | { phase: "completed"; jobId: string; modelId: string; backend: TrainingBackend; modelCard: ModelCard }
   | { phase: "failed"; jobId: string; message: string };
 
 /** Mirrors `TrainingEvent` in src-tauri/src/model_lab.rs (serde tag "kind", camelCase). */
 type TrainingEventPayload =
-  | { kind: "started"; jobId: string; datasetIds: string[] }
+  | { kind: "started"; jobId: string; datasetIds: string[]; backend: TrainingBackend }
   | { kind: "log"; jobId: string; message: string }
-  | { kind: "completed"; jobId: string; modelId: string; modelCard: ModelCard }
+  | { kind: "completed"; jobId: string; modelId: string; backend: TrainingBackend; modelCard: ModelCard }
   | { kind: "failed"; jobId: string; message: string }
   | { kind: "cancelled"; jobId: string };
 
@@ -100,6 +115,7 @@ interface ModelCard {
 /** Mirrors `TrainedModelSummary` in src-tauri/src/model_lab.rs (serde camelCase). */
 interface TrainedModelSummary {
   id: string;
+  backend: TrainingBackend;
   modelCard: ModelCard;
 }
 
@@ -114,10 +130,57 @@ interface ModelRegistryView {
 
 type ModelLifecycleState = "draft" | "evaluated" | "approved" | "active" | "archived";
 
+/** Mirrors `GestureIntent` in crates/interaction-engine/src/gesture_policy.rs (serde camelCase). */
+type GestureIntent =
+  | "noAction"
+  | "volumeGrab"
+  | "volumeRelease"
+  | "mute"
+  | "playPause"
+  | "previousTrack"
+  | "nextTrack";
+
+/** Mirrors `ModelIntentBinding` in src-tauri/src/model_registry.rs (serde camelCase). */
+interface ModelIntentBinding {
+  classLabel: string;
+  intent: GestureIntent;
+}
+
 interface ModelRegistryModel {
   id: string;
   state: ModelLifecycleState;
   createdAt: string;
+  intentBindings: ModelIntentBinding[];
+}
+
+/** The three deployable classes, in the order `model_registry.rs`'s `DEPLOYABLE_CLASS_LABELS` requires. */
+const DEPLOYABLE_CLASS_LABELS: readonly string[] = ["negative", "pinch_start", "pinch_release"];
+
+/** Mirrors `allowed_intents_for_class` in src-tauri/src/model_registry.rs exactly: this is what "safe" means
+ * per class, and the binding editor below must never offer an intent outside this set. */
+const ALLOWED_INTENTS_FOR_CLASS: Record<string, readonly GestureIntent[]> = {
+  pinch_start: ["volumeGrab", "noAction"],
+  pinch_release: ["volumeRelease", "noAction"],
+  negative: ["noAction"],
+};
+
+const INTENT_COPY: Record<GestureIntent, string> = {
+  noAction: "No action",
+  volumeGrab: "Begin volume grab",
+  volumeRelease: "End volume grab",
+  mute: "Mute",
+  playPause: "Play / pause",
+  previousTrack: "Previous track",
+  nextTrack: "Next track",
+};
+
+/** Mirrors `validate_intent_bindings` in src-tauri/src/model_registry.rs: every deployable class must have
+ * exactly one binding, and it must be one of that class's safe intents. */
+function bindingsAreComplete(bindings: ModelIntentBinding[]): boolean {
+  return DEPLOYABLE_CLASS_LABELS.every((classLabel) => {
+    const binding = bindings.find((entry) => entry.classLabel === classLabel);
+    return binding != null && ALLOWED_INTENTS_FOR_CLASS[classLabel]?.includes(binding.intent);
+  });
 }
 
 interface PpgWindowObservation {
@@ -178,6 +241,7 @@ export function ModelLab() {
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedDatasetIds, setSelectedDatasetIds] = useState<Set<string>>(new Set());
+  const [trainingBackend, setTrainingBackend] = useState<TrainingBackend>("tflite");
   const [status, setStatus] = useState<TrainingStatus>({ phase: "idle" });
   const [logs, setLogs] = useState<string[]>([]);
   const [trainedModels, setTrainedModels] = useState<TrainedModelSummary[]>([]);
@@ -187,6 +251,8 @@ export function ModelLab() {
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [environmentDiagnostics, setEnvironmentDiagnostics] = useState<EnvironmentDiagnostic[]>([]);
   const [environmentError, setEnvironmentError] = useState<string | null>(null);
+  const [bindingDrafts, setBindingDrafts] = useState<Record<string, Record<string, GestureIntent>>>({});
+  const [bindingError, setBindingError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const refreshDatasets = useCallback(async () => {
@@ -301,6 +367,7 @@ export function ModelLab() {
             phase: "running",
             jobId: payload.jobId,
             datasetIds: payload.datasetIds,
+            backend: payload.backend,
             startedAt: new Date().toISOString(),
           });
           setLogs([]);
@@ -310,7 +377,13 @@ export function ModelLab() {
           setLogs((prev) => [...prev, payload.message]);
           break;
         case "completed":
-          setStatus({ phase: "completed", jobId: payload.jobId, modelId: payload.modelId, modelCard: payload.modelCard });
+          setStatus({
+            phase: "completed",
+            jobId: payload.jobId,
+            modelId: payload.modelId,
+            backend: payload.backend,
+            modelCard: payload.modelCard,
+          });
           void refreshTrainedModels();
           void refreshRegistry();
           break;
@@ -391,11 +464,11 @@ export function ModelLab() {
     if (datasetIds.length === 0 || status.phase === "running") return;
     setTrainingError(null);
     try {
-      await invoke<string>("start_training_job", { datasetIds });
+      await invoke<string>("start_training_job", { datasetIds, backend: trainingBackend });
     } catch (err) {
       setTrainingError(String(err));
     }
-  }, [selectedDatasetIds, status.phase]);
+  }, [selectedDatasetIds, status.phase, trainingBackend]);
 
   const handleCancelTraining = useCallback(async () => {
     if (status.phase !== "running") return;
@@ -442,6 +515,31 @@ export function ModelLab() {
     }
   }, []);
 
+  const setBindingDraft = useCallback((modelId: string, classLabel: string, intent: GestureIntent) => {
+    setBindingDrafts((previous) => ({
+      ...previous,
+      [modelId]: { ...previous[modelId], [classLabel]: intent },
+    }));
+  }, []);
+
+  const handleSaveBindings = useCallback(
+    async (model: ModelRegistryModel) => {
+      const draft = bindingDrafts[model.id] ?? {};
+      const bindings: ModelIntentBinding[] = DEPLOYABLE_CLASS_LABELS.map((classLabel) => {
+        const existing = model.intentBindings.find((entry) => entry.classLabel === classLabel);
+        const intent: GestureIntent = draft[classLabel] ?? existing?.intent ?? "noAction";
+        return { classLabel, intent };
+      });
+      setBindingError(null);
+      try {
+        setRegistry(await invoke<ModelRegistryView>("set_model_intent_bindings", { id: model.id, bindings }));
+      } catch (err) {
+        setBindingError(String(err));
+      }
+    },
+    [bindingDrafts],
+  );
+
   const coverageByLabel = new Map<string, number>();
   for (const dataset of datasets) {
     coverageByLabel.set(dataset.label, (coverageByLabel.get(dataset.label) ?? 0) + 1);
@@ -451,6 +549,7 @@ export function ModelLab() {
   const sortedTrainedModels = [...trainedModels].sort((a, b) =>
     (b.modelCard.created_at ?? "").localeCompare(a.modelCard.created_at ?? ""),
   );
+  const trainedModelById = new Map(trainedModels.map((model) => [model.id, model]));
 
   return (
     <main className="shell model-lab-shell">
@@ -650,6 +749,24 @@ export function ModelLab() {
         <div className="vector-row">
           <code>pinch-classifier-train --input session1.csv session2.csv --output-dir artifacts/</code>
         </div>
+        <div className="vectors model-lab-backend-select" role="radiogroup" aria-label="Training backend">
+          {(["tflite", "sklearn"] as const).map((backend) => (
+            <label className="model-lab-dataset-select" key={backend}>
+              <input
+                type="radio"
+                name="training-backend"
+                checked={trainingBackend === backend}
+                onChange={() => setTrainingBackend(backend)}
+                disabled={isRunning}
+              />
+              <span className="label">
+                {TRAINING_BACKEND_COPY[backend].label}
+                <br />
+                <small className="hint">{TRAINING_BACKEND_COPY[backend].hint}</small>
+              </span>
+            </label>
+          ))}
+        </div>
         <div className="recording-actions">
           <button onClick={() => void handleStartTraining()} disabled={selectedDatasetIds.size === 0 || isRunning}>
             {isRunning ? "Training…" : "Start training"}
@@ -700,6 +817,16 @@ export function ModelLab() {
                   {formatPercent(model.modelCard.metrics?.macro_f1)}, false-activation rate{" "}
                   {formatPercent(model.modelCard.metrics?.false_activation_rate)}
                 </span>
+                <span className={`model-lab-chip model-lab-chip--${model.backend === "tflite" ? "ready" : "attention"}`}>
+                  {model.backend === "tflite" ? "TFLite — deployable" : "scikit-learn — not deployable"}
+                </span>
+                {model.backend === "sklearn" && (
+                  <p className="hint">
+                    This is a baseline evaluation model only: it has no LiteRT bundle, so it cannot be bound to
+                    intents, approved, or activated. Train with the TFLite backend above to produce a deployable
+                    candidate.
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -718,29 +845,86 @@ export function ModelLab() {
           <p className="hint model-lab-lifecycle-empty">No registered trained models yet.</p>
         ) : (
           <div className="vectors model-lab-models" aria-label="Model lifecycle">
-            {registry?.models.map((model) => (
-              <div className="vector-row model-lab-lifecycle-row" key={model.id}>
-                <div>
-                  <span className="label">{model.id}</span>
-                  <strong className="model-lab-state">{model.state}</strong>
-                  <small>Registered {model.createdAt}</small>
+            {registry?.models.map((model) => {
+              const backend = trainedModelById.get(model.id)?.backend;
+              const bindingsEditable = model.state === "draft" || model.state === "evaluated";
+              const bindingsComplete = bindingsAreComplete(model.intentBindings);
+              const canActivate = model.state === "approved" && backend === "tflite" && bindingsComplete;
+              return (
+                <div className="vector-row model-lab-lifecycle-row" key={model.id}>
+                  <div>
+                    <span className="label">{model.id}</span>
+                    <strong className="model-lab-state">{model.state}</strong>
+                    <small>Registered {model.createdAt}</small>
+                    {backend === "sklearn" && (
+                      <p className="hint">
+                        scikit-learn baseline: not deployable, cannot be bound or activated.
+                      </p>
+                    )}
+                  </div>
+                  <div aria-label={`Safe intent bindings for ${model.id}`}>
+                    {DEPLOYABLE_CLASS_LABELS.map((classLabel) => {
+                      const existing = model.intentBindings.find((entry) => entry.classLabel === classLabel);
+                      const draftIntent = bindingDrafts[model.id]?.[classLabel];
+                      const currentIntent = draftIntent ?? existing?.intent ?? "noAction";
+                      const options = ALLOWED_INTENTS_FOR_CLASS[classLabel] ?? [];
+                      return (
+                        <div className="model-lab-label-row" key={classLabel}>
+                          <span className="label">{classLabel.replaceAll("_", " ")}</span>
+                          {bindingsEditable ? (
+                            <select
+                              aria-label={`${classLabel} intent for ${model.id}`}
+                              value={currentIntent}
+                              onChange={(event) =>
+                                setBindingDraft(model.id, classLabel, event.target.value as GestureIntent)
+                              }
+                            >
+                              {options.map((intent) => (
+                                <option key={intent} value={intent}>
+                                  {INTENT_COPY[intent]}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="model-lab-chip">{existing ? INTENT_COPY[existing.intent] : "Unbound"}</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {bindingsEditable && (
+                      <button onClick={() => void handleSaveBindings(model)}>Save bindings</button>
+                    )}
+                    {!bindingsComplete && (
+                      <span className="model-lab-chip model-lab-chip--attention">Bindings incomplete</span>
+                    )}
+                  </div>
+                  <div className="model-lab-lifecycle-actions">
+                    {model.state === "draft" && <button onClick={() => void handleLifecycleTransition(model.id, "evaluated")}>Mark evaluated</button>}
+                    {model.state === "evaluated" && <button onClick={() => void handleLifecycleTransition(model.id, "approved")}>Approve</button>}
+                    {model.state === "approved" && <button onClick={() => void handleLifecycleTransition(model.id, "evaluated")}>Return to evaluation</button>}
+                    {(model.state === "evaluated" || model.state === "approved") && <button onClick={() => void handleLifecycleTransition(model.id, "archived")}>Archive</button>}
+                    {model.state === "archived" && <button onClick={() => void handleLifecycleTransition(model.id, "draft")}>Restore as draft</button>}
+                    {model.state === "approved" && (
+                      <button
+                        className="model-lab-activate"
+                        onClick={() => void handleActivate(model.id)}
+                        disabled={!canActivate}
+                        title={canActivate ? undefined : "Activation requires a TFLite bundle and complete safe intent bindings"}
+                      >
+                        Activate
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="model-lab-lifecycle-actions">
-                  {model.state === "draft" && <button onClick={() => void handleLifecycleTransition(model.id, "evaluated")}>Mark evaluated</button>}
-                  {model.state === "evaluated" && <button onClick={() => void handleLifecycleTransition(model.id, "approved")}>Approve</button>}
-                  {model.state === "approved" && <button onClick={() => void handleLifecycleTransition(model.id, "evaluated")}>Return to evaluation</button>}
-                  {(model.state === "evaluated" || model.state === "approved") && <button onClick={() => void handleLifecycleTransition(model.id, "archived")}>Archive</button>}
-                  {model.state === "archived" && <button onClick={() => void handleLifecycleTransition(model.id, "draft")}>Restore as draft</button>}
-                  {model.state === "approved" && <button className="model-lab-activate" onClick={() => void handleActivate(model.id)}>Activate</button>}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
         <div className="model-lab-deployment-actions">
           <span className="hint">Active: {registry?.activeModelId ?? "none"}. Activation requires approved lifecycle state, a validated LiteRT bundle, and complete safe intent bindings.</span>
           <button onClick={() => void handleRollback()} disabled={!registry?.previousActiveModelId}>Rollback active model</button>
         </div>
+        {bindingError && <p className="calibration-error" role="alert">{bindingError}</p>}
         {runtimeError && <p className="calibration-error" role="alert">{runtimeError}</p>}
       </section>
     </main>

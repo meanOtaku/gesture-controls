@@ -23,8 +23,13 @@ const MODEL_CARD = {
   metrics: { accuracy: 0.9, macro_f1: 0.85, false_activation_rate: 0.01 },
 };
 
-const TRAINED_MODEL_A = { id: "model-a", modelCard: MODEL_CARD };
-const REGISTRY_MODEL_A = { id: "model-a", state: "draft", createdAt: "2026-08-31T01:00:00Z" };
+const TRAINED_MODEL_A = { id: "model-a", backend: "tflite", modelCard: MODEL_CARD };
+const REGISTRY_MODEL_A = { id: "model-a", state: "draft", createdAt: "2026-08-31T01:00:00Z", intentBindings: [] };
+const COMPLETE_BINDINGS = [
+  { classLabel: "negative", intent: "noAction" },
+  { classLabel: "pinch_start", intent: "volumeGrab" },
+  { classLabel: "pinch_release", intent: "volumeRelease" },
+];
 
 async function openModelLab() {
   render(<App />);
@@ -265,7 +270,34 @@ describe("ModelLab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start training" }));
 
     await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("start_training_job", { datasetIds: ["dataset-a"] }),
+      expect(invokeMock).toHaveBeenCalledWith("start_training_job", {
+        datasetIds: ["dataset-a"],
+        backend: "tflite",
+      }),
+    );
+  });
+
+  it("starts a training job with the sklearn backend once selected", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_model_datasets") return Promise.resolve([DATASET_A]);
+      if (command === "get_training_status") return Promise.resolve({ phase: "idle" });
+      if (command === "list_trained_models") return Promise.resolve([]);
+      if (command === "start_training_job") return Promise.resolve("job-1");
+      return Promise.resolve(undefined);
+    });
+
+    await openModelLab();
+    await screen.findByText(/session-1\.csv/i);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /select session-1\.csv/i }));
+    fireEvent.click(screen.getByRole("radio", { name: /scikit-learn \(baseline only\)/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Start training" }));
+
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("start_training_job", {
+        datasetIds: ["dataset-a"],
+        backend: "sklearn",
+      }),
     );
   });
 
@@ -283,9 +315,16 @@ describe("ModelLab", () => {
 
     fireEvent.click(screen.getByRole("checkbox", { name: /select session-1\.csv/i }));
     fireEvent.click(screen.getByRole("button", { name: "Start training" }));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("start_training_job", { datasetIds: ["dataset-a"] }));
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("start_training_job", {
+        datasetIds: ["dataset-a"],
+        backend: "tflite",
+      }),
+    );
 
-    trainingEventHandler?.({ payload: { kind: "started", jobId: "job-1", datasetIds: ["dataset-a"] } });
+    trainingEventHandler?.({
+      payload: { kind: "started", jobId: "job-1", datasetIds: ["dataset-a"], backend: "tflite" },
+    });
     trainingEventHandler?.({ payload: { kind: "log", jobId: "job-1", message: "training started" } });
 
     expect(await screen.findByText(/running job job-1/i)).toBeInTheDocument();
@@ -316,7 +355,7 @@ describe("ModelLab", () => {
     await screen.findByText(/session-1\.csv/i);
 
     trainingEventHandler?.({
-      payload: { kind: "completed", jobId: "job-1", modelId: "model-a", modelCard: MODEL_CARD },
+      payload: { kind: "completed", jobId: "job-1", modelId: "model-a", backend: "tflite", modelCard: MODEL_CARD },
     });
 
     expect(await screen.findByText(/job job-1 completed/i)).toBeInTheDocument();
@@ -357,7 +396,10 @@ describe("ModelLab", () => {
 
   it("moves registered models through lifecycle approval and only offers activation after approval", async () => {
     const draftRegistry = { models: [REGISTRY_MODEL_A], activeModelId: null, previousActiveModelId: null, inferenceMode: "off" };
-    const approvedRegistry = { ...draftRegistry, models: [{ ...REGISTRY_MODEL_A, state: "approved" }] };
+    const approvedRegistry = {
+      ...draftRegistry,
+      models: [{ ...REGISTRY_MODEL_A, state: "approved", intentBindings: COMPLETE_BINDINGS }],
+    };
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_model_datasets") return Promise.resolve([]);
       if (command === "get_training_status") return Promise.resolve({ phase: "idle" });
@@ -378,6 +420,102 @@ describe("ModelLab", () => {
     eventHandlers.get("model-registry-updated")?.({ payload: approvedRegistry });
     fireEvent.click(await screen.findByRole("button", { name: "Activate" }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("activate_model", { id: "model-a" }));
+  });
+
+  it("only offers safe intents per class and saves bindings through set_model_intent_bindings", async () => {
+    const registry = { models: [REGISTRY_MODEL_A], activeModelId: null, previousActiveModelId: null, inferenceMode: "off" };
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_model_datasets") return Promise.resolve([]);
+      if (command === "get_training_status") return Promise.resolve({ phase: "idle" });
+      if (command === "list_trained_models") return Promise.resolve([TRAINED_MODEL_A]);
+      if (command === "get_model_registry") return Promise.resolve(registry);
+      if (command === "set_model_intent_bindings") return Promise.resolve(registry);
+      return Promise.resolve(undefined);
+    });
+
+    await openModelLab();
+    await screen.findByRole("button", { name: "Mark evaluated" });
+
+    const negativeSelect = screen.getByRole("combobox", { name: "negative intent for model-a" });
+    expect(Array.from(negativeSelect.querySelectorAll("option")).map((option) => option.textContent)).toEqual([
+      "No action",
+    ]);
+
+    const pinchStartSelect = screen.getByRole("combobox", { name: "pinch_start intent for model-a" });
+    expect(Array.from(pinchStartSelect.querySelectorAll("option")).map((option) => option.textContent)).toEqual([
+      "Begin volume grab",
+      "No action",
+    ]);
+
+    fireEvent.change(pinchStartSelect, { target: { value: "volumeGrab" } });
+    const pinchReleaseSelect = screen.getByRole("combobox", { name: "pinch_release intent for model-a" });
+    fireEvent.change(pinchReleaseSelect, { target: { value: "volumeRelease" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save bindings" }));
+
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("set_model_intent_bindings", {
+        id: "model-a",
+        bindings: [
+          { classLabel: "negative", intent: "noAction" },
+          { classLabel: "pinch_start", intent: "volumeGrab" },
+          { classLabel: "pinch_release", intent: "volumeRelease" },
+        ],
+      }),
+    );
+  });
+
+  it("keeps Activate disabled for an approved model with incomplete bindings, and enables it once bindings are complete", async () => {
+    const incompleteBindings = [
+      { classLabel: "negative", intent: "noAction" },
+      { classLabel: "pinch_start", intent: "noAction" },
+    ];
+    const approvedIncomplete = {
+      models: [{ ...REGISTRY_MODEL_A, state: "approved", intentBindings: incompleteBindings }],
+      activeModelId: null,
+      previousActiveModelId: null,
+      inferenceMode: "off",
+    };
+    const approvedComplete = {
+      ...approvedIncomplete,
+      models: [{ ...REGISTRY_MODEL_A, state: "approved", intentBindings: COMPLETE_BINDINGS }],
+    };
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_model_datasets") return Promise.resolve([]);
+      if (command === "get_training_status") return Promise.resolve({ phase: "idle" });
+      if (command === "list_trained_models") return Promise.resolve([TRAINED_MODEL_A]);
+      if (command === "get_model_registry") return Promise.resolve(approvedIncomplete);
+      if (command === "activate_model") return Promise.resolve({ ...approvedComplete, activeModelId: "model-a" });
+      return Promise.resolve(undefined);
+    });
+
+    await openModelLab();
+
+    const activateButton = await screen.findByRole("button", { name: "Activate" });
+    expect(activateButton).toBeDisabled();
+
+    eventHandlers.get("model-registry-updated")?.({ payload: approvedComplete });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Activate" })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: "Activate" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("activate_model", { id: "model-a" }));
+  });
+
+  it("marks a scikit-learn trained model as non-deployable and explains why", async () => {
+    const sklearnModel = { id: "model-b", backend: "sklearn", modelCard: MODEL_CARD };
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_model_datasets") return Promise.resolve([]);
+      if (command === "get_training_status") return Promise.resolve({ phase: "idle" });
+      if (command === "list_trained_models") return Promise.resolve([sklearnModel]);
+      return Promise.resolve(undefined);
+    });
+
+    await openModelLab();
+
+    expect(await screen.findByText(/scikit-learn — not deployable/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/it has no litert bundle, so it cannot be bound to intents, approved, or activated/i),
+    ).toBeInTheDocument();
   });
 
   it("offers rollback only when the persisted registry has a prior active model", async () => {

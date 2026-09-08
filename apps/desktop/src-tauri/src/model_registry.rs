@@ -845,6 +845,11 @@ pub fn activate_model(
             ));
         }
     }
+    // Reject a non-TFLite (e.g. sklearn baseline) bundle with a clear,
+    // deployability-specific error before the generic contract revalidation
+    // below, which would otherwise surface as an opaque "failed to read
+    // metadata.json" I/O error.
+    model_is_activatable(&app, &id)?;
     // Revalidate the full bundle contract, digest, and bindings under the
     // same lock as the state check above -- a stale `Approved` state on disk
     // must never be trusted alone, and nothing may mutate the record between

@@ -9,7 +9,7 @@
 use interaction_engine::PinchTransition;
 
 use crate::features::FEATURE_COUNT;
-use crate::model::{PinchModel, PinchModelError};
+use crate::model::{PinchModel, PinchModelError, validate_probabilities};
 
 /// Desktop-owned, per-model classification state machine. Not `Send`-bound
 /// itself; callers running this on a background task should wrap it the same
@@ -78,10 +78,7 @@ impl<M: PinchModel> DesktopPinchRuntime<M> {
             return Err(PinchModelError::NonFiniteOutput);
         }
         let probabilities = self.model.predict(features)?;
-        if probabilities.iter().any(|value| !value.is_finite()) {
-            return Err(PinchModelError::NonFiniteOutput);
-        }
-        Ok(probabilities)
+        validate_probabilities(&probabilities)
     }
 
     fn apply(&mut self, probabilities: [f32; 3], timestamp_ns: u64) -> Option<PinchTransition> {
@@ -185,7 +182,7 @@ mod tests {
 
     #[test]
     fn holds_while_active_and_released_below_threshold() {
-        let model = StubModel::new(vec![Ok([0.1, 0.9, 0.0]), Ok([0.1, 0.2, 0.3])]);
+        let model = StubModel::new(vec![Ok([0.1, 0.9, 0.0]), Ok([0.1, 0.6, 0.3])]);
         let mut runtime = DesktopPinchRuntime::new(model, 0.80, 0.80);
         runtime.submit(&features(), 100);
         let held = runtime.submit(&features(), 200);
@@ -271,6 +268,36 @@ mod tests {
                 timestamp_ns: 200
             })
         );
+    }
+
+    #[test]
+    fn out_of_range_model_output_forces_a_release() {
+        let model = StubModel::new(vec![Ok([0.1, 0.9, 0.0]), Ok([1.4, 0.3, -0.2])]);
+        let mut runtime = DesktopPinchRuntime::new(model, 0.80, 0.80);
+        runtime.submit(&features(), 100);
+        assert_eq!(
+            runtime.submit(&features(), 200),
+            Some(PinchTransition::Released {
+                confidence: 1.0,
+                timestamp_ns: 200
+            })
+        );
+        assert!(!runtime.is_active());
+    }
+
+    #[test]
+    fn unnormalized_model_output_forces_a_release() {
+        let model = StubModel::new(vec![Ok([0.1, 0.9, 0.0]), Ok([0.9, 0.9, 0.9])]);
+        let mut runtime = DesktopPinchRuntime::new(model, 0.80, 0.80);
+        runtime.submit(&features(), 100);
+        assert_eq!(
+            runtime.submit(&features(), 200),
+            Some(PinchTransition::Released {
+                confidence: 1.0,
+                timestamp_ns: 200
+            })
+        );
+        assert!(!runtime.is_active());
     }
 
     #[test]

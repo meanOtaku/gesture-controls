@@ -71,9 +71,9 @@ impl PinchModel for LiteRtPinchModel {
         self.compiled.run(&mut inputs, &mut outputs)?;
 
         let guard = outputs[0].lock_for_read::<f32>()?;
-        if guard.len() < CLASS_COUNT {
+        if guard.len() != CLASS_COUNT {
             return Err(PinchModelError::Backend(format!(
-                "model output has {} elements, expected at least {CLASS_COUNT}",
+                "model output has {} elements, expected exactly {CLASS_COUNT}",
                 guard.len()
             )));
         }
