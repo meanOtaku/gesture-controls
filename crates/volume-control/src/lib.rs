@@ -72,6 +72,37 @@ pub trait AppleScriptRunner: Send + Sync {
 #[derive(Debug, Default)]
 pub struct OsascriptRunner;
 
+/// Executes the narrowly-scoped native audio commands used by the Linux
+/// adapter. This keeps command selection and response validation testable
+/// without a sound server.
+#[cfg(target_os = "linux")]
+pub trait LinuxCommandRunner: Send + Sync {
+    fn run(&self, program: &str, args: &[&str]) -> Result<String, VolumeError>;
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, Default)]
+pub struct OsLinuxCommandRunner;
+
+#[cfg(target_os = "linux")]
+impl LinuxCommandRunner for OsLinuxCommandRunner {
+    fn run(&self, program: &str, args: &[&str]) -> Result<String, VolumeError> {
+        let mut command = Command::new(program);
+        command.args(args);
+        let output = run_command_with_timeout(&mut command, NATIVE_COMMAND_TIMEOUT)?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            return Err(VolumeError::Backend(if stderr.is_empty() {
+                format!("{program} exited with {}", output.status)
+            } else {
+                stderr
+            }));
+        }
+        String::from_utf8(output.stdout)
+            .map_err(|error| VolumeError::InvalidResponse(error.to_string()))
+    }
+}
+
 #[cfg(all(unix, not(target_os = "macos")))]
 struct ChildGuard {
     child: Option<GroupChild>,
@@ -500,6 +531,142 @@ impl<R: AppleScriptRunner> VolumeController for MacOsVolumeController<R> {
     }
 }
 
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+pub struct LinuxVolumeController<R = OsLinuxCommandRunner> {
+    runner: R,
+}
+
+#[cfg(target_os = "linux")]
+impl Default for LinuxVolumeController<OsLinuxCommandRunner> {
+    fn default() -> Self {
+        Self {
+            runner: OsLinuxCommandRunner,
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl<R> LinuxVolumeController<R> {
+    pub fn with_runner(runner: R) -> Self {
+        Self { runner }
+    }
+
+    pub fn runner(&self) -> &R {
+        &self.runner
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl<R: LinuxCommandRunner> LinuxVolumeController<R> {
+    fn with_backend<T>(
+        &self,
+        wpctl: impl FnOnce(&R) -> Result<T, VolumeError>,
+        pactl: impl FnOnce(&R) -> Result<T, VolumeError>,
+    ) -> Result<T, VolumeError> {
+        wpctl(&self.runner).or_else(|wpctl_error| {
+            pactl(&self.runner).map_err(|pactl_error| {
+                VolumeError::Backend(format!(
+                    "PipeWire wpctl failed ({wpctl_error}); PulseAudio pactl fallback failed ({pactl_error})"
+                ))
+            })
+        })
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl<R: LinuxCommandRunner> VolumeController for LinuxVolumeController<R> {
+    fn get_volume(&self) -> Result<f32, VolumeError> {
+        self.with_backend(
+            |runner| {
+                parse_wpctl_volume(&runner.run("wpctl", &["get-volume", "@DEFAULT_AUDIO_SINK@"])?)
+            },
+            |runner| {
+                parse_pactl_volume(&runner.run("pactl", &["get-sink-volume", "@DEFAULT_SINK@"])?)
+            },
+        )
+    }
+
+    fn set_volume(&self, volume: f32) -> Result<(), VolumeError> {
+        validate_volume(volume)?;
+        let percent = format!("{}%", (volume * 100.0).round() as u8);
+        self.with_backend(
+            |runner| {
+                runner
+                    .run("wpctl", &["set-volume", "@DEFAULT_AUDIO_SINK@", &percent])
+                    .map(|_| ())
+            },
+            |runner| {
+                runner
+                    .run("pactl", &["set-sink-volume", "@DEFAULT_SINK@", &percent])
+                    .map(|_| ())
+            },
+        )
+    }
+
+    fn get_muted(&self) -> Result<bool, VolumeError> {
+        self.with_backend(
+            |runner| {
+                parse_wpctl_muted(&runner.run("wpctl", &["get-volume", "@DEFAULT_AUDIO_SINK@"])?)
+            },
+            |runner| parse_pactl_muted(&runner.run("pactl", &["get-sink-mute", "@DEFAULT_SINK@"])?),
+        )
+    }
+
+    fn set_muted(&self, muted: bool) -> Result<(), VolumeError> {
+        let state = if muted { "1" } else { "0" };
+        self.with_backend(
+            |runner| {
+                runner
+                    .run("wpctl", &["set-mute", "@DEFAULT_AUDIO_SINK@", state])
+                    .map(|_| ())
+            },
+            |runner| {
+                runner
+                    .run("pactl", &["set-sink-mute", "@DEFAULT_SINK@", state])
+                    .map(|_| ())
+            },
+        )
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn parse_wpctl_volume(response: &str) -> Result<f32, VolumeError> {
+    response
+        .trim()
+        .strip_prefix("Volume:")
+        .and_then(|value| value.split_whitespace().next())
+        .and_then(|value| value.parse::<f32>().ok())
+        .filter(|volume| volume.is_finite() && (0.0..=1.0).contains(volume))
+        .ok_or_else(|| VolumeError::InvalidResponse(response.trim().to_owned()))
+}
+
+#[cfg(target_os = "linux")]
+fn parse_pactl_volume(response: &str) -> Result<f32, VolumeError> {
+    let percent = response
+        .split_whitespace()
+        .find_map(|part| part.strip_suffix('%'))
+        .and_then(|percent| percent.parse::<f32>().ok())
+        .filter(|percent| percent.is_finite() && (0.0..=100.0).contains(percent))
+        .ok_or_else(|| VolumeError::InvalidResponse(response.trim().to_owned()))?;
+    Ok(percent / 100.0)
+}
+
+#[cfg(target_os = "linux")]
+fn parse_wpctl_muted(response: &str) -> Result<bool, VolumeError> {
+    parse_wpctl_volume(response)?;
+    Ok(response.split_whitespace().any(|part| part == "[MUTED]"))
+}
+
+#[cfg(target_os = "linux")]
+fn parse_pactl_muted(response: &str) -> Result<bool, VolumeError> {
+    match response.split(':').nth(1).map(str::trim) {
+        Some("yes") => Ok(true),
+        Some("no") => Ok(false),
+        _ => Err(VolumeError::InvalidResponse(response.trim().to_owned())),
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct UnsupportedVolumeController;
 
@@ -526,7 +693,11 @@ pub fn platform_volume_controller() -> Box<dyn VolumeController> {
     {
         Box::new(MacOsVolumeController::default())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        Box::new(LinuxVolumeController::default())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         Box::new(UnsupportedVolumeController)
     }

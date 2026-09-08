@@ -2,7 +2,7 @@ use std::sync::Mutex;
 
 #[cfg(not(unix))]
 use volume_control::OsascriptRunner;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 use volume_control::platform_volume_controller;
 use volume_control::{
     AppleScriptRunner, MacOsVolumeController, VolumeController, VolumeError, adjust_system_volume,
@@ -134,7 +134,7 @@ fn macos_controller_rounds_normalized_volume_at_integer_boundaries() {
     assert_eq!(arguments, ["0", "0", "1", "100"]);
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 #[test]
 fn default_controller_reports_the_platform_as_unsupported() {
     let controller = platform_volume_controller();
@@ -142,6 +142,84 @@ fn default_controller_reports_the_platform_as_unsupported() {
         controller.get_volume(),
         Err(VolumeError::UnsupportedPlatform)
     ));
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Default)]
+struct FakeLinuxRunner {
+    responses: Mutex<Vec<Result<String, VolumeError>>>,
+    calls: Mutex<Vec<(String, Vec<String>)>>,
+}
+
+#[cfg(target_os = "linux")]
+impl FakeLinuxRunner {
+    fn with_responses(responses: Vec<Result<&str, VolumeError>>) -> Self {
+        Self {
+            responses: Mutex::new(
+                responses
+                    .into_iter()
+                    .map(|response| response.map(str::to_owned))
+                    .rev()
+                    .collect(),
+            ),
+            calls: Mutex::new(Vec::new()),
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl volume_control::LinuxCommandRunner for FakeLinuxRunner {
+    fn run(&self, program: &str, args: &[&str]) -> Result<String, VolumeError> {
+        self.calls.lock().unwrap().push((
+            program.to_owned(),
+            args.iter().map(|argument| (*argument).to_owned()).collect(),
+        ));
+        self.responses.lock().unwrap().pop().unwrap()
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_controller_prefers_pipewire_and_parses_volume_and_mute() {
+    let controller =
+        volume_control::LinuxVolumeController::with_runner(FakeLinuxRunner::with_responses(vec![
+            Ok("Volume: 0.64\n"),
+            Ok("Volume: 0.64 [MUTED]\n"),
+        ]));
+
+    assert_eq!(controller.get_volume().unwrap(), 0.64);
+    assert!(controller.get_muted().unwrap());
+    let calls = controller.runner().calls.lock().unwrap();
+    assert_eq!(calls[0].0, "wpctl");
+    assert_eq!(calls[0].1, ["get-volume", "@DEFAULT_AUDIO_SINK@"]);
+    assert_eq!(calls[1].0, "wpctl");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_controller_falls_back_to_pulseaudio_and_uses_normalized_writes() {
+    let unavailable = || VolumeError::Backend("not found".to_string());
+    let controller =
+        volume_control::LinuxVolumeController::with_runner(FakeLinuxRunner::with_responses(vec![
+            Err(unavailable()),
+            Ok("Volume: front-left: 65536 /  50% / -18.06 dB\n"),
+            Err(unavailable()),
+            Ok(""),
+            Err(unavailable()),
+            Ok("Mute: yes\n"),
+            Err(unavailable()),
+            Ok(""),
+        ]));
+
+    assert_eq!(controller.get_volume().unwrap(), 0.5);
+    controller.set_volume(0.555).unwrap();
+    assert!(controller.get_muted().unwrap());
+    controller.set_muted(false).unwrap();
+    let calls = controller.runner().calls.lock().unwrap();
+    assert_eq!(calls[3].0, "pactl");
+    assert_eq!(calls[3].1, ["set-sink-volume", "@DEFAULT_SINK@", "56%"]);
+    assert_eq!(calls[7].0, "pactl");
+    assert_eq!(calls[7].1, ["set-sink-mute", "@DEFAULT_SINK@", "0"]);
 }
 
 #[cfg(not(unix))]
