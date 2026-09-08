@@ -350,6 +350,25 @@ pub(crate) fn active_model_file_path(app: &AppHandle, model_id: &str) -> Result<
         .join(TFLITE_MODEL_FILE_NAME))
 }
 
+/// Resolves an approved/active bundle for side-effect-free offline replay.
+/// Draft and archived artifacts fail closed, as does any non-LiteRT bundle.
+pub(crate) fn replayable_model_dir(app: &AppHandle, model_id: &str) -> Result<PathBuf, String> {
+    let index = load_registry(app);
+    let model = index
+        .models
+        .iter()
+        .find(|model| model.id == model_id)
+        .ok_or_else(|| format!("no registered model with id '{model_id}'"))?;
+    if !matches!(
+        model.state,
+        ModelLifecycleState::Approved | ModelLifecycleState::Active
+    ) {
+        return Err("offline replay requires an approved or active model".to_string());
+    }
+    model_is_activatable(app, model_id)?;
+    Ok(model_lab::models_dir(app)?.join(model_id))
+}
+
 fn emit_registry(app: &AppHandle, index: &RegistryIndex) {
     if let Err(error) = app.emit(MODEL_REGISTRY_EVENT, RegistryView::from(index.clone())) {
         tracing::warn!(%error, "failed to emit model registry event");

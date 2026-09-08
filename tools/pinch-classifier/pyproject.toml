@@ -19,6 +19,7 @@ tensorflow = ["tensorflow>=2.16,<2.22"]
 [project.scripts]
 pinch-classifier-train = "pinch_classifier.train:main"
 pinch-classifier-train-tflite = "pinch_classifier.train_tflite:main"
+pinch-classifier-replay = "pinch_classifier.replay:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

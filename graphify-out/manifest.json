@@ -1,0 +1,817 @@
+{
+  "apps/desktop/package.json": {
+    "mtime": 1785147528.8055596,
+    "ast_hash": "3a694c532967ee18e029a4155b0f661a",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/build.rs": {
+    "mtime": 1785147718.701865,
+    "ast_hash": "1be34a5c61c2c35365de3dab14298f0b",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/capabilities/default.json": {
+    "mtime": 1785246038.403156,
+    "ast_hash": "0bbcf1f4fa6f9debec443c453a1d7836",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/src/calibration.rs": {
+    "mtime": 1785172873.287192,
+    "ast_hash": "feff21229950c09757cd1b0eee82df3b",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/src/lib.rs": {
+    "mtime": 1788849583.142741,
+    "ast_hash": "53138ff2de2dcbf88f3a614205e9ed84",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/src/main.rs": {
+    "mtime": 1785147719.3778374,
+    "ast_hash": "f31edf0fba9893362fbccbafbc6cb271",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/src/overlay.rs": {
+    "mtime": 1787982640.8122768,
+    "ast_hash": "56497872a5e21e78e6f750913ba34d86",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/src/watch.rs": {
+    "mtime": 1787977006.5982468,
+    "ast_hash": "d5a6d1112873a2419e508fd2bff92ac9",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/tauri.conf.json": {
+    "mtime": 1785246501.4682887,
+    "ast_hash": "74c7fbbc420f953e90b20c03b14c90cf",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src/main.tsx": {
+    "mtime": 1787812873.8960805,
+    "ast_hash": "59095717aeda796c84596185b0365bad",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src/test/setup.ts": {
+    "mtime": 1785147531.441453,
+    "ast_hash": "3709e3aa95abf0544678f0f2d9b46702",
+    "semantic_hash": ""
+  },
+  "apps/desktop/tsconfig.app.json": {
+    "mtime": 1785147529.3495376,
+    "ast_hash": "a4b96eaebf79abf847ab382c5c0133f0",
+    "semantic_hash": ""
+  },
+  "apps/desktop/tsconfig.json": {
+    "mtime": 1785147789.5029945,
+    "ast_hash": "7bbef11e7b0c4b6a3c3dfd3932cde8ce",
+    "semantic_hash": ""
+  },
+  "apps/desktop/tsconfig.node.json": {
+    "mtime": 1785147678.707486,
+    "ast_hash": "af4b44f148e1896d2423ab8b74ecd548",
+    "semantic_hash": ""
+  },
+  "apps/desktop/vite.config.ts": {
+    "mtime": 1785147758.588248,
+    "ast_hash": "d690002d1a04bc885aa0903414e6050f",
+    "semantic_hash": ""
+  },
+  "crates/head-tracking/src/lib.rs": {
+    "mtime": 1787495458.1976001,
+    "ast_hash": "a613b469e735cb64b08534e05a663cb5",
+    "semantic_hash": ""
+  },
+  "crates/head-tracking/tests/tracker_state.rs": {
+    "mtime": 1785147491.639065,
+    "ast_hash": "a2fc72c4c22f62b8adac43cae3c4bfcd",
+    "semantic_hash": ""
+  },
+  "crates/head-tracking/tests/udp_provider.rs": {
+    "mtime": 1785148450.6030662,
+    "ast_hash": "991eae839875820c3e7e7b03af5455ad",
+    "semantic_hash": ""
+  },
+  "crates/interaction-engine/src/lib.rs": {
+    "mtime": 1788833065.6578562,
+    "ast_hash": "08b0e56ef7a9e637858403e816e9274f",
+    "semantic_hash": ""
+  },
+  "crates/interaction-engine/tests/calibration.rs": {
+    "mtime": 1785172381.2072337,
+    "ast_hash": "02b60b4811ceff2c139b626d73437a23",
+    "semantic_hash": ""
+  },
+  "crates/interaction-engine/tests/overlay_position.rs": {
+    "mtime": 1785285233.0004406,
+    "ast_hash": "fc9a944cf22707d098267efa2c816606",
+    "semantic_hash": ""
+  },
+  "crates/interaction-engine/tests/overlay_visibility.rs": {
+    "mtime": 1785246871.8432543,
+    "ast_hash": "1849106a44c674a68d8cc78d4a7a922c",
+    "semantic_hash": ""
+  },
+  "crates/interaction-engine/tests/volume_simulation.rs": {
+    "mtime": 1785245737.7554057,
+    "ast_hash": "8bde8f6c414db1a9b893dd7699c0743b",
+    "semantic_hash": ""
+  },
+  "crates/protocol/src/lib.rs": {
+    "mtime": 1788790734.618159,
+    "ast_hash": "43b84a0f4ab4c8535a418e6402dcefa4",
+    "semantic_hash": ""
+  },
+  "crates/protocol/tests/sony_packet.rs": {
+    "mtime": 1785148318.5329332,
+    "ast_hash": "86518cbf651be8f434932f7411eea4ad",
+    "semantic_hash": ""
+  },
+  "crates/volume-control/src/lib.rs": {
+    "mtime": 1788848059.9018083,
+    "ast_hash": "1a170ab02f149f5f7dfa28b532da502e",
+    "semantic_hash": ""
+  },
+  "crates/volume-control/tests/volume_controller.rs": {
+    "mtime": 1788848083.0131018,
+    "ast_hash": "6e690c6450b222e74eb5481ec64d43fa",
+    "semantic_hash": ""
+  },
+  "crates/watch-bridge/src/lib.rs": {
+    "mtime": 1788790734.938146,
+    "ast_hash": "e4504546b7d657e390ec441d45231a7d",
+    "semantic_hash": ""
+  },
+  "package.json": {
+    "mtime": 1785246046.9068096,
+    "ast_hash": "a869e0e9dcd42abb1b0ca891add5b7c4",
+    "semantic_hash": ""
+  },
+  "scripts/check-tauri-icons.mjs": {
+    "mtime": 1785162852.069577,
+    "ast_hash": "d84e66386c013dae7f72072bebf45ec0",
+    "semantic_hash": ""
+  },
+  "scripts/run-system.mjs": {
+    "mtime": 1787810919.6238053,
+    "ast_hash": "4f11ae7a16cfd02e83895b7a5f2fb757",
+    "semantic_hash": ""
+  },
+  "scripts/run-system.test.mjs": {
+    "mtime": 1787810925.2276158,
+    "ast_hash": "7ce3a2bb5fe687b5638ef763bde490c6",
+    "semantic_hash": ""
+  },
+  "scripts/tauri-config.test.mjs": {
+    "mtime": 1787825765.1068573,
+    "ast_hash": "ae6ee98ccab5a22ac400effdf6373b0d",
+    "semantic_hash": ""
+  },
+  ".github/workflows/ci.yml": {
+    "mtime": 1785289391.6352298,
+    "ast_hash": "8cbb3ca3f1bd07e87fe89ae4131218c5",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1787811061.842998,
+    "ast_hash": "7e3262ee8e8f186f97f5b423d405d535",
+    "semantic_hash": ""
+  },
+  "apps/desktop/index.html": {
+    "mtime": 1785147644.8048599,
+    "ast_hash": "2c0615a6fb7733a07c731e935d62e65e",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/icons/128x128.png": {
+    "mtime": 1785149406.0743535,
+    "ast_hash": "c0044e492ce7d165002051ec12240c9d",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/icons/128x128@2x.png": {
+    "mtime": 1785149406.0943525,
+    "ast_hash": "4731769f69a1f0d35a55de570614ceaa",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/icons/32x32.png": {
+    "mtime": 1785149406.0663538,
+    "ast_hash": "2a3cc7743cf1756494ae53c34017853e",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/icons/64x64.png": {
+    "mtime": 1785149406.0663538,
+    "ast_hash": "ae1a8ee5fb1125199f22141f6399cc82",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/icons/Square107x107Logo.png": {
+    "mtime": 1785149405.6223724,
+    "ast_hash": "15930bb9666af65097d22091e0546fe4",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/icons/Square142x142Logo.png": {
+    "mtime": 1785149405.630372,
+    "ast_hash": "f2336ff32a3620d291308727c6a48a64",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/icons/Square150x150Logo.png": {
+    "mtime": 1785149405.6383717,
+    "ast_hash": "8fa799ffa3fad9923f18b6bec28da3b9",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/icons/Square284x284Logo.png": {
+    "mtime": 1785149405.6623707,
+    "ast_hash": "6352c460567053324daf8e6c10a3b4d7",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/icons/Square30x30Logo.png": {
+    "mtime": 1785149405.6103728,
+    "ast_hash": "b164422f247a5c1d8f9cee1abdd6a0b4",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/icons/Square310x310Logo.png": {
+    "mtime": 1785149405.6863697,
+    "ast_hash": "5d2366b86fe35c3c7f9a16173e51ba1c",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/icons/Square44x44Logo.png": {
+    "mtime": 1785149405.6103728,
+    "ast_hash": "a4e67ab01615d7bf31e3ad1e31f121a5",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/icons/Square71x71Logo.png": {
+    "mtime": 1785149405.6143725,
+    "ast_hash": "5e1eee28f81645c36fb5ce75ed707662",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/icons/Square89x89Logo.png": {
+    "mtime": 1785149405.6183724,
+    "ast_hash": "430d03263838874cba1f8922a63a69bc",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/icons/StoreLogo.png": {
+    "mtime": 1785149405.6103728,
+    "ast_hash": "9ed6d24af4bb56cdefce4b8c7d75afc5",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/icons/icon.png": {
+    "mtime": 1785149406.1463504,
+    "ast_hash": "be3c42b046d0a58a586a62d1865931c5",
+    "semantic_hash": ""
+  },
+  "apps/watch/app/build.gradle.kts": {
+    "mtime": 1788790733.838191,
+    "ast_hash": "0edf8ff5fbe541e3cee20b1f9fb10f4a",
+    "semantic_hash": ""
+  },
+  "apps/watch/build.gradle.kts": {
+    "mtime": 1787846794.1850958,
+    "ast_hash": "5c7122fe5135b3098f486645cd9a4a94",
+    "semantic_hash": ""
+  },
+  "apps/watch/gradlew": {
+    "mtime": 1786977346.389391,
+    "ast_hash": "945aa656d0e95b677abecc54f2bb825a",
+    "semantic_hash": ""
+  },
+  "apps/watch/settings.gradle.kts": {
+    "mtime": 1786976869.9929464,
+    "ast_hash": "550f61c739965463d93f93db6fde1afa",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/native-macos/App/ContentView.swift": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "3f5b811e7ff9b3506b00a3837359b0c2",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/native-macos/App/SpatialHeadTrackingApp.swift": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "e10f0737b95bc783ab5f5540190017a6",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/native-macos/App/TrackerViewModel.swift": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "4c5c7039fefe08b5e80118c0ccb19e36",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/native-macos/Core/HeadPose.swift": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "6281896b66241b85b87efa3ddd328e31",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/native-macos/Core/TrackerState.swift": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "a3529e6f38e1952edf9f716ef5927819",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/native-macos/Hardware/HeadTrackerProvider.swift": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "f8356e3672c743c85cae088b0a4af768",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/native-macos/Hardware/MacHIDConstants.swift": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "3b33ed10351fc52b2c694de5fbee5682",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/native-macos/Hardware/MacHIDHeadTracker.swift": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "39c118ee7f8e84961a02f049c72c67ba",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/pyproject.toml": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "ce8e2226493e07d9c0f55959aaa8ffec",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/scripts/send_sample.py": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "379d47e8814f920ce2cec02b159342f8",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/src/sony_head_tracking/__init__.py": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "dcc4f2f7286a4bea872c9677f58910f0",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/src/sony_head_tracking/__main__.py": {
+    "mtime": 1785147127.0938127,
+    "ast_hash": "5109ab95441454c3d40c9321c4c146b7",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/src/sony_head_tracking/cli.py": {
+    "mtime": 1785147127.0938127,
+    "ast_hash": "5f2d38aba61d2b42c5b6e356b17d6f10",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/src/sony_head_tracking/models.py": {
+    "mtime": 1785147127.0938127,
+    "ast_hash": "67c0cb4de72f8eb3bdb652ce7a39e730",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/src/sony_head_tracking/receiver.py": {
+    "mtime": 1785147127.0938127,
+    "ast_hash": "43d78fd872754e955b80882b248d98fa",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/tests/test_models.py": {
+    "mtime": 1785147127.0938127,
+    "ast_hash": "b64952b07ad9b63b065a9a3d77164a18",
+    "semantic_hash": ""
+  },
+  "apps/watch/README.md": {
+    "mtime": 1787834072.4191837,
+    "ast_hash": "57d589c0da68525ed39e76796b857327",
+    "semantic_hash": ""
+  },
+  "docs/README.md": {
+    "mtime": 1787811146.8961222,
+    "ast_hash": "da2be259fb1e00404f9371af3cfdb0f9",
+    "semantic_hash": ""
+  },
+  "docs/architecture/project-brief.md": {
+    "mtime": 1788825586.0757406,
+    "ast_hash": "041d7a690356195860a1d4cced0aaa2e",
+    "semantic_hash": ""
+  },
+  "docs/development/running-project.md": {
+    "mtime": 1787811118.0770967,
+    "ast_hash": "0ce3ef03a49ad1765506120584fadbec",
+    "semantic_hash": ""
+  },
+  "docs/protocols/watch-websocket-protocol.md": {
+    "mtime": 1788790735.158137,
+    "ast_hash": "3232f9d780a9f2c86f59a6f1e800655c",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/ARCHITECTURE.md": {
+    "mtime": 1786974279.8790166,
+    "ast_hash": "7476a6dd43aa89ef6fab5c6f944a65cb",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/README.md": {
+    "mtime": 1787811221.76559,
+    "ast_hash": "897ea8081688028595c1630d1e005b5c",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/THIRD_PARTY_NOTICES.md": {
+    "mtime": 1785168151.5675068,
+    "ast_hash": "2f9edb71bfbabd0ab8360ebcd194e433",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/native-macos/README.md": {
+    "mtime": 1787811221.7455907,
+    "ast_hash": "02ea8cf3d90079a2bd02e0e07e9ef9ac",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/native-macos/project.yml": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "35d90ba90bdeb75990ff066920e12019",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/prebuilds/sony-head-tracker-v2.2.0-macos-universal/CHANGELOG.md": {
+    "mtime": 1785167831.0567846,
+    "ast_hash": "647c54c8be082f956f7da6c5907dfc9b",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/prebuilds/sony-head-tracker-v2.2.0-macos-universal/README.md": {
+    "mtime": 1785167831.0567846,
+    "ast_hash": "55ba50d7eebe9c10440d57f41e2701e7",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/prebuilds/sony-head-tracker-v2.2.0-macos-universal/SonyHeadTracker.app/Contents/Resources/sony-head-tracker-LICENSE.txt": {
+    "mtime": 1785167831.0647843,
+    "ast_hash": "d2b00ee5e3a166379c93dc758c9f66f7",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/prebuilds/sony-head-tracker-v2.2.0-macos-universal/docs/MACOS.md": {
+    "mtime": 1785167831.0647843,
+    "ast_hash": "341e9f26dd509c55adf505e2424798c6",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/prebuilds/sony-head-tracker-v2.2.0-macos-universal/docs/PROTOCOL.md": {
+    "mtime": 1785167831.0647843,
+    "ast_hash": "4c1c8d1d5b45efae6949d0418090fb79",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/prebuilds/sony-head-tracker-v2.2.0-windows-x64/CHANGELOG.md": {
+    "mtime": 1785167831.068784,
+    "ast_hash": "647c54c8be082f956f7da6c5907dfc9b",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/prebuilds/sony-head-tracker-v2.2.0-windows-x64/PROTOCOL.md": {
+    "mtime": 1785167831.068784,
+    "ast_hash": "4c1c8d1d5b45efae6949d0418090fb79",
+    "semantic_hash": ""
+  },
+  "tools/sony-head-tracker/prebuilds/sony-head-tracker-v2.2.0-windows-x64/README.md": {
+    "mtime": 1785167831.068784,
+    "ast_hash": "55ba50d7eebe9c10440d57f41e2701e7",
+    "semantic_hash": ""
+  },
+  "vendor/samsung-health-sensor-sdk/1.4.1/Announcement.txt": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "c11a508dede21b320a8af945bad89820",
+    "semantic_hash": ""
+  },
+  "vendor/samsung-health-sensor-sdk/1.4.1/docs/api-reference.html": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "9d434dd8e1bc46ec56388fb8f6987e1a",
+    "semantic_hash": ""
+  },
+  "vendor/samsung-health-sensor-sdk/1.4.1/docs/programming-guide.html": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "b9ade1a9638bfbe3b75eadaf52584102",
+    "semantic_hash": ""
+  },
+  "vendor/samsung-health-sensor-sdk/1.4.1/sample-codes/ecg-monitor.html": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "e78b96267161e2a7bc2f2a1283f0c824",
+    "semantic_hash": ""
+  },
+  "vendor/samsung-health-sensor-sdk/1.4.1/sample-codes/measure-skin-temperature.html": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "c8894ce0bd1dc340a2eb666d19bd012d",
+    "semantic_hash": ""
+  },
+  "vendor/samsung-health-sensor-sdk/1.4.1/sample-codes/measure-spo2-and-hr.html": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "2e8899dbe1a61f4c4a019ccb36aed1f7",
+    "semantic_hash": ""
+  },
+  "vendor/samsung-health-sensor-sdk/1.4.1/sample-codes/measure-spo2.html": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "7349158b2d633149c7219c77c839a4c0",
+    "semantic_hash": ""
+  },
+  "vendor/samsung-health-sensor-sdk/1.4.1/sample-codes/sweat-loss-monitor.html": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "5d9731b561bffcd03b7fc60f7d0bbf29",
+    "semantic_hash": ""
+  },
+  "vendor/samsung-health-sensor-sdk/1.4.1/sample-codes/track-heart-rate-with-off-body-sensor.html": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "dd0ae583cfac31431cedbd23df9dcc42",
+    "semantic_hash": ""
+  },
+  "vendor/samsung-health-sensor-sdk/1.4.1/sample-codes/transfer-hr-from-watch-to-phone.html": {
+    "mtime": 1785147127.089813,
+    "ast_hash": "34177527738feed4241eb709e95c6b5c",
+    "semantic_hash": ""
+  },
+  "apps/desktop/assets/app-icon.svg": {
+    "mtime": 1785149398.5946662,
+    "ast_hash": "2af7dbebd441b63d703a85e2460ae53f",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src/app/App.test.tsx": {
+    "mtime": 1787840970.0257082,
+    "ast_hash": "df08e0e61d70d28e942d130dcf0cb978",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src/app/App.tsx": {
+    "mtime": 1788153173.6542387,
+    "ast_hash": "2eaa86ef34ebfaba5e6939eb5546d9e1",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src/features/dashboard/components/Dashboard.test.tsx": {
+    "mtime": 1787825722.820245,
+    "ast_hash": "24bf0077da378cb8da2f734ae39ebf68",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src/features/dashboard/components/Dashboard.tsx": {
+    "mtime": 1787812875.7480192,
+    "ast_hash": "8aeb1bc2540789aef370705731f64850",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src/features/overlay/components/VolumeKnob.test.tsx": {
+    "mtime": 1785289358.9085708,
+    "ast_hash": "5ef75224f60dcf0e738db5fd124b6fcf",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src/features/overlay/components/VolumeKnob.tsx": {
+    "mtime": 1787489678.3959372,
+    "ast_hash": "d2e30c3a65c0335ef3de236ca3ef3d5a",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src/features/telemetry/components/LiveTelemetry.tsx": {
+    "mtime": 1788830113.378412,
+    "ast_hash": "53558f6ed6683d8374c5e0fe905e50c2",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src/shared/protocol/events.ts": {
+    "mtime": 1788093783.2985501,
+    "ast_hash": "b620b595519c4cd8ec0b6a74d5baede7",
+    "semantic_hash": ""
+  },
+  "apps/watch/app/src/main/java/com/gesturecontrols/wearwatch/app/MainActivity.kt": {
+    "mtime": 1788790724.874557,
+    "ast_hash": "57d3e2cb8c27b660e1754f38bf499e84",
+    "semantic_hash": ""
+  },
+  "apps/watch/app/src/main/java/com/gesturecontrols/wearwatch/data/connection/WatchLinkManager.kt": {
+    "mtime": 1788790734.302172,
+    "ast_hash": "ba9072b053ed3e9edbc9de487ad2c841",
+    "semantic_hash": ""
+  },
+  "apps/watch/app/src/main/java/com/gesturecontrols/wearwatch/data/connection/WatchProtocol.kt": {
+    "mtime": 1788790734.6101594,
+    "ast_hash": "467cad212196fde5803fc90093b1a771",
+    "semantic_hash": ""
+  },
+  "apps/watch/app/src/main/java/com/gesturecontrols/wearwatch/data/discovery/DesktopDiscovery.kt": {
+    "mtime": 1787812958.617274,
+    "ast_hash": "f92ce71b2413c74c2ce22aaab2362cc4",
+    "semantic_hash": ""
+  },
+  "apps/watch/app/src/main/java/com/gesturecontrols/wearwatch/data/discovery/WatchPairingServer.kt": {
+    "mtime": 1787812958.713271,
+    "ast_hash": "78692b7fda0945879cb50d49805b3aad",
+    "semantic_hash": ""
+  },
+  "apps/watch/app/src/main/java/com/gesturecontrols/wearwatch/data/preferences/ConnectionPrefs.kt": {
+    "mtime": 1788790724.874557,
+    "ast_hash": "8a651fb68439eae304d101f084001022",
+    "semantic_hash": ""
+  },
+  "apps/watch/app/src/main/java/com/gesturecontrols/wearwatch/feature/health/MedicalContinuousCollector.kt": {
+    "mtime": 1787814350.382526,
+    "ast_hash": "97538a4aa135e4066a4be1710646f81f",
+    "semantic_hash": ""
+  },
+  "apps/watch/app/src/main/java/com/gesturecontrols/wearwatch/feature/health/MedicalTrackerProtocol.kt": {
+    "mtime": 1787845675.3334744,
+    "ast_hash": "91ab138b170ff91a995619368817ae42",
+    "semantic_hash": ""
+  },
+  "apps/watch/app/src/main/java/com/gesturecontrols/wearwatch/feature/health/OnDemandMedicalSampler.kt": {
+    "mtime": 1787814350.2825294,
+    "ast_hash": "cdb85aa486cb930c0877c50adc500896",
+    "semantic_hash": ""
+  },
+  "apps/watch/app/src/main/java/com/gesturecontrols/wearwatch/feature/health/PpgCollector.kt": {
+    "mtime": 1787846084.95117,
+    "ast_hash": "c6cda0fcbf20dddf01ec39596195f569",
+    "semantic_hash": ""
+  },
+  "apps/watch/app/src/main/java/com/gesturecontrols/wearwatch/feature/motion/SensorCollector.kt": {
+    "mtime": 1787840610.683914,
+    "ast_hash": "4b45130c18a9320a17b8dd8c02cf8ff2",
+    "semantic_hash": ""
+  },
+  "apps/watch/app/src/main/java/com/gesturecontrols/wearwatch/platform/service/StreamingForegroundService.kt": {
+    "mtime": 1787813012.1634984,
+    "ast_hash": "ffed8899d789d71c00dbe934f5fdb604",
+    "semantic_hash": ""
+  },
+  "apps/desktop/ARCHITECTURE.md": {
+    "mtime": 1787846018.9294717,
+    "ast_hash": "55ca044fdb502a86589a7b44fc7d73f4",
+    "semantic_hash": ""
+  },
+  "apps/watch/ARCHITECTURE.md": {
+    "mtime": 1787814405.0326872,
+    "ast_hash": "e0e87b69a601567bb6f87b571c9eef44",
+    "semantic_hash": ""
+  },
+  "apps/watch/app/src/main/java/com/gesturecontrols/wearwatch/feature/motion/MotionSensorProtocol.kt": {
+    "mtime": 1787840530.399288,
+    "ast_hash": "cf067a768d1afb97a8d37e461e0b1594",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src/features/telemetry/store/telemetryStore.test.ts": {
+    "mtime": 1788094142.0958543,
+    "ast_hash": "0cfc21e494b5739fd4f1ad4109e8e48f",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src/features/telemetry/store/telemetryStore.ts": {
+    "mtime": 1788830088.1274467,
+    "ast_hash": "2396418260d808f729aace408b640901",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/src/settings.rs": {
+    "mtime": 1787977677.2509935,
+    "ast_hash": "a3c0421a39f23ad7aafd50322e0c952e",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src/features/settings/components/Settings.tsx": {
+    "mtime": 1787977656.731826,
+    "ast_hash": "3584388ccc5495331d7c4dc3487b4e92",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/pyproject.toml": {
+    "mtime": 1788849466.0309699,
+    "ast_hash": "62ced8f5f46cc4fcf11872faf97fd00b",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/src/pinch_classifier/__init__.py": {
+    "mtime": 1788151778.373099,
+    "ast_hash": "f25d52e8060fb7c7e89f644e0555bef2",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/src/pinch_classifier/csv_io.py": {
+    "mtime": 1788151819.339564,
+    "ast_hash": "c6a3b19b0e956ba3a82a7e3aee57516b",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/src/pinch_classifier/dataset.py": {
+    "mtime": 1788151878.3253384,
+    "ast_hash": "ecca81dc31a28574f30e3f78501f5702",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/src/pinch_classifier/features.py": {
+    "mtime": 1788151868.1737227,
+    "ast_hash": "19f969b09edd8158d3d5c030f5bbdf3b",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/src/pinch_classifier/labels.py": {
+    "mtime": 1788151829.1071968,
+    "ast_hash": "9baef84326db4f1c84edcd454c9772cb",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/src/pinch_classifier/schema.py": {
+    "mtime": 1788151789.4006867,
+    "ast_hash": "64ab766230e93808b9dbe5b7b01329c6",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/src/pinch_classifier/train.py": {
+    "mtime": 1788151921.879684,
+    "ast_hash": "a3a04f9caad8e66c716c1049be03eb69",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/src/pinch_classifier/windowing.py": {
+    "mtime": 1788151850.3103976,
+    "ast_hash": "aca49672b722c729c5d5672c445157ee",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/tests/__init__.py": {
+    "mtime": 1788152077.7297,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/tests/conftest.py": {
+    "mtime": 1788151945.0707996,
+    "ast_hash": "6cbe7d56d939b1cc6e2cbabe6dbea98f",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/tests/test_csv_io.py": {
+    "mtime": 1788151955.6543953,
+    "ast_hash": "fcdfaa48b9928d6d82006bbd57b38bca",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/tests/test_features.py": {
+    "mtime": 1788151991.30103,
+    "ast_hash": "fcaa336ea54ddd79e336ecdd0c7e6e88",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/tests/test_train.py": {
+    "mtime": 1788152003.724553,
+    "ast_hash": "d1054af8be85348279a830bff6cf090e",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/tests/test_windowing.py": {
+    "mtime": 1788151966.8979652,
+    "ast_hash": "173a5ed75fc92c47792b915b36e7d445",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/README.md": {
+    "mtime": 1788347613.1278381,
+    "ast_hash": "f8b705128beeb9365cd70db15130069c",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src/features/model-lab/components/ModelLab.test.tsx": {
+    "mtime": 1788849166.2102244,
+    "ast_hash": "9156ac5b2a6063a90160b8ed18ad396f",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src/features/model-lab/components/ModelLab.tsx": {
+    "mtime": 1788849117.5641289,
+    "ast_hash": "711846fc5fa132361f5749d627ae76a8",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/src/model_lab.rs": {
+    "mtime": 1788849627.8691442,
+    "ast_hash": "5184151f61469f35adb3633c08c6fe31",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/src/pinch_classifier/bundle.py": {
+    "mtime": 1788347555.178254,
+    "ast_hash": "b56b61d179fa5fc5f2bfe6495d90a7c7",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/src/pinch_classifier/train_tflite.py": {
+    "mtime": 1788347612.0798821,
+    "ast_hash": "676ce9d5f753da5e13af51b89a52137a",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/tests/test_bundle.py": {
+    "mtime": 1788347555.5062404,
+    "ast_hash": "30cd505cdf42c27760392e42d1350823",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/tests/test_train_tflite.py": {
+    "mtime": 1788347555.9342225,
+    "ast_hash": "0c4afc4cd2a0e0b7fd3dd9a1f499c3c9",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/src/model_registry.rs": {
+    "mtime": 1788849627.7251492,
+    "ast_hash": "4564f1ae06c5d257dde3441efb341309",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/src/pinch_classifier/desktop_runtime.py": {
+    "mtime": 1788791588.943328,
+    "ast_hash": "6258c779055831cbce2e2ae4ef864633",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/tests/test_desktop_runtime.py": {
+    "mtime": 1788806853.167326,
+    "ast_hash": "57218189dea98a097714b8813da3cc77",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/src/inference.rs": {
+    "mtime": 1788839657.1559105,
+    "ast_hash": "c5b11d4ea782692f2b6fbed5295c2cba",
+    "semantic_hash": ""
+  },
+  "crates/interaction-engine/src/gesture_policy.rs": {
+    "mtime": 1788838083.296447,
+    "ast_hash": "a8e59c026e06523d7507aad279fdadef",
+    "semantic_hash": ""
+  },
+  "crates/pinch-inference/src/features.rs": {
+    "mtime": 1788839657.2039084,
+    "ast_hash": "6679ea17d91b180d29ec158df16c6554",
+    "semantic_hash": ""
+  },
+  "crates/pinch-inference/src/fusion.rs": {
+    "mtime": 1788839657.2079084,
+    "ast_hash": "0e49b391b349fd3f6b869ac771897e00",
+    "semantic_hash": ""
+  },
+  "crates/pinch-inference/src/lib.rs": {
+    "mtime": 1788839657.2079084,
+    "ast_hash": "bb1ddcd7efd54e6b9c0ad85cefb50003",
+    "semantic_hash": ""
+  },
+  "crates/pinch-inference/src/litert_model.rs": {
+    "mtime": 1788839657.2079084,
+    "ast_hash": "7b278b9fd1a99e75aebc638ac24fa911",
+    "semantic_hash": ""
+  },
+  "crates/pinch-inference/src/model.rs": {
+    "mtime": 1788839657.2079084,
+    "ast_hash": "405de4fe5c5a9b8792508779e75c8300",
+    "semantic_hash": ""
+  },
+  "crates/pinch-inference/src/runtime.rs": {
+    "mtime": 1788839657.2079084,
+    "ast_hash": "de0698048f1b37d622efc3ce1e71fc18",
+    "semantic_hash": ""
+  },
+  "apps/desktop/src-tauri/src/label_registry.rs": {
+    "mtime": 1788843746.7204878,
+    "ast_hash": "0605faae1fb37a6ae9c4365faa38951c",
+    "semantic_hash": ""
+  },
+  "tools/pinch-classifier/src/pinch_classifier/replay.py": {
+    "mtime": 1788849465.7589798,
+    "ast_hash": "1cff7127ef8d999782996dfa8eb49c6b",
+    "semantic_hash": ""
+  }
+}

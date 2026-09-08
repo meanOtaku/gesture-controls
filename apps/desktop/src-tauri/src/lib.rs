@@ -72,6 +72,7 @@ pub fn run() {
             model_lab::cancel_training_job,
             model_lab::get_training_status,
             model_lab::list_trained_models,
+            model_lab::replay_model_dataset,
             label_registry::list_model_labels,
             label_registry::create_model_label,
             label_registry::set_model_label_archived,

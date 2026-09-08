@@ -17,6 +17,7 @@ const INDEX_FILE_NAME: &str = "index.json";
 const MODEL_CARD_FILE_NAME: &str = "model_card.json";
 const MAX_DATASET_CSV_BYTES: usize = 20 * 1024 * 1024;
 const MAX_FILENAME_LEN: usize = 255;
+const MAX_REPLAY_OUTCOMES: usize = 200;
 const METADATA_COMMENT_PREFIX: char = '#';
 
 /// `model-lab-training-event` payload discriminant. This is a local
@@ -759,6 +760,61 @@ pub async fn start_training_job(
     });
 
     Ok(job_id)
+}
+
+/// Replays only managed datasets against a reviewed LiteRT bundle. This
+/// spawns the fixed local runner with resolved app-data paths and returns its
+/// bounded JSON report; it never enters the desktop gesture/volume pipeline.
+#[tauri::command]
+pub async fn replay_model_dataset(
+    model_id: String,
+    dataset_ids: Vec<String>,
+    max_outcomes: Option<usize>,
+    app: AppHandle,
+    runtime: State<'_, ModelLabRuntime>,
+) -> Result<serde_json::Value, String> {
+    let max_outcomes = max_outcomes.unwrap_or(MAX_REPLAY_OUTCOMES);
+    if !(1..=MAX_REPLAY_OUTCOMES).contains(&max_outcomes) {
+        return Err(format!(
+            "maxOutcomes must be between 1 and {MAX_REPLAY_OUTCOMES}"
+        ));
+    }
+    validate_dataset_id(&model_id)?;
+    let guard = runtime
+        .lock
+        .lock()
+        .map_err(|_| "model lab lock was poisoned".to_string())?;
+    let model_dir = crate::model_registry::replayable_model_dir(&app, &model_id)?;
+    let index = load_index(&app);
+    let inputs = resolve_training_inputs(&index, &datasets_dir(&app)?, &dataset_ids)?;
+    drop(guard);
+
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        Command::new("uv")
+            .arg("run")
+            .arg("--project")
+            .arg(PINCH_CLASSIFIER_PROJECT_DIR)
+            .arg("pinch-classifier-replay")
+            .arg("--bundle-dir")
+            .arg(model_dir)
+            .arg("--input")
+            .args(inputs)
+            .arg("--max-outcomes")
+            .arg(max_outcomes.to_string())
+            .output(),
+    )
+    .await
+    .map_err(|_| "offline replay timed out after 60 seconds".to_string())?
+    .map_err(|error| format!("failed to start offline replay: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "offline replay failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    serde_json::from_slice(&output.stdout)
+        .map_err(|error| format!("offline replay returned invalid JSON: {error}"))
 }
 
 /// Cancels the running job if (and only if) `job_id` matches it. This
