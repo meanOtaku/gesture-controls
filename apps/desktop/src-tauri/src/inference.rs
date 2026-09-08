@@ -21,14 +21,14 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Mutex;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use interaction_engine::{
     DecisionReason, ForceReleaseReason, GestureIntent, GesturePolicy, GesturePolicyConfig,
     PinchTransition, PolicyDecision, PolicyMode,
 };
-use pinch_inference::{DesktopPinchRuntime, PinchModel, TelemetryFusion};
+use pinch_inference::{DesktopPinchRuntime, FusionRejection, PinchModel, TelemetryFusion};
 use serde::{Deserialize, Serialize};
 use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -239,13 +239,7 @@ pub(crate) fn ingest_ppg_window(app: &AppHandle, sample: &WatchPpgBatchSample) {
             }
             PpgWindowOutcome::Accepted => unreachable!("handled above"),
         };
-        let runtime = app.state::<GesturePolicyRuntime>();
-        match runtime.force_release(reason) {
-            Ok(decision) => apply_decision(app, decision),
-            Err(error) => {
-                warn!(%error, "failed to force-release gesture policy on rejected PPG window")
-            }
-        }
+        force_release_policy(app, reason);
         return;
     }
     // `Accepted` only happens once `evaluate_ppg_window_quality` has already
@@ -276,15 +270,45 @@ pub(crate) fn ingest_ppg_window(app: &AppHandle, sample: &WatchPpgBatchSample) {
         ClassifyOutcome::NoChange => {}
         ClassifyOutcome::LoadFailed(error) => {
             warn!(%error, model_id = %active_model_id, "failed to load pinch inference model backend");
-            let gesture_policy = app.state::<GesturePolicyRuntime>();
-            match gesture_policy.force_release(ForceReleaseReason::ModelRuntimeFailure) {
-                Ok(decision) => apply_decision(app, decision),
-                Err(error) => {
-                    warn!(%error, "failed to force-release gesture policy on model load failure")
-                }
-            }
+            force_release_policy(app, ForceReleaseReason::ModelRuntimeFailure);
+        }
+        ClassifyOutcome::FusionRejected(rejection) => {
+            warn!(?rejection, model_id = %active_model_id, "rejected PPG window during telemetry fusion");
+            force_release_policy(app, ForceReleaseReason::StaleSensorWindow);
         }
     }
+}
+
+/// Resets the pinch classifier's own internal "active" flag and force-
+/// releases [`GesturePolicyRuntime`] -- the shared core every model-scoped
+/// "this telemetry can no longer be trusted" case funnels through (a
+/// rejected/stale PPG window, a fusion rejection, or a model load failure).
+/// Deliberately does not touch the overlay directly: [`apply_decision`]
+/// already releases it if (and only if) the policy was actually tracking a
+/// model-driven grab, so a button-driven grab that has nothing to do with
+/// model classification is left alone. Resetting the classifier keeps its
+/// internal state in sync with the policy immediately, rather than waiting
+/// for a future released-dominant window to self-heal it.
+fn force_release_policy(app: &AppHandle, reason: ForceReleaseReason) {
+    app.state::<PinchInferenceRuntime>().reset();
+    let gesture_policy = app.state::<GesturePolicyRuntime>();
+    match gesture_policy.force_release(reason) {
+        Ok(decision) => apply_decision(app, decision),
+        Err(error) => warn!(%error, "failed to force-release gesture policy"),
+    }
+}
+
+/// [`force_release_policy`] plus an unconditional overlay release -- for
+/// watch-connection-level anomalies (disconnect, a malformed/out-of-order
+/// inbound message, an unavailable/errored PPG sensor, or a lagged event
+/// channel) where the watch's own last-reported button state can no longer
+/// be trusted either, unlike a single rejected PPG window.
+pub(crate) fn force_release_and_hide(app: &AppHandle, reason: ForceReleaseReason) {
+    let overlay = app.state::<OverlayRuntime>();
+    if let Err(error) = overlay.release(app) {
+        warn!(%error, "failed to release overlay while forcing gesture policy release");
+    }
+    force_release_policy(app, reason);
 }
 
 /// Loads the real LiteRT backend when the desktop app was built with the
@@ -325,6 +349,10 @@ pub(crate) enum ClassifyOutcome {
     /// per-window classification failure, which `DesktopPinchRuntime` already
     /// handles by failing closed internally.
     LoadFailed(String),
+    /// The window could not be safely fused with a trustworthy orientation
+    /// snapshot (stale, mismatched device, non-finite, or internally
+    /// out-of-order) -- see [`pinch_inference::FusionRejection`].
+    FusionRejected(FusionRejection),
 }
 
 /// Desktop-only telemetry fusion and model execution: subscribes to watch
@@ -346,7 +374,7 @@ impl PinchInferenceRuntime {
     /// session immediately has a fresh orientation snapshot to fuse.
     pub(crate) fn observe_orientation(&self, sample: &WatchOrientationSample) {
         if let Ok(mut fusion) = self.fusion.lock() {
-            fusion.observe_orientation(sample);
+            fusion.observe_orientation(sample, desktop_monotonic_now_ns());
         } else {
             warn!("pinch inference fusion lock was poisoned; dropping orientation sample");
         }
@@ -385,7 +413,14 @@ impl PinchInferenceRuntime {
                     );
                 }
             };
-            let window = fusion.fuse_ppg_window(sample, contact_quality_mean);
+            let window = match fusion.fuse_ppg_window(
+                sample,
+                contact_quality_mean,
+                desktop_monotonic_now_ns(),
+            ) {
+                Ok(window) => window,
+                Err(rejection) => return ClassifyOutcome::FusionRejected(rejection),
+            };
             pinch_inference::extract_features(&window)
         };
 
@@ -431,7 +466,12 @@ impl PinchInferenceRuntime {
         let Some(model) = loaded.as_mut() else {
             return ClassifyOutcome::LoadFailed("pinch inference model failed to load".to_string());
         };
-        match model.runtime.submit(&features, sample.timestamp_ns) {
+        // Desktop receive-time, not `sample.timestamp_ns` -- the watch's own
+        // envelope timestamp runs on an unrelated, unsynchronized device
+        // clock, and `GesturePolicy::on_tick`'s staleness watchdog compares
+        // whatever timestamp lands in the resulting `PinchTransition` against
+        // its own desktop-side "now" (see [`GesturePolicyRuntime::tick`]).
+        match model.runtime.submit(&features, desktop_monotonic_now_ns()) {
             Some(transition) => ClassifyOutcome::Transition(transition),
             None => ClassifyOutcome::NoChange,
         }
@@ -466,11 +506,17 @@ impl PinchInferenceRuntime {
 /// the staleness timeout in [`GesturePolicyConfig`].
 pub const STALENESS_WATCHDOG_INTERVAL: Duration = Duration::from_millis(200);
 
-fn now_ns() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_nanos() as u64)
-        .unwrap_or(0)
+/// Desktop-side monotonic receive-time clock, anchored once at first call.
+/// Immune to wall-clock/NTP adjustments (unlike `SystemTime`), and never
+/// derived from a watch-sourced timestamp: comparing this module's own
+/// "now" against a raw Watch envelope timestamp would mix two independent,
+/// unsynchronized device clocks, defeating [`STALENESS_WATCHDOG_INTERVAL`]'s
+/// purpose. Raw Watch timestamps stay in play only for ordering/diagnostics
+/// (see [`PpgIngestRuntime`] and [`PpgWindowObservation::timestamp_ns`]).
+fn desktop_monotonic_now_ns() -> u64 {
+    static START: OnceLock<Instant> = OnceLock::new();
+    let start = START.get_or_init(Instant::now);
+    start.elapsed().as_nanos() as u64
 }
 
 fn to_policy_mode(mode: InferenceMode) -> PolicyMode {
@@ -526,7 +572,7 @@ impl GesturePolicyRuntime {
             .policy
             .lock()
             .map_err(|_| "gesture policy lock was poisoned".to_string())?;
-        Ok(policy.on_tick(now_ns()))
+        Ok(policy.on_tick(desktop_monotonic_now_ns()))
     }
 }
 

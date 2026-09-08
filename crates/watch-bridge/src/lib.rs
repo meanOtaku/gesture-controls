@@ -774,3 +774,129 @@ fn now_ns() -> u64 {
         .as_nanos()
         .min(u64::MAX as u128) as u64
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use spatial_protocol::{WATCH_ORIENTATION_TYPE, WATCH_PROTOCOL_VERSION};
+
+    fn shared_state() -> Arc<SharedState> {
+        let (events, _) = broadcast::channel(16);
+        let (commands, _) = broadcast::channel(16);
+        let (sensor_commands, _) = broadcast::channel(16);
+        let (sensor_rate_commands, _) = broadcast::channel(16);
+        let (haptic_commands, _) = broadcast::channel(16);
+        Arc::new(SharedState {
+            events,
+            commands,
+            sensor_commands,
+            sensor_rate_commands,
+            haptic_commands,
+            active: AtomicBool::new(false),
+            heartbeat_timeout: Duration::from_secs(3),
+        })
+    }
+
+    fn orientation_envelope(sequence: u64) -> Vec<u8> {
+        serde_json::to_vec(&json!({
+            "type": WATCH_ORIENTATION_TYPE,
+            "version": WATCH_PROTOCOL_VERSION,
+            "deviceId": "watch-1",
+            "sequence": sequence,
+            "timestampNs": 1,
+            "payload": { "quaternion": [1.0, 0.0, 0.0, 0.0] },
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn handle_inbound_accepts_strictly_increasing_sequence_and_advances_watermark() {
+        let shared = shared_state();
+        let mut receiver = shared.events.subscribe();
+        let mut last_sequence = Some(1);
+        let mut pending_time_sync_at = None;
+        let mut clock_offset_samples = VecDeque::new();
+        handle_inbound(
+            &orientation_envelope(2),
+            &mut last_sequence,
+            &mut pending_time_sync_at,
+            &mut clock_offset_samples,
+            &shared,
+        );
+        assert_eq!(last_sequence, Some(2));
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            WatchEvent::Orientation(_)
+        ));
+    }
+
+    #[test]
+    fn handle_inbound_rejects_duplicate_or_out_of_order_sequence_without_advancing_watermark() {
+        let shared = shared_state();
+        let mut receiver = shared.events.subscribe();
+        let mut last_sequence = Some(5);
+        let mut pending_time_sync_at = None;
+        let mut clock_offset_samples = VecDeque::new();
+        handle_inbound(
+            &orientation_envelope(5),
+            &mut last_sequence,
+            &mut pending_time_sync_at,
+            &mut clock_offset_samples,
+            &shared,
+        );
+        assert_eq!(last_sequence, Some(5));
+        match receiver.try_recv().unwrap() {
+            WatchEvent::InvalidMessage { reason } => assert!(reason.contains("out-of-order")),
+            other => panic!("expected InvalidMessage, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn handle_inbound_fails_closed_on_unparseable_json() {
+        let shared = shared_state();
+        let mut receiver = shared.events.subscribe();
+        let mut last_sequence = None;
+        let mut pending_time_sync_at = None;
+        let mut clock_offset_samples = VecDeque::new();
+        handle_inbound(
+            b"not json",
+            &mut last_sequence,
+            &mut pending_time_sync_at,
+            &mut clock_offset_samples,
+            &shared,
+        );
+        assert_eq!(last_sequence, None);
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            WatchEvent::InvalidMessage { .. }
+        ));
+    }
+
+    #[test]
+    fn connection_slot_is_released_and_reusable_after_reconnect() {
+        let shared = shared_state();
+        assert!(
+            shared
+                .active
+                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+        );
+        // A concurrent second connection while active must be rejected --
+        // this is the guard `handle_socket` uses before accepting a socket.
+        assert!(
+            shared
+                .active
+                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                .is_err()
+        );
+        shared.active.store(false, Ordering::Release);
+        // After disconnect, a fresh reconnect must be accepted again.
+        assert!(
+            shared
+                .active
+                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+        );
+    }
+}

@@ -255,20 +255,10 @@ pub fn run() {
                                     }
                                 }
                                 WatchEvent::Disconnected => {
-                                    if let Err(error) = overlay.release(&watch_handle) {
-                                        warn!(%error, "failed to release volume overlay on watch disconnect");
-                                    }
-                                    let gesture_policy =
-                                        watch_handle.state::<inference::GesturePolicyRuntime>();
-                                    match gesture_policy
-                                        .force_release(interaction_engine::ForceReleaseReason::WatchDisconnected)
-                                    {
-                                        Ok(decision) => inference::apply_decision(&watch_handle, decision),
-                                        Err(error) => warn!(%error, "failed to force-release gesture policy on watch disconnect"),
-                                    }
-                                    watch_handle
-                                        .state::<inference::PinchInferenceRuntime>()
-                                        .reset();
+                                    inference::force_release_and_hide(
+                                        &watch_handle,
+                                        interaction_engine::ForceReleaseReason::WatchDisconnected,
+                                    );
                                 }
                                 WatchEvent::Orientation(sample) => {
                                     let volume_runtime = watch_handle.state::<overlay::VolumeRuntime>();
@@ -282,6 +272,22 @@ pub fn run() {
                                 WatchEvent::Ppg(sample) => {
                                     inference::ingest_ppg_window(&watch_handle, sample);
                                 }
+                                WatchEvent::InvalidMessage { reason } => {
+                                    warn!(reason = %reason, "rejecting malformed or out-of-order watch message");
+                                    inference::force_release_and_hide(
+                                        &watch_handle,
+                                        interaction_engine::ForceReleaseReason::StaleSensorWindow,
+                                    );
+                                }
+                                WatchEvent::PpgStatusUpdated(sample)
+                                    if sample.state == "unavailable" || sample.state == "error" =>
+                                {
+                                    warn!(state = %sample.state, "watch PPG sensor became unavailable; forcing release");
+                                    inference::force_release_and_hide(
+                                        &watch_handle,
+                                        interaction_engine::ForceReleaseReason::StaleSensorWindow,
+                                    );
+                                }
                                 _ => {}
                             }
                             if let Err(error) = runtime.apply(&watch_handle, event) {
@@ -289,7 +295,11 @@ pub fn run() {
                             }
                         }
                         Err(error) => {
-                            warn!(%error, "watch event receiver lagged or closed");
+                            warn!(%error, "watch event receiver lagged or closed; failing closed");
+                            inference::force_release_and_hide(
+                                &watch_handle,
+                                interaction_engine::ForceReleaseReason::StaleSensorWindow,
+                            );
                         }
                     }
                 }

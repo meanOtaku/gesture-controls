@@ -21,7 +21,7 @@ mod runtime;
 pub use features::{
     FEATURE_COUNT, FEATURE_NAMES, FusedWindow, OrientationSnapshot, extract_features,
 };
-pub use fusion::TelemetryFusion;
+pub use fusion::{FusionRejection, ORIENTATION_STALENESS_TIMEOUT_NS, TelemetryFusion};
 #[cfg(feature = "litert")]
 pub use litert_model::LiteRtPinchModel;
 pub use model::{CLASS_COUNT, PinchModel, PinchModelError, UnavailablePinchModel};
