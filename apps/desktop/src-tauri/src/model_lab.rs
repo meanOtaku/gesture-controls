@@ -494,7 +494,10 @@ fn read_model_card(output_dir: &std::path::Path) -> Result<serde_json::Value, St
     read_json_artifact(output_dir, MODEL_CARD_FILE_NAME)
 }
 
-fn read_json_artifact(output_dir: &std::path::Path, filename: &str) -> Result<serde_json::Value, String> {
+fn read_json_artifact(
+    output_dir: &std::path::Path,
+    filename: &str,
+) -> Result<serde_json::Value, String> {
     let path = output_dir.join(filename);
     let contents = fs::read_to_string(&path)
         .map_err(|error| format!("failed to read {filename} at {}: {error}", path.display()))?;
@@ -534,7 +537,10 @@ pub(crate) fn read_trained_models(dir: &std::path::Path) -> Vec<TrainedModelSumm
                 model_card: metadata,
             });
         } else {
-            warn!(model_id = id, "skipping trained model with no readable model_card.json or metadata.json");
+            warn!(
+                model_id = id,
+                "skipping trained model with no readable model_card.json or metadata.json"
+            );
         }
     }
     models.sort_by(|a, b| a.id.cmp(&b.id));
@@ -757,7 +763,16 @@ pub async fn start_training_job(
 
     let job_id_for_task = job_id.clone();
     tauri::async_runtime::spawn(async move {
-        run_training_job(app, job_id_for_task, model_id, backend, output_dir, child, cancel_rx).await;
+        run_training_job(
+            app,
+            job_id_for_task,
+            model_id,
+            backend,
+            output_dir,
+            child,
+            cancel_rx,
+        )
+        .await;
     });
 
     Ok(job_id)
