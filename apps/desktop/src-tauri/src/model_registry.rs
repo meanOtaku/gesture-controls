@@ -300,7 +300,8 @@ fn emit_registry(app: &AppHandle, index: &RegistryIndex) {
 /// re-parse/re-validate the contract on the Rust side.
 fn model_is_activatable(app: &AppHandle, model_id: &str) -> Result<(), String> {
     let dir = model_lab::models_dir(app)?.join(model_id);
-    if !dir.join(TFLITE_METADATA_FILE_NAME).is_file() || !dir.join(TFLITE_MODEL_FILE_NAME).is_file() {
+    if !dir.join(TFLITE_METADATA_FILE_NAME).is_file() || !dir.join(TFLITE_MODEL_FILE_NAME).is_file()
+    {
         return Err(format!(
             "model '{model_id}' is not a validated TFLite bundle ({TFLITE_METADATA_FILE_NAME} + \
              {TFLITE_MODEL_FILE_NAME} required). Desktop inference only runs validated TFLite \
@@ -311,7 +312,10 @@ fn model_is_activatable(app: &AppHandle, model_id: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn find_model_mut<'a>(index: &'a mut RegistryIndex, id: &str) -> Result<&'a mut ModelRecord, String> {
+fn find_model_mut<'a>(
+    index: &'a mut RegistryIndex,
+    id: &str,
+) -> Result<&'a mut ModelRecord, String> {
     index
         .models
         .iter_mut()
@@ -323,7 +327,11 @@ fn find_model_mut<'a>(index: &'a mut RegistryIndex, id: &str) -> Result<&'a mut 
 /// registered. Called from `model_lab::run_training_job` on completion, for
 /// both backends (a Draft record is harmless bookkeeping even for a sklearn
 /// model that can never be activated).
-pub(crate) fn register_trained_model(app: &AppHandle, runtime: &ModelRegistryRuntime, model_id: &str) {
+pub(crate) fn register_trained_model(
+    app: &AppHandle,
+    runtime: &ModelRegistryRuntime,
+    model_id: &str,
+) {
     let Ok(_guard) = runtime.lock.lock() else {
         return;
     };
@@ -487,11 +495,17 @@ pub fn rollback_active_model(
     Ok(RegistryView::from(index))
 }
 
+/// Also drives [`crate::inference::GesturePolicyRuntime`], which is the
+/// component that actually gates whether pinch-transition decisions execute
+/// against the overlay -- see the non-negotiable rule that all gesture
+/// decisions run on the desktop, in `docs/architecture/project-brief.md`
+/// Milestone 11.
 #[tauri::command]
 pub fn set_inference_mode(
     mode: InferenceMode,
     app: AppHandle,
     runtime: State<'_, ModelRegistryRuntime>,
+    gesture_policy: State<'_, crate::inference::GesturePolicyRuntime>,
 ) -> Result<RegistryView, String> {
     let _guard = runtime
         .lock
@@ -501,6 +515,9 @@ pub fn set_inference_mode(
     index.inference_mode = mode;
     write_registry_atomic(&app, &index)?;
     emit_registry(&app, &index);
+    if let Some(decision) = gesture_policy.set_mode(mode)? {
+        crate::inference::apply_decision(&app, decision);
+    }
     Ok(RegistryView::from(index))
 }
 

@@ -6,6 +6,12 @@ use nalgebra::Quaternion;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+mod gesture_policy;
+pub use gesture_policy::{
+    DecisionReason, ForceReleaseReason, GestureIntent, GesturePolicy, GesturePolicyConfig,
+    PinchTransition, PolicyDecision, PolicyMode,
+};
+
 #[derive(Debug, Error, PartialEq)]
 pub enum CalibrationError {
     #[error("quaternion must contain finite values and have non-zero length")]

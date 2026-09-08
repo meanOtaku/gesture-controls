@@ -10,6 +10,7 @@ use tracing::{error, info, warn};
 use watch_bridge::{WatchBridgeServer, WatchEvent};
 
 mod calibration;
+mod inference;
 mod model_lab;
 mod model_registry;
 mod overlay;
@@ -40,6 +41,7 @@ pub fn run() {
         .manage(watch::WatchRuntime::default())
         .manage(model_lab::ModelLabRuntime::default())
         .manage(model_registry::ModelRegistryRuntime::default())
+        .manage(inference::GesturePolicyRuntime::default())
         .invoke_handler(tauri::generate_handler![
             calibration::get_calibration_state,
             calibration::capture_calibration_target,
@@ -73,6 +75,8 @@ pub fn run() {
             model_registry::activate_model,
             model_registry::rollback_active_model,
             model_registry::set_inference_mode,
+            inference::report_pinch_transition,
+            inference::report_model_runtime_failure,
         ])
         .on_window_event(|window, event| {
             if window.label() == MAIN_WINDOW
@@ -158,6 +162,20 @@ pub fn run() {
                 }
             });
 
+            let policy_watchdog_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let mut interval = tokio::time::interval(inference::STALENESS_WATCHDOG_INTERVAL);
+                loop {
+                    interval.tick().await;
+                    let runtime = policy_watchdog_handle.state::<inference::GesturePolicyRuntime>();
+                    match runtime.tick() {
+                        Ok(Some(decision)) => inference::apply_decision(&policy_watchdog_handle, decision),
+                        Ok(None) => {}
+                        Err(error) => warn!(%error, "gesture policy staleness watchdog failed"),
+                    }
+                }
+            });
+
             let watch_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let server = match WatchBridgeServer::bind(
@@ -228,6 +246,14 @@ pub fn run() {
                                 WatchEvent::Disconnected => {
                                     if let Err(error) = overlay.release(&watch_handle) {
                                         warn!(%error, "failed to release volume overlay on watch disconnect");
+                                    }
+                                    let gesture_policy =
+                                        watch_handle.state::<inference::GesturePolicyRuntime>();
+                                    match gesture_policy
+                                        .force_release(interaction_engine::ForceReleaseReason::WatchDisconnected)
+                                    {
+                                        Ok(decision) => inference::apply_decision(&watch_handle, decision),
+                                        Err(error) => warn!(%error, "failed to force-release gesture policy on watch disconnect"),
                                     }
                                 }
                                 WatchEvent::Orientation(sample) => {
