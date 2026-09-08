@@ -92,8 +92,8 @@ The watch application will:
 * Allow gesture dataset collection
 * Detect wrist rotation
 * Initially use a button as the pinch replacement
-* Eventually perform pinch inference on-device
-* Send gesture events to the desktop application
+* Remain a raw sensor source; pinch inference runs on the desktop (see Milestone 11)
+* Send raw telemetry to the desktop application
 
 ## Machine Learning
 
@@ -898,9 +898,6 @@ galaxy-watch/
         │   ├── CsvExporter.kt
         │   └── RecordingLabel.kt
         │
-        ├── ml/
-        │   └── PinchInferenceEngine.kt
-        │
         ├── ui/
         │   ├── ConnectionScreen.kt
         │   ├── RecordingScreen.kt
@@ -921,9 +918,13 @@ Send:
 ```text
 Orientation
 Wrist rotation
-Pinch events
+Button events
 Heartbeat
 ```
+
+The watch never classifies a pinch itself; it sends raw orientation/motion
+telemetry (and, until pinch ML replaces it, button events) and the desktop
+runs inference and decides the gesture (see Milestone 11).
 
 Do not stream raw PPG continuously in production control mode.
 
@@ -951,7 +952,6 @@ Display:
 Connection state
 Sensor values
 Sample rate
-Pinch confidence
 Rotation angle
 Battery level
 Latency
@@ -1174,7 +1174,7 @@ Evaluation
         ↓
 LiteRT/TFLite export
         ↓
-On-watch inference
+Desktop inference (see Milestone 11)
 ```
 
 Suggested window parameters:
@@ -1991,7 +1991,7 @@ Laptop sleep and resume
 
 11. Avoid streaming raw PPG during normal control mode.
 
-12. Perform pinch inference on the watch in the final system.
+12. Perform pinch inference on the desktop in the final system; the watch remains a raw sensor source (see Milestone 11).
 
 13. Use normalized quaternions for orientation calculations.
 

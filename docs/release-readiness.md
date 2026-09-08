@@ -96,6 +96,12 @@ Do not call the candidate hardware-validated until every applicable checked item
 an attached result. A failed or unavailable device/platform is a release blocker for
 that target, not evidence that the fail-closed desktop behavior was exercised.
 
+**Known, intentionally excluded risk:** the Watch pairs and streams over the LAN
+WebSocket without pairing-derived identity or an authenticated session. This is not a
+gap in the checklist above; it is an accepted, unrepaired risk that remains out of
+scope for every release candidate until a dedicated remediation is scoped and
+completed.
+
 Related references: [running the project](development/running-project.md),
 [Watch setup](../apps/watch/README.md), [Watch protocol](protocols/watch-websocket-protocol.md),
 and the [project brief](architecture/project-brief.md).

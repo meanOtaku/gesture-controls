@@ -107,6 +107,7 @@ apps/desktop/              React frontend + Tauri application
 crates/protocol/           Sony wire types and generic pose domain types
 crates/head-tracking/      Provider abstraction and strict UDP listener
 crates/interaction-engine/ Quaternion calibration and target dwell state
+crates/pinch-inference/    Desktop-side pinch feature extraction and LiteRT inference
 crates/volume-control/      Normalized controller trait and macOS adapter
 crates/watch-bridge/        Local-network Galaxy Watch WebSocket intake
 scripts/run-system.mjs     one-command external-process orchestrator
@@ -152,8 +153,8 @@ python3 tools/sony-head-tracker/scripts/send_sample.py
 npm test
 npm run typecheck
 npm run build
-cargo test -p spatial-protocol -p head-tracking -p interaction-engine -p volume-control --all-targets
-cargo clippy -p spatial-protocol -p head-tracking -p interaction-engine -p volume-control --all-targets --all-features -- -D warnings
+cargo test -p spatial-protocol -p head-tracking -p interaction-engine -p volume-control -p pinch-inference -p watch-bridge --all-targets
+cargo clippy -p spatial-protocol -p head-tracking -p interaction-engine -p volume-control -p pinch-inference -p watch-bridge --all-targets -- -D warnings
 ```
 
 For complete prerequisites, troubleshooting, build commands, and launcher details, see [`docs/development/running-project.md`](docs/development/running-project.md).

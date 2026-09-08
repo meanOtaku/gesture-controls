@@ -699,8 +699,8 @@ export function ModelLab() {
           <div><p className="eyebrow">Step 2</p><h2>Label coverage</h2></div>
         </div>
         <p className="hint">
-          Labels are persisted by the desktop with stable IDs. Archived labels stay visible so historical sessions
-          retain their meaning; they cannot be used for newly imported recordings.
+          Labels are persisted by the desktop with stable IDs. Archived labels stay visible and remain usable so
+          historical sessions and newly imported recordings keep the same meaning.
         </p>
         <div className="vectors model-lab-labels">
           {GESTURE_DATASET_LABELS.map((label) => {

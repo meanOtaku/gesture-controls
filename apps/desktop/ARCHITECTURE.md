@@ -7,6 +7,7 @@ src/
 ├── app/                         # Composition root, window-mode selection, Tauri subscriptions
 ├── features/
 │   ├── dashboard/components/     # Connection, calibration, and watch controls
+│   ├── model-lab/components/     # Dataset import, training, lifecycle, and deployment UI
 │   ├── overlay/components/       # Volume gesture overlay
 │   ├── settings/components/      # Validated live controls and reset-to-defaults UI
 │   └── telemetry/                # External bounded store, charts, and CSV export
