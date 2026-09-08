@@ -25,8 +25,8 @@ use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use interaction_engine::{
-    ForceReleaseReason, GestureIntent, GesturePolicy, GesturePolicyConfig, PinchTransition,
-    PolicyDecision, PolicyMode,
+    DecisionReason, ForceReleaseReason, GestureIntent, GesturePolicy, GesturePolicyConfig,
+    PinchTransition, PolicyDecision, PolicyMode,
 };
 use pinch_inference::{DesktopPinchRuntime, PinchModel, TelemetryFusion};
 use serde::{Deserialize, Serialize};
@@ -266,7 +266,10 @@ pub(crate) fn ingest_ppg_window(app: &AppHandle, sample: &WatchPpgBatchSample) {
         ClassifyOutcome::Transition(transition) => {
             let gesture_policy = app.state::<GesturePolicyRuntime>();
             match gesture_policy.on_transition(transition) {
-                Ok(decision) => apply_decision(app, decision),
+                Ok(decision) => {
+                    let decision = pinch.resolve_intent(decision);
+                    apply_decision(app, decision);
+                }
                 Err(error) => warn!(%error, "failed to apply classified pinch transition"),
             }
         }
@@ -305,12 +308,12 @@ fn load_model_backend(_path: &Path) -> Result<Box<dyn PinchModel>, String> {
     Ok(Box::new(pinch_inference::UnavailablePinchModel))
 }
 
-/// One loaded model backend, tied to the registry state it was built from --
-/// a changed active model id or edited thresholds invalidates it so the next
-/// window rebuilds it.
+/// One loaded model backend, tied to the verified snapshot it was built
+/// from -- a changed active model id or edited thresholds invalidates it so
+/// the next window rebuilds it (and revalidates the bundle contract, digest,
+/// and bindings from scratch; see [`model_registry::ActiveModelSnapshot::verified`]).
 struct LoadedPinchModel {
-    model_id: String,
-    thresholds: ModelThresholds,
+    snapshot: model_registry::ActiveModelSnapshot,
     runtime: DesktopPinchRuntime<Box<dyn PinchModel>>,
 }
 
@@ -395,10 +398,19 @@ impl PinchInferenceRuntime {
             }
         };
         let needs_reload = match loaded.as_ref() {
-            Some(current) => current.model_id != model_id || current.thresholds != thresholds,
+            Some(current) => {
+                current.snapshot.model_id != model_id || current.snapshot.thresholds != thresholds
+            }
             None => true,
         };
         if needs_reload {
+            // Revalidate the full bundle contract, digest, and bindings at
+            // every (re)load -- never trust that activation's earlier
+            // validation still holds for bytes now on disk.
+            let snapshot = match model_registry::ActiveModelSnapshot::verified(app, model_id) {
+                Ok(snapshot) => snapshot,
+                Err(error) => return ClassifyOutcome::LoadFailed(error),
+            };
             let path = match model_registry::active_model_file_path(app, model_id) {
                 Ok(path) => path,
                 Err(error) => return ClassifyOutcome::LoadFailed(error),
@@ -408,13 +420,12 @@ impl PinchInferenceRuntime {
                 Err(error) => return ClassifyOutcome::LoadFailed(error),
             };
             *loaded = Some(LoadedPinchModel {
-                model_id: model_id.to_string(),
-                thresholds,
                 runtime: DesktopPinchRuntime::new(
                     backend,
-                    thresholds.start_threshold as f32,
-                    thresholds.release_threshold as f32,
+                    snapshot.thresholds.start_threshold as f32,
+                    snapshot.thresholds.release_threshold as f32,
                 ),
+                snapshot,
             });
         }
         let Some(model) = loaded.as_mut() else {
@@ -424,6 +435,30 @@ impl PinchInferenceRuntime {
             Some(transition) => ClassifyOutcome::Transition(transition),
             None => ClassifyOutcome::NoChange,
         }
+    }
+
+    /// Resolves `decision`'s executed intent through the currently loaded
+    /// model's verified snapshot bindings: a `Started`/`Released` decision
+    /// only ever executes the safe intent this specific model bound its
+    /// `pinch_start`/`pinch_release` class to (`VolumeGrab`/`VolumeRelease`
+    /// or `NoAction`) -- never the policy's own generic default. Any other
+    /// reason (including every `ForcedRelease`) passes through unchanged,
+    /// since a forced release must always be able to execute a real release
+    /// regardless of what a class is bound to.
+    fn resolve_intent(&self, decision: PolicyDecision) -> PolicyDecision {
+        let Ok(loaded) = self.loaded.lock() else {
+            warn!("pinch inference model lock was poisoned; using unresolved decision intent");
+            return decision;
+        };
+        let Some(model) = loaded.as_ref() else {
+            return decision;
+        };
+        let intent = match decision.reason {
+            DecisionReason::Started => model.snapshot.intent_for_class("pinch_start"),
+            DecisionReason::Released => model.snapshot.intent_for_class("pinch_release"),
+            _ => decision.intent,
+        };
+        PolicyDecision { intent, ..decision }
     }
 }
 
@@ -752,5 +787,104 @@ mod ppg_window_tests {
         let json = serde_json::to_string(&outcome).expect("must serialize");
         let restored: PpgWindowOutcome = serde_json::from_str(&json).expect("must deserialize");
         assert_eq!(restored, outcome);
+    }
+
+    fn decision(intent: GestureIntent, reason: DecisionReason) -> PolicyDecision {
+        PolicyDecision {
+            intent,
+            reason,
+            live: true,
+        }
+    }
+
+    fn runtime_with_loaded_snapshot(bindings: &[(&str, GestureIntent)]) -> PinchInferenceRuntime {
+        let runtime = PinchInferenceRuntime::default();
+        let snapshot = model_registry::ActiveModelSnapshot::for_test("model-under-test", bindings);
+        *runtime.loaded.lock().unwrap() = Some(LoadedPinchModel {
+            snapshot,
+            runtime: DesktopPinchRuntime::new(
+                Box::new(pinch_inference::UnavailablePinchModel),
+                0.5,
+                0.5,
+            ),
+        });
+        runtime
+    }
+
+    #[test]
+    fn resolve_intent_with_no_loaded_model_passes_the_decision_through_unchanged() {
+        let runtime = PinchInferenceRuntime::default();
+        let original = decision(GestureIntent::VolumeGrab, DecisionReason::Started);
+        assert_eq!(runtime.resolve_intent(original), original);
+    }
+
+    #[test]
+    fn resolve_intent_remaps_started_through_the_pinch_start_binding() {
+        let runtime = runtime_with_loaded_snapshot(&[
+            ("negative", GestureIntent::NoAction),
+            ("pinch_start", GestureIntent::VolumeGrab),
+            ("pinch_release", GestureIntent::VolumeRelease),
+        ]);
+        let resolved =
+            runtime.resolve_intent(decision(GestureIntent::VolumeGrab, DecisionReason::Started));
+        assert_eq!(resolved.intent, GestureIntent::VolumeGrab);
+    }
+
+    #[test]
+    fn resolve_intent_started_cannot_grab_volume_when_the_class_is_bound_to_no_action() {
+        let runtime = runtime_with_loaded_snapshot(&[
+            ("negative", GestureIntent::NoAction),
+            ("pinch_start", GestureIntent::NoAction),
+            ("pinch_release", GestureIntent::VolumeRelease),
+        ]);
+        // The policy proposed VolumeGrab, but this model bound pinch_start to
+        // NoAction -- the resolved intent must not be able to actuate.
+        let resolved =
+            runtime.resolve_intent(decision(GestureIntent::VolumeGrab, DecisionReason::Started));
+        assert_eq!(resolved.intent, GestureIntent::NoAction);
+    }
+
+    #[test]
+    fn resolve_intent_remaps_released_through_the_pinch_release_binding() {
+        let runtime = runtime_with_loaded_snapshot(&[
+            ("negative", GestureIntent::NoAction),
+            ("pinch_start", GestureIntent::VolumeGrab),
+            ("pinch_release", GestureIntent::NoAction),
+        ]);
+        let resolved = runtime.resolve_intent(decision(
+            GestureIntent::VolumeRelease,
+            DecisionReason::Released,
+        ));
+        assert_eq!(resolved.intent, GestureIntent::NoAction);
+    }
+
+    #[test]
+    fn resolve_intent_leaves_forced_release_untouched_regardless_of_bindings() {
+        let runtime = runtime_with_loaded_snapshot(&[
+            ("negative", GestureIntent::NoAction),
+            ("pinch_start", GestureIntent::NoAction),
+            ("pinch_release", GestureIntent::NoAction),
+        ]);
+        let forced = decision(
+            GestureIntent::VolumeRelease,
+            DecisionReason::ForcedRelease(ForceReleaseReason::ModelSwapped),
+        );
+        assert_eq!(runtime.resolve_intent(forced), forced);
+    }
+
+    #[test]
+    fn resolve_intent_leaves_held_and_ignored_reasons_untouched() {
+        let runtime = runtime_with_loaded_snapshot(&[
+            ("negative", GestureIntent::NoAction),
+            ("pinch_start", GestureIntent::VolumeGrab),
+            ("pinch_release", GestureIntent::VolumeRelease),
+        ]);
+        let held = decision(GestureIntent::NoAction, DecisionReason::Held);
+        assert_eq!(runtime.resolve_intent(held), held);
+        let ignored = decision(
+            GestureIntent::NoAction,
+            DecisionReason::IgnoredAlreadyGrabbed,
+        );
+        assert_eq!(runtime.resolve_intent(ignored), ignored);
     }
 }

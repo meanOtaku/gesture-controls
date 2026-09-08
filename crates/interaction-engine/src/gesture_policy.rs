@@ -103,6 +103,11 @@ pub enum ForceReleaseReason {
     /// sensor-quality gate, since a bad ordering makes any quality
     /// computation over it untrustworthy too.
     StaleSensorWindow,
+    /// The active model is about to be swapped (activation or rollback) --
+    /// forced before the swap so a grab classified under the outgoing
+    /// model's bindings can never survive into the incoming model's
+    /// lifetime, which has no reason to share its meaning.
+    ModelSwapped,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
