@@ -874,6 +874,41 @@ mod tests {
     }
 
     #[test]
+    fn handle_inbound_advances_watermark_but_fails_closed_on_undecodable_payload() {
+        // A well-formed envelope (valid JSON, recognized `type`, in-order
+        // sequence) whose `payload` does not match that type's schema --
+        // e.g. a mixed/malformed telemetry frame -- must not be treated as
+        // any real sample, but the sequence watermark still advances so a
+        // single bad frame cannot be replayed to bypass ordering.
+        let shared = shared_state();
+        let mut receiver = shared.events.subscribe();
+        let mut last_sequence = Some(1);
+        let mut pending_time_sync_at = None;
+        let mut clock_offset_samples = VecDeque::new();
+        let malformed = serde_json::to_vec(&json!({
+            "type": WATCH_ORIENTATION_TYPE,
+            "version": WATCH_PROTOCOL_VERSION,
+            "deviceId": "watch-1",
+            "sequence": 2,
+            "timestampNs": 1,
+            "payload": { "quaternion": [1.0, 0.0] },
+        }))
+        .unwrap();
+        handle_inbound(
+            &malformed,
+            &mut last_sequence,
+            &mut pending_time_sync_at,
+            &mut clock_offset_samples,
+            &shared,
+        );
+        assert_eq!(last_sequence, Some(2));
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            WatchEvent::InvalidMessage { .. }
+        ));
+    }
+
+    #[test]
     fn connection_slot_is_released_and_reusable_after_reconnect() {
         let shared = shared_state();
         assert!(

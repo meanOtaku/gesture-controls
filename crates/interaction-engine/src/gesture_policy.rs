@@ -485,6 +485,28 @@ mod tests {
     }
 
     #[test]
+    fn model_swap_forces_a_live_release_of_an_active_grab() {
+        // Mirrors `model_registry::force_release_before_swap`, called by both
+        // `activate_model` and `rollback_active_model` before the active
+        // model id ever changes: a grab classified under the outgoing
+        // model's bindings must never survive into the incoming model's
+        // lifetime.
+        let mut policy = GesturePolicy::default();
+        policy.set_mode(PolicyMode::Live);
+        policy.on_transition(started(0.9, 1));
+        let decision = policy.force_release(ForceReleaseReason::ModelSwapped);
+        assert_eq!(decision.intent, GestureIntent::VolumeRelease);
+        assert_eq!(
+            decision.reason,
+            DecisionReason::ForcedRelease(ForceReleaseReason::ModelSwapped)
+        );
+        assert!(decision.live);
+        let after = policy.on_transition(held(0.9, 2));
+        assert_eq!(after.intent, GestureIntent::NoAction);
+        assert_eq!(after.reason, DecisionReason::IgnoredNotGrabbed);
+    }
+
+    #[test]
     fn force_release_while_grabbed_releases_live_regardless_of_mode() {
         // A grab recorded internally under any mode (even Off/Monitor, where
         // the grab itself was never actually executed) must still report a

@@ -45,8 +45,10 @@ fn begin_with_config_establishes_a_fresh_reference_and_allows_relative_rotation(
 #[test]
 fn begin_with_config_rejects_invalid_configuration_without_mutating_state() {
     let mut rotation = WristRotation::default();
-    let mut invalid = WristRotationConfig::default();
-    invalid.dead_zone_degrees = -1.0;
+    let invalid = WristRotationConfig {
+        dead_zone_degrees: -1.0,
+        ..Default::default()
+    };
 
     let error = rotation
         .begin_with_config(invalid, IDENTITY, 0)

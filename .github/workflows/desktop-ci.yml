@@ -28,7 +28,7 @@ jobs:
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          components: rustfmt, clippy
       - name: Install Linux Tauri prerequisites
         if: runner.os == 'Linux'
         run: |
@@ -44,7 +44,24 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: cargo fmt --all -- --check
-      - run: cargo test -p spatial-protocol -p head-tracking -p interaction-engine -p volume-control --all-targets
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test -p spatial-protocol -p head-tracking -p interaction-engine -p volume-control -p pinch-inference -p watch-bridge -p spatial-gesture-desktop --all-targets
+
+  litert:
+    name: LiteRT feature (pinned)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux Tauri prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes pkg-config
+      # `litert` fetches a prebuilt native shared library at build time (see
+      # crates/pinch-inference/Cargo.toml and src/litert_model.rs); `--locked`
+      # keeps that fetch pinned to the exact version resolved in Cargo.lock
+      # instead of a fresh, unbounded dependency resolution.
+      - run: cargo test -p pinch-inference --features litert --locked --all-targets
 
   package:
     name: Package (${{ matrix.os }})

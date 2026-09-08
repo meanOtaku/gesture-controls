@@ -46,8 +46,7 @@ pub fn validate_probabilities(
     let mut sum = 0.0f32;
     for (index, &value) in probabilities.iter().enumerate() {
         if !value.is_finite()
-            || value < -PROBABILITY_TOLERANCE
-            || value > 1.0 + PROBABILITY_TOLERANCE
+            || !(-PROBABILITY_TOLERANCE..=1.0 + PROBABILITY_TOLERANCE).contains(&value)
         {
             return Err(PinchModelError::InvalidOutput);
         }
