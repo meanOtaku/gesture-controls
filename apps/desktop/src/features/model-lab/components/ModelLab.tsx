@@ -5,6 +5,10 @@ import { GESTURE_DATASET_LABELS, type GestureDatasetLabel } from "../../telemetr
 
 /** Mirrors `model_lab::TRAINING_EVENT` in src-tauri/src/model_lab.rs. */
 const TRAINING_EVENT = "model-lab-training-event";
+const MODEL_REGISTRY_EVENT = "model-registry-updated";
+const PPG_WINDOW_OBSERVED_EVENT = "gesture-ppg-window-observed";
+const GESTURE_POLICY_EVENT = "gesture-policy-decision";
+const MAX_RUNTIME_EVENTS = 20;
 
 /** This is a local development runner, not a packaged app feature: the desktop app shells
  * out to `uv run --project tools/pinch-classifier pinch-classifier-train`, so training only
@@ -90,6 +94,52 @@ interface TrainedModelSummary {
   modelCard: ModelCard;
 }
 
+type InferenceMode = "off" | "monitor" | "live";
+
+interface ModelRegistryView {
+  activeModelId: string | null;
+  previousActiveModelId: string | null;
+  inferenceMode: InferenceMode;
+}
+
+interface PpgWindowObservation {
+  deviceId: string;
+  sequence: number;
+  timestampNs: number;
+  sampleCount: number;
+  contactQualityMean: number | null;
+  activeModelId: string;
+  outcome: { kind: string; [key: string]: unknown };
+}
+
+interface GesturePolicyDecision {
+  intent: string;
+  live: boolean;
+  reason: unknown;
+}
+
+type RuntimeEvent =
+  | { kind: "window"; observation: PpgWindowObservation }
+  | { kind: "decision"; decision: GesturePolicyDecision };
+
+function appendRuntimeEvent(previous: RuntimeEvent[], event: RuntimeEvent): RuntimeEvent[] {
+  return [event, ...previous].slice(0, MAX_RUNTIME_EVENTS);
+}
+
+function describeWindow(observation: PpgWindowObservation): string {
+  if (observation.outcome.kind === "accepted") {
+    return `accepted ${observation.sampleCount} samples; contact quality ${observation.contactQualityMean ?? "unknown"}`;
+  }
+  if (observation.outcome.kind === "rejectedStaleOrOutOfOrder") {
+    return `rejected stale/out-of-order (last ${describeDiagnosticValue(observation.outcome.lastTimestampNs)})`;
+  }
+  return `rejected by quality gate: ${describeDiagnosticValue(observation.outcome)}`;
+}
+
+function describeDiagnosticValue(value: unknown): string {
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
 function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -114,6 +164,9 @@ export function ModelLab() {
   const [logs, setLogs] = useState<string[]>([]);
   const [trainedModels, setTrainedModels] = useState<TrainedModelSummary[]>([]);
   const [trainingError, setTrainingError] = useState<string | null>(null);
+  const [registry, setRegistry] = useState<ModelRegistryView | null>(null);
+  const [runtimeEvents, setRuntimeEvents] = useState<RuntimeEvent[]>([]);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const refreshDatasets = useCallback(async () => {
@@ -156,6 +209,15 @@ export function ModelLab() {
     }
   }, []);
 
+  const refreshRegistry = useCallback(async () => {
+    try {
+      setRegistry(await invoke<ModelRegistryView>("get_model_registry"));
+      setRuntimeError(null);
+    } catch (err) {
+      setRuntimeError(String(err));
+    }
+  }, []);
+
   useEffect(() => {
     void refreshDatasets();
   }, [refreshDatasets]);
@@ -168,6 +230,32 @@ export function ModelLab() {
     void refreshTrainingStatus();
     void refreshTrainedModels();
   }, [refreshTrainingStatus, refreshTrainedModels]);
+
+  useEffect(() => {
+    void refreshRegistry();
+  }, [refreshRegistry]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const unlistens: (() => void)[] = [];
+    const addListener = <T,>(event: string, handler: (payload: T) => void) => {
+      void listen<T>(event, ({ payload }) => handler(payload)).then((unlisten) => {
+        if (cancelled) unlisten();
+        else unlistens.push(unlisten);
+      });
+    };
+    addListener<ModelRegistryView>(MODEL_REGISTRY_EVENT, setRegistry);
+    addListener<PpgWindowObservation>(PPG_WINDOW_OBSERVED_EVENT, (observation) => {
+      setRuntimeEvents((previous) => appendRuntimeEvent(previous, { kind: "window", observation }));
+    });
+    addListener<GesturePolicyDecision>(GESTURE_POLICY_EVENT, (decision) => {
+      setRuntimeEvents((previous) => appendRuntimeEvent(previous, { kind: "decision", decision }));
+    });
+    return () => {
+      cancelled = true;
+      unlistens.forEach((unlisten) => unlisten());
+    };
+  }, []);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -283,6 +371,15 @@ export function ModelLab() {
     }
   }, [status]);
 
+  const handleInferenceMode = useCallback(async (mode: InferenceMode) => {
+    try {
+      setRegistry(await invoke<ModelRegistryView>("set_inference_mode", { mode }));
+      setRuntimeError(null);
+    } catch (err) {
+      setRuntimeError(String(err));
+    }
+  }, []);
+
   const coverageByLabel = new Map<string, number>();
   for (const dataset of datasets) {
     coverageByLabel.set(dataset.label, (coverageByLabel.get(dataset.label) ?? 0) + 1);
@@ -301,8 +398,8 @@ export function ModelLab() {
           <h1>Model Lab</h1>
           <p className="subtitle">
             Turns labeled dataset recordings from the Live data tab into a trained pinch_start / pinch_release
-            classifier. Training and evaluation run in-app through a local development runner; model export and
-            on-device deploy are not implemented yet.
+            classifier. Training and evaluation run in-app through a local development runner; validated LiteRT
+            bundles execute on this desktop only.
           </p>
         </div>
         <div className={`connection ${trainedModels.length > 0 ? "online" : "offline"}`}>
@@ -312,6 +409,48 @@ export function ModelLab() {
             : "No trained model"}
         </div>
       </header>
+
+      <section className="calibration-card" aria-label="Live inference diagnostics">
+        <div className="calibration-heading">
+          <div><p className="eyebrow">Runtime</p><h2>Live inference diagnostics</h2></div>
+          <span className={`target-state ${registry?.inferenceMode !== "off" ? "active" : ""}`}>
+            {registry ? registry.inferenceMode : "loading"}
+          </span>
+        </div>
+        <p className="hint">
+          {registry?.activeModelId
+            ? `Active model: ${registry.activeModelId}. Monitor records decisions without desktop actions; Live permits bound safe intents.`
+            : "Inference is fail-closed: activate a validated LiteRT bundle with complete safe-intent bindings before Monitor or Live can run."}
+        </p>
+        <div className="recording-actions">
+          {(["off", "monitor", "live"] as const).map((mode) => (
+            <button
+              key={mode}
+              className={registry?.inferenceMode === mode ? "recording" : undefined}
+              disabled={!registry || (mode !== "off" && !registry.activeModelId)}
+              onClick={() => void handleInferenceMode(mode)}
+            >
+              {mode[0].toUpperCase() + mode.slice(1)}
+            </button>
+          ))}
+        </div>
+        {runtimeError && <p className="calibration-error" role="alert">{runtimeError}</p>}
+        {runtimeEvents.length === 0 ? (
+          <p className="hint">No desktop inference windows observed in this session.</p>
+        ) : (
+          <div className="vectors model-lab-models" aria-label="Recent inference events">
+            {runtimeEvents.map((event, index) => (
+              <div className="vector-row model-lab-label-row" key={`${event.kind}-${index}`}>
+                {event.kind === "window" ? (
+                  <span className="label">Window #{event.observation.sequence}: {describeWindow(event.observation)}</span>
+                ) : (
+                  <span className="label">{event.decision.live ? "Live" : "Monitor"} {event.decision.intent}: {describeDiagnosticValue(event.decision.reason)}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="calibration-card" aria-label="Dataset">
         <div className="calibration-heading">
@@ -480,19 +619,12 @@ export function ModelLab() {
 
       <section className="calibration-card" aria-label="Export and deploy">
         <div className="calibration-heading">
-          <div><p className="eyebrow">Step 5</p><h2>Export / Deploy</h2></div>
+          <div><p className="eyebrow">Step 5</p><h2>Desktop deployment</h2></div>
         </div>
         <p className="hint">
-          Training only produces a scikit-learn <code>model.joblib</code>, loadable with{" "}
-          <code>joblib.load</code>. TFLite/LiteRT conversion for on-device deployment is not implemented yet
-          &mdash; <code>model_card.json</code>&apos;s <code>tflite_export</code> field says so explicitly. There
-          is nothing to deploy to headphones or the watch from this app yet.
+          Only a validated LiteRT bundle may be activated for desktop inference. Sensor devices remain raw-data
+          sources: no model or gesture inference is deployed to the watch or headphones.
         </p>
-        <div className="recording-actions">
-          <button disabled title={EXPORT_UNAVAILABLE_REASON}>Export model</button>
-          <button disabled title={EXPORT_UNAVAILABLE_REASON}>Deploy to device</button>
-        </div>
-        <p className="hint">{EXPORT_UNAVAILABLE_REASON}</p>
       </section>
     </main>
   );

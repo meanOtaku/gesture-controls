@@ -5,6 +5,7 @@ import App from "../../../app/App";
 const invokeMock = vi.fn();
 const listenMock = vi.fn();
 let trainingEventHandler: ((event: { payload: unknown }) => void) | undefined;
+const eventHandlers = new Map<string, (event: { payload: unknown }) => void>();
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invokeMock(...args) }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: (...args: unknown[]) => listenMock(...args) }));
@@ -39,7 +40,9 @@ describe("ModelLab", () => {
     invokeMock.mockReset();
     listenMock.mockReset();
     trainingEventHandler = undefined;
+    eventHandlers.clear();
     listenMock.mockImplementation((event: string, handler: (event: { payload: unknown }) => void) => {
+      eventHandlers.set(event, handler);
       if (event === "model-lab-training-event") trainingEventHandler = handler;
       return Promise.resolve(() => undefined);
     });
@@ -63,8 +66,9 @@ describe("ModelLab", () => {
 
     expect(screen.getByRole("button", { name: "Start training" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Export model" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Deploy to device" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Monitor" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Live" })).toBeDisabled();
+    expect(screen.getByText(/inference is fail-closed/i)).toBeInTheDocument();
 
     expect(await screen.findByText(/no dataset sessions imported yet/i)).toBeInTheDocument();
     expect(screen.getByText(/no trained models yet/i)).toBeInTheDocument();
