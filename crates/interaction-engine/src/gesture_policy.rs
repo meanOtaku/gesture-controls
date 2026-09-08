@@ -5,7 +5,8 @@
 //! fixed intents, gated by [`PolicyMode`] (Off/Monitor/Live). The policy
 //! guarantees a forced release whenever the input stream looks unreliable
 //! (malformed confidence, out-of-order timestamps, a stale grab, an explicit
-//! runtime failure report, or a mode downgrade mid-grab) so a stuck
+//! runtime failure report, a mode downgrade mid-grab, or an out-of-order/stale
+//! raw sensor window rejected before it ever reached inference) so a stuck
 //! inference pipeline can never leave the volume grab held forever.
 //!
 //! Releasing is always safe to actually execute -- it can only stop
@@ -97,6 +98,11 @@ pub enum ForceReleaseReason {
     ModelRuntimeFailure,
     SensorQualityRejected,
     ModeChanged,
+    /// A raw sensor window arrived out of order or duplicated a
+    /// previously-seen timestamp -- rejected before it ever reached the
+    /// sensor-quality gate, since a bad ordering makes any quality
+    /// computation over it untrustworthy too.
+    StaleSensorWindow,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

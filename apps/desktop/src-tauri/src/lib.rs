@@ -42,6 +42,8 @@ pub fn run() {
         .manage(model_lab::ModelLabRuntime::default())
         .manage(model_registry::ModelRegistryRuntime::default())
         .manage(inference::GesturePolicyRuntime::default())
+        .manage(inference::PpgIngestRuntime::default())
+        .manage(inference::PinchInferenceRuntime::default())
         .invoke_handler(tauri::generate_handler![
             calibration::get_calibration_state,
             calibration::capture_calibration_target,
@@ -255,15 +257,21 @@ pub fn run() {
                                         Ok(decision) => inference::apply_decision(&watch_handle, decision),
                                         Err(error) => warn!(%error, "failed to force-release gesture policy on watch disconnect"),
                                     }
+                                    watch_handle
+                                        .state::<inference::PinchInferenceRuntime>()
+                                        .reset();
                                 }
                                 WatchEvent::Orientation(sample) => {
                                     let volume_runtime = watch_handle.state::<overlay::VolumeRuntime>();
                                     if let Err(error) = overlay.apply_wrist_rotation(&watch_handle, sample, &volume_runtime) {
                                         warn!(%error, "failed to apply wrist rotation to volume");
                                     }
+                                    watch_handle
+                                        .state::<inference::PinchInferenceRuntime>()
+                                        .observe_orientation(sample);
                                 }
                                 WatchEvent::Ppg(sample) => {
-                                    inference::evaluate_ppg_quality(&watch_handle, sample);
+                                    inference::ingest_ppg_window(&watch_handle, sample);
                                 }
                                 _ => {}
                             }

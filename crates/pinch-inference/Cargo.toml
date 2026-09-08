@@ -1,0 +1,20 @@
+[package]
+name = "pinch-inference"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+interaction-engine = { path = "../interaction-engine" }
+spatial-protocol = { path = "../protocol" }
+thiserror.workspace = true
+litert = { version = "0.2", optional = true }
+
+[features]
+# Real LiteRT/TFLite model execution. Off by default: `litert-sys` (the
+# native binding this pulls in) fetches a prebuilt LiteRT shared library at
+# build time, which is slow and network-dependent -- unsuitable for the
+# default `cargo test`/`cargo clippy` path CI and every contributor run on
+# every change. Enable explicitly (e.g. `cargo build --features litert`) to
+# build the desktop app with real on-device inference.
+litert = ["dep:litert"]

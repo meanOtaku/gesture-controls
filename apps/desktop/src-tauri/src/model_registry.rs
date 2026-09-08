@@ -126,7 +126,7 @@ impl QualityGateConfig {
 }
 
 /// Why a fused window was rejected before inference ran.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "reason", rename_all = "camelCase")]
 pub enum QualityGateRejection {
     LowSampleCount { actual: u32, required: u32 },
@@ -286,21 +286,33 @@ pub struct ModelRegistryRuntime {
     lock: Mutex<()>,
 }
 
-/// The active model's sensor-quality gate, or `None` if inference is `Off`
-/// or no model is active -- callers should skip quality gating entirely in
-/// that case, since there is nothing running that a stale/degraded window
-/// could corrupt.
-pub(crate) fn active_quality_gate(app: &AppHandle) -> Option<QualityGateConfig> {
+/// The active model's id, thresholds, and sensor-quality gate, or `None` if
+/// inference is `Off` or no model is active -- callers should skip quality
+/// gating and classification entirely in that case, since there is nothing
+/// running that a stale/degraded window could corrupt.
+pub(crate) fn active_model_runtime_config(
+    app: &AppHandle,
+) -> Option<(String, ModelThresholds, QualityGateConfig)> {
     let index = load_registry(app);
     if index.inference_mode == InferenceMode::Off {
         return None;
     }
-    let active_id = index.active_model_id.as_ref()?;
+    let active_id = index.active_model_id.clone()?;
     index
         .models
         .iter()
-        .find(|model| &model.id == active_id)
-        .map(|model| model.quality_gate)
+        .find(|model| model.id == active_id)
+        .map(|model| (active_id, model.thresholds, model.quality_gate))
+}
+
+/// Absolute path to `model_id`'s `model.tflite` file, for loading into a real
+/// inference backend. Does not check the file exists -- callers already know
+/// the model is activatable (file presence was checked by
+/// [`model_is_activatable`] before it could ever become active).
+pub(crate) fn active_model_file_path(app: &AppHandle, model_id: &str) -> Result<PathBuf, String> {
+    Ok(model_lab::models_dir(app)?
+        .join(model_id)
+        .join(TFLITE_MODEL_FILE_NAME))
 }
 
 fn emit_registry(app: &AppHandle, index: &RegistryIndex) {

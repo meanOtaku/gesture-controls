@@ -15,6 +15,7 @@ tauri-build = { version = "2", features = [] }
 chrono.workspace = true
 head-tracking = { path = "../../../crates/head-tracking" }
 interaction-engine = { path = "../../../crates/interaction-engine" }
+pinch-inference = { path = "../../../crates/pinch-inference" }
 volume-control = { path = "../../../crates/volume-control" }
 spatial-protocol = { path = "../../../crates/protocol" }
 watch-bridge = { path = "../../../crates/watch-bridge" }
@@ -25,3 +26,11 @@ tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
+
+[features]
+# Real on-device LiteRT inference. Off by default -- see
+# crates/pinch-inference/Cargo.toml for why. Without it, `PinchInferenceRuntime`
+# still fuses telemetry and runs the fail-closed threshold state machine, but
+# every window fails classification (no model backend compiled in), which
+# fails closed exactly like a model runtime failure would.
+litert-inference = ["pinch-inference/litert"]
