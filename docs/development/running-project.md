@@ -215,6 +215,13 @@ Python compatibility tests:
 
   uv run --directory tools/sony-head-tracker --with pytest pytest -q
 
+Continuous integration runs the JavaScript tests, typecheck, frontend build,
+Rust formatting, and platform-independent Rust tests on Ubuntu, macOS, and
+Windows. A second matrix job builds a native Tauri bundle on each of those
+hosts. This intentionally verifies each platform's packaging toolchain without
+publishing artifacts or requiring repository secrets. See
+`.github/workflows/desktop-ci.yml`.
+
 
 8. BUNDLED TRACKER ASSETS AND OFFLINE USE
 -----------------------------------------
