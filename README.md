@@ -12,6 +12,23 @@ Install the JavaScript dependencies once:
 npm ci
 ```
 
+### Model Lab first-run requirements
+
+Open **Model Lab** after launching the desktop app to see local readiness checks for
+the system-volume backend, optional desktop LiteRT inference, and the offline
+training/replay runner. The checks do not send telemetry or inspect user data.
+
+Training and replay deliberately remain development workflows, not bundled desktop
+features. They require a complete repository checkout and
+[uv](https://docs.astral.sh/uv/) on `PATH`; `uv` provisions the Python 3.11+ training
+environment from `tools/pinch-classifier/pyproject.toml` when a job starts. TFLite
+training also installs the package's TensorFlow optional dependency. The setup screen
+will identify a missing runner and provides the exact remediation.
+
+Desktop inference stays fail-closed unless the app is built with the
+`litert-inference` Cargo feature, a validated TFLite bundle is active, and every
+deployable class has a safe intent binding. It never runs on the Watch or headphones.
+
 Then use one command on macOS 14+ or Windows 11 x64:
 
 ```bash

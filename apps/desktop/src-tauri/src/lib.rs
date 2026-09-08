@@ -10,6 +10,7 @@ use tracing::{error, info, warn};
 use watch_bridge::{WatchBridgeServer, WatchEvent};
 
 mod calibration;
+mod environment;
 mod inference;
 mod label_registry;
 mod model_lab;
@@ -65,6 +66,7 @@ pub fn run() {
             settings::get_settings,
             settings::update_settings,
             settings::reset_settings,
+            environment::get_environment_diagnostics,
             model_lab::import_model_dataset,
             model_lab::list_model_datasets,
             model_lab::delete_model_dataset,

@@ -58,6 +58,15 @@ interface DatasetLabel {
   archivedAt: string | null;
 }
 
+/** Mirrors `EnvironmentDiagnostic` in src-tauri/src/environment.rs (serde camelCase). */
+interface EnvironmentDiagnostic {
+  id: string;
+  title: string;
+  status: "ready" | "attention";
+  detail: string;
+  action: string | null;
+}
+
 /** Mirrors `TrainingStatus` in src-tauri/src/model_lab.rs (serde tag "phase", camelCase). */
 type TrainingStatus =
   | { phase: "idle" }
@@ -176,6 +185,8 @@ export function ModelLab() {
   const [registry, setRegistry] = useState<ModelRegistryView | null>(null);
   const [runtimeEvents, setRuntimeEvents] = useState<RuntimeEvent[]>([]);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [environmentDiagnostics, setEnvironmentDiagnostics] = useState<EnvironmentDiagnostic[]>([]);
+  const [environmentError, setEnvironmentError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const refreshDatasets = useCallback(async () => {
@@ -227,6 +238,16 @@ export function ModelLab() {
     }
   }, []);
 
+  const refreshEnvironmentDiagnostics = useCallback(async () => {
+    try {
+      const result = await invoke<EnvironmentDiagnostic[]>("get_environment_diagnostics");
+      setEnvironmentDiagnostics(Array.isArray(result) ? result : []);
+      setEnvironmentError(null);
+    } catch (err) {
+      setEnvironmentError(String(err));
+    }
+  }, []);
+
   useEffect(() => {
     void refreshDatasets();
   }, [refreshDatasets]);
@@ -243,6 +264,10 @@ export function ModelLab() {
   useEffect(() => {
     void refreshRegistry();
   }, [refreshRegistry]);
+
+  useEffect(() => {
+    void refreshEnvironmentDiagnostics();
+  }, [refreshEnvironmentDiagnostics]);
 
   useEffect(() => {
     let cancelled = false;
@@ -446,6 +471,33 @@ export function ModelLab() {
             : "No trained model"}
         </div>
       </header>
+
+      <section className="calibration-card" aria-label="Desktop readiness">
+        <div className="calibration-heading">
+          <div><p className="eyebrow">First-run setup</p><h2>Desktop readiness</h2></div>
+          <button onClick={() => void refreshEnvironmentDiagnostics()}>Recheck</button>
+        </div>
+        <p className="hint">
+          Checks run locally and never send data. Training and replay use the development-only uv runner; LiteRT is only available when this desktop build includes it.
+        </p>
+        {environmentError && <p className="calibration-error" role="alert">{environmentError}</p>}
+        {environmentDiagnostics.length === 0 && !environmentError ? (
+          <p className="hint">Checking local desktop requirements&hellip;</p>
+        ) : (
+          <div className="vectors model-lab-models" aria-label="Desktop readiness checks">
+            {environmentDiagnostics.map((diagnostic) => (
+              <div className="vector-row model-lab-diagnostic-row" key={diagnostic.id}>
+                <div>
+                  <strong>{diagnostic.title}</strong>
+                  <p className="hint">{diagnostic.detail}</p>
+                  {diagnostic.action && <p className="model-lab-diagnostic-action">{diagnostic.action}</p>}
+                </div>
+                <span className={`model-lab-chip model-lab-chip--${diagnostic.status}`}>{diagnostic.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="calibration-card" aria-label="Live inference diagnostics">
         <div className="calibration-heading">

@@ -58,7 +58,7 @@ describe("ModelLab", () => {
   it("opens from the nav tab, shows every workflow section, and reports the dev-runner requirement truthfully", async () => {
     await openModelLab();
 
-    for (const sectionLabel of ["Dataset", "Label coverage", "Training", "Evaluation", "Export and deploy"]) {
+    for (const sectionLabel of ["Desktop readiness", "Dataset", "Label coverage", "Training", "Evaluation", "Export and deploy"]) {
       expect(screen.getByRole("region", { name: sectionLabel })).toBeInTheDocument();
     }
 
@@ -73,6 +73,28 @@ describe("ModelLab", () => {
 
     expect(await screen.findByText(/no dataset sessions imported yet/i)).toBeInTheDocument();
     expect(screen.getByText(/no trained models yet/i)).toBeInTheDocument();
+  });
+
+  it("shows locally checked first-run requirements and can recheck them", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "get_environment_diagnostics") {
+        return Promise.resolve([
+          { id: "training-runner", title: "Training and replay runner", status: "attention", detail: "uv was not found on PATH.", action: "Install uv and restart the app." },
+          { id: "volume-backend", title: "System volume backend", status: "ready", detail: "The desktop can read the host system volume.", action: null },
+        ]);
+      }
+      if (command === "list_model_datasets") return Promise.resolve([]);
+      if (command === "get_training_status") return Promise.resolve({ phase: "idle" });
+      if (command === "list_trained_models") return Promise.resolve([]);
+      return Promise.resolve(undefined);
+    });
+
+    await openModelLab();
+
+    expect(await screen.findByText("Training and replay runner")).toBeInTheDocument();
+    expect(screen.getByText(/install uv and restart the app/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Recheck" }));
+    await waitFor(() => expect(invokeMock.mock.calls.filter(([command]) => command === "get_environment_diagnostics")).toHaveLength(2));
   });
 
   it("fetches training status and trained models on mount", async () => {
