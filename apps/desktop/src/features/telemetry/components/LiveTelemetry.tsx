@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import {
   ESTIMATED_BYTES_PER_CSV_ROW,
   GESTURE_DATASET_LABELS,
@@ -63,6 +63,7 @@ function TimeChart({ title, points, labels, colors }: {
 }
 
 export function LiveTelemetry() {
+  const [customLabel, setCustomLabel] = useState("");
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
   const watchStatus = telemetryStore.getWatchStatus();
   const recording = telemetryStore.getRecording();
@@ -164,6 +165,19 @@ export function LiveTelemetry() {
         >
           {GESTURE_DATASET_LABELS.map((label) => <option key={label} value={label}>{label.replaceAll("_", " ")}</option>)}
         </select>
+        <input
+          aria-label="Custom dataset label"
+          value={customLabel}
+          disabled={datasetRecording}
+          placeholder="Custom label"
+          onChange={(event) => setCustomLabel(event.target.value)}
+        />
+        <button
+          disabled={datasetRecording || customLabel.trim().length === 0}
+          onClick={() => {
+            if (telemetryStore.selectDatasetLabel(customLabel)) setCustomLabel("");
+          }}
+        >Use custom label</button>
         <button disabled={datasetRecording} onClick={() => telemetryStore.startDatasetRecording()}>Start</button>
         <button disabled={!datasetRecording} onClick={() => telemetryStore.stopDatasetRecording()}>Stop</button>
         <button disabled={!datasetSession} onClick={() => telemetryStore.discardDatasetRecording()}>Discard</button>

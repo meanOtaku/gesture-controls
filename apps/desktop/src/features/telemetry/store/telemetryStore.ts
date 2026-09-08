@@ -21,7 +21,7 @@ export type CsvRow = {
   values: Record<string, number | null>;
 };
 
-/** Fixed label set for the desktop-side labeled gesture dataset recorder (Milestone 9). */
+/** Built-in templates for the desktop-side labeled gesture dataset recorder. */
 export const GESTURE_DATASET_LABELS = [
   "idle",
   "pinch_start",
@@ -38,7 +38,16 @@ export const GESTURE_DATASET_LABELS = [
   "standing",
   "sitting",
 ] as const;
-export type GestureDatasetLabel = (typeof GESTURE_DATASET_LABELS)[number];
+/**
+ * Labels are user-owned stable slugs. Built-ins above are templates, not a
+ * closed vocabulary; their role/intent mapping is maintained by Model Lab.
+ */
+export type GestureDatasetLabel = string;
+
+function normalizeDatasetLabel(label: string): GestureDatasetLabel | null {
+  const normalized = label.trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, "_").replaceAll(/^_+|_+$/g, "");
+  return /^[a-z][a-z0-9_]{0,63}$/.test(normalized) ? normalized : null;
+}
 
 /** Captured once at `startDatasetRecording()` and never mutated by later label changes. */
 export type DatasetSessionMetadata = {
@@ -264,9 +273,12 @@ class TelemetryStore {
     return this.selectedLabel;
   }
 
-  selectDatasetLabel(label: GestureDatasetLabel): void {
-    this.selectedLabel = label;
+  selectDatasetLabel(label: GestureDatasetLabel): boolean {
+    const normalized = normalizeDatasetLabel(label);
+    if (!normalized) return false;
+    this.selectedLabel = normalized;
     this.publishNow();
+    return true;
   }
 
   getDatasetRecording(): boolean {
