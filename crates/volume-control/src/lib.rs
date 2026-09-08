@@ -20,6 +20,14 @@ use std::time::{Duration, Instant};
 #[cfg(all(unix, not(target_os = "macos")))]
 use command_group::{CommandGroup, GroupChild};
 use thiserror::Error;
+#[cfg(target_os = "windows")]
+use windows::Win32::Media::Audio::{
+    Endpoints::IAudioEndpointVolume, IMMDeviceEnumerator, MMDeviceEnumerator, eMultimedia, eRender,
+};
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Com::{
+    CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize,
+};
 
 const GET_VOLUME_SCRIPT: &str = "output volume of (get volume settings)";
 const SET_VOLUME_SCRIPT: &str =
@@ -531,6 +539,101 @@ impl<R: AppleScriptRunner> VolumeController for MacOsVolumeController<R> {
     }
 }
 
+/// Windows Core Audio adapter for the current default multimedia render device.
+/// The endpoint is resolved for every operation, so default-device changes do
+/// not leave the application holding a stale COM interface.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Default)]
+pub struct WindowsVolumeController;
+
+#[cfg(target_os = "windows")]
+impl WindowsVolumeController {
+    fn with_endpoint<T>(
+        &self,
+        operation: impl FnOnce(&IAudioEndpointVolume) -> Result<T, VolumeError>,
+    ) -> Result<T, VolumeError> {
+        // Each call is bounded and pairs a successful per-thread COM
+        // initialization with cleanup, including the S_FALSE success case.
+        unsafe {
+            CoInitializeEx(None, COINIT_MULTITHREADED)
+                .ok()
+                .map_err(|error| {
+                    VolumeError::Backend(format!("failed to initialize Windows COM: {error}"))
+                })?;
+            let result = (|| {
+                let enumerator: IMMDeviceEnumerator =
+                    CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).map_err(|error| {
+                        VolumeError::Backend(format!(
+                            "failed to create Windows audio enumerator: {error}"
+                        ))
+                    })?;
+                let device = enumerator
+                    .GetDefaultAudioEndpoint(eRender, eMultimedia)
+                    .map_err(|error| {
+                        VolumeError::Backend(format!(
+                            "failed to resolve Windows default audio output: {error}"
+                        ))
+                    })?;
+                let endpoint = device
+                    .Activate::<IAudioEndpointVolume>(CLSCTX_ALL, None)
+                    .map_err(|error| {
+                        VolumeError::Backend(format!(
+                            "failed to activate Windows audio endpoint volume: {error}"
+                        ))
+                    })?;
+                operation(&endpoint)
+            })();
+            CoUninitialize();
+            result
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl VolumeController for WindowsVolumeController {
+    fn get_volume(&self) -> Result<f32, VolumeError> {
+        self.with_endpoint(|endpoint| {
+            let volume = unsafe { endpoint.GetMasterVolumeLevelScalar() }.map_err(|error| {
+                VolumeError::Backend(format!("failed to read Windows master volume: {error}"))
+            })?;
+            validate_volume(volume)
+                .map_err(|_| VolumeError::InvalidResponse(volume.to_string()))?;
+            Ok(volume)
+        })
+    }
+
+    fn set_volume(&self, volume: f32) -> Result<(), VolumeError> {
+        validate_volume(volume)?;
+        self.with_endpoint(|endpoint| unsafe {
+            endpoint
+                .SetMasterVolumeLevelScalar(volume, std::ptr::null())
+                .map_err(|error| {
+                    VolumeError::Backend(format!("failed to set Windows master volume: {error}"))
+                })
+        })
+    }
+
+    fn get_muted(&self) -> Result<bool, VolumeError> {
+        self.with_endpoint(|endpoint| {
+            unsafe { endpoint.GetMute() }
+                .map(|muted| muted.as_bool())
+                .map_err(|error| {
+                    VolumeError::Backend(format!(
+                        "failed to read Windows master mute state: {error}"
+                    ))
+                })
+        })
+    }
+
+    fn set_muted(&self, muted: bool) -> Result<(), VolumeError> {
+        self.with_endpoint(|endpoint| unsafe {
+            endpoint.SetMute(muted, std::ptr::null()).map_err(|error| {
+                VolumeError::Backend(format!("failed to set Windows master mute state: {error}"))
+            })
+        })
+    }
+}
+
 #[cfg(target_os = "linux")]
 #[derive(Debug)]
 pub struct LinuxVolumeController<R = OsLinuxCommandRunner> {
@@ -689,6 +792,10 @@ impl VolumeController for UnsupportedVolumeController {
 }
 
 pub fn platform_volume_controller() -> Box<dyn VolumeController> {
+    #[cfg(target_os = "windows")]
+    {
+        Box::new(WindowsVolumeController)
+    }
     #[cfg(target_os = "macos")]
     {
         Box::new(MacOsVolumeController::default())
@@ -697,7 +804,7 @@ pub fn platform_volume_controller() -> Box<dyn VolumeController> {
     {
         Box::new(LinuxVolumeController::default())
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
         Box::new(UnsupportedVolumeController)
     }

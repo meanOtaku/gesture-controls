@@ -2,6 +2,8 @@ use std::sync::Mutex;
 
 #[cfg(not(unix))]
 use volume_control::OsascriptRunner;
+#[cfg(target_os = "windows")]
+use volume_control::WindowsVolumeController;
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 use volume_control::platform_volume_controller;
 use volume_control::{
@@ -141,6 +143,25 @@ fn default_controller_reports_the_platform_as_unsupported() {
     assert!(matches!(
         controller.get_volume(),
         Err(VolumeError::UnsupportedPlatform)
+    ));
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn windows_controller_rejects_invalid_volume_before_opening_a_native_audio_endpoint() {
+    let controller = WindowsVolumeController;
+
+    assert!(matches!(
+        controller.set_volume(f32::NAN),
+        Err(VolumeError::InvalidVolume)
+    ));
+    assert!(matches!(
+        controller.set_volume(-0.01),
+        Err(VolumeError::InvalidVolume)
+    ));
+    assert!(matches!(
+        controller.set_volume(1.01),
+        Err(VolumeError::InvalidVolume)
     ));
 }
 
