@@ -421,10 +421,38 @@ impl WristRotation {
         Ok(())
     }
 
+    /// Validates `config` and `quaternion` before mutating any state, so a
+    /// button-start and a model-start always establish a fresh reference
+    /// pose under the intended settings or leave the previous interaction
+    /// (if any) completely untouched -- never a config swapped in with no
+    /// matching reference pose, or vice versa.
+    pub fn begin_with_config(
+        &mut self,
+        config: WristRotationConfig,
+        quaternion: [f64; 4],
+        timestamp_ns: u64,
+    ) -> Result<(), WristRotationError> {
+        validate_wrist_config(config)?;
+        let start = normalized_quaternion(quaternion)?;
+        self.config = config;
+        self.start = Some(start);
+        self.previous_raw_degrees = None;
+        self.smoothed_degrees = 0.0;
+        self.applied_degrees = 0.0;
+        self.last_timestamp_ns = Some(timestamp_ns);
+        Ok(())
+    }
+
     pub fn end(&mut self) {
         self.start = None;
         self.previous_raw_degrees = None;
         self.last_timestamp_ns = None;
+    }
+
+    /// True once a reference pose has been established by [`Self::begin`] or
+    /// [`Self::begin_with_config`] and not yet cleared by [`Self::end`].
+    pub fn is_active(&self) -> bool {
+        self.start.is_some()
     }
 
     /// Ignores high-velocity orientation outliers rather than risking a jump.

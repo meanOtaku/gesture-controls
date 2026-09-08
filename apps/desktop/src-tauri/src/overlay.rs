@@ -195,26 +195,43 @@ impl OverlayRuntime {
         Ok(snapshot)
     }
 
-    pub(crate) fn begin_wrist_rotation(
+    /// Atomically begins a wrist-rotation volume interaction: grabs the
+    /// overlay and establishes a fresh rotation reference under
+    /// `wrist_config` from `orientation`, as one transaction. This is the
+    /// single seam both the Watch-button and the approved desktop-model
+    /// paths call, so neither can leave the overlay visually grabbed with a
+    /// stale or missing reference pose. Fails closed: a missing orientation
+    /// sample or an invalid configuration rolls the grab back via
+    /// [`Self::release`] instead of leaving a partial interaction active.
+    pub(crate) fn begin_volume_interaction(
         &self,
-        sample: &WatchOrientationSample,
-    ) -> Result<(), String> {
-        self.wrist_rotation
+        app: &AppHandle,
+        wrist_config: WristRotationConfig,
+        orientation: Option<&WatchOrientationSample>,
+    ) -> Result<OverlayState, String> {
+        let grabbed = self.grab(app)?;
+        if !grabbed.grabbed {
+            // Overlay was not visible/dwelling: grab() correctly no-op'd.
+            return Ok(grabbed);
+        }
+        let Some(orientation) = orientation else {
+            warn!("volume interaction grabbed with no orientation sample available; releasing");
+            return self.release(app);
+        };
+        let began = self
+            .wrist_rotation
             .lock()
             .map_err(|_| "wrist rotation lock was poisoned")?
-            .begin(sample.quaternion, sample.timestamp_ns)
-            .map_err(|error| error.to_string())
-    }
-
-    pub(crate) fn configure_wrist_rotation(
-        &self,
-        config: WristRotationConfig,
-    ) -> Result<(), String> {
-        self.wrist_rotation
-            .lock()
-            .map_err(|_| "wrist rotation lock was poisoned")?
-            .update_config(config)
-            .map_err(|error| error.to_string())
+            .begin_with_config(
+                wrist_config,
+                orientation.quaternion,
+                orientation.timestamp_ns,
+            );
+        if let Err(error) = began {
+            warn!(%error, "failed to begin wrist rotation reference; releasing grab");
+            return self.release(app);
+        }
+        self.state()
     }
 
     pub(crate) fn apply_wrist_rotation(

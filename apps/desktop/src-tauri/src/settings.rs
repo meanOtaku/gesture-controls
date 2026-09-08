@@ -130,6 +130,21 @@ fn default_wrist_max_volume_points_per_second() -> f64 {
 }
 
 impl AppSettings {
+    /// Builds the wrist-rotation configuration both the Watch-button and the
+    /// approved desktop-model grab paths hand to
+    /// `OverlayRuntime::begin_volume_interaction`, so the two callers can
+    /// never drift apart on which settings drive the interaction.
+    pub fn wrist_rotation_config(&self) -> interaction_engine::WristRotationConfig {
+        interaction_engine::WristRotationConfig {
+            dead_zone_degrees: self.wrist_dead_zone_degrees,
+            smoothing_alpha: self.wrist_smoothing_alpha,
+            volume_points_per_degree: self.wrist_volume_points_per_degree,
+            max_angular_velocity_degrees_per_second: self
+                .wrist_max_angular_velocity_degrees_per_second,
+            max_volume_points_per_second: self.wrist_max_volume_points_per_second,
+        }
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         in_range(
             "headphonesRateHz",

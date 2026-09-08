@@ -38,6 +38,8 @@ use crate::model_registry::{
     self, InferenceMode, ModelThresholds, QualityGateConfig, QualityGateRejection,
 };
 use crate::overlay::OverlayRuntime;
+use crate::settings::SettingsRuntime;
+use crate::watch::WatchRuntime;
 
 pub const GESTURE_POLICY_EVENT: &str = "gesture-policy-decision";
 
@@ -591,11 +593,24 @@ pub(crate) fn apply_decision(app: &AppHandle, decision: PolicyDecision) {
     }
     let overlay = app.state::<OverlayRuntime>();
     match decision.intent {
-        GestureIntent::VolumeGrab => {
-            if let Err(error) = overlay.grab(app) {
-                warn!(%error, "failed to grab overlay from gesture policy decision");
+        GestureIntent::VolumeGrab => match app.state::<SettingsRuntime>().get() {
+            Ok(settings) => {
+                let orientation = app
+                    .state::<WatchRuntime>()
+                    .latest_orientation()
+                    .unwrap_or_default();
+                if let Err(error) = overlay.begin_volume_interaction(
+                    app,
+                    settings.wrist_rotation_config(),
+                    orientation.as_ref(),
+                ) {
+                    warn!(%error, "failed to begin volume interaction from gesture policy decision");
+                }
             }
-        }
+            Err(error) => {
+                warn!(%error, "failed to read settings for gesture policy volume interaction");
+            }
+        },
         GestureIntent::VolumeRelease => {
             if let Err(error) = overlay.release(app) {
                 warn!(%error, "failed to release overlay from gesture policy decision");
