@@ -44,6 +44,16 @@ interface DatasetSummary {
   rowCount: number;
 }
 
+/** Mirrors `DatasetLabel` in src-tauri/src/label_registry.rs. */
+interface DatasetLabel {
+  id: string;
+  displayName: string;
+  description: string;
+  color: string;
+  role: "positiveGesture" | "negativeBackground" | "calibrationOnly";
+  archivedAt: string | null;
+}
+
 /** Mirrors `TrainingStatus` in src-tauri/src/model_lab.rs (serde tag "phase", camelCase). */
 type TrainingStatus =
   | { phase: "idle" }
@@ -95,6 +105,7 @@ function formatPercent(value: number | null | undefined): string {
 
 export function ModelLab() {
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
+  const [labels, setLabels] = useState<DatasetLabel[]>([]);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,6 +126,15 @@ export function ModelLab() {
       setError(String(err));
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const refreshLabels = useCallback(async () => {
+    try {
+      const result = await invoke<DatasetLabel[]>("list_model_labels");
+      setLabels(Array.isArray(result) ? result : []);
+    } catch (err) {
+      setError(String(err));
     }
   }, []);
 
@@ -139,6 +159,10 @@ export function ModelLab() {
   useEffect(() => {
     void refreshDatasets();
   }, [refreshDatasets]);
+
+  useEffect(() => {
+    void refreshLabels();
+  }, [refreshLabels]);
 
   useEffect(() => {
     void refreshTrainingStatus();
@@ -348,9 +372,8 @@ export function ModelLab() {
           <div><p className="eyebrow">Step 2</p><h2>Label coverage</h2></div>
         </div>
         <p className="hint">
-          These are the recorder&apos;s fixed labels (<code>telemetryStore.GESTURE_DATASET_LABELS</code>). Only
-          the pinch labels feed the classifier directly; every other label becomes the negative/background class
-          used to measure false activations.
+          Labels are persisted by the desktop with stable IDs. Archived labels stay visible so historical sessions
+          retain their meaning; they cannot be used for newly imported recordings.
         </p>
         <div className="vectors model-lab-labels">
           {GESTURE_DATASET_LABELS.map((label) => {
@@ -361,6 +384,17 @@ export function ModelLab() {
                 <span className="label">{label.replaceAll("_", " ")}</span>
                 <span className="model-lab-coverage-count">{count} session{count === 1 ? "" : "s"}</span>
                 <span className={`model-lab-chip model-lab-chip--${role}`}>{ROLE_COPY[role]}</span>
+              </div>
+            );
+          })}
+          {labels.filter((label) => !GESTURE_DATASET_LABELS.some((builtin) => builtin === label.id)).map((label) => {
+            const count = coverageByLabel.get(label.id) ?? 0;
+            return (
+              <div className="vector-row model-lab-label-row" key={label.id}>
+                <span className="label">{label.displayName} <code>{label.id}</code></span>
+                <span className="model-lab-coverage-count">{count} session{count === 1 ? "" : "s"}</span>
+                <span className="model-lab-chip">{label.role}</span>
+                {label.archivedAt && <span className="hint">Archived</span>}
               </div>
             );
           })}

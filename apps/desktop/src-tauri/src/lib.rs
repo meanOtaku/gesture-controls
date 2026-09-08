@@ -11,6 +11,7 @@ use watch_bridge::{WatchBridgeServer, WatchEvent};
 
 mod calibration;
 mod inference;
+mod label_registry;
 mod model_lab;
 mod model_registry;
 mod overlay;
@@ -40,6 +41,7 @@ pub fn run() {
         .manage(overlay::VolumeRuntime::default())
         .manage(watch::WatchRuntime::default())
         .manage(model_lab::ModelLabRuntime::default())
+        .manage(label_registry::LabelRegistryRuntime::default())
         .manage(model_registry::ModelRegistryRuntime::default())
         .manage(inference::GesturePolicyRuntime::default())
         .manage(inference::PpgIngestRuntime::default())
@@ -70,10 +72,14 @@ pub fn run() {
             model_lab::cancel_training_job,
             model_lab::get_training_status,
             model_lab::list_trained_models,
+            label_registry::list_model_labels,
+            label_registry::create_model_label,
+            label_registry::set_model_label_archived,
             model_registry::get_model_registry,
             model_registry::transition_model_state,
             model_registry::update_model_thresholds,
             model_registry::update_model_quality_gate,
+            model_registry::set_model_intent_bindings,
             model_registry::activate_model,
             model_registry::rollback_active_model,
             model_registry::set_inference_mode,

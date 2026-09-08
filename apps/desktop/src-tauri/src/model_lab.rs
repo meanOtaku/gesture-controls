@@ -58,24 +58,6 @@ const DATASET_CSV_HEADER: [&str; 17] = [
     "label",
 ];
 
-/// Mirrors `GESTURE_DATASET_LABELS` in telemetryStore.ts / schema.py.
-const GESTURE_DATASET_LABELS: [&str; 14] = [
-    "idle",
-    "pinch_start",
-    "pinch_hold",
-    "pinch_release",
-    "walking",
-    "typing",
-    "using_mouse",
-    "touching_face",
-    "adjusting_headphones",
-    "picking_up_cup",
-    "scratching",
-    "normal_wrist_rotation",
-    "standing",
-    "sitting",
-];
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetSummary {
@@ -301,10 +283,6 @@ fn parse_csv(content: &str) -> Result<(String, usize), String> {
     let label = extract_label(&comment_lines).ok_or_else(|| {
         "missing '# label: <value>' metadata line required to import a dataset".to_string()
     })?;
-    if !GESTURE_DATASET_LABELS.contains(&label.as_str()) {
-        return Err(format!("unknown label '{label}'"));
-    }
-
     Ok((label, data_lines.len()))
 }
 
@@ -374,6 +352,11 @@ pub fn import_model_dataset(
         ));
     }
     let (label, row_count) = parse_csv(&csv_content)?;
+    if !crate::label_registry::contains_label(&app, &label) {
+        return Err(format!(
+            "unknown label '{label}'; create it in Model Lab before importing recordings"
+        ));
+    }
 
     let _guard = runtime
         .lock
@@ -854,10 +837,11 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unknown_label() {
+    fn parses_custom_label_for_registry_validation() {
         let csv = valid_csv().replace("pinch_start", "not_a_real_label");
-        let error = parse_csv(&csv).unwrap_err();
-        assert!(error.contains("unknown label") || error.contains("header"));
+        let (label, _) =
+            parse_csv(&csv).expect("custom labels are resolved by the persisted registry");
+        assert_eq!(label, "not_a_real_label");
     }
 
     #[test]

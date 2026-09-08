@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::model_lab::{self, MODEL_LAB_DIR_NAME};
+use interaction_engine::GestureIntent;
 
 /// Filename of the validated TFLite bundle's metadata (see `bundle.py`'s
 /// `METADATA_FILENAME`). Only a model directory containing this file (plus
@@ -174,6 +175,18 @@ pub struct ModelRecord {
     pub quality_gate: QualityGateConfig,
     pub created_at: String,
     pub history: Vec<StateTransitionRecord>,
+    /// Bindings belong to this immutable trained-model id, never to a label
+    /// globally. A later model must opt in again, preventing a changed class
+    /// meaning from silently inheriting a desktop action.
+    #[serde(default)]
+    pub intent_bindings: Vec<ModelIntentBinding>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelIntentBinding {
+    pub class_label: String,
+    pub intent: GestureIntent,
 }
 
 impl ModelRecord {
@@ -190,6 +203,7 @@ impl ModelRecord {
                 to: ModelLifecycleState::Draft,
                 at: now,
             }],
+            intent_bindings: Vec::new(),
         }
     }
 
@@ -284,6 +298,27 @@ fn write_registry_atomic(app: &AppHandle, index: &RegistryIndex) -> Result<(), S
 #[derive(Default)]
 pub struct ModelRegistryRuntime {
     lock: Mutex<()>,
+}
+
+const DEPLOYABLE_CLASS_LABELS: [&str; 3] = ["negative", "pinch_start", "pinch_release"];
+
+fn validate_intent_bindings(bindings: &[ModelIntentBinding]) -> Result<(), String> {
+    if bindings.is_empty() {
+        return Err("explicit intent bindings are required before activating a model".to_string());
+    }
+    if bindings.len() != DEPLOYABLE_CLASS_LABELS.len()
+        || !DEPLOYABLE_CLASS_LABELS.iter().all(|class_label| {
+            bindings
+                .iter()
+                .any(|binding| binding.class_label == *class_label)
+        })
+        || bindings
+            .iter()
+            .any(|binding| !DEPLOYABLE_CLASS_LABELS.contains(&binding.class_label.as_str()))
+    {
+        return Err("bindings must specify exactly negative, pinch_start, and pinch_release for this LiteRT model version".to_string());
+    }
+    Ok(())
 }
 
 /// The active model's id, thresholds, and sensor-quality gate, or `None` if
@@ -453,6 +488,36 @@ pub fn update_model_quality_gate(
     Ok(RegistryView::from(index))
 }
 
+/// Replaces the complete, closed-set intent mapping for one trained model.
+/// The caller cannot supply a shell command or executable path: intent is the
+/// `GestureIntent` enum shared with the desktop policy. Activation additionally
+/// requires a complete mapping, so an omitted class fails closed.
+#[tauri::command]
+pub fn set_model_intent_bindings(
+    id: String,
+    bindings: Vec<ModelIntentBinding>,
+    app: AppHandle,
+    runtime: State<'_, ModelRegistryRuntime>,
+) -> Result<RegistryView, String> {
+    validate_intent_bindings(&bindings)?;
+    let _guard = runtime
+        .lock
+        .lock()
+        .map_err(|_| "model registry lock was poisoned".to_string())?;
+    let mut index = load_registry(&app);
+    let model = find_model_mut(&mut index, &id)?;
+    if model.state == ModelLifecycleState::Active {
+        return Err(
+            "cannot change bindings of an active model; approve a new model version instead"
+                .to_string(),
+        );
+    }
+    model.intent_bindings = bindings;
+    write_registry_atomic(&app, &index)?;
+    emit_registry(&app, &index);
+    Ok(RegistryView::from(index))
+}
+
 /// Activates `id`: requires it be `Approved` and a validated TFLite bundle.
 /// Any currently Active model is demoted back to `Approved` and remembered
 /// as `previous_active_model_id` so [`rollback_active_model`] can restore it.
@@ -476,6 +541,7 @@ pub fn activate_model(
                 model.state
             ));
         }
+        validate_intent_bindings(&model.intent_bindings)?;
     }
 
     let previous_active = index.active_model_id.clone();
