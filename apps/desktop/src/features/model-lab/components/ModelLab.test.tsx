@@ -24,6 +24,7 @@ const MODEL_CARD = {
 };
 
 const TRAINED_MODEL_A = { id: "model-a", modelCard: MODEL_CARD };
+const REGISTRY_MODEL_A = { id: "model-a", state: "draft", createdAt: "2026-08-31T01:00:00Z" };
 
 async function openModelLab() {
   render(<App />);
@@ -330,5 +331,47 @@ describe("ModelLab", () => {
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(invokeMock).not.toHaveBeenCalledWith("cancel_training_job", expect.anything());
+  });
+
+  it("moves registered models through lifecycle approval and only offers activation after approval", async () => {
+    const draftRegistry = { models: [REGISTRY_MODEL_A], activeModelId: null, previousActiveModelId: null, inferenceMode: "off" };
+    const approvedRegistry = { ...draftRegistry, models: [{ ...REGISTRY_MODEL_A, state: "approved" }] };
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_model_datasets") return Promise.resolve([]);
+      if (command === "get_training_status") return Promise.resolve({ phase: "idle" });
+      if (command === "list_trained_models") return Promise.resolve([TRAINED_MODEL_A]);
+      if (command === "get_model_registry") return Promise.resolve(draftRegistry);
+      if (command === "transition_model_state") return Promise.resolve(approvedRegistry);
+      if (command === "activate_model") return Promise.resolve({ ...approvedRegistry, activeModelId: "model-a", models: [{ ...REGISTRY_MODEL_A, state: "active" }] });
+      return Promise.resolve(undefined);
+    });
+
+    await openModelLab();
+    expect(await screen.findByRole("button", { name: "Mark evaluated" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Activate" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark evaluated" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("transition_model_state", { id: "model-a", to: "evaluated" }));
+
+    eventHandlers.get("model-registry-updated")?.({ payload: approvedRegistry });
+    fireEvent.click(await screen.findByRole("button", { name: "Activate" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("activate_model", { id: "model-a" }));
+  });
+
+  it("offers rollback only when the persisted registry has a prior active model", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_model_datasets") return Promise.resolve([]);
+      if (command === "get_training_status") return Promise.resolve({ phase: "idle" });
+      if (command === "list_trained_models") return Promise.resolve([]);
+      if (command === "get_model_registry") return Promise.resolve({ models: [], activeModelId: "model-b", previousActiveModelId: "model-a", inferenceMode: "monitor" });
+      if (command === "rollback_active_model") return Promise.resolve(undefined);
+      return Promise.resolve(undefined);
+    });
+
+    await openModelLab();
+    const rollback = await screen.findByRole("button", { name: "Rollback active model" });
+    expect(rollback).not.toBeDisabled();
+    fireEvent.click(rollback);
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("rollback_active_model"));
   });
 });

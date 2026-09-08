@@ -97,9 +97,18 @@ interface TrainedModelSummary {
 type InferenceMode = "off" | "monitor" | "live";
 
 interface ModelRegistryView {
+  models: ModelRegistryModel[];
   activeModelId: string | null;
   previousActiveModelId: string | null;
   inferenceMode: InferenceMode;
+}
+
+type ModelLifecycleState = "draft" | "evaluated" | "approved" | "active" | "archived";
+
+interface ModelRegistryModel {
+  id: string;
+  state: ModelLifecycleState;
+  createdAt: string;
 }
 
 interface PpgWindowObservation {
@@ -278,6 +287,7 @@ export function ModelLab() {
         case "completed":
           setStatus({ phase: "completed", jobId: payload.jobId, modelId: payload.modelId, modelCard: payload.modelCard });
           void refreshTrainedModels();
+          void refreshRegistry();
           break;
         case "failed":
           setStatus({ phase: "failed", jobId: payload.jobId, message: payload.message });
@@ -298,7 +308,7 @@ export function ModelLab() {
       cancelled = true;
       unlisten?.();
     };
-  }, [refreshTrainedModels]);
+  }, [refreshRegistry, refreshTrainedModels]);
 
   const handleFileChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -374,6 +384,33 @@ export function ModelLab() {
   const handleInferenceMode = useCallback(async (mode: InferenceMode) => {
     try {
       setRegistry(await invoke<ModelRegistryView>("set_inference_mode", { mode }));
+      setRuntimeError(null);
+    } catch (err) {
+      setRuntimeError(String(err));
+    }
+  }, []);
+
+  const handleLifecycleTransition = useCallback(async (id: string, to: ModelLifecycleState) => {
+    try {
+      setRegistry(await invoke<ModelRegistryView>("transition_model_state", { id, to }));
+      setRuntimeError(null);
+    } catch (err) {
+      setRuntimeError(String(err));
+    }
+  }, []);
+
+  const handleActivate = useCallback(async (id: string) => {
+    try {
+      setRegistry(await invoke<ModelRegistryView>("activate_model", { id }));
+      setRuntimeError(null);
+    } catch (err) {
+      setRuntimeError(String(err));
+    }
+  }, []);
+
+  const handleRollback = useCallback(async () => {
+    try {
+      setRegistry(await invoke<ModelRegistryView>("rollback_active_model"));
       setRuntimeError(null);
     } catch (err) {
       setRuntimeError(String(err));
@@ -625,6 +662,34 @@ export function ModelLab() {
           Only a validated LiteRT bundle may be activated for desktop inference. Sensor devices remain raw-data
           sources: no model or gesture inference is deployed to the watch or headphones.
         </p>
+        {registry?.models.length === 0 ? (
+          <p className="hint model-lab-lifecycle-empty">No registered trained models yet.</p>
+        ) : (
+          <div className="vectors model-lab-models" aria-label="Model lifecycle">
+            {registry?.models.map((model) => (
+              <div className="vector-row model-lab-lifecycle-row" key={model.id}>
+                <div>
+                  <span className="label">{model.id}</span>
+                  <strong className="model-lab-state">{model.state}</strong>
+                  <small>Registered {model.createdAt}</small>
+                </div>
+                <div className="model-lab-lifecycle-actions">
+                  {model.state === "draft" && <button onClick={() => void handleLifecycleTransition(model.id, "evaluated")}>Mark evaluated</button>}
+                  {model.state === "evaluated" && <button onClick={() => void handleLifecycleTransition(model.id, "approved")}>Approve</button>}
+                  {model.state === "approved" && <button onClick={() => void handleLifecycleTransition(model.id, "evaluated")}>Return to evaluation</button>}
+                  {(model.state === "evaluated" || model.state === "approved") && <button onClick={() => void handleLifecycleTransition(model.id, "archived")}>Archive</button>}
+                  {model.state === "archived" && <button onClick={() => void handleLifecycleTransition(model.id, "draft")}>Restore as draft</button>}
+                  {model.state === "approved" && <button className="model-lab-activate" onClick={() => void handleActivate(model.id)}>Activate</button>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="model-lab-deployment-actions">
+          <span className="hint">Active: {registry?.activeModelId ?? "none"}. Activation requires approved lifecycle state, a validated LiteRT bundle, and complete safe intent bindings.</span>
+          <button onClick={() => void handleRollback()} disabled={!registry?.previousActiveModelId}>Rollback active model</button>
+        </div>
+        {runtimeError && <p className="calibration-error" role="alert">{runtimeError}</p>}
       </section>
     </main>
   );
