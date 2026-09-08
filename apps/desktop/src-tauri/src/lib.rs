@@ -262,6 +262,9 @@ pub fn run() {
                                         warn!(%error, "failed to apply wrist rotation to volume");
                                     }
                                 }
+                                WatchEvent::Ppg(sample) => {
+                                    inference::evaluate_ppg_quality(&watch_handle, sample);
+                                }
                                 _ => {}
                             }
                             if let Err(error) = runtime.apply(&watch_handle, event) {

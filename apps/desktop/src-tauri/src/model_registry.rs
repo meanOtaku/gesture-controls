@@ -286,6 +286,23 @@ pub struct ModelRegistryRuntime {
     lock: Mutex<()>,
 }
 
+/// The active model's sensor-quality gate, or `None` if inference is `Off`
+/// or no model is active -- callers should skip quality gating entirely in
+/// that case, since there is nothing running that a stale/degraded window
+/// could corrupt.
+pub(crate) fn active_quality_gate(app: &AppHandle) -> Option<QualityGateConfig> {
+    let index = load_registry(app);
+    if index.inference_mode == InferenceMode::Off {
+        return None;
+    }
+    let active_id = index.active_model_id.as_ref()?;
+    index
+        .models
+        .iter()
+        .find(|model| &model.id == active_id)
+        .map(|model| model.quality_gate)
+}
+
 fn emit_registry(app: &AppHandle, index: &RegistryIndex) {
     if let Err(error) = app.emit(MODEL_REGISTRY_EVENT, RegistryView::from(index.clone())) {
         tracing::warn!(%error, "failed to emit model registry event");
