@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { Dashboard } from "./Dashboard";
-import type { HeadTrackerStatus } from "../../../shared/protocol/events";
+import type { HeadTrackerStatus, WatchStatus } from "../../../shared/protocol/events";
 
 afterEach(cleanup);
 
@@ -89,5 +89,66 @@ describe("Dashboard", () => {
     expect(dashboard.getByText("Waiting for Sony bridge")).toBeInTheDocument();
     expect(dashboard.getByText("Sony bridge not detected")).toBeInTheDocument();
     expect(dashboard.getByText(/on macos, use the arrow or \+\/- keys to change system volume/i)).toBeInTheDocument();
+  });
+
+  it("shows pending feedback and disables a capture button while its own request is in flight", () => {
+    const captures: string[] = [];
+    const { container } = render(
+      <Dashboard
+        view="headphone"
+        status={connected}
+        isPending={(key) => key === "capture:center"}
+        onCaptureTarget={(target) => captures.push(target)}
+      />,
+    );
+    const dashboard = within(container);
+    const centerButton = dashboard.getByRole("button", { name: /Capturing…/ });
+    expect(centerButton).toBeDisabled();
+    fireEvent.click(centerButton);
+    expect(captures).toEqual([]);
+    expect(dashboard.getByRole("button", { name: /Capture top-right/ })).not.toBeDisabled();
+  });
+
+  const watchStatus: WatchStatus = {
+    connected: true,
+    lastOrientation: null,
+    lastHeartbeat: null,
+    clockOffsetNs: null,
+    roundTripNs: null,
+    ppgState: null,
+    ppgLastSample: null,
+    ppgRateHz: null,
+    lastButtonState: null,
+    medicalStatus: {},
+    sensorStatus: { orientation: true },
+    heartRateLast: null,
+    heartRateRateHz: null,
+    skinTemperatureLast: null,
+    skinTemperatureRateHz: null,
+    edaLast: null,
+    edaRateHz: null,
+    spo2Last: null,
+    ecgLast: null,
+    biaLast: null,
+    sweatLossLast: null,
+  };
+
+  it("shows pending feedback and prevents a duplicate sensor toggle while one is in flight", () => {
+    const toggles: Array<[string, boolean]> = [];
+    const { container } = render(
+      <Dashboard
+        view="watch"
+        status={null}
+        watchStatus={watchStatus}
+        isPending={(key) => key === "sensor:orientation"}
+        onSetSensorEnabled={(sensor, enabled) => toggles.push([sensor, enabled])}
+      />,
+    );
+    const dashboard = within(container);
+    expect(dashboard.getByText("Updating…")).toBeInTheDocument();
+    const orientationSwitch = dashboard.getByRole("switch", { name: /Orientation \(rotation vector\)/ });
+    expect(orientationSwitch).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(orientationSwitch);
+    expect(toggles).toEqual([]);
   });
 });

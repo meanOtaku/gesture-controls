@@ -1,22 +1,22 @@
 import { useRef } from "react";
-import type { AppSettings } from "../../../shared/protocol/events";
+import { Alert, AlertDescription } from "../../../components/ui/alert";
+import { CONTROLLABLE_SENSORS, type AppSettings } from "../../../shared/protocol/events";
+import { ApplySettingsFooter } from "./ApplySettingsFooter";
+import { HeadphonesSettingsSection } from "./HeadphonesSettingsSection";
+import { RecordingGraphSettingsSection } from "./RecordingGraphSettingsSection";
+import { WatchHealthDeliverySettingsSection } from "./WatchHealthDeliverySettingsSection";
+import { WatchRateSettingsSection } from "./WatchRateSettingsSection";
+import { WatchSensorSwitchSection } from "./WatchSensorSwitchSection";
+import { WristRotationSettings } from "./WristRotationSettings";
 
 interface SettingsProps {
   settings: AppSettings | null;
   error?: string | null;
+  /** Reports whether the operation for the given key (`settings:apply`, `settings:reset`) is in flight. */
+  isPending?: (key: string) => boolean;
   onUpdate: (settings: AppSettings) => void;
   onReset: () => void;
 }
-
-/** Mirrors `spatial_protocol::CONTROLLABLE_SENSOR_IDS`. */
-const CONTROLLABLE_SENSORS: Array<{ id: string; label: string }> = [
-  { id: "orientation", label: "Orientation (rotation vector)" },
-  { id: "acceleration", label: "Accelerometer" },
-  { id: "gyroscope", label: "Gyroscope" },
-  { id: "heart_rate_continuous", label: "Heart rate" },
-  { id: "skin_temperature_continuous", label: "Skin temperature" },
-  { id: "eda_continuous", label: "EDA" },
-];
 
 /** Mirrors `AppSettings::default()` in `apps/desktop/src-tauri/src/settings.rs`, used only until the real settings load. */
 const DEFAULT_SETTINGS: AppSettings = {
@@ -44,7 +44,7 @@ function clamp(raw: string | undefined, min: number, max: number, fallback: numb
   return Number.isFinite(value) && value >= min && value <= max ? value : fallback;
 }
 
-export function Settings({ settings, error, onUpdate, onReset }: SettingsProps) {
+export function Settings({ settings, error, isPending = () => false, onUpdate, onReset }: SettingsProps) {
   const current = settings ?? DEFAULT_SETTINGS;
   const headphonesRateInput = useRef<HTMLInputElement>(null);
   const recordingRateInput = useRef<HTMLInputElement>(null);
@@ -100,200 +100,67 @@ export function Settings({ settings, error, onUpdate, onReset }: SettingsProps) 
         </div>
       </header>
 
-      {error && <p className="calibration-error" role="alert">{error}</p>}
+      {error && (
+        <Alert variant="destructive" role="alert">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-      <section className="calibration-card" aria-label="Headphones settings">
-        <div className="calibration-heading">
-          <div><p className="eyebrow">Headphones</p><h2>Acceptance rate</h2></div>
-        </div>
-        <p className="hint">Every incoming Sony packet still updates calibration and connection state; this only throttles what's displayed and recorded.</p>
-        <div className="calibration-actions">
-          <button onClick={toggleHeadphonesEnabled}>
-            {current.headphonesEnabled ? "Enabled" : "Disabled"}
-            <small>Click to {current.headphonesEnabled ? "disable" : "enable"}</small>
-          </button>
-          <label>
-            Headphones rate
-            <input
-              aria-label="Headphones rate Hz"
-              type="number"
-              min="1"
-              max="200"
-              step="1"
-              ref={headphonesRateInput}
-              key={`headphones-rate-${current.headphonesRateHz}`}
-              defaultValue={current.headphonesRateHz}
-            />
-            <small>Hz</small>
-          </label>
-        </div>
-      </section>
+      <HeadphonesSettingsSection
+        enabled={current.headphonesEnabled}
+        rateHz={current.headphonesRateHz}
+        rateInputRef={headphonesRateInput}
+        onToggleEnabled={toggleHeadphonesEnabled}
+      />
 
-      <section className="calibration-card" aria-label="Wrist rotation controls">
-        <div className="calibration-heading"><div><p className="eyebrow">Volume gesture</p><h2>Wrist rotation tuning</h2></div></div>
-        <p className="hint">Applied on the next STEM-button grab. Defaults give 30 volume points for a 90° twist.</p>
-        <div className="calibration-actions">
-          <label>Dead zone<input aria-label="Wrist rotation dead zone degrees" type="number" min="0" max="45" step="0.5" ref={wristDeadZoneInput} key={`wrist-dead-zone-${current.wristDeadZoneDegrees}`} defaultValue={current.wristDeadZoneDegrees} /><small>degrees</small></label>
-          <label>Smoothing<input aria-label="Wrist rotation smoothing" type="number" min="0.01" max="1" step="0.01" ref={wristSmoothingInput} key={`wrist-smoothing-${current.wristSmoothingAlpha}`} defaultValue={current.wristSmoothingAlpha} /><small>alpha</small></label>
-          <label>Sensitivity<input aria-label="Wrist rotation volume points per degree" type="number" min="0.01" max="5" step="0.01" ref={wristSensitivityInput} key={`wrist-sensitivity-${current.wristVolumePointsPerDegree}`} defaultValue={current.wristVolumePointsPerDegree} /><small>points / degree</small></label>
-          <label>Max angular velocity<input aria-label="Wrist rotation max angular velocity" type="number" min="1" max="2000" step="1" ref={wristVelocityInput} key={`wrist-velocity-${current.wristMaxAngularVelocityDegreesPerSecond}`} defaultValue={current.wristMaxAngularVelocityDegreesPerSecond} /><small>degrees / second</small></label>
-          <label>Max volume rate<input aria-label="Wrist rotation max volume rate" type="number" min="1" max="100" step="1" ref={wristVolumeRateInput} key={`wrist-volume-rate-${current.wristMaxVolumePointsPerSecond}`} defaultValue={current.wristMaxVolumePointsPerSecond} /><small>points / second</small></label>
-        </div>
-      </section>
+      <WristRotationSettings
+        deadZoneDegrees={current.wristDeadZoneDegrees}
+        smoothingAlpha={current.wristSmoothingAlpha}
+        volumePointsPerDegree={current.wristVolumePointsPerDegree}
+        maxAngularVelocityDegreesPerSecond={current.wristMaxAngularVelocityDegreesPerSecond}
+        maxVolumePointsPerSecond={current.wristMaxVolumePointsPerSecond}
+        deadZoneInputRef={wristDeadZoneInput}
+        smoothingInputRef={wristSmoothingInput}
+        sensitivityInputRef={wristSensitivityInput}
+        velocityInputRef={wristVelocityInput}
+        volumeRateInputRef={wristVolumeRateInput}
+      />
 
-      <section className="calibration-card" aria-label="Recording and graph settings">
-        <div className="calibration-heading">
-          <div><p className="eyebrow">Live data</p><h2>Recording &amp; graph</h2></div>
-        </div>
-        <div className="calibration-actions">
-          <label>
-            Recording rate
-            <input
-              aria-label="Recording rate Hz"
-              type="number"
-              min="1"
-              max="200"
-              step="1"
-              ref={recordingRateInput}
-              key={`recording-rate-${current.recordingRateHz}`}
-              defaultValue={current.recordingRateHz}
-            />
-            <small>Hz, per channel</small>
-          </label>
-          <label>
-            Graph refresh rate
-            <input
-              aria-label="Graph refresh rate Hz"
-              type="number"
-              min="1"
-              max="60"
-              step="1"
-              ref={graphRefreshRateInput}
-              key={`graph-refresh-rate-${current.graphRefreshRateHz}`}
-              defaultValue={current.graphRefreshRateHz}
-            />
-            <small>Hz</small>
-          </label>
-        </div>
-      </section>
+      <RecordingGraphSettingsSection
+        recordingRateHz={current.recordingRateHz}
+        graphRefreshRateHz={current.graphRefreshRateHz}
+        recordingRateInputRef={recordingRateInput}
+        graphRefreshRateInputRef={graphRefreshRateInput}
+      />
 
-      <section className="calibration-card" aria-label="Watch sensor rates">
-        <div className="calibration-heading">
-          <div><p className="eyebrow">Galaxy Watch</p><h2>IMU sampling rates</h2></div>
-        </div>
-        <p className="hint">Applied live via Android SensorManager without restarting the stream.</p>
-        <div className="calibration-actions">
-          <label>
-            Orientation
-            <input
-              aria-label="Watch orientation rate Hz"
-              type="number"
-              min="1"
-              max="200"
-              step="1"
-              ref={watchOrientationRateInput}
-              key={`watch-orientation-rate-${current.watchOrientationRateHz}`}
-              defaultValue={current.watchOrientationRateHz}
-            />
-            <small>Hz</small>
-          </label>
-          <label>
-            Acceleration
-            <input
-              aria-label="Watch acceleration rate Hz"
-              type="number"
-              min="1"
-              max="200"
-              step="1"
-              ref={watchAccelerationRateInput}
-              key={`watch-acceleration-rate-${current.watchAccelerationRateHz}`}
-              defaultValue={current.watchAccelerationRateHz}
-            />
-            <small>Hz</small>
-          </label>
-          <label>
-            Gyroscope
-            <input
-              aria-label="Watch gyroscope rate Hz"
-              type="number"
-              min="1"
-              max="200"
-              step="1"
-              ref={watchGyroscopeRateInput}
-              key={`watch-gyroscope-rate-${current.watchGyroscopeRateHz}`}
-              defaultValue={current.watchGyroscopeRateHz}
-            />
-            <small>Hz</small>
-          </label>
-        </div>
-      </section>
+      <WatchRateSettingsSection
+        orientationRateHz={current.watchOrientationRateHz}
+        accelerationRateHz={current.watchAccelerationRateHz}
+        gyroscopeRateHz={current.watchGyroscopeRateHz}
+        orientationRateInputRef={watchOrientationRateInput}
+        accelerationRateInputRef={watchAccelerationRateInput}
+        gyroscopeRateInputRef={watchGyroscopeRateInput}
+      />
 
-      <section className="calibration-card" aria-label="Samsung health delivery controls">
-        <div className="calibration-heading">
-          <div><p className="eyebrow">Galaxy Watch</p><h2>Samsung health delivery controls</h2></div>
-        </div>
-        <p className="hint">PPG controls the existing HealthTracker.flush() frequency. The other values limit desktop graph and recording acceptance. Samsung still controls physical sampling.</p>
-        <div className="calibration-actions">
-          <label>
-            Raw PPG flush
-            <input aria-label="Watch PPG flush rate Hz" type="number" min="0.1" max="10" step="0.1"
-              ref={watchPpgFlushRateInput} key={`watch-ppg-flush-${current.watchPpgFlushRateHz}`}
-              defaultValue={current.watchPpgFlushRateHz} />
-            <small>Hz</small>
-          </label>
-          <label>
-            Heart rate
-            <input aria-label="Watch heart rate acceptance rate Hz" type="number" min="0.1" max="200" step="0.1"
-              ref={watchHeartRateAcceptanceRateInput} key={`watch-heart-rate-acceptance-${current.watchHeartRateAcceptanceRateHz}`}
-              defaultValue={current.watchHeartRateAcceptanceRateHz} />
-            <small>Hz</small>
-          </label>
-          <label>
-            Skin temperature
-            <input aria-label="Watch skin temperature acceptance rate Hz" type="number" min="0.1" max="200" step="0.1"
-              ref={watchSkinTemperatureAcceptanceRateInput} key={`watch-temperature-acceptance-${current.watchSkinTemperatureAcceptanceRateHz}`}
-              defaultValue={current.watchSkinTemperatureAcceptanceRateHz} />
-            <small>Hz</small>
-          </label>
-          <label>
-            EDA
-            <input aria-label="Watch EDA acceptance rate Hz" type="number" min="0.1" max="200" step="0.1"
-              ref={watchEdaAcceptanceRateInput} key={`watch-eda-acceptance-${current.watchEdaAcceptanceRateHz}`}
-              defaultValue={current.watchEdaAcceptanceRateHz} />
-            <small>Hz</small>
-          </label>
-        </div>
-      </section>
+      <WatchHealthDeliverySettingsSection
+        ppgFlushRateHz={current.watchPpgFlushRateHz}
+        heartRateAcceptanceRateHz={current.watchHeartRateAcceptanceRateHz}
+        skinTemperatureAcceptanceRateHz={current.watchSkinTemperatureAcceptanceRateHz}
+        edaAcceptanceRateHz={current.watchEdaAcceptanceRateHz}
+        ppgFlushRateInputRef={watchPpgFlushRateInput}
+        heartRateAcceptanceRateInputRef={watchHeartRateAcceptanceRateInput}
+        skinTemperatureAcceptanceRateInputRef={watchSkinTemperatureAcceptanceRateInput}
+        edaAcceptanceRateInputRef={watchEdaAcceptanceRateInput}
+      />
 
-      <section className="watch-card" aria-label="Watch sensor enable switches">
-        <div className="calibration-heading"><div><p className="eyebrow">Galaxy Watch</p><h2>Sensor switches</h2></div></div>
-        <div className="vectors">
-          {CONTROLLABLE_SENSORS.map(({ id, label }) => {
-            const enabled = current.watchSensorsEnabled[id] ?? true;
-            return (
-              <div className="vector-row sensor-toggle-row" key={id}>
-                <span className="label">{label}</span>
-                <span>{enabled ? "Enabled" : "Disabled"}</span>
-                <div className="recording-actions">
-                  <button onClick={() => toggleWatchSensor(id)}>{enabled ? "Disable" : "Enable"}</button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
+      <WatchSensorSwitchSection watchSensorsEnabled={current.watchSensorsEnabled} onToggle={toggleWatchSensor} />
 
-      <section className="settings" aria-label="Apply or reset settings">
-        <div>
-          <p className="eyebrow">Runtime configuration</p>
-          <h2>Apply rate changes</h2>
-          <p className="hint">Applies every edited rate to its corresponding desktop or Watch stream.</p>
-        </div>
-        <div className="recording-actions">
-          <button onClick={commitRates}>Apply rates</button>
-          <button onClick={onReset}>Reset to defaults</button>
-        </div>
-      </section>
+      <ApplySettingsFooter
+        applyPending={isPending("settings:apply")}
+        resetPending={isPending("settings:reset")}
+        onApply={commitRates}
+        onReset={onReset}
+      />
     </main>
   );
 }

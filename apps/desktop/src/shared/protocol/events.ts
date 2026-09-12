@@ -197,3 +197,16 @@ export interface AppSettings {
 }
 
 export const SETTINGS_UPDATED_EVENT = "settings-updated";
+
+/** Mirrors `spatial_protocol::IMU_SENSOR_IDS` / `CONTROLLABLE_SENSOR_IDS`. */
+export const IMU_SENSOR_IDS = new Set(["orientation", "acceleration", "gyroscope"]);
+
+/** Mirrors `spatial_protocol::CONTROLLABLE_SENSOR_IDS`. */
+export const CONTROLLABLE_SENSORS: Array<{ id: string; label: string }> = [
+  { id: "orientation", label: "Orientation (rotation vector)" },
+  { id: "acceleration", label: "Accelerometer" },
+  { id: "gyroscope", label: "Gyroscope" },
+  { id: "heart_rate_continuous", label: "Heart rate" },
+  { id: "skin_temperature_continuous", label: "Skin temperature" },
+  { id: "eda_continuous", label: "EDA" },
+];

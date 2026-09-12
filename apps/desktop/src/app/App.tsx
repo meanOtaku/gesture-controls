@@ -2,11 +2,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AppNav } from "./components/AppNav";
+import { OperationFeedback } from "../components/app/OperationFeedback";
 import { Dashboard } from "../features/dashboard/components/Dashboard";
 import { LiveTelemetry } from "../features/telemetry/components/LiveTelemetry";
 import { ModelLab } from "../features/model-lab/components/ModelLab";
 import { Settings } from "../features/settings/components/Settings";
 import { telemetryStore } from "../features/telemetry/store/telemetryStore";
+import { usePendingActions } from "../shared/hooks/usePendingActions";
 import { VolumeKnob } from "../features/overlay/components/VolumeKnob";
 import {
   CALIBRATION_STATE_EVENT,
@@ -115,6 +117,7 @@ function MainApp() {
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<"main" | "headphone" | "watch" | "telemetry" | "modelLab" | "settings">("main");
+  const { isPending, run } = usePendingActions();
   const calibrationEventVersion = useRef(0);
   const overlayEventVersion = useRef(0);
   const overlayVisible = useRef(false);
@@ -317,26 +320,40 @@ function MainApp() {
   };
 
   const queueSettingsWrite = (write: () => Promise<AppSettings>) => {
-    settingsWriteChain.current = settingsWriteChain.current
+    const outcome = settingsWriteChain.current
       .catch(() => undefined)
       .then(async () => {
-        try {
-          setSettingsError(null);
-          applyLiveSettings(await write());
-        } catch (error) {
-          setSettingsError(String(error));
-        }
+        setSettingsError(null);
+        applyLiveSettings(await write());
       });
+    settingsWriteChain.current = outcome.catch(() => undefined);
+    return outcome;
   };
 
   const updateSettings = (next: AppSettings) => {
     if (!inTauri) return;
-    queueSettingsWrite(() => invoke<AppSettings>("update_settings", { settings: next }));
+    void run("settings:apply", async () => {
+      try {
+        await queueSettingsWrite(() => invoke<AppSettings>("update_settings", { settings: next }));
+        OperationFeedback.success("Apply settings", "Rates updated.");
+      } catch (error) {
+        setSettingsError(String(error));
+        OperationFeedback.error("Apply settings", String(error));
+      }
+    });
   };
 
   const resetSettings = () => {
     if (!inTauri) return;
-    queueSettingsWrite(() => invoke<AppSettings>("reset_settings"));
+    void run("settings:reset", async () => {
+      try {
+        await queueSettingsWrite(() => invoke<AppSettings>("reset_settings"));
+        OperationFeedback.success("Reset settings", "Restored defaults.");
+      } catch (error) {
+        setSettingsError(String(error));
+        OperationFeedback.error("Reset settings", String(error));
+      }
+    });
   };
 
   useEffect(() => {
@@ -362,35 +379,50 @@ function MainApp() {
 
   const captureTarget = async (target: CalibrationTarget) => {
     if (!inTauri) return;
-    try {
-      setCalibrationError(null);
-      await invoke<CalibrationState>("capture_calibration_target", { target });
-    } catch (error) {
-      setCalibrationError(String(error));
-    }
+    await run(`capture:${target}`, async () => {
+      try {
+        setCalibrationError(null);
+        await invoke<CalibrationState>("capture_calibration_target", { target });
+        OperationFeedback.success(
+          "Capture calibration target",
+          target === "center" ? "Center position saved." : "Top-right position saved.",
+        );
+      } catch (error) {
+        setCalibrationError(String(error));
+        OperationFeedback.error("Capture calibration target", String(error));
+      }
+    });
   };
 
   const updateCalibration = async (activationThresholdDegrees: number, dwellMs: number) => {
     if (!inTauri) return;
-    try {
-      setCalibrationError(null);
-      await invoke<CalibrationState>("update_calibration_config", {
-        activationThresholdDegrees,
-        dwellMs,
-      });
-    } catch (error) {
-      setCalibrationError(String(error));
-    }
+    await run("calibration:update", async () => {
+      try {
+        setCalibrationError(null);
+        await invoke<CalibrationState>("update_calibration_config", {
+          activationThresholdDegrees,
+          dwellMs,
+        });
+        OperationFeedback.success("Update calibration", "Threshold and dwell saved.");
+      } catch (error) {
+        setCalibrationError(String(error));
+        OperationFeedback.error("Update calibration", String(error));
+      }
+    });
   };
 
   const setSensorEnabled = async (sensor: string, enabled: boolean) => {
     if (!inTauri) return;
-    try {
-      setSensorControlError(null);
-      await invoke("set_sensor_enabled", { sensor, enabled });
-    } catch (error) {
-      setSensorControlError(String(error));
-    }
+    await run(`sensor:${sensor}`, async () => {
+      try {
+        setSensorControlError(null);
+        await invoke("set_sensor_enabled", { sensor, enabled });
+        OperationFeedback.success("Sensor control", `${sensor.replaceAll("_", " ")} ${enabled ? "enabled" : "disabled"}.`);
+      } catch (error) {
+        setSensorControlError(String(error));
+        OperationFeedback.error("Sensor control", String(error));
+      }
+    });
   };
 
   const applicationError = [calibrationError, volumeError, sensorControlError]
@@ -407,15 +439,35 @@ function MainApp() {
         calibration={calibration}
         calibrationError={applicationError}
         watchStatus={watchStatus}
+        isPending={isPending}
         onCaptureTarget={(target) => { void captureTarget(target); }}
         onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }}
       />
     )}
     {activeTab === "headphone" && (
-      <Dashboard view="headphone" status={status} calibration={calibration} calibrationError={applicationError} watchStatus={watchStatus} onCaptureTarget={(target) => { void captureTarget(target); }} onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }} />
+      <Dashboard
+        view="headphone"
+        status={status}
+        calibration={calibration}
+        calibrationError={applicationError}
+        watchStatus={watchStatus}
+        isPending={isPending}
+        onCaptureTarget={(target) => { void captureTarget(target); }}
+        onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }}
+      />
     )}
     {activeTab === "watch" && (
-      <Dashboard view="watch" status={status} calibration={calibration} calibrationError={applicationError} watchStatus={watchStatus} onCaptureTarget={(target) => { void captureTarget(target); }} onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }} onSetSensorEnabled={(sensor, enabled) => { void setSensorEnabled(sensor, enabled); }} />
+      <Dashboard
+        view="watch"
+        status={status}
+        calibration={calibration}
+        calibrationError={applicationError}
+        watchStatus={watchStatus}
+        isPending={isPending}
+        onCaptureTarget={(target) => { void captureTarget(target); }}
+        onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }}
+        onSetSensorEnabled={(sensor, enabled) => { void setSensorEnabled(sensor, enabled); }}
+      />
     )}
     {activeTab === "telemetry" && (
       <LiveTelemetry />
@@ -427,6 +479,7 @@ function MainApp() {
       <Settings
         settings={settings}
         error={settingsError}
+        isPending={isPending}
         onUpdate={(next) => { void updateSettings(next); }}
         onReset={() => { void resetSettings(); }}
       />
