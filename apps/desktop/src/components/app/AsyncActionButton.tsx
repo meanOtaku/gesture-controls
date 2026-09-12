@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from "react";
+import { Loader2Icon } from "lucide-react";
+import { Button } from "../ui/button";
 
 type AsyncActionButtonProps = {
   pendingLabel: ReactNode;
@@ -23,8 +25,9 @@ export function AsyncActionButton({ pendingLabel, children, onPress, disabled, c
   };
 
   return (
-    <button type="button" className={className} disabled={disabled || pending} aria-busy={pending} onClick={handleClick}>
+    <Button type="button" className={className} disabled={disabled || pending} aria-busy={pending} onClick={handleClick}>
+      {pending && <Loader2Icon className="animate-spin" aria-hidden="true" />}
       {pending ? pendingLabel : children}
-    </button>
+    </Button>
   );
 }

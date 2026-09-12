@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveTelemetry } from "./LiveTelemetry";
 import { telemetryStore } from "../store/telemetryStore";
-import { OperationToaster } from "../../../components/app/OperationToaster";
+import { Toaster } from "../../../components/ui/sonner";
 import { resetFeedbackForTests } from "../../../components/app/OperationFeedback";
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
@@ -61,7 +61,7 @@ describe("Live telemetry", () => {
       resetCounter: 0,
     });
     exportCsv.mockResolvedValue({ status: "saved", path: "/Users/test/Desktop/gesture-telemetry.csv" });
-    render(<><OperationToaster /><LiveTelemetry /></>);
+    render(<><Toaster /><LiveTelemetry /></>);
 
     const button = screen.getByRole("button", { name: "Save CSV" });
     fireEvent.click(button);
@@ -85,7 +85,7 @@ describe("Live telemetry", () => {
       resetCounter: 0,
     });
     exportCsv.mockResolvedValue({ status: "cancelled" });
-    render(<><OperationToaster /><LiveTelemetry /></>);
+    render(<><Toaster /><LiveTelemetry /></>);
 
     fireEvent.click(screen.getByRole("button", { name: "Save CSV" }));
 
@@ -93,7 +93,7 @@ describe("Live telemetry", () => {
     expect(telemetryStore.getSavedCount()).toBe(0);
   });
 
-  it("reports a failed dataset export as an alert and re-enables the control", async () => {
+  it("reports a failed dataset export via toast and re-enables the control", async () => {
     telemetryStore.startDatasetRecording();
     telemetryStore.ingestWatchOrientation({
       deviceId: "watch-test",
@@ -104,12 +104,12 @@ describe("Live telemetry", () => {
       gyroscope: [0, 0, 0],
     });
     exportCsv.mockResolvedValue({ status: "error", message: "disk full" });
-    render(<><OperationToaster /><LiveTelemetry /></>);
+    render(<><Toaster /><LiveTelemetry /></>);
 
     const button = screen.getByRole("button", { name: "Export Dataset CSV" });
     fireEvent.click(button);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("disk full");
+    expect(await screen.findByText("Could not save: disk full")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "Export Dataset CSV" })).toBeEnabled());
   });
 });
