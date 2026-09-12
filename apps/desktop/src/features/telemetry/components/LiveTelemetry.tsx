@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useState, useSyncExternalStore } from "react";
+import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { CsvCaptureCard } from "./CsvCaptureCard";
 import { DatasetCaptureCard } from "./DatasetCaptureCard";
 import { SignalMonitor, type SignalView } from "./SignalMonitor";
@@ -58,8 +59,10 @@ export function LiveTelemetry() {
     setMeasurementError(null);
     try {
       await invoke(measuring ? "stop_measurement" : "start_measurement", { tracker });
+      OperationFeedback.success("Wellness measurement", `${measuring ? "Stopped" : "Started"} ${tracker.replaceAll("_", " ")}.`);
     } catch (error) {
       setMeasurementError(`Could not ${measuring ? "stop" : "start"} the measurement: ${String(error)}`);
+      OperationFeedback.error("Wellness measurement", String(error));
     } finally {
       setPendingMeasurement(null);
     }
@@ -119,6 +122,6 @@ export function LiveTelemetry() {
       measurementError={measurementError}
       onRequestMeasurement={(tracker, measuring) => { void requestMeasurement(tracker, measuring); }}
     />
-    <p className="hint telemetry-note">Graphs retain the latest {MAX_VISIBLE_SAMPLES} points. CSV recording is bounded to the most recent {MAX_CSV_ROWS.toLocaleString()} rows (~{formatBytes(MAX_CSV_ROWS * ESTIMATED_BYTES_PER_CSV_ROW)} max); files download through the desktop WebView.</p>
+    <p className="hint telemetry-note">Graphs retain the latest {MAX_VISIBLE_SAMPLES} points. CSV recording is bounded to the most recent {MAX_CSV_ROWS.toLocaleString()} rows (~{formatBytes(MAX_CSV_ROWS * ESTIMATED_BYTES_PER_CSV_ROW)} max); files save through your operating system's native save dialog.</p>
   </main>;
 }

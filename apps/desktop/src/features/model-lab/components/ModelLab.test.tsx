@@ -36,6 +36,13 @@ async function openModelLab() {
   await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("list_model_datasets"));
 }
 
+// Base UI's Select commits an item selection on pointerdown/pointerup, not a bare click.
+function selectOption(option: HTMLElement) {
+  fireEvent.pointerDown(option, { button: 0, pointerId: 1 });
+  fireEvent.pointerUp(option, { button: 0, pointerId: 1 });
+  fireEvent.click(option);
+}
+
 describe("ModelLab", () => {
   afterEach(() => {
     cleanup();
@@ -459,20 +466,19 @@ describe("ModelLab", () => {
     await openModelLab();
     await screen.findByRole("button", { name: "Mark evaluated" });
 
-    const negativeSelect = screen.getByRole("combobox", { name: "negative intent for model-a" });
-    expect(Array.from(negativeSelect.querySelectorAll("option")).map((option) => option.textContent)).toEqual([
-      "No action",
-    ]);
+    fireEvent.click(screen.getByRole("combobox", { name: "negative intent for model-a" }));
+    expect((await screen.findAllByRole("option")).map((option) => option.textContent)).toEqual(["No action"]);
+    selectOption(screen.getByRole("option", { name: "No action" }));
 
-    const pinchStartSelect = screen.getByRole("combobox", { name: "pinch_start intent for model-a" });
-    expect(Array.from(pinchStartSelect.querySelectorAll("option")).map((option) => option.textContent)).toEqual([
+    fireEvent.click(screen.getByRole("combobox", { name: "pinch_start intent for model-a" }));
+    expect((await screen.findAllByRole("option")).map((option) => option.textContent)).toEqual([
       "Begin volume grab",
       "No action",
     ]);
+    selectOption(screen.getByRole("option", { name: "Begin volume grab" }));
 
-    fireEvent.change(pinchStartSelect, { target: { value: "volumeGrab" } });
-    const pinchReleaseSelect = screen.getByRole("combobox", { name: "pinch_release intent for model-a" });
-    fireEvent.change(pinchReleaseSelect, { target: { value: "volumeRelease" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "pinch_release intent for model-a" }));
+    selectOption(await screen.findByRole("option", { name: "End volume grab" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Save bindings" }));
 
@@ -556,5 +562,35 @@ describe("ModelLab", () => {
     expect(rollback).not.toBeDisabled();
     fireEvent.click(rollback);
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("rollback_active_model"));
+  });
+
+  it("locks the inference mode controls while a mode change is in flight and ignores a duplicate click", async () => {
+    const activeRegistry = { models: [REGISTRY_MODEL_A], activeModelId: "model-a", previousActiveModelId: null, inferenceMode: "off" };
+    let resolveSetMode: (registry: unknown) => void = () => {};
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_model_datasets") return Promise.resolve([]);
+      if (command === "get_training_status") return Promise.resolve({ phase: "idle" });
+      if (command === "list_trained_models") return Promise.resolve([]);
+      if (command === "get_model_registry") return Promise.resolve(activeRegistry);
+      if (command === "set_inference_mode") {
+        return new Promise((resolve) => {
+          resolveSetMode = resolve;
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+
+    await openModelLab();
+    const monitorButton = await screen.findByRole("button", { name: "Monitor" });
+    expect(monitorButton).not.toBeDisabled();
+
+    fireEvent.click(monitorButton);
+    await waitFor(() => expect(monitorButton).toBeDisabled());
+    fireEvent.click(monitorButton);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "set_inference_mode")).toHaveLength(1);
+    expect(invokeMock).toHaveBeenCalledWith("set_inference_mode", { mode: "monitor" });
+
+    resolveSetMode({ ...activeRegistry, inferenceMode: "monitor" });
+    await screen.findByRole("button", { name: "Monitor", pressed: true });
   });
 });

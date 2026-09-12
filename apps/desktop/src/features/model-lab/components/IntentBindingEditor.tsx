@@ -1,5 +1,7 @@
 import { AsyncActionButton } from "../../../components/app/AsyncActionButton";
+import { HelpTooltip } from "../../../components/app/HelpTooltip";
 import { Badge } from "../../../components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 import {
   ALLOWED_INTENTS_FOR_CLASS,
   DEPLOYABLE_CLASS_LABELS,
@@ -23,6 +25,14 @@ export function IntentBindingEditor({ model, editable, draft, onDraftChange, onS
 
   return (
     <div aria-label={`Safe intent bindings for ${model.id}`}>
+      <div className="flex items-center gap-2">
+        <span className="label">Safe intent bindings</span>
+        <HelpTooltip label="About safe intent bindings">
+          Each predicted class maps to one allowed system action. Only Live mode can act on these bindings, and only
+          the intents listed here are ever offered — a model can never be bound to an action outside this fixed
+          allow-list.
+        </HelpTooltip>
+      </div>
       {DEPLOYABLE_CLASS_LABELS.map((classLabel) => {
         const existing = model.intentBindings.find((entry) => entry.classLabel === classLabel);
         const draftIntent = draft?.[classLabel];
@@ -32,17 +42,21 @@ export function IntentBindingEditor({ model, editable, draft, onDraftChange, onS
           <div className="model-lab-label-row" key={classLabel}>
             <span className="label">{classLabel.replaceAll("_", " ")}</span>
             {editable ? (
-              <select
-                aria-label={`${classLabel} intent for ${model.id}`}
+              <Select
                 value={currentIntent}
-                onChange={(event) => onDraftChange(classLabel, event.target.value as GestureIntent)}
+                onValueChange={(value) => onDraftChange(classLabel, value as GestureIntent)}
               >
-                {options.map((intent) => (
-                  <option key={intent} value={intent}>
-                    {INTENT_COPY[intent]}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger aria-label={`${classLabel} intent for ${model.id}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {options.map((intent) => (
+                    <SelectItem key={intent} value={intent}>
+                      {INTENT_COPY[intent]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             ) : (
               <Badge variant="outline">{existing ? INTENT_COPY[existing.intent] : "Unbound"}</Badge>
             )}

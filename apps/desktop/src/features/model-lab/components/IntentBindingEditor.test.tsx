@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { IntentBindingEditor } from "./IntentBindingEditor";
+import { TooltipProvider } from "../../../components/ui/tooltip";
 import type { ModelRegistryModel } from "../types";
 
 afterEach(() => cleanup());
@@ -16,19 +17,33 @@ function renderEditor(overrides: Partial<React.ComponentProps<typeof IntentBindi
     onSave: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
-  render(<IntentBindingEditor {...props} />);
+  render(<TooltipProvider><IntentBindingEditor {...props} /></TooltipProvider>);
   return props;
 }
 
+// Base UI's Select commits an item selection on pointerdown/pointerup, not a bare click.
+function selectOption(option: HTMLElement) {
+  fireEvent.pointerDown(option, { button: 0, pointerId: 1 });
+  fireEvent.pointerUp(option, { button: 0, pointerId: 1 });
+  fireEvent.click(option);
+}
+
 describe("IntentBindingEditor", () => {
-  it("only offers safe intents per class", () => {
+  it("explains safe intent bindings via an accessible help tooltip", async () => {
     renderEditor();
-    const negativeSelect = screen.getByRole("combobox", { name: "negative intent for model-a" });
-    expect(Array.from(negativeSelect.querySelectorAll("option")).map((option) => option.textContent)).toEqual([
-      "No action",
-    ]);
-    const pinchStartSelect = screen.getByRole("combobox", { name: "pinch_start intent for model-a" });
-    expect(Array.from(pinchStartSelect.querySelectorAll("option")).map((option) => option.textContent)).toEqual([
+    const trigger = screen.getByRole("button", { name: "About safe intent bindings" });
+    fireEvent.focus(trigger);
+    expect(await screen.findByText(/only Live mode can act on these bindings/i)).toBeInTheDocument();
+  });
+
+  it("only offers safe intents per class", async () => {
+    renderEditor();
+    fireEvent.click(screen.getByRole("combobox", { name: "negative intent for model-a" }));
+    expect((await screen.findAllByRole("option")).map((option) => option.textContent)).toEqual(["No action"]);
+    selectOption(screen.getByRole("option", { name: "No action" }));
+
+    fireEvent.click(screen.getByRole("combobox", { name: "pinch_start intent for model-a" }));
+    expect((await screen.findAllByRole("option")).map((option) => option.textContent)).toEqual([
       "Begin volume grab",
       "No action",
     ]);
@@ -39,10 +54,9 @@ describe("IntentBindingEditor", () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     renderEditor({ onDraftChange, onSave });
 
-    fireEvent.change(screen.getByRole("combobox", { name: "pinch_start intent for model-a" }), {
-      target: { value: "volumeGrab" },
-    });
-    expect(onDraftChange).toHaveBeenCalledWith("pinch_start", "volumeGrab");
+    fireEvent.click(screen.getByRole("combobox", { name: "pinch_start intent for model-a" }));
+    selectOption(await screen.findByRole("option", { name: "Begin volume grab" }));
+    await waitFor(() => expect(onDraftChange).toHaveBeenCalledWith("pinch_start", "volumeGrab"));
 
     fireEvent.click(screen.getByRole("button", { name: "Save bindings" }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());

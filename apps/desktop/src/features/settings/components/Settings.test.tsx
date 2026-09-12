@@ -78,6 +78,12 @@ describe("Settings", () => {
     expect(resetCount).toBe(1);
   });
 
+  it("explains the difference between recording and graph refresh rate via help", async () => {
+    render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
+    fireEvent.focus(screen.getByRole("button", { name: "About recording and graph rates" }));
+    expect(await screen.findByText(/does not affect what gets saved/i)).toBeInTheDocument();
+  });
+
   it("shows pending feedback and disables both apply and reset while either is in flight", () => {
     render(
       <Settings

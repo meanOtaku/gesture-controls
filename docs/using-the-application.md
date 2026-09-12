@@ -51,7 +51,21 @@ Follow this order rather than enabling every feature at once:
 7. **Model Lab:** use **Monitor** mode with live telemetry. It records decisions but cannot operate desktop controls.
 8. Only after reviewing Monitor results and validating the target platform, use **Live** mode with an isolated test audio output.
 
-## 3. Tabs and features
+## 3. In-app feedback, help, and file saves
+
+### Async action feedback
+
+Buttons that trigger a desktop-side operation (training, activation, rollback, inference-mode changes, wellness measurements, CSV saves, and similar) show a pending state while the request is in flight — the button's label changes (for example to "Saving…" or "Updating…") and it disables itself so a second click cannot fire a duplicate request. When the operation finishes, the outcome is reported as a toast notification: **success**, **info** (for example, a cancelled save), **warning**, or **error**, each auto-dismissing after a few seconds. Treat these toasts, not silent completion, as confirmation that an action actually happened.
+
+### Contextual help
+
+A small "?" icon next to some section headings and controls opens an accessible help tooltip on hover, keyboard focus, or click. It is used where a control's behavior is not obvious from its label alone — for example, the difference between recording rate and graph refresh rate, what a safe intent binding can and cannot do, or what each inference mode is allowed to do. Not every control has one; obvious controls intentionally do not.
+
+### Saving CSV files
+
+**Save CSV** and **Export Dataset CSV** open your operating system's native save dialog so you choose the destination yourself; nothing is written until you confirm the dialog. Canceling the dialog reports "Save cancelled" and writes nothing. A write failure (for example, no permission to the chosen folder) is reported with the underlying error rather than failing silently. In the browser-preview build only (no Tauri runtime), the same actions fall back to a normal browser download since no native dialog is available there; this fallback is never used to mask a Tauri write failure.
+
+## 4. Tabs and features
 
 ### Main
 
@@ -217,7 +231,7 @@ Defaults target roughly 30 volume points for a 90° twist. Begin with defaults a
 
 These controls preserve raw source timestamps. For health sensors, Samsung/device sampling remains authoritative; some controls affect desktop acceptance or flush/delivery behavior rather than physical sampling frequency.
 
-## 4. How volume control works
+## 5. How volume control works
 
 ### Watch-button fallback
 
@@ -235,7 +249,7 @@ With a validated active TFLite model in Live mode, the desktop may begin or rele
 
 Use the Desktop readiness screen to check the backend. Backend errors fail closed: the app must not claim a volume change it did not perform.
 
-## 5. Troubleshooting and safe recovery
+## 6. Troubleshooting and safe recovery
 
 | Symptom | What to do |
 | --- | --- |
@@ -247,7 +261,7 @@ Use the Desktop readiness screen to check the backend. Backend errors fail close
 | Model training/replay cannot start | Open Desktop readiness, install `uv`, use a complete repository checkout, and recheck. |
 | An interaction remains active unexpectedly | Stop Watch telemetry or disconnect the Watch; the desktop should force-release/hide. Also leave the gaze target or press Escape to hide the overlay. |
 
-## 6. Before enabling Live on your own hardware
+## 7. Before enabling Live on your own hardware
 
 Complete the applicable items in [Release-readiness acceptance checklist](release-readiness.md), especially:
 

@@ -1,12 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AppNav } from "./components/AppNav";
 import { OperationFeedback } from "../components/app/OperationFeedback";
-import { Dashboard } from "../features/dashboard/components/Dashboard";
-import { LiveTelemetry } from "../features/telemetry/components/LiveTelemetry";
-import { ModelLab } from "../features/model-lab/components/ModelLab";
-import { Settings } from "../features/settings/components/Settings";
+import { Skeleton } from "../components/ui/skeleton";
 import { telemetryStore } from "../features/telemetry/store/telemetryStore";
 import { usePendingActions } from "../shared/hooks/usePendingActions";
 import { VolumeKnob } from "../features/overlay/components/VolumeKnob";
@@ -46,6 +43,27 @@ const emptyOverlay: OverlayState = {
   screenX: 0,
   screenY: 0,
 };
+
+/**
+ * Tab bodies are code-split by route: only the active tab's chunk loads. The
+ * overlay window (`VolumeKnob`, above) is never part of this split — it is the
+ * always-visible safety/control surface and must stay eagerly bundled.
+ */
+const Dashboard = lazy(() => import("../features/dashboard/components/Dashboard").then((m) => ({ default: m.Dashboard })));
+const LiveTelemetry = lazy(() => import("../features/telemetry/components/LiveTelemetry").then((m) => ({ default: m.LiveTelemetry })));
+const ModelLab = lazy(() => import("../features/model-lab/components/ModelLab").then((m) => ({ default: m.ModelLab })));
+const Settings = lazy(() => import("../features/settings/components/Settings").then((m) => ({ default: m.Settings })));
+
+function TabFallback() {
+  return (
+    <main className="shell" aria-busy="true" aria-live="polite">
+      <span className="sr-only">Loading…</span>
+      <Skeleton className="h-24 w-full" />
+      <Skeleton className="mt-3 h-48 w-full" />
+      <Skeleton className="mt-3 h-48 w-full" />
+    </main>
+  );
+}
 
 
 
@@ -431,6 +449,7 @@ function MainApp() {
 
   return <>
     <AppNav activeTab={activeTab} onSelect={setActiveTab} />
+    <Suspense fallback={<TabFallback />}>
     {activeTab === "main" && (
       <Dashboard
         onNavigate={setActiveTab}
@@ -484,5 +503,6 @@ function MainApp() {
         onReset={() => { void resetSettings(); }}
       />
     )}
+    </Suspense>
   </>;
 }

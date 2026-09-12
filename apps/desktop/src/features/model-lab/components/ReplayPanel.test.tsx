@@ -47,11 +47,12 @@ describe("ReplayPanel", () => {
     expect(screen.getByText(/no deployable models yet/i)).toBeInTheDocument();
   });
 
-  it("disables Run replay until a model and dataset are selected", () => {
+  it("disables Run replay until a model and dataset are selected", async () => {
     renderPanel();
     expect(screen.getByRole("button", { name: "Run replay" })).toBeDisabled();
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Replay model" }), { target: { value: "model-a" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "Replay model" }));
+    fireEvent.click(await screen.findByRole("option", { name: "model-a" }));
     expect(screen.getByRole("button", { name: "Run replay" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("checkbox"));
@@ -62,7 +63,8 @@ describe("ReplayPanel", () => {
     const onReplay = vi.fn().mockResolvedValue(REPORT);
     renderPanel({ onReplay });
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Replay model" }), { target: { value: "model-a" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "Replay model" }));
+    fireEvent.click(await screen.findByRole("option", { name: "model-a" }));
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.change(screen.getByLabelText("Max reported outcomes"), { target: { value: "50" } });
     fireEvent.click(screen.getByRole("button", { name: "Run replay" }));
@@ -77,7 +79,8 @@ describe("ReplayPanel", () => {
     const onReplay = vi.fn().mockRejectedValue(new Error("replay timed out"));
     renderPanel({ onReplay });
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Replay model" }), { target: { value: "model-a" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "Replay model" }));
+    fireEvent.click(await screen.findByRole("option", { name: "model-a" }));
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Run replay" }));
 
@@ -87,7 +90,8 @@ describe("ReplayPanel", () => {
   it("flags truncated outcomes", async () => {
     renderPanel({ onReplay: vi.fn().mockResolvedValue({ ...REPORT, outcomes_truncated: true }) });
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Replay model" }), { target: { value: "model-a" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "Replay model" }));
+    fireEvent.click(await screen.findByRole("option", { name: "model-a" }));
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Run replay" }));
 

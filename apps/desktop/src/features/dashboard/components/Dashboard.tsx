@@ -1,4 +1,5 @@
 import { Alert, AlertDescription } from "../../../components/ui/alert";
+import { Input } from "../../../components/ui/input";
 import type {
   CalibrationState,
   CalibrationTarget,
@@ -123,9 +124,9 @@ export function Dashboard({
           <p className="eyebrow">Settings</p>
           <h2>Sony UDP input</h2>
         </div>
-        <label>Host<input value="127.0.0.1" readOnly /></label>
-        <label>JSON port<input value="4243" readOnly /></label>
-        <label>Watch WebSocket<input value="0.0.0.0:8766/ws/watch" readOnly /></label>
+        <label>Host<Input value="127.0.0.1" readOnly /></label>
+        <label>JSON port<Input value="4243" readOnly /></label>
+        <label>Watch WebSocket<Input value="0.0.0.0:8766/ws/watch" readOnly /></label>
         <p className="hint">Sony tracking stays on this computer; Watch data arrives over your local network. On macOS, use the arrow or +/- keys to change system volume while the knob is visible.</p>
       </section></details>}
     </main>

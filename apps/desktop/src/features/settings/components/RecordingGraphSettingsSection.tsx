@@ -21,7 +21,14 @@ export function RecordingGraphSettingsSection({
   return (
     <Card role="region" aria-label="Recording and graph settings">
       <CardHeader>
-        <SectionHeader title="Recording & graph" description="Live data" />
+        <SectionHeader
+          title="Recording & graph"
+          description="Live data"
+          help={{
+            label: "About recording and graph rates",
+            content: "Recording rate controls how many samples per second land in the CSV capture buffer, per channel. Graph refresh rate only controls how often the live charts redraw and does not affect what gets saved.",
+          }}
+        />
       </CardHeader>
       <CardContent className="calibration-actions">
         <Label className="flex flex-col items-start gap-1">

@@ -1,9 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
+import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
+import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { usePendingActions } from "../hooks/usePendingActions";
 import {
@@ -204,15 +206,18 @@ export function ModelLab() {
             backend: payload.backend,
             modelCard: payload.modelCard,
           });
+          OperationFeedback.success("Training", `Trained model ${payload.modelId}.`);
           void refreshTrainedModels();
           void refreshRegistry();
           break;
         case "failed":
           setStatus({ phase: "failed", jobId: payload.jobId, message: payload.message });
+          OperationFeedback.error("Training", payload.message);
           break;
         case "cancelled":
           setLogs((prev) => [...prev, "Training cancelled."]);
           setStatus({ phase: "idle" });
+          OperationFeedback.info("Training", "Training cancelled.");
           break;
       }
     }).then((fn) => {
@@ -237,8 +242,10 @@ export function ModelLab() {
         await invoke("import_model_dataset", { filename, csvContent });
         setError(null);
         await refreshDatasets();
+        OperationFeedback.success("Import dataset", `Imported ${filename}.`);
       } catch (err) {
         setError(String(err));
+        OperationFeedback.error("Import dataset", String(err));
       } finally {
         setImporting(false);
       }
@@ -259,8 +266,10 @@ export function ModelLab() {
           next.delete(id);
           return next;
         });
+        OperationFeedback.success("Delete dataset", "Dataset session deleted.");
       } catch (err) {
         setError(String(err));
+        OperationFeedback.error("Delete dataset", String(err));
       } finally {
         setPendingDeleteIds((prev) => {
           const next = new Set(prev);
@@ -292,6 +301,7 @@ export function ModelLab() {
       await invoke<string>("start_training_job", { datasetIds, backend: trainingBackend });
     } catch (err) {
       setTrainingError(String(err));
+      OperationFeedback.error("Start training", String(err));
     }
   }, [selectedDatasetIds, status.phase, trainingBackend]);
 
@@ -301,6 +311,7 @@ export function ModelLab() {
       await invoke("cancel_training_job", { jobId: status.jobId });
     } catch (err) {
       setTrainingError(String(err));
+      OperationFeedback.error("Cancel training", String(err));
     }
   }, [status]);
 
@@ -308,8 +319,10 @@ export function ModelLab() {
     try {
       setRegistry(await invoke<ModelRegistryView>("set_inference_mode", { mode }));
       setRuntimeError(null);
+      OperationFeedback.success("Inference mode", `Set to ${mode}.`);
     } catch (err) {
       setRuntimeError(String(err));
+      OperationFeedback.error("Inference mode", String(err));
     }
   }, []);
 
@@ -317,8 +330,10 @@ export function ModelLab() {
     try {
       setRegistry(await invoke<ModelRegistryView>("transition_model_state", { id, to }));
       setRuntimeError(null);
+      OperationFeedback.success("Model lifecycle", `${id} moved to ${to}.`);
     } catch (err) {
       setRuntimeError(String(err));
+      OperationFeedback.error("Model lifecycle", String(err));
     }
   }, []);
 
@@ -326,8 +341,10 @@ export function ModelLab() {
     try {
       setRegistry(await invoke<ModelRegistryView>("activate_model", { id }));
       setRuntimeError(null);
+      OperationFeedback.success("Activate model", `${id} is now active.`);
     } catch (err) {
       setRuntimeError(String(err));
+      OperationFeedback.error("Activate model", String(err));
     }
   }, []);
 
@@ -335,8 +352,10 @@ export function ModelLab() {
     try {
       setRegistry(await invoke<ModelRegistryView>("rollback_active_model"));
       setRuntimeError(null);
+      OperationFeedback.success("Rollback", "Restored the previous active model.");
     } catch (err) {
       setRuntimeError(String(err));
+      OperationFeedback.error("Rollback", String(err));
     }
   }, []);
 
@@ -360,8 +379,10 @@ export function ModelLab() {
       setBindingError(null);
       try {
         setRegistry(await invoke<ModelRegistryView>("set_model_intent_bindings", { id: modelId, bindings }));
+        OperationFeedback.success("Save bindings", `Safe intent bindings saved for ${modelId}.`);
       } catch (err) {
         setBindingError(String(err));
+        OperationFeedback.error("Save bindings", String(err));
       }
     },
     [registry, bindingDrafts],
@@ -494,16 +515,18 @@ export function ModelLab() {
             />
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            <div className="recording-actions">
+            <div className="recording-actions" role="radiogroup" aria-label="Inference mode">
               {(["off", "monitor", "live"] as const).map((mode) => (
-                <button
+                <Button
                   key={mode}
-                  className={registry?.inferenceMode === mode ? "recording" : undefined}
-                  disabled={!registry || (mode !== "off" && !registry.activeModelId)}
-                  onClick={() => void handleInferenceMode(mode)}
+                  type="button"
+                  variant={registry?.inferenceMode === mode ? "default" : "outline"}
+                  aria-pressed={registry?.inferenceMode === mode}
+                  disabled={!registry || isPending("inferenceMode") || (mode !== "off" && !registry.activeModelId)}
+                  onClick={() => void run("inferenceMode", () => handleInferenceMode(mode))}
                 >
-                  {mode[0].toUpperCase() + mode.slice(1)}
-                </button>
+                  {isPending("inferenceMode") ? "Updating…" : mode[0].toUpperCase() + mode.slice(1)}
+                </Button>
               ))}
             </div>
             {runtimeEvents.length === 0 ? (

@@ -13,6 +13,7 @@ import {
 } from "../../../components/ui/collapsible";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 import { formatPercent, type DatasetSummary, type ReplayReport } from "../types";
 
 const DEFAULT_MAX_OUTCOMES = 200;
@@ -75,19 +76,18 @@ export function ReplayPanel({ deployableModelIds, datasets, onReplay }: ReplayPa
           <>
             <div className="flex flex-col gap-1">
               <Label htmlFor="replay-model">Model</Label>
-              <select
-                id="replay-model"
-                aria-label="Replay model"
-                value={modelId}
-                onChange={(event) => setModelId(event.target.value)}
-              >
-                <option value="">Select a model…</option>
-                {deployableModelIds.map((id) => (
-                  <option key={id} value={id}>
-                    {id}
-                  </option>
-                ))}
-              </select>
+              <Select value={modelId} onValueChange={(value) => setModelId(value ?? "")}>
+                <SelectTrigger id="replay-model" aria-label="Replay model">
+                  <SelectValue placeholder="Select a model…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {deployableModelIds.map((id) => (
+                    <SelectItem key={id} value={id}>
+                      {id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <fieldset className="flex flex-col gap-1">

@@ -18,6 +18,7 @@ import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../../components/ui/collapsible";
+import { Input } from "../../../components/ui/input";
 import { GESTURE_DATASET_LABELS, type GestureDatasetLabel } from "../../telemetry/store/telemetryStore";
 import { ROLE_COPY, roleFor, type DatasetLabel, type DatasetSummary } from "../types";
 
@@ -91,7 +92,7 @@ export function DatasetManager({
           />
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <input
+          <Input
             ref={fileInputRef}
             type="file"
             accept=".csv"

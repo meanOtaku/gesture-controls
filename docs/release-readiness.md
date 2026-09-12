@@ -19,6 +19,29 @@ OS/architecture, device model/firmware, and outcome for every applicable row.
 - [ ] Use an isolated test audio output and a test dataset. Do not enable Live on an
   unreviewed model or a production presentation/audio device.
 
+**Status of this checklist as of the current change:** the async-feedback layer
+(pending button states plus success/info/warning/error toasts), contextual help
+tooltips, and the native CSV save dialog described below have been exercised only
+through the automated frontend test suite and manual testing on Linux development
+hardware. No macOS or Windows host was available in the environment that produced
+this change, so the macOS- and Windows-specific rows in this checklist remain
+unexecuted and are not being claimed as passed.
+
+## UI feedback and accessibility
+
+- [ ] Trigger a representative async action in each tab (for example: apply
+  settings, train/activate/roll back a model, change inference mode, start/stop a
+  wellness measurement, save a CSV) and confirm it shows a pending state (disabled
+  control and/or changed label) and a terminal success or error toast; confirm a
+  second rapid click does not fire a duplicate request while pending.
+- [ ] Reach each visible help ("?") icon by keyboard (Tab to focus, then confirm the
+  tooltip content is announced/visible) as well as by mouse hover, and confirm
+  Escape or moving focus away dismisses it.
+- [ ] Confirm **Save CSV** and **Export Dataset CSV** open the native OS save dialog,
+  that cancelling it reports "Save cancelled" and writes nothing, and that a save
+  failure (for example, an unwritable folder) surfaces the underlying error as a
+  toast rather than failing silently.
+
 ## Watch raw-telemetry and quality gate
 
 - [ ] Install the Watch app on a supported Galaxy Watch, place it and the desktop on
