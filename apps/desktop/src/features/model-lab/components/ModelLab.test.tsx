@@ -81,10 +81,12 @@ describe("ModelLab", () => {
   it("opens from the nav tab, shows every workflow section, and reports the dev-runner requirement truthfully", async () => {
     await openModelLab();
 
-    for (const sectionLabel of ["Desktop readiness", "Dataset", "Label coverage", "Training", "Evaluation", "Export and deploy"]) {
+    for (const sectionLabel of ["Desktop readiness", "Dataset", "Label coverage", "Training", "Evaluation", "Replay", "Export and deploy", "Live inference diagnostics"]) {
       expect(screen.getByRole("region", { name: sectionLabel })).toBeInTheDocument();
     }
 
+    expect(screen.queryByText(/uv run --project tools\/pinch-classifier/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Training requirements and advanced settings"));
     expect(screen.getAllByText(/uv run --project tools\/pinch-classifier/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/managed tauri runner is the next integration slice/i)).not.toBeInTheDocument();
 
@@ -160,6 +162,7 @@ describe("ModelLab", () => {
     await openModelLab();
 
     await screen.findByText(/session-1\.csv/i);
+    fireEvent.click(screen.getByRole("button", { name: /view label coverage/i }));
     const pinchStartRow = screen.getByText("pinch start").closest(".model-lab-label-row");
     expect(pinchStartRow).not.toBeNull();
     expect(pinchStartRow).toHaveTextContent("1 session");
@@ -217,6 +220,8 @@ describe("ModelLab", () => {
 
     await screen.findByText(/session-1\.csv/i);
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const confirmButtons = await screen.findAllByRole("button", { name: "Delete" });
+    fireEvent.click(confirmButtons[confirmButtons.length - 1]);
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("delete_model_dataset", { id: "dataset-a" }));
     expect(await screen.findByText(/no dataset sessions imported yet/i)).toBeInTheDocument();
