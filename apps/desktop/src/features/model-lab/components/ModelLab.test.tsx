@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import App from "../../../app/App";
+import { ModelLab } from "./ModelLab";
 
 const invokeMock = vi.fn();
 const listenMock = vi.fn();
@@ -32,17 +32,18 @@ const COMPLETE_BINDINGS = [
 ];
 
 async function openModelLab() {
-  render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: "Model Lab" }));
+  render(<ModelLab />);
   await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("list_model_datasets"));
 }
 
 describe("ModelLab", () => {
   afterEach(() => {
     cleanup();
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
   });
 
   beforeEach(() => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
     invokeMock.mockReset();
     listenMock.mockReset();
     trainingEventHandler = undefined;
@@ -58,6 +59,23 @@ describe("ModelLab", () => {
       if (command === "list_trained_models") return Promise.resolve([]);
       return Promise.resolve(undefined);
     });
+  });
+
+  it("explains browser preview without calling desktop APIs", () => {
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    render(<ModelLab />);
+    expect(screen.getByText("You’re viewing the browser preview")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Import dataset CSV" })).toBeDisabled();
+    expect(invokeMock).not.toHaveBeenCalled();
+    expect(listenMock).not.toHaveBeenCalled();
+    expect(screen.queryByText(/TypeError/)).not.toBeInTheDocument();
+  });
+
+  it("reports listener failures instead of leaving unhandled rejections", async () => {
+    listenMock.mockRejectedValue(new Error("event bridge unavailable"));
+    await openModelLab();
+    expect(await screen.findByText(/Could not subscribe to training updates/)).toBeInTheDocument();
+    expect(screen.getByText(/Could not subscribe to inference updates/)).toBeInTheDocument();
   });
 
   it("opens from the nav tab, shows every workflow section, and reports the dev-runner requirement truthfully", async () => {

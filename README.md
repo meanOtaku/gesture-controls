@@ -2,11 +2,11 @@
 
 A cross-platform Tauri 2 desktop coordinator for spatial controls using Sony headset orientation and, in later milestones, Samsung Galaxy Watch gestures.
 
-The repository currently implements Milestones 1–5 from [`docs/architecture/project-brief.md`](docs/architecture/project-brief.md): the desktop foundation, Sony JSON UDP input, head calibration, the volume overlay, and real macOS system-volume control. Sony Head Tracker remains a background CLI bridge, while the Tauri dashboard is the only tracker window.
+The repository includes the desktop foundation, Sony JSON UDP input, head calibration, volume overlay, Galaxy Watch telemetry and wrist controls, dataset recording, and Model Lab training and deployment workflows. Platform volume adapters exist for macOS, Windows, and Linux; physical-device and release acceptance remain separate validation steps. Sony Head Tracker remains a background CLI bridge, while the Tauri dashboard is the only tracker window.
 
 ## Run the complete system
 
-Install the JavaScript dependencies once:
+Use Node.js 22.12 or newer in the Node 22 release line (see `.nvmrc`), then install the JavaScript dependencies once:
 
 ```bash
 npm ci
@@ -43,7 +43,7 @@ npm start
 3. Starts the Tauri application.
 4. Stops both process trees when either application exits or the launcher receives Ctrl+C.
 
-After center and top-right calibration, hold your gaze on the top-right target for the configured dwell time. The dedicated volume overlay appears without taking focus. On macOS, use the arrow keys or `+`/`-` in the main window to change the real system output volume; leaving the target, losing Sony tracking, or pressing Escape hides it. Other platforms currently keep the overlay available but report native volume control as unsupported until their Milestone 12 adapters land.
+After center and top-right calibration, hold your gaze on the top-right target for the configured dwell time. The dedicated volume overlay appears without taking focus. On macOS, use the arrow keys or `+`/`-` in the main window to change the real system output volume; leaving the target, losing Sony tracking, or pressing Escape hides it. Windows uses Core Audio; Linux uses PipeWire or PulseAudio command adapters. Each platform still requires device validation.
 
 The tracker is deliberately not compiled into, bundled with, or owned by the Tauri binary. The launcher is only an operator convenience around two independent processes.
 

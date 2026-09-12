@@ -1,7 +1,9 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { Dashboard } from "./Dashboard";
 import type { HeadTrackerStatus } from "../../../shared/protocol/events";
+
+afterEach(cleanup);
 
 const connected: HeadTrackerStatus = {
   connected: true,
@@ -17,6 +19,24 @@ const connected: HeadTrackerStatus = {
 };
 
 describe("Dashboard", () => {
+  it("does not report a ready gesture when calibrated headphones are disconnected", () => {
+    render(<Dashboard status={{ ...connected, connected: false }} calibration={{
+      centerCalibrated: true, topRightCalibrated: true, requiresRecalibration: false,
+      activationThresholdDegrees: 12, dwellMs: 400, activeTarget: null,
+    }} />);
+    expect(screen.queryByText("Ready")).not.toBeInTheDocument();
+    expect(screen.getByText("Connect headphones to begin")).toBeInTheDocument();
+  });
+
+  it("keeps device errors visible on the overview and routes setup actions", () => {
+    const routes: string[] = [];
+    render(<Dashboard status={null} calibrationError="Volume backend unavailable" onNavigate={(view) => routes.push(view)} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Volume backend unavailable");
+    fireEvent.click(screen.getByRole("button", { name: "Open calibration →" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check Watch →" }));
+    expect(routes).toEqual(["headphone", "watch"]);
+  });
+
   it("shows connection and all required Sony diagnostics", () => {
     render(<Dashboard view="headphone" status={connected} />);
     expect(screen.getByText("Bridge connected")).toBeInTheDocument();

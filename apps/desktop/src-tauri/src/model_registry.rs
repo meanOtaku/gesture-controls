@@ -221,20 +221,14 @@ impl ModelRecord {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum InferenceMode {
+    // A fresh install never drives desktop actions until the user opts in.
+    #[default]
     Off,
     Monitor,
     Live,
-}
-
-impl Default for InferenceMode {
-    fn default() -> Self {
-        // Fail-closed default: a fresh install never drives desktop actions
-        // from inference until a user explicitly opts in.
-        InferenceMode::Off
-    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -859,12 +853,11 @@ pub fn activate_model(
     force_release_before_swap(&app, &gesture_policy, &pinch_inference);
 
     let previous_active = index.active_model_id.clone();
-    if let Some(previous_id) = &previous_active {
-        if previous_id != &id {
-            if let Ok(previous) = find_model_mut(&mut index, previous_id) {
-                previous.push_transition(ModelLifecycleState::Approved);
-            }
-        }
+    if let Some(previous_id) = &previous_active
+        && previous_id != &id
+        && let Ok(previous) = find_model_mut(&mut index, previous_id)
+    {
+        previous.push_transition(ModelLifecycleState::Approved);
     }
     find_model_mut(&mut index, &id)?.push_transition(ModelLifecycleState::Active);
     index.previous_active_model_id = previous_active.filter(|previous_id| previous_id != &id);
@@ -987,8 +980,10 @@ mod tests {
 
     #[test]
     fn thresholds_validate_rejects_out_of_range() {
-        let mut thresholds = ModelThresholds::default();
-        thresholds.start_threshold = 0.0;
+        let mut thresholds = ModelThresholds {
+            start_threshold: 0.0,
+            ..Default::default()
+        };
         assert!(thresholds.validate().is_err());
         thresholds.start_threshold = 1.5;
         assert!(thresholds.validate().is_err());
@@ -1198,7 +1193,7 @@ mod tests {
         fs::write(dir.join("empty"), b"").unwrap();
         assert_eq!(
             sha256_hex(&dir.join("empty")).unwrap(),
-            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b85"
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         );
         fs::remove_dir_all(&dir).ok();
     }

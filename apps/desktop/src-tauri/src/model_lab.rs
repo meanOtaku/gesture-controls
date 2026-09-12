@@ -545,17 +545,14 @@ where
 {
     tauri::async_runtime::spawn(async move {
         let mut lines = BufReader::new(pipe).lines();
-        loop {
-            match lines.next_line().await {
-                Ok(Some(line)) => emit_training_event(
-                    &app,
-                    &TrainingEvent::Log {
-                        job_id: job_id.clone(),
-                        message: line,
-                    },
-                ),
-                Ok(None) | Err(_) => break,
-            }
+        while let Ok(Some(line)) = lines.next_line().await {
+            emit_training_event(
+                &app,
+                &TrainingEvent::Log {
+                    job_id: job_id.clone(),
+                    message: line,
+                },
+            );
         }
     });
 }

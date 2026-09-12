@@ -2,7 +2,6 @@ use std::path::Path;
 use std::process::Command;
 
 use serde::Serialize;
-use volume_control::VolumeController;
 
 const PINCH_CLASSIFIER_PROJECT_DIR: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),

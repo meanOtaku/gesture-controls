@@ -235,6 +235,7 @@ function formatPercent(value: number | null | undefined): string {
 }
 
 export function ModelLab() {
+  const desktopAvailable = "__TAURI_INTERNALS__" in window;
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [labels, setLabels] = useState<DatasetLabel[]>([]);
   const [loading, setLoading] = useState(false);
@@ -256,6 +257,7 @@ export function ModelLab() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const refreshDatasets = useCallback(async () => {
+    if (!desktopAvailable) return;
     setLoading(true);
     try {
       const result = await invoke<DatasetSummary[]>("list_model_datasets");
@@ -266,45 +268,50 @@ export function ModelLab() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [desktopAvailable]);
 
   const refreshLabels = useCallback(async () => {
+    if (!desktopAvailable) return;
     try {
       const result = await invoke<DatasetLabel[]>("list_model_labels");
       setLabels(Array.isArray(result) ? result : []);
     } catch (err) {
       setError(String(err));
     }
-  }, []);
+  }, [desktopAvailable]);
 
   const refreshTrainingStatus = useCallback(async () => {
+    if (!desktopAvailable) return;
     try {
       const result = await invoke<TrainingStatus>("get_training_status");
       setStatus(result);
     } catch (err) {
       setTrainingError(String(err));
     }
-  }, []);
+  }, [desktopAvailable]);
 
   const refreshTrainedModels = useCallback(async () => {
+    if (!desktopAvailable) return;
     try {
       const result = await invoke<TrainedModelSummary[]>("list_trained_models");
       setTrainedModels(result);
     } catch (err) {
       setTrainingError(String(err));
     }
-  }, []);
+  }, [desktopAvailable]);
 
   const refreshRegistry = useCallback(async () => {
+    if (!desktopAvailable) return;
     try {
       setRegistry(await invoke<ModelRegistryView>("get_model_registry"));
       setRuntimeError(null);
     } catch (err) {
       setRuntimeError(String(err));
     }
-  }, []);
+  }, [desktopAvailable]);
 
   const refreshEnvironmentDiagnostics = useCallback(async () => {
+    if (!desktopAvailable) return;
     try {
       const result = await invoke<EnvironmentDiagnostic[]>("get_environment_diagnostics");
       setEnvironmentDiagnostics(Array.isArray(result) ? result : []);
@@ -312,7 +319,7 @@ export function ModelLab() {
     } catch (err) {
       setEnvironmentError(String(err));
     }
-  }, []);
+  }, [desktopAvailable]);
 
   useEffect(() => {
     void refreshDatasets();
@@ -336,12 +343,15 @@ export function ModelLab() {
   }, [refreshEnvironmentDiagnostics]);
 
   useEffect(() => {
+    if (!desktopAvailable) return;
     let cancelled = false;
     const unlistens: (() => void)[] = [];
     const addListener = <T,>(event: string, handler: (payload: T) => void) => {
-      void listen<T>(event, ({ payload }) => handler(payload)).then((unlisten) => {
+      void listen<T>(event, ({ payload }) => { if (!cancelled) handler(payload); }).then((unlisten) => {
         if (cancelled) unlisten();
         else unlistens.push(unlisten);
+      }).catch((err) => {
+        if (!cancelled) setRuntimeError(`Could not subscribe to inference updates: ${String(err)}`);
       });
     };
     addListener<ModelRegistryView>(MODEL_REGISTRY_EVENT, setRegistry);
@@ -355,12 +365,14 @@ export function ModelLab() {
       cancelled = true;
       unlistens.forEach((unlisten) => unlisten());
     };
-  }, []);
+  }, [desktopAvailable]);
 
   useEffect(() => {
+    if (!desktopAvailable) return;
     let unlisten: (() => void) | undefined;
     let cancelled = false;
     void listen<TrainingEventPayload>(TRAINING_EVENT, ({ payload }) => {
+      if (cancelled) return;
       switch (payload.kind) {
         case "started":
           setStatus({
@@ -374,7 +386,7 @@ export function ModelLab() {
           setTrainingError(null);
           break;
         case "log":
-          setLogs((prev) => [...prev, payload.message]);
+          setLogs((prev) => [...prev, payload.message].slice(-500));
           break;
         case "completed":
           setStatus({
@@ -401,12 +413,14 @@ export function ModelLab() {
         return;
       }
       unlisten = fn;
+    }).catch((err) => {
+      if (!cancelled) setTrainingError(`Could not subscribe to training updates: ${String(err)}`);
     });
     return () => {
       cancelled = true;
       unlisten?.();
     };
-  }, [refreshRegistry, refreshTrainedModels]);
+  }, [desktopAvailable, refreshRegistry, refreshTrainedModels]);
 
   const handleFileChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -558,30 +572,42 @@ export function ModelLab() {
           <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Model Lab</h1>
           <p className="subtitle">
-            Turns labeled dataset recordings from the Live data tab into a trained pinch_start / pinch_release
-            classifier. Training and evaluation run in-app through a local development runner; validated LiteRT
-            bundles execute on this desktop only.
+            Build a gesture model from your recordings. Import sessions, train a candidate, then review it before enabling desktop control.
           </p>
         </div>
         <div className={`connection ${trainedModels.length > 0 ? "online" : "offline"}`}>
           <span className="pulse" />
-          {trainedModels.length > 0
+          {!desktopAvailable ? "Browser preview" : trainedModels.length > 0
             ? `${trainedModels.length} trained model${trainedModels.length === 1 ? "" : "s"}`
             : "No trained model"}
         </div>
       </header>
 
+      {!desktopAvailable && <aside className="preview-notice" role="status">
+        <span className="preview-icon" aria-hidden="true">i</span>
+        <div><strong>You’re viewing the browser preview</strong><p>Import, training, and inference need the desktop app. Open it with <code>npm start</code> from the project folder. Your saved datasets and models are available there.</p></div>
+      </aside>}
+      <div className="lab-summary" aria-label="Model Lab overview">
+        <div><span className="label">Imported sessions</span><strong>{desktopAvailable ? datasets.length : "—"}</strong><small>{desktopAvailable ? `${selectedDatasetIds.size} selected for training` : "Available in the desktop app"}</small></div>
+        <div><span className="label">Trained models</span><strong>{desktopAvailable ? trainedModels.length : "—"}</strong><small>{desktopAvailable ? isRunning ? "Training in progress" : "Ready for your next experiment" : "Available in the desktop app"}</small></div>
+        <div><span className="label">Desktop control</span><strong>{desktopAvailable ? registry?.inferenceMode ?? "Checking" : "Preview"}</strong><small>{registry?.activeModelId ? "A model is active" : "No active model"}</small></div>
+      </div>
+      <nav className="lab-workflow" aria-label="Model workflow">
+        <a href="#lab-dataset">01 · Import</a><a href="#lab-coverage">02 · Labels</a><a href="#lab-training">03 · Train</a><a href="#lab-evaluation">04 · Review</a><a href="#lab-deployment">05 · Activate</a>
+      </nav>
+      {runtimeError && <p className="calibration-error" role="alert">{runtimeError}</p>}
+      <fieldset className="lab-workspace" disabled={!desktopAvailable} aria-label="Desktop model tools">
       <section className="calibration-card" aria-label="Desktop readiness">
         <div className="calibration-heading">
           <div><p className="eyebrow">First-run setup</p><h2>Desktop readiness</h2></div>
-          <button onClick={() => void refreshEnvironmentDiagnostics()}>Recheck</button>
+          <button disabled={!desktopAvailable} onClick={() => void refreshEnvironmentDiagnostics()}>Recheck</button>
         </div>
         <p className="hint">
           Checks run locally and never send data. Training and replay use the development-only uv runner; LiteRT is only available when this desktop build includes it.
         </p>
         {environmentError && <p className="calibration-error" role="alert">{environmentError}</p>}
         {environmentDiagnostics.length === 0 && !environmentError ? (
-          <p className="hint">Checking local desktop requirements&hellip;</p>
+          <p className="hint">{desktopAvailable ? "Checking local desktop requirements…" : "Open the desktop app to check training and inference requirements."}</p>
         ) : (
           <div className="vectors model-lab-models" aria-label="Desktop readiness checks">
             {environmentDiagnostics.map((diagnostic) => (
@@ -598,49 +624,7 @@ export function ModelLab() {
         )}
       </section>
 
-      <section className="calibration-card" aria-label="Live inference diagnostics">
-        <div className="calibration-heading">
-          <div><p className="eyebrow">Runtime</p><h2>Live inference diagnostics</h2></div>
-          <span className={`target-state ${registry?.inferenceMode !== "off" ? "active" : ""}`}>
-            {registry ? registry.inferenceMode : "loading"}
-          </span>
-        </div>
-        <p className="hint">
-          {registry?.activeModelId
-            ? `Active model: ${registry.activeModelId}. Monitor records decisions without desktop actions; Live permits bound safe intents.`
-            : "Inference is fail-closed: activate a validated LiteRT bundle with complete safe-intent bindings before Monitor or Live can run."}
-        </p>
-        <div className="recording-actions">
-          {(["off", "monitor", "live"] as const).map((mode) => (
-            <button
-              key={mode}
-              className={registry?.inferenceMode === mode ? "recording" : undefined}
-              disabled={!registry || (mode !== "off" && !registry.activeModelId)}
-              onClick={() => void handleInferenceMode(mode)}
-            >
-              {mode[0].toUpperCase() + mode.slice(1)}
-            </button>
-          ))}
-        </div>
-        {runtimeError && <p className="calibration-error" role="alert">{runtimeError}</p>}
-        {runtimeEvents.length === 0 ? (
-          <p className="hint">No desktop inference windows observed in this session.</p>
-        ) : (
-          <div className="vectors model-lab-models" aria-label="Recent inference events">
-            {runtimeEvents.map((event, index) => (
-              <div className="vector-row model-lab-label-row" key={`${event.kind}-${index}`}>
-                {event.kind === "window" ? (
-                  <span className="label">Window #{event.observation.sequence}: {describeWindow(event.observation)}</span>
-                ) : (
-                  <span className="label">{event.decision.live ? "Live" : "Monitor"} {event.decision.intent}: {describeDiagnosticValue(event.decision.reason)}</span>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="calibration-card" aria-label="Dataset">
+      <section id="lab-dataset" className="calibration-card" aria-label="Dataset">
         <div className="calibration-heading">
           <div><p className="eyebrow">Step 1</p><h2>Dataset</h2></div>
         </div>
@@ -662,7 +646,7 @@ export function ModelLab() {
         <div className="recording-actions">
           <button
             onClick={() => fileInputRef.current?.click()}
-            disabled={importing}
+            disabled={!desktopAvailable || importing}
           >
             {importing ? "Importing…" : "Import dataset CSV"}
           </button>
@@ -694,7 +678,7 @@ export function ModelLab() {
         )}
       </section>
 
-      <section className="calibration-card" aria-label="Label coverage">
+      <section id="lab-coverage" className="calibration-card" aria-label="Label coverage">
         <div className="calibration-heading">
           <div><p className="eyebrow">Step 2</p><h2>Label coverage</h2></div>
         </div>
@@ -702,6 +686,7 @@ export function ModelLab() {
           Labels are persisted by the desktop with stable IDs. Archived labels stay visible and remain usable so
           historical sessions and newly imported recordings keep the same meaning.
         </p>
+        <details className="lab-reference"><summary>View label coverage · {coverageByLabel.size} labels recorded</summary>
         <div className="vectors model-lab-labels">
           {GESTURE_DATASET_LABELS.map((label) => {
             const role = roleFor(label);
@@ -733,12 +718,15 @@ export function ModelLab() {
           <code>pinch_release</code> and on whichever everyday-activity labels are most likely to trigger false
           activations for you.
         </p>
+        </details>
       </section>
 
-      <section className="calibration-card" aria-label="Training">
+      <section id="lab-training" className="calibration-card" aria-label="Training">
         <div className="calibration-heading">
           <div><p className="eyebrow">Step 3</p><h2>Training</h2></div>
         </div>
+        <p className="hint">Choose a deployable model for desktop control, or a baseline to evaluate your recordings. Select imported sessions before starting.</p>
+        <details className="lab-reference"><summary>Training requirements and advanced settings</summary>
         <p className="hint" role="status">{DEV_RUNNER_NOTICE}</p>
         <p className="hint">
           Defaults: 500&nbsp;ms windows, 150&nbsp;ms stride, 250&nbsp;ms max gap before splitting a session,
@@ -749,6 +737,7 @@ export function ModelLab() {
         <div className="vector-row">
           <code>pinch-classifier-train --input session1.csv session2.csv --output-dir artifacts/</code>
         </div>
+        </details>
         <div className="vectors model-lab-backend-select" role="radiogroup" aria-label="Training backend">
           {(["tflite", "sklearn"] as const).map((backend) => (
             <label className="model-lab-dataset-select" key={backend}>
@@ -791,7 +780,7 @@ export function ModelLab() {
         )}
       </section>
 
-      <section className="calibration-card" aria-label="Evaluation">
+      <section id="lab-evaluation" className="calibration-card" aria-label="Evaluation">
         <div className="calibration-heading">
           <div><p className="eyebrow">Step 4</p><h2>Evaluation</h2></div>
         </div>
@@ -833,7 +822,7 @@ export function ModelLab() {
         )}
       </section>
 
-      <section className="calibration-card" aria-label="Export and deploy">
+      <section id="lab-deployment" className="calibration-card" aria-label="Export and deploy">
         <div className="calibration-heading">
           <div><p className="eyebrow">Step 5</p><h2>Desktop deployment</h2></div>
         </div>
@@ -841,7 +830,7 @@ export function ModelLab() {
           Only a validated LiteRT bundle may be activated for desktop inference. Sensor devices remain raw-data
           sources: no model or gesture inference is deployed to the watch or headphones.
         </p>
-        {registry?.models.length === 0 ? (
+        {!registry || registry.models.length === 0 ? (
           <p className="hint model-lab-lifecycle-empty">No registered trained models yet.</p>
         ) : (
           <div className="vectors model-lab-models" aria-label="Model lifecycle">
@@ -925,8 +914,49 @@ export function ModelLab() {
           <button onClick={() => void handleRollback()} disabled={!registry?.previousActiveModelId}>Rollback active model</button>
         </div>
         {bindingError && <p className="calibration-error" role="alert">{bindingError}</p>}
-        {runtimeError && <p className="calibration-error" role="alert">{runtimeError}</p>}
       </section>
+      <section className="calibration-card" aria-label="Live inference diagnostics">
+        <div className="calibration-heading">
+          <div><p className="eyebrow">Runtime</p><h2>Live inference diagnostics</h2></div>
+          <span className={`target-state ${registry && registry.inferenceMode !== "off" ? "active" : ""}`}>
+            {registry ? registry.inferenceMode : desktopAvailable ? "Checking" : "Desktop only"}
+          </span>
+        </div>
+        <p className="hint">
+          {registry?.activeModelId
+            ? `Active model: ${registry.activeModelId}. Monitor records decisions without desktop actions; Live permits bound safe intents.`
+            : "Inference is fail-closed: activate a validated LiteRT bundle with complete safe-intent bindings before Monitor or Live can run."}
+        </p>
+        <div className="recording-actions">
+          {(["off", "monitor", "live"] as const).map((mode) => (
+            <button
+              key={mode}
+              className={registry?.inferenceMode === mode ? "recording" : undefined}
+              disabled={!registry || (mode !== "off" && !registry.activeModelId)}
+              onClick={() => void handleInferenceMode(mode)}
+            >
+              {mode[0].toUpperCase() + mode.slice(1)}
+            </button>
+          ))}
+        </div>
+        {runtimeEvents.length === 0 ? (
+          <p className="hint">No desktop inference windows observed in this session.</p>
+        ) : (
+          <div className="vectors model-lab-models" aria-label="Recent inference events">
+            {runtimeEvents.map((event, index) => (
+              <div className="vector-row model-lab-label-row" key={`${event.kind}-${index}`}>
+                {event.kind === "window" ? (
+                  <span className="label">Window #{event.observation.sequence}: {describeWindow(event.observation)}</span>
+                ) : (
+                  <span className="label">{event.decision.live ? "Live" : "Monitor"} {event.decision.intent}: {describeDiagnosticValue(event.decision.reason)}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      </fieldset>
     </main>
   );
 }

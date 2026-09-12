@@ -474,8 +474,10 @@ mod tests {
 
     #[test]
     fn rejects_out_of_range_rate() {
-        let mut settings = AppSettings::default();
-        settings.watch_orientation_rate_hz = 0.0;
+        let settings = AppSettings {
+            watch_orientation_rate_hz: 0.0,
+            ..Default::default()
+        };
         assert!(settings.validate().is_err());
     }
 

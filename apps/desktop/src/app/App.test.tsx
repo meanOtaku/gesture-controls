@@ -59,6 +59,18 @@ function openHeadphoneTab(): void {
 }
 
 describe("App overlay integration", () => {
+  it("leaves focused control arrows alone but lets Escape dismiss the overlay", async () => {
+    render(<App />);
+    await waitFor(() => expect(listeners.has(OVERLAY_STATE_EVENT)).toBe(true));
+    await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: true } }));
+    invoke.mockClear();
+    const control = screen.getByRole("button", { name: "Headphones" });
+    fireEvent.keyDown(control, { key: "ArrowRight" });
+    expect(invoke).not.toHaveBeenCalledWith("adjust_system_volume", expect.anything());
+    fireEvent.keyDown(control, { key: "Escape" });
+    expect(invoke).toHaveBeenCalledWith("hide_overlay");
+  });
+
   it("retains graph samples while switching away from the live-data tab", async () => {
     render(<App />);
     await waitFor(() => expect(listeners.has(WATCH_PPG_BATCH_EVENT)).toBe(true));

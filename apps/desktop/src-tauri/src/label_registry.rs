@@ -9,7 +9,7 @@ use std::sync::Mutex;
 
 use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 const LABELS_FILE_NAME: &str = "labels.json";
 pub const LABEL_REGISTRY_EVENT: &str = "model-lab-labels-changed";

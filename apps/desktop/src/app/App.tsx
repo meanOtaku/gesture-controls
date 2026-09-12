@@ -224,9 +224,13 @@ function MainApp() {
     });
 
     const handleKeyboard = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        hideOverlay();
+        return;
+      }
       const target = event.target;
       if (target instanceof HTMLElement
-        && (target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+        && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName))) return;
       const delta = event.key === "ArrowUp" || event.key === "ArrowRight" || event.key === "+" ? 5
         : event.key === "ArrowDown" || event.key === "ArrowLeft" || event.key === "-" ? -5
           : null;
@@ -394,15 +398,16 @@ function MainApp() {
 
   return <>
     <nav className="app-tabs" aria-label="Application views">
-      <button className={activeTab === "main" ? "active" : ""} onClick={() => setActiveTab("main")}>Main</button>
-      <button className={activeTab === "headphone" ? "active" : ""} onClick={() => setActiveTab("headphone")}>Headphones</button>
-      <button className={activeTab === "watch" ? "active" : ""} onClick={() => setActiveTab("watch")}>Watch</button>
-      <button className={activeTab === "telemetry" ? "active" : ""} onClick={() => setActiveTab("telemetry")}>Live data</button>
-      <button className={activeTab === "modelLab" ? "active" : ""} onClick={() => setActiveTab("modelLab")}>Model Lab</button>
-      <button className={activeTab === "settings" ? "active" : ""} onClick={() => setActiveTab("settings")}>Settings</button>
+      <button aria-current={activeTab === "main" ? "page" : undefined} className={activeTab === "main" ? "active" : ""} onClick={() => setActiveTab("main")}>Main</button>
+      <button aria-current={activeTab === "headphone" ? "page" : undefined} className={activeTab === "headphone" ? "active" : ""} onClick={() => setActiveTab("headphone")}>Headphones</button>
+      <button aria-current={activeTab === "watch" ? "page" : undefined} className={activeTab === "watch" ? "active" : ""} onClick={() => setActiveTab("watch")}>Watch</button>
+      <button aria-current={activeTab === "telemetry" ? "page" : undefined} className={activeTab === "telemetry" ? "active" : ""} onClick={() => setActiveTab("telemetry")}>Live data</button>
+      <button aria-current={activeTab === "modelLab" ? "page" : undefined} className={activeTab === "modelLab" ? "active" : ""} onClick={() => setActiveTab("modelLab")}>Model Lab</button>
+      <button aria-current={activeTab === "settings" ? "page" : undefined} className={activeTab === "settings" ? "active" : ""} onClick={() => setActiveTab("settings")}>Settings</button>
     </nav>
     {activeTab === "main" && (
       <Dashboard
+        onNavigate={setActiveTab}
         view="main"
         status={status}
         calibration={calibration}

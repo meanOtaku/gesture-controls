@@ -29,6 +29,7 @@ interface DashboardProps {
   calibration?: CalibrationState | null;
   calibrationError?: string | null;
   watchStatus?: WatchStatus | null;
+  onNavigate?: (view: "headphone" | "watch") => void;
   onCaptureTarget?: (target: CalibrationTarget) => void;
   onUpdateCalibration?: (activationThresholdDegrees: number, dwellMs: number) => void;
   onSetSensorEnabled?: (sensor: string, enabled: boolean) => void;
@@ -55,6 +56,7 @@ export function Dashboard({
   calibration,
   calibrationError,
   watchStatus,
+  onNavigate,
   onCaptureTarget = () => undefined,
   onUpdateCalibration = () => undefined,
   onSetSensorEnabled = () => undefined,
@@ -78,6 +80,8 @@ export function Dashboard({
       onUpdateCalibration(threshold, dwell);
     }
   };
+  const calibrated = calibrationState.centerCalibrated && calibrationState.topRightCalibrated && !calibrationState.requiresRecalibration;
+  const gestureReady = connected && calibrated && watchStatus?.connected === true;
   const watchEuler = watchStatus?.lastOrientation
     ? quaternionToEulerDegrees(watchStatus.lastOrientation.quaternion)
     : null;
@@ -98,11 +102,33 @@ export function Dashboard({
         </div>
       </header>
 
+      {calibrationError && <p className="calibration-error" role="alert">{calibrationError}</p>}
+
       {view === "main" && <section className="overview-grid" aria-label="Device overview">
         <article className="overview-card"><span className="label">Headphones</span><strong>{connected ? "Connected" : "Waiting"}</strong><small>{status?.device ?? "Sony bridge not detected"}</small></article>
         <article className="overview-card"><span className="label">Galaxy Watch</span><strong>{watchStatus?.connected ? "Connected" : "Waiting"}</strong><small>{watchStatus?.connected ? "Streaming to this desktop" : "Searching for desktop"}</small></article>
-        <article className="overview-card"><span className="label">Volume gesture</span><strong>{calibrationState.requiresRecalibration ? "Set up" : "Ready"}</strong><small>{calibrationState.requiresRecalibration ? "Calibrate headphones in their tab" : "Look top-right to open the knob"}</small></article>
+        <article className="overview-card"><span className="label">Volume gesture</span><strong>{gestureReady ? "Ready" : "Set up"}</strong><small>{!connected ? "Connect headphones to begin" : !calibrated ? "Capture your two head positions" : !watchStatus?.connected ? "Connect Watch for wrist control" : "Look top-right to open the knob"}</small></article>
       </section>}
+
+      {view === "main" && <section className="setup-card" aria-label="Setup checklist">
+        <div className="calibration-heading">
+          <div><p className="eyebrow">Your next steps</p><h2>{gestureReady ? "You’re ready to take control" : "Get your devices ready"}</h2></div>
+          <span className="setup-progress">{Number(connected) + Number(connected && calibrated) + Number(watchStatus?.connected === true)} / 3 complete</span>
+        </div>
+        <ol className="setup-steps">
+          <li data-complete={connected}><span className="step-number">{connected ? "✓" : "1"}</span><div><strong>Connect your headphones</strong><p>Start the Sony bridge and connect your headset in Bluetooth settings.</p></div>{onNavigate && <button onClick={() => onNavigate("headphone")}>Check headphones →</button>}</li>
+          <li data-complete={connected && calibrated}><span className="step-number">{connected && calibrated ? "✓" : "2"}</span><div><strong>Set your head positions</strong><p>Capture the screen center, then the top-right corner. Hold still for each capture.</p></div>{onNavigate && <button onClick={() => onNavigate("headphone")}>Open calibration →</button>}</li>
+          <li data-complete={watchStatus?.connected === true}><span className="step-number">{watchStatus?.connected ? "✓" : "3"}</span><div><strong>Connect your Galaxy Watch</strong><p>Open the Watch app with both devices on the same Wi-Fi network.</p></div>{onNavigate && <button onClick={() => onNavigate("watch")}>Check Watch →</button>}</li>
+        </ol>
+        <p className="interaction-guide">Look top-right to show the knob. Hold the Watch button, rotate your wrist, then release. Press Escape to hide the knob.</p>
+      </section>}
+
+      {view === "headphone" && !connected && <aside className="connection-help" aria-label="Headphone connection help">
+        <h2>Waiting for head-tracking data</h2>
+        <p>Pairing alone does not confirm that the headset’s tracking sensor is connected.</p>
+        <ol><li>Connect the headset in your computer’s Bluetooth settings.</li><li>On macOS, allow the Sony tracker executable in Privacy &amp; Security → Input Monitoring.</li><li>Stop and restart the project after changing permissions.</li></ol>
+      </aside>}
+      {view === "watch" && !watchStatus?.connected && <aside className="connection-help"><h2>Connect your Watch</h2><p>Open the Watch app, enable streaming, and keep both devices on the same Wi-Fi network. Guest networks may block discovery.</p></aside>}
 
       {view === "headphone" && <section className="device-card">
         <div>
@@ -149,7 +175,7 @@ export function Dashboard({
             A tracker reset clears both targets.
           </p>
         )}
-        {calibrationError && <p className="calibration-error" role="alert">{calibrationError}</p>}
+
         <div className="calibration-actions">
           <button disabled={!connected} onClick={() => onCaptureTarget("center")}>
             Capture center
@@ -206,7 +232,7 @@ export function Dashboard({
         <section className="metric-grid" aria-label="Watch telemetry">
           <Metric
             label="Battery"
-            value={watchStatus?.lastHeartbeat ? `${number(watchStatus.lastHeartbeat.batteryPercent ?? 0, 0)}%` : "—"}
+            value={watchStatus?.lastHeartbeat?.batteryPercent != null ? `${number(watchStatus.lastHeartbeat.batteryPercent, 0)}%` : "—"}
           />
           <Metric
             label="Sequence"
@@ -291,7 +317,7 @@ export function Dashboard({
                 <span className="label">{label}</span>
                 <span>{enabled ? "Enabled" : "Disabled"}</span>
                 <div className="recording-actions">
-                  <button onClick={() => onSetSensorEnabled(id, !enabled)}>
+                  <button disabled={!watchStatus?.connected} onClick={() => onSetSensorEnabled(id, !enabled)}>
                     {enabled ? "Disable" : "Enable"}
                   </button>
                 </div>
@@ -301,7 +327,7 @@ export function Dashboard({
         </div>
       </section>}
 
-      {view === "main" && <section className="settings">
+      {view === "main" && <details className="connection-details"><summary>Connection details</summary><section className="settings">
         <div>
           <p className="eyebrow">Settings</p>
           <h2>Sony UDP input</h2>
@@ -309,8 +335,8 @@ export function Dashboard({
         <label>Host<input value="127.0.0.1" readOnly /></label>
         <label>JSON port<input value="4243" readOnly /></label>
         <label>Watch WebSocket<input value="0.0.0.0:8766/ws/watch" readOnly /></label>
-        <p className="hint">Loopback-only by design. On macOS, use the arrow or +/- keys to change system volume while the knob is visible.</p>
-      </section>}
+        <p className="hint">Sony tracking stays on this computer; Watch data arrives over your local network. On macOS, use the arrow or +/- keys to change system volume while the knob is visible.</p>
+      </section></details>}
     </main>
   );
 }
