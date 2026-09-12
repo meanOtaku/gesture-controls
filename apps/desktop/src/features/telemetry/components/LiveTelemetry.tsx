@@ -1,6 +1,9 @@
 import { TimeChart } from "./TimeChart";
 import { invoke } from "@tauri-apps/api/core";
 import { useState, useSyncExternalStore } from "react";
+import { AsyncActionButton } from "../../../components/app/AsyncActionButton";
+import { OperationFeedback } from "../../../components/app/OperationFeedback";
+import { exportCsv, type ExportCsvResult } from "../../../shared/tauri/exportCsv";
 import {
   ESTIMATED_BYTES_PER_CSV_ROW,
   GESTURE_DATASET_LABELS,
@@ -21,6 +24,20 @@ function csvEscape(value: string): string {
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function basename(path: string): string {
+  return path.split(/[/\\]/).pop() ?? path;
+}
+
+function reportExportOutcome(operation: string, result: ExportCsvResult): void {
+  if (result.status === "saved") {
+    OperationFeedback.success(operation, `Saved to ${basename(result.path)}`);
+  } else if (result.status === "cancelled") {
+    OperationFeedback.info(operation, "Save cancelled");
+  } else {
+    OperationFeedback.error(operation, `Could not save: ${result.message}`);
+  }
 }
 
 export function LiveTelemetry() {
@@ -47,7 +64,7 @@ export function LiveTelemetry() {
 
   const toggleRecording = () => telemetryStore.toggleRecording();
 
-  const saveCsv = () => {
+  const saveCsv = async () => {
     const headers = [
       "recorded_at_iso", "source", "source_timestamp_ns", "sequence",
       "yaw_deg", "pitch_deg", "roll_deg", "accel_x", "accel_y", "accel_z",
@@ -63,13 +80,10 @@ export function LiveTelemetry() {
       number(row.values.ppgGreen), number(row.values.ppgRed), number(row.values.ppgIr),
       number(row.values.heartRateBpm), number(row.values.ibiMs), number(row.values.skinTemperatureCelsius), number(row.values.ambientTemperatureCelsius), number(row.values.edaMicrosiemens), number(row.values.spo2Percent), number(row.values.spo2HeartRateBpm), number(row.values.ecgMillivolts), number(row.values.biaProgressPercent), number(row.values.sweatLossMilliliters),
     ].map(csvEscape).join(","))].join("\n");
-    const download = document.createElement("a");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    download.href = url;
-    download.download = `gesture-telemetry-${new Date().toISOString().replaceAll(":", "-")}.csv`;
-    download.click();
-    URL.revokeObjectURL(url);
-    telemetryStore.setSavedCount(retained.length);
+    const suggestedName = `gesture-telemetry-${new Date().toISOString().replaceAll(":", "-")}.csv`;
+    const result = await exportCsv({ content: csv, suggestedName, title: "Save CSV" });
+    if (result.status === "saved") telemetryStore.setSavedCount(retained.length);
+    reportExportOutcome("Save CSV", result);
   };
 
   const rowCount = telemetryStore.getRowCount();
@@ -80,15 +94,12 @@ export function LiveTelemetry() {
   const datasetSession = telemetryStore.getDatasetSession();
   const datasetRowCount = telemetryStore.getDatasetRowCount();
 
-  const exportDatasetCsv = () => {
+  const exportDatasetCsv = async () => {
     const csv = telemetryStore.generateDatasetCsv();
-    const download = document.createElement("a");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    download.href = url;
     const label = datasetSession?.label ?? selectedLabel;
-    download.download = `gesture-dataset-${label}-${new Date().toISOString().replaceAll(":", "-")}.csv`;
-    download.click();
-    URL.revokeObjectURL(url);
+    const suggestedName = `gesture-dataset-${label}-${new Date().toISOString().replaceAll(":", "-")}.csv`;
+    const result = await exportCsv({ content: csv, suggestedName, title: "Export dataset CSV" });
+    reportExportOutcome("Export dataset CSV", result);
   };
 
   // Mirrors Dashboard.tsx's IMU_SENSOR_IDS default-enabled read and the
@@ -132,7 +143,7 @@ export function LiveTelemetry() {
           {savedCount ? ` · ${savedCount} rows last saved` : ""}
         </small>
       </div>
-      <div className="recording-actions"><button className={recording ? "recording" : ""} onClick={toggleRecording}>{recording ? "Stop recording" : "Start recording"}</button><button disabled={rowCount === 0} onClick={saveCsv}>Save CSV</button></div>
+      <div className="recording-actions"><button className={recording ? "recording" : ""} onClick={toggleRecording}>{recording ? "Stop recording" : "Start recording"}</button><AsyncActionButton disabled={rowCount === 0} onPress={saveCsv} pendingLabel="Saving…">Save CSV</AsyncActionButton></div>
     </section>
     <section className="recording-card dataset-card" aria-label="Labeled dataset recorder">
       <div>
@@ -173,7 +184,7 @@ export function LiveTelemetry() {
         >Use custom label</button>
         <button className={datasetRecording ? "recording" : "primary-action"} onClick={() => datasetRecording ? telemetryStore.stopDatasetRecording() : telemetryStore.startDatasetRecording()}>{datasetRecording ? "Stop dataset capture" : "Start dataset capture"}</button>
         <button disabled={!datasetSession} onClick={() => telemetryStore.discardDatasetRecording()}>Discard</button>
-        <button disabled={datasetRowCount === 0} onClick={exportDatasetCsv}>Export Dataset CSV</button>
+        <AsyncActionButton disabled={datasetRowCount === 0} onPress={exportDatasetCsv} pendingLabel="Exporting…">Export Dataset CSV</AsyncActionButton>
       </div>
       {labelError && <p className="calibration-error" role="alert">{labelError}</p>}
     </section>

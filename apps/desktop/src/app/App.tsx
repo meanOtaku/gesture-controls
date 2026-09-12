@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { OperationToaster } from "../components/app/OperationToaster";
 import { Dashboard } from "../features/dashboard/components/Dashboard";
 import { LiveTelemetry } from "../features/telemetry/components/LiveTelemetry";
 import { ModelLab } from "../features/model-lab/components/ModelLab";
@@ -397,6 +398,7 @@ function MainApp() {
     .join(" · ") || null;
 
   return <>
+    <OperationToaster />
     <nav className="app-tabs" aria-label="Application views">
       <button aria-current={activeTab === "main" ? "page" : undefined} className={activeTab === "main" ? "active" : ""} onClick={() => setActiveTab("main")}>Main</button>
       <button aria-current={activeTab === "headphone" ? "page" : undefined} className={activeTab === "headphone" ? "active" : ""} onClick={() => setActiveTab("headphone")}>Headphones</button>
