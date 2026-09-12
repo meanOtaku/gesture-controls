@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
+import { Checkbox } from "../../../components/ui/checkbox";
 import {
   Collapsible,
   CollapsibleContent,
@@ -97,10 +98,9 @@ export function ReplayPanel({ deployableModelIds, datasets, onReplay }: ReplayPa
               ) : (
                 datasets.map((dataset) => (
                   <label key={dataset.id} className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={datasetIds.has(dataset.id)}
-                      onChange={() => toggleDataset(dataset.id)}
+                      onCheckedChange={() => toggleDataset(dataset.id)}
                     />
                     {dataset.originalFilename} ({dataset.label})
                   </label>

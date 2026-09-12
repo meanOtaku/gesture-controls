@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../../components/ui/collapsible";
+import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
 import { DEV_RUNNER_NOTICE, TRAINING_BACKEND_COPY, type TrainingBackend, type TrainingStatus } from "../types";
 
 type TrainingPanelProps = {
@@ -64,16 +65,16 @@ export function TrainingPanel({
             </div>
           </CollapsibleContent>
         </Collapsible>
-        <div className="vectors model-lab-backend-select" role="radiogroup" aria-label="Training backend">
+        <RadioGroup
+          className="vectors model-lab-backend-select"
+          aria-label="Training backend"
+          name="training-backend"
+          value={trainingBackend}
+          onValueChange={(value) => onBackendChange(value as TrainingBackend)}
+        >
           {(["tflite", "sklearn"] as const).map((backend) => (
             <label className="model-lab-dataset-select" key={backend}>
-              <input
-                type="radio"
-                name="training-backend"
-                checked={trainingBackend === backend}
-                onChange={() => onBackendChange(backend)}
-                disabled={isRunning}
-              />
+              <RadioGroupItem value={backend} disabled={isRunning} />
               <span className="label">
                 {TRAINING_BACKEND_COPY[backend].label}
                 <br />
@@ -81,7 +82,7 @@ export function TrainingPanel({
               </span>
             </label>
           ))}
-        </div>
+        </RadioGroup>
         <div className="recording-actions flex flex-wrap items-center gap-2">
           <Button type="button" onClick={onStart} disabled={selectedCount === 0 || isRunning}>
             {isRunning ? "Training…" : "Start training"}

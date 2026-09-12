@@ -17,6 +17,7 @@ import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
+import { Checkbox } from "../../../components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../../components/ui/collapsible";
 import { Input } from "../../../components/ui/input";
 import { GESTURE_DATASET_LABELS, type GestureDatasetLabel } from "../../telemetry/store/telemetryStore";
@@ -124,17 +125,16 @@ export function DatasetManager({
             <div className="vectors model-lab-datasets">
               {datasets.map((dataset) => (
                 <div className="vector-row model-lab-label-row" key={dataset.id}>
-                  <label className="model-lab-dataset-select">
-                    <input
-                      type="checkbox"
+                  <div className="model-lab-dataset-select">
+                    <Checkbox
                       checked={selectedDatasetIds.has(dataset.id)}
-                      onChange={() => onToggleSelected(dataset.id)}
+                      onCheckedChange={() => onToggleSelected(dataset.id)}
                       aria-label={`Select ${dataset.originalFilename}`}
                     />
-                    <span className="label">
+                    <span className="label" onClick={() => onToggleSelected(dataset.id)}>
                       {dataset.originalFilename} &mdash; {dataset.label.replaceAll("_", " ")} ({dataset.rowCount} rows)
                     </span>
-                  </label>
+                  </div>
                   <AlertDialog>
                     <AlertDialogTrigger
                       render={<Button type="button" variant="outline" disabled={pendingDeleteIds.has(dataset.id)}>Delete</Button>}
