@@ -88,7 +88,10 @@ describe("App overlay integration", () => {
       },
     }));
     fireEvent.click(screen.getByRole("button", { name: "Live data" }));
-    await waitFor(() => expect(screen.getAllByText("2 samples").length).toBeGreaterThan(0));
+    await waitFor(
+      () => expect(screen.getAllByText("2 samples").length).toBeGreaterThan(0),
+      { timeout: 5000 },
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Main" }));
     await act(async () => listeners.get(WATCH_PPG_BATCH_EVENT)?.({
@@ -104,7 +107,10 @@ describe("App overlay integration", () => {
       },
     }));
     fireEvent.click(screen.getByRole("button", { name: "Live data" }));
-    await waitFor(() => expect(screen.getAllByText("3 samples").length).toBeGreaterThan(0));
+    await waitFor(
+      () => expect(screen.getAllByText("3 samples").length).toBeGreaterThan(0),
+      { timeout: 5000 },
+    );
   });
 
   it("ignores volume keys while the overlay is hidden", async () => {

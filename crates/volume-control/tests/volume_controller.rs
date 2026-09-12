@@ -136,7 +136,7 @@ fn macos_controller_rounds_normalized_volume_at_integer_boundaries() {
     assert_eq!(arguments, ["0", "0", "1", "100"]);
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 #[test]
 fn default_controller_reports_the_platform_as_unsupported() {
     let controller = platform_volume_controller();

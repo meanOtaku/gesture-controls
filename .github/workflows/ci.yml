@@ -22,7 +22,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - uses: astral-sh/setup-uv@v6
-      - run: uv run --directory head-tracking --with pytest pytest -q
+      - run: uv run --directory tools/sony-head-tracker --with pytest pytest -q
       - run: cargo fmt --all -- --check
       - run: cargo test -p spatial-protocol -p head-tracking -p interaction-engine -p volume-control
       - run: cargo clippy -p spatial-protocol -p head-tracking -p interaction-engine -p volume-control --all-targets -- -D warnings
