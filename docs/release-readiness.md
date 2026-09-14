@@ -97,9 +97,19 @@ unexecuted and are not being claimed as passed.
 
 ## Platform adapters and package installation
 
-- [ ] **macOS 14+:** grant Input Monitoring to the pinned or reviewed Sony tracker,
-  verify headset samples, and verify the macOS system-volume adapter reads and changes
-  the selected test output with rate limiting.
+- [ ] **macOS 14+:** grant Input Monitoring to Spatial Gesture Control itself (the
+  native `crates/native-head-tracking` provider runs in-process; it is no longer a
+  separate tracker binary), verify headset samples, verify the permission-denied /
+  scanning / device-not-found / device-not-verified / feature-write-failed / error
+  diagnostics surface correctly for their real triggering conditions (not just the
+  synthetic events exercised by `crates/native-head-tracking/tests/ffi_macos.rs` and
+  `apps/desktop/src-tauri/src/head_pose.rs`'s unit tests), verify reconnect and the
+  reset-counter/recalibration path, verify `SONY_HEAD_TRACKER_PROVIDER=external`
+  correctly falls back to the CLI bridge and its own Input Monitoring grant, and
+  verify the macOS system-volume adapter reads and changes the selected test output
+  with rate limiting. None of this has been exercised against a physical Sony
+  headset in this repository's own testing; only the no-hardware CI job
+  `native-head-tracking-macos` (`macos-14`) and code review have run so far.
 - [ ] **Windows 11 x64:** verify the pinned tracker discovers the headset (use its
   documented Repair Tracker flow if needed), then verify the platform volume adapter
   changes the selected test output.

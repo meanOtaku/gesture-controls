@@ -67,3 +67,21 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # macOS package-readiness evidence for Milestone 3 of
+      # .hermes/plans/2026-09-14_065556-native-sony-head-tracking-cross-platform.md.
+      # `macos-latest` is an Apple Silicon (arm64) host; there is no Intel
+      # macOS runner in this matrix, so this does not cover an Intel build.
+      # This only confirms a .app bundle was produced and records its
+      # (expected-unsigned) code-signing status -- it is not an install test
+      # and not physical-hardware validation.
+      - name: Record macOS bundle and signing status
+        if: matrix.platform == 'macos-latest'
+        run: |
+          APP="$(find target/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)"
+          if [ -z "$APP" ]; then
+            echo "No .app bundle found under target/release/bundle/macos" >&2
+            exit 1
+          fi
+          echo "Bundle: $APP"
+          codesign -dv --verbose=2 "$APP" || true
+          spctl -a -vv "$APP" || true
