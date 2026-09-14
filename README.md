@@ -2,7 +2,7 @@
 
 A cross-platform Tauri 2 desktop coordinator for spatial controls using Sony headset orientation and, in later milestones, Samsung Galaxy Watch gestures.
 
-The repository includes the desktop foundation, Sony JSON UDP input, head calibration, volume overlay, Galaxy Watch telemetry and wrist controls, dataset recording, and Model Lab training and deployment workflows. Platform volume adapters exist for macOS, Windows, and Linux; physical-device and release acceptance remain separate validation steps. On macOS, `npm start` runs the Sony head tracker in-process (see [`crates/native-head-tracking`](crates/native-head-tracking)); Windows and Linux still use the background Sony Head Tracker CLI bridge, and the Tauri dashboard is the only tracker window on every platform.
+The repository includes the desktop foundation, Sony JSON UDP input, head calibration, volume overlay, Galaxy Watch telemetry and wrist controls, dataset recording, and Model Lab training and deployment workflows. Platform volume adapters exist for macOS, Windows, and Linux; physical-device and release acceptance remain separate validation steps. On macOS and Windows, `npm start` runs the Sony head tracker in-process (see [`crates/native-head-tracking`](crates/native-head-tracking)); Linux still uses the background Sony Head Tracker CLI bridge, since upstream has no Linux hardware backend. The Tauri dashboard is the only tracker window on every platform.
 
 ## Run the complete system
 
@@ -37,22 +37,24 @@ npm start
 
 `npm start` runs `scripts/run-system.mjs`, which:
 
-1. On macOS, skips the external tracker entirely: the in-process
-   `native-head-tracking` provider owns Bluetooth/IOKit acquisition inside the
-   Tauri binary. Setting `SONY_HEAD_TRACKER_PROVIDER=external` restores the old
-   two-process behavior as a documented recovery fallback.
-2. On Windows and Linux, selects the committed upstream v2.2.0 CLI bridge
-   prebuild and starts it in the background. It discovers the sensor and
-   emits its protocol-v2 JSON stream on `127.0.0.1:4243`.
+1. On macOS and Windows, skips the external tracker entirely: the in-process
+   `native-head-tracking` provider owns Bluetooth/IOKit (macOS) or
+   HID/SetupAPI (Windows) acquisition inside the Tauri binary. Setting
+   `SONY_HEAD_TRACKER_PROVIDER=external` restores the old two-process
+   behavior as a documented recovery fallback on either platform.
+2. On Linux, selects the committed upstream v2.2.0 CLI bridge prebuild and
+   starts it in the background. It discovers the sensor and emits its
+   protocol-v2 JSON stream on `127.0.0.1:4243`. (Linux has no native provider
+   -- upstream has no Linux hardware backend.)
 3. Starts the Tauri application.
 4. Stops every process it started when the application exits or the launcher
    receives Ctrl+C.
 
 After center and top-right calibration, hold your gaze on the top-right target for the configured dwell time. The dedicated volume overlay appears without taking focus. On macOS, use the arrow keys or `+`/`-` in the main window to change the real system output volume; leaving the target, losing Sony tracking, or pressing Escape hides it. Windows uses Core Audio; Linux uses PipeWire or PulseAudio command adapters. Each platform still requires device validation.
 
-On Windows and Linux the external CLI tracker is deliberately not compiled into, bundled with, or owned by the Tauri binary; the launcher is an operator convenience around two independent processes. On macOS the native provider is linked directly into the Tauri binary instead, so `npm start` there is a single process unless `SONY_HEAD_TRACKER_PROVIDER=external` is set.
+On Linux the external CLI tracker is deliberately not compiled into, bundled with, or owned by the Tauri binary; the launcher is an operator convenience around two independent processes. On macOS and Windows the native provider is linked directly into the Tauri binary instead, so `npm start` there is a single process unless `SONY_HEAD_TRACKER_PROVIDER=external` is set.
 
-To use an existing or custom CLI tracker build instead of the committed prebuild (Windows/Linux, or macOS with the external fallback enabled):
+To use an existing or custom CLI tracker build instead of the committed prebuild (Linux, or macOS/Windows with the external fallback enabled):
 
 ```bash
 # macOS/Linux shell
@@ -69,9 +71,9 @@ the `bridge` argument to stream JSON without opening a second window.
 ## Current capabilities
 
 - Tauri 2 desktop shell with a React, TypeScript, and Vite frontend
-- macOS: in-process native Sony head-tracker provider (`crates/native-head-tracking`), with typed permission/scanning/device diagnostics surfaced in the dashboard
-- Windows/Linux: loopback-only Sony protocol-v2 JSON listener on `127.0.0.1:4243`, fed by a background CLI bridge with one-command orchestration and a single Tauri tracker UI
-- `SONY_HEAD_TRACKER_PROVIDER=external` recovery fallback to the CLI bridge on macOS
+- macOS and Windows: in-process native Sony head-tracker provider (`crates/native-head-tracking`), with typed permission/scanning/device diagnostics surfaced in the dashboard
+- Linux: loopback-only Sony protocol-v2 JSON listener on `127.0.0.1:4243`, fed by a background CLI bridge with one-command orchestration and a single Tauri tracker UI
+- `SONY_HEAD_TRACKER_PROVIDER=external` recovery fallback to the CLI bridge on macOS and Windows
 - Committed upstream v2.2.0 tracker prebuilds for macOS universal and Windows x64
 - Provider-neutral Rust pose types and `SonyUdpHeadPoseProvider`
 - Strict schema validation, connection timeout, and reset-counter detection
@@ -106,12 +108,13 @@ Tauri event bridge ──► React dashboard + dedicated volume overlay
 volume-control trait ──► macOS AppleScript system-volume adapter
 ```
 
-On macOS, `crates/native-head-tracking` replaces the first two stages above:
-IOKit/IOBluetooth samples are converted to the same generic `HeadPose` inside
-the Tauri process, with no external tracker and no UDP hop, unless
-`SONY_HEAD_TRACKER_PROVIDER=external` restores the diagram above as a
-fallback. Sony wire types are converted immediately into a generic `HeadPose`
-either way, so calibration does not depend on Sony packet structures.
+On macOS and Windows, `crates/native-head-tracking` replaces the first two
+stages above: IOKit/IOBluetooth (macOS) or HID/SetupAPI (Windows) samples are
+converted to the same generic `HeadPose` inside the Tauri process, with no
+external tracker and no UDP hop, unless `SONY_HEAD_TRACKER_PROVIDER=external`
+restores the diagram above as a fallback. Sony wire types are converted
+immediately into a generic `HeadPose` either way, so calibration does not
+depend on Sony packet structures.
 
 ```text
 apps/desktop/              React frontend + Tauri application
@@ -121,8 +124,8 @@ crates/interaction-engine/ Quaternion calibration and target dwell state
 crates/pinch-inference/    Desktop-side pinch feature extraction and LiteRT inference
 crates/volume-control/      Normalized controller trait and macOS adapter
 crates/watch-bridge/        Local-network Galaxy Watch WebSocket intake
-crates/native-head-tracking/ In-process macOS Sony provider (IOKit/IOBluetooth FFI + conversion)
-scripts/run-system.mjs     one-command external-process orchestrator (Windows/Linux tracker, or macOS external fallback)
+crates/native-head-tracking/ In-process macOS/Windows Sony provider (IOKit/IOBluetooth or HID/SetupAPI FFI + conversion)
+scripts/run-system.mjs     one-command external-process orchestrator (Linux tracker, or macOS/Windows external fallback)
 tools/sony-head-tracker/   compatibility tests, sample sender, and reference work
 ```
 
@@ -159,8 +162,23 @@ client that implements this protocol lives in
 ### Windows x64
 
 - Requires Windows 11 x64 and the usual Tauri C++/WebView2 prerequisites.
-- The pinned upstream Windows artifact is x64-only; Windows ARM64 is not currently verified.
-- If Windows has not created the headset sensor node, use the upstream tracker’s documented Repair Tracker flow, then rerun `npm start`.
+- `npm start` and the packaged app run the native provider in-process by
+  default; no separate tracker executable is started. Setting
+  `SONY_HEAD_TRACKER_PROVIDER=external` restores the old two-process CLI
+  bridge behavior as a documented recovery fallback.
+- The native provider is x64-only, matching the pinned upstream Windows
+  artifact; Windows ARM64 is not currently verified.
+- If Windows has not created the headset sensor node (surfaced in the
+  dashboard as a "Head tracker device access denied" diagnostic), follow Sony
+  Head Tracker's documented Repair Tracker flow yourself, then rerun
+  `npm start`. Spatial Gesture Control never performs elevated driver repair
+  on its own.
+- No download or separate build step is required for the native path; the
+  vendored engine sources build as part of `cargo build`/`npm start`.
+- No physical Windows hardware was available to validate this provider
+  end-to-end; only no-hardware CI smoke tests
+  (`native-head-tracking-windows`) and code review have run so far. See
+  [`docs/release-readiness.md`](docs/release-readiness.md).
 
 ### Linux
 

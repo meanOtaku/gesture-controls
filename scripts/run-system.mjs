@@ -182,16 +182,19 @@ export function superviseChildren({
   });
 }
 
+const NATIVE_PROVIDER_PLATFORMS = new Set(["darwin", "win32"]);
+
 /**
- * macOS has an in-process native head-tracker provider (see
+ * macOS and Windows have an in-process native head-tracker provider (see
  * `crates/native-head-tracking`), so `npm start` no longer needs to spawn the
- * external CLI bridge there. Every other platform still relies on the
- * external bridge until its own native provider lands. Setting
- * `SONY_HEAD_TRACKER_PROVIDER=external` keeps the old two-process behavior on
- * macOS as an explicit, documented fallback.
+ * external CLI bridge there. Linux still relies on the external bridge --
+ * upstream has no Linux HID backend, so there is no native provider to build
+ * (see the plan's non-goals). Setting `SONY_HEAD_TRACKER_PROVIDER=external`
+ * keeps the old two-process behavior on macOS/Windows as an explicit,
+ * documented fallback.
  */
 export function needsExternalBridge(platform, useExternalBridge) {
-  return platform !== "darwin" || useExternalBridge;
+  return !NATIVE_PROVIDER_PLATFORMS.has(platform) || useExternalBridge;
 }
 
 export async function runSystem({
@@ -213,7 +216,8 @@ export async function runSystem({
       detached,
     });
   } else {
-    console.log("[system] Using the native macOS Sony head-tracker provider; not starting the CLI bridge");
+    const platformName = platform === "darwin" ? "macOS" : "Windows";
+    console.log(`[system] Using the native ${platformName} Sony head-tracker provider; not starting the CLI bridge`);
   }
 
   console.log("[system] Starting Spatial Gesture Control");

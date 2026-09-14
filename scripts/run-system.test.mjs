@@ -80,11 +80,13 @@ test("launches the Sony Head Tracker CLI bridge with the bridge argument", () =>
   });
 });
 
-test("needsExternalBridge only forces the CLI bridge off the native macOS default", () => {
+test("needsExternalBridge only forces the CLI bridge off the native macOS/Windows default", () => {
   assert.equal(needsExternalBridge("darwin", false), false);
   assert.equal(needsExternalBridge("darwin", true), true);
-  assert.equal(needsExternalBridge("win32", false), true);
+  assert.equal(needsExternalBridge("win32", false), false);
+  assert.equal(needsExternalBridge("win32", true), true);
   assert.equal(needsExternalBridge("linux", false), true);
+  assert.equal(needsExternalBridge("linux", true), true);
 });
 
 test("macOS starts Tauri only by default, using the native head-tracker provider", async () => {
@@ -129,12 +131,33 @@ test("SONY_HEAD_TRACKER_PROVIDER=external falls back to the bundled CLI bridge o
   ]);
 });
 
-test("starts the bundled Windows CLI bridge with the bridge argument", async () => {
+test("Windows starts Tauri only by default, using the native head-tracker provider", async () => {
+  const events = [];
+
+  await runSystem({
+    platform: "win32",
+    ensure: async () => {
+      throw new Error("must not download or launch the CLI bridge on the native Windows default");
+    },
+    spawnChild: (command, args) => {
+      events.push(["spawn", command, ...args]);
+      const child = fakeChild();
+      queueMicrotask(() => child.emit("exit", 0, null));
+      return child;
+    },
+  });
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0][1], process.env.ComSpec ?? "cmd.exe");
+});
+
+test("SONY_HEAD_TRACKER_PROVIDER=external falls back to the bundled CLI bridge on Windows", async () => {
   const events = [];
   let spawnCount = 0;
 
   await runSystem({
     platform: "win32",
+    useExternalBridge: true,
     ensure: async () => "C:\\prebuilds\\sony-head-tracker.exe",
     spawnChild: (command, args) => {
       events.push([command, ...args]);

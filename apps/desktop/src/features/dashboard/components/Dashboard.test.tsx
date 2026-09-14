@@ -110,13 +110,13 @@ describe("Dashboard", () => {
     expect(screen.queryByText("Waiting for head-tracking data")).not.toBeInTheDocument();
   });
 
-  it("names the right executable to allow in Input Monitoring for each provider mode", () => {
+  it("names the right executable to allow device access for each provider mode", () => {
     const { unmount } = render(<Dashboard view="headphone" status={null} headTrackerProvider="native" />);
-    expect(screen.getByText(/allow Spatial Gesture Control in Privacy/)).toBeInTheDocument();
+    expect(screen.getByText(/Allow Spatial Gesture Control through your OS device-access prompt/)).toBeInTheDocument();
     unmount();
 
     render(<Dashboard view="headphone" status={null} headTrackerProvider="external" />);
-    expect(screen.getByText(/allow the Sony tracker executable in Privacy/)).toBeInTheDocument();
+    expect(screen.getByText(/Allow the Sony tracker executable through your OS device-access prompt/)).toBeInTheDocument();
   });
 
   it("shows pending feedback and disables a capture button while its own request is in flight", () => {

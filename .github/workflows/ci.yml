@@ -101,3 +101,17 @@ jobs:
           echo "Bundle: $APP"
           codesign -dv --verbose=2 "$APP" || true
           spctl -a -vv "$APP" || true
+      # Windows package-readiness evidence for Milestone 5 of
+      # .hermes/plans/2026-09-14_065556-native-sony-head-tracking-cross-platform.md.
+      # This only confirms an installer bundle was produced -- it is not an
+      # install test and not physical-hardware validation.
+      - name: Record Windows bundle status
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        run: |
+          BUNDLE="$(find target/release/bundle -maxdepth 2 \( -name '*.msi' -o -name '*-setup.exe' \) -print -quit)"
+          if [ -z "$BUNDLE" ]; then
+            echo "No .msi/-setup.exe bundle found under target/release/bundle" >&2
+            exit 1
+          fi
+          echo "Bundle: $BUNDLE"

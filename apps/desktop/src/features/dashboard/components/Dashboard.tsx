@@ -108,8 +108,8 @@ export function Dashboard({
           <ol>
             <li>Connect the headset in your computer’s Bluetooth settings.</li>
             {headTrackerProvider === "external"
-              ? <li>On macOS, allow the Sony tracker executable in Privacy &amp; Security → Input Monitoring.</li>
-              : <li>On macOS, allow Spatial Gesture Control in Privacy &amp; Security → Input Monitoring.</li>}
+              ? <li>Allow the Sony tracker executable through your OS device-access prompt (macOS: Privacy &amp; Security → Input Monitoring).</li>
+              : <li>Allow Spatial Gesture Control through your OS device-access prompt (macOS: Privacy &amp; Security → Input Monitoring; Windows: Bluetooth &amp; devices).</li>}
             <li>Stop and restart the project after changing permissions.</li>
           </ol>
         </aside>

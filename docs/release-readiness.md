@@ -110,9 +110,21 @@ unexecuted and are not being claimed as passed.
   with rate limiting. None of this has been exercised against a physical Sony
   headset in this repository's own testing; only the no-hardware CI job
   `native-head-tracking-macos` (`macos-14`) and code review have run so far.
-- [ ] **Windows 11 x64:** verify the pinned tracker discovers the headset (use its
-  documented Repair Tracker flow if needed), then verify the platform volume adapter
-  changes the selected test output.
+- [ ] **Windows 11 x64:** verify the native `crates/native-head-tracking` provider
+  (in-process, no separate tracker binary) discovers the headset over Bluetooth,
+  verify the permission-denied / scanning / device-not-found / device-not-verified /
+  feature-write-failed / error diagnostics surface correctly for their real
+  triggering conditions (not just the synthetic events exercised by
+  `crates/native-head-tracking/tests/ffi_windows.rs` and
+  `apps/desktop/src-tauri/src/head_pose.rs`'s unit tests), verify reconnect and the
+  reset-counter/recalibration path, verify Sony Head Tracker's documented Repair
+  Tracker flow resolves a missing sensor node without this app performing any
+  elevated action itself, verify `SONY_HEAD_TRACKER_PROVIDER=external` correctly
+  falls back to the CLI bridge, and verify the Windows Core Audio volume adapter
+  reads and changes the selected test output with rate limiting. None of this has
+  been exercised against a physical Sony headset in this repository's own testing;
+  only the no-hardware CI job `native-head-tracking-windows` (`windows-2022`) and
+  code review have run so far.
 - [ ] **Linux:** use the sample sender to validate UI/UDP behavior. The upstream Sony
   tracker has no Linux hardware backend; record that limitation. Verify the native
   volume adapter against PipeWire (`wpctl`) and, where used, its PulseAudio (`pactl`)

@@ -1,12 +1,13 @@
 //! Head-pose provider selection and the event pipeline shared by the
-//! macOS-native provider and the external Sony CLI bridge (Milestone 2 of
+//! native (macOS/Windows) provider and the external Sony CLI bridge
+//! (Milestones 2 and 5 of
 //! `.hermes/plans/2026-09-14_065556-native-sony-head-tracking-cross-platform.md`).
 //!
-//! macOS defaults to the in-process `native-head-tracking` provider.
-//! Setting `SONY_HEAD_TRACKER_PROVIDER=external` falls back to the external
-//! `SonyUdpHeadPoseProvider` -- the same UDP listener every other platform
-//! still uses today, since only macOS has a native provider so far
-//! (Windows lands in Milestone 4/5).
+//! macOS and Windows default to the in-process `native-head-tracking`
+//! provider. Setting `SONY_HEAD_TRACKER_PROVIDER=external` falls back to the
+//! external `SonyUdpHeadPoseProvider` -- the same UDP listener Linux still
+//! uses today, since Linux has no native provider (see the plan's
+//! non-goals).
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
@@ -30,7 +31,8 @@ const PROVIDER_OVERRIDE_ENV: &str = "SONY_HEAD_TRACKER_PROVIDER";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderSelection {
-    /// The in-process macOS provider (`native-head-tracking`).
+    /// The in-process native provider (`native-head-tracking`; macOS or
+    /// Windows).
     Native,
     /// The external Sony Head Tracker CLI bridge over loopback UDP.
     External,
@@ -59,7 +61,7 @@ fn select_provider_for(native_available: bool, override_value: Option<&str>) -> 
 
 pub fn select_provider() -> ProviderSelection {
     select_provider_for(
-        cfg!(target_os = "macos"),
+        cfg!(target_os = "macos") || cfg!(target_os = "windows"),
         std::env::var(PROVIDER_OVERRIDE_ENV).ok().as_deref(),
     )
 }
@@ -134,6 +136,69 @@ fn diagnostic_payload(
     }
 }
 
+/// Windows counterpart to the macOS `diagnostic_payload` above. Wording
+/// differs because the underlying causes differ -- Windows has no Input
+/// Monitoring-style app permission; `PermissionDenied` here comes from
+/// `CreateFileW` failing with `ERROR_ACCESS_DENIED` while enumerating the
+/// HID node (see `windows/adapter.cpp`, Milestone 4). Per the plan's
+/// Milestone 5 guardrail, every action string only ever points the user at
+/// Sony's own documented Repair Tracker flow -- this app never elevates or
+/// repairs the driver itself.
+#[cfg(target_os = "windows")]
+fn diagnostic_payload(
+    diagnostic: native_head_tracking::convert::NativeDiagnostic,
+) -> HeadTrackerDiagnosticPayload {
+    use native_head_tracking::convert::NativeDiagnostic;
+    match diagnostic {
+        NativeDiagnostic::Scanning => HeadTrackerDiagnosticPayload {
+            id: "scanning",
+            title: "Scanning for the Sony head tracker",
+            detail: "Looking for a compatible Sony head-tracking device over Bluetooth.",
+            action: Some(
+                "Make sure the headset is powered on and already paired in Windows Bluetooth settings.",
+            ),
+        },
+        NativeDiagnostic::PermissionDenied => HeadTrackerDiagnosticPayload {
+            id: "permission-denied",
+            title: "Head tracker device access denied",
+            detail: "Windows denied access to the head tracker's sensor device.",
+            action: Some(
+                "Close any other app that may already be using the headset. If the sensor node is missing, follow Sony Head Tracker's documented Repair Tracker instructions, then restart Spatial Gesture Control -- this app does not perform elevated driver repair on its own.",
+            ),
+        },
+        NativeDiagnostic::DeviceNotFound => HeadTrackerDiagnosticPayload {
+            id: "device-not-found",
+            title: "No supported head tracker found",
+            detail: "No compatible Sony head-tracking device is reachable over Bluetooth.",
+            action: Some(
+                "Pair the headset in Windows Bluetooth settings and make sure it is powered on.",
+            ),
+        },
+        NativeDiagnostic::DeviceNotVerified => HeadTrackerDiagnosticPayload {
+            id: "device-not-verified",
+            title: "Head tracker not verified",
+            detail: "The connected device could not be verified as a supported Sony head tracker.",
+            action: Some("Reconnect the supported Sony headset model."),
+        },
+        NativeDiagnostic::FeatureWriteFailed => HeadTrackerDiagnosticPayload {
+            id: "feature-write-failed",
+            title: "Head tracker configuration failed",
+            detail: "The app could not configure a required sensor feature on the head tracker.",
+            action: Some(
+                "Reconnect the headset. If this continues, follow Sony Head Tracker's documented Repair Tracker instructions -- Spatial Gesture Control will not repair the driver for you.",
+            ),
+        },
+        NativeDiagnostic::Error => HeadTrackerDiagnosticPayload {
+            id: "error",
+            title: "Head tracker error",
+            detail: "The native head-tracking engine reported an unexpected error.",
+            action: Some(
+                "Restart the app. If this continues, set SONY_HEAD_TRACKER_PROVIDER=external as a temporary fallback.",
+            ),
+        },
+    }
+}
+
 /// Starts the selected head-pose provider and feeds its events into the
 /// existing calibration/telemetry paths. Spawns its own task; callers do not
 /// need to await this.
@@ -141,14 +206,14 @@ pub fn spawn(handle: AppHandle) {
     tauri::async_runtime::spawn(async move {
         match select_provider() {
             ProviderSelection::Native => {
-                #[cfg(target_os = "macos")]
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
                 {
                     run_native(handle).await;
                 }
-                #[cfg(not(target_os = "macos"))]
+                #[cfg(not(any(target_os = "macos", target_os = "windows")))]
                 {
                     let _ = handle;
-                    unreachable!("select_provider only returns Native on macOS");
+                    unreachable!("select_provider only returns Native on macOS/Windows");
                 }
             }
             ProviderSelection::External => run_external(handle).await,
@@ -223,7 +288,12 @@ async fn run_external(handle: AppHandle) {
     }
 }
 
-#[cfg(target_os = "macos")]
+/// Shared between macOS and Windows: `NativeProvider` (and its
+/// `MacosProvider`/`WindowsProvider` aliases) is the same wrapper type on
+/// both platforms, and `diagnostic_payload` above is `cfg`-selected per
+/// platform under the same name, so this function's body needs no `cfg`
+/// branching of its own.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 async fn run_native(handle: AppHandle) {
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -231,7 +301,7 @@ async fn run_native(handle: AppHandle) {
         NativeDiagnostic, sample_to_head_pose, status_to_diagnostic, status_to_event,
     };
     use native_head_tracking::ffi::{NativeSample, NativeStatus};
-    use native_head_tracking::provider::{MacosProvider, NativeEventSink};
+    use native_head_tracking::provider::{NativeEventSink, NativeProvider};
     use tokio::sync::mpsc;
 
     enum NativeChannelEvent {
@@ -279,8 +349,8 @@ async fn run_native(handle: AppHandle) {
         }
     }
 
-    let Some(provider) = MacosProvider::new() else {
-        error!("failed to create native macOS head-tracker provider");
+    let Some(provider) = NativeProvider::new() else {
+        error!("failed to create native head-tracker provider");
         let _ = handle.emit(CONNECTION_EVENT, false);
         return;
     };
@@ -291,11 +361,11 @@ async fn run_native(handle: AppHandle) {
         previous_reset_counter: None,
     };
     if !provider.start(Box::new(sink)) {
-        error!("native macOS head-tracker provider failed to start");
+        error!("native head-tracker provider failed to start");
         let _ = handle.emit(CONNECTION_EVENT, false);
         return;
     }
-    info!("native macOS Sony head-tracker provider started");
+    info!("native Sony head-tracker provider started");
 
     // `provider` must outlive this loop: dropping it stops the native worker
     // thread and frees the callback context `tx` was moved into.
@@ -313,13 +383,18 @@ async fn run_native(handle: AppHandle) {
 mod tests {
     use super::*;
 
+    // `select_provider_for`'s `native_available` bool stands in for
+    // `cfg!(target_os = "macos") || cfg!(target_os = "windows")`, so these
+    // cases cover both native platforms identically; `select_provider`
+    // itself just wires that `cfg!` into the `true` branch below.
+
     #[test]
-    fn macos_without_override_selects_native() {
+    fn native_platform_without_override_selects_native() {
         assert_eq!(select_provider_for(true, None), ProviderSelection::Native);
     }
 
     #[test]
-    fn macos_with_external_override_selects_external() {
+    fn native_platform_with_external_override_selects_external() {
         assert_eq!(
             select_provider_for(true, Some("external")),
             ProviderSelection::External
@@ -331,7 +406,7 @@ mod tests {
     }
 
     #[test]
-    fn non_macos_always_selects_external() {
+    fn non_native_platform_always_selects_external() {
         assert_eq!(
             select_provider_for(false, None),
             ProviderSelection::External
@@ -352,5 +427,11 @@ mod tests {
             select_provider_for(true, Some("")),
             ProviderSelection::Native
         );
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn select_provider_defaults_to_native_on_this_platform() {
+        assert_eq!(select_provider(), ProviderSelection::Native);
     }
 }
