@@ -1,17 +1,13 @@
-//! Milestone 1: compiles and links the macOS native provider. Other targets
-//! (Windows/Milestone 4, Linux/no physical backend) do nothing here yet, so
-//! `src/ffi.rs`'s extern blocks stay declaration-only for them -- see the
-//! module doc comment in `src/lib.rs`.
+//! Milestone 1 compiles and links the macOS native provider; Milestone 4 does
+//! the same for Windows. Linux (no physical backend) does nothing here, so
+//! `src/ffi.rs` declares no extern block for it at all -- see the module doc
+//! comment in `src/lib.rs`.
 
 use std::env;
 use std::path::{Path, PathBuf};
 
 fn main() {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-    if target_os != "macos" {
-        return;
-    }
-
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let repo_root = manifest_dir
         .parent()
@@ -20,6 +16,14 @@ fn main() {
         .to_path_buf();
     let vendor = repo_root.join("third_party/sony-head-tracker");
 
+    if target_os == "macos" {
+        build_macos(&manifest_dir, &vendor);
+    } else if target_os == "windows" {
+        build_windows(&manifest_dir, &vendor);
+    }
+}
+
+fn build_macos(manifest_dir: &Path, vendor: &Path) {
     cc::Build::new()
         .cpp(true)
         .std("c++20")
@@ -70,5 +74,45 @@ fn main() {
 
     println!("cargo:rerun-if-changed={}", vendor.display());
     println!("cargo:rerun-if-changed=macos/adapter.cpp");
+    println!("cargo:rerun-if-changed=include/spatial_head_tracker.h");
+}
+
+fn build_windows(manifest_dir: &Path, vendor: &Path) {
+    // Upstream's engine is Windows-first (macOS is the ported platform), so
+    // its root `src/*.cpp` files are already the real HID/SetupAPI/Bluetooth
+    // implementation, not stubs. Each includes
+    // "sony_head_tracker/windows_prelude.hpp", which pulls in SetupAPI/HID/
+    // Bluetooth headers and links their import libraries via
+    // `#pragma comment(lib, ...)`, so no explicit rustc-link-lib is needed --
+    // MSVC's linker honors those directives from the compiled objects.
+    //
+    // Only the files this crate's windows/adapter.cpp actually depends on
+    // (transitively, via sony::HidBackend + sony::OrientationFilter) are
+    // compiled: app_config.cpp/diagnostics.cpp/protocol.cpp (config
+    // persistence, support-bundle formatting, and OpenTrack/JSON
+    // serialization) belong to the CLI/GUI surface this repo does not
+    // vendor a caller for, and sensor_api_backend.cpp's Windows Sensor API
+    // fallback is deferred -- neither is reachable from this adapter, so
+    // compiling them would only add untested surface.
+    cc::Build::new()
+        .cpp(true)
+        .std("c++20")
+        .include(vendor.join("include"))
+        .include(manifest_dir.join("include"))
+        .file(vendor.join("src/hid_descriptor.cpp"))
+        .file(vendor.join("src/math.cpp"))
+        .file(vendor.join("src/orientation.cpp"))
+        .file(vendor.join("src/logger.cpp"))
+        .file(vendor.join("src/bluetooth.cpp"))
+        .file(vendor.join("src/hid_backend.cpp"))
+        // Our adapter (repo-owned, not vendored): upstream has no reusable C
+        // ABI bridge object for Windows the way it does for macOS, so this
+        // drives sony::HidBackend/sony::OrientationFilter directly instead of
+        // translating another C API.
+        .file("windows/adapter.cpp")
+        .compile("sony_head_tracker_windows");
+
+    println!("cargo:rerun-if-changed={}", vendor.display());
+    println!("cargo:rerun-if-changed=windows/adapter.cpp");
     println!("cargo:rerun-if-changed=include/spatial_head_tracker.h");
 }

@@ -43,6 +43,22 @@ jobs:
       - run: cargo test -p native-head-tracking
       - run: cargo clippy -p native-head-tracking --all-targets -- -D warnings
 
+  native-head-tracking-windows:
+    # Builds and links the real Windows provider (crates/native-head-tracking/build.rs
+    # + windows/adapter.cpp against third_party/sony-head-tracker's Windows-native
+    # HID engine sources), not just the target-gated stubs the ubuntu `quality`
+    # job compiles. No paired headset is available on this runner; the tests in
+    # tests/ffi_windows.rs are written to pass anyway (see Milestone 4 in
+    # .hermes/plans/2026-09-14_065556-native-sony-head-tracking-cross-platform.md).
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - run: cargo test -p native-head-tracking
+      - run: cargo clippy -p native-head-tracking --all-targets -- -D warnings
+
   desktop-build:
     strategy:
       fail-fast: false

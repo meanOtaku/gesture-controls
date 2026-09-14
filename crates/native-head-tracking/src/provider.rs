@@ -1,9 +1,11 @@
-//! Safe macOS wrapper around the linked native FFI contract (`src/ffi.rs`,
-//! backed by `build.rs`/`macos/adapter.cpp` on this target only). `start`
-//! copies the raw sample/status out of native memory before handing it to
-//! Rust, `stop`/`Drop` guarantee the native worker thread is joined before
-//! its callback context is freed, and a panic inside the sink can never
-//! unwind back across the C ABI boundary.
+//! Safe wrapper around the linked native FFI contract (`src/ffi.rs`, backed by
+//! `build.rs`/`macos/adapter.cpp` on macOS and `build.rs`/`windows/adapter.cpp`
+//! on Windows -- both targets share this same wrapper since the ABI contract
+//! and its safety obligations are identical). `start` copies the raw
+//! sample/status out of native memory before handing it to Rust, `stop`/`Drop`
+//! guarantee the native worker thread is joined before its callback context is
+//! freed, and a panic inside the sink can never unwind back across the C ABI
+//! boundary.
 
 use std::ffi::{CStr, c_void};
 use std::os::raw::c_char;
@@ -14,7 +16,7 @@ use crate::ffi::{self, NativeHandle, NativeSample, NativeStatus};
 
 /// Receives owned copies of native callback data. Called on the native
 /// engine's worker thread; implementations must not block or call back into
-/// `MacosProvider` (matches the ABI contract's callback contract).
+/// `NativeProvider` (matches the ABI contract's callback contract).
 pub trait NativeEventSink: Send {
     fn on_sample(&mut self, sample: NativeSample);
     fn on_status(&mut self, status: NativeStatus, message: String);
@@ -29,18 +31,26 @@ struct CallbackState {
 /// has returned) and destroys the handle, so an early return or panic in the
 /// caller never leaks the native worker thread or a dangling callback
 /// context.
-pub struct MacosProvider {
+pub struct NativeProvider {
     handle: *mut NativeHandle,
     state: Mutex<Option<Box<CallbackState>>>,
 }
 
+/// The macOS build spike's name for `NativeProvider` (Milestone 1).
+#[cfg(target_os = "macos")]
+pub type MacosProvider = NativeProvider;
+
+/// The Windows build spike's name for `NativeProvider` (Milestone 4).
+#[cfg(target_os = "windows")]
+pub type WindowsProvider = NativeProvider;
+
 // SAFETY: `handle` is only ever passed to the native functions declared in
 // `ffi.rs`, which the vendored engine documents as safe to call from any
 // thread; `state` guards the one piece of Rust-owned data those calls touch.
-unsafe impl Send for MacosProvider {}
-unsafe impl Sync for MacosProvider {}
+unsafe impl Send for NativeProvider {}
+unsafe impl Sync for NativeProvider {}
 
-impl MacosProvider {
+impl NativeProvider {
     /// Creates a native handle. Returns `None` only on allocation failure;
     /// no hardware or permission is required to construct one.
     pub fn new() -> Option<Self> {
@@ -123,7 +133,7 @@ impl MacosProvider {
     }
 }
 
-impl Drop for MacosProvider {
+impl Drop for NativeProvider {
     fn drop(&mut self) {
         self.stop();
         unsafe { ffi::spatial_head_tracker_destroy(self.handle) };
