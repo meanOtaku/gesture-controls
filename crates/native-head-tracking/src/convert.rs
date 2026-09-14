@@ -29,10 +29,8 @@ pub fn sample_to_head_pose(sample: &NativeSample, timestamp_ns: u64) -> HeadPose
 
 /// Maps a raw status onto the existing session event stream. `Scanning`,
 /// `PermissionDenied`, `DeviceNotFound`, `DeviceNotVerified`,
-/// `FeatureWriteFailed`, and `Error` are not yet represented in
-/// `HeadPoseEvent` (Milestone 1 extends product diagnostics); until then
-/// they are reported through `spatial_head_tracker_get_diagnostics` only and
-/// produce no session event here.
+/// `FeatureWriteFailed`, and `Error` have no session-event equivalent; see
+/// `status_to_diagnostic` for those.
 pub fn status_to_event(status: NativeStatus) -> Option<HeadPoseEvent> {
     match status {
         NativeStatus::Connected => Some(HeadPoseEvent::Connected),
@@ -45,5 +43,38 @@ pub fn status_to_event(status: NativeStatus) -> Option<HeadPoseEvent> {
         | NativeStatus::DeviceNotVerified
         | NativeStatus::FeatureWriteFailed
         | NativeStatus::Error => None,
+    }
+}
+
+/// Typed diagnostic categories for the statuses `status_to_event` maps to
+/// `None`. Deliberately as name/identifier-free as `NativeStatus` itself:
+/// the ABI contract (`include/spatial_head_tracker.h`) never carries a
+/// device name, and `spatial_head_tracker_get_diagnostics` documents the
+/// same omission for its free-text snapshot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NativeDiagnostic {
+    Scanning,
+    PermissionDenied,
+    DeviceNotFound,
+    DeviceNotVerified,
+    FeatureWriteFailed,
+    Error,
+}
+
+/// Companion to `status_to_event`: typed for product-facing diagnostics/UI
+/// (Milestone 2 wires this into the app). Returns `None` for statuses that
+/// already have a session-event mapping.
+pub fn status_to_diagnostic(status: NativeStatus) -> Option<NativeDiagnostic> {
+    match status {
+        NativeStatus::Scanning => Some(NativeDiagnostic::Scanning),
+        NativeStatus::PermissionDenied => Some(NativeDiagnostic::PermissionDenied),
+        NativeStatus::DeviceNotFound => Some(NativeDiagnostic::DeviceNotFound),
+        NativeStatus::DeviceNotVerified => Some(NativeDiagnostic::DeviceNotVerified),
+        NativeStatus::FeatureWriteFailed => Some(NativeDiagnostic::FeatureWriteFailed),
+        NativeStatus::Error => Some(NativeDiagnostic::Error),
+        NativeStatus::Connected
+        | NativeStatus::Stopped
+        | NativeStatus::Reconnecting
+        | NativeStatus::StreamTimeout => None,
     }
 }

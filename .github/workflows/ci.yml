@@ -27,6 +27,22 @@ jobs:
       - run: cargo test -p spatial-protocol -p head-tracking -p native-head-tracking -p interaction-engine -p volume-control
       - run: cargo clippy -p spatial-protocol -p head-tracking -p native-head-tracking -p interaction-engine -p volume-control --all-targets -- -D warnings
 
+  native-head-tracking-macos:
+    # Builds and links the real macOS provider (crates/native-head-tracking/build.rs
+    # + macos/adapter.cpp against third_party/sony-head-tracker), not just the
+    # target-gated stubs the ubuntu `quality` job compiles. No paired headset
+    # or Input Monitoring permission is available on this runner; the tests in
+    # tests/ffi_macos.rs are written to pass anyway (see Milestone 1 in
+    # .hermes/plans/2026-09-14_065556-native-sony-head-tracking-cross-platform.md).
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - run: cargo test -p native-head-tracking
+      - run: cargo clippy -p native-head-tracking --all-targets -- -D warnings
+
   desktop-build:
     strategy:
       fail-fast: false

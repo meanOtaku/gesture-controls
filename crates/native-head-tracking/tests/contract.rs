@@ -4,7 +4,9 @@
 //! provider-neutral types.
 
 use head_tracking::HeadPoseEvent;
-use native_head_tracking::convert::{sample_to_head_pose, status_to_event};
+use native_head_tracking::convert::{
+    NativeDiagnostic, sample_to_head_pose, status_to_diagnostic, status_to_event,
+};
 use native_head_tracking::ffi::{NativeSample, NativeStatus};
 
 fn fake_sample() -> NativeSample {
@@ -82,5 +84,44 @@ fn diagnostics_only_statuses_produce_no_session_event() {
         NativeStatus::Error,
     ] {
         assert!(status_to_event(status).is_none());
+    }
+}
+
+#[test]
+fn diagnostics_only_statuses_map_to_typed_diagnostics() {
+    let cases = [
+        (NativeStatus::Scanning, NativeDiagnostic::Scanning),
+        (
+            NativeStatus::PermissionDenied,
+            NativeDiagnostic::PermissionDenied,
+        ),
+        (
+            NativeStatus::DeviceNotFound,
+            NativeDiagnostic::DeviceNotFound,
+        ),
+        (
+            NativeStatus::DeviceNotVerified,
+            NativeDiagnostic::DeviceNotVerified,
+        ),
+        (
+            NativeStatus::FeatureWriteFailed,
+            NativeDiagnostic::FeatureWriteFailed,
+        ),
+        (NativeStatus::Error, NativeDiagnostic::Error),
+    ];
+    for (status, expected) in cases {
+        assert_eq!(status_to_diagnostic(status), Some(expected));
+    }
+}
+
+#[test]
+fn session_event_statuses_produce_no_diagnostic() {
+    for status in [
+        NativeStatus::Connected,
+        NativeStatus::Stopped,
+        NativeStatus::Reconnecting,
+        NativeStatus::StreamTimeout,
+    ] {
+        assert!(status_to_diagnostic(status).is_none());
     }
 }
