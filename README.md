@@ -169,4 +169,4 @@ For complete prerequisites, troubleshooting, build commands, and launcher detail
 
 ## License
 
-MIT. This is an unofficial project and is not affiliated with or endorsed by Sony or Samsung. See [`tools/sony-head-tracker/THIRD_PARTY_NOTICES.md`](tools/sony-head-tracker/THIRD_PARTY_NOTICES.md) for upstream attribution.
+MIT. This is an unofficial project and is not affiliated with or endorsed by Sony or Samsung. See [`tools/sony-head-tracker/THIRD_PARTY_NOTICES.md`](tools/sony-head-tracker/THIRD_PARTY_NOTICES.md) for the external-bridge fallback attribution and [`third_party/sony-head-tracker/THIRD_PARTY_NOTICES.md`](third_party/sony-head-tracker/THIRD_PARTY_NOTICES.md) for the vendored native engine/bridge sources (see [`crates/native-head-tracking`](crates/native-head-tracking)).
