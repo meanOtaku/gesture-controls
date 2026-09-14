@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use spatial_protocol::{BUTTON_STATE_DOWN, BUTTON_STATE_UP, STEM_PRIMARY_BUTTON_ID};
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 use tracing::{error, info, warn};
 use watch_bridge::{WatchBridgeServer, WatchEvent};
 

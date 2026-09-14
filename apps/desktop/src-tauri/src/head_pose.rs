@@ -305,7 +305,7 @@ async fn run_native(handle: AppHandle) {
     use tokio::sync::mpsc;
 
     enum NativeChannelEvent {
-        Head(HeadPoseEvent),
+        Head(Box<HeadPoseEvent>),
         Diagnostic(NativeDiagnostic),
     }
 
@@ -325,23 +325,25 @@ async fn run_native(handle: AppHandle) {
             if let Some(previous) = self.previous_reset_counter
                 && previous != reset_counter
             {
-                let _ = self.tx.send(NativeChannelEvent::Head(
+                let _ = self.tx.send(NativeChannelEvent::Head(Box::new(
                     HeadPoseEvent::ResetCounterChanged {
                         previous,
                         current: reset_counter,
                     },
-                ));
+                )));
             }
             self.previous_reset_counter = Some(reset_counter);
             let pose = sample_to_head_pose(&sample, timestamp_ns);
             let _ = self
                 .tx
-                .send(NativeChannelEvent::Head(HeadPoseEvent::Pose(pose)));
+                .send(NativeChannelEvent::Head(Box::new(HeadPoseEvent::Pose(
+                    pose,
+                ))));
         }
 
         fn on_status(&mut self, status: NativeStatus, _message: String) {
             if let Some(event) = status_to_event(status) {
-                let _ = self.tx.send(NativeChannelEvent::Head(event));
+                let _ = self.tx.send(NativeChannelEvent::Head(Box::new(event)));
             }
             if let Some(diagnostic) = status_to_diagnostic(status) {
                 let _ = self.tx.send(NativeChannelEvent::Diagnostic(diagnostic));
@@ -371,7 +373,7 @@ async fn run_native(handle: AppHandle) {
     // thread and frees the callback context `tx` was moved into.
     while let Some(event) = rx.recv().await {
         match event {
-            NativeChannelEvent::Head(head_event) => handle_head_event(&handle, head_event),
+            NativeChannelEvent::Head(head_event) => handle_head_event(&handle, *head_event),
             NativeChannelEvent::Diagnostic(diagnostic) => {
                 let _ = handle.emit(DIAGNOSTIC_EVENT, Some(diagnostic_payload(diagnostic)));
             }

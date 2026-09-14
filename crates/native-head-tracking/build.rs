@@ -27,6 +27,15 @@ fn build_macos(manifest_dir: &Path, vendor: &Path) {
     cc::Build::new()
         .cpp(true)
         .std("c++20")
+        // The SDK marks floating-point std::to_chars (and, transitively,
+        // std::format over doubles/long doubles, used by app_config.cpp) as
+        // unavailable before macOS 13.3. That's a compile-time-only policy
+        // annotation -- libc++'s floating-point to_chars is implemented
+        // entirely in the header, so it needs no newer dylib symbol -- and
+        // protocol.cpp already relies on calling it directly at this same
+        // -mmacosx-version-min. Disabling the check keeps the real minimum
+        // (10.13) instead of raising it to silence the diagnostic.
+        .define("_LIBCPP_DISABLE_AVAILABILITY", None)
         .include(vendor.join("include"))
         .include(vendor.join("macos/Bridge"))
         .include(manifest_dir.join("include"))
