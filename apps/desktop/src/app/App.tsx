@@ -13,6 +13,7 @@ import {
   HEAD_TARGET_ENTERED_EVENT,
   HEAD_TARGET_EXITED_EVENT,
   HEAD_TRACKER_CONNECTION_EVENT,
+  HEAD_TRACKER_DIAGNOSTIC_EVENT,
   OVERLAY_STATE_EVENT,
   SETTINGS_UPDATED_EVENT,
   WATCH_EDA_BATCH_EVENT,
@@ -25,7 +26,7 @@ import {
   type CalibrationState,
   type CalibrationTarget,
   type HeadPosePayload,
-
+  type HeadTrackerDiagnostic,
   type OverlayState,
   type WatchEdaBatch,
   type WatchHeartRateBatch,
@@ -126,6 +127,8 @@ function OverlayApp() {
 function MainApp() {
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
   const status = telemetryStore.getHeadStatus();
+  const headDiagnostic = telemetryStore.getHeadDiagnostic();
+  const headTrackerProvider = telemetryStore.getHeadTrackerProvider();
   const watchStatus = telemetryStore.getWatchStatus();
   const [calibration, setCalibration] = useState<CalibrationState | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
@@ -195,6 +198,9 @@ function MainApp() {
         telemetryStore.setHeadConnected(payload);
         if (!payload) hideOverlay();
       }),
+      listen<HeadTrackerDiagnostic | null>(HEAD_TRACKER_DIAGNOSTIC_EVENT, ({ payload }) => {
+        if (!cancelled) telemetryStore.setHeadDiagnostic(payload);
+      }),
       listen<CalibrationState>(CALIBRATION_STATE_EVENT, ({ payload }) => {
         if (cancelled) return;
         calibrationEventVersion.current += 1;
@@ -242,6 +248,11 @@ function MainApp() {
         .catch((error) => {
           if (!cancelled) setCalibrationError(String(error));
         });
+      void invoke<"native" | "external">("get_head_tracker_provider")
+        .then((provider) => {
+          if (!cancelled) telemetryStore.setHeadTrackerProvider(provider);
+        })
+        .catch(() => {});
       return results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
     });
 
@@ -455,6 +466,8 @@ function MainApp() {
         onNavigate={setActiveTab}
         view="main"
         status={status}
+        headDiagnostic={headDiagnostic}
+        headTrackerProvider={headTrackerProvider}
         calibration={calibration}
         calibrationError={applicationError}
         watchStatus={watchStatus}
@@ -467,6 +480,8 @@ function MainApp() {
       <Dashboard
         view="headphone"
         status={status}
+        headDiagnostic={headDiagnostic}
+        headTrackerProvider={headTrackerProvider}
         calibration={calibration}
         calibrationError={applicationError}
         watchStatus={watchStatus}

@@ -9,6 +9,7 @@ import {
   buildTrackerInvocation,
   bundledTrackerPath,
   ensureTracker,
+  needsExternalBridge,
   runSystem,
   superviseChildren,
 } from "./run-system.mjs";
@@ -79,12 +80,39 @@ test("launches the Sony Head Tracker CLI bridge with the bridge argument", () =>
   });
 });
 
-test("starts the bundled CLI bridge directly before Tauri", async () => {
+test("needsExternalBridge only forces the CLI bridge off the native macOS default", () => {
+  assert.equal(needsExternalBridge("darwin", false), false);
+  assert.equal(needsExternalBridge("darwin", true), true);
+  assert.equal(needsExternalBridge("win32", false), true);
+  assert.equal(needsExternalBridge("linux", false), true);
+});
+
+test("macOS starts Tauri only by default, using the native head-tracker provider", async () => {
+  const events = [];
+
+  await runSystem({
+    platform: "darwin",
+    ensure: async () => {
+      throw new Error("must not download or launch the CLI bridge on the native macOS default");
+    },
+    spawnChild: (command, args) => {
+      events.push(["spawn", command, ...args]);
+      const child = fakeChild();
+      queueMicrotask(() => child.emit("exit", 0, null));
+      return child;
+    },
+  });
+
+  assert.deepEqual(events, [["spawn", "npm", "run", "tauri", "--", "dev"]]);
+});
+
+test("SONY_HEAD_TRACKER_PROVIDER=external falls back to the bundled CLI bridge on macOS", async () => {
   const events = [];
   let spawnCount = 0;
 
   await runSystem({
     platform: "darwin",
+    useExternalBridge: true,
     ensure: async () => "/tmp/sony-head-tracker-macos",
     spawnChild: (command, args) => {
       events.push(["spawn", command, ...args]);
@@ -191,6 +219,25 @@ test("Ctrl+C cleans up both process trees", async () => {
   host.emit("SIGINT");
   assert.equal(await completion, 130);
   assert.deepEqual(stopped, [tauri, tracker]);
+});
+
+test("with no tracker (native macOS provider), an app exit only stops Tauri", async () => {
+  const tauri = fakeChild();
+  const host = new EventEmitter();
+  host.exitCode = null;
+  const stopped = [];
+  const completion = superviseChildren({
+    tracker: null,
+    tauri,
+    platform: "darwin",
+    host,
+    terminateChild: async (child) => stopped.push(child),
+  });
+
+  tauri.emit("exit", 7, null);
+  assert.equal(await completion, 7);
+  assert.deepEqual(stopped, [tauri]);
+  assert.equal(host.exitCode, 7);
 });
 
 test("a cleanup error cannot prevent the launcher from completing shutdown", async () => {

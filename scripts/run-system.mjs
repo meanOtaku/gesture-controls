@@ -128,7 +128,7 @@ async function terminate(child, platform) {
 }
 
 export function superviseChildren({
-  tracker,
+  tracker = null,
   tauri,
   platform,
   host = process,
@@ -142,10 +142,10 @@ export function superviseChildren({
       stopping = true;
       host.removeListener("SIGINT", onSigint);
       host.removeListener("SIGTERM", onSigterm);
-      const cleanup = await Promise.allSettled([
-        terminateChild(tauri, platform),
-        terminateChild(tracker, platform),
-      ]);
+      const targets = tracker ? [tauri, tracker] : [tauri];
+      const cleanup = await Promise.allSettled(
+        targets.map((child) => terminateChild(child, platform)),
+      );
       for (const outcome of cleanup) {
         if (outcome.status === "rejected") {
           console.error(`[system] Process cleanup failed: ${outcome.reason?.message ?? outcome.reason}`);
@@ -160,19 +160,21 @@ export function superviseChildren({
     host.once("SIGINT", onSigint);
     host.once("SIGTERM", onSigterm);
 
-    tracker.once("error", (error) => {
-      console.error(`[system] Sony Head Tracker CLI bridge failed to start: ${error.message}`);
-      void stop(1);
-    });
+    if (tracker) {
+      tracker.once("error", (error) => {
+        console.error(`[system] Sony Head Tracker CLI bridge failed to start: ${error.message}`);
+        void stop(1);
+      });
+      tracker.once("exit", (code, signal) => {
+        if (!stopping) {
+          console.error(`[system] Sony Head Tracker CLI bridge stopped (${signal ?? `exit ${code}`})`);
+          void stop(code || 1);
+        }
+      });
+    }
     tauri.once("error", (error) => {
       console.error(`[system] Tauri failed to start: ${error.message}`);
       void stop(1);
-    });
-    tracker.once("exit", (code, signal) => {
-      if (!stopping) {
-        console.error(`[system] Sony Head Tracker CLI bridge stopped (${signal ?? `exit ${code}`})`);
-        void stop(code || 1);
-      }
     });
     tauri.once("exit", (code) => {
       if (!stopping) void stop(code ?? 1);
@@ -180,21 +182,40 @@ export function superviseChildren({
   });
 }
 
+/**
+ * macOS has an in-process native head-tracker provider (see
+ * `crates/native-head-tracking`), so `npm start` no longer needs to spawn the
+ * external CLI bridge there. Every other platform still relies on the
+ * external bridge until its own native provider lands. Setting
+ * `SONY_HEAD_TRACKER_PROVIDER=external` keeps the old two-process behavior on
+ * macOS as an explicit, documented fallback.
+ */
+export function needsExternalBridge(platform, useExternalBridge) {
+  return platform !== "darwin" || useExternalBridge;
+}
+
 export async function runSystem({
   platform = process.platform,
   ensure = ensureTracker,
   spawnChild = spawn,
+  useExternalBridge = process.env.SONY_HEAD_TRACKER_PROVIDER === "external",
 } = {}) {
-  const executable = await ensure({ platform });
-  const trackerSpec = buildTrackerInvocation(executable);
   const tauriSpec = tauriInvocation(platform);
   const detached = platform !== "win32";
 
-  console.log(`[system] Starting Sony Head Tracker v${RELEASE_VERSION} CLI bridge`);
-  const tracker = spawnChild(trackerSpec.command, trackerSpec.args, {
-    stdio: "inherit",
-    detached,
-  });
+  let tracker = null;
+  if (needsExternalBridge(platform, useExternalBridge)) {
+    const executable = await ensure({ platform });
+    const trackerSpec = buildTrackerInvocation(executable);
+    console.log(`[system] Starting Sony Head Tracker v${RELEASE_VERSION} CLI bridge`);
+    tracker = spawnChild(trackerSpec.command, trackerSpec.args, {
+      stdio: "inherit",
+      detached,
+    });
+  } else {
+    console.log("[system] Using the native macOS Sony head-tracker provider; not starting the CLI bridge");
+  }
+
   console.log("[system] Starting Spatial Gesture Control");
   const tauri = spawnChild(tauriSpec.command, tauriSpec.args, {
     stdio: "inherit",

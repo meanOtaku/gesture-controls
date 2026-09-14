@@ -83,6 +83,27 @@ describe("telemetryStore", () => {
     expect(telemetryStore.getSeries("watchOrientation")).toHaveLength(1);
   });
 
+  it("clears the head-tracker diagnostic on reset but keeps the last-selected provider", () => {
+    telemetryStore.setHeadTrackerProvider("native");
+    telemetryStore.setHeadDiagnostic({
+      id: "scanning",
+      title: "Scanning for the Sony head tracker",
+      detail: "Looking for a compatible Sony head-tracking device over Bluetooth.",
+      action: null,
+    });
+    expect(telemetryStore.getHeadDiagnostic()?.id).toBe("scanning");
+
+    telemetryStore.reset();
+    expect(telemetryStore.getHeadDiagnostic()).toBeNull();
+    expect(telemetryStore.getHeadTrackerProvider()).toBe("native");
+  });
+
+  it("clears a stale diagnostic once the head tracker connects", () => {
+    telemetryStore.setHeadDiagnostic({ id: "device-not-found", title: "x", detail: "y", action: null });
+    telemetryStore.setHeadDiagnostic(null);
+    expect(telemetryStore.getHeadDiagnostic()).toBeNull();
+  });
+
   describe("labeled dataset recorder", () => {
     it("does not buffer dataset rows before a session is started", () => {
       telemetryStore.selectDatasetLabel("pinch_start");

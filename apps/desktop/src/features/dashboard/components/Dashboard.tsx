@@ -3,6 +3,7 @@ import { Input } from "../../../components/ui/input";
 import type {
   CalibrationState,
   CalibrationTarget,
+  HeadTrackerDiagnostic,
   HeadTrackerStatus,
   WatchStatus,
 } from "../../../shared/protocol/events";
@@ -16,6 +17,10 @@ import { WatchWellnessPanel } from "./WatchWellnessPanel";
 interface DashboardProps {
   view?: "main" | "headphone" | "watch";
   status: HeadTrackerStatus | null;
+  /** Native-provider-only readiness state (scanning, permission denied, etc). `null` when there's nothing to report. */
+  headDiagnostic?: HeadTrackerDiagnostic | null;
+  /** Which head-pose provider this session selected; see `get_head_tracker_provider`. `null` before the first response arrives. */
+  headTrackerProvider?: "native" | "external" | null;
   calibration?: CalibrationState | null;
   calibrationError?: string | null;
   watchStatus?: WatchStatus | null;
@@ -39,6 +44,8 @@ const DEFAULT_CALIBRATION: CalibrationState = {
 export function Dashboard({
   view = "main",
   status,
+  headDiagnostic = null,
+  headTrackerProvider = null,
   calibration,
   calibrationError,
   watchStatus,
@@ -87,11 +94,24 @@ export function Dashboard({
         />
       )}
 
-      {view === "headphone" && !connected && (
+      {view === "headphone" && !connected && headDiagnostic && (
+        <aside className="connection-help" aria-label="Headphone connection help">
+          <h2>{headDiagnostic.title}</h2>
+          <p>{headDiagnostic.detail}</p>
+          {headDiagnostic.action && <p className="hint">{headDiagnostic.action}</p>}
+        </aside>
+      )}
+      {view === "headphone" && !connected && !headDiagnostic && (
         <aside className="connection-help" aria-label="Headphone connection help">
           <h2>Waiting for head-tracking data</h2>
           <p>Pairing alone does not confirm that the headset’s tracking sensor is connected.</p>
-          <ol><li>Connect the headset in your computer’s Bluetooth settings.</li><li>On macOS, allow the Sony tracker executable in Privacy &amp; Security → Input Monitoring.</li><li>Stop and restart the project after changing permissions.</li></ol>
+          <ol>
+            <li>Connect the headset in your computer’s Bluetooth settings.</li>
+            {headTrackerProvider === "external"
+              ? <li>On macOS, allow the Sony tracker executable in Privacy &amp; Security → Input Monitoring.</li>
+              : <li>On macOS, allow Spatial Gesture Control in Privacy &amp; Security → Input Monitoring.</li>}
+            <li>Stop and restart the project after changing permissions.</li>
+          </ol>
         </aside>
       )}
       {view === "watch" && !watchConnected && (
