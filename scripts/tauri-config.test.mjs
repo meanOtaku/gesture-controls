@@ -7,6 +7,25 @@ const cargoUrl = new URL("../apps/desktop/src-tauri/Cargo.toml", import.meta.url
 const libSourceUrl = new URL("../apps/desktop/src-tauri/src/lib.rs", import.meta.url);
 const overlaySourceUrl = new URL("../apps/desktop/src-tauri/src/overlay.rs", import.meta.url);
 
+// Extracts a fn's full body by brace-counting rather than matching a specific
+// line-ending/indentation shape, so the assertions survive reformatting and
+// CRLF checkouts (e.g. Windows CI) instead of being coupled to exact source text.
+function extractFunctionBody(source, signature) {
+  const start = source.indexOf(signature);
+  if (start === -1) return null;
+  const braceStart = source.indexOf("{", start);
+  if (braceStart === -1) return null;
+  let depth = 0;
+  for (let i = braceStart; i < source.length; i += 1) {
+    if (source[i] === "{") depth += 1;
+    else if (source[i] === "}") {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
 test("defines a hidden transparent non-focusable always-on-top overlay window", async () => {
   const config = JSON.parse(await readFile(configUrl, "utf8"));
   const overlay = config.app.windows.find((window) => window.label === "overlay");
@@ -39,19 +58,19 @@ test("positions the volume overlay at the active screen's top-right before showi
 
 test("commits refreshed show state only after fallible window operations succeed", async () => {
   const overlaySource = await readFile(overlaySourceUrl, "utf8");
-  const showBody = overlaySource.match(/fn show\([\s\S]*?\n    }\n\n    fn hide/);
+  const showBody = extractFunctionBody(overlaySource, "fn show(");
 
   assert.ok(showBody, "the overlay show implementation exists");
   assert.ok(
-    showBody[0].indexOf(".lock()") < showBody[0].indexOf("available_volume"),
+    showBody.indexOf(".lock()") < showBody.indexOf("available_volume"),
     "show must serialize its native volume read with overlay mutations",
   );
   assert.ok(
-    showBody[0].indexOf("commit_visibility_after") < showBody[0].indexOf("state.volume ="),
+    showBody.indexOf("commit_visibility_after") < showBody.indexOf("state.volume ="),
     "show must not mutate volume before prepare, position, and native show have succeeded",
   );
   assert.ok(
-    showBody[0].indexOf("state.volume =") < showBody[0].indexOf("state_generation.fetch_add"),
+    showBody.indexOf("state.volume =") < showBody.indexOf("state_generation.fetch_add"),
     "show must invalidate admitted refreshes after committing its volume",
   );
 });
@@ -95,17 +114,15 @@ test("wires keyboard adjustments and live refresh to the platform volume control
     /fn refresh_system_volume[\s\S]*available_volume[\s\S]*state_generation/,
     "refresh must validate its generation after reading native volume",
   );
-  const adjustBody = overlaySource.match(
-    /fn adjust_system_volume\([\s\S]*?\n    }\n\n    fn refresh_system_volume/,
-  );
+  const adjustBody = extractFunctionBody(overlaySource, "fn adjust_system_volume(");
   assert.ok(adjustBody, "the overlay adjustment implementation exists");
   assert.ok(
-    adjustBody[0].indexOf("state_generation.fetch_add") <
-      adjustBody[0].indexOf("adjust_native_volume"),
+    adjustBody.indexOf("state_generation.fetch_add") <
+      adjustBody.indexOf("adjust_native_volume"),
     "an adjustment attempt must invalidate older refreshes before native I/O can partially succeed",
   );
   assert.ok(
-    adjustBody[0].indexOf("adjust_native_volume") < adjustBody[0].indexOf("state.volume ="),
+    adjustBody.indexOf("adjust_native_volume") < adjustBody.indexOf("state.volume ="),
     "adjustment state must commit only after native I/O succeeds",
   );
 });
