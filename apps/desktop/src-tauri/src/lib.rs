@@ -2,15 +2,14 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
-use calibration::CalibrationRuntime;
-use head_tracking::{HeadPoseEvent, HeadPoseProvider, SonyUdpHeadPoseProvider};
 use spatial_protocol::{BUTTON_STATE_DOWN, BUTTON_STATE_UP, STEM_PRIMARY_BUTTON_ID};
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 use tracing::{error, info, warn};
 use watch_bridge::{WatchBridgeServer, WatchEvent};
 
 mod calibration;
 mod environment;
+mod head_pose;
 mod inference;
 mod label_registry;
 mod model_lab;
@@ -19,14 +18,10 @@ mod overlay;
 mod settings;
 mod watch;
 
-const SONY_JSON_ADDRESS: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 4243);
 const WATCH_WEBSOCKET_ADDRESS: SocketAddr =
     SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 8766);
 const WATCH_HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(3);
 const MAIN_WINDOW: &str = "main";
-const CONNECTION_EVENT: &str = "head-tracker-connection";
-const POSE_EVENT: &str = "head-pose-updated";
-const RESET_EVENT: &str = "head-tracker-reset";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -39,7 +34,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .manage(CalibrationRuntime::default())
+        .manage(calibration::CalibrationRuntime::default())
         .manage(overlay::OverlayRuntime::default())
         .manage(overlay::VolumeRuntime::default())
         .manage(watch::WatchRuntime::default())
@@ -69,6 +64,7 @@ pub fn run() {
             settings::update_settings,
             settings::reset_settings,
             environment::get_environment_diagnostics,
+            head_pose::get_head_tracker_provider,
             model_lab::import_model_dataset,
             model_lab::list_model_datasets,
             model_lab::delete_model_dataset,
@@ -111,69 +107,7 @@ pub fn run() {
             let handle = app.handle().clone();
             app.manage(settings::SettingsRuntime::load(&handle));
             overlay::prepare_window(&handle).map_err(std::io::Error::other)?;
-            tauri::async_runtime::spawn(async move {
-                let provider = match SonyUdpHeadPoseProvider::bind(
-                    SONY_JSON_ADDRESS,
-                    Duration::from_millis(1_000),
-                )
-                .await
-                {
-                    Ok(provider) => provider,
-                    Err(error) => {
-                        error!(%error, address = %SONY_JSON_ADDRESS, "Sony UDP listener failed to bind");
-                        let _ = handle.emit(CONNECTION_EVENT, false);
-                        return;
-                    }
-                };
-
-                let mut events = provider.subscribe();
-                if let Err(error) = provider.start().await {
-                    error!(%error, "Sony head-pose provider failed to start");
-                    let _ = handle.emit(CONNECTION_EVENT, false);
-                    return;
-                }
-                info!(address = %SONY_JSON_ADDRESS, "Sony JSON UDP listener started");
-
-                loop {
-                    match events.recv().await {
-                        Ok(HeadPoseEvent::Connected) => {
-                            info!("Sony head tracker connected");
-                            let _ = handle.emit(CONNECTION_EVENT, true);
-                        }
-                        Ok(HeadPoseEvent::Disconnected) => {
-                            warn!("Sony head tracker disconnected");
-                            match handle.state::<CalibrationRuntime>().disconnect(&handle) {
-                                Ok(()) => {}
-                                Err(error) => warn!(%error, "failed to suspend head calibration"),
-                            }
-                            let _ = handle.emit(CONNECTION_EVENT, false);
-                        }
-                        Ok(HeadPoseEvent::Pose(pose)) => {
-                            match handle.state::<CalibrationRuntime>().observe(&handle, pose.quaternion) {
-                                Ok(()) => {}
-                                Err(error) => warn!(%error, "failed to evaluate head calibration"),
-                            }
-                            if handle.state::<settings::SettingsRuntime>().accept_headphones_pose()
-                                && let Err(error) = handle.emit(POSE_EVENT, pose)
-                            {
-                                warn!(%error, "failed to emit head-pose event");
-                            }
-                        }
-                        Ok(HeadPoseEvent::ResetCounterChanged { previous, current }) => {
-                            warn!(previous, current, "Sony reference frame reset");
-                            let runtime = handle.state::<CalibrationRuntime>();
-                            match runtime.invalidate(&handle) {
-                                Ok(_) => {}
-                                Err(error) => warn!(%error, "failed to invalidate calibration"),
-                            }
-                            let _ = handle.emit(RESET_EVENT, (previous, current));
-                        }
-                        Err(error) => {
-                            warn!(%error, "head-pose event receiver lagged or closed");
-                        }
-                    }
-                }
-            });
+            head_pose::spawn(handle.clone());
 
             let policy_watchdog_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {

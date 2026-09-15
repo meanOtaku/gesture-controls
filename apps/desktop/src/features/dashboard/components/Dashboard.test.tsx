@@ -91,6 +91,34 @@ describe("Dashboard", () => {
     expect(dashboard.getByText(/on macos, use the arrow or \+\/- keys to change system volume/i)).toBeInTheDocument();
   });
 
+  it("surfaces a native-provider diagnostic instead of the generic waiting copy", () => {
+    render(
+      <Dashboard
+        view="headphone"
+        status={null}
+        headDiagnostic={{
+          id: "permission-denied",
+          title: "Input Monitoring permission needed",
+          detail: "macOS requires Input Monitoring permission to read the head tracker's sensor input.",
+          action: "Open System Settings -> Privacy & Security -> Input Monitoring, allow Spatial Gesture Control, then restart the app.",
+        }}
+      />,
+    );
+    expect(screen.getByText("Input Monitoring permission needed")).toBeInTheDocument();
+    expect(screen.getByText(/requires Input Monitoring permission/)).toBeInTheDocument();
+    expect(screen.getByText(/allow Spatial Gesture Control, then restart/)).toBeInTheDocument();
+    expect(screen.queryByText("Waiting for head-tracking data")).not.toBeInTheDocument();
+  });
+
+  it("names the right executable to allow device access for each provider mode", () => {
+    const { unmount } = render(<Dashboard view="headphone" status={null} headTrackerProvider="native" />);
+    expect(screen.getByText(/Allow Spatial Gesture Control through your OS device-access prompt/)).toBeInTheDocument();
+    unmount();
+
+    render(<Dashboard view="headphone" status={null} headTrackerProvider="external" />);
+    expect(screen.getByText(/Allow the Sony tracker executable through your OS device-access prompt/)).toBeInTheDocument();
+  });
+
   it("shows pending feedback and disables a capture button while its own request is in flight", () => {
     const captures: string[] = [];
     const { container } = render(

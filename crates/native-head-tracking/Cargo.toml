@@ -1,0 +1,12 @@
+[package]
+name = "native-head-tracking"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+head-tracking = { path = "../head-tracking" }
+spatial-protocol = { path = "../protocol" }
+
+[build-dependencies]
+cc = "1"

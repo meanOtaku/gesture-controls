@@ -9,7 +9,7 @@ This guide explains how to set up and use the desktop application, what every ta
 ### What you need
 
 - A supported desktop host. The packaged application is intended for macOS, Windows, and Linux; actual install/package validation is still a release gate.
-- Sony headset tracking when you want gaze calibration and the overlay. On macOS/Windows, `npm start` starts the pinned Sony tracker bridge alongside the desktop app. Linux development can use the sample sender because the upstream tracker has no Linux hardware backend.
+- Sony headset tracking when you want gaze calibration and the overlay. On macOS and Windows, `npm start` builds the tracking support directly into the desktop app (no separate process); on macOS grant it Input Monitoring on first launch, on Windows follow Sony Head Tracker's Repair Tracker instructions yourself if the sensor node is missing. Linux development can use the sample sender because the upstream tracker has no Linux hardware backend.
 - A Galaxy Watch for Watch IMU/PPG telemetry and gesture recording. The desktop and Watch must be on the same local network for discovery and streaming.
 - `uv` and a repository checkout only when using the current development-only training or replay workflow in Model Lab. The app's **Desktop readiness** panel will report missing requirements.
 
@@ -22,7 +22,7 @@ npm ci
 npm start
 ```
 
-`npm start` launches the Sony tracker bridge and the Tauri desktop app together. To run the Tauri app alone during Linux/sample-sender development:
+On macOS and Windows, `npm start` launches only the Tauri desktop app, which acquires the Sony headset itself; set `SONY_HEAD_TRACKER_PROVIDER=external` to fall back to the separate tracker bridge instead. To run the Tauri app alone during Linux/sample-sender development:
 
 ```bash
 npm run tauri -- dev

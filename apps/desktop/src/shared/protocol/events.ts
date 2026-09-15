@@ -122,6 +122,21 @@ export interface WatchStatus {
 export const HEAD_POSE_EVENT = "head-pose-updated";
 export const HEAD_TRACKER_CONNECTION_EVENT = "head-tracker-connection";
 export const HEAD_TRACKER_RESET_EVENT = "head-tracker-reset";
+export const HEAD_TRACKER_DIAGNOSTIC_EVENT = "head-tracker-diagnostic";
+
+/**
+ * Mirrors `HeadTrackerDiagnosticPayload` in
+ * `apps/desktop/src-tauri/src/head_pose.rs`. Native-provider-only statuses
+ * with no session-event equivalent (scanning, permission denied, device not
+ * found/verified, feature write failure, generic error). `null` over
+ * `HEAD_TRACKER_DIAGNOSTIC_EVENT` means no active diagnostic.
+ */
+export interface HeadTrackerDiagnostic {
+  id: string;
+  title: string;
+  detail: string;
+  action: string | null;
+}
 export const CALIBRATION_STATE_EVENT = "head-calibration-state";
 export const HEAD_TARGET_ENTERED_EVENT = "head-target-entered";
 export const HEAD_TARGET_EXITED_EVENT = "head-target-exited";

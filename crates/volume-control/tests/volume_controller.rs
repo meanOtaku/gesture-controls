@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use volume_control::OsascriptRunner;
 #[cfg(target_os = "windows")]
 use volume_control::WindowsVolumeController;
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 use volume_control::platform_volume_controller;
 use volume_control::{
     AppleScriptRunner, MacOsVolumeController, VolumeController, VolumeError, adjust_system_volume,

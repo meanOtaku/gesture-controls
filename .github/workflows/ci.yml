@@ -24,8 +24,40 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: uv run --directory tools/sony-head-tracker --with pytest pytest -q
       - run: cargo fmt --all -- --check
-      - run: cargo test -p spatial-protocol -p head-tracking -p interaction-engine -p volume-control
-      - run: cargo clippy -p spatial-protocol -p head-tracking -p interaction-engine -p volume-control --all-targets -- -D warnings
+      - run: cargo test -p spatial-protocol -p head-tracking -p native-head-tracking -p interaction-engine -p volume-control
+      - run: cargo clippy -p spatial-protocol -p head-tracking -p native-head-tracking -p interaction-engine -p volume-control --all-targets -- -D warnings
+
+  native-head-tracking-macos:
+    # Builds and links the real macOS provider (crates/native-head-tracking/build.rs
+    # + macos/adapter.cpp against third_party/sony-head-tracker), not just the
+    # target-gated stubs the ubuntu `quality` job compiles. No paired headset
+    # or Input Monitoring permission is available on this runner; the tests in
+    # tests/ffi_macos.rs are written to pass anyway (see Milestone 1 in
+    # .hermes/plans/2026-09-14_065556-native-sony-head-tracking-cross-platform.md).
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - run: cargo test -p native-head-tracking
+      - run: cargo clippy -p native-head-tracking --all-targets -- -D warnings
+
+  native-head-tracking-windows:
+    # Builds and links the real Windows provider (crates/native-head-tracking/build.rs
+    # + windows/adapter.cpp against third_party/sony-head-tracker's Windows-native
+    # HID engine sources), not just the target-gated stubs the ubuntu `quality`
+    # job compiles. No paired headset is available on this runner; the tests in
+    # tests/ffi_windows.rs are written to pass anyway (see Milestone 4 in
+    # .hermes/plans/2026-09-14_065556-native-sony-head-tracking-cross-platform.md).
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - run: cargo test -p native-head-tracking
+      - run: cargo clippy -p native-head-tracking --all-targets -- -D warnings
 
   desktop-build:
     strategy:
@@ -48,6 +80,47 @@ jobs:
       - run: npm ci
       - run: npm run test:launcher
       - run: cargo test -p volume-control
+      # Milestone 6 release hardening: `spatial-gesture-desktop` (the Tauri
+      # app crate owning `head_pose.rs`'s provider selection and
+      # native/external event pipeline) was previously only ever compiled as
+      # part of the app bundle below, never `cargo test`ed, on any platform.
+      # Running it here on all three matrix legs actually exercises the
+      # provider-selection and native-sink failure-injection unit tests next
+      # to the same system libraries (Linux) or native toolchain
+      # (macOS/Windows) the bundle step uses.
+      - run: cargo test -p spatial-gesture-desktop
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # macOS package-readiness evidence for Milestone 3 of
+      # .hermes/plans/2026-09-14_065556-native-sony-head-tracking-cross-platform.md.
+      # `macos-latest` is an Apple Silicon (arm64) host; there is no Intel
+      # macOS runner in this matrix, so this does not cover an Intel build.
+      # This only confirms a .app bundle was produced and records its
+      # (expected-unsigned) code-signing status -- it is not an install test
+      # and not physical-hardware validation.
+      - name: Record macOS bundle and signing status
+        if: matrix.platform == 'macos-latest'
+        run: |
+          APP="$(find target/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)"
+          if [ -z "$APP" ]; then
+            echo "No .app bundle found under target/release/bundle/macos" >&2
+            exit 1
+          fi
+          echo "Bundle: $APP"
+          codesign -dv --verbose=2 "$APP" || true
+          spctl -a -vv "$APP" || true
+      # Windows package-readiness evidence for Milestone 5 of
+      # .hermes/plans/2026-09-14_065556-native-sony-head-tracking-cross-platform.md.
+      # This only confirms an installer bundle was produced -- it is not an
+      # install test and not physical-hardware validation.
+      - name: Record Windows bundle status
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        run: |
+          BUNDLE="$(find target/release/bundle -maxdepth 2 \( -name '*.msi' -o -name '*-setup.exe' \) -print -quit)"
+          if [ -z "$BUNDLE" ]; then
+            echo "No .msi/-setup.exe bundle found under target/release/bundle" >&2
+            exit 1
+          fi
+          echo "Bundle: $BUNDLE"

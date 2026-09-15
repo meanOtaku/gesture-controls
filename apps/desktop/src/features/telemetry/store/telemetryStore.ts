@@ -1,6 +1,7 @@
 import { quaternionToEulerDegrees } from "../../../shared/protocol/events";
 import type {
   HeadPosePayload,
+  HeadTrackerDiagnostic,
   HeadTrackerStatus,
   Quaternion,
   Vector3,
@@ -183,6 +184,8 @@ class TelemetryStore {
   private version = 0;
   private publishTimer: ReturnType<typeof setTimeout> | null = null;
   private headStatus: HeadTrackerStatus | null = null;
+  private headDiagnostic: HeadTrackerDiagnostic | null = null;
+  private headTrackerProvider: "native" | "external" | null = null;
   private watchStatus: WatchStatus = EMPTY_WATCH_STATUS;
   private recording = false;
   private savedCount = 0;
@@ -228,6 +231,24 @@ class TelemetryStore {
 
   getHeadStatus(): HeadTrackerStatus | null {
     return this.headStatus;
+  }
+
+  getHeadDiagnostic(): HeadTrackerDiagnostic | null {
+    return this.headDiagnostic;
+  }
+
+  setHeadDiagnostic(diagnostic: HeadTrackerDiagnostic | null): void {
+    this.headDiagnostic = diagnostic;
+    this.schedulePublish();
+  }
+
+  getHeadTrackerProvider(): "native" | "external" | null {
+    return this.headTrackerProvider;
+  }
+
+  setHeadTrackerProvider(provider: "native" | "external"): void {
+    this.headTrackerProvider = provider;
+    this.publishNow();
   }
 
   getWatchStatus(): WatchStatus {
@@ -546,6 +567,7 @@ class TelemetryStore {
     this.series.forEach((buffer) => buffer.clear());
     this.rows.clear();
     this.headStatus = null;
+    this.headDiagnostic = null;
     this.watchStatus = EMPTY_WATCH_STATUS;
     this.recording = false;
     this.savedCount = 0;
