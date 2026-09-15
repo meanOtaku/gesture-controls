@@ -141,6 +141,16 @@ is a local-environment limitation, not an unverified code path in CI.
 
 ## Remaining work
 
+## GC-007 — Flat super-dark-blue desktop UI (2026-09-15)
+
+- Replaced the desktop visual treatment's visible gradients, translucent cards,
+  blur, and decorative glow effects with opaque super-dark-blue surfaces.
+- Existing layout, responsive behavior, focus affordances, and semantic
+  success/warning/error/recording colors are retained.
+- Per task direction, no tests, CI, builds, linting, formatting, installs,
+  screenshots, or runtime validation were run. Those gates are **DEFERRED /
+  NOT CLEARED**.
+
 See `TASKS.md` for the full GC-002–GC-006 breakdown. In short: GC-002 is
 complete. GC-003's custom-bundle UI/backend flow is implemented. GC-004 adds
 the explicit `npm run package:litert` release entrypoint, target-native staging,
