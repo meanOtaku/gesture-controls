@@ -141,6 +141,18 @@ is a local-environment limitation, not an unverified code path in CI.
 
 ## Remaining work
 
+## GC-008 — Bright electric-blue desktop outlines (2026-09-15)
+
+- Standardized visible non-semantic desktop component borders, inputs,
+  shadcn border/sidebar tokens, and focus outlines on a bright electric-blue
+  token (`#268cff`).
+- Semantic error, success, warning, recording, and completed-state borders
+  retain their existing colors. Layout selectors and shadcn component
+  structure are unchanged.
+- Per task direction, no tests, CI, builds, linting, formatting, installs,
+  screenshots, or runtime validation were run. Those gates are **DEFERRED /
+  NOT CLEARED**.
+
 ## GC-007 — Flat super-dark-blue desktop UI (2026-09-15)
 
 - Replaced the desktop visual treatment's visible gradients, translucent cards,
