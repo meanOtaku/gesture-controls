@@ -117,6 +117,17 @@ already flags as unexecuted on this host.
 (`docs/release-readiness.md`'s LiteRT-candidate precondition row) once
 GC-003–GC-005 land.
 
+## GC-007 — Flat super-dark-blue desktop UI
+
+**Status: implemented; validation intentionally deferred.**
+
+- [x] Replaced the desktop's visible gradient, blur, translucent-surface, and
+      decorative glow treatment with opaque super-dark-blue surfaces.
+- [x] Preserved the existing layout selectors, responsive rules, focus states,
+      and semantic success/warning/error/recording states.
+- [ ] No tests, CI, builds, linting, formatting, screenshots, or runtime
+      validation were run, by explicit delivery instruction.
+
 > GC-004–GC-006 titles above are placeholders inferred from open gaps in
 > `docs/release-readiness.md` and existing code comments, not commitments —
 > confirm scope before starting them.
