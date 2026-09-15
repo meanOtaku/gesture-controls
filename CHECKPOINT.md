@@ -119,7 +119,9 @@ is a local-environment limitation, not an unverified code path in CI.
 ## Remaining work
 
 See `TASKS.md` for the full GC-002–GC-006 breakdown. In short: GC-002 is
-complete; GC-003 (wiring live PPG windows through the activated model into
-real gesture-triggered volume actions) is the next slice and is explicitly
-**not** started by this session — `inference.rs`'s `ingest_ppg_window` still
-has no LiteRT execution call, by design (its own doc comment says so).
+complete. GC-003 is the remaining LiteRT enablement/release slice: wire the
+verified active bundle into the feature-gated LiteRT runtime and ship that
+runtime safely across supported targets. The existing inference and
+gesture-policy paths already route classified output through the safety state
+machine; this session did not enable the LiteRT feature or validate it on
+physical hardware.

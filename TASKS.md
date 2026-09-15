@@ -41,23 +41,21 @@ GC-003's scope, and nothing in this slice performs one).
       could not be compiled/tested locally — **host-blocked**, see
       "Known blocker" in `CHECKPOINT.md`. CI already covers this crate.
 
-## GC-003 — Live user actions (not started)
+## GC-003 — Enable validated LiteRT inference (not started)
 
-Wire an activated, validated LiteRT bundle into the *live* desktop pipeline
-so a real pinch gesture actually grabs/releases volume:
+Enable the already-present live desktop inference/policy pipeline to execute
+a verified LiteRT model safely and make its runtime availability explicit:
 
-- Add real LiteRT classification inside `inference.rs::ingest_ppg_window`
-  (today it fuses and quality-gates a window but performs no inference —
-  see that module's doc comment, which calls this out as the open seam).
 - Load the active model (`model_registry::active_model_file_path` /
-  `ActiveModelSnapshot::verified`) into a `PinchModel` per
-  `crates/pinch-inference`'s existing `LiteRtPinchModel`, keyed off
-  `InferenceMode::Live` (Monitor should classify + log without acting;
-  Off must never classify).
-- Route classification output through the existing
-  `GesturePolicyRuntime`/`interaction_engine` state machine (already built
-  and tested — `runtime::tests::*` in `pinch-inference`) so no new gating
-  logic is needed, only the missing wiring.
+  `ActiveModelSnapshot::verified`) into the existing
+  `crates/pinch-inference::LiteRtPinchModel`, keyed off `InferenceMode`.
+  `Monitor` must classify and log without acting; `Off` must never classify.
+- Enable and package the `litert` Cargo feature for supported targets, while
+  retaining the current fail-closed behavior when that feature/runtime is
+  absent or model loading/inference fails.
+- Use the existing `GesturePolicyRuntime`/`interaction_engine` state machine
+  for classified output; do not add a bypass around its gating or Watch-button
+  fallback behavior.
 - Re-verify the release-readiness checklist's "Model lifecycle, replay, and
   inference diagnostics" and "Interaction safety and failure handling"
   sections end-to-end on real hardware once this is wired.
