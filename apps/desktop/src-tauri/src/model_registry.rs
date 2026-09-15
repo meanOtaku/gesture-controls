@@ -16,6 +16,7 @@ use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter, Manager, State};
+use uuid::Uuid;
 
 use crate::inference::{GesturePolicyRuntime, PinchInferenceRuntime};
 use crate::model_lab::{self, MODEL_LAB_DIR_NAME};
