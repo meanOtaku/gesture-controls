@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useState } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { SectionHeader } from "../../../components/app/SectionHeader";
@@ -49,6 +50,7 @@ export function ModelLab() {
   const [labels, setLabels] = useState<DatasetLabel[]>([]);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importingBundle, setImportingBundle] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedDatasetIds, setSelectedDatasetIds] = useState<Set<string>>(new Set());
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
@@ -281,6 +283,28 @@ export function ModelLab() {
     [refreshDatasets],
   );
 
+  const handleImportCustomBundle = useCallback(async () => {
+    if (!desktopAvailable) return;
+    const selected = await open({
+      title: "Select custom LiteRT bundle metadata.json",
+      multiple: false,
+      filters: [{ name: "TFLite bundle metadata", extensions: ["json"] }],
+    });
+    if (!selected || Array.isArray(selected)) return;
+    setImportingBundle(true);
+    try {
+      setRegistry(await invoke<ModelRegistryView>("import_custom_tflite_bundle", { metadataPath: selected }));
+      setRuntimeError(null);
+      OperationFeedback.success("Import custom bundle", "Bundle validated and registered as Draft. Review, evaluate, approve, and add safe bindings before activation.");
+    } catch (err) {
+      const message = String(err);
+      setRuntimeError(`Custom bundle was not imported: ${message}`);
+      OperationFeedback.error("Import custom bundle", message);
+    } finally {
+      setImportingBundle(false);
+    }
+  }, [desktopAvailable]);
+
   const toggleDatasetSelected = useCallback((id: string) => {
     setSelectedDatasetIds((prev) => {
       const next = new Set(prev);
@@ -404,7 +428,7 @@ export function ModelLab() {
   const deployableModelIds = (registry?.models ?? [])
     .filter((model) =>
       (model.state === "approved" || model.state === "active")
-      && trainedModelById.get(model.id)?.backend === "tflite")
+      && (trainedModelById.get(model.id)?.backend === "tflite" || model.importedTfliteBundle))
     .map((model) => model.id);
 
   return (
@@ -464,6 +488,25 @@ export function ModelLab() {
           onDelete={handleDelete}
           onToggleSelected={toggleDatasetSelected}
         />
+
+        <Card role="region" aria-label="Import custom LiteRT bundle" className="min-w-0">
+          <CardHeader>
+            <SectionHeader
+              title="Import custom LiteRT bundle"
+              description="Choose the bundle’s metadata.json. Model Lab checks its versioned feature contract, preprocessing, window semantics, class/tensor shapes, and SHA-256 before copying it into private storage. Imported models begin as Draft and cannot activate until lifecycle approval and safe bindings are complete."
+            />
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <Alert>
+              <AlertDescription>Only validated TFLite bundles are accepted. Do not select model.tflite directly; choose its adjacent metadata.json.</AlertDescription>
+            </Alert>
+            <div className="recording-actions">
+              <Button type="button" disabled={importingBundle} onClick={() => void handleImportCustomBundle()}>
+                {importingBundle ? "Validating bundle…" : "Select metadata.json"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         <TrainingPanel
           trainingBackend={trainingBackend}

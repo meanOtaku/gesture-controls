@@ -129,6 +129,7 @@ export interface ModelRegistryModel {
   state: ModelLifecycleState;
   createdAt: string;
   intentBindings: ModelIntentBinding[];
+  importedTfliteBundle: boolean;
 }
 
 /** The three deployable classes, in the order `model_registry.rs`'s `DEPLOYABLE_CLASS_LABELS` requires. */

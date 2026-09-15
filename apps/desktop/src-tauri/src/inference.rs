@@ -473,7 +473,32 @@ impl PinchInferenceRuntime {
         // clock, and `GesturePolicy::on_tick`'s staleness watchdog compares
         // whatever timestamp lands in the resulting `PinchTransition` against
         // its own desktop-side "now" (see [`GesturePolicyRuntime::tick`]).
-        match model.runtime.submit(&features, desktop_monotonic_now_ns()) {
+        let projected_features = match model
+            .snapshot
+            .feature_names
+            .iter()
+            .map(|name| {
+                pinch_inference::FEATURE_NAMES
+                    .iter()
+                    .position(|canonical| canonical == name)
+                    .map(|index| features[index])
+                    .ok_or_else(|| {
+                        format!(
+                            "verified feature contract contains unknown canonical feature '{name}'"
+                        )
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()
+        {
+            Ok(projected) => projected,
+            Err(error) => return ClassifyOutcome::LoadFailed(error),
+        };
+        // Projection is strictly by the signed contract's declared canonical
+        // names; there is intentionally no padding, guessing, or remapping.
+        match model
+            .runtime
+            .submit(&projected_features, desktop_monotonic_now_ns())
+        {
             Some(transition) => ClassifyOutcome::Transition(transition),
             None => ClassifyOutcome::NoChange,
         }

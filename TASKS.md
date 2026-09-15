@@ -41,7 +41,7 @@ GC-003's scope, and nothing in this slice performs one).
       could not be compiled/tested locally — **host-blocked**, see
       "Known blocker" in `CHECKPOINT.md`. CI already covers this crate.
 
-## GC-003 — Enable validated LiteRT inference (not started)
+## GC-003 — Enable validated LiteRT inference (in progress)
 
 Enable the already-present live desktop inference/policy pipeline to execute
 a verified LiteRT model safely and make its runtime availability explicit:
@@ -60,16 +60,29 @@ a verified LiteRT model safely and make its runtime availability explicit:
   inference diagnostics" and "Interaction safety and failure handling"
   sections end-to-end on real hardware once this is wired.
 
+Progress in this commit:
+
+- [x] Variable-size model seam and strict ordered canonical-feature projection.
+- [x] Reduced (1..54) contracts require version `1`, preprocessing, window
+      semantics, exact tensor shape, class order, and SHA-256; legacy exact
+      55-feature bundles and sklearn baseline behavior remain unchanged.
+- [x] Explicit desktop custom-bundle import/register UI: choose `metadata.json`,
+      validate source, copy only bundle artifacts into private storage,
+      revalidate, register Draft, then require normal lifecycle approval and
+      safe intent bindings before activation.
+- [ ] **Deferred / not cleared:** feature-enabled LiteRT build, package, and
+      real-device validation. Do not run validation until explicitly requested.
+
 ## GC-004 — (not yet scoped)
 
-Not defined by this session. Likely candidate: cross-platform LiteRT native
+**Deferred / not cleared.** Likely candidate: cross-platform LiteRT native
 library packaging/distribution for the `litert` Cargo feature (today gated
 off by default and not exercised in default CI, per
 `crates/pinch-inference/Cargo.toml`'s own comments).
 
 ## GC-005 — (not yet scoped)
 
-Not defined by this session. Likely candidate: real-device model lifecycle
+**Deferred / not cleared.** Likely candidate: real-device model lifecycle
 validation from `docs/release-readiness.md`'s "Model lifecycle, replay, and
 inference diagnostics" checklist (import → train → approve → activate →
 replay → rollback) on actual Galaxy Watch hardware, which that document
@@ -77,7 +90,7 @@ already flags as unexecuted on this host.
 
 ## GC-006 — (not yet scoped)
 
-Not defined by this session. Likely candidate: packaging/signing the
+**Deferred / not cleared.** Likely candidate: packaging/signing the
 `litert-inference` feature build across the release matrix
 (`docs/release-readiness.md`'s LiteRT-candidate precondition row) once
 GC-003–GC-005 land.
