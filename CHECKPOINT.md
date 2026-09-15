@@ -127,8 +127,10 @@ is a local-environment limitation, not an unverified code path in CI.
   1, 1..54 unique canonical names, matching input shape, preprocessing and
   window semantics, exact class order/output shape, and a matching SHA-256.
   Any other reduced contract rejects before activation/runtime load.
-- `cargo test -p pinch-inference` passed (41 tests). Desktop crate tests
-  remain blocked by the missing GTK/pkg-config prerequisites below.
+- Historical evidence: `cargo test -p pinch-inference` previously passed (41
+  tests). Per the current delivery direction, no validation is being run or
+  accepted as clearance; all test, CI, package, and hardware gates remain
+  explicitly **not cleared**.
 - Model Lab now presents an explicit "Import custom LiteRT bundle" chooser for
   `metadata.json`. The backend validates the source before copying, copies only
   `metadata.json` and `model.tflite` into app-private model storage, validates
@@ -144,4 +146,5 @@ complete. GC-003's custom-bundle UI/backend flow is implemented. A
 feature-enabled LiteRT build/package and physical inference validation are still
 release gates. The existing inference and gesture-policy paths route classified
 output through the safety state machine; physical LiteRT execution remains
-unvalidated on this host.
+unvalidated on this host. Validation, packaging, and physical-device gates are
+deferred and **not cleared**.

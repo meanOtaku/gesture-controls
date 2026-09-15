@@ -70,18 +70,19 @@ Progress in this commit:
       validate source, copy only bundle artifacts into private storage,
       revalidate, register Draft, then require normal lifecycle approval and
       safe intent bindings before activation.
-- [ ] Feature-enabled LiteRT build and real-device validation.
+- [ ] **Deferred / not cleared:** feature-enabled LiteRT build, package, and
+      real-device validation. Do not run validation until explicitly requested.
 
 ## GC-004 — (not yet scoped)
 
-Not defined by this session. Likely candidate: cross-platform LiteRT native
+**Deferred / not cleared.** Likely candidate: cross-platform LiteRT native
 library packaging/distribution for the `litert` Cargo feature (today gated
 off by default and not exercised in default CI, per
 `crates/pinch-inference/Cargo.toml`'s own comments).
 
 ## GC-005 — (not yet scoped)
 
-Not defined by this session. Likely candidate: real-device model lifecycle
+**Deferred / not cleared.** Likely candidate: real-device model lifecycle
 validation from `docs/release-readiness.md`'s "Model lifecycle, replay, and
 inference diagnostics" checklist (import → train → approve → activate →
 replay → rollback) on actual Galaxy Watch hardware, which that document
@@ -89,7 +90,7 @@ already flags as unexecuted on this host.
 
 ## GC-006 — (not yet scoped)
 
-Not defined by this session. Likely candidate: packaging/signing the
+**Deferred / not cleared.** Likely candidate: packaging/signing the
 `litert-inference` feature build across the release matrix
 (`docs/release-readiness.md`'s LiteRT-candidate precondition row) once
 GC-003–GC-005 land.
