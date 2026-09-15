@@ -131,3 +131,14 @@ GC-003–GC-005 land.
 > GC-004–GC-006 titles above are placeholders inferred from open gaps in
 > `docs/release-readiness.md` and existing code comments, not commitments —
 > confirm scope before starting them.
+
+## GC-008 — Bright electric-blue desktop outlines
+
+**Status: implemented; validation intentionally deferred.**
+
+- [x] Applied one bright electric-blue border and focus-outline token to visible
+      non-semantic desktop components and shadcn border/input/sidebar tokens.
+- [x] Kept error, success, warning, recording, and completed-state borders
+      semantic, without changing component layouts or shadcn structure.
+- [ ] No tests, CI, builds, linting, formatting, installs, screenshots, or
+      runtime validation were run, by explicit delivery instruction.

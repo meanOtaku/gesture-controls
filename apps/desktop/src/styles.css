@@ -209,3 +209,10 @@ body::before { display:none; }
     @apply bg-background text-foreground; }
   html {
     @apply font-sans; } }
+
+/* GC-008: one electric-blue outline system for non-semantic desktop chrome. */
+:root,.dark { --electric-blue:#268cff; --border:var(--electric-blue); --input:var(--electric-blue); --ring:var(--electric-blue); --sidebar-border:var(--electric-blue); --sidebar-ring:var(--electric-blue); }
+.app-tabs,.recording-card,.telemetry-chart,.overview-card,.connection,.device-card,.settings,.metric,.vector-row,.calibration-card,.watch-card,.model-lab-log,.volume-knob,.setup-card,.connection-help,.step-number,.telemetry-shell input,.telemetry-shell select,.model-lab-shell select,.signal-filters,.signal-grid .telemetry-chart,.wellness-panel,.preview-notice,.preview-icon,.lab-summary>div,.lab-workflow a,.model-lab-shell button,.lab-reference,.model-lab-backend-select>label { border-color:var(--electric-blue); }
+.recording-actions button:not(.recording):not(.primary-action),.calibration-actions button,.calibration-actions label,.target-state,.model-lab-chip:not(.model-lab-chip--positive):not(.model-lab-chip--hold):not(.model-lab-chip--ready):not(.model-lab-chip--attention) { border-color:var(--electric-blue); }
+.recording-actions button:focus-visible { outline-color:var(--electric-blue); }
+.recording-actions button:hover:not(:disabled),.setup-steps button:hover,.model-lab-backend-select>label:has(input:checked) { border-color:var(--electric-blue); }
