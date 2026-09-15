@@ -66,7 +66,10 @@ Progress in this commit:
 - [x] Reduced (1..54) contracts require version `1`, preprocessing, window
       semantics, exact tensor shape, class order, and SHA-256; legacy exact
       55-feature bundles and sklearn baseline behavior remain unchanged.
-- [ ] Explicit desktop custom-bundle import/register UI.
+- [x] Explicit desktop custom-bundle import/register UI: choose `metadata.json`,
+      validate source, copy only bundle artifacts into private storage,
+      revalidate, register Draft, then require normal lifecycle approval and
+      safe intent bindings before activation.
 - [ ] Feature-enabled LiteRT build and real-device validation.
 
 ## GC-004 — (not yet scoped)

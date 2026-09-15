@@ -184,6 +184,11 @@ pub struct ModelRecord {
     /// meaning from silently inheriting a desktop action.
     #[serde(default)]
     pub intent_bindings: Vec<ModelIntentBinding>,
+    /// Set only after this app has copied and revalidated an externally
+    /// supplied TFLite bundle. Existing trained records retain their
+    /// backend-derived deployability behavior.
+    #[serde(default)]
+    pub imported_tflite_bundle: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -208,6 +213,7 @@ impl ModelRecord {
                 at: now,
             }],
             intent_bindings: Vec::new(),
+            imported_tflite_bundle: false,
         }
     }
 
@@ -729,6 +735,62 @@ pub(crate) fn register_trained_model(
         return;
     }
     emit_registry(app, &index);
+}
+
+/// Imports a user-selected TFLite bundle into Model Lab. The selected path must
+/// be `metadata.json`; its parent is treated as the bundle root. The source is
+/// validated before copy and the private destination is validated again before
+/// a Draft lifecycle record is persisted. Thus a copied/corrupt/swapped file can
+/// never become registered, approved, or active merely because it has a familiar
+/// filename.
+#[tauri::command]
+pub fn import_custom_tflite_bundle(
+    metadata_path: String,
+    app: AppHandle,
+    runtime: State<'_, ModelRegistryRuntime>,
+) -> Result<RegistryView, String> {
+    let source_metadata = PathBuf::from(&metadata_path);
+    if source_metadata.file_name().and_then(|name| name.to_str()) != Some(TFLITE_METADATA_FILE_NAME) {
+        return Err(format!(
+            "select the bundle's {TFLITE_METADATA_FILE_NAME}, not an arbitrary file"
+        ));
+    }
+    let source_dir = source_metadata.parent().ok_or_else(|| {
+        format!("{TFLITE_METADATA_FILE_NAME} has no containing bundle directory")
+    })?;
+    load_and_verify_bundle(source_dir).map_err(|error| {
+        format!("custom bundle rejected before import: {error}")
+    })?;
+
+    let _guard = runtime
+        .lock
+        .lock()
+        .map_err(|_| "model registry lock was poisoned".to_string())?;
+    let id = format!("imported-{}", Uuid::new_v4());
+    let destination = model_lab::models_dir(&app)?.join(&id);
+    fs::create_dir_all(&destination)
+        .map_err(|error| format!("failed to create private bundle storage: {error}"))?;
+    let copy_result = (|| -> Result<(), String> {
+        fs::copy(source_dir.join(TFLITE_METADATA_FILE_NAME), destination.join(TFLITE_METADATA_FILE_NAME))
+            .map_err(|error| format!("failed to copy {TFLITE_METADATA_FILE_NAME}: {error}"))?;
+        fs::copy(source_dir.join(TFLITE_MODEL_FILE_NAME), destination.join(TFLITE_MODEL_FILE_NAME))
+            .map_err(|error| format!("failed to copy {TFLITE_MODEL_FILE_NAME}: {error}"))?;
+        load_and_verify_bundle(&destination)
+            .map_err(|error| format!("custom bundle rejected after copy: {error}"))?;
+        Ok(())
+    })();
+    if let Err(error) = copy_result {
+        let _ = fs::remove_dir_all(&destination);
+        return Err(error);
+    }
+
+    let mut index = load_registry(&app);
+    let mut record = ModelRecord::new(id);
+    record.imported_tflite_bundle = true;
+    index.models.push(record);
+    write_registry_atomic(&app, &index)?;
+    emit_registry(&app, &index);
+    Ok(RegistryView::from(index))
 }
 
 #[tauri::command]

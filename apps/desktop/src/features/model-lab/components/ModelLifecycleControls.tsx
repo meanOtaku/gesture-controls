@@ -61,7 +61,8 @@ export function ModelLifecycleControls({
               const backend = trainedModelById.get(model.id)?.backend;
               const bindingsEditable = model.state === "draft" || model.state === "evaluated";
               const bindingsComplete = bindingsAreComplete(model.intentBindings);
-              const canActivate = model.state === "approved" && backend === "tflite" && bindingsComplete;
+              const deployableTflite = backend === "tflite" || model.importedTfliteBundle;
+              const canActivate = model.state === "approved" && deployableTflite && bindingsComplete;
               const rowPending = isPending(`lifecycle:${model.id}`);
               const transition = (to: ModelLifecycleState) => {
                 void run(`lifecycle:${model.id}`, () => onTransition(model.id, to));
@@ -76,6 +77,9 @@ export function ModelLifecycleControls({
                       <p className="hint">
                         scikit-learn baseline: not deployable, cannot be bound or activated.
                       </p>
+                    )}
+                    {model.importedTfliteBundle && (
+                      <p className="hint">Imported custom TFLite bundle: revalidated before activation.</p>
                     )}
                   </div>
                   <IntentBindingEditor

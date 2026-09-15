@@ -77,6 +77,7 @@ pub fn run() {
             label_registry::create_model_label,
             label_registry::set_model_label_archived,
             model_registry::get_model_registry,
+            model_registry::import_custom_tflite_bundle,
             model_registry::transition_model_state,
             model_registry::update_model_thresholds,
             model_registry::update_model_quality_gate,
