@@ -80,6 +80,15 @@ jobs:
       - run: npm ci
       - run: npm run test:launcher
       - run: cargo test -p volume-control
+      # Milestone 6 release hardening: `spatial-gesture-desktop` (the Tauri
+      # app crate owning `head_pose.rs`'s provider selection and
+      # native/external event pipeline) was previously only ever compiled as
+      # part of the app bundle below, never `cargo test`ed, on any platform.
+      # Running it here on all three matrix legs actually exercises the
+      # provider-selection and native-sink failure-injection unit tests next
+      # to the same system libraries (Linux) or native toolchain
+      # (macOS/Windows) the bundle step uses.
+      - run: cargo test -p spatial-gesture-desktop
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

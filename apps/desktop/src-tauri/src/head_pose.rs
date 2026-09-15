@@ -288,6 +288,67 @@ async fn run_external(handle: AppHandle) {
     }
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+enum NativeChannelEvent {
+    Head(Box<HeadPoseEvent>),
+    Diagnostic(native_head_tracking::convert::NativeDiagnostic),
+}
+
+/// Translates raw native callbacks into `NativeChannelEvent`s for `run_native`'s
+/// receive loop. Kept at module scope (rather than nested in `run_native`, as
+/// in earlier milestones) specifically so failure sequences -- permission
+/// denial, device disappearance, stale samples -- can be injected and
+/// asserted on directly in
+/// `tests::native_sink_failure_injection` below, without a real native
+/// backend or hardware.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+struct NativeSink {
+    tx: tokio::sync::mpsc::UnboundedSender<NativeChannelEvent>,
+    previous_reset_counter: Option<u64>,
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+impl native_head_tracking::provider::NativeEventSink for NativeSink {
+    fn on_sample(&mut self, sample: native_head_tracking::ffi::NativeSample) {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let timestamp_ns = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+            .min(u64::MAX as u128) as u64;
+        let reset_counter = u64::from(sample.reset_counter);
+        if let Some(previous) = self.previous_reset_counter
+            && previous != reset_counter
+        {
+            let _ = self.tx.send(NativeChannelEvent::Head(Box::new(
+                HeadPoseEvent::ResetCounterChanged {
+                    previous,
+                    current: reset_counter,
+                },
+            )));
+        }
+        self.previous_reset_counter = Some(reset_counter);
+        let pose = native_head_tracking::convert::sample_to_head_pose(&sample, timestamp_ns);
+        let _ = self
+            .tx
+            .send(NativeChannelEvent::Head(Box::new(HeadPoseEvent::Pose(
+                pose,
+            ))));
+    }
+
+    fn on_status(&mut self, status: native_head_tracking::ffi::NativeStatus, _message: String) {
+        use native_head_tracking::convert::{status_to_diagnostic, status_to_event};
+
+        if let Some(event) = status_to_event(status) {
+            let _ = self.tx.send(NativeChannelEvent::Head(Box::new(event)));
+        }
+        if let Some(diagnostic) = status_to_diagnostic(status) {
+            let _ = self.tx.send(NativeChannelEvent::Diagnostic(diagnostic));
+        }
+    }
+}
+
 /// Shared between macOS and Windows: `NativeProvider` (and its
 /// `MacosProvider`/`WindowsProvider` aliases) is the same wrapper type on
 /// both platforms, and `diagnostic_payload` above is `cfg`-selected per
@@ -295,61 +356,8 @@ async fn run_external(handle: AppHandle) {
 /// branching of its own.
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 async fn run_native(handle: AppHandle) {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    use native_head_tracking::convert::{
-        NativeDiagnostic, sample_to_head_pose, status_to_diagnostic, status_to_event,
-    };
-    use native_head_tracking::ffi::{NativeSample, NativeStatus};
-    use native_head_tracking::provider::{NativeEventSink, NativeProvider};
+    use native_head_tracking::provider::NativeProvider;
     use tokio::sync::mpsc;
-
-    enum NativeChannelEvent {
-        Head(Box<HeadPoseEvent>),
-        Diagnostic(NativeDiagnostic),
-    }
-
-    struct Sink {
-        tx: mpsc::UnboundedSender<NativeChannelEvent>,
-        previous_reset_counter: Option<u64>,
-    }
-
-    impl NativeEventSink for Sink {
-        fn on_sample(&mut self, sample: NativeSample) {
-            let timestamp_ns = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos()
-                .min(u64::MAX as u128) as u64;
-            let reset_counter = u64::from(sample.reset_counter);
-            if let Some(previous) = self.previous_reset_counter
-                && previous != reset_counter
-            {
-                let _ = self.tx.send(NativeChannelEvent::Head(Box::new(
-                    HeadPoseEvent::ResetCounterChanged {
-                        previous,
-                        current: reset_counter,
-                    },
-                )));
-            }
-            self.previous_reset_counter = Some(reset_counter);
-            let pose = sample_to_head_pose(&sample, timestamp_ns);
-            let _ = self
-                .tx
-                .send(NativeChannelEvent::Head(Box::new(HeadPoseEvent::Pose(
-                    pose,
-                ))));
-        }
-
-        fn on_status(&mut self, status: NativeStatus, _message: String) {
-            if let Some(event) = status_to_event(status) {
-                let _ = self.tx.send(NativeChannelEvent::Head(Box::new(event)));
-            }
-            if let Some(diagnostic) = status_to_diagnostic(status) {
-                let _ = self.tx.send(NativeChannelEvent::Diagnostic(diagnostic));
-            }
-        }
-    }
 
     let Some(provider) = NativeProvider::new() else {
         error!("failed to create native head-tracker provider");
@@ -358,7 +366,7 @@ async fn run_native(handle: AppHandle) {
     };
 
     let (tx, mut rx) = mpsc::unbounded_channel();
-    let sink = Sink {
+    let sink = NativeSink {
         tx,
         previous_reset_counter: None,
     };
@@ -435,5 +443,149 @@ mod tests {
     #[test]
     fn select_provider_defaults_to_native_on_this_platform() {
         assert_eq!(select_provider(), ProviderSelection::Native);
+    }
+
+    // Failure-injection tests for `NativeSink` (the translation layer
+    // `run_native` feeds into its receive loop). These drive
+    // `NativeEventSink` callbacks by hand -- the same way `RecordingSink` in
+    // `tests/ffi_macos.rs`/`tests/ffi_windows.rs` is driven by the real
+    // linked backend -- so permission denial, device disappearance, and
+    // stale/duplicate samples are exercised without hardware or a native
+    // build. "Native start failure" itself is covered at the ABI boundary by
+    // `double_start_without_stop_is_rejected` in those same files, since
+    // that failure mode belongs to the real linked `NativeProvider::start`,
+    // not to this translation layer. "Fallback selection" is covered above
+    // by the `select_provider_for` cases.
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    mod native_sink_failure_injection {
+        use native_head_tracking::ffi::{NativeSample, NativeStatus};
+        use native_head_tracking::provider::NativeEventSink;
+        use tokio::sync::mpsc;
+
+        use super::{NativeChannelEvent, NativeSink};
+        use crate::head_pose::HeadPoseEvent;
+
+        fn fake_sample(reset_counter: u8) -> NativeSample {
+            NativeSample {
+                quaternion: [1.0, 0.0, 0.0, 0.0],
+                yaw_deg: 0.0,
+                pitch_deg: 0.0,
+                roll_deg: 0.0,
+                gyroscope: [0.0, 0.0, 0.0],
+                has_gyroscope: false,
+                accelerometer: [0.0, 0.0, 0.0],
+                has_accelerometer: false,
+                reset_counter,
+                packets_per_second: 60.0,
+                receive_latency_ms: 0.5,
+            }
+        }
+
+        fn sink() -> (NativeSink, mpsc::UnboundedReceiver<NativeChannelEvent>) {
+            let (tx, rx) = mpsc::unbounded_channel();
+            (
+                NativeSink {
+                    tx,
+                    previous_reset_counter: None,
+                },
+                rx,
+            )
+        }
+
+        #[test]
+        fn permission_denial_emits_diagnostic_without_head_event() {
+            let (mut sink, mut rx) = sink();
+            sink.on_status(NativeStatus::PermissionDenied, String::new());
+
+            assert!(matches!(
+                rx.try_recv(),
+                Ok(NativeChannelEvent::Diagnostic(
+                    native_head_tracking::convert::NativeDiagnostic::PermissionDenied
+                ))
+            ));
+            assert!(rx.try_recv().is_err(), "no head event should follow");
+        }
+
+        #[test]
+        fn device_disappearance_reconnecting_emits_disconnected_without_diagnostic() {
+            let (mut sink, mut rx) = sink();
+            sink.on_status(NativeStatus::Connected, String::new());
+            sink.on_status(NativeStatus::Reconnecting, String::new());
+
+            assert!(matches!(
+                rx.try_recv(),
+                Ok(NativeChannelEvent::Head(event)) if matches!(*event, HeadPoseEvent::Connected)
+            ));
+            assert!(matches!(
+                rx.try_recv(),
+                Ok(NativeChannelEvent::Head(event)) if matches!(*event, HeadPoseEvent::Disconnected)
+            ));
+            assert!(
+                rx.try_recv().is_err(),
+                "device disappearance carries no diagnostic of its own"
+            );
+        }
+
+        #[test]
+        fn device_disappearance_stream_timeout_emits_disconnected_without_diagnostic() {
+            let (mut sink, mut rx) = sink();
+            sink.on_status(NativeStatus::StreamTimeout, String::new());
+
+            assert!(matches!(
+                rx.try_recv(),
+                Ok(NativeChannelEvent::Head(event)) if matches!(*event, HeadPoseEvent::Disconnected)
+            ));
+            assert!(rx.try_recv().is_err());
+        }
+
+        #[test]
+        fn stale_sample_with_unchanged_reset_counter_after_disconnect_emits_no_reset_event() {
+            let (mut sink, mut rx) = sink();
+            sink.on_sample(fake_sample(3));
+            assert!(matches!(
+                rx.try_recv(),
+                Ok(NativeChannelEvent::Head(event)) if matches!(*event, HeadPoseEvent::Pose(_))
+            ));
+
+            sink.on_status(NativeStatus::StreamTimeout, String::new());
+            assert!(matches!(
+                rx.try_recv(),
+                Ok(NativeChannelEvent::Head(event)) if matches!(*event, HeadPoseEvent::Disconnected)
+            ));
+
+            // A stale sample the native worker still had in flight when the
+            // stream timed out: reset counter unchanged from the last
+            // observed value, so it must not be misread as a reset.
+            sink.on_sample(fake_sample(3));
+            assert!(matches!(
+                rx.try_recv(),
+                Ok(NativeChannelEvent::Head(event)) if matches!(*event, HeadPoseEvent::Pose(_))
+            ));
+            assert!(
+                rx.try_recv().is_err(),
+                "unchanged reset counter must not synthesize a ResetCounterChanged event"
+            );
+        }
+
+        #[test]
+        fn sample_after_reconnect_with_changed_reset_counter_emits_reset_event_before_pose() {
+            let (mut sink, mut rx) = sink();
+            sink.on_sample(fake_sample(3));
+            let _ = rx.try_recv();
+
+            // Device disappeared and came back with a new reference frame,
+            // matching upstream's own reset-on-reconnect behavior.
+            sink.on_sample(fake_sample(4));
+
+            assert!(matches!(
+                rx.try_recv(),
+                Ok(NativeChannelEvent::Head(event))
+                    if matches!(*event, HeadPoseEvent::ResetCounterChanged { previous: 3, current: 4 })
+            ));
+            assert!(matches!(
+                rx.try_recv(),
+                Ok(NativeChannelEvent::Head(event)) if matches!(*event, HeadPoseEvent::Pose(_))
+            ));
+        }
     }
 }
