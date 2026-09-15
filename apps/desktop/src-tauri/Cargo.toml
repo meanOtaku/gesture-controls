@@ -33,8 +33,10 @@ tauri-plugin-fs = "2.5.2"
 
 [features]
 # Real on-device LiteRT inference. Off by default -- see
-# crates/pinch-inference/Cargo.toml for why. Without it, `PinchInferenceRuntime`
-# still fuses telemetry and runs the fail-closed threshold state machine, but
-# every window fails classification (no model backend compiled in), which
-# fails closed exactly like a model runtime failure would.
+# docs/release/litert-runtime-packaging.md. Feature-enabled packages must use
+# `npm run package:litert`, which rejects a missing/cross-target native runtime
+# rather than shipping the build host's LiteRT cache. Without this feature,
+# `PinchInferenceRuntime` still fuses telemetry and runs the fail-closed
+# threshold state machine, but every window fails classification (no model
+# backend compiled in), exactly like a model runtime failure would.
 litert-inference = ["pinch-inference/litert"]

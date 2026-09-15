@@ -5,3 +5,4 @@
 - [Development / Running the project](development/running-project.md)
 - [Protocols / Watch WebSocket protocol](protocols/watch-websocket-protocol.md)
 - [Release-readiness acceptance checklist](release-readiness.md)
+- [LiteRT desktop runtime packaging](release/litert-runtime-packaging.md)

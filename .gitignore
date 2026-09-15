@@ -21,6 +21,7 @@ __pycache__/
 
 # Generated Tauri artifacts
 apps/desktop/src-tauri/gen/
+apps/desktop/src-tauri/resources/litert/
 
 # Local Android Studio / Gradle state
 apps/watch/.gradle/
