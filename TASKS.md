@@ -41,7 +41,7 @@ GC-003's scope, and nothing in this slice performs one).
       could not be compiled/tested locally — **host-blocked**, see
       "Known blocker" in `CHECKPOINT.md`. CI already covers this crate.
 
-## GC-003 — Enable validated LiteRT inference (not started)
+## GC-003 — Enable validated LiteRT inference (in progress)
 
 Enable the already-present live desktop inference/policy pipeline to execute
 a verified LiteRT model safely and make its runtime availability explicit:
@@ -59,6 +59,15 @@ a verified LiteRT model safely and make its runtime availability explicit:
 - Re-verify the release-readiness checklist's "Model lifecycle, replay, and
   inference diagnostics" and "Interaction safety and failure handling"
   sections end-to-end on real hardware once this is wired.
+
+Progress in this commit:
+
+- [x] Variable-size model seam and strict ordered canonical-feature projection.
+- [x] Reduced (1..54) contracts require version `1`, preprocessing, window
+      semantics, exact tensor shape, class order, and SHA-256; legacy exact
+      55-feature bundles and sklearn baseline behavior remain unchanged.
+- [ ] Explicit desktop custom-bundle import/register UI.
+- [ ] Feature-enabled LiteRT build and real-device validation.
 
 ## GC-004 — (not yet scoped)
 

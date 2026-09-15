@@ -368,6 +368,8 @@ struct BundleClassEntry {
 
 #[derive(Debug, Deserialize)]
 struct BundleFeatureContract {
+    #[serde(default)]
+    version: Option<u64>,
     count: usize,
     ordered_names: Vec<String>,
 }
@@ -378,6 +380,10 @@ struct BundleMetadata {
     model: BundleModelField,
     classes: Vec<BundleClassEntry>,
     feature_contract: BundleFeatureContract,
+    #[serde(default)]
+    preprocessing: Option<serde_json::Value>,
+    #[serde(default)]
+    window_semantics: Option<serde_json::Value>,
 }
 
 fn sha256_hex(path: &Path) -> Result<String, String> {
@@ -430,7 +436,7 @@ fn load_and_verify_bundle(dir: &Path) -> Result<(BundleMetadata, String), String
         ));
     }
 
-    let features_match = metadata.feature_contract.count == FEATURE_COUNT
+    let legacy_features_match = metadata.feature_contract.count == FEATURE_COUNT
         && metadata.feature_contract.ordered_names.len() == FEATURE_NAMES.len()
         && metadata
             .feature_contract
@@ -438,9 +444,27 @@ fn load_and_verify_bundle(dir: &Path) -> Result<(BundleMetadata, String), String
             .iter()
             .zip(FEATURE_NAMES.iter())
             .all(|(actual, expected)| actual.as_str() == *expected);
-    if !features_match {
+    let custom_features_match = metadata.feature_contract.count > 0
+        && metadata.feature_contract.count < FEATURE_COUNT
+        && metadata.feature_contract.version == Some(1)
+        && metadata.feature_contract.ordered_names.len() == metadata.feature_contract.count
+        && metadata
+            .feature_contract
+            .ordered_names
+            .iter()
+            .all(|name| FEATURE_NAMES.contains(&name.as_str()))
+        && metadata
+            .feature_contract
+            .ordered_names
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            == metadata.feature_contract.ordered_names.len()
+        && metadata.preprocessing.is_some()
+        && metadata.window_semantics.is_some();
+    if !legacy_features_match && !custom_features_match {
         return Err(
-            "bundle feature_contract does not match the desktop's 55-feature contract".to_string(),
+            "bundle feature_contract must be the legacy exact 55-feature contract, or a version: 1 custom contract with 1..54 unique canonical ordered_names plus preprocessing and window_semantics".to_string(),
         );
     }
 
@@ -450,7 +474,7 @@ fn load_and_verify_bundle(dir: &Path) -> Result<(BundleMetadata, String), String
             "bundle model must be '{TFLITE_MODEL_FILE_NAME}' in {BUNDLE_MODEL_FORMAT} format"
         ));
     }
-    if metadata.model.input_shape != vec![1, FEATURE_COUNT as u64] {
+    if metadata.model.input_shape != vec![1, metadata.feature_contract.count as u64] {
         return Err(
             "bundle model input_shape does not match the desktop's feature contract".to_string(),
         );
@@ -488,6 +512,7 @@ pub struct ActiveModelSnapshot {
     pub quality_gate: QualityGateConfig,
     pub class_order: Vec<String>,
     pub digest: String,
+    pub feature_names: Vec<String>,
     bindings: HashMap<String, GestureIntent>,
 }
 
@@ -539,6 +564,7 @@ impl ActiveModelSnapshot {
             quality_gate: model.quality_gate,
             class_order,
             digest,
+            feature_names: metadata.feature_contract.ordered_names,
             bindings,
         })
     }
@@ -567,6 +593,7 @@ impl ActiveModelSnapshot {
                 .map(|label| label.to_string())
                 .collect(),
             digest: "test-digest".to_string(),
+            feature_names: FEATURE_NAMES.iter().map(|name| name.to_string()).collect(),
             bindings: bindings
                 .iter()
                 .map(|(label, intent)| (label.to_string(), *intent))
@@ -1262,6 +1289,19 @@ mod tests {
         metadata["feature_contract"]["count"] = serde_json::json!(1);
         write_metadata(&dir, &metadata);
         assert!(load_and_verify_bundle(&dir).is_err());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn load_and_verify_bundle_accepts_versioned_custom_canonical_subset() {
+        let dir = unique_bundle_dir("custom-contract");
+        let mut metadata = write_valid_bundle(&dir);
+        metadata["feature_contract"] = serde_json::json!({"version": 1, "count": 2, "ordered_names": ["ppg_green_mean", "gyro_magnitude_std"]});
+        metadata["preprocessing"] = serde_json::json!({"normalization": "bundle-defined-v1"});
+        metadata["window_semantics"] = serde_json::json!({"samples": 32, "alignment": "latest"});
+        metadata["model"]["input_shape"] = serde_json::json!([1, 2]);
+        write_metadata(&dir, &metadata);
+        assert!(load_and_verify_bundle(&dir).is_ok());
         fs::remove_dir_all(&dir).ok();
     }
 

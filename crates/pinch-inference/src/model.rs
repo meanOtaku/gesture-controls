@@ -5,8 +5,6 @@
 
 use thiserror::Error;
 
-use crate::features::FEATURE_COUNT;
-
 /// `[negative, pinch_start, pinch_release]`, matching `bundle.py`'s
 /// `CLASS_NAMES` order exactly -- a model's output tensor must be laid out
 /// this way for [`crate::runtime::DesktopPinchRuntime`] to interpret it
@@ -64,20 +62,16 @@ pub fn validate_probabilities(
 /// runtime handle they need (a `litert::CompiledModel`, a mock, ...) and are
 /// free to be stateful (e.g. cache buffers) since `predict` takes `&mut self`.
 pub trait PinchModel: Send {
-    fn predict(
-        &mut self,
-        features: &[f32; FEATURE_COUNT],
-    ) -> Result<[f32; CLASS_COUNT], PinchModelError>;
+    /// `features` is the already contract-projected ordered vector. The
+    /// desktop never pads, reorders, or invents missing features.
+    fn predict(&mut self, features: &[f32]) -> Result<[f32; CLASS_COUNT], PinchModelError>;
 }
 
 /// Lets `DesktopPinchRuntime<Box<dyn PinchModel>>` hold a backend picked at
 /// runtime (the real LiteRT backend or [`UnavailablePinchModel`]) behind one
 /// concrete type.
 impl PinchModel for Box<dyn PinchModel> {
-    fn predict(
-        &mut self,
-        features: &[f32; FEATURE_COUNT],
-    ) -> Result<[f32; CLASS_COUNT], PinchModelError> {
+    fn predict(&mut self, features: &[f32]) -> Result<[f32; CLASS_COUNT], PinchModelError> {
         (**self).predict(features)
     }
 }
@@ -90,10 +84,7 @@ impl PinchModel for Box<dyn PinchModel> {
 pub struct UnavailablePinchModel;
 
 impl PinchModel for UnavailablePinchModel {
-    fn predict(
-        &mut self,
-        _features: &[f32; FEATURE_COUNT],
-    ) -> Result<[f32; CLASS_COUNT], PinchModelError> {
+    fn predict(&mut self, _features: &[f32]) -> Result<[f32; CLASS_COUNT], PinchModelError> {
         Err(PinchModelError::Backend(
             "no inference backend compiled in (enable the `litert` crate feature)".to_string(),
         ))
@@ -107,7 +98,7 @@ mod tests {
     #[test]
     fn unavailable_pinch_model_always_errors() {
         let mut model = UnavailablePinchModel;
-        assert!(model.predict(&[0.0; FEATURE_COUNT]).is_err());
+        assert!(model.predict(&[0.0; 1]).is_err());
     }
 
     #[test]

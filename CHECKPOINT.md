@@ -116,12 +116,24 @@ behavior the acceptance criteria require. CI (`desktop-ci.yml`) already
 installs these prerequisites and runs the full desktop crate suite, so this
 is a local-environment limitation, not an unverified code path in CI.
 
+## GC-003 progress (2026-09-15)
+
+- The active runtime now projects the extracted canonical feature vector only
+  through the verified bundle contract's ordered names. `PinchModel` and the
+  feature-gated LiteRT backend accept that exact vector length; no path pads,
+  guesses, or silently remaps inputs.
+- `metadata.json` accepts legacy app-trained 55-feature bundles unchanged.
+  A custom bundle is accepted only when it declares feature-contract version
+  1, 1..54 unique canonical names, matching input shape, preprocessing and
+  window semantics, exact class order/output shape, and a matching SHA-256.
+  Any other reduced contract rejects before activation/runtime load.
+- `cargo test -p pinch-inference` passed (41 tests). Desktop crate tests
+  remain blocked by the missing GTK/pkg-config prerequisites below.
+
 ## Remaining work
 
 See `TASKS.md` for the full GC-002–GC-006 breakdown. In short: GC-002 is
-complete. GC-003 is the remaining LiteRT enablement/release slice: wire the
-verified active bundle into the feature-gated LiteRT runtime and ship that
-runtime safely across supported targets. The existing inference and
-gesture-policy paths already route classified output through the safety state
-machine; this session did not enable the LiteRT feature or validate it on
-physical hardware.
+complete. GC-003 still needs the explicit custom-bundle import/register UI and a
+feature-enabled LiteRT build on each supported target. The existing inference
+and gesture-policy paths route classified output through the safety state
+machine; physical LiteRT execution remains unvalidated on this host.

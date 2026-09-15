@@ -8,7 +8,6 @@
 
 use interaction_engine::PinchTransition;
 
-use crate::features::FEATURE_COUNT;
 use crate::model::{PinchModel, PinchModelError, validate_probabilities};
 
 /// Desktop-owned, per-model classification state machine. Not `Send`-bound
@@ -62,18 +61,14 @@ impl<M: PinchModel> DesktopPinchRuntime<M> {
     /// model-load/construction errors separately (see
     /// `apps/desktop/src-tauri/src/inference.rs`'s
     /// `report_model_runtime_failure`).
-    pub fn submit(
-        &mut self,
-        features: &[f32; FEATURE_COUNT],
-        timestamp_ns: u64,
-    ) -> Option<PinchTransition> {
+    pub fn submit(&mut self, features: &[f32], timestamp_ns: u64) -> Option<PinchTransition> {
         match self.classify(features) {
             Ok(probabilities) => self.apply(probabilities, timestamp_ns),
             Err(_) => self.reset(timestamp_ns),
         }
     }
 
-    fn classify(&mut self, features: &[f32; FEATURE_COUNT]) -> Result<[f32; 3], PinchModelError> {
+    fn classify(&mut self, features: &[f32]) -> Result<[f32; 3], PinchModelError> {
         if features.iter().any(|value| !value.is_finite()) {
             return Err(PinchModelError::NonFiniteOutput);
         }
@@ -133,10 +128,7 @@ mod tests {
     }
 
     impl PinchModel for StubModel {
-        fn predict(
-            &mut self,
-            _features: &[f32; FEATURE_COUNT],
-        ) -> Result<[f32; 3], PinchModelError> {
+        fn predict(&mut self, _features: &[f32]) -> Result<[f32; 3], PinchModelError> {
             self.outputs
                 .pop_front()
                 .unwrap_or(Err(PinchModelError::Backend(
@@ -145,8 +137,8 @@ mod tests {
         }
     }
 
-    fn features() -> [f32; FEATURE_COUNT] {
-        [0.0; FEATURE_COUNT]
+    fn features() -> Vec<f32> {
+        vec![0.0; 55]
     }
 
     #[test]
