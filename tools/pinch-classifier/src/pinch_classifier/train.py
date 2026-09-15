@@ -176,7 +176,11 @@ def main(argv: list[str] | None = None) -> int:
         "hold_handling": args.hold_handling,
         "feature_names": list(dataset.feature_names),
         "input_files": [str(path) for path in input_paths],
-        "tflite_export": "not yet implemented — this slice only trains and evaluates the scikit-learn baseline",
+        "tflite_export": (
+            "not applicable to this sklearn baseline — use the 'tflite' training backend "
+            "(pinch-classifier-train-tflite / train_tflite.py) to produce a deployable, "
+            "validated model.tflite + metadata.json bundle"
+        ),
         **run_info,
     }
     model_card_path = output_dir / "model_card.json"
