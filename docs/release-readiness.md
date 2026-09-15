@@ -15,11 +15,19 @@ OS/architecture, device model/firmware, and outcome for every applicable row.
   x64 tooling; it is not a signed-release, cross-architecture, or install test.
 - [ ] For a LiteRT candidate, build the desktop with the `litert-inference` Cargo
   feature and have a reviewed, validated TFLite bundle with complete model-versioned
-  safe intent bindings. The default build deliberately fails inference closed.
+  safe intent bindings. Use only the `npm run package:litert` entrypoint and
+  its reviewed, target-native runtime inputs; see
+  [LiteRT desktop runtime packaging](release/litert-runtime-packaging.md).
+  The default build deliberately fails inference closed.
 - [ ] Use an isolated test audio output and a test dataset. Do not enable Live on an
   unreviewed model or a production presentation/audio device.
 
-**Status of this checklist as of the current change:** the async-feedback layer
+**Status of this checklist as of GC-004:** GC-004 supplies source/configuration
+for intentional feature-enabled LiteRT packaging, but no native runtime was
+provided and no LiteRT package was created. Native-loader behavior, package
+contents, signing, clean-host installation, model execution, safety behavior,
+CI, and physical-device results are all **DEFERRED / NOT CLEARED**. The
+async-feedback layer
 (pending button states plus success/info/warning/error toasts), contextual help
 tooltips, and the native CSV save dialog described below have been exercised only
 through the automated frontend test suite and manual testing on Linux development

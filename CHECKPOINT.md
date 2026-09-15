@@ -142,9 +142,15 @@ is a local-environment limitation, not an unverified code path in CI.
 ## Remaining work
 
 See `TASKS.md` for the full GC-002–GC-006 breakdown. In short: GC-002 is
-complete. GC-003's custom-bundle UI/backend flow is implemented. A
-feature-enabled LiteRT build/package and physical inference validation are still
-release gates. The existing inference and gesture-policy paths route classified
-output through the safety state machine; physical LiteRT execution remains
-unvalidated on this host. Validation, packaging, and physical-device gates are
-deferred and **not cleared**.
+complete. GC-003's custom-bundle UI/backend flow is implemented. GC-004 adds
+the explicit `npm run package:litert` release entrypoint, target-native staging,
+loader layout, and release instructions in
+`docs/release/litert-runtime-packaging.md`; it refuses a missing, unreviewed,
+or cross-target runtime rather than manufacturing a LiteRT package. Default
+builds and the existing inference/gesture-policy path remain fail-closed.
+
+No native runtime was supplied and no feature-enabled build, package,
+installation, CI run, clean-host loader check, Off/Monitor/Live exercise,
+fallback/forced-release exercise, signing step, or physical LiteRT execution
+was performed for GC-004. Every validation, platform, release, and hardware
+gate remains **DEFERRED / NOT CLEARED**.

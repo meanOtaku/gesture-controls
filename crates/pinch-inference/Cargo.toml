@@ -15,6 +15,9 @@ litert = { version = "0.2", optional = true }
 # native binding this pulls in) fetches a prebuilt LiteRT shared library at
 # build time, which is slow and network-dependent -- unsuitable for the
 # default `cargo test`/`cargo clippy` path CI and every contributor run on
-# every change. Enable explicitly (e.g. `cargo build --features litert`) to
-# build the desktop app with real on-device inference.
+# every change. Desktop release packaging must instead use the explicit
+# `npm run package:litert` entrypoint documented in
+# `docs/release/litert-runtime-packaging.md`; it requires a reviewed native
+# runtime and forbids that network fetch. The default desktop build remains
+# fail-closed with no model backend compiled in.
 litert = ["dep:litert"]

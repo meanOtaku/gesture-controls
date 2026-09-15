@@ -93,14 +93,14 @@ fn litert_diagnostic() -> EnvironmentDiagnostic {
         EnvironmentDiagnostic::ready(
             "litert-runtime",
             "Desktop LiteRT inference",
-            "This desktop build includes the LiteRT backend. A validated active TFLite model and complete safe-intent bindings are still required before Monitor or Live can run.",
+            "This desktop build includes the LiteRT backend and its package-time native runtime requirement. A validated active TFLite model and complete safe-intent bindings are still required before Monitor or Live can run.",
         )
     } else {
         EnvironmentDiagnostic::attention(
             "litert-runtime",
             "Desktop LiteRT inference",
             "This desktop build omits the optional LiteRT backend, so model windows fail closed.",
-            "Build the desktop app with cargo feature litert-inference before using Monitor or Live.",
+            "Use the explicit LiteRT packaging entrypoint before using Monitor or Live; ordinary desktop builds intentionally omit the native backend.",
         )
     }
 }

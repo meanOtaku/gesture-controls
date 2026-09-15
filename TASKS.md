@@ -73,12 +73,34 @@ Progress in this commit:
 - [ ] **Deferred / not cleared:** feature-enabled LiteRT build, package, and
       real-device validation. Do not run validation until explicitly requested.
 
-## GC-004 — (not yet scoped)
+## GC-004 — LiteRT desktop runtime packaging
 
-**Deferred / not cleared.** Likely candidate: cross-platform LiteRT native
-library packaging/distribution for the `litert` Cargo feature (today gated
-off by default and not exercised in default CI, per
-`crates/pinch-inference/Cargo.toml`'s own comments).
+Package the optional `litert-inference` desktop backend deliberately, without
+claiming that a host cache, cross-target binary, or absent native library is a
+redistributable runtime:
+
+- [x] `npm run package:litert` is the sole feature-package entrypoint. It
+      requires an explicit supported target triple, reviewed native runtime
+      directory, and reviewed native-runtime NOTICE; it rejects missing or
+      cross-target inputs before a package is created.
+- [x] The package command stages only supplied `libLiteRt*` files and a runtime
+      inventory, sets `LITERT_LIB_DIR` plus `LITERT_NO_DOWNLOAD=1`, selects
+      `litert-inference`, and removes staging on success or failure.
+- [x] Tauri overlays and desktop linker configuration handle macOS Apple
+      Silicon, Windows x64, Linux x64, and Linux ARM64 according to the
+      selected binding's declared native targets. macOS/Linux use resource
+      loader paths; Windows places runtime DLLs beside the executable.
+- [x] Default builds remain LiteRT-free and fail closed. Off/Monitor/Live,
+      policy gates, forced-release behavior, and the Watch-button fallback
+      remain unchanged.
+- [x] Release procedure and the expected native-runtime artifact layout are
+      documented in `docs/release/litert-runtime-packaging.md`.
+- [ ] **Deferred / NOT CLEARED:** source/license/hash review for every runtime,
+      feature-enabled builds, all platform packages, native-loader checks,
+      clean-host installation, signing/notarization, CI, real LiteRT execution,
+      Off/Monitor/Live verification, fallback/forced-release verification, and
+      physical hardware validation. Do not treat this source/configuration work
+      as package or runtime availability evidence.
 
 ## GC-005 — (not yet scoped)
 
