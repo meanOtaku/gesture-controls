@@ -8,7 +8,6 @@
 
 use interaction_engine::PinchTransition;
 
-use crate::features::FEATURE_COUNT;
 use crate::model::{PinchModel, PinchModelError, validate_probabilities};
 
 /// Desktop-owned, per-model classification state machine. Not `Send`-bound
@@ -62,18 +61,14 @@ impl<M: PinchModel> DesktopPinchRuntime<M> {
     /// model-load/construction errors separately (see
     /// `apps/desktop/src-tauri/src/inference.rs`'s
     /// `report_model_runtime_failure`).
-    pub fn submit(
-        &mut self,
-        features: &[f32; FEATURE_COUNT],
-        timestamp_ns: u64,
-    ) -> Option<PinchTransition> {
+    pub fn submit(&mut self, features: &[f32], timestamp_ns: u64) -> Option<PinchTransition> {
         match self.classify(features) {
             Ok(probabilities) => self.apply(probabilities, timestamp_ns),
             Err(_) => self.reset(timestamp_ns),
         }
     }
 
-    fn classify(&mut self, features: &[f32; FEATURE_COUNT]) -> Result<[f32; 3], PinchModelError> {
+    fn classify(&mut self, features: &[f32]) -> Result<[f32; 3], PinchModelError> {
         if features.iter().any(|value| !value.is_finite()) {
             return Err(PinchModelError::NonFiniteOutput);
         }
@@ -133,10 +128,7 @@ mod tests {
     }
 
     impl PinchModel for StubModel {
-        fn predict(
-            &mut self,
-            _features: &[f32; FEATURE_COUNT],
-        ) -> Result<[f32; 3], PinchModelError> {
+        fn predict(&mut self, _features: &[f32]) -> Result<[f32; 3], PinchModelError> {
             self.outputs
                 .pop_front()
                 .unwrap_or(Err(PinchModelError::Backend(
@@ -145,8 +137,8 @@ mod tests {
         }
     }
 
-    fn features() -> [f32; FEATURE_COUNT] {
-        [0.0; FEATURE_COUNT]
+    fn features() -> [f32; crate::features::FEATURE_COUNT] {
+        [0.0; crate::features::FEATURE_COUNT]
     }
 
     #[test]
@@ -320,5 +312,23 @@ mod tests {
         let model = StubModel::new(vec![]);
         let mut runtime = DesktopPinchRuntime::new(model, 0.80, 0.80);
         assert_eq!(runtime.reset(150), None);
+    }
+
+    #[test]
+    fn submit_accepts_a_reduced_length_feature_slice() {
+        // A custom bundle's model may take fewer than FEATURE_COUNT inputs;
+        // submit/classify must accept whatever slice length the caller
+        // resolved via `select_features`, not just the full canonical array.
+        let model = StubModel::new(vec![Ok([0.1, 0.85, 0.05])]);
+        let mut runtime = DesktopPinchRuntime::new(model, 0.80, 0.80);
+        let subset_features = [0.1f32, 0.2, 0.3];
+        let transition = runtime.submit(&subset_features, 100);
+        assert_eq!(
+            transition,
+            Some(PinchTransition::Started {
+                confidence: 0.85,
+                timestamp_ns: 100
+            })
+        );
     }
 }

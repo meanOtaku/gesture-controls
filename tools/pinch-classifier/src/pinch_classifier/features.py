@@ -11,6 +11,8 @@ that must feed it at inference time.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import numpy as np
 
 from .csv_io import Recording
@@ -42,6 +44,41 @@ FEATURE_NAMES: tuple[str, ...] = (
     "sample_count",
     "duration_ms",
 )
+
+
+def resolve_feature_subset(names: Sequence[str]) -> tuple[str, ...]:
+    """Validates a candidate ordered list of feature names against the
+    canonical `FEATURE_NAMES` registry -- the single source of truth for a
+    custom TFLite bundle's declared feature contract (see `bundle.py`).
+
+    Every name must be one of `FEATURE_NAMES` (unknown names are rejected),
+    none may repeat (duplicates are rejected), and `names` must already be in
+    the same relative order as `FEATURE_NAMES` (reordering is rejected) --
+    live desktop inference always computes the full canonical vector and then
+    selects a subset by canonical position, so a declared order that doesn't
+    match canonical position would silently mean a different feature than the
+    one intended. A subset is accepted; nothing is ever inferred, padded, or
+    fabricated for a name that isn't listed.
+    """
+    if not names:
+        raise ValueError("feature subset must not be empty")
+    seen: set[str] = set()
+    indices: list[int] = []
+    for name in names:
+        if name in seen:
+            raise ValueError(f"duplicate feature name '{name}'")
+        seen.add(name)
+        try:
+            indices.append(FEATURE_NAMES.index(name))
+        except ValueError:
+            raise ValueError(
+                f"unknown feature name '{name}'; every feature must be one of the canonical FEATURE_NAMES"
+            ) from None
+    if indices != sorted(indices):
+        raise ValueError(
+            "feature subset must preserve the canonical FEATURE_NAMES order; reordering is not supported"
+        )
+    return tuple(names)
 
 
 def _stat_block(values: np.ndarray) -> tuple[float, float, float, float]:

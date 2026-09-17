@@ -11,7 +11,6 @@ use litert::{
     CompilationOptions, CompiledModel, ElementType, Environment, Model, TensorBuffer, TensorShape,
 };
 
-use crate::features::FEATURE_COUNT;
 use crate::model::{CLASS_COUNT, PinchModel, PinchModelError};
 
 impl From<litert::Error> for PinchModelError {
@@ -44,13 +43,10 @@ impl LiteRtPinchModel {
 }
 
 impl PinchModel for LiteRtPinchModel {
-    fn predict(
-        &mut self,
-        features: &[f32; FEATURE_COUNT],
-    ) -> Result<[f32; CLASS_COUNT], PinchModelError> {
+    fn predict(&mut self, features: &[f32]) -> Result<[f32; CLASS_COUNT], PinchModelError> {
         let input_shape = TensorShape {
             element_type: ElementType::Float32,
-            dims: vec![1, FEATURE_COUNT as i32],
+            dims: vec![1, features.len() as i32],
         };
         let mut input = TensorBuffer::managed_host(&self.env, &input_shape)?;
         {

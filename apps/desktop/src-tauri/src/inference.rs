@@ -468,12 +468,17 @@ impl PinchInferenceRuntime {
         let Some(model) = loaded.as_mut() else {
             return ClassifyOutcome::LoadFailed("pinch inference model failed to load".to_string());
         };
+        // A custom bundle may declare a strict subset of the canonical
+        // feature registry; select exactly the values this model's own
+        // verified contract declared, in its declared order (never the full
+        // vector unconditionally) -- see `ActiveModelSnapshot::feature_indices`.
+        let selected = pinch_inference::select_features(&features, &model.snapshot.feature_indices);
         // Desktop receive-time, not `sample.timestamp_ns` -- the watch's own
         // envelope timestamp runs on an unrelated, unsynchronized device
         // clock, and `GesturePolicy::on_tick`'s staleness watchdog compares
         // whatever timestamp lands in the resulting `PinchTransition` against
         // its own desktop-side "now" (see [`GesturePolicyRuntime::tick`]).
-        match model.runtime.submit(&features, desktop_monotonic_now_ns()) {
+        match model.runtime.submit(&selected, desktop_monotonic_now_ns()) {
             Some(transition) => ClassifyOutcome::Transition(transition),
             None => ClassifyOutcome::NoChange,
         }

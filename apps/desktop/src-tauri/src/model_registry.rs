@@ -12,6 +12,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use base64::Engine;
 use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -29,6 +30,13 @@ use pinch_inference::{CLASS_COUNT, FEATURE_COUNT, FEATURE_NAMES};
 pub(crate) const TFLITE_METADATA_FILE_NAME: &str = "metadata.json";
 const TFLITE_MODEL_FILE_NAME: &str = "model.tflite";
 const REGISTRY_FILE_NAME: &str = "registry.json";
+/// Generous enough for a `metadata.json` with a full 55-name feature
+/// contract, training provenance, and a classification report, with ample
+/// headroom, while still rejecting an absurdly oversized payload outright.
+const MAX_BUNDLE_METADATA_BYTES: usize = 1024 * 1024;
+/// A small MLP's exported TFLite graph is a few hundred KB; 50 MB is well
+/// beyond any bundle this pipeline could legitimately produce.
+const MAX_BUNDLE_MODEL_BYTES: usize = 50 * 1024 * 1024;
 
 pub const MODEL_REGISTRY_EVENT: &str = "model-registry-updated";
 
@@ -380,6 +388,57 @@ struct BundleMetadata {
     feature_contract: BundleFeatureContract,
 }
 
+/// Validates a bundle's declared `feature_contract.ordered_names` against
+/// the desktop's canonical [`FEATURE_NAMES`] registry, returning each name's
+/// resolved canonical index in the given (validated) order. A bundle may
+/// declare a strict subset of the canonical registry -- provided every name
+/// is known, none repeats, and the declared order matches each name's
+/// canonical position. Reordering is rejected: live inference always
+/// extracts the full canonical vector and then selects by canonical index
+/// (see `pinch_inference::select_features`), so a declared order that didn't
+/// match canonical position would silently select a different feature than
+/// the one intended. Nothing is ever inferred, padded, or fabricated for a
+/// name that isn't listed.
+fn validate_feature_subset(ordered_names: &[String]) -> Result<Vec<usize>, String> {
+    if ordered_names.is_empty() {
+        return Err("bundle feature_contract.ordered_names must not be empty".to_string());
+    }
+    if ordered_names.len() > FEATURE_NAMES.len() {
+        return Err(format!(
+            "bundle feature_contract declares {} features, more than the desktop's canonical {}-feature registry",
+            ordered_names.len(),
+            FEATURE_NAMES.len()
+        ));
+    }
+    let mut seen = std::collections::HashSet::new();
+    let mut indices = Vec::with_capacity(ordered_names.len());
+    for name in ordered_names {
+        if !seen.insert(name.as_str()) {
+            return Err(format!(
+                "bundle feature_contract declares duplicate feature '{name}'"
+            ));
+        }
+        let index = FEATURE_NAMES
+            .iter()
+            .position(|canonical| canonical == name)
+            .ok_or_else(|| {
+                format!(
+                    "bundle feature_contract declares unknown feature '{name}'; every feature \
+                     must be one of the desktop's canonical FEATURE_NAMES"
+                )
+            })?;
+        indices.push(index);
+    }
+    if !indices.windows(2).all(|pair| pair[0] < pair[1]) {
+        return Err(
+            "bundle feature_contract.ordered_names must preserve the canonical FEATURE_NAMES \
+             order; reordering is not supported"
+                .to_string(),
+        );
+    }
+    Ok(indices)
+}
+
 fn sha256_hex(path: &Path) -> Result<String, String> {
     let bytes =
         fs::read(path).map_err(|error| format!("failed to read '{}': {error}", path.display()))?;
@@ -393,14 +452,16 @@ fn sha256_hex(path: &Path) -> Result<String, String> {
 }
 
 /// Fully revalidates a model directory's bundle contract against the desktop's
-/// fixed feature/class contract and recomputes `model.tflite`'s digest --
-/// never trusts that a file named `metadata.json` still matches the bytes on
-/// disk, since either could have been replaced or corrupted after the model
-/// was approved. Returns the parsed metadata plus the freshly recomputed
-/// (verified-matching) digest. This is the single choke point
-/// [`ActiveModelSnapshot::verified`] runs through at activation, rollback,
-/// and every runtime (re)load.
-fn load_and_verify_bundle(dir: &Path) -> Result<(BundleMetadata, String), String> {
+/// fixed class contract and canonical feature registry (accepting any
+/// strict, canonically-ordered subset -- see [`validate_feature_subset`]) and
+/// recomputes `model.tflite`'s digest -- never trusts that a file named
+/// `metadata.json` still matches the bytes on disk, since either could have
+/// been replaced or corrupted after the model was approved. Returns the
+/// parsed metadata, the freshly recomputed (verified-matching) digest, and
+/// the bundle's declared features' resolved canonical indices. This is the
+/// single choke point [`ActiveModelSnapshot::verified`] runs through at
+/// activation, rollback, and every runtime (re)load.
+fn load_and_verify_bundle(dir: &Path) -> Result<(BundleMetadata, String, Vec<usize>), String> {
     let metadata_path = dir.join(TFLITE_METADATA_FILE_NAME);
     let contents = fs::read_to_string(&metadata_path)
         .map_err(|error| format!("failed to read {TFLITE_METADATA_FILE_NAME}: {error}"))?;
@@ -430,19 +491,12 @@ fn load_and_verify_bundle(dir: &Path) -> Result<(BundleMetadata, String), String
         ));
     }
 
-    let features_match = metadata.feature_contract.count == FEATURE_COUNT
-        && metadata.feature_contract.ordered_names.len() == FEATURE_NAMES.len()
-        && metadata
-            .feature_contract
-            .ordered_names
-            .iter()
-            .zip(FEATURE_NAMES.iter())
-            .all(|(actual, expected)| actual.as_str() == *expected);
-    if !features_match {
+    if metadata.feature_contract.count != metadata.feature_contract.ordered_names.len() {
         return Err(
-            "bundle feature_contract does not match the desktop's 55-feature contract".to_string(),
+            "bundle feature_contract.count must match ordered_names length".to_string(),
         );
     }
+    let feature_indices = validate_feature_subset(&metadata.feature_contract.ordered_names)?;
 
     if metadata.model.file != TFLITE_MODEL_FILE_NAME || metadata.model.format != BUNDLE_MODEL_FORMAT
     {
@@ -450,9 +504,10 @@ fn load_and_verify_bundle(dir: &Path) -> Result<(BundleMetadata, String), String
             "bundle model must be '{TFLITE_MODEL_FILE_NAME}' in {BUNDLE_MODEL_FORMAT} format"
         ));
     }
-    if metadata.model.input_shape != vec![1, FEATURE_COUNT as u64] {
+    if metadata.model.input_shape != vec![1, feature_indices.len() as u64] {
         return Err(
-            "bundle model input_shape does not match the desktop's feature contract".to_string(),
+            "bundle model input_shape does not match its own declared feature_contract length"
+                .to_string(),
         );
     }
     if metadata.model.output_shape != vec![1, CLASS_COUNT as u64] {
@@ -472,7 +527,7 @@ fn load_and_verify_bundle(dir: &Path) -> Result<(BundleMetadata, String), String
         ));
     }
 
-    Ok((metadata, actual_digest))
+    Ok((metadata, actual_digest, feature_indices))
 }
 
 /// Immutable, contract-verified snapshot of one model: the only shape
@@ -488,6 +543,12 @@ pub struct ActiveModelSnapshot {
     pub quality_gate: QualityGateConfig,
     pub class_order: Vec<String>,
     pub digest: String,
+    /// Resolved canonical `FEATURE_NAMES` indices for this bundle's declared
+    /// `feature_contract.ordered_names`, in that same order -- what
+    /// `pinch_inference::select_features` uses to pick this model's input
+    /// values out of the full extracted canonical feature vector. A full
+    /// legacy/app-trained bundle resolves to `0..FEATURE_COUNT`.
+    pub feature_indices: Vec<usize>,
     bindings: HashMap<String, GestureIntent>,
 }
 
@@ -510,7 +571,7 @@ impl ActiveModelSnapshot {
         model.quality_gate.validate()?;
 
         let dir = model_lab::models_dir(app)?.join(model_id);
-        let (metadata, digest) = load_and_verify_bundle(&dir)?;
+        let (metadata, digest, feature_indices) = load_and_verify_bundle(&dir)?;
         let class_order: Vec<String> = metadata
             .classes
             .iter()
@@ -539,6 +600,7 @@ impl ActiveModelSnapshot {
             quality_gate: model.quality_gate,
             class_order,
             digest,
+            feature_indices,
             bindings,
         })
     }
@@ -567,6 +629,7 @@ impl ActiveModelSnapshot {
                 .map(|label| label.to_string())
                 .collect(),
             digest: "test-digest".to_string(),
+            feature_indices: (0..FEATURE_COUNT).collect(),
             bindings: bindings
                 .iter()
                 .map(|(label, intent)| (label.to_string(), *intent))
@@ -702,6 +765,94 @@ pub(crate) fn register_trained_model(
         return;
     }
     emit_registry(app, &index);
+}
+
+/// Imports a custom-trained TFLite bundle supplied by the webview as
+/// `metadata.json` text plus base64-encoded `model.tflite` bytes -- content,
+/// never a filesystem path, so the webview can never point this command at
+/// an arbitrary file on disk (matching `model_lab::import_model_dataset`'s
+/// existing convention). Writes both into a fresh model directory and runs
+/// the bundle through exactly the same [`load_and_verify_bundle`] contract
+/// check every activation/rollback uses -- schema version, fixed class
+/// order, a strict canonically-ordered feature subset (see
+/// [`validate_feature_subset`]; unknown, duplicate, reordered, or oversized
+/// feature lists are all rejected with an actionable diagnostic), tensor
+/// shapes tied to the bundle's own declared feature count, and a SHA-256
+/// digest recomputed from the actual bytes on disk. On any violation the
+/// partial directory is deleted and nothing is registered -- a bundle either
+/// imports whole and valid, or not at all. On success the model is
+/// registered as `Draft`, exactly like a model trained in-app, so it must
+/// still go through the normal Evaluate/Approve/Activate lifecycle (and its
+/// own explicit intent bindings) before it can ever run live.
+#[tauri::command]
+pub fn import_model_bundle(
+    metadata_json: String,
+    model_base64: String,
+    app: AppHandle,
+    runtime: State<'_, ModelRegistryRuntime>,
+) -> Result<RegistryView, String> {
+    if metadata_json.len() > MAX_BUNDLE_METADATA_BYTES {
+        return Err(format!(
+            "bundle metadata.json exceeds the {MAX_BUNDLE_METADATA_BYTES}-byte import limit (got {} bytes)",
+            metadata_json.len()
+        ));
+    }
+    serde_json::from_str::<serde_json::Value>(&metadata_json)
+        .map_err(|error| format!("metadata.json is not valid JSON: {error}"))?;
+
+    // Reject an implausibly large payload before paying for a full base64
+    // decode (base64 expands raw bytes by roughly 4/3).
+    if model_base64.len() > MAX_BUNDLE_MODEL_BYTES * 4 / 3 + 4 {
+        return Err(format!(
+            "bundle model.tflite exceeds the {MAX_BUNDLE_MODEL_BYTES}-byte import limit"
+        ));
+    }
+    let model_bytes = base64::engine::general_purpose::STANDARD
+        .decode(model_base64.trim())
+        .map_err(|error| format!("model.tflite is not valid base64: {error}"))?;
+    if model_bytes.len() > MAX_BUNDLE_MODEL_BYTES {
+        return Err(format!(
+            "bundle model.tflite exceeds the {MAX_BUNDLE_MODEL_BYTES}-byte import limit (got {} bytes)",
+            model_bytes.len()
+        ));
+    }
+
+    let _guard = runtime
+        .lock
+        .lock()
+        .map_err(|_| "model registry lock was poisoned".to_string())?;
+
+    let models_root = model_lab::models_dir(&app)?;
+    fs::create_dir_all(&models_root).map_err(|error| error.to_string())?;
+    let model_id = loop {
+        let candidate = uuid::Uuid::new_v4().to_string();
+        if !models_root.join(&candidate).exists() {
+            break candidate;
+        }
+    };
+    let dir = models_root.join(&model_id);
+    fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+
+    if let Err(error) = fs::write(dir.join(TFLITE_MODEL_FILE_NAME), &model_bytes)
+        .map_err(|error| error.to_string())
+        .and_then(|()| {
+            fs::write(dir.join(TFLITE_METADATA_FILE_NAME), &metadata_json)
+                .map_err(|error| error.to_string())
+        })
+        .and_then(|()| load_and_verify_bundle(&dir).map(|_| ()))
+    {
+        let _ = fs::remove_dir_all(&dir);
+        return Err(error);
+    }
+
+    let mut index = load_registry(&app);
+    index.models.push(ModelRecord::new(model_id));
+    if let Err(error) = write_registry_atomic(&app, &index) {
+        let _ = fs::remove_dir_all(&dir);
+        return Err(error);
+    }
+    emit_registry(&app, &index);
+    Ok(RegistryView::from(index))
 }
 
 #[tauri::command]
@@ -1187,6 +1338,35 @@ mod tests {
         .unwrap();
     }
 
+    /// Like [`write_valid_bundle`], but with a custom (possibly reduced)
+    /// declared feature list, for exercising [`validate_feature_subset`]
+    /// through the full bundle contract.
+    fn write_bundle_with_features(dir: &Path, feature_names: &[&str]) -> serde_json::Value {
+        fs::write(dir.join(TFLITE_MODEL_FILE_NAME), b"fake-tflite-bytes").unwrap();
+        let digest = sha256_hex(&dir.join(TFLITE_MODEL_FILE_NAME)).unwrap();
+        let metadata = serde_json::json!({
+            "schema_version": BUNDLE_SCHEMA_VERSION,
+            "model": {
+                "file": TFLITE_MODEL_FILE_NAME,
+                "format": BUNDLE_MODEL_FORMAT,
+                "sha256": digest,
+                "input_shape": [1, feature_names.len()],
+                "output_shape": [1, CLASS_COUNT],
+            },
+            "classes": [
+                {"index": 0, "label": "negative"},
+                {"index": 1, "label": "pinch_start"},
+                {"index": 2, "label": "pinch_release"},
+            ],
+            "feature_contract": {
+                "count": feature_names.len(),
+                "ordered_names": feature_names,
+            },
+        });
+        write_metadata(dir, &metadata);
+        metadata
+    }
+
     #[test]
     fn sha256_hex_matches_known_test_vector() {
         let dir = unique_bundle_dir("sha256-vector");
@@ -1280,6 +1460,94 @@ mod tests {
         let dir = unique_bundle_dir("malformed-digest");
         let mut metadata = write_valid_bundle(&dir);
         metadata["model"]["sha256"] = serde_json::json!("not-a-hex-digest");
+        write_metadata(&dir, &metadata);
+        assert!(load_and_verify_bundle(&dir).is_err());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn validate_feature_subset_accepts_full_canonical_registry() {
+        let names: Vec<String> = FEATURE_NAMES.iter().map(|name| name.to_string()).collect();
+        let indices = validate_feature_subset(&names).expect("must accept full registry");
+        assert_eq!(indices, (0..FEATURE_COUNT).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn validate_feature_subset_accepts_canonical_order_subset() {
+        let names = vec![
+            FEATURE_NAMES[0].to_string(),
+            FEATURE_NAMES[2].to_string(),
+            FEATURE_NAMES[5].to_string(),
+        ];
+        assert_eq!(validate_feature_subset(&names).unwrap(), vec![0, 2, 5]);
+    }
+
+    #[test]
+    fn validate_feature_subset_rejects_empty() {
+        assert!(validate_feature_subset(&[]).is_err());
+    }
+
+    #[test]
+    fn validate_feature_subset_rejects_duplicate() {
+        let names = vec![FEATURE_NAMES[0].to_string(), FEATURE_NAMES[0].to_string()];
+        assert!(validate_feature_subset(&names).is_err());
+    }
+
+    #[test]
+    fn validate_feature_subset_rejects_unknown_name() {
+        let names = vec!["not_a_real_feature".to_string()];
+        assert!(validate_feature_subset(&names).is_err());
+    }
+
+    #[test]
+    fn validate_feature_subset_rejects_reordering() {
+        let names = vec![FEATURE_NAMES[5].to_string(), FEATURE_NAMES[0].to_string()];
+        assert!(validate_feature_subset(&names).is_err());
+    }
+
+    #[test]
+    fn load_and_verify_bundle_accepts_a_strict_canonical_order_subset() {
+        let dir = unique_bundle_dir("feature-subset-valid");
+        let subset = [FEATURE_NAMES[0], FEATURE_NAMES[2], FEATURE_NAMES[10]];
+        write_bundle_with_features(&dir, &subset);
+        let (_, _, feature_indices) = load_and_verify_bundle(&dir).expect("must accept subset");
+        assert_eq!(feature_indices, vec![0, 2, 10]);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn load_and_verify_bundle_rejects_reordered_subset() {
+        let dir = unique_bundle_dir("feature-subset-reordered");
+        let subset = [FEATURE_NAMES[10], FEATURE_NAMES[0]];
+        write_bundle_with_features(&dir, &subset);
+        assert!(load_and_verify_bundle(&dir).is_err());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn load_and_verify_bundle_rejects_unknown_feature_name() {
+        let dir = unique_bundle_dir("feature-subset-unknown");
+        let subset = ["not_a_real_feature"];
+        write_bundle_with_features(&dir, &subset);
+        assert!(load_and_verify_bundle(&dir).is_err());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn load_and_verify_bundle_rejects_duplicate_feature_name() {
+        let dir = unique_bundle_dir("feature-subset-duplicate");
+        let subset = [FEATURE_NAMES[0], FEATURE_NAMES[0]];
+        write_bundle_with_features(&dir, &subset);
+        assert!(load_and_verify_bundle(&dir).is_err());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn load_and_verify_bundle_rejects_input_shape_mismatched_with_declared_feature_count() {
+        let dir = unique_bundle_dir("feature-subset-shape-mismatch");
+        let subset = [FEATURE_NAMES[0], FEATURE_NAMES[2]];
+        let mut metadata = write_bundle_with_features(&dir, &subset);
+        metadata["model"]["input_shape"] = serde_json::json!([1, FEATURE_COUNT]);
         write_metadata(&dir, &metadata);
         assert!(load_and_verify_bundle(&dir).is_err());
         fs::remove_dir_all(&dir).ok();
