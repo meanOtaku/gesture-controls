@@ -15,9 +15,11 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 import numpy as np
 from sklearn.metrics import classification_report, confusion_matrix
 
+import dataclasses
+
 from .bundle import CLASS_NAMES, MODEL_FILENAME, build_metadata, write_and_validate_metadata
 from .dataset import Dataset, build_dataset
-from .features import FEATURE_NAMES
+from .features import FEATURE_NAMES, resolve_feature_subset
 from .labels import (
     LabelMapping,
     NEGATIVE_TARGET,
@@ -75,6 +77,15 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--parity-atol", type=float, default=1e-5)
+    parser.add_argument(
+        "--features",
+        default=None,
+        help=(
+            "Comma-separated strict subset of the canonical feature names (see "
+            "pinch_classifier.features.FEATURE_NAMES), in canonical order, to train a custom "
+            "smaller-input bundle. Omit to use the full canonical feature contract."
+        ),
+    )
     return parser
 
 
@@ -109,7 +120,7 @@ def build_model(x_train: np.ndarray, learning_rate: float, random_seed: int) -> 
     normalization.adapt(np.asarray(x_train, dtype=np.float32))
     model = tf.keras.Sequential(
         [
-            tf.keras.Input(shape=(len(FEATURE_NAMES),), dtype=tf.float32, name="features"),
+            tf.keras.Input(shape=(x_train.shape[1],), dtype=tf.float32, name="features"),
             normalization,
             tf.keras.layers.Dense(32, activation="relu", name="dense_1"),
             tf.keras.layers.Dense(16, activation="relu", name="dense_2"),
@@ -140,7 +151,7 @@ def _tflite_predictions(model_path: Path, features: np.ndarray) -> np.ndarray:
     input_detail = interpreter.get_input_details()[0]
     output_detail = interpreter.get_output_details()[0]
 
-    if tuple(input_detail["shape"]) != (1, len(FEATURE_NAMES)) or input_detail["dtype"] != np.float32:
+    if tuple(input_detail["shape"]) != (1, features.shape[1]) or input_detail["dtype"] != np.float32:
         raise RuntimeError(f"unexpected TFLite input contract: shape={input_detail['shape']}, dtype={input_detail['dtype']}")
     if tuple(output_detail["shape"]) != (1, len(CLASS_NAMES)) or output_detail["dtype"] != np.float32:
         raise RuntimeError(f"unexpected TFLite output contract: shape={output_detail['shape']}, dtype={output_detail['dtype']}")
@@ -243,6 +254,7 @@ def train_and_export(
         tensorflow_version=tf.__version__,
         run_info=run_info,
         parity=parity,
+        feature_names=dataset.feature_names,
     )
     write_and_validate_metadata(metadata, output_dir)
     return metadata
@@ -271,6 +283,14 @@ def main(argv: list[str] | None = None) -> int:
     # (pinch_start/pinch_release as targets, pinch_hold excluded, everything else negative), which
     # already guarantees the deployment contract stays exactly three classes.
     dataset = build_dataset(input_paths, args.window_config, hold_handling="exclude", label_mapping=label_mapping)
+    if args.features:
+        requested = [name.strip() for name in args.features.split(",") if name.strip()]
+        try:
+            subset = resolve_feature_subset(requested)
+        except ValueError as error:
+            raise SystemExit(f"--features is invalid: {error}") from error
+        indices = [FEATURE_NAMES.index(name) for name in subset]
+        dataset = dataclasses.replace(dataset, features=dataset.features[:, indices], feature_names=subset)
     metadata = train_and_export(dataset, args, Path(args.output_dir), input_paths, label_mapping)
     metrics = metadata["training"]["metrics"]
     parity = metadata["conversion_parity"]

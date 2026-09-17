@@ -468,37 +468,17 @@ impl PinchInferenceRuntime {
         let Some(model) = loaded.as_mut() else {
             return ClassifyOutcome::LoadFailed("pinch inference model failed to load".to_string());
         };
+        // A custom bundle may declare a strict subset of the canonical
+        // feature registry; select exactly the values this model's own
+        // verified contract declared, in its declared order (never the full
+        // vector unconditionally) -- see `ActiveModelSnapshot::feature_indices`.
+        let selected = pinch_inference::select_features(&features, &model.snapshot.feature_indices);
         // Desktop receive-time, not `sample.timestamp_ns` -- the watch's own
         // envelope timestamp runs on an unrelated, unsynchronized device
         // clock, and `GesturePolicy::on_tick`'s staleness watchdog compares
         // whatever timestamp lands in the resulting `PinchTransition` against
         // its own desktop-side "now" (see [`GesturePolicyRuntime::tick`]).
-        let projected_features = match model
-            .snapshot
-            .feature_names
-            .iter()
-            .map(|name| {
-                pinch_inference::FEATURE_NAMES
-                    .iter()
-                    .position(|canonical| canonical == name)
-                    .map(|index| features[index])
-                    .ok_or_else(|| {
-                        format!(
-                            "verified feature contract contains unknown canonical feature '{name}'"
-                        )
-                    })
-            })
-            .collect::<Result<Vec<_>, _>>()
-        {
-            Ok(projected) => projected,
-            Err(error) => return ClassifyOutcome::LoadFailed(error),
-        };
-        // Projection is strictly by the signed contract's declared canonical
-        // names; there is intentionally no padding, guessing, or remapping.
-        match model
-            .runtime
-            .submit(&projected_features, desktop_monotonic_now_ns())
-        {
+        match model.runtime.submit(&selected, desktop_monotonic_now_ns()) {
             Some(transition) => ClassifyOutcome::Transition(transition),
             None => ClassifyOutcome::NoChange,
         }

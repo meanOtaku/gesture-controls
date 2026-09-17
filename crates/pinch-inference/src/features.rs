@@ -275,6 +275,16 @@ pub fn extract_features(window: &FusedWindow) -> [f32; FEATURE_COUNT] {
     out
 }
 
+/// Selects the values at `indices` out of the full canonical `features`
+/// vector, in the given order -- the live-inference counterpart of a custom
+/// bundle's `feature_contract.ordered_names`. `indices` must already be
+/// resolved canonical positions (see `model_registry::validate_feature_subset`);
+/// this function trusts them and never reorders, pads, or infers a value for
+/// an index that isn't present.
+pub fn select_features(features: &[f32; FEATURE_COUNT], indices: &[usize]) -> Vec<f32> {
+    indices.iter().map(|&index| features[index]).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -377,5 +387,18 @@ mod tests {
             .position(|&name| name == "quat_delta_angle_deg")
             .unwrap();
         assert_eq!(features[index], 0.0);
+    }
+
+    #[test]
+    fn select_features_picks_values_at_given_indices_in_order() {
+        let features = extract_features(&sample_window());
+        let selected = select_features(&features, &[2, 0]);
+        assert_eq!(selected, vec![features[2], features[0]]);
+    }
+
+    #[test]
+    fn select_features_empty_indices_yields_empty_vec() {
+        let features = extract_features(&sample_window());
+        assert!(select_features(&features, &[]).is_empty());
     }
 }

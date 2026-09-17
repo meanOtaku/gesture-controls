@@ -20,6 +20,7 @@ mod runtime;
 
 pub use features::{
     FEATURE_COUNT, FEATURE_NAMES, FusedWindow, OrientationSnapshot, extract_features,
+    select_features,
 };
 pub use fusion::{FusionRejection, ORIENTATION_STALENESS_TIMEOUT_NS, TelemetryFusion};
 #[cfg(feature = "litert")]

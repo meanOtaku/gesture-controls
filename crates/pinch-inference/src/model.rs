@@ -61,9 +61,13 @@ pub fn validate_probabilities(
 /// One loaded, ready-to-run pinch classifier. Implementations own whatever
 /// runtime handle they need (a `litert::CompiledModel`, a mock, ...) and are
 /// free to be stateful (e.g. cache buffers) since `predict` takes `&mut self`.
+///
+/// `features` is a slice, not a fixed `[f32; FEATURE_COUNT]` array, because a
+/// custom bundle may declare a strict subset of the canonical feature
+/// registry (see `crate::features::select_features`) -- the implementation
+/// must size its input tensor to `features.len()`, never assume the full
+/// canonical count.
 pub trait PinchModel: Send {
-    /// `features` is the already contract-projected ordered vector. The
-    /// desktop never pads, reorders, or invents missing features.
     fn predict(&mut self, features: &[f32]) -> Result<[f32; CLASS_COUNT], PinchModelError>;
 }
 
@@ -98,7 +102,11 @@ mod tests {
     #[test]
     fn unavailable_pinch_model_always_errors() {
         let mut model = UnavailablePinchModel;
-        assert!(model.predict(&[0.0; 1]).is_err());
+        assert!(
+            model
+                .predict(&[0.0; crate::features::FEATURE_COUNT])
+                .is_err()
+        );
     }
 
     #[test]

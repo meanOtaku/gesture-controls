@@ -137,8 +137,8 @@ mod tests {
         }
     }
 
-    fn features() -> Vec<f32> {
-        vec![0.0; 55]
+    fn features() -> [f32; crate::features::FEATURE_COUNT] {
+        [0.0; crate::features::FEATURE_COUNT]
     }
 
     #[test]
@@ -312,5 +312,23 @@ mod tests {
         let model = StubModel::new(vec![]);
         let mut runtime = DesktopPinchRuntime::new(model, 0.80, 0.80);
         assert_eq!(runtime.reset(150), None);
+    }
+
+    #[test]
+    fn submit_accepts_a_reduced_length_feature_slice() {
+        // A custom bundle's model may take fewer than FEATURE_COUNT inputs;
+        // submit/classify must accept whatever slice length the caller
+        // resolved via `select_features`, not just the full canonical array.
+        let model = StubModel::new(vec![Ok([0.1, 0.85, 0.05])]);
+        let mut runtime = DesktopPinchRuntime::new(model, 0.80, 0.80);
+        let subset_features = [0.1f32, 0.2, 0.3];
+        let transition = runtime.submit(&subset_features, 100);
+        assert_eq!(
+            transition,
+            Some(PinchTransition::Started {
+                confidence: 0.85,
+                timestamp_ns: 100
+            })
+        );
     }
 }

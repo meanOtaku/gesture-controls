@@ -5,10 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from .features import FEATURE_NAMES
+from .features import FEATURE_NAMES, resolve_feature_subset
 from .windowing import WindowConfig
 
 BUNDLE_SCHEMA_VERSION = 1
@@ -16,7 +17,7 @@ CLASS_NAMES: tuple[str, ...] = ("negative", "pinch_start", "pinch_release")
 MODEL_FILENAME = "model.tflite"
 METADATA_FILENAME = "metadata.json"
 PREPROCESSING_POLICY: dict[str, Any] = {
-    "input": "the 55 engineered window features in feature_contract.ordered_names order",
+    "input": "the named engineered window features listed in feature_contract.ordered_names, in that order",
     "missing_sensor_values": "carry-forward within each recording; leading missing values become 0.0",
     "normalization": "per-feature standard score fitted on training sessions only and embedded in model.tflite",
     "zero_variance_scale": 1.0,
@@ -44,23 +45,31 @@ def build_metadata(
     tensorflow_version: str,
     run_info: dict[str, Any],
     parity: dict[str, Any],
+    feature_names: Sequence[str] = FEATURE_NAMES,
 ) -> dict[str, Any]:
-    """Build the portable inference contract; timestamps are intentionally omitted."""
+    """Build the portable inference contract; timestamps are intentionally omitted.
+
+    `feature_names` defaults to the full canonical 55-feature contract
+    (legacy/app-trained behavior, unchanged). Passing a strict subset (see
+    `resolve_feature_subset`) records a custom, smaller feature contract
+    instead -- the model's own `input_shape` always matches its length.
+    """
+    feature_names = resolve_feature_subset(feature_names)
     return {
         "schema_version": BUNDLE_SCHEMA_VERSION,
         "model": {
             "file": MODEL_FILENAME,
             "format": "TFLite",
             "sha256": sha256_file(model_path),
-            "input_shape": [1, len(FEATURE_NAMES)],
+            "input_shape": [1, len(feature_names)],
             "input_dtype": "float32",
             "output_shape": [1, len(CLASS_NAMES)],
             "output_dtype": "float32",
         },
         "classes": [{"index": index, "label": label} for index, label in enumerate(CLASS_NAMES)],
         "feature_contract": {
-            "count": len(FEATURE_NAMES),
-            "ordered_names": list(FEATURE_NAMES),
+            "count": len(feature_names),
+            "ordered_names": list(feature_names),
         },
         "window_config": {
             "window_ms": window_config.window_ms,
@@ -91,10 +100,24 @@ def validate_metadata(metadata: dict[str, Any], bundle_dir: Path | None = None) 
     feature_contract = metadata.get("feature_contract")
     if not isinstance(feature_contract, dict):
         raise BundleValidationError("feature_contract must be an object")
-    if feature_contract.get("count") != len(FEATURE_NAMES):
-        raise BundleValidationError(f"feature_contract.count must be {len(FEATURE_NAMES)}")
-    if feature_contract.get("ordered_names") != list(FEATURE_NAMES):
-        raise BundleValidationError("feature_contract.ordered_names does not match the ordered 55-feature contract")
+    ordered_names = feature_contract.get("ordered_names")
+    if (
+        not isinstance(ordered_names, list)
+        or not ordered_names
+        or not all(isinstance(name, str) for name in ordered_names)
+    ):
+        raise BundleValidationError("feature_contract.ordered_names must be a non-empty string array")
+    if feature_contract.get("count") != len(ordered_names):
+        raise BundleValidationError("feature_contract.count must match ordered_names length")
+    if len(ordered_names) > len(FEATURE_NAMES):
+        raise BundleValidationError(
+            f"feature_contract declares {len(ordered_names)} features, more than the canonical "
+            f"{len(FEATURE_NAMES)}-feature registry"
+        )
+    try:
+        resolve_feature_subset(ordered_names)
+    except ValueError as error:
+        raise BundleValidationError(f"feature_contract.ordered_names is invalid: {error}") from error
 
     if metadata.get("preprocessing") != PREPROCESSING_POLICY:
         raise BundleValidationError("preprocessing does not match the supported deployment policy")
@@ -117,7 +140,7 @@ def validate_metadata(metadata: dict[str, Any], bundle_dir: Path | None = None) 
     expected_model_fields = {
         "file": MODEL_FILENAME,
         "format": "TFLite",
-        "input_shape": [1, len(FEATURE_NAMES)],
+        "input_shape": [1, len(ordered_names)],
         "input_dtype": "float32",
         "output_shape": [1, len(CLASS_NAMES)],
         "output_dtype": "float32",

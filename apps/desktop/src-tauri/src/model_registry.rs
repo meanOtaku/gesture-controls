@@ -393,6 +393,57 @@ struct BundleMetadata {
     window_semantics: Option<serde_json::Value>,
 }
 
+/// Validates a bundle's declared `feature_contract.ordered_names` against
+/// the desktop's canonical [`FEATURE_NAMES`] registry, returning each name's
+/// resolved canonical index in the given (validated) order. A bundle may
+/// declare a strict subset of the canonical registry -- provided every name
+/// is known, none repeats, and the declared order matches each name's
+/// canonical position. Reordering is rejected: live inference always
+/// extracts the full canonical vector and then selects by canonical index
+/// (see `pinch_inference::select_features`), so a declared order that didn't
+/// match canonical position would silently select a different feature than
+/// the one intended. Nothing is ever inferred, padded, or fabricated for a
+/// name that isn't listed.
+fn validate_feature_subset(ordered_names: &[String]) -> Result<Vec<usize>, String> {
+    if ordered_names.is_empty() {
+        return Err("bundle feature_contract.ordered_names must not be empty".to_string());
+    }
+    if ordered_names.len() > FEATURE_NAMES.len() {
+        return Err(format!(
+            "bundle feature_contract declares {} features, more than the desktop's canonical {}-feature registry",
+            ordered_names.len(),
+            FEATURE_NAMES.len()
+        ));
+    }
+    let mut seen = std::collections::HashSet::new();
+    let mut indices = Vec::with_capacity(ordered_names.len());
+    for name in ordered_names {
+        if !seen.insert(name.as_str()) {
+            return Err(format!(
+                "bundle feature_contract declares duplicate feature '{name}'"
+            ));
+        }
+        let index = FEATURE_NAMES
+            .iter()
+            .position(|canonical| canonical == name)
+            .ok_or_else(|| {
+                format!(
+                    "bundle feature_contract declares unknown feature '{name}'; every feature \
+                     must be one of the desktop's canonical FEATURE_NAMES"
+                )
+            })?;
+        indices.push(index);
+    }
+    if !indices.windows(2).all(|pair| pair[0] < pair[1]) {
+        return Err(
+            "bundle feature_contract.ordered_names must preserve the canonical FEATURE_NAMES \
+             order; reordering is not supported"
+                .to_string(),
+        );
+    }
+    Ok(indices)
+}
+
 fn sha256_hex(path: &Path) -> Result<String, String> {
     let bytes =
         fs::read(path).map_err(|error| format!("failed to read '{}': {error}", path.display()))?;
@@ -406,14 +457,16 @@ fn sha256_hex(path: &Path) -> Result<String, String> {
 }
 
 /// Fully revalidates a model directory's bundle contract against the desktop's
-/// fixed feature/class contract and recomputes `model.tflite`'s digest --
-/// never trusts that a file named `metadata.json` still matches the bytes on
-/// disk, since either could have been replaced or corrupted after the model
-/// was approved. Returns the parsed metadata plus the freshly recomputed
-/// (verified-matching) digest. This is the single choke point
-/// [`ActiveModelSnapshot::verified`] runs through at activation, rollback,
-/// and every runtime (re)load.
-fn load_and_verify_bundle(dir: &Path) -> Result<(BundleMetadata, String), String> {
+/// fixed class contract and canonical feature registry (accepting any
+/// strict, canonically-ordered subset -- see [`validate_feature_subset`]) and
+/// recomputes `model.tflite`'s digest -- never trusts that a file named
+/// `metadata.json` still matches the bytes on disk, since either could have
+/// been replaced or corrupted after the model was approved. Returns the
+/// parsed metadata, the freshly recomputed (verified-matching) digest, and
+/// the bundle's declared features' resolved canonical indices. This is the
+/// single choke point [`ActiveModelSnapshot::verified`] runs through at
+/// activation, rollback, and every runtime (re)load.
+fn load_and_verify_bundle(dir: &Path) -> Result<(BundleMetadata, String, Vec<usize>), String> {
     let metadata_path = dir.join(TFLITE_METADATA_FILE_NAME);
     let contents = fs::read_to_string(&metadata_path)
         .map_err(|error| format!("failed to read {TFLITE_METADATA_FILE_NAME}: {error}"))?;
@@ -443,37 +496,12 @@ fn load_and_verify_bundle(dir: &Path) -> Result<(BundleMetadata, String), String
         ));
     }
 
-    let legacy_features_match = metadata.feature_contract.count == FEATURE_COUNT
-        && metadata.feature_contract.ordered_names.len() == FEATURE_NAMES.len()
-        && metadata
-            .feature_contract
-            .ordered_names
-            .iter()
-            .zip(FEATURE_NAMES.iter())
-            .all(|(actual, expected)| actual.as_str() == *expected);
-    let custom_features_match = metadata.feature_contract.count > 0
-        && metadata.feature_contract.count < FEATURE_COUNT
-        && metadata.feature_contract.version == Some(1)
-        && metadata.feature_contract.ordered_names.len() == metadata.feature_contract.count
-        && metadata
-            .feature_contract
-            .ordered_names
-            .iter()
-            .all(|name| FEATURE_NAMES.contains(&name.as_str()))
-        && metadata
-            .feature_contract
-            .ordered_names
-            .iter()
-            .collect::<std::collections::HashSet<_>>()
-            .len()
-            == metadata.feature_contract.ordered_names.len()
-        && metadata.preprocessing.is_some()
-        && metadata.window_semantics.is_some();
-    if !legacy_features_match && !custom_features_match {
+    if metadata.feature_contract.count != metadata.feature_contract.ordered_names.len() {
         return Err(
-            "bundle feature_contract must be the legacy exact 55-feature contract, or a version: 1 custom contract with 1..54 unique canonical ordered_names plus preprocessing and window_semantics".to_string(),
+            "bundle feature_contract.count must match ordered_names length".to_string(),
         );
     }
+    let feature_indices = validate_feature_subset(&metadata.feature_contract.ordered_names)?;
 
     if metadata.model.file != TFLITE_MODEL_FILE_NAME || metadata.model.format != BUNDLE_MODEL_FORMAT
     {
@@ -481,9 +509,10 @@ fn load_and_verify_bundle(dir: &Path) -> Result<(BundleMetadata, String), String
             "bundle model must be '{TFLITE_MODEL_FILE_NAME}' in {BUNDLE_MODEL_FORMAT} format"
         ));
     }
-    if metadata.model.input_shape != vec![1, metadata.feature_contract.count as u64] {
+    if metadata.model.input_shape != vec![1, feature_indices.len() as u64] {
         return Err(
-            "bundle model input_shape does not match the desktop's feature contract".to_string(),
+            "bundle model input_shape does not match its own declared feature_contract length"
+                .to_string(),
         );
     }
     if metadata.model.output_shape != vec![1, CLASS_COUNT as u64] {
@@ -503,7 +532,7 @@ fn load_and_verify_bundle(dir: &Path) -> Result<(BundleMetadata, String), String
         ));
     }
 
-    Ok((metadata, actual_digest))
+    Ok((metadata, actual_digest, feature_indices))
 }
 
 /// Immutable, contract-verified snapshot of one model: the only shape
@@ -519,7 +548,12 @@ pub struct ActiveModelSnapshot {
     pub quality_gate: QualityGateConfig,
     pub class_order: Vec<String>,
     pub digest: String,
-    pub feature_names: Vec<String>,
+    /// Resolved canonical `FEATURE_NAMES` indices for this bundle's declared
+    /// `feature_contract.ordered_names`, in that same order -- what
+    /// `pinch_inference::select_features` uses to pick this model's input
+    /// values out of the full extracted canonical feature vector. A full
+    /// legacy/app-trained bundle resolves to `0..FEATURE_COUNT`.
+    pub feature_indices: Vec<usize>,
     bindings: HashMap<String, GestureIntent>,
 }
 
@@ -542,7 +576,7 @@ impl ActiveModelSnapshot {
         model.quality_gate.validate()?;
 
         let dir = model_lab::models_dir(app)?.join(model_id);
-        let (metadata, digest) = load_and_verify_bundle(&dir)?;
+        let (metadata, digest, feature_indices) = load_and_verify_bundle(&dir)?;
         let class_order: Vec<String> = metadata
             .classes
             .iter()
@@ -571,7 +605,7 @@ impl ActiveModelSnapshot {
             quality_gate: model.quality_gate,
             class_order,
             digest,
-            feature_names: metadata.feature_contract.ordered_names,
+            feature_indices,
             bindings,
         })
     }
@@ -600,7 +634,7 @@ impl ActiveModelSnapshot {
                 .map(|label| label.to_string())
                 .collect(),
             digest: "test-digest".to_string(),
-            feature_names: FEATURE_NAMES.iter().map(|name| name.to_string()).collect(),
+            feature_indices: (0..FEATURE_COUNT).collect(),
             bindings: bindings
                 .iter()
                 .map(|(label, intent)| (label.to_string(), *intent))
@@ -1277,6 +1311,35 @@ mod tests {
         .unwrap();
     }
 
+    /// Like [`write_valid_bundle`], but with a custom (possibly reduced)
+    /// declared feature list, for exercising [`validate_feature_subset`]
+    /// through the full bundle contract.
+    fn write_bundle_with_features(dir: &Path, feature_names: &[&str]) -> serde_json::Value {
+        fs::write(dir.join(TFLITE_MODEL_FILE_NAME), b"fake-tflite-bytes").unwrap();
+        let digest = sha256_hex(&dir.join(TFLITE_MODEL_FILE_NAME)).unwrap();
+        let metadata = serde_json::json!({
+            "schema_version": BUNDLE_SCHEMA_VERSION,
+            "model": {
+                "file": TFLITE_MODEL_FILE_NAME,
+                "format": BUNDLE_MODEL_FORMAT,
+                "sha256": digest,
+                "input_shape": [1, feature_names.len()],
+                "output_shape": [1, CLASS_COUNT],
+            },
+            "classes": [
+                {"index": 0, "label": "negative"},
+                {"index": 1, "label": "pinch_start"},
+                {"index": 2, "label": "pinch_release"},
+            ],
+            "feature_contract": {
+                "count": feature_names.len(),
+                "ordered_names": feature_names,
+            },
+        });
+        write_metadata(dir, &metadata);
+        metadata
+    }
+
     #[test]
     fn sha256_hex_matches_known_test_vector() {
         let dir = unique_bundle_dir("sha256-vector");
@@ -1383,6 +1446,94 @@ mod tests {
         let dir = unique_bundle_dir("malformed-digest");
         let mut metadata = write_valid_bundle(&dir);
         metadata["model"]["sha256"] = serde_json::json!("not-a-hex-digest");
+        write_metadata(&dir, &metadata);
+        assert!(load_and_verify_bundle(&dir).is_err());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn validate_feature_subset_accepts_full_canonical_registry() {
+        let names: Vec<String> = FEATURE_NAMES.iter().map(|name| name.to_string()).collect();
+        let indices = validate_feature_subset(&names).expect("must accept full registry");
+        assert_eq!(indices, (0..FEATURE_COUNT).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn validate_feature_subset_accepts_canonical_order_subset() {
+        let names = vec![
+            FEATURE_NAMES[0].to_string(),
+            FEATURE_NAMES[2].to_string(),
+            FEATURE_NAMES[5].to_string(),
+        ];
+        assert_eq!(validate_feature_subset(&names).unwrap(), vec![0, 2, 5]);
+    }
+
+    #[test]
+    fn validate_feature_subset_rejects_empty() {
+        assert!(validate_feature_subset(&[]).is_err());
+    }
+
+    #[test]
+    fn validate_feature_subset_rejects_duplicate() {
+        let names = vec![FEATURE_NAMES[0].to_string(), FEATURE_NAMES[0].to_string()];
+        assert!(validate_feature_subset(&names).is_err());
+    }
+
+    #[test]
+    fn validate_feature_subset_rejects_unknown_name() {
+        let names = vec!["not_a_real_feature".to_string()];
+        assert!(validate_feature_subset(&names).is_err());
+    }
+
+    #[test]
+    fn validate_feature_subset_rejects_reordering() {
+        let names = vec![FEATURE_NAMES[5].to_string(), FEATURE_NAMES[0].to_string()];
+        assert!(validate_feature_subset(&names).is_err());
+    }
+
+    #[test]
+    fn load_and_verify_bundle_accepts_a_strict_canonical_order_subset() {
+        let dir = unique_bundle_dir("feature-subset-valid");
+        let subset = [FEATURE_NAMES[0], FEATURE_NAMES[2], FEATURE_NAMES[10]];
+        write_bundle_with_features(&dir, &subset);
+        let (_, _, feature_indices) = load_and_verify_bundle(&dir).expect("must accept subset");
+        assert_eq!(feature_indices, vec![0, 2, 10]);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn load_and_verify_bundle_rejects_reordered_subset() {
+        let dir = unique_bundle_dir("feature-subset-reordered");
+        let subset = [FEATURE_NAMES[10], FEATURE_NAMES[0]];
+        write_bundle_with_features(&dir, &subset);
+        assert!(load_and_verify_bundle(&dir).is_err());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn load_and_verify_bundle_rejects_unknown_feature_name() {
+        let dir = unique_bundle_dir("feature-subset-unknown");
+        let subset = ["not_a_real_feature"];
+        write_bundle_with_features(&dir, &subset);
+        assert!(load_and_verify_bundle(&dir).is_err());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn load_and_verify_bundle_rejects_duplicate_feature_name() {
+        let dir = unique_bundle_dir("feature-subset-duplicate");
+        let subset = [FEATURE_NAMES[0], FEATURE_NAMES[0]];
+        write_bundle_with_features(&dir, &subset);
+        assert!(load_and_verify_bundle(&dir).is_err());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn load_and_verify_bundle_rejects_input_shape_mismatched_with_declared_feature_count() {
+        let dir = unique_bundle_dir("feature-subset-shape-mismatch");
+        let subset = [FEATURE_NAMES[0], FEATURE_NAMES[2]];
+        let mut metadata = write_bundle_with_features(&dir, &subset);
+        metadata["model"]["input_shape"] = serde_json::json!([1, FEATURE_COUNT]);
         write_metadata(&dir, &metadata);
         assert!(load_and_verify_bundle(&dir).is_err());
         fs::remove_dir_all(&dir).ok();
