@@ -1,21 +1,54 @@
-import type { GestureDatasetLabel } from "../telemetry/store/telemetryStore";
+/** Mirrors `pinch_classifier.labels.LabelMapping` / `training_label_mapping::LabelMapping` in src-tauri.
+ *
+ * Boundary note (M1-B): a collection label carries no training semantics by itself. Whether it is a
+ * trained target, folded into "negative", or excluded from training is decided per training run by this
+ * explicit mapping, never implied by the label's own metadata. A label absent from `entries` is never
+ * silently trained as negative — training must be rejected until every selected label has a role.
+ */
+export const LABEL_MAPPING_VERSION = 1;
 
-export type LabelRole = "positive" | "hold" | "negative";
+export type LabelMappingEntry =
+  | { role: "target"; target: string }
+  | { role: "negative" }
+  | { role: "exclude" };
 
-export const POSITIVE_LABELS: readonly GestureDatasetLabel[] = ["pinch_start", "pinch_release"];
-export const HOLD_LABEL: GestureDatasetLabel = "pinch_hold";
-
-export function roleFor(label: GestureDatasetLabel): LabelRole {
-  if (POSITIVE_LABELS.includes(label)) return "positive";
-  if (label === HOLD_LABEL) return "hold";
-  return "negative";
+export interface LabelMapping {
+  version: number;
+  entries: Record<string, LabelMappingEntry>;
 }
 
-export const ROLE_COPY: Record<LabelRole, string> = {
-  positive: "Trained class",
-  hold: "Optional (--hold-handling)",
-  negative: "Negative / background",
+/** The fixed vocabulary this desktop app recorded before per-label training roles existed. Desktop-triggered
+ * training never passes `--hold-handling`, so `pinch_hold` mirrors that path's existing default: exclude.
+ * Any other (new, user-created) label is deliberately left uncovered by this and needs an explicit role. */
+export const LEGACY_COMPATIBILITY_LABEL_MAPPING: LabelMapping = {
+  version: LABEL_MAPPING_VERSION,
+  entries: {
+    idle: { role: "negative" },
+    pinch_start: { role: "target", target: "pinch_start" },
+    pinch_hold: { role: "exclude" },
+    pinch_release: { role: "target", target: "pinch_release" },
+    walking: { role: "negative" },
+    typing: { role: "negative" },
+    using_mouse: { role: "negative" },
+    touching_face: { role: "negative" },
+    adjusting_headphones: { role: "negative" },
+    picking_up_cup: { role: "negative" },
+    scratching: { role: "negative" },
+    normal_wrist_rotation: { role: "negative" },
+    standing: { role: "negative" },
+    sitting: { role: "negative" },
+  },
 };
+
+/** Collection labels present in `labelIds` with no entry in `mapping`. Callers must block training on
+ * these (with a clear message), never default them to a role. */
+export function missingLabelMappings(mapping: LabelMapping, labelIds: Iterable<string>): string[] {
+  const missing: string[] = [];
+  for (const labelId of labelIds) {
+    if (!(labelId in mapping.entries)) missing.push(labelId);
+  }
+  return missing;
+}
 
 /** Mirrors `DatasetSummary` in src-tauri/src/model_lab.rs (serde camelCase). */
 export interface DatasetSummary {

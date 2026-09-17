@@ -91,19 +91,23 @@ describe("DatasetManager", () => {
     await waitFor(() => expect(onDelete).toHaveBeenCalledWith("dataset-a"));
   });
 
-  it("derives label coverage counts and shows built-in and custom labels", () => {
+  it("derives label coverage counts and flags labels without a training role mapping", () => {
     const coverageByLabel = new Map([["pinch_start", 1]]);
     renderManager({
       coverageByLabel,
       labels: [
+        { id: "pinch_start", displayName: "Pinch start", description: "", color: "#65e6ff", role: "positiveGesture", archivedAt: null },
+        { id: "idle", displayName: "Idle", description: "", color: "#65e6ff", role: "negativeBackground", archivedAt: null },
         { id: "wrist_flick", displayName: "Wrist flick", description: "", color: "#fff", role: "positiveGesture", archivedAt: null },
       ],
     });
     fireEvent.click(screen.getByRole("button", { name: /view label coverage/i }));
-    const pinchStartRow = screen.getByText("pinch start").closest(".model-lab-label-row");
+    const pinchStartRow = screen.getByText("Pinch start").closest(".model-lab-label-row");
     expect(pinchStartRow).toHaveTextContent("1 session");
-    const idleRow = screen.getByText("idle").closest(".model-lab-label-row");
+    expect(pinchStartRow).toHaveTextContent("Legacy training role");
+    const idleRow = screen.getByText("Idle").closest(".model-lab-label-row");
     expect(idleRow).toHaveTextContent("0 sessions");
-    expect(screen.getByText("Wrist flick")).toBeInTheDocument();
+    const wristFlickRow = screen.getByText("Wrist flick").closest(".model-lab-label-row");
+    expect(wristFlickRow).toHaveTextContent("Needs training role mapping");
   });
 });

@@ -20,8 +20,7 @@ import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../../components/ui/collapsible";
 import { Input } from "../../../components/ui/input";
-import { GESTURE_DATASET_LABELS, type GestureDatasetLabel } from "../../telemetry/store/telemetryStore";
-import { ROLE_COPY, roleFor, type DatasetLabel, type DatasetSummary } from "../types";
+import { LEGACY_COMPATIBILITY_LABEL_MAPPING, type DatasetLabel, type DatasetSummary } from "../types";
 
 function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -88,7 +87,7 @@ export function DatasetManager({
             }
             help={{
               label: "About importing datasets",
-              content: "Only CSVs exported from the Live data tab's labeled dataset recorder are supported; each file becomes one managed, selectable training session.",
+              content: "Only CSVs exported from the Live data tab's labeled dataset recorder are supported; each file becomes one managed, selectable training session. This is a legacy-compatible import path: it never reads or modifies any Timeline Capture recording bundle, and it only shares the label catalogue with that newer format. An import either fully succeeds or writes nothing — a failure (unknown label, malformed file, size limit) is reported with its exact cause so you can fix it and retry.",
             }}
           />
         </CardHeader>
@@ -114,7 +113,9 @@ export function DatasetManager({
           </div>
           {error && (
             <Alert variant="destructive" role="alert">
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>
+                {error} Nothing was imported or changed on disk — fix the issue and try the import again.
+              </AlertDescription>
             </Alert>
           )}
           {loading ? (
@@ -185,26 +186,16 @@ export function DatasetManager({
             </div>
             <CollapsibleContent>
               <div className="vectors model-lab-labels">
-                {GESTURE_DATASET_LABELS.map((label: GestureDatasetLabel) => {
-                  const role = roleFor(label);
-                  const count = coverageByLabel.get(label) ?? 0;
-                  return (
-                    <div className="vector-row model-lab-label-row" key={label}>
-                      <span className="label">{label.replaceAll("_", " ")}</span>
-                      <span className="model-lab-coverage-count">{count} session{count === 1 ? "" : "s"}</span>
-                      <Badge variant={role === "positive" ? "default" : role === "hold" ? "secondary" : "outline"}>
-                        {ROLE_COPY[role]}
-                      </Badge>
-                    </div>
-                  );
-                })}
-                {labels.filter((label) => !GESTURE_DATASET_LABELS.some((builtin) => builtin === label.id)).map((label) => {
+                {labels.map((label) => {
                   const count = coverageByLabel.get(label.id) ?? 0;
+                  const hasTrainingRole = label.id in LEGACY_COMPATIBILITY_LABEL_MAPPING.entries;
                   return (
                     <div className="vector-row model-lab-label-row" key={label.id}>
                       <span className="label">{label.displayName} <code>{label.id}</code></span>
                       <span className="model-lab-coverage-count">{count} session{count === 1 ? "" : "s"}</span>
-                      <Badge variant="outline">{label.role}</Badge>
+                      <Badge variant={hasTrainingRole ? "outline" : "destructive"}>
+                        {hasTrainingRole ? "Legacy training role" : "Needs training role mapping"}
+                      </Badge>
                       {label.archivedAt && <span className="hint">Archived</span>}
                     </div>
                   );
@@ -215,7 +206,9 @@ export function DatasetManager({
                 holdout by session (<code>GroupShuffleSplit</code> on <code>session_id</code>), so a label with only
                 one session has nothing to hold out. Aim for more sessions on <code>pinch_start</code> /{" "}
                 <code>pinch_release</code> and on whichever everyday-activity labels are most likely to trigger false
-                activations for you.
+                activations for you. A label is a collection label only, not a training target — its
+                &quot;Legacy training role&quot; badge means it is covered by the built-in compatibility mapping;
+                other labels need an explicit target/negative/exclude mapping assigned before they can be trained on.
               </p>
             </CollapsibleContent>
           </Collapsible>

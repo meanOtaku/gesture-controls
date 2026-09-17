@@ -46,6 +46,11 @@ const BUILTIN_LABELS: &[(&str, &str, LabelRole)] = &[
     ("sitting", "Sitting", LabelRole::NegativeBackground),
 ];
 
+/// Presentation-only classification of a collection label, chosen at creation time to help someone browsing
+/// Model Lab understand what a label is *for* (e.g. showing a coverage badge). This is never authoritative
+/// for training: it carries no target/negative/exclude semantics and is not read anywhere in the training
+/// pipeline. Whether a label is trained as a target, folded into negative, or excluded is decided per
+/// training run by an explicit mapping (see `training_label_mapping.rs`), never implied by this role.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum LabelRole {

@@ -12,6 +12,15 @@ import type {
   WatchSkinTemperatureBatch,
   WatchStatus,
 } from "../../../shared/protocol/events";
+import type { RecordingBundlePayload, StopReason } from "../../../shared/tauri/recordingBundle";
+import {
+  hasOverlap,
+  isDegenerate,
+  splitInterval,
+  toAnnotationInterval,
+  type ClosedLiveInterval,
+  type LiveInterval,
+} from "../annotations/timeline";
 
 export type SeriesPoint = { at: number; values: number[] };
 export type CsvRow = {
@@ -22,27 +31,7 @@ export type CsvRow = {
   values: Record<string, number | null>;
 };
 
-/** Built-in templates for the desktop-side labeled gesture dataset recorder. */
-export const GESTURE_DATASET_LABELS = [
-  "idle",
-  "pinch_start",
-  "pinch_hold",
-  "pinch_release",
-  "walking",
-  "typing",
-  "using_mouse",
-  "touching_face",
-  "adjusting_headphones",
-  "picking_up_cup",
-  "scratching",
-  "normal_wrist_rotation",
-  "standing",
-  "sitting",
-] as const;
-/**
- * Labels are user-owned stable slugs. Built-ins above are templates, not a
- * closed vocabulary; their role/intent mapping is maintained by Model Lab.
- */
+/** Labels are user-owned stable slugs; no built-in templates. */
 export type GestureDatasetLabel = string;
 
 function normalizeDatasetLabel(label: string): GestureDatasetLabel | null {
@@ -51,6 +40,16 @@ function normalizeDatasetLabel(label: string): GestureDatasetLabel | null {
 }
 
 /** Captured once at `startDatasetRecording()` and never mutated by later label changes. */
+export type DatasetRecordingState = "idle" | "arming" | "recording" | "saved" | "discarded";
+
+/**
+ * Quick Capture keeps the existing one-label-per-session behavior. Timeline
+ * Capture shares the same recording engine/state machine but records zero or
+ * more non-overlapping label intervals over one continuous raw stream,
+ * leaving unlabeled stretches `unannotated` per the ADR.
+ */
+export type DatasetCaptureMode = "quick" | "timeline";
+
 export type DatasetSessionMetadata = {
   label: GestureDatasetLabel;
   startedAtIso: string;
@@ -81,6 +80,18 @@ export const DATASET_CSV_COLUMNS = [
   "accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z",
   "quat_w", "quat_x", "quat_y", "quat_z", "contact_quality", "label",
 ] as const;
+
+/**
+ * `raw.csv` columns for the immutable recording-bundle contract (see
+ * `docs/decisions/2026-09-dataset-capture-recording-contract.md`): the same
+ * fused sample shape as `DATASET_CSV_COLUMNS` minus `label`, since raw
+ * capture evidence carries no label — labels live only in `annotations.json`.
+ */
+export const RAW_RECORDING_CSV_COLUMNS = DATASET_CSV_COLUMNS.filter((column) => column !== "label");
+
+/** Resolution rule fixed by the ADR: start resolves to the first accepted sample, end to the last. */
+const INTERVAL_RESOLUTION_RULE_VERSION = 1;
+const RECORDING_BUNDLE_FORMAT_VERSION = 1;
 
 function datasetCsvValue(value: number | null): string {
   return value == null ? "" : String(value);
@@ -206,10 +217,28 @@ class TelemetryStore {
   // Labeled gesture dataset recorder: independent of `recording`/`rows` above,
   // built on the same raw watch ingest path but fused into one row per
   // accepted sample, carrying forward the other channel's last known values.
-  private selectedLabel: GestureDatasetLabel = "idle";
+  private selectedLabel: GestureDatasetLabel | null = null;
+  private readonly sessionLabels = new Set<GestureDatasetLabel>();
+  private datasetRecordingState: DatasetRecordingState = "idle";
   private datasetRecording = false;
   private datasetSession: DatasetSessionMetadata | null = null;
+  private datasetRecordingStartedAtMs: number | null = null;
+  // Recording-bundle timing: `requestedStartAtIso` is captured on Start
+  // (Arming); the monotonic/wall-clock pair is captured on the first
+  // accepted sample (actual_start) and again on stop (actual_end), per the
+  // ADR's clock-domain rule. `performance.now()` (not `Date.now()`) backs the
+  // monotonic field so it cannot be skewed by a wall-clock adjustment mid-session.
+  private datasetRequestedStartAtIso: string | null = null;
+  private datasetActualStartAtIso: string | null = null;
+  private datasetActualStartMonotonicMs: number | null = null;
   private readonly datasetRows = new RingBuffer<DatasetRow>(MAX_CSV_ROWS);
+
+  // Timeline Capture: live/edited intervals for the current session. Cleared
+  // on start/discard, closed out on stop, and freely editable while
+  // `datasetRecordingState === "saved"` (post-capture editing).
+  private datasetCaptureMode: DatasetCaptureMode = "quick";
+  private timelineIntervals: LiveInterval[] = [];
+  private activeTimelineIntervalId: string | null = null;
   private lastKnownOrientationSample: { accel: Vector3 | null; gyro: Vector3 | null; quat: Quaternion | null } = {
     accel: null,
     gyro: null,
@@ -290,16 +319,25 @@ class TelemetryStore {
     this.publishNow();
   }
 
-  getSelectedLabel(): GestureDatasetLabel {
+  getSelectedLabel(): GestureDatasetLabel | null {
     return this.selectedLabel;
+  }
+
+  getSessionLabels(): GestureDatasetLabel[] {
+    return Array.from(this.sessionLabels);
   }
 
   selectDatasetLabel(label: GestureDatasetLabel): boolean {
     const normalized = normalizeDatasetLabel(label);
     if (!normalized) return false;
     this.selectedLabel = normalized;
+    this.sessionLabels.add(normalized);
     this.publishNow();
     return true;
+  }
+
+  getDatasetRecordingState(): DatasetRecordingState {
+    return this.datasetRecordingState;
   }
 
   getDatasetRecording(): boolean {
@@ -310,6 +348,11 @@ class TelemetryStore {
     return this.datasetSession;
   }
 
+  getDatasetRecordingElapsedMs(): number {
+    if (this.datasetRecordingStartedAtMs === null) return 0;
+    return Date.now() - this.datasetRecordingStartedAtMs;
+  }
+
   getDatasetRowCount(): number {
     return this.datasetRows.length;
   }
@@ -318,27 +361,221 @@ class TelemetryStore {
     return this.datasetRows.toArray();
   }
 
-  /** Starts a new labeled session, snapshotting `selectedLabel` immutably for the session's lifetime. */
-  startDatasetRecording(): void {
-    if (this.datasetRecording) return;
-    this.datasetRows.clear();
-    this.datasetSession = { label: this.selectedLabel, startedAtIso: new Date().toISOString() };
-    this.datasetRecording = true;
-    this.publishNow();
+  getDatasetCaptureMode(): DatasetCaptureMode {
+    return this.datasetCaptureMode;
   }
 
-  /** Stops accepting new rows but keeps the buffered session so it can still be exported. */
+  /** Only changeable while idle: switching mode mid-session would leave a partially-labeled buffer in an ambiguous shape. */
+  setDatasetCaptureMode(mode: DatasetCaptureMode): boolean {
+    if (this.datasetRecording) return false;
+    this.datasetCaptureMode = mode;
+    this.publishNow();
+    return true;
+  }
+
+  /** Snapshot of this session's intervals, live (still recording) or saved (ready for post-capture editing). */
+  getTimelineIntervals(): LiveInterval[] {
+    return [...this.timelineIntervals];
+  }
+
+  getActiveTimelineLabel(): GestureDatasetLabel | null {
+    return this.timelineIntervals.find((interval) => interval.intervalId === this.activeTimelineIntervalId)
+      ?.labelId ?? null;
+  }
+
+  /**
+   * Starts a new session. Enters Arming state, waiting for the first
+   * accepted sample. Quick Capture snapshots `selectedLabel` immutably for
+   * the session's lifetime and requires one to be selected first; Timeline
+   * Capture needs no upfront label — intervals are opened live via
+   * `setTimelineLabel()` once recording starts.
+   */
+  startDatasetRecording(): boolean {
+    if (this.datasetRecording) return false;
+    if (this.datasetCaptureMode === "quick" && !this.selectedLabel) return false;
+    this.datasetRows.clear();
+    this.datasetSession = {
+      label: this.datasetCaptureMode === "quick" ? (this.selectedLabel as GestureDatasetLabel) : "",
+      startedAtIso: new Date().toISOString(),
+    };
+    this.datasetRecordingState = "arming";
+    this.datasetRecording = true;
+    this.datasetRecordingStartedAtMs = null;
+    this.datasetRequestedStartAtIso = new Date().toISOString();
+    this.datasetActualStartAtIso = null;
+    this.datasetActualStartMonotonicMs = null;
+    this.timelineIntervals = [];
+    this.activeTimelineIntervalId = null;
+    this.publishNow();
+    return true;
+  }
+
+  /**
+   * Timeline Capture only: opens a new label interval, first closing whichever
+   * interval is currently active (so intervals never overlap). Passing `null`
+   * closes the active interval without opening a new one, leaving a gap that
+   * stays `unannotated`. Only valid while a timeline session is `recording`.
+   * `mechanism` distinguishes hold-to-label from press-to-toggle for audit.
+   */
+  setTimelineLabel(label: GestureDatasetLabel | null, mechanism: "hotkey_hold" | "hotkey_toggle" = "hotkey_toggle"): boolean {
+    if (this.datasetCaptureMode !== "timeline") return false;
+    if (this.datasetRecordingState !== "recording") return false;
+    const normalized = label === null ? null : normalizeDatasetLabel(label);
+    if (label !== null && !normalized) return false;
+    if (normalized !== null && normalized === this.getActiveTimelineLabel()) return true;
+
+    const nowMonotonicNs = Math.round(performance.now() * 1_000_000);
+    const nowIso = new Date().toISOString();
+    const currentRowCount = this.datasetRows.length;
+    this.closeActiveTimelineInterval(nowMonotonicNs, currentRowCount);
+
+    if (normalized) {
+      this.sessionLabels.add(normalized);
+      const interval: LiveInterval = {
+        intervalId: crypto.randomUUID(),
+        labelId: normalized,
+        startMonotonicNs: nowMonotonicNs,
+        endMonotonicNs: null,
+        startRawRow: currentRowCount,
+        endRawRow: null,
+        creationMechanism: mechanism,
+        curationStatus: "unreviewed",
+        createdAt: nowIso,
+        revision: 1,
+      };
+      this.timelineIntervals.push(interval);
+      this.activeTimelineIntervalId = interval.intervalId;
+    }
+    this.publishNow();
+    return true;
+  }
+
+  /** Post-capture editing (only while `saved`): rename a label without moving boundaries. Bumps revision for audit. */
+  relabelTimelineInterval(intervalId: string, label: GestureDatasetLabel): boolean {
+    if (this.datasetRecordingState !== "saved") return false;
+    const normalized = normalizeDatasetLabel(label);
+    if (!normalized) return false;
+    const interval = this.timelineIntervals.find((entry) => entry.intervalId === intervalId);
+    if (!interval) return false;
+    interval.labelId = normalized;
+    interval.revision += 1;
+    this.sessionLabels.add(normalized);
+    this.publishNow();
+    return true;
+  }
+
+  /** Post-capture editing: sets curation state (`unreviewed`/`approved`/`excluded`) without touching boundaries or raw data. */
+  setTimelineIntervalCurationStatus(intervalId: string, status: "unreviewed" | "approved" | "excluded"): boolean {
+    if (this.datasetRecordingState !== "saved") return false;
+    const interval = this.timelineIntervals.find((entry) => entry.intervalId === intervalId);
+    if (!interval) return false;
+    interval.curationStatus = status;
+    interval.revision += 1;
+    this.publishNow();
+    return true;
+  }
+
+  /**
+   * Post-capture editing: moves one boundary of a closed interval to
+   * `newRawRow`, rejecting the edit if it would create overlap with another
+   * interval, invert the interval, or move outside the captured row range.
+   */
+  moveTimelineIntervalBoundary(intervalId: string, edge: "start" | "end", newRawRow: number): boolean {
+    if (this.datasetRecordingState !== "saved") return false;
+    const interval = this.timelineIntervals.find((entry) => entry.intervalId === intervalId);
+    if (!interval || interval.endRawRow === null) return false;
+    if (newRawRow < 0 || newRawRow > this.datasetRows.length) return false;
+
+    const candidate: LiveInterval = edge === "start"
+      ? { ...interval, startRawRow: newRawRow }
+      : { ...interval, endRawRow: newRawRow };
+    if (candidate.endRawRow === null || candidate.startRawRow >= candidate.endRawRow) return false;
+    if (hasOverlap(candidate, this.timelineIntervals)) return false;
+
+    interval.startRawRow = candidate.startRawRow;
+    interval.endRawRow = candidate.endRawRow;
+    interval.revision += 1;
+    this.publishNow();
+    return true;
+  }
+
+  /** Post-capture editing: splits a closed interval into two adjacent same-label intervals at `atRawRow`. */
+  splitTimelineInterval(intervalId: string, atRawRow: number): boolean {
+    if (this.datasetRecordingState !== "saved") return false;
+    const index = this.timelineIntervals.findIndex((entry) => entry.intervalId === intervalId);
+    if (index === -1) return false;
+    const interval = this.timelineIntervals[index];
+    if (interval.endRawRow === null) return false;
+    const halves = splitInterval(interval as ClosedLiveInterval, atRawRow, crypto.randomUUID(), new Date().toISOString());
+    if (!halves) return false;
+    this.timelineIntervals.splice(index, 1, ...halves);
+    this.publishNow();
+    return true;
+  }
+
+  /**
+   * Post-capture editing: fills a currently-unannotated gap with a new
+   * interval. Rejects the request if it overlaps any existing interval or
+   * falls outside the captured row range.
+   */
+  createTimelineInterval(label: GestureDatasetLabel, startRawRow: number, endRawRow: number): boolean {
+    if (this.datasetRecordingState !== "saved") return false;
+    const normalized = normalizeDatasetLabel(label);
+    if (!normalized) return false;
+    if (startRawRow < 0 || endRawRow > this.datasetRows.length || startRawRow >= endRawRow) return false;
+
+    const candidate: LiveInterval = {
+      intervalId: crypto.randomUUID(),
+      labelId: normalized,
+      startMonotonicNs: 0,
+      endMonotonicNs: 0,
+      startRawRow,
+      endRawRow,
+      creationMechanism: "timeline_edit",
+      curationStatus: "unreviewed",
+      createdAt: new Date().toISOString(),
+      revision: 1,
+    };
+    if (hasOverlap(candidate, this.timelineIntervals)) return false;
+
+    this.sessionLabels.add(normalized);
+    this.timelineIntervals.push(candidate);
+    this.publishNow();
+    return true;
+  }
+
+  /** Post-capture editing: removes an interval entirely, returning its rows to `unannotated`. Raw data is untouched. */
+  deleteTimelineInterval(intervalId: string): boolean {
+    if (this.datasetRecordingState !== "saved") return false;
+    const before = this.timelineIntervals.length;
+    this.timelineIntervals = this.timelineIntervals.filter((entry) => entry.intervalId !== intervalId);
+    if (this.timelineIntervals.length === before) return false;
+    this.publishNow();
+    return true;
+  }
+
+  /** Stops accepting new rows but keeps the buffered session so it can still be exported. Transitions to Saved state. */
   stopDatasetRecording(): void {
     if (!this.datasetRecording) return;
+    if (this.datasetCaptureMode === "timeline") {
+      this.closeActiveTimelineInterval(Math.round(performance.now() * 1_000_000), this.datasetRows.length);
+    }
     this.datasetRecording = false;
+    this.datasetRecordingState = "saved";
     this.publishNow();
   }
 
-  /** Abandons the current session: stops recording and drops buffered rows/metadata. */
+  /** Abandons the current session: stops recording and drops buffered rows/metadata. Transitions to Discarded state. */
   discardDatasetRecording(): void {
     this.datasetRecording = false;
+    this.datasetRecordingState = "discarded";
     this.datasetSession = null;
+    this.datasetRequestedStartAtIso = null;
+    this.datasetActualStartAtIso = null;
+    this.datasetActualStartMonotonicMs = null;
     this.datasetRows.clear();
+    this.timelineIntervals = [];
+    this.activeTimelineIntervalId = null;
     this.publishNow();
   }
 
@@ -348,7 +585,7 @@ class TelemetryStore {
     const rows = this.datasetRows.toArray();
     const metadataLines = [
       "# gesture-dataset-export: 1",
-      `# label: ${session?.label ?? this.selectedLabel}`,
+      `# label: ${session?.label ?? ""}`,
       `# started_at: ${session?.startedAtIso ?? ""}`,
       `# row_count: ${rows.length}`,
     ];
@@ -372,6 +609,87 @@ class TelemetryStore {
       row.label,
     ].join(","));
     return [...metadataLines, DATASET_CSV_COLUMNS.join(","), ...dataLines].join("\n");
+  }
+
+  /**
+   * Builds the immutable recording-bundle payload (raw CSV + recording +
+   * annotations metadata) for the current buffered session, as a one-label
+   * "quick capture" full-span interval per the ADR. Returns `null` when there
+   * is no session or no accepted samples — an armed/empty session must never
+   * produce a persisted `raw.csv` (`cancelled_before_first_sample`), matching
+   * the state-machine contract.
+   */
+  buildRecordingBundlePayload(stopReason: StopReason = "manual_stop"): RecordingBundlePayload | null {
+    const session = this.datasetSession;
+    const rows = this.datasetRows.toArray();
+    if (!session || rows.length === 0) return null;
+
+    const recordingId = crypto.randomUUID();
+    const nowIso = new Date().toISOString();
+    const actualStartIso = this.datasetActualStartAtIso ?? session.startedAtIso;
+    const actualStartMonotonicNs = Math.round((this.datasetActualStartMonotonicMs ?? performance.now()) * 1_000_000);
+    const actualEndMonotonicNs = Math.round(performance.now() * 1_000_000);
+    const actualDurationMs = this.datasetRecordingStartedAtMs !== null ? Date.now() - this.datasetRecordingStartedAtMs : 0;
+
+    const rawCsv = [
+      RAW_RECORDING_CSV_COLUMNS.join(","),
+      ...rows.map((row) => [
+        row.timestampNs,
+        row.sequence,
+        datasetCsvValue(row.ppgGreen),
+        datasetCsvValue(row.ppgRed),
+        datasetCsvValue(row.ppgIr),
+        datasetCsvValue(row.accelX),
+        datasetCsvValue(row.accelY),
+        datasetCsvValue(row.accelZ),
+        datasetCsvValue(row.gyroX),
+        datasetCsvValue(row.gyroY),
+        datasetCsvValue(row.gyroZ),
+        datasetCsvValue(row.quatW),
+        datasetCsvValue(row.quatX),
+        datasetCsvValue(row.quatY),
+        datasetCsvValue(row.quatZ),
+        datasetCsvValue(row.contactQuality),
+      ].join(",")),
+    ].join("\n");
+
+    return {
+      rawCsv,
+      recording: {
+        format_version: RECORDING_BUNDLE_FORMAT_VERSION,
+        recording_id: recordingId,
+        requested_start_at: this.datasetRequestedStartAtIso ?? session.startedAtIso,
+        actual_start: { monotonic_ns: actualStartMonotonicNs, wall_clock_at: actualStartIso },
+        actual_end: { monotonic_ns: actualEndMonotonicNs, wall_clock_at: nowIso },
+        requested_duration_ms: null,
+        actual_duration_ms: actualDurationMs,
+        stop_reason: stopReason,
+        sources: [{ source_id: "watch", configuration: {} }],
+        raw_row_count: rows.length,
+        raw_source_row_counts: { watch: rows.length },
+      },
+      annotations: {
+        format_version: RECORDING_BUNDLE_FORMAT_VERSION,
+        recording_id: recordingId,
+        intervals: this.datasetCaptureMode === "timeline"
+          ? this.timelineIntervals
+              .filter((interval): interval is ClosedLiveInterval => interval.endRawRow !== null && !isDegenerate(interval))
+              .map((interval) => toAnnotationInterval(interval, rows, INTERVAL_RESOLUTION_RULE_VERSION))
+          : [{
+              interval_id: crypto.randomUUID(),
+              label_id: session.label,
+              requested_start_monotonic_ns: actualStartMonotonicNs,
+              requested_end_monotonic_ns: actualEndMonotonicNs,
+              resolved_start: { raw_row: 0, source_timestamp_ns: Number(rows[0].timestampNs) },
+              resolved_end: { raw_row: rows.length - 1, source_timestamp_ns: Number(rows[rows.length - 1].timestampNs) },
+              resolution_rule_version: INTERVAL_RESOLUTION_RULE_VERSION,
+              creation_mechanism: "quick_capture",
+              curation_status: "unreviewed",
+              created_at: nowIso,
+              revision: 1,
+            }],
+      },
+    };
   }
 
   /** Graph refresh rate: how often subscribers are notified of new samples. */
@@ -464,25 +782,28 @@ class TelemetryStore {
       gyro: orientation.gyroscope,
       quat: orientation.quaternion,
     };
-    if (this.datasetRecording && this.datasetSession) this.datasetRows.push({
-      timestampNs: String(orientation.timestampNs),
-      sequence: String(orientation.sequence),
-      ppgGreen: this.lastKnownPpgSample.green,
-      ppgRed: this.lastKnownPpgSample.red,
-      ppgIr: this.lastKnownPpgSample.ir,
-      accelX: orientation.accelerometer?.[0] ?? null,
-      accelY: orientation.accelerometer?.[1] ?? null,
-      accelZ: orientation.accelerometer?.[2] ?? null,
-      gyroX: orientation.gyroscope?.[0] ?? null,
-      gyroY: orientation.gyroscope?.[1] ?? null,
-      gyroZ: orientation.gyroscope?.[2] ?? null,
-      quatW: orientation.quaternion[0],
-      quatX: orientation.quaternion[1],
-      quatY: orientation.quaternion[2],
-      quatZ: orientation.quaternion[3],
-      contactQuality: this.lastKnownPpgSample.contactQuality,
-      label: this.datasetSession.label,
-    });
+    if (this.datasetRecording && this.datasetSession) {
+      this.transitionDatasetFromArmingIfNeeded();
+      this.datasetRows.push({
+        timestampNs: String(orientation.timestampNs),
+        sequence: String(orientation.sequence),
+        ppgGreen: this.lastKnownPpgSample.green,
+        ppgRed: this.lastKnownPpgSample.red,
+        ppgIr: this.lastKnownPpgSample.ir,
+        accelX: orientation.accelerometer?.[0] ?? null,
+        accelY: orientation.accelerometer?.[1] ?? null,
+        accelZ: orientation.accelerometer?.[2] ?? null,
+        gyroX: orientation.gyroscope?.[0] ?? null,
+        gyroY: orientation.gyroscope?.[1] ?? null,
+        gyroZ: orientation.gyroscope?.[2] ?? null,
+        quatW: orientation.quaternion[0],
+        quatX: orientation.quaternion[1],
+        quatY: orientation.quaternion[2],
+        quatZ: orientation.quaternion[3],
+        contactQuality: this.lastKnownPpgSample.contactQuality,
+        label: this.currentDatasetRowLabel(),
+      });
+    }
     this.schedulePublish();
   }
 
@@ -502,25 +823,28 @@ class TelemetryStore {
         batch.irStatus?.[index] ?? 0,
       );
       this.lastKnownPpgSample = { green, red, ir, contactQuality };
-      if (this.datasetRecording && this.datasetSession) this.datasetRows.push({
-        timestampNs: String(timestampNs),
-        sequence: String(batch.sequence),
-        ppgGreen: green,
-        ppgRed: red,
-        ppgIr: ir,
-        accelX: this.lastKnownOrientationSample.accel?.[0] ?? null,
-        accelY: this.lastKnownOrientationSample.accel?.[1] ?? null,
-        accelZ: this.lastKnownOrientationSample.accel?.[2] ?? null,
-        gyroX: this.lastKnownOrientationSample.gyro?.[0] ?? null,
-        gyroY: this.lastKnownOrientationSample.gyro?.[1] ?? null,
-        gyroZ: this.lastKnownOrientationSample.gyro?.[2] ?? null,
-        quatW: this.lastKnownOrientationSample.quat?.[0] ?? null,
-        quatX: this.lastKnownOrientationSample.quat?.[1] ?? null,
-        quatY: this.lastKnownOrientationSample.quat?.[2] ?? null,
-        quatZ: this.lastKnownOrientationSample.quat?.[3] ?? null,
-        contactQuality,
-        label: this.datasetSession.label,
-      });
+      if (this.datasetRecording && this.datasetSession) {
+        this.transitionDatasetFromArmingIfNeeded();
+        this.datasetRows.push({
+          timestampNs: String(timestampNs),
+          sequence: String(batch.sequence),
+          ppgGreen: green,
+          ppgRed: red,
+          ppgIr: ir,
+          accelX: this.lastKnownOrientationSample.accel?.[0] ?? null,
+          accelY: this.lastKnownOrientationSample.accel?.[1] ?? null,
+          accelZ: this.lastKnownOrientationSample.accel?.[2] ?? null,
+          gyroX: this.lastKnownOrientationSample.gyro?.[0] ?? null,
+          gyroY: this.lastKnownOrientationSample.gyro?.[1] ?? null,
+          gyroZ: this.lastKnownOrientationSample.gyro?.[2] ?? null,
+          quatW: this.lastKnownOrientationSample.quat?.[0] ?? null,
+          quatX: this.lastKnownOrientationSample.quat?.[1] ?? null,
+          quatY: this.lastKnownOrientationSample.quat?.[2] ?? null,
+          quatZ: this.lastKnownOrientationSample.quat?.[3] ?? null,
+          contactQuality,
+          label: this.currentDatasetRowLabel(),
+        });
+      }
     });
   }
 
@@ -576,13 +900,55 @@ class TelemetryStore {
     this.lastEcgTimestampNs = null;
     this.lastRecordedAtByChannel.clear();
     this.lastAcceptedAtByChannel.clear();
-    this.selectedLabel = "idle";
+    this.selectedLabel = null;
+    this.sessionLabels.clear();
+    this.datasetRecordingState = "idle";
     this.datasetRecording = false;
     this.datasetSession = null;
+    this.datasetRecordingStartedAtMs = null;
+    this.datasetRequestedStartAtIso = null;
+    this.datasetActualStartAtIso = null;
+    this.datasetActualStartMonotonicMs = null;
     this.datasetRows.clear();
+    this.datasetCaptureMode = "quick";
+    this.timelineIntervals = [];
+    this.activeTimelineIntervalId = null;
     this.lastKnownOrientationSample = { accel: null, gyro: null, quat: null };
     this.lastKnownPpgSample = { green: null, red: null, ir: null, contactQuality: null };
     this.publishNow();
+  }
+
+  /** Closes the currently active timeline interval, if any, at `endRawRow`; discards it instead if it captured zero rows. */
+  private closeActiveTimelineInterval(endMonotonicNs: number, endRawRow: number): void {
+    const interval = this.timelineIntervals.find((entry) => entry.intervalId === this.activeTimelineIntervalId);
+    this.activeTimelineIntervalId = null;
+    if (!interval) return;
+    interval.endMonotonicNs = endMonotonicNs;
+    interval.endRawRow = endRawRow;
+    if (isDegenerate(interval)) {
+      this.timelineIntervals = this.timelineIntervals.filter((entry) => entry.intervalId !== interval.intervalId);
+    }
+  }
+
+  /**
+   * The label a just-appended row should carry for legacy fused-CSV export.
+   * Quick Capture always uses the whole session's one label; Timeline
+   * Capture uses whatever label is currently active live, or `""` while a
+   * gap is unannotated — this row-level label is a compatibility view only,
+   * the intervals list is the authoritative annotation record.
+   */
+  private currentDatasetRowLabel(): GestureDatasetLabel {
+    if (this.datasetCaptureMode === "timeline") return this.getActiveTimelineLabel() ?? "";
+    return this.datasetSession?.label ?? "";
+  }
+
+  private transitionDatasetFromArmingIfNeeded(): void {
+    if (this.datasetRecordingState === "arming") {
+      this.datasetRecordingState = "recording";
+      this.datasetRecordingStartedAtMs = Date.now();
+      this.datasetActualStartAtIso = new Date().toISOString();
+      this.datasetActualStartMonotonicMs = performance.now();
+    }
   }
 
   private canAcceptHealth(channel: string, at: number): boolean {

@@ -44,11 +44,22 @@ def test_rejects_out_of_order_timestamps(tmp_path):
         load_recording(path)
 
 
-def test_rejects_unknown_label(tmp_path):
+def test_accepts_non_legacy_custom_label(tmp_path):
+    # M1-B: collection labels are user-defined, so csv_io only validates structure.
+    # Whether a label is trainable is decided later by an explicit LabelMapping
+    # (see pinch_classifier.labels / test_dataset.py), not by a fixed vocabulary here.
     path = make_dataset_csv(tmp_path, "session_d.csv", "idle", row_count=3)
-    text = path.read_text(encoding="utf-8").replace(",idle", ",not_a_real_label")
+    text = path.read_text(encoding="utf-8").replace(",idle", ",my_custom_label")
     path.write_text(text, encoding="utf-8")
-    with pytest.raises(CsvFormatError, match="unknown label"):
+    recording = load_recording(path)
+    assert (recording.raw_labels == "my_custom_label").all()
+
+
+def test_rejects_blank_label(tmp_path):
+    path = make_dataset_csv(tmp_path, "session_d2.csv", "idle", row_count=3)
+    text = path.read_text(encoding="utf-8").replace(",idle", ",")
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(CsvFormatError, match="missing 'label' value"):
         load_recording(path)
 
 

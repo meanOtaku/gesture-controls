@@ -649,10 +649,21 @@ async fn run_training_job(
 /// directory via [`resolve_training_inputs`], and the trainer is always the
 /// fixed `pinch-classifier-train` console script inside
 /// `tools/pinch-classifier`, run through `uv`.
+/// Selected dataset labels (see `DatasetSummary::label`, one label per whole session) must each have an
+/// explicit training role before a run starts. `label_mapping` overlays the caller's explicit roles on top
+/// of [`training_label_mapping::legacy_compatibility_mapping`]; omitting it trains exactly as before for
+/// the legacy vocabulary only, and any other selected label is rejected here rather than silently trained
+/// as negative. The resolved mapping is written to `label_mapping.json` in the run's output directory and
+/// forwarded to whichever backend trains (both `pinch-classifier-train` and `pinch-classifier-train-tflite`
+/// resolve raw labels only through it); for `Tflite`, every `target`-role entry must also resolve to one of
+/// `training_label_mapping::TFLITE_DEPLOYABLE_TARGETS`, since that backend's exported model is hard-pinned
+/// to a fixed three-class contract. See `training_label_mapping.rs` for the mapping contract this mirrors
+/// on the Python side.
 #[tauri::command]
 pub async fn start_training_job(
     dataset_ids: Vec<String>,
     backend: Option<TrainingBackend>,
+    label_mapping: Option<crate::training_label_mapping::LabelMapping>,
     app: AppHandle,
     runtime: State<'_, ModelLabRuntime>,
 ) -> Result<String, String> {
@@ -670,6 +681,25 @@ pub async fn start_training_job(
     let index = load_index(&app);
     let datasets_dir = datasets_dir(&app)?;
     let input_paths = resolve_training_inputs(&index, &datasets_dir, &dataset_ids)?;
+
+    let required_labels: std::collections::BTreeSet<String> = dataset_ids
+        .iter()
+        .filter_map(|id| {
+            index
+                .datasets
+                .iter()
+                .find(|dataset| &dataset.id == id)
+                .map(|dataset| dataset.label.clone())
+        })
+        .collect();
+    let effective_mapping = crate::training_label_mapping::effective_mapping(label_mapping)?;
+    crate::training_label_mapping::validate_mapping_covers(&effective_mapping, &required_labels)?;
+    if matches!(backend, TrainingBackend::Tflite) {
+        crate::training_label_mapping::validate_mapping_targets(
+            &effective_mapping,
+            &crate::training_label_mapping::TFLITE_DEPLOYABLE_TARGETS,
+        )?;
+    }
 
     let job_id = Uuid::new_v4().to_string();
     let model_id = Uuid::new_v4().to_string();
@@ -689,6 +719,15 @@ pub async fn start_training_job(
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .kill_on_drop(true);
+
+    // Both backends resolve raw collection labels only through this mapping. The tflite backend's
+    // output is hard-pinned to a fixed three-class deployment contract (see model_registry.rs's
+    // DEPLOYABLE_CLASS_LABELS), which `validate_mapping_targets` above already enforced.
+    let mapping_path = output_dir.join("label_mapping.json");
+    let mapping_json = serde_json::to_string_pretty(&effective_mapping)
+        .map_err(|error| format!("failed to serialize label mapping: {error}"))?;
+    fs::write(&mapping_path, mapping_json).map_err(|error| error.to_string())?;
+    command.arg("--label-mapping-file").arg(&mapping_path);
 
     let mut child = command.spawn().map_err(|error| {
         format!(

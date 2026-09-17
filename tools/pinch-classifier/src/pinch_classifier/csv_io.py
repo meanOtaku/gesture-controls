@@ -15,7 +15,6 @@ from pathlib import Path
 import numpy as np
 
 from .schema import (
-    GESTURE_DATASET_LABELS,
     HEADER_COLUMNS,
     LABEL_COLUMN,
     METADATA_COMMENT_PREFIX,
@@ -120,8 +119,8 @@ def load_recording(path: str | Path) -> Recording:
                 ) from exc
 
         label = fields[header_index[LABEL_COLUMN]]
-        if label not in GESTURE_DATASET_LABELS:
-            raise CsvFormatError(f"{path}:{line_number}: unknown label {label!r}")
+        if not label:
+            raise CsvFormatError(f"{path}:{line_number}: missing {LABEL_COLUMN!r} value")
         raw_labels[row_offset] = label
 
     # Sequence numbers come from independent per-channel counters on the

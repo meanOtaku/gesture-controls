@@ -284,7 +284,7 @@ describe("ModelLab", () => {
     expect(startButton).not.toBeDisabled();
   });
 
-  it("starts a training job with the selected dataset ids", async () => {
+  it("starts a training job with the selected dataset ids and label mapping", async () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_model_datasets") return Promise.resolve([DATASET_A]);
       if (command === "get_training_status") return Promise.resolve({ phase: "idle" });
@@ -299,12 +299,13 @@ describe("ModelLab", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /select session-1\.csv/i }));
     fireEvent.click(screen.getByRole("button", { name: "Start training" }));
 
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("start_training_job", {
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("start_training_job", expect.objectContaining({
         datasetIds: ["dataset-a"],
         backend: "tflite",
-      }),
-    );
+        labelMapping: expect.any(Object),
+      }));
+    });
   });
 
   it("starts a training job with the sklearn backend once selected", async () => {
@@ -324,10 +325,11 @@ describe("ModelLab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start training" }));
 
     await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("start_training_job", {
+      expect(invokeMock).toHaveBeenCalledWith("start_training_job", expect.objectContaining({
         datasetIds: ["dataset-a"],
         backend: "sklearn",
-      }),
+        labelMapping: expect.any(Object),
+      })),
     );
   });
 
@@ -346,10 +348,11 @@ describe("ModelLab", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /select session-1\.csv/i }));
     fireEvent.click(screen.getByRole("button", { name: "Start training" }));
     await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("start_training_job", {
+      expect(invokeMock).toHaveBeenCalledWith("start_training_job", expect.objectContaining({
         datasetIds: ["dataset-a"],
         backend: "tflite",
-      }),
+        labelMapping: expect.any(Object),
+      })),
     );
 
     trainingEventHandler?.({

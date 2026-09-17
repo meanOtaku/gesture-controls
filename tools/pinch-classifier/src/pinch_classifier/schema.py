@@ -45,9 +45,12 @@ GYRO_COLUMNS: tuple[str, ...] = ("gyro_x", "gyro_y", "gyro_z")
 QUAT_COLUMNS: tuple[str, ...] = ("quat_w", "quat_x", "quat_y", "quat_z")
 CONTACT_QUALITY_COLUMN = "contact_quality"
 
-# Full label set the recorder can emit (GESTURE_DATASET_LABELS). Any label
-# outside this set fails validation, since it likely means a hand-edited or
-# out-of-contract CSV.
+# The legacy fixed label vocabulary the recorder used to emit before per-label
+# training roles existed (M1-B). This is no longer an authoritative allowlist
+# for CSV loading (see csv_io.load_recording): collection labels are now
+# user-defined, so any non-empty label is structurally valid here. This tuple
+# now only backs `labels.legacy_compatibility_mapping()`, the explicit
+# compatibility mapping for CSVs recorded against this original vocabulary.
 GESTURE_DATASET_LABELS: tuple[str, ...] = (
     "idle",
     "pinch_start",
