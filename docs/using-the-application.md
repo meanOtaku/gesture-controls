@@ -129,15 +129,22 @@ Use **Start recording** / **Stop recording** for a general telemetry capture, th
 
 #### Labeled dataset recorder
 
-Use this for model training data:
+Use this for model training data. It records a separate, labeled session distinct from the ordinary CSV capture above, and it never includes data you were already looking at before you pressed Start.
 
-1. Choose a built-in label or enter a custom label and select **Use custom label**.
-2. Choose **Start**.
-3. Perform only the selected gesture or activity during the session.
-4. Choose **Stop**.
-5. Choose **Export Dataset CSV**.
+**Graph history is excluded on purpose.** The live charts above keep a rolling buffer so you can see recent signal, but that buffer is never copied into a new recording. Pressing **Start** arms the recorder and clears only the new recording's buffer; the first row ever stored is the first sensor sample the desktop accepts *after* Start, not anything already visible in the graphs.
 
-Each exported dataset file is one uniformly labeled session. **Discard** removes the current in-memory labeled session without exporting it. Preserve a mix of positive gestures and realistic background/negative activities; that is important for false-activation evaluation.
+**Arming and the timer.** After Start, the card shows `Arming…` while it waits for that first accepted sample — if the sensor is unavailable or you press Stop before any sample arrives, the session is cancelled and no data file is created. Once the first sample lands, recording begins immediately and the elapsed/remaining timer starts counting from that moment, not from when you pressed Start. This keeps "planned duration" and "actual duration" honest even if there's a short delay before the first sample.
+
+Two capture modes share this same Arming/timer behavior and the same immutable-raw-data guarantee, but differ in how labels are attached:
+
+- **Quick Capture** — pick or type one label, Start, perform only that gesture or activity, Stop. The whole session becomes a single label interval covering its full span. This is the simplest workflow and matches the original one-label-per-session recorder.
+- **Timeline Capture** — Start a longer recording, then switch labels live as you go: click a label, press number keys 1-9 to toggle a label on/off, or hold Alt+1-9 to label only while the key is held. Stretches you don't label stay `unannotated` rather than being silently treated as a negative/background label — an unlabeled gap is not the same thing as "no gesture happened."
+
+**Raw data is immutable.** Once samples are captured, `raw.csv` for that recording is never rewritten — not by labeling, not by curation, not by later edits. Only interval/label metadata (`annotations.json`) can change after the fact. Quick Capture saves its bundle automatically on Stop; Timeline Capture leaves the session in a **Saved** state so you can review/edit intervals first, then choose **Save recording bundle** to persist that reviewed state.
+
+**Interval curation (Timeline Capture only).** After Stop, the recording timeline editor lets you split, move boundaries, relabel, delete, or mark each interval's curation status (`unreviewed`, `approved`, `excluded`) before you rely on it for training, and lets you fill an unannotated gap with a new interval. Every one of these edits changes only interval metadata — the underlying raw samples and their timestamps never move. Use **excluded** to drop a bad stretch of a recording without discarding the rest of it.
+
+**Discard** removes the current in-memory session without saving or exporting it — nothing has been written to disk yet at that point, so nothing needs to be cleaned up. **Export Dataset CSV** writes the legacy single-label-per-file CSV format for compatibility with the current Model Lab importer. Preserve a mix of positive gestures and realistic background/negative activities; that is important for false-activation evaluation.
 
 ### Model Lab
 
@@ -171,6 +178,14 @@ Use **Monitor** before **Live**. A stale input, quality rejection, malformed/out
 3. Review per-label coverage and the label catalogue.
 
 Labels have stable IDs, display metadata, roles, and archive state. Archiving is non-destructive: historical recordings and models retain their label meaning. Do not train a deployable gesture model until relevant positive and negative/background labels have useful coverage.
+
+##### Legacy CSV import and migration state
+
+The **Dataset** panel's importer accepts the legacy single-label-per-file CSV format exported by the labeled dataset recorder above. This importer is a compatibility path, not a converter: it is intentionally kept independent of the newer recording-bundle format (`raw.csv` / `recording.json` / `annotations.json`) used by Timeline Capture, and importing a CSV never reads, writes, or otherwise touches any recording bundle on disk. The two pipelines share only the label catalogue, so a label created in either place is recognized by the other.
+
+Import is all-or-nothing and recoverable: a CSV is written to the app's dataset store, and the session index is updated, only after the file has been fully validated (byte-size limit, a `# label:` metadata line, and a label that already exists in the catalogue). If any check fails, or if updating the index fails, nothing is left on disk — the failure is reported as the specific error (for example, "unknown label; create it in Model Lab before importing recordings") in the panel rather than a generic failure, so you can create the missing label or fix the file and simply retry the same import. A failed import never partially writes a session and never modifies any existing dataset, recording, or raw sensor file.
+
+Labels themselves migrate forward automatically and non-destructively: previously used label IDs and their display metadata keep working after an app update, and archiving a label only hides it from new selection — it never deletes or renumbers historical sessions that reference it.
 
 #### Training and evaluation
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -17,7 +18,14 @@ from sklearn.metrics import classification_report, confusion_matrix
 from .bundle import CLASS_NAMES, MODEL_FILENAME, build_metadata, write_and_validate_metadata
 from .dataset import Dataset, build_dataset
 from .features import FEATURE_NAMES
-from .labels import NEGATIVE_TARGET
+from .labels import (
+    LabelMapping,
+    NEGATIVE_TARGET,
+    load_label_mapping,
+    mapping_positive_targets,
+    positive_targets,
+    validate_mapping_targets,
+)
 from .train import _false_activation_metrics, _resolve_inputs, _split_by_group
 from .windowing import (
     DEFAULT_MAX_GAP_MS,
@@ -51,6 +59,16 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--stride-ms", type=float, default=DEFAULT_STRIDE_MS)
     parser.add_argument("--max-gap-ms", type=float, default=DEFAULT_MAX_GAP_MS)
     parser.add_argument("--min-samples-per-window", type=int, default=DEFAULT_MIN_SAMPLES_PER_WINDOW)
+    parser.add_argument(
+        "--label-mapping-file", type=Path, default=None,
+        help="Path to a JSON explicit label-to-training-target mapping (version + entries: each raw label "
+             "mapped to role target/negative/exclude; see pinch_classifier.labels.LabelMapping). Every raw "
+             "label present in --input must have an entry, or the run is rejected. Because this backend's "
+             "output is hard-pinned to the three deployable classes (negative/pinch_start/pinch_release, "
+             "see bundle.CLASS_NAMES), a 'target' role must resolve to pinch_start or pinch_release — any "
+             "other target class is rejected. Omit this to train on the legacy compatibility mapping instead "
+             "(pinch_start/pinch_release as targets, pinch_hold excluded, everything else negative).",
+    )
     parser.add_argument("--test-size", type=float, default=0.25, help="Fraction of recording sessions held out.")
     parser.add_argument("--random-seed", type=int, default=42)
     parser.add_argument("--epochs", type=int, default=30)
@@ -156,7 +174,7 @@ def verify_conversion_parity(model: Any, model_path: Path, features: np.ndarray,
     return result
 
 
-def _evaluation(y_true: np.ndarray, probabilities: np.ndarray) -> dict[str, Any]:
+def _evaluation(y_true: np.ndarray, probabilities: np.ndarray, positive_target_names: tuple[str, ...]) -> dict[str, Any]:
     predicted_indices = np.argmax(probabilities, axis=1)
     predicted = np.asarray([CLASS_NAMES[index] for index in predicted_indices], dtype=object)
     report = classification_report(y_true, predicted, labels=list(CLASS_NAMES), output_dict=True, zero_division=0)
@@ -166,11 +184,17 @@ def _evaluation(y_true: np.ndarray, probabilities: np.ndarray) -> dict[str, Any]
         "macro_f1": float(report["macro avg"]["f1-score"]),
         "classification_report": report,
         "confusion_matrix": {"labels": list(CLASS_NAMES), "matrix": matrix.tolist()},
-        **_false_activation_metrics(y_true, predicted, "exclude"),
+        **_false_activation_metrics(y_true, predicted, positive_target_names),
     }
 
 
-def train_and_export(dataset: Dataset, args: argparse.Namespace, output_dir: Path, input_paths: list[Path]) -> dict[str, Any]:
+def train_and_export(
+    dataset: Dataset,
+    args: argparse.Namespace,
+    output_dir: Path,
+    input_paths: list[Path],
+    label_mapping: LabelMapping | None,
+) -> dict[str, Any]:
     tf = _tensorflow()
     train_idx, test_idx = _split_by_group(dataset, args.test_size, args.random_seed)
     x_train = np.asarray(dataset.features[train_idx], dtype=np.float32)
@@ -194,7 +218,10 @@ def train_and_export(dataset: Dataset, args: argparse.Namespace, output_dir: Pat
     export_tflite(model, model_path)
     parity = verify_conversion_parity(model, model_path, x_test, args.parity_atol)
     probabilities = _tflite_predictions(model_path, x_test)
-    metrics = _evaluation(y_test_labels, probabilities)
+    positive_target_names = (
+        mapping_positive_targets(label_mapping) if label_mapping is not None else positive_targets("exclude")
+    )
+    metrics = _evaluation(y_test_labels, probabilities, positive_target_names)
 
     run_info = {
         "model_type": "keras.Sequential",
@@ -232,9 +259,19 @@ def main(argv: list[str] | None = None) -> int:
         max_gap_ms=args.max_gap_ms,
         min_samples_per_window=args.min_samples_per_window,
     )
-    # Excluding pinch_hold guarantees the deployment contract remains exactly three classes.
-    dataset = build_dataset(input_paths, args.window_config, hold_handling="exclude")
-    metadata = train_and_export(dataset, args, Path(args.output_dir), input_paths)
+    label_mapping: LabelMapping | None = None
+    if args.label_mapping_file is not None:
+        payload = json.loads(args.label_mapping_file.read_text(encoding="utf-8"))
+        label_mapping = load_label_mapping(payload)
+        # This backend's output is hard-pinned to CLASS_NAMES (negative/pinch_start/pinch_release, see
+        # bundle.py), so an explicit mapping must not be able to train toward any other target class.
+        validate_mapping_targets(label_mapping, CLASS_NAMES[1:])
+
+    # Without an explicit mapping, keep the legacy fixed-vocabulary resolve_target() path
+    # (pinch_start/pinch_release as targets, pinch_hold excluded, everything else negative), which
+    # already guarantees the deployment contract stays exactly three classes.
+    dataset = build_dataset(input_paths, args.window_config, hold_handling="exclude", label_mapping=label_mapping)
+    metadata = train_and_export(dataset, args, Path(args.output_dir), input_paths, label_mapping)
     metrics = metadata["training"]["metrics"]
     parity = metadata["conversion_parity"]
     print(f"accuracy={metrics['accuracy']:.4f} macro_f1={metrics['macro_f1']:.4f}")

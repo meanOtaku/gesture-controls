@@ -11,15 +11,18 @@ import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { usePendingActions } from "../hooks/usePendingActions";
 import {
   DEPLOYABLE_CLASS_LABELS,
+  LEGACY_COMPATIBILITY_LABEL_MAPPING,
   appendRuntimeEvent,
   describeDiagnosticValue,
   describeWindow,
+  missingLabelMappings,
   type DatasetLabel,
   type DatasetSummary,
   type EnvironmentDiagnostic,
   type GestureIntent,
   type GesturePolicyDecision,
   type InferenceMode,
+  type LabelMapping,
   type ModelIntentBinding,
   type ModelLifecycleState,
   type ModelRegistryView,
@@ -32,6 +35,7 @@ import {
   type TrainingStatus,
 } from "../types";
 import { DatasetManager } from "./DatasetManager";
+import { LabelMappingEditor } from "./LabelMappingEditor";
 import { ModelLifecycleControls } from "./ModelLifecycleControls";
 import { ModelRegistryTable } from "./ModelRegistryTable";
 import { ReadinessPanel } from "./ReadinessPanel";
@@ -66,6 +70,7 @@ export function ModelLab() {
   const [environmentError, setEnvironmentError] = useState<string | null>(null);
   const [bindingDrafts, setBindingDrafts] = useState<Record<string, Record<string, GestureIntent>>>({});
   const [bindingError, setBindingError] = useState<string | null>(null);
+  const [labelMapping, setLabelMapping] = useState<LabelMapping>(LEGACY_COMPATIBILITY_LABEL_MAPPING);
   const { isPending, run } = usePendingActions();
 
   const refreshDatasets = useCallback(async () => {
@@ -321,13 +326,27 @@ export function ModelLab() {
     const datasetIds = Array.from(selectedDatasetIds);
     if (datasetIds.length === 0 || status.phase === "running") return;
     setTrainingError(null);
+    const selectedLabelIds = new Set(
+      datasets.filter((dataset) => selectedDatasetIds.has(dataset.id)).map((dataset) => dataset.label),
+    );
+    const unmapped = missingLabelMappings(labelMapping, selectedLabelIds);
+    if (unmapped.length > 0) {
+      const message = `These labels have no training role mapping yet, so they cannot be trained on: ${unmapped.join(", ")}.`;
+      setTrainingError(message);
+      OperationFeedback.error("Start training", message);
+      return;
+    }
     try {
-      await invoke<string>("start_training_job", { datasetIds, backend: trainingBackend });
+      await invoke<string>("start_training_job", {
+        datasetIds,
+        backend: trainingBackend,
+        labelMapping,
+      });
     } catch (err) {
       setTrainingError(String(err));
       OperationFeedback.error("Start training", String(err));
     }
-  }, [selectedDatasetIds, status.phase, trainingBackend]);
+  }, [datasets, selectedDatasetIds, status.phase, trainingBackend, labelMapping]);
 
   const handleCancelTraining = useCallback(async () => {
     if (status.phase !== "running") return;
@@ -488,6 +507,27 @@ export function ModelLab() {
           onDelete={handleDelete}
           onToggleSelected={toggleDatasetSelected}
         />
+
+        {selectedDatasetIds.size > 0 && (
+          <Card role="region" aria-label="Label training role mapping" className="min-w-0">
+            <CardHeader>
+              <SectionHeader
+                title="Label training roles"
+                description="Each selected dataset's label must be assigned an explicit training role: as a training target class, as negative examples, or excluded from this training run."
+              />
+            </CardHeader>
+            <CardContent>
+              <LabelMappingEditor
+                selectedDatasetLabels={new Set(
+                  datasets.filter((dataset) => selectedDatasetIds.has(dataset.id)).map((dataset) => dataset.label),
+                )}
+                labels={labels}
+                mapping={labelMapping}
+                onMappingChange={setLabelMapping}
+              />
+            </CardContent>
+          </Card>
+        )}
 
         <Card role="region" aria-label="Import custom LiteRT bundle" className="min-w-0">
           <CardHeader>

@@ -24,7 +24,7 @@ export function LiveTelemetry() {
   const [signalView, setSignalView] = useState<SignalView>("all");
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
-  const { saveCsv, exportDatasetCsv } = useTelemetryExport();
+  const { saveCsv, exportDatasetCsv, saveDatasetRecording } = useTelemetryExport();
 
   const watchStatus = telemetryStore.getWatchStatus();
   const headConnected = telemetryStore.getHeadStatus()?.connected === true;
@@ -42,9 +42,16 @@ export function LiveTelemetry() {
   const rowCount = telemetryStore.getRowCount();
 
   const selectedLabel = telemetryStore.getSelectedLabel();
+  const sessionLabels = telemetryStore.getSessionLabels();
   const datasetRecording = telemetryStore.getDatasetRecording();
+  const datasetRecordingState = telemetryStore.getDatasetRecordingState();
   const datasetSession = telemetryStore.getDatasetSession();
   const datasetRowCount = telemetryStore.getDatasetRowCount();
+  const datasetElapsedMs = telemetryStore.getDatasetRecordingElapsedMs();
+  const datasetRows = telemetryStore.getDatasetRows();
+  const captureMode = telemetryStore.getDatasetCaptureMode();
+  const timelineIntervals = telemetryStore.getTimelineIntervals();
+  const activeTimelineLabel = telemetryStore.getActiveTimelineLabel();
 
   // Mirrors Dashboard.tsx's IMU_SENSOR_IDS default-enabled read and the
   // continuous-tracker "idle means disabled" convention.
@@ -87,15 +94,38 @@ export function LiveTelemetry() {
         onSaveCsv={saveCsv}
       />
       <DatasetCaptureCard
+        captureMode={captureMode}
+        onCaptureModeChange={(mode) => telemetryStore.setDatasetCaptureMode(mode)}
         selectedLabel={selectedLabel}
+        sessionLabels={sessionLabels}
         datasetRecording={datasetRecording}
+        datasetRecordingState={datasetRecordingState}
         datasetSession={datasetSession}
         datasetRowCount={datasetRowCount}
+        datasetElapsedMs={datasetElapsedMs}
+        datasetRows={datasetRows}
+        timelineIntervals={timelineIntervals}
+        activeTimelineLabel={activeTimelineLabel}
         onSelectLabel={(label) => telemetryStore.selectDatasetLabel(label)}
         onStart={() => telemetryStore.startDatasetRecording()}
-        onStop={() => telemetryStore.stopDatasetRecording()}
+        onStop={() => {
+          telemetryStore.stopDatasetRecording();
+          // Quick Capture has nothing left to review, so it persists the bundle
+          // immediately; Timeline Capture waits for the explicit "Save recording
+          // bundle" action below so post-capture interval edits land in the
+          // saved bundle instead of racing it.
+          if (captureMode === "quick") void saveDatasetRecording();
+        }}
         onDiscard={() => telemetryStore.discardDatasetRecording()}
         onExport={exportDatasetCsv}
+        onSaveRecording={saveDatasetRecording}
+        onSetTimelineLabel={(label, mechanism) => telemetryStore.setTimelineLabel(label, mechanism)}
+        onRelabelInterval={(intervalId, label) => telemetryStore.relabelTimelineInterval(intervalId, label)}
+        onSetIntervalCurationStatus={(intervalId, status) => telemetryStore.setTimelineIntervalCurationStatus(intervalId, status)}
+        onMoveIntervalBoundary={(intervalId, edge, newRawRow) => telemetryStore.moveTimelineIntervalBoundary(intervalId, edge, newRawRow)}
+        onSplitInterval={(intervalId, atRawRow) => telemetryStore.splitTimelineInterval(intervalId, atRawRow)}
+        onCreateInterval={(label, startRawRow, endRawRow) => telemetryStore.createTimelineInterval(label, startRawRow, endRawRow)}
+        onDeleteInterval={(intervalId) => telemetryStore.deleteTimelineInterval(intervalId)}
       />
     </div>
     <SignalMonitor

@@ -15,7 +15,9 @@ mod label_registry;
 mod model_lab;
 mod model_registry;
 mod overlay;
+mod recording_bundle;
 mod settings;
+mod training_label_mapping;
 mod watch;
 
 const WATCH_WEBSOCKET_ADDRESS: SocketAddr =
@@ -73,6 +75,10 @@ pub fn run() {
             model_lab::get_training_status,
             model_lab::list_trained_models,
             model_lab::replay_model_dataset,
+            recording_bundle::save_recording_bundle,
+            recording_bundle::list_recording_bundles,
+            recording_bundle::load_recording_bundle,
+            recording_bundle::set_interval_curation_status,
             label_registry::list_model_labels,
             label_registry::create_model_label,
             label_registry::set_model_label_archived,

@@ -15,7 +15,7 @@ import numpy as np
 
 from .csv_io import Recording, load_recordings
 from .features import FEATURE_NAMES, extract_features
-from .labels import resolve_target
+from .labels import LabelMapping, missing_labels, resolve_target
 from .windowing import Window, WindowConfig, build_windows
 
 
@@ -29,14 +29,36 @@ class Dataset:
     feature_names: tuple[str, ...] = FEATURE_NAMES
 
 
-def build_dataset(paths: list[str | Path], window_config: WindowConfig, hold_handling: str) -> Dataset:
+def build_dataset(
+    paths: list[str | Path],
+    window_config: WindowConfig,
+    hold_handling: str,
+    label_mapping: LabelMapping | None = None,
+) -> Dataset:
     recordings = load_recordings(paths)
-    return build_dataset_from_recordings(recordings, window_config, hold_handling)
+    return build_dataset_from_recordings(recordings, window_config, hold_handling, label_mapping=label_mapping)
 
 
 def build_dataset_from_recordings(
-    recordings: list[Recording], window_config: WindowConfig, hold_handling: str
+    recordings: list[Recording],
+    window_config: WindowConfig,
+    hold_handling: str,
+    label_mapping: LabelMapping | None = None,
 ) -> Dataset:
+    """`label_mapping`, when given, fully replaces `hold_handling` and the legacy `resolve_target` lookup:
+    every raw label present in `recordings` must have an explicit entry, or the whole run is rejected
+    before any windowing/training happens (see `LabelMapping.resolve` / `missing_labels`).
+    """
+    if label_mapping is not None:
+        raw_labels_present = {label for recording in recordings for label in recording.raw_labels.tolist()}
+        unmapped = missing_labels(label_mapping, raw_labels_present)
+        if unmapped:
+            raise ValueError(
+                "the following collection label(s) have no explicit training role mapping "
+                f"(target/negative/exclude): {', '.join(sorted(unmapped))}. Assign a role for each "
+                "before training; unmapped labels are never silently treated as negative."
+            )
+
     feature_rows: list[np.ndarray] = []
     targets: list[str] = []
     groups: list[str] = []
@@ -45,7 +67,7 @@ def build_dataset_from_recordings(
 
     for recording in recordings:
         for window in build_windows(recording, window_config):
-            target = resolve_target(window.label, hold_handling)
+            target = label_mapping.resolve(window.label) if label_mapping is not None else resolve_target(window.label, hold_handling)
             if target is None:
                 continue
             feature_rows.append(extract_features(recording, window))

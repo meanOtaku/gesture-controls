@@ -1,5 +1,6 @@
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { exportCsv, type ExportCsvResult } from "../../../shared/tauri/exportCsv";
+import { saveRecordingBundle, type SaveRecordingBundleResult } from "../../../shared/tauri/recordingBundle";
 import { telemetryStore } from "../store/telemetryStore";
 
 const CSV_HEADERS = [
@@ -28,6 +29,15 @@ function reportExportOutcome(operation: string, result: ExportCsvResult): void {
     OperationFeedback.info(operation, "Save cancelled");
   } else {
     OperationFeedback.error(operation, `Could not save: ${result.message}`);
+  }
+}
+
+function reportRecordingBundleOutcome(result: SaveRecordingBundleResult): void {
+  const operation = "Save recording";
+  if (result.status === "saved") {
+    OperationFeedback.success(operation, `Saved recording ${result.recordingId} (${result.rowCount} rows)`);
+  } else {
+    OperationFeedback.error(operation, `Could not save recording bundle: ${result.message}`);
   }
 }
 
@@ -61,5 +71,23 @@ export function useTelemetryExport() {
     reportExportOutcome("Export dataset CSV", result);
   };
 
-  return { saveCsv, exportDatasetCsv };
+  /**
+   * Persists the labeled session as an immutable recording bundle (raw.csv +
+   * recording.json + annotations.json) in the app's own data directory,
+   * independent of the manual "Export Dataset CSV" native save dialog above.
+   * Quick Capture calls this right after Stop; Timeline Capture calls it
+   * explicitly once the user has reviewed/edited intervals in the "saved"
+   * state, so editing never races a bundle that was already written. A
+   * no-sample session (armed then stopped with nothing captured) has no
+   * bundle to write and is silently skipped rather than reported as a
+   * failure.
+   */
+  const saveDatasetRecording = async () => {
+    const payload = telemetryStore.buildRecordingBundlePayload("manual_stop");
+    if (!payload) return;
+    const result = await saveRecordingBundle(payload);
+    reportRecordingBundleOutcome(result);
+  };
+
+  return { saveCsv, exportDatasetCsv, saveDatasetRecording };
 }

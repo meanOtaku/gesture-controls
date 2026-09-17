@@ -28,7 +28,14 @@ from sklearn.model_selection import GroupShuffleSplit
 
 from . import __version__
 from .dataset import Dataset, build_dataset
-from .labels import HOLD_HANDLING_CHOICES, NEGATIVE_TARGET, positive_targets
+from .labels import (
+    HOLD_HANDLING_CHOICES,
+    NEGATIVE_TARGET,
+    LabelMapping,
+    load_label_mapping,
+    mapping_positive_targets,
+    positive_targets,
+)
 from .windowing import (
     DEFAULT_MAX_GAP_MS,
     DEFAULT_MIN_SAMPLES_PER_WINDOW,
@@ -69,6 +76,15 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--hold-handling", choices=HOLD_HANDLING_CHOICES, default="exclude",
         help="How to treat pinch_hold rows: exclude (default, dropped), negative (folded into the negative class), or class (trained as its own class).",
     )
+    parser.add_argument(
+        "--label-mapping-file", type=Path, default=None,
+        help="Path to a JSON explicit label-to-training-target mapping (version + entries: each raw label "
+             "mapped to role target/negative/exclude; see pinch_classifier.labels.LabelMapping). When given, "
+             "this fully replaces --hold-handling and the legacy fixed vocabulary: every raw label present "
+             "in --input must have an entry, or the run is rejected. Omit this to train on the legacy "
+             "compatibility mapping instead (pinch_start/pinch_release as targets, --hold-handling for "
+             "pinch_hold, everything else negative).",
+    )
     parser.add_argument("--test-size", type=float, default=0.25, help="Fraction of sessions (groups) held out for evaluation.")
     parser.add_argument("--random-seed", type=int, default=42, help="Random seed for the split and the classifier.")
     parser.add_argument("--n-estimators", type=int, default=200, help="Number of trees in the RandomForest baseline.")
@@ -87,7 +103,7 @@ def _split_by_group(dataset: Dataset, test_size: float, random_seed: int) -> tup
     return train_idx, test_idx
 
 
-def _false_activation_metrics(y_true: np.ndarray, y_pred: np.ndarray, hold_handling: str) -> dict:
+def _false_activation_metrics(y_true: np.ndarray, y_pred: np.ndarray, positive_target_names: tuple[str, ...]) -> dict:
     negative_mask = y_true == NEGATIVE_TARGET
     total_negative = int(np.sum(negative_mask))
     if total_negative == 0:
@@ -96,7 +112,7 @@ def _false_activation_metrics(y_true: np.ndarray, y_pred: np.ndarray, hold_handl
             "false_activation_total_negative_windows": 0,
             "false_activation_rate": None,
         }
-    positives = set(positive_targets(hold_handling))
+    positives = set(positive_target_names)
     false_activations = int(sum(1 for pred in y_pred[negative_mask] if pred in positives))
     return {
         "false_activation_count": false_activations,
@@ -105,7 +121,9 @@ def _false_activation_metrics(y_true: np.ndarray, y_pred: np.ndarray, hold_handl
     }
 
 
-def train_and_evaluate(dataset: Dataset, args: argparse.Namespace) -> tuple[RandomForestClassifier, dict]:
+def train_and_evaluate(
+    dataset: Dataset, args: argparse.Namespace, label_mapping: LabelMapping | None
+) -> tuple[RandomForestClassifier, dict]:
     train_idx, test_idx = _split_by_group(dataset, args.test_size, args.random_seed)
 
     x_train, x_test = dataset.features[train_idx], dataset.features[test_idx]
@@ -124,12 +142,15 @@ def train_and_evaluate(dataset: Dataset, args: argparse.Namespace) -> tuple[Rand
     report = classification_report(y_test, y_pred, labels=labels, output_dict=True, zero_division=0)
     matrix = confusion_matrix(y_test, y_pred, labels=labels)
 
+    positive_target_names = (
+        mapping_positive_targets(label_mapping) if label_mapping is not None else positive_targets(args.hold_handling)
+    )
     metrics = {
         "accuracy": float(report["accuracy"]),
         "macro_f1": float(report["macro avg"]["f1-score"]),
         "classification_report": report,
         "confusion_matrix": {"labels": labels, "matrix": matrix.tolist()},
-        **_false_activation_metrics(y_test, y_pred, args.hold_handling),
+        **_false_activation_metrics(y_test, y_pred, positive_target_names),
     }
 
     run_info = {
@@ -155,8 +176,13 @@ def main(argv: list[str] | None = None) -> int:
         min_samples_per_window=args.min_samples_per_window,
     )
 
-    dataset = build_dataset(input_paths, window_config, args.hold_handling)
-    model, run_info = train_and_evaluate(dataset, args)
+    label_mapping: LabelMapping | None = None
+    if args.label_mapping_file is not None:
+        payload = json.loads(args.label_mapping_file.read_text(encoding="utf-8"))
+        label_mapping = load_label_mapping(payload)
+
+    dataset = build_dataset(input_paths, window_config, args.hold_handling, label_mapping=label_mapping)
+    model, run_info = train_and_evaluate(dataset, args, label_mapping)
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -174,6 +200,11 @@ def main(argv: list[str] | None = None) -> int:
         "random_seed": args.random_seed,
         "window_config": asdict(window_config),
         "hold_handling": args.hold_handling,
+        "label_mapping": (
+            {"source": "explicit", "path": str(args.label_mapping_file)}
+            if label_mapping is not None
+            else {"source": "legacy_compatibility", "hold_handling": args.hold_handling}
+        ),
         "feature_names": list(dataset.feature_names),
         "input_files": [str(path) for path in input_paths],
         "tflite_export": (
