@@ -32,7 +32,7 @@ export function SignalMonitor({
     <section aria-label="Signal monitor">
       <div className="signal-heading">
         <div><p className="eyebrow">Signal monitor</p><h2>Incoming signals</h2></div>
-        <div className="signal-filters" role="group" aria-label="Signal filters">
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Signal filters">
           {VIEWS.map(({ id, label }) => (
             <Button
               key={id}
