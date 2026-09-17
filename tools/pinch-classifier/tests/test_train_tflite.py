@@ -41,3 +41,23 @@ def test_neural_cli_exports_valid_bundle_and_preserves_source_parity(tmp_path):
     predictions = _tflite_predictions(output / "model.tflite", np.zeros((2, 55), dtype=np.float32))
     assert predictions.shape == (2, 3)
     np.testing.assert_allclose(np.sum(predictions, axis=1), 1.0, atol=1e-5)
+
+
+def test_neural_cli_rejects_a_label_mapping_target_outside_the_deployable_class_set(tmp_path):
+    make_dataset_csv(tmp_path, "idle_0.csv", "idle", 40)
+    mapping_path = tmp_path / "label_mapping.json"
+    mapping_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "entries": {"idle": {"role": "target", "target": "double_tap"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "bundle"
+    with pytest.raises(ValueError, match="double_tap"):
+        main([
+            "--input", str(tmp_path), "--output-dir", str(output),
+            "--label-mapping-file", str(mapping_path),
+        ])

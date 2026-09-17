@@ -16,6 +16,7 @@ mod model_lab;
 mod model_registry;
 mod overlay;
 mod settings;
+mod training_label_mapping;
 mod watch;
 
 const WATCH_WEBSOCKET_ADDRESS: SocketAddr =
