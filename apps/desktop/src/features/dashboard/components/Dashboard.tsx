@@ -1,5 +1,7 @@
 import { Alert, AlertDescription } from "../../../components/ui/alert";
+import { Card, CardContent } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
+import { Label } from "../../../components/ui/label";
 import type {
   CalibrationState,
   CalibrationTarget,
@@ -96,26 +98,35 @@ export function Dashboard({
 
       {view === "headphone" && !connected && headDiagnostic && (
         <aside className="connection-help" aria-label="Headphone connection help">
-          <h2>{headDiagnostic.title}</h2>
-          <p>{headDiagnostic.detail}</p>
-          {headDiagnostic.action && <p className="hint">{headDiagnostic.action}</p>}
+          <Card><CardContent className="flex flex-col gap-2">
+            <h2>{headDiagnostic.title}</h2>
+            <p>{headDiagnostic.detail}</p>
+            {headDiagnostic.action && <p className="hint">{headDiagnostic.action}</p>}
+          </CardContent></Card>
         </aside>
       )}
       {view === "headphone" && !connected && !headDiagnostic && (
         <aside className="connection-help" aria-label="Headphone connection help">
-          <h2>Waiting for head-tracking data</h2>
-          <p>Pairing alone does not confirm that the headset’s tracking sensor is connected.</p>
-          <ol>
-            <li>Connect the headset in your computer’s Bluetooth settings.</li>
-            {headTrackerProvider === "external"
-              ? <li>Allow the Sony tracker executable through your OS device-access prompt (macOS: Privacy &amp; Security → Input Monitoring).</li>
-              : <li>Allow Spatial Gesture Control through your OS device-access prompt (macOS: Privacy &amp; Security → Input Monitoring; Windows: Bluetooth &amp; devices).</li>}
-            <li>Stop and restart the project after changing permissions.</li>
-          </ol>
+          <Card><CardContent className="flex flex-col gap-2">
+            <h2>Waiting for head-tracking data</h2>
+            <p>Pairing alone does not confirm that the headset’s tracking sensor is connected.</p>
+            <ol>
+              <li>Connect the headset in your computer’s Bluetooth settings.</li>
+              {headTrackerProvider === "external"
+                ? <li>Allow the Sony tracker executable through your OS device-access prompt (macOS: Privacy &amp; Security → Input Monitoring).</li>
+                : <li>Allow Spatial Gesture Control through your OS device-access prompt (macOS: Privacy &amp; Security → Input Monitoring; Windows: Bluetooth &amp; devices).</li>}
+              <li>Stop and restart the project after changing permissions.</li>
+            </ol>
+          </CardContent></Card>
         </aside>
       )}
       {view === "watch" && !watchConnected && (
-        <aside className="connection-help"><h2>Connect your Watch</h2><p>Open the Watch app, enable streaming, and keep both devices on the same Wi-Fi network. Guest networks may block discovery.</p></aside>
+        <aside className="connection-help">
+          <Card><CardContent className="flex flex-col gap-2">
+            <h2>Connect your Watch</h2>
+            <p>Open the Watch app, enable streaming, and keep both devices on the same Wi-Fi network. Guest networks may block discovery.</p>
+          </CardContent></Card>
+        </aside>
       )}
 
       {view === "headphone" && <HeadphoneTelemetryPanel status={status} />}
@@ -139,16 +150,18 @@ export function Dashboard({
         />
       )}
 
-      {view === "main" && <details className="connection-details"><summary>Connection details</summary><section className="settings">
-        <div>
-          <p className="eyebrow">Settings</p>
-          <h2>Sony UDP input</h2>
-        </div>
-        <label>Host<Input value="127.0.0.1" readOnly /></label>
-        <label>JSON port<Input value="4243" readOnly /></label>
-        <label>Watch WebSocket<Input value="0.0.0.0:8766/ws/watch" readOnly /></label>
-        <p className="hint">Sony tracking stays on this computer; Watch data arrives over your local network. On macOS, use the arrow or +/- keys to change system volume while the knob is visible.</p>
-      </section></details>}
+      {view === "main" && <details className="connection-details"><summary>Connection details</summary>
+        <Card><CardContent className="flex flex-wrap items-end justify-between gap-6">
+          <div>
+            <p className="eyebrow">Settings</p>
+            <h2>Sony UDP input</h2>
+          </div>
+          <Label className="flex flex-col items-start gap-1 min-w-[150px] flex-1">Host<Input value="127.0.0.1" readOnly /></Label>
+          <Label className="flex flex-col items-start gap-1 min-w-[150px] flex-1">JSON port<Input value="4243" readOnly /></Label>
+          <Label className="flex flex-col items-start gap-1 min-w-[150px] flex-1">Watch WebSocket<Input value="0.0.0.0:8766/ws/watch" readOnly /></Label>
+          <p className="hint basis-full max-w-none">Sony tracking stays on this computer; Watch data arrives over your local network. On macOS, use the arrow or +/- keys to change system volume while the knob is visible.</p>
+        </CardContent></Card>
+      </details>}
     </main>
   );
 }

@@ -11,9 +11,9 @@ type HeadphoneTelemetryPanelProps = {
 export function HeadphoneTelemetryPanel({ status }: HeadphoneTelemetryPanelProps) {
   return (
     <>
-      <Card role="region" aria-label="Sony device"><CardContent className="device-card">
-        <div><span className="label">Active device</span><strong>{status?.device ?? "No device detected"}</strong></div>
-        <div className="rate"><span>{status ? number(status.packetsPerSecond, 1) : "—"}</span><small>packets / sec</small></div>
+      <Card role="region" aria-label="Sony device"><CardContent className="flex items-center justify-between gap-6">
+        <div><span className="label">Active device</span><strong className="text-numeric block">{status?.device ?? "No device detected"}</strong></div>
+        <div className="text-right"><span className="text-numeric">{status ? number(status.packetsPerSecond, 1) : "—"}</span><small className="block text-muted-foreground">packets / sec</small></div>
       </CardContent></Card>
 
       <section className="metric-grid" aria-label="Sony telemetry">
