@@ -472,11 +472,11 @@ export function ModelLab() {
         <span className="preview-icon" aria-hidden="true">i</span>
         <div><strong>You’re viewing the browser preview</strong><p>Import, training, and inference need the desktop app. Open it with <code>npm start</code> from the project folder. Your saved datasets and models are available there.</p></div>
       </aside>}
-      <div className="lab-summary" aria-label="Model Lab overview">
-        <div><span className="label">Imported sessions</span><strong>{desktopAvailable ? datasets.length : "—"}</strong><small>{desktopAvailable ? `${selectedDatasetIds.size} selected for training` : "Available in the desktop app"}</small></div>
-        <div><span className="label">Trained models</span><strong>{desktopAvailable ? trainedModels.length : "—"}</strong><small>{desktopAvailable ? isRunning ? "Training in progress" : "Ready for your next experiment" : "Available in the desktop app"}</small></div>
-        <div><span className="label">Desktop control</span><strong>{desktopAvailable ? registry?.inferenceMode ?? "Checking" : "Preview"}</strong><small>{registry?.activeModelId ? "A model is active" : "No active model"}</small></div>
-      </div>
+      <section className="overview-grid" aria-label="Model Lab overview">
+        <Card><CardContent><span className="label">Imported sessions</span><strong className="text-numeric">{desktopAvailable ? datasets.length : "—"}</strong><small>{desktopAvailable ? `${selectedDatasetIds.size} selected for training` : "Available in the desktop app"}</small></CardContent></Card>
+        <Card><CardContent><span className="label">Trained models</span><strong className="text-numeric">{desktopAvailable ? trainedModels.length : "—"}</strong><small>{desktopAvailable ? isRunning ? "Training in progress" : "Ready for your next experiment" : "Available in the desktop app"}</small></CardContent></Card>
+        <Card><CardContent><span className="label">Desktop control</span><strong className="text-numeric">{desktopAvailable ? registry?.inferenceMode ?? "Checking" : "Preview"}</strong><small>{registry?.activeModelId ? "A model is active" : "No active model"}</small></CardContent></Card>
+      </section>
       <nav className="lab-workflow" aria-label="Model workflow">
         <a href="#lab-dataset">01 · Import</a><a href="#lab-coverage">02 · Labels</a><a href="#lab-training">03 · Train</a><a href="#lab-evaluation">04 · Review</a><a href="#lab-replay">05 · Replay</a><a href="#lab-deployment">06 · Activate</a>
       </nav>

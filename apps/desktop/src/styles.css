@@ -43,8 +43,7 @@ body::before { content:""; position:fixed; inset:0; pointer-events:none; opacity
 .eyebrow { @apply text-xs font-medium uppercase tracking-[.13em] text-muted-foreground; }
 .label { @apply text-xs font-medium text-muted-foreground; }
 .text-numeric,
-.metric strong,
-.lab-summary strong {
+.metric strong {
   font-family:var(--font-mono);
   @apply text-2xl font-medium tabular-nums;
 }
@@ -135,17 +134,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .preview-icon { flex:0 0 24px; height:24px; display:grid; place-items:center; border:1px solid #87b8db; border-radius:50%; color:#c1e7ff; }
 .preview-notice strong { color:#d4edff; font-size:.95rem; }
 .preview-notice p { margin:7px 0 0; color:#a8c2d9; font-size:.85rem; line-height:1.65; }
-.lab-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--space-card); }
-.lab-summary>div { border:1px solid #2b374b; border-radius:16px; padding:22px; background:#111b2a; min-width:0; }
-.lab-summary strong,.lab-summary small { display:block; }
-.lab-summary strong { margin:12px 0 7px; text-transform:capitalize; }
-.lab-summary small { color:#91a5bf; line-height:1.5; }
 .lab-workflow { display:flex; gap:8px; overflow-x:auto; padding-bottom:14px; margin-bottom:8px; }
 .lab-workflow a { flex:1; min-width:max-content; padding:12px 18px; border:1px solid #34465d; border-radius:10px; color:#acd4ef; background:#101c2a; font-size:.8rem; text-decoration:none; }
 .lab-workflow a:hover { background:#20374c; }
 .lab-workspace { border:0; padding:0; margin:0; min-width:0; }
-.model-lab-shell .calibration-card { box-shadow:none; scroll-margin-top:90px; }
-.model-lab-shell .calibration-heading { margin-bottom:18px; }
 .model-lab-shell .hint { line-height:1.7; max-width:850px; margin:12px 0; }
 .model-lab-shell .vectors { gap:12px; }
 .model-lab-models,.model-lab-datasets { grid-template-columns:1fr; }
@@ -154,8 +146,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .model-lab-label-row { flex-wrap:wrap; min-width:0; }
 .model-lab-label-row .label { text-transform:none; letter-spacing:0; font-size:.85rem; color:#bfcee2; overflow-wrap:anywhere; }
 .model-lab-coverage-count { color:#a8bdd5; font-size:.8rem; }
-.lab-reference { margin:16px 0; border:1px solid #2b3c53; border-radius:12px; padding:0 16px; }
-.lab-reference>summary { padding:15px 0; cursor:pointer; color:#adc6df; font-size:.85rem; }
 .model-lab-backend-select { margin:20px 0; }
 .model-lab-backend-select>label { align-items:flex-start; border:1px solid #34445c; border-radius:12px; padding:18px; }
 .model-lab-backend-select>label:has(input:checked) { border-color:#67b7cf; background:#65e6ff09; }
@@ -168,10 +158,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   .model-lab-labels { grid-template-columns:1fr; }
 }
 @media(max-width:620px) {
-  .signal-grid,.lab-summary,.model-lab-backend-select { grid-template-columns:1fr; }
+  .signal-grid,.model-lab-backend-select { grid-template-columns:1fr; }
   .telemetry-chart-heading { align-items:flex-start; gap:10px; }
   .stream-status { gap:12px; }
-  .model-lab-shell .calibration-card { padding:20px; }
 }
 
 @theme inline {
@@ -201,6 +190,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
     @apply font-sans; } }
 
 /* GC-008: one electric-blue outline system for non-semantic desktop chrome (literal-border legacy selectors). */
-.app-tabs,.telemetry-chart,.connection,.metric,.vector-row,.model-lab-log,.volume-knob,.step-number,.signal-grid .telemetry-chart,.preview-notice,.preview-icon,.lab-summary>div,.lab-workflow a,.lab-reference,.model-lab-backend-select>label { border-color:var(--electric-blue); }
+.app-tabs,.telemetry-chart,.connection,.metric,.vector-row,.model-lab-log,.volume-knob,.step-number,.signal-grid .telemetry-chart,.preview-notice,.preview-icon,.lab-workflow a,.model-lab-backend-select>label { border-color:var(--electric-blue); }
 .model-lab-chip:not(.model-lab-chip--positive):not(.model-lab-chip--hold):not(.model-lab-chip--ready):not(.model-lab-chip--attention) { border-color:var(--electric-blue); }
 .setup-steps button:hover,.model-lab-backend-select>label:has(input:checked) { border-color:var(--electric-blue); }
