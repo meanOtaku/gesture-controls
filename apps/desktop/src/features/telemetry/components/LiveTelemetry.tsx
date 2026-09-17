@@ -42,6 +42,7 @@ export function LiveTelemetry() {
   const rowCount = telemetryStore.getRowCount();
 
   const selectedLabel = telemetryStore.getSelectedLabel();
+  const sessionLabels = telemetryStore.getSessionLabels();
   const datasetRecording = telemetryStore.getDatasetRecording();
   const datasetSession = telemetryStore.getDatasetSession();
   const datasetRowCount = telemetryStore.getDatasetRowCount();
@@ -88,6 +89,7 @@ export function LiveTelemetry() {
       />
       <DatasetCaptureCard
         selectedLabel={selectedLabel}
+        sessionLabels={sessionLabels}
         datasetRecording={datasetRecording}
         datasetSession={datasetSession}
         datasetRowCount={datasetRowCount}

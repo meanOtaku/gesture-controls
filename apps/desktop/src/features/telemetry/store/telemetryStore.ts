@@ -22,27 +22,7 @@ export type CsvRow = {
   values: Record<string, number | null>;
 };
 
-/** Built-in templates for the desktop-side labeled gesture dataset recorder. */
-export const GESTURE_DATASET_LABELS = [
-  "idle",
-  "pinch_start",
-  "pinch_hold",
-  "pinch_release",
-  "walking",
-  "typing",
-  "using_mouse",
-  "touching_face",
-  "adjusting_headphones",
-  "picking_up_cup",
-  "scratching",
-  "normal_wrist_rotation",
-  "standing",
-  "sitting",
-] as const;
-/**
- * Labels are user-owned stable slugs. Built-ins above are templates, not a
- * closed vocabulary; their role/intent mapping is maintained by Model Lab.
- */
+/** Labels are user-owned stable slugs; no built-in templates. */
 export type GestureDatasetLabel = string;
 
 function normalizeDatasetLabel(label: string): GestureDatasetLabel | null {
@@ -206,7 +186,8 @@ class TelemetryStore {
   // Labeled gesture dataset recorder: independent of `recording`/`rows` above,
   // built on the same raw watch ingest path but fused into one row per
   // accepted sample, carrying forward the other channel's last known values.
-  private selectedLabel: GestureDatasetLabel = "idle";
+  private selectedLabel: GestureDatasetLabel | null = null;
+  private readonly sessionLabels = new Set<GestureDatasetLabel>();
   private datasetRecording = false;
   private datasetSession: DatasetSessionMetadata | null = null;
   private readonly datasetRows = new RingBuffer<DatasetRow>(MAX_CSV_ROWS);
@@ -290,14 +271,19 @@ class TelemetryStore {
     this.publishNow();
   }
 
-  getSelectedLabel(): GestureDatasetLabel {
+  getSelectedLabel(): GestureDatasetLabel | null {
     return this.selectedLabel;
+  }
+
+  getSessionLabels(): GestureDatasetLabel[] {
+    return Array.from(this.sessionLabels);
   }
 
   selectDatasetLabel(label: GestureDatasetLabel): boolean {
     const normalized = normalizeDatasetLabel(label);
     if (!normalized) return false;
     this.selectedLabel = normalized;
+    this.sessionLabels.add(normalized);
     this.publishNow();
     return true;
   }
@@ -318,13 +304,14 @@ class TelemetryStore {
     return this.datasetRows.toArray();
   }
 
-  /** Starts a new labeled session, snapshotting `selectedLabel` immutably for the session's lifetime. */
-  startDatasetRecording(): void {
-    if (this.datasetRecording) return;
+  /** Starts a new labeled session, snapshotting `selectedLabel` immutably for the session's lifetime. Returns false if no label is selected. */
+  startDatasetRecording(): boolean {
+    if (this.datasetRecording || !this.selectedLabel) return false;
     this.datasetRows.clear();
     this.datasetSession = { label: this.selectedLabel, startedAtIso: new Date().toISOString() };
     this.datasetRecording = true;
     this.publishNow();
+    return true;
   }
 
   /** Stops accepting new rows but keeps the buffered session so it can still be exported. */
@@ -348,7 +335,7 @@ class TelemetryStore {
     const rows = this.datasetRows.toArray();
     const metadataLines = [
       "# gesture-dataset-export: 1",
-      `# label: ${session?.label ?? this.selectedLabel}`,
+      `# label: ${session?.label ?? ""}`,
       `# started_at: ${session?.startedAtIso ?? ""}`,
       `# row_count: ${rows.length}`,
     ];
@@ -576,7 +563,8 @@ class TelemetryStore {
     this.lastEcgTimestampNs = null;
     this.lastRecordedAtByChannel.clear();
     this.lastAcceptedAtByChannel.clear();
-    this.selectedLabel = "idle";
+    this.selectedLabel = null;
+    this.sessionLabels.clear();
     this.datasetRecording = false;
     this.datasetSession = null;
     this.datasetRows.clear();

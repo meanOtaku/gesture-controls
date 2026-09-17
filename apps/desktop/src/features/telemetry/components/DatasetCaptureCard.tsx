@@ -17,15 +17,14 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 import {
-  GESTURE_DATASET_LABELS,
   type DatasetSessionMetadata,
   type GestureDatasetLabel,
 } from "../store/telemetryStore";
 
 type DatasetCaptureCardProps = {
-  selectedLabel: GestureDatasetLabel;
+  selectedLabel: GestureDatasetLabel | null;
+  sessionLabels: GestureDatasetLabel[];
   datasetRecording: boolean;
   datasetSession: DatasetSessionMetadata | null;
   datasetRowCount: number;
@@ -39,6 +38,7 @@ type DatasetCaptureCardProps = {
 /** Labeled gesture-dataset recorder: pick or type a label, capture a session, then export it. */
 export function DatasetCaptureCard({
   selectedLabel,
+  sessionLabels,
   datasetRecording,
   datasetSession,
   datasetRowCount,
@@ -71,7 +71,7 @@ export function DatasetCaptureCard({
           </HelpTooltip>
         </CardTitle>
         <CardDescription>
-          {datasetRecording ? `Recording "${datasetSession?.label}"` : "Select a label, then start a labeled capture"}
+          {datasetRecording ? `Recording "${datasetSession?.label}"` : selectedLabel ? `Ready to record "${selectedLabel.replaceAll("_", " ")}"` : "Enter or select a label to start"}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -79,45 +79,50 @@ export function DatasetCaptureCard({
           {datasetRowCount.toLocaleString()} rows buffered
           {datasetSession ? ` · session label: ${datasetSession.label}` : ""}
         </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Label htmlFor="dataset-label-select" className="sr-only">Dataset label</Label>
-          <Select
-            value={selectedLabel}
-            disabled={datasetRecording}
-            onValueChange={(value) => onSelectLabel(value as GestureDatasetLabel)}
-          >
-            <SelectTrigger id="dataset-label-select" aria-label="Dataset label">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {!GESTURE_DATASET_LABELS.some((label) => label === selectedLabel) && (
-                <SelectItem value={selectedLabel}>{selectedLabel.replaceAll("_", " ")}</SelectItem>
-              )}
-              {GESTURE_DATASET_LABELS.map((label) => (
-                <SelectItem key={label} value={label}>{label.replaceAll("_", " ")}</SelectItem>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Label htmlFor="dataset-custom-label" className="sr-only">Dataset label</Label>
+            <Input
+              id="dataset-custom-label"
+              aria-label="Dataset label"
+              value={customLabel}
+              disabled={datasetRecording}
+              placeholder="Enter a label"
+              onChange={(event) => setCustomLabel(event.target.value)}
+            />
+            <Button type="button" variant="outline" disabled={datasetRecording || customLabel.trim().length === 0} onClick={applyCustomLabel}>
+              Apply label
+            </Button>
+            <HelpTooltip label="About labels">
+              Labels must start with a letter and contain only letters, numbers, or underscores (up to 64 characters).
+            </HelpTooltip>
+          </div>
+          {sessionLabels.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              <Label className="text-xs text-muted-foreground w-full">Previously used labels</Label>
+              {sessionLabels.map((label) => (
+                <Button
+                  key={label}
+                  type="button"
+                  variant={selectedLabel === label ? "default" : "outline"}
+                  size="sm"
+                  disabled={datasetRecording}
+                  onClick={() => onSelectLabel(label)}
+                  className="text-xs"
+                >
+                  {label.replaceAll("_", " ")}
+                </Button>
               ))}
-            </SelectContent>
-          </Select>
-
-          <Label htmlFor="dataset-custom-label" className="sr-only">Custom dataset label</Label>
-          <Input
-            id="dataset-custom-label"
-            aria-label="Custom dataset label"
-            value={customLabel}
-            disabled={datasetRecording}
-            placeholder="Custom label"
-            className="w-36"
-            onChange={(event) => setCustomLabel(event.target.value)}
-          />
-          <Button type="button" variant="outline" disabled={datasetRecording || customLabel.trim().length === 0} onClick={applyCustomLabel}>
-            Use custom label
-          </Button>
-          <HelpTooltip label="About custom labels">
-            Custom labels must start with a letter and contain only letters, numbers, or underscores (up to 64 characters).
-          </HelpTooltip>
+            </div>
+          )}
+          {selectedLabel && (
+            <p className="text-xs text-foreground">
+              Selected label: <span className="font-semibold">{selectedLabel.replaceAll("_", " ")}</span>
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant={datasetRecording ? "destructive" : "default"} onClick={datasetRecording ? onStop : onStart}>
+          <Button type="button" variant={datasetRecording ? "destructive" : "default"} disabled={!datasetRecording && !selectedLabel} onClick={datasetRecording ? onStop : onStart}>
             {datasetRecording ? "Stop dataset capture" : "Start dataset capture"}
           </Button>
 
