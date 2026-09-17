@@ -26,11 +26,13 @@ export function HeadphonesSettingsSection({ enabled, rateHz, rateInputRef, onTog
           }}
         />
       </CardHeader>
-      <CardContent className="calibration-actions">
-        <Button type="button" variant="outline" onClick={onToggleEnabled}>
-          {enabled ? "Enabled" : "Disabled"}
-          <small>Click to {enabled ? "disable" : "enable"}</small>
-        </Button>
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" variant="outline" onClick={onToggleEnabled}>
+            {enabled ? "Enabled" : "Disabled"}
+          </Button>
+          <span className="text-xs text-muted-foreground">Click to {enabled ? "disable" : "enable"}</span>
+        </div>
         <Label className="flex flex-col items-start gap-1">
           Headphones rate
           <Input

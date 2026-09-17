@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { HelpTooltip } from "../../../components/app/HelpTooltip";
 import { SectionHeader } from "../../../components/app/SectionHeader";
+import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
@@ -41,13 +42,13 @@ export function CalibrationPanel({ connected, calibration, isPending, onCaptureT
             content: "Capture the screen center, then look at the top-right corner and capture again. The volume gesture activates once your head crosses the threshold angle toward the top-right target and stays there for the dwell time. A tracker reset clears both captures.",
           }}
           status={
-            <strong className={`target-state ${calibration.activeTarget ? "active" : ""}`}>
+            <Badge variant={calibration.activeTarget ? "default" : "secondary"}>
               {calibration.activeTarget === "topRight"
                 ? "Top-right active"
                 : calibration.activeTarget === "center"
                   ? "Center active"
                   : "No active target"}
-            </strong>
+            </Badge>
           }
         />
       </CardHeader>
@@ -59,25 +60,31 @@ export function CalibrationPanel({ connected, calibration, isPending, onCaptureT
           </p>
         )}
 
-        <div className="calibration-actions">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!connected || isPending("capture:center")}
-            onClick={() => onCaptureTarget("center")}
-          >
-            {isPending("capture:center") ? "Capturing…" : "Capture center"}
-            <small>{calibration.centerCalibrated ? "Saved" : "Not saved"}</small>
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!connected || isPending("capture:topRight")}
-            onClick={() => onCaptureTarget("topRight")}
-          >
-            {isPending("capture:topRight") ? "Capturing…" : "Capture top-right"}
-            <small>{calibration.topRightCalibrated ? "Saved" : "Not saved"}</small>
-          </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-col items-start gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!connected || isPending("capture:center")}
+              onClick={() => onCaptureTarget("center")}
+            >
+              {isPending("capture:center") ? "Capturing…" : "Capture center"}
+            </Button>
+            <small className="text-xs text-muted-foreground">{calibration.centerCalibrated ? "Saved" : "Not saved"}</small>
+          </div>
+          <div className="flex flex-col items-start gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!connected || isPending("capture:topRight")}
+              onClick={() => onCaptureTarget("topRight")}
+            >
+              {isPending("capture:topRight") ? "Capturing…" : "Capture top-right"}
+            </Button>
+            <small className="text-xs text-muted-foreground">{calibration.topRightCalibrated ? "Saved" : "Not saved"}</small>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-4">
           <Label className="flex flex-col items-start gap-1">
             <span className="flex items-center gap-1">
               Threshold

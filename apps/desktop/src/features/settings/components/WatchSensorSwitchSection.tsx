@@ -27,9 +27,9 @@ export function WatchSensorSwitchSection({ watchSensorsEnabled, onToggle }: Watc
           {CONTROLLABLE_SENSORS.map(({ id, label }) => {
             const enabled = watchSensorsEnabled[id] ?? true;
             return (
-              <div className="vector-row sensor-toggle-row" key={id}>
+              <div className="vector-row flex items-center justify-between gap-3" key={id}>
                 <span className="label">{label}</span>
-                <span>{enabled ? "Enabled" : "Disabled"}</span>
+                <span className="text-xs text-muted-foreground">{enabled ? "Enabled" : "Disabled"}</span>
                 <Switch
                   aria-label={`${label} ${enabled ? "enabled" : "disabled"} by default`}
                   checked={enabled}

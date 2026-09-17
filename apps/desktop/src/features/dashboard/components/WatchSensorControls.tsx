@@ -32,9 +32,9 @@ export function WatchSensorControls({ watchStatus, isPending, onSetSensorEnabled
               : watchStatus?.medicalStatus?.[id] !== "idle";
             const pending = isPending(`sensor:${id}`);
             return (
-              <div className="vector-row sensor-toggle-row" key={id}>
+              <div className="vector-row flex items-center justify-between gap-3" key={id}>
                 <span className="label">{label}</span>
-                <span>{pending ? "Updating…" : enabled ? "Enabled" : "Disabled"}</span>
+                <span className="text-xs text-muted-foreground">{pending ? "Updating…" : enabled ? "Enabled" : "Disabled"}</span>
                 <Switch
                   aria-label={`${label} ${enabled ? "enabled" : "disabled"}`}
                   checked={enabled}

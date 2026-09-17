@@ -83,7 +83,7 @@ export function TrainingPanel({
             </label>
           ))}
         </RadioGroup>
-        <div className="recording-actions flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button type="button" onClick={onStart} disabled={selectedCount === 0 || isRunning}>
             {isRunning ? "Training…" : "Start training"}
           </Button>

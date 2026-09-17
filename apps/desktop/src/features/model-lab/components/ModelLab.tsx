@@ -540,7 +540,7 @@ export function ModelLab() {
             <Alert>
               <AlertDescription>Only validated TFLite bundles are accepted. Do not select model.tflite directly; choose its adjacent metadata.json.</AlertDescription>
             </Alert>
-            <div className="recording-actions">
+            <div className="flex flex-wrap items-center gap-2">
               <Button type="button" disabled={importingBundle} onClick={() => void handleImportCustomBundle()}>
                 {importingBundle ? "Validating bundle…" : "Select metadata.json"}
               </Button>
@@ -598,7 +598,7 @@ export function ModelLab() {
             />
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            <div className="recording-actions" role="radiogroup" aria-label="Inference mode">
+            <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Inference mode">
               {(["off", "monitor", "live"] as const).map((mode) => (
                 <Button
                   key={mode}

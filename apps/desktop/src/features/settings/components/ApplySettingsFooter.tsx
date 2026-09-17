@@ -31,7 +31,7 @@ export function ApplySettingsFooter({ applyPending, resetPending, onApply, onRes
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <p className="hint">Applies every edited rate to its corresponding desktop or Watch stream.</p>
-        <div className="recording-actions">
+        <div className="flex flex-wrap items-center gap-2">
           <Button type="button" disabled={busy} onClick={onApply}>
             {applyPending ? "Applying…" : "Apply rates"}
           </Button>

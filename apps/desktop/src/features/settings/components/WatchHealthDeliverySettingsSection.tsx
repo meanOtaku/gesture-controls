@@ -38,7 +38,7 @@ export function WatchHealthDeliverySettingsSection({
           }}
         />
       </CardHeader>
-      <CardContent className="calibration-actions">
+      <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Label className="flex flex-col items-start gap-1">
           Raw PPG flush
           <Input aria-label="Watch PPG flush rate Hz" type="number" min="0.1" max="10" step="0.1"

@@ -34,7 +34,7 @@ export function WatchRateSettingsSection({
           }}
         />
       </CardHeader>
-      <CardContent className="calibration-actions">
+      <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Label className="flex flex-col items-start gap-1">
           Orientation
           <Input
