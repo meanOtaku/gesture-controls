@@ -485,7 +485,7 @@ export function ModelLab() {
           <AlertDescription>{runtimeError}</AlertDescription>
         </Alert>
       )}
-      <fieldset className="lab-workspace" disabled={!desktopAvailable} aria-label="Desktop model tools">
+      <fieldset className="lab-workspace card-stack" disabled={!desktopAvailable} aria-label="Desktop model tools">
         <ReadinessPanel
           desktopAvailable={desktopAvailable}
           diagnostics={environmentDiagnostics}
