@@ -78,6 +78,7 @@ pub fn run() {
             recording_bundle::save_recording_bundle,
             recording_bundle::list_recording_bundles,
             recording_bundle::load_recording_bundle,
+            recording_bundle::get_raw_recording_window,
             recording_bundle::set_interval_curation_status,
             label_registry::list_model_labels,
             label_registry::create_model_label,

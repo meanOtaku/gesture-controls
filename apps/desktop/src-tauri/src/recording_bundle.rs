@@ -28,6 +28,53 @@ const ANNOTATIONS_FILE_NAME: &str = "annotations.json";
 /// are intentionally independent.
 const MAX_RAW_CSV_BYTES: usize = 20 * 1024 * 1024;
 
+/// The exact `raw.csv` header written by `RAW_RECORDING_CSV_COLUMNS`
+/// (`telemetryStore.ts`): `DATASET_CSV_COLUMNS` minus `label`.
+const RAW_CSV_HEADER: [&str; 16] = [
+    "timestamp_ns",
+    "sequence",
+    "ppg_green",
+    "ppg_red",
+    "ppg_ir",
+    "accel_x",
+    "accel_y",
+    "accel_z",
+    "gyro_x",
+    "gyro_y",
+    "gyro_z",
+    "quat_w",
+    "quat_x",
+    "quat_y",
+    "quat_z",
+    "contact_quality",
+];
+
+/// The subset of `RAW_CSV_HEADER` inspectable as an image-viewer channel;
+/// `timestamp_ns` and `sequence` are exposed separately in every window
+/// response and are not themselves selectable channels.
+const RAW_WINDOW_ALLOWED_COLUMNS: [&str; 14] = [
+    "ppg_green",
+    "ppg_red",
+    "ppg_ir",
+    "accel_x",
+    "accel_y",
+    "accel_z",
+    "gyro_x",
+    "gyro_y",
+    "gyro_z",
+    "quat_w",
+    "quat_x",
+    "quat_y",
+    "quat_z",
+    "contact_quality",
+];
+
+/// Fixed 64x64 image contract from the GC-009 delivery plan.
+const RAW_WINDOW_MAX_VALUES: usize = 4_096;
+/// Slider/navigation hop; every accepted or clamped window start is a
+/// multiple of this value.
+const RAW_WINDOW_ROW_HOP: usize = 64;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MonotonicWallClock {
     pub monotonic_ns: i64,
@@ -286,6 +333,174 @@ pub fn load_recording_bundle(
     Ok(RecordingBundleDetail { recording, annotations })
 }
 
+/// A bounded, read-only window into one numeric `raw.csv` column, resolved
+/// to at most `RAW_WINDOW_MAX_VALUES` chronological rows starting at a
+/// hop-aligned raw row. This is the only path that ever parses `raw.csv`'s
+/// data rows; it never writes the file and never touches
+/// `recording.json`/`annotations.json`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RawRecordingWindow {
+    pub recording_id: String,
+    pub column: String,
+    pub total_raw_row_count: usize,
+    pub start_raw_row: usize,
+    pub end_raw_row: usize,
+    pub row_indices: Vec<usize>,
+    pub timestamps_ns: Vec<i64>,
+    pub values: Vec<Option<f64>>,
+    pub channel_available: bool,
+    pub recording_min: Option<f64>,
+    pub recording_max: Option<f64>,
+}
+
+fn raw_csv_path(dir: &std::path::Path) -> PathBuf {
+    dir.join(RAW_CSV_FILE_NAME)
+}
+
+/// Parses `raw.csv`'s data rows for exactly one already-validated column,
+/// returning that column's full per-row values alongside `timestamp_ns` for
+/// every row. Empty fields become `None`, never a coerced/carried-forward
+/// value; any non-empty field that fails to parse as a number, any row with
+/// the wrong column count, or a header that does not match
+/// `RAW_CSV_HEADER` is a malformed-CSV error.
+fn parse_raw_csv_column(content: &str, column: &str) -> Result<(Vec<i64>, Vec<Option<f64>>), String> {
+    let mut lines = content.lines();
+    let header = lines.next().ok_or_else(|| "raw.csv is empty".to_string())?;
+    let expected_header = RAW_CSV_HEADER.join(",");
+    if header != expected_header {
+        return Err(format!(
+            "malformed raw.csv: expected header '{expected_header}', got '{header}'"
+        ));
+    }
+    let column_index = RAW_CSV_HEADER
+        .iter()
+        .position(|candidate| *candidate == column)
+        .ok_or_else(|| format!("unsupported raw column '{column}'"))?;
+
+    let mut timestamps_ns = Vec::new();
+    let mut values = Vec::new();
+    for (offset, line) in lines.enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let row_number = offset + 2; // 1-indexed, plus the header line
+        let fields: Vec<&str> = line.split(',').collect();
+        if fields.len() != RAW_CSV_HEADER.len() {
+            return Err(format!(
+                "malformed raw.csv: row {row_number} has {} fields, expected {}",
+                fields.len(),
+                RAW_CSV_HEADER.len()
+            ));
+        }
+        let timestamp_ns: i64 = fields[0]
+            .trim()
+            .parse()
+            .map_err(|_| format!("malformed raw.csv: row {row_number} has a non-numeric timestamp_ns"))?;
+        let raw_value = fields[column_index].trim();
+        let value = if raw_value.is_empty() {
+            None
+        } else {
+            Some(raw_value.parse::<f64>().map_err(|_| {
+                format!("malformed raw.csv: row {row_number} column '{column}' is not numeric")
+            })?)
+        };
+        timestamps_ns.push(timestamp_ns);
+        values.push(value);
+    }
+    Ok((timestamps_ns, values))
+}
+
+/// Validates `start_raw_row` and resolves it to a hop-aligned, in-bounds
+/// `[start, end)` window against `total_raw_row_count`. Negative or
+/// non-hop-aligned starts are rejected outright; an aligned start beyond the
+/// last reachable window is clamped deterministically down to the final
+/// hop-aligned window so the end of a recording is always reachable.
+fn resolve_raw_window_bounds(total_raw_row_count: usize, start_raw_row: i64) -> Result<(usize, usize), String> {
+    if start_raw_row < 0 {
+        return Err("start raw row must not be negative".to_string());
+    }
+    if start_raw_row as u64 % RAW_WINDOW_ROW_HOP as u64 != 0 {
+        return Err(format!(
+            "start raw row {start_raw_row} must be a multiple of {RAW_WINDOW_ROW_HOP}"
+        ));
+    }
+
+    let last_valid_start = if total_raw_row_count <= RAW_WINDOW_MAX_VALUES {
+        0
+    } else {
+        let max_start = total_raw_row_count - RAW_WINDOW_MAX_VALUES;
+        (max_start / RAW_WINDOW_ROW_HOP) * RAW_WINDOW_ROW_HOP
+    };
+    let requested_start = start_raw_row as usize;
+    let resolved_start = requested_start.min(last_valid_start);
+    let resolved_end = (resolved_start + RAW_WINDOW_MAX_VALUES).min(total_raw_row_count);
+    Ok((resolved_start, resolved_end))
+}
+
+/// Returns a bounded, chronological window of one numeric `raw.csv` column
+/// for image-viewer inspection. This never writes any bundle file and never
+/// changes `load_recording_bundle`'s metadata/annotation behavior.
+#[tauri::command]
+pub fn get_raw_recording_window(
+    recording_id: String,
+    column: String,
+    start_raw_row: i64,
+    app: AppHandle,
+) -> Result<RawRecordingWindow, String> {
+    validate_recording_id(&recording_id)?;
+    if !RAW_WINDOW_ALLOWED_COLUMNS.contains(&column.as_str()) {
+        return Err(format!("unsupported raw column '{column}'"));
+    }
+
+    let dir = recording_bundles_dir(&app)?.join(&recording_id);
+    let csv_path = raw_csv_path(&dir);
+    let content = fs::read_to_string(&csv_path)
+        .map_err(|error| format!("failed to read raw.csv for recording '{recording_id}': {error}"))?;
+    if content.len() > MAX_RAW_CSV_BYTES {
+        return Err(format!(
+            "raw.csv exceeds the {MAX_RAW_CSV_BYTES}-byte limit (got {} bytes)",
+            content.len()
+        ));
+    }
+    let (timestamps_ns, all_values) = parse_raw_csv_column(&content, &column)?;
+
+    let total_raw_row_count = all_values.len();
+    let (resolved_start, resolved_end) = resolve_raw_window_bounds(total_raw_row_count, start_raw_row)?;
+
+    let window_values = all_values[resolved_start..resolved_end].to_vec();
+    let window_timestamps = timestamps_ns[resolved_start..resolved_end].to_vec();
+    let row_indices: Vec<usize> = (resolved_start..resolved_end).collect();
+
+    let channel_available = all_values.iter().any(Option::is_some);
+    let recording_min = all_values
+        .iter()
+        .filter_map(|value| *value)
+        .fold(None, |acc: Option<f64>, value| {
+            Some(acc.map_or(value, |current| current.min(value)))
+        });
+    let recording_max = all_values
+        .iter()
+        .filter_map(|value| *value)
+        .fold(None, |acc: Option<f64>, value| {
+            Some(acc.map_or(value, |current| current.max(value)))
+        });
+
+    Ok(RawRecordingWindow {
+        recording_id,
+        column,
+        total_raw_row_count,
+        start_raw_row: resolved_start,
+        end_raw_row: resolved_end,
+        row_indices,
+        timestamps_ns: window_timestamps,
+        values: window_values,
+        channel_available,
+        recording_min,
+        recording_max,
+    })
+}
+
 /// Sets one interval's curation status after a bundle has been saved,
 /// bumping its revision. `raw.csv` is never touched; only `annotations.json`
 /// is rewritten, atomically via a sibling tmp file plus rename.
@@ -498,5 +713,79 @@ mod tests {
         assert_eq!(reloaded_interval.revision, expected_revision);
 
         fs::remove_dir_all(&dir).ok();
+    }
+
+    fn raw_csv_with_rows(rows: &[(i64, &str)]) -> String {
+        let mut lines = vec![RAW_CSV_HEADER.join(",")];
+        for (timestamp_ns, ppg_green) in rows {
+            let mut fields = vec![timestamp_ns.to_string(), "0".to_string(), ppg_green.to_string()];
+            fields.extend(std::iter::repeat("".to_string()).take(RAW_CSV_HEADER.len() - fields.len()));
+            lines.push(fields.join(","));
+        }
+        lines.join("\n")
+    }
+
+    #[test]
+    fn parse_raw_csv_column_preserves_nulls_and_rejects_bad_header() {
+        let csv = raw_csv_with_rows(&[(1, "1.5"), (2, ""), (3, "3.5")]);
+        let (timestamps, values) = parse_raw_csv_column(&csv, "ppg_green").expect("valid csv must parse");
+        assert_eq!(timestamps, vec![1, 2, 3]);
+        assert_eq!(values, vec![Some(1.5), None, Some(3.5)]);
+
+        assert!(parse_raw_csv_column("not,a,header", "ppg_green").is_err());
+        assert!(parse_raw_csv_column(&csv, "sequence").is_err());
+    }
+
+    #[test]
+    fn parse_raw_csv_column_rejects_malformed_rows() {
+        let header = RAW_CSV_HEADER.join(",");
+        let short_row = format!("{header}\n1,0,1.5");
+        assert!(parse_raw_csv_column(&short_row, "ppg_green").is_err());
+
+        let mut fields = vec!["1".to_string(), "0".to_string(), "not_a_number".to_string()];
+        fields.extend(std::iter::repeat("".to_string()).take(RAW_CSV_HEADER.len() - fields.len()));
+        let non_numeric_value = format!("{header}\n{}", fields.join(","));
+        assert!(parse_raw_csv_column(&non_numeric_value, "ppg_green").is_err());
+    }
+
+    #[test]
+    fn resolve_raw_window_bounds_rejects_negative_and_unaligned_starts() {
+        assert!(resolve_raw_window_bounds(10_000, -1).is_err());
+        assert!(resolve_raw_window_bounds(10_000, 1).is_err());
+        assert!(resolve_raw_window_bounds(10_000, 63).is_err());
+        assert!(resolve_raw_window_bounds(10_000, 64).is_ok());
+    }
+
+    #[test]
+    fn resolve_raw_window_bounds_clamps_deterministically_to_final_window() {
+        // 10_000 rows: last full-window start is the largest multiple of 64
+        // such that start + 4096 <= 10_000, i.e. floor(5904 / 64) * 64 = 5888.
+        let (start, end) = resolve_raw_window_bounds(10_000, 5888).unwrap();
+        assert_eq!((start, end), (5888, 9984));
+
+        // Requesting far past the end clamps to that same final window.
+        let (start, end) = resolve_raw_window_bounds(10_000, 1_000_000).unwrap();
+        assert_eq!((start, end), (5888, 9984));
+
+        // Re-requesting the already-clamped final start is idempotent.
+        let (start, end) = resolve_raw_window_bounds(10_000, start as i64).unwrap();
+        assert_eq!((start, end), (5888, 9984));
+    }
+
+    #[test]
+    fn resolve_raw_window_bounds_handles_short_recordings() {
+        assert_eq!(resolve_raw_window_bounds(0, 0).unwrap(), (0, 0));
+        assert_eq!(resolve_raw_window_bounds(100, 0).unwrap(), (0, 100));
+        // Any aligned start beyond a short recording clamps back to 0.
+        assert_eq!(resolve_raw_window_bounds(100, 64).unwrap(), (0, 100));
+    }
+
+    #[test]
+    fn get_raw_recording_window_allow_list_matches_header_minus_metadata_columns() {
+        for column in RAW_WINDOW_ALLOWED_COLUMNS {
+            assert!(RAW_CSV_HEADER.contains(&column));
+        }
+        assert!(!RAW_WINDOW_ALLOWED_COLUMNS.contains(&"timestamp_ns"));
+        assert!(!RAW_WINDOW_ALLOWED_COLUMNS.contains(&"sequence"));
     }
 }
