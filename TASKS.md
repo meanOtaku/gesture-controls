@@ -145,7 +145,7 @@ GC-003–GC-005 land.
 
 ## GC-009 — Raw recording image viewer
 
-**Status: M1–M2 done; M3–M4 not started.**
+**Status: M1–M3 done; M4 not started.**
 
 - [x] GC-009-M1: bounded, read-only `raw.csv` window contract (4,096 values;
       allow-listed numeric channel; preserved nulls). Added
@@ -159,8 +159,20 @@ GC-003–GC-005 land.
       (recording/channel/normalization-mode selection, request-version +
       selection guard against stale responses, and hop-aligned navigation
       bounds derived from the last loaded window). No UI panel yet.
-- [ ] GC-009-M3: dedicated inspection tab with a chronological 64 × 64 canvas
-      renderer, explicit missing values, and recording-scale normalization.
+- [x] GC-009-M3: dedicated "Raw image viewer" tab inside `LiveTelemetry`
+      (the existing saved-recording/telemetry host), added via
+      `RawImageViewerPanel` and `RawImageCanvas` under
+      `apps/desktop/src/features/telemetry/components/`. Recording/channel
+      `Select`s, a recording-vs-frame-scale `RadioGroup`, and a 64-row-hop
+      `Slider` drive `rawImageViewerStore`; the frame itself renders through
+      one `<canvas>`/`ImageData` (never 4,096 DOM nodes) with distinct fills
+      for real values (grayscale), missing raw fields (fuchsia), pixels
+      beyond the recording's end (slate), and constant-valued channels/frames
+      (neutral gray) plus a matching legend. Keyboard/hover pixel inspection
+      reports raw row, timestamp, value, and null/beyond state. Covers the
+      no-recording, empty-selection, loading, unavailable-channel,
+      short-recording, and command-error states. No annotation-edit or
+      training action is exposed.
 - [ ] GC-009-M4: boundary documentation, final acceptance review, and delivery
       state reconciliation.
 - [ ] Automated tests, builds, linting, formatting, screenshots, and runtime

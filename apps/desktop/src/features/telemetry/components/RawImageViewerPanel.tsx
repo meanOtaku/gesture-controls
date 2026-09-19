@@ -1,0 +1,257 @@
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { Button } from "../../../components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
+import { HelpTooltip } from "../../../components/app/HelpTooltip";
+import { Label } from "../../../components/ui/label";
+import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
+import { Skeleton } from "../../../components/ui/skeleton";
+import { Slider } from "../../../components/ui/slider";
+import {
+  listRecordingBundles,
+  RAW_IMAGE_VIEWER_CHANNELS,
+  RAW_WINDOW_MAX_VALUES,
+  RAW_WINDOW_ROW_HOP,
+  type RawImageViewerChannel,
+  type RecordingBundleSummary,
+} from "../../../shared/tauri/recordingBundle";
+import { rawImageViewerStore } from "../store/rawImageViewerStore";
+import { RawImageCanvas } from "./RawImageCanvas";
+
+type RecordingListState =
+  | { status: "loading" }
+  | { status: "loaded"; recordings: RecordingBundleSummary[] }
+  | { status: "error"; message: string };
+
+function channelLabel(channel: RawImageViewerChannel): string {
+  return channel.replaceAll("_", " ");
+}
+
+function recordingLabel(summary: RecordingBundleSummary): string {
+  const seconds = (summary.actualDurationMs / 1000).toFixed(1);
+  return `${summary.recordingId} · ${summary.rawRowCount.toLocaleString()} rows · ${seconds}s`;
+}
+
+/**
+ * Dedicated, read-only raw-data inspection panel: select a saved recording
+ * and an allow-listed numeric channel, then inspect a chronological 64x64
+ * image with exactly 64 raw rows per navigation step. This panel never
+ * edits annotations, never writes raw.csv, and offers no training action —
+ * see GC-009's delivery plan for the fixed scope.
+ */
+export function RawImageViewerPanel() {
+  const [recordingList, setRecordingList] = useState<RecordingListState>({ status: "loading" });
+  const [listVersion, setListVersion] = useState(0);
+  useSyncExternalStore(rawImageViewerStore.subscribe, rawImageViewerStore.getVersion, rawImageViewerStore.getVersion);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRecordingList({ status: "loading" });
+    void listRecordingBundles().then((result) => {
+      if (cancelled) return;
+      if (result.status === "error") {
+        setRecordingList({ status: "error", message: result.message });
+      } else {
+        setRecordingList({ status: "loaded", recordings: result.value });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [listVersion]);
+
+  const recordingId = rawImageViewerStore.getRecordingId();
+  const channel = rawImageViewerStore.getChannel();
+  const normalizationMode = rawImageViewerStore.getNormalizationMode();
+  const status = rawImageViewerStore.getStatus();
+  const errorMessage = rawImageViewerStore.getErrorMessage();
+  const rawWindow = rawImageViewerStore.getWindow();
+  const bounds = rawImageViewerStore.getNavigationBounds();
+  const requestedStartRawRow = rawImageViewerStore.getRequestedStartRawRow();
+
+  const totalFrames = bounds ? Math.floor(bounds.maxStartRawRow / RAW_WINDOW_ROW_HOP) + 1 : null;
+  const currentFrame = Math.floor(requestedStartRawRow / RAW_WINDOW_ROW_HOP) + 1;
+
+  return (
+    <Card role="region" aria-label="Raw image viewer" className="min-w-0">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          Raw image viewer
+          <HelpTooltip label="About the raw image viewer">
+            Read-only visual inspection of one saved recording's raw sensor channel, reshaped
+            into a chronological 64×64 image (pixel <em>i</em> is raw row <code>startRawRow + i</code>,
+            left-to-right then top-to-bottom). It never edits annotations, never writes raw.csv,
+            and is not a training-data representation.
+          </HelpTooltip>
+        </CardTitle>
+        <CardDescription>
+          Select a saved recording and numeric channel to inspect its raw samples as an image.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {recordingList.status === "loading" && (
+          <div className="flex flex-col gap-2" aria-busy="true" aria-live="polite">
+            <Skeleton className="h-8 w-64" />
+            <Skeleton className="h-4 w-40" />
+          </div>
+        )}
+
+        {recordingList.status === "error" && (
+          <div className="flex flex-col gap-2">
+            <p role="alert" className="text-sm text-destructive">
+              Could not load saved recordings: {recordingList.message}
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={() => setListVersion((v) => v + 1)}>
+              Retry
+            </Button>
+          </div>
+        )}
+
+        {recordingList.status === "loaded" && recordingList.recordings.length === 0 && (
+          <p className="hint">No saved recordings yet. Save a Timeline Capture recording bundle to inspect it here.</p>
+        )}
+
+        {recordingList.status === "loaded" && recordingList.recordings.length > 0 && (
+          <>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="raw-viewer-recording">Recording</Label>
+                <Select
+                  value={recordingId ?? ""}
+                  onValueChange={(value) => rawImageViewerStore.setRecording(value === "" ? null : value)}
+                >
+                  <SelectTrigger id="raw-viewer-recording" aria-label="Saved recording" className="min-w-64">
+                    <SelectValue placeholder="Select a recording…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {recordingList.recordings.map((summary) => (
+                      <SelectItem key={summary.recordingId} value={summary.recordingId}>
+                        {recordingLabel(summary)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="raw-viewer-channel">Channel</Label>
+                <Select
+                  value={channel ?? ""}
+                  onValueChange={(value) =>
+                    rawImageViewerStore.setChannel(value === "" ? null : (value as RawImageViewerChannel))
+                  }
+                >
+                  <SelectTrigger id="raw-viewer-channel" aria-label="Numeric channel" className="min-w-40">
+                    <SelectValue placeholder="Select a channel…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RAW_IMAGE_VIEWER_CHANNELS.map((candidate) => (
+                      <SelectItem key={candidate} value={candidate}>
+                        {channelLabel(candidate)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <fieldset className="flex flex-col gap-1">
+                <legend className="label">Normalization</legend>
+                <RadioGroup
+                  className="flex flex-row gap-4"
+                  value={normalizationMode}
+                  onValueChange={(value) => {
+                    if (value === "recording" || value === "frame") rawImageViewerStore.setNormalizationMode(value);
+                  }}
+                >
+                  <label className="flex items-center gap-2 text-sm">
+                    <RadioGroupItem value="recording" aria-label="Recording-scale normalization (default)" />
+                    Recording-scale (default)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <RadioGroupItem value="frame" aria-label="Frame-scale normalization" />
+                    Frame-scale
+                  </label>
+                </RadioGroup>
+              </fieldset>
+            </div>
+
+            {recordingId === null || channel === null ? (
+              <p className="hint">Select a recording and a channel to inspect its raw image.</p>
+            ) : status === "loading" ? (
+              <div className="flex flex-col gap-2" aria-busy="true" aria-live="polite">
+                <Skeleton className="h-80 w-80" />
+                <span className="sr-only">Loading raw recording window…</span>
+              </div>
+            ) : status === "error" ? (
+              <p role="alert" className="text-sm text-destructive">
+                Could not load this raw window: {errorMessage}
+              </p>
+            ) : rawWindow !== null ? (
+              <div className="flex flex-col gap-3">
+                {!rawWindow.channelAvailable ? (
+                  <p role="alert" className="text-sm text-destructive">
+                    This channel has no recorded numeric values in this recording; there is nothing to visualize.
+                  </p>
+                ) : (
+                  <>
+                    {rawWindow.totalRawRowCount < RAW_WINDOW_MAX_VALUES && (
+                      <p className="hint">
+                        Short recording: only {rawWindow.totalRawRowCount.toLocaleString()} of {RAW_WINDOW_MAX_VALUES.toLocaleString()} pixels
+                        have a recorded row; the remaining pixels show the "no data" fill below.
+                      </p>
+                    )}
+                    <RawImageCanvas rawWindow={rawWindow} normalizationMode={normalizationMode} />
+                    <div className="flex flex-col gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                        <span>
+                          Rows {rawWindow.startRawRow.toLocaleString()}–{Math.max(rawWindow.startRawRow, rawWindow.endRawRow - 1).toLocaleString()} of{" "}
+                          {rawWindow.totalRawRowCount.toLocaleString()}
+                        </span>
+                        <span>
+                          Frame {currentFrame}
+                          {totalFrames !== null ? ` of ${totalFrames}` : ""}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={bounds === null || requestedStartRawRow <= bounds.minStartRawRow}
+                          onClick={() => rawImageViewerStore.goToPreviousFrame()}
+                        >
+                          Previous 64 rows
+                        </Button>
+                        <Slider
+                          aria-label="Raw row frame position"
+                          min={bounds?.minStartRawRow ?? 0}
+                          max={Math.max(bounds?.maxStartRawRow ?? 0, bounds?.minStartRawRow ?? 0)}
+                          step={RAW_WINDOW_ROW_HOP}
+                          value={[requestedStartRawRow]}
+                          disabled={bounds === null || bounds.maxStartRawRow === bounds.minStartRawRow}
+                          onValueChange={(value) => {
+                            const next = Array.isArray(value) ? value[0] : value;
+                            if (typeof next === "number") rawImageViewerStore.setStartRawRow(next);
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={bounds === null || requestedStartRawRow >= bounds.maxStartRawRow}
+                          onClick={() => rawImageViewerStore.goToNextFrame()}
+                        >
+                          Next 64 rows
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : null}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

@@ -1,8 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useState, useSyncExternalStore } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import { CsvCaptureCard } from "./CsvCaptureCard";
 import { DatasetCaptureCard } from "./DatasetCaptureCard";
+import { RawImageViewerPanel } from "./RawImageViewerPanel";
 import { SignalMonitor, type SignalView } from "./SignalMonitor";
 import { WellnessCapturePanel } from "./WellnessCapturePanel";
 import { useTelemetryExport } from "../hooks/useTelemetryExport";
@@ -85,73 +87,88 @@ export function LiveTelemetry() {
       <span><i className={watchStatus?.connected ? "connected" : ""} />Watch · {watchStatus?.connected ? "Connected" : "Disconnected"}</span>
       {!desktopAvailable && <span className="preview-label">Browser preview · connect devices in the desktop app</span>}
     </div>
-    <div className="capture-grid">
-      <CsvCaptureCard
-        recording={recording}
-        rowCount={rowCount}
-        savedCount={savedCount}
-        onToggleRecording={() => telemetryStore.toggleRecording()}
-        onSaveCsv={saveCsv}
-      />
-      <DatasetCaptureCard
-        captureMode={captureMode}
-        onCaptureModeChange={(mode) => telemetryStore.setDatasetCaptureMode(mode)}
-        selectedLabel={selectedLabel}
-        sessionLabels={sessionLabels}
-        datasetRecording={datasetRecording}
-        datasetRecordingState={datasetRecordingState}
-        datasetSession={datasetSession}
-        datasetRowCount={datasetRowCount}
-        datasetElapsedMs={datasetElapsedMs}
-        datasetRows={datasetRows}
-        timelineIntervals={timelineIntervals}
-        activeTimelineLabel={activeTimelineLabel}
-        onSelectLabel={(label) => telemetryStore.selectDatasetLabel(label)}
-        onStart={() => telemetryStore.startDatasetRecording()}
-        onStop={() => {
-          telemetryStore.stopDatasetRecording();
-          // Quick Capture has nothing left to review, so it persists the bundle
-          // immediately; Timeline Capture waits for the explicit "Save recording
-          // bundle" action below so post-capture interval edits land in the
-          // saved bundle instead of racing it.
-          if (captureMode === "quick") void saveDatasetRecording();
-        }}
-        onDiscard={() => telemetryStore.discardDatasetRecording()}
-        onExport={exportDatasetCsv}
-        onSaveRecording={saveDatasetRecording}
-        onSetTimelineLabel={(label, mechanism) => telemetryStore.setTimelineLabel(label, mechanism)}
-        onRelabelInterval={(intervalId, label) => telemetryStore.relabelTimelineInterval(intervalId, label)}
-        onSetIntervalCurationStatus={(intervalId, status) => telemetryStore.setTimelineIntervalCurationStatus(intervalId, status)}
-        onMoveIntervalBoundary={(intervalId, edge, newRawRow) => telemetryStore.moveTimelineIntervalBoundary(intervalId, edge, newRawRow)}
-        onSplitInterval={(intervalId, atRawRow) => telemetryStore.splitTimelineInterval(intervalId, atRawRow)}
-        onCreateInterval={(label, startRawRow, endRawRow) => telemetryStore.createTimelineInterval(label, startRawRow, endRawRow)}
-        onDeleteInterval={(intervalId) => telemetryStore.deleteTimelineInterval(intervalId)}
-      />
-    </div>
-    <SignalMonitor
-      signalView={signalView}
-      onSignalViewChange={setSignalView}
-      orientationEnabled={orientationEnabled}
-      headPoints={headPoints}
-      watchOrientationPoints={watchOrientationPoints}
-      ppgPoints={ppgPoints}
-    />
-    <WellnessCapturePanel
-      desktopAvailable={desktopAvailable}
-      watchStatus={watchStatus}
-      heartRateStreaming={heartRateStreaming}
-      skinTemperatureStreaming={skinTemperatureStreaming}
-      edaStreaming={edaStreaming}
-      heartRatePoints={heartRatePoints}
-      ibiPoints={ibiPoints}
-      temperaturePoints={temperaturePoints}
-      edaPoints={edaPoints}
-      spo2Points={spo2Points}
-      ecgPoints={ecgPoints}
-      pendingMeasurement={pendingMeasurement}
-      measurementError={measurementError}
-      onRequestMeasurement={(tracker, measuring) => { void requestMeasurement(tracker, measuring); }}
-    />
-    <p className="hint telemetry-note">Graphs retain the latest {MAX_VISIBLE_SAMPLES} points. CSV recording is bounded to the most recent {MAX_CSV_ROWS.toLocaleString()} rows (~{formatBytes(MAX_CSV_ROWS * ESTIMATED_BYTES_PER_CSV_ROW)} max); files save through your operating system's native save dialog.</p>
+    <Tabs defaultValue="live">
+      <TabsList>
+        <TabsTrigger value="live">Live</TabsTrigger>
+        <TabsTrigger value="rawViewer">Raw image viewer</TabsTrigger>
+      </TabsList>
+      <TabsContent value="live" className="card-stack">
+        <div className="capture-grid">
+          <CsvCaptureCard
+            recording={recording}
+            rowCount={rowCount}
+            savedCount={savedCount}
+            onToggleRecording={() => telemetryStore.toggleRecording()}
+            onSaveCsv={saveCsv}
+          />
+          <DatasetCaptureCard
+            captureMode={captureMode}
+            onCaptureModeChange={(mode) => telemetryStore.setDatasetCaptureMode(mode)}
+            selectedLabel={selectedLabel}
+            sessionLabels={sessionLabels}
+            datasetRecording={datasetRecording}
+            datasetRecordingState={datasetRecordingState}
+            datasetSession={datasetSession}
+            datasetRowCount={datasetRowCount}
+            datasetElapsedMs={datasetElapsedMs}
+            datasetRows={datasetRows}
+            timelineIntervals={timelineIntervals}
+            activeTimelineLabel={activeTimelineLabel}
+            onSelectLabel={(label) => telemetryStore.selectDatasetLabel(label)}
+            onStart={() => telemetryStore.startDatasetRecording()}
+            onStop={() => {
+              telemetryStore.stopDatasetRecording();
+              // Quick Capture has nothing left to review, so it persists the bundle
+              // immediately; Timeline Capture waits for the explicit "Save recording
+              // bundle" action below so post-capture interval edits land in the
+              // saved bundle instead of racing it.
+              if (captureMode === "quick") void saveDatasetRecording();
+            }}
+            onDiscard={() => telemetryStore.discardDatasetRecording()}
+            onExport={exportDatasetCsv}
+            onSaveRecording={saveDatasetRecording}
+            onSetTimelineLabel={(label, mechanism) => telemetryStore.setTimelineLabel(label, mechanism)}
+            onRelabelInterval={(intervalId, label) => telemetryStore.relabelTimelineInterval(intervalId, label)}
+            onSetIntervalCurationStatus={(intervalId, status) => telemetryStore.setTimelineIntervalCurationStatus(intervalId, status)}
+            onMoveIntervalBoundary={(intervalId, edge, newRawRow) => telemetryStore.moveTimelineIntervalBoundary(intervalId, edge, newRawRow)}
+            onSplitInterval={(intervalId, atRawRow) => telemetryStore.splitTimelineInterval(intervalId, atRawRow)}
+            onCreateInterval={(label, startRawRow, endRawRow) => telemetryStore.createTimelineInterval(label, startRawRow, endRawRow)}
+            onDeleteInterval={(intervalId) => telemetryStore.deleteTimelineInterval(intervalId)}
+          />
+        </div>
+        <SignalMonitor
+          signalView={signalView}
+          onSignalViewChange={setSignalView}
+          orientationEnabled={orientationEnabled}
+          headPoints={headPoints}
+          watchOrientationPoints={watchOrientationPoints}
+          ppgPoints={ppgPoints}
+        />
+        <WellnessCapturePanel
+          desktopAvailable={desktopAvailable}
+          watchStatus={watchStatus}
+          heartRateStreaming={heartRateStreaming}
+          skinTemperatureStreaming={skinTemperatureStreaming}
+          edaStreaming={edaStreaming}
+          heartRatePoints={heartRatePoints}
+          ibiPoints={ibiPoints}
+          temperaturePoints={temperaturePoints}
+          edaPoints={edaPoints}
+          spo2Points={spo2Points}
+          ecgPoints={ecgPoints}
+          pendingMeasurement={pendingMeasurement}
+          measurementError={measurementError}
+          onRequestMeasurement={(tracker, measuring) => { void requestMeasurement(tracker, measuring); }}
+        />
+        <p className="hint telemetry-note">Graphs retain the latest {MAX_VISIBLE_SAMPLES} points. CSV recording is bounded to the most recent {MAX_CSV_ROWS.toLocaleString()} rows (~{formatBytes(MAX_CSV_ROWS * ESTIMATED_BYTES_PER_CSV_ROW)} max); files save through your operating system's native save dialog.</p>
+      </TabsContent>
+      <TabsContent value="rawViewer">
+        {desktopAvailable ? (
+          <RawImageViewerPanel />
+        ) : (
+          <p className="hint">The raw image viewer reads saved recording bundles from the desktop app's data directory and is unavailable in browser preview.</p>
+        )}
+      </TabsContent>
+    </Tabs>
   </main>;
 }
