@@ -145,14 +145,20 @@ GC-003–GC-005 land.
 
 ## GC-009 — Raw recording image viewer
 
-**Status: M1 done; M2–M4 not started.**
+**Status: M1–M2 done; M3–M4 not started.**
 
 - [x] GC-009-M1: bounded, read-only `raw.csv` window contract (4,096 values;
       allow-listed numeric channel; preserved nulls). Added
       `recording_bundle::get_raw_recording_window`, registered in `lib.rs`;
       `load_recording_bundle` and the write path are unchanged.
-- [ ] GC-009-M2: typed Tauri bridge and race-safe viewer state with 64-row
-      frame navigation.
+- [x] GC-009-M2: typed Tauri bridge and race-safe viewer state with 64-row
+      frame navigation. Added `getRawRecordingWindow` plus the
+      `RawRecordingWindow`/channel-allow-list types to
+      `shared/tauri/recordingBundle.ts`, and a new
+      `features/telemetry/store/rawImageViewerStore.ts` state module
+      (recording/channel/normalization-mode selection, request-version +
+      selection guard against stale responses, and hop-aligned navigation
+      bounds derived from the last loaded window). No UI panel yet.
 - [ ] GC-009-M3: dedicated inspection tab with a chronological 64 × 64 canvas
       renderer, explicit missing values, and recording-scale normalization.
 - [ ] GC-009-M4: boundary documentation, final acceptance review, and delivery

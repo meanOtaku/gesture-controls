@@ -79,6 +79,57 @@ export type RecordingBundleDetail = {
 
 export type RecordingBundleResult<T> = { status: "ok"; value: T } | { status: "error"; message: string };
 
+/**
+ * Mirrors `recording_bundle::RAW_WINDOW_ALLOWED_COLUMNS` exactly: the subset
+ * of raw.csv columns selectable as a raw-image-viewer channel. `timestamp_ns`
+ * and `sequence` are excluded since they are exposed separately on every
+ * window response, not as selectable channels.
+ */
+export const RAW_IMAGE_VIEWER_CHANNELS = [
+  "ppg_green",
+  "ppg_red",
+  "ppg_ir",
+  "accel_x",
+  "accel_y",
+  "accel_z",
+  "gyro_x",
+  "gyro_y",
+  "gyro_z",
+  "quat_w",
+  "quat_x",
+  "quat_y",
+  "quat_z",
+  "contact_quality",
+] as const;
+
+export type RawImageViewerChannel = (typeof RAW_IMAGE_VIEWER_CHANNELS)[number];
+
+/** Mirrors `recording_bundle::RAW_WINDOW_MAX_VALUES`. */
+export const RAW_WINDOW_MAX_VALUES = 4096;
+/** Mirrors `recording_bundle::RAW_WINDOW_ROW_HOP`. */
+export const RAW_WINDOW_ROW_HOP = 64;
+
+export type RawRecordingWindowRequest = {
+  recordingId: string;
+  column: RawImageViewerChannel;
+  startRawRow: number;
+};
+
+/** Mirrors `recording_bundle::RawRecordingWindow` field-for-field. */
+export type RawRecordingWindow = {
+  recordingId: string;
+  column: string;
+  totalRawRowCount: number;
+  startRawRow: number;
+  endRawRow: number;
+  rowIndices: number[];
+  timestampsNs: number[];
+  values: (number | null)[];
+  channelAvailable: boolean;
+  recordingMin: number | null;
+  recordingMax: number | null;
+};
+
 function toResult<T>(promise: Promise<T>): Promise<RecordingBundleResult<T>> {
   return promise
     .then((value) => ({ status: "ok" as const, value }))
@@ -154,6 +205,27 @@ export async function setIntervalCurationStatus(
       recordingId,
       intervalId,
       curationStatus,
+    }),
+  );
+}
+
+/**
+ * Fetches a bounded, read-only window of one numeric raw.csv column through
+ * the dedicated `get_raw_recording_window` command. This is the only path
+ * that reads raw sample data for inspection; it never writes any bundle file
+ * and is otherwise unrelated to `save_recording_bundle`/annotation curation.
+ */
+export async function getRawRecordingWindow(
+  request: RawRecordingWindowRequest,
+): Promise<RecordingBundleResult<RawRecordingWindow>> {
+  if (!isTauriDesktop()) {
+    return { status: "error", message: "Recording bundle persistence requires the desktop app" };
+  }
+  return toResult(
+    invoke<RawRecordingWindow>("get_raw_recording_window", {
+      recordingId: request.recordingId,
+      column: request.column,
+      startRawRow: request.startRawRow,
     }),
   );
 }
