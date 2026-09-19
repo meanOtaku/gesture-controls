@@ -146,6 +146,12 @@ Two capture modes share this same Arming/timer behavior and the same immutable-r
 
 **Discard** removes the current in-memory session without saving or exporting it — nothing has been written to disk yet at that point, so nothing needs to be cleaned up. **Export Dataset CSV** writes the legacy single-label-per-file CSV format for compatibility with the current Model Lab importer. Preserve a mix of positive gestures and realistic background/negative activities; that is important for false-activation evaluation.
 
+#### Raw image viewer
+
+This tab gives a read-only visual inspection of one numeric raw-data column from a saved recording's `raw.csv`. Each frame reshapes exactly 4,096 chronological raw rows into a 64×64 image (pixel-left-to-right, then top-to-bottom, in raw-row order); the slider and prev/next controls move in fixed 64-row hops, and the far end of a recording is always reachable even if it isn't hop-aligned. A missing raw field renders in a distinct color from "beyond the end of this recording," and neither is ever filled in with replacement data. Recording-scale normalization (the default) and an explicitly labeled per-frame-scale alternative are pure rendering choices over the already-loaded frame. Hover or use arrow keys to inspect a pixel's raw row, timestamp, value, and null state.
+
+This viewer is inspection-only: it has no annotation-editing or training action, and nothing it renders or computes feeds Model Lab, dataset export, or inference.
+
 ### Model Lab
 
 The **Model Lab** tab manages datasets, model training, model safety state, replay, and desktop inference mode.

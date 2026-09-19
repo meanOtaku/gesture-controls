@@ -145,7 +145,7 @@ GC-003–GC-005 land.
 
 ## GC-009 — Raw recording image viewer
 
-**Status: M1–M3 done; M4 not started.**
+**Status: done** (M1–M4 complete; validation gates deferred/not cleared).
 
 - [x] GC-009-M1: bounded, read-only `raw.csv` window contract (4,096 values;
       allow-listed numeric channel; preserved nulls). Added
@@ -173,10 +173,23 @@ GC-003–GC-005 land.
       no-recording, empty-selection, loading, unavailable-channel,
       short-recording, and command-error states. No annotation-edit or
       training action is exposed.
-- [ ] GC-009-M4: boundary documentation, final acceptance review, and delivery
-      state reconciliation.
+- [x] GC-009-M4: documented the read-only raw-image-viewer contract (fixed
+      4,096-value/64-row-hop frame, chronological row-major canvas order,
+      null/missing vs. beyond-recording treatment, recording- vs. frame-scale
+      normalization, and the explicit non-training/non-classifier boundary)
+      in `docs/decisions/2026-09-dataset-capture-recording-contract.md`
+      (new "Raw image viewer (read-only inspection)" section) and added a
+      matching user-facing "Raw image viewer" subsection to
+      `docs/using-the-application.md`. Performed an independent source/diff
+      review of M1-M3 against their acceptance criteria (backend bounds/null
+      handling, frontend hop-alignment/stale-response guards, UI states and
+      tab wiring) with no discrepancies found. No application behavior was
+      changed.
+- [x] GC-009 is now **done**: M1-M4 are committed and pushed in order
+      (`1cfc7a2`, `1b8d75a`, `2e9e45f`, and this M4 commit).
 - [ ] Automated tests, builds, linting, formatting, screenshots, and runtime
-      validation are **DEFERRED / NOT CLEARED** until explicitly requested.
+      validation are **DEFERRED / NOT CLEARED** — not run for any of
+      GC-009-M1 through M4.
 
 See `.hermes/plans/2026-09-19-gc-009-raw-recording-image-viewer-milestones.md`
 and `.hermes/queues/gc-009-raw-recording-image-viewer.json`.

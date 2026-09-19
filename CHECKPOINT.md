@@ -176,3 +176,46 @@ installation, CI run, clean-host loader check, Off/Monitor/Live exercise,
 fallback/forced-release exercise, signing step, or physical LiteRT execution
 was performed for GC-004. Every validation, platform, release, and hardware
 gate remains **DEFERRED / NOT CLEARED**.
+
+## GC-009 — Raw recording image viewer (2026-09-19)
+
+**Status: done.** M1-M4 committed and pushed in order: `1cfc7a2` (M1, backend
+window contract), `1b8d75a` (M2, typed bridge + viewer state), `2e9e45f`
+(M3, tab UI + canvas renderer), and this M4 commit (documentation + delivery
+reconciliation).
+
+- M1 (`recording_bundle::get_raw_recording_window`): a dedicated, read-only
+  command bounding a `raw.csv` column read to at most 4,096 chronological
+  values starting at a hop-64-aligned raw row; rejects negative/non-aligned
+  starts, clamps an out-of-range start down to the last reachable hop-aligned
+  window, and preserves empty fields as `None` rather than coercing or
+  carrying forward. Never touches `load_recording_bundle`'s metadata/
+  annotation path or writes any file.
+- M2 (`recordingBundle.ts`, `rawImageViewerStore.ts`): a narrow typed
+  invocation wrapper and a request-versioned state module that aligns every
+  navigation path to the 64-row hop client-side, derives slider bounds from
+  the backend's own `totalRawRowCount`, and discards any response superseded
+  by a newer request or a changed recording/channel selection.
+- M3 (`RawImageViewerPanel.tsx`, `RawImageCanvas.tsx`): a "Raw image viewer"
+  tab inside `LiveTelemetry` rendering one `<canvas>`/`ImageData` 64×64
+  chronological frame (never 4,096 DOM nodes), with distinct fills for real
+  values, missing raw fields, and out-of-recording pixels, a
+  recording-vs-frame-scale normalization toggle, a matching legend, and
+  keyboard/hover pixel inspection. Covers no-recording, empty-selection,
+  loading, unavailable-channel, short-recording, and command-error states.
+  No annotation-editing or training action is exposed anywhere in this path.
+- M4 (this entry): documented the fixed 4,096-value/64-row-hop frame
+  contract, chronological row-major canvas order, null/missing vs.
+  beyond-recording treatment, recording-/frame-scale normalization, and the
+  explicit non-training/non-classifier boundary in
+  `docs/decisions/2026-09-dataset-capture-recording-contract.md` (new
+  section) and `docs/using-the-application.md` (new user-facing
+  subsection). Performed an independent source/diff review of M1-M3 against
+  their acceptance criteria (bounds/null handling, hop-alignment/stale-
+  response guards, UI states and tab wiring) with no discrepancies found.
+  Reconciled `TASKS.md`, `CHECKPOINT.md`, and
+  `.hermes/queues/gc-009-raw-recording-image-viewer.json` to reflect M1-M4
+  completion. No application behavior was changed in this milestone.
+- Per task direction, no tests, CI, builds, linting, formatting, installs,
+  screenshots, or runtime validation were run for any of GC-009-M1 through
+  M4. Those gates remain **DEFERRED / NOT CLEARED**.
