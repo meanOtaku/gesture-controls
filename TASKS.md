@@ -425,3 +425,11 @@ and `.hermes/queues/gc-009-raw-recording-image-viewer.json`.
 - [x] GC-015 follow-up 2: removed the overlaying page trigger entirely and
       used the generated `SidebarRail` inside the sidebar for collapse/expand,
       leaving the content inset free of navigation chrome.
+
+## GC-016 — Watch discovery recognizes already-active Wi-Fi
+
+- [x] Seed `DesktopDiscovery` from `ConnectivityManager.allNetworks` before
+      waiting for future network callbacks, so discovery starts when the watch
+      opens while Wi-Fi is already connected.
+- [ ] Automated tests, builds, lint, formatting, installs, and runtime
+      validation are **DEFERRED / NOT CLEARED**.
