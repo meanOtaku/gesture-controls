@@ -8,6 +8,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
 } from "../../components/ui/sidebar";
 
 export type AppTab = "main" | "headphone" | "watch" | "telemetry" | "modelLab" | "settings";
@@ -55,6 +56,7 @@ export function AppNav({ activeTab, onSelect }: AppNavProps) {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarRail />
     </Sidebar>
   );
 }

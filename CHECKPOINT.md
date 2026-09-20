@@ -476,3 +476,10 @@ remain **DEFERRED / NOT CLEARED**.
   trigger remains accessible while no longer consuming the dashboard's top
   space or pushing down its heading.
 - No validation gates were run; they remain **DEFERRED / NOT CLEARED**.
+
+### GC-015 follow-up 2 — Sidebar rail instead of content overlay
+
+- Replaced the content-area `SidebarTrigger` with the official shadcn
+  `SidebarRail` within `AppNav`. The collapse affordance stays on the sidebar
+  boundary and cannot overlap or clip a page heading.
+- No validation gates were run; they remain **DEFERRED / NOT CLEARED**.

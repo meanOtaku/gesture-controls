@@ -422,3 +422,6 @@ and `.hermes/queues/gc-009-raw-recording-image-viewer.json`.
 - [x] GC-015 follow-up: moved `SidebarTrigger` out of normal document flow
       (`absolute left-2 top-2 z-10`), so it no longer consumes the page's
       top space or displaces each view heading.
+- [x] GC-015 follow-up 2: removed the overlaying page trigger entirely and
+      used the generated `SidebarRail` inside the sidebar for collapse/expand,
+      leaving the content inset free of navigation chrome.
