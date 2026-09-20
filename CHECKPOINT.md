@@ -219,3 +219,24 @@ reconciliation).
 - Per task direction, no tests, CI, builds, linting, formatting, installs,
   screenshots, or runtime validation were run for any of GC-009-M1 through
   M4. Those gates remain **DEFERRED / NOT CLEARED**.
+
+## GC-010 — Registry-mutation helper refactor (this session)
+
+Minimal architecture cleanup of `apps/desktop/src-tauri/src/model_registry.rs`:
+added a single private helper, `with_registry_mutation`, that centralizes
+lock acquisition, `load_registry`, a fallible mutation closure over
+`RegistryIndex`, `write_registry_atomic`, `emit_registry`, and `RegistryView`
+conversion. `transition_model_state`, `update_model_thresholds`,
+`update_model_quality_gate`, `set_model_intent_bindings`, `activate_model`,
+`rollback_active_model`, and `set_inference_mode` now go through it;
+`get_model_registry` is unchanged (read-only). No command interface,
+lifecycle rule, bundle validation, atomic-persistence mechanism, error text,
+or operation ordering changed — `activate_model`/`rollback_active_model`
+still run validation and `force_release_before_swap` inside their closures in
+the original order, and `set_inference_mode` still applies the gesture-policy
+mode change after persistence.
+
+Per task direction: no tests, builds, lint, formatting, or installs were run.
+Only the final diff and `git diff --check` were inspected. Validation
+(cargo test/clippy/fmt, targeted `model_registry` unit tests) remains
+**DEFERRED / NOT CLEARED**.

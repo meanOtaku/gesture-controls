@@ -193,3 +193,25 @@ GC-003–GC-005 land.
 
 See `.hermes/plans/2026-09-19-gc-009-raw-recording-image-viewer-milestones.md`
 and `.hermes/queues/gc-009-raw-recording-image-viewer.json`.
+
+## GC-010 — Registry-mutation helper refactor in `model_registry.rs`
+
+- [x] Added one private helper, `with_registry_mutation`, that owns the
+      `ModelRegistryRuntime` lock acquisition, `load_registry`, a fallible
+      mutation closure over `RegistryIndex`, `write_registry_atomic`,
+      `emit_registry`, and `RegistryView` conversion for every
+      registry-mutating command.
+- [x] Refactored `transition_model_state`, `update_model_thresholds`,
+      `update_model_quality_gate`, `set_model_intent_bindings`,
+      `activate_model`, `rollback_active_model`, and `set_inference_mode`
+      through the helper. `get_model_registry` stays explicit (read-only,
+      never mutates).
+- [x] No change to any Tauri command interface, lifecycle rule, bundle
+      validation, atomic-persistence mechanism, error text, or operation
+      ordering. `activate_model`/`rollback_active_model` keep validation and
+      `force_release_before_swap` inside their closures in the same order as
+      before. `set_inference_mode` still applies gesture-policy mode after
+      persistence.
+- [ ] Automated tests, builds, lint, formatting, and installs are
+      **DEFERRED / NOT CLEARED** — not run for this change; only the diff
+      and `git diff --check` were inspected.

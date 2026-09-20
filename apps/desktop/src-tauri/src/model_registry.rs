@@ -717,6 +717,32 @@ fn emit_registry(app: &AppHandle, index: &RegistryIndex) {
     }
 }
 
+/// Single choke point for every registry-mutating command: acquires
+/// `runtime`'s lock, loads the current index, runs `mutate` over it, and -- if
+/// `mutate` succeeds -- atomically persists and emits the result. `mutate`
+/// itself decides what "success" means for its operation (state checks,
+/// bundle/binding revalidation, the actual field change), so this only
+/// centralizes the lock/load/persist/emit/view steps every command repeated,
+/// without changing what each command validates or when.
+fn with_registry_mutation<F>(
+    app: &AppHandle,
+    runtime: &ModelRegistryRuntime,
+    mutate: F,
+) -> Result<RegistryView, String>
+where
+    F: FnOnce(&mut RegistryIndex) -> Result<(), String>,
+{
+    let _guard = runtime
+        .lock
+        .lock()
+        .map_err(|_| "model registry lock was poisoned".to_string())?;
+    let mut index = load_registry(app);
+    mutate(&mut index)?;
+    write_registry_atomic(app, &index)?;
+    emit_registry(app, &index);
+    Ok(RegistryView::from(index))
+}
+
 /// A model directory is a validated, activatable TFLite bundle iff it holds
 /// both `metadata.json` and `model.tflite`. `metadata.json` is only ever
 /// written by `write_and_validate_metadata` in bundle.py, which validates the
@@ -847,24 +873,17 @@ pub fn transition_model_state(
     app: AppHandle,
     runtime: State<'_, ModelRegistryRuntime>,
 ) -> Result<RegistryView, String> {
-    let _guard = runtime
-        .lock
-        .lock()
-        .map_err(|_| "model registry lock was poisoned".to_string())?;
-    let mut index = load_registry(&app);
-    if index.active_model_id.as_deref() == Some(id.as_str()) {
-        return Err("cannot transition the active model directly; use rollback_active_model or activate a different model first".to_string());
-    }
-    {
-        let model = find_model_mut(&mut index, &id)?;
+    with_registry_mutation(&app, &runtime, |index| {
+        if index.active_model_id.as_deref() == Some(id.as_str()) {
+            return Err("cannot transition the active model directly; use rollback_active_model or activate a different model first".to_string());
+        }
+        let model = find_model_mut(index, &id)?;
         if !legal_transition(model.state, to) {
             return Err(format!("illegal transition {:?} -> {:?}", model.state, to));
         }
         model.push_transition(to);
-    }
-    write_registry_atomic(&app, &index)?;
-    emit_registry(&app, &index);
-    Ok(RegistryView::from(index))
+        Ok(())
+    })
 }
 
 #[tauri::command]
@@ -875,15 +894,10 @@ pub fn update_model_thresholds(
     runtime: State<'_, ModelRegistryRuntime>,
 ) -> Result<RegistryView, String> {
     thresholds.validate()?;
-    let _guard = runtime
-        .lock
-        .lock()
-        .map_err(|_| "model registry lock was poisoned".to_string())?;
-    let mut index = load_registry(&app);
-    find_model_mut(&mut index, &id)?.thresholds = thresholds;
-    write_registry_atomic(&app, &index)?;
-    emit_registry(&app, &index);
-    Ok(RegistryView::from(index))
+    with_registry_mutation(&app, &runtime, |index| {
+        find_model_mut(index, &id)?.thresholds = thresholds;
+        Ok(())
+    })
 }
 
 #[tauri::command]
@@ -894,15 +908,10 @@ pub fn update_model_quality_gate(
     runtime: State<'_, ModelRegistryRuntime>,
 ) -> Result<RegistryView, String> {
     quality_gate.validate()?;
-    let _guard = runtime
-        .lock
-        .lock()
-        .map_err(|_| "model registry lock was poisoned".to_string())?;
-    let mut index = load_registry(&app);
-    find_model_mut(&mut index, &id)?.quality_gate = quality_gate;
-    write_registry_atomic(&app, &index)?;
-    emit_registry(&app, &index);
-    Ok(RegistryView::from(index))
+    with_registry_mutation(&app, &runtime, |index| {
+        find_model_mut(index, &id)?.quality_gate = quality_gate;
+        Ok(())
+    })
 }
 
 /// Replaces the complete, closed-set intent mapping for one trained model.
@@ -917,25 +926,20 @@ pub fn set_model_intent_bindings(
     runtime: State<'_, ModelRegistryRuntime>,
 ) -> Result<RegistryView, String> {
     validate_intent_bindings(&bindings)?;
-    let _guard = runtime
-        .lock
-        .lock()
-        .map_err(|_| "model registry lock was poisoned".to_string())?;
-    let mut index = load_registry(&app);
-    let model = find_model_mut(&mut index, &id)?;
-    if matches!(
-        model.state,
-        ModelLifecycleState::Approved | ModelLifecycleState::Active
-    ) {
-        return Err(
-            "cannot change bindings of an approved or active model; move it back to Evaluated first"
-                .to_string(),
-        );
-    }
-    model.intent_bindings = bindings;
-    write_registry_atomic(&app, &index)?;
-    emit_registry(&app, &index);
-    Ok(RegistryView::from(index))
+    with_registry_mutation(&app, &runtime, |index| {
+        let model = find_model_mut(index, &id)?;
+        if matches!(
+            model.state,
+            ModelLifecycleState::Approved | ModelLifecycleState::Active
+        ) {
+            return Err(
+                "cannot change bindings of an approved or active model; move it back to Evaluated first"
+                    .to_string(),
+            );
+        }
+        model.intent_bindings = bindings;
+        Ok(())
+    })
 }
 
 /// Activates `id`: requires it be `Approved` and a validated TFLite bundle.
@@ -949,47 +953,41 @@ pub fn activate_model(
     gesture_policy: State<'_, GesturePolicyRuntime>,
     pinch_inference: State<'_, PinchInferenceRuntime>,
 ) -> Result<RegistryView, String> {
-    let _guard = runtime
-        .lock
-        .lock()
-        .map_err(|_| "model registry lock was poisoned".to_string())?;
-    let mut index = load_registry(&app);
-    {
-        let model = find_model_mut(&mut index, &id)?;
-        if model.state != ModelLifecycleState::Approved {
-            return Err(format!(
-                "model '{id}' must be Approved before activation (currently {:?})",
-                model.state
-            ));
+    with_registry_mutation(&app, &runtime, |index| {
+        {
+            let model = find_model_mut(index, &id)?;
+            if model.state != ModelLifecycleState::Approved {
+                return Err(format!(
+                    "model '{id}' must be Approved before activation (currently {:?})",
+                    model.state
+                ));
+            }
         }
-    }
-    // Reject a non-TFLite (e.g. sklearn baseline) bundle with a clear,
-    // deployability-specific error before the generic contract revalidation
-    // below, which would otherwise surface as an opaque "failed to read
-    // metadata.json" I/O error.
-    model_is_activatable(&app, &id)?;
-    // Revalidate the full bundle contract, digest, and bindings under the
-    // same lock as the state check above -- a stale `Approved` state on disk
-    // must never be trusted alone, and nothing may mutate the record between
-    // this validation and the swap below (see `ActiveModelSnapshot::verified`).
-    ActiveModelSnapshot::verified(&app, &id)?;
+        // Reject a non-TFLite (e.g. sklearn baseline) bundle with a clear,
+        // deployability-specific error before the generic contract revalidation
+        // below, which would otherwise surface as an opaque "failed to read
+        // metadata.json" I/O error.
+        model_is_activatable(&app, &id)?;
+        // Revalidate the full bundle contract, digest, and bindings under the
+        // same lock as the state check above -- a stale `Approved` state on disk
+        // must never be trusted alone, and nothing may mutate the record between
+        // this validation and the swap below (see `ActiveModelSnapshot::verified`).
+        ActiveModelSnapshot::verified(&app, &id)?;
 
-    force_release_before_swap(&app, &gesture_policy, &pinch_inference);
+        force_release_before_swap(&app, &gesture_policy, &pinch_inference);
 
-    let previous_active = index.active_model_id.clone();
-    if let Some(previous_id) = &previous_active
-        && previous_id != &id
-        && let Ok(previous) = find_model_mut(&mut index, previous_id)
-    {
-        previous.push_transition(ModelLifecycleState::Approved);
-    }
-    find_model_mut(&mut index, &id)?.push_transition(ModelLifecycleState::Active);
-    index.previous_active_model_id = previous_active.filter(|previous_id| previous_id != &id);
-    index.active_model_id = Some(id);
-
-    write_registry_atomic(&app, &index)?;
-    emit_registry(&app, &index);
-    Ok(RegistryView::from(index))
+        let previous_active = index.active_model_id.clone();
+        if let Some(previous_id) = &previous_active
+            && previous_id != &id
+            && let Ok(previous) = find_model_mut(index, previous_id)
+        {
+            previous.push_transition(ModelLifecycleState::Approved);
+        }
+        find_model_mut(index, &id)?.push_transition(ModelLifecycleState::Active);
+        index.previous_active_model_id = previous_active.filter(|previous_id| previous_id != &id);
+        index.active_model_id = Some(id);
+        Ok(())
+    })
 }
 
 /// Swaps the active model back to whichever model was active immediately
@@ -1001,33 +999,27 @@ pub fn rollback_active_model(
     gesture_policy: State<'_, GesturePolicyRuntime>,
     pinch_inference: State<'_, PinchInferenceRuntime>,
 ) -> Result<RegistryView, String> {
-    let _guard = runtime
-        .lock
-        .lock()
-        .map_err(|_| "model registry lock was poisoned".to_string())?;
-    let mut index = load_registry(&app);
-    let Some(previous_id) = index.previous_active_model_id.clone() else {
-        return Err("no previous active model to roll back to".to_string());
-    };
-    // The model being restored may have been demoted since it was last
-    // active; revalidate its bundle contract, digest, and bindings exactly
-    // as activation would rather than trusting its earlier validation still
-    // holds.
-    ActiveModelSnapshot::verified(&app, &previous_id)?;
-    let current_active = index.active_model_id.clone();
+    with_registry_mutation(&app, &runtime, |index| {
+        let Some(previous_id) = index.previous_active_model_id.clone() else {
+            return Err("no previous active model to roll back to".to_string());
+        };
+        // The model being restored may have been demoted since it was last
+        // active; revalidate its bundle contract, digest, and bindings exactly
+        // as activation would rather than trusting its earlier validation still
+        // holds.
+        ActiveModelSnapshot::verified(&app, &previous_id)?;
+        let current_active = index.active_model_id.clone();
 
-    force_release_before_swap(&app, &gesture_policy, &pinch_inference);
+        force_release_before_swap(&app, &gesture_policy, &pinch_inference);
 
-    if let Some(current_id) = &current_active {
-        find_model_mut(&mut index, current_id)?.push_transition(ModelLifecycleState::Approved);
-    }
-    find_model_mut(&mut index, &previous_id)?.push_transition(ModelLifecycleState::Active);
-    index.active_model_id = Some(previous_id);
-    index.previous_active_model_id = current_active;
-
-    write_registry_atomic(&app, &index)?;
-    emit_registry(&app, &index);
-    Ok(RegistryView::from(index))
+        if let Some(current_id) = &current_active {
+            find_model_mut(index, current_id)?.push_transition(ModelLifecycleState::Approved);
+        }
+        find_model_mut(index, &previous_id)?.push_transition(ModelLifecycleState::Active);
+        index.active_model_id = Some(previous_id);
+        index.previous_active_model_id = current_active;
+        Ok(())
+    })
 }
 
 /// Also drives [`crate::inference::GesturePolicyRuntime`], which is the
@@ -1042,18 +1034,14 @@ pub fn set_inference_mode(
     runtime: State<'_, ModelRegistryRuntime>,
     gesture_policy: State<'_, crate::inference::GesturePolicyRuntime>,
 ) -> Result<RegistryView, String> {
-    let _guard = runtime
-        .lock
-        .lock()
-        .map_err(|_| "model registry lock was poisoned".to_string())?;
-    let mut index = load_registry(&app);
-    index.inference_mode = mode;
-    write_registry_atomic(&app, &index)?;
-    emit_registry(&app, &index);
+    let view = with_registry_mutation(&app, &runtime, |index| {
+        index.inference_mode = mode;
+        Ok(())
+    })?;
     if let Some(decision) = gesture_policy.set_mode(mode)? {
         crate::inference::apply_decision(&app, decision);
     }
-    Ok(RegistryView::from(index))
+    Ok(view)
 }
 
 #[cfg(test)]
