@@ -68,7 +68,11 @@ class DesktopDiscovery(
             }
         }
         networkCallback = callback
-        emitStatus("Wi-Fi unavailable")
+        val existingWifi = connectivityManager.allNetworks.filter { network ->
+            connectivityManager.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        }
+        val hasWifi = synchronized(wifiNetworks) { wifiNetworks.addAll(existingWifi); wifiNetworks.isNotEmpty() }
+        if (hasWifi) beginDiscovery() else emitStatus("Wi-Fi unavailable")
         connectivityManager.registerNetworkCallback(request, callback, mainHandler)
     }
 
