@@ -433,3 +433,18 @@ and `.hermes/queues/gc-009-raw-recording-image-viewer.json`.
       opens while Wi-Fi is already connected.
 - [ ] Automated tests, builds, lint, formatting, installs, and runtime
       validation are **DEFERRED / NOT CLEARED**.
+
+## GC-017 — Dataset CSV output folder and label cleanup
+
+- [x] Dataset CSV export now requires a native selected folder in the desktop
+      app and writes the existing generated filename directly there; browser
+      preview retains its download fallback.
+- [x] The recorder form consolidates label entry, previously-used labels, and
+      export-folder selection. Labels can be removed unless an existing
+      timeline interval still references one, protecting recorded intervals.
+- [x] Added the native dialog open permission required for folder selection.
+- [x] Targeted telemetry tests: **37 passed** (CSV export, telemetry export,
+      store, and dataset recorder card).
+- [ ] Production build is **NOT CLEARED**: the existing unrelated TypeScript
+      failures in Model Lab and `RecordingTimelineEditor` remain; no runtime
+      desktop verification was performed.

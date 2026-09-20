@@ -7,15 +7,34 @@ afterEach(() => cleanup());
 
 function renderCard(overrides: Partial<React.ComponentProps<typeof DatasetCaptureCard>> = {}) {
   const props: React.ComponentProps<typeof DatasetCaptureCard> = {
+    captureMode: "quick",
+    onCaptureModeChange: vi.fn(),
     selectedLabel: "idle",
+    sessionLabels: [],
+    onRemoveLabel: vi.fn(() => true),
+    getLabelRemovalBlockedReason: vi.fn(() => null),
+    desktopAvailable: false,
+    datasetExportFolder: null,
+    onChooseExportFolder: vi.fn().mockResolvedValue(undefined),
     datasetRecording: false,
     datasetSession: null,
     datasetRowCount: 0,
+    datasetRows: [],
+    timelineIntervals: [],
+    activeTimelineLabel: null,
     onSelectLabel: vi.fn(() => true),
     onStart: vi.fn(),
     onStop: vi.fn(),
     onDiscard: vi.fn(),
     onExport: vi.fn().mockResolvedValue(undefined),
+    onSaveRecording: vi.fn().mockResolvedValue(undefined),
+    onSetTimelineLabel: vi.fn(() => true),
+    onRelabelInterval: vi.fn(() => true),
+    onSetIntervalCurationStatus: vi.fn(() => true),
+    onMoveIntervalBoundary: vi.fn(() => true),
+    onSplitInterval: vi.fn(() => true),
+    onCreateInterval: vi.fn(() => true),
+    onDeleteInterval: vi.fn(() => true),
     ...overrides,
   };
   render(<TooltipProvider><DatasetCaptureCard {...props} /></TooltipProvider>);
@@ -25,25 +44,25 @@ function renderCard(overrides: Partial<React.ComponentProps<typeof DatasetCaptur
 describe("DatasetCaptureCard", () => {
   it("accepts a valid custom label and clears the field", () => {
     const props = renderCard();
-    fireEvent.change(screen.getByLabelText("Custom dataset label"), { target: { value: "wrist_flick" } });
-    fireEvent.click(screen.getByRole("button", { name: "Use custom label" }));
+    fireEvent.change(screen.getByLabelText("Dataset label"), { target: { value: "wrist_flick" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply label" }));
     expect(props.onSelectLabel).toHaveBeenCalledWith("wrist_flick");
-    expect(screen.getByLabelText("Custom dataset label")).toHaveValue("");
+    expect(screen.getByLabelText("Dataset label")).toHaveValue("");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("shows a validation error for an invalid custom label and keeps the field", () => {
     renderCard({ onSelectLabel: vi.fn(() => false) });
-    fireEvent.change(screen.getByLabelText("Custom dataset label"), { target: { value: "9bad" } });
-    fireEvent.click(screen.getByRole("button", { name: "Use custom label" }));
+    fireEvent.change(screen.getByLabelText("Dataset label"), { target: { value: "9bad" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply label" }));
     expect(screen.getByRole("alert")).toHaveTextContent(/letters, numbers, or underscores/);
-    expect(screen.getByLabelText("Custom dataset label")).toHaveValue("9bad");
+    expect(screen.getByLabelText("Dataset label")).toHaveValue("9bad");
   });
 
   it("disables label editing while a dataset session is recording", () => {
     renderCard({ datasetRecording: true, datasetSession: { label: "walking", startedAtIso: new Date().toISOString() } });
     expect(screen.getByLabelText("Dataset label")).toBeDisabled();
-    expect(screen.getByLabelText("Custom dataset label")).toBeDisabled();
+
     expect(screen.getByRole("button", { name: "Stop dataset capture" })).toBeInTheDocument();
   });
 
@@ -86,37 +105,10 @@ describe("DatasetCaptureCard", () => {
   });
 
   it("disables Export Dataset CSV when there are no buffered rows and enables it once rows exist", () => {
-    const { rerender } = render(
-      <TooltipProvider>
-        <DatasetCaptureCard
-          selectedLabel="idle"
-          datasetRecording={false}
-          datasetSession={null}
-          datasetRowCount={0}
-          onSelectLabel={vi.fn(() => true)}
-          onStart={vi.fn()}
-          onStop={vi.fn()}
-          onDiscard={vi.fn()}
-          onExport={vi.fn().mockResolvedValue(undefined)}
-        />
-      </TooltipProvider>,
-    );
+    renderCard({ datasetRowCount: 0 });
     expect(screen.getByRole("button", { name: "Export Dataset CSV" })).toBeDisabled();
-    rerender(
-      <TooltipProvider>
-        <DatasetCaptureCard
-          selectedLabel="idle"
-          datasetRecording={false}
-          datasetSession={{ label: "idle", startedAtIso: new Date().toISOString() }}
-          datasetRowCount={5}
-          onSelectLabel={vi.fn(() => true)}
-          onStart={vi.fn()}
-          onStop={vi.fn()}
-          onDiscard={vi.fn()}
-          onExport={vi.fn().mockResolvedValue(undefined)}
-        />
-      </TooltipProvider>,
-    );
+    cleanup();
+    renderCard({ datasetRowCount: 5 });
     expect(screen.getByRole("button", { name: "Export Dataset CSV" })).toBeEnabled();
   });
 

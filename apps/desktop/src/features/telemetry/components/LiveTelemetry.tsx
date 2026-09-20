@@ -26,7 +26,7 @@ export function LiveTelemetry() {
   const [signalView, setSignalView] = useState<SignalView>("all");
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
-  const { saveCsv, exportDatasetCsv, saveDatasetRecording } = useTelemetryExport();
+  const { saveCsv, exportDatasetCsv, saveDatasetRecording, datasetExportFolder, chooseDatasetExportFolder } = useTelemetryExport();
 
   const watchStatus = telemetryStore.getWatchStatus();
   const headConnected = telemetryStore.getHeadStatus()?.connected === true;
@@ -106,6 +106,11 @@ export function LiveTelemetry() {
             onCaptureModeChange={(mode) => telemetryStore.setDatasetCaptureMode(mode)}
             selectedLabel={selectedLabel}
             sessionLabels={sessionLabels}
+            onRemoveLabel={(label) => telemetryStore.removeSessionLabel(label)}
+            getLabelRemovalBlockedReason={(label) => telemetryStore.labelRemovalBlockedReason(label)}
+            desktopAvailable={desktopAvailable}
+            datasetExportFolder={datasetExportFolder}
+            onChooseExportFolder={async () => { await chooseDatasetExportFolder(); }}
             datasetRecording={datasetRecording}
             datasetRecordingState={datasetRecordingState}
             datasetSession={datasetSession}
@@ -160,7 +165,7 @@ export function LiveTelemetry() {
           measurementError={measurementError}
           onRequestMeasurement={(tracker, measuring) => { void requestMeasurement(tracker, measuring); }}
         />
-        <p className="hint telemetry-note">Graphs retain the latest {MAX_VISIBLE_SAMPLES} points. CSV recording is bounded to the most recent {MAX_CSV_ROWS.toLocaleString()} rows (~{formatBytes(MAX_CSV_ROWS * ESTIMATED_BYTES_PER_CSV_ROW)} max); files save through your operating system's native save dialog.</p>
+        <p className="hint telemetry-note">Graphs retain the latest {MAX_VISIBLE_SAMPLES} points. CSV recording is bounded to the most recent {MAX_CSV_ROWS.toLocaleString()} rows (~{formatBytes(MAX_CSV_ROWS * ESTIMATED_BYTES_PER_CSV_ROW)} max); ordinary CSV files save through your operating system's native save dialog.</p>
       </TabsContent>
       <TabsContent value="rawViewer">
         {desktopAvailable ? (

@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
-import { exportCsv, type ExportCsvResult } from "../../../shared/tauri/exportCsv";
+import { chooseExportFolder, exportCsv, exportCsvToFolder, isTauriDesktop, type ExportCsvResult } from "../../../shared/tauri/exportCsv";
 import { saveRecordingBundle, type SaveRecordingBundleResult } from "../../../shared/tauri/recordingBundle";
 import { telemetryStore } from "../store/telemetryStore";
 
@@ -47,6 +48,18 @@ function reportRecordingBundleOutcome(result: SaveRecordingBundleResult): void {
  * two capture cards only need to trigger these actions.
  */
 export function useTelemetryExport() {
+  // Session-only: no established lightweight local-setting store exists yet
+  // to persist this across app restarts (see settings.rs's heavier
+  // validated-settings-blob pattern, which this single path isn't worth
+  // wiring into) — the user re-picks the export folder each session.
+  const [datasetExportFolder, setDatasetExportFolder] = useState<string | null>(null);
+
+  const chooseDatasetExportFolder = async () => {
+    const folder = await chooseExportFolder("Choose dataset export folder");
+    if (folder) setDatasetExportFolder(folder);
+    return folder;
+  };
+
   const saveCsv = async () => {
     const retained = telemetryStore.getRows();
     const csv = [CSV_HEADERS.join(","), ...retained.map((row) => [
@@ -65,16 +78,22 @@ export function useTelemetryExport() {
 
   const exportDatasetCsv = async () => {
     const csv = telemetryStore.generateDatasetCsv();
-    const label = telemetryStore.getDatasetSession()?.label ?? telemetryStore.getSelectedLabel();
-    const suggestedName = `gesture-dataset-${label}-${new Date().toISOString().replaceAll(":", "-")}.csv`;
-    const result = await exportCsv({ content: csv, suggestedName, title: "Export dataset CSV" });
+    const label = telemetryStore.getDatasetSession()?.label ?? telemetryStore.getSelectedLabel() ?? "unlabeled";
+    const fileName = `gesture-dataset-${label}-${new Date().toISOString().replaceAll(":", "-")}.csv`;
+    if (isTauriDesktop() && !datasetExportFolder) {
+      // The UI disables Export until a folder is chosen; this only guards against that
+      // invariant slipping, and must never fall back to an arbitrary save location.
+      OperationFeedback.error("Export dataset CSV", "Choose an output folder first.");
+      return;
+    }
+    const result = await exportCsvToFolder({ content: csv, folder: datasetExportFolder ?? "", fileName });
     reportExportOutcome("Export dataset CSV", result);
   };
 
   /**
    * Persists the labeled session as an immutable recording bundle (raw.csv +
    * recording.json + annotations.json) in the app's own data directory,
-   * independent of the manual "Export Dataset CSV" native save dialog above.
+   * independent of the manual "Export Dataset CSV" folder export above.
    * Quick Capture calls this right after Stop; Timeline Capture calls it
    * explicitly once the user has reviewed/edited intervals in the "saved"
    * state, so editing never races a bundle that was already written. A
@@ -89,5 +108,5 @@ export function useTelemetryExport() {
     reportRecordingBundleOutcome(result);
   };
 
-  return { saveCsv, exportDatasetCsv, saveDatasetRecording };
+  return { saveCsv, exportDatasetCsv, saveDatasetRecording, datasetExportFolder, chooseDatasetExportFolder };
 }

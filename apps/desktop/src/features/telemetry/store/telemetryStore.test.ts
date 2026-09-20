@@ -223,5 +223,24 @@ describe("telemetryStore", () => {
       const dataLine = lines[lines.length - 1];
       expect(dataLine).toBe("500,3,,,,0.1,0.2,0.3,,,,1,0,0,0,,standing");
     });
+
+    it("removes an unreferenced label but blocks removal of a label a timeline interval still references", () => {
+      telemetryStore.selectDatasetLabel("resting");
+      expect(telemetryStore.getSessionLabels()).toContain("resting");
+      expect(telemetryStore.labelRemovalBlockedReason("resting")).toBeNull();
+      expect(telemetryStore.removeSessionLabel("resting")).toBe(true);
+      expect(telemetryStore.getSessionLabels()).not.toContain("resting");
+      expect(telemetryStore.getSelectedLabel()).toBeNull();
+
+      telemetryStore.setDatasetCaptureMode("timeline");
+      telemetryStore.startDatasetRecording();
+      telemetryStore.ingestPpgBatch({
+        sequence: 1, timestampsNs: [0], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
+      });
+      telemetryStore.setTimelineLabel("waving");
+      expect(telemetryStore.labelRemovalBlockedReason("waving")).not.toBeNull();
+      expect(telemetryStore.removeSessionLabel("waving")).toBe(false);
+      expect(telemetryStore.getSessionLabels()).toContain("waving");
+    });
   });
 });

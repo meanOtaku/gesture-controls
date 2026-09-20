@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Default desktop window capability",
   "windows": ["main", "overlay"],
-  "permissions": ["core:default", "dialog:allow-save", "fs:allow-write-text-file"]
+  "permissions": ["core:default", "dialog:allow-save", "dialog:allow-open", "fs:allow-write-text-file"]
 }

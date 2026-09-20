@@ -1,12 +1,26 @@
+import { renderHook } from "@testing-library/react";
+import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useTelemetryExport } from "./useTelemetryExport";
 import { telemetryStore } from "../store/telemetryStore";
 import { resetFeedbackForTests } from "../../../components/app/OperationFeedback";
 
-const { exportCsv } = vi.hoisted(() => ({ exportCsv: vi.fn() }));
-vi.mock("../../../shared/tauri/exportCsv", () => ({ exportCsv }));
+const { exportCsv, exportCsvToFolder, chooseExportFolder, isTauriDesktop } = vi.hoisted(() => ({
+  exportCsv: vi.fn(),
+  exportCsvToFolder: vi.fn(),
+  chooseExportFolder: vi.fn(),
+  isTauriDesktop: vi.fn(() => false),
+}));
+vi.mock("../../../shared/tauri/exportCsv", () => ({ exportCsv, exportCsvToFolder, chooseExportFolder, isTauriDesktop }));
 
-beforeEach(() => { telemetryStore.reset(); exportCsv.mockReset(); resetFeedbackForTests(); });
+beforeEach(() => {
+  telemetryStore.reset();
+  exportCsv.mockReset();
+  exportCsvToFolder.mockReset();
+  chooseExportFolder.mockReset();
+  isTauriDesktop.mockReturnValue(false);
+  resetFeedbackForTests();
+});
 
 describe("useTelemetryExport", () => {
   it("saves the buffered rows as CSV and records the saved count on success", async () => {
@@ -17,8 +31,8 @@ describe("useTelemetryExport", () => {
     });
     exportCsv.mockResolvedValue({ status: "saved", path: "/tmp/out.csv" });
 
-    const { saveCsv } = useTelemetryExport();
-    await saveCsv();
+    const { result } = renderHook(() => useTelemetryExport());
+    await act(() => result.current.saveCsv());
 
     expect(exportCsv).toHaveBeenCalledTimes(1);
     const call = exportCsv.mock.calls[0][0];
@@ -38,22 +52,45 @@ describe("useTelemetryExport", () => {
     });
     exportCsv.mockResolvedValue({ status: "cancelled" });
 
-    const { saveCsv } = useTelemetryExport();
-    await saveCsv();
+    const { result } = renderHook(() => useTelemetryExport());
+    await act(() => result.current.saveCsv());
 
     expect(telemetryStore.getSavedCount()).toBe(0);
   });
 
-  it("exports the labeled dataset CSV using the active session label in the suggested filename", async () => {
+  it("uses an unlabeled filename when no dataset label is available", async () => {
     telemetryStore.startDatasetRecording();
-    exportCsv.mockResolvedValue({ status: "error", message: "disk full" });
+    exportCsvToFolder.mockResolvedValue({ status: "error", message: "disk full" });
 
-    const { exportDatasetCsv } = useTelemetryExport();
-    await exportDatasetCsv();
+    const { result } = renderHook(() => useTelemetryExport());
+    await act(() => result.current.exportDatasetCsv());
 
-    expect(exportCsv).toHaveBeenCalledTimes(1);
-    const call = exportCsv.mock.calls[0][0];
-    expect(call.title).toBe("Export dataset CSV");
-    expect(call.suggestedName).toContain(`gesture-dataset-${telemetryStore.getDatasetSession()?.label}-`);
+    expect(exportCsvToFolder).toHaveBeenCalledTimes(1);
+    const call = exportCsvToFolder.mock.calls[0][0];
+    expect(call.fileName).toContain("gesture-dataset-unlabeled-");
+  });
+
+  it("requires an output folder before exporting in Tauri, never falling back to an arbitrary location", async () => {
+    isTauriDesktop.mockReturnValue(true);
+    telemetryStore.startDatasetRecording();
+
+    const { result } = renderHook(() => useTelemetryExport());
+    await act(() => result.current.exportDatasetCsv());
+
+    expect(exportCsvToFolder).not.toHaveBeenCalled();
+  });
+
+  it("exports into the folder chosen via chooseDatasetExportFolder", async () => {
+    isTauriDesktop.mockReturnValue(true);
+    chooseExportFolder.mockResolvedValue("/Users/test/datasets");
+    exportCsvToFolder.mockResolvedValue({ status: "saved", path: "/Users/test/datasets/out.csv" });
+    telemetryStore.startDatasetRecording();
+
+    const { result } = renderHook(() => useTelemetryExport());
+    await act(() => result.current.chooseDatasetExportFolder());
+    expect(result.current.datasetExportFolder).toBe("/Users/test/datasets");
+
+    await act(() => result.current.exportDatasetCsv());
+    expect(exportCsvToFolder).toHaveBeenCalledWith(expect.objectContaining({ folder: "/Users/test/datasets" }));
   });
 });

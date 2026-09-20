@@ -34,6 +34,12 @@ type DatasetCaptureCardProps = {
   onCaptureModeChange: (mode: DatasetCaptureMode) => void;
   selectedLabel: GestureDatasetLabel | null;
   sessionLabels?: GestureDatasetLabel[];
+  onRemoveLabel: (label: GestureDatasetLabel) => boolean;
+  getLabelRemovalBlockedReason: (label: GestureDatasetLabel) => string | null;
+  /** True in the desktop app; false in browser preview, where there is no native folder picker. */
+  desktopAvailable: boolean;
+  datasetExportFolder: string | null;
+  onChooseExportFolder: () => Promise<void>;
   datasetRecording: boolean;
   datasetRecordingState?: DatasetRecordingState;
   datasetSession: DatasetSessionMetadata | null;
@@ -80,6 +86,11 @@ export function DatasetCaptureCard({
   onCaptureModeChange,
   selectedLabel,
   sessionLabels = [],
+  onRemoveLabel,
+  getLabelRemovalBlockedReason,
+  desktopAvailable,
+  datasetExportFolder,
+  onChooseExportFolder,
   datasetRecording,
   datasetRecordingState = "idle",
   datasetSession,
@@ -242,19 +253,36 @@ export function DatasetCaptureCard({
           {sessionLabels.length > 0 && !isTimeline && (
             <div className="flex flex-wrap gap-2">
               <Label className="text-xs text-muted-foreground w-full">Previously used labels</Label>
-              {sessionLabels.map((label) => (
-                <Button
-                  key={label}
-                  type="button"
-                  variant={selectedLabel === label ? "default" : "outline"}
-                  size="sm"
-                  disabled={datasetRecording}
-                  onClick={() => onSelectLabel(label)}
-                  className="text-xs"
-                >
-                  {label.replaceAll("_", " ")}
-                </Button>
-              ))}
+              {sessionLabels.map((label) => {
+                const removalBlockedReason = datasetRecording
+                  ? "Stop dataset capture before removing labels."
+                  : getLabelRemovalBlockedReason(label);
+                return (
+                  <span key={label} className="inline-flex items-center gap-0.5">
+                    <Button
+                      type="button"
+                      variant={selectedLabel === label ? "default" : "outline"}
+                      size="sm"
+                      disabled={datasetRecording}
+                      onClick={() => onSelectLabel(label)}
+                      className="text-xs"
+                    >
+                      {label.replaceAll("_", " ")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`Remove label ${label}`}
+                      title={removalBlockedReason ?? "Remove this label"}
+                      disabled={removalBlockedReason !== null}
+                      onClick={() => onRemoveLabel(label)}
+                    >
+                      ×
+                    </Button>
+                  </span>
+                );
+              })}
             </div>
           )}
           {selectedLabel && !isTimeline && (
@@ -286,6 +314,21 @@ export function DatasetCaptureCard({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Label className="text-xs text-muted-foreground">Export folder:</Label>
+          {desktopAvailable ? (
+            <>
+              <span className="text-xs text-foreground truncate max-w-[16rem]" title={datasetExportFolder ?? undefined}>
+                {datasetExportFolder ?? "Not set"}
+              </span>
+              <Button type="button" variant="outline" size="sm" onClick={() => void onChooseExportFolder()}>
+                {datasetExportFolder ? "Change…" : "Browse…"}
+              </Button>
+            </>
+          ) : (
+            <span className="text-xs text-muted-foreground">Browser preview downloads the CSV directly.</span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <Button type="button" variant={datasetRecording ? "destructive" : "default"} disabled={!datasetRecording && !isTimeline && !selectedLabel} onClick={datasetRecording ? onStop : onStart}>
             {datasetRecording ? (datasetRecordingState === "arming" ? "Arming…" : "Stop dataset capture") : "Start dataset capture"}
           </Button>
@@ -310,11 +353,17 @@ export function DatasetCaptureCard({
             </AlertDialogContent>
           </AlertDialog>
 
-          <AsyncActionButton disabled={datasetRowCount === 0} onPress={onExport} pendingLabel="Exporting…">
+          <AsyncActionButton
+            disabled={datasetRowCount === 0 || (desktopAvailable && !datasetExportFolder)}
+            onPress={onExport}
+            pendingLabel="Exporting…"
+          >
             Export Dataset CSV
           </AsyncActionButton>
           <HelpTooltip label="About exporting the dataset">
-            Saves the buffered labeled rows to a CSV file you choose, through the native save dialog.
+            {desktopAvailable
+              ? "Saves the buffered labeled rows straight into the export folder above, under an auto-generated timestamped file name — choose a folder first, then Export writes there directly with no save dialog."
+              : "Browser preview has no native folder picker, so this downloads the CSV directly instead."}
           </HelpTooltip>
           {isTimeline && (
             <>

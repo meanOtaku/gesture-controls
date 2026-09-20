@@ -1,4 +1,5 @@
-import { save } from "@tauri-apps/plugin-dialog";
+import { join } from "@tauri-apps/api/path";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 
 export type ExportCsvRequest = {
@@ -15,8 +16,53 @@ export type ExportCsvResult =
   | { status: "cancelled" }
   | { status: "error"; message: string };
 
-function isTauriDesktop(): boolean {
+export function isTauriDesktop(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+/** Opens the native folder picker. Returns null in browser preview (no native dialog exists there) or if the user cancels. */
+export async function chooseExportFolder(title: string): Promise<string | null> {
+  if (!isTauriDesktop()) return null;
+  const result = await open({ title, directory: true, multiple: false });
+  return typeof result === "string" ? result : null;
+}
+
+export type ExportCsvToFolderRequest = {
+  /** Exact CSV text to write; never mutated or re-derived here. */
+  content: string;
+  /** Folder chosen via `chooseExportFolder`. */
+  folder: string;
+  /** Generated file name, e.g. "gesture-dataset-wave-2026-09-12.csv". */
+  fileName: string;
+};
+
+/**
+ * Writes CSV content straight into a previously chosen folder under the
+ * given file name — no save dialog per export. In browser preview (no
+ * Tauri runtime, so no folder could ever have been chosen) falls back to
+ * the existing Blob-anchor download; in Tauri a required folder is the
+ * caller's responsibility (see `chooseExportFolder`) and this never
+ * substitutes the browser fallback for a missing one.
+ */
+export async function exportCsvToFolder({ content, folder, fileName }: ExportCsvToFolderRequest): Promise<ExportCsvResult> {
+  if (!isTauriDesktop()) {
+    return exportCsvViaBrowserDownload(content, fileName);
+  }
+
+  let path: string;
+  try {
+    path = await join(folder, fileName);
+  } catch (error) {
+    return { status: "error", message: describeError(error) };
+  }
+
+  try {
+    await writeTextFile(path, content);
+  } catch (error) {
+    return { status: "error", message: describeError(error) };
+  }
+
+  return { status: "saved", path };
 }
 
 /**

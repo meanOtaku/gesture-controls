@@ -336,6 +336,23 @@ class TelemetryStore {
     return true;
   }
 
+  /** Null when `label` can be safely removed; otherwise the reason it can't, for the dataset recorder UI to surface. */
+  labelRemovalBlockedReason(label: GestureDatasetLabel): string | null {
+    if (this.timelineIntervals.some((interval) => interval.labelId === label)) {
+      return "Used by a timeline interval in this session — relabel or delete that interval first.";
+    }
+    return null;
+  }
+
+  /** Removes a previously used label, unless a timeline interval still references it (see `labelRemovalBlockedReason`). Clears the selected label if it was the one removed — always safe, since a referenced label is never removable and thus never reaches this point while active. */
+  removeSessionLabel(label: GestureDatasetLabel): boolean {
+    if (!this.sessionLabels.has(label) || this.labelRemovalBlockedReason(label) !== null) return false;
+    this.sessionLabels.delete(label);
+    if (this.selectedLabel === label) this.selectedLabel = null;
+    this.publishNow();
+    return true;
+  }
+
   getDatasetRecordingState(): DatasetRecordingState {
     return this.datasetRecordingState;
   }
