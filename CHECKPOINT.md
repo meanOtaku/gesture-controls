@@ -277,3 +277,41 @@ mapping UI.
 Per task direction: no tests, builds, lint, formatting, installs, or runtime
 validation were run. Only the diff and `git diff --check` were inspected.
 Those gates remain **DEFERRED / NOT CLEARED**.
+
+## GC-011 follow-up — accept the legacy dataset CSV export (this session)
+
+Root-cause compatibility fix: the importer only accepted the 16-column
+Timeline Capture `raw.csv` header, so it correctly-but-unhelpfully rejected
+the app's other real supported export format — the legacy dataset CSV
+(optional `#` metadata comments, then the exact 17-column
+`DATASET_CSV_HEADER` from `model_lab.rs`, ending in `label`).
+
+- `model_lab::DATASET_CSV_HEADER` made `pub(crate)` and reused as-is from
+  `recording_bundle.rs` (no duplicated schema, no shared abstraction built
+  for a single caller).
+- Added `convert_legacy_dataset_csv` in `recording_bundle.rs`: recognizes the
+  legacy shape by exact header match (after skipping leading `#` lines) and
+  converts it into a canonical `raw.csv` document by dropping the metadata
+  lines and the trailing `label` field from each data row. Row order and
+  every retained field's original string are preserved unchanged — no
+  reordering, no timestamp/value normalization or fabrication. A document
+  that isn't headed by the legacy header returns `None` and falls through to
+  the existing plain `raw.csv` path unchanged; a malformed legacy document
+  (wrong column count, or a row with an empty label) is a hard `Err`.
+- The converted document still goes through the existing
+  `validate_raw_csv_full` full per-field validation before being written —
+  same numeric-or-blank contract, same exact-header check, same
+  `MAX_RAW_CSV_BYTES` limit as the plain `raw.csv` path. No mapper, no UI
+  mapping screen, no training changes, no mutation of any existing bundle.
+- `RawImageViewerPanel`'s import help text now names both accepted formats.
+  Success handling (recording-list refresh + auto-select the imported
+  recording) needed no change; it already ran for every successful import.
+- Added `recording_bundle.rs` unit tests for `convert_legacy_dataset_csv`:
+  row order/value preservation on conversion, rejection of a missing label
+  or wrong column count, and pass-through (`None`) for a non-legacy
+  document.
+- `graphify update .` run after the source changes.
+
+Per task direction: no tests, builds, lint, formatting, or installs were run.
+Only the diff and `git diff --check` were inspected. Those gates remain
+**DEFERRED / NOT CLEARED**.

@@ -142,8 +142,9 @@ export function RawImageViewerPanel() {
             </Button>
             <HelpTooltip label="About importing a raw.csv recording">
               Imports a Timeline Capture <code>raw.csv</code> file (the app&apos;s exact 16-column export
-              schema only) as a new, read-only recording for inspection here. It creates no annotations
-              and is never used for training.
+              schema) or a legacy dataset CSV export (the app&apos;s exact 17-column export schema, label
+              column included) as a new, read-only recording for inspection here. It creates no
+              annotations and is never used for training.
             </HelpTooltip>
           </div>
           {importError && (

@@ -10,7 +10,10 @@
 //! ```
 //! This module never touches the legacy single-label dataset CSV pipeline in
 //! `model_lab.rs` (`import_model_dataset`/`DATASET_CSV_HEADER`), which stays the
-//! compatibility path for existing exports and training.
+//! compatibility path for existing exports and training. `import_recording_from_raw_csv`
+//! additionally *accepts* a document in that legacy dataset-export shape as an input
+//! format, converting it server-side into a canonical `raw.csv` (see
+//! `convert_legacy_dataset_csv`); it never writes back to the legacy pipeline.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -20,6 +23,8 @@ use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
+
+use crate::model_lab::DATASET_CSV_HEADER;
 
 pub(crate) const RECORDING_BUNDLES_DIR_NAME: &str = "recording";
 const RAW_CSV_FILE_NAME: &str = "raw.csv";
@@ -356,13 +361,60 @@ fn validate_raw_csv_full(content: &str) -> Result<(usize, i64, i64), String> {
     Ok((row_count, first_timestamp_ns.unwrap(), last_timestamp_ns.unwrap()))
 }
 
+/// If `content` is in the legacy dataset-export shape (optional leading `#`
+/// metadata lines, then the exact `DATASET_CSV_HEADER` row), converts it into
+/// a canonical `raw.csv` document by dropping the metadata lines and the
+/// trailing `label` field from every data row. Row order and every retained
+/// field's original string form are preserved unchanged; only the discarded
+/// metadata/label content is removed. Returns `None` when `content` is not
+/// headed by the legacy header at all (the caller then validates it as a
+/// plain `raw.csv` document instead). A malformed legacy document (wrong
+/// column count or a missing label) is a hard `Err`, not a fall-through.
+fn convert_legacy_dataset_csv(content: &str) -> Option<Result<String, String>> {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut index = 0;
+    while index < lines.len() && lines[index].trim_start().starts_with('#') {
+        index += 1;
+    }
+    let header_line = lines.get(index)?;
+    if *header_line != DATASET_CSV_HEADER.join(",") {
+        return None;
+    }
+
+    let mut converted_lines = vec![RAW_CSV_HEADER.join(",")];
+    for (offset, line) in lines[index + 1..].iter().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let fields: Vec<&str> = line.split(',').collect();
+        if fields.len() != DATASET_CSV_HEADER.len() {
+            return Some(Err(format!(
+                "malformed legacy dataset CSV: row {} has {} fields, expected {}",
+                offset + 1,
+                fields.len(),
+                DATASET_CSV_HEADER.len()
+            )));
+        }
+        if fields[DATASET_CSV_HEADER.len() - 1].trim().is_empty() {
+            return Some(Err(format!(
+                "malformed legacy dataset CSV: row {} is missing its label",
+                offset + 1
+            )));
+        }
+        converted_lines.push(fields[..RAW_CSV_HEADER.len()].join(","));
+    }
+    Some(Ok(converted_lines.join("\n")))
+}
+
 /// Imports a Timeline Capture `raw.csv` document (exact `RAW_CSV_HEADER`
-/// contract only — no arbitrary-CSV mapping) as a new, immutable, read-only
-/// recording bundle. All metadata (`recording_id`, timestamps, row counts,
-/// source identity) is generated server-side from the validated CSV content;
-/// no browser-supplied recording metadata is trusted. The created bundle has
-/// no annotations and is written through the same atomic stage-then-rename
-/// path as `save_recording_bundle`.
+/// contract), or the app's legacy dataset-export CSV (exact
+/// `DATASET_CSV_HEADER` contract, converted via `convert_legacy_dataset_csv`)
+/// — no arbitrary-CSV mapping — as a new, immutable, read-only recording
+/// bundle. All metadata (`recording_id`, timestamps, row counts, source
+/// identity) is generated server-side from the validated CSV content; no
+/// browser-supplied recording metadata is trusted. The created bundle has no
+/// annotations and is written through the same atomic stage-then-rename path
+/// as `save_recording_bundle`.
 #[tauri::command]
 pub fn import_recording_from_raw_csv(csv_text: String, app: AppHandle) -> Result<RecordingBundleSummary, String> {
     if csv_text.trim().is_empty() {
@@ -374,6 +426,10 @@ pub fn import_recording_from_raw_csv(csv_text: String, app: AppHandle) -> Result
             csv_text.len()
         ));
     }
+    let csv_text = match convert_legacy_dataset_csv(&csv_text) {
+        Some(result) => result?,
+        None => csv_text,
+    };
     let (row_count, first_timestamp_ns, last_timestamp_ns) = validate_raw_csv_full(&csv_text)?;
 
     let recording_id = Uuid::new_v4().to_string();
@@ -930,6 +986,45 @@ mod tests {
         fields.extend(std::iter::repeat("".to_string()).take(RAW_CSV_HEADER.len() - fields.len()));
         let non_numeric = format!("{header}\n{}", fields.join(","));
         assert!(validate_raw_csv_full(&non_numeric).is_err());
+    }
+
+    fn legacy_row(timestamp_ns: i64, ppg_green: &str, label: &str) -> String {
+        let mut fields = vec![timestamp_ns.to_string(), "0".to_string(), ppg_green.to_string()];
+        fields.extend(std::iter::repeat("".to_string()).take(DATASET_CSV_HEADER.len() - 1 - fields.len()));
+        fields.push(label.to_string());
+        fields.join(",")
+    }
+
+    #[test]
+    fn convert_legacy_dataset_csv_strips_metadata_and_label_preserving_row_order() {
+        let legacy = format!(
+            "# gesture-dataset-export\n# label: pinch\n{}\n{}\n{}\n",
+            DATASET_CSV_HEADER.join(","),
+            legacy_row(1, "1.5", "pinch"),
+            legacy_row(2, "", "idle"),
+        );
+        let converted = convert_legacy_dataset_csv(&legacy)
+            .expect("legacy header must be recognized")
+            .expect("well-formed legacy csv must convert");
+        let (_, values) = parse_raw_csv_column(&converted, "ppg_green").expect("converted csv must be valid raw.csv");
+        assert_eq!(values, vec![Some(1.5), None]);
+        assert_eq!(converted.lines().count(), 3);
+    }
+
+    #[test]
+    fn convert_legacy_dataset_csv_rejects_missing_label_and_wrong_column_count() {
+        let header = DATASET_CSV_HEADER.join(",");
+        let missing_label = format!("{header}\n{}\n", legacy_row(1, "1.5", ""));
+        assert!(convert_legacy_dataset_csv(&missing_label).unwrap().is_err());
+
+        let wrong_columns = format!("{header}\n1,0,1.5\n");
+        assert!(convert_legacy_dataset_csv(&wrong_columns).unwrap().is_err());
+    }
+
+    #[test]
+    fn convert_legacy_dataset_csv_ignores_non_legacy_documents() {
+        assert!(convert_legacy_dataset_csv(&RAW_CSV_HEADER.join(",")).is_none());
+        assert!(convert_legacy_dataset_csv("not,a,header").is_none());
     }
 
     #[test]

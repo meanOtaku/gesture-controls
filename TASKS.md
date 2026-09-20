@@ -257,3 +257,37 @@ and `.hermes/queues/gc-009-raw-recording-image-viewer.json`.
 - [ ] Automated tests, builds, lint, formatting, installs, and runtime
       validation are **DEFERRED / NOT CLEARED** by explicit delivery
       instruction — only the diff and `git diff --check` were inspected.
+
+### GC-011 follow-up — accept the legacy dataset CSV export as an import source
+
+- [x] `import_recording_from_raw_csv` rejected the actual supported legacy
+      export (optional `#` metadata comments, then the exact 17-column
+      `DATASET_CSV_HEADER` from `model_lab.rs`, ending in `label`) because it
+      only matched the 16-column `RAW_CSV_HEADER`. Root-caused instead of
+      patched around: `model_lab::DATASET_CSV_HEADER` made `pub(crate)` and
+      reused directly rather than duplicated.
+- [x] Added `convert_legacy_dataset_csv` in `recording_bundle.rs`: detects
+      the legacy shape by header match after skipping leading `#` lines,
+      then converts it to a canonical `raw.csv` document by dropping the
+      metadata lines and the trailing `label` field from each data row.
+      Source row order and every retained field's original string are
+      preserved unchanged (no reordering, no normalization/fabrication of
+      timestamps or values). A non-legacy document (no header match) returns
+      `None` and falls through to the existing plain `raw.csv` path
+      unchanged; a malformed legacy document (wrong column count or an empty
+      label) is a hard `Err`, never a silent skip.
+- [x] The converted document is still run through the existing
+      `validate_raw_csv_full` (full per-field raw validation, exact header,
+      numeric-or-blank contract) before being written — no separate/weaker
+      validation path for the legacy input.
+- [x] Updated `RawImageViewerPanel`'s import help text to mention both
+      accepted formats. Success handling (list refresh + auto-select the
+      imported recording) was already in place from the original GC-011
+      delivery; no change needed there.
+- [x] Added `recording_bundle.rs` unit tests: legacy-to-canonical conversion
+      preserves row order/values, rejects a missing label or wrong column
+      count, and a non-legacy document is left alone (`None`).
+- [x] `graphify update .` run after the source changes.
+- [ ] Automated tests, builds, lint, formatting, and installs are
+      **DEFERRED / NOT CLEARED** by explicit delivery instruction — only the
+      diff and `git diff --check` were inspected.

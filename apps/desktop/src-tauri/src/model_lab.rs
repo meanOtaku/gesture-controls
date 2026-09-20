@@ -39,7 +39,7 @@ const PINCH_CLASSIFIER_PROJECT_DIR: &str = concat!(
 /// `DATASET_CSV_COLUMNS` in telemetryStore.ts and `HEADER_COLUMNS` in
 /// tools/pinch-classifier/src/pinch_classifier/schema.py. A dataset whose
 /// header does not match this exactly is rejected on import.
-const DATASET_CSV_HEADER: [&str; 17] = [
+pub(crate) const DATASET_CSV_HEADER: [&str; 17] = [
     "timestamp_ns",
     "sequence",
     "ppg_green",
