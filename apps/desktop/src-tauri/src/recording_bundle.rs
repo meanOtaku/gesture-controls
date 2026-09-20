@@ -16,8 +16,10 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
+use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
+use uuid::Uuid;
 
 pub(crate) const RECORDING_BUNDLES_DIR_NAME: &str = "recording";
 const RAW_CSV_FILE_NAME: &str = "raw.csv";
@@ -27,6 +29,10 @@ const ANNOTATIONS_FILE_NAME: &str = "annotations.json";
 /// the two csv contracts (legacy fused dataset vs. new immutable raw capture)
 /// are intentionally independent.
 const MAX_RAW_CSV_BYTES: usize = 20 * 1024 * 1024;
+/// Stable `RecordingSource.source_id` for every bundle created by
+/// `import_recording_from_raw_csv`, so imported bundles are always
+/// identifiable by source rather than by a browser-supplied label.
+const IMPORTED_SOURCE_ID: &str = "timeline_capture_csv_import";
 
 /// The exact `raw.csv` header written by `RAW_RECORDING_CSV_COLUMNS`
 /// (`telemetryStore.ts`): `DATASET_CSV_COLUMNS` minus `label`.
@@ -283,6 +289,130 @@ pub fn save_recording_bundle(
     }
     let write_result = write_bundle_files(&tmp_dir, &raw_csv, &recording, &annotations);
     if let Err(error) = write_result {
+        let _ = fs::remove_dir_all(&tmp_dir);
+        return Err(error);
+    }
+    if let Err(error) = fs::rename(&tmp_dir, &final_dir) {
+        let _ = fs::remove_dir_all(&tmp_dir);
+        return Err(error.to_string());
+    }
+
+    Ok(summarize_bundle(&recording, &annotations))
+}
+
+/// Validates a complete `raw.csv` document against the exact `RAW_CSV_HEADER`
+/// contract and existing per-field parsing rules (empty -> null, non-empty
+/// must parse as its numeric type), and returns the data row count plus the
+/// first/last `timestamp_ns` for metadata generation. This is stricter than
+/// `parse_raw_csv_column` (which only validates the requested column) since
+/// an import must reject a malformed file in any column, not just the one
+/// currently being viewed.
+fn validate_raw_csv_full(content: &str) -> Result<(usize, i64, i64), String> {
+    let mut lines = content.lines();
+    let header = lines.next().ok_or_else(|| "raw.csv is empty".to_string())?;
+    let expected_header = RAW_CSV_HEADER.join(",");
+    if header != expected_header {
+        return Err(format!(
+            "malformed raw.csv: expected header '{expected_header}', got '{header}'"
+        ));
+    }
+
+    let mut row_count = 0usize;
+    let mut first_timestamp_ns: Option<i64> = None;
+    let mut last_timestamp_ns: Option<i64> = None;
+    for (offset, line) in lines.enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let row_number = offset + 2; // 1-indexed, plus the header line
+        let fields: Vec<&str> = line.split(',').collect();
+        if fields.len() != RAW_CSV_HEADER.len() {
+            return Err(format!(
+                "malformed raw.csv: row {row_number} has {} fields, expected {}",
+                fields.len(),
+                RAW_CSV_HEADER.len()
+            ));
+        }
+        let timestamp_ns: i64 = fields[0]
+            .trim()
+            .parse()
+            .map_err(|_| format!("malformed raw.csv: row {row_number} has a non-numeric timestamp_ns"))?;
+        for (column_index, column_name) in RAW_CSV_HEADER.iter().enumerate().skip(1) {
+            let raw_value = fields[column_index].trim();
+            if !raw_value.is_empty() {
+                raw_value.parse::<f64>().map_err(|_| {
+                    format!("malformed raw.csv: row {row_number} column '{column_name}' is not numeric")
+                })?;
+            }
+        }
+        row_count += 1;
+        first_timestamp_ns.get_or_insert(timestamp_ns);
+        last_timestamp_ns = Some(timestamp_ns);
+    }
+
+    if row_count == 0 {
+        return Err("raw CSV must contain at least one data row".to_string());
+    }
+    Ok((row_count, first_timestamp_ns.unwrap(), last_timestamp_ns.unwrap()))
+}
+
+/// Imports a Timeline Capture `raw.csv` document (exact `RAW_CSV_HEADER`
+/// contract only — no arbitrary-CSV mapping) as a new, immutable, read-only
+/// recording bundle. All metadata (`recording_id`, timestamps, row counts,
+/// source identity) is generated server-side from the validated CSV content;
+/// no browser-supplied recording metadata is trusted. The created bundle has
+/// no annotations and is written through the same atomic stage-then-rename
+/// path as `save_recording_bundle`.
+#[tauri::command]
+pub fn import_recording_from_raw_csv(csv_text: String, app: AppHandle) -> Result<RecordingBundleSummary, String> {
+    if csv_text.trim().is_empty() {
+        return Err("raw CSV must not be empty".to_string());
+    }
+    if csv_text.len() > MAX_RAW_CSV_BYTES {
+        return Err(format!(
+            "raw CSV exceeds the {MAX_RAW_CSV_BYTES}-byte limit (got {} bytes)",
+            csv_text.len()
+        ));
+    }
+    let (row_count, first_timestamp_ns, last_timestamp_ns) = validate_raw_csv_full(&csv_text)?;
+
+    let recording_id = Uuid::new_v4().to_string();
+    let imported_at = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+    let actual_duration_ms = last_timestamp_ns.saturating_sub(first_timestamp_ns).max(0) as u64 / 1_000_000;
+
+    let recording = RecordingMetadata {
+        format_version: 1,
+        recording_id: recording_id.clone(),
+        requested_start_at: imported_at.clone(),
+        actual_start: MonotonicWallClock { monotonic_ns: first_timestamp_ns, wall_clock_at: imported_at.clone() },
+        actual_end: MonotonicWallClock { monotonic_ns: last_timestamp_ns, wall_clock_at: imported_at },
+        requested_duration_ms: None,
+        actual_duration_ms,
+        stop_reason: StopReason::ManualStop,
+        sources: vec![RecordingSource {
+            source_id: IMPORTED_SOURCE_ID.to_string(),
+            configuration: serde_json::json!({}),
+        }],
+        raw_row_count: row_count,
+        raw_source_row_counts: BTreeMap::from([(IMPORTED_SOURCE_ID.to_string(), row_count)]),
+    };
+    let annotations = AnnotationsFile {
+        format_version: 1,
+        recording_id: recording_id.clone(),
+        intervals: Vec::new(),
+    };
+
+    let dir = recording_bundles_dir(&app)?;
+    fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+    let final_dir = dir.join(&recording_id);
+    if final_dir.exists() {
+        return Err(format!("recording bundle '{recording_id}' already exists"));
+    }
+    let tmp_dir = dir.join(format!("{recording_id}.tmp"));
+    if tmp_dir.exists() {
+        fs::remove_dir_all(&tmp_dir).map_err(|error| error.to_string())?;
+    }
+    if let Err(error) = write_bundle_files(&tmp_dir, &csv_text, &recording, &annotations) {
         let _ = fs::remove_dir_all(&tmp_dir);
         return Err(error);
     }
@@ -778,6 +908,33 @@ mod tests {
         assert_eq!(resolve_raw_window_bounds(100, 0).unwrap(), (0, 100));
         // Any aligned start beyond a short recording clamps back to 0.
         assert_eq!(resolve_raw_window_bounds(100, 64).unwrap(), (0, 100));
+    }
+
+    #[test]
+    fn validate_raw_csv_full_accepts_valid_csv_and_reports_row_count_and_timestamps() {
+        let csv = raw_csv_with_rows(&[(10, "1.5"), (20, ""), (30, "3.5")]);
+        let (row_count, first, last) = validate_raw_csv_full(&csv).expect("valid csv must parse");
+        assert_eq!((row_count, first, last), (3, 10, 30));
+    }
+
+    #[test]
+    fn validate_raw_csv_full_rejects_bad_header_wrong_field_count_and_non_numeric_fields() {
+        assert!(validate_raw_csv_full("not,a,header").is_err());
+        assert!(validate_raw_csv_full(&RAW_CSV_HEADER.join(",")).is_err()); // header only, no rows
+
+        let header = RAW_CSV_HEADER.join(",");
+        let short_row = format!("{header}\n1,0,1.5");
+        assert!(validate_raw_csv_full(&short_row).is_err());
+
+        let mut fields = vec!["1".to_string(), "not_a_number".to_string()];
+        fields.extend(std::iter::repeat("".to_string()).take(RAW_CSV_HEADER.len() - fields.len()));
+        let non_numeric = format!("{header}\n{}", fields.join(","));
+        assert!(validate_raw_csv_full(&non_numeric).is_err());
+    }
+
+    #[test]
+    fn import_recording_from_raw_csv_uses_stable_source_identity() {
+        assert_eq!(IMPORTED_SOURCE_ID, "timeline_capture_csv_import");
     }
 
     #[test]

@@ -215,3 +215,45 @@ and `.hermes/queues/gc-009-raw-recording-image-viewer.json`.
 - [ ] Automated tests, builds, lint, formatting, and installs are
       **DEFERRED / NOT CLEARED** — not run for this change; only the diff
       and `git diff --check` were inspected.
+
+## GC-011 — Raw image viewer: import a Timeline Capture `raw.csv` as a new read-only recording
+
+- [x] Added `RawImageViewerPanel` an "Import raw.csv" control (hidden native
+      `<input type="file" accept=".csv">` plus the existing shadcn
+      `Input`/`Button`, read via `File.text()`), visible even when no
+      recordings exist yet. In-panel `role="alert"` error text and a
+      `role="status"`/`aria-live="polite"` success message; no changes to
+      `model_lab`, labels, training, capture, or CSV export UI.
+- [x] Added `recording_bundle::import_recording_from_raw_csv`, a new bounded
+      Tauri command (registered in `lib.rs`) plus a typed
+      `importRecordingFromRawCsv` wrapper in
+      `shared/tauri/recordingBundle.ts`. It accepts only raw CSV text (no
+      browser-supplied metadata), enforces the existing `MAX_RAW_CSV_BYTES`
+      limit, and validates the **exact** 16-column `RAW_CSV_HEADER` plus
+      every row's field count/numeric-or-blank contract via a new
+      `validate_raw_csv_full` (reuses `parse_raw_csv_column`'s per-field
+      rules, extended to every column, not just the requested one) —
+      rejecting malformed, empty, oversized, or wrong-header input outright
+      and preserving blank fields as-is (never coerced).
+- [x] All recording metadata (`recording_id` via `Uuid::new_v4()`,
+      `actual_start`/`actual_end` from the CSV's first/last `timestamp_ns`,
+      `raw_row_count`, `actual_duration_ms`) is generated server-side from
+      CSV facts; the source uses a stable identity constant,
+      `IMPORTED_SOURCE_ID = "timeline_capture_csv_import"`. An empty
+      `annotations.json` (`intervals: []`) is created. The bundle is written
+      through the same atomic stage-in-`.tmp`-then-rename path as
+      `save_recording_bundle`, reusing `write_bundle_files`/
+      `summarize_bundle` unchanged.
+- [x] On success the panel refreshes the recording list
+      (`listVersion` bump), selects the imported recording via
+      `rawImageViewerStore.setRecording`, and shows the success message. No
+      train/annotate/raw-write action is exposed for imported (or any) raw
+      image viewer recordings — this stays a read-only inspection surface.
+- [x] Added unit tests for `validate_raw_csv_full` (valid CSV row
+      count/timestamps, bad header, wrong field count, non-numeric field)
+      and a stable-identity assertion for `IMPORTED_SOURCE_ID`, alongside
+      the existing `recording_bundle.rs` test module.
+- [x] `graphify update .` run after the source changes.
+- [ ] Automated tests, builds, lint, formatting, installs, and runtime
+      validation are **DEFERRED / NOT CLEARED** by explicit delivery
+      instruction — only the diff and `git diff --check` were inspected.

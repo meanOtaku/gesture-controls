@@ -1,13 +1,15 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent } from "react";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { HelpTooltip } from "../../../components/app/HelpTooltip";
+import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { Slider } from "../../../components/ui/slider";
 import {
+  importRecordingFromRawCsv,
   listRecordingBundles,
   RAW_IMAGE_VIEWER_CHANNELS,
   RAW_WINDOW_MAX_VALUES,
@@ -42,7 +44,35 @@ function recordingLabel(summary: RecordingBundleSummary): string {
 export function RawImageViewerPanel() {
   const [recordingList, setRecordingList] = useState<RecordingListState>({ status: "loading" });
   const [listVersion, setListVersion] = useState(0);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
   useSyncExternalStore(rawImageViewerStore.subscribe, rawImageViewerStore.getVersion, rawImageViewerStore.getVersion);
+
+  const handleImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    setImportError(null);
+    setImportSuccessMessage(null);
+    try {
+      const csvText = await file.text();
+      const result = await importRecordingFromRawCsv(csvText);
+      if (result.status === "error") {
+        setImportError(result.message);
+        return;
+      }
+      setListVersion((v) => v + 1);
+      rawImageViewerStore.setRecording(result.recordingId);
+      setImportSuccessMessage(
+        `Imported recording ${result.recordingId} (${result.rowCount.toLocaleString()} rows).`,
+      );
+    } finally {
+      setImporting(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -89,6 +119,45 @@ export function RawImageViewerPanel() {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <Input
+            ref={importFileInputRef}
+            type="file"
+            accept=".csv"
+            hidden
+            onChange={(event) => {
+              void handleImportFileChange(event);
+            }}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => importFileInputRef.current?.click()}
+              disabled={importing}
+              aria-busy={importing}
+            >
+              {importing ? "Importing…" : "Import raw.csv"}
+            </Button>
+            <HelpTooltip label="About importing a raw.csv recording">
+              Imports a Timeline Capture <code>raw.csv</code> file (the app&apos;s exact 16-column export
+              schema only) as a new, read-only recording for inspection here. It creates no annotations
+              and is never used for training.
+            </HelpTooltip>
+          </div>
+          {importError && (
+            <p role="alert" className="text-sm text-destructive">
+              Could not import this file: {importError}
+            </p>
+          )}
+          {importSuccessMessage && (
+            <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+              {importSuccessMessage}
+            </p>
+          )}
+        </div>
+
         {recordingList.status === "loading" && (
           <div className="flex flex-col gap-2" aria-busy="true" aria-live="polite">
             <Skeleton className="h-8 w-64" />

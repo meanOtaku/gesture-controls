@@ -170,6 +170,33 @@ export async function saveRecordingBundle(payload: RecordingBundlePayload): Prom
   }
 }
 
+export type ImportRawCsvResult =
+  | { status: "imported"; recordingId: string; rowCount: number }
+  | { status: "error"; message: string };
+
+/**
+ * Imports a Timeline Capture `raw.csv` document (the app's exact
+ * `RAW_CSV_HEADER` schema only — no arbitrary-CSV mapping) as a new,
+ * immutable, read-only recording bundle via `import_recording_from_raw_csv`.
+ * All recording metadata is generated server-side from the CSV; this only
+ * ever sends the raw CSV text itself. The result has no annotations and is
+ * not wired into training.
+ */
+export async function importRecordingFromRawCsv(csvText: string): Promise<ImportRawCsvResult> {
+  if (!isTauriDesktop()) {
+    return { status: "error", message: "Recording bundle persistence requires the desktop app" };
+  }
+  try {
+    const summary = await invoke<{ recordingId: string; rawRowCount: number }>(
+      "import_recording_from_raw_csv",
+      { csvText },
+    );
+    return { status: "imported", recordingId: summary.recordingId, rowCount: summary.rawRowCount };
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 /** Lists every saved recording bundle for curation review. */
 export async function listRecordingBundles(): Promise<RecordingBundleResult<RecordingBundleSummary[]>> {
   if (!isTauriDesktop()) {

@@ -76,6 +76,7 @@ pub fn run() {
             model_lab::list_trained_models,
             model_lab::replay_model_dataset,
             recording_bundle::save_recording_bundle,
+            recording_bundle::import_recording_from_raw_csv,
             recording_bundle::list_recording_bundles,
             recording_bundle::load_recording_bundle,
             recording_bundle::get_raw_recording_window,

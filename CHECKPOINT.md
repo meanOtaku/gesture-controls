@@ -240,3 +240,40 @@ Per task direction: no tests, builds, lint, formatting, or installs were run.
 Only the final diff and `git diff --check` were inspected. Validation
 (cargo test/clippy/fmt, targeted `model_registry` unit tests) remains
 **DEFERRED / NOT CLEARED**.
+
+## GC-011 — Import a Timeline Capture `raw.csv` into the raw image viewer (this session)
+
+Bounded vertical slice: `RawImageViewerPanel` gained an "Import raw.csv"
+control (hidden native file input + existing shadcn `Input`/`Button`,
+`File.text()`), visible even with no saved recordings. It only accepts the
+app's exact Timeline Capture `raw.csv` schema — no arbitrary-CSV upload, no
+mapping UI.
+
+- Backend: `recording_bundle::import_recording_from_raw_csv`, a new Tauri
+  command that owns the trust boundary. `validate_raw_csv_full` extends
+  `parse_raw_csv_column`'s per-field rules (empty -> `None`, non-empty must
+  parse as its numeric type) across every column, not just one, and enforces
+  the exact `RAW_CSV_HEADER`, row field count, and the existing
+  `MAX_RAW_CSV_BYTES` limit — rejecting malformed, empty, oversized, or
+  wrong-header CSV outright.
+- All recording metadata (`recording_id`, `actual_start`/`actual_end`,
+  `raw_row_count`, `actual_duration_ms`) is derived server-side from the CSV
+  itself; nothing browser-supplied is trusted. Source identity is the stable
+  constant `IMPORTED_SOURCE_ID = "timeline_capture_csv_import"`. Annotations
+  are created empty. The bundle is written through the same atomic
+  stage-then-rename path as `save_recording_bundle`, reusing
+  `write_bundle_files`/`summarize_bundle` unchanged.
+- Frontend: `importRecordingFromRawCsv` typed wrapper in
+  `shared/tauri/recordingBundle.ts`. On success the panel refreshes the
+  recording list, selects the imported bundle, and shows a
+  `role="status"`/`aria-live="polite"` message; errors render in-panel via
+  `role="alert"`. No train/annotate/raw-write action is exposed.
+- Did not touch `model_lab`, labels, training, capture, existing raw
+  recordings, or CSV export behavior.
+- Added unit tests for `validate_raw_csv_full` (valid CSV, bad header, wrong
+  field count, non-numeric field) and the `IMPORTED_SOURCE_ID` constant.
+- `graphify update .` run after the source changes.
+
+Per task direction: no tests, builds, lint, formatting, installs, or runtime
+validation were run. Only the diff and `git diff --check` were inspected.
+Those gates remain **DEFERRED / NOT CLEARED**.
