@@ -19,22 +19,11 @@ function renderCard(overrides: Partial<React.ComponentProps<typeof DatasetCaptur
     datasetRecording: false,
     datasetSession: null,
     datasetRowCount: 0,
-    datasetRows: [],
-    timelineIntervals: [],
-    activeTimelineLabel: null,
     onSelectLabel: vi.fn(() => true),
     onStart: vi.fn(),
     onStop: vi.fn(),
     onDiscard: vi.fn(),
     onExport: vi.fn().mockResolvedValue(undefined),
-    onSaveRecording: vi.fn().mockResolvedValue(undefined),
-    onSetTimelineLabel: vi.fn(() => true),
-    onRelabelInterval: vi.fn(() => true),
-    onSetIntervalCurationStatus: vi.fn(() => true),
-    onMoveIntervalBoundary: vi.fn(() => true),
-    onSplitInterval: vi.fn(() => true),
-    onCreateInterval: vi.fn(() => true),
-    onDeleteInterval: vi.fn(() => true),
     ...overrides,
   };
   render(<TooltipProvider><DatasetCaptureCard {...props} /></TooltipProvider>);
@@ -110,6 +99,25 @@ describe("DatasetCaptureCard", () => {
     cleanup();
     renderCard({ datasetRowCount: 5 });
     expect(screen.getByRole("button", { name: "Export Dataset CSV" })).toBeEnabled();
+  });
+
+  it("requires a duration within range before Timeline Capture can start", () => {
+    const onStart = vi.fn();
+    renderCard({ captureMode: "timeline", onStart, selectedLabel: null });
+
+    const durationInput = screen.getByLabelText("Recording duration in seconds");
+    const startButton = screen.getByRole("button", { name: "Start dataset capture" });
+
+    fireEvent.change(durationInput, { target: { value: "0" } });
+    expect(startButton).toBeDisabled();
+
+    fireEvent.change(durationInput, { target: { value: "3601" } });
+    expect(startButton).toBeDisabled();
+
+    fireEvent.change(durationInput, { target: { value: "45" } });
+    expect(startButton).toBeEnabled();
+    fireEvent.click(startButton);
+    expect(onStart).toHaveBeenCalledWith(45);
   });
 
   it("shows pending feedback while exporting and re-enables afterward", async () => {

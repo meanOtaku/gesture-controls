@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import { CsvCaptureCard } from "./CsvCaptureCard";
@@ -50,10 +50,7 @@ export function LiveTelemetry() {
   const datasetSession = telemetryStore.getDatasetSession();
   const datasetRowCount = telemetryStore.getDatasetRowCount();
   const datasetElapsedMs = telemetryStore.getDatasetRecordingElapsedMs();
-  const datasetRows = telemetryStore.getDatasetRows();
   const captureMode = telemetryStore.getDatasetCaptureMode();
-  const timelineIntervals = telemetryStore.getTimelineIntervals();
-  const activeTimelineLabel = telemetryStore.getActiveTimelineLabel();
 
   // Mirrors Dashboard.tsx's IMU_SENSOR_IDS default-enabled read and the
   // continuous-tracker "idle means disabled" convention.
@@ -61,6 +58,43 @@ export function LiveTelemetry() {
   const heartRateStreaming = watchStatus?.medicalStatus?.heart_rate_continuous === "streaming";
   const skinTemperatureStreaming = watchStatus?.medicalStatus?.skin_temperature_continuous === "streaming";
   const edaStreaming = watchStatus?.medicalStatus?.eda_continuous === "streaming";
+
+  // Kept as a ref (not a dependency) so the timed-capture effect below doesn't
+  // re-run — and clear its pending timeout — on every render caused by
+  // useTelemetryExport() returning a fresh exportDatasetCsv closure.
+  const exportDatasetCsvRef = useRef(exportDatasetCsv);
+  exportDatasetCsvRef.current = exportDatasetCsv;
+
+  const pendingTimelineDurationSecondsRef = useRef<number | null>(null);
+  const timelineTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Timeline Capture is a timed recorder: the timer starts once the first sample actually
+  // lands (recording state, not arming), and at timeout stops the session once and, if any
+  // rows were captured, auto-exports the CSV straight to the selected export folder. The
+  // effect's own cleanup — which fires on every dependency change, including the state
+  // leaving "recording" via manual stop/discard, a mode switch, or unmount — cancels any
+  // pending timer, so it's never armed twice or left running past its owning session.
+  useEffect(() => {
+    if (captureMode === "timeline" && datasetRecordingState === "recording" && pendingTimelineDurationSecondsRef.current !== null) {
+      const seconds = pendingTimelineDurationSecondsRef.current;
+      pendingTimelineDurationSecondsRef.current = null;
+      timelineTimeoutRef.current = setTimeout(() => {
+        timelineTimeoutRef.current = null;
+        telemetryStore.stopDatasetRecording();
+        if (telemetryStore.getDatasetRowCount() > 0) {
+          void exportDatasetCsvRef.current();
+        } else {
+          OperationFeedback.error("Export dataset CSV", "No samples were captured — nothing to export.");
+        }
+      }, seconds * 1000);
+    }
+    return () => {
+      if (timelineTimeoutRef.current !== null) {
+        clearTimeout(timelineTimeoutRef.current);
+        timelineTimeoutRef.current = null;
+      }
+    };
+  }, [captureMode, datasetRecordingState]);
 
   const requestMeasurement = async (tracker: string, measuring: boolean) => {
     if (!desktopAvailable || pendingMeasurement) return;
@@ -116,29 +150,22 @@ export function LiveTelemetry() {
             datasetSession={datasetSession}
             datasetRowCount={datasetRowCount}
             datasetElapsedMs={datasetElapsedMs}
-            datasetRows={datasetRows}
-            timelineIntervals={timelineIntervals}
-            activeTimelineLabel={activeTimelineLabel}
             onSelectLabel={(label) => telemetryStore.selectDatasetLabel(label)}
-            onStart={() => telemetryStore.startDatasetRecording()}
+            onStart={(timelineDurationSeconds) => {
+              if (captureMode === "timeline" && timelineDurationSeconds) {
+                pendingTimelineDurationSecondsRef.current = timelineDurationSeconds;
+              }
+              telemetryStore.startDatasetRecording();
+            }}
             onStop={() => {
               telemetryStore.stopDatasetRecording();
               // Quick Capture has nothing left to review, so it persists the bundle
-              // immediately; Timeline Capture waits for the explicit "Save recording
-              // bundle" action below so post-capture interval edits land in the
-              // saved bundle instead of racing it.
+              // immediately. Timeline Capture never saves a recording bundle here —
+              // it only exports a CSV, automatically at timeout (see the effect above).
               if (captureMode === "quick") void saveDatasetRecording();
             }}
             onDiscard={() => telemetryStore.discardDatasetRecording()}
             onExport={exportDatasetCsv}
-            onSaveRecording={saveDatasetRecording}
-            onSetTimelineLabel={(label, mechanism) => telemetryStore.setTimelineLabel(label, mechanism)}
-            onRelabelInterval={(intervalId, label) => telemetryStore.relabelTimelineInterval(intervalId, label)}
-            onSetIntervalCurationStatus={(intervalId, status) => telemetryStore.setTimelineIntervalCurationStatus(intervalId, status)}
-            onMoveIntervalBoundary={(intervalId, edge, newRawRow) => telemetryStore.moveTimelineIntervalBoundary(intervalId, edge, newRawRow)}
-            onSplitInterval={(intervalId, atRawRow) => telemetryStore.splitTimelineInterval(intervalId, atRawRow)}
-            onCreateInterval={(label, startRawRow, endRawRow) => telemetryStore.createTimelineInterval(label, startRawRow, endRawRow)}
-            onDeleteInterval={(intervalId) => telemetryStore.deleteTimelineInterval(intervalId)}
           />
         </div>
         <SignalMonitor

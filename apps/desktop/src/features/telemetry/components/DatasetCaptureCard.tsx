@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { AsyncActionButton } from "../../../components/app/AsyncActionButton";
 import { HelpTooltip } from "../../../components/app/HelpTooltip";
 import {
@@ -18,16 +18,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "../../../components/ui/tabs";
-import type { CurationStatus } from "../../../shared/tauri/recordingBundle";
-import type { LiveInterval } from "../annotations/timeline";
 import {
   type DatasetCaptureMode,
   type DatasetRecordingState,
-  type DatasetRow,
   type DatasetSessionMetadata,
   type GestureDatasetLabel,
 } from "../store/telemetryStore";
-import { RecordingTimelineEditor } from "./RecordingTimelineEditor";
+
+/** Timeline Capture's timed-recording duration must stay well under the ~6,666s
+ * (200,000-row `MAX_CSV_ROWS` at 30Hz) capture buffer limit, while still allowing
+ * long sessions: 1 second to 1 hour (3,600 seconds). */
+export const TIMELINE_DURATION_SECONDS_MIN = 1;
+export const TIMELINE_DURATION_SECONDS_MAX = 3600;
+const DEFAULT_TIMELINE_DURATION_SECONDS = 30;
 
 type DatasetCaptureCardProps = {
   captureMode: DatasetCaptureMode;
@@ -45,33 +48,13 @@ type DatasetCaptureCardProps = {
   datasetSession: DatasetSessionMetadata | null;
   datasetRowCount: number;
   datasetElapsedMs?: number;
-  datasetRows: DatasetRow[];
-  timelineIntervals: LiveInterval[];
-  activeTimelineLabel: GestureDatasetLabel | null;
   onSelectLabel: (label: GestureDatasetLabel) => boolean;
-  onStart: () => void;
+  /** Timeline Capture passes the chosen recording duration (seconds); Quick Capture ignores it. */
+  onStart: (timelineDurationSeconds?: number) => void;
   onStop: () => void;
   onDiscard: () => void;
   onExport: () => Promise<void>;
-  /** Timeline Capture only: persists the recording bundle after the user has reviewed/edited intervals in the "saved" state. Quick Capture saves automatically on Stop. */
-  onSaveRecording: () => Promise<void>;
-  onSetTimelineLabel: (label: GestureDatasetLabel | null, mechanism?: "hotkey_hold" | "hotkey_toggle") => boolean;
-  onRelabelInterval: (intervalId: string, label: GestureDatasetLabel) => boolean;
-  onSetIntervalCurationStatus: (intervalId: string, status: CurationStatus) => boolean;
-  onMoveIntervalBoundary: (intervalId: string, edge: "start" | "end", newRawRow: number) => boolean;
-  onSplitInterval: (intervalId: string, atRawRow: number) => boolean;
-  onCreateInterval: (label: GestureDatasetLabel, startRawRow: number, endRawRow: number) => boolean;
-  onDeleteInterval: (intervalId: string) => boolean;
 };
-
-/** Ignore label hotkeys while the user is typing anywhere in the app, matching App.tsx's focus-safe convention. */
-function isTypingTarget(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement
-    && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName));
-}
-
-/** Which modifier distinguishes a hold-to-label press from a plain toggle press. Change this single constant to remap. */
-const HOLD_MODIFIER: "altKey" | "shiftKey" | "ctrlKey" | "metaKey" = "altKey";
 
 function formatElapsed(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
@@ -80,7 +63,7 @@ function formatElapsed(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-/** Labeled gesture-dataset recorder: pick or type a label, capture a session, then export it. Supports Quick Capture (one label per session) and Timeline Capture (multiple live-annotated intervals). */
+/** Labeled gesture-dataset recorder: pick or type a label, capture a session, then export it. Supports Quick Capture (one label per session) and Timeline Capture (a fixed-duration timed recording, auto-exported on completion). */
 export function DatasetCaptureCard({
   captureMode,
   onCaptureModeChange,
@@ -96,26 +79,19 @@ export function DatasetCaptureCard({
   datasetSession,
   datasetRowCount,
   datasetElapsedMs = 0,
-  datasetRows,
-  timelineIntervals,
-  activeTimelineLabel,
   onSelectLabel,
   onStart,
   onStop,
   onDiscard,
   onExport,
-  onSaveRecording,
-  onSetTimelineLabel,
-  onRelabelInterval,
-  onSetIntervalCurationStatus,
-  onMoveIntervalBoundary,
-  onSplitInterval,
-  onCreateInterval,
-  onDeleteInterval,
 }: DatasetCaptureCardProps) {
   const [customLabel, setCustomLabel] = useState("");
   const [labelError, setLabelError] = useState<string | null>(null);
+  const [timelineDurationSeconds, setTimelineDurationSeconds] = useState(DEFAULT_TIMELINE_DURATION_SECONDS);
   const isTimeline = captureMode === "timeline";
+  const timelineDurationValid = Number.isInteger(timelineDurationSeconds)
+    && timelineDurationSeconds >= TIMELINE_DURATION_SECONDS_MIN
+    && timelineDurationSeconds <= TIMELINE_DURATION_SECONDS_MAX;
 
   const applyCustomLabel = () => {
     if (onSelectLabel(customLabel)) {
@@ -125,66 +101,6 @@ export function DatasetCaptureCard({
       setLabelError("Use a label beginning with a letter, followed by letters, numbers, or underscores (up to 64 characters).");
     }
   };
-
-  // Keeps the hold-key effect's closures reading the current active label without re-subscribing listeners on every change.
-  const activeTimelineLabelRef = useRef(activeTimelineLabel);
-  useEffect(() => {
-    activeTimelineLabelRef.current = activeTimelineLabel;
-  }, [activeTimelineLabel]);
-
-  // Number-key hotkeys (1-9) toggle the matching session label live; 0/Escape clears the active label,
-  // leaving a gap. Holding the modifier (see HOLD_MODIFIER) while pressing a number instead opens the
-  // label only for as long as the key is held: keydown begins the interval, keyup ends it. Only active
-  // during a Timeline Capture that has actually started recording.
-  useEffect(() => {
-    if (!isTimeline || datasetRecordingState !== "recording") return;
-    let heldKeyCode: string | null = null;
-    let heldLabel: GestureDatasetLabel | null = null;
-
-    const handleKeydown = (event: KeyboardEvent) => {
-      if (isTypingTarget(event.target)) return;
-
-      if (event[HOLD_MODIFIER]) {
-        if (event.repeat || event.code === heldKeyCode) return;
-        const index = Number(event.key) - 1;
-        if (Number.isInteger(index) && index >= 0 && index < sessionLabels.length) {
-          const label = sessionLabels[index];
-          if (onSetTimelineLabel(label, "hotkey_hold")) {
-            heldKeyCode = event.code;
-            heldLabel = label;
-          }
-        }
-        return;
-      }
-
-      if (event.key === "0" || event.key === "Escape") {
-        onSetTimelineLabel(null, "hotkey_toggle");
-        return;
-      }
-      const index = Number(event.key) - 1;
-      if (Number.isInteger(index) && index >= 0 && index < sessionLabels.length) {
-        onSetTimelineLabel(sessionLabels[index], "hotkey_toggle");
-      }
-    };
-
-    const handleKeyup = (event: KeyboardEvent) => {
-      if (event.code !== heldKeyCode) return;
-      // Only close the interval this key opened — if another hotkey (hold or toggle) already
-      // changed the active label since, this key's release must not clobber it.
-      if (activeTimelineLabelRef.current === heldLabel) {
-        onSetTimelineLabel(null, "hotkey_hold");
-      }
-      heldKeyCode = null;
-      heldLabel = null;
-    };
-
-    window.addEventListener("keydown", handleKeydown);
-    window.addEventListener("keyup", handleKeyup);
-    return () => {
-      window.removeEventListener("keydown", handleKeydown);
-      window.removeEventListener("keyup", handleKeyup);
-    };
-  }, [isTimeline, datasetRecordingState, sessionLabels, onSetTimelineLabel]);
 
   return (
     <Card role="region" aria-label="Labeled dataset recorder" className="min-w-0">
@@ -196,23 +112,22 @@ export function DatasetCaptureCard({
             ordinary CSV capture above. Start arms the recorder: data already visible in the graphs
             above is never included, and the first stored row is the first sample accepted after
             Start. The timer starts counting from that first sample too, not from the Start press.
-            Quick Capture tags the whole session with one label; Timeline Capture lets you switch
-            labels live during a longer recording, leaving unlabeled stretches unannotated rather
-            than a false negative. Either way, raw samples are never rewritten once captured — only
-            label/interval metadata can change afterward.
+            Quick Capture tags the whole session with one label; Timeline Capture runs for a fixed
+            duration you set and then automatically exports the unlabeled CSV to the export folder
+            below. Either way, raw samples are never rewritten once captured.
           </HelpTooltip>
         </CardTitle>
         <CardDescription>
           {datasetRecordingState === "arming" && (isTimeline ? "Arming — waiting for the first sample" : `Arming "${datasetSession?.label}" — waiting for the first sample`)}
           {datasetRecordingState === "recording" && (isTimeline
-            ? `Recording · ${formatElapsed(datasetElapsedMs)} · active label: ${activeTimelineLabel ? activeTimelineLabel.replaceAll("_", " ") : "none (unannotated)"}`
+            ? `Recording · ${formatElapsed(datasetElapsedMs)} of ${timelineDurationSeconds}s`
             : `Recording "${datasetSession?.label}" · ${formatElapsed(datasetElapsedMs)}`)}
           {datasetRecordingState === "saved" && (isTimeline
-            ? `Saved · ${timelineIntervals.length} interval${timelineIntervals.length === 1 ? "" : "s"} — review below before exporting`
+            ? `Stopped — ${datasetRowCount.toLocaleString()} rows captured`
             : `Saved "${datasetSession?.label}" — ready to export`)}
           {datasetRecordingState === "discarded" && "Session discarded"}
           {datasetRecordingState === "idle" && (isTimeline
-            ? "Ready — create labels below, then Start and switch labels live"
+            ? "Ready — set a duration, then Start"
             : (selectedLabel ? `Ready to record "${selectedLabel.replaceAll("_", " ")}"` : "Enter or select a label to start"))}
         </CardDescription>
       </CardHeader>
@@ -233,23 +148,25 @@ export function DatasetCaptureCard({
           {!isTimeline && datasetSession ? ` · session label: ${datasetSession.label}` : ""}
         </p>
         <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Label htmlFor="dataset-custom-label" className="sr-only">Dataset label</Label>
-            <Input
-              id="dataset-custom-label"
-              aria-label="Dataset label"
-              value={customLabel}
-              disabled={datasetRecording && !isTimeline}
-              placeholder="Enter a label"
-              onChange={(event) => setCustomLabel(event.target.value)}
-            />
-            <Button type="button" variant="outline" disabled={(datasetRecording && !isTimeline) || customLabel.trim().length === 0} onClick={applyCustomLabel}>
-              Apply label
-            </Button>
-            <HelpTooltip label="About labels">
-              Labels must start with a letter and contain only letters, numbers, or underscores (up to 64 characters).
-            </HelpTooltip>
-          </div>
+          {!isTimeline && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Label htmlFor="dataset-custom-label" className="sr-only">Dataset label</Label>
+              <Input
+                id="dataset-custom-label"
+                aria-label="Dataset label"
+                value={customLabel}
+                disabled={datasetRecording}
+                placeholder="Enter a label"
+                onChange={(event) => setCustomLabel(event.target.value)}
+              />
+              <Button type="button" variant="outline" disabled={datasetRecording || customLabel.trim().length === 0} onClick={applyCustomLabel}>
+                Apply label
+              </Button>
+              <HelpTooltip label="About labels">
+                Labels must start with a letter and contain only letters, numbers, or underscores (up to 64 characters).
+              </HelpTooltip>
+            </div>
+          )}
           {sessionLabels.length > 0 && !isTimeline && (
             <div className="flex flex-wrap gap-2">
               <Label className="text-xs text-muted-foreground w-full">Previously used labels</Label>
@@ -290,26 +207,29 @@ export function DatasetCaptureCard({
               Selected label: <span className="font-semibold">{selectedLabel.replaceAll("_", " ")}</span>
             </p>
           )}
-          {isTimeline && sessionLabels.length > 0 && datasetRecordingState === "recording" && (
-            <div className="flex flex-wrap gap-2">
-              <Label className="text-xs text-muted-foreground w-full">
-                Live labels — click, or press 1-9 to toggle (0/Esc clears), or hold Alt+1-9 to label only while held
+          {isTimeline && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Label htmlFor="timeline-duration-seconds" className="text-xs text-muted-foreground">
+                Duration (seconds):
               </Label>
-              {sessionLabels.map((label, index) => (
-                <Button
-                  key={label}
-                  type="button"
-                  variant={activeTimelineLabel === label ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => onSetTimelineLabel(label, "hotkey_toggle")}
-                  className="text-xs"
-                >
-                  {index < 9 ? `${index + 1}. ` : ""}{label.replaceAll("_", " ")}
-                </Button>
-              ))}
-              <Button type="button" variant="ghost" size="sm" disabled={!activeTimelineLabel} onClick={() => onSetTimelineLabel(null)} className="text-xs">
-                Clear (gap)
-              </Button>
+              <Input
+                id="timeline-duration-seconds"
+                type="number"
+                aria-label="Recording duration in seconds"
+                required
+                min={TIMELINE_DURATION_SECONDS_MIN}
+                max={TIMELINE_DURATION_SECONDS_MAX}
+                step={1}
+                value={timelineDurationSeconds}
+                disabled={datasetRecording}
+                className="w-24"
+                onChange={(event) => setTimelineDurationSeconds(Number(event.target.value))}
+              />
+              <HelpTooltip label="About the recording duration">
+                Timeline Capture runs for exactly this many seconds once the first sample lands, then
+                stops and automatically writes the CSV to the export folder below. Must be between
+                {" "}{TIMELINE_DURATION_SECONDS_MIN} and {TIMELINE_DURATION_SECONDS_MAX} seconds.
+              </HelpTooltip>
             </div>
           )}
         </div>
@@ -329,7 +249,12 @@ export function DatasetCaptureCard({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant={datasetRecording ? "destructive" : "default"} disabled={!datasetRecording && !isTimeline && !selectedLabel} onClick={datasetRecording ? onStop : onStart}>
+          <Button
+            type="button"
+            variant={datasetRecording ? "destructive" : "default"}
+            disabled={!datasetRecording && (isTimeline ? !timelineDurationValid : !selectedLabel)}
+            onClick={datasetRecording ? onStop : () => onStart(isTimeline ? timelineDurationSeconds : undefined)}
+          >
             {datasetRecording ? (datasetRecordingState === "arming" ? "Arming…" : "Stop dataset capture") : "Start dataset capture"}
           </Button>
 
@@ -365,39 +290,11 @@ export function DatasetCaptureCard({
               ? "Saves the buffered labeled rows straight into the export folder above, under an auto-generated timestamped file name — choose a folder first, then Export writes there directly with no save dialog."
               : "Browser preview has no native folder picker, so this downloads the CSV directly instead."}
           </HelpTooltip>
-          {isTimeline && (
-            <>
-              <AsyncActionButton
-                disabled={datasetRecordingState !== "saved" || datasetRowCount === 0}
-                onPress={onSaveRecording}
-                pendingLabel="Saving…"
-              >
-                Save recording bundle
-              </AsyncActionButton>
-              <HelpTooltip label="About saving the recording bundle">
-                Persists the immutable raw.csv/recording.json/annotations.json bundle with your reviewed
-                intervals. Review the timeline below first — this captures its current state.
-              </HelpTooltip>
-            </>
-          )}
         </div>
         {labelError && (
           <Alert variant="destructive" role="alert">
             <AlertDescription>{labelError}</AlertDescription>
           </Alert>
-        )}
-        {isTimeline && datasetRecordingState === "saved" && (
-          <RecordingTimelineEditor
-            intervals={timelineIntervals}
-            rows={datasetRows}
-            sessionLabels={sessionLabels}
-            onRelabel={onRelabelInterval}
-            onSetCurationStatus={onSetIntervalCurationStatus}
-            onMoveBoundary={onMoveIntervalBoundary}
-            onSplit={onSplitInterval}
-            onCreate={onCreateInterval}
-            onDelete={onDeleteInterval}
-          />
         )}
       </CardContent>
     </Card>

@@ -381,7 +381,12 @@ fn validate_raw_csv_full(content: &str) -> Result<(usize, i64, i64), String> {
 /// metadata/label content is removed. Returns `None` when `content` is not
 /// headed by the legacy header at all (the caller then validates it as a
 /// plain `raw.csv` document instead). A malformed legacy document (wrong
-/// column count or a missing label) is a hard `Err`, not a fall-through.
+/// column count) is a hard `Err`, not a fall-through. The label field itself
+/// is never validated here — raw inspection doesn't use labels, and
+/// Timeline Capture's own export (`telemetryStore.ts::generateDatasetCsv`)
+/// legitimately produces this exact legacy header with an empty label, e.g.
+/// for unannotated rows; label presence/validity stays `model_lab.rs`'s
+/// concern for the training-import path.
 fn convert_legacy_dataset_csv(content: &str) -> Option<Result<String, String>> {
     let lines: Vec<&str> = content.lines().collect();
     let mut index = 0;
@@ -405,12 +410,6 @@ fn convert_legacy_dataset_csv(content: &str) -> Option<Result<String, String>> {
                 offset + 1,
                 fields.len(),
                 DATASET_CSV_HEADER.len()
-            )));
-        }
-        if fields[DATASET_CSV_HEADER.len() - 1].trim().is_empty() {
-            return Some(Err(format!(
-                "malformed legacy dataset CSV: row {} is missing its label",
-                offset + 1
             )));
         }
         converted_lines.push(fields[..RAW_CSV_HEADER.len()].join(","));
@@ -1061,10 +1060,15 @@ mod tests {
     }
 
     #[test]
-    fn convert_legacy_dataset_csv_rejects_missing_label_and_wrong_column_count() {
+    fn convert_legacy_dataset_csv_accepts_empty_label_but_rejects_wrong_column_count() {
         let header = DATASET_CSV_HEADER.join(",");
-        let missing_label = format!("{header}\n{}\n", legacy_row(1, "1.5", ""));
-        assert!(convert_legacy_dataset_csv(&missing_label).unwrap().is_err());
+        // Exactly the shape Timeline Capture's own export produces for unlabeled rows
+        // (`telemetryStore.ts::generateDatasetCsv`): raw inspection never uses labels.
+        let empty_label = format!("{header}\n{}\n", legacy_row(1, "1.5", ""));
+        let converted = convert_legacy_dataset_csv(&empty_label)
+            .expect("legacy header must be recognized")
+            .expect("an empty per-row label must not be rejected");
+        assert!(validate_raw_csv_full(&converted).is_ok());
 
         let wrong_columns = format!("{header}\n1,0,1.5\n");
         assert!(convert_legacy_dataset_csv(&wrong_columns).unwrap().is_err());

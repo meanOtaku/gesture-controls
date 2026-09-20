@@ -448,3 +448,92 @@ and `.hermes/queues/gc-009-raw-recording-image-viewer.json`.
 - [ ] Production build is **NOT CLEARED**: the existing unrelated TypeScript
       failures in Model Lab and `RecordingTimelineEditor` remain; no runtime
       desktop verification was performed.
+
+## GC-018 — Timeline Capture becomes a timed recorder; raw import accepts unlabeled legacy CSV
+
+- [x] Timeline Capture is now a timed recorder, not a live-labeling/interval-
+      review workflow: the user enters a duration in seconds and clicks Start;
+      capture runs for that duration, then stops once and auto-exports the
+      generated dataset CSV straight to the already-selected Export folder
+      (no save dialog). Quick Capture's own start/stop/export behavior is
+      unchanged.
+- [x] Duration input (`DatasetCaptureCard.tsx`) is a native, required
+      `<input type="number">` (`min`/`max`/`step`, disabled while recording),
+      constrained to **1–3600 seconds (up to 1 hour)**. Range chosen against
+      `telemetryStore.ts`'s existing capture ceiling: `MAX_CSV_ROWS = 200_000`
+      at `DEFAULT_RECORDING_RATE_HZ = 30` gives a real buffer ceiling of
+      ~6,666s, so 3600s stays comfortably inside it while still being a
+      round, easy-to-reason-about "up to an hour" limit; 1s is the minimum
+      duration that can produce a real recording. Start is disabled outside
+      this range.
+- [x] The timer starts only once the dataset session actually reaches
+      `"recording"` (i.e., once the first sample lands), not during
+      `"arming"`. It is owned by a `useEffect` in `LiveTelemetry.tsx` keyed on
+      `[captureMode, datasetRecordingState]`; the effect's cleanup — which
+      React runs on every dependency change as well as unmount — cancels any
+      pending `setTimeout`, which is what satisfies cleanup on manual stop,
+      mode switch, unmount, and completion with a single mechanism (no
+      timer is ever armed twice or left running past its owning session).
+      At timeout the session is stopped exactly once; if at least one row was
+      captured the CSV is auto-exported through the existing
+      `exportDatasetCsv` (native selected-folder write, no dialog, no new
+      dependency, no new persisted config); if zero rows were captured, the
+      existing `OperationFeedback.error` toast path is used instead (the same
+      surfaced-error mechanism `useTelemetryExport` already uses for a
+      missing export folder).
+- [x] Simplified `DatasetCaptureCard.tsx` for Timeline Capture: removed the
+      live-label hotkey controls, the custom-label input/"Apply label"/
+      previously-used-labels list, the `RecordingTimelineEditor` (interval
+      review/relabel/gap-fill), and the manual "Save recording bundle"
+      action. Quick Capture's label controls and behavior are untouched.
+      Per instruction, no core store or recording-bundle code was deleted:
+      `telemetryStore.ts`'s timeline-interval methods
+      (`setTimelineLabel`/`relabelInterval`/`setIntervalCurationStatus`/
+      `moveIntervalBoundary`/`splitInterval`/`createInterval`/
+      `deleteInterval`) and `buildRecordingBundlePayload` remain intact and
+      unused-but-present; `RecordingTimelineEditor.tsx` itself is untouched
+      and simply no longer rendered from Timeline Capture.
+- [x] Fixed the raw image viewer import failure: a CSV exported from Timeline
+      Capture has the legacy 17-column `DATASET_CSV_HEADER` but an empty
+      per-row label (raw inspection never uses labels — confirmed by tracing
+      `telemetryStore.ts::generateDatasetCsv`, which writes `""` for
+      Timeline Capture's rows). `recording_bundle.rs::convert_legacy_dataset_csv`
+      no longer rejects an empty trailing label; it converts the row as-is
+      once the column count matches, still rejecting any wrong column count.
+      No arbitrary CSV mapping was introduced — the header must still match
+      `DATASET_CSV_HEADER` exactly. The training/model-lab legacy importer
+      (`model_lab.rs::parse_csv`) is untouched and keeps its own, independent
+      label validation (`extract_label` on the `# label: <value>` metadata
+      comment line, not the per-row field), so this fix does not weaken
+      training-data label enforcement.
+- [x] Added tests: a `DatasetCaptureCard.test.tsx` case that the duration
+      input enforces the 1–3600 range and calls `onStart` with the chosen
+      value; a new isolated `LiveTelemetry.timelineCapture.test.tsx` (4
+      cases) covering that the timer does not start while merely arming,
+      that it stops once and auto-exports exactly once after the duration
+      elapses (and never re-fires), and that manual stop/discard before the
+      timeout both prevent any auto-export; and a Rust unit test
+      (`convert_legacy_dataset_csv_accepts_empty_label_but_rejects_wrong_column_count`)
+      asserting the exact unlabeled shape Timeline Capture's own export
+      produces is accepted while a wrong column count is still rejected.
+- [x] Targeted frontend tests: **`DatasetCaptureCard.test.tsx`
+      (10 passed)** + **`LiveTelemetry.timelineCapture.test.tsx` (4 passed)**
+      + full `src/features/telemetry` suite **(50 passed, 1 pre-existing
+      failure)** — the failing case
+      (`LiveTelemetry.test.tsx` › "reports a failed dataset export via toast
+      and re-enables the control") is unrelated and pre-existing: its own
+      `vi.mock` of `shared/tauri/exportCsv` only stubs `exportCsv`, not the
+      `exportCsvToFolder` the real code calls; confirmed identical on `main`
+      via `git stash` before any of this task's edits.
+      `npx tsc -b --pretty false`: same 5 pre-existing unrelated errors as on
+      `main` (`RecordingTimelineEditor.tsx` x2, `IntentBindingEditor.test.tsx`,
+      `LabelMappingEditor.tsx`, `ModelLifecycleControls.test.tsx`), none in
+      any file touched by this task.
+- [ ] Rust build/tests are **NOT CLEARED**: `cargo test`/`cargo check` on
+      `spatial-gesture-desktop` fail on this host before reaching any test —
+      `gobject-sys`'s build script requires `pkg-config`, which is not
+      installed here. This is the same pre-existing host blocker already
+      documented under GC-002. The `recording_bundle.rs` diff was instead
+      reviewed by eye for correctness (minimal, syntactic `git diff`
+      inspection) since it could not be compiled or run locally.
+- [x] `git diff --check` clean (no whitespace errors).
