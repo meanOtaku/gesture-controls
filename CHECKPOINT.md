@@ -315,3 +315,54 @@ the app's other real supported export format — the legacy dataset CSV
 Per task direction: no tests, builds, lint, formatting, or installs were run.
 Only the diff and `git diff --check` were inspected. Those gates remain
 **DEFERRED / NOT CLEARED**.
+
+## GC-012 — Dynamic raw-image grid size (this session)
+
+Bounded vertical slice: replaced the raw image viewer's fixed 64×64/4,096-value/
+64-row-hop contract with a typed, allow-listed grid size (`8, 16, 32, 64`,
+default 64), while preserving the same absolute upper bound (4,096 values) and
+every existing read-only/non-training guarantee.
+
+- Backend (`recording_bundle.rs`): `get_raw_recording_window` now takes a
+  `grid_size: u32` argument, validated against `RAW_GRID_SIZES = [8, 16, 32, 64]`
+  via `validate_grid_size` (rejects anything else outright). `resolve_raw_window_bounds`
+  derives its hop and max-values from the validated grid size (`hop = N`,
+  `max_values = N * N`) instead of the old fixed constants; `RAW_WINDOW_MAX_VALUES = 4096`
+  now documents only the absolute upper bound (64×64). `RawRecordingWindow`
+  gained a `grid_size` field so every response echoes the size actually served.
+  Column allow-listing, record-id validation, null preservation, and
+  recording-wide min/max normalization are unchanged.
+- Frontend types (`shared/tauri/recordingBundle.ts`): added `RAW_GRID_SIZES`,
+  `RawGridSize`, `DEFAULT_RAW_GRID_SIZE`, and `rawWindowMaxValues`/
+  `rawWindowRowHop` helpers mirroring the backend; `RawRecordingWindowRequest`
+  and `RawRecordingWindow` both carry `gridSize`.
+- `rawImageViewerStore.ts`: added a `gridSize` field (default 64) and
+  `setGridSize`, which realigns the current start to the new hop and reloads.
+  `alignToRowHop`/`lastValidStart` take the hop/max-values explicitly instead
+  of assuming fixed constants. The in-flight-response guard now also discards
+  a response if the grid size has since changed, alongside the existing
+  recording/channel guard.
+- `RawImageViewerPanel.tsx`: added a shadcn `Select` for grid size next to the
+  recording/channel selects, defaulting to 64×64, labeled with the selected
+  size and its row hop; prev/next button labels, the slider step, and the
+  short-recording hint now derive from the selected grid size instead of
+  fixed text/constants.
+- `RawImageCanvas.tsx`: removed the fixed `GRID_SIZE`/`PIXEL_COUNT` constants;
+  every dimension, `ImageData` allocation, pixel-index mapping, pointer
+  hit-testing, keyboard navigation, aria-label, and pixel-inspection text now
+  derive from the loaded response's own `gridSize`. Canvas-only rendering is
+  unchanged (still one `<canvas>`/`ImageData`, never N² DOM nodes).
+- Docs: `docs/decisions/2026-09-dataset-capture-recording-contract.md`'s Raw
+  image viewer section and `docs/using-the-application.md`'s Raw image viewer
+  subsection now describe the bounded dynamic grid-size contract instead of
+  the fixed 64×64 invariant.
+- Added Rust unit tests: `resolve_raw_window_bounds_scales_hop_and_window_with_grid_size`
+  and `validate_grid_size_allows_only_the_listed_sizes`, alongside updating the
+  existing `resolve_raw_window_bounds_*` tests for the new `grid_size` argument.
+- No arbitrary custom width/height, no separate hop control, no training
+  integration, and no new dependency.
+- `graphify update .` run after the source changes.
+
+Per task direction: no tests, builds, lint, formatting, or installs were run.
+Only the diff and `git diff --check` were inspected. Those gates remain
+**DEFERRED / NOT CLEARED**.

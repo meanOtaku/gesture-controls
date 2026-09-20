@@ -2,8 +2,6 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type Keyboard
 import type { RawImageNormalizationMode } from "../store/rawImageViewerStore";
 import type { RawRecordingWindow } from "../../../shared/tauri/recordingBundle";
 
-const GRID_SIZE = 64;
-const PIXEL_COUNT = GRID_SIZE * GRID_SIZE;
 const DISPLAY_SIZE = 320;
 
 /** Distinct from both the grayscale data range and the "beyond recording" fill,
@@ -30,8 +28,9 @@ type PixelInfo = {
 };
 
 function pixelInfoAt(rawWindow: RawRecordingWindow, index: number): PixelInfo {
-  const column = index % GRID_SIZE;
-  const row = Math.floor(index / GRID_SIZE);
+  const gridSize = rawWindow.gridSize;
+  const column = index % gridSize;
+  const row = Math.floor(index / gridSize);
   const rawRow = rawWindow.startRawRow + index;
   if (index >= rawWindow.values.length) {
     return { index, column, row, rawRow, category: "beyond", value: null, timestampNs: null };
@@ -71,9 +70,11 @@ function buildImageData(
 ): { imageData: ImageData; extent: { min: number; max: number } | null; isConstant: boolean } {
   const extent = resolveExtent(rawWindow, mode);
   const isConstant = extent !== null && extent.min === extent.max;
-  const data = new Uint8ClampedArray(PIXEL_COUNT * 4);
+  const gridSize = rawWindow.gridSize;
+  const pixelCount = gridSize * gridSize;
+  const data = new Uint8ClampedArray(pixelCount * 4);
 
-  for (let index = 0; index < PIXEL_COUNT; index += 1) {
+  for (let index = 0; index < pixelCount; index += 1) {
     const info = pixelInfoAt(rawWindow, index);
     let color: readonly [number, number, number];
     if (info.category === "beyond") {
@@ -95,7 +96,7 @@ function buildImageData(
     data[offset + 3] = 255;
   }
 
-  return { imageData: new ImageData(data, GRID_SIZE, GRID_SIZE), extent, isConstant };
+  return { imageData: new ImageData(data, gridSize, gridSize), extent, isConstant };
 }
 
 function formatTimestamp(timestampNs: number | null): string {
@@ -104,8 +105,8 @@ function formatTimestamp(timestampNs: number | null): string {
   return `${new Date(ms).toISOString()} (${timestampNs.toLocaleString()} ns)`;
 }
 
-function describePixel(info: PixelInfo): string {
-  const position = `column ${info.column + 1}, row ${info.row + 1} of the 64×64 grid`;
+function describePixel(info: PixelInfo, gridSize: number): string {
+  const position = `column ${info.column + 1}, row ${info.row + 1} of the ${gridSize}×${gridSize} grid`;
   if (info.category === "beyond") {
     return `${position}. Raw row ${info.rawRow}: no data — beyond the end of this recording.`;
   }
@@ -120,15 +121,18 @@ type RawImageCanvasProps = {
   normalizationMode: RawImageNormalizationMode;
 };
 
-/** Renders one 64x64 chronological raw-value frame via `<canvas>`/`ImageData`
- * (never as 4,096 DOM nodes), plus a keyboard/hover-accessible textual
- * inspector and a color legend. Purely visual inspection: this component
- * never edits annotations, never writes raw.csv, and exposes no training
- * action. */
+/** Renders one N×N (N is the response's own `gridSize`, one of the
+ * allow-listed grid sizes) chronological raw-value frame via
+ * `<canvas>`/`ImageData` (never as N² DOM nodes), plus a keyboard/hover-
+ * accessible textual inspector and a color legend. Purely visual
+ * inspection: this component never edits annotations, never writes
+ * raw.csv, and exposes no training action. */
 export function RawImageCanvas({ rawWindow, normalizationMode }: RawImageCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+  const gridSize = rawWindow.gridSize;
+  const pixelCount = gridSize * gridSize;
 
   const built = useMemo(() => buildImageData(rawWindow, normalizationMode), [rawWindow, normalizationMode]);
 
@@ -150,9 +154,9 @@ export function RawImageCanvas({ rawWindow, normalizationMode }: RawImageCanvasP
     const relativeX = event.clientX - rect.left;
     const relativeY = event.clientY - rect.top;
     if (relativeX < 0 || relativeY < 0 || relativeX >= rect.width || relativeY >= rect.height) return null;
-    const column = Math.min(GRID_SIZE - 1, Math.floor((relativeX / rect.width) * GRID_SIZE));
-    const row = Math.min(GRID_SIZE - 1, Math.floor((relativeY / rect.height) * GRID_SIZE));
-    return row * GRID_SIZE + column;
+    const column = Math.min(gridSize - 1, Math.floor((relativeX / rect.width) * gridSize));
+    const row = Math.min(gridSize - 1, Math.floor((relativeY / rect.height) * gridSize));
+    return row * gridSize + column;
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLCanvasElement>) => {
@@ -160,22 +164,22 @@ export function RawImageCanvas({ rawWindow, normalizationMode }: RawImageCanvasP
     let next: number | null = null;
     switch (event.key) {
       case "ArrowLeft":
-        next = current % GRID_SIZE === 0 ? current : current - 1;
+        next = current % gridSize === 0 ? current : current - 1;
         break;
       case "ArrowRight":
-        next = current % GRID_SIZE === GRID_SIZE - 1 ? current : current + 1;
+        next = current % gridSize === gridSize - 1 ? current : current + 1;
         break;
       case "ArrowUp":
-        next = current - GRID_SIZE < 0 ? current : current - GRID_SIZE;
+        next = current - gridSize < 0 ? current : current - gridSize;
         break;
       case "ArrowDown":
-        next = current + GRID_SIZE >= PIXEL_COUNT ? current : current + GRID_SIZE;
+        next = current + gridSize >= pixelCount ? current : current + gridSize;
         break;
       case "Home":
-        next = current - (current % GRID_SIZE);
+        next = current - (current % gridSize);
         break;
       case "End":
-        next = current - (current % GRID_SIZE) + (GRID_SIZE - 1);
+        next = current - (current % gridSize) + (gridSize - 1);
         break;
       default:
         return;
@@ -188,11 +192,11 @@ export function RawImageCanvas({ rawWindow, normalizationMode }: RawImageCanvasP
     <div className="flex flex-col gap-3">
       <canvas
         ref={canvasRef}
-        width={GRID_SIZE}
-        height={GRID_SIZE}
+        width={gridSize}
+        height={gridSize}
         role="img"
         tabIndex={0}
-        aria-label={`Chronological raw-data image for column ${rawWindow.column}, raw rows ${rawWindow.startRawRow} to ${Math.max(rawWindow.startRawRow, rawWindow.endRawRow - 1)}. Use arrow keys to inspect a pixel.`}
+        aria-label={`Chronological raw-data image for column ${rawWindow.column}, ${gridSize}×${gridSize} grid, raw rows ${rawWindow.startRawRow} to ${Math.max(rawWindow.startRawRow, rawWindow.endRawRow - 1)}. Use arrow keys to inspect a pixel.`}
         className="rounded-lg ring-1 ring-foreground/10"
         style={{ width: DISPLAY_SIZE, height: DISPLAY_SIZE, imageRendering: "pixelated", cursor: "crosshair" }}
         onPointerMove={(event) => setHoveredIndex(pixelIndexFromPointer(event))}
@@ -205,7 +209,9 @@ export function RawImageCanvas({ rawWindow, normalizationMode }: RawImageCanvasP
         onKeyDown={handleKeyDown}
       />
       <p className="text-xs text-muted-foreground" aria-live="polite">
-        {inspectedInfo ? describePixel(inspectedInfo) : "Hover or focus the image (arrow keys move the focused pixel) to inspect a raw row."}
+        {inspectedInfo
+          ? describePixel(inspectedInfo, gridSize)
+          : "Hover or focus the image (arrow keys move the focused pixel) to inspect a raw row."}
       </p>
       <RawImageLegend extent={built.extent} isConstant={built.isConstant} normalizationMode={normalizationMode} />
     </div>

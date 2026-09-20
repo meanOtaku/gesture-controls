@@ -11,9 +11,11 @@ import { Slider } from "../../../components/ui/slider";
 import {
   importRecordingFromRawCsv,
   listRecordingBundles,
+  RAW_GRID_SIZES,
   RAW_IMAGE_VIEWER_CHANNELS,
-  RAW_WINDOW_MAX_VALUES,
-  RAW_WINDOW_ROW_HOP,
+  rawWindowMaxValues,
+  rawWindowRowHop,
+  type RawGridSize,
   type RawImageViewerChannel,
   type RecordingBundleSummary,
 } from "../../../shared/tauri/recordingBundle";
@@ -35,11 +37,13 @@ function recordingLabel(summary: RecordingBundleSummary): string {
 }
 
 /**
- * Dedicated, read-only raw-data inspection panel: select a saved recording
- * and an allow-listed numeric channel, then inspect a chronological 64x64
- * image with exactly 64 raw rows per navigation step. This panel never
- * edits annotations, never writes raw.csv, and offers no training action —
- * see GC-009's delivery plan for the fixed scope.
+ * Dedicated, read-only raw-data inspection panel: select a saved recording,
+ * an allow-listed numeric channel, and one of four allow-listed square grid
+ * sizes (8×8, 16×16, 32×32, 64×64, default 64×64), then inspect a
+ * chronological N×N image with exactly N raw rows per navigation step. This
+ * panel never edits annotations, never writes raw.csv, and offers no
+ * training action — see GC-009's delivery plan for the original fixed scope
+ * and GC-012 for the bounded dynamic grid size.
  */
 export function RawImageViewerPanel() {
   const [recordingList, setRecordingList] = useState<RecordingListState>({ status: "loading" });
@@ -93,14 +97,17 @@ export function RawImageViewerPanel() {
   const recordingId = rawImageViewerStore.getRecordingId();
   const channel = rawImageViewerStore.getChannel();
   const normalizationMode = rawImageViewerStore.getNormalizationMode();
+  const gridSize = rawImageViewerStore.getGridSize();
   const status = rawImageViewerStore.getStatus();
   const errorMessage = rawImageViewerStore.getErrorMessage();
   const rawWindow = rawImageViewerStore.getWindow();
   const bounds = rawImageViewerStore.getNavigationBounds();
   const requestedStartRawRow = rawImageViewerStore.getRequestedStartRawRow();
 
-  const totalFrames = bounds ? Math.floor(bounds.maxStartRawRow / RAW_WINDOW_ROW_HOP) + 1 : null;
-  const currentFrame = Math.floor(requestedStartRawRow / RAW_WINDOW_ROW_HOP) + 1;
+  const rowHop = rawWindowRowHop(gridSize);
+  const maxValues = rawWindowMaxValues(gridSize);
+  const totalFrames = bounds ? Math.floor(bounds.maxStartRawRow / rowHop) + 1 : null;
+  const currentFrame = Math.floor(requestedStartRawRow / rowHop) + 1;
 
   return (
     <Card role="region" aria-label="Raw image viewer" className="min-w-0">
@@ -109,13 +116,14 @@ export function RawImageViewerPanel() {
           Raw image viewer
           <HelpTooltip label="About the raw image viewer">
             Read-only visual inspection of one saved recording's raw sensor channel, reshaped
-            into a chronological 64×64 image (pixel <em>i</em> is raw row <code>startRawRow + i</code>,
-            left-to-right then top-to-bottom). It never edits annotations, never writes raw.csv,
-            and is not a training-data representation.
+            into a chronological N×N image (pixel <em>i</em> is raw row <code>startRawRow + i</code>,
+            left-to-right then top-to-bottom) for an allow-listed grid size N (8, 16, 32, or 64;
+            default 64), with an N-row navigation hop. It never edits annotations, never writes
+            raw.csv, and is not a training-data representation.
           </HelpTooltip>
         </CardTitle>
         <CardDescription>
-          Select a saved recording and numeric channel to inspect its raw samples as an image.
+          Select a saved recording, numeric channel, and grid size to inspect its raw samples as an image.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -224,6 +232,27 @@ export function RawImageViewerPanel() {
                 </Select>
               </div>
 
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="raw-viewer-grid-size">
+                  Grid size ({gridSize}×{gridSize}, {rowHop}-row hop)
+                </Label>
+                <Select
+                  value={String(gridSize)}
+                  onValueChange={(value) => rawImageViewerStore.setGridSize(Number(value) as RawGridSize)}
+                >
+                  <SelectTrigger id="raw-viewer-grid-size" aria-label="Image grid size" className="min-w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RAW_GRID_SIZES.map((size) => (
+                      <SelectItem key={size} value={String(size)}>
+                        {size}×{size} ({size}-row hop)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <fieldset className="flex flex-col gap-1">
                 <legend className="label">Normalization</legend>
                 <RadioGroup
@@ -264,9 +293,9 @@ export function RawImageViewerPanel() {
                   </p>
                 ) : (
                   <>
-                    {rawWindow.totalRawRowCount < RAW_WINDOW_MAX_VALUES && (
+                    {rawWindow.totalRawRowCount < maxValues && (
                       <p className="hint">
-                        Short recording: only {rawWindow.totalRawRowCount.toLocaleString()} of {RAW_WINDOW_MAX_VALUES.toLocaleString()} pixels
+                        Short recording: only {rawWindow.totalRawRowCount.toLocaleString()} of {maxValues.toLocaleString()} pixels
                         have a recorded row; the remaining pixels show the "no data" fill below.
                       </p>
                     )}
@@ -290,13 +319,13 @@ export function RawImageViewerPanel() {
                           disabled={bounds === null || requestedStartRawRow <= bounds.minStartRawRow}
                           onClick={() => rawImageViewerStore.goToPreviousFrame()}
                         >
-                          Previous 64 rows
+                          Previous {rowHop} rows
                         </Button>
                         <Slider
                           aria-label="Raw row frame position"
                           min={bounds?.minStartRawRow ?? 0}
                           max={Math.max(bounds?.maxStartRawRow ?? 0, bounds?.minStartRawRow ?? 0)}
-                          step={RAW_WINDOW_ROW_HOP}
+                          step={rowHop}
                           value={[requestedStartRawRow]}
                           disabled={bounds === null || bounds.maxStartRawRow === bounds.minStartRawRow}
                           onValueChange={(value) => {
@@ -311,7 +340,7 @@ export function RawImageViewerPanel() {
                           disabled={bounds === null || requestedStartRawRow >= bounds.maxStartRawRow}
                           onClick={() => rawImageViewerStore.goToNextFrame()}
                         >
-                          Next 64 rows
+                          Next {rowHop} rows
                         </Button>
                       </div>
                     </div>

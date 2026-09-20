@@ -80,11 +80,23 @@ const RAW_WINDOW_ALLOWED_COLUMNS: [&str; 14] = [
     "contact_quality",
 ];
 
-/// Fixed 64x64 image contract from the GC-009 delivery plan.
+/// Allow-listed square grid sizes (GC-012). The hop equals the grid size
+/// (one displayed row of raw rows), and the window is always `size * size`
+/// values, so `RAW_WINDOW_MAX_VALUES` (the largest allowed size squared)
+/// remains the absolute upper bound on any response.
+const RAW_GRID_SIZES: [u32; 4] = [8, 16, 32, 64];
+const DEFAULT_RAW_GRID_SIZE: u32 = 64;
+/// Absolute upper bound on values returned by any allow-listed grid size.
 const RAW_WINDOW_MAX_VALUES: usize = 4_096;
-/// Slider/navigation hop; every accepted or clamped window start is a
-/// multiple of this value.
-const RAW_WINDOW_ROW_HOP: usize = 64;
+
+fn validate_grid_size(grid_size: u32) -> Result<usize, String> {
+    if !RAW_GRID_SIZES.contains(&grid_size) {
+        return Err(format!(
+            "unsupported grid size {grid_size}; must be one of {RAW_GRID_SIZES:?}"
+        ));
+    }
+    Ok(grid_size as usize)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MonotonicWallClock {
@@ -529,6 +541,7 @@ pub fn load_recording_bundle(
 pub struct RawRecordingWindow {
     pub recording_id: String,
     pub column: String,
+    pub grid_size: u32,
     pub total_raw_row_count: usize,
     pub start_raw_row: usize,
     pub end_raw_row: usize,
@@ -602,25 +615,31 @@ fn parse_raw_csv_column(content: &str, column: &str) -> Result<(Vec<i64>, Vec<Op
 /// non-hop-aligned starts are rejected outright; an aligned start beyond the
 /// last reachable window is clamped deterministically down to the final
 /// hop-aligned window so the end of a recording is always reachable.
-fn resolve_raw_window_bounds(total_raw_row_count: usize, start_raw_row: i64) -> Result<(usize, usize), String> {
+fn resolve_raw_window_bounds(
+    total_raw_row_count: usize,
+    start_raw_row: i64,
+    grid_size: usize,
+) -> Result<(usize, usize), String> {
     if start_raw_row < 0 {
         return Err("start raw row must not be negative".to_string());
     }
-    if start_raw_row as u64 % RAW_WINDOW_ROW_HOP as u64 != 0 {
+    let row_hop = grid_size;
+    let max_values = grid_size * grid_size;
+    if start_raw_row as u64 % row_hop as u64 != 0 {
         return Err(format!(
-            "start raw row {start_raw_row} must be a multiple of {RAW_WINDOW_ROW_HOP}"
+            "start raw row {start_raw_row} must be a multiple of {row_hop}"
         ));
     }
 
-    let last_valid_start = if total_raw_row_count <= RAW_WINDOW_MAX_VALUES {
+    let last_valid_start = if total_raw_row_count <= max_values {
         0
     } else {
-        let max_start = total_raw_row_count - RAW_WINDOW_MAX_VALUES;
-        (max_start / RAW_WINDOW_ROW_HOP) * RAW_WINDOW_ROW_HOP
+        let max_start = total_raw_row_count - max_values;
+        (max_start / row_hop) * row_hop
     };
     let requested_start = start_raw_row as usize;
     let resolved_start = requested_start.min(last_valid_start);
-    let resolved_end = (resolved_start + RAW_WINDOW_MAX_VALUES).min(total_raw_row_count);
+    let resolved_end = (resolved_start + max_values).min(total_raw_row_count);
     Ok((resolved_start, resolved_end))
 }
 
@@ -632,12 +651,14 @@ pub fn get_raw_recording_window(
     recording_id: String,
     column: String,
     start_raw_row: i64,
+    grid_size: u32,
     app: AppHandle,
 ) -> Result<RawRecordingWindow, String> {
     validate_recording_id(&recording_id)?;
     if !RAW_WINDOW_ALLOWED_COLUMNS.contains(&column.as_str()) {
         return Err(format!("unsupported raw column '{column}'"));
     }
+    let grid_size_usize = validate_grid_size(grid_size)?;
 
     let dir = recording_bundles_dir(&app)?.join(&recording_id);
     let csv_path = raw_csv_path(&dir);
@@ -652,7 +673,8 @@ pub fn get_raw_recording_window(
     let (timestamps_ns, all_values) = parse_raw_csv_column(&content, &column)?;
 
     let total_raw_row_count = all_values.len();
-    let (resolved_start, resolved_end) = resolve_raw_window_bounds(total_raw_row_count, start_raw_row)?;
+    let (resolved_start, resolved_end) =
+        resolve_raw_window_bounds(total_raw_row_count, start_raw_row, grid_size_usize)?;
 
     let window_values = all_values[resolved_start..resolved_end].to_vec();
     let window_timestamps = timestamps_ns[resolved_start..resolved_end].to_vec();
@@ -675,6 +697,7 @@ pub fn get_raw_recording_window(
     Ok(RawRecordingWindow {
         recording_id,
         column,
+        grid_size,
         total_raw_row_count,
         start_raw_row: resolved_start,
         end_raw_row: resolved_end,
@@ -936,34 +959,60 @@ mod tests {
 
     #[test]
     fn resolve_raw_window_bounds_rejects_negative_and_unaligned_starts() {
-        assert!(resolve_raw_window_bounds(10_000, -1).is_err());
-        assert!(resolve_raw_window_bounds(10_000, 1).is_err());
-        assert!(resolve_raw_window_bounds(10_000, 63).is_err());
-        assert!(resolve_raw_window_bounds(10_000, 64).is_ok());
+        assert!(resolve_raw_window_bounds(10_000, -1, 64).is_err());
+        assert!(resolve_raw_window_bounds(10_000, 1, 64).is_err());
+        assert!(resolve_raw_window_bounds(10_000, 63, 64).is_err());
+        assert!(resolve_raw_window_bounds(10_000, 64, 64).is_ok());
     }
 
     #[test]
     fn resolve_raw_window_bounds_clamps_deterministically_to_final_window() {
         // 10_000 rows: last full-window start is the largest multiple of 64
         // such that start + 4096 <= 10_000, i.e. floor(5904 / 64) * 64 = 5888.
-        let (start, end) = resolve_raw_window_bounds(10_000, 5888).unwrap();
+        let (start, end) = resolve_raw_window_bounds(10_000, 5888, 64).unwrap();
         assert_eq!((start, end), (5888, 9984));
 
         // Requesting far past the end clamps to that same final window.
-        let (start, end) = resolve_raw_window_bounds(10_000, 1_000_000).unwrap();
+        let (start, end) = resolve_raw_window_bounds(10_000, 1_000_000, 64).unwrap();
         assert_eq!((start, end), (5888, 9984));
 
         // Re-requesting the already-clamped final start is idempotent.
-        let (start, end) = resolve_raw_window_bounds(10_000, start as i64).unwrap();
+        let (start, end) = resolve_raw_window_bounds(10_000, start as i64, 64).unwrap();
         assert_eq!((start, end), (5888, 9984));
     }
 
     #[test]
     fn resolve_raw_window_bounds_handles_short_recordings() {
-        assert_eq!(resolve_raw_window_bounds(0, 0).unwrap(), (0, 0));
-        assert_eq!(resolve_raw_window_bounds(100, 0).unwrap(), (0, 100));
+        assert_eq!(resolve_raw_window_bounds(0, 0, 64).unwrap(), (0, 0));
+        assert_eq!(resolve_raw_window_bounds(100, 0, 64).unwrap(), (0, 100));
         // Any aligned start beyond a short recording clamps back to 0.
-        assert_eq!(resolve_raw_window_bounds(100, 64).unwrap(), (0, 100));
+        assert_eq!(resolve_raw_window_bounds(100, 64, 64).unwrap(), (0, 100));
+    }
+
+    #[test]
+    fn resolve_raw_window_bounds_scales_hop_and_window_with_grid_size() {
+        // 8x8: hop 8, max 64 values.
+        assert!(resolve_raw_window_bounds(1_000, 4, 8).is_err());
+        let (start, end) = resolve_raw_window_bounds(1_000, 936, 8).unwrap();
+        assert_eq!((start, end), (936, 1_000));
+
+        // 16x16: hop 16, max 256 values.
+        let (start, end) = resolve_raw_window_bounds(1_000, 1_000_000, 16).unwrap();
+        assert_eq!(end - start, 256);
+        assert_eq!(start % 16, 0);
+    }
+
+    #[test]
+    fn validate_grid_size_allows_only_the_listed_sizes() {
+        for size in RAW_GRID_SIZES {
+            assert!(validate_grid_size(size).is_ok());
+        }
+        assert!(validate_grid_size(4).is_err());
+        assert!(validate_grid_size(48).is_err());
+        assert!(validate_grid_size(128).is_err());
+        assert!(RAW_GRID_SIZES.contains(&DEFAULT_RAW_GRID_SIZE));
+        let max_grid_size = RAW_GRID_SIZES.iter().max().copied().unwrap();
+        assert_eq!((max_grid_size * max_grid_size) as usize, RAW_WINDOW_MAX_VALUES);
     }
 
     #[test]

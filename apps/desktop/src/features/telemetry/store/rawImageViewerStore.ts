@@ -1,7 +1,9 @@
 import {
+  DEFAULT_RAW_GRID_SIZE,
   getRawRecordingWindow,
-  RAW_WINDOW_MAX_VALUES,
-  RAW_WINDOW_ROW_HOP,
+  rawWindowMaxValues,
+  rawWindowRowHop,
+  type RawGridSize,
   type RawImageViewerChannel,
   type RawRecordingWindow,
 } from "../../../shared/tauri/recordingBundle";
@@ -16,14 +18,14 @@ export type RawImageNormalizationMode = "recording" | "frame";
 export type RawImageViewerStatus = "empty" | "loading" | "loaded" | "error";
 
 /**
- * Every request path (recording, channel, or row-start change) is
- * `Math.floor`-aligned to `RAW_WINDOW_ROW_HOP` before it is sent, so
- * `startRawRow % RAW_WINDOW_ROW_HOP === 0` holds for every navigation path,
- * not just the ones the backend would otherwise reject.
+ * Every request path (recording, channel, grid-size, or row-start change) is
+ * `Math.floor`-aligned to the selected grid size's row hop before it is
+ * sent, so `startRawRow % hop === 0` holds for every navigation path, not
+ * just the ones the backend would otherwise reject.
  */
-function alignToRowHop(value: number): number {
+function alignToRowHop(value: number, rowHop: number): number {
   const nonNegative = Number.isFinite(value) ? Math.max(0, value) : 0;
-  return Math.floor(nonNegative / RAW_WINDOW_ROW_HOP) * RAW_WINDOW_ROW_HOP;
+  return Math.floor(nonNegative / rowHop) * rowHop;
 }
 
 /**
@@ -32,9 +34,9 @@ function alignToRowHop(value: number): number {
  * fact (`totalRawRowCount`) the command itself resolves against, rather than
  * a locally guessed limit.
  */
-function lastValidStart(totalRawRowCount: number, maxValues: number): number {
+function lastValidStart(totalRawRowCount: number, maxValues: number, rowHop: number): number {
   if (totalRawRowCount <= maxValues) return 0;
-  return alignToRowHop(totalRawRowCount - maxValues);
+  return alignToRowHop(totalRawRowCount - maxValues, rowHop);
 }
 
 class RawImageViewerStore {
@@ -45,6 +47,7 @@ class RawImageViewerStore {
   private recordingId: string | null = null;
   private channel: RawImageViewerChannel | null = null;
   private normalizationMode: RawImageNormalizationMode = "recording";
+  private gridSize: RawGridSize = DEFAULT_RAW_GRID_SIZE;
   private requestedStartRawRow = 0;
 
   private status: RawImageViewerStatus = "empty";
@@ -75,6 +78,10 @@ class RawImageViewerStore {
     return this.normalizationMode;
   }
 
+  getGridSize(): RawGridSize {
+    return this.gridSize;
+  }
+
   getRequestedStartRawRow(): number {
     return this.requestedStartRawRow;
   }
@@ -99,7 +106,11 @@ class RawImageViewerStore {
    */
   getNavigationBounds(): { minStartRawRow: number; maxStartRawRow: number } | null {
     if (this.window === null) return null;
-    const maxStartRawRow = lastValidStart(this.window.totalRawRowCount, RAW_WINDOW_MAX_VALUES);
+    const maxStartRawRow = lastValidStart(
+      this.window.totalRawRowCount,
+      rawWindowMaxValues(this.window.gridSize),
+      rawWindowRowHop(this.window.gridSize),
+    );
     return { minStartRawRow: 0, maxStartRawRow };
   }
 
@@ -117,6 +128,14 @@ class RawImageViewerStore {
     this.resetAndReload();
   }
 
+  /** Changing grid size realigns the current start to the new hop (never resets to 0 unless already there) and reloads against the new N*N window. */
+  setGridSize(gridSize: RawGridSize): void {
+    if (gridSize === this.gridSize) return;
+    this.gridSize = gridSize;
+    this.requestedStartRawRow = alignToRowHop(this.requestedStartRawRow, rawWindowRowHop(gridSize));
+    this.resetAndReload();
+  }
+
   setNormalizationMode(mode: RawImageNormalizationMode): void {
     if (mode === this.normalizationMode) return;
     this.normalizationMode = mode;
@@ -126,20 +145,20 @@ class RawImageViewerStore {
     this.notify();
   }
 
-  /** Jumps to an explicit raw row start (e.g. from a slider drag), aligned down to the nearest `RAW_WINDOW_ROW_HOP` multiple. */
+  /** Jumps to an explicit raw row start (e.g. from a slider drag), aligned down to the nearest row-hop multiple for the selected grid size. */
   setStartRawRow(startRawRow: number): void {
-    const aligned = alignToRowHop(startRawRow);
+    const aligned = alignToRowHop(startRawRow, rawWindowRowHop(this.gridSize));
     if (aligned === this.requestedStartRawRow) return;
     this.requestedStartRawRow = aligned;
     this.reload();
   }
 
   goToPreviousFrame(): void {
-    this.setStartRawRow(this.requestedStartRawRow - RAW_WINDOW_ROW_HOP);
+    this.setStartRawRow(this.requestedStartRawRow - rawWindowRowHop(this.gridSize));
   }
 
   goToNextFrame(): void {
-    this.setStartRawRow(this.requestedStartRawRow + RAW_WINDOW_ROW_HOP);
+    this.setStartRawRow(this.requestedStartRawRow + rawWindowRowHop(this.gridSize));
   }
 
   goToFirstFrame(): void {
@@ -171,18 +190,19 @@ class RawImageViewerStore {
 
     const requestVersion = ++this.requestVersion;
     const startRawRow = this.requestedStartRawRow;
+    const gridSize = this.gridSize;
     this.status = "loading";
     this.errorMessage = null;
     this.notify();
 
-    void getRawRecordingWindow({ recordingId, column: channel, startRawRow }).then((result) => {
+    void getRawRecordingWindow({ recordingId, column: channel, startRawRow, gridSize }).then((result) => {
       // Discard this response if a newer request has since been issued, or
-      // if the recording/channel selection has moved on entirely (e.g. the
-      // user switched recordings while this request was in flight): either
-      // way, the current selection must never be overwritten by a
-      // superseded response.
+      // if the recording/channel/grid-size selection has moved on entirely
+      // (e.g. the user switched recordings or grid size while this request
+      // was in flight): either way, the current selection must never be
+      // overwritten by a superseded response.
       if (requestVersion !== this.requestVersion) return;
-      if (this.recordingId !== recordingId || this.channel !== channel) return;
+      if (this.recordingId !== recordingId || this.channel !== channel || this.gridSize !== gridSize) return;
 
       if (result.status === "error") {
         this.status = "error";

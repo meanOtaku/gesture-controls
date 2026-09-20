@@ -104,21 +104,34 @@ export const RAW_IMAGE_VIEWER_CHANNELS = [
 
 export type RawImageViewerChannel = (typeof RAW_IMAGE_VIEWER_CHANNELS)[number];
 
-/** Mirrors `recording_bundle::RAW_WINDOW_MAX_VALUES`. */
+/** Mirrors `recording_bundle::RAW_GRID_SIZES`: the only square grid sizes the UI offers. */
+export const RAW_GRID_SIZES = [8, 16, 32, 64] as const;
+export type RawGridSize = (typeof RAW_GRID_SIZES)[number];
+/** Mirrors `recording_bundle::DEFAULT_RAW_GRID_SIZE`. */
+export const DEFAULT_RAW_GRID_SIZE: RawGridSize = 64;
+/** Mirrors `recording_bundle::RAW_WINDOW_MAX_VALUES`: the absolute upper bound (64x64) across every allowed grid size. */
 export const RAW_WINDOW_MAX_VALUES = 4096;
-/** Mirrors `recording_bundle::RAW_WINDOW_ROW_HOP`. */
-export const RAW_WINDOW_ROW_HOP = 64;
+
+/** For grid size N, the window is N*N values and the hop is N raw rows (one displayed grid row). */
+export function rawWindowMaxValues(gridSize: RawGridSize): number {
+  return gridSize * gridSize;
+}
+export function rawWindowRowHop(gridSize: RawGridSize): number {
+  return gridSize;
+}
 
 export type RawRecordingWindowRequest = {
   recordingId: string;
   column: RawImageViewerChannel;
   startRawRow: number;
+  gridSize: RawGridSize;
 };
 
 /** Mirrors `recording_bundle::RawRecordingWindow` field-for-field. */
 export type RawRecordingWindow = {
   recordingId: string;
   column: string;
+  gridSize: RawGridSize;
   totalRawRowCount: number;
   startRawRow: number;
   endRawRow: number;
@@ -253,6 +266,7 @@ export async function getRawRecordingWindow(
       recordingId: request.recordingId,
       column: request.column,
       startRawRow: request.startRawRow,
+      gridSize: request.gridSize,
     }),
   );
 }
