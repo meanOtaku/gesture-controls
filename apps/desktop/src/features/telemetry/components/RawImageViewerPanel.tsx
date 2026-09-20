@@ -40,10 +40,11 @@ function recordingLabel(summary: RecordingBundleSummary): string {
  * Dedicated, read-only raw-data inspection panel: select a saved recording,
  * an allow-listed numeric channel, and one of four allow-listed square grid
  * sizes (8×8, 16×16, 32×32, 64×64, default 64×64), then inspect a
- * chronological N×N image with exactly N raw rows per navigation step. This
- * panel never edits annotations, never writes raw.csv, and offers no
- * training action — see GC-009's delivery plan for the original fixed scope
- * and GC-012 for the bounded dynamic grid size.
+ * chronological N×N image with exactly N raw rows per navigation step,
+ * rendered as a grayscale image and a paired rainbow false-colour image of
+ * the identical window (GC-013). This panel never edits annotations, never
+ * writes raw.csv, and offers no training action — see GC-009's delivery plan
+ * for the original fixed scope and GC-012 for the bounded dynamic grid size.
  */
 export function RawImageViewerPanel() {
   const [recordingList, setRecordingList] = useState<RecordingListState>({ status: "loading" });
@@ -299,7 +300,20 @@ export function RawImageViewerPanel() {
                         have a recorded row; the remaining pixels show the "no data" fill below.
                       </p>
                     )}
-                    <RawImageCanvas rawWindow={rawWindow} normalizationMode={normalizationMode} />
+                    <div className="flex flex-col gap-6 md:flex-row md:flex-wrap">
+                      <RawImageCanvas
+                        rawWindow={rawWindow}
+                        normalizationMode={normalizationMode}
+                        title="Grayscale"
+                        colorMode="grayscale"
+                      />
+                      <RawImageCanvas
+                        rawWindow={rawWindow}
+                        normalizationMode={normalizationMode}
+                        title="Rainbow (false-colour)"
+                        colorMode="rainbow"
+                      />
+                    </div>
                     <div className="flex flex-col gap-2">
                       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                         <span>

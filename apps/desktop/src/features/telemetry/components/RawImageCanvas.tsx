@@ -15,6 +15,10 @@ const BEYOND_COLOR: readonly [number, number, number] = [51, 65, 85];
  * instead of a divide-by-zero normalization. */
 const CONSTANT_COLOR: readonly [number, number, number] = [128, 128, 128];
 
+/** Rendering palette for the value gradient only; `MISSING_COLOR`, `BEYOND_COLOR`,
+ * and `CONSTANT_COLOR` are shared "not data" fills, unaffected by this choice. */
+export type RawImageColorMode = "grayscale" | "rainbow";
+
 type PixelCategory = "value" | "missing" | "beyond";
 
 type PixelInfo = {
@@ -64,9 +68,31 @@ function resolveExtent(
   return min === null || max === null ? null : { min, max };
 }
 
+/** Low value → red (hue 0°), high value → violet (hue 270°), sweeping through
+ * the visible spectrum in between — never wrapping back toward red. */
+const RAINBOW_MAX_HUE_DEGREES = 270;
+
+function hsvToRgb(hueDegrees: number, saturation: number, value: number): readonly [number, number, number] {
+  const c = value * saturation;
+  const h = hueDegrees / 60;
+  const x = c * (1 - Math.abs((h % 2) - 1));
+  const [r1, g1, b1] =
+    h < 1 ? [c, x, 0] : h < 2 ? [x, c, 0] : h < 3 ? [0, c, x] : h < 4 ? [0, x, c] : h < 5 ? [x, 0, c] : [c, 0, x];
+  const m = value - c;
+  return [Math.round((r1 + m) * 255), Math.round((g1 + m) * 255), Math.round((b1 + m) * 255)];
+}
+
+function colorForFraction(fraction: number, colorMode: RawImageColorMode): readonly [number, number, number] {
+  const clamped = Math.max(0, Math.min(1, fraction));
+  if (colorMode === "rainbow") return hsvToRgb(clamped * RAINBOW_MAX_HUE_DEGREES, 1, 1);
+  const intensity = Math.round(clamped * 255);
+  return [intensity, intensity, intensity];
+}
+
 function buildImageData(
   rawWindow: RawRecordingWindow,
   mode: RawImageNormalizationMode,
+  colorMode: RawImageColorMode,
 ): { imageData: ImageData; extent: { min: number; max: number } | null; isConstant: boolean } {
   const extent = resolveExtent(rawWindow, mode);
   const isConstant = extent !== null && extent.min === extent.max;
@@ -86,8 +112,7 @@ function buildImageData(
     } else {
       const value = info.value as number;
       const fraction = (value - extent.min) / (extent.max - extent.min);
-      const intensity = Math.round(Math.max(0, Math.min(1, fraction)) * 255);
-      color = [intensity, intensity, intensity];
+      color = colorForFraction(fraction, colorMode);
     }
     const offset = index * 4;
     data[offset] = color[0];
@@ -119,6 +144,12 @@ function describePixel(info: PixelInfo, gridSize: number): string {
 type RawImageCanvasProps = {
   rawWindow: RawRecordingWindow;
   normalizationMode: RawImageNormalizationMode;
+  /** Visible heading and the basis for this image's aria-label; must be
+   * distinct across images shown for the same window (e.g. "Grayscale",
+   * "Rainbow (false-colour)"). */
+  title: string;
+  /** @default "grayscale" */
+  colorMode?: RawImageColorMode;
 };
 
 /** Renders one N×N (N is the response's own `gridSize`, one of the
@@ -127,14 +158,17 @@ type RawImageCanvasProps = {
  * accessible textual inspector and a color legend. Purely visual
  * inspection: this component never edits annotations, never writes
  * raw.csv, and exposes no training action. */
-export function RawImageCanvas({ rawWindow, normalizationMode }: RawImageCanvasProps) {
+export function RawImageCanvas({ rawWindow, normalizationMode, title, colorMode = "grayscale" }: RawImageCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const gridSize = rawWindow.gridSize;
   const pixelCount = gridSize * gridSize;
 
-  const built = useMemo(() => buildImageData(rawWindow, normalizationMode), [rawWindow, normalizationMode]);
+  const built = useMemo(
+    () => buildImageData(rawWindow, normalizationMode, colorMode),
+    [rawWindow, normalizationMode, colorMode],
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -190,13 +224,14 @@ export function RawImageCanvas({ rawWindow, normalizationMode }: RawImageCanvasP
 
   return (
     <div className="flex flex-col gap-3">
+      <h4 className="text-sm font-medium">{title}</h4>
       <canvas
         ref={canvasRef}
         width={gridSize}
         height={gridSize}
         role="img"
         tabIndex={0}
-        aria-label={`Chronological raw-data image for column ${rawWindow.column}, ${gridSize}×${gridSize} grid, raw rows ${rawWindow.startRawRow} to ${Math.max(rawWindow.startRawRow, rawWindow.endRawRow - 1)}. Use arrow keys to inspect a pixel.`}
+        aria-label={`${title}: chronological raw-data image for column ${rawWindow.column}, ${gridSize}×${gridSize} grid, raw rows ${rawWindow.startRawRow} to ${Math.max(rawWindow.startRawRow, rawWindow.endRawRow - 1)}. Use arrow keys to inspect a pixel.`}
         className="rounded-lg ring-1 ring-foreground/10"
         style={{ width: DISPLAY_SIZE, height: DISPLAY_SIZE, imageRendering: "pixelated", cursor: "crosshair" }}
         onPointerMove={(event) => setHoveredIndex(pixelIndexFromPointer(event))}
@@ -213,7 +248,12 @@ export function RawImageCanvas({ rawWindow, normalizationMode }: RawImageCanvasP
           ? describePixel(inspectedInfo, gridSize)
           : "Hover or focus the image (arrow keys move the focused pixel) to inspect a raw row."}
       </p>
-      <RawImageLegend extent={built.extent} isConstant={built.isConstant} normalizationMode={normalizationMode} />
+      <RawImageLegend
+        extent={built.extent}
+        isConstant={built.isConstant}
+        normalizationMode={normalizationMode}
+        colorMode={colorMode}
+      />
     </div>
   );
 }
@@ -222,24 +262,41 @@ type RawImageLegendProps = {
   extent: { min: number; max: number } | null;
   isConstant: boolean;
   normalizationMode: RawImageNormalizationMode;
+  colorMode: RawImageColorMode;
 };
 
 function swatchStyle(color: readonly [number, number, number]): CSSProperties {
   return { backgroundColor: `rgb(${color[0]}, ${color[1]}, ${color[2]})` };
 }
 
+const RAINBOW_GRADIENT_CSS = `linear-gradient(to right, ${Array.from({ length: 7 }, (_, step) => {
+  const [r, g, b] = hsvToRgb((step / 6) * RAINBOW_MAX_HUE_DEGREES, 1, 1);
+  return `rgb(${r}, ${g}, ${b})`;
+}).join(", ")})`;
+
 /** Explains every fill used above so a reader never mistakes "beyond
  * recording", "missing value", or "constant neutral gray" for scaled data. */
-function RawImageLegend({ extent, isConstant, normalizationMode }: RawImageLegendProps) {
+function RawImageLegend({ extent, isConstant, normalizationMode, colorMode }: RawImageLegendProps) {
+  const paletteName = colorMode === "rainbow" ? "rainbow (red → violet)" : "grayscale (black → white)";
+  const lowLabel = colorMode === "rainbow" ? "red" : "black";
+  const highLabel = colorMode === "rainbow" ? "violet" : "white";
   return (
     <dl className="flex flex-col gap-1.5 text-xs text-muted-foreground">
       <div className="flex items-center gap-2">
-        <span className="inline-block size-3 shrink-0 rounded-sm bg-gradient-to-r from-black to-white ring-1 ring-foreground/20" aria-hidden="true" />
+        <span
+          className="inline-block size-3 shrink-0 rounded-sm ring-1 ring-foreground/20"
+          style={
+            colorMode === "rainbow"
+              ? { backgroundImage: RAINBOW_GRADIENT_CSS }
+              : { backgroundImage: "linear-gradient(to right, black, white)" }
+          }
+          aria-hidden="true"
+        />
         <span>
           {isConstant
             ? `Constant value: every recorded pixel renders at a fixed neutral gray, not scaled by magnitude (${normalizationMode}-scale normalization has no range to map).`
             : extent
-              ? `Data range (${normalizationMode}-scale): black ≈ ${extent.min}, white ≈ ${extent.max}.`
+              ? `Palette: ${paletteName}. Data range (${normalizationMode}-scale): ${lowLabel} ≈ ${extent.min}, ${highLabel} ≈ ${extent.max}.`
               : "No valid numeric values to normalize against."}
         </span>
       </div>

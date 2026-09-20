@@ -366,3 +366,42 @@ every existing read-only/non-training guarantee.
 Per task direction: no tests, builds, lint, formatting, or installs were run.
 Only the diff and `git diff --check` were inspected. Those gates remain
 **DEFERRED / NOT CLEARED**.
+
+## GC-013 — Second rainbow false-colour raw-image canvas (this session)
+
+Bounded vertical slice: added a second, purely client-side false-colour
+rendering of the same raw-image window already loaded by the raw image
+viewer — no backend/Tauri contract change, no additional raw-data read.
+
+- `RawImageCanvas.tsx`: added a local `RawImageColorMode` prop
+  (`"grayscale" | "rainbow"`, default `"grayscale"`) and a required `title`
+  prop used as the visible heading and the aria-label prefix. Extracted
+  `colorForFraction`/`hsvToRgb` so both palettes share the same pixel loop,
+  extent resolution, missing/beyond/constant handling, pointer hit-testing,
+  and keyboard navigation — only the value-color mapping branches on
+  `colorMode`. Rainbow sweeps hue 0° (red, low) to 270° (violet, high) at
+  full saturation/value, never wrapping back toward red. `MISSING_COLOR`,
+  `BEYOND_COLOR`, and `CONSTANT_COLOR` are unchanged and shared by both
+  images.
+- `RawImageViewerPanel.tsx`: when a window is loaded, renders two
+  `RawImageCanvas` instances for the same `rawWindow`/`normalizationMode` —
+  "Grayscale" and "Rainbow (false-colour)" — in a `flex-col md:flex-row`
+  wrapper so they stack on narrow layouts and sit side by side when space
+  allows. No new store state; both canvases read the same selected
+  recording, channel, raw window, grid size, and normalization mode.
+- Legend is palette-aware: names the palette, the normalization mode, and
+  the actual low/high endpoint colors (black/white or red/violet); constant-
+  range and missing/beyond wording is otherwise unchanged. Hover/keyboard
+  pixel inspection remains per-canvas and reports row, timestamp, value, and
+  missing/beyond state exactly as before.
+- Not built: no RGB multi-sensor composite, no channel-mapping controls, no
+  generalized/pluggable palette system, and no new dependency.
+- Docs: `docs/decisions/2026-09-dataset-capture-recording-contract.md`'s Raw
+  image viewer section and `docs/using-the-application.md`'s Raw image
+  viewer subsection now describe the paired grayscale/rainbow rendering as a
+  client-only rendering choice, not a data transform.
+- `graphify update .` run after the source changes.
+
+Per task direction: no tests, builds, lint, formatting, or installs were run.
+Only the diff and `git diff --check` were inspected. Those gates remain
+**DEFERRED / NOT CLEARED**.

@@ -344,3 +344,37 @@ and `.hermes/queues/gc-009-raw-recording-image-viewer.json`.
 - [ ] Automated tests, builds, lint, formatting, installs, and runtime
       validation are **DEFERRED / NOT CLEARED** by explicit delivery
       instruction — only the diff and `git diff --check` were inspected.
+
+## GC-013 — Raw image viewer: second rainbow false-colour canvas
+
+- [x] `RawImageCanvas.tsx` gained a local `RawImageColorMode` prop
+      (`"grayscale" | "rainbow"`, default `"grayscale"`) and a required
+      `title` prop (visible heading, also the aria-label prefix). Grayscale
+      behavior is byte-for-byte unchanged when the prop is omitted/default.
+      Rainbow maps a normalized fraction through HSV (hue 0°→270°, S=V=1) so
+      low = red through the spectrum to high = violet, never wrapping back
+      toward red. `MISSING_COLOR`, `BEYOND_COLOR`, and `CONSTANT_COLOR` are
+      unchanged and shared by both palettes — same missing/beyond/constant
+      treatment in both images, only the value gradient differs.
+- [x] `RawImageViewerPanel.tsx`: when a window is loaded, renders two
+      `RawImageCanvas` instances side by side (`flex-col md:flex-row`, so
+      they stack on narrow layouts and sit side-by-side when space allows)
+      for the same `rawWindow`/`normalizationMode` — no new state, no
+      additional backend read, same N×N grid and navigation controls shared
+      by both.
+- [x] Legend text is palette-aware: states the palette name, the
+      normalization mode, and the actual low/high endpoint colors
+      (black/white or red/violet) instead of assuming grayscale.
+      Hover/keyboard pixel inspection is per-canvas and unchanged in
+      behavior (row, timestamp, value, missing/beyond state).
+- [x] No backend/Tauri contract change, no extra raw-data read, no RGB
+      multi-sensor composite, no channel-mapping controls, no generalized
+      palette system, and no new dependency.
+- [x] Updated `docs/decisions/2026-09-dataset-capture-recording-contract.md`'s
+      Raw image viewer section and `docs/using-the-application.md`'s Raw
+      image viewer subsection to describe the paired grayscale/rainbow
+      rendering as a client-only, non-data-transform choice.
+- [x] `graphify update .` run after the source changes.
+- [ ] Automated tests, builds, lint, formatting, installs, and runtime
+      validation are **DEFERRED / NOT CLEARED** by explicit delivery
+      instruction — only the diff and `git diff --check` were inspected.
