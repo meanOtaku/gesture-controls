@@ -462,7 +462,7 @@ function MainApp() {
   return <SidebarProvider>
     <AppNav activeTab={activeTab} onSelect={setActiveTab} />
     <SidebarInset>
-    <SidebarTrigger className="m-2" />
+    <SidebarTrigger className="absolute left-2 top-2 z-10" />
     <Suspense fallback={<TabFallback />}>
     {activeTab === "main" && (
       <Dashboard

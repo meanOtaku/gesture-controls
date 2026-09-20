@@ -467,3 +467,12 @@ Per task direction: no tests, builds, lint, formatting, or (beyond the
 explicitly requested `shadcn add sidebar`) installs, or runtime validation
 were run. Only the diff and `git diff --check` were inspected. Those gates
 remain **DEFERRED / NOT CLEARED**.
+
+### GC-015 follow-up — Trigger no longer displaces content
+
+- User-observed layout regression fixed in `App.tsx`: `SidebarTrigger` is now
+  absolutely positioned inside the already-relative `SidebarInset`
+  (`left-2 top-2 z-10`) instead of participating in the flex column. The
+  trigger remains accessible while no longer consuming the dashboard's top
+  space or pushing down its heading.
+- No validation gates were run; they remain **DEFERRED / NOT CLEARED**.

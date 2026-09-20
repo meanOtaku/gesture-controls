@@ -419,3 +419,6 @@ and `.hermes/queues/gc-009-raw-recording-image-viewer.json`.
       requested `shadcn add`), and runtime validation are **DEFERRED / NOT
       CLEARED** by explicit delivery instruction — only the diff and
       `git diff --check` were inspected.
+- [x] GC-015 follow-up: moved `SidebarTrigger` out of normal document flow
+      (`absolute left-2 top-2 z-10`), so it no longer consumes the page's
+      top space or displaces each view heading.
