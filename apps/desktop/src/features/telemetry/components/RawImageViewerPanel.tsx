@@ -300,19 +300,27 @@ export function RawImageViewerPanel() {
                         have a recorded row; the remaining pixels show the "no data" fill below.
                       </p>
                     )}
-                    <div className="flex flex-col gap-6 md:flex-row md:flex-wrap">
-                      <RawImageCanvas
-                        rawWindow={rawWindow}
-                        normalizationMode={normalizationMode}
-                        title="Grayscale"
-                        colorMode="grayscale"
-                      />
-                      <RawImageCanvas
-                        rawWindow={rawWindow}
-                        normalizationMode={normalizationMode}
-                        title="Rainbow (false-colour)"
-                        colorMode="rainbow"
-                      />
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                      <Card>
+                        <CardContent className="pt-6">
+                          <RawImageCanvas
+                            rawWindow={rawWindow}
+                            normalizationMode={normalizationMode}
+                            title="Grayscale"
+                            colorMode="grayscale"
+                          />
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-6">
+                          <RawImageCanvas
+                            rawWindow={rawWindow}
+                            normalizationMode={normalizationMode}
+                            title="Rainbow (false-colour)"
+                            colorMode="rainbow"
+                          />
+                        </CardContent>
+                      </Card>
                     </div>
                     <div className="flex flex-col gap-2">
                       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">

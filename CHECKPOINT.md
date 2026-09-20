@@ -405,3 +405,28 @@ viewer — no backend/Tauri contract change, no additional raw-data read.
 Per task direction: no tests, builds, lint, formatting, or installs were run.
 Only the diff and `git diff --check` were inspected. Those gates remain
 **DEFERRED / NOT CLEARED**.
+
+## GC-014 — Paired image cards in a responsive grid (this session)
+
+Bounded presentation-only slice: the two raw-image canvases the GC-013
+session placed in a flex wrapper were observed to visually stack rather than
+sit side by side; this session gives them an explicit responsive grid.
+
+- `RawImageViewerPanel.tsx`: replaced the `flex-col md:flex-row` wrapper
+  around the two `RawImageCanvas` instances with `grid grid-cols-1
+  lg:grid-cols-2`, and wrapped each canvas in its own shadcn `Card`
+  (`CardContent`) so Grayscale and Rainbow false-colour are explicit sibling
+  cards — one column on narrow screens, side-by-side at desktop widths.
+- Each card holds only that image's own title, canvas, hover/keyboard
+  inspector text, and legend, all already rendered internally by
+  `RawImageCanvas`. The shared recording/channel/grid-size/normalization
+  selectors and the frame navigation controls stay outside both cards,
+  unchanged.
+- No changes to `RawImageCanvas.tsx`, data normalization, the inspection
+  contract, or backend/Tauri reads; no new dependency — reused the
+  `Card`/`CardContent` components already imported in this file.
+- `graphify update .` run after the source change.
+
+Per task direction: no tests, builds, lint, formatting, or installs were run.
+Only the diff and `git diff --check` were inspected. Those gates remain
+**DEFERRED / NOT CLEARED**.

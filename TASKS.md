@@ -378,3 +378,21 @@ and `.hermes/queues/gc-009-raw-recording-image-viewer.json`.
 - [ ] Automated tests, builds, lint, formatting, installs, and runtime
       validation are **DEFERRED / NOT CLEARED** by explicit delivery
       instruction — only the diff and `git diff --check` were inspected.
+
+## GC-014 — Raw image viewer: paired image cards in a responsive grid
+
+- [x] `RawImageViewerPanel.tsx`: the two `RawImageCanvas` instances
+      (Grayscale, Rainbow false-colour) are now each wrapped in their own
+      shadcn `Card`, laid out as siblings in an explicit
+      `grid grid-cols-1 lg:grid-cols-2` — one column on narrow screens,
+      side-by-side at desktop widths. Each card contains only that image's
+      title, canvas, hover/keyboard inspector text, and legend (all already
+      rendered by `RawImageCanvas`); the shared recording/channel/grid/
+      normalization selectors and frame navigation stay outside both cards.
+- [x] No changes to `RawImageCanvas.tsx`, data normalization, the
+      inspection contract, or backend reads; no new dependency — reused the
+      existing `Card`/`CardContent` components already imported in this file.
+- [x] `graphify update .` run after the source change.
+- [ ] Automated tests, builds, lint, formatting, installs, and runtime
+      validation are **DEFERRED / NOT CLEARED** by explicit delivery
+      instruction — only the diff and `git diff --check` were inspected.
