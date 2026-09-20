@@ -60,7 +60,6 @@ body::before { content:""; position:fixed; inset:0; pointer-events:none; opacity
   margin-top:var(--space-section);
 }
 
-.app-tabs{position:sticky;top:14px;z-index:5;display:flex;gap:6px;width:min(1120px,calc(100% - 40px));margin:14px auto 0;padding:6px;border:1px solid #2b3448;border-radius:14px;background:#0c111de8;backdrop-filter:blur(12px);overflow-x:auto}
 .telemetry-shell{padding-top:56px}.telemetry-chart{margin-bottom:14px;padding:22px 24px;border:1px solid #293248;border-radius:22px;background:linear-gradient(120deg,#121a2acc,#101321dd)}.telemetry-chart-heading{display:flex;align-items:center;justify-content:space-between;gap:20px}.telemetry-chart-heading h2{margin:.2rem 0}.telemetry-count{color:#8d9bb8;font:400 .73rem var(--font-mono);white-space:nowrap}.telemetry-legend{display:flex;gap:16px;margin:16px 0;color:#aeb9d1;font-size:.78rem;flex-wrap:wrap}.telemetry-legend span{display:flex;align-items:center;gap:6px}.telemetry-legend i{width:7px;height:7px;border-radius:50%;box-shadow:none}.telemetry-chart svg{display:block;width:100%;height:220px;overflow:visible;border:1px solid #202a3b;border-radius:12px;background:repeating-linear-gradient(0deg,transparent 0,transparent 54px,#ffffff08 55px),repeating-linear-gradient(90deg,transparent 0,transparent 89px,#ffffff08 90px)}.telemetry-chart svg path{fill:none;stroke-width:2.5;vector-effect:non-scaling-stroke}.telemetry-chart svg .telemetry-grid-line{stroke:#ffffff1c;stroke-width:1}.telemetry-note{max-width:none;text-align:center}
 .hero { display:flex; justify-content:space-between; gap:32px; align-items:flex-end; } .subtitle { color:#aeb9d1; margin:0; }
 .overview-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-card)}
@@ -75,7 +74,6 @@ html.overlay-document,html.overlay-document body,html.overlay-document #root{wid
 .model-lab-chip--ready{color:#07110d;background:#4ff0b7;border-color:#4ff0b7}.model-lab-chip--attention{color:#2a1a05;background:#ffb45d;border-color:#ffb45d}.model-lab-diagnostic-row{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.model-lab-diagnostic-row strong{display:block;margin-bottom:6px}.model-lab-diagnostic-action{margin:10px 0 0;color:#ffd29b;font-size:.82rem}
 
 /* Setup and navigation stay usable on compact desktop windows. */
-.app-tabs > * { flex-shrink:0; }
 .setup-steps { list-style:none; padding:0; margin:24px 0 0; }
 .setup-steps li { display:flex; gap:16px; align-items:center; padding:20px 0; border-top:1px solid #ffffff12; }
 .step-number { display:grid; place-items:center; flex:0 0 34px; height:34px; border:1px solid #53627b; border-radius:50%; color:#c3d0e6; }
@@ -88,7 +86,6 @@ html.overlay-document,html.overlay-document body,html.overlay-document #root{wid
 .connection-details summary { cursor:pointer; padding:14px 0; }
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible { outline:2px solid #65e6ff; outline-offset:4px; }
 @media(max-width:760px) {
-  .app-tabs { top:0; width:100%; margin-top:0; border-radius:0; }
   .setup-steps li { flex-wrap:wrap; align-items:flex-start; }
   .setup-steps li>div { min-width:180px; }
   .setup-steps button { margin-left:50px; }
@@ -184,6 +181,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
     @apply font-sans; } }
 
 /* GC-008: one electric-blue outline system for non-semantic desktop chrome (literal-border legacy selectors). */
-.app-tabs,.telemetry-chart,.connection,.metric,.vector-row,.model-lab-log,.step-number,.signal-grid .telemetry-chart,.preview-notice,.preview-icon,.lab-workflow a,.model-lab-backend-select>label { border-color:var(--electric-blue); }
+.telemetry-chart,.connection,.metric,.vector-row,.model-lab-log,.step-number,.signal-grid .telemetry-chart,.preview-notice,.preview-icon,.lab-workflow a,.model-lab-backend-select>label { border-color:var(--electric-blue); }
 .model-lab-chip:not(.model-lab-chip--positive):not(.model-lab-chip--hold):not(.model-lab-chip--ready):not(.model-lab-chip--attention) { border-color:var(--electric-blue); }
 .setup-steps button:hover,.model-lab-backend-select>label:has(input:checked) { border-color:var(--electric-blue); }

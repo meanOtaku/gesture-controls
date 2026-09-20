@@ -396,3 +396,26 @@ and `.hermes/queues/gc-009-raw-recording-image-viewer.json`.
 - [ ] Automated tests, builds, lint, formatting, installs, and runtime
       validation are **DEFERRED / NOT CLEARED** by explicit delivery
       instruction — only the diff and `git diff --check` were inspected.
+
+## GC-015 — Replace top AppNav with the official shadcn Sidebar
+
+- [x] Installed the official `sidebar` component via `npx shadcn@latest add
+      sidebar` from `apps/desktop` (also generated `sheet.tsx`,
+      `use-mobile.ts`, and refreshed `separator.tsx`/`tooltip.tsx` with
+      trivial `"use client"` directive changes from the registry).
+- [x] `AppNav.tsx` now renders the generated `Sidebar`/`SidebarHeader`/
+      `SidebarContent`/`SidebarGroup`/`SidebarMenu`/`SidebarMenuButton`
+      directly (no bespoke wrapper), with the same six routes, the same
+      `activeTab`/`onSelect` contract, and a lucide icon per tab.
+- [x] `App.tsx` wraps the shell in `SidebarProvider`, renders `AppNav`
+      alongside a `SidebarInset` holding a `SidebarTrigger` and the existing
+      `Suspense`-lazy tab bodies — active-tab state, lazy page rendering,
+      overlay window behavior, and all action logic are unchanged.
+- [x] Removed the obsolete `.app-tabs` layout/CSS rules (including its
+      responsive override and its entry in the shared border-color
+      selector list); left all unrelated CSS untouched.
+- [x] `graphify update .` run after the source changes.
+- [ ] Automated tests, builds, lint, formatting, installs (beyond the
+      requested `shadcn add`), and runtime validation are **DEFERRED / NOT
+      CLEARED** by explicit delivery instruction — only the diff and
+      `git diff --check` were inspected.

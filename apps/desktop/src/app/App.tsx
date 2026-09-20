@@ -4,6 +4,7 @@ import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } fro
 import { AppNav } from "./components/AppNav";
 import { OperationFeedback } from "../components/app/OperationFeedback";
 import { Skeleton } from "../components/ui/skeleton";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "../components/ui/sidebar";
 import { telemetryStore } from "../features/telemetry/store/telemetryStore";
 import { usePendingActions } from "../shared/hooks/usePendingActions";
 import { VolumeKnob } from "../features/overlay/components/VolumeKnob";
@@ -458,8 +459,10 @@ function MainApp() {
     .filter((error): error is string => error !== null)
     .join(" · ") || null;
 
-  return <>
+  return <SidebarProvider>
     <AppNav activeTab={activeTab} onSelect={setActiveTab} />
+    <SidebarInset>
+    <SidebarTrigger className="m-2" />
     <Suspense fallback={<TabFallback />}>
     {activeTab === "main" && (
       <Dashboard
@@ -519,5 +522,6 @@ function MainApp() {
       />
     )}
     </Suspense>
-  </>;
+    </SidebarInset>
+  </SidebarProvider>;
 }

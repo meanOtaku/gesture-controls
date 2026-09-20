@@ -430,3 +430,40 @@ sit side by side; this session gives them an explicit responsive grid.
 Per task direction: no tests, builds, lint, formatting, or installs were run.
 Only the diff and `git diff --check` were inspected. Those gates remain
 **DEFERRED / NOT CLEARED**.
+
+## GC-015 — Official shadcn Sidebar replaces the top AppNav (this session)
+
+The top `AppNav` (a `<nav>` of shadcn `Button`s) is replaced with the
+official shadcn Sidebar app-shell pattern, installed via the CLI rather than
+hand-built.
+
+- Ran `npx shadcn@latest add sidebar` from `apps/desktop`. This created
+  `src/components/ui/sidebar.tsx`, `src/components/ui/sheet.tsx`, and
+  `src/hooks/use-mobile.ts`, and refreshed `separator.tsx`/`tooltip.tsx`
+  (only a `"use client"` directive toggle in each — confirmed via
+  `--diff` before applying).
+- `AppNav.tsx` now returns the generated `Sidebar` directly — `SidebarHeader`
+  + `SidebarContent` > `SidebarGroup` > `SidebarMenu` of `SidebarMenuButton`s,
+  one per route, each holding a lucide icon (already an installed
+  dependency) and the same label as before. Same `AppTab` union, same
+  `activeTab`/`onSelect` props, same six routes (`main`, `headphone`,
+  `watch`, `telemetry`, `modelLab`, `settings`).
+- `App.tsx`'s `MainApp` now returns `<SidebarProvider><AppNav .../><SidebarInset><SidebarTrigger/>...</SidebarInset></SidebarProvider>` in
+  place of the old `<><AppNav/><Suspense>...</Suspense></>` fragment. The
+  `Suspense`-lazy tab bodies, all calibration/overlay/settings/sensor action
+  logic, and the separate `OverlayApp` volume-overlay window are untouched.
+  `SidebarProvider`'s built-in responsive behavior (collapsing to an
+  off-canvas sheet below the mobile breakpoint, via the generated
+  `use-mobile` hook) is what makes the shell usable on narrow windows —
+  no custom breakpoint code was added.
+- Removed the now-obsolete `.app-tabs` rule, its `> *` and `@media
+  (max-width:760px)` overrides, and its entry in the shared
+  `border-color:var(--electric-blue)` selector list from `styles.css`.
+  `--sidebar*` CSS variables already existed in `styles.css` from the
+  original shadcn theme setup and needed no changes.
+- `graphify update .` run after the source changes.
+
+Per task direction: no tests, builds, lint, formatting, or (beyond the
+explicitly requested `shadcn add sidebar`) installs, or runtime validation
+were run. Only the diff and `git diff --check` were inspected. Those gates
+remain **DEFERRED / NOT CLEARED**.
