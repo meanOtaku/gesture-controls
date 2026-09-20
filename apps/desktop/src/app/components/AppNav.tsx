@@ -1,4 +1,4 @@
-import { Activity, Brain, Headphones, LayoutDashboard, Settings as SettingsIcon, Watch } from "lucide-react";
+import { Activity, Brain, Hand, Headphones, LayoutDashboard, Settings as SettingsIcon, Watch } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -32,7 +32,12 @@ export function AppNav({ activeTab, onSelect }: AppNavProps) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <span className="px-2 text-sm font-semibold">Spatial Gesture</span>
+        <div className="flex items-center gap-2 px-2 text-sidebar-foreground" aria-label="Spatial Gesture">
+          <Hand className="size-5 shrink-0" aria-hidden="true" />
+          <span className="truncate text-sm font-semibold group-data-[collapsible=icon]:hidden" aria-hidden="true">
+            Spatial Gesture
+          </span>
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>

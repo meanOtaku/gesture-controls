@@ -38,8 +38,8 @@ function recordingLabel(summary: RecordingBundleSummary): string {
 
 /**
  * Dedicated, read-only raw-data inspection panel: select a saved recording,
- * an allow-listed numeric channel, and one of four allow-listed square grid
- * sizes (8×8, 16×16, 32×32, 64×64, default 64×64), then inspect a
+ * an allow-listed numeric channel, and one of five allow-listed square grid
+ * sizes (4×4, 8×8, 16×16, 32×32, 64×64, default 64×64), then inspect a
  * chronological N×N image with exactly N raw rows per navigation step,
  * rendered as a grayscale image and a paired rainbow false-colour image of
  * the identical window (GC-013). This panel never edits annotations, never
@@ -118,7 +118,7 @@ export function RawImageViewerPanel() {
           <HelpTooltip label="About the raw image viewer">
             Read-only visual inspection of one saved recording's raw sensor channel, reshaped
             into a chronological N×N image (pixel <em>i</em> is raw row <code>startRawRow + i</code>,
-            left-to-right then top-to-bottom) for an allow-listed grid size N (8, 16, 32, or 64;
+            left-to-right then top-to-bottom) for an allow-listed grid size N (4, 8, 16, 32, or 64;
             default 64), with an N-row navigation hop. It never edits annotations, never writes
             raw.csv, and is not a training-data representation.
           </HelpTooltip>

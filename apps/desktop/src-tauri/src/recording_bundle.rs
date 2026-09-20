@@ -84,7 +84,7 @@ const RAW_WINDOW_ALLOWED_COLUMNS: [&str; 14] = [
 /// (one displayed row of raw rows), and the window is always `size * size`
 /// values, so `RAW_WINDOW_MAX_VALUES` (the largest allowed size squared)
 /// remains the absolute upper bound on any response.
-const RAW_GRID_SIZES: [u32; 4] = [8, 16, 32, 64];
+const RAW_GRID_SIZES: [u32; 5] = [4, 8, 16, 32, 64];
 const DEFAULT_RAW_GRID_SIZE: u32 = 64;
 /// Absolute upper bound on values returned by any allow-listed grid size.
 const RAW_WINDOW_MAX_VALUES: usize = 4_096;
@@ -1006,7 +1006,7 @@ mod tests {
         for size in RAW_GRID_SIZES {
             assert!(validate_grid_size(size).is_ok());
         }
-        assert!(validate_grid_size(4).is_err());
+        assert!(validate_grid_size(2).is_err());
         assert!(validate_grid_size(48).is_err());
         assert!(validate_grid_size(128).is_err());
         assert!(RAW_GRID_SIZES.contains(&DEFAULT_RAW_GRID_SIZE));

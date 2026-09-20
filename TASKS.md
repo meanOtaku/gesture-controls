@@ -537,3 +537,62 @@ and `.hermes/queues/gc-009-raw-recording-image-viewer.json`.
       reviewed by eye for correctness (minimal, syntactic `git diff`
       inspection) since it could not be compiled or run locally.
 - [x] `git diff --check` clean (no whitespace errors).
+
+## GC-019 — Reduce telemetry top whitespace, add 4×4 raw-image grid, sidebar brand mark
+
+- [x] Reduced `.telemetry-shell`'s `padding-top` from `56px` to `36px`
+      (`styles.css`), matching the base `.shell` rule it was previously
+      adding 20px on top of. `.telemetry-shell` is used only by
+      `LiveTelemetry.tsx` (confirmed via grep), so no other page's spacing
+      changed; `.model-lab-shell` and the base `.shell` rule are untouched.
+- [x] Added a 4×4 raw-image square-grid option, keeping 8/16/32/64 and the
+      64 default unchanged, hop still equal to the selected side length:
+      - `recording_bundle.rs`: `RAW_GRID_SIZES` is now `[4, 8, 16, 32, 64]`
+        (`[u32; 5]`); `DEFAULT_RAW_GRID_SIZE`/`RAW_WINDOW_MAX_VALUES`/
+        `validate_grid_size` needed no other change (4×4 = 16 values, well
+        under the existing 4,096 cap from 64×64).
+      - `recordingBundle.ts`'s `RAW_GRID_SIZES` (the typed frontend mirror)
+        updated to match; `RawImageViewerPanel.tsx`'s grid `<Select>` is
+        already driven entirely off `RAW_GRID_SIZES`, so no UI change was
+        needed there beyond its doc-comment sizes list.
+      - Updated the existing Rust unit test
+        `validate_grid_size_allows_only_the_listed_sizes`, which previously
+        asserted `validate_grid_size(4).is_err()` — that's now the new
+        valid value, so the invalid-size probe was changed to `2`.
+- [x] Sidebar brand mark: `AppNav.tsx`'s `SidebarHeader` now renders a
+      `lucide-react` `Hand` icon plus a "Spatial Gesture" label, wrapped in
+      a `div` with `aria-label="Spatial Gesture"` for a stable accessible
+      name in both states. The label `<span>` is hidden via the existing
+      `group-data-[collapsible=icon]:hidden` shadcn pattern on collapse, so
+      only the icon remains visually; both the icon and the now-redundant
+      visible label are `aria-hidden` so screen readers get exactly one
+      "Spatial Gesture" announcement regardless of collapse state. No new
+      dependency or logo asset — `lucide-react` was already a dependency
+      and `Hand` is bundled in it. Sidebar itself is untouched: still the
+      generated `Sidebar`/`SidebarContent`/`SidebarMenu*`/`SidebarRail`
+      from GC-015, `SidebarRail` remains the sole collapse control, and
+      `activeTab`/`onSelect` nav wiring is unchanged.
+- [x] Verification run this session:
+      - `git diff --check`: clean.
+      - `npm run typecheck` (desktop workspace): same 5 pre-existing
+        unrelated errors as on `main` before this task's edits (confirmed
+        via `git stash`/`git stash pop`) — `RecordingTimelineEditor.tsx` x2,
+        `IntentBindingEditor.test.tsx`, `LabelMappingEditor.tsx`,
+        `ModelLifecycleControls.test.tsx`; none in any file this task
+        touched.
+      - `npx vitest run src/app/App.test.tsx`: **18 passed** — covers
+        `AppNav`/`Sidebar` rendering and tab-switch behavior, confirming
+        nav is unaffected by the brand-mark change.
+      - `npx vitest run src/features/telemetry/components/LiveTelemetry.test.tsx`:
+        **3 passed, 1 pre-existing failure**, identical on `main` via
+        `git stash`/`git stash pop` (same unrelated CSV-export-toast mock
+        gap noted under GC-018) — unaffected by the `.telemetry-shell`
+        padding change.
+- [ ] Rust build/tests are **NOT CLEARED**: `cargo test --lib
+      recording_bundle` fails on this host before reaching any test —
+      `gobject-sys`'s build script requires `pkg-config`, which is not
+      installed here. Same pre-existing host blocker documented under
+      GC-002/GC-018. The `recording_bundle.rs` diff (array literal + one
+      test assertion) was reviewed by eye instead.
+- [ ] No manual/runtime desktop verification (app not launched) — deferred
+      per this task's smallest-relevant-check scope.
