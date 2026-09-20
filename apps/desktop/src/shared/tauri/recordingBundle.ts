@@ -105,7 +105,7 @@ export const RAW_IMAGE_VIEWER_CHANNELS = [
 export type RawImageViewerChannel = (typeof RAW_IMAGE_VIEWER_CHANNELS)[number];
 
 /** Mirrors `recording_bundle::RAW_GRID_SIZES`: the only square grid sizes the UI offers. */
-export const RAW_GRID_SIZES = [4, 8, 16, 32, 64] as const;
+export const RAW_GRID_SIZES = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64] as const;
 export type RawGridSize = (typeof RAW_GRID_SIZES)[number];
 /** Mirrors `recording_bundle::DEFAULT_RAW_GRID_SIZE`. */
 export const DEFAULT_RAW_GRID_SIZE: RawGridSize = 64;
