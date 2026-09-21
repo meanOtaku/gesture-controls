@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import type { RawImageNormalizationMode } from "../store/rawImageViewerStore";
 import type { RawRecordingWindow } from "../../../shared/tauri/recordingBundle";
 
@@ -150,6 +150,11 @@ type RawImageCanvasProps = {
   title: string;
   /** @default "grayscale" */
   colorMode?: RawImageColorMode;
+  /** Optional accessible overlay (e.g. `RawImageLabelRangeRail`) rendered
+   * pinned to the canvas's left edge, sized to its DISPLAY_SIZE bounds.
+   * Non-interactive (pointer-events disabled) so it never blocks pixel
+   * hover/inspection on the canvas beneath it. */
+  labelRangeOverlay?: ReactNode;
 };
 
 /** Renders one N×N (N is the response's own `gridSize`, one of the
@@ -158,7 +163,13 @@ type RawImageCanvasProps = {
  * accessible textual inspector and a color legend. Purely visual
  * inspection: this component never edits annotations, never writes
  * raw.csv, and exposes no training action. */
-export function RawImageCanvas({ rawWindow, normalizationMode, title, colorMode = "grayscale" }: RawImageCanvasProps) {
+export function RawImageCanvas({
+  rawWindow,
+  normalizationMode,
+  title,
+  colorMode = "grayscale",
+  labelRangeOverlay,
+}: RawImageCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
@@ -225,24 +236,29 @@ export function RawImageCanvas({ rawWindow, normalizationMode, title, colorMode 
   return (
     <div className="flex flex-col gap-3">
       <h4 className="text-sm font-medium">{title}</h4>
-      <canvas
-        ref={canvasRef}
-        width={gridSize}
-        height={gridSize}
-        role="img"
-        tabIndex={0}
-        aria-label={`${title}: chronological raw-data image for column ${rawWindow.column}, ${gridSize}×${gridSize} grid, raw rows ${rawWindow.startRawRow} to ${Math.max(rawWindow.startRawRow, rawWindow.endRawRow - 1)}. Use arrow keys to inspect a pixel.`}
-        className="rounded-lg ring-1 ring-foreground/10"
-        style={{ width: DISPLAY_SIZE, height: DISPLAY_SIZE, imageRendering: "pixelated", cursor: "crosshair" }}
-        onPointerMove={(event) => setHoveredIndex(pixelIndexFromPointer(event))}
-        onPointerLeave={() => setHoveredIndex(null)}
-        onPointerDown={(event) => {
-          const index = pixelIndexFromPointer(event);
-          if (index !== null) setFocusedIndex(index);
-        }}
-        onFocus={() => setFocusedIndex((current) => current ?? 0)}
-        onKeyDown={handleKeyDown}
-      />
+      <div className="relative" style={{ width: DISPLAY_SIZE, height: DISPLAY_SIZE }}>
+        <canvas
+          ref={canvasRef}
+          width={gridSize}
+          height={gridSize}
+          role="img"
+          tabIndex={0}
+          aria-label={`${title}: chronological raw-data image for column ${rawWindow.column}, ${gridSize}×${gridSize} grid, raw rows ${rawWindow.startRawRow} to ${Math.max(rawWindow.startRawRow, rawWindow.endRawRow - 1)}. Use arrow keys to inspect a pixel.`}
+          className="rounded-lg ring-1 ring-foreground/10"
+          style={{ width: DISPLAY_SIZE, height: DISPLAY_SIZE, imageRendering: "pixelated", cursor: "crosshair" }}
+          onPointerMove={(event) => setHoveredIndex(pixelIndexFromPointer(event))}
+          onPointerLeave={() => setHoveredIndex(null)}
+          onPointerDown={(event) => {
+            const index = pixelIndexFromPointer(event);
+            if (index !== null) setFocusedIndex(index);
+          }}
+          onFocus={() => setFocusedIndex((current) => current ?? 0)}
+          onKeyDown={handleKeyDown}
+        />
+        {labelRangeOverlay && (
+          <div className="pointer-events-none absolute inset-y-0 left-0">{labelRangeOverlay}</div>
+        )}
+      </div>
       <p className="text-xs text-muted-foreground" aria-live="polite">
         {inspectedInfo
           ? describePixel(inspectedInfo, gridSize)

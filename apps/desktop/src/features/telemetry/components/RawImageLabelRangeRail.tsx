@@ -11,7 +11,7 @@ function describeRange(range: VisibleLabelRange): string {
 }
 
 /**
- * Narrow vertical rail rendered beside the synchronized raw image pair: one
+ * Narrow vertical rail overlaid on the grayscale raw image's left edge: one
  * bracket per visible label range (already clipped/merged by
  * `deriveVisibleLabelRanges`), positioned by percentage within the rail.
  * Display-only — no editing, no canvas, no icon dependency.
@@ -27,9 +27,9 @@ export function RawImageLabelRangeRail({ ranges }: RawImageLabelRangeRailProps) 
 
   return (
     // Height matches RawImageCanvas's fixed 320px display size (not
-    // percentage-based) so brackets stay visible on the mobile stacked
-    // layout, where a flex column can't stretch this rail's height to match
-    // its siblings.
+    // percentage-based); the parent overlay wrapper positions this rail
+    // absolutely over the canvas, so a fixed height is required regardless
+    // of surrounding layout.
     <div
       role="list"
       aria-label="Saved label ranges"

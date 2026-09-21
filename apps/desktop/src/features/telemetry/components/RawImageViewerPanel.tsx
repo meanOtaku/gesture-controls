@@ -393,19 +393,17 @@ export function RawImageViewerPanel() {
                       </p>
                     )}
                     <div className="flex flex-col gap-4 lg:flex-row">
-                      <div className="flex min-w-0 flex-col gap-4 lg:flex-1 lg:flex-row">
-                        <RawImageLabelRangeRail ranges={visibleLabelRanges} />
-                        <Card className="min-w-0 lg:flex-1">
-                          <CardContent className="pt-6">
-                            <RawImageCanvas
-                              rawWindow={rawWindow}
-                              normalizationMode={normalizationMode}
-                              title="Grayscale"
-                              colorMode="grayscale"
-                            />
-                          </CardContent>
-                        </Card>
-                      </div>
+                      <Card className="min-w-0 lg:flex-1">
+                        <CardContent className="pt-6">
+                          <RawImageCanvas
+                            rawWindow={rawWindow}
+                            normalizationMode={normalizationMode}
+                            title="Grayscale"
+                            colorMode="grayscale"
+                            labelRangeOverlay={<RawImageLabelRangeRail ranges={visibleLabelRanges} />}
+                          />
+                        </CardContent>
+                      </Card>
                       <Card className="min-w-0 lg:flex-1">
                         <CardContent className="pt-6">
                           <RawImageCanvas
