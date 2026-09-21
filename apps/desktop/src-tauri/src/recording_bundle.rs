@@ -12,7 +12,8 @@
 //! `model_lab.rs` (`import_model_dataset`/`DATASET_CSV_HEADER`), which stays the
 //! compatibility path for existing exports and training. `import_recording_from_raw_csv`
 //! additionally *accepts* a document in that legacy dataset-export shape as an input
-//! format, converting it server-side into a canonical `raw.csv` (see
+//! format, converting it server-side into a canonical `raw.csv` plus derived
+//! `annotations.json` intervals from its label column (see
 //! `convert_legacy_dataset_csv`); it never writes back to the legacy pipeline.
 
 use std::collections::BTreeMap;
@@ -390,21 +391,38 @@ fn validate_raw_csv_full(content: &str) -> Result<(usize, i64, i64), String> {
     Ok((row_count, first_timestamp_ns.unwrap(), last_timestamp_ns.unwrap()))
 }
 
+/// One maximal contiguous run of non-blank, same-label rows found while
+/// converting a legacy dataset CSV, in terms of the resulting `raw.csv`'s
+/// own 0-based row indices (post blank-line filtering) — ready to become one
+/// `AnnotationInterval`.
+struct LegacyLabelRun {
+    label: String,
+    start_row: usize,
+    end_row: usize,
+    start_timestamp_ns: i64,
+    end_timestamp_ns: i64,
+}
+
 /// If `content` is in the legacy dataset-export shape (optional leading `#`
 /// metadata lines, then the exact `DATASET_CSV_HEADER` row), converts it into
 /// a canonical `raw.csv` document by dropping the metadata lines and the
-/// trailing `label` field from every data row. Row order and every retained
-/// field's original string form are preserved unchanged; only the discarded
-/// metadata/label content is removed. Returns `None` when `content` is not
-/// headed by the legacy header at all (the caller then validates it as a
-/// plain `raw.csv` document instead). A malformed legacy document (wrong
-/// column count) is a hard `Err`, not a fall-through. The label field itself
-/// is never validated here — raw inspection doesn't use labels, and
-/// Timeline Capture's own export (`telemetryStore.ts::generateDatasetCsv`)
-/// legitimately produces this exact legacy header with an empty label, e.g.
-/// for unannotated rows; label presence/validity stays `model_lab.rs`'s
-/// concern for the training-import path.
-fn convert_legacy_dataset_csv(content: &str) -> Option<Result<String, String>> {
+/// trailing `label` field from every data row, and also derives one
+/// `LegacyLabelRun` per maximal contiguous run of non-blank same-label rows
+/// (a blank/whitespace-only label cell, a blank line, or a change of label
+/// ends the current run). Row order and every retained field's original
+/// string form are preserved unchanged; only the discarded metadata/label
+/// content is removed from `raw.csv` itself — the label text lives on in the
+/// returned runs instead of being dropped. Returns `None` when `content` is
+/// not headed by the legacy header at all (the caller then validates it as a
+/// plain `raw.csv` document instead, with no derived annotations). A
+/// malformed legacy document (wrong column count) is a hard `Err`, not a
+/// fall-through. The label field itself is never validated for content here
+/// — raw inspection doesn't use labels, and Timeline Capture's own export
+/// (`telemetryStore.ts::generateDatasetCsv`) legitimately produces this exact
+/// legacy header with an empty label, e.g. for unannotated rows; label
+/// presence/validity stays `model_lab.rs`'s concern for the training-import
+/// path.
+fn convert_legacy_dataset_csv(content: &str) -> Option<Result<(String, Vec<LegacyLabelRun>), String>> {
     let lines: Vec<&str> = content.lines().collect();
     let mut index = 0;
     while index < lines.len() && lines[index].trim_start().starts_with('#') {
@@ -416,6 +434,9 @@ fn convert_legacy_dataset_csv(content: &str) -> Option<Result<String, String>> {
     }
 
     let mut converted_lines = vec![RAW_CSV_HEADER.join(",")];
+    let mut runs: Vec<LegacyLabelRun> = Vec::new();
+    let mut current_run: Option<LegacyLabelRun> = None;
+    let label_column = RAW_CSV_HEADER.len();
     for (offset, line) in lines[index + 1..].iter().enumerate() {
         if line.trim().is_empty() {
             continue;
@@ -430,8 +451,41 @@ fn convert_legacy_dataset_csv(content: &str) -> Option<Result<String, String>> {
             )));
         }
         converted_lines.push(fields[..RAW_CSV_HEADER.len()].join(","));
+        let row_index = converted_lines.len() - 2; // 0-based, header excluded
+        // A malformed timestamp fails `validate_raw_csv_full` right after this
+        // function returns, so a 0 placeholder here is never actually surfaced.
+        let timestamp_ns: i64 = fields[0].trim().parse().unwrap_or(0);
+        let label = fields[label_column].trim();
+
+        if label.is_empty() {
+            if let Some(run) = current_run.take() {
+                runs.push(run);
+            }
+            continue;
+        }
+        match &mut current_run {
+            Some(run) if run.label == label => {
+                run.end_row = row_index;
+                run.end_timestamp_ns = timestamp_ns;
+            }
+            _ => {
+                if let Some(run) = current_run.take() {
+                    runs.push(run);
+                }
+                current_run = Some(LegacyLabelRun {
+                    label: label.to_string(),
+                    start_row: row_index,
+                    end_row: row_index,
+                    start_timestamp_ns: timestamp_ns,
+                    end_timestamp_ns: timestamp_ns,
+                });
+            }
+        }
     }
-    Some(Ok(converted_lines.join("\n")))
+    if let Some(run) = current_run.take() {
+        runs.push(run);
+    }
+    Some(Ok((converted_lines.join("\n"), runs)))
 }
 
 /// Imports a Timeline Capture `raw.csv` document (exact `RAW_CSV_HEADER`
@@ -440,9 +494,12 @@ fn convert_legacy_dataset_csv(content: &str) -> Option<Result<String, String>> {
 /// — no arbitrary-CSV mapping — as a new, immutable, read-only recording
 /// bundle. All metadata (`recording_id`, timestamps, row counts, source
 /// identity) is generated server-side from the validated CSV content; no
-/// browser-supplied recording metadata is trusted. The created bundle has no
-/// annotations and is written through the same atomic stage-then-rename path
-/// as `save_recording_bundle`.
+/// browser-supplied recording metadata is trusted. A plain `raw.csv` import
+/// has no annotations. A legacy dataset-export import instead gets one
+/// `AnnotationInterval` per maximal contiguous same-label run from its label
+/// column (see `convert_legacy_dataset_csv`); a legacy file with only blank
+/// labels likewise gets no annotations. The bundle is written through the
+/// same atomic stage-then-rename path as `save_recording_bundle`.
 #[tauri::command]
 pub fn import_recording_from_raw_csv(csv_text: String, app: AppHandle) -> Result<RecordingBundleSummary, String> {
     if csv_text.trim().is_empty() {
@@ -454,9 +511,9 @@ pub fn import_recording_from_raw_csv(csv_text: String, app: AppHandle) -> Result
             csv_text.len()
         ));
     }
-    let csv_text = match convert_legacy_dataset_csv(&csv_text) {
+    let (csv_text, legacy_label_runs) = match convert_legacy_dataset_csv(&csv_text) {
         Some(result) => result?,
-        None => csv_text,
+        None => (csv_text, Vec::new()),
     };
     let (row_count, first_timestamp_ns, last_timestamp_ns) = validate_raw_csv_full(&csv_text)?;
 
@@ -480,10 +537,26 @@ pub fn import_recording_from_raw_csv(csv_text: String, app: AppHandle) -> Result
         raw_row_count: row_count,
         raw_source_row_counts: BTreeMap::from([(IMPORTED_SOURCE_ID.to_string(), row_count)]),
     };
+    let intervals = legacy_label_runs
+        .into_iter()
+        .map(|run| AnnotationInterval {
+            interval_id: Uuid::new_v4().to_string(),
+            label_id: run.label,
+            requested_start_monotonic_ns: run.start_timestamp_ns,
+            requested_end_monotonic_ns: run.end_timestamp_ns,
+            resolved_start: ResolvedBoundary { raw_row: run.start_row, source_timestamp_ns: run.start_timestamp_ns },
+            resolved_end: ResolvedBoundary { raw_row: run.end_row, source_timestamp_ns: run.end_timestamp_ns },
+            resolution_rule_version: 1,
+            creation_mechanism: CreationMechanism::TimelineEdit,
+            curation_status: CurationStatus::Unreviewed,
+            created_at: recording.requested_start_at.clone(),
+            revision: 1,
+        })
+        .collect();
     let annotations = AnnotationsFile {
         format_version: 1,
         recording_id: recording_id.clone(),
-        intervals: Vec::new(),
+        intervals,
     };
 
     let dir = recording_bundles_dir(&app)?;
@@ -1087,12 +1160,15 @@ mod tests {
             legacy_row(1, "1.5", "pinch"),
             legacy_row(2, "", "idle"),
         );
-        let converted = convert_legacy_dataset_csv(&legacy)
+        let (converted, runs) = convert_legacy_dataset_csv(&legacy)
             .expect("legacy header must be recognized")
             .expect("well-formed legacy csv must convert");
         let (_, values) = parse_raw_csv_column(&converted, "ppg_green").expect("converted csv must be valid raw.csv");
         assert_eq!(values, vec![Some(1.5), None]);
         assert_eq!(converted.lines().count(), 3);
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].label, "pinch");
+        assert_eq!((runs[0].start_row, runs[0].end_row), (0, 0));
     }
 
     #[test]
@@ -1101,13 +1177,75 @@ mod tests {
         // Exactly the shape Timeline Capture's own export produces for unlabeled rows
         // (`telemetryStore.ts::generateDatasetCsv`): raw inspection never uses labels.
         let empty_label = format!("{header}\n{}\n", legacy_row(1, "1.5", ""));
-        let converted = convert_legacy_dataset_csv(&empty_label)
+        let (converted, runs) = convert_legacy_dataset_csv(&empty_label)
             .expect("legacy header must be recognized")
             .expect("an empty per-row label must not be rejected");
         assert!(validate_raw_csv_full(&converted).is_ok());
+        assert!(runs.is_empty(), "an all-blank label column must derive no intervals");
 
         let wrong_columns = format!("{header}\n1,0,1.5\n");
         assert!(convert_legacy_dataset_csv(&wrong_columns).unwrap().is_err());
+    }
+
+    #[test]
+    fn convert_legacy_dataset_csv_groups_labels_into_maximal_contiguous_runs() {
+        let header = DATASET_CSV_HEADER.join(",");
+        let legacy = format!(
+            "{header}\n{}\n{}\n{}\n{}\n{}\n{}\n",
+            legacy_row(1, "1.0", "pinch"),  // row 0: pinch run starts
+            legacy_row(2, "1.1", "pinch"),  // row 1: adjacent identical label, same run
+            legacy_row(3, "1.2", ""),       // row 2: blank label ends the pinch run
+            legacy_row(4, "1.3", "wave"),   // row 3: different label starts a new run
+            legacy_row(5, "1.4", "pinch"),  // row 4: same text as first run, but not adjacent
+            legacy_row(6, "1.5", "pinch"),  // row 5: adjacent identical label, same run
+        );
+        let (_, runs) = convert_legacy_dataset_csv(&legacy)
+            .expect("legacy header must be recognized")
+            .expect("well-formed legacy csv must convert");
+
+        assert_eq!(runs.len(), 3);
+
+        assert_eq!(runs[0].label, "pinch");
+        assert_eq!((runs[0].start_row, runs[0].end_row), (0, 1));
+        assert_eq!((runs[0].start_timestamp_ns, runs[0].end_timestamp_ns), (1, 2));
+
+        assert_eq!(runs[1].label, "wave");
+        assert_eq!((runs[1].start_row, runs[1].end_row), (3, 3));
+        assert_eq!((runs[1].start_timestamp_ns, runs[1].end_timestamp_ns), (4, 4));
+
+        assert_eq!(runs[2].label, "pinch");
+        assert_eq!((runs[2].start_row, runs[2].end_row), (4, 5));
+        assert_eq!((runs[2].start_timestamp_ns, runs[2].end_timestamp_ns), (5, 6));
+    }
+
+    #[test]
+    fn convert_legacy_dataset_csv_trims_label_whitespace_without_other_normalization() {
+        let header = DATASET_CSV_HEADER.join(",");
+        let legacy = format!("{header}\n{}\n{}\n", legacy_row(1, "1.0", "  Pinch  "), legacy_row(2, "1.1", "   "));
+        let (_, runs) = convert_legacy_dataset_csv(&legacy)
+            .expect("legacy header must be recognized")
+            .expect("well-formed legacy csv must convert");
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].label, "Pinch"); // boundary-trimmed; case/identity otherwise untouched
+    }
+
+    #[test]
+    fn convert_legacy_dataset_csv_run_timestamps_survive_into_a_valid_raw_csv() {
+        let header = DATASET_CSV_HEADER.join(",");
+        let legacy = format!(
+            "{header}\n{}\n{}\n{}\n",
+            legacy_row(1_000_000_000, "1.0", "pinch"),
+            legacy_row(2_000_000_000, "1.1", "pinch"),
+            legacy_row(3_000_000_000, "1.2", ""),
+        );
+        let (converted, runs) = convert_legacy_dataset_csv(&legacy)
+            .expect("legacy header must be recognized")
+            .expect("well-formed legacy csv must convert");
+        assert!(validate_raw_csv_full(&converted).is_ok());
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].label, "pinch");
+        assert_eq!((runs[0].start_row, runs[0].end_row), (0, 1));
+        assert_eq!((runs[0].start_timestamp_ns, runs[0].end_timestamp_ns), (1_000_000_000, 2_000_000_000));
     }
 
     #[test]
