@@ -82,10 +82,9 @@ export function RawImageViewerPanel() {
     }
   };
 
-  const handleDeleteImportedRecording = async (summary: RecordingBundleSummary) => {
-    if (!summary.isImported) return;
+  const handleDeleteRecording = async (summary: RecordingBundleSummary) => {
     const confirmed = window.confirm(
-      `Permanently delete imported recording ${summary.recordingId}? This cannot be undone.`,
+      `Permanently delete recording ${summary.recordingId}? This cannot be undone.`,
     );
     if (!confirmed) return;
     setDeleting(true);
@@ -224,43 +223,43 @@ export function RawImageViewerPanel() {
             <div className="flex flex-wrap items-end gap-3">
               <div className="flex flex-col gap-1">
                 <Label htmlFor="raw-viewer-recording">Recording</Label>
-                <Select
-                  value={recordingId ?? ""}
-                  onValueChange={(value) => rawImageViewerStore.setRecording(value === "" ? null : value)}
-                >
-                  <SelectTrigger id="raw-viewer-recording" aria-label="Saved recording" className="min-w-64">
-                    <SelectValue placeholder="Select a recording…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {recordingList.recordings.map((summary) => (
-                      <SelectItem key={summary.recordingId} value={summary.recordingId}>
-                        {recordingLabel(summary)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-1">
+                  {(() => {
+                    const selectedSummary = recordingList.recordings.find((summary) => summary.recordingId === recordingId);
+                    return (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={selectedSummary ? `Delete recording ${selectedSummary.recordingId}` : "Delete recording"}
+                        title="Permanently delete the selected recording"
+                        disabled={!selectedSummary || deleting}
+                        aria-busy={deleting}
+                        onClick={() => {
+                          if (selectedSummary) void handleDeleteRecording(selectedSummary);
+                        }}
+                      >
+                        ×
+                      </Button>
+                    );
+                  })()}
+                  <Select
+                    value={recordingId ?? ""}
+                    onValueChange={(value) => rawImageViewerStore.setRecording(value === "" ? null : value)}
+                  >
+                    <SelectTrigger id="raw-viewer-recording" aria-label="Saved recording" className="min-w-64">
+                      <SelectValue placeholder="Select a recording…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {recordingList.recordings.map((summary) => (
+                        <SelectItem key={summary.recordingId} value={summary.recordingId}>
+                          {recordingLabel(summary)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-
-              {(() => {
-                const selectedSummary = recordingList.recordings.find((summary) => summary.recordingId === recordingId);
-                if (!selectedSummary?.isImported) return null;
-                return (
-                  <div className="flex flex-col gap-1">
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="sm"
-                      disabled={deleting}
-                      aria-busy={deleting}
-                      onClick={() => {
-                        void handleDeleteImportedRecording(selectedSummary);
-                      }}
-                    >
-                      {deleting ? "Deleting…" : "Delete imported recording"}
-                    </Button>
-                  </div>
-                );
-              })()}
 
               <div className="flex flex-col gap-1">
                 <Label htmlFor="raw-viewer-channel">Channel</Label>

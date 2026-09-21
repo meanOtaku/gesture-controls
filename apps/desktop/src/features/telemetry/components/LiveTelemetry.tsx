@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
-import { CsvCaptureCard } from "./CsvCaptureCard";
 import { DatasetCaptureCard } from "./DatasetCaptureCard";
 import { RawImageViewerPanel } from "./RawImageViewerPanel";
 import { SignalMonitor, type SignalView } from "./SignalMonitor";
@@ -26,13 +25,10 @@ export function LiveTelemetry() {
   const [signalView, setSignalView] = useState<SignalView>("all");
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
-  const { saveCsv, exportDatasetCsv, saveDatasetRecording, datasetExportFolder, chooseDatasetExportFolder } = useTelemetryExport();
+  const { exportDatasetCsv, saveDatasetRecording, datasetExportFolder, chooseDatasetExportFolder } = useTelemetryExport();
 
   const watchStatus = telemetryStore.getWatchStatus();
   const headConnected = telemetryStore.getHeadStatus()?.connected === true;
-  const recording = telemetryStore.getRecording();
-  const savedCount = telemetryStore.getSavedCount();
-  const appliedOrdinaryLabel = telemetryStore.getAppliedOrdinaryLabel();
   const headPoints = telemetryStore.getSeries("head");
   const watchOrientationPoints = telemetryStore.getSeries("watchOrientation");
   const ppgPoints = telemetryStore.getSeries("ppg");
@@ -42,7 +38,6 @@ export function LiveTelemetry() {
   const edaPoints = telemetryStore.getSeries("eda");
   const spo2Points = telemetryStore.getSeries("spo2");
   const ecgPoints = telemetryStore.getSeries("ecg");
-  const rowCount = telemetryStore.getRowCount();
 
   const selectedLabel = telemetryStore.getSelectedLabel();
   const sessionLabels = telemetryStore.getSessionLabels();
@@ -52,6 +47,7 @@ export function LiveTelemetry() {
   const datasetRowCount = telemetryStore.getDatasetRowCount();
   const datasetElapsedMs = telemetryStore.getDatasetRecordingElapsedMs();
   const captureMode = telemetryStore.getDatasetCaptureMode();
+  const activeMarkerLabel = telemetryStore.getActiveTimelineLabel();
 
   // Mirrors Dashboard.tsx's IMU_SENSOR_IDS default-enabled read and the
   // continuous-tracker "idle means disabled" convention.
@@ -115,7 +111,7 @@ export function LiveTelemetry() {
   return <main className="shell telemetry-shell">
     <header className="hero">
       <div><p className="eyebrow">Spatial Gesture Control</p><h1>Live telemetry</h1><p className="subtitle">Watch your sensor signals, capture a session, and build your gesture dataset.</p></div>
-      <div className={`connection ${recording ? "online" : "offline"}`}><span className="pulse" />{recording ? "Recording" : "Not recording"}</div>
+      <div className={`connection ${datasetRecording ? "online" : "offline"}`}><span className="pulse" />{datasetRecording ? "Recording" : "Not recording"}</div>
     </header>
     <div className="stream-status" aria-label="Sensor connections">
       <span><i className={headConnected ? "connected" : ""} />Headphones · {headConnected ? "Connected" : "Disconnected"}</span>
@@ -129,19 +125,7 @@ export function LiveTelemetry() {
       </TabsList>
       <TabsContent value="live" className="card-stack">
         <div className="capture-grid">
-          <CsvCaptureCard
-            recording={recording}
-            rowCount={rowCount}
-            savedCount={savedCount}
-            appliedLabel={appliedOrdinaryLabel}
-            onToggleRecording={() => telemetryStore.toggleRecording()}
-            onSaveCsv={saveCsv}
-            onApplyLabel={(label) => telemetryStore.applyOrdinaryLabel(label)}
-            onClearLabel={() => telemetryStore.clearOrdinaryLabel()}
-          />
           <DatasetCaptureCard
-            captureMode={captureMode}
-            onCaptureModeChange={(mode) => telemetryStore.setDatasetCaptureMode(mode)}
             selectedLabel={selectedLabel}
             sessionLabels={sessionLabels}
             onRemoveLabel={(label) => telemetryStore.removeSessionLabel(label)}
@@ -155,18 +139,18 @@ export function LiveTelemetry() {
             datasetRowCount={datasetRowCount}
             datasetElapsedMs={datasetElapsedMs}
             onSelectLabel={(label) => telemetryStore.selectDatasetLabel(label)}
+            activeMarkerLabel={activeMarkerLabel}
+            onToggleMarker={() => {
+              if (!selectedLabel) return;
+              telemetryStore.setTimelineLabel(activeMarkerLabel === selectedLabel ? null : selectedLabel);
+            }}
             onStart={(timelineDurationSeconds) => {
-              if (captureMode === "timeline" && timelineDurationSeconds) {
-                pendingTimelineDurationSecondsRef.current = timelineDurationSeconds;
-              }
+              pendingTimelineDurationSecondsRef.current = timelineDurationSeconds;
               telemetryStore.startDatasetRecording();
             }}
             onStop={() => {
               telemetryStore.stopDatasetRecording();
-              // Quick Capture has nothing left to review, so it persists the bundle
-              // immediately. Timeline Capture never saves a recording bundle here —
-              // it only exports a CSV, automatically at timeout (see the effect above).
-              if (captureMode === "quick") void saveDatasetRecording();
+              void saveDatasetRecording();
             }}
             onDiscard={() => telemetryStore.discardDatasetRecording()}
             onExport={exportDatasetCsv}
@@ -196,7 +180,7 @@ export function LiveTelemetry() {
           measurementError={measurementError}
           onRequestMeasurement={(tracker, measuring) => { void requestMeasurement(tracker, measuring); }}
         />
-        <p className="hint telemetry-note">Graphs retain the latest {MAX_VISIBLE_SAMPLES} points. CSV recording is bounded to the most recent {MAX_CSV_ROWS.toLocaleString()} rows (~{formatBytes(MAX_CSV_ROWS * ESTIMATED_BYTES_PER_CSV_ROW)} max); ordinary CSV files save through your operating system's native save dialog.</p>
+        <p className="hint telemetry-note">Graphs retain the latest {MAX_VISIBLE_SAMPLES} points. Timeline recording is bounded to the most recent {MAX_CSV_ROWS.toLocaleString()} rows (~{formatBytes(MAX_CSV_ROWS * ESTIMATED_BYTES_PER_CSV_ROW)} max).</p>
       </TabsContent>
       <TabsContent value="rawViewer">
         {desktopAvailable ? (

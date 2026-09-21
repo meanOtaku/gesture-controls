@@ -69,7 +69,7 @@ export type RecordingBundleSummary = {
   unreviewedCount: number;
   approvedCount: number;
   excludedCount: number;
-  /** True only for a recording imported via `import_recording_from_raw_csv`; the only bundles `deleteRecordingBundle` will accept. */
+  /** Informational only: true for a recording imported via `import_recording_from_raw_csv`. Every bundle, imported or manually captured, is equally deletable via `deleteRecordingBundle`. */
   isImported: boolean;
 };
 
@@ -231,11 +231,10 @@ export async function loadRecordingBundle(
 }
 
 /**
- * Permanently deletes one recording bundle through `delete_recording_bundle`.
- * The backend independently re-derives eligibility from the bundle's own
- * `recording.json` and rejects anything but a recording imported via
- * `importRecordingFromRawCsv` — this is not enforced by the UI alone. There
- * is no undo.
+ * Permanently deletes one saved recording bundle through
+ * `delete_recording_bundle` — manually captured and imported bundles alike.
+ * The backend re-validates the id and loads the bundle from disk before
+ * removing it; this is not enforced by the UI alone. There is no undo.
  */
 export async function deleteRecordingBundle(recordingId: string): Promise<RecordingBundleResult<void>> {
   if (!isTauriDesktop()) {

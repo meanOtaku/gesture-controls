@@ -20,7 +20,6 @@ vi.mock("../../../shared/tauri/exportCsv", () => ({
 }));
 
 function startTimelineCapture(durationSeconds: number) {
-  fireEvent.click(screen.getByRole("tab", { name: "Timeline Capture" }));
   fireEvent.change(screen.getByLabelText("Recording duration in seconds"), { target: { value: String(durationSeconds) } });
   fireEvent.click(screen.getByRole("button", { name: "Start dataset capture" }));
 }

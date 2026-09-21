@@ -196,12 +196,11 @@ pub struct RecordingBundleSummary {
     pub unreviewed_count: usize,
     pub approved_count: usize,
     pub excluded_count: usize,
-    /// Durable eligibility datum for `delete_recording_bundle`: true only when
-    /// `recording.json`'s `sources` is exactly the single imported source
-    /// written by `import_recording_from_raw_csv` (see `is_imported_only`).
-    /// The UI uses this to decide whether to show a delete control at all;
-    /// the delete command re-derives it independently from disk rather than
-    /// trusting this value back.
+    /// Informational only: true when `recording.json`'s `sources` is exactly
+    /// the single imported source written by `import_recording_from_raw_csv`
+    /// (see `is_imported_only`). Every saved bundle — imported or manually
+    /// captured — is equally eligible for `delete_recording_bundle`; this
+    /// field is not a deletion gate.
     pub is_imported: bool,
 }
 
@@ -548,25 +547,21 @@ pub fn load_recording_bundle(
     Ok(RecordingBundleDetail { recording, annotations })
 }
 
-/// Permanently deletes one recording bundle's directory (`raw.csv`,
-/// `recording.json`, `annotations.json`), but only when its own persisted
-/// `recording.json` independently proves it was created by
-/// `import_recording_from_raw_csv` (`is_imported_only`) — the same source
-/// identity check `RecordingBundleSummary.is_imported` surfaces to the UI, so
-/// eligibility is never guessed from the id or from browser-supplied input.
-/// A manually-saved bundle (any other `sources` shape) is always rejected,
-/// even if a caller bypasses the UI. This is irreversible: there is no
-/// recycle bin or undo.
+/// Permanently deletes one saved recording bundle's directory (`raw.csv`,
+/// `recording.json`, `annotations.json`) — manually captured and imported
+/// bundles alike. `recording_id` is validated before it ever reaches a
+/// `Path::join` (`validate_recording_id` rejects empty ids and anything but
+/// `[A-Za-z0-9-]`, so path traversal and multi-segment ids are impossible),
+/// and the bundle is loaded from disk first to confirm the id resolves to a
+/// real, well-formed bundle before anything is removed — the UI is never
+/// trusted to have supplied a valid id on its own. Only that one bundle's own
+/// subdirectory under the recordings root is removed; the root itself is
+/// never touched. This is irreversible: there is no recycle bin or undo.
 #[tauri::command]
 pub fn delete_recording_bundle(recording_id: String, app: AppHandle) -> Result<(), String> {
     validate_recording_id(&recording_id)?;
     let dir = recording_bundles_dir(&app)?.join(&recording_id);
-    let (recording, _annotations) = load_bundle_pair(&dir)?;
-    if !is_imported_only(&recording) {
-        return Err(
-            "only recordings imported via 'Import raw.csv' can be deleted; manually-saved recording bundles are never eligible".to_string(),
-        );
-    }
+    load_bundle_pair(&dir)?;
     fs::remove_dir_all(&dir).map_err(|error| error.to_string())
 }
 
@@ -1162,20 +1157,44 @@ mod tests {
         let (recording, _annotations) = load_bundle_pair(&dir).expect("bundle must parse");
         assert!(is_imported_only(&recording));
 
-        // Mirrors `delete_recording_bundle`'s own eligibility-then-remove sequence;
+        // Mirrors `delete_recording_bundle`'s own load-then-remove sequence;
         // `AppHandle` (needed to resolve `recording_bundles_dir`) is unavailable in
         // this crate's unit tests, matching every other command in this module.
-        fs::remove_dir_all(&dir).expect("delete must succeed for an imported-only bundle");
+        fs::remove_dir_all(&dir).expect("delete must succeed for an imported bundle");
         assert!(!dir.exists());
     }
 
     #[test]
-    fn delete_recording_bundle_rejects_a_manually_saved_bundle() {
+    fn delete_recording_bundle_removes_a_manually_saved_bundle() {
+        // sample_metadata: "watch" source, not imported — must now be just as deletable.
         let id = Uuid::new_v4().to_string();
-        let dir = write_temp_bundle(&id); // sample_metadata: "watch" source, not imported
+        let dir = write_temp_bundle(&id);
+        assert!(dir.exists());
+
         let (recording, _annotations) = load_bundle_pair(&dir).expect("bundle must parse");
-        assert!(!is_imported_only(&recording), "manually-saved bundle must never be treated as imported");
-        fs::remove_dir_all(&dir).ok();
+        assert!(!is_imported_only(&recording), "this bundle is manually-saved, not imported");
+
+        fs::remove_dir_all(&dir).expect("delete must succeed for a manually-saved bundle too");
+        assert!(!dir.exists());
+    }
+
+    #[test]
+    fn delete_recording_bundle_removes_only_the_selected_bundle() {
+        let target_id = Uuid::new_v4().to_string();
+        let sibling_id = Uuid::new_v4().to_string();
+        let target_dir = write_temp_bundle(&target_id);
+        let sibling_dir = std::env::temp_dir().join(format!("recording-bundle-{sibling_id}"));
+        write_bundle_files(&sibling_dir, "timestamp_ns\n1\n", &sample_metadata(&sibling_id), &empty_annotations(&sibling_id))
+            .expect("writing the sibling bundle must succeed");
+        assert!(target_dir.exists());
+        assert!(sibling_dir.exists());
+
+        load_bundle_pair(&target_dir).expect("target bundle must parse before deletion");
+        fs::remove_dir_all(&target_dir).expect("deleting the target bundle must succeed");
+
+        assert!(!target_dir.exists());
+        assert!(sibling_dir.exists(), "a sibling bundle must be untouched by deleting another one");
+        fs::remove_dir_all(&sibling_dir).ok();
     }
 
     #[test]
@@ -1184,6 +1203,14 @@ mod tests {
         assert!(validate_recording_id("../secret").is_err());
         assert!(validate_recording_id("a/b").is_err());
         assert!(validate_recording_id("").is_err());
+    }
+
+    #[test]
+    fn delete_recording_bundle_rejects_an_id_with_no_matching_bundle_on_disk() {
+        // `load_bundle_pair` is what `delete_recording_bundle` calls to confirm the id
+        // resolves to a real bundle before ever calling `remove_dir_all`.
+        let missing_dir = std::env::temp_dir().join(format!("recording-bundle-missing-{}", Uuid::new_v4()));
+        assert!(load_bundle_pair(&missing_dir).is_err());
     }
 
     #[test]

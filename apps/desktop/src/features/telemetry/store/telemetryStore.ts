@@ -244,8 +244,12 @@ class TelemetryStore {
 
   // Timeline Capture: live/edited intervals for the current session. Cleared
   // on start/discard, closed out on stop, and freely editable while
-  // `datasetRecordingState === "saved"` (post-capture editing).
-  private datasetCaptureMode: DatasetCaptureMode = "quick";
+  // `datasetRecordingState === "saved"` (post-capture editing). Defaults to
+  // "timeline" since GC-017 made it the screen's only recorder; "quick"
+  // remains fully supported (and covered by its own tests) for the
+  // recording-bundle contract's `quick_capture` shape, just unreachable from
+  // the UI's default state.
+  private datasetCaptureMode: DatasetCaptureMode = "timeline";
   private timelineIntervals: LiveInterval[] = [];
   private activeTimelineIntervalId: string | null = null;
   private lastKnownOrientationSample: { accel: Vector3 | null; gyro: Vector3 | null; quat: Quaternion | null } = {
@@ -962,7 +966,7 @@ class TelemetryStore {
     this.datasetActualStartAtIso = null;
     this.datasetActualStartMonotonicMs = null;
     this.datasetRows.clear();
-    this.datasetCaptureMode = "quick";
+    this.datasetCaptureMode = "timeline";
     this.timelineIntervals = [];
     this.activeTimelineIntervalId = null;
     this.lastKnownOrientationSample = { accel: null, gyro: null, quat: null };

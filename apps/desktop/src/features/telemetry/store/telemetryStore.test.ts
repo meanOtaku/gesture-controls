@@ -105,6 +105,12 @@ describe("telemetryStore", () => {
   });
 
   describe("labeled dataset recorder", () => {
+    // The store defaults to "timeline" mode (GC-017); these tests exercise the
+    // still-supported "quick" mode explicitly, since that's the behavior they cover.
+    beforeEach(() => {
+      telemetryStore.setDatasetCaptureMode("quick");
+    });
+
     it("does not buffer dataset rows before a session is started", () => {
       telemetryStore.selectDatasetLabel("pinch_start");
       telemetryStore.ingestWatchOrientation({
