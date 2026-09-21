@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AsyncActionButton } from "../../../components/app/AsyncActionButton";
 import { HelpTooltip } from "../../../components/app/HelpTooltip";
 import {
@@ -47,8 +47,10 @@ type DatasetCaptureCardProps = {
   onSelectLabel: (label: GestureDatasetLabel) => boolean;
   /** The label interval currently open on the timeline, if any. */
   activeMarkerLabel: GestureDatasetLabel | null;
-  /** Toggles the marker for `selectedLabel`: starts it if it's not the active interval, ends it if it is. */
-  onToggleMarker: () => void;
+  /** Opens a `selectedLabel` interval (hold-to-mark: called on press). */
+  onMarkStart: () => void;
+  /** Closes the open interval (hold-to-mark: called on release). */
+  onMarkEnd: () => void;
   onStart: (timelineDurationSeconds: number) => void;
   onStop: () => void;
   onDiscard: () => void;
@@ -83,7 +85,8 @@ export function DatasetCaptureCard({
   datasetElapsedMs = 0,
   onSelectLabel,
   activeMarkerLabel,
-  onToggleMarker,
+  onMarkStart,
+  onMarkEnd,
   onStart,
   onStop,
   onDiscard,
@@ -97,6 +100,37 @@ export function DatasetCaptureCard({
     && timelineDurationSeconds <= TIMELINE_DURATION_SECONDS_MAX;
   const isRecording = datasetRecordingState === "recording";
   const isMarking = isRecording && activeMarkerLabel !== null && activeMarkerLabel === selectedLabel;
+  const canMark = isRecording && !!selectedLabel;
+
+  const heldRef = useRef(false);
+  const onMarkEndRef = useRef(onMarkEnd);
+  onMarkEndRef.current = onMarkEnd;
+
+  const beginHold = () => {
+    if (heldRef.current || !canMark) return;
+    heldRef.current = true;
+    onMarkStart();
+  };
+  const endHold = () => {
+    if (!heldRef.current) return;
+    heldRef.current = false;
+    onMarkEnd();
+  };
+
+  // Releases the hold whenever marking becomes unavailable (recording stops,
+  // the label is cleared) or a different label is selected — a physically
+  // held button must not silently keep marking the old or a new label.
+  useEffect(() => {
+    if (heldRef.current && !canMark) endHold();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canMark]);
+  useEffect(() => {
+    if (heldRef.current) endHold();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLabel]);
+
+  // Recording stop/discard and unmount must never leave a marker open.
+  useEffect(() => () => { if (heldRef.current) { heldRef.current = false; onMarkEndRef.current(); } }, []);
 
   const applyCustomLabel = () => {
     if (onSelectLabel(customLabel)) {
@@ -116,9 +150,10 @@ export function DatasetCaptureCard({
             Records one continuous raw session for a fixed duration you set. Start arms the
             recorder: data already visible in the graphs above is never included, and the first
             stored row is the first sample accepted after Start — the timer starts counting from
-            that first sample too, not from the Start press. While recording, use the marker
-            button to mark the stretches where you performed the current label's action; unmarked
-            stretches stay unannotated. Raw samples are never rewritten once captured; the
+            that first sample too, not from the Start press. While recording, hold the marker
+            button down to mark the stretch where you're performing the current label's action;
+            release it to stop. Unmarked stretches stay unannotated. Raw samples are never
+            rewritten once captured; the
             exported dataset CSV carries the label for every row from these marked intervals.
           </HelpTooltip>
         </CardTitle>
@@ -243,23 +278,45 @@ export function DatasetCaptureCard({
           <Button
             type="button"
             variant={isMarking ? "destructive" : "outline"}
-            disabled={!isRecording || !selectedLabel}
+            disabled={!canMark}
             aria-pressed={isMarking}
             title={
               !isRecording
                 ? "Start dataset capture before marking"
                 : !selectedLabel
                   ? "Enter or select a label to mark"
-                  : undefined
+                  : "Hold (mouse, touch, or Space/Enter) to mark; release to stop"
             }
-            onClick={onToggleMarker}
+            onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              beginHold();
+              event.currentTarget.setPointerCapture?.(event.pointerId);
+            }}
+            onPointerUp={endHold}
+            onPointerCancel={endHold}
+            onLostPointerCapture={endHold}
+            onBlur={endHold}
+            onKeyDown={(event) => {
+              if ((event.key === " " || event.key === "Enter") && !event.repeat) {
+                event.preventDefault();
+                beginHold();
+              }
+            }}
+            onKeyUp={(event) => {
+              if (event.key === " " || event.key === "Enter") {
+                event.preventDefault();
+                endHold();
+              }
+            }}
           >
-            {!selectedLabel ? "Mark label" : isMarking ? `Stop marking "${selectedLabel}"` : `Mark "${selectedLabel}"`}
+            {!selectedLabel ? "Mark label" : isMarking ? `Marking "${selectedLabel}"…` : `Hold to mark "${selectedLabel}"`}
           </Button>
           <HelpTooltip label="About the marker">
             Enabled only while recording, and only once a valid label is entered or selected
-            above. Press to start marking the current label on the raw timeline; press again to
-            end that interval. Time left unmarked stays unannotated in the exported CSV.
+            above. Press and hold (mouse, touch, or Space/Enter) to mark the current label on the
+            raw timeline; release to end that interval. It never toggles — releasing, losing
+            focus, or the pointer being cancelled all stop marking. Time left unmarked stays
+            unannotated in the exported CSV.
           </HelpTooltip>
 
           <AlertDialog>

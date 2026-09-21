@@ -124,38 +124,37 @@ export function LiveTelemetry() {
         <TabsTrigger value="rawViewer">Raw image viewer</TabsTrigger>
       </TabsList>
       <TabsContent value="live" className="card-stack">
-        <div className="capture-grid">
-          <DatasetCaptureCard
-            selectedLabel={selectedLabel}
-            sessionLabels={sessionLabels}
-            onRemoveLabel={(label) => telemetryStore.removeSessionLabel(label)}
-            getLabelRemovalBlockedReason={(label) => telemetryStore.labelRemovalBlockedReason(label)}
-            desktopAvailable={desktopAvailable}
-            datasetExportFolder={datasetExportFolder}
-            onChooseExportFolder={async () => { await chooseDatasetExportFolder(); }}
-            datasetRecording={datasetRecording}
-            datasetRecordingState={datasetRecordingState}
-            datasetSession={datasetSession}
-            datasetRowCount={datasetRowCount}
-            datasetElapsedMs={datasetElapsedMs}
-            onSelectLabel={(label) => telemetryStore.selectDatasetLabel(label)}
-            activeMarkerLabel={activeMarkerLabel}
-            onToggleMarker={() => {
-              if (!selectedLabel) return;
-              telemetryStore.setTimelineLabel(activeMarkerLabel === selectedLabel ? null : selectedLabel);
-            }}
-            onStart={(timelineDurationSeconds) => {
-              pendingTimelineDurationSecondsRef.current = timelineDurationSeconds;
-              telemetryStore.startDatasetRecording();
-            }}
-            onStop={() => {
-              telemetryStore.stopDatasetRecording();
-              void saveDatasetRecording();
-            }}
-            onDiscard={() => telemetryStore.discardDatasetRecording()}
-            onExport={exportDatasetCsv}
-          />
-        </div>
+        <DatasetCaptureCard
+          selectedLabel={selectedLabel}
+          sessionLabels={sessionLabels}
+          onRemoveLabel={(label) => telemetryStore.removeSessionLabel(label)}
+          getLabelRemovalBlockedReason={(label) => telemetryStore.labelRemovalBlockedReason(label)}
+          desktopAvailable={desktopAvailable}
+          datasetExportFolder={datasetExportFolder}
+          onChooseExportFolder={async () => { await chooseDatasetExportFolder(); }}
+          datasetRecording={datasetRecording}
+          datasetRecordingState={datasetRecordingState}
+          datasetSession={datasetSession}
+          datasetRowCount={datasetRowCount}
+          datasetElapsedMs={datasetElapsedMs}
+          onSelectLabel={(label) => telemetryStore.selectDatasetLabel(label)}
+          activeMarkerLabel={activeMarkerLabel}
+          onMarkStart={() => {
+            if (!selectedLabel) return;
+            telemetryStore.setTimelineLabel(selectedLabel, "hotkey_hold");
+          }}
+          onMarkEnd={() => telemetryStore.setTimelineLabel(null)}
+          onStart={(timelineDurationSeconds) => {
+            pendingTimelineDurationSecondsRef.current = timelineDurationSeconds;
+            telemetryStore.startDatasetRecording();
+          }}
+          onStop={() => {
+            telemetryStore.stopDatasetRecording();
+            void saveDatasetRecording();
+          }}
+          onDiscard={() => telemetryStore.discardDatasetRecording()}
+          onExport={exportDatasetCsv}
+        />
         <SignalMonitor
           signalView={signalView}
           onSignalViewChange={setSignalView}

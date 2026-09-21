@@ -104,7 +104,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .stream-status i { width:7px; height:7px; border-radius:50%; background:#65728b; }
 .stream-status i.connected { background:#4ff0b7; }
 .preview-label { color:#91a5bf; }
-.capture-grid { display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); gap:var(--space-card); }
 .signal-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; margin:0 0 20px; }
 .signal-heading .eyebrow { margin:0 0 6px; }
 .signal-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--space-card); }
@@ -145,7 +144,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .model-lab-shell input[type="radio"],.model-lab-shell input[type="checkbox"] { accent-color:#65e6ff; flex-shrink:0; }
 .model-lab-shell code { overflow-wrap:anywhere; white-space:normal; }
 @media(max-width:900px) {
-  .capture-grid { grid-template-columns:1fr; }
   .model-lab-labels { grid-template-columns:1fr; }
 }
 @media(max-width:620px) {

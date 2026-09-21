@@ -19,7 +19,8 @@ function renderCard(overrides: Partial<React.ComponentProps<typeof DatasetCaptur
     datasetRowCount: 0,
     onSelectLabel: vi.fn(() => true),
     activeMarkerLabel: null,
-    onToggleMarker: vi.fn(),
+    onMarkStart: vi.fn(),
+    onMarkEnd: vi.fn(),
     onStart: vi.fn(),
     onStop: vi.fn(),
     onDiscard: vi.fn(),
@@ -74,7 +75,7 @@ describe("DatasetCaptureCard", () => {
     expect(onStart).toHaveBeenCalledWith(45);
   });
 
-  it("requires confirmation before discarding a session, and does not discard on cancel", () => {
+  it("requires confirmation before discarding a session, closes the dialog on cancel, and does not discard", async () => {
     const onDiscard = vi.fn();
     renderCard({
       onDiscard,
@@ -85,9 +86,10 @@ describe("DatasetCaptureCard", () => {
     expect(screen.getByText("Discard dataset session?")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Keep session" }));
     expect(onDiscard).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByText("Discard dataset session?")).not.toBeInTheDocument());
   });
 
-  it("discards the session once confirmed", async () => {
+  it("discards the session and closes the dialog once confirmed", async () => {
     const onDiscard = vi.fn();
     renderCard({
       onDiscard,
@@ -98,6 +100,7 @@ describe("DatasetCaptureCard", () => {
     const discardButtons = await screen.findAllByRole("button", { name: "Discard" });
     fireEvent.click(discardButtons[discardButtons.length - 1]);
     expect(onDiscard).toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByText("Discard dataset session?")).not.toBeInTheDocument());
   });
 
   it("disables Discard when there is no dataset session", () => {
@@ -124,10 +127,10 @@ describe("DatasetCaptureCard", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Export Dataset CSV" })).toBeEnabled());
   });
 
-  describe("marker", () => {
+  describe("marker (hold-to-mark)", () => {
     it("is disabled before recording, even with a valid label selected", () => {
       renderCard({ datasetRecordingState: "idle", selectedLabel: "idle" });
-      expect(screen.getByRole("button", { name: 'Mark "idle"' })).toBeDisabled();
+      expect(screen.getByRole("button", { name: 'Hold to mark "idle"' })).toBeDisabled();
     });
 
     it("is disabled while recording without a valid label", () => {
@@ -135,67 +138,175 @@ describe("DatasetCaptureCard", () => {
       expect(screen.getByRole("button", { name: "Mark label" })).toBeDisabled();
     });
 
-    it("toggles: press starts marking the selected label, press again ends it", () => {
-      const onToggleMarker = vi.fn();
+    it("starts marking on pointer down and ends it on pointer up, never on a plain click", () => {
+      const onMarkStart = vi.fn();
+      const onMarkEnd = vi.fn();
+      renderCard({
+        datasetRecording: true,
+        datasetRecordingState: "recording",
+        selectedLabel: "idle",
+        onMarkStart,
+        onMarkEnd,
+      });
+
+      const markerButton = screen.getByRole("button", { name: 'Hold to mark "idle"' });
+      expect(markerButton).toBeEnabled();
+
+      fireEvent.click(markerButton);
+      expect(onMarkStart).not.toHaveBeenCalled();
+      expect(onMarkEnd).not.toHaveBeenCalled();
+
+      fireEvent.pointerDown(markerButton, { pointerId: 1, button: 0 });
+      expect(onMarkStart).toHaveBeenCalledTimes(1);
+      expect(onMarkEnd).not.toHaveBeenCalled();
+
+      fireEvent.pointerUp(markerButton, { pointerId: 1 });
+      expect(onMarkEnd).toHaveBeenCalledTimes(1);
+      expect(onMarkStart).toHaveBeenCalledTimes(1);
+    });
+
+    it("ends the hold on pointer cancellation and on losing focus, without a second start", () => {
+      const onMarkStart = vi.fn();
+      const onMarkEnd = vi.fn();
+      renderCard({
+        datasetRecording: true,
+        datasetRecordingState: "recording",
+        selectedLabel: "idle",
+        onMarkStart,
+        onMarkEnd,
+      });
+      const markerButton = screen.getByRole("button", { name: 'Hold to mark "idle"' });
+
+      fireEvent.pointerDown(markerButton, { pointerId: 1, button: 0 });
+      fireEvent.pointerCancel(markerButton, { pointerId: 1 });
+      expect(onMarkStart).toHaveBeenCalledTimes(1);
+      expect(onMarkEnd).toHaveBeenCalledTimes(1);
+
+      fireEvent.pointerDown(markerButton, { pointerId: 2, button: 0 });
+      fireEvent.blur(markerButton);
+      expect(onMarkStart).toHaveBeenCalledTimes(2);
+      expect(onMarkEnd).toHaveBeenCalledTimes(2);
+    });
+
+    it("supports keyboard hold via Space/Enter, with no repeat re-triggering", () => {
+      const onMarkStart = vi.fn();
+      const onMarkEnd = vi.fn();
+      renderCard({
+        datasetRecording: true,
+        datasetRecordingState: "recording",
+        selectedLabel: "idle",
+        onMarkStart,
+        onMarkEnd,
+      });
+      const markerButton = screen.getByRole("button", { name: 'Hold to mark "idle"' });
+
+      fireEvent.keyDown(markerButton, { key: " " });
+      fireEvent.keyDown(markerButton, { key: " ", repeat: true });
+      expect(onMarkStart).toHaveBeenCalledTimes(1);
+
+      fireEvent.keyUp(markerButton, { key: " " });
+      expect(onMarkEnd).toHaveBeenCalledTimes(1);
+
+      fireEvent.keyDown(markerButton, { key: "Enter" });
+      fireEvent.keyUp(markerButton, { key: "Enter" });
+      expect(onMarkStart).toHaveBeenCalledTimes(2);
+      expect(onMarkEnd).toHaveBeenCalledTimes(2);
+    });
+
+    it("shows the marking label while held", () => {
+      renderCard({
+        datasetRecording: true,
+        datasetRecordingState: "recording",
+        selectedLabel: "idle",
+        activeMarkerLabel: "idle",
+      });
+      const markingButton = screen.getByRole("button", { name: 'Marking "idle"…' });
+      expect(markingButton).toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("ends an in-progress hold when the label changes", () => {
+      const onMarkStart = vi.fn();
+      const onMarkEnd = vi.fn();
       const { rerender } = render(
         <TooltipProvider>
           <DatasetCaptureCard
-            selectedLabel="idle"
-            sessionLabels={[]}
-            onRemoveLabel={vi.fn(() => true)}
-            getLabelRemovalBlockedReason={vi.fn(() => null)}
-            desktopAvailable={false}
-            datasetExportFolder={null}
-            onChooseExportFolder={vi.fn().mockResolvedValue(undefined)}
-            datasetRecording
-            datasetRecordingState="recording"
-            datasetSession={{ label: "", startedAtIso: new Date().toISOString() }}
-            datasetRowCount={3}
-            onSelectLabel={vi.fn(() => true)}
-            activeMarkerLabel={null}
-            onToggleMarker={onToggleMarker}
-            onStart={vi.fn()}
-            onStop={vi.fn()}
-            onDiscard={vi.fn()}
-            onExport={vi.fn().mockResolvedValue(undefined)}
+            {...({
+              selectedLabel: "idle",
+              sessionLabels: [],
+              onRemoveLabel: vi.fn(() => true),
+              getLabelRemovalBlockedReason: vi.fn(() => null),
+              desktopAvailable: false,
+              datasetExportFolder: null,
+              onChooseExportFolder: vi.fn().mockResolvedValue(undefined),
+              datasetRecording: true,
+              datasetRecordingState: "recording",
+              datasetSession: { label: "", startedAtIso: new Date().toISOString() },
+              datasetRowCount: 3,
+              onSelectLabel: vi.fn(() => true),
+              activeMarkerLabel: null,
+              onMarkStart,
+              onMarkEnd,
+              onStart: vi.fn(),
+              onStop: vi.fn(),
+              onDiscard: vi.fn(),
+              onExport: vi.fn().mockResolvedValue(undefined),
+            } satisfies React.ComponentProps<typeof DatasetCaptureCard>)}
           />
         </TooltipProvider>,
       );
 
-      const markerButton = screen.getByRole("button", { name: 'Mark "idle"' });
-      expect(markerButton).toBeEnabled();
-      fireEvent.click(markerButton);
-      expect(onToggleMarker).toHaveBeenCalledTimes(1);
+      const markerButton = screen.getByRole("button", { name: 'Hold to mark "idle"' });
+      fireEvent.pointerDown(markerButton, { pointerId: 1, button: 0 });
+      expect(onMarkStart).toHaveBeenCalledTimes(1);
 
       rerender(
         <TooltipProvider>
           <DatasetCaptureCard
-            selectedLabel="idle"
-            sessionLabels={[]}
-            onRemoveLabel={vi.fn(() => true)}
-            getLabelRemovalBlockedReason={vi.fn(() => null)}
-            desktopAvailable={false}
-            datasetExportFolder={null}
-            onChooseExportFolder={vi.fn().mockResolvedValue(undefined)}
-            datasetRecording
-            datasetRecordingState="recording"
-            datasetSession={{ label: "", startedAtIso: new Date().toISOString() }}
-            datasetRowCount={3}
-            onSelectLabel={vi.fn(() => true)}
-            activeMarkerLabel="idle"
-            onToggleMarker={onToggleMarker}
-            onStart={vi.fn()}
-            onStop={vi.fn()}
-            onDiscard={vi.fn()}
-            onExport={vi.fn().mockResolvedValue(undefined)}
+            {...({
+              selectedLabel: "walking",
+              sessionLabels: [],
+              onRemoveLabel: vi.fn(() => true),
+              getLabelRemovalBlockedReason: vi.fn(() => null),
+              desktopAvailable: false,
+              datasetExportFolder: null,
+              onChooseExportFolder: vi.fn().mockResolvedValue(undefined),
+              datasetRecording: true,
+              datasetRecordingState: "recording",
+              datasetSession: { label: "", startedAtIso: new Date().toISOString() },
+              datasetRowCount: 3,
+              onSelectLabel: vi.fn(() => true),
+              activeMarkerLabel: null,
+              onMarkStart,
+              onMarkEnd,
+              onStart: vi.fn(),
+              onStop: vi.fn(),
+              onDiscard: vi.fn(),
+              onExport: vi.fn().mockResolvedValue(undefined),
+            } satisfies React.ComponentProps<typeof DatasetCaptureCard>)}
           />
         </TooltipProvider>,
       );
 
-      const stopMarkerButton = screen.getByRole("button", { name: 'Stop marking "idle"' });
-      expect(stopMarkerButton).toHaveAttribute("aria-pressed", "true");
-      fireEvent.click(stopMarkerButton);
-      expect(onToggleMarker).toHaveBeenCalledTimes(2);
+      expect(onMarkEnd).toHaveBeenCalledTimes(1);
+      expect(onMarkStart).toHaveBeenCalledTimes(1);
+    });
+
+    it("ends an in-progress hold on unmount", () => {
+      const onMarkStart = vi.fn();
+      const onMarkEnd = vi.fn();
+      renderCard({
+        datasetRecording: true,
+        datasetRecordingState: "recording",
+        selectedLabel: "idle",
+        onMarkStart,
+        onMarkEnd,
+      });
+      const markerButton = screen.getByRole("button", { name: 'Hold to mark "idle"' });
+      fireEvent.pointerDown(markerButton, { pointerId: 1, button: 0 });
+      expect(onMarkStart).toHaveBeenCalledTimes(1);
+
+      cleanup();
+      expect(onMarkEnd).toHaveBeenCalledTimes(1);
     });
   });
 });
