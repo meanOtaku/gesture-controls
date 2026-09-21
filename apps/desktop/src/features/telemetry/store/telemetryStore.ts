@@ -34,7 +34,7 @@ export type CsvRow = {
 };
 
 /** Default label for ordinary CSV rows when no ordinary-capture label is applied. Not a user-chosen label. */
-export const DEFAULT_ORDINARY_LABEL = "ordinary";
+export const DEFAULT_ORDINARY_LABEL = "NA";
 
 /** Labels are user-owned stable slugs; no built-in templates. */
 export type GestureDatasetLabel = string;
