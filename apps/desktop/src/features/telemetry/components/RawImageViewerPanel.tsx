@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent } from "react";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { HelpTooltip } from "../../../components/app/HelpTooltip";
@@ -12,16 +12,26 @@ import {
   deleteRecordingBundle,
   importRecordingFromRawCsv,
   listRecordingBundles,
+  loadRecordingBundle,
   RAW_GRID_SIZES,
   RAW_IMAGE_VIEWER_CHANNELS,
   rawWindowMaxValues,
   rawWindowRowHop,
+  type AnnotationInterval,
   type RawGridSize,
   type RawImageViewerChannel,
   type RecordingBundleSummary,
 } from "../../../shared/tauri/recordingBundle";
+import { deriveVisibleLabelRanges } from "../annotations/visibleLabelRanges";
 import { rawImageViewerStore } from "../store/rawImageViewerStore";
 import { RawImageCanvas } from "./RawImageCanvas";
+import { RawImageLabelRangeRail } from "./RawImageLabelRangeRail";
+
+type LabelRangesState =
+  | { status: "empty" }
+  | { status: "loading" }
+  | { status: "loaded"; intervals: AnnotationInterval[] }
+  | { status: "error"; message: string };
 
 type RecordingListState =
   | { status: "loading" }
@@ -56,6 +66,8 @@ export function RawImageViewerPanel() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [labelRanges, setLabelRanges] = useState<LabelRangesState>({ status: "empty" });
+  const labelRangesRequestVersion = useRef(0);
   useSyncExternalStore(rawImageViewerStore.subscribe, rawImageViewerStore.getVersion, rawImageViewerStore.getVersion);
 
   const handleImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -119,6 +131,27 @@ export function RawImageViewerPanel() {
   }, [listVersion]);
 
   const recordingId = rawImageViewerStore.getRecordingId();
+
+  // Loads the selected recording's saved annotations (never raw.csv) purely
+  // for display; request-version-guarded so a stale/out-of-order response for
+  // a since-abandoned recording can never land on the current selection.
+  useEffect(() => {
+    const requestVersion = ++labelRangesRequestVersion.current;
+    if (recordingId === null) {
+      setLabelRanges({ status: "empty" });
+      return;
+    }
+    setLabelRanges({ status: "loading" });
+    void loadRecordingBundle(recordingId).then((result) => {
+      if (requestVersion !== labelRangesRequestVersion.current) return;
+      if (result.status === "error") {
+        setLabelRanges({ status: "error", message: result.message });
+      } else {
+        setLabelRanges({ status: "loaded", intervals: result.value.annotations.intervals });
+      }
+    });
+  }, [recordingId]);
+
   const channel = rawImageViewerStore.getChannel();
   const normalizationMode = rawImageViewerStore.getNormalizationMode();
   const gridSize = rawImageViewerStore.getGridSize();
@@ -132,6 +165,11 @@ export function RawImageViewerPanel() {
   const maxValues = rawWindowMaxValues(gridSize);
   const totalFrames = bounds ? Math.floor(bounds.maxStartRawRow / rowHop) + 1 : null;
   const currentFrame = Math.floor(requestedStartRawRow / rowHop) + 1;
+
+  const visibleLabelRanges = useMemo(() => {
+    if (rawWindow === null || labelRanges.status !== "loaded") return [];
+    return deriveVisibleLabelRanges(labelRanges.intervals, rawWindow.startRawRow, rawWindow.endRawRow);
+  }, [rawWindow, labelRanges]);
 
   return (
     <Card role="region" aria-label="Raw image viewer" className="min-w-0">
@@ -349,27 +387,35 @@ export function RawImageViewerPanel() {
                         have a recorded row; the remaining pixels show the "no data" fill below.
                       </p>
                     )}
-                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                      <Card>
-                        <CardContent className="pt-6">
-                          <RawImageCanvas
-                            rawWindow={rawWindow}
-                            normalizationMode={normalizationMode}
-                            title="Grayscale"
-                            colorMode="grayscale"
-                          />
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="pt-6">
-                          <RawImageCanvas
-                            rawWindow={rawWindow}
-                            normalizationMode={normalizationMode}
-                            title="Rainbow (false-colour)"
-                            colorMode="rainbow"
-                          />
-                        </CardContent>
-                      </Card>
+                    {labelRanges.status === "error" && (
+                      <p role="alert" className="text-xs text-destructive">
+                        Could not load saved label ranges for this recording: {labelRanges.message}
+                      </p>
+                    )}
+                    <div className="flex flex-col gap-4 lg:flex-row">
+                      <RawImageLabelRangeRail ranges={visibleLabelRanges} />
+                      <div className="grid min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-2">
+                        <Card>
+                          <CardContent className="pt-6">
+                            <RawImageCanvas
+                              rawWindow={rawWindow}
+                              normalizationMode={normalizationMode}
+                              title="Grayscale"
+                              colorMode="grayscale"
+                            />
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardContent className="pt-6">
+                            <RawImageCanvas
+                              rawWindow={rawWindow}
+                              normalizationMode={normalizationMode}
+                              title="Rainbow (false-colour)"
+                              colorMode="rainbow"
+                            />
+                          </CardContent>
+                        </Card>
+                      </div>
                     </div>
                     <div className="flex flex-col gap-2">
                       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
