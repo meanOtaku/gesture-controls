@@ -3,7 +3,7 @@ import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CsvCaptureCard } from "./CsvCaptureCard";
 import { TooltipProvider } from "../../../components/ui/tooltip";
-import { MAX_CSV_ROWS } from "../store/telemetryStore";
+import { DEFAULT_ORDINARY_LABEL, MAX_CSV_ROWS } from "../store/telemetryStore";
 
 afterEach(() => cleanup());
 
@@ -12,7 +12,7 @@ function renderCard(overrides: Partial<ComponentProps<typeof CsvCaptureCard>> = 
     recording: false,
     rowCount: 0,
     savedCount: 0,
-    appliedLabel: "",
+    appliedLabel: DEFAULT_ORDINARY_LABEL,
     onToggleRecording: vi.fn(),
     onSaveCsv: vi.fn(),
     onApplyLabel: vi.fn(() => true),
@@ -55,7 +55,7 @@ describe("CsvCaptureCard", () => {
 
   it("shows no label applied by default and disables Apply for whitespace-only input", () => {
     renderCard();
-    expect(screen.getByText("No row label applied")).toBeInTheDocument();
+    expect(screen.getByText(`No row label applied (rows save as "${DEFAULT_ORDINARY_LABEL}")`)).toBeInTheDocument();
     const applyButton = screen.getByRole("button", { name: "Apply label" });
     expect(applyButton).toBeDisabled();
     fireEvent.change(screen.getByRole("textbox", { name: "Row label" }), { target: { value: "   " } });
@@ -84,7 +84,7 @@ describe("CsvCaptureCard", () => {
   });
 
   it("disables Clear label when no label is applied", () => {
-    renderCard({ appliedLabel: "" });
+    renderCard({ appliedLabel: DEFAULT_ORDINARY_LABEL });
     expect(screen.getByRole("button", { name: "Clear label" })).toBeDisabled();
   });
 });

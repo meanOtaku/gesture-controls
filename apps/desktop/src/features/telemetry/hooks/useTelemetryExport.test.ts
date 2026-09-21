@@ -2,7 +2,7 @@ import { renderHook } from "@testing-library/react";
 import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useTelemetryExport } from "./useTelemetryExport";
-import { telemetryStore } from "../store/telemetryStore";
+import { DEFAULT_ORDINARY_LABEL, telemetryStore } from "../store/telemetryStore";
 import { resetFeedbackForTests } from "../../../components/app/OperationFeedback";
 
 const { exportCsv, exportCsvToFolder, chooseExportFolder, isTauriDesktop } = vi.hoisted(() => ({
@@ -41,7 +41,7 @@ describe("useTelemetryExport", () => {
       "recorded_at_iso,source,source_timestamp_ns,sequence,yaw_deg,pitch_deg,roll_deg,accel_x,accel_y,accel_z,gyro_x,gyro_y,gyro_z,ppg_green,ppg_red,ppg_ir,heart_rate_bpm,ibi_ms,skin_temperature_celsius,ambient_temperature_celsius,eda_microsiemens,spo2_percent,spo2_heart_rate_bpm,ecg_millivolts,bia_progress_percent,sweat_loss_milliliters,label",
     );
     expect(call.content).toContain("1,2,3");
-    expect(call.content.split("\n")[1].endsWith(",")).toBe(true);
+    expect(call.content.split("\n")[1].endsWith(`,${DEFAULT_ORDINARY_LABEL}`)).toBe(true);
     expect(telemetryStore.getSavedCount()).toBe(1);
   });
 
@@ -75,14 +75,14 @@ describe("useTelemetryExport", () => {
     await act(() => result.current.saveCsv());
 
     const lines = exportCsv.mock.calls[0][0].content.split("\n");
-    expect(lines[1].endsWith(",")).toBe(true);
+    expect(lines[1].endsWith(`,${DEFAULT_ORDINARY_LABEL}`)).toBe(true);
     expect(lines[2].endsWith(",gesture_1")).toBe(true);
-    expect(lines[3].endsWith(",")).toBe(true);
+    expect(lines[3].endsWith(`,${DEFAULT_ORDINARY_LABEL}`)).toBe(true);
   });
 
   it("rejects applying a whitespace-only label and leaves the previous applied label unchanged", () => {
     expect(telemetryStore.applyOrdinaryLabel("   ")).toBe(false);
-    expect(telemetryStore.getAppliedOrdinaryLabel()).toBe("");
+    expect(telemetryStore.getAppliedOrdinaryLabel()).toBe(DEFAULT_ORDINARY_LABEL);
     telemetryStore.applyOrdinaryLabel("gesture_1");
     expect(telemetryStore.applyOrdinaryLabel("   ")).toBe(false);
     expect(telemetryStore.getAppliedOrdinaryLabel()).toBe("gesture_1");

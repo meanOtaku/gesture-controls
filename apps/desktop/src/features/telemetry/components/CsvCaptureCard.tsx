@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { Progress } from "../../../components/ui/progress";
-import { ESTIMATED_BYTES_PER_CSV_ROW, MAX_CSV_ROWS } from "../store/telemetryStore";
+import { DEFAULT_ORDINARY_LABEL, ESTIMATED_BYTES_PER_CSV_ROW, MAX_CSV_ROWS } from "../store/telemetryStore";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -24,10 +24,11 @@ type CsvCaptureCardProps = {
   onClearLabel: () => void;
 };
 
-/** Ordinary (unlabeled by default) CSV capture: start/stop the buffer, optionally apply a row label, and save it via the native dialog. */
+/** Ordinary (labeled "ordinary" by default) CSV capture: start/stop the buffer, optionally apply a row label, and save it via the native dialog. */
 export function CsvCaptureCard({ recording, rowCount, savedCount, appliedLabel, onToggleRecording, onSaveCsv, onApplyLabel, onClearLabel }: CsvCaptureCardProps) {
   const bufferFull = rowCount >= MAX_CSV_ROWS;
   const [labelDraft, setLabelDraft] = useState("");
+  const hasAppliedLabel = appliedLabel !== DEFAULT_ORDINARY_LABEL;
 
   return (
     <Card role="region" aria-label="CSV capture" className="min-w-0">
@@ -69,16 +70,17 @@ export function CsvCaptureCard({ recording, rowCount, savedCount, appliedLabel, 
           <Button type="button" variant="outline" disabled={labelDraft.trim().length === 0} onClick={() => { if (onApplyLabel(labelDraft)) setLabelDraft(""); }}>
             Apply label
           </Button>
-          <Button type="button" variant="outline" disabled={appliedLabel.length === 0} onClick={onClearLabel}>
+          <Button type="button" variant="outline" disabled={!hasAppliedLabel} onClick={onClearLabel}>
             Clear label
           </Button>
           <HelpTooltip label="About row labels">
             Applying a label stamps it onto every row captured from then on, until cleared. Editing this field alone
-            does not change already-buffered rows or the active label — use Apply/Clear.
+            does not change already-buffered rows or the active label — use Apply/Clear. Unlabeled rows are saved
+            with the "{DEFAULT_ORDINARY_LABEL}" default label.
           </HelpTooltip>
         </div>
         <p className="text-xs text-muted-foreground">
-          {appliedLabel ? `Active row label: ${appliedLabel}` : "No row label applied"}
+          {hasAppliedLabel ? `Active row label: ${appliedLabel}` : `No row label applied (rows save as "${DEFAULT_ORDINARY_LABEL}")`}
         </p>
       </CardContent>
     </Card>

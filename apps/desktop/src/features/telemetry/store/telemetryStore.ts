@@ -29,12 +29,12 @@ export type CsvRow = {
   sourceTimestampNs: string;
   sequence: string;
   values: Record<string, number | null>;
-  /** Snapshot of the applied ordinary-capture label at push time; `""` when none is applied. */
+  /** Snapshot of the applied ordinary-capture label at push time; `DEFAULT_ORDINARY_LABEL` when none is applied. */
   label: string;
 };
 
-/** Default label for ordinary CSV rows when no ordinary-capture label is applied. */
-export const DEFAULT_ORDINARY_LABEL = "";
+/** Default label for ordinary CSV rows when no ordinary-capture label is applied. Not a user-chosen label. */
+export const DEFAULT_ORDINARY_LABEL = "ordinary";
 
 /** Labels are user-owned stable slugs; no built-in templates. */
 export type GestureDatasetLabel = string;
