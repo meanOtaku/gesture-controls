@@ -393,9 +393,9 @@ export function RawImageViewerPanel() {
                       </p>
                     )}
                     <div className="flex flex-col gap-4 lg:flex-row">
-                      <RawImageLabelRangeRail ranges={visibleLabelRanges} />
-                      <div className="grid min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-2">
-                        <Card>
+                      <div className="flex min-w-0 flex-col gap-4 lg:flex-1 lg:flex-row">
+                        <RawImageLabelRangeRail ranges={visibleLabelRanges} />
+                        <Card className="min-w-0 lg:flex-1">
                           <CardContent className="pt-6">
                             <RawImageCanvas
                               rawWindow={rawWindow}
@@ -405,17 +405,17 @@ export function RawImageViewerPanel() {
                             />
                           </CardContent>
                         </Card>
-                        <Card>
-                          <CardContent className="pt-6">
-                            <RawImageCanvas
-                              rawWindow={rawWindow}
-                              normalizationMode={normalizationMode}
-                              title="Rainbow (false-colour)"
-                              colorMode="rainbow"
-                            />
-                          </CardContent>
-                        </Card>
                       </div>
+                      <Card className="min-w-0 lg:flex-1">
+                        <CardContent className="pt-6">
+                          <RawImageCanvas
+                            rawWindow={rawWindow}
+                            normalizationMode={normalizationMode}
+                            title="Rainbow (false-colour)"
+                            colorMode="rainbow"
+                          />
+                        </CardContent>
+                      </Card>
                     </div>
                     <div className="flex flex-col gap-2">
                       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
