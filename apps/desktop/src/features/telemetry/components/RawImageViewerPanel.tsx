@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Skeleton } from "../../../components/ui/skeleton";
 import { Slider } from "../../../components/ui/slider";
 import {
+  deleteRecordingBundle,
   importRecordingFromRawCsv,
   listRecordingBundles,
   RAW_GRID_SIZES,
@@ -52,6 +53,8 @@ export function RawImageViewerPanel() {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
   useSyncExternalStore(rawImageViewerStore.subscribe, rawImageViewerStore.getVersion, rawImageViewerStore.getVersion);
 
@@ -76,6 +79,27 @@ export function RawImageViewerPanel() {
       );
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleDeleteImportedRecording = async (summary: RecordingBundleSummary) => {
+    if (!summary.isImported) return;
+    const confirmed = window.confirm(
+      `Permanently delete imported recording ${summary.recordingId}? This cannot be undone.`,
+    );
+    if (!confirmed) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const result = await deleteRecordingBundle(summary.recordingId);
+      if (result.status === "error") {
+        setDeleteError(result.message);
+        return;
+      }
+      rawImageViewerStore.setRecording(null);
+      setListVersion((v) => v + 1);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -166,6 +190,11 @@ export function RawImageViewerPanel() {
               {importSuccessMessage}
             </p>
           )}
+          {deleteError && (
+            <p role="alert" className="text-sm text-destructive">
+              Could not delete this recording: {deleteError}
+            </p>
+          )}
         </div>
 
         {recordingList.status === "loading" && (
@@ -211,6 +240,27 @@ export function RawImageViewerPanel() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {(() => {
+                const selectedSummary = recordingList.recordings.find((summary) => summary.recordingId === recordingId);
+                if (!selectedSummary?.isImported) return null;
+                return (
+                  <div className="flex flex-col gap-1">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      disabled={deleting}
+                      aria-busy={deleting}
+                      onClick={() => {
+                        void handleDeleteImportedRecording(selectedSummary);
+                      }}
+                    >
+                      {deleting ? "Deleting…" : "Delete imported recording"}
+                    </Button>
+                  </div>
+                );
+              })()}
 
               <div className="flex flex-col gap-1">
                 <Label htmlFor="raw-viewer-channel">Channel</Label>

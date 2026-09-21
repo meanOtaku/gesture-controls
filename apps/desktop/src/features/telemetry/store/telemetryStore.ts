@@ -29,7 +29,12 @@ export type CsvRow = {
   sourceTimestampNs: string;
   sequence: string;
   values: Record<string, number | null>;
+  /** Snapshot of the applied ordinary-capture label at push time; `""` when none is applied. */
+  label: string;
 };
+
+/** Default label for ordinary CSV rows when no ordinary-capture label is applied. */
+export const DEFAULT_ORDINARY_LABEL = "";
 
 /** Labels are user-owned stable slugs; no built-in templates. */
 export type GestureDatasetLabel = string;
@@ -200,6 +205,10 @@ class TelemetryStore {
   private watchStatus: WatchStatus = EMPTY_WATCH_STATUS;
   private recording = false;
   private savedCount = 0;
+  // Ordinary CSV capture label: applied explicitly via `applyOrdinaryLabel`/
+  // `clearOrdinaryLabel`, independent of any draft text the UI input holds —
+  // editing the input alone must never change what gets stamped on rows.
+  private appliedOrdinaryLabel: string = DEFAULT_ORDINARY_LABEL;
   private lastWatchOrientationSequence: number | null = null;
   private lastSpo2TimestampNs: number | null = null;
   private lastEcgTimestampNs: number | null = null;
@@ -306,6 +315,25 @@ class TelemetryStore {
 
   setSavedCount(count: number): void {
     this.savedCount = count;
+    this.publishNow();
+  }
+
+  getAppliedOrdinaryLabel(): string {
+    return this.appliedOrdinaryLabel;
+  }
+
+  /** Applies a trimmed non-empty label to future ordinary-capture rows; rejects whitespace-only/empty input. */
+  applyOrdinaryLabel(label: string): boolean {
+    const trimmed = label.trim();
+    if (!trimmed) return false;
+    this.appliedOrdinaryLabel = trimmed;
+    this.publishNow();
+    return true;
+  }
+
+  /** Deactivates the applied ordinary-capture label; future rows return to the default. */
+  clearOrdinaryLabel(): void {
+    this.appliedOrdinaryLabel = DEFAULT_ORDINARY_LABEL;
     this.publishNow();
   }
 
@@ -754,6 +782,7 @@ class TelemetryStore {
         gyroY: status.gyroscope?.[1] ?? null,
         gyroZ: status.gyroscope?.[2] ?? null,
       },
+      label: this.appliedOrdinaryLabel,
     });
     this.schedulePublish();
   }
@@ -793,6 +822,7 @@ class TelemetryStore {
         gyroY: orientation.gyroscope?.[1] ?? null,
         gyroZ: orientation.gyroscope?.[2] ?? null,
       },
+      label: this.appliedOrdinaryLabel,
     });
     this.lastKnownOrientationSample = {
       accel: orientation.accelerometer,
@@ -830,6 +860,7 @@ class TelemetryStore {
       if (this.canRecord("ppg", at)) this.rows.push({
         recordedAt: new Date(at).toISOString(), source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(batch.sequence),
         values: { ppgGreen: batch.green[index] ?? null, ppgRed: batch.red[index] ?? null, ppgIr: batch.ir[index] ?? null },
+        label: this.appliedOrdinaryLabel,
       });
       const green = batch.green[index] ?? null;
       const red = batch.red[index] ?? null;
@@ -873,6 +904,7 @@ class TelemetryStore {
       if (this.canRecord("heartRate", at)) this.rows.push({
         recordedAt: new Date(at).toISOString(), source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(batch.sequence),
         values: { heartRateBpm: batch.heartRate[index] ?? null, ibiMs: batch.ibiMs[index]?.[0] ?? null },
+        label: this.appliedOrdinaryLabel,
       });
     });
   }
@@ -887,6 +919,7 @@ class TelemetryStore {
           skinTemperatureCelsius: batch.objectTemperatureCelsius[index] ?? null,
           ambientTemperatureCelsius: batch.ambientTemperatureCelsius[index] ?? null,
         },
+        label: this.appliedOrdinaryLabel,
       });
     });
   }
@@ -898,6 +931,7 @@ class TelemetryStore {
       if (this.canRecord("eda", at)) this.rows.push({
         recordedAt: new Date(at).toISOString(), source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(batch.sequence),
         values: { edaMicrosiemens: batch.skinConductanceMicrosiemens[index] ?? null },
+        label: this.appliedOrdinaryLabel,
       });
     });
   }
@@ -912,6 +946,7 @@ class TelemetryStore {
     this.watchStatus = EMPTY_WATCH_STATUS;
     this.recording = false;
     this.savedCount = 0;
+    this.appliedOrdinaryLabel = DEFAULT_ORDINARY_LABEL;
     this.lastWatchOrientationSequence = null;
     this.lastSpo2TimestampNs = null;
     this.lastEcgTimestampNs = null;
@@ -1008,6 +1043,7 @@ class TelemetryStore {
       if (this.canRecord("spo2", at)) this.rows.push({
         recordedAt: new Date(at).toISOString(), source: "watch", sourceTimestampNs: String(spo2.timestampNs), sequence: "",
         values: { spo2Percent: spo2.spo2, spo2HeartRateBpm: spo2.heartRate },
+        label: this.appliedOrdinaryLabel,
       });
     }
     const ecg = status.ecgLast;
@@ -1021,6 +1057,7 @@ class TelemetryStore {
           biaProgressPercent: status.biaLast?.progressPercent ?? null,
           sweatLossMilliliters: status.sweatLossLast?.sweatLossMilliliters ?? null,
         },
+        label: this.appliedOrdinaryLabel,
       });
     }
   }

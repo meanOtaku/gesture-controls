@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { AsyncActionButton } from "../../../components/app/AsyncActionButton";
 import { HelpTooltip } from "../../../components/app/HelpTooltip";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
+import { Input } from "../../../components/ui/input";
+import { Label } from "../../../components/ui/label";
 import { Progress } from "../../../components/ui/progress";
 import { ESTIMATED_BYTES_PER_CSV_ROW, MAX_CSV_ROWS } from "../store/telemetryStore";
 
@@ -14,13 +17,17 @@ type CsvCaptureCardProps = {
   recording: boolean;
   rowCount: number;
   savedCount: number;
+  appliedLabel: string;
   onToggleRecording: () => void;
   onSaveCsv: () => Promise<void>;
+  onApplyLabel: (label: string) => boolean;
+  onClearLabel: () => void;
 };
 
-/** Ordinary (unlabeled) CSV capture: start/stop the buffer and save it via the native dialog. */
-export function CsvCaptureCard({ recording, rowCount, savedCount, onToggleRecording, onSaveCsv }: CsvCaptureCardProps) {
+/** Ordinary (unlabeled by default) CSV capture: start/stop the buffer, optionally apply a row label, and save it via the native dialog. */
+export function CsvCaptureCard({ recording, rowCount, savedCount, appliedLabel, onToggleRecording, onSaveCsv, onApplyLabel, onClearLabel }: CsvCaptureCardProps) {
   const bufferFull = rowCount >= MAX_CSV_ROWS;
+  const [labelDraft, setLabelDraft] = useState("");
 
   return (
     <Card role="region" aria-label="CSV capture" className="min-w-0">
@@ -50,6 +57,29 @@ export function CsvCaptureCard({ recording, rowCount, savedCount, onToggleRecord
           </Button>
           <AsyncActionButton disabled={rowCount === 0} onPress={onSaveCsv} pendingLabel="Saving…">Save CSV</AsyncActionButton>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Label htmlFor="csv-row-label" className="sr-only">Row label</Label>
+          <Input
+            id="csv-row-label"
+            aria-label="Row label"
+            value={labelDraft}
+            placeholder="Label for captured rows (optional)"
+            onChange={(event) => setLabelDraft(event.target.value)}
+          />
+          <Button type="button" variant="outline" disabled={labelDraft.trim().length === 0} onClick={() => { if (onApplyLabel(labelDraft)) setLabelDraft(""); }}>
+            Apply label
+          </Button>
+          <Button type="button" variant="outline" disabled={appliedLabel.length === 0} onClick={onClearLabel}>
+            Clear label
+          </Button>
+          <HelpTooltip label="About row labels">
+            Applying a label stamps it onto every row captured from then on, until cleared. Editing this field alone
+            does not change already-buffered rows or the active label — use Apply/Clear.
+          </HelpTooltip>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {appliedLabel ? `Active row label: ${appliedLabel}` : "No row label applied"}
+        </p>
       </CardContent>
     </Card>
   );

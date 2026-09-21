@@ -196,6 +196,21 @@ pub struct RecordingBundleSummary {
     pub unreviewed_count: usize,
     pub approved_count: usize,
     pub excluded_count: usize,
+    /// Durable eligibility datum for `delete_recording_bundle`: true only when
+    /// `recording.json`'s `sources` is exactly the single imported source
+    /// written by `import_recording_from_raw_csv` (see `is_imported_only`).
+    /// The UI uses this to decide whether to show a delete control at all;
+    /// the delete command re-derives it independently from disk rather than
+    /// trusting this value back.
+    pub is_imported: bool,
+}
+
+/// True only when `recording.sources` is exactly the single
+/// `IMPORTED_SOURCE_ID` source written by `import_recording_from_raw_csv` —
+/// never for a manually-saved bundle, which always carries its own recorder
+/// sources (e.g. `"watch"`) instead.
+fn is_imported_only(recording: &RecordingMetadata) -> bool {
+    recording.sources.len() == 1 && recording.sources[0].source_id == IMPORTED_SOURCE_ID
 }
 
 /// The read side of a saved bundle for curation review: full metadata plus
@@ -232,6 +247,7 @@ fn summarize_bundle(recording: &RecordingMetadata, annotations: &AnnotationsFile
         unreviewed_count: count_where(CurationStatus::Unreviewed),
         approved_count: count_where(CurationStatus::Approved),
         excluded_count: count_where(CurationStatus::Excluded),
+        is_imported: is_imported_only(recording),
     }
 }
 
@@ -530,6 +546,28 @@ pub fn load_recording_bundle(
     let dir = recording_bundles_dir(&app)?.join(&recording_id);
     let (recording, annotations) = load_bundle_pair(&dir)?;
     Ok(RecordingBundleDetail { recording, annotations })
+}
+
+/// Permanently deletes one recording bundle's directory (`raw.csv`,
+/// `recording.json`, `annotations.json`), but only when its own persisted
+/// `recording.json` independently proves it was created by
+/// `import_recording_from_raw_csv` (`is_imported_only`) — the same source
+/// identity check `RecordingBundleSummary.is_imported` surfaces to the UI, so
+/// eligibility is never guessed from the id or from browser-supplied input.
+/// A manually-saved bundle (any other `sources` shape) is always rejected,
+/// even if a caller bypasses the UI. This is irreversible: there is no
+/// recycle bin or undo.
+#[tauri::command]
+pub fn delete_recording_bundle(recording_id: String, app: AppHandle) -> Result<(), String> {
+    validate_recording_id(&recording_id)?;
+    let dir = recording_bundles_dir(&app)?.join(&recording_id);
+    let (recording, _annotations) = load_bundle_pair(&dir)?;
+    if !is_imported_only(&recording) {
+        return Err(
+            "only recordings imported via 'Import raw.csv' can be deleted; manually-saved recording bundles are never eligible".to_string(),
+        );
+    }
+    fs::remove_dir_all(&dir).map_err(|error| error.to_string())
 }
 
 /// A bounded, read-only window into one numeric `raw.csv` column, resolved
@@ -1086,6 +1124,66 @@ mod tests {
     #[test]
     fn import_recording_from_raw_csv_uses_stable_source_identity() {
         assert_eq!(IMPORTED_SOURCE_ID, "timeline_capture_csv_import");
+    }
+
+    fn imported_metadata(id: &str) -> RecordingMetadata {
+        let mut metadata = sample_metadata(id);
+        metadata.sources = vec![RecordingSource {
+            source_id: IMPORTED_SOURCE_ID.to_string(),
+            configuration: serde_json::json!({}),
+        }];
+        metadata.raw_source_row_counts = BTreeMap::from([(IMPORTED_SOURCE_ID.to_string(), 2)]);
+        metadata
+    }
+
+    fn empty_annotations(id: &str) -> AnnotationsFile {
+        AnnotationsFile { format_version: 1, recording_id: id.to_string(), intervals: Vec::new() }
+    }
+
+    #[test]
+    fn is_imported_only_matches_the_exact_imported_source_shape() {
+        let id = Uuid::new_v4().to_string();
+        assert!(is_imported_only(&imported_metadata(&id)));
+        assert!(!is_imported_only(&sample_metadata(&id))); // manually-saved: "watch" source
+
+        let mut mixed = imported_metadata(&id);
+        mixed.sources.push(RecordingSource { source_id: "watch".to_string(), configuration: serde_json::json!({}) });
+        assert!(!is_imported_only(&mixed));
+    }
+
+    #[test]
+    fn delete_recording_bundle_removes_an_imported_recording() {
+        let id = Uuid::new_v4().to_string();
+        let dir = std::env::temp_dir().join(format!("recording-bundle-delete-imported-{id}"));
+        write_bundle_files(&dir, "timestamp_ns\n1\n", &imported_metadata(&id), &empty_annotations(&id))
+            .expect("writing a fresh bundle must succeed");
+        assert!(dir.exists());
+
+        let (recording, _annotations) = load_bundle_pair(&dir).expect("bundle must parse");
+        assert!(is_imported_only(&recording));
+
+        // Mirrors `delete_recording_bundle`'s own eligibility-then-remove sequence;
+        // `AppHandle` (needed to resolve `recording_bundles_dir`) is unavailable in
+        // this crate's unit tests, matching every other command in this module.
+        fs::remove_dir_all(&dir).expect("delete must succeed for an imported-only bundle");
+        assert!(!dir.exists());
+    }
+
+    #[test]
+    fn delete_recording_bundle_rejects_a_manually_saved_bundle() {
+        let id = Uuid::new_v4().to_string();
+        let dir = write_temp_bundle(&id); // sample_metadata: "watch" source, not imported
+        let (recording, _annotations) = load_bundle_pair(&dir).expect("bundle must parse");
+        assert!(!is_imported_only(&recording), "manually-saved bundle must never be treated as imported");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn delete_recording_bundle_id_validation_rejects_path_traversal() {
+        assert!(validate_recording_id("../../etc/passwd").is_err());
+        assert!(validate_recording_id("../secret").is_err());
+        assert!(validate_recording_id("a/b").is_err());
+        assert!(validate_recording_id("").is_err());
     }
 
     #[test]

@@ -32,6 +32,7 @@ export function LiveTelemetry() {
   const headConnected = telemetryStore.getHeadStatus()?.connected === true;
   const recording = telemetryStore.getRecording();
   const savedCount = telemetryStore.getSavedCount();
+  const appliedOrdinaryLabel = telemetryStore.getAppliedOrdinaryLabel();
   const headPoints = telemetryStore.getSeries("head");
   const watchOrientationPoints = telemetryStore.getSeries("watchOrientation");
   const ppgPoints = telemetryStore.getSeries("ppg");
@@ -132,8 +133,11 @@ export function LiveTelemetry() {
             recording={recording}
             rowCount={rowCount}
             savedCount={savedCount}
+            appliedLabel={appliedOrdinaryLabel}
             onToggleRecording={() => telemetryStore.toggleRecording()}
             onSaveCsv={saveCsv}
+            onApplyLabel={(label) => telemetryStore.applyOrdinaryLabel(label)}
+            onClearLabel={() => telemetryStore.clearOrdinaryLabel()}
           />
           <DatasetCaptureCard
             captureMode={captureMode}

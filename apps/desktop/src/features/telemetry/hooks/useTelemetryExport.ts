@@ -9,6 +9,7 @@ const CSV_HEADERS = [
   "yaw_deg", "pitch_deg", "roll_deg", "accel_x", "accel_y", "accel_z",
   "gyro_x", "gyro_y", "gyro_z", "ppg_green", "ppg_red", "ppg_ir",
   "heart_rate_bpm", "ibi_ms", "skin_temperature_celsius", "ambient_temperature_celsius", "eda_microsiemens", "spo2_percent", "spo2_heart_rate_bpm", "ecg_millivolts", "bia_progress_percent", "sweat_loss_milliliters",
+  "label",
 ];
 
 function number(value: number | null | undefined): string {
@@ -69,6 +70,7 @@ export function useTelemetryExport() {
       number(row.values.gyroX), number(row.values.gyroY), number(row.values.gyroZ),
       number(row.values.ppgGreen), number(row.values.ppgRed), number(row.values.ppgIr),
       number(row.values.heartRateBpm), number(row.values.ibiMs), number(row.values.skinTemperatureCelsius), number(row.values.ambientTemperatureCelsius), number(row.values.edaMicrosiemens), number(row.values.spo2Percent), number(row.values.spo2HeartRateBpm), number(row.values.ecgMillivolts), number(row.values.biaProgressPercent), number(row.values.sweatLossMilliliters),
+      row.label,
     ].map(csvEscape).join(","))].join("\n");
     const suggestedName = `gesture-telemetry-${new Date().toISOString().replaceAll(":", "-")}.csv`;
     const result = await exportCsv({ content: csv, suggestedName, title: "Save CSV" });

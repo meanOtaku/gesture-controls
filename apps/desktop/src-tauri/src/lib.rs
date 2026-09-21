@@ -79,6 +79,7 @@ pub fn run() {
             recording_bundle::import_recording_from_raw_csv,
             recording_bundle::list_recording_bundles,
             recording_bundle::load_recording_bundle,
+            recording_bundle::delete_recording_bundle,
             recording_bundle::get_raw_recording_window,
             recording_bundle::set_interval_curation_status,
             label_registry::list_model_labels,
