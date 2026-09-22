@@ -916,11 +916,14 @@ fn assess_cadence_regularity(timestamps_ns: &[i64]) -> CadenceRegularity {
 /// fabricated boundary value. Returns `(derivative_values, available,
 /// unavailable_reason, effective_sample_rate_hz)`.
 ///
-/// Availability is decided once for the whole recording (a global cadence
-/// regularity check); missing/nonfinite values and window-edge rows then
-/// individually withhold a derivative (`None`) without invalidating the rest
-/// of the response. A derivative is never interpolated across a missing run
-/// and never fabricated at either boundary of the source series.
+/// `raw.csv` is a fused, multi-channel-per-row schema (GC-030): a row belongs
+/// to whichever channel's sample triggered it, and every *other* channel is
+/// `None` on that row rather than carried forward. Availability and cadence
+/// are therefore assessed only over *this column's own* present rows — its
+/// own finite samples on its own time series — never the full fused-row
+/// timeline, which would mix this channel's cadence with unrelated channels'
+/// arrival timing. Rows where the column is absent simply stay `None`,
+/// independent of whether the channel's own cadence is regular.
 fn compute_sg_derivative_window(
     timestamps_ns: &[i64],
     values: &[Option<f64>],
@@ -930,14 +933,22 @@ fn compute_sg_derivative_window(
     debug_assert_eq!(timestamps_ns.len(), values.len());
     let row_count = values.len();
 
-    let (median_dt_ns, effective_sample_rate_hz) = match assess_cadence_regularity(timestamps_ns) {
+    // The channel's own genuine samples: (original row index, timestamp,
+    // value) for every row where this column is actually present.
+    let present: Vec<(usize, i64, f64)> = timestamps_ns
+        .iter()
+        .zip(values.iter())
+        .enumerate()
+        .filter_map(|(row, (&timestamp_ns, &value))| {
+            value.filter(|v| v.is_finite()).map(|v| (row, timestamp_ns, v))
+        })
+        .collect();
+    let present_timestamps_ns: Vec<i64> = present.iter().map(|(_, ts, _)| *ts).collect();
+
+    let placeholder_len = end.saturating_sub(start).min(row_count.saturating_sub(start));
+    let (median_dt_ns, effective_sample_rate_hz) = match assess_cadence_regularity(&present_timestamps_ns) {
         CadenceRegularity::Irregular(reason) => {
-            let placeholder = vec![
-                None;
-                end.saturating_sub(start)
-                    .min(row_count.saturating_sub(start))
-            ];
-            return (placeholder, false, Some(reason), None);
+            return (vec![None; placeholder_len], false, Some(reason), None);
         }
         CadenceRegularity::Regular { median_dt_ns } => {
             (median_dt_ns, Some(1_000_000_000.0 / median_dt_ns))
@@ -946,27 +957,22 @@ fn compute_sg_derivative_window(
     let dt_seconds = median_dt_ns / 1_000_000_000.0;
     let coefficients = sg_first_derivative_coefficients(SG_HALF_WIDTH);
 
-    let derivative_at = |row: usize| -> Option<f64> {
-        if row < SG_HALF_WIDTH || row + SG_HALF_WIDTH >= row_count {
-            // Deterministic boundary rule: never extrapolate a value at the
-            // edge of the *source* series where a full symmetric window
-            // cannot be formed.
-            return None;
-        }
-        let window_start = row - SG_HALF_WIDTH;
+    // Derivative at each *present-sequence* position, mapped back to the
+    // original row it came from; a full symmetric SG window needs
+    // SG_HALF_WIDTH genuine neighbors on each side within this channel's own
+    // present-sample sequence, not within the raw row index space.
+    let mut derivative_by_row: std::collections::HashMap<usize, f64> = std::collections::HashMap::new();
+    for present_index in SG_HALF_WIDTH..present.len().saturating_sub(SG_HALF_WIDTH) {
+        let window_start = present_index - SG_HALF_WIDTH;
         let mut accumulator = 0.0;
         for (offset, coefficient) in coefficients.iter().enumerate() {
-            match values[window_start + offset] {
-                Some(value) if value.is_finite() => accumulator += coefficient * value,
-                // Any missing/nonfinite sample inside the window breaks this
-                // one derivative; never interpolated or skipped-and-rescaled.
-                _ => return None,
-            }
+            accumulator += coefficient * present[window_start + offset].2;
         }
-        Some(accumulator / dt_seconds)
-    };
+        let (row, _, _) = present[present_index];
+        derivative_by_row.insert(row, accumulator / dt_seconds);
+    }
 
-    let derivative_values = (start..end).map(derivative_at).collect();
+    let derivative_values = (start..end).map(|row| derivative_by_row.get(&row).copied()).collect();
     (derivative_values, true, None, effective_sample_rate_hz)
 }
 
@@ -1077,6 +1083,14 @@ pub fn get_raw_recording_derivative_window(
     })
 }
 
+/// A gap this many times the recording's own median row-to-row timestamp
+/// delta marks the overall recording timing unusable for `RecordingQualitySummary`
+/// purposes (see `compute_quality_summary`'s `has_dominant_outlier_gap`) —
+/// deliberately far looser than the derivative's `CADENCE_TOLERANCE_FRACTION`,
+/// since this only catches a gross, single dominant-gap timing break, not
+/// ordinary multi-sensor cadence variation.
+const MAX_TIMESTAMP_GAP_MEDIAN_MULTIPLE: f64 = 50.0;
+
 /// A short label interval is flagged as too brief to give the fixed 500 ms
 /// model window usable context (see the milestone plan's collection-protocol
 /// rationale); this does not reject or alter the interval, only surfaces it.
@@ -1143,9 +1157,29 @@ fn compute_quality_summary(
     };
     let time_span_ms = time_span_ns as f64 / 1_000_000.0;
 
+    // A pathologically large gap relative to the recording's own typical
+    // (median) row-to-row spacing — e.g. two channels whose timestamps were
+    // fused from incomparable clock domains — can still be strictly
+    // monotonic with a positive span, yet make the effective sample rate
+    // meaningless (GC-030: 4,499 rows / 517,508s / "0.0 Hz effective",
+    // reported as "Timing OK"). Flag that case explicitly instead of
+    // presenting a misleadingly tiny effective rate as trustworthy.
+    let has_dominant_outlier_gap = row_count >= 3 && {
+        let mut deltas: Vec<i64> = timestamps_ns.windows(2).map(|pair| pair[1] - pair[0]).collect();
+        deltas.sort_unstable();
+        let mid = deltas.len() / 2;
+        let median_delta_ns = if deltas.len() % 2 == 0 {
+            (deltas[mid - 1] + deltas[mid]) as f64 / 2.0
+        } else {
+            deltas[mid] as f64
+        };
+        let max_delta_ns = *deltas.last().unwrap_or(&0) as f64;
+        median_delta_ns > 0.0 && max_delta_ns > median_delta_ns * MAX_TIMESTAMP_GAP_MEDIAN_MULTIPLE
+    };
+
     let timestamp_status = if row_count < 2 {
         TimestampStatus::InsufficientData
-    } else if non_monotonic_row_count > 0 || time_span_ns <= 0 {
+    } else if non_monotonic_row_count > 0 || time_span_ns <= 0 || has_dominant_outlier_gap {
         TimestampStatus::Warning
     } else {
         TimestampStatus::Ok
@@ -1199,6 +1233,9 @@ fn compute_quality_summary(
         TimestampStatus::Warning if non_monotonic_row_count > 0 => warnings.push(format!(
             "{non_monotonic_row_count} row(s) are out of chronological order; the effective sample rate cannot be trusted."
         )),
+        TimestampStatus::Warning if has_dominant_outlier_gap => warnings.push(
+            "Timestamps contain a gap far larger than the recording's typical row spacing; the effective sample rate cannot be trusted.".to_string(),
+        ),
         TimestampStatus::Warning => warnings.push(
             "Recording has zero observed time span; timestamps cannot establish a sample rate.".to_string(),
         ),
@@ -1600,6 +1637,42 @@ mod tests {
         assert!(summary.warnings.iter().any(|warning| warning.contains("no recorded values")));
     }
 
+    /// GC-030 repro: a mixed/incomparable-clock-domain bug (fixed upstream in
+    /// the desktop ingest layer) could still produce a strictly monotonic,
+    /// positive-span raw.csv dominated by one huge outlier gap — e.g. 11 rows
+    /// at a normal ~20ms cadence, then one absurd jump. That must never
+    /// present as "Timing OK" with a misleadingly tiny effective rate.
+    #[test]
+    fn quality_summary_flags_a_dominant_outlier_gap_as_warning_even_when_monotonic() {
+        let mut rows: Vec<(i64, &str)> = (0..11).map(|i| (i * 20_000_000, "1.0")).collect();
+        rows.push((517_508_300_000_000, "1.0")); // ~517,508s later: the GC-030 symptom
+        let csv = raw_csv_with_rows(&rows);
+        let id = Uuid::new_v4().to_string();
+        let summary = compute_quality_summary(id.clone(), &csv, &empty_annotations(&id)).unwrap();
+
+        assert_eq!(summary.non_monotonic_row_count, 0, "rows are still strictly increasing");
+        assert_eq!(summary.timestamp_status, TimestampStatus::Warning);
+        assert!(summary.effective_sample_rate_hz.is_none(), "a misleading near-zero rate must not be reported");
+        assert!(summary.warnings.iter().any(|warning| warning.contains("typical row spacing")));
+    }
+
+    /// Old bundles saved before GC-030 densely populate every column on every
+    /// row (carry-forward). The new per-channel-present derivative/cadence
+    /// logic must produce the exact same result for that shape as before —
+    /// legacy bundles are never rewritten and their analysis must not regress.
+    #[test]
+    fn legacy_densely_populated_bundle_derivative_is_unaffected_by_the_per_channel_fix() {
+        let timestamps_ns = uniform_timestamps(21, 20_000_000);
+        let values: Vec<Option<f64>> = (0..21).map(|i| Some(i as f64 * 0.5)).collect(); // every row populated
+        let (derivative, available, reason, rate) =
+            compute_sg_derivative_window(&timestamps_ns, &values, 0, 21);
+        assert!(available, "reason: {reason:?}");
+        assert!((rate.unwrap() - 50.0).abs() < 1e-6);
+        for row in SG_HALF_WIDTH..(21 - SG_HALF_WIDTH) {
+            assert!((derivative[row].unwrap() - 25.0).abs() < 1e-9); // d/dt(0.5*i) at 50Hz = 0.5*50
+        }
+    }
+
     #[test]
     fn quality_summary_flags_short_labeled_intervals_and_counts_coverage() {
         let rows: Vec<(i64, &str)> = (0..10).map(|i| (i * 20_000_000, "1.0")).collect();
@@ -1977,36 +2050,63 @@ mod tests {
         }
     }
 
+    /// GC-030: `raw.csv` is a fused, multi-channel-per-row schema — a row
+    /// where this column is `None` belongs to a *different* channel's
+    /// trigger, never a carried-forward value. That row must never affect
+    /// this channel's own cadence or derivative, no matter how the other
+    /// channel's rows are timed, and it must itself always have no
+    /// derivative.
     #[test]
-    fn missing_value_in_window_breaks_only_the_derivatives_that_use_it() {
-        let timestamps_ns = uniform_timestamps(21, 20_000_000);
-        let mut values: Vec<Option<f64>> = (0..21).map(|i| Some(i as f64)).collect();
-        values[10] = None; // gap at the center row
-        let (derivative, available, _reason, _rate) =
-            compute_sg_derivative_window(&timestamps_ns, &values, 0, 21);
-        assert!(available);
-        // Every window that includes row 10 (rows 5..=15) must be withheld.
-        for row in 5..=15 {
-            assert!(
-                derivative[row].is_none(),
-                "row {row}'s window includes the gap at row 10"
-            );
+    fn other_channel_rows_never_affect_this_channels_cadence_or_derivative() {
+        // Even rows: this channel's own genuine samples on a uniform 50Hz
+        // grid. Odd rows: a different channel's rows, `None` for this
+        // column, each with an arbitrary offset timestamp of its own.
+        let mut timestamps_ns = Vec::new();
+        let mut values = Vec::new();
+        for i in 0..21i64 {
+            timestamps_ns.push(i * 20_000_000);
+            values.push(Some(i as f64));
+            timestamps_ns.push(i * 20_000_000 + 7_000_000);
+            values.push(None);
         }
-        // Rows far enough from the gap still get a real derivative.
-        assert!(derivative[16].is_some());
-        assert!(derivative[4].is_none()); // row 4 is itself a boundary row (< SG_HALF_WIDTH)
+        let row_count = timestamps_ns.len();
+
+        let (derivative, available, reason, rate) =
+            compute_sg_derivative_window(&timestamps_ns, &values, 0, row_count);
+        assert!(available, "reason: {reason:?}");
+        assert!((rate.unwrap() - 50.0).abs() < 1e-6);
+
+        for (row, value) in values.iter().enumerate() {
+            if value.is_none() {
+                assert!(derivative[row].is_none(), "other-channel row {row} must have no derivative");
+            }
+        }
+        // Interior rows of this channel's own present-sample sequence still
+        // get a real derivative, purely from this channel's own neighbors.
+        for i in SG_HALF_WIDTH..(21 - SG_HALF_WIDTH) {
+            let row = 2 * i;
+            assert!(derivative[row].is_some(), "row {row} should have a derivative");
+        }
     }
 
     #[test]
-    fn nonfinite_value_is_treated_as_missing() {
-        let timestamps_ns = uniform_timestamps(21, 20_000_000);
+    fn nonfinite_value_is_excluded_from_cadence_like_an_absent_row() {
+        // 21 genuine, uniformly-spaced own-channel samples, plus one extra
+        // row (another channel's) whose value for this column is NaN rather
+        // than a clean empty field — it must be excluded exactly like an
+        // absent row, never propagated as a real sample or allowed to break
+        // this channel's own regular cadence.
+        let mut timestamps_ns = uniform_timestamps(21, 20_000_000);
         let mut values: Vec<Option<f64>> = (0..21).map(|i| Some(i as f64)).collect();
-        values[10] = Some(f64::NAN);
-        let (derivative, available, _reason, _rate) =
-            compute_sg_derivative_window(&timestamps_ns, &values, 0, 21);
-        assert!(available);
-        assert!(derivative[10].is_none());
-        assert!(derivative[12].is_none()); // row 12's window (7..=17) still includes row 10
+        timestamps_ns.insert(1, 10_000_000);
+        values.insert(1, Some(f64::NAN));
+        let row_count = timestamps_ns.len();
+
+        let (derivative, available, reason, rate) =
+            compute_sg_derivative_window(&timestamps_ns, &values, 0, row_count);
+        assert!(available, "reason: {reason:?}");
+        assert!((rate.unwrap() - 50.0).abs() < 1e-6);
+        assert!(derivative[1].is_none(), "nonfinite row must have no derivative");
     }
 
     #[test]

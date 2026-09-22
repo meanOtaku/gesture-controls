@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RawImageViewerPanel } from "./RawImageViewerPanel";
@@ -205,6 +205,78 @@ describe("RawImageViewerPanel quality summary", () => {
       expect(screen.getByText("Timing warning")).toBeInTheDocument();
     });
     expect(screen.getByRole("alert")).toHaveTextContent("out of chronological order");
+  });
+});
+
+describe("RawImageViewerPanel raw-window navigation (GC-030)", () => {
+  it("keeps the loaded raw window mounted (not replaced by a loading skeleton) while paging with Next", async () => {
+    let resolveSecondWindow: (value: unknown) => void = () => {};
+    const secondWindow = new Promise((resolve) => {
+      resolveSecondWindow = resolve;
+    });
+    let getRawWindowCallCount = 0;
+    invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
+      if (command === "list_recording_bundles") return Promise.resolve([summary("rec-a")]);
+      if (command === "load_recording_bundle") {
+        return Promise.resolve({
+          recording: {},
+          annotations: { format_version: 1, recording_id: "rec-a", intervals: [] },
+        });
+      }
+      if (command === "get_raw_recording_window") {
+        getRawWindowCallCount += 1;
+        // Two full 64x64 pages (8,192 total rows) so Next is actually
+        // enabled instead of the single-page degenerate case.
+        if (getRawWindowCallCount === 1) {
+          return Promise.resolve({
+            ...rawWindow(args?.recordingId as string),
+            totalRawRowCount: 8_192,
+            startRawRow: 0,
+            endRawRow: 4_096,
+          });
+        }
+        return secondWindow;
+      }
+      if (command === "get_raw_recording_derivative_window") {
+        return Promise.resolve(derivativeWindow(args?.recordingId as string));
+      }
+      if (command === "get_recording_quality_summary") {
+        return Promise.resolve(qualitySummary(args?.recordingId as string));
+      }
+      return Promise.reject(new Error(`unmocked command ${command}`));
+    });
+    renderPanel();
+
+    await screen.findByRole("combobox", { name: "Saved recording" });
+    rawImageViewerStore.setRecording("rec-a");
+    rawImageViewerStore.setChannel("ppg_green");
+
+    const nextButton = await screen.findByRole("button", { name: "Next 64 rows" });
+    expect(screen.getByText(/Rows 0–4,095 of/)).toBeInTheDocument();
+    expect(nextButton).not.toBeDisabled();
+
+    fireEvent.click(nextButton);
+
+    // The second `get_raw_recording_window` fetch is still in flight: the
+    // previously loaded window's content (and its Next/Previous/slider
+    // controls) must still be in the document — never unmounted for a
+    // Skeleton — so the page never collapses/re-expands and loses scroll
+    // position (GC-030). A brand-new recording/channel selection is the only
+    // case that should show the loading skeleton.
+    expect(screen.getByText(/Rows 0–4,095 of/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next 64 rows" })).toBeInTheDocument();
+    expect(screen.queryByText("Loading raw recording window…")).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveSecondWindow({
+        ...rawWindow("rec-a"),
+        totalRawRowCount: 8_192,
+        startRawRow: 4_096,
+        endRawRow: 8_192,
+      });
+      await secondWindow;
+    });
+    await waitFor(() => expect(screen.getByText(/Rows 4,096–8,191 of/)).toBeInTheDocument());
   });
 });
 

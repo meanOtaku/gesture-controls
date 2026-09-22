@@ -11,6 +11,7 @@ describe("telemetryStore", () => {
     for (let index = 0; index < MAX_VISIBLE_SAMPLES + 5; index += 1) {
       telemetryStore.ingestPpgBatch({
         sequence: index,
+        timestampNs: index * 1_000_000,
         timestampsNs: [index * 1_000_000],
         green: [index],
         greenStatus: [0],
@@ -34,6 +35,7 @@ describe("telemetryStore", () => {
     for (let index = 0; index < 100; index += 1) {
       telemetryStore.ingestPpgBatch({
         sequence: index,
+        timestampNs: index,
         timestampsNs: [index],
         green: [index],
         greenStatus: [0],
@@ -54,6 +56,7 @@ describe("telemetryStore", () => {
     telemetryStore.setHealthAcceptanceRatesHz({ heartRate: 200, temperature: 200, eda: 200 });
     telemetryStore.ingestPpgBatch({
       sequence: 1,
+      timestampNs: 160_000_000,
       timestampsNs: [0, 40_000_000, 80_000_000, 120_000_000, 160_000_000],
       green: [1, 2, 3, 4, 5],
       greenStatus: [0, 0, 0, 0, 0],
@@ -137,7 +140,7 @@ describe("telemetryStore", () => {
       expect(telemetryStore.getSelectedLabel()).toBe("typing");
     });
 
-    it("fuses orientation and PPG samples, carrying forward the other channel's last known values", () => {
+    it("fuses orientation and PPG samples, leaving each row's other channel absent rather than carried forward (GC-030)", () => {
       telemetryStore.selectDatasetLabel("pinch_hold");
       telemetryStore.startDatasetRecording();
 
@@ -151,6 +154,7 @@ describe("telemetryStore", () => {
       });
       telemetryStore.ingestPpgBatch({
         sequence: 9,
+        timestampNs: 2_000,
         timestampsNs: [2_000],
         green: [10],
         greenStatus: [0],
@@ -179,8 +183,9 @@ describe("telemetryStore", () => {
         sequence: "9",
         ppgGreen: 10, ppgRed: 20, ppgIr: 30,
         contactQuality: 1,
-        accelX: 1, accelY: 2, accelZ: 3,
-        quatW: 0.9, quatX: 0.1, quatY: 0.2, quatZ: 0.3,
+        accelX: null, accelY: null, accelZ: null,
+        gyroX: null, gyroY: null, gyroZ: null,
+        quatW: null, quatX: null, quatY: null, quatZ: null,
         label: "pinch_hold",
       });
     });
@@ -189,7 +194,7 @@ describe("telemetryStore", () => {
       telemetryStore.selectDatasetLabel("scratching");
       telemetryStore.startDatasetRecording();
       telemetryStore.ingestPpgBatch({
-        sequence: 1, timestampsNs: [0], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
+        sequence: 1, timestampNs: 0, timestampsNs: [0], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
       });
 
       telemetryStore.stopDatasetRecording();
@@ -241,7 +246,7 @@ describe("telemetryStore", () => {
       telemetryStore.setDatasetCaptureMode("timeline");
       telemetryStore.startDatasetRecording();
       telemetryStore.ingestPpgBatch({
-        sequence: 1, timestampsNs: [0], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
+        sequence: 1, timestampNs: 0, timestampsNs: [0], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
       });
       telemetryStore.setTimelineLabel("waving");
       expect(telemetryStore.labelRemovalBlockedReason("waving")).not.toBeNull();
@@ -262,7 +267,7 @@ describe("telemetryStore", () => {
         quaternion: [1, 0, 0, 0], accelerometer: null, gyroscope: null,
       });
       telemetryStore.ingestPpgBatch({
-        sequence: 1, timestampsNs: [1_000], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
+        sequence: 1, timestampNs: 1_000, timestampsNs: [1_000], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
       });
       telemetryStore.ingestWatchOrientation({
         deviceId: "watch-test", sequence: 2, timestampNs: 1_500,
@@ -274,10 +279,10 @@ describe("telemetryStore", () => {
 
     it("re-sorts a cross-batch out-of-order arrival within the same channel", () => {
       telemetryStore.ingestPpgBatch({
-        sequence: 1, timestampsNs: [3_000], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
+        sequence: 1, timestampNs: 3_000, timestampsNs: [3_000], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
       });
       telemetryStore.ingestPpgBatch({
-        sequence: 2, timestampsNs: [1_000, 2_000], green: [1, 1], greenStatus: [0, 0], red: [1, 1], redStatus: [0, 0], ir: [1, 1], irStatus: [0, 0],
+        sequence: 2, timestampNs: 2_000, timestampsNs: [1_000, 2_000], green: [1, 1], greenStatus: [0, 0], red: [1, 1], redStatus: [0, 0], ir: [1, 1], irStatus: [0, 0],
       });
 
       expect(telemetryStore.getDatasetRows().map((row) => row.timestampNs)).toEqual(["1000", "2000", "3000"]);
@@ -289,7 +294,7 @@ describe("telemetryStore", () => {
         quaternion: [1, 0, 0, 0], accelerometer: null, gyroscope: null,
       });
       telemetryStore.ingestPpgBatch({
-        sequence: 1, timestampsNs: [1_000], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
+        sequence: 1, timestampNs: 1_000, timestampsNs: [1_000], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
       });
 
       const rows = telemetryStore.getDatasetRows();
@@ -300,11 +305,11 @@ describe("telemetryStore", () => {
 
     it("shifts timeline interval boundaries so a late out-of-order sample does not move an already-closed interval's rows", () => {
       telemetryStore.ingestPpgBatch({
-        sequence: 1, timestampsNs: [1_000], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
+        sequence: 1, timestampNs: 1_000, timestampsNs: [1_000], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
       });
       telemetryStore.setTimelineLabel("waving");
       telemetryStore.ingestPpgBatch({
-        sequence: 2, timestampsNs: [2_000], green: [2], greenStatus: [0], red: [2], redStatus: [0], ir: [2], irStatus: [0],
+        sequence: 2, timestampNs: 2_000, timestampsNs: [2_000], green: [2], greenStatus: [0], red: [2], redStatus: [0], ir: [2], irStatus: [0],
       });
       telemetryStore.setTimelineLabel(null);
 
@@ -313,7 +318,7 @@ describe("telemetryStore", () => {
 
       // A straggler with an earlier source timestamp arrives after the interval closed.
       telemetryStore.ingestPpgBatch({
-        sequence: 3, timestampsNs: [500], green: [3], greenStatus: [0], red: [3], redStatus: [0], ir: [3], irStatus: [0],
+        sequence: 3, timestampNs: 500, timestampsNs: [500], green: [3], greenStatus: [0], red: [3], redStatus: [0], ir: [3], irStatus: [0],
       });
 
       const rows = telemetryStore.getDatasetRows();
@@ -332,7 +337,7 @@ describe("telemetryStore", () => {
         quaternion: [1, 0, 0, 0], accelerometer: null, gyroscope: null,
       });
       telemetryStore.ingestPpgBatch({
-        sequence: 1, timestampsNs: [3_000], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
+        sequence: 1, timestampNs: 3_000, timestampsNs: [3_000], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
       });
       telemetryStore.ingestWatchOrientation({
         deviceId: "watch-test", sequence: 2, timestampNs: 4_000,
@@ -345,6 +350,35 @@ describe("telemetryStore", () => {
 
       expect(timestamps).toEqual([3_000, 4_000, 5_000]);
       expect([...timestamps].sort((a, b) => a - b)).toEqual(timestamps);
+    });
+
+    it("translates PPG's SDK-clock-domain timestamps onto orientation's watch-clock domain instead of sorting incomparable clocks (GC-030)", () => {
+      // The PPG batch's own per-sample SDK timestamps (1e9-scale, an
+      // unrelated clock domain) sit nowhere near the watch-clock-domain
+      // orientation timestamps below; only the batch envelope timestamp
+      // (1_040 — the same domain as orientation) is comparable.
+      telemetryStore.ingestWatchOrientation({
+        deviceId: "watch-test", sequence: 1, timestampNs: 1_000,
+        quaternion: [1, 0, 0, 0], accelerometer: null, gyroscope: null,
+      });
+      telemetryStore.ingestPpgBatch({
+        sequence: 1,
+        timestampNs: 1_040,
+        timestampsNs: [1_000_000_000, 1_000_000_040],
+        green: [1, 2], greenStatus: [0, 0], red: [1, 2], redStatus: [0, 0], ir: [1, 2], irStatus: [0, 0],
+      });
+      telemetryStore.ingestWatchOrientation({
+        deviceId: "watch-test", sequence: 2, timestampNs: 1_080,
+        quaternion: [1, 0, 0, 0], accelerometer: null, gyroscope: null,
+      });
+
+      const rows = telemetryStore.getDatasetRows();
+      // Translated PPG timestamps land at 1000 and 1040 (envelope 1040,
+      // anchored on the last sample, offset by the genuine 40ns intra-batch
+      // SDK delta) — comparable with and correctly interleaved among the
+      // orientation rows, never the raw ~1e9 SDK values.
+      expect(rows.map((row) => row.timestampNs)).toEqual(["1000", "1000", "1040", "1080"]);
+      expect(rows.map((row) => Number(row.timestampNs))).toEqual([1_000, 1_000, 1_040, 1_080]);
     });
   });
 });

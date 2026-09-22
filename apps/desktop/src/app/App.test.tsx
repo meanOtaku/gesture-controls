@@ -78,6 +78,7 @@ describe("App overlay integration", () => {
     await act(async () => listeners.get(WATCH_PPG_BATCH_EVENT)?.({
       payload: {
         sampleCount: 2,
+        timestampNs: 1_040_000_000,
         timestampsNs: [1_000_000_000, 1_040_000_000],
         green: [1, 2],
         greenStatus: [0, 0],
@@ -97,6 +98,7 @@ describe("App overlay integration", () => {
     await act(async () => listeners.get(WATCH_PPG_BATCH_EVENT)?.({
       payload: {
         sampleCount: 1,
+        timestampNs: 1_080_000_000,
         timestampsNs: [1_080_000_000],
         green: [7],
         greenStatus: [0],

@@ -405,17 +405,15 @@ export function RawImageViewerPanel() {
 
             {recordingId === null || channel === null ? (
               <p className="hint">Select a recording and a channel to inspect its raw image.</p>
-            ) : status === "loading" ? (
-              <div className="flex flex-col gap-2" aria-busy="true" aria-live="polite">
-                <Skeleton className="h-80 w-80" />
-                <span className="sr-only">Loading raw recording window…</span>
-              </div>
-            ) : status === "error" ? (
-              <p role="alert" className="text-sm text-destructive">
-                Could not load this raw window: {errorMessage}
-              </p>
             ) : rawWindow !== null ? (
-              <div className="flex flex-col gap-3">
+              // Keep the already-loaded window mounted while a Next/Previous/slider
+              // navigation reload is in flight (`status === "loading"` with a
+              // still-valid `rawWindow`): swapping this whole block for the tiny
+              // Skeleton below on every step collapses and re-expands the page's
+              // height, which resets scroll position. A brand-new selection nulls
+              // `rawWindow` first (see `resetAndReload`), so that case still shows
+              // the loading skeleton below as before.
+              <div className="flex flex-col gap-3" aria-busy={status === "loading"}>
                 {!rawWindow.channelAvailable ? (
                   <p role="alert" className="text-sm text-destructive">
                     This channel has no recorded numeric values in this recording; there is nothing to visualize.
@@ -552,6 +550,15 @@ export function RawImageViewerPanel() {
                   </>
                 )}
               </div>
+            ) : status === "loading" ? (
+              <div className="flex flex-col gap-2" aria-busy="true" aria-live="polite">
+                <Skeleton className="h-80 w-80" />
+                <span className="sr-only">Loading raw recording window…</span>
+              </div>
+            ) : status === "error" ? (
+              <p role="alert" className="text-sm text-destructive">
+                Could not load this raw window: {errorMessage}
+              </p>
             ) : null}
           </>
         )}

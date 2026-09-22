@@ -143,6 +143,14 @@ export const HEAD_TARGET_EXITED_EVENT = "head-target-exited";
 export const OVERLAY_STATE_EVENT = "overlay-state";
 export interface WatchPpgBatch {
   sequence: number;
+  /**
+   * Envelope timestamp (watch `SystemClock.elapsedRealtimeNanos()` domain) —
+   * the same clock domain `WatchOrientationSample.timestampNs` uses. Distinct
+   * from `timestampsNs` below, which are on the Samsung Health Sensor SDK's
+   * own, incomparable per-sample clock (see
+   * docs/protocols/watch-websocket-protocol.md).
+   */
+  timestampNs: number;
   timestampsNs: number[];
   green: number[];
   /** Samsung Health Sensor SDK per-sample PPG status (0 = good contact); used as the dataset "contact quality" signal. */

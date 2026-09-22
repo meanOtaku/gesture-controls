@@ -3,8 +3,6 @@ import type {
   HeadPosePayload,
   HeadTrackerDiagnostic,
   HeadTrackerStatus,
-  Quaternion,
-  Vector3,
   WatchEdaBatch,
   WatchHeartRateBatch,
   WatchOrientationSample,
@@ -100,6 +98,27 @@ const RECORDING_BUNDLE_FORMAT_VERSION = 1;
 
 function datasetCsvValue(value: number | null): string {
   return value == null ? "" : String(value);
+}
+
+/**
+ * PPG batch per-sample timestamps (`WatchPpgBatch.timestampsNs`) are on the
+ * Samsung Health Sensor SDK's own clock (`DataPoint.getTimestamp()`), a
+ * different, incomparable domain from the watch `SystemClock`-based envelope
+ * timestamp used everywhere else, including `WatchOrientationSample.timestampNs`
+ * (see docs/protocols/watch-websocket-protocol.md). This is the single
+ * canonical capture-time basis for newly captured rows: anchoring on the
+ * envelope timestamp (the last sample = batch arrival, same domain as every
+ * other channel) and applying the SDK domain's own intra-batch deltas — valid
+ * since both clocks are monotonic at the same rate — translates each sample
+ * onto that shared domain so it can be legitimately compared/sorted against
+ * other channels. Neither value is fabricated: both the anchor and the deltas
+ * are genuine device-reported numbers, so this is a domain translation, not a
+ * synthesized timestamp.
+ */
+function translateToWatchClockDomain(envelopeTimestampNs: number, sdkTimestampsNs: number[]): number[] {
+  if (sdkTimestampsNs.length === 0) return [];
+  const lastSdkTimestampNs = sdkTimestampsNs[sdkTimestampsNs.length - 1];
+  return sdkTimestampsNs.map((sdkTimestampNs) => envelopeTimestampNs - (lastSdkTimestampNs - sdkTimestampNs));
 }
 
 export type TelemetrySeries =
@@ -287,17 +306,6 @@ class TelemetryStore {
   private datasetCaptureMode: DatasetCaptureMode = "timeline";
   private timelineIntervals: LiveInterval[] = [];
   private activeTimelineIntervalId: string | null = null;
-  private lastKnownOrientationSample: { accel: Vector3 | null; gyro: Vector3 | null; quat: Quaternion | null } = {
-    accel: null,
-    gyro: null,
-    quat: null,
-  };
-  private lastKnownPpgSample: { green: number | null; red: number | null; ir: number | null; contactQuality: number | null } = {
-    green: null,
-    red: null,
-    ir: null,
-    contactQuality: null,
-  };
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -890,19 +898,19 @@ class TelemetryStore {
       },
       label: this.appliedOrdinaryLabel,
     });
-    this.lastKnownOrientationSample = {
-      accel: orientation.accelerometer,
-      gyro: orientation.gyroscope,
-      quat: orientation.quaternion,
-    };
     if (this.datasetRecording && this.datasetSession) {
       this.transitionDatasetFromArmingIfNeeded();
+      // This row is a genuine orientation-channel sample: the PPG columns
+      // are left `null` (absent) rather than carried forward from the last
+      // PPG sample, so the derivative/cadence pipeline can later assess each
+      // channel's own finite samples on its own time series instead of a
+      // fused, cross-channel cadence (GC-030).
       this.pushDatasetRowSorted({
         timestampNs: String(orientation.timestampNs),
         sequence: String(orientation.sequence),
-        ppgGreen: this.lastKnownPpgSample.green,
-        ppgRed: this.lastKnownPpgSample.red,
-        ppgIr: this.lastKnownPpgSample.ir,
+        ppgGreen: null,
+        ppgRed: null,
+        ppgIr: null,
         accelX: orientation.accelerometer?.[0] ?? null,
         accelY: orientation.accelerometer?.[1] ?? null,
         accelZ: orientation.accelerometer?.[2] ?? null,
@@ -913,7 +921,7 @@ class TelemetryStore {
         quatX: orientation.quaternion[1],
         quatY: orientation.quaternion[2],
         quatZ: orientation.quaternion[3],
-        contactQuality: this.lastKnownPpgSample.contactQuality,
+        contactQuality: null,
         label: this.currentDatasetRowLabel(),
       });
     }
@@ -921,7 +929,11 @@ class TelemetryStore {
   }
 
   ingestPpgBatch(batch: WatchPpgBatch): void {
-    this.ingestTimestampedBatch(batch.timestampsNs, (timestampNs, index, at) => {
+    // Translate the SDK-clock-domain per-sample timestamps onto the same
+    // watch-monotonic domain orientation samples use before they ever reach
+    // row ordering/timing — see `translateToWatchClockDomain`.
+    const canonicalTimestampsNs = translateToWatchClockDomain(batch.timestampNs, batch.timestampsNs);
+    this.ingestTimestampedBatch(canonicalTimestampsNs, (timestampNs, index, at) => {
       this.series.get("ppg")?.push({ at, values: [batch.green[index] ?? 0, batch.red[index] ?? 0, batch.ir[index] ?? 0] });
       if (this.canRecord("ppg", at)) this.rows.push({
         recordedAt: new Date(at).toISOString(), source: "watch", sourceTimestampNs: String(timestampNs), sequence: String(batch.sequence),
@@ -936,25 +948,26 @@ class TelemetryStore {
         batch.redStatus?.[index] ?? 0,
         batch.irStatus?.[index] ?? 0,
       );
-      this.lastKnownPpgSample = { green, red, ir, contactQuality };
       if (this.datasetRecording && this.datasetSession) {
         this.transitionDatasetFromArmingIfNeeded();
+        // Genuine PPG-channel sample: orientation columns are left `null`
+        // (absent) rather than carried forward — see the note above.
         this.pushDatasetRowSorted({
           timestampNs: String(timestampNs),
           sequence: String(batch.sequence),
           ppgGreen: green,
           ppgRed: red,
           ppgIr: ir,
-          accelX: this.lastKnownOrientationSample.accel?.[0] ?? null,
-          accelY: this.lastKnownOrientationSample.accel?.[1] ?? null,
-          accelZ: this.lastKnownOrientationSample.accel?.[2] ?? null,
-          gyroX: this.lastKnownOrientationSample.gyro?.[0] ?? null,
-          gyroY: this.lastKnownOrientationSample.gyro?.[1] ?? null,
-          gyroZ: this.lastKnownOrientationSample.gyro?.[2] ?? null,
-          quatW: this.lastKnownOrientationSample.quat?.[0] ?? null,
-          quatX: this.lastKnownOrientationSample.quat?.[1] ?? null,
-          quatY: this.lastKnownOrientationSample.quat?.[2] ?? null,
-          quatZ: this.lastKnownOrientationSample.quat?.[3] ?? null,
+          accelX: null,
+          accelY: null,
+          accelZ: null,
+          gyroX: null,
+          gyroY: null,
+          gyroZ: null,
+          quatW: null,
+          quatX: null,
+          quatY: null,
+          quatZ: null,
           contactQuality,
           label: this.currentDatasetRowLabel(),
         });
@@ -1031,8 +1044,6 @@ class TelemetryStore {
     this.datasetCaptureMode = "timeline";
     this.timelineIntervals = [];
     this.activeTimelineIntervalId = null;
-    this.lastKnownOrientationSample = { accel: null, gyro: null, quat: null };
-    this.lastKnownPpgSample = { green: null, red: null, ir: null, contactQuality: null };
     this.publishNow();
   }
 
