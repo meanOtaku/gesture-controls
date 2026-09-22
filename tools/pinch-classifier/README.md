@@ -165,3 +165,28 @@ loading a deployed model.
 TensorFlow is deliberately optional: baseline users do not install the large
 runtime, and the ordinary test suite skips real conversion tests when the
 `tensorflow` extra is absent.
+
+## Baseline vs. derivative-feature experiment (research only)
+
+```bash
+pinch-classifier-experiment --input session1.csv session2.csv ... --output report.json
+```
+
+Offline-only comparison (M5) between the existing baseline feature set and a
+candidate that adds per-channel accel/gyro/PPG first-derivative features
+(`pinch_classifier.derivative_features`). It reuses the same CSV loader,
+windowing, and grouped-session split as `pinch-classifier-train`, trains a
+RandomForest on each feature set with the identical train/test split, and
+never writes a model file, model card, or any deployment artifact — output is
+one machine-readable `report.json` (dataset/session/window counts, split
+method and parameters, both feature sets' metrics, and a `recommendation`
+string).
+
+Time-based derivatives require a reasonably regular sample cadence: any
+window whose sample-interval deviation from its own median cadence exceeds
+`--timestamp-tolerance` (default `0.5`, i.e. 50%) is excluded from *both*
+feature sets for that comparison, and the rejection count/reasons are
+reported explicitly rather than silently dropped. Accepts the same
+`--hold-handling` / `--label-mapping-file` / `--window-ms` / `--stride-ms` /
+`--max-gap-ms` / `--test-size` / `--random-seed` / `--n-estimators` flags as
+`pinch-classifier-train`.
