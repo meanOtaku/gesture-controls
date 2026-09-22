@@ -191,6 +191,9 @@ export function RawImageViewerPanel() {
   const rawWindow = rawImageViewerStore.getWindow();
   const bounds = rawImageViewerStore.getNavigationBounds();
   const requestedStartRawRow = rawImageViewerStore.getRequestedStartRawRow();
+  const derivativeStatus = rawImageViewerStore.getDerivativeStatus();
+  const derivativeErrorMessage = rawImageViewerStore.getDerivativeErrorMessage();
+  const derivativeWindow = rawImageViewerStore.getDerivativeWindow();
 
   const rowHop = rawWindowRowHop(gridSize);
   const maxValues = rawWindowMaxValues(gridSize);
@@ -450,6 +453,55 @@ export function RawImageViewerPanel() {
                             title="Rainbow (false-colour)"
                             colorMode="rainbow"
                           />
+                        </CardContent>
+                      </Card>
+                      <Card className="min-w-0 lg:flex-1">
+                        <CardContent className="pt-6">
+                          {derivativeStatus === "loading" ? (
+                            <div className="flex flex-col gap-2" aria-busy="true" aria-live="polite">
+                              <Skeleton className="h-80 w-80" />
+                              <span className="sr-only">Loading derivative view…</span>
+                            </div>
+                          ) : derivativeStatus === "error" ? (
+                            <div className="flex flex-col gap-2">
+                              <h4 className="text-sm font-medium">Derivative (Savitzky–Golay)</h4>
+                              <p role="alert" className="text-sm text-destructive">
+                                Could not load the derivative view: {derivativeErrorMessage}
+                              </p>
+                            </div>
+                          ) : derivativeWindow === null ? (
+                            <div className="flex flex-col gap-2">
+                              <h4 className="text-sm font-medium">Derivative (Savitzky–Golay)</h4>
+                              <p className="hint">Derivative view not available yet.</p>
+                            </div>
+                          ) : !derivativeWindow.available ? (
+                            <div className="flex flex-col gap-2">
+                              <h4 className="text-sm font-medium">Derivative (Savitzky–Golay)</h4>
+                              <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+                                Derivative unavailable for this recording:{" "}
+                                {derivativeWindow.unavailableReason ??
+                                  "this recording's timestamp cadence does not meet the offline derivative's regularity requirement."}
+                              </p>
+                            </div>
+                          ) : (
+                            <RawImageCanvas
+                              rawWindow={rawWindow}
+                              normalizationMode={normalizationMode}
+                              title="Derivative (Savitzky–Golay)"
+                              colorMode="diverging"
+                              derivativeWindow={derivativeWindow}
+                              labelRangeOverlay={<RawImageLabelRangeRail ranges={visibleLabelRanges} />}
+                              titleHelp={
+                                <HelpTooltip label="About the derivative view">
+                                  An offline Savitzky–Golay first derivative of this saved recording&apos;s selected
+                                  channel — a signed rate of change over time, computed fresh from the saved raw
+                                  data on every load. It is not a live signal, is never used for training or
+                                  inference, and is never written back into the recording. The Grayscale and
+                                  Rainbow raw views, live telemetry, and Watch behavior are unchanged.
+                                </HelpTooltip>
+                              }
+                            />
+                          )}
                         </CardContent>
                       </Card>
                     </div>

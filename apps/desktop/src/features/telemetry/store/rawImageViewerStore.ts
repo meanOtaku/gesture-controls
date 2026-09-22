@@ -1,10 +1,12 @@
 import {
   DEFAULT_RAW_GRID_SIZE,
+  getRawRecordingDerivativeWindow,
   getRawRecordingWindow,
   rawWindowMaxValues,
   rawWindowRowHop,
   type RawGridSize,
   type RawImageViewerChannel,
+  type RawRecordingDerivativeWindow,
   type RawRecordingWindow,
 } from "../../../shared/tauri/recordingBundle";
 
@@ -54,6 +56,18 @@ class RawImageViewerStore {
   private errorMessage: string | null = null;
   private window: RawRecordingWindow | null = null;
 
+  /**
+   * The M3 derivative view's own load state, kept alongside (never gating)
+   * the raw window's: it is requested with the identical
+   * recording/channel/grid-size/start-row on every reload and validated
+   * against the same `requestVersion`/selection guard, so a stale derivative
+   * response can never land on a since-changed selection, and a slow or
+   * failed derivative fetch never blocks the raw Grayscale/Rainbow canvases.
+   */
+  private derivativeStatus: RawImageViewerStatus = "empty";
+  private derivativeErrorMessage: string | null = null;
+  private derivativeWindow: RawRecordingDerivativeWindow | null = null;
+
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -97,6 +111,19 @@ class RawImageViewerStore {
   /** The last window successfully resolved for the current recording/channel/start selection, or `null` if none has loaded yet or the selection has since changed. */
   getWindow(): RawRecordingWindow | null {
     return this.window;
+  }
+
+  getDerivativeStatus(): RawImageViewerStatus {
+    return this.derivativeStatus;
+  }
+
+  getDerivativeErrorMessage(): string | null {
+    return this.derivativeErrorMessage;
+  }
+
+  /** The last M3 derivative window successfully resolved for the current recording/channel/start selection, or `null` if none has loaded yet, the fetch failed, or the selection has since changed. Row-aligned with `getWindow()` by construction (see `reload()`). */
+  getDerivativeWindow(): RawRecordingDerivativeWindow | null {
+    return this.derivativeWindow;
   }
 
   /**
@@ -173,6 +200,8 @@ class RawImageViewerStore {
   private resetAndReload(): void {
     this.window = null;
     this.errorMessage = null;
+    this.derivativeWindow = null;
+    this.derivativeErrorMessage = null;
     this.reload();
   }
 
@@ -184,6 +213,9 @@ class RawImageViewerStore {
       this.status = "empty";
       this.errorMessage = null;
       this.window = null;
+      this.derivativeStatus = "empty";
+      this.derivativeErrorMessage = null;
+      this.derivativeWindow = null;
       this.notify();
       return;
     }
@@ -193,16 +225,24 @@ class RawImageViewerStore {
     const gridSize = this.gridSize;
     this.status = "loading";
     this.errorMessage = null;
+    this.derivativeStatus = "loading";
+    this.derivativeErrorMessage = null;
     this.notify();
 
+    // Discard a response if a newer request has since been issued, or if
+    // the recording/channel/grid-size selection has moved on entirely (e.g.
+    // the user switched recordings or grid size while this request was in
+    // flight): either way, the current selection must never be overwritten
+    // by a superseded response. Shared by the raw and derivative fetches
+    // below so both are held to the identical staleness guard.
+    const isStale = (): boolean =>
+      requestVersion !== this.requestVersion ||
+      this.recordingId !== recordingId ||
+      this.channel !== channel ||
+      this.gridSize !== gridSize;
+
     void getRawRecordingWindow({ recordingId, column: channel, startRawRow, gridSize }).then((result) => {
-      // Discard this response if a newer request has since been issued, or
-      // if the recording/channel/grid-size selection has moved on entirely
-      // (e.g. the user switched recordings or grid size while this request
-      // was in flight): either way, the current selection must never be
-      // overwritten by a superseded response.
-      if (requestVersion !== this.requestVersion) return;
-      if (this.recordingId !== recordingId || this.channel !== channel || this.gridSize !== gridSize) return;
+      if (isStale()) return;
 
       if (result.status === "error") {
         this.status = "error";
@@ -216,6 +256,26 @@ class RawImageViewerStore {
         // the requested value in sync with what was actually served so the
         // next relative navigation (prev/next) starts from the real window.
         this.requestedStartRawRow = result.value.startRawRow;
+      }
+      this.notify();
+    });
+
+    // Requested with the identical recording/channel/grid-size/start-row as
+    // the raw window above, so a resolved derivative response is row-aligned
+    // with it by construction. Resolves independently of the raw fetch: a
+    // slow, failed, or "unavailable" derivative never blocks or replaces the
+    // raw Grayscale/Rainbow canvases, and vice versa.
+    void getRawRecordingDerivativeWindow({ recordingId, column: channel, startRawRow, gridSize }).then((result) => {
+      if (isStale()) return;
+
+      if (result.status === "error") {
+        this.derivativeStatus = "error";
+        this.derivativeErrorMessage = result.message;
+        this.derivativeWindow = null;
+      } else {
+        this.derivativeStatus = "loaded";
+        this.derivativeErrorMessage = null;
+        this.derivativeWindow = result.value;
       }
       this.notify();
     });

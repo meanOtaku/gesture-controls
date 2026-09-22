@@ -734,3 +734,69 @@ comparison) are not started.
       --check`: clean. `graphify update .`: ran successfully.
 - [ ] No manual/runtime desktop walkthrough (app not launched on this host,
       and there is no UI surface yet — M3 adds the viewer panel).
+
+## GC-026 — M3: third derivative image viewer canvas (data-collection & derivative-viewer milestone plan)
+
+Implements only **M3** of `.hermes/plans/2026-09-22_072210-data-collection-derivative-viewer-milestones.md`
+(third synchronized Raw image viewer canvas for the M2 offline derivative),
+following accepted M2 (GC-025). M4 (review/export gate) and M5 (training
+comparison) are not started. Frontend-only slice: M2's Rust backend contract
+(`get_raw_recording_derivative_window`) is reused unchanged; no Rust files
+were touched.
+
+- [x] `rawImageViewerStore.ts`: `reload()` now also fetches
+      `getRawRecordingDerivativeWindow` with the identical
+      recording/channel/grid-size/start-row as the existing raw-window
+      fetch, guarded by the same shared `isStale()` check (request version
+      plus current recording/channel/grid-size). The two fetches resolve
+      independently — a slow, failed, or "unavailable" derivative never
+      blocks or replaces the raw Grayscale/Rainbow canvases, and vice
+      versa. New `getDerivativeStatus()`/`getDerivativeErrorMessage()`/
+      `getDerivativeWindow()` getters mirror the existing raw-window ones.
+- [x] `RawImageCanvas.tsx`: added a `"diverging"` `colorMode` — a
+      zero-centred, frame-scale-only palette (blue = decreasing, white ≈ no
+      change, red = increasing) driven by a new `derivativeWindow` prop,
+      reusing the same component (not a new/duplicate canvas) for all three
+      views. `buildDivergingImageData` computes the frame's max-absolute
+      extent and shares the existing `MISSING_COLOR`/`BEYOND_COLOR`
+      "not data" fills with the raw canvases. Pixel inspection
+      (`describeDerivativePixel`) reports raw row, timestamp, the original
+      raw value, the derivative value with its per-second unit, and the
+      filter configuration (method/order/window/version) — missing rows
+      (series edge or a nearby missing/nonfinite source value) are called
+      out explicitly rather than silently rendered as zero. The legend
+      states the palette convention and the signed ±scale in text, so
+      positive/negative is never a hidden-color convention. Added an
+      optional `titleHelp` slot for a heading-adjacent `HelpTooltip`.
+- [x] `RawImageViewerPanel.tsx`: renders the third "Derivative
+      (Savitzky–Golay)" canvas alongside Grayscale/Rainbow, sharing the same
+      recording/channel/grid-size/frame/normalization selection and the same
+      `RawImageLabelRangeRail` label overlay so the same saved interval is
+      visible over raw and derived values. Explicit states: loading
+      (skeleton), fetch error, not-yet-loaded, and whole-recording
+      "unavailable" (M2's cadence-regularity gate) rendered as a clear
+      message with the backend's reason instead of a blank/misleading
+      canvas — never conflated with a per-row missing value. A `HelpTooltip`
+      on the canvas heading states this is an offline, saved-data view, not
+      a live signal, not used for training/inference, and never written
+      back into the recording; the existing Grayscale/Rainbow raw views,
+      live telemetry, and Watch behavior are explicitly called out as
+      unchanged.
+- [x] Tests: 3 new `RawImageCanvas.test.tsx` cases (available-pixel
+      description merges raw value + derivative + filter config; a
+      missing-derivative row keeps its raw value and states unavailability
+      distinctly; the diverging legend shows the signed ±scale and palette
+      convention). 2 new `RawImageViewerPanel.test.tsx` cases (derivative
+      canvas renders row-aligned with the raw canvas once available;
+      whole-recording "unavailable" shows the reason and never renders a
+      derivative canvas, while the raw canvases are unaffected). Updated 4
+      pre-existing `RawImageViewerPanel.test.tsx` label-range assertions
+      from `getByRole`/`queryByRole` to `getAllByRole`/`queryAllByRole`,
+      since the label-range overlay is now intentionally shown on both the
+      Grayscale and Derivative canvases (M3's own acceptance criterion),
+      not because prior behavior was wrong. All 85 tests across
+      `src/features/telemetry/**` pass.
+- [x] `npx tsc --noEmit -p tsconfig.json`: zero errors (no pre-existing
+      errors remained to compare against this session). `git diff --check`:
+      clean. `graphify update .`: ran successfully.
+- [ ] No manual/runtime desktop walkthrough (app not launched on this host).

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import type { RawImageNormalizationMode } from "../store/rawImageViewerStore";
-import type { RawRecordingWindow } from "../../../shared/tauri/recordingBundle";
+import type { DerivativeFilterConfig, RawRecordingDerivativeWindow, RawRecordingWindow } from "../../../shared/tauri/recordingBundle";
 
 const DISPLAY_SIZE = 320;
 
@@ -16,8 +16,25 @@ const BEYOND_COLOR: readonly [number, number, number] = [51, 65, 85];
 const CONSTANT_COLOR: readonly [number, number, number] = [128, 128, 128];
 
 /** Rendering palette for the value gradient only; `MISSING_COLOR`, `BEYOND_COLOR`,
- * and `CONSTANT_COLOR` are shared "not data" fills, unaffected by this choice. */
-export type RawImageColorMode = "grayscale" | "rainbow";
+ * and `CONSTANT_COLOR` are shared "not data" fills, unaffected by this choice.
+ * `"diverging"` is the M3 derivative palette: zero-centred, frame-scale only. */
+export type RawImageColorMode = "grayscale" | "rainbow" | "diverging";
+
+/** Diverging-scale endpoints: cool blue = decreasing, white = ~no change, warm red = increasing. */
+const DIVERGING_LOW_COLOR: readonly [number, number, number] = [37, 99, 235];
+const DIVERGING_MID_COLOR: readonly [number, number, number] = [255, 255, 255];
+const DIVERGING_HIGH_COLOR: readonly [number, number, number] = [220, 38, 38];
+
+function lerpChannel(from: number, to: number, t: number): number {
+  return Math.round(from + (to - from) * t);
+}
+
+/** `signedFraction` in `[-1, 1]` (already divided by the frame's max absolute derivative). */
+function colorForDivergingFraction(signedFraction: number): readonly [number, number, number] {
+  const clamped = Math.max(-1, Math.min(1, signedFraction));
+  const [from, to, t] = clamped < 0 ? [DIVERGING_LOW_COLOR, DIVERGING_MID_COLOR, clamped + 1] : [DIVERGING_MID_COLOR, DIVERGING_HIGH_COLOR, clamped];
+  return [lerpChannel(from[0], to[0], t), lerpChannel(from[1], to[1], t), lerpChannel(from[2], to[2], t)];
+}
 
 type PixelCategory = "value" | "missing" | "beyond";
 
@@ -124,6 +141,92 @@ function buildImageData(
   return { imageData: new ImageData(data, gridSize, gridSize), extent, isConstant };
 }
 
+type DerivativePixelInfo = {
+  index: number;
+  column: number;
+  row: number;
+  rawRow: number;
+  category: PixelCategory;
+  rawValue: number | null;
+  derivativeValue: number | null;
+  timestampNs: number | null;
+};
+
+/**
+ * Reads the raw value from `rawWindow` and the derivative value from
+ * `derivativeWindow` for the same pixel index. The two windows are requested
+ * with identical recording/channel/grid-size/start-row (see
+ * `rawImageViewerStore.reload`), so index `i` names the same raw row in
+ * both; this never re-derives or infers row alignment on its own.
+ */
+function derivativePixelInfoAt(
+  rawWindow: RawRecordingWindow,
+  derivativeWindow: RawRecordingDerivativeWindow,
+  index: number,
+): DerivativePixelInfo {
+  const gridSize = derivativeWindow.gridSize;
+  const column = index % gridSize;
+  const row = Math.floor(index / gridSize);
+  const rawRow = derivativeWindow.startRawRow + index;
+  if (index >= derivativeWindow.derivativeValues.length) {
+    return { index, column, row, rawRow, category: "beyond", rawValue: null, derivativeValue: null, timestampNs: null };
+  }
+  const rawValue = index < rawWindow.values.length ? rawWindow.values[index] : null;
+  const timestampNs = derivativeWindow.timestampsNs[index] ?? null;
+  const derivativeValue = derivativeWindow.derivativeValues[index];
+  if (derivativeValue === null) {
+    return { index, column, row, rawRow, category: "missing", rawValue, derivativeValue: null, timestampNs };
+  }
+  return { index, column, row, rawRow, category: "value", rawValue, derivativeValue, timestampNs };
+}
+
+/**
+ * Zero-centred, frame-scale-only colour mapping for the M3 derivative
+ * canvas: the extent is always `±(max absolute derivative visible in this
+ * frame)`, independent of the raw Grayscale/Rainbow `normalizationMode`
+ * controls. Missing/beyond fills are shared with the raw canvases so they
+ * read as the same "not data" facts everywhere.
+ */
+function buildDivergingImageData(
+  derivativeWindow: RawRecordingDerivativeWindow,
+): { imageData: ImageData; extent: { min: number; max: number } | null; isConstant: boolean } {
+  const gridSize = derivativeWindow.gridSize;
+  const pixelCount = gridSize * gridSize;
+
+  let maxAbs: number | null = null;
+  for (const value of derivativeWindow.derivativeValues) {
+    if (value === null) continue;
+    const abs = Math.abs(value);
+    maxAbs = maxAbs === null ? abs : Math.max(maxAbs, abs);
+  }
+  const extent = maxAbs === null ? null : { min: -maxAbs, max: maxAbs };
+  const isConstant = extent !== null && extent.min === extent.max;
+
+  const data = new Uint8ClampedArray(pixelCount * 4);
+  for (let index = 0; index < pixelCount; index += 1) {
+    let color: readonly [number, number, number];
+    if (index >= derivativeWindow.derivativeValues.length) {
+      color = BEYOND_COLOR;
+    } else {
+      const value = derivativeWindow.derivativeValues[index];
+      if (value === null) {
+        color = MISSING_COLOR;
+      } else if (extent === null || isConstant || maxAbs === null) {
+        color = CONSTANT_COLOR;
+      } else {
+        color = colorForDivergingFraction(value / maxAbs);
+      }
+    }
+    const offset = index * 4;
+    data[offset] = color[0];
+    data[offset + 1] = color[1];
+    data[offset + 2] = color[2];
+    data[offset + 3] = 255;
+  }
+
+  return { imageData: new ImageData(data, gridSize, gridSize), extent, isConstant };
+}
+
 function formatTimestamp(timestampNs: number | null): string {
   if (timestampNs === null) return "no timestamp";
   const ms = timestampNs / 1_000_000;
@@ -141,6 +244,22 @@ function describePixel(info: PixelInfo, gridSize: number): string {
   return `${position}. Raw row ${info.rawRow}, ${formatTimestamp(info.timestampNs)}: value ${info.value}.`;
 }
 
+/** Accessible pixel inspection for the derivative canvas: raw row, timestamp,
+ * original raw value, derivative value/unit, filter configuration, and the
+ * missing/unavailable state — never just the derivative number alone. */
+function describeDerivativePixel(info: DerivativePixelInfo, gridSize: number, filterConfig: DerivativeFilterConfig): string {
+  const position = `column ${info.column + 1}, row ${info.row + 1} of the ${gridSize}×${gridSize} grid`;
+  if (info.category === "beyond") {
+    return `${position}. Raw row ${info.rawRow}: no data — beyond the end of this recording.`;
+  }
+  const rawValueText = info.rawValue === null ? "missing" : `${info.rawValue}`;
+  const filterText = `${filterConfig.method}, order ${filterConfig.polynomialOrder}, window ${filterConfig.windowSize} (${filterConfig.version})`;
+  if (info.category === "missing") {
+    return `${position}. Raw row ${info.rawRow}, ${formatTimestamp(info.timestampNs)}: raw value ${rawValueText}. Derivative unavailable for this row (series edge or a missing value in its local window) — not interpolated or estimated. Filter: ${filterText}.`;
+  }
+  return `${position}. Raw row ${info.rawRow}, ${formatTimestamp(info.timestampNs)}: raw value ${rawValueText}, derivative ${info.derivativeValue} per second. Filter: ${filterText}.`;
+}
+
 type RawImageCanvasProps = {
   rawWindow: RawRecordingWindow;
   normalizationMode: RawImageNormalizationMode;
@@ -155,6 +274,13 @@ type RawImageCanvasProps = {
    * Non-interactive (pointer-events disabled) so it never blocks pixel
    * hover/inspection on the canvas beneath it. */
   labelRangeOverlay?: ReactNode;
+  /** Required when `colorMode` is `"diverging"`: the M3 offline derivative
+   * window for the identical recording/channel/grid-size/start-row as
+   * `rawWindow`, used both for the colour mapping and for merging the
+   * original raw value into pixel inspection. Ignored otherwise. */
+  derivativeWindow?: RawRecordingDerivativeWindow;
+  /** Optional element (e.g. a `HelpTooltip`) rendered next to the heading. */
+  titleHelp?: ReactNode;
 };
 
 /** Renders one N×N (N is the response's own `gridSize`, one of the
@@ -169,16 +295,19 @@ export function RawImageCanvas({
   title,
   colorMode = "grayscale",
   labelRangeOverlay,
+  derivativeWindow,
+  titleHelp,
 }: RawImageCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const gridSize = rawWindow.gridSize;
   const pixelCount = gridSize * gridSize;
+  const isDiverging = colorMode === "diverging" && derivativeWindow !== undefined;
 
   const built = useMemo(
-    () => buildImageData(rawWindow, normalizationMode, colorMode),
-    [rawWindow, normalizationMode, colorMode],
+    () => (isDiverging ? buildDivergingImageData(derivativeWindow) : buildImageData(rawWindow, normalizationMode, colorMode)),
+    [rawWindow, normalizationMode, colorMode, derivativeWindow, isDiverging],
   );
 
   useEffect(() => {
@@ -190,7 +319,19 @@ export function RawImageCanvas({
   }, [built]);
 
   const inspectedIndex = hoveredIndex ?? focusedIndex;
-  const inspectedInfo = inspectedIndex === null ? null : pixelInfoAt(rawWindow, inspectedIndex);
+  const pixelDescription = ((): string => {
+    if (inspectedIndex === null) {
+      return "Hover or focus the image (arrow keys move the focused pixel) to inspect a raw row.";
+    }
+    if (isDiverging) {
+      return describeDerivativePixel(
+        derivativePixelInfoAt(rawWindow, derivativeWindow, inspectedIndex),
+        gridSize,
+        derivativeWindow.filterConfig,
+      );
+    }
+    return describePixel(pixelInfoAt(rawWindow, inspectedIndex), gridSize);
+  })();
 
   const pixelIndexFromPointer = (event: { clientX: number; clientY: number }): number | null => {
     const canvas = canvasRef.current;
@@ -233,9 +374,16 @@ export function RawImageCanvas({
     setFocusedIndex(next);
   };
 
+  const ariaLabel = isDiverging
+    ? `${title}: offline Savitzky–Golay derivative image for column ${rawWindow.column}, ${gridSize}×${gridSize} grid, raw rows ${derivativeWindow.startRawRow} to ${Math.max(derivativeWindow.startRawRow, derivativeWindow.endRawRow - 1)}. Not a live signal. Use arrow keys to inspect a pixel.`
+    : `${title}: chronological raw-data image for column ${rawWindow.column}, ${gridSize}×${gridSize} grid, raw rows ${rawWindow.startRawRow} to ${Math.max(rawWindow.startRawRow, rawWindow.endRawRow - 1)}. Use arrow keys to inspect a pixel.`;
+
   return (
     <div className="flex flex-col gap-3">
-      <h4 className="text-sm font-medium">{title}</h4>
+      <h4 className="flex items-center gap-1 text-sm font-medium">
+        {title}
+        {titleHelp}
+      </h4>
       <div className="relative" style={{ width: DISPLAY_SIZE, height: DISPLAY_SIZE }}>
         <canvas
           ref={canvasRef}
@@ -243,7 +391,7 @@ export function RawImageCanvas({
           height={gridSize}
           role="img"
           tabIndex={0}
-          aria-label={`${title}: chronological raw-data image for column ${rawWindow.column}, ${gridSize}×${gridSize} grid, raw rows ${rawWindow.startRawRow} to ${Math.max(rawWindow.startRawRow, rawWindow.endRawRow - 1)}. Use arrow keys to inspect a pixel.`}
+          aria-label={ariaLabel}
           className="rounded-lg ring-1 ring-foreground/10"
           style={{ width: DISPLAY_SIZE, height: DISPLAY_SIZE, imageRendering: "pixelated", cursor: "crosshair" }}
           onPointerMove={(event) => setHoveredIndex(pixelIndexFromPointer(event))}
@@ -260,9 +408,7 @@ export function RawImageCanvas({
         )}
       </div>
       <p className="text-xs text-muted-foreground" aria-live="polite">
-        {inspectedInfo
-          ? describePixel(inspectedInfo, gridSize)
-          : "Hover or focus the image (arrow keys move the focused pixel) to inspect a raw row."}
+        {pixelDescription}
       </p>
       <RawImageLegend
         extent={built.extent}
@@ -290,9 +436,42 @@ const RAINBOW_GRADIENT_CSS = `linear-gradient(to right, ${Array.from({ length: 7
   return `rgb(${r}, ${g}, ${b})`;
 }).join(", ")})`;
 
+const DIVERGING_GRADIENT_CSS = `linear-gradient(to right, rgb(${DIVERGING_LOW_COLOR.join(", ")}), rgb(${DIVERGING_MID_COLOR.join(", ")}), rgb(${DIVERGING_HIGH_COLOR.join(", ")}))`;
+
 /** Explains every fill used above so a reader never mistakes "beyond
- * recording", "missing value", or "constant neutral gray" for scaled data. */
+ * recording", "missing value", or "constant neutral gray/white" for scaled
+ * data, and — for the diverging derivative palette — never has to interpret
+ * positive/negative colour direction from a hidden convention. */
 function RawImageLegend({ extent, isConstant, normalizationMode, colorMode }: RawImageLegendProps) {
+  if (colorMode === "diverging") {
+    return (
+      <dl className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2">
+          <span
+            className="inline-block size-3 shrink-0 rounded-sm ring-1 ring-foreground/20"
+            style={{ backgroundImage: DIVERGING_GRADIENT_CSS }}
+            aria-hidden="true"
+          />
+          <span>
+            {isConstant
+              ? "No change: every derivative value in this frame is zero (or unavailable), shown as neutral white."
+              : extent
+                ? `Palette: diverging, zero-centred, frame-scale. Blue = decreasing, white ≈ no change, red = increasing. Scale: ±${extent.max} per second.`
+                : "No available derivative values in this frame to scale against."}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-block size-3 shrink-0 rounded-sm ring-1 ring-foreground/20" style={swatchStyle(MISSING_COLOR)} aria-hidden="true" />
+          <span>Derivative unavailable for this row (series edge or a missing value nearby) — not interpolated or estimated.</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-block size-3 shrink-0 rounded-sm ring-1 ring-foreground/20" style={swatchStyle(BEYOND_COLOR)} aria-hidden="true" />
+          <span>No data — this pixel position is beyond the end of the recording.</span>
+        </div>
+      </dl>
+    );
+  }
+
   const paletteName = colorMode === "rainbow" ? "rainbow (red → violet)" : "grayscale (black → white)";
   const lowLabel = colorMode === "rainbow" ? "red" : "black";
   const highLabel = colorMode === "rainbow" ? "violet" : "white";

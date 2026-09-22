@@ -4,7 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RawImageViewerPanel } from "./RawImageViewerPanel";
 import { rawImageViewerStore } from "../store/rawImageViewerStore";
 import { TooltipProvider } from "../../../components/ui/tooltip";
-import type { AnnotationInterval, RecordingBundleSummary, RawRecordingWindow } from "../../../shared/tauri/recordingBundle";
+import type {
+  AnnotationInterval,
+  RawRecordingDerivativeWindow,
+  RecordingBundleSummary,
+  RawRecordingWindow,
+} from "../../../shared/tauri/recordingBundle";
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
@@ -57,6 +62,29 @@ function rawWindow(recordingId: string): RawRecordingWindow {
   };
 }
 
+function derivativeWindow(recordingId: string): RawRecordingDerivativeWindow {
+  return {
+    recordingId,
+    column: "ppg_green",
+    gridSize: 64,
+    totalRawRowCount: 4096,
+    startRawRow: 0,
+    endRawRow: 4096,
+    rowIndices: [],
+    timestampsNs: [],
+    derivativeValues: [],
+    available: true,
+    unavailableReason: null,
+    effectiveSampleRateHz: 50,
+    filterConfig: {
+      method: "savitzky_golay",
+      polynomialOrder: 2,
+      windowSize: 11,
+      version: "savitzky_golay_order2_window11_v1",
+    },
+  };
+}
+
 function qualitySummary(recordingId: string) {
   return {
     recordingId,
@@ -92,6 +120,9 @@ function mockInvoke({
     }
     if (command === "get_raw_recording_window") {
       return Promise.resolve(rawWindow(args?.recordingId as string));
+    }
+    if (command === "get_raw_recording_derivative_window") {
+      return Promise.resolve(derivativeWindow(args?.recordingId as string));
     }
     if (command === "get_recording_quality_summary") {
       return Promise.resolve(qualitySummary(args?.recordingId as string));
@@ -196,7 +227,11 @@ describe("RawImageViewerPanel label ranges", () => {
     rawImageViewerStore.setChannel("ppg_green");
 
     await waitFor(() => {
-      expect(screen.getByRole("listitem")).toHaveAccessibleName("pinching, rows 0–63");
+      // The same saved interval is shown on both the Grayscale and
+      // Derivative canvases (each with their own label-range overlay).
+      for (const item of screen.getAllByRole("listitem")) {
+        expect(item).toHaveAccessibleName("pinching, rows 0–63");
+      }
     });
     expect(invoke).toHaveBeenCalledWith("load_recording_bundle", { recordingId: "rec-a" });
     expect(invoke.mock.calls.filter((call) => call[0] === "load_recording_bundle")).toHaveLength(1);
@@ -223,19 +258,27 @@ describe("RawImageViewerPanel label ranges", () => {
 
     rawImageViewerStore.setRecording("rec-a");
     rawImageViewerStore.setChannel("ppg_green");
-    await waitFor(() => expect(screen.getByRole("listitem")).toHaveAccessibleName("pinching, rows 0–63"));
+    await waitFor(() => {
+      for (const item of screen.getAllByRole("listitem")) {
+        expect(item).toHaveAccessibleName("pinching, rows 0–63");
+      }
+    });
 
     rawImageViewerStore.setRecording("rec-b");
     await waitFor(() => {
       expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
-      expect(screen.getByRole("note", { name: "Saved label ranges" })).toBeInTheDocument();
+      expect(screen.getAllByRole("note", { name: "Saved label ranges" }).length).toBeGreaterThan(0);
     });
 
     resolveSecond({
       recording: {},
       annotations: { format_version: 1, recording_id: "rec-b", intervals: [interval("waving", 10, 20)] },
     });
-    await waitFor(() => expect(screen.getByRole("listitem")).toHaveAccessibleName("waving, rows 10–20"));
+    await waitFor(() => {
+      for (const item of screen.getAllByRole("listitem")) {
+        expect(item).toHaveAccessibleName("waving, rows 10–20");
+      }
+    });
   });
 
   it("discards a stale out-of-order response and keeps only the latest recording's ranges", async () => {
@@ -265,7 +308,11 @@ describe("RawImageViewerPanel label ranges", () => {
       annotations: { format_version: 1, recording_id: "rec-b", intervals: [interval("waving", 10, 20)] },
     });
 
-    await waitFor(() => expect(screen.getByRole("listitem")).toHaveAccessibleName("waving, rows 10–20"));
+    await waitFor(() => {
+      for (const item of screen.getAllByRole("listitem")) {
+        expect(item).toHaveAccessibleName("waving, rows 10–20");
+      }
+    });
     expect(screen.queryByText(/pinching/)).not.toBeInTheDocument();
   });
 
@@ -307,10 +354,64 @@ describe("RawImageViewerPanel label ranges", () => {
     rawImageViewerStore.setChannel("ppg_green");
 
     await waitFor(() => {
-      expect(screen.getByRole("note", { name: "Saved label ranges" })).toHaveTextContent(
-        "No saved label ranges in this frame.",
-      );
+      for (const note of screen.getAllByRole("note", { name: "Saved label ranges" })) {
+        expect(note).toHaveTextContent("No saved label ranges in this frame.");
+      }
     });
     expect(await screen.findByRole("img", { name: /Grayscale/ })).toBeInTheDocument();
+  });
+});
+
+describe("RawImageViewerPanel derivative canvas", () => {
+  it("renders the derivative canvas synchronized with the raw window's rows once available", async () => {
+    mockInvoke({
+      recordings: [summary("rec-a")],
+      detailByRecording: {
+        "rec-a": () =>
+          Promise.resolve({ recording: {}, annotations: { format_version: 1, recording_id: "rec-a", intervals: [] } }),
+      },
+    });
+    renderPanel();
+    await screen.findByRole("combobox", { name: "Saved recording" });
+
+    rawImageViewerStore.setRecording("rec-a");
+    rawImageViewerStore.setChannel("ppg_green");
+
+    const derivativeImage = await screen.findByRole("img", { name: /Derivative \(Savitzky–Golay\)/ });
+    expect(derivativeImage).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /Grayscale/ })).toHaveAccessibleName(/raw rows 0 to 4095/);
+    expect(derivativeImage).toHaveAccessibleName(/raw rows 0 to 4095/);
+    expect(derivativeImage).toHaveAccessibleName(/Not a live signal/);
+  });
+
+  it("shows an explicit unavailable state (not blank/missing) when the recording's cadence fails the M2 regularity gate", async () => {
+    invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
+      if (command === "list_recording_bundles") return Promise.resolve([summary("rec-a")]);
+      if (command === "load_recording_bundle") {
+        return Promise.resolve({ recording: {}, annotations: { format_version: 1, recording_id: "rec-a", intervals: [] } });
+      }
+      if (command === "get_raw_recording_window") return Promise.resolve(rawWindow(args?.recordingId as string));
+      if (command === "get_recording_quality_summary") return Promise.resolve(qualitySummary(args?.recordingId as string));
+      if (command === "get_raw_recording_derivative_window") {
+        return Promise.resolve({
+          ...derivativeWindow(args?.recordingId as string),
+          available: false,
+          unavailableReason: "timestamp cadence is too irregular for a reliable derivative",
+        });
+      }
+      return Promise.reject(new Error(`unmocked command ${command}`));
+    });
+    renderPanel();
+    await screen.findByRole("combobox", { name: "Saved recording" });
+
+    rawImageViewerStore.setRecording("rec-a");
+    rawImageViewerStore.setChannel("ppg_green");
+
+    await waitFor(() => {
+      expect(screen.getByText(/timestamp cadence is too irregular/)).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("img", { name: /Derivative \(Savitzky–Golay\)/ })).not.toBeInTheDocument();
+    // The raw canvases are unaffected by the derivative being unavailable.
+    expect(screen.getByRole("img", { name: /Grayscale/ })).toBeInTheDocument();
   });
 });
