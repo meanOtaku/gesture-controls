@@ -817,6 +817,266 @@ pub fn get_raw_recording_window(
     })
 }
 
+/// Half-width of the fixed Savitzky–Golay first-derivative window (M2): the
+/// window itself is `2 * SG_HALF_WIDTH + 1` = 11 samples, centered on the row
+/// being derived.
+const SG_HALF_WIDTH: usize = 5;
+/// Fixed, documented M2 filter window: polynomial order 2, 11 samples
+/// (~220 ms at the ~50 Hz target rate). Not user-configurable in this slice.
+pub const SG_WINDOW_SIZE: usize = 2 * SG_HALF_WIDTH + 1;
+pub const SG_POLYNOMIAL_ORDER: u32 = 2;
+/// Bumped whenever the filter math, window, order, or regularity tolerance
+/// changes, so a cached/compared derivative can never silently mix versions.
+pub const SG_FILTER_VERSION: &str = "savitzky_golay_order2_window11_v1";
+/// A full SG window is the minimum basis for even attempting a cadence claim.
+const MIN_ROWS_FOR_DERIVATIVE: usize = SG_WINDOW_SIZE;
+/// Documented tolerance band around the robust (median) sample cadence: any
+/// timestamp delta more than this fraction away from the median marks the
+/// stream irregular for M2's purposes. Widening this (or adding resampling)
+/// is a separate, reviewed decision per the milestone plan's "Irregular data
+/// policy" — not something this slice tunes per recording.
+const CADENCE_TOLERANCE_FRACTION: f64 = 0.25;
+
+/// Least-squares first-derivative coefficients for a symmetric,
+/// evenly-spaced Savitzky–Golay window of polynomial order >= 2: by symmetry
+/// the quadratic (even-power) term is orthogonal to the linear (odd-power)
+/// term at symmetric sample offsets, so the order-2 and order-1 first
+/// derivative filters coincide — `c_i = i / sum(j^2 for j in -m..=m)`. The
+/// result is in "value units per sample"; dividing by the cadence (seconds
+/// per sample) converts it to "value units per second".
+fn sg_first_derivative_coefficients(half_width: usize) -> Vec<f64> {
+    let sum_of_squares: f64 = (1..=half_width).map(|i| (i * i) as f64).sum::<f64>() * 2.0;
+    (0..=(2 * half_width))
+        .map(|index| {
+            let offset = index as f64 - half_width as f64;
+            offset / sum_of_squares
+        })
+        .collect()
+}
+
+/// Outcome of assessing whether a full timestamp series is regular enough to
+/// support a Savitzky–Golay time-derivative claim at all. `median_dt_ns` is
+/// the robust per-sample cadence used to convert the per-sample SG
+/// coefficient sum into a per-second derivative.
+enum CadenceRegularity {
+    Regular { median_dt_ns: f64 },
+    Irregular(String),
+}
+
+/// Robust-median-cadence check over an entire recording's timestamps: fails
+/// closed (never guesses a working cadence) on too few rows, any
+/// non-strictly-increasing delta, or any delta outside
+/// `CADENCE_TOLERANCE_FRACTION` of the median. See `CADENCE_TOLERANCE_FRACTION`
+/// for why this rejects rather than resamples.
+fn assess_cadence_regularity(timestamps_ns: &[i64]) -> CadenceRegularity {
+    if timestamps_ns.len() < MIN_ROWS_FOR_DERIVATIVE {
+        return CadenceRegularity::Irregular(format!(
+            "fewer than {MIN_ROWS_FOR_DERIVATIVE} rows; a {SG_WINDOW_SIZE}-sample Savitzky–Golay window needs at least that many rows of context"
+        ));
+    }
+    let deltas: Vec<i64> = timestamps_ns
+        .windows(2)
+        .map(|pair| pair[1] - pair[0])
+        .collect();
+    if deltas.iter().any(|&delta| delta <= 0) {
+        return CadenceRegularity::Irregular(
+            "timestamps are not strictly increasing; a time-based derivative requires strictly increasing timestamps".to_string(),
+        );
+    }
+
+    let mut sorted_deltas = deltas.clone();
+    sorted_deltas.sort_unstable();
+    let mid = sorted_deltas.len() / 2;
+    let median_dt_ns = if sorted_deltas.len() % 2 == 0 {
+        (sorted_deltas[mid - 1] + sorted_deltas[mid]) as f64 / 2.0
+    } else {
+        sorted_deltas[mid] as f64
+    };
+
+    let lower_bound = median_dt_ns * (1.0 - CADENCE_TOLERANCE_FRACTION);
+    let upper_bound = median_dt_ns * (1.0 + CADENCE_TOLERANCE_FRACTION);
+    if deltas
+        .iter()
+        .any(|&delta| (delta as f64) < lower_bound || (delta as f64) > upper_bound)
+    {
+        return CadenceRegularity::Irregular(format!(
+            "timestamp spacing deviates by more than {:.0}% from the median cadence; the stream is too irregular for a fixed-window time derivative",
+            CADENCE_TOLERANCE_FRACTION * 100.0
+        ));
+    }
+
+    CadenceRegularity::Regular { median_dt_ns }
+}
+
+/// Pure, dependency-free Savitzky–Golay first-derivative computation over one
+/// full source column, sliced afterward to `[start, end)` — the same bounded
+/// response shape `get_raw_recording_window` uses. Reads the *entire* source
+/// series (never just the requested window) so rows near the edges of the
+/// requested window still get real leading/trailing context instead of a
+/// fabricated boundary value. Returns `(derivative_values, available,
+/// unavailable_reason, effective_sample_rate_hz)`.
+///
+/// Availability is decided once for the whole recording (a global cadence
+/// regularity check); missing/nonfinite values and window-edge rows then
+/// individually withhold a derivative (`None`) without invalidating the rest
+/// of the response. A derivative is never interpolated across a missing run
+/// and never fabricated at either boundary of the source series.
+fn compute_sg_derivative_window(
+    timestamps_ns: &[i64],
+    values: &[Option<f64>],
+    start: usize,
+    end: usize,
+) -> (Vec<Option<f64>>, bool, Option<String>, Option<f64>) {
+    debug_assert_eq!(timestamps_ns.len(), values.len());
+    let row_count = values.len();
+
+    let (median_dt_ns, effective_sample_rate_hz) = match assess_cadence_regularity(timestamps_ns) {
+        CadenceRegularity::Irregular(reason) => {
+            let placeholder = vec![
+                None;
+                end.saturating_sub(start)
+                    .min(row_count.saturating_sub(start))
+            ];
+            return (placeholder, false, Some(reason), None);
+        }
+        CadenceRegularity::Regular { median_dt_ns } => {
+            (median_dt_ns, Some(1_000_000_000.0 / median_dt_ns))
+        }
+    };
+    let dt_seconds = median_dt_ns / 1_000_000_000.0;
+    let coefficients = sg_first_derivative_coefficients(SG_HALF_WIDTH);
+
+    let derivative_at = |row: usize| -> Option<f64> {
+        if row < SG_HALF_WIDTH || row + SG_HALF_WIDTH >= row_count {
+            // Deterministic boundary rule: never extrapolate a value at the
+            // edge of the *source* series where a full symmetric window
+            // cannot be formed.
+            return None;
+        }
+        let window_start = row - SG_HALF_WIDTH;
+        let mut accumulator = 0.0;
+        for (offset, coefficient) in coefficients.iter().enumerate() {
+            match values[window_start + offset] {
+                Some(value) if value.is_finite() => accumulator += coefficient * value,
+                // Any missing/nonfinite sample inside the window breaks this
+                // one derivative; never interpolated or skipped-and-rescaled.
+                _ => return None,
+            }
+        }
+        Some(accumulator / dt_seconds)
+    };
+
+    let derivative_values = (start..end).map(derivative_at).collect();
+    (derivative_values, true, None, effective_sample_rate_hz)
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DerivativeFilterConfig {
+    pub method: String,
+    pub polynomial_order: u32,
+    pub window_size: usize,
+    pub version: String,
+}
+
+fn sg_filter_config() -> DerivativeFilterConfig {
+    DerivativeFilterConfig {
+        method: "savitzky_golay".to_string(),
+        polynomial_order: SG_POLYNOMIAL_ORDER,
+        window_size: SG_WINDOW_SIZE,
+        version: SG_FILTER_VERSION.to_string(),
+    }
+}
+
+/// A bounded, read-only, **offline-derived** window of one numeric raw.csv
+/// column's Savitzky–Golay first time-derivative, aligned row-for-row and
+/// timestamp-for-timestamp with `RawRecordingWindow` for the same request.
+/// This is calculated fresh from the immutable `raw.csv` on every call; it is
+/// never persisted, never written back into any bundle file, and is not a
+/// live/Watch/inference signal — see the module-level docs and the M2
+/// section of `.hermes/plans/2026-09-22_072210-data-collection-derivative-viewer-milestones.md`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RawRecordingDerivativeWindow {
+    pub recording_id: String,
+    pub column: String,
+    pub grid_size: u32,
+    pub total_raw_row_count: usize,
+    pub start_raw_row: usize,
+    pub end_raw_row: usize,
+    pub row_indices: Vec<usize>,
+    pub timestamps_ns: Vec<i64>,
+    /// One entry per `row_indices` entry: `None` where no derivative could be
+    /// computed for that specific row (window-edge, missing/nonfinite value
+    /// in its local window), regardless of the recording-wide `available` flag.
+    pub derivative_values: Vec<Option<f64>>,
+    /// False when the *entire recording's* timestamp cadence failed the
+    /// regularity check; when false every `derivative_values` entry is `None`
+    /// and `unavailable_reason` explains why.
+    pub available: bool,
+    pub unavailable_reason: Option<String>,
+    pub effective_sample_rate_hz: Option<f64>,
+    pub filter_config: DerivativeFilterConfig,
+}
+
+/// Returns the offline Savitzky–Golay first-derivative window matching
+/// `get_raw_recording_window`'s exact row/timestamp alignment and bounded
+/// N×N response shape for the same recording, channel, grid size, and start
+/// row. Never writes any bundle file; `raw.csv` is read fresh and untouched.
+/// This is a saved-data analysis view, not a live signal and not a training
+/// transformation — see `RawRecordingDerivativeWindow`'s docs.
+#[tauri::command]
+pub fn get_raw_recording_derivative_window(
+    recording_id: String,
+    column: String,
+    start_raw_row: i64,
+    grid_size: u32,
+    app: AppHandle,
+) -> Result<RawRecordingDerivativeWindow, String> {
+    validate_recording_id(&recording_id)?;
+    if !RAW_WINDOW_ALLOWED_COLUMNS.contains(&column.as_str()) {
+        return Err(format!("unsupported raw column '{column}'"));
+    }
+    let grid_size_usize = validate_grid_size(grid_size)?;
+
+    let dir = recording_bundles_dir(&app)?.join(&recording_id);
+    let csv_path = raw_csv_path(&dir);
+    let content = fs::read_to_string(&csv_path)
+        .map_err(|error| format!("failed to read raw.csv for recording '{recording_id}': {error}"))?;
+    if content.len() > MAX_RAW_CSV_BYTES {
+        return Err(format!(
+            "raw.csv exceeds the {MAX_RAW_CSV_BYTES}-byte limit (got {} bytes)",
+            content.len()
+        ));
+    }
+    let (timestamps_ns, all_values) = parse_raw_csv_column(&content, &column)?;
+
+    let total_raw_row_count = all_values.len();
+    let (resolved_start, resolved_end) =
+        resolve_raw_window_bounds(total_raw_row_count, start_raw_row, grid_size_usize)?;
+
+    let (derivative_values, available, unavailable_reason, effective_sample_rate_hz) =
+        compute_sg_derivative_window(&timestamps_ns, &all_values, resolved_start, resolved_end);
+    let window_timestamps = timestamps_ns[resolved_start..resolved_end].to_vec();
+    let row_indices: Vec<usize> = (resolved_start..resolved_end).collect();
+
+    Ok(RawRecordingDerivativeWindow {
+        recording_id,
+        column,
+        grid_size,
+        total_raw_row_count,
+        start_raw_row: resolved_start,
+        end_raw_row: resolved_end,
+        row_indices,
+        timestamps_ns: window_timestamps,
+        derivative_values,
+        available,
+        unavailable_reason,
+        effective_sample_rate_hz,
+        filter_config: sg_filter_config(),
+    })
+}
+
 /// A short label interval is flagged as too brief to give the fixed 500 ms
 /// model window usable context (see the milestone plan's collection-protocol
 /// rationale); this does not reject or alter the interval, only surfaces it.
@@ -1642,5 +1902,191 @@ mod tests {
         }
         assert!(!RAW_WINDOW_ALLOWED_COLUMNS.contains(&"timestamp_ns"));
         assert!(!RAW_WINDOW_ALLOWED_COLUMNS.contains(&"sequence"));
+    }
+
+    // --- M2: Savitzky–Golay derivative helper ---
+
+    fn uniform_timestamps(row_count: usize, dt_ns: i64) -> Vec<i64> {
+        (0..row_count as i64).map(|i| i * dt_ns).collect()
+    }
+
+    #[test]
+    fn sg_coefficients_are_antisymmetric_and_sum_to_zero() {
+        let coefficients = sg_first_derivative_coefficients(SG_HALF_WIDTH);
+        assert_eq!(coefficients.len(), SG_WINDOW_SIZE);
+        assert!((coefficients.iter().sum::<f64>()).abs() < 1e-12);
+        for offset in 0..=SG_HALF_WIDTH {
+            assert!(
+                (coefficients[SG_HALF_WIDTH + offset] + coefficients[SG_HALF_WIDTH - offset]).abs()
+                    < 1e-12
+            );
+        }
+        // c_i = i / sum(j^2), sum(j^2) for j in -5..=5 (excluding 0) = 110.
+        assert!((coefficients[SG_HALF_WIDTH + 1] - (1.0 / 110.0)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn constant_signal_has_zero_derivative_everywhere_available() {
+        let timestamps_ns = uniform_timestamps(20, 20_000_000); // 50Hz
+        let values: Vec<Option<f64>> = vec![Some(3.0); 20];
+        let (derivative, available, reason, rate) =
+            compute_sg_derivative_window(&timestamps_ns, &values, 0, 20);
+        assert!(available);
+        assert!(reason.is_none());
+        assert!((rate.unwrap() - 50.0).abs() < 1e-6);
+        for (row, value) in derivative.iter().enumerate() {
+            if (SG_HALF_WIDTH..20 - SG_HALF_WIDTH).contains(&row) {
+                assert!(
+                    (value.unwrap()).abs() < 1e-9,
+                    "row {row} expected ~0, got {value:?}"
+                );
+            } else {
+                assert!(
+                    value.is_none(),
+                    "boundary row {row} must have no derivative"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn linear_signal_derivative_matches_known_slope_and_aligns_by_row() {
+        // y = 2.0 * t_seconds, uniform 50Hz (dt = 20ms) => dy/dt = 2.0 everywhere interior.
+        let dt_ns = 20_000_000i64;
+        let timestamps_ns = uniform_timestamps(21, dt_ns);
+        let values: Vec<Option<f64>> = timestamps_ns
+            .iter()
+            .map(|&t| Some(2.0 * (t as f64 / 1_000_000_000.0)))
+            .collect();
+        let (derivative, available, _reason, _rate) =
+            compute_sg_derivative_window(&timestamps_ns, &values, 0, 21);
+        assert!(available);
+        for row in SG_HALF_WIDTH..(21 - SG_HALF_WIDTH) {
+            let value = derivative[row].expect("interior row must have a derivative");
+            assert!(
+                (value - 2.0).abs() < 1e-9,
+                "row {row}: expected slope 2.0, got {value}"
+            );
+        }
+        // Requesting a sub-window [8,13) still aligns 1:1 with rows 8..13 of the full series.
+        let (sub_derivative, _, _, _) =
+            compute_sg_derivative_window(&timestamps_ns, &values, 8, 13);
+        assert_eq!(sub_derivative.len(), 5);
+        for value in &sub_derivative {
+            assert!((value.unwrap() - 2.0).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn missing_value_in_window_breaks_only_the_derivatives_that_use_it() {
+        let timestamps_ns = uniform_timestamps(21, 20_000_000);
+        let mut values: Vec<Option<f64>> = (0..21).map(|i| Some(i as f64)).collect();
+        values[10] = None; // gap at the center row
+        let (derivative, available, _reason, _rate) =
+            compute_sg_derivative_window(&timestamps_ns, &values, 0, 21);
+        assert!(available);
+        // Every window that includes row 10 (rows 5..=15) must be withheld.
+        for row in 5..=15 {
+            assert!(
+                derivative[row].is_none(),
+                "row {row}'s window includes the gap at row 10"
+            );
+        }
+        // Rows far enough from the gap still get a real derivative.
+        assert!(derivative[16].is_some());
+        assert!(derivative[4].is_none()); // row 4 is itself a boundary row (< SG_HALF_WIDTH)
+    }
+
+    #[test]
+    fn nonfinite_value_is_treated_as_missing() {
+        let timestamps_ns = uniform_timestamps(21, 20_000_000);
+        let mut values: Vec<Option<f64>> = (0..21).map(|i| Some(i as f64)).collect();
+        values[10] = Some(f64::NAN);
+        let (derivative, available, _reason, _rate) =
+            compute_sg_derivative_window(&timestamps_ns, &values, 0, 21);
+        assert!(available);
+        assert!(derivative[10].is_none());
+        assert!(derivative[12].is_none()); // row 12's window (7..=17) still includes row 10
+    }
+
+    #[test]
+    fn short_input_is_unavailable_with_reason() {
+        let timestamps_ns = uniform_timestamps(5, 20_000_000); // fewer than SG_WINDOW_SIZE
+        let values: Vec<Option<f64>> = vec![Some(1.0); 5];
+        let (derivative, available, reason, rate) =
+            compute_sg_derivative_window(&timestamps_ns, &values, 0, 5);
+        assert!(!available);
+        assert!(derivative.iter().all(Option::is_none));
+        assert!(rate.is_none());
+        assert!(reason.unwrap().contains("fewer than"));
+    }
+
+    #[test]
+    fn non_monotonic_timestamps_are_unavailable() {
+        let mut timestamps_ns = uniform_timestamps(15, 20_000_000);
+        timestamps_ns[7] = timestamps_ns[6]; // duplicate/non-increasing
+        let values: Vec<Option<f64>> = vec![Some(1.0); 15];
+        let (derivative, available, reason, _rate) =
+            compute_sg_derivative_window(&timestamps_ns, &values, 0, 15);
+        assert!(!available);
+        assert!(derivative.iter().all(Option::is_none));
+        assert!(reason.unwrap().contains("strictly increasing"));
+    }
+
+    #[test]
+    fn irregular_mixed_cadence_is_unavailable() {
+        // Mostly 20ms deltas but one wildly different delta far outside tolerance.
+        let mut timestamps_ns = uniform_timestamps(15, 20_000_000);
+        for t in timestamps_ns.iter_mut().skip(8) {
+            *t += 500_000_000; // a huge jump partway through
+        }
+        let values: Vec<Option<f64>> = vec![Some(1.0); 15];
+        let (derivative, available, reason, _rate) =
+            compute_sg_derivative_window(&timestamps_ns, &values, 0, 15);
+        assert!(!available);
+        assert!(derivative.iter().all(Option::is_none));
+        assert!(reason.unwrap().contains("irregular"));
+    }
+
+    #[test]
+    fn ordinary_uniform_50hz_stream_is_accepted() {
+        let timestamps_ns = uniform_timestamps(50, 20_000_000);
+        let values: Vec<Option<f64>> = (0..50).map(|i| Some(i as f64 * 0.1)).collect();
+        let (_derivative, available, reason, rate) =
+            compute_sg_derivative_window(&timestamps_ns, &values, 0, 50);
+        assert!(available);
+        assert!(reason.is_none());
+        assert!((rate.unwrap() - 50.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn recording_bounds_edge_rows_get_context_from_outside_the_requested_subwindow() {
+        // 30-row recording; request the trailing sub-window [20,30). Row 20 is
+        // not a boundary of the *recording* (rows 15..25 all exist), so it must
+        // still get a real derivative even though it's the first row requested.
+        let timestamps_ns = uniform_timestamps(30, 20_000_000);
+        let values: Vec<Option<f64>> = timestamps_ns
+            .iter()
+            .map(|&t| Some(3.0 * (t as f64 / 1_000_000_000.0)))
+            .collect();
+        let (derivative, available, _reason, _rate) =
+            compute_sg_derivative_window(&timestamps_ns, &values, 20, 30);
+        assert!(available);
+        assert_eq!(derivative.len(), 10);
+        // row 20 (index 0 of this sub-slice) has full context from rows 15..25.
+        assert!((derivative[0].unwrap() - 3.0).abs() < 1e-9);
+        // row 29 (index 9, the last row of the whole recording) is a true boundary.
+        assert!(derivative[9].is_none());
+    }
+
+    #[test]
+    fn deterministic_repeat_calls_produce_identical_output() {
+        let timestamps_ns = uniform_timestamps(25, 20_000_000);
+        let values: Vec<Option<f64>> = (0..25).map(|i| Some((i as f64).sin())).collect();
+        let first = compute_sg_derivative_window(&timestamps_ns, &values, 0, 25);
+        let second = compute_sg_derivative_window(&timestamps_ns, &values, 0, 25);
+        assert_eq!(first.0, second.0);
+        assert_eq!(first.1, second.1);
+        assert_eq!(first.3, second.3);
     }
 }

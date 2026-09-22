@@ -169,6 +169,40 @@ export type RecordingQualitySummary = {
   warnings: string[];
 };
 
+/** Mirrors `recording_bundle::DerivativeFilterConfig`: the fixed, versioned M2 filter contract. */
+export type DerivativeFilterConfig = {
+  method: string;
+  polynomialOrder: number;
+  windowSize: number;
+  version: string;
+};
+
+/**
+ * Mirrors `recording_bundle::RawRecordingDerivativeWindow` field-for-field.
+ * This is an **offline, saved-data** analysis of the selected channel — a
+ * signed rate-of-change (Savitzky–Golay first derivative with respect to
+ * time, not row-to-row differencing) — computed fresh on every call. It is
+ * never a live/Watch signal, never a training transformation, and never
+ * written back into `raw.csv` or any other bundle file.
+ */
+export type RawRecordingDerivativeWindow = {
+  recordingId: string;
+  column: string;
+  gridSize: RawGridSize;
+  totalRawRowCount: number;
+  startRawRow: number;
+  endRawRow: number;
+  rowIndices: number[];
+  timestampsNs: number[];
+  /** One entry per `rowIndices` entry; `null` where that specific row has no derivative (window-edge or a missing/nonfinite value in its local window), independent of `available`. */
+  derivativeValues: (number | null)[];
+  /** False when the whole recording's timestamp cadence failed the M2 regularity check; every `derivativeValues` entry is then `null` and `unavailableReason` explains why. */
+  available: boolean;
+  unavailableReason: string | null;
+  effectiveSampleRateHz: number | null;
+  filterConfig: DerivativeFilterConfig;
+};
+
 function toResult<T>(promise: Promise<T>): Promise<RecordingBundleResult<T>> {
   return promise
     .then((value) => ({ status: "ok" as const, value }))
@@ -302,6 +336,32 @@ export async function getRawRecordingWindow(
   }
   return toResult(
     invoke<RawRecordingWindow>("get_raw_recording_window", {
+      recordingId: request.recordingId,
+      column: request.column,
+      startRawRow: request.startRawRow,
+      gridSize: request.gridSize,
+    }),
+  );
+}
+
+/**
+ * Fetches the offline Savitzky–Golay first-derivative window (M2) for one
+ * numeric raw.csv column through `get_raw_recording_derivative_window`,
+ * aligned row-for-row with `getRawRecordingWindow` for the same recording,
+ * channel, grid size, and start row. This is a saved-data analysis view of
+ * the selected channel's signed rate of change over time — never a live
+ * signal, never used for inference or training, and never written into
+ * `raw.csv` or any other bundle file. See `RawRecordingDerivativeWindow`'s
+ * docs for the per-row/whole-recording availability contract.
+ */
+export async function getRawRecordingDerivativeWindow(
+  request: RawRecordingWindowRequest,
+): Promise<RecordingBundleResult<RawRecordingDerivativeWindow>> {
+  if (!isTauriDesktop()) {
+    return { status: "error", message: "Recording bundle persistence requires the desktop app" };
+  }
+  return toResult(
+    invoke<RawRecordingDerivativeWindow>("get_raw_recording_derivative_window", {
       recordingId: request.recordingId,
       column: request.column,
       startRawRow: request.startRawRow,

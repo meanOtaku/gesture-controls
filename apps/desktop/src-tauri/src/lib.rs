@@ -81,6 +81,7 @@ pub fn run() {
             recording_bundle::load_recording_bundle,
             recording_bundle::delete_recording_bundle,
             recording_bundle::get_raw_recording_window,
+            recording_bundle::get_raw_recording_derivative_window,
             recording_bundle::get_recording_quality_summary,
             recording_bundle::set_interval_curation_status,
             label_registry::list_model_labels,

@@ -662,3 +662,75 @@ in that plan's documented M1→M5 delivery sequence.
       zero errors.
 - [ ] No manual/runtime desktop capture or raw-image-viewer walkthrough was
       performed (app not launched on this host).
+
+## GC-025 — M2: offline Savitzky–Golay first-derivative contract (data-collection & derivative-viewer milestone plan)
+
+Implements only **M2** of `.hermes/plans/2026-09-22_072210-data-collection-derivative-viewer-milestones.md`
+(offline SG derivative backend contract), following accepted M1 (GC-024).
+M3 (third viewer canvas), M4 (review/export gate), and M5 (training
+comparison) are not started.
+
+- [x] `recording_bundle.rs`: new `get_raw_recording_derivative_window` Tauri
+      command, aligned row/timestamp-for-row/timestamp with
+      `get_raw_recording_window` for the same recording/channel/grid
+      size/start row. Reads and derives from the *entire* source column
+      (never just the requested window) so edge rows of a requested
+      sub-window still get real leading/trailing context, then slices to the
+      same bounded N×N response shape. `raw.csv`/bundle files are read-only;
+      nothing is written.
+- [x] `compute_sg_derivative_window`: pure, dependency-free Savitzky–Golay
+      order-2, window-11 first derivative with respect to time (not
+      row-to-row differencing). Uses the closed-form least-squares
+      coefficient `c_i = i / sum(j^2)` (valid for order ≥ 2 by symmetry,
+      documented in code), divided by the robust median per-sample cadence
+      to convert "per sample" to "per second". A missing/nonfinite value
+      anywhere in a row's local 11-sample window withholds only that row's
+      derivative (`None`), never interpolated or fabricated; the two rows at
+      either true boundary of the source series always withhold a value
+      deterministically (no extrapolation).
+- [x] `assess_cadence_regularity`: whole-recording gate, fails closed
+      (`available: false` + a specific `unavailableReason`) on fewer than 11
+      rows, any non-strictly-increasing timestamp delta, or any delta
+      outside a documented ±25% band around the robust median cadence — no
+      resampling, matching the plan's "Irregular data policy". Accepts an
+      ordinary uniform ~50 Hz stream.
+- [x] `DerivativeFilterConfig`/`SG_FILTER_VERSION` ("savitzky_golay_order2_window11_v1")
+      travel on every response so a cached/compared derivative can never
+      silently mix filter versions.
+- [x] `recordingBundle.ts`: matching `RawRecordingDerivativeWindow`/
+      `DerivativeFilterConfig` types and `getRawRecordingDerivativeWindow()`
+      bridge function, field-for-field with the Rust response, with
+      precise "offline, saved-data, not live, not training" doc comments.
+      No `rawImageViewerStore.ts` change: nothing consumes this bridge call
+      yet (M3 owns rendering the third canvas and wiring request-version
+      race safety into the store for it), so adding unused store state now
+      would be dead code ahead of its only caller.
+- [x] Tests: 10 new Rust unit tests on `compute_sg_derivative_window`/
+      `sg_first_derivative_coefficients`/`assess_cadence_regularity` —
+      coefficient symmetry, constant signal (zero derivative), linear
+      signal (exact known slope, row-aligned, and matching when requesting
+      a sub-window), a missing-value gap (withholds only the rows whose
+      window touches it), a NaN value (treated as missing), too-short input,
+      non-monotonic timestamps, irregular/mixed cadence, an ordinary uniform
+      50 Hz stream, boundary rows getting real context from *outside* a
+      requested sub-window (vs. the true recording boundary), and
+      deterministic repeat-call output.
+- [ ] **Not cleared / host-blocked:** `cargo test -p spatial-gesture-desktop`
+      cannot run on this host — same pre-existing `glib-sys`/`pkg-config`
+      blocker as GC-002/GC-009/GC-018/GC-019/GC-024 (`pkg-config` not
+      installed; confirmed again this session). `cargo fmt -p
+      spatial-gesture-desktop -- --check` (pure syntax/formatting, no
+      linking) was run instead and confirms the new code parses; the diff
+      introduces zero new formatting violations beyond the file's
+      pre-existing (already-unformatted) baseline. The 10 new tests were
+      reviewed by eye; the SG coefficient/regularity math was independently
+      hand-verified (S2 for m=5 is 110; linear-signal slope recovery is
+      exact for a quadratic-order SG filter on an exactly linear signal).
+- [x] `npx tsc --noEmit -p tsconfig.json`: zero errors. `npx vitest run
+      src/features/telemetry`: **80 passed** (unchanged from GC-024 — no
+      new frontend test needed since `getRawRecordingDerivativeWindow` is
+      an untested-by-precedent thin `invoke` wrapper, same as the existing
+      `getRawRecordingWindow`/`getRecordingQualitySummary`). `git diff
+      --check`: clean. `graphify update .`: ran successfully.
+- [ ] No manual/runtime desktop walkthrough (app not launched on this host,
+      and there is no UI surface yet — M3 adds the viewer panel).
