@@ -10,6 +10,7 @@ import { Skeleton } from "../../../components/ui/skeleton";
 import { Slider } from "../../../components/ui/slider";
 import {
   deleteRecordingBundle,
+  getRecordingQualitySummary,
   importRecordingFromRawCsv,
   listRecordingBundles,
   loadRecordingBundle,
@@ -21,11 +22,13 @@ import {
   type RawGridSize,
   type RawImageViewerChannel,
   type RecordingBundleSummary,
+  type RecordingQualitySummary,
 } from "../../../shared/tauri/recordingBundle";
 import { deriveVisibleLabelRanges } from "../annotations/visibleLabelRanges";
 import { rawImageViewerStore } from "../store/rawImageViewerStore";
 import { RawImageCanvas } from "./RawImageCanvas";
 import { RawImageLabelRangeRail } from "./RawImageLabelRangeRail";
+import { RecordingQualitySummaryCard } from "./RecordingQualitySummaryCard";
 
 type LabelRangesState =
   | { status: "empty" }
@@ -36,6 +39,12 @@ type LabelRangesState =
 type RecordingListState =
   | { status: "loading" }
   | { status: "loaded"; recordings: RecordingBundleSummary[] }
+  | { status: "error"; message: string };
+
+type QualitySummaryState =
+  | { status: "empty" }
+  | { status: "loading" }
+  | { status: "loaded"; summary: RecordingQualitySummary }
   | { status: "error"; message: string };
 
 function channelLabel(channel: RawImageViewerChannel): string {
@@ -68,6 +77,8 @@ export function RawImageViewerPanel() {
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const [labelRanges, setLabelRanges] = useState<LabelRangesState>({ status: "empty" });
   const labelRangesRequestVersion = useRef(0);
+  const [qualitySummary, setQualitySummary] = useState<QualitySummaryState>({ status: "empty" });
+  const qualitySummaryRequestVersion = useRef(0);
   useSyncExternalStore(rawImageViewerStore.subscribe, rawImageViewerStore.getVersion, rawImageViewerStore.getVersion);
 
   const handleImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -148,6 +159,26 @@ export function RawImageViewerPanel() {
         setLabelRanges({ status: "error", message: result.message });
       } else {
         setLabelRanges({ status: "loaded", intervals: result.value.annotations.intervals });
+      }
+    });
+  }, [recordingId]);
+
+  // Loads the derived-only recording/collection quality summary (M1) for the
+  // selected saved recording; request-version-guarded like the label-range
+  // load above so a stale response for an abandoned selection never lands.
+  useEffect(() => {
+    const requestVersion = ++qualitySummaryRequestVersion.current;
+    if (recordingId === null) {
+      setQualitySummary({ status: "empty" });
+      return;
+    }
+    setQualitySummary({ status: "loading" });
+    void getRecordingQualitySummary(recordingId).then((result) => {
+      if (requestVersion !== qualitySummaryRequestVersion.current) return;
+      if (result.status === "error") {
+        setQualitySummary({ status: "error", message: result.message });
+      } else {
+        setQualitySummary({ status: "loaded", summary: result.value });
       }
     });
   }, [recordingId]);
@@ -361,6 +392,13 @@ export function RawImageViewerPanel() {
                 </RadioGroup>
               </fieldset>
             </div>
+
+            {qualitySummary.status === "loaded" && <RecordingQualitySummaryCard summary={qualitySummary.summary} />}
+            {qualitySummary.status === "error" && (
+              <p role="alert" className="text-xs text-destructive">
+                Could not load recording quality summary: {qualitySummary.message}
+              </p>
+            )}
 
             {recordingId === null || channel === null ? (
               <p className="hint">Select a recording and a channel to inspect its raw image.</p>

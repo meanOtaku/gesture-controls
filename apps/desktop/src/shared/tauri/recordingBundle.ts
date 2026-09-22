@@ -145,6 +145,30 @@ export type RawRecordingWindow = {
   recordingMax: number | null;
 };
 
+export type TimestampStatus = "ok" | "warning" | "insufficient_data";
+
+/**
+ * Mirrors `recording_bundle::RecordingQualitySummary` field-for-field:
+ * derived-only, never persisted, and never a basis for rewriting either
+ * `raw.csv` or `annotations.json`.
+ */
+export type RecordingQualitySummary = {
+  recordingId: string;
+  rowCount: number;
+  timeSpanMs: number;
+  timestampStatus: TimestampStatus;
+  nonMonotonicRowCount: number;
+  effectiveSampleRateHz: number | null;
+  missingValueCounts: Record<string, number>;
+  missingChannels: string[];
+  intervalCount: number;
+  labeledRowCount: number;
+  unlabeledRowCount: number;
+  shortLabelIntervalIds: string[];
+  shortLabelThresholdMs: number;
+  warnings: string[];
+};
+
 function toResult<T>(promise: Promise<T>): Promise<RecordingBundleResult<T>> {
   return promise
     .then((value) => ({ status: "ok" as const, value }))
@@ -284,4 +308,19 @@ export async function getRawRecordingWindow(
       gridSize: request.gridSize,
     }),
   );
+}
+
+/**
+ * Fetches a derived-only recording/collection quality summary (M1) through
+ * `get_recording_quality_summary`: row count, timestamp monotonicity and
+ * effective sample rate, per-channel missing values, and label
+ * coverage/short-label warnings. Never writes any bundle file.
+ */
+export async function getRecordingQualitySummary(
+  recordingId: string,
+): Promise<RecordingBundleResult<RecordingQualitySummary>> {
+  if (!isTauriDesktop()) {
+    return { status: "error", message: "Recording bundle persistence requires the desktop app" };
+  }
+  return toResult(invoke<RecordingQualitySummary>("get_recording_quality_summary", { recordingId }));
 }

@@ -7,7 +7,9 @@ import { Label } from "../../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 import type { CurationStatus } from "../../../shared/tauri/recordingBundle";
 import type { LiveInterval } from "../annotations/timeline";
+import { computeLiveQualitySummary } from "../quality/computeLiveQualitySummary";
 import type { DatasetRow, GestureDatasetLabel } from "../store/telemetryStore";
+import { RecordingQualitySummaryCard } from "./RecordingQualitySummaryCard";
 
 type Gap = { startRawRow: number; endRawRow: number };
 
@@ -105,6 +107,7 @@ export function RecordingTimelineEditor({
       </div>
 
       {rows.length === 0 && <p className="text-xs text-muted-foreground">No rows captured.</p>}
+      {rows.length > 0 && <RecordingQualitySummaryCard summary={computeLiveQualitySummary(rows, intervals)} />}
 
       <div className="flex flex-col gap-2">
         {sorted.map((interval) => (

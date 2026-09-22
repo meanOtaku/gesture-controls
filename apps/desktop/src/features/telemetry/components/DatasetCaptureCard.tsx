@@ -316,7 +316,10 @@ export function DatasetCaptureCard({
             above. Press and hold (mouse, touch, or Space/Enter) to mark the current label on the
             raw timeline; release to end that interval. It never toggles — releasing, losing
             focus, or the pointer being cancelled all stop marking. Time left unmarked stays
-            unannotated in the exported CSV.
+            unannotated in the exported CSV. Hold for at least 300–500 ms per action, starting the
+            hold just before the action begins and releasing just after it ends — the current model
+            window is 500 ms, so a shorter mark gives it too little context; the quality summary
+            below flags any saved interval under 150 ms as likely too brief.
           </HelpTooltip>
 
           <AlertDialog>

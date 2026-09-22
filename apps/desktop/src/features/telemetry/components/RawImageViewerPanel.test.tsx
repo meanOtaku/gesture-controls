@@ -57,6 +57,25 @@ function rawWindow(recordingId: string): RawRecordingWindow {
   };
 }
 
+function qualitySummary(recordingId: string) {
+  return {
+    recordingId,
+    rowCount: 4096,
+    timeSpanMs: 81_920,
+    timestampStatus: "ok",
+    nonMonotonicRowCount: 0,
+    effectiveSampleRateHz: 50,
+    missingValueCounts: {},
+    missingChannels: [],
+    intervalCount: 0,
+    labeledRowCount: 0,
+    unlabeledRowCount: 4096,
+    shortLabelIntervalIds: [],
+    shortLabelThresholdMs: 150,
+    warnings: [],
+  };
+}
+
 function mockInvoke({
   recordings,
   detailByRecording,
@@ -73,6 +92,9 @@ function mockInvoke({
     }
     if (command === "get_raw_recording_window") {
       return Promise.resolve(rawWindow(args?.recordingId as string));
+    }
+    if (command === "get_recording_quality_summary") {
+      return Promise.resolve(qualitySummary(args?.recordingId as string));
     }
     return Promise.reject(new Error(`unmocked command ${command}`));
   });
@@ -96,6 +118,63 @@ afterEach(() => {
   rawImageViewerStore.setChannel(null);
   rawImageViewerStore.setRecording(null);
   Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+});
+
+describe("RawImageViewerPanel quality summary", () => {
+  it("loads and renders the recording quality summary for the selected recording", async () => {
+    mockInvoke({
+      recordings: [summary("rec-a")],
+      detailByRecording: {
+        "rec-a": () =>
+          Promise.resolve({
+            recording: {},
+            annotations: { format_version: 1, recording_id: "rec-a", intervals: [] },
+          }),
+      },
+    });
+    renderPanel();
+
+    await screen.findByRole("combobox", { name: "Saved recording" });
+    rawImageViewerStore.setRecording("rec-a");
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Recording quality summary")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Timing OK")).toBeInTheDocument();
+    expect(invoke).toHaveBeenCalledWith("get_recording_quality_summary", { recordingId: "rec-a" });
+  });
+
+  it("surfaces backend warnings when timestamp quality is degraded", async () => {
+    invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
+      if (command === "list_recording_bundles") return Promise.resolve([summary("rec-a")]);
+      if (command === "load_recording_bundle") {
+        return Promise.resolve({
+          recording: {},
+          annotations: { format_version: 1, recording_id: "rec-a", intervals: [] },
+        });
+      }
+      if (command === "get_raw_recording_window") return Promise.resolve(rawWindow(args?.recordingId as string));
+      if (command === "get_recording_quality_summary") {
+        return Promise.resolve({
+          ...qualitySummary("rec-a"),
+          timestampStatus: "warning",
+          nonMonotonicRowCount: 3,
+          effectiveSampleRateHz: null,
+          warnings: ["3 row(s) are out of chronological order; the effective sample rate cannot be trusted."],
+        });
+      }
+      return Promise.reject(new Error(`unmocked command ${command}`));
+    });
+    renderPanel();
+
+    await screen.findByRole("combobox", { name: "Saved recording" });
+    rawImageViewerStore.setRecording("rec-a");
+
+    await waitFor(() => {
+      expect(screen.getByText("Timing warning")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("out of chronological order");
+  });
 });
 
 describe("RawImageViewerPanel label ranges", () => {

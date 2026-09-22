@@ -805,6 +805,9 @@ class TelemetryStore {
   }
 
   ingestWatchOrientation(orientation: WatchOrientationSample): void {
+    // M1: reject an impossible/non-finite source timestamp outright rather
+    // than accepting or inventing one for row-ordering/timing purposes.
+    if (!Number.isFinite(orientation.timestampNs)) return;
     if (orientation.sequence === this.lastWatchOrientationSequence) return;
     this.lastWatchOrientationSequence = orientation.sequence;
     const at = Date.now();
@@ -1025,6 +1028,13 @@ class TelemetryStore {
     return true;
   }
 
+  /**
+   * Shared choke point for every batched watch channel (PPG, heart rate,
+   * temperature, EDA). A non-finite source timestamp is an impossible
+   * capture-time value (M1): that single sample is skipped rather than
+   * accepted with a garbage timestamp or having one invented for it: every
+   * other sample in the batch is still ingested normally.
+   */
   private ingestTimestampedBatch(
     timestampsNs: number[],
     ingest: (timestampNs: number, index: number, receivedAt: number) => void,
@@ -1033,6 +1043,7 @@ class TelemetryStore {
     const lastTimestampNs = timestampsNs[timestampsNs.length - 1];
     const receivedAt = Date.now();
     timestampsNs.forEach((timestampNs, index) => {
+      if (!Number.isFinite(timestampNs)) return;
       ingest(timestampNs, index, receivedAt - (lastTimestampNs - timestampNs) / 1_000_000);
     });
     this.schedulePublish();

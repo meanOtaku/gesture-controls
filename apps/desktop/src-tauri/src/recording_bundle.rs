@@ -817,6 +817,192 @@ pub fn get_raw_recording_window(
     })
 }
 
+/// A short label interval is flagged as too brief to give the fixed 500 ms
+/// model window usable context (see the milestone plan's collection-protocol
+/// rationale); this does not reject or alter the interval, only surfaces it.
+const SHORT_LABEL_THRESHOLD_MS: f64 = 150.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TimestampStatus {
+    /// At least two rows, strictly non-decreasing `timestamp_ns`, usable span.
+    Ok,
+    /// Non-monotonic order and/or a usable span could not be established;
+    /// callers must not treat the effective sample rate as trustworthy.
+    Warning,
+    /// Fewer than two rows: no basis for a rate or monotonicity claim at all.
+    InsufficientData,
+}
+
+/// Read-only, derived-only recording/collection quality summary (M1):
+/// computed fresh from the immutable `raw.csv` plus `annotations.json` on
+/// every call, never persisted and never a basis for rewriting either file.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordingQualitySummary {
+    pub recording_id: String,
+    pub row_count: usize,
+    pub time_span_ms: f64,
+    pub timestamp_status: TimestampStatus,
+    pub non_monotonic_row_count: usize,
+    pub effective_sample_rate_hz: Option<f64>,
+    /// Per allow-listed channel: count of empty/missing values across every row.
+    pub missing_value_counts: BTreeMap<String, usize>,
+    /// Channels with zero recorded values anywhere in this recording.
+    pub missing_channels: Vec<String>,
+    pub interval_count: usize,
+    pub labeled_row_count: usize,
+    pub unlabeled_row_count: usize,
+    pub short_label_interval_ids: Vec<String>,
+    pub short_label_threshold_ms: f64,
+    /// Human-readable, actionable warnings; empty when nothing is flagged.
+    pub warnings: Vec<String>,
+}
+
+/// Pure computation behind `get_recording_quality_summary`, kept separate
+/// from file IO so it is directly unit-testable against synthetic CSV text.
+fn compute_quality_summary(
+    recording_id: String,
+    raw_csv: &str,
+    annotations: &AnnotationsFile,
+) -> Result<RecordingQualitySummary, String> {
+    // `timestamp_ns` is present in every allow-listed-column parse; reuse the
+    // first one purely for the shared timestamp series.
+    let (timestamps_ns, _) = parse_raw_csv_column(raw_csv, RAW_WINDOW_ALLOWED_COLUMNS[0])?;
+    let row_count = timestamps_ns.len();
+
+    let mut non_monotonic_row_count = 0usize;
+    for window in timestamps_ns.windows(2) {
+        if window[1] < window[0] {
+            non_monotonic_row_count += 1;
+        }
+    }
+    let time_span_ns = match (timestamps_ns.first(), timestamps_ns.last()) {
+        (Some(first), Some(last)) => (last - first).max(0),
+        _ => 0,
+    };
+    let time_span_ms = time_span_ns as f64 / 1_000_000.0;
+
+    let timestamp_status = if row_count < 2 {
+        TimestampStatus::InsufficientData
+    } else if non_monotonic_row_count > 0 || time_span_ns <= 0 {
+        TimestampStatus::Warning
+    } else {
+        TimestampStatus::Ok
+    };
+
+    let effective_sample_rate_hz = if timestamp_status == TimestampStatus::Ok {
+        Some((row_count - 1) as f64 / (time_span_ns as f64 / 1_000_000_000.0))
+    } else {
+        None
+    };
+
+    let mut missing_value_counts = BTreeMap::new();
+    let mut missing_channels = Vec::new();
+    for column in RAW_WINDOW_ALLOWED_COLUMNS {
+        let (_, values) = parse_raw_csv_column(raw_csv, column)?;
+        let missing = values.iter().filter(|value| value.is_none()).count();
+        missing_value_counts.insert(column.to_string(), missing);
+        if row_count > 0 && missing == row_count {
+            missing_channels.push(column.to_string());
+        }
+    }
+
+    let labeled_row_count: usize = annotations
+        .intervals
+        .iter()
+        .map(|interval| {
+            interval
+                .resolved_end
+                .raw_row
+                .saturating_sub(interval.resolved_start.raw_row)
+                + 1
+        })
+        .sum::<usize>()
+        .min(row_count);
+    let unlabeled_row_count = row_count.saturating_sub(labeled_row_count);
+
+    let short_label_interval_ids: Vec<String> = annotations
+        .intervals
+        .iter()
+        .filter(|interval| {
+            let duration_ms = (interval.resolved_end.source_timestamp_ns
+                - interval.resolved_start.source_timestamp_ns) as f64
+                / 1_000_000.0;
+            duration_ms < SHORT_LABEL_THRESHOLD_MS
+        })
+        .map(|interval| interval.interval_id.clone())
+        .collect();
+
+    let mut warnings = Vec::new();
+    match timestamp_status {
+        TimestampStatus::Warning if non_monotonic_row_count > 0 => warnings.push(format!(
+            "{non_monotonic_row_count} row(s) are out of chronological order; the effective sample rate cannot be trusted."
+        )),
+        TimestampStatus::Warning => warnings.push(
+            "Recording has zero observed time span; timestamps cannot establish a sample rate.".to_string(),
+        ),
+        TimestampStatus::InsufficientData => {
+            warnings.push("Fewer than two rows; timestamp quality cannot be assessed.".to_string())
+        }
+        TimestampStatus::Ok => {}
+    }
+    if !missing_channels.is_empty() {
+        warnings.push(format!(
+            "{} channel(s) have no recorded values: {}.",
+            missing_channels.len(),
+            missing_channels.join(", ")
+        ));
+    }
+    if !short_label_interval_ids.is_empty() {
+        warnings.push(format!(
+            "{} labeled interval(s) are shorter than {SHORT_LABEL_THRESHOLD_MS:.0} ms, which may be too brief for the current model window.",
+            short_label_interval_ids.len()
+        ));
+    }
+
+    Ok(RecordingQualitySummary {
+        recording_id,
+        row_count,
+        time_span_ms,
+        timestamp_status,
+        non_monotonic_row_count,
+        effective_sample_rate_hz,
+        missing_value_counts,
+        missing_channels,
+        interval_count: annotations.intervals.len(),
+        labeled_row_count,
+        unlabeled_row_count,
+        short_label_interval_ids,
+        short_label_threshold_ms: SHORT_LABEL_THRESHOLD_MS,
+        warnings,
+    })
+}
+
+/// Returns a derived-only recording/collection quality summary (M1): row
+/// count, timestamp monotonicity/effective sample rate, per-channel missing
+/// values, and label coverage/short-label warnings. Never writes any bundle
+/// file and never rewrites legacy imports; a bad/mixed timestamp stream is
+/// reported via `warnings`, not silently presented as clean.
+#[tauri::command]
+pub fn get_recording_quality_summary(
+    recording_id: String,
+    app: AppHandle,
+) -> Result<RecordingQualitySummary, String> {
+    validate_recording_id(&recording_id)?;
+    let dir = recording_bundles_dir(&app)?.join(&recording_id);
+    let (_, annotations) = load_bundle_pair(&dir)?;
+    let content = fs::read_to_string(raw_csv_path(&dir))
+        .map_err(|error| format!("failed to read raw.csv for recording '{recording_id}': {error}"))?;
+    if content.len() > MAX_RAW_CSV_BYTES {
+        return Err(format!(
+            "raw.csv exceeds the {MAX_RAW_CSV_BYTES}-byte limit (got {} bytes)",
+            content.len()
+        ));
+    }
+    compute_quality_summary(recording_id, &content, &annotations)
+}
+
 /// Sets one interval's curation status after a bundle has been saved,
 /// bumping its revision. `raw.csv` is never touched; only `annotations.json`
 /// is rewritten, atomically via a sibling tmp file plus rename.
@@ -1070,6 +1256,104 @@ mod tests {
         assert!(resolve_raw_window_bounds(10_000, 1, 64).is_err());
         assert!(resolve_raw_window_bounds(10_000, 63, 64).is_err());
         assert!(resolve_raw_window_bounds(10_000, 64, 64).is_ok());
+    }
+
+    fn empty_annotations(id: &str) -> AnnotationsFile {
+        AnnotationsFile { format_version: 1, recording_id: id.to_string(), intervals: vec![] }
+    }
+
+    fn interval(
+        raw_row_start: usize,
+        raw_row_end: usize,
+        start_ns: i64,
+        end_ns: i64,
+    ) -> AnnotationInterval {
+        AnnotationInterval {
+            interval_id: Uuid::new_v4().to_string(),
+            label_id: "pinch".to_string(),
+            requested_start_monotonic_ns: start_ns,
+            requested_end_monotonic_ns: end_ns,
+            resolved_start: ResolvedBoundary { raw_row: raw_row_start, source_timestamp_ns: start_ns },
+            resolved_end: ResolvedBoundary { raw_row: raw_row_end, source_timestamp_ns: end_ns },
+            resolution_rule_version: 1,
+            creation_mechanism: CreationMechanism::TimelineEdit,
+            curation_status: CurationStatus::Unreviewed,
+            created_at: "2026-09-22T00:00:00Z".to_string(),
+            revision: 1,
+        }
+    }
+
+    #[test]
+    fn quality_summary_reports_ok_for_uniform_monotonic_timestamps() {
+        // 11 rows at exactly 20ms spacing => 50Hz effective rate.
+        let rows: Vec<(i64, &str)> = (0..11).map(|i| (i * 20_000_000, "1.0")).collect();
+        let csv = raw_csv_with_rows(&rows);
+        let id = Uuid::new_v4().to_string();
+        let summary = compute_quality_summary(id.clone(), &csv, &empty_annotations(&id)).unwrap();
+        assert_eq!(summary.row_count, 11);
+        assert_eq!(summary.timestamp_status, TimestampStatus::Ok);
+        assert_eq!(summary.non_monotonic_row_count, 0);
+        assert!((summary.effective_sample_rate_hz.unwrap() - 50.0).abs() < 1e-6);
+        assert!(summary.warnings.is_empty());
+    }
+
+    #[test]
+    fn quality_summary_flags_non_monotonic_timestamps_as_warning() {
+        let csv = raw_csv_with_rows(&[
+            (0, "1.0"),
+            (20_000_000, "1.0"),
+            (10_000_000, "1.0"),
+            (40_000_000, "1.0"),
+        ]);
+        let id = Uuid::new_v4().to_string();
+        let summary = compute_quality_summary(id.clone(), &csv, &empty_annotations(&id)).unwrap();
+        assert_eq!(summary.timestamp_status, TimestampStatus::Warning);
+        assert_eq!(summary.non_monotonic_row_count, 1);
+        assert!(summary.effective_sample_rate_hz.is_none());
+        assert!(
+            summary
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("out of chronological order"))
+        );
+    }
+
+    #[test]
+    fn quality_summary_reports_insufficient_data_for_short_streams() {
+        let csv = raw_csv_with_rows(&[(0, "1.0")]);
+        let id = Uuid::new_v4().to_string();
+        let summary = compute_quality_summary(id.clone(), &csv, &empty_annotations(&id)).unwrap();
+        assert_eq!(summary.timestamp_status, TimestampStatus::InsufficientData);
+        assert!(summary.effective_sample_rate_hz.is_none());
+    }
+
+    #[test]
+    fn quality_summary_reports_fully_missing_channels() {
+        // `raw_csv_with_rows` only ever populates ppg_green; every other
+        // allow-listed channel is entirely empty in this fixture.
+        let csv = raw_csv_with_rows(&[(0, "1.0"), (20_000_000, "2.0")]);
+        let id = Uuid::new_v4().to_string();
+        let summary = compute_quality_summary(id.clone(), &csv, &empty_annotations(&id)).unwrap();
+        assert!(!summary.missing_channels.contains(&"ppg_green".to_string()));
+        assert!(summary.missing_channels.contains(&"accel_x".to_string()));
+        assert_eq!(summary.missing_value_counts["accel_x"], 2);
+        assert!(summary.warnings.iter().any(|warning| warning.contains("no recorded values")));
+    }
+
+    #[test]
+    fn quality_summary_flags_short_labeled_intervals_and_counts_coverage() {
+        let rows: Vec<(i64, &str)> = (0..10).map(|i| (i * 20_000_000, "1.0")).collect();
+        let csv = raw_csv_with_rows(&rows);
+        let id = Uuid::new_v4().to_string();
+        let mut annotations = empty_annotations(&id);
+        // Rows 0..=1 spanning 20ms: well under the 150ms short-label threshold.
+        annotations.intervals.push(interval(0, 1, 0, 20_000_000));
+        let summary = compute_quality_summary(id.clone(), &csv, &annotations).unwrap();
+        assert_eq!(summary.interval_count, 1);
+        assert_eq!(summary.labeled_row_count, 2);
+        assert_eq!(summary.unlabeled_row_count, 8);
+        assert_eq!(summary.short_label_interval_ids.len(), 1);
+        assert!(summary.warnings.iter().any(|warning| warning.contains("shorter than")));
     }
 
     #[test]
