@@ -249,4 +249,102 @@ describe("telemetryStore", () => {
       expect(telemetryStore.getSessionLabels()).toContain("waving");
     });
   });
+
+  describe("dataset row chronological ordering (GC-029)", () => {
+    beforeEach(() => {
+      telemetryStore.setDatasetCaptureMode("timeline");
+      telemetryStore.startDatasetRecording();
+    });
+
+    it("re-sorts a cross-sensor out-of-order arrival into source-timestamp order", () => {
+      telemetryStore.ingestWatchOrientation({
+        deviceId: "watch-test", sequence: 1, timestampNs: 2_000,
+        quaternion: [1, 0, 0, 0], accelerometer: null, gyroscope: null,
+      });
+      telemetryStore.ingestPpgBatch({
+        sequence: 1, timestampsNs: [1_000], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
+      });
+      telemetryStore.ingestWatchOrientation({
+        deviceId: "watch-test", sequence: 2, timestampNs: 1_500,
+        quaternion: [1, 0, 0, 0], accelerometer: null, gyroscope: null,
+      });
+
+      expect(telemetryStore.getDatasetRows().map((row) => row.timestampNs)).toEqual(["1000", "1500", "2000"]);
+    });
+
+    it("re-sorts a cross-batch out-of-order arrival within the same channel", () => {
+      telemetryStore.ingestPpgBatch({
+        sequence: 1, timestampsNs: [3_000], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
+      });
+      telemetryStore.ingestPpgBatch({
+        sequence: 2, timestampsNs: [1_000, 2_000], green: [1, 1], greenStatus: [0, 0], red: [1, 1], redStatus: [0, 0], ir: [1, 1], irStatus: [0, 0],
+      });
+
+      expect(telemetryStore.getDatasetRows().map((row) => row.timestampNs)).toEqual(["1000", "2000", "3000"]);
+    });
+
+    it("breaks equal source timestamps by arrival order (stable tie-break)", () => {
+      telemetryStore.ingestWatchOrientation({
+        deviceId: "watch-test", sequence: 1, timestampNs: 1_000,
+        quaternion: [1, 0, 0, 0], accelerometer: null, gyroscope: null,
+      });
+      telemetryStore.ingestPpgBatch({
+        sequence: 1, timestampsNs: [1_000], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
+      });
+
+      const rows = telemetryStore.getDatasetRows();
+      expect(rows.map((row) => row.timestampNs)).toEqual(["1000", "1000"]);
+      expect(rows[0].ppgGreen).toBeNull();
+      expect(rows[1].ppgGreen).toBe(1);
+    });
+
+    it("shifts timeline interval boundaries so a late out-of-order sample does not move an already-closed interval's rows", () => {
+      telemetryStore.ingestPpgBatch({
+        sequence: 1, timestampsNs: [1_000], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
+      });
+      telemetryStore.setTimelineLabel("waving");
+      telemetryStore.ingestPpgBatch({
+        sequence: 2, timestampsNs: [2_000], green: [2], greenStatus: [0], red: [2], redStatus: [0], ir: [2], irStatus: [0],
+      });
+      telemetryStore.setTimelineLabel(null);
+
+      const beforeLateArrival = telemetryStore.getTimelineIntervals()[0];
+      expect(beforeLateArrival).toMatchObject({ startRawRow: 1, endRawRow: 2 });
+
+      // A straggler with an earlier source timestamp arrives after the interval closed.
+      telemetryStore.ingestPpgBatch({
+        sequence: 3, timestampsNs: [500], green: [3], greenStatus: [0], red: [3], redStatus: [0], ir: [3], irStatus: [0],
+      });
+
+      const rows = telemetryStore.getDatasetRows();
+      expect(rows.map((row) => row.timestampNs)).toEqual(["500", "1000", "2000"]);
+
+      const interval = telemetryStore.getTimelineIntervals()[0];
+      expect(interval.startRawRow).toBe(2);
+      expect(interval.endRawRow).toBe(3);
+      expect(rows[interval.startRawRow].timestampNs).toBe("2000");
+      expect(rows[(interval.endRawRow as number) - 1].timestampNs).toBe("2000");
+    });
+
+    it("persists raw.csv rows in chronological order after an out-of-order live capture", () => {
+      telemetryStore.ingestWatchOrientation({
+        deviceId: "watch-test", sequence: 1, timestampNs: 5_000,
+        quaternion: [1, 0, 0, 0], accelerometer: null, gyroscope: null,
+      });
+      telemetryStore.ingestPpgBatch({
+        sequence: 1, timestampsNs: [3_000], green: [1], greenStatus: [0], red: [1], redStatus: [0], ir: [1], irStatus: [0],
+      });
+      telemetryStore.ingestWatchOrientation({
+        deviceId: "watch-test", sequence: 2, timestampNs: 4_000,
+        quaternion: [1, 0, 0, 0], accelerometer: null, gyroscope: null,
+      });
+
+      const payload = telemetryStore.buildRecordingBundlePayload();
+      const dataLines = payload?.rawCsv.split("\n").slice(1) ?? [];
+      const timestamps = dataLines.map((line) => Number(line.split(",")[0]));
+
+      expect(timestamps).toEqual([3_000, 4_000, 5_000]);
+      expect([...timestamps].sort((a, b) => a - b)).toEqual(timestamps);
+    });
+  });
 });

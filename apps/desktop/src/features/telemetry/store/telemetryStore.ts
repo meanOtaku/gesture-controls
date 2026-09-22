@@ -188,6 +188,41 @@ class RingBuffer<T> {
   get length(): number {
     return this.count;
   }
+
+  get(index: number): T | undefined {
+    if (index < 0 || index >= this.count) return undefined;
+    return this.slots[(this.start + index) % this.capacity] as T;
+  }
+
+  /** Upper-bound binary search: first logical index whose `key` exceeds `target`, assuming the buffer is already sorted ascending by `key`. Ties land after existing equal-key entries (stable). */
+  upperBound(key: (item: T) => number, target: number): number {
+    let lo = 0;
+    let hi = this.count;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (key(this.get(mid) as T) <= target) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  }
+
+  /** Inserts `item` at logical `index`, shifting later elements right. At capacity, evicts the oldest element (index 0), same as `push`. */
+  insertAt(index: number, item: T): void {
+    if (this.count < this.capacity) {
+      for (let i = this.count; i > index; i -= 1) {
+        this.slots[(this.start + i) % this.capacity] = this.slots[(this.start + i - 1) % this.capacity];
+      }
+      this.slots[(this.start + index) % this.capacity] = item;
+      this.count += 1;
+    } else if (index > 0) {
+      for (let i = 1; i < index; i += 1) {
+        this.slots[(this.start + i - 1) % this.capacity] = this.slots[(this.start + i) % this.capacity];
+      }
+      this.slots[(this.start + index - 1) % this.capacity] = item;
+      this.start = (this.start + 1) % this.capacity;
+    }
+    // index === 0 at full capacity: item is older than everything retained, so it is dropped (same outcome as push's own eviction rule).
+  }
 }
 
 class TelemetryStore {
@@ -603,6 +638,30 @@ class TelemetryStore {
     return true;
   }
 
+  /**
+   * Inserts a dataset row at its chronological position by `timestampNs`
+   * (stable: equal timestamps keep arrival order), instead of always
+   * appending in arrival order. Cross-batch/cross-sensor ingest can deliver a
+   * sample whose source timestamp is earlier than one already buffered; a
+   * plain append would leave `raw.csv` non-chronological (GC-029). Any
+   * timeline interval boundary recorded at or after the insertion point is
+   * shifted by one so it keeps pointing at the same logical rows.
+   */
+  private pushDatasetRowSorted(row: DatasetRow): void {
+    const timestampNs = Number(row.timestampNs);
+    const previousLength = this.datasetRows.length;
+    const insertIndex = Number.isFinite(timestampNs)
+      ? this.datasetRows.upperBound((existing) => Number(existing.timestampNs), timestampNs)
+      : previousLength;
+    this.datasetRows.insertAt(insertIndex, row);
+    if (insertIndex < previousLength) {
+      this.timelineIntervals.forEach((interval) => {
+        if (interval.startRawRow >= insertIndex) interval.startRawRow += 1;
+        if (interval.endRawRow !== null && interval.endRawRow >= insertIndex) interval.endRawRow += 1;
+      });
+    }
+  }
+
   /** Stops accepting new rows but keeps the buffered session so it can still be exported. Transitions to Saved state. */
   stopDatasetRecording(): void {
     if (!this.datasetRecording) return;
@@ -838,7 +897,7 @@ class TelemetryStore {
     };
     if (this.datasetRecording && this.datasetSession) {
       this.transitionDatasetFromArmingIfNeeded();
-      this.datasetRows.push({
+      this.pushDatasetRowSorted({
         timestampNs: String(orientation.timestampNs),
         sequence: String(orientation.sequence),
         ppgGreen: this.lastKnownPpgSample.green,
@@ -880,7 +939,7 @@ class TelemetryStore {
       this.lastKnownPpgSample = { green, red, ir, contactQuality };
       if (this.datasetRecording && this.datasetSession) {
         this.transitionDatasetFromArmingIfNeeded();
-        this.datasetRows.push({
+        this.pushDatasetRowSorted({
           timestampNs: String(timestampNs),
           sequence: String(batch.sequence),
           ppgGreen: green,
