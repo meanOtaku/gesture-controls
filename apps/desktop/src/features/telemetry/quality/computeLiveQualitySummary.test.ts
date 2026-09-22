@@ -77,14 +77,13 @@ describe("computeLiveQualitySummary", () => {
     expect(summary.missingValueCounts.accel_x).toBe(2);
   });
 
-  it("counts labeled/unlabeled rows and flags a short labeled interval", () => {
+  it("counts labeled/unlabeled rows and detects short labeled intervals", () => {
     const rows = Array.from({ length: 10 }, (_, i) => row(i * 20_000_000));
     // rows [0,2) span 20ms: under the 150ms short-label threshold.
     const summary = computeLiveQualitySummary(rows, [interval(0, 2)]);
     expect(summary.labeledRowCount).toBe(2);
     expect(summary.unlabeledRowCount).toBe(8);
     expect(summary.shortLabelIntervalIds).toEqual(["iv-1"]);
-    expect(summary.warnings.some((w) => w.includes("shorter than"))).toBe(true);
   });
 
   it("ignores an open (unclosed) interval for coverage and short-label checks", () => {

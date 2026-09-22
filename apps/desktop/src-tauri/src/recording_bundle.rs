@@ -1251,13 +1251,6 @@ fn compute_quality_summary(
             missing_channels.join(", ")
         ));
     }
-    if !short_label_interval_ids.is_empty() {
-        warnings.push(format!(
-            "{} labeled interval(s) are shorter than {SHORT_LABEL_THRESHOLD_MS:.0} ms, which may be too brief for the current model window.",
-            short_label_interval_ids.len()
-        ));
-    }
-
     Ok(RecordingQualitySummary {
         recording_id,
         row_count,
@@ -1686,7 +1679,6 @@ mod tests {
         assert_eq!(summary.labeled_row_count, 2);
         assert_eq!(summary.unlabeled_row_count, 8);
         assert_eq!(summary.short_label_interval_ids.len(), 1);
-        assert!(summary.warnings.iter().any(|warning| warning.contains("shorter than")));
     }
 
     #[test]

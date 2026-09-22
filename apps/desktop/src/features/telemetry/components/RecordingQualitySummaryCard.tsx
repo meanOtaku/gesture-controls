@@ -44,9 +44,6 @@ export function RecordingQualitySummaryCard({ summary }: { summary: RecordingQua
           {summary.labeledRowCount.toLocaleString()} labeled / {summary.unlabeledRowCount.toLocaleString()} unlabeled rows
           {summary.intervalCount > 0 && <> across {summary.intervalCount} interval(s)</>}
         </span>
-        {summary.shortLabelIntervalIds.length > 0 && (
-          <Badge variant="destructive">{summary.shortLabelIntervalIds.length} short label(s)</Badge>
-        )}
         {summary.missingChannels.length > 0 && (
           <Badge variant="destructive">{summary.missingChannels.length} missing channel(s)</Badge>
         )}

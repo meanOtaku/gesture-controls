@@ -90,11 +90,6 @@ export function computeLiveQualitySummary(rows: DatasetRow[], intervals: LiveInt
   if (missingChannels.length > 0) {
     warnings.push(`${missingChannels.length} channel(s) have no recorded values: ${missingChannels.join(", ")}.`);
   }
-  if (shortLabelIntervalIds.length > 0) {
-    warnings.push(
-      `${shortLabelIntervalIds.length} labeled interval(s) are shorter than ${SHORT_LABEL_THRESHOLD_MS} ms, which may be too brief for the current model window.`,
-    );
-  }
 
   return {
     recordingId: "",
