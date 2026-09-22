@@ -62,7 +62,10 @@ function rawWindow(recordingId: string): RawRecordingWindow {
   };
 }
 
-function derivativeWindow(recordingId: string): RawRecordingDerivativeWindow {
+function derivativeWindow(
+  recordingId: string,
+  overrides: Partial<RawRecordingDerivativeWindow> = {},
+): RawRecordingDerivativeWindow {
   return {
     recordingId,
     column: "ppg_green",
@@ -82,6 +85,10 @@ function derivativeWindow(recordingId: string): RawRecordingDerivativeWindow {
       windowSize: 11,
       version: "savitzky_golay_order2_window11_v1",
     },
+    mode: "time",
+    units: "per_second",
+    unavailableIsCadenceIssue: false,
+    ...overrides,
   };
 }
 
@@ -485,5 +492,60 @@ describe("RawImageViewerPanel derivative canvas", () => {
     expect(screen.queryByRole("img", { name: /Derivative \(Savitzky–Golay\)/ })).not.toBeInTheDocument();
     // The raw canvases are unaffected by the derivative being unavailable.
     expect(screen.getByRole("img", { name: /Grayscale/ })).toBeInTheDocument();
+    // Not offered when the recording simply has too few rows, only for a genuine cadence problem.
+    expect(screen.queryByRole("button", { name: /Preview by sample order/ })).not.toBeInTheDocument();
+  });
+
+  it("offers an explicit 'Preview by sample order' opt-in only when unavailable solely for a cadence issue, and never fetches it automatically", async () => {
+    invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
+      if (command === "list_recording_bundles") return Promise.resolve([summary("rec-a")]);
+      if (command === "load_recording_bundle") {
+        return Promise.resolve({ recording: {}, annotations: { format_version: 1, recording_id: "rec-a", intervals: [] } });
+      }
+      if (command === "get_raw_recording_window") return Promise.resolve(rawWindow(args?.recordingId as string));
+      if (command === "get_recording_quality_summary") return Promise.resolve(qualitySummary(args?.recordingId as string));
+      if (command === "get_raw_recording_derivative_window") {
+        if (args?.previewBySampleOrder === true) {
+          return Promise.resolve(
+            derivativeWindow(args?.recordingId as string, {
+              mode: "sample_order",
+              units: "per_sample",
+              derivativeValues: [],
+            }),
+          );
+        }
+        return Promise.resolve(
+          derivativeWindow(args?.recordingId as string, {
+            available: false,
+            unavailableReason: "timestamp spacing deviates by more than 25% from the median cadence",
+            unavailableIsCadenceIssue: true,
+          }),
+        );
+      }
+      return Promise.reject(new Error(`unmocked command ${command}`));
+    });
+    renderPanel();
+    await screen.findByRole("combobox", { name: "Saved recording" });
+
+    rawImageViewerStore.setRecording("rec-a");
+    rawImageViewerStore.setChannel("ppg_green");
+
+    const previewButton = await screen.findByRole("button", { name: /Preview by sample order/ });
+    // The opt-in fallback must never fire on its own: no `previewBySampleOrder: true` call yet.
+    expect(invoke).not.toHaveBeenCalledWith(
+      "get_raw_recording_derivative_window",
+      expect.objectContaining({ previewBySampleOrder: true }),
+    );
+
+    fireEvent.click(previewButton);
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith(
+        "get_raw_recording_derivative_window",
+        expect.objectContaining({ previewBySampleOrder: true }),
+      );
+    });
+    expect(await screen.findByText(/Legacy visual preview — change per sample, not per second/)).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /Derivative preview \(sample order, legacy\)/ })).toBeInTheDocument();
   });
 });

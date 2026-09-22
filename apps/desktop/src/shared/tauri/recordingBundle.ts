@@ -201,6 +201,12 @@ export type RawRecordingDerivativeWindow = {
   unavailableReason: string | null;
   effectiveSampleRateHz: number | null;
   filterConfig: DerivativeFilterConfig;
+  /** `"time"` (default) or `"sample_order"` (GC-032 opt-in legacy preview). */
+  mode: "time" | "sample_order";
+  /** `"per_second"` in `"time"` mode, `"per_sample"` in `"sample_order"` mode — the two are not comparable. */
+  units: "per_second" | "per_sample";
+  /** Only meaningful in `"time"` mode: true when unavailable solely because of a timestamp/cadence irregularity (not too few rows) — exactly when the sample-order preview fallback may be offered. */
+  unavailableIsCadenceIssue: boolean;
 };
 
 function toResult<T>(promise: Promise<T>): Promise<RecordingBundleResult<T>> {
@@ -353,9 +359,19 @@ export async function getRawRecordingWindow(
  * signal, never used for inference or training, and never written into
  * `raw.csv` or any other bundle file. See `RawRecordingDerivativeWindow`'s
  * docs for the per-row/whole-recording availability contract.
+ *
+ * `previewBySampleOrder` (GC-032, default `false`): an explicit, caller-opted-in
+ * request for the legacy visual-preview fallback for recordings whose saved
+ * timestamps are too irregular for the time-based derivative — the same
+ * filter run in raw row/sample order, in "per sample" (not "per second")
+ * units. Callers must only pass `true` once a prior `false`-mode response
+ * came back with `unavailableIsCadenceIssue: true`; this function never
+ * enables it on its own, and the result must never be used for model
+ * training, export, or inference.
  */
 export async function getRawRecordingDerivativeWindow(
   request: RawRecordingWindowRequest,
+  previewBySampleOrder = false,
 ): Promise<RecordingBundleResult<RawRecordingDerivativeWindow>> {
   if (!isTauriDesktop()) {
     return { status: "error", message: "Recording bundle persistence requires the desktop app" };
@@ -366,6 +382,7 @@ export async function getRawRecordingDerivativeWindow(
       column: request.column,
       startRawRow: request.startRawRow,
       gridSize: request.gridSize,
+      previewBySampleOrder,
     }),
   );
 }

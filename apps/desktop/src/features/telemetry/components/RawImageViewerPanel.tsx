@@ -194,6 +194,9 @@ export function RawImageViewerPanel() {
   const derivativeStatus = rawImageViewerStore.getDerivativeStatus();
   const derivativeErrorMessage = rawImageViewerStore.getDerivativeErrorMessage();
   const derivativeWindow = rawImageViewerStore.getDerivativeWindow();
+  const sampleOrderPreviewStatus = rawImageViewerStore.getSampleOrderPreviewStatus();
+  const sampleOrderPreviewErrorMessage = rawImageViewerStore.getSampleOrderPreviewErrorMessage();
+  const sampleOrderPreviewWindow = rawImageViewerStore.getSampleOrderPreviewWindow();
 
   const rowHop = rawWindowRowHop(gridSize);
   const maxValues = rawWindowMaxValues(gridSize);
@@ -480,6 +483,48 @@ export function RawImageViewerPanel() {
                                 {derivativeWindow.unavailableReason ??
                                   "this recording's timestamp cadence does not meet the offline derivative's regularity requirement."}
                               </p>
+                              {derivativeWindow.unavailableIsCadenceIssue &&
+                                sampleOrderPreviewStatus !== "loaded" &&
+                                sampleOrderPreviewStatus !== "loading" && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => rawImageViewerStore.requestSampleOrderPreview()}
+                                  >
+                                    Preview by sample order
+                                  </Button>
+                                )}
+                              {sampleOrderPreviewStatus === "loading" ? (
+                                <p className="text-sm text-muted-foreground" aria-live="polite">
+                                  Loading sample-order preview…
+                                </p>
+                              ) : sampleOrderPreviewStatus === "error" ? (
+                                <p role="alert" className="text-sm text-destructive">
+                                  Could not load the sample-order preview: {sampleOrderPreviewErrorMessage}
+                                </p>
+                              ) : sampleOrderPreviewWindow === null ? null : !sampleOrderPreviewWindow.available ? (
+                                <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+                                  Sample-order preview also unavailable:{" "}
+                                  {sampleOrderPreviewWindow.unavailableReason}
+                                </p>
+                              ) : (
+                                <div className="flex flex-col gap-2">
+                                  <p role="status" className="text-sm text-muted-foreground">
+                                    Legacy visual preview — change per sample, not per second. This recording&apos;s
+                                    saved timestamps remain timing-invalid; this view does not fix that and is never
+                                    used for model training, export, or inference.
+                                  </p>
+                                  <RawImageCanvas
+                                    rawWindow={rawWindow}
+                                    normalizationMode={normalizationMode}
+                                    title="Derivative preview (sample order, legacy)"
+                                    colorMode="diverging"
+                                    derivativeWindow={sampleOrderPreviewWindow}
+                                    labelRangeOverlay={<RawImageLabelRangeRail ranges={visibleLabelRanges} />}
+                                  />
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <RawImageCanvas

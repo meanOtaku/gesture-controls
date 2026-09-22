@@ -68,6 +68,18 @@ class RawImageViewerStore {
   private derivativeErrorMessage: string | null = null;
   private derivativeWindow: RawRecordingDerivativeWindow | null = null;
 
+  /**
+   * GC-032: the "preview by sample order" legacy fallback. Unlike the
+   * time-based derivative above, this is never fetched automatically — it
+   * only loads when `requestSampleOrderPreview()` is called explicitly (the
+   * Derivative panel's opt-in button), and it is cleared on every selection
+   * change like everything else here so a stale preview can never survive a
+   * recording/channel/grid-size switch.
+   */
+  private sampleOrderPreviewStatus: RawImageViewerStatus = "empty";
+  private sampleOrderPreviewErrorMessage: string | null = null;
+  private sampleOrderPreviewWindow: RawRecordingDerivativeWindow | null = null;
+
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -124,6 +136,62 @@ class RawImageViewerStore {
   /** The last M3 derivative window successfully resolved for the current recording/channel/start selection, or `null` if none has loaded yet, the fetch failed, or the selection has since changed. Row-aligned with `getWindow()` by construction (see `reload()`). */
   getDerivativeWindow(): RawRecordingDerivativeWindow | null {
     return this.derivativeWindow;
+  }
+
+  getSampleOrderPreviewStatus(): RawImageViewerStatus {
+    return this.sampleOrderPreviewStatus;
+  }
+
+  getSampleOrderPreviewErrorMessage(): string | null {
+    return this.sampleOrderPreviewErrorMessage;
+  }
+
+  getSampleOrderPreviewWindow(): RawRecordingDerivativeWindow | null {
+    return this.sampleOrderPreviewWindow;
+  }
+
+  /**
+   * Explicit opt-in fetch for the GC-032 "preview by sample order" legacy
+   * fallback, for the current recording/channel/grid-size/start-row
+   * selection. Never called automatically — only from the Derivative panel's
+   * opt-in button, and only once the time-based derivative has already come
+   * back unavailable with `unavailableIsCadenceIssue: true`.
+   */
+  requestSampleOrderPreview(): void {
+    const recordingId = this.recordingId;
+    const channel = this.channel;
+    if (recordingId === null || channel === null) return;
+
+    const requestVersion = this.requestVersion;
+    const startRawRow = this.requestedStartRawRow;
+    const gridSize = this.gridSize;
+    this.sampleOrderPreviewStatus = "loading";
+    this.sampleOrderPreviewErrorMessage = null;
+    this.notify();
+
+    void getRawRecordingDerivativeWindow({ recordingId, column: channel, startRawRow, gridSize }, true).then(
+      (result) => {
+        if (
+          requestVersion !== this.requestVersion ||
+          this.recordingId !== recordingId ||
+          this.channel !== channel ||
+          this.gridSize !== gridSize
+        ) {
+          return;
+        }
+
+        if (result.status === "error") {
+          this.sampleOrderPreviewStatus = "error";
+          this.sampleOrderPreviewErrorMessage = result.message;
+          this.sampleOrderPreviewWindow = null;
+        } else {
+          this.sampleOrderPreviewStatus = "loaded";
+          this.sampleOrderPreviewErrorMessage = null;
+          this.sampleOrderPreviewWindow = result.value;
+        }
+        this.notify();
+      },
+    );
   }
 
   /**
@@ -202,6 +270,9 @@ class RawImageViewerStore {
     this.errorMessage = null;
     this.derivativeWindow = null;
     this.derivativeErrorMessage = null;
+    this.sampleOrderPreviewStatus = "empty";
+    this.sampleOrderPreviewErrorMessage = null;
+    this.sampleOrderPreviewWindow = null;
     this.reload();
   }
 
@@ -216,6 +287,9 @@ class RawImageViewerStore {
       this.derivativeStatus = "empty";
       this.derivativeErrorMessage = null;
       this.derivativeWindow = null;
+      this.sampleOrderPreviewStatus = "empty";
+      this.sampleOrderPreviewErrorMessage = null;
+      this.sampleOrderPreviewWindow = null;
       this.notify();
       return;
     }
@@ -227,6 +301,12 @@ class RawImageViewerStore {
     this.errorMessage = null;
     this.derivativeStatus = "loading";
     this.derivativeErrorMessage = null;
+    // A new row-start/selection request supersedes any sample-order preview
+    // for the previous window — it is row-specific and must never be shown
+    // against a different selection than the one the user opted it in for.
+    this.sampleOrderPreviewStatus = "empty";
+    this.sampleOrderPreviewErrorMessage = null;
+    this.sampleOrderPreviewWindow = null;
     this.notify();
 
     // Discard a response if a newer request has since been issued, or if

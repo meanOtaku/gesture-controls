@@ -908,6 +908,17 @@ fn assess_cadence_regularity(timestamps_ns: &[i64]) -> CadenceRegularity {
     CadenceRegularity::Regular { median_dt_ns }
 }
 
+/// True when a `compute_sg_derivative_window` unavailable `reason` is a pure
+/// timestamp/cadence problem (non-monotonic or out-of-tolerance spacing)
+/// rather than the recording simply not having enough rows to fill a full SG
+/// window. Only the former is something the "preview by sample order"
+/// fallback (GC-032) can ever route around — a too-short recording is short
+/// in sample order too, so the fallback would fail identically there and
+/// must not be offered for it.
+fn is_cadence_only_unavailable_reason(reason: &str) -> bool {
+    !reason.starts_with("fewer than")
+}
+
 /// Pure, dependency-free Savitzky–Golay first-derivative computation over one
 /// full source column, sliced afterward to `[start, end)` — the same bounded
 /// response shape `get_raw_recording_window` uses. Reads the *entire* source
@@ -976,6 +987,58 @@ fn compute_sg_derivative_window(
     (derivative_values, true, None, effective_sample_rate_hz)
 }
 
+/// GC-032 legacy fallback: the same Savitzky–Golay first-difference filter as
+/// `compute_sg_derivative_window`, but run over this column's present finite
+/// values in raw row/sample order instead of by timestamp — no cadence
+/// regularity check, and no division by an elapsed time, so the result is in
+/// "value units per sample", never "per second". This is an explicit,
+/// opt-in *visual preview* for recordings whose saved timestamps are too
+/// irregular for the time-based derivative; it does not and cannot make the
+/// recording timing-valid, and must never be offered to model training,
+/// export, or inference. Returns `(derivative_values, available,
+/// unavailable_reason)`.
+fn compute_sample_order_derivative_window(
+    values: &[Option<f64>],
+    start: usize,
+    end: usize,
+) -> (Vec<Option<f64>>, bool, Option<String>) {
+    let row_count = values.len();
+    let present: Vec<(usize, f64)> = values
+        .iter()
+        .enumerate()
+        .filter_map(|(row, &value)| value.filter(|v| v.is_finite()).map(|v| (row, v)))
+        .collect();
+
+    let placeholder_len = end.saturating_sub(start).min(row_count.saturating_sub(start));
+    if present.len() < MIN_ROWS_FOR_DERIVATIVE {
+        return (
+            vec![None; placeholder_len],
+            false,
+            Some(format!(
+                "fewer than {MIN_ROWS_FOR_DERIVATIVE} finite samples in this channel; a {SG_WINDOW_SIZE}-sample Savitzky–Golay window needs at least that many rows of context even in sample order"
+            )),
+        );
+    }
+
+    let coefficients = sg_first_derivative_coefficients(SG_HALF_WIDTH);
+    let mut derivative_by_row: std::collections::HashMap<usize, f64> = std::collections::HashMap::new();
+    for present_index in SG_HALF_WIDTH..present.len().saturating_sub(SG_HALF_WIDTH) {
+        let window_start = present_index - SG_HALF_WIDTH;
+        let mut accumulator = 0.0;
+        for (offset, coefficient) in coefficients.iter().enumerate() {
+            accumulator += coefficient * present[window_start + offset].1;
+        }
+        let (row, _) = present[present_index];
+        // No `dt_seconds` division here (contrast `compute_sg_derivative_window`):
+        // the coefficients already yield "value units per sample", which is
+        // exactly this fallback's unit.
+        derivative_by_row.insert(row, accumulator);
+    }
+
+    let derivative_values = (start..end).map(|row| derivative_by_row.get(&row).copied()).collect();
+    (derivative_values, true, None)
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DerivativeFilterConfig {
@@ -1023,6 +1086,19 @@ pub struct RawRecordingDerivativeWindow {
     pub unavailable_reason: Option<String>,
     pub effective_sample_rate_hz: Option<f64>,
     pub filter_config: DerivativeFilterConfig,
+    /// `"time"` (default) or `"sample_order"` (GC-032 legacy preview fallback
+    /// — see `preview_by_sample_order` on `get_raw_recording_derivative_window`).
+    pub mode: String,
+    /// `"per_second"` in `"time"` mode, `"per_sample"` in `"sample_order"`
+    /// mode. The frontend must render this alongside every value; the two
+    /// are not comparable or interchangeable.
+    pub units: String,
+    /// Only meaningful in `"time"` mode: true when `available` is false
+    /// *solely* because of a timestamp/cadence irregularity (not because the
+    /// recording has too few rows) — i.e. exactly the case the
+    /// `preview_by_sample_order` fallback exists for. Always false in
+    /// `"sample_order"` mode.
+    pub unavailable_is_cadence_issue: bool,
 }
 
 /// Returns the offline Savitzky–Golay first-derivative window matching
@@ -1031,6 +1107,15 @@ pub struct RawRecordingDerivativeWindow {
 /// row. Never writes any bundle file; `raw.csv` is read fresh and untouched.
 /// This is a saved-data analysis view, not a live signal and not a training
 /// transformation — see `RawRecordingDerivativeWindow`'s docs.
+///
+/// `preview_by_sample_order` (GC-032, default `false`/omitted): an explicit,
+/// caller-opted-in request for the legacy visual-preview fallback — the same
+/// filter run in raw row/sample order instead of by timestamp, with no
+/// cadence check and "per sample" (not "per second") units. It never
+/// activates on its own; the frontend must only offer it once the
+/// time-based derivative has already come back with
+/// `unavailable_is_cadence_issue: true`. It is not offered to, and must
+/// never be wired into, model training, export, or inference.
 #[tauri::command]
 pub fn get_raw_recording_derivative_window(
     recording_id: String,
@@ -1038,6 +1123,7 @@ pub fn get_raw_recording_derivative_window(
     start_raw_row: i64,
     grid_size: u32,
     app: AppHandle,
+    preview_by_sample_order: Option<bool>,
 ) -> Result<RawRecordingDerivativeWindow, String> {
     validate_recording_id(&recording_id)?;
     if !RAW_WINDOW_ALLOWED_COLUMNS.contains(&column.as_str()) {
@@ -1061,10 +1147,31 @@ pub fn get_raw_recording_derivative_window(
     let (resolved_start, resolved_end) =
         resolve_raw_window_bounds(total_raw_row_count, start_raw_row, grid_size_usize)?;
 
-    let (derivative_values, available, unavailable_reason, effective_sample_rate_hz) =
-        compute_sg_derivative_window(&timestamps_ns, &all_values, resolved_start, resolved_end);
     let window_timestamps = timestamps_ns[resolved_start..resolved_end].to_vec();
     let row_indices: Vec<usize> = (resolved_start..resolved_end).collect();
+
+    let (derivative_values, available, unavailable_reason, effective_sample_rate_hz, mode, units, unavailable_is_cadence_issue) =
+        if preview_by_sample_order.unwrap_or(false) {
+            let (derivative_values, available, unavailable_reason) =
+                compute_sample_order_derivative_window(&all_values, resolved_start, resolved_end);
+            (derivative_values, available, unavailable_reason, None, "sample_order", "per_sample", false)
+        } else {
+            let (derivative_values, available, unavailable_reason, effective_sample_rate_hz) =
+                compute_sg_derivative_window(&timestamps_ns, &all_values, resolved_start, resolved_end);
+            let unavailable_is_cadence_issue = !available
+                && unavailable_reason
+                    .as_deref()
+                    .is_some_and(is_cadence_only_unavailable_reason);
+            (
+                derivative_values,
+                available,
+                unavailable_reason,
+                effective_sample_rate_hz,
+                "time",
+                "per_second",
+                unavailable_is_cadence_issue,
+            )
+        };
 
     Ok(RawRecordingDerivativeWindow {
         recording_id,
@@ -1080,6 +1187,9 @@ pub fn get_raw_recording_derivative_window(
         unavailable_reason,
         effective_sample_rate_hz,
         filter_config: sg_filter_config(),
+        mode: mode.to_string(),
+        units: units.to_string(),
+        unavailable_is_cadence_issue,
     })
 }
 
@@ -2180,5 +2290,101 @@ mod tests {
         assert_eq!(first.0, second.0);
         assert_eq!(first.1, second.1);
         assert_eq!(first.3, second.3);
+    }
+
+    // --- GC-032: "preview by sample order" legacy fallback ---
+
+    #[test]
+    fn is_cadence_only_unavailable_reason_distinguishes_row_count_from_timing() {
+        assert!(!is_cadence_only_unavailable_reason(
+            "fewer than 11 rows; a 11-sample Savitzky–Golay window needs at least that many rows of context"
+        ));
+        assert!(is_cadence_only_unavailable_reason(
+            "timestamps are not strictly increasing; a time-based derivative requires strictly increasing timestamps"
+        ));
+        assert!(is_cadence_only_unavailable_reason(
+            "timestamp spacing deviates by more than 25% from the median cadence; the stream is too irregular for a fixed-window time derivative"
+        ));
+    }
+
+    #[test]
+    fn sample_order_derivative_matches_time_derivative_units_scaled_by_dt_for_uniform_cadence() {
+        // Uniform 50Hz, slope 2.0/s => per-sample slope is 2.0 * 0.02s = 0.04/sample.
+        let dt_ns = 20_000_000i64;
+        let timestamps_ns = uniform_timestamps(21, dt_ns);
+        let values: Vec<Option<f64>> = timestamps_ns
+            .iter()
+            .map(|&t| Some(2.0 * (t as f64 / 1_000_000_000.0)))
+            .collect();
+        let (sample_order, available, reason) =
+            compute_sample_order_derivative_window(&values, 0, 21);
+        assert!(available, "reason: {reason:?}");
+        for row in SG_HALF_WIDTH..(21 - SG_HALF_WIDTH) {
+            let value = sample_order[row].expect("interior row must have a derivative");
+            assert!((value - 0.04).abs() < 1e-9, "row {row}: expected 0.04/sample, got {value}");
+        }
+    }
+
+    #[test]
+    fn sample_order_derivative_ignores_wildly_irregular_timestamps() {
+        // Same irregular timestamps that make the time-based derivative
+        // unavailable; the sample-order fallback ignores timestamps entirely
+        // and still produces a result purely from row order.
+        let mut timestamps_ns = uniform_timestamps(15, 20_000_000);
+        for t in timestamps_ns.iter_mut().skip(8) {
+            *t += 500_000_000;
+        }
+        let values: Vec<Option<f64>> = (0..15).map(|i| Some(i as f64)).collect();
+
+        let (_time_derivative, time_available, time_reason, _rate) =
+            compute_sg_derivative_window(&timestamps_ns, &values, 0, 15);
+        assert!(!time_available);
+        assert!(is_cadence_only_unavailable_reason(&time_reason.unwrap()));
+
+        let (sample_order, available, reason) =
+            compute_sample_order_derivative_window(&values, 0, 15);
+        assert!(available, "reason: {reason:?}");
+        for row in SG_HALF_WIDTH..(15 - SG_HALF_WIDTH) {
+            assert!(
+                (sample_order[row].unwrap() - 1.0).abs() < 1e-9,
+                "row {row}: unit-slope-per-sample expected, got {:?}",
+                sample_order[row]
+            );
+        }
+    }
+
+    #[test]
+    fn sample_order_derivative_skips_gaps_and_nonfinite_values_like_time_mode() {
+        let mut values: Vec<Option<f64>> = (0..21).map(|i| Some(i as f64)).collect();
+        values[10] = None; // a gap (another channel's row)
+        values.insert(1, Some(f64::NAN)); // an explicit non-finite reading
+        let row_count = values.len();
+
+        let (derivative, available, reason) =
+            compute_sample_order_derivative_window(&values, 0, row_count);
+        assert!(available, "reason: {reason:?}");
+        assert!(derivative[10].is_none(), "gap row must have no derivative");
+        assert!(derivative[1].is_none(), "nonfinite row must have no derivative");
+    }
+
+    #[test]
+    fn sample_order_derivative_too_few_finite_samples_is_unavailable_with_reason() {
+        let values: Vec<Option<f64>> = vec![Some(1.0); 5]; // fewer than SG_WINDOW_SIZE
+        let (derivative, available, reason) = compute_sample_order_derivative_window(&values, 0, 5);
+        assert!(!available);
+        assert!(derivative.iter().all(Option::is_none));
+        let reason = reason.unwrap();
+        assert!(reason.contains("fewer than"));
+        assert!(!is_cadence_only_unavailable_reason(&reason));
+    }
+
+    #[test]
+    fn get_raw_recording_derivative_window_request_validation_is_shared_across_modes() {
+        // The `preview_by_sample_order` opt-in must not bypass the existing
+        // recording-id/column/grid-size request validation that runs before
+        // either derivative path is ever reached.
+        assert!(validate_recording_id("../escape").is_err());
+        assert!(!RAW_WINDOW_ALLOWED_COLUMNS.contains(&"timestamp_ns"));
+        assert!(validate_grid_size(0).is_err());
     }
 }

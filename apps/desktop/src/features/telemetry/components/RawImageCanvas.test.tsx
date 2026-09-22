@@ -71,6 +71,9 @@ const derivativeWindow: RawRecordingDerivativeWindow = {
     windowSize: 11,
     version: "savitzky_golay_order2_window11_v1",
   },
+  mode: "time",
+  units: "per_second",
+  unavailableIsCadenceIssue: false,
 };
 
 describe("RawImageCanvas diverging derivative mode", () => {
