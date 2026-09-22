@@ -596,3 +596,69 @@ and `.hermes/queues/gc-009-raw-recording-image-viewer.json`.
       test assertion) was reviewed by eye instead.
 - [ ] No manual/runtime desktop verification (app not launched) — deferred
       per this task's smallest-relevant-check scope.
+
+## GC-024 — M1: recording/collection quality summary (data-collection & derivative-viewer milestone plan)
+
+Implements only **M1** of `.hermes/plans/2026-09-22_072210-data-collection-derivative-viewer-milestones.md`
+(timestamp/label auditability); M2–M5 (offline Savitzky–Golay derivative
+contract, third Derivative image-viewer canvas, review/export gate, and
+training-preparation comparison) are not started and remain the next slices
+in that plan's documented M1→M5 delivery sequence.
+
+- [x] `recording_bundle.rs`: new derived-only `get_recording_quality_summary`
+      Tauri command (`RecordingQualitySummary`, `compute_quality_summary`):
+      row count, timestamp monotonicity/effective sample rate
+      (`TimestampStatus::Ok/Warning/InsufficientData`), per-channel missing
+      value counts, fully-missing-channel list, label coverage
+      (labeled/unlabeled row counts), and short-label-interval flagging
+      (< 150 ms — the fixed 500 ms model-window rationale from the plan).
+      Reads `raw.csv`/`annotations.json` fresh on every call; writes
+      neither. Registered in `lib.rs`'s `generate_handler!`.
+- [x] `telemetryStore.ts`: a non-finite source timestamp is now rejected at
+      the shared `ingestTimestampedBatch` choke point (covers PPG/heart
+      rate/temperature/EDA) and in `ingestWatchOrientation`, instead of
+      being accepted or silently fixed — only that one sample is skipped,
+      every other sample in the batch still ingests normally.
+- [x] `recordingBundle.ts`: `RecordingQualitySummary`/`TimestampStatus`
+      types plus `getRecordingQualitySummary()` bridge function mirroring
+      the Rust command field-for-field.
+- [x] `computeLiveQualitySummary.ts`: client-side equivalent of the backend
+      computation over the in-memory Timeline Capture session
+      (`DatasetRow[]`/`LiveInterval[]`), so quality is visible **before** a
+      bundle is ever saved, not only after.
+- [x] `RecordingQualitySummaryCard.tsx`: one shared, read-only summary
+      display used by both surfaces below.
+- [x] Wired into the saved-recording detail path
+      (`RawImageViewerPanel.tsx`, request-version-guarded like the
+      existing label-range load) and the pre-save Timeline recorder
+      (`RecordingTimelineEditor.tsx`).
+- [x] `DatasetCaptureCard.tsx`: marker tooltip now recommends a 300–500 ms
+      minimum hold duration tied to the current 500 ms model window.
+- [x] Legacy imports/existing raw rows are untouched — the summary is
+      purely derived/read-only; nothing here rewrites `raw.csv` or
+      `annotations.json` for any recording, new or imported.
+- [x] Tests: 5 new Rust unit tests on `compute_quality_summary` (uniform
+      50 Hz → `Ok` + correct rate; non-monotonic → `Warning`, rate
+      withheld; <2 rows → `InsufficientData`; fully-missing channel
+      detection; short-label flagging + labeled/unlabeled row coverage). 6
+      new Vitest unit tests on `computeLiveQualitySummary` mirroring the
+      same cases plus an open-interval-ignored case. 2 new
+      `RawImageViewerPanel` tests (renders the loaded summary; surfaces a
+      backend timing warning). All 80 tests across
+      `src/features/telemetry/**` pass.
+- [ ] **Not cleared / host-blocked:** `cargo test`/`cargo fmt`/`cargo
+      clippy` on `spatial-gesture-desktop` cannot run on this host — same
+      pre-existing `gobject-sys`/`pkg-config` blocker as GC-002/GC-009/
+      GC-018/GC-019 (`pkg-config` not installed). `cargo fmt -p
+      spatial-gesture-desktop -- --check` (pure syntax/formatting, no
+      linking) was run instead and confirms the new code parses; the 5 new
+      Rust tests were reviewed by eye and mirror the already-passing
+      Vitest equivalents line-for-line.
+- [ ] `npm run typecheck` still reports the same 5 pre-existing errors
+      already documented under GC-019 (`IntentBindingEditor.test.tsx`,
+      `LabelMappingEditor.tsx`, `ModelLifecycleControls.test.tsx`,
+      `RecordingTimelineEditor.tsx` x2) — none introduced by this task; a
+      direct `tsc --noEmit -p tsconfig.json` on the touched files reports
+      zero errors.
+- [ ] No manual/runtime desktop capture or raw-image-viewer walkthrough was
+      performed (app not launched on this host).
