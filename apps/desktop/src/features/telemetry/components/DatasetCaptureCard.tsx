@@ -17,8 +17,13 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
+import type { RecordingQualitySummary } from "../../../shared/tauri/recordingBundle";
+import type { LiveInterval } from "../annotations/timeline";
+import { computeLiveQualitySummary } from "../quality/computeLiveQualitySummary";
+import { RecordingQualitySummaryCard } from "./RecordingQualitySummaryCard";
 import {
   type DatasetRecordingState,
+  type DatasetRow,
   type DatasetSessionMetadata,
   type GestureDatasetLabel,
 } from "../store/telemetryStore";
@@ -55,6 +60,9 @@ type DatasetCaptureCardProps = {
   onStop: () => void;
   onDiscard: () => void;
   onExport: () => Promise<void>;
+  /** Buffered session rows/intervals, for the pre-export data-quality review gate. Empty when there is nothing buffered yet. */
+  datasetRows?: DatasetRow[];
+  timelineIntervals?: LiveInterval[];
 };
 
 function formatElapsed(ms: number): string {
@@ -91,9 +99,14 @@ export function DatasetCaptureCard({
   onStop,
   onDiscard,
   onExport,
+  datasetRows = [],
+  timelineIntervals = [],
 }: DatasetCaptureCardProps) {
   const [customLabel, setCustomLabel] = useState("");
   const [labelError, setLabelError] = useState<string | null>(null);
+  const [exportReviewOpen, setExportReviewOpen] = useState(false);
+  const [exportReviewSummary, setExportReviewSummary] = useState<RecordingQualitySummary | null>(null);
+  const [exportReviewError, setExportReviewError] = useState<string | null>(null);
   const [timelineDurationSeconds, setTimelineDurationSeconds] = useState(DEFAULT_TIMELINE_DURATION_SECONDS);
   const timelineDurationValid = Number.isInteger(timelineDurationSeconds)
     && timelineDurationSeconds >= TIMELINE_DURATION_SECONDS_MIN
@@ -131,6 +144,30 @@ export function DatasetCaptureCard({
 
   // Recording stop/discard and unmount must never leave a marker open.
   useEffect(() => () => { if (heldRef.current) { heldRef.current = false; onMarkEndRef.current(); } }, []);
+
+  /**
+   * Data-quality review gate (M4): when a buffered session's rows are
+   * available, review its M1 quality summary before exporting rather than
+   * exporting straight away. No rows buffered (e.g. a historical/imported
+   * flow with nothing in memory to summarize) exports exactly as before —
+   * this never blocks or errors on a missing summary.
+   */
+  const handleExportPress = async () => {
+    if (datasetRows.length === 0) {
+      await onExport();
+      return;
+    }
+    try {
+      setExportReviewSummary(computeLiveQualitySummary(datasetRows, timelineIntervals));
+      setExportReviewError(null);
+    } catch {
+      setExportReviewSummary(null);
+      setExportReviewError("Data-quality review is unavailable for this session; export will proceed without it.");
+    }
+    setExportReviewOpen(true);
+  };
+
+  const exportReviewHasWarnings = (exportReviewSummary?.warnings.length ?? 0) > 0;
 
   const applyCustomLabel = () => {
     if (onSelectLabel(customLabel)) {
@@ -344,7 +381,7 @@ export function DatasetCaptureCard({
 
           <AsyncActionButton
             disabled={datasetRowCount === 0 || (desktopAvailable && !datasetExportFolder)}
-            onPress={onExport}
+            onPress={handleExportPress}
             pendingLabel="Exporting…"
           >
             Export Dataset CSV
@@ -354,6 +391,28 @@ export function DatasetCaptureCard({
               ? "Saves the buffered labeled rows straight into the export folder above, under an auto-generated timestamped file name — choose a folder first, then Export writes there directly with no save dialog."
               : "Browser preview has no native folder picker, so this downloads the CSV directly instead."}
           </HelpTooltip>
+
+          <AlertDialog open={exportReviewOpen} onOpenChange={setExportReviewOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Review data quality before export</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {exportReviewError
+                    ? exportReviewError
+                    : exportReviewHasWarnings
+                      ? "This is a data-quality review of the buffered session, not model validation. Warnings below don't block export, but review them first."
+                      : "This is a data-quality review of the buffered session, not model validation. No warnings were found."}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              {exportReviewSummary && <RecordingQualitySummaryCard summary={exportReviewSummary} />}
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => void onExport()}>
+                  {exportReviewHasWarnings ? "Export anyway" : "Export"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
         {labelError && (
           <Alert variant="destructive" role="alert">

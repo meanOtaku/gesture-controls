@@ -144,7 +144,20 @@ Two capture modes share this same Arming/timer behavior and the same immutable-r
 
 **Interval curation (Timeline Capture only).** After Stop, the recording timeline editor lets you split, move boundaries, relabel, delete, or mark each interval's curation status (`unreviewed`, `approved`, `excluded`) before you rely on it for training, and lets you fill an unannotated gap with a new interval. Every one of these edits changes only interval metadata — the underlying raw samples and their timestamps never move. Use **excluded** to drop a bad stretch of a recording without discarding the rest of it.
 
+**Recording quality summary.** While a session is buffered and on a saved recording's detail view, a compact quality summary reports row count, observed time span and effective sample rate, timestamp ordering (`ok`/`warning`/`insufficient_data`), missing-value counts per channel, and label coverage including any interval shorter than ~150 ms (too brief for the current 500 ms model window). This is a data-quality review, not model validation — it never rewrites raw samples or annotations, and it never claims a recording is "training-ready."
+
+**Export review gate.** Pressing **Export Dataset CSV** with a buffered session first shows this same quality summary as a review dialog. A session with no quality warnings exports immediately from that dialog. A session with warnings requires an explicit **Export anyway** click; **Cancel** closes the dialog and leaves every buffered row and interval untouched. A session with no recording/quality summary available (nothing buffered yet) exports exactly as before, with no dialog.
+
 **Discard** removes the current in-memory session without saving or exporting it — nothing has been written to disk yet at that point, so nothing needs to be cleaned up. **Export Dataset CSV** writes the legacy single-label-per-file CSV format for compatibility with the current Model Lab importer. Preserve a mix of positive gestures and realistic background/negative activities; that is important for false-activation evaluation.
+
+**Pinch collection protocol.** A practical routine for capturing usable `pinch` intervals with Timeline Capture:
+
+1. Put the watch/headphones on and let sensors settle a few seconds before recording anything.
+2. Start the recording, then hold a few seconds of neutral rest (no gesture) so there's clean lead-in.
+3. Hold the marker through one full pinch — start the hold just before the pinch begins and release just after it ends, for at least 300–500 ms (see the marker's tooltip); a shorter hold gives the 500 ms model window too little context and is flagged as a short label.
+4. Return to rest, then repeat steps 2–3 for several more pinches, mixed with realistic non-pinch activity so background/negative coverage isn't all idle.
+5. Capture more than one session (separate Start/Stop recordings) rather than one very long one — training holds out whole sessions, so one session can't cover evaluation by itself.
+6. Before exporting, check the quality summary and timeline intervals — fix mislabeled or too-short intervals, then export.
 
 #### Raw image viewer
 

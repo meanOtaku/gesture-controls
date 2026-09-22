@@ -2,8 +2,45 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DatasetCaptureCard } from "./DatasetCaptureCard";
 import { TooltipProvider } from "../../../components/ui/tooltip";
+import { computeLiveQualitySummary } from "../quality/computeLiveQualitySummary";
+import type { DatasetRow } from "../store/telemetryStore";
 
-afterEach(() => cleanup());
+vi.mock("../quality/computeLiveQualitySummary", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../quality/computeLiveQualitySummary")>();
+  return { ...actual, computeLiveQualitySummary: vi.fn(actual.computeLiveQualitySummary) };
+});
+
+afterEach(() => {
+  cleanup();
+  vi.mocked(computeLiveQualitySummary).mockClear();
+});
+
+function makeRow(index: number): DatasetRow {
+  return {
+    timestampNs: String(index * 20_000_000),
+    sequence: String(index),
+    ppgGreen: index,
+    ppgRed: index,
+    ppgIr: index,
+    accelX: index,
+    accelY: index,
+    accelZ: index,
+    gyroX: index,
+    gyroY: index,
+    gyroZ: index,
+    quatW: index,
+    quatX: index,
+    quatY: index,
+    quatZ: index,
+    contactQuality: index,
+    label: "",
+  };
+}
+
+/** 20 evenly spaced (50 Hz) rows with every channel populated: no M1 warnings. */
+const cleanRows: DatasetRow[] = Array.from({ length: 20 }, (_, index) => makeRow(index));
+/** A single row is flagged "insufficient_data" by M1 (fewer than two rows), guaranteeing a warning. */
+const warningRows: DatasetRow[] = [makeRow(0)];
 
 function renderCard(overrides: Partial<React.ComponentProps<typeof DatasetCaptureCard>> = {}) {
   const props: React.ComponentProps<typeof DatasetCaptureCard> = {
@@ -125,6 +162,73 @@ describe("DatasetCaptureCard", () => {
     expect(await screen.findByRole("button", { name: "Exporting…" })).toBeDisabled();
     resolveExport();
     await waitFor(() => expect(screen.getByRole("button", { name: "Export Dataset CSV" })).toBeEnabled());
+  });
+
+  describe("export data-quality review gate", () => {
+    it("exports directly with no review dialog when there is no buffered summary data", async () => {
+      const onExport = vi.fn().mockResolvedValue(undefined);
+      renderCard({ datasetRowCount: 5, onExport, datasetRows: [] });
+      fireEvent.click(screen.getByRole("button", { name: "Export Dataset CSV" }));
+      await waitFor(() => expect(onExport).toHaveBeenCalledTimes(1));
+      expect(screen.queryByText("Review data quality before export")).not.toBeInTheDocument();
+    });
+
+    it("clean data shows the review gate with no warnings and exports on Export", async () => {
+      const onExport = vi.fn().mockResolvedValue(undefined);
+      renderCard({ datasetRowCount: cleanRows.length, onExport, datasetRows: cleanRows });
+      fireEvent.click(screen.getByRole("button", { name: "Export Dataset CSV" }));
+
+      expect(await screen.findByText("Review data quality before export")).toBeInTheDocument();
+      expect(screen.getByText(/data-quality review/i)).toBeInTheDocument();
+      expect(screen.getByText(/not model validation/i)).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Export" }));
+      expect(onExport).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(screen.queryByText("Review data quality before export")).not.toBeInTheDocument());
+    });
+
+    it("warning data requires explicit 'Export anyway' confirmation and surfaces the M1 warning", async () => {
+      const onExport = vi.fn().mockResolvedValue(undefined);
+      renderCard({ datasetRowCount: warningRows.length, onExport, datasetRows: warningRows });
+      fireEvent.click(screen.getByRole("button", { name: "Export Dataset CSV" }));
+
+      expect(await screen.findByText("Review data quality before export")).toBeInTheDocument();
+      expect(screen.getByRole("alert")).toHaveTextContent(/fewer than two rows/i);
+      expect(screen.queryByRole("button", { name: "Export" })).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Export anyway" }));
+      expect(onExport).toHaveBeenCalledTimes(1);
+    });
+
+    it("Cancel closes the review dialog, exports nothing, and preserves buffered data", async () => {
+      const onExport = vi.fn().mockResolvedValue(undefined);
+      const onDiscard = vi.fn();
+      renderCard({ datasetRowCount: warningRows.length, onExport, onDiscard, datasetRows: warningRows });
+      fireEvent.click(screen.getByRole("button", { name: "Export Dataset CSV" }));
+      expect(await screen.findByText("Review data quality before export")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      await waitFor(() => expect(screen.queryByText("Review data quality before export")).not.toBeInTheDocument());
+      expect(onExport).not.toHaveBeenCalled();
+      expect(onDiscard).not.toHaveBeenCalled();
+    });
+
+    it("shows a bounded, non-blocking explanation and still allows export when the summary is unavailable", async () => {
+      const onExport = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(computeLiveQualitySummary).mockImplementationOnce(() => {
+        throw new Error("boom");
+      });
+      renderCard({ datasetRowCount: warningRows.length, onExport, datasetRows: warningRows });
+      fireEvent.click(screen.getByRole("button", { name: "Export Dataset CSV" }));
+
+      expect(await screen.findByText("Review data quality before export")).toBeInTheDocument();
+      expect(screen.getByText(/quality review is unavailable/i)).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Export" }));
+      expect(onExport).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("marker (hold-to-mark)", () => {

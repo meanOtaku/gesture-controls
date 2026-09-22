@@ -42,6 +42,10 @@ describe("Live telemetry", () => {
     const button = screen.getByRole("button", { name: "Export Dataset CSV" });
     fireEvent.click(button);
 
+    // One buffered row trips M1's "insufficient_data" quality warning, so the
+    // pre-export review gate requires an explicit "Export anyway" here.
+    fireEvent.click(await screen.findByRole("button", { name: "Export anyway" }));
+
     expect(await screen.findByText("Could not save: disk full")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "Export Dataset CSV" })).toBeEnabled());
   });

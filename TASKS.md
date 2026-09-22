@@ -800,3 +800,59 @@ were touched.
       errors remained to compare against this session). `git diff --check`:
       clean. `graphify update .`: ran successfully.
 - [ ] No manual/runtime desktop walkthrough (app not launched on this host).
+
+## GC-027 — M4: collection review/export gate (data-collection & derivative-viewer milestone plan)
+
+Implements only **M4** of `.hermes/plans/2026-09-22_072210-data-collection-derivative-viewer-milestones.md`
+(pre-export data-quality review gate), following accepted M1–M3
+(GC-024/GC-025/GC-026). M5 (training comparison) is not started.
+Frontend-only slice: reuses M1's `computeLiveQualitySummary` and
+`RecordingQualitySummaryCard` unchanged; no Rust files were touched, and no
+new timestamp/label-quality rule was added or duplicated.
+
+- [x] `DatasetCaptureCard.tsx`: **Export Dataset CSV** now opens a review
+      gate (`AlertDialog`) immediately before export whenever the buffered
+      Timeline Capture session has rows (`datasetRows`/`timelineIntervals`
+      props, both optional and empty by default). The gate runs the same
+      `computeLiveQualitySummary` M1 uses and renders it through the shared
+      `RecordingQualitySummaryCard`. A session with no warnings shows a
+      plain "Export" action; a session with warnings requires an explicit
+      "Export anyway" click. "Cancel" closes the dialog via the existing
+      `AlertDialogCancel` primitive and calls nothing — no buffered row,
+      interval, or session state is touched. A session with no buffered
+      rows (nothing to summarize) calls the export callback directly, with
+      no dialog — identical to the prior unconditional-export behavior. A
+      thrown/failed summary computation is caught and shown as a bounded,
+      non-blocking explanation with a plain "Export" action instead of an
+      error loop or a blocked export. Copy explicitly says "data-quality
+      review, not model validation" and never claims a recording is
+      "training-ready."
+- [x] `LiveTelemetry.tsx`: passes `telemetryStore.getDatasetRows()` /
+      `getTimelineIntervals()` into `DatasetCaptureCard` so the gate reviews
+      the same in-memory session `RecordingTimelineEditor` already
+      summarizes; the actual CSV export callback (`exportDatasetCsv`) is
+      unchanged.
+- [x] `docs/using-the-application.md`: added "Recording quality summary",
+      "Export review gate", and a compact numbered "Pinch collection
+      protocol" (settle, rest, hold marker for ≥300–500 ms, repeat, capture
+      multiple sessions, check quality/labels before export) to the existing
+      "Labeled dataset recorder" section — no new document, no accuracy
+      claims beyond what M1/M4 actually compute.
+- [x] Tests: 5 new `DatasetCaptureCard.test.tsx` cases (no buffered
+      summary exports directly with no dialog; clean data shows the gate
+      with no warnings and exports on "Export"; warning data requires
+      "Export anyway" and surfaces the M1 warning text via `role="alert"`;
+      "Cancel" closes the dialog, calls neither export nor discard, and
+      leaves buffered data untouched; a thrown quality-summary computation
+      shows the bounded explanation and still allows "Export"). Updated 1
+      pre-existing `LiveTelemetry.test.tsx` case to click through the new
+      "Export anyway" step (one buffered row now trips M1's
+      `insufficient_data` warning, which is the intended new gate behavior,
+      not a regression). All 90 tests across `src/features/telemetry/**`
+      pass (up from 85 in GC-026).
+- [x] `npx tsc --noEmit -p tsconfig.json`: zero errors. `git diff --check`:
+      clean. `graphify update .`: ran successfully.
+- [ ] No manual/runtime desktop walkthrough (app not launched on this host).
+- [ ] Rust backend untouched by this slice, so the pre-existing
+      `pkg-config`/GTK build blocker (GC-002/GC-009/GC-018/GC-019/GC-024/
+      GC-025) was not re-checked here; nothing in this change depends on it.

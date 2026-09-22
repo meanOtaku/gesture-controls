@@ -154,6 +154,8 @@ export function LiveTelemetry() {
           }}
           onDiscard={() => telemetryStore.discardDatasetRecording()}
           onExport={exportDatasetCsv}
+          datasetRows={telemetryStore.getDatasetRows()}
+          timelineIntervals={telemetryStore.getTimelineIntervals()}
         />
         <SignalMonitor
           signalView={signalView}
