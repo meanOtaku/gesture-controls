@@ -151,7 +151,7 @@ type RawImageCanvasProps = {
   /** @default "grayscale" */
   colorMode?: RawImageColorMode;
   /** Optional accessible overlay (e.g. `RawImageLabelRangeRail`) rendered
-   * pinned to the canvas's left edge, sized to its DISPLAY_SIZE bounds.
+   * full-bleed over the canvas, sized to its DISPLAY_SIZE bounds.
    * Non-interactive (pointer-events disabled) so it never blocks pixel
    * hover/inspection on the canvas beneath it. */
   labelRangeOverlay?: ReactNode;
@@ -256,7 +256,7 @@ export function RawImageCanvas({
           onKeyDown={handleKeyDown}
         />
         {labelRangeOverlay && (
-          <div className="pointer-events-none absolute inset-y-0 left-0">{labelRangeOverlay}</div>
+          <div className="pointer-events-none absolute inset-0">{labelRangeOverlay}</div>
         )}
       </div>
       <p className="text-xs text-muted-foreground" aria-live="polite">

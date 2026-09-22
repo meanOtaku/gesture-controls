@@ -11,15 +11,16 @@ function describeRange(range: VisibleLabelRange): string {
 }
 
 /**
- * Narrow vertical rail overlaid on the grayscale raw image's left edge: one
- * bracket per visible label range (already clipped/merged by
- * `deriveVisibleLabelRanges`), positioned by percentage within the rail.
- * Display-only — no editing, no canvas, no icon dependency.
+ * Full-width band overlaid on the grayscale raw image: one bracket per
+ * visible label range (already clipped/merged by
+ * `deriveVisibleLabelRanges`), spanning the canvas's full width and
+ * positioned vertically by percentage. Display-only — no editing, no
+ * canvas, no icon dependency.
  */
 export function RawImageLabelRangeRail({ ranges }: RawImageLabelRangeRailProps) {
   if (ranges.length === 0) {
     return (
-      <div role="note" aria-label="Saved label ranges" className="flex w-20 shrink-0 items-start justify-center text-xs text-muted-foreground lg:w-24">
+      <div role="note" aria-label="Saved label ranges" className="flex w-full items-start justify-center text-xs text-muted-foreground">
         No saved label ranges in this frame.
       </div>
     );
@@ -33,7 +34,7 @@ export function RawImageLabelRangeRail({ ranges }: RawImageLabelRangeRailProps) 
     <div
       role="list"
       aria-label="Saved label ranges"
-      className="relative h-80 w-20 shrink-0 lg:w-24"
+      className="relative h-80 w-full"
     >
       {ranges.map((range) => (
         <div
@@ -41,7 +42,7 @@ export function RawImageLabelRangeRail({ ranges }: RawImageLabelRangeRailProps) 
           role="listitem"
           aria-label={describeRange(range)}
           title={describeRange(range)}
-          className="absolute left-1 right-1 flex items-center justify-center rounded-sm border-y-2 border-foreground/50 bg-foreground/5 px-1 text-center text-[10px] leading-tight text-foreground/80"
+          className="absolute left-0 right-0 flex items-center justify-center border-y-2 border-foreground/50 bg-foreground/5 px-1 text-center text-[10px] leading-tight text-foreground/80"
           style={{
             top: `${range.startFraction * 100}%`,
             height: `${Math.max(range.endFraction - range.startFraction, 0) * 100}%`,

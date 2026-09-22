@@ -45,4 +45,14 @@ describe("RawImageLabelRangeRail", () => {
     expect(item.style.top).toBe("25%");
     expect(item.style.height).toBe("25%");
   });
+
+  it("spans the full canvas width edge-to-edge", () => {
+    const ranges: VisibleLabelRange[] = [
+      { labelId: "pinching", startRawRow: 16, endRawRow: 32, startFraction: 0.25, endFraction: 0.5 },
+    ];
+    render(<RawImageLabelRangeRail ranges={ranges} />);
+    expect(screen.getByRole("list", { name: "Saved label ranges" })).toHaveClass("w-full");
+    const item = screen.getByRole("listitem");
+    expect(item).toHaveClass("left-0", "right-0");
+  });
 });
