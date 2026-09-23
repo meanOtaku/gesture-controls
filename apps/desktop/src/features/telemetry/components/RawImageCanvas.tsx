@@ -546,6 +546,16 @@ export function RawImageCanvas({
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const [labelsVisible, setLabelsVisible] = useState(true);
+
+  // A pixel index is only meaningful relative to the window it was hovered/
+  // focused in. Without this, paging to a new window (new startSampleIndex/
+  // startRawRow) silently reapplies a stale index to unrelated data — the
+  // inspector then narrates a sample/column/row that no longer matches what
+  // is on screen.
+  useEffect(() => {
+    setHoveredIndex(null);
+    setFocusedIndex(null);
+  }, [rawWindow, compactWindow, derivativeWindow]);
   const isCompact = compactWindow !== undefined;
   const isCompactDerivative = isCompact && colorMode === "diverging";
   const gridSize = isCompact ? compactWindow.gridSize : (rawWindow as RawRecordingWindow).gridSize;

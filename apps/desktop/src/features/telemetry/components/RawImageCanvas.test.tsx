@@ -225,6 +225,46 @@ describe("RawImageCanvas compact sample-order derivative preview (GC-033 follow-
     expect(screen.getByText(/Sample-order derivative unavailable — no actually-adjacent observed sample/)).toBeInTheDocument();
   });
 
+  it("clears the focused/hovered pixel when the compact window changes (e.g. paging to a new sample range), so a stale index is never reapplied to new data", () => {
+    const { rerender } = render(
+      <RawImageCanvas
+        compactWindow={compactWindow}
+        normalizationMode="recording"
+        title="Derivative preview (sample order)"
+        colorMode="diverging"
+      />,
+    );
+    const canvas = screen.getByRole("img", { name: /Derivative preview/ });
+    fireEvent.keyDown(canvas, { key: "Home" });
+    fireEvent.keyDown(canvas, { key: "ArrowRight" }); // focuses index 1
+    expect(screen.getByText(/Compact sample 2 of 4/)).toBeInTheDocument();
+
+    const nextWindow: RawRecordingCompactWindow = {
+      ...compactWindow,
+      startSampleIndex: 4,
+      endSampleIndex: 8,
+      sourceRawRowIndices: [50, 51, 52, 53],
+      timestampsNs: [50_000_000, 51_000_000, 52_000_000, 53_000_000],
+      values: [20, 21, 19, 25],
+      precedingTimestampNs: 40_000_000,
+    };
+    rerender(
+      <RawImageCanvas
+        compactWindow={nextWindow}
+        normalizationMode="recording"
+        title="Derivative preview (sample order)"
+        colorMode="diverging"
+      />,
+    );
+
+    // No description carried over describing sample 2 of the old window
+    // against the new one's data — the inspector goes back to its idle prompt.
+    expect(screen.queryByText(/Compact sample/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Hover or focus the image \(arrow keys move the focused pixel\) to inspect a sample-order derivative preview value\./),
+    ).toBeInTheDocument();
+  });
+
   it("labels the legend and aria-label as a preview, not the Savitzky–Golay time-based derivative", () => {
     render(
       <RawImageCanvas
