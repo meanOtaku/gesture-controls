@@ -380,9 +380,14 @@ function compactDerivativePixelInfoAt(compactWindow: RawRecordingCompactWindow, 
 }
 
 /** Zero-centred, frame-scale diverging palette over consecutive-sample
- * differences, reusing the same fill colours as the time-based derivative
- * canvas so "unavailable"/"beyond" read identically everywhere. */
-function buildCompactDivergingImageData(
+ * differences, reusing the same "beyond" fill as the time-based derivative
+ * canvas so it reads identically everywhere. Pixel 0 uses `CONSTANT_COLOR`
+ * rather than `MISSING_COLOR`: every compact sample is a genuine observation
+ * (unlike a raw-row's withheld field), so pixel 0 is not "missing data" — it
+ * is simply a window edge with no actually-adjacent loaded sample to
+ * difference against, the same "nothing to compute" case `CONSTANT_COLOR`
+ * already covers elsewhere in this file. */
+export function buildCompactDivergingImageData(
   compactWindow: RawRecordingCompactWindow,
 ): { imageData: ImageData; extent: { min: number; max: number } | null; isConstant: boolean } {
   const gridSize = compactWindow.gridSize;
@@ -403,7 +408,7 @@ function buildCompactDivergingImageData(
       color = BEYOND_COLOR;
     } else if (index === 0) {
       // No actually-adjacent loaded sample to difference pixel 0 against.
-      color = MISSING_COLOR;
+      color = CONSTANT_COLOR;
     } else if (extent === null || isConstant || maxAbs === null) {
       color = CONSTANT_COLOR;
     } else {
@@ -661,14 +666,20 @@ export function RawImageCanvas({
 
   return (
     <div className="flex flex-col gap-3">
-      <h4 className="flex items-center gap-1 text-sm font-medium">
-        {title}
+      <h4 className="flex min-w-0 items-center gap-1 truncate text-sm font-medium" title={title}>
+        <span className="truncate">{title}</span>
         {titleHelp}
       </h4>
       {labelRangeOverlay && (
-        <label className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
+        // `truncate` keeps this row single-line regardless of `title`'s length, so every
+        // sibling canvas in a row (e.g. Grayscale/Rainbow/Derivative) starts at the same
+        // top edge instead of one wrapping to two lines and pushing its canvas down.
+        <label
+          className="flex min-w-0 items-center gap-2 text-xs font-normal text-muted-foreground"
+          title={`Show label ranges for ${title}`}
+        >
           <Checkbox checked={labelsVisible} onCheckedChange={setLabelsVisible} />
-          {`Show label ranges for ${title}`}
+          <span className="truncate">{`Show label ranges for ${title}`}</span>
         </label>
       )}
       <div className="relative" style={{ width: DISPLAY_SIZE, height: DISPLAY_SIZE }}>
@@ -777,7 +788,11 @@ function RawImageLegend({
           </div>
         )}
         <div className="flex items-center gap-2">
-          <span className="inline-block size-3 shrink-0 rounded-sm ring-1 ring-foreground/20" style={swatchStyle(MISSING_COLOR)} aria-hidden="true" />
+          <span
+            className="inline-block size-3 shrink-0 rounded-sm ring-1 ring-foreground/20"
+            style={swatchStyle(sampleOrderDerivative ? CONSTANT_COLOR : MISSING_COLOR)}
+            aria-hidden="true"
+          />
           <span>
             {sampleOrderDerivative
               ? "Derivative unavailable — no actually-adjacent observed sample is loaded in this window to difference against."

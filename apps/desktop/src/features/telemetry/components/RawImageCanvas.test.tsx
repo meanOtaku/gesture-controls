@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { RawImageCanvas } from "./RawImageCanvas";
+import { buildCompactDivergingImageData, RawImageCanvas } from "./RawImageCanvas";
 import { RawImageLabelRangeRail } from "./RawImageLabelRangeRail";
 import type {
   RawRecordingCompactWindow,
@@ -223,6 +223,13 @@ describe("RawImageCanvas compact sample-order derivative preview (GC-033 follow-
     fireEvent.keyDown(canvas, { key: "Home" }); // sample index 0
 
     expect(screen.getByText(/Sample-order derivative unavailable — no actually-adjacent observed sample/)).toBeInTheDocument();
+  });
+
+  it("does not paint pixel 0 with the missing-value magenta fill — every compact sample is a real observation, not a withheld field", () => {
+    const { imageData } = buildCompactDivergingImageData(compactWindow);
+    const [r, g, b] = [imageData.data[0], imageData.data[1], imageData.data[2]];
+    expect([r, g, b]).not.toEqual([217, 70, 239]); // MISSING_COLOR
+    expect([r, g, b]).toEqual([128, 128, 128]); // CONSTANT_COLOR: nothing computable at the window edge
   });
 
   it("clears the focused/hovered pixel when the compact window changes (e.g. paging to a new sample range), so a stale index is never reapplied to new data", () => {
