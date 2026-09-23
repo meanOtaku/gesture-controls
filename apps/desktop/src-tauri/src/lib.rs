@@ -180,10 +180,13 @@ pub fn run() {
                                     match watch_handle.state::<settings::SettingsRuntime>().get() {
                                         Ok(settings) => {
                                             let orientation = runtime.latest_orientation().unwrap_or_default();
+                                            let volume_runtime =
+                                                watch_handle.state::<overlay::VolumeRuntime>();
                                             if let Err(error) = overlay.begin_volume_interaction(
                                                 &watch_handle,
                                                 settings.wrist_rotation_config(),
                                                 orientation.as_ref(),
+                                                &volume_runtime,
                                             ) {
                                                 warn!(%error, "failed to begin volume interaction");
                                             }

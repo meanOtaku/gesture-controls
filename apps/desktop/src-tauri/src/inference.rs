@@ -604,10 +604,12 @@ pub(crate) fn apply_decision(app: &AppHandle, decision: PolicyDecision) {
                     .state::<WatchRuntime>()
                     .latest_orientation()
                     .unwrap_or_default();
+                let volume_runtime = app.state::<crate::overlay::VolumeRuntime>();
                 if let Err(error) = overlay.begin_volume_interaction(
                     app,
                     settings.wrist_rotation_config(),
                     orientation.as_ref(),
+                    &volume_runtime,
                 ) {
                     warn!(%error, "failed to begin volume interaction from gesture policy decision");
                 }

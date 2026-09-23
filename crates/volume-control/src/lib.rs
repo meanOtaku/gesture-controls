@@ -829,6 +829,29 @@ pub fn adjust_system_volume(
     Ok(updated)
 }
 
+/// Sets the system volume to `target_percent` outright. Unlike
+/// [`adjust_system_volume`], never reads the current volume first: the
+/// caller already computed an absolute target, and re-reading here would
+/// let a concurrent external volume change or read latency leak into that
+/// target instead of the value the caller asked for. `target_percent` is
+/// clamped to the valid range but never rounded before being sent to the
+/// backend, so repeated calls with the same target never drift.
+pub fn set_system_volume(
+    controller: &dyn VolumeController,
+    overlay_visible: bool,
+    target_percent: f32,
+) -> Result<f32, VolumeError> {
+    if !overlay_visible {
+        return Err(VolumeError::OverlayInactive);
+    }
+    if !target_percent.is_finite() {
+        return Err(VolumeError::InvalidAdjustment);
+    }
+    let clamped_percent = target_percent.clamp(0.0, 100.0);
+    controller.set_volume(clamped_percent / 100.0)?;
+    Ok(clamped_percent)
+}
+
 fn validate_volume(volume: f32) -> Result<(), VolumeError> {
     if volume.is_finite() && (0.0..=1.0).contains(&volume) {
         Ok(())
@@ -1023,9 +1046,9 @@ mod macos_controller_tests {
 
     #[test]
     fn get_volume_rejects_a_non_numeric_or_out_of_range_response() {
-        let non_numeric = MacOsVolumeController::with_runner(MockAppleScriptRunner::returning(
-            Ok("not a number".to_owned()),
-        ));
+        let non_numeric = MacOsVolumeController::with_runner(MockAppleScriptRunner::returning(Ok(
+            "not a number".to_owned(),
+        )));
         assert!(matches!(
             non_numeric.get_volume(),
             Err(VolumeError::InvalidResponse(_))
@@ -1042,9 +1065,9 @@ mod macos_controller_tests {
 
     #[test]
     fn get_volume_surfaces_the_backend_error_the_script_runner_returns() {
-        let controller = MacOsVolumeController::with_runner(MockAppleScriptRunner::returning(
-            Err(VolumeError::Backend("osascript is not authorized".to_owned())),
-        ));
+        let controller = MacOsVolumeController::with_runner(MockAppleScriptRunner::returning(Err(
+            VolumeError::Backend("osascript is not authorized".to_owned()),
+        )));
 
         let error = controller.get_volume().unwrap_err();
 
@@ -1069,9 +1092,8 @@ mod macos_controller_tests {
 
     #[test]
     fn set_volume_rejects_an_invalid_value_without_calling_the_runner() {
-        let controller = MacOsVolumeController::with_runner(MockAppleScriptRunner::returning(Ok(
-            String::new(),
-        )));
+        let controller =
+            MacOsVolumeController::with_runner(MockAppleScriptRunner::returning(Ok(String::new())));
 
         let error = controller.set_volume(1.5).unwrap_err();
 
@@ -1081,9 +1103,9 @@ mod macos_controller_tests {
 
     #[test]
     fn set_volume_surfaces_the_backend_error_the_script_runner_returns() {
-        let controller = MacOsVolumeController::with_runner(MockAppleScriptRunner::returning(
-            Err(VolumeError::Backend("no output device".to_owned())),
-        ));
+        let controller = MacOsVolumeController::with_runner(MockAppleScriptRunner::returning(Err(
+            VolumeError::Backend("no output device".to_owned()),
+        )));
 
         let error = controller.set_volume(0.5).unwrap_err();
 

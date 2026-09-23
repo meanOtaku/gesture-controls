@@ -350,8 +350,15 @@ impl VolumeSimulation {
     }
 }
 
-/// Maps relative watch orientation around the local forearm (X) axis to
-/// bounded, smoothed incremental volume-point changes.
+/// Maps relative watch orientation around the local forearm (X) axis to an
+/// absolute target volume: `activation_volume + signed(relative_degrees) *
+/// volume_points_per_degree`, clamped to the valid volume range. The target
+/// is a pure function of the reference pose and activation volume captured
+/// at [`WristRotation::begin`]/[`WristRotation::begin_with_config`] and the
+/// current sample -- never of any previously applied volume -- so holding a
+/// fixed wrist angle holds a fixed volume and returning to the reference
+/// angle restores the activation volume exactly, with no per-event
+/// accumulation to drift.
 ///
 /// The forearm's long axis runs through the watch case's 9-3 (X) direction,
 /// not 12-6 (Y): the band wraps the wrist circumferentially through the 12
@@ -361,9 +368,15 @@ impl VolumeSimulation {
 #[derive(Debug, Clone, Copy)]
 pub struct WristRotationConfig {
     pub dead_zone_degrees: f64,
+    /// Retained for config/UI compatibility and still validated; the
+    /// absolute target mapping is a stateless function of the current
+    /// sample, so no smoothing filter is applied to it.
     pub smoothing_alpha: f64,
     pub volume_points_per_degree: f64,
     pub max_angular_velocity_degrees_per_second: f64,
+    /// Retained for config/UI compatibility and still validated; the
+    /// absolute target mapping computes each target directly rather than
+    /// ramping toward it, so no per-second volume-point cap applies.
     pub max_volume_points_per_second: f64,
     /// Flips clockwise/counter-clockwise sign to correct for a Watch worn or
     /// mounted with the opposite physical handedness than this convention
@@ -399,15 +412,23 @@ pub enum WristRotationError {
 pub struct WristRotation {
     config: WristRotationConfig,
     start: Option<Quaternion<f64>>,
+    /// Desktop volume percent (0.0..=100.0) captured once when the
+    /// reference pose is established. The sole baseline every absolute
+    /// target is computed from; nothing outside a fresh [`Self::begin`] /
+    /// [`Self::begin_with_config`] call can change it, so it cannot drift
+    /// across repeated samples.
+    activation_volume_percent: Option<f32>,
     previous_raw_degrees: Option<f64>,
-    smoothed_degrees: f64,
-    applied_degrees: f64,
+    /// Absolute target volume percent from the most recent [`Self::observe`]
+    /// call. Reused verbatim when a sample is rejected as a velocity
+    /// outlier, so a bad sample freezes the target instead of jumping it.
+    last_target_volume_percent: Option<f32>,
     last_timestamp_ns: Option<u64>,
-    /// Raw relative roll (degrees from the reference pose, pre-dead-zone,
-    /// pre-smoothing) from the most recent [`Self::observe`] call while a
-    /// reference is active. Diagnostic-only: never fed back into volume
-    /// math, so it cannot influence the mapper this task must preserve.
-    /// `None` before a reference is established or after [`Self::end`].
+    /// Raw relative roll (degrees from the reference pose, pre-dead-zone)
+    /// from the most recent [`Self::observe`] call while a reference is
+    /// active. Diagnostic-only: never fed back into volume math, so it
+    /// cannot influence the mapper this task must preserve. `None` before a
+    /// reference is established or after [`Self::end`].
     last_relative_degrees: Option<f64>,
 }
 
@@ -426,38 +447,52 @@ impl WristRotation {
         Ok(())
     }
 
+    /// Establishes a fresh reference pose and captures `activation_volume_percent`
+    /// (the desktop's current volume at activation) as the baseline every
+    /// subsequent [`Self::observe`] target is computed from.
     pub fn begin(
         &mut self,
         quaternion: [f64; 4],
         timestamp_ns: u64,
+        activation_volume_percent: f32,
     ) -> Result<(), WristRotationError> {
+        if !activation_volume_percent.is_finite() {
+            return Err(WristRotationError::InvalidConfiguration);
+        }
         self.start = Some(normalized_quaternion(quaternion)?);
+        let clamped = activation_volume_percent.clamp(0.0, 100.0);
+        self.activation_volume_percent = Some(clamped);
         self.previous_raw_degrees = None;
-        self.smoothed_degrees = 0.0;
-        self.applied_degrees = 0.0;
+        self.last_target_volume_percent = Some(clamped);
         self.last_timestamp_ns = Some(timestamp_ns);
         self.last_relative_degrees = None;
         Ok(())
     }
 
-    /// Validates `config` and `quaternion` before mutating any state, so a
-    /// button-start and a model-start always establish a fresh reference
-    /// pose under the intended settings or leave the previous interaction
-    /// (if any) completely untouched -- never a config swapped in with no
-    /// matching reference pose, or vice versa.
+    /// Validates `config`, `quaternion`, and `activation_volume_percent`
+    /// before mutating any state, so a button-start and a model-start
+    /// always establish a fresh reference pose and activation-volume
+    /// baseline under the intended settings or leave the previous
+    /// interaction (if any) completely untouched -- never a config swapped
+    /// in with no matching reference pose, or vice versa.
     pub fn begin_with_config(
         &mut self,
         config: WristRotationConfig,
         quaternion: [f64; 4],
         timestamp_ns: u64,
+        activation_volume_percent: f32,
     ) -> Result<(), WristRotationError> {
         validate_wrist_config(config)?;
+        if !activation_volume_percent.is_finite() {
+            return Err(WristRotationError::InvalidConfiguration);
+        }
         let start = normalized_quaternion(quaternion)?;
+        let clamped = activation_volume_percent.clamp(0.0, 100.0);
         self.config = config;
         self.start = Some(start);
+        self.activation_volume_percent = Some(clamped);
         self.previous_raw_degrees = None;
-        self.smoothed_degrees = 0.0;
-        self.applied_degrees = 0.0;
+        self.last_target_volume_percent = Some(clamped);
         self.last_timestamp_ns = Some(timestamp_ns);
         self.last_relative_degrees = None;
         Ok(())
@@ -465,7 +500,9 @@ impl WristRotation {
 
     pub fn end(&mut self) {
         self.start = None;
+        self.activation_volume_percent = None;
         self.previous_raw_degrees = None;
+        self.last_target_volume_percent = None;
         self.last_timestamp_ns = None;
         self.last_relative_degrees = None;
     }
@@ -484,13 +521,29 @@ impl WristRotation {
         self.last_relative_degrees
     }
 
-    /// Ignores high-velocity orientation outliers rather than risking a jump.
+    /// Computes the absolute target volume percent (0.0..=100.0) for the
+    /// current orientation sample: `activation_volume + signed(relative_roll)
+    /// * volume_points_per_degree`, clamped to the valid range. A pure
+    /// function of the reference pose, the activation-volume baseline, and
+    /// this sample alone -- never of any previously applied volume -- so
+    /// holding a fixed wrist angle holds a fixed target and returning to the
+    /// reference angle restores the activation volume exactly, with nothing
+    /// accumulated across samples to drift.
+    ///
+    /// Returns `0.0` if no reference is active; callers must gate on
+    /// [`Self::is_active`] before treating the result as meaningful.
+    ///
+    /// Ignores high-velocity orientation outliers rather than risking a
+    /// jump: an outlier tick returns the previous target unchanged instead
+    /// of a freshly computed one.
     pub fn observe(
         &mut self,
         quaternion: [f64; 4],
         timestamp_ns: u64,
     ) -> Result<f64, WristRotationError> {
-        let Some(start) = self.start else {
+        let (Some(start), Some(activation_volume_percent)) =
+            (self.start, self.activation_volume_percent)
+        else {
             return Ok(0.0);
         };
         let previous_timestamp = self
@@ -513,27 +566,27 @@ impl WristRotation {
         }
         self.last_relative_degrees = Some(raw_degrees);
         let elapsed_seconds = (timestamp_ns - previous_timestamp) as f64 / 1_000_000_000.0;
+        self.last_timestamp_ns = Some(timestamp_ns);
         if let Some(previous) = self.previous_raw_degrees
             && (raw_degrees - previous).abs() / elapsed_seconds
                 > self.config.max_angular_velocity_degrees_per_second
         {
-            self.last_timestamp_ns = Some(timestamp_ns);
-            return Ok(0.0);
+            return Ok(self
+                .last_target_volume_percent
+                .map(f64::from)
+                .unwrap_or(f64::from(activation_volume_percent)));
         }
         self.previous_raw_degrees = Some(raw_degrees);
-        self.last_timestamp_ns = Some(timestamp_ns);
         let dead_zoned = if raw_degrees.abs() <= self.config.dead_zone_degrees {
             0.0
         } else {
             raw_degrees - self.config.dead_zone_degrees.copysign(raw_degrees)
         };
-        self.smoothed_degrees += self.config.smoothing_alpha * (dead_zoned - self.smoothed_degrees);
-        let desired_delta = self.smoothed_degrees - self.applied_degrees;
-        let maximum_delta = self.config.max_volume_points_per_second * elapsed_seconds
-            / self.config.volume_points_per_degree;
-        let applied_delta = desired_delta.clamp(-maximum_delta, maximum_delta);
-        self.applied_degrees += applied_delta;
-        Ok(applied_delta * self.config.volume_points_per_degree)
+        let target = (f64::from(activation_volume_percent)
+            + dead_zoned * self.config.volume_points_per_degree)
+            .clamp(0.0, 100.0);
+        self.last_target_volume_percent = Some(target as f32);
+        Ok(target)
     }
 }
 

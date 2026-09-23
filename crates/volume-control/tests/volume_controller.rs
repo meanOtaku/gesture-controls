@@ -8,6 +8,7 @@ use volume_control::WindowsVolumeController;
 use volume_control::platform_volume_controller;
 use volume_control::{
     AppleScriptRunner, MacOsVolumeController, VolumeController, VolumeError, adjust_system_volume,
+    set_system_volume,
 };
 
 #[derive(Default)]
@@ -354,6 +355,86 @@ fn hidden_overlay_cannot_change_system_volume() {
 
     assert!(matches!(
         adjust_system_volume(&controller, false, 5.0),
+        Err(VolumeError::OverlayInactive)
+    ));
+    assert!(controller.writes.lock().unwrap().is_empty());
+}
+
+// GC-035 follow-up: absolute wrist-volume mapping writes an outright target,
+// never a delta read against the current volume.
+
+#[test]
+fn set_system_volume_writes_the_target_without_ever_reading_current_volume() {
+    let controller = FakeVolumeController {
+        // Wildly different from any target below: if `set_system_volume`
+        // ever consulted it, the written value would reveal that.
+        volume: 0.01,
+        writes: Mutex::new(Vec::new()),
+    };
+
+    let applied = set_system_volume(&controller, true, 72.5).unwrap();
+
+    assert_eq!(applied, 72.5);
+    assert_eq!(*controller.writes.lock().unwrap(), [0.725]);
+}
+
+#[test]
+fn set_system_volume_repeated_with_the_same_target_never_drifts() {
+    let controller = FakeVolumeController {
+        volume: 0.5,
+        writes: Mutex::new(Vec::new()),
+    };
+
+    for _ in 0..10 {
+        let applied = set_system_volume(&controller, true, 63.0).unwrap();
+        assert_eq!(applied, 63.0);
+    }
+    assert_eq!(*controller.writes.lock().unwrap(), [0.63; 10]);
+}
+
+#[test]
+fn set_system_volume_clamps_to_the_valid_range() {
+    let controller = FakeVolumeController {
+        volume: 0.5,
+        writes: Mutex::new(Vec::new()),
+    };
+
+    assert_eq!(set_system_volume(&controller, true, 150.0).unwrap(), 100.0);
+    assert_eq!(set_system_volume(&controller, true, -20.0).unwrap(), 0.0);
+    assert_eq!(*controller.writes.lock().unwrap(), [1.0, 0.0]);
+}
+
+#[test]
+fn set_system_volume_rejects_a_non_finite_target() {
+    let controller = FakeVolumeController {
+        volume: 0.5,
+        writes: Mutex::new(Vec::new()),
+    };
+
+    assert!(matches!(
+        set_system_volume(&controller, true, f32::NAN),
+        Err(VolumeError::InvalidAdjustment)
+    ));
+    assert!(controller.writes.lock().unwrap().is_empty());
+}
+
+#[test]
+fn set_system_volume_backend_write_failure_is_returned() {
+    assert!(matches!(
+        set_system_volume(&RejectingVolumeController, true, 40.0),
+        Err(VolumeError::Backend(message)) if message == "write rejected"
+    ));
+}
+
+#[test]
+fn set_system_volume_hidden_overlay_cannot_change_system_volume() {
+    let controller = FakeVolumeController {
+        volume: 0.5,
+        writes: Mutex::new(Vec::new()),
+    };
+
+    assert!(matches!(
+        set_system_volume(&controller, false, 40.0),
         Err(VolumeError::OverlayInactive)
     ));
     assert!(controller.writes.lock().unwrap().is_empty());

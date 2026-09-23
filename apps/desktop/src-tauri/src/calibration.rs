@@ -327,6 +327,7 @@ fn start_corner_wrist_volume_demo(app: &AppHandle) {
                 app,
                 settings.corner_wrist_volume_config(),
                 orientation.as_ref(),
+                &volume_runtime,
             ) {
                 Ok(state) if state.grabbed => {
                     let _ =

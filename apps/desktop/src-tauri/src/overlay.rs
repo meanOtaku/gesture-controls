@@ -13,7 +13,7 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow}
 use tracing::warn;
 use volume_control::{
     VolumeController, VolumeError, adjust_system_volume as adjust_native_volume,
-    platform_volume_controller,
+    platform_volume_controller, set_system_volume as set_native_volume,
 };
 use watch_bridge::{HapticCommand, WatchBridgeServer};
 
@@ -263,17 +263,21 @@ impl OverlayRuntime {
 
     /// Atomically begins a wrist-rotation volume interaction: grabs the
     /// overlay and establishes a fresh rotation reference under
-    /// `wrist_config` from `orientation`, as one transaction. This is the
+    /// `wrist_config` from `orientation`, capturing the desktop's current
+    /// volume as the activation baseline every absolute target this
+    /// interaction computes is anchored to, as one transaction. This is the
     /// single seam both the Watch-button and the approved desktop-model
     /// paths call, so neither can leave the overlay visually grabbed with a
     /// stale or missing reference pose. Fails closed: a missing orientation
-    /// sample or an invalid configuration rolls the grab back via
-    /// [`Self::release`] instead of leaving a partial interaction active.
+    /// sample, an unreadable/unsupported native volume, or an invalid
+    /// configuration rolls the grab back via [`Self::release`] instead of
+    /// leaving a partial interaction active.
     pub(crate) fn begin_volume_interaction(
         &self,
         app: &AppHandle,
         wrist_config: WristRotationConfig,
         orientation: Option<&WatchOrientationSample>,
+        volume_runtime: &VolumeRuntime,
     ) -> Result<OverlayState, String> {
         let grabbed = self.grab(app)?;
         if !grabbed.grabbed {
@@ -284,6 +288,19 @@ impl OverlayRuntime {
             warn!("volume interaction grabbed with no orientation sample available; releasing");
             return self.release(app);
         };
+        let activation_volume_percent = match volume_runtime.available_volume() {
+            Ok(Some(volume)) => volume * 100.0,
+            Ok(None) => {
+                warn!(
+                    "volume interaction grabbed with no controllable native volume backend; releasing"
+                );
+                return self.release(app);
+            }
+            Err(error) => {
+                warn!(%error, "failed to read activation volume for wrist rotation; releasing");
+                return self.release(app);
+            }
+        };
         let began = self
             .wrist_rotation
             .lock()
@@ -292,6 +309,7 @@ impl OverlayRuntime {
                 wrist_config,
                 orientation.quaternion,
                 orientation.timestamp_ns,
+                activation_volume_percent,
             );
         if let Err(error) = began {
             warn!(%error, "failed to begin wrist rotation reference; releasing grab");
@@ -306,26 +324,26 @@ impl OverlayRuntime {
         sample: &WatchOrientationSample,
         volume_runtime: &VolumeRuntime,
     ) -> Result<OverlayState, String> {
-        let (delta, relative_degrees) = {
+        let (target_volume, relative_degrees) = {
             let mut wrist_rotation = self
                 .wrist_rotation
                 .lock()
                 .map_err(|_| "wrist rotation lock was poisoned")?;
-            let delta = wrist_rotation
+            let target_volume = wrist_rotation
                 .observe(sample.quaternion, sample.timestamp_ns)
                 .map_err(|error| error.to_string())? as f32;
-            (delta, wrist_rotation.last_relative_degrees())
+            (target_volume, wrist_rotation.last_relative_degrees())
         };
         self.update_relative_roll_diagnostic(app, relative_degrees.map(|degrees| degrees as f32));
         let state = self.state()?;
-        if !state.grabbed || delta.abs() < f32::EPSILON {
+        if !state.grabbed || (target_volume - state.volume).abs() < f32::EPSILON {
             let next_phase = corner_demo_phase_after_sample(state.corner_demo_phase, false);
             if next_phase != state.corner_demo_phase {
                 return self.set_corner_demo_phase(app, next_phase);
             }
             return Ok(state);
         }
-        let applied = self.adjust_system_volume(app, delta, volume_runtime)?;
+        let applied = self.set_absolute_system_volume(app, target_volume, volume_runtime)?;
         if (applied.volume - state.volume).abs() >= f32::EPSILON {
             self.notify_wrist_rotation_haptic(app);
         }
@@ -444,6 +462,45 @@ impl OverlayRuntime {
         };
         state.last_native_volume_error = None;
         state.volume = normalized * 100.0;
+        let snapshot = state.clone();
+        let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
+        Ok(snapshot)
+    }
+
+    /// Sets the system volume to `target_percent` outright, unlike
+    /// [`Self::adjust_system_volume`] which reads the current volume and
+    /// nudges it by a delta. Wrist rotation computes each target as an
+    /// absolute value already anchored to the activation baseline, so
+    /// applying it must never re-read the current volume -- doing so would
+    /// let an external volume change (or read latency) silently shift the
+    /// mapping and drift the target away from what the wrist angle implies.
+    fn set_absolute_system_volume(
+        &self,
+        app: &AppHandle,
+        target_percent: f32,
+        volume_runtime: &VolumeRuntime,
+    ) -> Result<OverlayState, String> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "overlay state lock was poisoned")?;
+        if !state.visible {
+            return Err(VolumeError::OverlayInactive.to_string());
+        }
+        self.state_generation.fetch_add(1, Ordering::AcqRel);
+        let normalized = match set_native_volume(volume_runtime.controller(), true, target_percent)
+        {
+            Ok(normalized) => normalized,
+            Err(error) => {
+                let message = error.to_string();
+                state.last_native_volume_error = Some(message.clone());
+                let snapshot = state.clone();
+                let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
+                return Err(message);
+            }
+        };
+        state.last_native_volume_error = None;
+        state.volume = normalized;
         let snapshot = state.clone();
         let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
         Ok(snapshot)
