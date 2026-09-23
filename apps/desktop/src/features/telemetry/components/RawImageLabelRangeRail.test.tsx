@@ -54,6 +54,16 @@ describe("RawImageLabelRangeRail", () => {
     expect(screen.getByRole("listitem")).toHaveAccessibleName("pinching, samples 0–1");
   });
 
+  it("uses a difference-blended white overlay so brackets/text stay legible over any pixel colour", () => {
+    const ranges: VisibleLabelRange[] = [
+      { labelId: "pinching", startRawRow: 16, endRawRow: 32, startFraction: 0.25, endFraction: 0.5 },
+    ];
+    render(<RawImageLabelRangeRail ranges={ranges} />);
+    const item = screen.getByRole("listitem");
+    expect(item.style.mixBlendMode).toBe("difference");
+    expect(item).toHaveClass("border-white", "text-white");
+  });
+
   it("spans the full canvas width edge-to-edge", () => {
     const ranges: VisibleLabelRange[] = [
       { labelId: "pinching", startRawRow: 16, endRawRow: 32, startFraction: 0.25, endFraction: 0.5 },

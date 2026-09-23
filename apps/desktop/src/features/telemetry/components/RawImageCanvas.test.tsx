@@ -53,6 +53,52 @@ describe("RawImageCanvas labelRangeOverlay", () => {
     render(<RawImageCanvas rawWindow={rawWindow} normalizationMode="recording" title="Rainbow" colorMode="rainbow" />);
     expect(screen.queryByRole("list", { name: "Saved label ranges" })).not.toBeInTheDocument();
   });
+
+  it("shows no toggle when labelRangeOverlay is omitted", () => {
+    render(<RawImageCanvas rawWindow={rawWindow} normalizationMode="recording" title="Rainbow" colorMode="rainbow" />);
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it("hides the overlay when its toggle is unchecked, independently of a sibling viewer's toggle", () => {
+    render(
+      <>
+        <RawImageCanvas
+          rawWindow={rawWindow}
+          normalizationMode="recording"
+          title="Grayscale"
+          colorMode="grayscale"
+          labelRangeOverlay={
+            <RawImageLabelRangeRail
+              ranges={[{ labelId: "pinching", startRawRow: 0, endRawRow: 4, startFraction: 0, endFraction: 0.25 }]}
+            />
+          }
+        />
+        <RawImageCanvas
+          rawWindow={rawWindow}
+          normalizationMode="recording"
+          title="Rainbow"
+          colorMode="rainbow"
+          labelRangeOverlay={
+            <RawImageLabelRangeRail
+              ranges={[{ labelId: "pinching", startRawRow: 0, endRawRow: 4, startFraction: 0, endFraction: 0.25 }]}
+            />
+          }
+        />
+      </>,
+    );
+
+    const grayscaleToggle = screen.getByRole("checkbox", { name: "Show label ranges for Grayscale" });
+    const rainbowToggle = screen.getByRole("checkbox", { name: "Show label ranges for Rainbow" });
+    expect(grayscaleToggle).toBeChecked();
+    expect(rainbowToggle).toBeChecked();
+    expect(screen.getAllByRole("list", { name: "Saved label ranges" })).toHaveLength(2);
+
+    fireEvent.click(grayscaleToggle);
+
+    expect(grayscaleToggle).not.toBeChecked();
+    expect(rainbowToggle).toBeChecked();
+    expect(screen.getAllByRole("list", { name: "Saved label ranges" })).toHaveLength(1);
+  });
 });
 
 const derivativeWindow: RawRecordingDerivativeWindow = {

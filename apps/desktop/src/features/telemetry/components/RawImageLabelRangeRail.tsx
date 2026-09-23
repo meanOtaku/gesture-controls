@@ -48,10 +48,11 @@ export function RawImageLabelRangeRail({ ranges, unit = "row" }: RawImageLabelRa
           role="listitem"
           aria-label={describeRange(range, unit)}
           title={describeRange(range, unit)}
-          className="absolute left-0 right-0 flex items-center justify-center border-y-2 border-foreground/50 bg-foreground/5 px-1 text-center text-[10px] leading-tight text-foreground/80"
+          className="absolute left-0 right-0 flex items-center justify-center border-y-2 border-white px-1 text-center text-[10px] leading-tight text-white"
           style={{
             top: `${range.startFraction * 100}%`,
             height: `${Math.max(range.endFraction - range.startFraction, 0) * 100}%`,
+            mixBlendMode: "difference",
           }}
         >
           <span className="truncate">{range.labelId.replaceAll("_", " ")}</span>

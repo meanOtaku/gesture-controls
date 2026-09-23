@@ -495,6 +495,7 @@ export function RawImageViewerPanel() {
                               normalizationMode={normalizationMode}
                               title="Rainbow (observed samples, false-colour)"
                               colorMode="rainbow"
+                              labelRangeOverlay={<RawImageLabelRangeRail ranges={visibleCompactLabelRanges} unit="sample" />}
                             />
                           </CardContent>
                         </Card>
@@ -621,6 +622,7 @@ export function RawImageViewerPanel() {
                             normalizationMode={normalizationMode}
                             title="Rainbow (false-colour)"
                             colorMode="rainbow"
+                            labelRangeOverlay={<RawImageLabelRangeRail ranges={visibleLabelRanges} />}
                           />
                         </CardContent>
                       </Card>

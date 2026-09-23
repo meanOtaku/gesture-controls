@@ -512,7 +512,9 @@ type RawImageCanvasProps = {
   /** Optional accessible overlay (e.g. `RawImageLabelRangeRail`) rendered
    * full-bleed over the canvas, sized to its DISPLAY_SIZE bounds.
    * Non-interactive (pointer-events disabled) so it never blocks pixel
-   * hover/inspection on the canvas beneath it. */
+   * hover/inspection on the canvas beneath it. When provided, this instance
+   * also renders its own "Show label ranges" checkbox (default on), so each
+   * viewer's overlay toggles independently of its siblings. */
   labelRangeOverlay?: ReactNode;
   /** Required when `colorMode` is `"diverging"`: the M3 offline derivative
    * window for the identical recording/channel/grid-size/start-row as
@@ -542,6 +544,7 @@ export function RawImageCanvas({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+  const [labelsVisible, setLabelsVisible] = useState(true);
   const isCompact = compactWindow !== undefined;
   const isCompactDerivative = isCompact && colorMode === "diverging";
   const gridSize = isCompact ? compactWindow.gridSize : (rawWindow as RawRecordingWindow).gridSize;
@@ -651,6 +654,17 @@ export function RawImageCanvas({
         {title}
         {titleHelp}
       </h4>
+      {labelRangeOverlay && (
+        <label className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={labelsVisible}
+            onChange={(event) => setLabelsVisible(event.target.checked)}
+            aria-label={`Show label ranges for ${title}`}
+          />
+          Show label ranges
+        </label>
+      )}
       <div className="relative" style={{ width: DISPLAY_SIZE, height: DISPLAY_SIZE }}>
         <canvas
           ref={canvasRef}
@@ -670,7 +684,7 @@ export function RawImageCanvas({
           onFocus={() => setFocusedIndex((current) => current ?? 0)}
           onKeyDown={handleKeyDown}
         />
-        {labelRangeOverlay && (
+        {labelRangeOverlay && labelsVisible && (
           <div className="pointer-events-none absolute inset-0">{labelRangeOverlay}</div>
         )}
       </div>
