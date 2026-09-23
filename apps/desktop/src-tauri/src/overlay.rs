@@ -181,7 +181,7 @@ impl OverlayRuntime {
         }
         self.state_generation.fetch_add(1, Ordering::AcqRel);
         let snapshot = state.clone();
-        let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
+        let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
         Ok(snapshot)
     }
 
@@ -211,7 +211,7 @@ impl OverlayRuntime {
         })?;
         self.state_generation.fetch_add(1, Ordering::AcqRel);
         let snapshot = state.clone();
-        let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
+        let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
         Ok(snapshot)
     }
 
@@ -228,7 +228,7 @@ impl OverlayRuntime {
         state.grabbed = true;
         self.state_generation.fetch_add(1, Ordering::AcqRel);
         let snapshot = state.clone();
-        let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
+        let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
         Ok(snapshot)
     }
 
@@ -257,7 +257,7 @@ impl OverlayRuntime {
         })?;
         self.state_generation.fetch_add(1, Ordering::AcqRel);
         let snapshot = state.clone();
-        let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
+        let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
         Ok(snapshot)
     }
 
@@ -357,7 +357,7 @@ impl OverlayRuntime {
         state.corner_demo_phase = phase;
         self.state_generation.fetch_add(1, Ordering::AcqRel);
         let snapshot = state.clone();
-        let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
+        let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
         Ok(snapshot)
     }
 
@@ -445,7 +445,7 @@ impl OverlayRuntime {
         state.last_native_volume_error = None;
         state.volume = normalized * 100.0;
         let snapshot = state.clone();
-        let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
+        let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
         Ok(snapshot)
     }
 
