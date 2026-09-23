@@ -181,4 +181,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* GC-008: one electric-blue outline system for non-semantic desktop chrome (literal-border legacy selectors). */
 .telemetry-chart,.connection,.metric,.vector-row,.model-lab-log,.step-number,.signal-grid .telemetry-chart,.preview-notice,.preview-icon,.lab-workflow a,.model-lab-backend-select>label { border-color:var(--electric-blue); }
 .model-lab-chip:not(.model-lab-chip--positive):not(.model-lab-chip--hold):not(.model-lab-chip--ready):not(.model-lab-chip--attention) { border-color:var(--electric-blue); }
+
+/* GC-034: compact corner-gated wrist-volume demo status caption under the knob. */
+.volume-knob__corner-demo-phase { position:relative; margin:0; font-size:.72rem; font-weight:600; letter-spacing:.04em; color:var(--muted-foreground); text-align:center; }
 .setup-steps button:hover,.model-lab-backend-select>label:has(input:checked) { border-color:var(--electric-blue); }

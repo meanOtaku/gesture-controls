@@ -37,6 +37,18 @@ export interface CalibrationState {
   activeTarget: CalibrationTarget | null;
 }
 
+/**
+ * Compact status for the corner-gated wrist-volume demo (`corner_demo_phase`
+ * in `apps/desktop/src-tauri/src/overlay.rs`). `null` whenever the demo mode
+ * is off or no corner-demo interaction is in progress.
+ */
+export type CornerWristVolumeDemoPhase =
+  | "targeting"
+  | "ready"
+  | "adjusting"
+  | "unavailableNoOrientation"
+  | "unavailableVolumeUnsupported";
+
 export interface OverlayState {
   visible: boolean;
   grabbed: boolean;
@@ -44,6 +56,7 @@ export interface OverlayState {
   rotationAngle: number;
   screenX: number;
   screenY: number;
+  cornerDemoPhase: CornerWristVolumeDemoPhase | null;
 }
 
 export interface WatchOrientationSample {
@@ -217,6 +230,10 @@ export interface AppSettings {
   wristMaxAngularVelocityDegreesPerSecond: number;
   wristMaxVolumePointsPerSecond: number;
   watchSensorsEnabled: Record<string, boolean>;
+  /** Opt-in: dwelling on the calibrated top-right target grabs the volume overlay directly. Default off. */
+  cornerWristVolumeDemoEnabled: boolean;
+  /** Direction calibration for the corner-gated demo only; does not affect the Watch-button/desktop-model paths. */
+  cornerWristVolumeInvertDirection: boolean;
 }
 
 export const SETTINGS_UPDATED_EVENT = "settings-updated";

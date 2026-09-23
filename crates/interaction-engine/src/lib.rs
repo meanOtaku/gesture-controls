@@ -359,6 +359,11 @@ pub struct WristRotationConfig {
     pub volume_points_per_degree: f64,
     pub max_angular_velocity_degrees_per_second: f64,
     pub max_volume_points_per_second: f64,
+    /// Flips clockwise/counter-clockwise sign to correct for a Watch worn or
+    /// mounted with the opposite physical handedness than this convention
+    /// assumes. Calibration, not a gesture tuning knob: leave `false` unless
+    /// a real Watch has been confirmed to produce the wrong sign.
+    pub invert_direction: bool,
 }
 
 impl Default for WristRotationConfig {
@@ -369,6 +374,7 @@ impl Default for WristRotationConfig {
             volume_points_per_degree: 1.0 / 3.0,
             max_angular_velocity_degrees_per_second: 360.0,
             max_volume_points_per_second: 30.0,
+            invert_direction: false,
         }
     }
 }
@@ -478,6 +484,9 @@ impl WristRotation {
         }
         if raw_degrees < -180.0 {
             raw_degrees += 360.0;
+        }
+        if self.config.invert_direction {
+            raw_degrees = -raw_degrees;
         }
         let elapsed_seconds = (timestamp_ns - previous_timestamp) as f64 / 1_000_000_000.0;
         if let Some(previous) = self.previous_raw_degrees

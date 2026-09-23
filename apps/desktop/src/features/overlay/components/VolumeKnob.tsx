@@ -1,13 +1,23 @@
 import type { CSSProperties } from "react";
+import type { CornerWristVolumeDemoPhase } from "../../../shared/protocol/events";
 
 interface VolumeKnobProps {
   volume: number;
   grabbed?: boolean;
+  cornerDemoPhase?: CornerWristVolumeDemoPhase | null;
 }
 
 type KnobStyle = CSSProperties & { "--volume-progress": number };
 
-export function VolumeKnob({ volume, grabbed = false }: VolumeKnobProps) {
+const CORNER_DEMO_PHASE_LABEL: Record<CornerWristVolumeDemoPhase, string> = {
+  targeting: "Targeting…",
+  ready: "Ready — twist wrist",
+  adjusting: "Adjusting",
+  unavailableNoOrientation: "Unavailable — no Watch orientation",
+  unavailableVolumeUnsupported: "Unavailable — volume control unsupported",
+};
+
+export function VolumeKnob({ volume, grabbed = false, cornerDemoPhase = null }: VolumeKnobProps) {
   const boundedVolume = Math.min(100, Math.max(0, Math.round(volume)));
   const style: KnobStyle = { "--volume-progress": boundedVolume };
 
@@ -29,6 +39,7 @@ export function VolumeKnob({ volume, grabbed = false }: VolumeKnobProps) {
         <strong>{boundedVolume}%</strong>
         <span>Volume</span>
       </div>
+      {cornerDemoPhase && <p className="volume-knob__corner-demo-phase">{CORNER_DEMO_PHASE_LABEL[cornerDemoPhase]}</p>}
     </section>
   );
 }

@@ -73,6 +73,18 @@ pub struct AppSettings {
     #[serde(default = "default_wrist_max_volume_points_per_second")]
     pub wrist_max_volume_points_per_second: f64,
     pub watch_sensors_enabled: HashMap<String, bool>,
+    /// Explicit opt-in for the corner-gated demo interaction: dwelling on the
+    /// calibrated top-right target grabs the volume overlay directly (no
+    /// STEM button needed) and wrist twists adjust volume while it holds.
+    /// Default off; the Watch-button and desktop-model grab paths are
+    /// unaffected either way. See [`Self::corner_wrist_volume_config`].
+    #[serde(default)]
+    pub corner_wrist_volume_demo_enabled: bool,
+    /// Physical direction calibration for the corner-gated demo only: flips
+    /// clockwise/counter-clockwise if this Watch's mounting reports the
+    /// opposite sign. Has no effect on the Watch-button/desktop-model paths.
+    #[serde(default)]
+    pub corner_wrist_volume_invert_direction: bool,
 }
 
 impl Default for AppSettings {
@@ -101,6 +113,8 @@ impl Default for AppSettings {
                 .iter()
                 .map(|&sensor| (sensor.to_string(), true))
                 .collect(),
+            corner_wrist_volume_demo_enabled: false,
+            corner_wrist_volume_invert_direction: false,
         }
     }
 }
@@ -142,6 +156,17 @@ impl AppSettings {
             max_angular_velocity_degrees_per_second: self
                 .wrist_max_angular_velocity_degrees_per_second,
             max_volume_points_per_second: self.wrist_max_volume_points_per_second,
+            invert_direction: false,
+        }
+    }
+
+    /// Same tuning as [`Self::wrist_rotation_config`], with the corner-demo's
+    /// own direction calibration applied. Kept separate so inverting the
+    /// demo's direction can never flip the Watch-button/desktop-model paths.
+    pub fn corner_wrist_volume_config(&self) -> interaction_engine::WristRotationConfig {
+        interaction_engine::WristRotationConfig {
+            invert_direction: self.corner_wrist_volume_invert_direction,
+            ..self.wrist_rotation_config()
         }
     }
 

@@ -258,6 +258,11 @@ These settings apply to the next successful volume grab (from the Watch button f
 
 Defaults target roughly 30 volume points for a 90° twist. Begin with defaults and adjust gradually using a test audio output.
 
+#### Corner wrist volume (demo)
+
+- **Enable demo interaction:** off by default. When on, dwelling on the calibrated top-right target begins the volume interaction directly, without the Watch button. See [§5 Corner wrist volume (demo)](#corner-wrist-volume-demo) for the full behavior and fail-closed guarantees.
+- **Invert twist direction:** only shown while the demo is enabled. Flips which twist direction raises vs. lowers volume, for a Watch mounted with the opposite physical handedness. Affects only this demo interaction.
+
 #### Recording, graphs, and Watch rates
 
 - Set ordinary recording rate and graph refresh rate.
@@ -276,6 +281,16 @@ With model inference Off, the supported Watch-button interaction can begin a vol
 ### Model-assisted gesture
 
 With a validated active TFLite model in Live mode, the desktop may begin or release only the intent explicitly bound to the model class. The model does not run on the Watch or headphones. The same desktop transaction is used for model and button initiation so a new interaction always gets a fresh rotation reference.
+
+### Corner wrist volume (demo)
+
+An explicit, default-off opt-in in Settings. While enabled, dwelling on the calibrated top-right target begins the volume interaction directly — no STEM button press needed — using the same desktop transaction (fresh wrist-orientation reference, dead zone, smoothing, rate limiting, and native volume call) as the Watch-button and model-assisted paths. Clockwise twist raises volume; counter-clockwise lowers it. If your Watch's physical mounting reports the opposite handedness, use the demo's own **Invert twist direction** toggle — it only affects this demo interaction, never the Watch-button or model-assisted paths.
+
+The overlay shows a compact status while the demo is enabled: *Targeting…*, *Ready — twist wrist*, *Adjusting*, or an *Unavailable* reason (no live Watch orientation, or the native volume backend on this platform is unsupported).
+
+Fails closed the same way every time: leaving the top-right target, losing head-tracker calibration, a stale/disconnected Watch, or pressing Escape immediately ends the interaction and clears the reference pose, so any later wrist twist has no effect until the target is re-entered and a new reference is established. Disabling the setting makes this path fully inert — gazing at the target and twisting the wrist changes nothing, same as before this feature existed.
+
+**Manual verification remaining:** this demo interaction has been proven with unit tests exercising sign/direction, fresh-reference-on-entry, gating, and every fail-closed exit path, but the actual clockwise/counter-clockwise walkthrough on a physical Galaxy Watch and a supported native volume backend has not been performed in this environment (no connected hardware). Before relying on this for a live demo, wear the Watch, enable the setting, and confirm real clockwise/counter-clockwise twists raise/lower volume in the expected direction — flip **Invert twist direction** if they're reversed.
 
 ### Native platform volume backends
 

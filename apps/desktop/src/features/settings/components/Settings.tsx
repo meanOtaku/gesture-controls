@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { CONTROLLABLE_SENSORS, type AppSettings } from "../../../shared/protocol/events";
 import { ApplySettingsFooter } from "./ApplySettingsFooter";
+import { CornerWristVolumeDemoSection } from "./CornerWristVolumeDemoSection";
 import { HeadphonesSettingsSection } from "./HeadphonesSettingsSection";
 import { RecordingGraphSettingsSection } from "./RecordingGraphSettingsSection";
 import { WatchHealthDeliverySettingsSection } from "./WatchHealthDeliverySettingsSection";
@@ -37,6 +38,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   wristMaxAngularVelocityDegreesPerSecond: 360,
   wristMaxVolumePointsPerSecond: 30,
   watchSensorsEnabled: Object.fromEntries(CONTROLLABLE_SENSORS.map(({ id }) => [id, true])),
+  cornerWristVolumeDemoEnabled: false,
+  cornerWristVolumeInvertDirection: false,
 };
 
 function clamp(raw: string | undefined, min: number, max: number, fallback: number): number {
@@ -84,6 +87,10 @@ export function Settings({ settings, error, isPending = () => false, onUpdate, o
   };
 
   const toggleHeadphonesEnabled = () => onUpdate({ ...current, headphonesEnabled: !current.headphonesEnabled });
+  const toggleCornerWristVolumeDemoEnabled = () =>
+    onUpdate({ ...current, cornerWristVolumeDemoEnabled: !current.cornerWristVolumeDemoEnabled });
+  const toggleCornerWristVolumeInvertDirection = () =>
+    onUpdate({ ...current, cornerWristVolumeInvertDirection: !current.cornerWristVolumeInvertDirection });
   const toggleWatchSensor = (id: string) =>
     onUpdate({
       ...current,
@@ -154,6 +161,13 @@ export function Settings({ settings, error, isPending = () => false, onUpdate, o
       />
 
       <WatchSensorSwitchSection watchSensorsEnabled={current.watchSensorsEnabled} onToggle={toggleWatchSensor} />
+
+      <CornerWristVolumeDemoSection
+        enabled={current.cornerWristVolumeDemoEnabled}
+        invertDirection={current.cornerWristVolumeInvertDirection}
+        onToggleEnabled={toggleCornerWristVolumeDemoEnabled}
+        onToggleInvertDirection={toggleCornerWristVolumeInvertDirection}
+      />
 
       <ApplySettingsFooter
         applyPending={isPending("settings:apply")}

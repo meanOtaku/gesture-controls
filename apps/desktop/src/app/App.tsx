@@ -44,6 +44,7 @@ const emptyOverlay: OverlayState = {
   rotationAngle: 0,
   screenX: 0,
   screenY: 0,
+  cornerDemoPhase: null,
 };
 
 /**
@@ -122,7 +123,11 @@ function OverlayApp() {
     };
   }, [inTauri, overlay.visible]);
 
-  return <main className="overlay-shell"><VolumeKnob volume={overlay.volume} grabbed={overlay.grabbed} /></main>;
+  return (
+    <main className="overlay-shell">
+      <VolumeKnob volume={overlay.volume} grabbed={overlay.grabbed} cornerDemoPhase={overlay.cornerDemoPhase} />
+    </main>
+  );
 }
 
 function MainApp() {

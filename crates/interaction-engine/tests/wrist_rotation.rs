@@ -119,6 +119,65 @@ fn re_beginning_after_a_release_starts_from_a_fresh_reference_with_no_carried_st
     assert_eq!(delta_at_same_absolute_orientation, 0.0);
 }
 
+// Sign convention: a positive rotation around the forearm (quaternion j)
+// axis is "clockwise" and must always raise volume (positive delta) by
+// default; `invert_direction` exists solely to correct a Watch physically
+// mounted/worn with the opposite handedness, and must flip both directions
+// together, never just one.
+#[test]
+fn clockwise_forearm_rotation_raises_volume_by_default() {
+    let mut rotation = WristRotation::default();
+    rotation
+        .begin_with_config(WristRotationConfig::default(), IDENTITY, 0)
+        .unwrap();
+    let delta = rotation
+        .observe(rotated_around_forearm(20.0), 200_000_000)
+        .unwrap();
+    assert!(delta > 0.0, "clockwise twist must increase volume, got {delta}");
+}
+
+#[test]
+fn counter_clockwise_forearm_rotation_lowers_volume_by_default() {
+    let mut rotation = WristRotation::default();
+    rotation
+        .begin_with_config(WristRotationConfig::default(), IDENTITY, 0)
+        .unwrap();
+    let delta = rotation
+        .observe(rotated_around_forearm(-20.0), 200_000_000)
+        .unwrap();
+    assert!(delta < 0.0, "counter-clockwise twist must decrease volume, got {delta}");
+}
+
+#[test]
+fn invert_direction_flips_both_signs_for_a_reversed_watch_mounting() {
+    let config = WristRotationConfig {
+        invert_direction: true,
+        ..WristRotationConfig::default()
+    };
+
+    let mut clockwise = WristRotation::default();
+    clockwise.begin_with_config(config, IDENTITY, 0).unwrap();
+    let clockwise_delta = clockwise
+        .observe(rotated_around_forearm(20.0), 200_000_000)
+        .unwrap();
+    assert!(
+        clockwise_delta < 0.0,
+        "inverted config must lower volume on a physically clockwise twist, got {clockwise_delta}"
+    );
+
+    let mut counter_clockwise = WristRotation::default();
+    counter_clockwise
+        .begin_with_config(config, IDENTITY, 0)
+        .unwrap();
+    let counter_clockwise_delta = counter_clockwise
+        .observe(rotated_around_forearm(-20.0), 200_000_000)
+        .unwrap();
+    assert!(
+        counter_clockwise_delta > 0.0,
+        "inverted config must raise volume on a physically counter-clockwise twist, got {counter_clockwise_delta}"
+    );
+}
+
 #[test]
 fn observe_after_begin_still_enforces_monotonic_timestamps() {
     let mut rotation = WristRotation::default();
