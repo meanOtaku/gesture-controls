@@ -403,6 +403,12 @@ pub struct WristRotation {
     smoothed_degrees: f64,
     applied_degrees: f64,
     last_timestamp_ns: Option<u64>,
+    /// Raw relative roll (degrees from the reference pose, pre-dead-zone,
+    /// pre-smoothing) from the most recent [`Self::observe`] call while a
+    /// reference is active. Diagnostic-only: never fed back into volume
+    /// math, so it cannot influence the mapper this task must preserve.
+    /// `None` before a reference is established or after [`Self::end`].
+    last_relative_degrees: Option<f64>,
 }
 
 impl WristRotation {
@@ -430,6 +436,7 @@ impl WristRotation {
         self.smoothed_degrees = 0.0;
         self.applied_degrees = 0.0;
         self.last_timestamp_ns = Some(timestamp_ns);
+        self.last_relative_degrees = None;
         Ok(())
     }
 
@@ -452,6 +459,7 @@ impl WristRotation {
         self.smoothed_degrees = 0.0;
         self.applied_degrees = 0.0;
         self.last_timestamp_ns = Some(timestamp_ns);
+        self.last_relative_degrees = None;
         Ok(())
     }
 
@@ -459,12 +467,21 @@ impl WristRotation {
         self.start = None;
         self.previous_raw_degrees = None;
         self.last_timestamp_ns = None;
+        self.last_relative_degrees = None;
     }
 
     /// True once a reference pose has been established by [`Self::begin`] or
     /// [`Self::begin_with_config`] and not yet cleared by [`Self::end`].
     pub fn is_active(&self) -> bool {
         self.start.is_some()
+    }
+
+    /// Raw relative roll (degrees from the reference pose) from the most
+    /// recent [`Self::observe`] call, before dead-zone/smoothing/velocity
+    /// clamping. Diagnostic-only, for surfacing "is the wrist roll actually
+    /// changing" independent of whether it produced a volume delta.
+    pub fn last_relative_degrees(&self) -> Option<f64> {
+        self.last_relative_degrees
     }
 
     /// Ignores high-velocity orientation outliers rather than risking a jump.
@@ -494,6 +511,7 @@ impl WristRotation {
         if self.config.invert_direction {
             raw_degrees = -raw_degrees;
         }
+        self.last_relative_degrees = Some(raw_degrees);
         let elapsed_seconds = (timestamp_ns - previous_timestamp) as f64 / 1_000_000_000.0;
         if let Some(previous) = self.previous_raw_degrees
             && (raw_degrees - previous).abs() / elapsed_seconds

@@ -184,4 +184,5 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* GC-034: compact corner-gated wrist-volume demo status caption under the knob. */
 .volume-knob__corner-demo-phase { position:relative; margin:0; font-size:.72rem; font-weight:600; letter-spacing:.04em; color:var(--muted-foreground); text-align:center; }
+.volume-knob__native-error { position:relative; margin:0; font-size:.68rem; font-weight:600; letter-spacing:.02em; color:var(--destructive); text-align:center; max-width:12rem; }
 .setup-steps button:hover,.model-lab-backend-select>label:has(input:checked) { border-color:var(--electric-blue); }

@@ -23,6 +23,11 @@ const OVERLAY_WINDOW: &str = "overlay";
 const SCREEN_EDGE_MARGIN: f64 = 16.0;
 const WRIST_ROTATION_HAPTIC_DURATION_MS: u32 = 20;
 const WRIST_ROTATION_HAPTIC_MIN_INTERVAL: Duration = Duration::from_millis(125);
+/// Caps how often the raw relative-roll diagnostic (below) can update and
+/// emit, independent of the Watch orientation sample rate (up to ~50Hz) --
+/// enough for a human to see the wrist roll changing during macOS bring-up
+/// without turning this diagnostic into a raw high-rate sensor stream.
+const WRIST_ROTATION_DIAGNOSTIC_MIN_INTERVAL: Duration = Duration::from_millis(200);
 
 /// Compact status for the corner-gated wrist-volume demo, surfaced on
 /// [`OverlayState`] so the operator can tell targeting from an actual
@@ -40,7 +45,7 @@ pub enum CornerWristVolumeDemoPhase {
     UnavailableVolumeUnsupported,
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OverlayState {
     pub visible: bool,
@@ -50,6 +55,15 @@ pub struct OverlayState {
     pub screen_x: f64,
     pub screen_y: f64,
     pub corner_demo_phase: Option<CornerWristVolumeDemoPhase>,
+    /// Raw relative roll (degrees from the wrist-rotation reference pose),
+    /// throttled to [`WRIST_ROTATION_DIAGNOSTIC_MIN_INTERVAL`]. `None`
+    /// whenever no wrist-rotation reference is active (corner demo not
+    /// gripping, Watch-button/desktop-model grab not active either).
+    pub last_relative_roll_degrees: Option<f32>,
+    /// The error string from the most recent failed native volume read or
+    /// write, cleared on the next successful one of either kind. `None`
+    /// means the last native volume operation (if any) succeeded.
+    pub last_native_volume_error: Option<String>,
 }
 
 impl Default for OverlayState {
@@ -62,6 +76,8 @@ impl Default for OverlayState {
             screen_x: 0.0,
             screen_y: 0.0,
             corner_demo_phase: None,
+            last_relative_roll_degrees: None,
+            last_native_volume_error: None,
         }
     }
 }
@@ -72,6 +88,7 @@ pub struct OverlayRuntime {
     state_generation: AtomicU64,
     refresh_in_flight: AtomicBool,
     last_wrist_rotation_haptic_at: Mutex<Option<Instant>>,
+    last_relative_roll_diagnostic_at: Mutex<Option<Instant>>,
 }
 
 struct RefreshGuard<'a>(&'a AtomicBool);
@@ -112,6 +129,7 @@ impl Default for OverlayRuntime {
             state_generation: AtomicU64::new(0),
             refresh_in_flight: AtomicBool::new(false),
             last_wrist_rotation_haptic_at: Mutex::new(None),
+            last_relative_roll_diagnostic_at: Mutex::new(None),
         }
     }
 }
@@ -120,7 +138,7 @@ impl OverlayRuntime {
     fn state(&self) -> Result<OverlayState, String> {
         self.state
             .lock()
-            .map(|state| *state)
+            .map(|state| state.clone())
             .map_err(|_| "overlay state lock was poisoned".to_string())
     }
 
@@ -142,7 +160,17 @@ impl OverlayRuntime {
             .state
             .lock()
             .map_err(|_| "overlay state lock was poisoned")?;
-        let available_volume = volume_runtime.available_volume()?;
+        let available_volume = match volume_runtime.available_volume() {
+            Ok(volume) => volume,
+            Err(error) => {
+                state.last_native_volume_error = Some(error.clone());
+                self.state_generation.fetch_add(1, Ordering::AcqRel);
+                let snapshot = state.clone();
+                let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
+                return Err(error);
+            }
+        };
+        state.last_native_volume_error = None;
         prepare_window(app)?;
         position_window_at_top_right(app, &window)?;
         commit_visibility_after(&mut state.visible, true, || {
@@ -152,7 +180,7 @@ impl OverlayRuntime {
             state.volume = volume * 100.0;
         }
         self.state_generation.fetch_add(1, Ordering::AcqRel);
-        let snapshot = *state;
+        let snapshot = state.clone();
         let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
         Ok(snapshot)
     }
@@ -173,6 +201,7 @@ impl OverlayRuntime {
             .map_err(|_| "overlay state lock was poisoned")?;
         state.grabbed = false;
         state.corner_demo_phase = None;
+        state.last_relative_roll_degrees = None;
         self.wrist_rotation
             .lock()
             .map_err(|_| "wrist rotation lock was poisoned")?
@@ -181,7 +210,7 @@ impl OverlayRuntime {
             window.hide().map_err(|error| error.to_string())
         })?;
         self.state_generation.fetch_add(1, Ordering::AcqRel);
-        let snapshot = *state;
+        let snapshot = state.clone();
         let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
         Ok(snapshot)
     }
@@ -194,11 +223,11 @@ impl OverlayRuntime {
             .lock()
             .map_err(|_| "overlay state lock was poisoned")?;
         if !state.visible || state.grabbed {
-            return Ok(*state);
+            return Ok(state.clone());
         }
         state.grabbed = true;
         self.state_generation.fetch_add(1, Ordering::AcqRel);
-        let snapshot = *state;
+        let snapshot = state.clone();
         let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
         Ok(snapshot)
     }
@@ -211,13 +240,14 @@ impl OverlayRuntime {
             .lock()
             .map_err(|_| "overlay state lock was poisoned")?;
         if !state.grabbed && !state.visible && state.corner_demo_phase.is_none() {
-            return Ok(*state);
+            return Ok(state.clone());
         }
         let window = app
             .get_webview_window(OVERLAY_WINDOW)
             .ok_or("overlay window is not configured")?;
         state.grabbed = false;
         state.corner_demo_phase = None;
+        state.last_relative_roll_degrees = None;
         self.wrist_rotation
             .lock()
             .map_err(|_| "wrist rotation lock was poisoned")?
@@ -226,7 +256,7 @@ impl OverlayRuntime {
             window.hide().map_err(|error| error.to_string())
         })?;
         self.state_generation.fetch_add(1, Ordering::AcqRel);
-        let snapshot = *state;
+        let snapshot = state.clone();
         let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
         Ok(snapshot)
     }
@@ -276,12 +306,17 @@ impl OverlayRuntime {
         sample: &WatchOrientationSample,
         volume_runtime: &VolumeRuntime,
     ) -> Result<OverlayState, String> {
-        let delta = self
-            .wrist_rotation
-            .lock()
-            .map_err(|_| "wrist rotation lock was poisoned")?
-            .observe(sample.quaternion, sample.timestamp_ns)
-            .map_err(|error| error.to_string())? as f32;
+        let (delta, relative_degrees) = {
+            let mut wrist_rotation = self
+                .wrist_rotation
+                .lock()
+                .map_err(|_| "wrist rotation lock was poisoned")?;
+            let delta = wrist_rotation
+                .observe(sample.quaternion, sample.timestamp_ns)
+                .map_err(|error| error.to_string())? as f32;
+            (delta, wrist_rotation.last_relative_degrees())
+        };
+        self.update_relative_roll_diagnostic(app, relative_degrees.map(|degrees| degrees as f32));
         let state = self.state()?;
         if !state.grabbed || delta.abs() < f32::EPSILON {
             let next_phase = corner_demo_phase_after_sample(state.corner_demo_phase, false);
@@ -317,11 +352,11 @@ impl OverlayRuntime {
             .lock()
             .map_err(|_| "overlay state lock was poisoned")?;
         if state.corner_demo_phase == phase {
-            return Ok(*state);
+            return Ok(state.clone());
         }
         state.corner_demo_phase = phase;
         self.state_generation.fetch_add(1, Ordering::AcqRel);
-        let snapshot = *state;
+        let snapshot = state.clone();
         let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
         Ok(snapshot)
     }
@@ -351,6 +386,35 @@ impl OverlayRuntime {
         }
     }
 
+    /// Updates the throttled raw-relative-roll diagnostic and emits it, but
+    /// only at most every [`WRIST_ROTATION_DIAGNOSTIC_MIN_INTERVAL`] and only
+    /// when the value actually changed -- so a live orientation stream (up to
+    /// ~50Hz) can never turn this into a raw high-rate sensor feed on the
+    /// wire, while still proving the wrist roll is moving during bring-up.
+    fn update_relative_roll_diagnostic(&self, app: &AppHandle, relative_degrees: Option<f32>) {
+        let Ok(mut last_emit) = self.last_relative_roll_diagnostic_at.lock() else {
+            return;
+        };
+        let now = Instant::now();
+        if last_emit.is_some_and(|previous| {
+            now.duration_since(previous) < WRIST_ROTATION_DIAGNOSTIC_MIN_INTERVAL
+        }) {
+            return;
+        }
+        let Ok(mut state) = self.state.lock() else {
+            return;
+        };
+        if state.last_relative_roll_degrees == relative_degrees {
+            return;
+        }
+        *last_emit = Some(now);
+        drop(last_emit);
+        state.last_relative_roll_degrees = relative_degrees;
+        let snapshot = state.clone();
+        drop(state);
+        let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
+    }
+
     fn adjust_system_volume(
         &self,
         app: &AppHandle,
@@ -368,10 +432,19 @@ impl OverlayRuntime {
             return Err(VolumeError::InvalidAdjustment.to_string());
         }
         self.state_generation.fetch_add(1, Ordering::AcqRel);
-        let normalized = adjust_native_volume(volume_runtime.controller(), true, delta)
-            .map_err(|error| error.to_string())?;
+        let normalized = match adjust_native_volume(volume_runtime.controller(), true, delta) {
+            Ok(normalized) => normalized,
+            Err(error) => {
+                let message = error.to_string();
+                state.last_native_volume_error = Some(message.clone());
+                let snapshot = state.clone();
+                let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
+                return Err(message);
+            }
+        };
+        state.last_native_volume_error = None;
         state.volume = normalized * 100.0;
-        let snapshot = *state;
+        let snapshot = state.clone();
         let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
         Ok(snapshot)
     }
@@ -382,23 +455,44 @@ impl OverlayRuntime {
         volume_runtime: &VolumeRuntime,
         refresh_generation: u64,
     ) -> Result<OverlayState, String> {
-        let available_volume = volume_runtime.available_volume()?;
+        let available_volume = match volume_runtime.available_volume() {
+            Ok(volume) => volume,
+            Err(error) => {
+                let mut state = self
+                    .state
+                    .lock()
+                    .map_err(|_| "overlay state lock was poisoned")?;
+                state.last_native_volume_error = Some(error.clone());
+                self.state_generation.fetch_add(1, Ordering::AcqRel);
+                let snapshot = state.clone();
+                let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
+                return Err(error);
+            }
+        };
         let mut state = self
             .state
             .lock()
             .map_err(|_| "overlay state lock was poisoned")?;
         if !state.visible || self.state_generation.load(Ordering::Acquire) != refresh_generation {
-            return Ok(*state);
+            return Ok(state.clone());
+        }
+        let mut changed = false;
+        if state.last_native_volume_error.is_some() {
+            state.last_native_volume_error = None;
+            changed = true;
         }
         if let Some(volume) = available_volume {
             let refreshed_volume = (volume * 100.0).round();
             if state.volume != refreshed_volume {
                 state.volume = refreshed_volume;
-                self.state_generation.fetch_add(1, Ordering::AcqRel);
-                let _ = app.emit(OVERLAY_STATE_EVENT, *state);
+                changed = true;
             }
         }
-        Ok(*state)
+        if changed {
+            self.state_generation.fetch_add(1, Ordering::AcqRel);
+            let _ = app.emit(OVERLAY_STATE_EVENT, state.clone());
+        }
+        Ok(state.clone())
     }
 }
 
@@ -525,7 +619,7 @@ pub async fn refresh_system_volume(app: AppHandle) -> Result<OverlayState, Strin
                 .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
                 .is_err()
         {
-            return Ok(*state);
+            return Ok(state.clone());
         }
         runtime.state_generation.load(Ordering::Acquire)
     };

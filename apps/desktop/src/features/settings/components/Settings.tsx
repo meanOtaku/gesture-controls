@@ -1,8 +1,9 @@
 import { useRef } from "react";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
-import { CONTROLLABLE_SENSORS, type AppSettings } from "../../../shared/protocol/events";
+import { CONTROLLABLE_SENSORS, type AppSettings, type OverlayState, type WatchStatus } from "../../../shared/protocol/events";
 import { ApplySettingsFooter } from "./ApplySettingsFooter";
 import { CornerWristVolumeDemoSection } from "./CornerWristVolumeDemoSection";
+import { CornerWristVolumeDiagnosticsSection } from "./CornerWristVolumeDiagnosticsSection";
 import { HeadphonesSettingsSection } from "./HeadphonesSettingsSection";
 import { RecordingGraphSettingsSection } from "./RecordingGraphSettingsSection";
 import { WatchHealthDeliverySettingsSection } from "./WatchHealthDeliverySettingsSection";
@@ -10,11 +11,25 @@ import { WatchRateSettingsSection } from "./WatchRateSettingsSection";
 import { WatchSensorSwitchSection } from "./WatchSensorSwitchSection";
 import { WristRotationSettings } from "./WristRotationSettings";
 
+const EMPTY_OVERLAY_STATE: OverlayState = {
+  visible: false,
+  grabbed: false,
+  volume: 50,
+  rotationAngle: 0,
+  screenX: 0,
+  screenY: 0,
+  cornerDemoPhase: null,
+  lastRelativeRollDegrees: null,
+  lastNativeVolumeError: null,
+};
+
 interface SettingsProps {
   settings: AppSettings | null;
   error?: string | null;
   /** Reports whether the operation for the given key (`settings:apply`, `settings:reset`) is in flight. */
   isPending?: (key: string) => boolean;
+  overlay?: OverlayState;
+  watchStatus?: WatchStatus | null;
   onUpdate: (settings: AppSettings) => void;
   onReset: () => void;
 }
@@ -47,7 +62,15 @@ function clamp(raw: string | undefined, min: number, max: number, fallback: numb
   return Number.isFinite(value) && value >= min && value <= max ? value : fallback;
 }
 
-export function Settings({ settings, error, isPending = () => false, onUpdate, onReset }: SettingsProps) {
+export function Settings({
+  settings,
+  error,
+  isPending = () => false,
+  overlay = EMPTY_OVERLAY_STATE,
+  watchStatus = null,
+  onUpdate,
+  onReset,
+}: SettingsProps) {
   const current = settings ?? DEFAULT_SETTINGS;
   const headphonesRateInput = useRef<HTMLInputElement>(null);
   const recordingRateInput = useRef<HTMLInputElement>(null);
@@ -168,6 +191,14 @@ export function Settings({ settings, error, isPending = () => false, onUpdate, o
         onToggleEnabled={toggleCornerWristVolumeDemoEnabled}
         onToggleInvertDirection={toggleCornerWristVolumeInvertDirection}
       />
+
+      {current.cornerWristVolumeDemoEnabled && (
+        <CornerWristVolumeDiagnosticsSection
+          overlay={overlay}
+          watchStatus={watchStatus}
+          invertDirection={current.cornerWristVolumeInvertDirection}
+        />
+      )}
 
       <ApplySettingsFooter
         applyPending={isPending("settings:apply")}

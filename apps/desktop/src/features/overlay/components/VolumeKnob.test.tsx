@@ -26,4 +26,14 @@ describe("VolumeKnob", () => {
     render(<VolumeKnob volume={50} cornerDemoPhase={phase} />);
     expect(screen.getByText(label)).toBeInTheDocument();
   });
+
+  it("shows no native-error alert when there is none", () => {
+    render(<VolumeKnob volume={50} />);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("surfaces a native volume error as a visible alert instead of a static overlay", () => {
+    render(<VolumeKnob volume={50} nativeVolumeError="native volume backend failed: osascript is not authorized" />);
+    expect(screen.getByRole("alert")).toHaveTextContent("osascript is not authorized");
+  });
 });

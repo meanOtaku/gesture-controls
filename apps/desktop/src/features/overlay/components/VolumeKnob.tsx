@@ -5,6 +5,8 @@ interface VolumeKnobProps {
   volume: number;
   grabbed?: boolean;
   cornerDemoPhase?: CornerWristVolumeDemoPhase | null;
+  /** Most recent native volume read/write failure; surfaced directly instead of leaving the knob static on error. */
+  nativeVolumeError?: string | null;
 }
 
 type KnobStyle = CSSProperties & { "--volume-progress": number };
@@ -17,7 +19,12 @@ const CORNER_DEMO_PHASE_LABEL: Record<CornerWristVolumeDemoPhase, string> = {
   unavailableVolumeUnsupported: "Unavailable — volume control unsupported",
 };
 
-export function VolumeKnob({ volume, grabbed = false, cornerDemoPhase = null }: VolumeKnobProps) {
+export function VolumeKnob({
+  volume,
+  grabbed = false,
+  cornerDemoPhase = null,
+  nativeVolumeError = null,
+}: VolumeKnobProps) {
   const boundedVolume = Math.min(100, Math.max(0, Math.round(volume)));
   const style: KnobStyle = { "--volume-progress": boundedVolume };
 
@@ -40,6 +47,7 @@ export function VolumeKnob({ volume, grabbed = false, cornerDemoPhase = null }: 
         <span>Volume</span>
       </div>
       {cornerDemoPhase && <p className="volume-knob__corner-demo-phase">{CORNER_DEMO_PHASE_LABEL[cornerDemoPhase]}</p>}
+      {nativeVolumeError && <p className="volume-knob__native-error" role="alert">{nativeVolumeError}</p>}
     </section>
   );
 }

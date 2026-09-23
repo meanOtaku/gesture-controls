@@ -45,6 +45,8 @@ const emptyOverlay: OverlayState = {
   screenX: 0,
   screenY: 0,
   cornerDemoPhase: null,
+  lastRelativeRollDegrees: null,
+  lastNativeVolumeError: null,
 };
 
 /**
@@ -125,7 +127,12 @@ function OverlayApp() {
 
   return (
     <main className="overlay-shell">
-      <VolumeKnob volume={overlay.volume} grabbed={overlay.grabbed} cornerDemoPhase={overlay.cornerDemoPhase} />
+      <VolumeKnob
+        volume={overlay.volume}
+        grabbed={overlay.grabbed}
+        cornerDemoPhase={overlay.cornerDemoPhase}
+        nativeVolumeError={overlay.lastNativeVolumeError}
+      />
     </main>
   );
 }
@@ -138,6 +145,7 @@ function MainApp() {
   const watchStatus = telemetryStore.getWatchStatus();
   const [calibration, setCalibration] = useState<CalibrationState | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
+  const [overlay, setOverlay] = useState<OverlayState>(emptyOverlay);
   const [volumeError, setVolumeError] = useState<string | null>(null);
   const [sensorControlError, setSensorControlError] = useState<string | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -193,6 +201,7 @@ function MainApp() {
       listen<OverlayState>(OVERLAY_STATE_EVENT, ({ payload }) => {
         if (cancelled) return;
         overlayEventVersion.current += 1;
+        setOverlay(payload);
         if (payload.visible && overlayDesiredVisible.current === false) return;
         overlayVisible.current = payload.visible;
       }),
@@ -234,9 +243,9 @@ function MainApp() {
       const requestedOverlayVersion = overlayEventVersion.current;
       void invoke<OverlayState>("get_overlay_state")
         .then((state) => {
-          if (!cancelled
-            && overlayEventVersion.current === requestedOverlayVersion
-            && !(state.visible && overlayDesiredVisible.current === false)) {
+          if (cancelled || overlayEventVersion.current !== requestedOverlayVersion) return;
+          setOverlay(state);
+          if (!(state.visible && overlayDesiredVisible.current === false)) {
             overlayVisible.current = state.visible;
           }
         })
@@ -521,6 +530,8 @@ function MainApp() {
         settings={settings}
         error={settingsError}
         isPending={isPending}
+        overlay={overlay}
+        watchStatus={watchStatus}
         onUpdate={(next) => { void updateSettings(next); }}
         onReset={() => { void resetSettings(); }}
       />

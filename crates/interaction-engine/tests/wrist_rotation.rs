@@ -106,6 +106,34 @@ fn end_clears_the_reference_so_future_observations_stay_safely_inert() {
 }
 
 #[test]
+fn last_relative_degrees_tracks_raw_roll_independent_of_dead_zone_and_clears_on_end() {
+    let mut rotation = WristRotation::default();
+    assert_eq!(rotation.last_relative_degrees(), None);
+
+    rotation
+        .begin_with_config(WristRotationConfig::default(), IDENTITY, 0)
+        .unwrap();
+    assert_eq!(rotation.last_relative_degrees(), None);
+
+    // Inside the dead zone: no volume delta, but the raw roll must still be
+    // visible for diagnostics (e.g. proving the wrist is moving at all).
+    let inside_dead_zone = rotation
+        .observe(rotated_around_forearm(1.0), 100_000_000)
+        .unwrap();
+    assert_eq!(inside_dead_zone, 0.0);
+    assert!((rotation.last_relative_degrees().unwrap() - 1.0).abs() < 1e-6);
+
+    let beyond_dead_zone = rotation
+        .observe(rotated_around_forearm(20.0), 200_000_000)
+        .unwrap();
+    assert!(beyond_dead_zone > 0.0);
+    assert!((rotation.last_relative_degrees().unwrap() - 20.0).abs() < 1e-6);
+
+    rotation.end();
+    assert_eq!(rotation.last_relative_degrees(), None);
+}
+
+#[test]
 fn re_beginning_after_a_release_starts_from_a_fresh_reference_with_no_carried_state() {
     let mut rotation = WristRotation::default();
     rotation

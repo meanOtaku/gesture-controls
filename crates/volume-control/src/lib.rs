@@ -50,7 +50,7 @@ static DEFERRED_REAP_ACTIVE: AtomicBool = AtomicBool::new(false);
 #[cfg(all(unix, not(target_os = "macos")))]
 static DEFERRED_CHILDREN: OnceLock<Mutex<Vec<GroupChild>>> = OnceLock::new();
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error, PartialEq, Clone)]
 pub enum VolumeError {
     #[error("volume must be finite and within 0.0..=1.0")]
     InvalidVolume,
@@ -971,6 +971,123 @@ mod timeout_tests {
             !still_running,
             "successful command descendants must not be orphaned"
         );
+    }
+}
+
+/// Exercises `MacOsVolumeController`'s read/write command logic (script
+/// selection, response parsing, error propagation) against a mock
+/// `AppleScriptRunner`, independently of `osascript`/AppleScript actually
+/// being present -- so this coverage runs on every platform, unlike
+/// `macos_tests` below which needs a real macOS `osacompile`.
+#[cfg(test)]
+mod macos_controller_tests {
+    use std::sync::Mutex;
+
+    use super::{
+        AppleScriptRunner, GET_VOLUME_SCRIPT, MacOsVolumeController, SET_VOLUME_SCRIPT,
+        VolumeController, VolumeError,
+    };
+
+    struct MockAppleScriptRunner {
+        response: Mutex<Result<String, VolumeError>>,
+        last_call: Mutex<Option<(String, Vec<String>)>>,
+    }
+
+    impl MockAppleScriptRunner {
+        fn returning(response: Result<String, VolumeError>) -> Self {
+            Self {
+                response: Mutex::new(response),
+                last_call: Mutex::new(None),
+            }
+        }
+    }
+
+    impl AppleScriptRunner for MockAppleScriptRunner {
+        fn run(&self, script: &str, args: &[String]) -> Result<String, VolumeError> {
+            *self.last_call.lock().unwrap() = Some((script.to_owned(), args.to_vec()));
+            self.response.lock().unwrap().clone()
+        }
+    }
+
+    #[test]
+    fn get_volume_reads_the_get_volume_script_and_normalizes_the_percent() {
+        let runner = MockAppleScriptRunner::returning(Ok("42\n".to_owned()));
+        let controller = MacOsVolumeController::with_runner(runner);
+
+        let volume = controller.get_volume().unwrap();
+
+        assert!((volume - 0.42).abs() < 1e-6);
+        let last_call = controller.runner().last_call.lock().unwrap();
+        assert_eq!(last_call.as_ref().unwrap().0, GET_VOLUME_SCRIPT);
+    }
+
+    #[test]
+    fn get_volume_rejects_a_non_numeric_or_out_of_range_response() {
+        let non_numeric = MacOsVolumeController::with_runner(MockAppleScriptRunner::returning(
+            Ok("not a number".to_owned()),
+        ));
+        assert!(matches!(
+            non_numeric.get_volume(),
+            Err(VolumeError::InvalidResponse(_))
+        ));
+
+        let out_of_range = MacOsVolumeController::with_runner(MockAppleScriptRunner::returning(
+            Ok("150".to_owned()),
+        ));
+        assert!(matches!(
+            out_of_range.get_volume(),
+            Err(VolumeError::InvalidResponse(_))
+        ));
+    }
+
+    #[test]
+    fn get_volume_surfaces_the_backend_error_the_script_runner_returns() {
+        let controller = MacOsVolumeController::with_runner(MockAppleScriptRunner::returning(
+            Err(VolumeError::Backend("osascript is not authorized".to_owned())),
+        ));
+
+        let error = controller.get_volume().unwrap_err();
+
+        assert_eq!(
+            error,
+            VolumeError::Backend("osascript is not authorized".to_owned())
+        );
+    }
+
+    #[test]
+    fn set_volume_writes_the_set_volume_script_with_a_rounded_percent_argument() {
+        let runner = MockAppleScriptRunner::returning(Ok(String::new()));
+        let controller = MacOsVolumeController::with_runner(runner);
+
+        controller.set_volume(0.5).unwrap();
+
+        let last_call = controller.runner().last_call.lock().unwrap();
+        let (script, args) = last_call.as_ref().unwrap();
+        assert_eq!(script, SET_VOLUME_SCRIPT);
+        assert_eq!(args, &["50".to_owned()]);
+    }
+
+    #[test]
+    fn set_volume_rejects_an_invalid_value_without_calling_the_runner() {
+        let controller = MacOsVolumeController::with_runner(MockAppleScriptRunner::returning(Ok(
+            String::new(),
+        )));
+
+        let error = controller.set_volume(1.5).unwrap_err();
+
+        assert_eq!(error, VolumeError::InvalidVolume);
+        assert!(controller.runner().last_call.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn set_volume_surfaces_the_backend_error_the_script_runner_returns() {
+        let controller = MacOsVolumeController::with_runner(MockAppleScriptRunner::returning(
+            Err(VolumeError::Backend("no output device".to_owned())),
+        ));
+
+        let error = controller.set_volume(0.5).unwrap_err();
+
+        assert_eq!(error, VolumeError::Backend("no output device".to_owned()));
     }
 }
 

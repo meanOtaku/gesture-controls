@@ -57,6 +57,10 @@ export interface OverlayState {
   screenX: number;
   screenY: number;
   cornerDemoPhase: CornerWristVolumeDemoPhase | null;
+  /** Raw relative roll (degrees from the wrist-rotation reference pose), throttled server-side. `null` while no reference is active. */
+  lastRelativeRollDegrees: number | null;
+  /** The most recent failed native volume read/write's error text; `null` once the last native volume operation succeeded. */
+  lastNativeVolumeError: string | null;
 }
 
 export interface WatchOrientationSample {
