@@ -817,6 +817,155 @@ pub fn get_raw_recording_window(
     })
 }
 
+/// A bounded, read-only window of one numeric `raw.csv` column's **observed**
+/// (finite, present) samples only, ordered by source row/timestamp, for the
+/// compact sample-order image viewer
+/// (`.hermes/plans/2026-09-23-compact-sample-order-image-viewer.md`). Unlike
+/// `RawRecordingWindow`, absent/non-finite fields are never represented as a
+/// pixel at all — pixel `i` is compact sample `startSampleIndex + i`, not raw
+/// row `startSampleIndex + i` — so every entry here carries its own source
+/// `raw.csv` row and timestamp rather than assuming one contiguous run of
+/// rows. This is a pure read derived fresh from `raw.csv` on every call; it
+/// never writes any bundle file and never changes `get_raw_recording_window`'s
+/// null-preserving raw-row semantics.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompactObservationWindow {
+    pub recording_id: String,
+    pub column: String,
+    pub grid_size: u32,
+    /// Count of this channel's own finite observed samples in the whole
+    /// recording (never the raw row count, which may be far larger).
+    pub total_observed_sample_count: usize,
+    pub start_sample_index: usize,
+    pub end_sample_index: usize,
+    /// One entry per returned sample: the `raw.csv` row it was read from.
+    /// Equal length to `timestamps_ns`/`values` and chronologically ordered.
+    pub source_raw_row_indices: Vec<usize>,
+    pub timestamps_ns: Vec<i64>,
+    /// Always finite; a null/non-finite source field is filtered out upstream
+    /// and never appears here as a fabricated or placeholder value.
+    pub values: Vec<f64>,
+    /// The timestamp of the observed sample immediately before
+    /// `start_sample_index` in this channel's own sample sequence, or `None`
+    /// when `start_sample_index` is 0 (the very first observed sample of the
+    /// whole recording has no predecessor to gap against). Lets the frontend
+    /// compute pixel 0's "elapsed since preceding observation" even though
+    /// that predecessor sample itself lies outside this bounded window.
+    pub preceding_timestamp_ns: Option<i64>,
+    pub recording_min: Option<f64>,
+    pub recording_max: Option<f64>,
+}
+
+/// Pure computation behind `get_compact_observation_window`, kept separate
+/// from file IO so it is directly unit-testable against synthetic
+/// `raw.csv` column data (same split as `compute_sg_derivative_window` above).
+/// `grid_size_usize` must already be allow-list-validated by the caller.
+fn compute_compact_observation_window(
+    recording_id: String,
+    column: String,
+    grid_size: u32,
+    grid_size_usize: usize,
+    start_sample_index: i64,
+    timestamps_ns: &[i64],
+    all_values: &[Option<f64>],
+) -> Result<CompactObservationWindow, String> {
+    // This channel's own finite observed samples, in source row/timestamp
+    // order — the same "present" extraction `compute_sg_derivative_window`
+    // uses, kept independent here since this command never derives anything.
+    let present: Vec<(usize, i64, f64)> = timestamps_ns
+        .iter()
+        .zip(all_values.iter())
+        .enumerate()
+        .filter_map(|(row, (&timestamp_ns, &value))| {
+            value.filter(|v| v.is_finite()).map(|v| (row, timestamp_ns, v))
+        })
+        .collect();
+
+    let total_observed_sample_count = present.len();
+    let (resolved_start, resolved_end) =
+        resolve_raw_window_bounds(total_observed_sample_count, start_sample_index, grid_size_usize)?;
+
+    let window = &present[resolved_start..resolved_end];
+    let source_raw_row_indices = window.iter().map(|(row, _, _)| *row).collect();
+    let window_timestamps = window.iter().map(|(_, timestamp_ns, _)| *timestamp_ns).collect();
+    let values = window.iter().map(|(_, _, value)| *value).collect();
+    let preceding_timestamp_ns = if resolved_start == 0 {
+        None
+    } else {
+        Some(present[resolved_start - 1].1)
+    };
+
+    let recording_min = present
+        .iter()
+        .map(|(_, _, value)| *value)
+        .fold(None, |acc: Option<f64>, value| Some(acc.map_or(value, |current| current.min(value))));
+    let recording_max = present
+        .iter()
+        .map(|(_, _, value)| *value)
+        .fold(None, |acc: Option<f64>, value| Some(acc.map_or(value, |current| current.max(value))));
+
+    Ok(CompactObservationWindow {
+        recording_id,
+        column,
+        grid_size,
+        total_observed_sample_count,
+        start_sample_index: resolved_start,
+        end_sample_index: resolved_end,
+        source_raw_row_indices,
+        timestamps_ns: window_timestamps,
+        values,
+        preceding_timestamp_ns,
+        recording_min,
+        recording_max,
+    })
+}
+
+/// Returns a bounded, chronological window of one numeric `raw.csv` column's
+/// finite observed samples only (no nulls, no interpolation, no resampling)
+/// for the compact sample-order image viewer. Navigation is in observed
+/// sample-sequence positions, not raw rows: `start_sample_index` must be a
+/// non-negative multiple of `grid_size`, exactly like
+/// `get_raw_recording_window`'s `start_raw_row`, and is resolved/clamped by
+/// the identical `resolve_raw_window_bounds` logic against this channel's own
+/// observed sample count. This never writes any bundle file.
+#[tauri::command]
+pub fn get_compact_observation_window(
+    recording_id: String,
+    column: String,
+    start_sample_index: i64,
+    grid_size: u32,
+    app: AppHandle,
+) -> Result<CompactObservationWindow, String> {
+    validate_recording_id(&recording_id)?;
+    if !RAW_WINDOW_ALLOWED_COLUMNS.contains(&column.as_str()) {
+        return Err(format!("unsupported raw column '{column}'"));
+    }
+    let grid_size_usize = validate_grid_size(grid_size)?;
+
+    let dir = recording_bundles_dir(&app)?.join(&recording_id);
+    let csv_path = raw_csv_path(&dir);
+    let content = fs::read_to_string(&csv_path)
+        .map_err(|error| format!("failed to read raw.csv for recording '{recording_id}': {error}"))?;
+    if content.len() > MAX_RAW_CSV_BYTES {
+        return Err(format!(
+            "raw.csv exceeds the {MAX_RAW_CSV_BYTES}-byte limit (got {} bytes)",
+            content.len()
+        ));
+    }
+    let (timestamps_ns, all_values) = parse_raw_csv_column(&content, &column)?;
+
+    compute_compact_observation_window(
+        recording_id,
+        column,
+        grid_size,
+        grid_size_usize,
+        start_sample_index,
+        &timestamps_ns,
+        &all_values,
+    )
+}
+
 /// Half-width of the fixed Savitzky–Golay first-derivative window (M2): the
 /// window itself is `2 * SG_HALF_WIDTH + 1` = 11 samples, centered on the row
 /// being derived.
@@ -2077,6 +2226,118 @@ mod tests {
         }
         assert!(!RAW_WINDOW_ALLOWED_COLUMNS.contains(&"timestamp_ns"));
         assert!(!RAW_WINDOW_ALLOWED_COLUMNS.contains(&"sequence"));
+    }
+
+    // --- M1 (compact sample-order viewer): compute_compact_observation_window ---
+
+    fn compact_window(
+        timestamps_ns: &[i64],
+        values: &[Option<f64>],
+        start_sample_index: i64,
+        grid_size: usize,
+    ) -> Result<CompactObservationWindow, String> {
+        compute_compact_observation_window(
+            "rec-a".to_string(),
+            "ppg_green".to_string(),
+            grid_size as u32,
+            grid_size,
+            start_sample_index,
+            timestamps_ns,
+            values,
+        )
+    }
+
+    #[test]
+    fn compact_window_returns_only_finite_values_consecutively_with_source_provenance() {
+        // Interleaved sparse field: only raw rows 3 and 10 carry a value.
+        let mut timestamps_ns = vec![0i64; 11];
+        let mut values = vec![None; 11];
+        for (row, timestamp_ns) in timestamps_ns.iter_mut().enumerate() {
+            *timestamp_ns = row as i64 * 1_000_000;
+        }
+        values[3] = Some(1.5);
+        values[10] = Some(9.5);
+
+        let window = compact_window(&timestamps_ns, &values, 0, 4).expect("valid window");
+        assert_eq!(window.total_observed_sample_count, 2);
+        assert_eq!(window.source_raw_row_indices, vec![3, 10]);
+        assert_eq!(window.timestamps_ns, vec![3_000_000, 10_000_000]);
+        assert_eq!(window.values, vec![1.5, 9.5]);
+        assert!(window.values.iter().all(|value| value.is_finite()));
+        assert_eq!(window.preceding_timestamp_ns, None);
+        assert_eq!(window.recording_min, Some(1.5));
+        assert_eq!(window.recording_max, Some(9.5));
+    }
+
+    #[test]
+    fn compact_window_all_null_channel_is_empty_not_an_error() {
+        let timestamps_ns = vec![0, 1_000_000, 2_000_000];
+        let values = vec![None, None, None];
+        let window = compact_window(&timestamps_ns, &values, 0, 4).expect("empty channel is not an error");
+        assert_eq!(window.total_observed_sample_count, 0);
+        assert!(window.values.is_empty());
+        assert!(window.source_raw_row_indices.is_empty());
+        assert_eq!(window.recording_min, None);
+        assert_eq!(window.recording_max, None);
+    }
+
+    #[test]
+    fn compact_window_short_recording_returns_fewer_than_a_full_frame() {
+        let timestamps_ns = vec![0, 1_000_000];
+        let values = vec![Some(1.0), Some(2.0)];
+        let window = compact_window(&timestamps_ns, &values, 0, 4).expect("valid window");
+        assert_eq!(window.total_observed_sample_count, 2);
+        assert_eq!(window.values.len(), 2);
+        assert_eq!(window.end_sample_index, 2);
+    }
+
+    #[test]
+    fn compact_window_constant_values_report_equal_min_and_max() {
+        let timestamps_ns = vec![0, 1_000_000, 2_000_000];
+        let values = vec![Some(4.0), Some(4.0), Some(4.0)];
+        let window = compact_window(&timestamps_ns, &values, 0, 4).expect("valid window");
+        assert_eq!(window.recording_min, Some(4.0));
+        assert_eq!(window.recording_max, Some(4.0));
+    }
+
+    #[test]
+    fn compact_window_rejects_unaligned_or_negative_start() {
+        let timestamps_ns = vec![0; 20];
+        let values: Vec<Option<f64>> = (0..20).map(|i| Some(i as f64)).collect();
+        assert!(compact_window(&timestamps_ns, &values, -1, 4).is_err());
+        assert!(compact_window(&timestamps_ns, &values, 1, 4).is_err());
+    }
+
+    #[test]
+    fn compact_window_clamps_oversized_start_to_final_reachable_frame() {
+        let timestamps_ns: Vec<i64> = (0..20).map(|i| i * 1_000_000).collect();
+        let values: Vec<Option<f64>> = (0..20).map(|i| Some(i as f64)).collect();
+        // 20 observed samples, grid_size 4 -> max_values 16; last valid start is 4.
+        let window = compact_window(&timestamps_ns, &values, 1_000, 4).expect("oversized start is clamped, not rejected");
+        assert_eq!(window.start_sample_index, 4);
+        assert_eq!(window.end_sample_index, 20);
+    }
+
+    #[test]
+    fn compact_window_second_frame_reports_preceding_timestamp_for_gap_calculation() {
+        // 20 observed samples, grid_size 4 (max_values 16) -> a real second
+        // frame exists at start 4, distinct from the single-frame case above.
+        let timestamps_ns: Vec<i64> = (0..20).map(|i| i * 1_000_000).collect();
+        let values: Vec<Option<f64>> = (0..20).map(|i| Some(i as f64)).collect();
+        let window = compact_window(&timestamps_ns, &values, 4, 4).expect("valid second frame");
+        assert_eq!(window.start_sample_index, 4);
+        assert_eq!(window.preceding_timestamp_ns, Some(3_000_000));
+    }
+
+    #[test]
+    fn compact_window_never_fabricates_a_value_for_a_malformed_or_absent_source_field() {
+        // The observed-values slice never contains a null: every entry
+        // returned traces back to a genuinely present, finite source field.
+        let timestamps_ns = vec![0, 1_000_000, 2_000_000, 3_000_000];
+        let values = vec![Some(1.0), None, Some(f64::NAN), Some(2.0)];
+        let window = compact_window(&timestamps_ns, &values, 0, 4).expect("valid window");
+        assert_eq!(window.source_raw_row_indices, vec![0, 3]);
+        assert_eq!(window.values, vec![1.0, 2.0]);
     }
 
     // --- M2: Savitzky–Golay derivative helper ---

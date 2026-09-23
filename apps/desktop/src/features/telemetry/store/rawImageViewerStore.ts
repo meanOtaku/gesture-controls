@@ -1,14 +1,25 @@
 import {
   DEFAULT_RAW_GRID_SIZE,
+  getCompactObservationWindow,
   getRawRecordingDerivativeWindow,
   getRawRecordingWindow,
   rawWindowMaxValues,
   rawWindowRowHop,
   type RawGridSize,
   type RawImageViewerChannel,
+  type RawRecordingCompactWindow,
   type RawRecordingDerivativeWindow,
   type RawRecordingWindow,
 } from "../../../shared/tauri/recordingBundle";
+
+/**
+ * Raw rows (existing default/audit mode, exact `raw.csv` rows, nulls
+ * visible) vs. Observed samples (M3 read-only compact mode: only this
+ * channel's finite observed values, in timestamp order, no missing-value
+ * pixels by design). See
+ * `.hermes/plans/2026-09-23-compact-sample-order-image-viewer.md`.
+ */
+export type RawImageViewMode = "rawRows" | "observedSamples";
 
 /**
  * Visual inspection only: this state module (and the `get_raw_recording_window`
@@ -45,12 +56,23 @@ class RawImageViewerStore {
   private readonly listeners = new Set<() => void>();
   private version = 0;
   private requestVersion = 0;
+  /** Separate from `requestVersion`: navigating compact mode must not cancel
+   * an in-flight raw-window request (and vice versa), since a user can only
+   * be looking at one mode's controls at a time but both windows' loaded
+   * state is retained across a mode toggle (see `setViewMode`). */
+  private compactRequestVersion = 0;
 
   private recordingId: string | null = null;
   private channel: RawImageViewerChannel | null = null;
   private normalizationMode: RawImageNormalizationMode = "recording";
   private gridSize: RawGridSize = DEFAULT_RAW_GRID_SIZE;
   private requestedStartRawRow = 0;
+  private viewMode: RawImageViewMode = "rawRows";
+  private requestedStartSampleIndex = 0;
+
+  private compactStatus: RawImageViewerStatus = "empty";
+  private compactErrorMessage: string | null = null;
+  private compactWindow: RawRecordingCompactWindow | null = null;
 
   private status: RawImageViewerStatus = "empty";
   private errorMessage: string | null = null;
@@ -209,10 +231,134 @@ class RawImageViewerStore {
     return { minStartRawRow: 0, maxStartRawRow };
   }
 
+  getViewMode(): RawImageViewMode {
+    return this.viewMode;
+  }
+
+  /** Switches between the raw-row audit view and the M3 compact
+   * observed-samples view. Never re-fetches the mode being left (its loaded
+   * window, if any, is kept so toggling back is instant); fetches the
+   * compact window on first entry into `"observedSamples"` for the current
+   * selection if it hasn't already loaded. */
+  setViewMode(mode: RawImageViewMode): void {
+    if (mode === this.viewMode) return;
+    this.viewMode = mode;
+    if (mode === "observedSamples" && this.compactWindow === null && this.compactStatus !== "loading") {
+      this.loadCompact();
+    } else {
+      this.notify();
+    }
+  }
+
+  getRequestedStartSampleIndex(): number {
+    return this.requestedStartSampleIndex;
+  }
+
+  getCompactStatus(): RawImageViewerStatus {
+    return this.compactStatus;
+  }
+
+  getCompactErrorMessage(): string | null {
+    return this.compactErrorMessage;
+  }
+
+  /** The last compact observed-samples window successfully resolved for the
+   * current recording/channel/grid-size/start-sample selection, or `null` if
+   * none has loaded yet, the fetch failed, or the selection has since changed. */
+  getCompactWindow(): RawRecordingCompactWindow | null {
+    return this.compactWindow;
+  }
+
+  /** Compact-mode navigation bounds, in observed-sample-sequence positions
+   * (never raw rows), derived only from the last loaded compact window's
+   * `totalObservedSampleCount` — mirrors `getNavigationBounds()`. */
+  getCompactNavigationBounds(): { minStartSampleIndex: number; maxStartSampleIndex: number } | null {
+    if (this.compactWindow === null) return null;
+    const maxStartSampleIndex = lastValidStart(
+      this.compactWindow.totalObservedSampleCount,
+      rawWindowMaxValues(this.compactWindow.gridSize),
+      rawWindowRowHop(this.compactWindow.gridSize),
+    );
+    return { minStartSampleIndex: 0, maxStartSampleIndex };
+  }
+
+  /** Jumps to an explicit observed-sample-index start, aligned down to the
+   * nearest sample-hop multiple for the selected grid size. */
+  setStartSampleIndex(startSampleIndex: number): void {
+    const aligned = alignToRowHop(startSampleIndex, rawWindowRowHop(this.gridSize));
+    if (aligned === this.requestedStartSampleIndex) return;
+    this.requestedStartSampleIndex = aligned;
+    this.loadCompact();
+  }
+
+  goToPreviousCompactFrame(): void {
+    this.setStartSampleIndex(this.requestedStartSampleIndex - rawWindowRowHop(this.gridSize));
+  }
+
+  goToNextCompactFrame(): void {
+    this.setStartSampleIndex(this.requestedStartSampleIndex + rawWindowRowHop(this.gridSize));
+  }
+
+  goToFirstCompactFrame(): void {
+    this.setStartSampleIndex(0);
+  }
+
+  goToLastCompactFrame(): void {
+    const bounds = this.getCompactNavigationBounds();
+    this.setStartSampleIndex(bounds === null ? this.requestedStartSampleIndex : bounds.maxStartSampleIndex);
+  }
+
+  private loadCompact(): void {
+    const recordingId = this.recordingId;
+    const channel = this.channel;
+    if (recordingId === null || channel === null) {
+      this.compactRequestVersion += 1;
+      this.compactStatus = "empty";
+      this.compactErrorMessage = null;
+      this.compactWindow = null;
+      this.notify();
+      return;
+    }
+
+    const requestVersion = ++this.compactRequestVersion;
+    const startSampleIndex = this.requestedStartSampleIndex;
+    const gridSize = this.gridSize;
+    this.compactStatus = "loading";
+    this.compactErrorMessage = null;
+    this.notify();
+
+    void getCompactObservationWindow({ recordingId, column: channel, startSampleIndex, gridSize }).then((result) => {
+      if (
+        requestVersion !== this.compactRequestVersion ||
+        this.recordingId !== recordingId ||
+        this.channel !== channel ||
+        this.gridSize !== gridSize
+      ) {
+        return;
+      }
+
+      if (result.status === "error") {
+        this.compactStatus = "error";
+        this.compactErrorMessage = result.message;
+        this.compactWindow = null;
+      } else {
+        this.compactStatus = "loaded";
+        this.compactErrorMessage = null;
+        this.compactWindow = result.value;
+        // The backend resolves/clamps `startSampleIndex` deterministically;
+        // keep the requested value in sync so the next relative navigation
+        // (prev/next) starts from the real window, exactly like raw rows.
+        this.requestedStartSampleIndex = result.value.startSampleIndex;
+      }
+      this.notify();
+    });
+  }
+
   setRecording(recordingId: string | null): void {
     if (recordingId === this.recordingId) return;
     this.recordingId = recordingId;
     this.requestedStartRawRow = 0;
+    this.requestedStartSampleIndex = 0;
     this.resetAndReload();
   }
 
@@ -220,6 +366,7 @@ class RawImageViewerStore {
     if (channel === this.channel) return;
     this.channel = channel;
     this.requestedStartRawRow = 0;
+    this.requestedStartSampleIndex = 0;
     this.resetAndReload();
   }
 
@@ -228,6 +375,7 @@ class RawImageViewerStore {
     if (gridSize === this.gridSize) return;
     this.gridSize = gridSize;
     this.requestedStartRawRow = alignToRowHop(this.requestedStartRawRow, rawWindowRowHop(gridSize));
+    this.requestedStartSampleIndex = alignToRowHop(this.requestedStartSampleIndex, rawWindowRowHop(gridSize));
     this.resetAndReload();
   }
 
@@ -273,7 +421,11 @@ class RawImageViewerStore {
     this.sampleOrderPreviewStatus = "empty";
     this.sampleOrderPreviewErrorMessage = null;
     this.sampleOrderPreviewWindow = null;
+    this.compactStatus = "empty";
+    this.compactErrorMessage = null;
+    this.compactWindow = null;
     this.reload();
+    if (this.viewMode === "observedSamples") this.loadCompact();
   }
 
   private reload(): void {

@@ -198,10 +198,19 @@ export function RawImageViewerPanel() {
   const sampleOrderPreviewErrorMessage = rawImageViewerStore.getSampleOrderPreviewErrorMessage();
   const sampleOrderPreviewWindow = rawImageViewerStore.getSampleOrderPreviewWindow();
 
+  const viewMode = rawImageViewerStore.getViewMode();
+  const compactStatus = rawImageViewerStore.getCompactStatus();
+  const compactErrorMessage = rawImageViewerStore.getCompactErrorMessage();
+  const compactWindow = rawImageViewerStore.getCompactWindow();
+  const compactBounds = rawImageViewerStore.getCompactNavigationBounds();
+  const requestedStartSampleIndex = rawImageViewerStore.getRequestedStartSampleIndex();
+
   const rowHop = rawWindowRowHop(gridSize);
   const maxValues = rawWindowMaxValues(gridSize);
   const totalFrames = bounds ? Math.floor(bounds.maxStartRawRow / rowHop) + 1 : null;
   const currentFrame = Math.floor(requestedStartRawRow / rowHop) + 1;
+  const compactTotalFrames = compactBounds ? Math.floor(compactBounds.maxStartSampleIndex / rowHop) + 1 : null;
+  const compactCurrentFrame = Math.floor(requestedStartSampleIndex / rowHop) + 1;
 
   const visibleLabelRanges = useMemo(() => {
     if (rawWindow === null || labelRanges.status !== "loaded") return [];
@@ -379,6 +388,35 @@ export function RawImageViewerPanel() {
               </div>
 
               <fieldset className="flex flex-col gap-1">
+                <legend className="label flex items-center gap-1">
+                  View mode
+                  <HelpTooltip label="About view modes">
+                    <strong>Raw rows</strong> shows exact consecutive <code>raw.csv</code> rows, including
+                    missing (null) cells — the audit view. <strong>Observed samples</strong> shows only this
+                    channel&apos;s own finite recorded values, compacted in timestamp order with no
+                    missing-value pixels; adjacent pixels are not necessarily adjacent in time. Neither view
+                    fabricates, interpolates, or resamples data.
+                  </HelpTooltip>
+                </legend>
+                <RadioGroup
+                  className="flex flex-row gap-4"
+                  value={viewMode}
+                  onValueChange={(value) => {
+                    if (value === "rawRows" || value === "observedSamples") rawImageViewerStore.setViewMode(value);
+                  }}
+                >
+                  <label className="flex items-center gap-2 text-sm">
+                    <RadioGroupItem value="rawRows" aria-label="Raw rows (default)" />
+                    Raw rows (default)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <RadioGroupItem value="observedSamples" aria-label="Observed samples (compact)" />
+                    Observed samples (compact)
+                  </label>
+                </RadioGroup>
+              </fieldset>
+
+              <fieldset className="flex flex-col gap-1">
                 <legend className="label">Normalization</legend>
                 <RadioGroup
                   className="flex flex-row gap-4"
@@ -408,6 +446,111 @@ export function RawImageViewerPanel() {
 
             {recordingId === null || channel === null ? (
               <p className="hint">Select a recording and a channel to inspect its raw image.</p>
+            ) : viewMode === "observedSamples" ? (
+              compactWindow !== null ? (
+                // Same "keep the loaded window mounted while a reload is in
+                // flight" treatment as raw rows, for the identical reason
+                // (GC-030): swapping this block for a Skeleton on every
+                // navigation step would collapse/re-expand the page height.
+                <div className="flex flex-col gap-3" aria-busy={compactStatus === "loading"}>
+                  {compactWindow.totalObservedSampleCount === 0 ? (
+                    <p role="alert" className="text-sm text-destructive">
+                      This channel has no observed numeric values in this recording; there is nothing to visualize.
+                    </p>
+                  ) : (
+                    <>
+                      {compactWindow.totalObservedSampleCount < maxValues && (
+                        <p className="hint">
+                          Only {compactWindow.totalObservedSampleCount.toLocaleString()} observed sample
+                          {compactWindow.totalObservedSampleCount === 1 ? "" : "s"} of{" "}
+                          {maxValues.toLocaleString()} pixels in this channel; the remaining pixels show the
+                          "no data" fill below (never a fabricated value).
+                        </p>
+                      )}
+                      <p className="hint">
+                        Pixel adjacency is sample order, not equal time spacing — see each pixel's source raw row,
+                        original timestamp, and gap since the preceding observation below the image.
+                      </p>
+                      <div className="flex flex-col gap-4 lg:flex-row">
+                        <Card className="min-w-0 lg:flex-1">
+                          <CardContent className="pt-6">
+                            <RawImageCanvas
+                              compactWindow={compactWindow}
+                              normalizationMode={normalizationMode}
+                              title="Grayscale (observed samples)"
+                              colorMode="grayscale"
+                            />
+                          </CardContent>
+                        </Card>
+                        <Card className="min-w-0 lg:flex-1">
+                          <CardContent className="pt-6">
+                            <RawImageCanvas
+                              compactWindow={compactWindow}
+                              normalizationMode={normalizationMode}
+                              title="Rainbow (observed samples, false-colour)"
+                              colorMode="rainbow"
+                            />
+                          </CardContent>
+                        </Card>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                          <span>
+                            Samples {compactWindow.startSampleIndex.toLocaleString()}–
+                            {Math.max(compactWindow.startSampleIndex, compactWindow.endSampleIndex - 1).toLocaleString()} of{" "}
+                            {compactWindow.totalObservedSampleCount.toLocaleString()}
+                          </span>
+                          <span>
+                            Frame {compactCurrentFrame}
+                            {compactTotalFrames !== null ? ` of ${compactTotalFrames}` : ""}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={compactBounds === null || requestedStartSampleIndex <= compactBounds.minStartSampleIndex}
+                            onClick={() => rawImageViewerStore.goToPreviousCompactFrame()}
+                          >
+                            Previous {rowHop} samples
+                          </Button>
+                          <Slider
+                            aria-label="Observed-sample frame position"
+                            min={compactBounds?.minStartSampleIndex ?? 0}
+                            max={Math.max(compactBounds?.maxStartSampleIndex ?? 0, compactBounds?.minStartSampleIndex ?? 0)}
+                            step={rowHop}
+                            value={[requestedStartSampleIndex]}
+                            disabled={compactBounds === null || compactBounds.maxStartSampleIndex === compactBounds.minStartSampleIndex}
+                            onValueChange={(value) => {
+                              const next = Array.isArray(value) ? value[0] : value;
+                              if (typeof next === "number") rawImageViewerStore.setStartSampleIndex(next);
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={compactBounds === null || requestedStartSampleIndex >= compactBounds.maxStartSampleIndex}
+                            onClick={() => rawImageViewerStore.goToNextCompactFrame()}
+                          >
+                            Next {rowHop} samples
+                          </Button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : compactStatus === "loading" ? (
+                <div className="flex flex-col gap-2" aria-busy="true" aria-live="polite">
+                  <Skeleton className="h-80 w-80" />
+                  <span className="sr-only">Loading observed-samples window…</span>
+                </div>
+              ) : compactStatus === "error" ? (
+                <p role="alert" className="text-sm text-destructive">
+                  Could not load the observed-samples window: {compactErrorMessage}
+                </p>
+              ) : null
             ) : rawWindow !== null ? (
               // Keep the already-loaded window mounted while a Next/Previous/slider
               // navigation reload is in flight (`status === "loading"` with a

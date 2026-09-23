@@ -209,6 +209,39 @@ export type RawRecordingDerivativeWindow = {
   unavailableIsCadenceIssue: boolean;
 };
 
+/**
+ * Mirrors `recording_bundle::CompactObservationWindow` field-for-field: a
+ * bounded window of one channel's own **observed** (finite, present) samples
+ * only, ordered by source row/timestamp — never a raw-row window. Pixel `i`
+ * is compact sample `startSampleIndex + i`, not raw row `startSampleIndex +
+ * i`, so `sourceRawRowIndices[i]`/`timestampsNs[i]` must be used to recover
+ * where sample `i` actually came from. `values` is never null: an
+ * absent/non-finite source field is filtered out server-side and never
+ * appears here as a fabricated or placeholder entry. This is a read-only
+ * visual-inspection view; it never writes `raw.csv` or any other bundle file
+ * and is independent of `RawRecordingWindow`'s null-preserving raw-row
+ * contract.
+ */
+export type RawRecordingCompactWindow = {
+  recordingId: string;
+  column: string;
+  gridSize: RawGridSize;
+  totalObservedSampleCount: number;
+  startSampleIndex: number;
+  endSampleIndex: number;
+  sourceRawRowIndices: number[];
+  timestampsNs: number[];
+  values: number[];
+  /** The timestamp of the observed sample immediately before `startSampleIndex`
+   * in this channel's own sample sequence, or `null` when `startSampleIndex`
+   * is 0 (the very first observed sample of the whole recording has no
+   * predecessor). Lets the viewer compute pixel 0's gap even though that
+   * predecessor sample lies outside this bounded window. */
+  precedingTimestampNs: number | null;
+  recordingMin: number | null;
+  recordingMax: number | null;
+};
+
 function toResult<T>(promise: Promise<T>): Promise<RecordingBundleResult<T>> {
   return promise
     .then((value) => ({ status: "ok" as const, value }))
@@ -345,6 +378,41 @@ export async function getRawRecordingWindow(
       recordingId: request.recordingId,
       column: request.column,
       startRawRow: request.startRawRow,
+      gridSize: request.gridSize,
+    }),
+  );
+}
+
+/** Request shape for `getCompactObservationWindow`: `startSampleIndex` names
+ * an observed-sample-sequence position, never a raw row — kept as its own
+ * type (distinct from `RawRecordingWindowRequest`) so the two navigation
+ * units can never be mixed up at a call site. */
+export type CompactObservationWindowRequest = {
+  recordingId: string;
+  column: RawImageViewerChannel;
+  startSampleIndex: number;
+  gridSize: RawGridSize;
+};
+
+/**
+ * Fetches a bounded, read-only window of one channel's own observed (finite)
+ * samples in source order through the dedicated `get_compact_observation_window`
+ * command — the compact sample-order image viewer's only data path. Distinct
+ * from `getRawRecordingWindow`: navigation here is in observed *sample*
+ * positions, not raw rows, per the identical N-sample hop convention. Never
+ * writes any bundle file.
+ */
+export async function getCompactObservationWindow(
+  request: CompactObservationWindowRequest,
+): Promise<RecordingBundleResult<RawRecordingCompactWindow>> {
+  if (!isTauriDesktop()) {
+    return { status: "error", message: "Recording bundle persistence requires the desktop app" };
+  }
+  return toResult(
+    invoke<RawRecordingCompactWindow>("get_compact_observation_window", {
+      recordingId: request.recordingId,
+      column: request.column,
+      startSampleIndex: request.startSampleIndex,
       gridSize: request.gridSize,
     }),
   );
