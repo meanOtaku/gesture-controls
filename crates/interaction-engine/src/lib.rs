@@ -350,8 +350,14 @@ impl VolumeSimulation {
     }
 }
 
-/// Maps relative watch orientation around the local forearm (Y) axis to
+/// Maps relative watch orientation around the local forearm (X) axis to
 /// bounded, smoothed incremental volume-point changes.
+///
+/// The forearm's long axis runs through the watch case's 9-3 (X) direction,
+/// not 12-6 (Y): the band wraps the wrist circumferentially through the 12
+/// and 6 lugs, so 12-6 (Y) is the around-the-wrist direction and 9-3 (X) is
+/// the along-the-arm one. Confirmed against real Watch hardware, where
+/// rolling the wrist produced no signal on the previously-used Y axis.
 #[derive(Debug, Clone, Copy)]
 pub struct WristRotationConfig {
     pub dead_zone_degrees: f64,
@@ -478,7 +484,7 @@ impl WristRotation {
         }
         let current = normalized_quaternion(quaternion)?;
         let relative = start.conjugate() * current;
-        let mut raw_degrees = (2.0 * relative.j.atan2(relative.w)).to_degrees();
+        let mut raw_degrees = (2.0 * relative.i.atan2(relative.w)).to_degrees();
         if raw_degrees > 180.0 {
             raw_degrees -= 360.0;
         }

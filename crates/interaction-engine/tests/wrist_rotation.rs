@@ -2,7 +2,21 @@ use interaction_engine::{WristRotation, WristRotationConfig, WristRotationError}
 
 const IDENTITY: [f64; 4] = [1.0, 0.0, 0.0, 0.0];
 
+// The forearm's long axis runs through the watch's 9-3 (quaternion i/X)
+// direction: the band wraps circumferentially through the 12/6 lugs, so
+// 12-6 (Y) goes around the wrist and 9-3 (X) runs along the arm. Confirmed
+// against real Watch hardware, where a physical wrist roll produced no
+// signal on the previously-used Y axis.
 fn rotated_around_forearm(degrees: f64) -> [f64; 4] {
+    let half = degrees.to_radians() / 2.0;
+    [half.cos(), half.sin(), 0.0, 0.0]
+}
+
+// A rotation around the watch's 12-6 (Y) axis: around-the-wrist motion, not
+// a forearm twist. Real Y-axis Watch hardware traffic must never move the
+// volume -- that exact confusion (treating Y as the roll axis) is why a
+// physical wrist roll previously produced no volume change at all.
+fn rotated_around_wrist_circumference(degrees: f64) -> [f64; 4] {
     let half = degrees.to_radians() / 2.0;
     [half.cos(), 0.0, half.sin(), 0.0]
 }
@@ -119,7 +133,7 @@ fn re_beginning_after_a_release_starts_from_a_fresh_reference_with_no_carried_st
     assert_eq!(delta_at_same_absolute_orientation, 0.0);
 }
 
-// Sign convention: a positive rotation around the forearm (quaternion j)
+// Sign convention: a positive rotation around the forearm (quaternion i)
 // axis is "clockwise" and must always raise volume (positive delta) by
 // default; `invert_direction` exists solely to correct a Watch physically
 // mounted/worn with the opposite handedness, and must flip both directions
@@ -175,6 +189,26 @@ fn invert_direction_flips_both_signs_for_a_reversed_watch_mounting() {
     assert!(
         counter_clockwise_delta > 0.0,
         "inverted config must raise volume on a physically counter-clockwise twist, got {counter_clockwise_delta}"
+    );
+}
+
+// Regression for the real-hardware failure: rolling the Watch produced no
+// volume change because the code read the wrong quaternion axis (Y, around
+// the wrist) instead of the forearm's actual twist axis (X). A rotation on
+// the Y axis alone -- what the old, wrong extraction responded to -- must
+// stay inert now.
+#[test]
+fn rotation_around_the_wrist_circumference_axis_produces_no_volume_change() {
+    let mut rotation = WristRotation::default();
+    rotation
+        .begin_with_config(WristRotationConfig::default(), IDENTITY, 0)
+        .unwrap();
+    let delta = rotation
+        .observe(rotated_around_wrist_circumference(20.0), 200_000_000)
+        .unwrap();
+    assert_eq!(
+        delta, 0.0,
+        "rotation around the wrist-circumference (Y) axis must not move volume, got {delta}"
     );
 }
 
