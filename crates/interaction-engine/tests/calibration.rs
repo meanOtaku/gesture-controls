@@ -155,3 +155,108 @@ fn updated_threshold_and_dwell_control_activation() {
 fn angular_distance_rejects_zero_length_quaternions() {
     assert!(quaternion_angular_distance([0.0; 4], [1.0, 0.0, 0.0, 0.0]).is_err());
 }
+
+// GC-035: a corner-gated interaction (e.g. the wrist-volume demo) must stay
+// open while a valid, still-generally-on-target head tracker keeps reporting
+// samples -- a single noisy sample that transiently crosses the activation
+// threshold is not a "confirmed" exit. Entry already required a sustained
+// dwell; exit previously fired instantly on one bad sample with no symmetric
+// debounce, which is the auto-close-while-still-looking-at-the-corner bug.
+
+#[test]
+fn a_single_noisy_sample_beyond_threshold_does_not_exit_an_active_target() {
+    let mut calibration = HeadCalibration::new(CalibrationConfig {
+        activation_threshold_degrees: 12.0,
+        dwell: Duration::from_millis(400),
+    })
+    .unwrap();
+    let center = [1.0, 0.0, 0.0, 0.0];
+    let top_right = [0.965925826, 0.0, 0.258819045, 0.0];
+    calibration
+        .capture(CalibrationTarget::Center, center)
+        .unwrap();
+    calibration
+        .capture(CalibrationTarget::TopRight, top_right)
+        .unwrap();
+
+    calibration.observe(top_right, Duration::ZERO).unwrap();
+    assert_eq!(
+        calibration
+            .observe(top_right, Duration::from_millis(400))
+            .unwrap(),
+        vec![CalibrationEvent::TargetEntered(CalibrationTarget::TopRight)]
+    );
+
+    // A far-off single sample (tracker jitter, a blink-fast head twitch) --
+    // must not immediately emit `TargetExited`.
+    assert!(
+        calibration
+            .observe(center, Duration::from_millis(420))
+            .unwrap()
+            .is_empty(),
+        "one noisy sample must not instantly drop an active target"
+    );
+    assert_eq!(
+        calibration.state().active_target,
+        Some(CalibrationTarget::TopRight),
+        "target must still read active immediately after a single noisy sample"
+    );
+
+    // Recovering back onto the target before the grace period elapses must
+    // cancel the pending exit entirely -- no `TargetExited` ever fires.
+    assert!(
+        calibration
+            .observe(top_right, Duration::from_millis(450))
+            .unwrap()
+            .is_empty(),
+        "recovering onto the target within the grace period must not emit any event"
+    );
+    assert_eq!(
+        calibration.state().active_target,
+        Some(CalibrationTarget::TopRight)
+    );
+}
+
+#[test]
+fn a_sustained_departure_still_confirms_a_real_exit() {
+    let mut calibration = HeadCalibration::new(CalibrationConfig {
+        activation_threshold_degrees: 12.0,
+        dwell: Duration::from_millis(400),
+    })
+    .unwrap();
+    let center = [1.0, 0.0, 0.0, 0.0];
+    let top_right = [0.965925826, 0.0, 0.258819045, 0.0];
+    calibration
+        .capture(CalibrationTarget::Center, center)
+        .unwrap();
+    calibration
+        .capture(CalibrationTarget::TopRight, top_right)
+        .unwrap();
+
+    calibration.observe(top_right, Duration::ZERO).unwrap();
+    calibration
+        .observe(top_right, Duration::from_millis(400))
+        .unwrap();
+    assert_eq!(
+        calibration.state().active_target,
+        Some(CalibrationTarget::TopRight)
+    );
+
+    // Sustained departure for the full dwell must still fail closed -- this
+    // is a confirmed exit, not noise.
+    assert!(
+        calibration
+            .observe(center, Duration::from_millis(420))
+            .unwrap()
+            .is_empty(),
+        "grace period has not elapsed yet"
+    );
+    assert_eq!(
+        calibration
+            .observe(center, Duration::from_millis(820))
+            .unwrap(),
+        vec![CalibrationEvent::TargetExited(CalibrationTarget::TopRight)],
+        "departure sustained for a full dwell must confirm the exit"
+    );
+    assert_eq!(calibration.state().active_target, None);
+}

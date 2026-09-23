@@ -473,3 +473,189 @@ fn velocity_outlier_freezes_the_previous_target_instead_of_jumping() {
         .unwrap();
     assert_eq!(outlier, settled);
 }
+
+// GC-035: reversing the wrist direction must traverse smoothly back through
+// the activation reference and continue lowering/raising volume on the other
+// side, with no accumulated state to snag the transition at zero.
+
+#[test]
+fn positive_roll_reversing_through_zero_to_negative_lowers_volume_past_baseline() {
+    let mut rotation = WristRotation::default();
+    rotation
+        .begin_with_config(
+            WristRotationConfig::default(),
+            IDENTITY,
+            0,
+            ACTIVATION_VOLUME,
+        )
+        .unwrap();
+
+    let mut previous = rotation
+        .observe(rotated_around_forearm(30.0), 100_000_000)
+        .unwrap();
+    assert!(previous > f64::from(ACTIVATION_VOLUME));
+
+    for (degrees, ms) in [(20.0, 200), (10.0, 300)] {
+        let target = rotation
+            .observe(rotated_around_forearm(degrees), ms * 1_000_000)
+            .unwrap();
+        assert!(
+            target < previous,
+            "target must keep falling toward baseline while unwinding toward the reference, got {target} after {previous}"
+        );
+        previous = target;
+    }
+    let at_reference = rotation.observe(IDENTITY, 400_000_000).unwrap();
+    assert_eq!(at_reference, f64::from(ACTIVATION_VOLUME));
+    assert!(at_reference < previous);
+    previous = at_reference;
+
+    for (degrees, ms) in [(-10.0, 500), (-20.0, 600), (-30.0, 700)] {
+        let target = rotation
+            .observe(rotated_around_forearm(degrees), ms * 1_000_000)
+            .unwrap();
+        assert!(
+            target < previous,
+            "target must keep falling below baseline on the other side of the reference, got {target} after {previous}"
+        );
+        previous = target;
+    }
+    assert!(previous < f64::from(ACTIVATION_VOLUME));
+}
+
+#[test]
+fn negative_roll_reversing_through_zero_to_positive_raises_volume_past_baseline() {
+    let mut rotation = WristRotation::default();
+    rotation
+        .begin_with_config(
+            WristRotationConfig::default(),
+            IDENTITY,
+            0,
+            ACTIVATION_VOLUME,
+        )
+        .unwrap();
+
+    let mut previous = rotation
+        .observe(rotated_around_forearm(-30.0), 100_000_000)
+        .unwrap();
+    assert!(previous < f64::from(ACTIVATION_VOLUME));
+
+    for (degrees, ms) in [(-20.0, 200), (-10.0, 300)] {
+        let target = rotation
+            .observe(rotated_around_forearm(degrees), ms * 1_000_000)
+            .unwrap();
+        assert!(
+            target > previous,
+            "target must keep rising toward baseline while unwinding toward the reference, got {target} after {previous}"
+        );
+        previous = target;
+    }
+    let at_reference = rotation.observe(IDENTITY, 400_000_000).unwrap();
+    assert_eq!(at_reference, f64::from(ACTIVATION_VOLUME));
+    assert!(at_reference > previous);
+    previous = at_reference;
+
+    for (degrees, ms) in [(10.0, 500), (20.0, 600), (30.0, 700)] {
+        let target = rotation
+            .observe(rotated_around_forearm(degrees), ms * 1_000_000)
+            .unwrap();
+        assert!(
+            target > previous,
+            "target must keep rising above baseline on the other side of the reference, got {target} after {previous}"
+        );
+        previous = target;
+    }
+    assert!(previous > f64::from(ACTIVATION_VOLUME));
+}
+
+#[test]
+fn repeated_reversals_stay_bidirectional_around_the_reference() {
+    let mut rotation = WristRotation::default();
+    rotation
+        .begin_with_config(
+            WristRotationConfig::default(),
+            IDENTITY,
+            0,
+            ACTIVATION_VOLUME,
+        )
+        .unwrap();
+
+    // Sweep back and forth across the reference several times; each swing's
+    // sign must match the wrist's current side of the reference regardless
+    // of how many prior reversals happened, since the mapping is a pure
+    // function of the current angle alone.
+    let sweeps = [25.0, -25.0, 15.0, -40.0, 5.0, -5.0, 0.0];
+    let mut ms = 100u64;
+    for degrees in sweeps {
+        let target = rotation
+            .observe(rotated_around_forearm(degrees), ms * 1_000_000)
+            .unwrap();
+        let expected_sign = if degrees > 3.0 {
+            std::cmp::Ordering::Greater
+        } else if degrees < -3.0 {
+            std::cmp::Ordering::Less
+        } else {
+            std::cmp::Ordering::Equal
+        };
+        assert_eq!(
+            target.total_cmp(&f64::from(ACTIVATION_VOLUME)),
+            expected_sign,
+            "at {degrees} degrees expected target vs baseline ordering {expected_sign:?}, got target {target}"
+        );
+        ms += 200;
+    }
+}
+
+#[test]
+fn a_genuine_outlier_does_not_block_the_legitimate_reversal_samples_that_follow_it() {
+    // Realistic ~50Hz cadence (20ms ticks). A real, slow reversal (5
+    // degrees/tick = 250 degrees/second, comfortably under the default
+    // 360 degrees/second cap) is interrupted by a single sensor glitch, then
+    // resumes at the same real speed. Regression for a bug where the
+    // velocity-outlier check measured elapsed time from the *rejected*
+    // glitch sample's timestamp while comparing against the angle from
+    // before the glitch -- desyncing the two and making every subsequent
+    // legitimate sample look like a second outlier too, freezing the target
+    // indefinitely after any single transient glitch.
+    let mut rotation = WristRotation::default();
+    rotation
+        .begin_with_config(
+            WristRotationConfig::default(),
+            IDENTITY,
+            0,
+            ACTIVATION_VOLUME,
+        )
+        .unwrap();
+
+    let settled = rotation
+        .observe(rotated_around_forearm(20.0), 20_000_000)
+        .unwrap();
+
+    // A single sensor glitch: huge implied velocity, must freeze.
+    let outlier = rotation
+        .observe(rotated_around_forearm(-150.0), 40_000_000)
+        .unwrap();
+    assert!(
+        (outlier - settled).abs() < 1e-5,
+        "the glitch sample itself must freeze the target, got {outlier}, settled {settled}"
+    );
+
+    // Real reversal resumes at the same 5-degrees/tick pace as before the
+    // glitch. Each of these must be accepted (not still frozen at `settled`)
+    // and keep moving the target down toward and then past the baseline.
+    let mut previous = settled;
+    for (degrees, ms) in [(10.0, 60), (5.0, 80), (0.0, 100), (-5.0, 120)] {
+        let target = rotation
+            .observe(rotated_around_forearm(degrees), ms * 1_000_000)
+            .unwrap();
+        assert!(
+            target < previous,
+            "legitimate reversal sample at {degrees} degrees must not stay frozen by the earlier outlier, got {target}, previous {previous}"
+        );
+        previous = target;
+    }
+    assert!(
+        previous < settled,
+        "reversal must eventually cross below the original settled target"
+    );
+}

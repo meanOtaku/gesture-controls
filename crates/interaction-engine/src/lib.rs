@@ -88,6 +88,17 @@ pub struct HeadCalibration {
     top_right: Option<[f64; 4]>,
     candidate: Option<(CalibrationTarget, Duration)>,
     active: Option<CalibrationTarget>,
+    /// First instant the currently active target stopped being confirmed by
+    /// a sample (moved beyond its own activation threshold, or a different
+    /// target became nearer). Mirrors the entry-side `candidate` dwell: a
+    /// single noisy head-tracker sample must not instantly drop an active
+    /// target the way it previously did, since entry already requires a
+    /// sustained dwell but exit did not -- only a departure sustained for
+    /// the same `dwell` duration now confirms a real exit. Reset to `None`
+    /// the moment any sample reconfirms the active target, so a momentary
+    /// jitter that recovers before the grace period elapses never emits
+    /// `TargetExited` at all.
+    exit_candidate: Option<Duration>,
     requires_recalibration: bool,
 }
 
@@ -106,6 +117,7 @@ impl HeadCalibration {
             top_right: None,
             candidate: None,
             active: None,
+            exit_candidate: None,
             requires_recalibration: true,
         })
     }
@@ -139,6 +151,7 @@ impl HeadCalibration {
         validate_config(config)?;
         self.config = config;
         self.candidate = None;
+        self.exit_candidate = None;
         Ok(())
     }
 
@@ -151,20 +164,32 @@ impl HeadCalibration {
             return Ok(Vec::new());
         };
         let mut events = Vec::new();
-        if nearest.1.to_degrees() > self.config.activation_threshold_degrees {
-            self.candidate = None;
-            if let Some(active) = self.active.take() {
-                events.push(CalibrationEvent::TargetExited(active));
+        let confirms_active = self.active == Some(nearest.0)
+            && nearest.1.to_degrees() <= self.config.activation_threshold_degrees;
+
+        if let Some(active) = self.active {
+            if confirms_active {
+                self.exit_candidate = None;
+                self.candidate = None;
+                return Ok(events);
             }
-            return Ok(events);
+            let exit_started = *self.exit_candidate.get_or_insert(now);
+            if now.saturating_sub(exit_started) < self.config.dwell {
+                // Not yet a confirmed exit -- a single noisy sample (or a
+                // brief glance elsewhere) must not instantly drop an active
+                // target. Leave `active` (and any in-progress candidate for
+                // a different target) untouched until the departure is
+                // sustained for a full dwell.
+                return Ok(events);
+            }
+            self.exit_candidate = None;
+            self.active = None;
+            events.push(CalibrationEvent::TargetExited(active));
         }
 
-        if self.active == Some(nearest.0) {
+        if nearest.1.to_degrees() > self.config.activation_threshold_degrees {
             self.candidate = None;
             return Ok(events);
-        }
-        if let Some(active) = self.active.take() {
-            events.push(CalibrationEvent::TargetExited(active));
         }
 
         let started = match self.candidate {
@@ -184,6 +209,7 @@ impl HeadCalibration {
 
     pub fn deactivate(&mut self) -> Vec<CalibrationEvent> {
         self.candidate = None;
+        self.exit_candidate = None;
         self.active
             .take()
             .map(CalibrationEvent::TargetExited)
@@ -196,6 +222,7 @@ impl HeadCalibration {
         self.center = None;
         self.top_right = None;
         self.candidate = None;
+        self.exit_candidate = None;
         self.requires_recalibration = true;
         events
     }
@@ -419,6 +446,11 @@ pub struct WristRotation {
     /// across repeated samples.
     activation_volume_percent: Option<f32>,
     previous_raw_degrees: Option<f64>,
+    /// Timestamp `previous_raw_degrees` was captured at. Paired with it and
+    /// updated only together (on an *accepted* sample), so the
+    /// velocity-outlier elapsed-time baseline can never desync from the
+    /// angle it is being compared against -- see [`Self::observe`].
+    previous_raw_degrees_at_ns: Option<u64>,
     /// Absolute target volume percent from the most recent [`Self::observe`]
     /// call. Reused verbatim when a sample is rejected as a velocity
     /// outlier, so a bad sample freezes the target instead of jumping it.
@@ -463,6 +495,7 @@ impl WristRotation {
         let clamped = activation_volume_percent.clamp(0.0, 100.0);
         self.activation_volume_percent = Some(clamped);
         self.previous_raw_degrees = None;
+        self.previous_raw_degrees_at_ns = None;
         self.last_target_volume_percent = Some(clamped);
         self.last_timestamp_ns = Some(timestamp_ns);
         self.last_relative_degrees = None;
@@ -492,6 +525,7 @@ impl WristRotation {
         self.start = Some(start);
         self.activation_volume_percent = Some(clamped);
         self.previous_raw_degrees = None;
+        self.previous_raw_degrees_at_ns = None;
         self.last_target_volume_percent = Some(clamped);
         self.last_timestamp_ns = Some(timestamp_ns);
         self.last_relative_degrees = None;
@@ -502,6 +536,7 @@ impl WristRotation {
         self.start = None;
         self.activation_volume_percent = None;
         self.previous_raw_degrees = None;
+        self.previous_raw_degrees_at_ns = None;
         self.last_target_volume_percent = None;
         self.last_timestamp_ns = None;
         self.last_relative_degrees = None;
@@ -535,7 +570,11 @@ impl WristRotation {
     ///
     /// Ignores high-velocity orientation outliers rather than risking a
     /// jump: an outlier tick returns the previous target unchanged instead
-    /// of a freshly computed one.
+    /// of a freshly computed one. The velocity is measured against the last
+    /// *accepted* sample's angle and timestamp together (never a rejected
+    /// one), so one genuine outlier can never desync the elapsed-time
+    /// baseline from the angle baseline and cascade into rejecting the
+    /// legitimate reversal samples that follow it.
     pub fn observe(
         &mut self,
         quaternion: [f64; 4],
@@ -552,6 +591,7 @@ impl WristRotation {
         if timestamp_ns <= previous_timestamp {
             return Err(WristRotationError::NonMonotonicTimestamp);
         }
+        self.last_timestamp_ns = Some(timestamp_ns);
         let current = normalized_quaternion(quaternion)?;
         let relative = start.conjugate() * current;
         let mut raw_degrees = (2.0 * relative.i.atan2(relative.w)).to_degrees();
@@ -565,18 +605,21 @@ impl WristRotation {
             raw_degrees = -raw_degrees;
         }
         self.last_relative_degrees = Some(raw_degrees);
-        let elapsed_seconds = (timestamp_ns - previous_timestamp) as f64 / 1_000_000_000.0;
-        self.last_timestamp_ns = Some(timestamp_ns);
-        if let Some(previous) = self.previous_raw_degrees
-            && (raw_degrees - previous).abs() / elapsed_seconds
-                > self.config.max_angular_velocity_degrees_per_second
+        if let (Some(previous), Some(previous_at_ns)) =
+            (self.previous_raw_degrees, self.previous_raw_degrees_at_ns)
         {
-            return Ok(self
-                .last_target_volume_percent
-                .map(f64::from)
-                .unwrap_or(f64::from(activation_volume_percent)));
+            let elapsed_seconds = (timestamp_ns - previous_at_ns) as f64 / 1_000_000_000.0;
+            if (raw_degrees - previous).abs() / elapsed_seconds
+                > self.config.max_angular_velocity_degrees_per_second
+            {
+                return Ok(self
+                    .last_target_volume_percent
+                    .map(f64::from)
+                    .unwrap_or(f64::from(activation_volume_percent)));
+            }
         }
         self.previous_raw_degrees = Some(raw_degrees);
+        self.previous_raw_degrees_at_ns = Some(timestamp_ns);
         let dead_zoned = if raw_degrees.abs() <= self.config.dead_zone_degrees {
             0.0
         } else {
