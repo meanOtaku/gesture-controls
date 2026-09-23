@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { Checkbox } from "../../../components/ui/checkbox";
 import type { RawImageNormalizationMode } from "../store/rawImageViewerStore";
 import type {
   DerivativeFilterConfig,
@@ -656,13 +657,8 @@ export function RawImageCanvas({
       </h4>
       {labelRangeOverlay && (
         <label className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={labelsVisible}
-            onChange={(event) => setLabelsVisible(event.target.checked)}
-            aria-label={`Show label ranges for ${title}`}
-          />
-          Show label ranges
+          <Checkbox checked={labelsVisible} onCheckedChange={setLabelsVisible} />
+          {`Show label ranges for ${title}`}
         </label>
       )}
       <div className="relative" style={{ width: DISPLAY_SIZE, height: DISPLAY_SIZE }}>
