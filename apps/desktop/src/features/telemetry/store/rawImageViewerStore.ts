@@ -67,7 +67,10 @@ class RawImageViewerStore {
   private normalizationMode: RawImageNormalizationMode = "recording";
   private gridSize: RawGridSize = DEFAULT_RAW_GRID_SIZE;
   private requestedStartRawRow = 0;
-  private viewMode: RawImageViewMode = "rawRows";
+  /** Observed samples is the default for a newly selected recording/channel;
+   * Raw rows remains the explicit audit mode, unchanged and still one click
+   * away via `setViewMode("rawRows")`. */
+  private viewMode: RawImageViewMode = "observedSamples";
   private requestedStartSampleIndex = 0;
 
   private compactStatus: RawImageViewerStatus = "empty";

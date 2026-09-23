@@ -2,12 +2,18 @@ import type { VisibleLabelRange } from "../annotations/visibleLabelRanges";
 
 type RawImageLabelRangeRailProps = {
   ranges: VisibleLabelRange[];
+  /** `ranges`' `startRawRow`/`endRawRow` are raw rows by default; pass
+   * `"sample"` when they are compact-mode observed-sample-index bounds
+   * instead (see `deriveVisibleCompactLabelRanges`), so the label reads
+   * accurately either way. @default "row" */
+  unit?: "row" | "sample";
 };
 
-function describeRange(range: VisibleLabelRange): string {
+function describeRange(range: VisibleLabelRange, unit: "row" | "sample"): string {
   const label = range.labelId.replaceAll("_", " ");
-  const lastRow = Math.max(range.startRawRow, range.endRawRow - 1);
-  return `${label}, rows ${range.startRawRow}–${lastRow}`;
+  const lastIndex = Math.max(range.startRawRow, range.endRawRow - 1);
+  const unitLabel = unit === "sample" ? "samples" : "rows";
+  return `${label}, ${unitLabel} ${range.startRawRow}–${lastIndex}`;
 }
 
 /**
@@ -17,7 +23,7 @@ function describeRange(range: VisibleLabelRange): string {
  * positioned vertically by percentage. Display-only — no editing, no
  * canvas, no icon dependency.
  */
-export function RawImageLabelRangeRail({ ranges }: RawImageLabelRangeRailProps) {
+export function RawImageLabelRangeRail({ ranges, unit = "row" }: RawImageLabelRangeRailProps) {
   if (ranges.length === 0) {
     return (
       <div role="note" aria-label="Saved label ranges" className="flex w-full items-start justify-center text-xs text-muted-foreground">
@@ -40,8 +46,8 @@ export function RawImageLabelRangeRail({ ranges }: RawImageLabelRangeRailProps) 
         <div
           key={`${range.labelId}-${range.startRawRow}-${range.endRawRow}`}
           role="listitem"
-          aria-label={describeRange(range)}
-          title={describeRange(range)}
+          aria-label={describeRange(range, unit)}
+          title={describeRange(range, unit)}
           className="absolute left-0 right-0 flex items-center justify-center border-y-2 border-foreground/50 bg-foreground/5 px-1 text-center text-[10px] leading-tight text-foreground/80"
           style={{
             top: `${range.startFraction * 100}%`,

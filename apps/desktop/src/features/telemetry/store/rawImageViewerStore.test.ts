@@ -47,19 +47,42 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  rawImageViewerStore.setViewMode("rawRows");
+  // Reset to the store's real default ("observedSamples", GC-033 follow-up)
+  // so every test starts from the same state regardless of run order.
+  rawImageViewerStore.setViewMode("observedSamples");
   rawImageViewerStore.setChannel(null);
   rawImageViewerStore.setRecording(null);
   Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
 });
 
 describe("rawImageViewerStore compact mode (M2/M3)", () => {
-  it("defaults to raw rows and never fetches the compact endpoint until switched", async () => {
+  it("defaults to observed samples and fetches the compact endpoint automatically on selection (GC-033 follow-up)", async () => {
     invoke.mockImplementation((command: string) => {
       if (command === "get_raw_recording_window") return Promise.resolve(rawWindow());
       if (command === "get_raw_recording_derivative_window") {
         return Promise.reject(new Error("unused in this test"));
       }
+      if (command === "get_compact_observation_window") return Promise.resolve(compactWindow());
+      return Promise.reject(new Error(`unmocked command ${command}`));
+    });
+
+    expect(rawImageViewerStore.getViewMode()).toBe("observedSamples");
+
+    rawImageViewerStore.setRecording("rec-a");
+    rawImageViewerStore.setChannel("ppg_green");
+    await vi.waitFor(() => expect(rawImageViewerStore.getCompactStatus()).toBe("loaded"));
+
+    expect(invoke).toHaveBeenCalledWith(
+      "get_compact_observation_window",
+      expect.objectContaining({ recordingId: "rec-a", column: "ppg_green" }),
+    );
+  });
+
+  it("keeps Raw rows available and unchanged as an explicit mode switch", async () => {
+    invoke.mockImplementation((command: string) => {
+      if (command === "get_raw_recording_window") return Promise.resolve(rawWindow());
+      if (command === "get_raw_recording_derivative_window") return Promise.reject(new Error("unused"));
+      if (command === "get_compact_observation_window") return Promise.resolve(compactWindow());
       return Promise.reject(new Error(`unmocked command ${command}`));
     });
 
@@ -67,8 +90,9 @@ describe("rawImageViewerStore compact mode (M2/M3)", () => {
     rawImageViewerStore.setChannel("ppg_green");
     await vi.waitFor(() => expect(rawImageViewerStore.getStatus()).toBe("loaded"));
 
+    rawImageViewerStore.setViewMode("rawRows");
     expect(rawImageViewerStore.getViewMode()).toBe("rawRows");
-    expect(invoke).not.toHaveBeenCalledWith("get_compact_observation_window", expect.anything());
+    expect(rawImageViewerStore.getWindow()?.values).toEqual([1, 2, 3, 4]);
   });
 
   it("fetches the compact window on switching to observedSamples, aligned/bounded like raw navigation", async () => {

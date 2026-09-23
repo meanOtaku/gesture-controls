@@ -46,6 +46,14 @@ describe("RawImageLabelRangeRail", () => {
     expect(item.style.height).toBe("25%");
   });
 
+  it("labels ranges as samples, not rows, when unit is 'sample' (compact mode)", () => {
+    const ranges: VisibleLabelRange[] = [
+      { labelId: "pinching", startRawRow: 0, endRawRow: 2, startFraction: 0, endFraction: 0.125 },
+    ];
+    render(<RawImageLabelRangeRail ranges={ranges} unit="sample" />);
+    expect(screen.getByRole("listitem")).toHaveAccessibleName("pinching, samples 0–1");
+  });
+
   it("spans the full canvas width edge-to-edge", () => {
     const ranges: VisibleLabelRange[] = [
       { labelId: "pinching", startRawRow: 16, endRawRow: 32, startFraction: 0.25, endFraction: 0.5 },

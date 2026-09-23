@@ -6,6 +6,7 @@ import { rawImageViewerStore } from "../store/rawImageViewerStore";
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import type {
   AnnotationInterval,
+  RawImageViewerChannel,
   RawRecordingCompactWindow,
   RawRecordingDerivativeWindow,
   RecordingBundleSummary,
@@ -156,8 +157,21 @@ function mockInvoke({
     if (command === "get_recording_quality_summary") {
       return Promise.resolve(qualitySummary(args?.recordingId as string));
     }
+    if (command === "get_compact_observation_window") {
+      return Promise.resolve(compactWindow(args?.recordingId as string));
+    }
     return Promise.reject(new Error(`unmocked command ${command}`));
   });
+}
+
+/** Most tests below assert Raw rows mode's own long-standing behavior;
+ * Observed samples is the default as of the GC-033 follow-up, so they must
+ * switch explicitly. Keeps every existing raw-row assertion meaningful
+ * without exercising the (separately covered) compact-mode path. */
+function selectRecordingInRawRowsMode(recordingId: string, channel: RawImageViewerChannel = "ppg_green") {
+  rawImageViewerStore.setRecording(recordingId);
+  rawImageViewerStore.setChannel(channel);
+  rawImageViewerStore.setViewMode("rawRows");
 }
 
 function renderPanel() {
@@ -177,6 +191,9 @@ afterEach(() => {
   cleanup();
   rawImageViewerStore.setChannel(null);
   rawImageViewerStore.setRecording(null);
+  // Reset to the store's real default ("observedSamples", GC-033 follow-up)
+  // so every test starts from the same state regardless of run order.
+  rawImageViewerStore.setViewMode("observedSamples");
   Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
 });
 
@@ -277,8 +294,7 @@ describe("RawImageViewerPanel raw-window navigation (GC-030)", () => {
     renderPanel();
 
     await screen.findByRole("combobox", { name: "Saved recording" });
-    rawImageViewerStore.setRecording("rec-a");
-    rawImageViewerStore.setChannel("ppg_green");
+    selectRecordingInRawRowsMode("rec-a");
 
     const nextButton = await screen.findByRole("button", { name: "Next 64 rows" });
     expect(screen.getByText(/Rows 0–4,095 of/)).toBeInTheDocument();
@@ -324,8 +340,7 @@ describe("RawImageViewerPanel label ranges", () => {
     renderPanel();
 
     await screen.findByRole("combobox", { name: "Saved recording" });
-    rawImageViewerStore.setRecording("rec-a");
-    rawImageViewerStore.setChannel("ppg_green");
+    selectRecordingInRawRowsMode("rec-a");
 
     await waitFor(() => {
       // The same saved interval is shown on both the Grayscale and
@@ -357,8 +372,7 @@ describe("RawImageViewerPanel label ranges", () => {
     renderPanel();
     await screen.findByRole("combobox", { name: "Saved recording" });
 
-    rawImageViewerStore.setRecording("rec-a");
-    rawImageViewerStore.setChannel("ppg_green");
+    selectRecordingInRawRowsMode("rec-a");
     await waitFor(() => {
       for (const item of screen.getAllByRole("listitem")) {
         expect(item).toHaveAccessibleName("pinching, rows 0–63");
@@ -397,6 +411,7 @@ describe("RawImageViewerPanel label ranges", () => {
 
     act(() => rawImageViewerStore.setRecording("rec-a"));
     act(() => rawImageViewerStore.setChannel("ppg_green"));
+    act(() => rawImageViewerStore.setViewMode("rawRows"));
     act(() => rawImageViewerStore.setRecording("rec-b"));
 
     // Recording A's (stale) response resolves after B was already selected.
@@ -427,8 +442,7 @@ describe("RawImageViewerPanel label ranges", () => {
     renderPanel();
     await screen.findByRole("combobox", { name: "Saved recording" });
 
-    rawImageViewerStore.setRecording("rec-a");
-    rawImageViewerStore.setChannel("ppg_green");
+    selectRecordingInRawRowsMode("rec-a");
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent("Could not load saved label ranges for this recording: disk unavailable");
@@ -451,8 +465,7 @@ describe("RawImageViewerPanel label ranges", () => {
     renderPanel();
     await screen.findByRole("combobox", { name: "Saved recording" });
 
-    rawImageViewerStore.setRecording("rec-a");
-    rawImageViewerStore.setChannel("ppg_green");
+    selectRecordingInRawRowsMode("rec-a");
 
     await waitFor(() => {
       for (const note of screen.getAllByRole("note", { name: "Saved label ranges" })) {
@@ -475,8 +488,7 @@ describe("RawImageViewerPanel derivative canvas", () => {
     renderPanel();
     await screen.findByRole("combobox", { name: "Saved recording" });
 
-    rawImageViewerStore.setRecording("rec-a");
-    rawImageViewerStore.setChannel("ppg_green");
+    selectRecordingInRawRowsMode("rec-a");
 
     const derivativeImage = await screen.findByRole("img", { name: /Derivative \(Savitzky–Golay\)/ });
     expect(derivativeImage).toBeInTheDocument();
@@ -505,8 +517,7 @@ describe("RawImageViewerPanel derivative canvas", () => {
     renderPanel();
     await screen.findByRole("combobox", { name: "Saved recording" });
 
-    rawImageViewerStore.setRecording("rec-a");
-    rawImageViewerStore.setChannel("ppg_green");
+    selectRecordingInRawRowsMode("rec-a");
 
     await waitFor(() => {
       expect(screen.getByText(/timestamp cadence is too irregular/)).toBeInTheDocument();
@@ -549,8 +560,7 @@ describe("RawImageViewerPanel derivative canvas", () => {
     renderPanel();
     await screen.findByRole("combobox", { name: "Saved recording" });
 
-    rawImageViewerStore.setRecording("rec-a");
-    rawImageViewerStore.setChannel("ppg_green");
+    selectRecordingInRawRowsMode("rec-a");
 
     const previewButton = await screen.findByRole("button", { name: /Preview by sample order/ });
     // The opt-in fallback must never fire on its own: no `previewBySampleOrder: true` call yet.
@@ -589,28 +599,13 @@ describe("RawImageViewerPanel compact observed-samples mode (M3, GC-033)", () =>
     });
   }
 
-  it("defaults to Raw rows mode and never calls the compact endpoint", async () => {
+  it("defaults to Observed samples mode and calls the compact endpoint automatically on selection", async () => {
     mockInvokeWithCompact();
     renderPanel();
     await screen.findByRole("combobox", { name: "Saved recording" });
 
     rawImageViewerStore.setRecording("rec-a");
     rawImageViewerStore.setChannel("ppg_green");
-
-    expect(await screen.findByRole("img", { name: /Grayscale/ })).toBeInTheDocument();
-    expect(invoke).not.toHaveBeenCalledWith("get_compact_observation_window", expect.anything());
-  });
-
-  it("switches to Observed samples mode and renders sparse values compactly, with no missing-value pixels", async () => {
-    mockInvokeWithCompact();
-    renderPanel();
-    await screen.findByRole("combobox", { name: "Saved recording" });
-
-    rawImageViewerStore.setRecording("rec-a");
-    rawImageViewerStore.setChannel("ppg_green");
-    await screen.findByRole("img", { name: /Grayscale/ });
-
-    fireEvent.click(screen.getByRole("radio", { name: /Observed samples \(compact\)/ }));
 
     const compactImage = await screen.findByRole("img", { name: /Grayscale \(observed samples\): compact observed-samples image/ });
     expect(compactImage).toHaveAccessibleName(/samples 0 to 1 of 2/);
@@ -624,22 +619,36 @@ describe("RawImageViewerPanel compact observed-samples mode (M3, GC-033)", () =>
     );
   });
 
-  it("keeps raw rows mode's null-preserving behavior unchanged after visiting compact mode", async () => {
+  it("renders the sample-order derivative preview canvas alongside the observed-samples canvases", async () => {
     mockInvokeWithCompact();
     renderPanel();
     await screen.findByRole("combobox", { name: "Saved recording" });
 
     rawImageViewerStore.setRecording("rec-a");
     rawImageViewerStore.setChannel("ppg_green");
-    await screen.findByRole("img", { name: /Grayscale/ });
 
-    fireEvent.click(screen.getByRole("radio", { name: /Observed samples \(compact\)/ }));
-    await screen.findByRole("img", { name: /Grayscale \(observed samples\): compact observed-samples image/ });
+    const derivativePreview = await screen.findByRole("img", { name: /Derivative preview \(sample order\)/ });
+    expect(derivativePreview).toHaveAccessibleName(/Not time-normalized, not Savitzky–Golay, not valid for training, export, or inference/);
+    expect(screen.getByText(/Not the Savitzky–Golay time-based derivative/)).toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByRole("radio", { name: /Raw rows \(default\)/ }));
+  it("switches to Raw rows mode on request and renders its unchanged null-preserving raw-row view", async () => {
+    mockInvokeWithCompact();
+    renderPanel();
+    await screen.findByRole("combobox", { name: "Saved recording" });
+
+    rawImageViewerStore.setRecording("rec-a");
+    rawImageViewerStore.setChannel("ppg_green");
+    await screen.findByRole("img", { name: /Grayscale \(observed samples\)/ });
+
+    fireEvent.click(screen.getByRole("radio", { name: /Raw rows \(audit\)/ }));
+
     // Raw rows mode's exact prior semantics: still rendered from
     // `get_raw_recording_window`'s null-preserving raw-row response.
     expect(await screen.findByRole("img", { name: /Grayscale/ })).toHaveAccessibleName(/chronological raw-data image/);
     expect(screen.queryByRole("img", { name: /compact observed-samples image/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: /Observed samples \(default\)/ }));
+    expect(await screen.findByRole("img", { name: /Grayscale \(observed samples\): compact observed-samples image/ })).toBeInTheDocument();
   });
 });

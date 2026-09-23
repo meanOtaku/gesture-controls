@@ -2,7 +2,11 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { RawImageCanvas } from "./RawImageCanvas";
 import { RawImageLabelRangeRail } from "./RawImageLabelRangeRail";
-import type { RawRecordingDerivativeWindow, RawRecordingWindow } from "../../../shared/tauri/recordingBundle";
+import type {
+  RawRecordingCompactWindow,
+  RawRecordingDerivativeWindow,
+  RawRecordingWindow,
+} from "../../../shared/tauri/recordingBundle";
 
 afterEach(() => cleanup());
 
@@ -125,5 +129,67 @@ describe("RawImageCanvas diverging derivative mode", () => {
     );
     expect(screen.getByText(/Blue = decreasing, white ≈ no change, red = increasing/)).toBeInTheDocument();
     expect(screen.getByText(/Scale: ±8 per second/)).toBeInTheDocument();
+  });
+});
+
+const compactWindow: RawRecordingCompactWindow = {
+  recordingId: "rec-1",
+  column: "pinch_distance",
+  gridSize: 4,
+  totalObservedSampleCount: 4,
+  startSampleIndex: 0,
+  endSampleIndex: 4,
+  sourceRawRowIndices: [3, 10, 11, 40],
+  timestampsNs: [3_000_000, 10_000_000, 11_000_000, 40_000_000],
+  values: [1, 4, 2, 10],
+  precedingTimestampNs: null,
+  recordingMin: 1,
+  recordingMax: 10,
+};
+
+describe("RawImageCanvas compact sample-order derivative preview (GC-033 follow-up)", () => {
+  it("differences two actually-adjacent loaded samples and labels it per-sample, not per-second", () => {
+    render(
+      <RawImageCanvas
+        compactWindow={compactWindow}
+        normalizationMode="recording"
+        title="Derivative preview (sample order)"
+        colorMode="diverging"
+      />,
+    );
+    const canvas = screen.getByRole("img", { name: /Derivative preview/ });
+    fireEvent.keyDown(canvas, { key: "Home" });
+    fireEvent.keyDown(canvas, { key: "ArrowRight" }); // sample index 1: values[1] - values[0] = 3
+
+    expect(screen.getByText(/value 4\. Sample-order derivative \(preview only, not time-normalized\): 3 per sample/)).toBeInTheDocument();
+  });
+
+  it("has no derivative at the window's first pixel — no actually-adjacent loaded sample to difference against", () => {
+    render(
+      <RawImageCanvas
+        compactWindow={compactWindow}
+        normalizationMode="recording"
+        title="Derivative preview (sample order)"
+        colorMode="diverging"
+      />,
+    );
+    const canvas = screen.getByRole("img", { name: /Derivative preview/ });
+    fireEvent.keyDown(canvas, { key: "Home" }); // sample index 0
+
+    expect(screen.getByText(/Sample-order derivative unavailable — no actually-adjacent observed sample/)).toBeInTheDocument();
+  });
+
+  it("labels the legend and aria-label as a preview, not the Savitzky–Golay time-based derivative", () => {
+    render(
+      <RawImageCanvas
+        compactWindow={compactWindow}
+        normalizationMode="recording"
+        title="Derivative preview (sample order)"
+        colorMode="diverging"
+      />,
+    );
+    expect(screen.getByRole("img", { name: /Not time-normalized, not Savitzky–Golay/ })).toBeInTheDocument();
+    expect(screen.getByText(/Scale: ±\d+(\.\d+)? per sample \(not per second, not time-normalized\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Not the Savitzky–Golay time-based derivative/)).toBeInTheDocument();
   });
 });

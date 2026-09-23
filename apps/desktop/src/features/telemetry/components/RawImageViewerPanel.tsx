@@ -24,7 +24,7 @@ import {
   type RecordingBundleSummary,
   type RecordingQualitySummary,
 } from "../../../shared/tauri/recordingBundle";
-import { deriveVisibleLabelRanges } from "../annotations/visibleLabelRanges";
+import { deriveVisibleCompactLabelRanges, deriveVisibleLabelRanges } from "../annotations/visibleLabelRanges";
 import { rawImageViewerStore } from "../store/rawImageViewerStore";
 import { RawImageCanvas } from "./RawImageCanvas";
 import { RawImageLabelRangeRail } from "./RawImageLabelRangeRail";
@@ -217,6 +217,11 @@ export function RawImageViewerPanel() {
     return deriveVisibleLabelRanges(labelRanges.intervals, rawWindow.startRawRow, rawWindow.endRawRow);
   }, [rawWindow, labelRanges]);
 
+  const visibleCompactLabelRanges = useMemo(() => {
+    if (compactWindow === null || labelRanges.status !== "loaded") return [];
+    return deriveVisibleCompactLabelRanges(labelRanges.intervals, compactWindow);
+  }, [compactWindow, labelRanges]);
+
   return (
     <Card role="region" aria-label="Raw image viewer" className="min-w-0">
       <CardHeader>
@@ -406,12 +411,12 @@ export function RawImageViewerPanel() {
                   }}
                 >
                   <label className="flex items-center gap-2 text-sm">
-                    <RadioGroupItem value="rawRows" aria-label="Raw rows (default)" />
-                    Raw rows (default)
+                    <RadioGroupItem value="rawRows" aria-label="Raw rows (audit)" />
+                    Raw rows (audit)
                   </label>
                   <label className="flex items-center gap-2 text-sm">
-                    <RadioGroupItem value="observedSamples" aria-label="Observed samples (compact)" />
-                    Observed samples (compact)
+                    <RadioGroupItem value="observedSamples" aria-label="Observed samples (default)" />
+                    Observed samples (default)
                   </label>
                 </RadioGroup>
               </fieldset>
@@ -479,6 +484,7 @@ export function RawImageViewerPanel() {
                               normalizationMode={normalizationMode}
                               title="Grayscale (observed samples)"
                               colorMode="grayscale"
+                              labelRangeOverlay={<RawImageLabelRangeRail ranges={visibleCompactLabelRanges} unit="sample" />}
                             />
                           </CardContent>
                         </Card>
@@ -489,6 +495,25 @@ export function RawImageViewerPanel() {
                               normalizationMode={normalizationMode}
                               title="Rainbow (observed samples, false-colour)"
                               colorMode="rainbow"
+                            />
+                          </CardContent>
+                        </Card>
+                        <Card className="min-w-0 lg:flex-1">
+                          <CardContent className="pt-6">
+                            <RawImageCanvas
+                              compactWindow={compactWindow}
+                              normalizationMode={normalizationMode}
+                              title="Derivative preview (sample order)"
+                              colorMode="diverging"
+                              labelRangeOverlay={<RawImageLabelRangeRail ranges={visibleCompactLabelRanges} unit="sample" />}
+                              titleHelp={
+                                <HelpTooltip label="About the observed-samples derivative preview">
+                                  A visual preview only: the difference between two actually-adjacent observed
+                                  samples of this channel, computed from the same compact window shown above (no
+                                  extra fetch). It is <strong>not time-normalized</strong>, not the Savitzky–Golay
+                                  time-based derivative, and is never used for training, export, or inference.
+                                </HelpTooltip>
+                              }
                             />
                           </CardContent>
                         </Card>
