@@ -52,6 +52,18 @@ export function LiveTelemetry() {
   // Mirrors Dashboard.tsx's IMU_SENSOR_IDS default-enabled read and the
   // continuous-tracker "idle means disabled" convention.
   const orientationEnabled = watchStatus?.sensorStatus?.orientation ?? true;
+  // Distinguishes why the chart has no samples once it's plausible the Watch
+  // is meant to be streaming: disconnected, connected but nothing has ever
+  // arrived (transport rejected it or the Watch never sent one), or the
+  // backend already has a sample the UI store isn't reflecting (GC-035
+  // regression triage: "Watch IMU data is no longer loading").
+  const watchOrientationHint = !watchStatus?.connected
+    ? "Watch is disconnected — reconnect to resume orientation data."
+    : watchOrientationPoints.length === 0 && watchStatus.lastOrientation
+      ? "The Watch reports live orientation, but it isn't reaching this chart — this looks like a UI issue, please report it."
+      : watchOrientationPoints.length === 0
+        ? "Connected, but no orientation samples have arrived yet — check the Watch transport or pairing."
+        : undefined;
   const heartRateStreaming = watchStatus?.medicalStatus?.heart_rate_continuous === "streaming";
   const skinTemperatureStreaming = watchStatus?.medicalStatus?.skin_temperature_continuous === "streaming";
   const edaStreaming = watchStatus?.medicalStatus?.eda_continuous === "streaming";
@@ -164,6 +176,7 @@ export function LiveTelemetry() {
           headPoints={headPoints}
           watchOrientationPoints={watchOrientationPoints}
           ppgPoints={ppgPoints}
+          watchOrientationHint={watchOrientationHint}
         />
         <WellnessCapturePanel
           desktopAvailable={desktopAvailable}

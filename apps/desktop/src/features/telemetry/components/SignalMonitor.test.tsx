@@ -52,6 +52,23 @@ describe("SignalMonitor", () => {
     expect(screen.queryByRole("region", { name: "Watch orientation" })).not.toBeInTheDocument();
   });
 
+  it("shows the caller-provided hint distinguishing why the watch chart is empty", () => {
+    render(
+      <SignalMonitor
+        signalView="all"
+        onSignalViewChange={vi.fn()}
+        orientationEnabled={true}
+        headPoints={points}
+        watchOrientationPoints={[]}
+        ppgPoints={points}
+        watchOrientationHint="Watch is disconnected — reconnect to resume orientation data."
+      />,
+    );
+    expect(
+      screen.getByText("Watch is disconnected — reconnect to resume orientation data."),
+    ).toBeInTheDocument();
+  });
+
   it("invokes the callback when a filter is pressed", () => {
     const onSignalViewChange = vi.fn();
     render(

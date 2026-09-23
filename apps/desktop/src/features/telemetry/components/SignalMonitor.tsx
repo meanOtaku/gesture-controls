@@ -17,6 +17,14 @@ type SignalMonitorProps = {
   headPoints: SeriesPoint[];
   watchOrientationPoints: SeriesPoint[];
   ppgPoints: SeriesPoint[];
+  /**
+   * Distinguishes why the Watch orientation chart has no samples yet
+   * (disconnected, transport never delivered one, or the backend has one but
+   * the UI store isn't reflecting it) instead of always showing the generic
+   * "connect your device" hint, which is misleading once the Watch is
+   * already connected (GC-035 regression triage).
+   */
+  watchOrientationHint?: string;
 };
 
 /** Live signal charts plus the motion/optical filter that scopes which charts are shown. */
@@ -27,6 +35,7 @@ export function SignalMonitor({
   headPoints,
   watchOrientationPoints,
   ppgPoints,
+  watchOrientationHint,
 }: SignalMonitorProps) {
   return (
     <section aria-label="Signal monitor">
@@ -52,7 +61,14 @@ export function SignalMonitor({
           <TimeChart title="Headphone orientation" points={headPoints} labels={["Yaw", "Pitch", "Roll"]} unit="degrees" colors={["#65e6ff", "#b88cff", "#ffb45d"]} />
         )}
         {signalView !== "optical" && orientationEnabled && (
-          <TimeChart title="Watch orientation" points={watchOrientationPoints} labels={["Yaw", "Pitch", "Roll"]} unit="degrees" colors={["#65e6ff", "#b88cff", "#ffb45d"]} />
+          <TimeChart
+            title="Watch orientation"
+            points={watchOrientationPoints}
+            labels={["Yaw", "Pitch", "Roll"]}
+            unit="degrees"
+            colors={["#65e6ff", "#b88cff", "#ffb45d"]}
+            emptyHint={watchOrientationHint}
+          />
         )}
         {signalView !== "motion" && (
           <TimeChart title="Raw PPG" points={ppgPoints} labels={["Green", "Red", "IR"]} unit="raw counts" emptyHint="Enable PPG on a supported Watch to see optical signals." colors={["#4ff0b7", "#ff7da5", "#b88cff"]} />
