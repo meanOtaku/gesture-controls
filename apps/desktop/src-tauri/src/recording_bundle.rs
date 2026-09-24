@@ -1003,6 +1003,34 @@ fn sg_first_derivative_coefficients(half_width: usize) -> Vec<f64> {
         .collect()
 }
 
+/// Pure, dependency-free symmetric Savitzky–Golay convolution: shared by both
+/// `compute_sg_derivative_window` (time mode) and
+/// `compute_sample_order_derivative_window` (GC-032 sample-order fallback),
+/// which differ only in whether the result is divided by an elapsed time
+/// afterward. `present` is `(original_row_index, value)` for a column's own
+/// genuine finite samples, in the order they occur (by timestamp for time
+/// mode, by row for sample-order mode); the caller decides that ordering.
+/// Returns the raw "value units per sample" convolution, keyed by original
+/// row index, for every position with a full symmetric window of
+/// `half_width` genuine neighbors on each side within `present` itself.
+fn convolve_symmetric_sg(
+    present: &[(usize, f64)],
+    coefficients: &[f64],
+    half_width: usize,
+) -> std::collections::HashMap<usize, f64> {
+    let mut result = std::collections::HashMap::new();
+    for present_index in half_width..present.len().saturating_sub(half_width) {
+        let window_start = present_index - half_width;
+        let mut accumulator = 0.0;
+        for (offset, coefficient) in coefficients.iter().enumerate() {
+            accumulator += coefficient * present[window_start + offset].1;
+        }
+        let (row, _) = present[present_index];
+        result.insert(row, accumulator);
+    }
+    result
+}
+
 /// Outcome of assessing whether a full timestamp series is regular enough to
 /// support a Savitzky–Golay time-derivative claim at all. `median_dt_ns` is
 /// the robust per-sample cadence used to convert the per-sample SG
@@ -1121,16 +1149,12 @@ fn compute_sg_derivative_window(
     // original row it came from; a full symmetric SG window needs
     // SG_HALF_WIDTH genuine neighbors on each side within this channel's own
     // present-sample sequence, not within the raw row index space.
-    let mut derivative_by_row: std::collections::HashMap<usize, f64> = std::collections::HashMap::new();
-    for present_index in SG_HALF_WIDTH..present.len().saturating_sub(SG_HALF_WIDTH) {
-        let window_start = present_index - SG_HALF_WIDTH;
-        let mut accumulator = 0.0;
-        for (offset, coefficient) in coefficients.iter().enumerate() {
-            accumulator += coefficient * present[window_start + offset].2;
-        }
-        let (row, _, _) = present[present_index];
-        derivative_by_row.insert(row, accumulator / dt_seconds);
-    }
+    let present_values: Vec<(usize, f64)> = present.iter().map(|&(row, _, value)| (row, value)).collect();
+    let derivative_by_row = convolve_symmetric_sg(&present_values, &coefficients, SG_HALF_WIDTH);
+    let derivative_by_row: std::collections::HashMap<usize, f64> = derivative_by_row
+        .into_iter()
+        .map(|(row, raw)| (row, raw / dt_seconds))
+        .collect();
 
     let derivative_values = (start..end).map(|row| derivative_by_row.get(&row).copied()).collect();
     (derivative_values, true, None, effective_sample_rate_hz)
@@ -1170,19 +1194,10 @@ fn compute_sample_order_derivative_window(
     }
 
     let coefficients = sg_first_derivative_coefficients(SG_HALF_WIDTH);
-    let mut derivative_by_row: std::collections::HashMap<usize, f64> = std::collections::HashMap::new();
-    for present_index in SG_HALF_WIDTH..present.len().saturating_sub(SG_HALF_WIDTH) {
-        let window_start = present_index - SG_HALF_WIDTH;
-        let mut accumulator = 0.0;
-        for (offset, coefficient) in coefficients.iter().enumerate() {
-            accumulator += coefficient * present[window_start + offset].1;
-        }
-        let (row, _) = present[present_index];
-        // No `dt_seconds` division here (contrast `compute_sg_derivative_window`):
-        // the coefficients already yield "value units per sample", which is
-        // exactly this fallback's unit.
-        derivative_by_row.insert(row, accumulator);
-    }
+    // No `dt_seconds` division here (contrast `compute_sg_derivative_window`):
+    // the coefficients already yield "value units per sample", which is
+    // exactly this fallback's unit.
+    let derivative_by_row = convolve_symmetric_sg(&present, &coefficients, SG_HALF_WIDTH);
 
     let derivative_values = (start..end).map(|row| derivative_by_row.get(&row).copied()).collect();
     (derivative_values, true, None)
@@ -2359,6 +2374,36 @@ mod tests {
         }
         // c_i = i / sum(j^2), sum(j^2) for j in -5..=5 (excluding 0) = 110.
         assert!((coefficients[SG_HALF_WIDTH + 1] - (1.0 / 110.0)).abs() < 1e-12);
+    }
+
+    /// GC-036: `convolve_symmetric_sg` is the pure convolution extracted out
+    /// of both `compute_sg_derivative_window` (time mode) and
+    /// `compute_sample_order_derivative_window` (sample-order fallback) so
+    /// the two no longer duplicate the same windowed-accumulation loop. This
+    /// pins its output against the known linear-signal closed form directly
+    /// (slope * dt_seconds per sample, `dt_seconds = 1` here), independent of
+    /// either caller, and checks the exact edge rows a `SG_HALF_WIDTH = 5`
+    /// window can and cannot cover — the same behavior the pre-extraction
+    /// inlined loops produced.
+    #[test]
+    fn convolve_symmetric_sg_matches_known_linear_slope_and_respects_window_edges() {
+        let present: Vec<(usize, f64)> = (0..16).map(|row| (row, 2.0 * row as f64 + 7.0)).collect();
+        let coefficients = sg_first_derivative_coefficients(SG_HALF_WIDTH);
+        let result = convolve_symmetric_sg(&present, &coefficients, SG_HALF_WIDTH);
+
+        // Only rows with a full SG_HALF_WIDTH of genuine neighbors on both
+        // sides (here, 5..=10 out of 16 present samples) get a value.
+        assert_eq!(result.len(), present.len() - 2 * SG_HALF_WIDTH);
+        for row in SG_HALF_WIDTH..(present.len() - SG_HALF_WIDTH) {
+            assert!(
+                (result[&row] - 2.0).abs() < 1e-9,
+                "row {row}: expected slope 2.0, got {:?}",
+                result.get(&row)
+            );
+        }
+        for row in [0usize, 1, 2, 3, 4, 11, 12, 13, 14, 15] {
+            assert!(!result.contains_key(&row), "row {row} should have no full window");
+        }
     }
 
     #[test]

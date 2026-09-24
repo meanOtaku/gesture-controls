@@ -52,17 +52,22 @@ export function CornerWristVolumeDiagnosticsSection({
     }
   }, [lastOrientationSequence]);
 
-  // Re-renders periodically so "live" ages into "stale" without a new
-  // orientation sample arriving to trigger it.
-  useEffect(() => {
-    const id = window.setInterval(forceTick, ORIENTATION_STALE_POLL_MS);
-    return () => window.clearInterval(id);
-  }, []);
-
   const orientationStatus: "absent" | "stale" | "live" =
     lastOrientation === null ? "absent"
       : receivedAtRef.current !== null && Date.now() - receivedAtRef.current > ORIENTATION_STALE_THRESHOLD_MS ? "stale"
         : "live";
+
+  // Re-renders periodically so "live" ages into "stale" without a new
+  // orientation sample arriving to trigger it. Only needed while still
+  // "live": once stale (or with no orientation at all), nothing further
+  // changes until a new sample arrives, which already re-renders this
+  // component via its `watchStatus` prop -- so the poll stops rather than
+  // ticking forever in the background.
+  useEffect(() => {
+    if (orientationStatus !== "live") return;
+    const id = window.setInterval(forceTick, ORIENTATION_STALE_POLL_MS);
+    return () => window.clearInterval(id);
+  }, [orientationStatus]);
 
   return (
     <Card role="region" aria-label="Corner wrist volume diagnostics">
