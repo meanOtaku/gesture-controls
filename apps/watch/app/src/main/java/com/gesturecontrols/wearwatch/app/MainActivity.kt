@@ -222,14 +222,14 @@ class MainActivity : AppCompatActivity() {
         // Not actively capturing: drop to a low-rate, wakelock-free monitor mode instead
         // of leaving sensors idle while backgrounded. Active capture (sensorCollector.start(),
         // full SENSOR_DELAY_GAME rate + StreamingForegroundService's wake lock) is untouched.
-        if (watchLink.state.value != ConnectionState.CONNECTED) {
+        if (!watchLink.state.value.isConnectionActive()) {
             sensorCollector.startMonitoring()
         }
     }
 
     override fun onResume() {
         super.onResume()
-        if (watchLink.state.value != ConnectionState.CONNECTED) {
+        if (!watchLink.state.value.isConnectionActive()) {
             sensorCollector.stop()
             desktopDiscovery.start()
             pairingServer.start()
@@ -367,6 +367,12 @@ class MainActivity : AppCompatActivity() {
             pairingServer.stop()
             discoveryStatusText.text = "Connected to desktop"
             discoveryHistoryText.text = ""
+            // Restarting here (idempotent, preserves each sensor's individual
+            // enable flag) covers reconnects that never go through
+            // connectToDesktop(), e.g. a CONNECTING/RECONNECTING session that
+            // was backgrounded and resumed before landing on CONNECTED.
+            sensorCollector.start()
+            sensorStatusText.setText(R.string.sensors_streaming)
         }
         if (state == ConnectionState.FAILED) {
             StreamingForegroundService.stop(this)
