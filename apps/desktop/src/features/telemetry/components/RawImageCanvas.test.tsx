@@ -300,11 +300,10 @@ describe("RawImageCanvas compact sample-order derivative preview (GC-033 follow-
     expect(screen.getByText(/Sample-order derivative unavailable — no actually-adjacent observed sample/)).toBeInTheDocument();
   });
 
-  it("does not paint pixel 0 with the missing-value magenta fill — every compact sample is a real observation, not a withheld field", () => {
+  it("paints the unavailable first derivative pixel neutral white instead of a gray artifact", () => {
     const { imageData } = buildCompactDivergingImageData(compactWindow, "recording");
     const [r, g, b] = [imageData.data[0], imageData.data[1], imageData.data[2]];
-    expect([r, g, b]).not.toEqual([217, 70, 239]); // MISSING_COLOR
-    expect([r, g, b]).toEqual([128, 128, 128]); // CONSTANT_COLOR: nothing computable at the window edge
+    expect([r, g, b]).toEqual([255, 255, 255]);
   });
 
   it("clears the focused/hovered pixel when the compact window changes (e.g. paging to a new sample range), so a stale index is never reapplied to new data", () => {

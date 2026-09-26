@@ -398,12 +398,11 @@ function compactDerivativePixelInfoAt(compactWindow: RawRecordingCompactWindow, 
  * observed values, so a given magnitude keeps the same color across compact
  * windows); in `"frame"` mode it stays `±(max absolute diff visible in this
  * window)`, as before. Reuses the same "beyond" fill as the time-based
- * derivative canvas so it reads identically everywhere. Pixel 0 uses
- * `CONSTANT_COLOR` rather than `MISSING_COLOR`: every compact sample is a
- * genuine observation (unlike a raw-row's withheld field), so pixel 0 is not
- * "missing data" — it is simply a window edge with no actually-adjacent
- * loaded sample to difference against, the same "nothing to compute" case
- * `CONSTANT_COLOR` already covers elsewhere in this file. */
+ * derivative canvas so it reads identically everywhere. Pixel 0 uses the
+ * diverging palette's neutral white: it has no loaded predecessor to
+ * difference against, but a gray not-data block is a distracting visual
+ * artifact in an otherwise continuous derivative image. The inspector still
+ * reports the derivative as unavailable. */
 export function buildCompactDivergingImageData(
   compactWindow: RawRecordingCompactWindow,
   mode: RawImageNormalizationMode,
@@ -431,7 +430,7 @@ export function buildCompactDivergingImageData(
       color = BEYOND_COLOR;
     } else if (index === 0) {
       // No actually-adjacent loaded sample to difference pixel 0 against.
-      color = CONSTANT_COLOR;
+      color = DIVERGING_MID_COLOR;
     } else if (extent === null || isConstant || maxAbs === null) {
       color = CONSTANT_COLOR;
     } else {
@@ -816,7 +815,7 @@ function RawImageLegend({
         <div className="flex items-center gap-2">
           <span
             className="inline-block size-3 shrink-0 rounded-sm ring-1 ring-foreground/20"
-            style={swatchStyle(sampleOrderDerivative ? CONSTANT_COLOR : MISSING_COLOR)}
+            style={swatchStyle(sampleOrderDerivative ? DIVERGING_MID_COLOR : MISSING_COLOR)}
             aria-hidden="true"
           />
           <span>
