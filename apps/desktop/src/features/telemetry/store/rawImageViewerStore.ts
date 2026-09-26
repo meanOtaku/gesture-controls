@@ -1,5 +1,6 @@
 import {
   DEFAULT_RAW_GRID_SIZE,
+  DEFAULT_SPIKE_EXTRACTION_METHOD,
   getCompactObservationWindow,
   getRawRecordingDerivativeWindow,
   getRawRecordingWindow,
@@ -10,6 +11,7 @@ import {
   type RawRecordingCompactWindow,
   type RawRecordingDerivativeWindow,
   type RawRecordingWindow,
+  type SpikeExtractionMethod,
 } from "../../../shared/tauri/recordingBundle";
 
 /**
@@ -61,10 +63,21 @@ class RawImageViewerStore {
    * be looking at one mode's controls at a time but both windows' loaded
    * state is retained across a mode toggle (see `setViewMode`). */
   private compactRequestVersion = 0;
+  /** Separate from `requestVersion` (the raw window's own guard): selecting a
+   * new spike-extraction method reloads only the derivative window, for the
+   * unchanged recording/channel/grid-size/start-row selection, and must not
+   * be cancelled by (or itself cancel) an in-flight raw-window fetch. Every
+   * derivative fetch — from `reload()` or `setSpikeExtractionMethod()` —
+   * increments this counter, so a startRawRow/selection change that lands
+   * while a method-triggered fetch is in flight still supersedes it. */
+  private derivativeRequestVersion = 0;
 
   private recordingId: string | null = null;
   private channel: RawImageViewerChannel | null = null;
   private normalizationMode: RawImageNormalizationMode = "recording";
+  /** Persists across recording/channel changes, like `normalizationMode` — a
+   * viewer display preference, not part of the data selection. */
+  private spikeExtractionMethod: SpikeExtractionMethod = DEFAULT_SPIKE_EXTRACTION_METHOD;
   private gridSize: RawGridSize = DEFAULT_RAW_GRID_SIZE;
   private requestedStartRawRow = 0;
   /** Observed samples is the default for a newly selected recording/channel;
@@ -161,6 +174,41 @@ class RawImageViewerStore {
   /** The last M3 derivative window successfully resolved for the current recording/channel/start selection, or `null` if none has loaded yet, the fetch failed, or the selection has since changed. Row-aligned with `getWindow()` by construction (see `reload()`). */
   getDerivativeWindow(): RawRecordingDerivativeWindow | null {
     return this.derivativeWindow;
+  }
+
+  getSpikeExtractionMethod(): SpikeExtractionMethod {
+    return this.spikeExtractionMethod;
+  }
+
+  /**
+   * Selects one of the six `SpikeExtractionMethod` transforms and reloads the
+   * derivative/spike-extraction window *and* (when already loaded) the
+   * compact observed-samples window, for the current, unchanged
+   * recording/channel/grid-size/start-row (or start-sample) selection — the
+   * raw Grayscale/Rainbow and compact Grayscale/Rainbow canvases and their
+   * loaded windows are untouched. Race-safe via `derivativeRequestVersion`
+   * and `compactRequestVersion` independently (see their field docs): a
+   * stale response for a since-superseded method or a since-moved-on
+   * selection can never land in either window. Never fetches the compact
+   * window if it has never been visited (mirrors `setViewMode`'s "load on
+   * first entry" treatment) — a user who has never visited Observed samples
+   * mode gets no superfluous fetch. A compact fetch still in flight
+   * (`compactStatus === "loading"`, not yet `"loaded"`) is also reloaded, not
+   * just an already-loaded window: otherwise its in-flight response would
+   * land with the stale method still baked in.
+   *
+   * Notifies unconditionally, even with no recording/channel selected (where
+   * `loadDerivative()`/`loadCompact()` themselves no-op without notifying):
+   * subscribers must still see the new selection reflected in
+   * `getSpikeExtractionMethod()`, e.g. a method picker rendered before any
+   * recording is chosen.
+   */
+  setSpikeExtractionMethod(method: SpikeExtractionMethod): void {
+    if (method === this.spikeExtractionMethod) return;
+    this.spikeExtractionMethod = method;
+    this.loadDerivative();
+    if (this.compactStatus !== "empty") this.loadCompact();
+    this.notify();
   }
 
   getSampleOrderPreviewStatus(): RawImageViewerStatus {
@@ -330,7 +378,10 @@ class RawImageViewerStore {
     this.compactErrorMessage = null;
     this.notify();
 
-    void getCompactObservationWindow({ recordingId, column: channel, startSampleIndex, gridSize }).then((result) => {
+    void getCompactObservationWindow(
+      { recordingId, column: channel, startSampleIndex, gridSize },
+      this.spikeExtractionMethod,
+    ).then((result) => {
       if (
         requestVersion !== this.compactRequestVersion ||
         this.recordingId !== recordingId ||
@@ -436,6 +487,7 @@ class RawImageViewerStore {
     const channel = this.channel;
     if (recordingId === null || channel === null) {
       this.requestVersion += 1;
+      this.derivativeRequestVersion += 1;
       this.status = "empty";
       this.errorMessage = null;
       this.window = null;
@@ -454,8 +506,6 @@ class RawImageViewerStore {
     const gridSize = this.gridSize;
     this.status = "loading";
     this.errorMessage = null;
-    this.derivativeStatus = "loading";
-    this.derivativeErrorMessage = null;
     // A new row-start/selection request supersedes any sample-order preview
     // for the previous window — it is row-specific and must never be shown
     // against a different selection than the one the user opted it in for.
@@ -464,20 +514,20 @@ class RawImageViewerStore {
     this.sampleOrderPreviewWindow = null;
     this.notify();
 
-    // Discard a response if a newer request has since been issued, or if
-    // the recording/channel/grid-size selection has moved on entirely (e.g.
-    // the user switched recordings or grid size while this request was in
-    // flight): either way, the current selection must never be overwritten
-    // by a superseded response. Shared by the raw and derivative fetches
-    // below so both are held to the identical staleness guard.
-    const isStale = (): boolean =>
-      requestVersion !== this.requestVersion ||
-      this.recordingId !== recordingId ||
-      this.channel !== channel ||
-      this.gridSize !== gridSize;
-
     void getRawRecordingWindow({ recordingId, column: channel, startRawRow, gridSize }).then((result) => {
-      if (isStale()) return;
+      // Discard a response if a newer request has since been issued, or if
+      // the recording/channel/grid-size selection has moved on entirely (e.g.
+      // the user switched recordings or grid size while this request was in
+      // flight): either way, the current selection must never be overwritten
+      // by a superseded response.
+      if (
+        requestVersion !== this.requestVersion ||
+        this.recordingId !== recordingId ||
+        this.channel !== channel ||
+        this.gridSize !== gridSize
+      ) {
+        return;
+      }
 
       if (result.status === "error") {
         this.status = "error";
@@ -500,20 +550,59 @@ class RawImageViewerStore {
     // with it by construction. Resolves independently of the raw fetch: a
     // slow, failed, or "unavailable" derivative never blocks or replaces the
     // raw Grayscale/Rainbow canvases, and vice versa.
-    void getRawRecordingDerivativeWindow({ recordingId, column: channel, startRawRow, gridSize }).then((result) => {
-      if (isStale()) return;
+    this.loadDerivative();
+  }
 
-      if (result.status === "error") {
-        this.derivativeStatus = "error";
-        this.derivativeErrorMessage = result.message;
-        this.derivativeWindow = null;
-      } else {
-        this.derivativeStatus = "loaded";
-        this.derivativeErrorMessage = null;
-        this.derivativeWindow = result.value;
-      }
-      this.notify();
-    });
+  /**
+   * Fetches the derivative/spike-extraction window for the current
+   * recording/channel/grid-size/start-row selection and the currently
+   * selected `spikeExtractionMethod`. Called both by `reload()` (a new
+   * row/selection) and `setSpikeExtractionMethod()` (the same row/selection,
+   * a new transform) — both increment `derivativeRequestVersion`, so either
+   * kind of change supersedes an in-flight fetch from the other.
+   */
+  private loadDerivative(): void {
+    const recordingId = this.recordingId;
+    const channel = this.channel;
+    if (recordingId === null || channel === null) {
+      this.derivativeRequestVersion += 1;
+      this.derivativeStatus = "empty";
+      this.derivativeErrorMessage = null;
+      this.derivativeWindow = null;
+      return;
+    }
+
+    const requestVersion = ++this.derivativeRequestVersion;
+    const startRawRow = this.requestedStartRawRow;
+    const gridSize = this.gridSize;
+    const method = this.spikeExtractionMethod;
+    this.derivativeStatus = "loading";
+    this.derivativeErrorMessage = null;
+    this.notify();
+
+    void getRawRecordingDerivativeWindow({ recordingId, column: channel, startRawRow, gridSize }, false, method).then(
+      (result) => {
+        if (
+          requestVersion !== this.derivativeRequestVersion ||
+          this.recordingId !== recordingId ||
+          this.channel !== channel ||
+          this.gridSize !== gridSize
+        ) {
+          return;
+        }
+
+        if (result.status === "error") {
+          this.derivativeStatus = "error";
+          this.derivativeErrorMessage = result.message;
+          this.derivativeWindow = null;
+        } else {
+          this.derivativeStatus = "loaded";
+          this.derivativeErrorMessage = null;
+          this.derivativeWindow = result.value;
+        }
+        this.notify();
+      },
+    );
   }
 }
 

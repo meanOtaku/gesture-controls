@@ -141,7 +141,7 @@ describe("RawImageCanvas diverging derivative mode", () => {
     const canvas = screen.getByRole("img", { name: /Derivative/ });
     fireEvent.keyDown(canvas, { key: "Home" }); // focuses pixel index 0
 
-    expect(screen.getByText(/raw value 0, derivative -8 per second/)).toBeInTheDocument();
+    expect(screen.getByText(/raw value 0, First derivative \(Savitzky–Golay\): -8 per second/)).toBeInTheDocument();
     expect(screen.getByText(/savitzky_golay_order2_window11_v1/)).toBeInTheDocument();
   });
 
@@ -161,7 +161,7 @@ describe("RawImageCanvas diverging derivative mode", () => {
     fireEvent.keyDown(canvas, { key: "ArrowRight" });
     fireEvent.keyDown(canvas, { key: "ArrowRight" }); // index 3, the withheld row
 
-    expect(screen.getByText(/raw value 3\. Derivative unavailable for this row/)).toBeInTheDocument();
+    expect(screen.getByText(/raw value 3\. First derivative \(Savitzky–Golay\) unavailable for this row/)).toBeInTheDocument();
   });
 
   it("shows a zero-centred diverging legend with a signed scale, distinct from the raw-value legend", () => {
@@ -252,6 +252,75 @@ describe("RawImageCanvas diverging derivative mode", () => {
   });
 });
 
+describe("RawImageCanvas spike-extraction method legend (GC-036 frontend slice)", () => {
+  it("shows the selected method's label and description in the legend when spikeExtractionMethod is provided", () => {
+    render(
+      <RawImageCanvas
+        rawWindow={rawWindow}
+        normalizationMode="recording"
+        title="Rolling median residual"
+        colorMode="diverging"
+        derivativeWindow={derivativeWindow}
+        spikeExtractionMethod="rolling_median_residual"
+      />,
+    );
+    expect(screen.getByText("Rolling median residual", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByText(/rolling median of its own present neighbors/)).toBeInTheDocument();
+  });
+
+  it("omits the method line when spikeExtractionMethod is not provided (e.g. the legacy sample-order preview canvas)", () => {
+    render(
+      <RawImageCanvas
+        rawWindow={rawWindow}
+        normalizationMode="recording"
+        title="Derivative (Savitzky–Golay)"
+        colorMode="diverging"
+        derivativeWindow={derivativeWindow}
+      />,
+    );
+    expect(screen.queryByText(/rolling median of its own present neighbors/)).not.toBeInTheDocument();
+  });
+
+  it("scales in 'value units' (not 'per second') for a non-first_derivative method's units", () => {
+    const valueUnitsWindow: RawRecordingDerivativeWindow = { ...derivativeWindow, units: "value_units" };
+    render(
+      <RawImageCanvas
+        rawWindow={rawWindow}
+        normalizationMode="recording"
+        title="Haar wavelet detail"
+        colorMode="diverging"
+        derivativeWindow={valueUnitsWindow}
+        spikeExtractionMethod="haar_wavelet_detail"
+      />,
+    );
+    expect(screen.getByText(/Scale: ±8 value units/)).toBeInTheDocument();
+    expect(screen.queryByText(/Scale: ±8 per second/)).not.toBeInTheDocument();
+  });
+
+  it("uses the backend's actual response unit in the per-pixel description, not a hardcoded 'per second', for a non-first_derivative method", () => {
+    const valueUnitsWindow: RawRecordingDerivativeWindow = {
+      ...derivativeWindow,
+      units: "value_units",
+      filterConfig: { ...derivativeWindow.filterConfig, method: "haar_wavelet_detail" },
+    };
+    render(
+      <RawImageCanvas
+        rawWindow={rawWindow}
+        normalizationMode="recording"
+        title="Haar wavelet detail"
+        colorMode="diverging"
+        derivativeWindow={valueUnitsWindow}
+        spikeExtractionMethod="haar_wavelet_detail"
+      />,
+    );
+    const canvas = screen.getByRole("img", { name: /Haar wavelet detail/ });
+    fireEvent.keyDown(canvas, { key: "Home" }); // focuses pixel index 0
+
+    expect(screen.getByText(/raw value 0, Haar wavelet detail: -8 value units/)).toBeInTheDocument();
+    expect(screen.queryByText(/Haar wavelet detail: -8 per second/)).not.toBeInTheDocument();
+  });
+});
+
 const compactWindow: RawRecordingCompactWindow = {
   recordingId: "rec-1",
   column: "pinch_distance",
@@ -265,45 +334,125 @@ const compactWindow: RawRecordingCompactWindow = {
   precedingTimestampNs: null,
   recordingMin: 1,
   recordingMax: 10,
-  recordingMaxAbsSampleOrderDerivative: 8,
+  transformValues: [null, 3, -2, 8],
+  transformAvailable: true,
+  transformUnavailableReason: null,
+  recordingMaxAbsTransform: 8,
 };
 
-describe("RawImageCanvas compact sample-order derivative preview (GC-033 follow-up)", () => {
-  it("differences two actually-adjacent loaded samples and labels it per-sample, not per-second", () => {
+describe("RawImageCanvas compact observed-samples transform preview (GC-036 follow-up)", () => {
+  it("renders the backend-computed transform value, labeled per-sample, not per-second, for first_derivative", () => {
     render(
       <RawImageCanvas
         compactWindow={compactWindow}
         normalizationMode="recording"
-        title="Derivative preview (sample order)"
+        title="First derivative (observed samples)"
         colorMode="diverging"
+        spikeExtractionMethod="first_derivative"
       />,
     );
-    const canvas = screen.getByRole("img", { name: /Derivative preview/ });
+    const canvas = screen.getByRole("img", { name: /First derivative \(observed samples\)/ });
     fireEvent.keyDown(canvas, { key: "Home" });
-    fireEvent.keyDown(canvas, { key: "ArrowRight" }); // sample index 1: values[1] - values[0] = 3
+    fireEvent.keyDown(canvas, { key: "ArrowRight" }); // sample index 1: transformValues[1] = 3
 
-    expect(screen.getByText(/value 4\. Sample-order derivative \(preview only, not time-normalized\): 3 per sample/)).toBeInTheDocument();
+    expect(screen.getByText(/value 4\. First difference \(per sample\): 3 per sample/)).toBeInTheDocument();
   });
 
-  it("has no derivative at the window's first pixel — no actually-adjacent loaded sample to difference against", () => {
+  it("labels compact first_derivative 'First difference (per sample)' in the legend and aria-label, distinct from the raw-row 'First derivative (Savitzky–Golay)' label — never the time-based derivative in compact mode", () => {
     render(
       <RawImageCanvas
         compactWindow={compactWindow}
         normalizationMode="recording"
-        title="Derivative preview (sample order)"
+        title="First derivative (observed samples)"
         colorMode="diverging"
+        spikeExtractionMethod="first_derivative"
       />,
     );
-    const canvas = screen.getByRole("img", { name: /Derivative preview/ });
+    expect(screen.getByText("First difference (per sample)", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.queryByText("First derivative (Savitzky–Golay)", { selector: "strong" })).not.toBeInTheDocument();
+
+    const canvas = screen.getByRole("img", { name: /First derivative \(observed samples\)/ });
+    expect(canvas).toHaveAccessibleName(/Not time-normalized, not the Savitzky–Golay time-based derivative/);
+  });
+
+  it("has no transform value at a true recording-wide edge, never a window-local scrolling artifact", () => {
+    const edgeWindow: RawRecordingCompactWindow = { ...compactWindow, transformValues: [null, 3, -2, 8] };
+    render(
+      <RawImageCanvas
+        compactWindow={edgeWindow}
+        normalizationMode="recording"
+        title="First derivative (observed samples)"
+        colorMode="diverging"
+        spikeExtractionMethod="first_derivative"
+      />,
+    );
+    const canvas = screen.getByRole("img", { name: /First derivative \(observed samples\)/ });
     fireEvent.keyDown(canvas, { key: "Home" }); // sample index 0
 
-    expect(screen.getByText(/Sample-order derivative unavailable — no actually-adjacent observed sample/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/First difference \(per sample\) unavailable — this is a true edge of this channel's observed-sample sequence, not a scrolling artifact\./),
+    ).toBeInTheDocument();
   });
 
-  it("paints the unavailable first derivative pixel neutral white instead of a gray artifact", () => {
+  it("paints an unavailable (null) transform pixel with the shared missing-value color, not a special white edge fill", () => {
     const { imageData } = buildCompactDivergingImageData(compactWindow, "recording");
     const [r, g, b] = [imageData.data[0], imageData.data[1], imageData.data[2]];
-    expect([r, g, b]).toEqual([255, 255, 255]);
+    expect([r, g, b]).toEqual([217, 70, 239]);
+  });
+
+  it("a later window's first pixel is NOT null — proves scrolling never creates a fixed window-local edge marker", () => {
+    // Unlike the true-recording-edge case above, a later window's pixel 0
+    // has a real backend-computed transform value (its predecessor lives in
+    // the previous window, but the backend already folded it in).
+    const laterWindow: RawRecordingCompactWindow = {
+      ...compactWindow,
+      startSampleIndex: 4,
+      endSampleIndex: 8,
+      sourceRawRowIndices: [50, 51, 52, 53],
+      timestampsNs: [50_000_000, 51_000_000, 52_000_000, 53_000_000],
+      values: [20, 21, 19, 25],
+      precedingTimestampNs: 40_000_000,
+      transformValues: [1, -2, 6, 3],
+    };
+    render(
+      <RawImageCanvas
+        compactWindow={laterWindow}
+        normalizationMode="recording"
+        title="First derivative (observed samples)"
+        colorMode="diverging"
+        spikeExtractionMethod="first_derivative"
+      />,
+    );
+    const canvas = screen.getByRole("img", { name: /First derivative \(observed samples\)/ });
+    fireEvent.keyDown(canvas, { key: "Home" }); // sample index 4, window-local pixel 0
+
+    expect(screen.getByText(/Compact sample 5 of 4/)).toBeInTheDocument();
+    expect(screen.queryByText(/First difference \(per sample\) unavailable/)).not.toBeInTheDocument();
+  });
+
+  it("selecting a different method changes the rendered title, legend, and per-pixel description — proves the selector actually reaches the third imager", () => {
+    const haarWindow: RawRecordingCompactWindow = {
+      ...compactWindow,
+      transformValues: [-1.5, 2.5, -0.5, 1.5],
+      recordingMaxAbsTransform: 2.5,
+    };
+    render(
+      <RawImageCanvas
+        compactWindow={haarWindow}
+        normalizationMode="recording"
+        title="Haar wavelet detail (observed samples)"
+        colorMode="diverging"
+        spikeExtractionMethod="haar_wavelet_detail"
+      />,
+    );
+    expect(screen.getByText("Haar wavelet detail (observed samples)")).toBeInTheDocument();
+    expect(screen.getByText("Haar wavelet detail", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByText(/Haar wavelet detail coefficient\./)).toBeInTheDocument();
+    expect(screen.getByText(/Scale: ±2\.5 value units/)).toBeInTheDocument();
+
+    const canvas = screen.getByRole("img", { name: /Haar wavelet detail/ });
+    fireEvent.keyDown(canvas, { key: "Home" });
+    expect(screen.getByText(/value 1\. Haar wavelet detail: -1\.5 value units/)).toBeInTheDocument();
   });
 
   it("clears the focused/hovered pixel when the compact window changes (e.g. paging to a new sample range), so a stale index is never reapplied to new data", () => {
@@ -311,11 +460,12 @@ describe("RawImageCanvas compact sample-order derivative preview (GC-033 follow-
       <RawImageCanvas
         compactWindow={compactWindow}
         normalizationMode="recording"
-        title="Derivative preview (sample order)"
+        title="First derivative (observed samples)"
         colorMode="diverging"
+        spikeExtractionMethod="first_derivative"
       />,
     );
-    const canvas = screen.getByRole("img", { name: /Derivative preview/ });
+    const canvas = screen.getByRole("img", { name: /First derivative \(observed samples\)/ });
     fireEvent.keyDown(canvas, { key: "Home" });
     fireEvent.keyDown(canvas, { key: "ArrowRight" }); // focuses index 1
     expect(screen.getByText(/Compact sample 2 of 4/)).toBeInTheDocument();
@@ -328,13 +478,15 @@ describe("RawImageCanvas compact sample-order derivative preview (GC-033 follow-
       timestampsNs: [50_000_000, 51_000_000, 52_000_000, 53_000_000],
       values: [20, 21, 19, 25],
       precedingTimestampNs: 40_000_000,
+      transformValues: [1, -2, 6, 3],
     };
     rerender(
       <RawImageCanvas
         compactWindow={nextWindow}
         normalizationMode="recording"
-        title="Derivative preview (sample order)"
+        title="First derivative (observed samples)"
         colorMode="diverging"
+        spikeExtractionMethod="first_derivative"
       />,
     );
 
@@ -342,57 +494,37 @@ describe("RawImageCanvas compact sample-order derivative preview (GC-033 follow-
     // against the new one's data — the inspector goes back to its idle prompt.
     expect(screen.queryByText(/Compact sample/)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/Hover or focus the image \(arrow keys move the focused pixel\) to inspect a sample-order derivative preview value\./),
+      screen.getByText(/Hover or focus the image \(arrow keys move the focused pixel\) to inspect a first difference \(per sample\) value\./i),
     ).toBeInTheDocument();
   });
 
-  it("labels the legend and aria-label as a preview, not the Savitzky–Golay time-based derivative", () => {
-    render(
-      <RawImageCanvas
-        compactWindow={compactWindow}
-        normalizationMode="recording"
-        title="Derivative preview (sample order)"
-        colorMode="diverging"
-      />,
-    );
-    expect(screen.getByRole("img", { name: /Not time-normalized, not Savitzky–Golay/ })).toBeInTheDocument();
-    expect(screen.getByText(/Scale: ±\d+(\.\d+)? per sample \(not per second, not time-normalized\)/)).toBeInTheDocument();
-    expect(screen.getByText(/Not the Savitzky–Golay time-based derivative/)).toBeInTheDocument();
-  });
-
-  it("honors the shared normalization selector: recording-scale uses the recording-wide max abs sample-order derivative, not the visible window's own max", () => {
-    // This window's own adjacent diffs only reach ±3 (values 1,4,2), but the
-    // recording-wide max (as computed over the whole channel's observed
-    // sequence by the backend) is 8 — recording-scale must use the latter.
-    const narrowWindow: RawRecordingCompactWindow = {
-      ...compactWindow,
-      values: [1, 4, 2, 3],
-      recordingMaxAbsSampleOrderDerivative: 8,
-    };
+  it("honors the shared normalization selector: recording-scale uses the whole-recording max abs transform, not the visible window's own max", () => {
+    // This window's own transform values only reach ±3, but the recording-wide
+    // max (as computed by the backend over the whole channel's observed
+    // sequence) is 8 — recording-scale must use the latter.
+    const narrowWindow: RawRecordingCompactWindow = { ...compactWindow, transformValues: [null, 3, -2, 3] };
     render(
       <RawImageCanvas
         compactWindow={narrowWindow}
         normalizationMode="recording"
-        title="Derivative preview (sample order)"
+        title="First derivative (observed samples)"
         colorMode="diverging"
+        spikeExtractionMethod="first_derivative"
       />,
     );
     expect(screen.getByText(/recording-scale/)).toBeInTheDocument();
     expect(screen.getByText(/Scale: ±8 per sample/)).toBeInTheDocument();
   });
 
-  it("frame-scale mode instead scales to the visible window's own max abs adjacent diff, distinct from recording-scale", () => {
-    const narrowWindow: RawRecordingCompactWindow = {
-      ...compactWindow,
-      values: [1, 4, 2, 3],
-      recordingMaxAbsSampleOrderDerivative: 8,
-    };
+  it("frame-scale mode instead scales to the visible window's own max abs transform value, distinct from recording-scale", () => {
+    const narrowWindow: RawRecordingCompactWindow = { ...compactWindow, transformValues: [null, 3, -2, 3] };
     render(
       <RawImageCanvas
         compactWindow={narrowWindow}
         normalizationMode="frame"
-        title="Derivative preview (sample order)"
+        title="First derivative (observed samples)"
         colorMode="diverging"
+        spikeExtractionMethod="first_derivative"
       />,
     );
     expect(screen.getByText(/frame-scale/)).toBeInTheDocument();
@@ -400,7 +532,7 @@ describe("RawImageCanvas compact sample-order derivative preview (GC-033 follow-
   });
 
   it("keeps the recording-scale extent stable across two different compact windows sharing the same recording-wide max", () => {
-    const windowA: RawRecordingCompactWindow = { ...compactWindow, recordingMaxAbsSampleOrderDerivative: 8 };
+    const windowA: RawRecordingCompactWindow = { ...compactWindow, recordingMaxAbsTransform: 8 };
     const windowB: RawRecordingCompactWindow = {
       ...compactWindow,
       startSampleIndex: 4,
@@ -409,14 +541,16 @@ describe("RawImageCanvas compact sample-order derivative preview (GC-033 follow-
       timestampsNs: [50_000_000, 51_000_000, 52_000_000, 53_000_000],
       values: [20, 21, 19, 19.5],
       precedingTimestampNs: 40_000_000,
-      recordingMaxAbsSampleOrderDerivative: 8,
+      transformValues: [1, -2, 6, 0.5],
+      recordingMaxAbsTransform: 8,
     };
     const { rerender } = render(
       <RawImageCanvas
         compactWindow={windowA}
         normalizationMode="recording"
-        title="Derivative preview (sample order)"
+        title="First derivative (observed samples)"
         colorMode="diverging"
+        spikeExtractionMethod="first_derivative"
       />,
     );
     expect(screen.getByText(/Scale: ±8 per sample/)).toBeInTheDocument();
@@ -425,8 +559,9 @@ describe("RawImageCanvas compact sample-order derivative preview (GC-033 follow-
       <RawImageCanvas
         compactWindow={windowB}
         normalizationMode="recording"
-        title="Derivative preview (sample order)"
+        title="First derivative (observed samples)"
         colorMode="diverging"
+        spikeExtractionMethod="first_derivative"
       />,
     );
     expect(screen.getByText(/Scale: ±8 per sample/)).toBeInTheDocument();

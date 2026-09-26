@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Checkbox } from "../../../components/ui/checkbox";
 import type { RawImageNormalizationMode } from "../store/rawImageViewerStore";
-import type {
-  DerivativeFilterConfig,
-  RawRecordingCompactWindow,
-  RawRecordingDerivativeWindow,
-  RawRecordingWindow,
+import {
+  formatDerivativeUnits,
+  methodDisplayInfo,
+  SPIKE_EXTRACTION_METHOD_INFO,
+  type DerivativeFilterConfig,
+  type RawRecordingCompactWindow,
+  type RawRecordingDerivativeWindow,
+  type RawRecordingWindow,
+  type SpikeExtractionMethod,
 } from "../../../shared/tauri/recordingBundle";
 
 const DISPLAY_SIZE = 320;
@@ -346,12 +350,11 @@ type CompactDerivativePixelInfo = {
   row: number;
   category: CompactPixelCategory;
   sampleIndex: number;
-  /** `values[i] - values[i-1]` for two actually-adjacent loaded observed
-   * samples; `null` at pixel 0 of the window (its predecessor, if any,
-   * belongs to a different loaded window and is never fetched or invented
-   * just to fill this pixel) and at the "beyond" fill. Never time-based —
-   * see `RawRecordingCompactWindow` and the M3 plan's sample-order-only
-   * non-goal. */
+  /** The selected `SpikeExtractionMethod`'s transform value at this compact
+   * sample, from `compactWindow.transformValues` — computed server-side over
+   * this channel's *entire* observed sequence before slicing, so this is
+   * `null` only at a true recording-wide edge (never a window-local
+   * scrolling artifact). See `RawRecordingCompactWindow.transformValues`. */
   derivativeValue: number | null;
   rawValue: number | null;
   sourceRawRow: number | null;
@@ -360,11 +363,9 @@ type CompactDerivativePixelInfo = {
 };
 
 /**
- * GC-033 sample-order derivative preview: differences only two positions that
- * are genuinely adjacent *in this window's loaded array* — never across a
- * navigation boundary, never time-weighted. This is expressly a visual
- * preview, not the M2 Savitzky–Golay time-based derivative and not
- * comparable to it.
+ * Reads the selected method's already-computed transform value for this
+ * pixel from `compactWindow.transformValues` — never re-derived client-side
+ * — paired with the raw value/provenance from `compactPixelInfoAt`.
  */
 function compactDerivativePixelInfoAt(compactWindow: RawRecordingCompactWindow, index: number): CompactDerivativePixelInfo {
   const gridSize = compactWindow.gridSize;
@@ -375,7 +376,7 @@ function compactDerivativePixelInfoAt(compactWindow: RawRecordingCompactWindow, 
     return { index, column, row, category: "beyond", sampleIndex, derivativeValue: null, rawValue: null, sourceRawRow: null, timestampNs: null, gapNs: null };
   }
   const base = compactPixelInfoAt(compactWindow, index);
-  const derivativeValue = index === 0 ? null : compactWindow.values[index] - compactWindow.values[index - 1];
+  const derivativeValue = compactWindow.transformValues[index] ?? null;
   return {
     index,
     column,
@@ -390,19 +391,17 @@ function compactDerivativePixelInfoAt(compactWindow: RawRecordingCompactWindow, 
   };
 }
 
-/** Zero-centred diverging palette over consecutive-sample differences,
- * honoring the same `normalizationMode` selector as the grayscale/rainbow
- * compact imagers and the raw-row derivative canvas: in `"recording"` mode
- * the scale is `±recordingMaxAbsSampleOrderDerivative` (the max absolute
- * finite adjacent-sample diff over the whole selected recording/channel's
- * observed values, so a given magnitude keeps the same color across compact
- * windows); in `"frame"` mode it stays `±(max absolute diff visible in this
- * window)`, as before. Reuses the same "beyond" fill as the time-based
- * derivative canvas so it reads identically everywhere. Pixel 0 uses the
- * diverging palette's neutral white: it has no loaded predecessor to
- * difference against, but a gray not-data block is a distracting visual
- * artifact in an otherwise continuous derivative image. The inspector still
- * reports the derivative as unavailable. */
+/** Zero-centred diverging palette over the selected method's compact
+ * transform values (`compactWindow.transformValues`, computed server-side
+ * over the whole selected recording/channel before slicing — never a local
+ * client-side diff), honoring the same `normalizationMode` selector as the
+ * grayscale/rainbow compact imagers and the raw-row derivative canvas: in
+ * `"recording"` mode the scale is `±recordingMaxAbsTransform` (the max
+ * absolute finite transform value over the whole selected recording/channel,
+ * so a given magnitude keeps the same color across compact windows); in
+ * `"frame"` mode it stays `±(max absolute transform value visible in this
+ * window)`. Reuses the same "beyond"/"missing" fills as the raw-row
+ * derivative canvas so it reads identically everywhere. */
 export function buildCompactDivergingImageData(
   compactWindow: RawRecordingCompactWindow,
   mode: RawImageNormalizationMode,
@@ -412,11 +411,12 @@ export function buildCompactDivergingImageData(
 
   let maxAbs: number | null;
   if (mode === "recording") {
-    maxAbs = compactWindow.recordingMaxAbsSampleOrderDerivative;
+    maxAbs = compactWindow.recordingMaxAbsTransform;
   } else {
     maxAbs = null;
-    for (let index = 1; index < compactWindow.values.length; index += 1) {
-      const abs = Math.abs(compactWindow.values[index] - compactWindow.values[index - 1]);
+    for (const value of compactWindow.transformValues) {
+      if (value === null) continue;
+      const abs = Math.abs(value);
       maxAbs = maxAbs === null ? abs : Math.max(maxAbs, abs);
     }
   }
@@ -428,14 +428,15 @@ export function buildCompactDivergingImageData(
     let color: readonly [number, number, number];
     if (index >= compactWindow.values.length) {
       color = BEYOND_COLOR;
-    } else if (index === 0) {
-      // No actually-adjacent loaded sample to difference pixel 0 against.
-      color = DIVERGING_MID_COLOR;
-    } else if (extent === null || isConstant || maxAbs === null) {
-      color = CONSTANT_COLOR;
     } else {
-      const diff = compactWindow.values[index] - compactWindow.values[index - 1];
-      color = colorForDivergingFraction(diff / maxAbs);
+      const value = compactWindow.transformValues[index] ?? null;
+      if (value === null) {
+        color = MISSING_COLOR;
+      } else if (extent === null || isConstant || maxAbs === null) {
+        color = CONSTANT_COLOR;
+      } else {
+        color = colorForDivergingFraction(value / maxAbs);
+      }
     }
     const offset = index * 4;
     data[offset] = color[0];
@@ -447,14 +448,16 @@ export function buildCompactDivergingImageData(
   return { imageData: new ImageData(data, gridSize, gridSize), extent, isConstant };
 }
 
-/** Accessible pixel inspection for the compact sample-order derivative
+/** Accessible pixel inspection for the compact observed-samples transform
  * preview: compact sample index, source raw row, original timestamp, raw
- * value, the differenced value (explicitly "per sample", never "per
- * second"), and the gap since the preceding observed sample. */
+ * value, and the selected method's transform value/unit — or an
+ * unavailable explanation at a true recording-wide edge. */
 function describeCompactDerivativePixel(
   info: CompactDerivativePixelInfo,
   gridSize: number,
   totalObservedSampleCount: number,
+  methodLabel: string,
+  unitsLabel: string,
 ): string {
   const position = `column ${info.column + 1}, row ${info.row + 1} of the ${gridSize}×${gridSize} grid`;
   if (info.category === "beyond") {
@@ -462,9 +465,18 @@ function describeCompactDerivativePixel(
   }
   const base = `${position}. Compact sample ${info.sampleIndex + 1} of ${totalObservedSampleCount}, source raw row ${info.sourceRawRow}, ${formatTimestamp(info.timestampNs)}: value ${info.rawValue}.`;
   if (info.derivativeValue === null) {
-    return `${base} Sample-order derivative unavailable — no actually-adjacent observed sample is loaded in this window to difference against.`;
+    return `${base} ${methodLabel} unavailable — this is a true edge of this channel's observed-sample sequence, not a scrolling artifact.`;
   }
-  return `${base} Sample-order derivative (preview only, not time-normalized): ${info.derivativeValue} per sample. ${formatGap(info.gapNs)}.`;
+  return `${base} ${methodLabel}: ${info.derivativeValue} ${unitsLabel}. ${formatGap(info.gapNs)}.`;
+}
+
+/** `"per_second"` for `first_derivative`'s raw-row time-based mode;
+ * `"per sample"` for `first_derivative`'s compact mode (the GC-032/033
+ * legacy per-sample adjacent difference, never time-based); `"value units"`
+ * for every other method in either mode (never a rate at all). */
+function unitsLabelFor(isCompact: boolean, method: SpikeExtractionMethod): string {
+  if (SPIKE_EXTRACTION_METHOD_INFO[method].units === "value_units") return "value units";
+  return isCompact ? "per sample" : "per second";
 }
 
 function formatGap(gapNs: number | null): string {
@@ -503,18 +515,28 @@ function describePixel(info: PixelInfo, gridSize: number): string {
 
 /** Accessible pixel inspection for the derivative canvas: raw row, timestamp,
  * original raw value, derivative value/unit, filter configuration, and the
- * missing/unavailable state — never just the derivative number alone. */
-function describeDerivativePixel(info: DerivativePixelInfo, gridSize: number, filterConfig: DerivativeFilterConfig): string {
+ * missing/unavailable state — never just the derivative number alone.
+ * `units` is the backend's own `RawRecordingDerivativeWindow.units` for this
+ * response — the source of truth for what unit the value is actually in,
+ * never re-derived from the selected method client-side. */
+function describeDerivativePixel(
+  info: DerivativePixelInfo,
+  gridSize: number,
+  filterConfig: DerivativeFilterConfig,
+  units: "per_second" | "per_sample" | "value_units",
+  method: SpikeExtractionMethod,
+): string {
   const position = `column ${info.column + 1}, row ${info.row + 1} of the ${gridSize}×${gridSize} grid`;
   if (info.category === "beyond") {
     return `${position}. Raw row ${info.rawRow}: no data — beyond the end of this recording.`;
   }
   const rawValueText = info.rawValue === null ? "missing" : `${info.rawValue}`;
+  const methodLabel = SPIKE_EXTRACTION_METHOD_INFO[method].label;
   const filterText = `${filterConfig.method}, order ${filterConfig.polynomialOrder}, window ${filterConfig.windowSize} (${filterConfig.version})`;
   if (info.category === "missing") {
-    return `${position}. Raw row ${info.rawRow}, ${formatTimestamp(info.timestampNs)}: raw value ${rawValueText}. Derivative unavailable for this row (series edge or a missing value in its local window) — not interpolated or estimated. Filter: ${filterText}.`;
+    return `${position}. Raw row ${info.rawRow}, ${formatTimestamp(info.timestampNs)}: raw value ${rawValueText}. ${methodLabel} unavailable for this row (series edge or a missing value in its local window) — not interpolated or estimated. Filter: ${filterText}.`;
   }
-  return `${position}. Raw row ${info.rawRow}, ${formatTimestamp(info.timestampNs)}: raw value ${rawValueText}, derivative ${info.derivativeValue} per second. Filter: ${filterText}.`;
+  return `${position}. Raw row ${info.rawRow}, ${formatTimestamp(info.timestampNs)}: raw value ${rawValueText}, ${methodLabel}: ${info.derivativeValue} ${formatDerivativeUnits(units)}. Filter: ${filterText}.`;
 }
 
 type RawImageCanvasProps = {
@@ -549,6 +571,14 @@ type RawImageCanvasProps = {
    * `rawWindow`, used both for the colour mapping and for merging the
    * original raw value into pixel inspection. Ignored otherwise. */
   derivativeWindow?: RawRecordingDerivativeWindow;
+  /** The currently selected `SpikeExtractionMethod`, shown in the legend
+   * alongside its unit/short description so the scale is never read without
+   * knowing which of the six transforms produced it. Meaningful for both
+   * diverging canvases: the raw-row spike-extraction canvas
+   * (`rawWindow`+`derivativeWindow`) and the compact observed-samples
+   * transform preview (`compactWindow`, defaults to `"first_derivative"`
+   * when omitted — matches the compact window's own default). */
+  spikeExtractionMethod?: SpikeExtractionMethod;
   /** Optional element (e.g. a `HelpTooltip`) rendered next to the heading. */
   titleHelp?: ReactNode;
 };
@@ -567,6 +597,7 @@ export function RawImageCanvas({
   colorMode = "grayscale",
   labelRangeOverlay,
   derivativeWindow,
+  spikeExtractionMethod,
   titleHelp,
 }: RawImageCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -604,11 +635,16 @@ export function RawImageCanvas({
     context.putImageData(built.imageData, 0, 0);
   }, [built]);
 
+  const compactMethod = spikeExtractionMethod ?? "first_derivative";
+  const rawMethod = spikeExtractionMethod ?? "first_derivative";
+  const compactUnitsLabel = unitsLabelFor(true, compactMethod);
+  const compactMethodLabel = methodDisplayInfo(true, compactMethod).label;
+
   const inspectedIndex = hoveredIndex ?? focusedIndex;
   const pixelDescription = ((): string => {
     if (inspectedIndex === null) {
       return isCompactDerivative
-        ? "Hover or focus the image (arrow keys move the focused pixel) to inspect a sample-order derivative preview value."
+        ? `Hover or focus the image (arrow keys move the focused pixel) to inspect a ${compactMethodLabel.toLowerCase()} value.`
         : isCompact
           ? "Hover or focus the image (arrow keys move the focused pixel) to inspect an observed sample."
           : "Hover or focus the image (arrow keys move the focused pixel) to inspect a raw row.";
@@ -618,6 +654,8 @@ export function RawImageCanvas({
         compactDerivativePixelInfoAt(compactWindow as RawRecordingCompactWindow, inspectedIndex),
         gridSize,
         (compactWindow as RawRecordingCompactWindow).totalObservedSampleCount,
+        compactMethodLabel,
+        compactUnitsLabel,
       );
     }
     if (isCompact) {
@@ -632,6 +670,8 @@ export function RawImageCanvas({
         derivativePixelInfoAt(rawWindow as RawRecordingWindow, derivativeWindow as RawRecordingDerivativeWindow, inspectedIndex),
         gridSize,
         (derivativeWindow as RawRecordingDerivativeWindow).filterConfig,
+        (derivativeWindow as RawRecordingDerivativeWindow).units,
+        rawMethod,
       );
     }
     return describePixel(pixelInfoAt(rawWindow as RawRecordingWindow, inspectedIndex), gridSize);
@@ -679,11 +719,11 @@ export function RawImageCanvas({
   };
 
   const ariaLabel = isCompactDerivative
-    ? `${title}: sample-order derivative preview image for column ${(compactWindow as RawRecordingCompactWindow).column}, ${gridSize}×${gridSize} grid, samples ${(compactWindow as RawRecordingCompactWindow).startSampleIndex} to ${Math.max((compactWindow as RawRecordingCompactWindow).startSampleIndex, (compactWindow as RawRecordingCompactWindow).endSampleIndex - 1)} of ${(compactWindow as RawRecordingCompactWindow).totalObservedSampleCount}. Not time-normalized, not Savitzky–Golay, not valid for training, export, or inference. Use arrow keys to inspect a pixel.`
+    ? `${title}: ${compactMethodLabel} observed-samples preview image for column ${(compactWindow as RawRecordingCompactWindow).column}, ${gridSize}×${gridSize} grid, samples ${(compactWindow as RawRecordingCompactWindow).startSampleIndex} to ${Math.max((compactWindow as RawRecordingCompactWindow).startSampleIndex, (compactWindow as RawRecordingCompactWindow).endSampleIndex - 1)} of ${(compactWindow as RawRecordingCompactWindow).totalObservedSampleCount}. ${compactMethod === "first_derivative" ? "Not time-normalized, not the Savitzky–Golay time-based derivative. " : ""}Not valid for training, export, or inference. Use arrow keys to inspect a pixel.`
     : isCompact
     ? `${title}: compact observed-samples image for column ${compactWindow.column}, ${gridSize}×${gridSize} grid, samples ${compactWindow.startSampleIndex} to ${Math.max(compactWindow.startSampleIndex, compactWindow.endSampleIndex - 1)} of ${compactWindow.totalObservedSampleCount}. Adjacency is sample order, not elapsed time. Use arrow keys to inspect a pixel.`
     : isDiverging
-      ? `${title}: offline Savitzky–Golay derivative image for column ${(rawWindow as RawRecordingWindow).column}, ${gridSize}×${gridSize} grid, raw rows ${(derivativeWindow as RawRecordingDerivativeWindow).startRawRow} to ${Math.max((derivativeWindow as RawRecordingDerivativeWindow).startRawRow, (derivativeWindow as RawRecordingDerivativeWindow).endRawRow - 1)}. Not a live signal. Use arrow keys to inspect a pixel.`
+      ? `${title}: offline ${SPIKE_EXTRACTION_METHOD_INFO[rawMethod].label} image for column ${(rawWindow as RawRecordingWindow).column}, ${gridSize}×${gridSize} grid, raw rows ${(derivativeWindow as RawRecordingDerivativeWindow).startRawRow} to ${Math.max((derivativeWindow as RawRecordingDerivativeWindow).startRawRow, (derivativeWindow as RawRecordingDerivativeWindow).endRawRow - 1)}. Not a live signal. Use arrow keys to inspect a pixel.`
       : `${title}: chronological raw-data image for column ${(rawWindow as RawRecordingWindow).column}, ${gridSize}×${gridSize} grid, raw rows ${(rawWindow as RawRecordingWindow).startRawRow} to ${Math.max((rawWindow as RawRecordingWindow).startRawRow, (rawWindow as RawRecordingWindow).endRawRow - 1)}. Use arrow keys to inspect a pixel.`;
 
   return (
@@ -737,6 +777,17 @@ export function RawImageCanvas({
         colorMode={colorMode}
         isCompact={isCompact}
         sampleOrderDerivative={isCompactDerivative}
+        methodLabel={isDiverging && spikeExtractionMethod ? methodDisplayInfo(isCompact, spikeExtractionMethod).label : undefined}
+        methodDescription={
+          isDiverging && spikeExtractionMethod ? methodDisplayInfo(isCompact, spikeExtractionMethod).description : undefined
+        }
+        unitsLabel={
+          isDiverging && spikeExtractionMethod
+            ? isCompact
+              ? unitsLabelFor(isCompact, spikeExtractionMethod)
+              : formatDerivativeUnits((derivativeWindow as RawRecordingDerivativeWindow).units)
+            : undefined
+        }
       />
     </div>
   );
@@ -755,6 +806,16 @@ type RawImageLegendProps = {
    * M2 time-based Savitzky–Golay derivative — the legend must say so and use
    * "per sample" instead of "per second" scale wording. */
   sampleOrderDerivative?: boolean;
+  /** The selected `SpikeExtractionMethod`'s display label, shown for the
+   * raw-row spike-extraction canvas only (`undefined` for the compact
+   * sample-order preview, which has no method selector). */
+  methodLabel?: string;
+  /** The selected method's one-line description, shown alongside `methodLabel`. */
+  methodDescription?: string;
+  /** `"per second"` for the raw-row `first_derivative`, `"per sample"` for
+   * the compact `first_derivative`, `"value units"` for every other method
+   * in either mode — see `unitsLabelFor`. */
+  unitsLabel?: string;
 };
 
 function swatchStyle(color: readonly [number, number, number]): CSSProperties {
@@ -779,13 +840,26 @@ function RawImageLegend({
   colorMode,
   isCompact = false,
   sampleOrderDerivative = false,
+  methodLabel,
+  methodDescription,
+  unitsLabel = "per second",
 }: RawImageLegendProps) {
   if (colorMode === "diverging") {
-    // Both the compact sample-order preview and the raw-row derivative
-    // canvas honor the shared normalization selector, like the other imagers.
+    // Both the compact observed-samples transform preview and the raw-row
+    // derivative canvas honor the shared normalization selector, like the
+    // other imagers.
     const scaleLabel = `${normalizationMode}-scale`;
     return (
       <dl className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+        {methodLabel && (
+          <div className="flex items-center gap-2">
+            <span className="inline-block size-3 shrink-0 rounded-sm ring-1 ring-foreground/20 bg-transparent" aria-hidden="true" />
+            <span>
+              <strong>{methodLabel}</strong>
+              {methodDescription ? ` — ${methodDescription}` : ""}
+            </span>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <span
             className="inline-block size-3 shrink-0 rounded-sm ring-1 ring-foreground/20"
@@ -796,9 +870,7 @@ function RawImageLegend({
             {isConstant
               ? "No change: every derivative value in this frame is zero (or unavailable), shown as neutral white."
               : extent
-                ? sampleOrderDerivative
-                  ? `Palette: diverging, zero-centred, ${scaleLabel}. Blue = decreasing, white ≈ no change, red = increasing. Scale: ±${extent.max} per sample (not per second, not time-normalized).`
-                  : `Palette: diverging, zero-centred, ${scaleLabel}. Blue = decreasing, white ≈ no change, red = increasing. Scale: ±${extent.max} per second.`
+                ? `Palette: diverging, zero-centred, ${scaleLabel}. Blue = decreasing, white ≈ no change, red = increasing. Scale: ±${extent.max} ${unitsLabel}.`
                 : "No available derivative values in this frame to scale against."}
           </span>
         </div>
@@ -806,21 +878,21 @@ function RawImageLegend({
           <div className="flex items-center gap-2">
             <span className="inline-block size-3 shrink-0 rounded-sm ring-1 ring-foreground/20 bg-transparent" aria-hidden="true" />
             <span>
-              Sample-order visual preview only: the difference between two actually-adjacent observed samples, not
-              weighted by elapsed time. Not the Savitzky–Golay time-based derivative. Never used for training,
-              export, or inference.
+              Observed-samples visual preview only: computed over this channel&apos;s entire present sample
+              sequence, in sample order, before slicing to this window. Never used for training, export, or
+              inference.
             </span>
           </div>
         )}
         <div className="flex items-center gap-2">
           <span
             className="inline-block size-3 shrink-0 rounded-sm ring-1 ring-foreground/20"
-            style={swatchStyle(sampleOrderDerivative ? DIVERGING_MID_COLOR : MISSING_COLOR)}
+            style={swatchStyle(MISSING_COLOR)}
             aria-hidden="true"
           />
           <span>
             {sampleOrderDerivative
-              ? "Derivative unavailable — no actually-adjacent observed sample is loaded in this window to difference against."
+              ? "Transform unavailable for this sample — a true edge of this channel's observed-sample sequence, never a scrolling artifact."
               : "Derivative unavailable for this row (series edge or a missing value nearby) — not interpolated or estimated."}
           </span>
         </div>

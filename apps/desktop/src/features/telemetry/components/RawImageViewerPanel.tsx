@@ -18,11 +18,15 @@ import {
   RAW_IMAGE_VIEWER_CHANNELS,
   rawWindowMaxValues,
   rawWindowRowHop,
+  methodDisplayInfo,
+  SPIKE_EXTRACTION_METHOD_INFO,
+  SPIKE_EXTRACTION_METHODS,
   type AnnotationInterval,
   type RawGridSize,
   type RawImageViewerChannel,
   type RecordingBundleSummary,
   type RecordingQualitySummary,
+  type SpikeExtractionMethod,
 } from "../../../shared/tauri/recordingBundle";
 import { deriveVisibleCompactLabelRanges, deriveVisibleLabelRanges } from "../annotations/visibleLabelRanges";
 import { rawImageViewerStore } from "../store/rawImageViewerStore";
@@ -194,6 +198,12 @@ export function RawImageViewerPanel() {
   const derivativeStatus = rawImageViewerStore.getDerivativeStatus();
   const derivativeErrorMessage = rawImageViewerStore.getDerivativeErrorMessage();
   const derivativeWindow = rawImageViewerStore.getDerivativeWindow();
+  const spikeExtractionMethod = rawImageViewerStore.getSpikeExtractionMethod();
+  const spikeMethodInfo = SPIKE_EXTRACTION_METHOD_INFO[spikeExtractionMethod];
+  // Compact (observed-samples) mode's `first_derivative` is the GC-032/033
+  // legacy adjacent first difference, never the time-based Savitzky–Golay
+  // derivative `spikeMethodInfo` describes — see `methodDisplayInfo`.
+  const compactSpikeMethodInfo = methodDisplayInfo(true, spikeExtractionMethod);
   const sampleOrderPreviewStatus = rawImageViewerStore.getSampleOrderPreviewStatus();
   const sampleOrderPreviewErrorMessage = rawImageViewerStore.getSampleOrderPreviewErrorMessage();
   const sampleOrderPreviewWindow = rawImageViewerStore.getSampleOrderPreviewWindow();
@@ -440,6 +450,27 @@ export function RawImageViewerPanel() {
                   </label>
                 </RadioGroup>
               </fieldset>
+
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="raw-viewer-spike-method">Spike extraction method</Label>
+                <Select
+                  value={spikeExtractionMethod}
+                  onValueChange={(value) =>
+                    rawImageViewerStore.setSpikeExtractionMethod(value as SpikeExtractionMethod)
+                  }
+                >
+                  <SelectTrigger id="raw-viewer-spike-method" aria-label="Spike extraction method" className="min-w-56">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SPIKE_EXTRACTION_METHODS.map((candidate) => (
+                      <SelectItem key={candidate} value={candidate}>
+                        {SPIKE_EXTRACTION_METHOD_INFO[candidate].label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {qualitySummary.status === "loaded" && <RecordingQualitySummaryCard summary={qualitySummary.summary} />}
@@ -501,21 +532,40 @@ export function RawImageViewerPanel() {
                         </Card>
                         <Card className="min-w-0 lg:flex-1">
                           <CardContent className="pt-6">
-                            <RawImageCanvas
-                              compactWindow={compactWindow}
-                              normalizationMode={normalizationMode}
-                              title="Derivative preview (sample order)"
-                              colorMode="diverging"
-                              labelRangeOverlay={<RawImageLabelRangeRail ranges={visibleCompactLabelRanges} unit="sample" />}
-                              titleHelp={
-                                <HelpTooltip label="About the observed-samples derivative preview">
-                                  A visual preview only: the difference between two actually-adjacent observed
-                                  samples of this channel, computed from the same compact window shown above (no
-                                  extra fetch). It is <strong>not time-normalized</strong>, not the Savitzky–Golay
-                                  time-based derivative, and is never used for training, export, or inference.
-                                </HelpTooltip>
-                              }
-                            />
+                            {!compactWindow.transformAvailable ? (
+                              <div className="flex flex-col gap-2">
+                                <h4 className="text-sm font-medium">{compactSpikeMethodInfo.label} (observed samples)</h4>
+                                <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+                                  Transform unavailable for this recording:{" "}
+                                  {compactWindow.transformUnavailableReason ??
+                                    "this channel has fewer than two observed samples."}
+                                </p>
+                              </div>
+                            ) : (
+                              <RawImageCanvas
+                                compactWindow={compactWindow}
+                                normalizationMode={normalizationMode}
+                                title={`${compactSpikeMethodInfo.label} (observed samples)`}
+                                colorMode="diverging"
+                                spikeExtractionMethod={spikeExtractionMethod}
+                                labelRangeOverlay={<RawImageLabelRangeRail ranges={visibleCompactLabelRanges} unit="sample" />}
+                                titleHelp={
+                                  <HelpTooltip label="About the observed-samples transform preview">
+                                    An offline spike-extraction transform of this channel&apos;s own observed
+                                    samples — {compactSpikeMethodInfo.description.toLowerCase()} Computed over the
+                                    channel&apos;s entire observed sample sequence (not just this visible window)
+                                    before slicing, so scrolling never resets it.{" "}
+                                    {spikeExtractionMethod === "first_derivative" && (
+                                      <>
+                                        It is <strong>not time-normalized</strong> and not the Savitzky–Golay
+                                        time-based derivative.{" "}
+                                      </>
+                                    )}
+                                    It is never a live signal and is never used for training, export, or inference.
+                                  </HelpTooltip>
+                                }
+                              />
+                            )}
                           </CardContent>
                         </Card>
                       </div>
@@ -635,19 +685,19 @@ export function RawImageViewerPanel() {
                             </div>
                           ) : derivativeStatus === "error" ? (
                             <div className="flex flex-col gap-2">
-                              <h4 className="text-sm font-medium">Derivative (Savitzky–Golay)</h4>
+                              <h4 className="text-sm font-medium">{spikeMethodInfo.label}</h4>
                               <p role="alert" className="text-sm text-destructive">
                                 Could not load the derivative view: {derivativeErrorMessage}
                               </p>
                             </div>
                           ) : derivativeWindow === null ? (
                             <div className="flex flex-col gap-2">
-                              <h4 className="text-sm font-medium">Derivative (Savitzky–Golay)</h4>
+                              <h4 className="text-sm font-medium">{spikeMethodInfo.label}</h4>
                               <p className="hint">Derivative view not available yet.</p>
                             </div>
                           ) : !derivativeWindow.available ? (
                             <div className="flex flex-col gap-2">
-                              <h4 className="text-sm font-medium">Derivative (Savitzky–Golay)</h4>
+                              <h4 className="text-sm font-medium">{spikeMethodInfo.label}</h4>
                               <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
                                 Derivative unavailable for this recording:{" "}
                                 {derivativeWindow.unavailableReason ??
@@ -700,16 +750,17 @@ export function RawImageViewerPanel() {
                             <RawImageCanvas
                               rawWindow={rawWindow}
                               normalizationMode={normalizationMode}
-                              title="Derivative (Savitzky–Golay)"
+                              title={spikeMethodInfo.label}
                               colorMode="diverging"
                               derivativeWindow={derivativeWindow}
+                              spikeExtractionMethod={spikeExtractionMethod}
                               labelRangeOverlay={<RawImageLabelRangeRail ranges={visibleLabelRanges} />}
                               titleHelp={
-                                <HelpTooltip label="About the derivative view">
-                                  An offline Savitzky–Golay first derivative of this saved recording&apos;s selected
-                                  channel — a signed rate of change over time, computed fresh from the saved raw
-                                  data on every load. It is not a live signal, is never used for training or
-                                  inference, and is never written back into the recording. The Grayscale and
+                                <HelpTooltip label="About the spike-extraction/derivative view">
+                                  An offline spike-extraction transform of this saved recording&apos;s selected
+                                  channel — {spikeMethodInfo.description.toLowerCase()} Computed fresh from the
+                                  saved raw data on every load. It is not a live signal, is never used for training
+                                  or inference, and is never written back into the recording. The Grayscale and
                                   Rainbow raw views, live telemetry, and Watch behavior are unchanged.
                                 </HelpTooltip>
                               }
