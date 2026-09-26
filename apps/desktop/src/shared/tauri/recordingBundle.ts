@@ -169,6 +169,108 @@ export type RecordingQualitySummary = {
   warnings: string[];
 };
 
+/**
+ * Mirrors `recording_bundle::SpikeExtractionMethod` (serde `snake_case`,
+ * matching each Rust enum variant name exactly). Six selectable transforms
+ * for the offline derivative/spike viewer, each computed over this channel's
+ * entire present (finite) samples before window slicing — see the Rust
+ * type's own docs for the "never a live/training/export signal" contract.
+ */
+export const SPIKE_EXTRACTION_METHODS = [
+  "first_derivative",
+  "rolling_median_residual",
+  "morphological_top_hat",
+  "butterworth_high_pass",
+  "savitzky_golay_residual",
+  "haar_wavelet_detail",
+] as const;
+
+export type SpikeExtractionMethod = (typeof SPIKE_EXTRACTION_METHODS)[number];
+
+/** Mirrors `recording_bundle::SpikeExtractionMethod::default()`. */
+export const DEFAULT_SPIKE_EXTRACTION_METHOD: SpikeExtractionMethod = "first_derivative";
+
+/**
+ * Frontend-only display copy for each method — the backend has no
+ * human-readable label field, only `filterConfig.method` (a canonical name
+ * used for the accessible per-pixel description) and `units`. `units` here
+ * mirrors `SpikeExtractionMethod::units()`: `"per_second"` only for
+ * `first_derivative`, `"value_units"` for every other method (each stays in
+ * the channel's own raw units, never time-normalized).
+ */
+export const SPIKE_EXTRACTION_METHOD_INFO: Record<
+  SpikeExtractionMethod,
+  { label: string; description: string; units: "per_second" | "value_units" }
+> = {
+  first_derivative: {
+    label: "First derivative (Savitzky–Golay)",
+    description: "Signed rate of change with respect to time.",
+    units: "per_second",
+  },
+  rolling_median_residual: {
+    label: "Rolling median residual",
+    description: "Value minus a rolling median of its own present neighbors.",
+    units: "value_units",
+  },
+  morphological_top_hat: {
+    label: "Morphological top-hat",
+    description: "Value minus a morphological opening of its own present neighbors.",
+    units: "value_units",
+  },
+  butterworth_high_pass: {
+    label: "Butterworth high-pass",
+    description: "Butterworth high-pass filtered residual.",
+    units: "value_units",
+  },
+  savitzky_golay_residual: {
+    label: "Savitzky–Golay residual",
+    description: "Value minus a local Savitzky–Golay polynomial fit.",
+    units: "value_units",
+  },
+  haar_wavelet_detail: {
+    label: "Haar wavelet detail",
+    description: "Haar wavelet detail coefficient.",
+    units: "value_units",
+  },
+};
+
+/**
+ * Compact (observed-samples) mode's `first_derivative` is the GC-032/033
+ * legacy adjacent first difference between two consecutive observed
+ * samples — never time-based, and never the Savitzky–Golay time derivative
+ * that `SPIKE_EXTRACTION_METHOD_INFO.first_derivative` describes. Every
+ * other method, and `first_derivative` in raw-row mode, keeps that shared
+ * label/description verbatim.
+ */
+export const COMPACT_FIRST_DERIVATIVE_INFO = {
+  label: "First difference (per sample)",
+  description:
+    "Adjacent difference between two consecutive observed samples — not the time-based Savitzky–Golay derivative.",
+} as const;
+
+export function methodDisplayInfo(
+  isCompact: boolean,
+  method: SpikeExtractionMethod,
+): { label: string; description: string } {
+  if (isCompact && method === "first_derivative") return COMPACT_FIRST_DERIVATIVE_INFO;
+  return SPIKE_EXTRACTION_METHOD_INFO[method];
+}
+
+/** Human-readable text for `RawRecordingDerivativeWindow.units`/`units` —
+ * the backend's own source of truth for what unit a derivative/transform
+ * value is actually in, so callers never have to re-derive it from the
+ * selected method. */
+export function formatDerivativeUnits(units: "per_second" | "per_sample" | "value_units"): string {
+  switch (units) {
+    case "per_second":
+      return "per second";
+    case "per_sample":
+      return "per sample";
+    case "value_units":
+      return "value units";
+  }
+}
+
 /** Mirrors `recording_bundle::DerivativeFilterConfig`: the fixed, versioned M2 filter contract. */
 export type DerivativeFilterConfig = {
   method: string;
@@ -201,10 +303,13 @@ export type RawRecordingDerivativeWindow = {
   unavailableReason: string | null;
   effectiveSampleRateHz: number | null;
   filterConfig: DerivativeFilterConfig;
-  /** `"time"` (default) or `"sample_order"` (GC-032 opt-in legacy preview). */
+  /** `"time"` (default, `first_derivative` only) or `"sample_order"` (every
+   * other spike-extraction method, and the GC-032 opt-in legacy preview). */
   mode: "time" | "sample_order";
-  /** `"per_second"` in `"time"` mode, `"per_sample"` in `"sample_order"` mode — the two are not comparable. */
-  units: "per_second" | "per_sample";
+  /** `"per_second"` for `first_derivative`'s time-based mode, `"per_sample"`
+   * for the GC-032 legacy sample-order preview, `"value_units"` for every
+   * other spike-extraction method — never comparable across units. */
+  units: "per_second" | "per_sample" | "value_units";
   /** Only meaningful in `"time"` mode: true when unavailable solely because of a timestamp/cadence irregularity (not too few rows) — exactly when the sample-order preview fallback may be offered. */
   unavailableIsCadenceIssue: boolean;
   /** Maximum absolute finite derivative value over the entire selected recording/channel (not just this sliced display window) — the fixed, zero-centred scale `"recording"`-mode normalization uses. `null` when unavailable or no derivative could be computed anywhere. */
@@ -242,13 +347,26 @@ export type RawRecordingCompactWindow = {
   precedingTimestampNs: number | null;
   recordingMin: number | null;
   recordingMax: number | null;
-  /** Maximum absolute finite difference between two consecutive observed
-   * samples (sample-order, never time-weighted) over the entire channel's
-   * observed sequence — computed before slicing, so it stays fixed across
-   * compact windows. `null` with fewer than two observed samples or no
-   * finite adjacent diff. The fixed scale `"recording"`-mode normalization
-   * uses for the sample-order derivative preview. */
-  recordingMaxAbsSampleOrderDerivative: number | null;
+  /** One entry per returned sample: the selected `SpikeExtractionMethod`'s
+   * transform value for that compact sample, computed over this channel's
+   * *entire* observed sample sequence before slicing to `startSampleIndex` —
+   * so scrolling never resets the transform or exposes a fixed window-local
+   * edge artifact (only the true first/last present sample of the whole
+   * recording can ever be `null`). For `first_derivative` this is the
+   * per-sample adjacent difference (never time-based), matching the
+   * GC-032/033 legacy semantics. */
+  transformValues: (number | null)[];
+  /** `false` when this channel has fewer than two observed samples anywhere
+   * in the recording; every `transformValues` entry is then `null` and
+   * `transformUnavailableReason` explains why. */
+  transformAvailable: boolean;
+  transformUnavailableReason: string | null;
+  /** Maximum absolute finite transform value over the entire selected
+   * recording/channel (not just this sliced display window) — the fixed
+   * scale `"recording"`-mode normalization uses so a given magnitude keeps
+   * the same color while scrolling. `null` when unavailable or no transform
+   * value could be computed anywhere. */
+  recordingMaxAbsTransform: number | null;
 };
 
 function toResult<T>(promise: Promise<T>): Promise<RecordingBundleResult<T>> {
@@ -410,9 +528,14 @@ export type CompactObservationWindowRequest = {
  * from `getRawRecordingWindow`: navigation here is in observed *sample*
  * positions, not raw rows, per the identical N-sample hop convention. Never
  * writes any bundle file.
+ *
+ * `method` (default `first_derivative` when omitted): which of the six
+ * `SpikeExtractionMethod` transforms to compute for the response's
+ * `transformValues`, mirroring `getRawRecordingDerivativeWindow`'s selector.
  */
 export async function getCompactObservationWindow(
   request: CompactObservationWindowRequest,
+  method?: SpikeExtractionMethod,
 ): Promise<RecordingBundleResult<RawRecordingCompactWindow>> {
   if (!isTauriDesktop()) {
     return { status: "error", message: "Recording bundle persistence requires the desktop app" };
@@ -423,6 +546,7 @@ export async function getCompactObservationWindow(
       column: request.column,
       startSampleIndex: request.startSampleIndex,
       gridSize: request.gridSize,
+      method,
     }),
   );
 }
@@ -445,10 +569,18 @@ export async function getCompactObservationWindow(
  * came back with `unavailableIsCadenceIssue: true`; this function never
  * enables it on its own, and the result must never be used for model
  * training, export, or inference.
+ *
+ * `method` (default `first_derivative` when omitted): which of the six
+ * `SpikeExtractionMethod` transforms to compute; ignored by the backend when
+ * `previewBySampleOrder` is set, since that legacy fallback is always the
+ * first-derivative filter run in sample order. Each method's fixed default
+ * tunable width is used server-side — this call never sends a window-size
+ * override.
  */
 export async function getRawRecordingDerivativeWindow(
   request: RawRecordingWindowRequest,
   previewBySampleOrder = false,
+  method?: SpikeExtractionMethod,
 ): Promise<RecordingBundleResult<RawRecordingDerivativeWindow>> {
   if (!isTauriDesktop()) {
     return { status: "error", message: "Recording bundle persistence requires the desktop app" };
@@ -460,6 +592,7 @@ export async function getRawRecordingDerivativeWindow(
       startRawRow: request.startRawRow,
       gridSize: request.gridSize,
       previewBySampleOrder,
+      method,
     }),
   );
 }

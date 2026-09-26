@@ -855,14 +855,29 @@ pub struct CompactObservationWindow {
     pub preceding_timestamp_ns: Option<i64>,
     pub recording_min: Option<f64>,
     pub recording_max: Option<f64>,
-    /// Maximum absolute finite difference between two consecutive observed
-    /// samples (sample-order, never time-weighted) over the entire channel's
-    /// observed sequence — computed before slicing to `start_sample_index`,
-    /// so it stays fixed while paging through compact windows. `None` when
-    /// there are fewer than two observed samples or no finite adjacent diff
-    /// exists. This is the fixed scale the sample-order derivative preview
-    /// uses in `"recording"` normalization mode.
-    pub recording_max_abs_sample_order_derivative: Option<f64>,
+    /// One entry per returned sample: the selected `SpikeExtractionMethod`'s
+    /// transform value for that compact sample, computed over this channel's
+    /// *entire* observed sample sequence before slicing to
+    /// `start_sample_index` — so scrolling never resets the transform or
+    /// exposes a fixed window-local edge artifact (only the true first/last
+    /// present sample of the whole recording can ever be unavailable). `None`
+    /// where that specific sample has no transform value (a true
+    /// recording-wide edge), independent of the recording-wide
+    /// `transform_available` flag. For `FirstDerivative` this is the
+    /// per-sample adjacent difference (never time-based) in compact mode,
+    /// matching the GC-032/033 legacy semantics.
+    pub transform_values: Vec<Option<f64>>,
+    /// False when this channel has fewer than two observed samples anywhere
+    /// in the recording; when false every `transform_values` entry is `None`
+    /// and `transform_unavailable_reason` explains why.
+    pub transform_available: bool,
+    pub transform_unavailable_reason: Option<String>,
+    /// Maximum absolute finite transform value over the entire selected
+    /// recording/channel (not just this sliced display window) — the fixed
+    /// scale `"recording"`-mode normalization uses so a given magnitude keeps
+    /// the same color while scrolling. `None` when unavailable or no
+    /// transform value could be computed anywhere.
+    pub recording_max_abs_transform: Option<f64>,
 }
 
 /// Pure computation behind `get_compact_observation_window`, kept separate
@@ -877,6 +892,7 @@ fn compute_compact_observation_window(
     start_sample_index: i64,
     timestamps_ns: &[i64],
     all_values: &[Option<f64>],
+    method: SpikeExtractionMethod,
 ) -> Result<CompactObservationWindow, String> {
     // This channel's own finite observed samples, in source row/timestamp
     // order — the same "present" extraction `compute_sg_derivative_window`
@@ -913,12 +929,8 @@ fn compute_compact_observation_window(
         .map(|(_, _, value)| *value)
         .fold(None, |acc: Option<f64>, value| Some(acc.map_or(value, |current| current.max(value))));
 
-    let recording_max_abs_sample_order_derivative = present
-        .windows(2)
-        .map(|pair| pair[1].2 - pair[0].2)
-        .filter(|diff| diff.is_finite())
-        .map(f64::abs)
-        .fold(None, |max, abs| Some(max.map_or(abs, |m: f64| m.max(abs))));
+    let (transform_values, transform_available, transform_unavailable_reason, recording_max_abs_transform) =
+        compute_compact_transform_window(method, all_values, resolved_start, resolved_end);
 
     Ok(CompactObservationWindow {
         recording_id,
@@ -933,8 +945,82 @@ fn compute_compact_observation_window(
         preceding_timestamp_ns,
         recording_min,
         recording_max,
-        recording_max_abs_sample_order_derivative,
+        transform_values,
+        transform_available,
+        transform_unavailable_reason,
+        recording_max_abs_transform,
     })
+}
+
+/// Computes the selected `SpikeExtractionMethod`'s transform over this
+/// channel's *entire* present (finite) sample sequence — the same present
+/// extraction `compute_compact_observation_window` uses (identical filter,
+/// identical row order), so present-order position `i` here is exactly
+/// compact sample `i` — then slices to `[start, end)` compact sample indices.
+/// Computing over the whole sequence before slicing (rather than only the
+/// visible window) is what lets scrolling reveal a real value at a window's
+/// first pixel instead of a fixed "no predecessor loaded" artifact: only the
+/// true first/last present sample of the whole recording can ever be
+/// unavailable. `FirstDerivative` here is the plain per-sample adjacent
+/// difference (GC-032/033 legacy semantics, never time-based); the other
+/// five methods reuse their exact raw-row-mode transforms
+/// (`compute_spike_extraction_window`'s per-method `*_by_row` functions),
+/// looked up by present-order position instead of raw row.
+fn compute_compact_transform_window(
+    method: SpikeExtractionMethod,
+    all_values: &[Option<f64>],
+    start: usize,
+    end: usize,
+) -> (Vec<Option<f64>>, bool, Option<String>, Option<f64>) {
+    let present = extract_present_by_row(all_values);
+    let placeholder_len = end.saturating_sub(start);
+
+    if present.len() < 2 {
+        return (
+            vec![None; placeholder_len],
+            false,
+            Some(format!(
+                "fewer than 2 finite samples in this channel; {} needs at least two present samples",
+                method.canonical_name()
+            )),
+            None,
+        );
+    }
+
+    if method == SpikeExtractionMethod::FirstDerivative {
+        let mut by_index: Vec<Option<f64>> = Vec::with_capacity(present.len());
+        by_index.push(None);
+        for i in 1..present.len() {
+            by_index.push(Some(present[i].1 - present[i - 1].1));
+        }
+        let recording_max_abs = max_abs_finite_options(&by_index);
+        return (by_index[start..end].to_vec(), true, None, recording_max_abs);
+    }
+
+    let window_samples = method.default_window_samples();
+    let by_row = match method {
+        SpikeExtractionMethod::FirstDerivative => unreachable!("handled above"),
+        SpikeExtractionMethod::RollingMedianResidual => rolling_median_residual_by_row(&present, window_samples),
+        SpikeExtractionMethod::MorphologicalTopHat => morphological_top_hat_by_row(&present, window_samples),
+        SpikeExtractionMethod::ButterworthHighPass => butterworth_high_pass_by_row(&present, window_samples),
+        SpikeExtractionMethod::SavitzkyGolayResidual => savitzky_golay_residual_by_row(&present, window_samples),
+        SpikeExtractionMethod::HaarWaveletDetail => haar_wavelet_detail_by_row(&present, window_samples),
+    };
+    let recording_max_abs = max_abs_finite(&by_row);
+    let sliced = (start..end).map(|i| by_row.get(&present[i].0).copied()).collect();
+    (sliced, true, None, recording_max_abs)
+}
+
+/// Same fold as `max_abs_finite`, over a plain present-order-indexed slice
+/// instead of a `HashMap<row, value>` — used by `FirstDerivative`'s compact
+/// adjacent-difference path, which has no row-keyed map to fold over.
+fn max_abs_finite_options(values: &[Option<f64>]) -> Option<f64> {
+    values
+        .iter()
+        .filter_map(|value| *value)
+        .filter(|value| value.is_finite())
+        .map(f64::abs)
+        .fold(None, |max, abs| Some(max.map_or(abs, |m: f64| m.max(abs))))
 }
 
 /// Returns a bounded, chronological window of one numeric `raw.csv` column's
@@ -945,6 +1031,13 @@ fn compute_compact_observation_window(
 /// `get_raw_recording_window`'s `start_raw_row`, and is resolved/clamped by
 /// the identical `resolve_raw_window_bounds` logic against this channel's own
 /// observed sample count. This never writes any bundle file.
+///
+/// `method` (default `FirstDerivative` when omitted): which of the six
+/// `SpikeExtractionMethod` transforms to compute for `transform_values`,
+/// mirroring `get_raw_recording_derivative_window`'s selector. Every method
+/// is computed over this channel's entire observed sample sequence before
+/// slicing, so a method or navigation change never resets the transform's
+/// whole-recording scale (`recording_max_abs_transform`).
 #[tauri::command]
 pub fn get_compact_observation_window(
     recording_id: String,
@@ -952,6 +1045,7 @@ pub fn get_compact_observation_window(
     start_sample_index: i64,
     grid_size: u32,
     app: AppHandle,
+    method: Option<SpikeExtractionMethod>,
 ) -> Result<CompactObservationWindow, String> {
     validate_recording_id(&recording_id)?;
     if !RAW_WINDOW_ALLOWED_COLUMNS.contains(&column.as_str()) {
@@ -979,6 +1073,7 @@ pub fn get_compact_observation_window(
         start_sample_index,
         &timestamps_ns,
         &all_values,
+        method.unwrap_or_default(),
     )
 }
 
@@ -1017,6 +1112,366 @@ fn sg_first_derivative_coefficients(half_width: usize) -> Vec<f64> {
             offset / sum_of_squares
         })
         .collect()
+}
+
+/// Six selectable spike-extraction transforms for the offline derivative
+/// viewer, each computed over an entire selected recording/channel's own
+/// present (finite) samples before any window slicing -- so scrolling never
+/// resets the filter or exposes a fixed window-edge artifact. Every method
+/// but `FirstDerivative` runs in this channel's own present-sample order
+/// (never raw-row index) and is a pure visual-inspection view: never
+/// persisted, never used for training/export/inference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpikeExtractionMethod {
+    FirstDerivative,
+    RollingMedianResidual,
+    MorphologicalTopHat,
+    ButterworthHighPass,
+    SavitzkyGolayResidual,
+    HaarWaveletDetail,
+}
+
+impl Default for SpikeExtractionMethod {
+    fn default() -> Self {
+        SpikeExtractionMethod::FirstDerivative
+    }
+}
+
+impl SpikeExtractionMethod {
+    fn canonical_name(self) -> &'static str {
+        match self {
+            Self::FirstDerivative => "savitzky_golay",
+            Self::RollingMedianResidual => "rolling_median_residual",
+            Self::MorphologicalTopHat => "morphological_top_hat",
+            Self::ButterworthHighPass => "butterworth_high_pass",
+            Self::SavitzkyGolayResidual => "savitzky_golay_residual",
+            Self::HaarWaveletDetail => "haar_wavelet_detail",
+        }
+    }
+
+    /// Sensible fixed default tunable width (in this channel's own present
+    /// samples) for methods whose spike width materially depends on sensor
+    /// cadence; ignored for `FirstDerivative`, whose window is the fixed M2
+    /// `SG_WINDOW_SIZE` contract.
+    fn default_window_samples(self) -> usize {
+        match self {
+            Self::FirstDerivative => SG_WINDOW_SIZE,
+            Self::RollingMedianResidual => 9,
+            Self::MorphologicalTopHat => 9,
+            Self::ButterworthHighPass => 20,
+            Self::SavitzkyGolayResidual => 11,
+            Self::HaarWaveletDetail => 8,
+        }
+    }
+
+    /// `"per_second"` only for the time-based first derivative; every other
+    /// method's residual/detail value stays in the channel's own raw units,
+    /// never time-normalized.
+    fn units(self) -> &'static str {
+        match self {
+            Self::FirstDerivative => "per_second",
+            _ => "value_units",
+        }
+    }
+}
+
+/// This channel's own present (finite) samples in row order, paired with
+/// their original row index -- the same "present" extraction every spike
+/// method other than `FirstDerivative` (which also needs timestamps) uses.
+fn extract_present_by_row(values: &[Option<f64>]) -> Vec<(usize, f64)> {
+    values
+        .iter()
+        .enumerate()
+        .filter_map(|(row, &value)| value.filter(|v| v.is_finite()).map(|v| (row, v)))
+        .collect()
+}
+
+/// Shared skeleton for the five non-`FirstDerivative` spike methods: resolves
+/// this channel's own present samples once, fails closed with a reason when
+/// there are fewer than 2 (no method here can produce anything from 0 or 1
+/// samples), otherwise applies `transform` over the *entire* present
+/// sequence and slices the result to `[start, end)` -- so the whole-recording
+/// computation, and its whole-recording max-abs scale, are always available
+/// regardless of which window is being viewed.
+fn compute_present_order_spike_window(
+    values: &[Option<f64>],
+    start: usize,
+    end: usize,
+    window_samples: usize,
+    method_label: &str,
+    transform: impl Fn(&[(usize, f64)], usize) -> std::collections::HashMap<usize, f64>,
+) -> (Vec<Option<f64>>, bool, Option<String>, Option<f64>) {
+    let row_count = values.len();
+    let present = extract_present_by_row(values);
+    let placeholder_len = end.saturating_sub(start).min(row_count.saturating_sub(start));
+
+    if present.len() < 2 {
+        return (
+            vec![None; placeholder_len],
+            false,
+            Some(format!(
+                "fewer than 2 finite samples in this channel; {method_label} needs at least two present samples"
+            )),
+            None,
+        );
+    }
+
+    let by_row = transform(&present, window_samples.max(2));
+    let recording_max_abs = max_abs_finite(&by_row);
+    let derivative_values = (start..end).map(|row| by_row.get(&row).copied()).collect();
+    (derivative_values, true, None, recording_max_abs)
+}
+
+/// Residual after subtracting a centered rolling median (window
+/// `window_samples`, shrinking near the edges of the present sequence so
+/// every present sample gets a value): highlights short spikes that survive
+/// median smoothing while a slow drift/baseline does not.
+fn rolling_median_residual_by_row(
+    present: &[(usize, f64)],
+    window_samples: usize,
+) -> std::collections::HashMap<usize, f64> {
+    let len = present.len();
+    let radius = (window_samples / 2).max(1);
+    let mut result = std::collections::HashMap::new();
+    for i in 0..len {
+        let lo = i.saturating_sub(radius);
+        let hi = (i + radius + 1).min(len);
+        let mut window: Vec<f64> = present[lo..hi].iter().map(|&(_, value)| value).collect();
+        window.sort_by(|a, b| a.partial_cmp(b).expect("finite present values are always comparable"));
+        let mid = window.len() / 2;
+        let median = if window.len() % 2 == 0 {
+            (window[mid - 1] + window[mid]) / 2.0
+        } else {
+            window[mid]
+        };
+        let (row, value) = present[i];
+        result.insert(row, value - median);
+    }
+    result
+}
+
+/// Grayscale morphological white top-hat (`value - opening(value)`, opening =
+/// dilation(erosion(value))) over a `window_samples`-wide structuring element
+/// (radius shrinking near the edges of the present sequence): highlights
+/// short positive spikes an opening smooths away, near-zero on flat/drifting
+/// baseline.
+fn morphological_top_hat_by_row(
+    present: &[(usize, f64)],
+    window_samples: usize,
+) -> std::collections::HashMap<usize, f64> {
+    let len = present.len();
+    let radius = (window_samples / 2).max(1);
+    let values: Vec<f64> = present.iter().map(|&(_, value)| value).collect();
+    let erosion: Vec<f64> = (0..len)
+        .map(|i| {
+            let lo = i.saturating_sub(radius);
+            let hi = (i + radius + 1).min(len);
+            values[lo..hi].iter().copied().fold(f64::INFINITY, f64::min)
+        })
+        .collect();
+    let mut result = std::collections::HashMap::new();
+    for i in 0..len {
+        let lo = i.saturating_sub(radius);
+        let hi = (i + radius + 1).min(len);
+        let opening = erosion[lo..hi].iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let (row, _) = present[i];
+        result.insert(row, values[i] - opening);
+    }
+    result
+}
+
+/// Dependency-free second-order Butterworth high-pass (RBJ cookbook biquad,
+/// Q = 1/sqrt(2)) with cutoff period `window_samples` (in this channel's own
+/// present samples), applied forward then time-reversed-and-forward again for
+/// an approximately zero-phase response. Suppresses slow drift/baseline while
+/// passing short spikes.
+fn butterworth_high_pass_by_row(
+    present: &[(usize, f64)],
+    window_samples: usize,
+) -> std::collections::HashMap<usize, f64> {
+    let len = present.len();
+    let period = window_samples.max(3) as f64;
+    let w0 = 2.0 * std::f64::consts::PI / period;
+    let q = std::f64::consts::FRAC_1_SQRT_2;
+    let alpha = w0.sin() / (2.0 * q);
+    let cos_w0 = w0.cos();
+    let a0 = 1.0 + alpha;
+    let b0 = (1.0 + cos_w0) / 2.0 / a0;
+    let b1 = -(1.0 + cos_w0) / a0;
+    let b2 = (1.0 + cos_w0) / 2.0 / a0;
+    let a1 = -2.0 * cos_w0 / a0;
+    let a2 = (1.0 - alpha) / a0;
+
+    let apply = |input: &[f64]| -> Vec<f64> {
+        let mut output = vec![0.0; input.len()];
+        let (mut x1, mut x2, mut y1, mut y2) = (0.0, 0.0, 0.0, 0.0);
+        for (i, &x0) in input.iter().enumerate() {
+            let y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+            output[i] = y0;
+            x2 = x1;
+            x1 = x0;
+            y2 = y1;
+            y1 = y0;
+        }
+        output
+    };
+
+    let values: Vec<f64> = present.iter().map(|&(_, value)| value).collect();
+    let forward = apply(&values);
+    let mut reversed = forward;
+    reversed.reverse();
+    let mut backward = apply(&reversed);
+    backward.reverse();
+
+    let mut result = std::collections::HashMap::new();
+    for i in 0..len {
+        let (row, _) = present[i];
+        result.insert(row, backward[i]);
+    }
+    result
+}
+
+/// Closed-form quadratic (order-2) Savitzky–Golay *smoothing* coefficients
+/// for a symmetric window of `half_width` genuine neighbors on each side:
+/// the least-squares quadratic fit's own-position coefficient, `(S4 - S2*i^2)
+/// / (S0*S4 - S2^2)` where `S0/S2/S4` are the even power sums of the
+/// symmetric integer offsets. Distinct from `sg_first_derivative_coefficients`
+/// (which fits the *derivative*, not the smoothed value, at the center).
+fn sg_smoothing_coefficients(half_width: usize) -> Vec<f64> {
+    if half_width == 0 {
+        return vec![1.0];
+    }
+    let m = half_width as i64;
+    let s0 = (2 * half_width + 1) as f64;
+    let s2: f64 = (-m..=m).map(|i| (i * i) as f64).sum();
+    let s4: f64 = (-m..=m).map(|i| (i * i * i * i) as f64).sum();
+    let denom = s0 * s4 - s2 * s2;
+    (-m..=m).map(|i| (s4 - s2 * (i * i) as f64) / denom).collect()
+}
+
+/// Residual after subtracting a quadratic Savitzky–Golay *smoothing* filter
+/// (window `window_samples`, half-width shrinking near the edges of the
+/// present sequence so every present sample gets a value -- half-width 0 at
+/// the true first/last present sample smooths to the point itself, so its
+/// residual there is exactly 0, never a fabricated boundary value).
+fn savitzky_golay_residual_by_row(
+    present: &[(usize, f64)],
+    window_samples: usize,
+) -> std::collections::HashMap<usize, f64> {
+    let len = present.len();
+    let target_half_width = (window_samples / 2).max(1);
+    let mut result = std::collections::HashMap::new();
+    for i in 0..len {
+        let half_width = target_half_width.min(i).min(len - 1 - i);
+        let window_start = i - half_width;
+        let coefficients = sg_smoothing_coefficients(half_width);
+        let smoothed: f64 = coefficients
+            .iter()
+            .enumerate()
+            .map(|(offset, coefficient)| coefficient * present[window_start + offset].1)
+            .sum();
+        let (row, value) = present[i];
+        result.insert(row, value - smoothed);
+    }
+    result
+}
+
+/// Single-level stationary (undecimated) Haar wavelet detail coefficient at
+/// scale `window_samples / 2`: the normalized difference between the mean of
+/// up to `scale` present samples ending at (and including) position `i` and
+/// the mean of up to `scale` present samples immediately after it -- `i`
+/// itself is included on the "before" side so a spike exactly at `i` shows up
+/// in the coefficient, not just a spike in its neighbors. Only the true last
+/// present sample of the whole recording, which has no sample after it at
+/// all, has no detail coefficient; every other position -- including the
+/// very first present sample, whose "before" window shrinks to just itself --
+/// still gets one.
+fn haar_wavelet_detail_by_row(
+    present: &[(usize, f64)],
+    window_samples: usize,
+) -> std::collections::HashMap<usize, f64> {
+    let len = present.len();
+    let scale = (window_samples / 2).max(1);
+    let mut result = std::collections::HashMap::new();
+    for i in 0..len {
+        // Left window includes position `i` itself (so a spike exactly at
+        // `i` shows up in the coefficient), shrinking toward just `i` alone
+        // near the true start of the recording; right window excludes `i`
+        // and requires at least one sample after it, so only the true last
+        // present sample of the whole recording has nowhere to compare
+        // against.
+        let left_lo = i + 1 - scale.min(i + 1);
+        let right_hi = (i + 1 + scale).min(len);
+        if right_hi <= i + 1 {
+            continue;
+        }
+        let left: &[(usize, f64)] = &present[left_lo..=i];
+        let right: &[(usize, f64)] = &present[i + 1..right_hi];
+        let left_mean = left.iter().map(|&(_, v)| v).sum::<f64>() / left.len() as f64;
+        let right_mean = right.iter().map(|&(_, v)| v).sum::<f64>() / right.len() as f64;
+        let (row, _) = present[i];
+        result.insert(row, (left_mean - right_mean) / std::f64::consts::SQRT_2);
+    }
+    result
+}
+
+/// Dispatches to the selected `SpikeExtractionMethod`'s pure computation
+/// (the four "present-order" methods sharing `compute_present_order_spike_window`);
+/// `FirstDerivative` is handled separately by `compute_sg_derivative_window`
+/// since it alone needs timestamps for its cadence/time-derivative contract.
+fn compute_spike_extraction_window(
+    method: SpikeExtractionMethod,
+    values: &[Option<f64>],
+    start: usize,
+    end: usize,
+    window_samples: usize,
+) -> (Vec<Option<f64>>, bool, Option<String>, Option<f64>) {
+    match method {
+        SpikeExtractionMethod::FirstDerivative => {
+            unreachable!("FirstDerivative is handled by compute_sg_derivative_window")
+        }
+        SpikeExtractionMethod::RollingMedianResidual => compute_present_order_spike_window(
+            values,
+            start,
+            end,
+            window_samples,
+            "a rolling-median residual",
+            rolling_median_residual_by_row,
+        ),
+        SpikeExtractionMethod::MorphologicalTopHat => compute_present_order_spike_window(
+            values,
+            start,
+            end,
+            window_samples,
+            "a morphological top-hat",
+            morphological_top_hat_by_row,
+        ),
+        SpikeExtractionMethod::ButterworthHighPass => compute_present_order_spike_window(
+            values,
+            start,
+            end,
+            window_samples,
+            "a Butterworth high-pass filter",
+            butterworth_high_pass_by_row,
+        ),
+        SpikeExtractionMethod::SavitzkyGolayResidual => compute_present_order_spike_window(
+            values,
+            start,
+            end,
+            window_samples,
+            "a Savitzky-Golay residual",
+            savitzky_golay_residual_by_row,
+        ),
+        SpikeExtractionMethod::HaarWaveletDetail => compute_present_order_spike_window(
+            values,
+            start,
+            end,
+            window_samples,
+            "a Haar wavelet detail",
+            haar_wavelet_detail_by_row,
+        ),
+    }
 }
 
 /// Pure, dependency-free symmetric Savitzky–Golay convolution: shared by both
@@ -1253,6 +1708,32 @@ fn sg_filter_config() -> DerivativeFilterConfig {
     }
 }
 
+/// `filter_config` for the selected `SpikeExtractionMethod`, generalizing
+/// `sg_filter_config`'s shape to all six methods: `method` names the
+/// transform, `window_size` is the effective tunable width actually used
+/// (in this channel's own present samples; meaningless -- always
+/// `SG_WINDOW_SIZE` -- for `FirstDerivative`, whose window is fixed), and
+/// `polynomial_order` is only meaningful for the two SG-based methods.
+fn spike_extraction_filter_config(
+    method: SpikeExtractionMethod,
+    effective_window_samples: usize,
+) -> DerivativeFilterConfig {
+    if method == SpikeExtractionMethod::FirstDerivative {
+        return sg_filter_config();
+    }
+    let polynomial_order = if method == SpikeExtractionMethod::SavitzkyGolayResidual {
+        SG_POLYNOMIAL_ORDER
+    } else {
+        0
+    };
+    DerivativeFilterConfig {
+        method: method.canonical_name().to_string(),
+        polynomial_order,
+        window_size: effective_window_samples,
+        version: "spike_extraction_v1".to_string(),
+    }
+}
+
 /// A bounded, read-only, **offline-derived** window of one numeric raw.csv
 /// column's Savitzky–Golay first time-derivative, aligned row-for-row and
 /// timestamp-for-timestamp with `RawRecordingWindow` for the same request.
@@ -1318,6 +1799,13 @@ pub struct RawRecordingDerivativeWindow {
 /// time-based derivative has already come back with
 /// `unavailable_is_cadence_issue: true`. It is not offered to, and must
 /// never be wired into, model training, export, or inference.
+///
+/// `method` (default `FirstDerivative` when omitted): which of the six
+/// selectable spike-extraction transforms to compute. Ignored when
+/// `preview_by_sample_order` is set -- that legacy fallback is always the
+/// first-derivative filter run in sample order, unaffected by this selector.
+/// The other five methods always use their own fixed default tunable width
+/// (in this channel's own present samples) -- there is no caller override.
 #[tauri::command]
 pub fn get_raw_recording_derivative_window(
     recording_id: String,
@@ -1326,6 +1814,7 @@ pub fn get_raw_recording_derivative_window(
     grid_size: u32,
     app: AppHandle,
     preview_by_sample_order: Option<bool>,
+    method: Option<SpikeExtractionMethod>,
 ) -> Result<RawRecordingDerivativeWindow, String> {
     validate_recording_id(&recording_id)?;
     if !RAW_WINDOW_ALLOWED_COLUMNS.contains(&column.as_str()) {
@@ -1351,6 +1840,7 @@ pub fn get_raw_recording_derivative_window(
 
     let window_timestamps = timestamps_ns[resolved_start..resolved_end].to_vec();
     let row_indices: Vec<usize> = (resolved_start..resolved_end).collect();
+    let method = method.unwrap_or_default();
 
     let (
         derivative_values,
@@ -1361,6 +1851,7 @@ pub fn get_raw_recording_derivative_window(
         units,
         unavailable_is_cadence_issue,
         recording_max_abs_derivative,
+        filter_config,
     ) = if preview_by_sample_order.unwrap_or(false) {
         let (derivative_values, available, unavailable_reason, recording_max_abs_derivative) =
             compute_sample_order_derivative_window(&all_values, resolved_start, resolved_end);
@@ -1373,8 +1864,9 @@ pub fn get_raw_recording_derivative_window(
             "per_sample",
             false,
             recording_max_abs_derivative,
+            sg_filter_config(),
         )
-    } else {
+    } else if method == SpikeExtractionMethod::FirstDerivative {
         let (derivative_values, available, unavailable_reason, effective_sample_rate_hz, recording_max_abs_derivative) =
             compute_sg_derivative_window(&timestamps_ns, &all_values, resolved_start, resolved_end);
         let unavailable_is_cadence_issue = !available
@@ -1387,9 +1879,25 @@ pub fn get_raw_recording_derivative_window(
             unavailable_reason,
             effective_sample_rate_hz,
             "time",
-            "per_second",
+            method.units(),
             unavailable_is_cadence_issue,
             recording_max_abs_derivative,
+            sg_filter_config(),
+        )
+    } else {
+        let effective_window_samples = method.default_window_samples();
+        let (derivative_values, available, unavailable_reason, recording_max_abs_derivative) =
+            compute_spike_extraction_window(method, &all_values, resolved_start, resolved_end, effective_window_samples);
+        (
+            derivative_values,
+            available,
+            unavailable_reason,
+            None,
+            "sample_order",
+            method.units(),
+            false,
+            recording_max_abs_derivative,
+            spike_extraction_filter_config(method, effective_window_samples),
         )
     };
 
@@ -1406,7 +1914,7 @@ pub fn get_raw_recording_derivative_window(
         available,
         unavailable_reason,
         effective_sample_rate_hz,
-        filter_config: sg_filter_config(),
+        filter_config,
         mode: mode.to_string(),
         units: units.to_string(),
         unavailable_is_cadence_issue,
@@ -2308,6 +2816,22 @@ mod tests {
         start_sample_index: i64,
         grid_size: usize,
     ) -> Result<CompactObservationWindow, String> {
+        compact_window_with_method(
+            timestamps_ns,
+            values,
+            start_sample_index,
+            grid_size,
+            SpikeExtractionMethod::FirstDerivative,
+        )
+    }
+
+    fn compact_window_with_method(
+        timestamps_ns: &[i64],
+        values: &[Option<f64>],
+        start_sample_index: i64,
+        grid_size: usize,
+        method: SpikeExtractionMethod,
+    ) -> Result<CompactObservationWindow, String> {
         compute_compact_observation_window(
             "rec-a".to_string(),
             "ppg_green".to_string(),
@@ -2316,6 +2840,7 @@ mod tests {
             start_sample_index,
             timestamps_ns,
             values,
+            method,
         )
     }
 
@@ -2413,35 +2938,93 @@ mod tests {
     }
 
     #[test]
-    fn compact_window_recording_max_abs_sample_order_derivative_is_stable_across_frames() {
+    fn compact_window_recording_max_abs_transform_is_stable_across_frames() {
         // Observed sample sequence: 1, 5, 2, 20 -> adjacent diffs |4|, |3|, |18| -> max 18.
         let timestamps_ns: Vec<i64> = (0..4).map(|i| i * 1_000_000).collect();
         let values = vec![Some(1.0), Some(5.0), Some(2.0), Some(20.0)];
         let first_frame = compact_window(&timestamps_ns, &values, 0, 2).expect("valid first frame");
         let second_frame = compact_window(&timestamps_ns, &values, 2, 2).expect("valid second frame");
-        assert_eq!(first_frame.recording_max_abs_sample_order_derivative, Some(18.0));
-        assert_eq!(
-            first_frame.recording_max_abs_sample_order_derivative,
-            second_frame.recording_max_abs_sample_order_derivative,
-        );
+        assert_eq!(first_frame.recording_max_abs_transform, Some(18.0));
+        assert_eq!(first_frame.recording_max_abs_transform, second_frame.recording_max_abs_transform,);
     }
 
     #[test]
-    fn compact_window_recording_max_abs_sample_order_derivative_none_for_zero_or_one_sample() {
+    fn compact_window_recording_max_abs_transform_none_for_zero_or_one_sample() {
         let empty = compact_window(&[], &[], 0, 4).expect("empty channel is not an error");
-        assert_eq!(empty.recording_max_abs_sample_order_derivative, None);
+        assert_eq!(empty.recording_max_abs_transform, None);
+        assert!(!empty.transform_available);
 
         let single = compact_window(&[0], &[Some(1.0)], 0, 4).expect("single-sample channel is not an error");
-        assert_eq!(single.recording_max_abs_sample_order_derivative, None);
+        assert_eq!(single.recording_max_abs_transform, None);
+        assert!(!single.transform_available);
     }
 
     #[test]
-    fn compact_window_recording_max_abs_sample_order_derivative_ignores_non_finite_diffs() {
-        // f64::MAX - (-f64::MAX) overflows to +inf, which must not become "the" scale.
+    fn compact_window_recording_max_abs_transform_ignores_non_finite_diffs() {
+        // f64::MAX - (-f64::MAX) overflows to +inf, which must not become "the"
+        // scale; the second (finite) diff's magnitude must win instead.
         let timestamps_ns = vec![0, 1_000_000, 2_000_000];
-        let values = vec![Some(-f64::MAX), Some(f64::MAX), Some(f64::MAX - 1.0)];
+        let values = vec![Some(-f64::MAX), Some(f64::MAX), Some(1.0)];
         let window = compact_window(&timestamps_ns, &values, 0, 4).expect("valid window");
-        assert_eq!(window.recording_max_abs_sample_order_derivative, Some(1.0));
+        assert_eq!(window.recording_max_abs_transform, Some(f64::MAX));
+    }
+
+    #[test]
+    fn compact_window_first_derivative_transform_values_are_per_sample_adjacent_diffs() {
+        let timestamps_ns: Vec<i64> = (0..4).map(|i| i * 1_000_000).collect();
+        let values = vec![Some(1.0), Some(5.0), Some(2.0), Some(20.0)];
+        let window = compact_window(&timestamps_ns, &values, 0, 4).expect("valid window");
+        assert_eq!(window.transform_values, vec![None, Some(4.0), Some(-3.0), Some(18.0)]);
+        assert!(window.transform_available);
+    }
+
+    #[test]
+    fn compact_window_method_selection_changes_the_third_imager_transform() {
+        // Same underlying data, different `SpikeExtractionMethod` selections must
+        // produce different `transform_values` — this is the GC-036 selector's
+        // whole point for the observed-samples viewer, not just the raw-row one.
+        let timestamps_ns: Vec<i64> = (0..12).map(|i| i * 1_000_000).collect();
+        let values: Vec<Option<f64>> = vec![1.0, 5.0, 2.0, 20.0, 3.0, 4.0, 1.0, 9.0, 2.0, 6.0, 3.0, 8.0]
+            .into_iter()
+            .map(Some)
+            .collect();
+
+        let first_derivative =
+            compact_window_with_method(&timestamps_ns, &values, 0, 4, SpikeExtractionMethod::FirstDerivative)
+                .expect("valid window");
+        let rolling_median = compact_window_with_method(
+            &timestamps_ns,
+            &values,
+            0,
+            4,
+            SpikeExtractionMethod::RollingMedianResidual,
+        )
+        .expect("valid window");
+        let haar = compact_window_with_method(&timestamps_ns, &values, 0, 4, SpikeExtractionMethod::HaarWaveletDetail)
+            .expect("valid window");
+
+        assert_ne!(first_derivative.transform_values, rolling_median.transform_values);
+        assert_ne!(first_derivative.transform_values, haar.transform_values);
+        assert_ne!(rolling_median.transform_values, haar.transform_values);
+        assert_ne!(first_derivative.recording_max_abs_transform, rolling_median.recording_max_abs_transform);
+    }
+
+    #[test]
+    fn compact_window_scrolling_never_shows_a_fixed_window_local_edge_marker() {
+        // 20 observed samples, grid_size 4 (max_values 16): a real second frame
+        // exists at start 4. Pixel 0 of that *later* window must resolve to a
+        // real adjacent difference against the last sample of the previous
+        // window, not a fixed "no predecessor loaded" `None` — only the true
+        // first present sample of the whole recording (frame 0, pixel 0) has no
+        // predecessor at all.
+        let timestamps_ns: Vec<i64> = (0..20).map(|i| i * 1_000_000).collect();
+        let values: Vec<Option<f64>> = (0..20).map(|i| Some(i as f64)).collect();
+
+        let first_frame = compact_window(&timestamps_ns, &values, 0, 4).expect("valid first frame");
+        assert_eq!(first_frame.transform_values[0], None);
+
+        let second_frame = compact_window(&timestamps_ns, &values, 4, 4).expect("valid second frame");
+        assert_eq!(second_frame.transform_values[0], Some(1.0));
     }
 
     // --- M2: Savitzky–Golay derivative helper ---
@@ -2781,5 +3364,166 @@ mod tests {
         assert!(validate_recording_id("../escape").is_err());
         assert!(!RAW_WINDOW_ALLOWED_COLUMNS.contains(&"timestamp_ns"));
         assert!(validate_grid_size(0).is_err());
+    }
+
+    // --- GC-spike-transforms: six selectable spike-extraction methods ---
+
+    /// 40 present samples: a slow linear drift (`0.1 * i`) with one isolated
+    /// spike injected at `spike_index` -- every spike method below must make
+    /// that point stand out far more than the drift baseline does anywhere
+    /// else in the recording.
+    fn drift_with_spike_values(spike_index: usize, spike_height: f64) -> Vec<Option<f64>> {
+        (0..40)
+            .map(|i| {
+                let drift = 0.1 * i as f64;
+                Some(if i == spike_index { drift + spike_height } else { drift })
+            })
+            .collect()
+    }
+
+    #[test]
+    fn rolling_median_residual_highlights_an_isolated_spike_over_drift() {
+        let values = drift_with_spike_values(20, 10.0);
+        let (residual, available, reason, max_abs) = compute_present_order_spike_window(
+            &values, 0, 40, 9, "test", rolling_median_residual_by_row,
+        );
+        assert!(available, "reason: {reason:?}");
+        let spike = residual[20].expect("spike row must have a residual");
+        let baseline = residual[10].expect("drift-only row must have a residual");
+        assert!(spike.abs() > 5.0, "spike residual too small: {spike}");
+        assert!(baseline.abs() < 1.0, "drift-only residual should stay small: {baseline}");
+        assert!((max_abs.unwrap() - spike.abs()).abs() < 1e-9);
+    }
+
+    #[test]
+    fn morphological_top_hat_highlights_an_isolated_spike_over_drift() {
+        let values = drift_with_spike_values(20, 10.0);
+        let (top_hat, available, reason, max_abs) = compute_present_order_spike_window(
+            &values, 0, 40, 9, "test", morphological_top_hat_by_row,
+        );
+        assert!(available, "reason: {reason:?}");
+        let spike = top_hat[20].expect("spike row must have a top-hat value");
+        let baseline = top_hat[10].expect("drift-only row must have a top-hat value");
+        assert!(spike.abs() > 5.0, "spike top-hat too small: {spike}");
+        assert!(baseline.abs() < 1e-9, "drift-only top-hat should be ~0: {baseline}");
+        assert!((max_abs.unwrap() - spike.abs()).abs() < 1e-9);
+    }
+
+    #[test]
+    fn butterworth_high_pass_highlights_an_isolated_spike_over_drift() {
+        let values = drift_with_spike_values(20, 10.0);
+        let (filtered, available, reason, _max_abs) = compute_present_order_spike_window(
+            &values, 0, 40, 20, "test", butterworth_high_pass_by_row,
+        );
+        assert!(available, "reason: {reason:?}");
+        let spike = filtered[20].expect("spike row must have a filtered value");
+        let baseline = filtered[35].expect("late drift-only row must have a filtered value");
+        assert!(spike.abs() > baseline.abs() * 3.0, "spike ({spike}) should dominate drift ({baseline})");
+    }
+
+    #[test]
+    fn savitzky_golay_residual_highlights_an_isolated_spike_over_drift() {
+        let values = drift_with_spike_values(20, 10.0);
+        let (residual, available, reason, max_abs) = compute_present_order_spike_window(
+            &values, 0, 40, 11, "test", savitzky_golay_residual_by_row,
+        );
+        assert!(available, "reason: {reason:?}");
+        let spike = residual[20].expect("spike row must have a residual");
+        let baseline = residual[10].expect("drift-only row must have a residual");
+        assert!(spike.abs() > 5.0, "spike residual too small: {spike}");
+        assert!(baseline.abs() < 1e-6, "drift-only residual should be ~0: {baseline}");
+        assert!((max_abs.unwrap() - spike.abs()).abs() < 1e-9);
+        // True recording edges (present index 0 and 39) still get a value --
+        // half-width 0 smooths to the point itself, so the residual is
+        // exactly 0 there, never a fabricated boundary value.
+        assert!((residual[0].unwrap()).abs() < 1e-9);
+        assert!((residual[39].unwrap()).abs() < 1e-9);
+    }
+
+    #[test]
+    fn haar_wavelet_detail_highlights_an_isolated_spike_over_drift() {
+        let values = drift_with_spike_values(20, 10.0);
+        let (detail, available, reason, max_abs) = compute_present_order_spike_window(
+            &values, 0, 40, 8, "test", haar_wavelet_detail_by_row,
+        );
+        assert!(available, "reason: {reason:?}");
+        let spike = detail[20].expect("spike row must have a detail coefficient");
+        let baseline = detail[10].expect("drift-only row must have a detail coefficient");
+        assert!(spike.abs() > baseline.abs() * 3.0, "spike ({spike}) should dominate drift ({baseline})");
+        assert!((max_abs.unwrap() - spike.abs()).abs() < 1e-9);
+        // Only the true last present sample of the whole recording (nothing
+        // after it to compare against) lacks a detail coefficient; the first
+        // present sample's "before" window shrinks to just itself instead.
+        assert!(detail[0].is_some());
+        assert!(detail[39].is_none());
+    }
+
+    #[test]
+    fn present_order_spike_methods_are_unavailable_with_fewer_than_two_present_samples() {
+        let values: Vec<Option<f64>> = vec![Some(1.0)];
+        for transform in [
+            rolling_median_residual_by_row as fn(&[(usize, f64)], usize) -> std::collections::HashMap<usize, f64>,
+            morphological_top_hat_by_row,
+            butterworth_high_pass_by_row,
+            savitzky_golay_residual_by_row,
+            haar_wavelet_detail_by_row,
+        ] {
+            let (values_out, available, reason, max_abs) =
+                compute_present_order_spike_window(&values, 0, 1, 9, "test", transform);
+            assert!(!available);
+            assert!(values_out.iter().all(Option::is_none));
+            assert!(max_abs.is_none());
+            assert!(reason.unwrap().contains("fewer than 2"));
+        }
+    }
+
+    /// The whole-recording-then-slice contract: computing the transform over
+    /// the entire recording and slicing to a sub-window must produce exactly
+    /// the same values (and the same whole-recording max-abs scale) as
+    /// requesting that sub-window directly -- so scrolling never re-derives a
+    /// different answer for rows it has already shown, and never resets the
+    /// normalization scale either.
+    #[test]
+    fn window_slice_matches_the_corresponding_slice_of_the_whole_recording_transform() {
+        let values = drift_with_spike_values(20, 10.0);
+        let methods: [(&str, fn(&[(usize, f64)], usize) -> std::collections::HashMap<usize, f64>, usize); 5] = [
+            ("rolling_median_residual", rolling_median_residual_by_row, 9),
+            ("morphological_top_hat", morphological_top_hat_by_row, 9),
+            ("butterworth_high_pass", butterworth_high_pass_by_row, 20),
+            ("savitzky_golay_residual", savitzky_golay_residual_by_row, 11),
+            ("haar_wavelet_detail", haar_wavelet_detail_by_row, 8),
+        ];
+        for (name, transform, window) in methods {
+            let (whole, whole_available, _, whole_max_abs) =
+                compute_present_order_spike_window(&values, 0, 40, window, "test", transform);
+            let (sub, sub_available, _, sub_max_abs) =
+                compute_present_order_spike_window(&values, 15, 25, window, "test", transform);
+            assert!(whole_available && sub_available, "method {name}");
+            for row in 15..25 {
+                assert_eq!(
+                    whole[row], sub[row - 15],
+                    "method {name}, row {row}: window slice must match the whole-recording transform"
+                );
+            }
+            // The whole-recording max-abs scale is identical regardless of
+            // which sub-window was requested -- it is always computed over
+            // the entire recording before slicing.
+            assert_eq!(whole_max_abs, sub_max_abs, "method {name}");
+        }
+    }
+
+    #[test]
+    fn spike_extraction_method_defaults_to_first_derivative_and_units_are_method_specific() {
+        assert_eq!(SpikeExtractionMethod::default(), SpikeExtractionMethod::FirstDerivative);
+        assert_eq!(SpikeExtractionMethod::FirstDerivative.units(), "per_second");
+        for method in [
+            SpikeExtractionMethod::RollingMedianResidual,
+            SpikeExtractionMethod::MorphologicalTopHat,
+            SpikeExtractionMethod::ButterworthHighPass,
+            SpikeExtractionMethod::SavitzkyGolayResidual,
+            SpikeExtractionMethod::HaarWaveletDetail,
+        ] {
+            assert_eq!(method.units(), "value_units");
+        }
     }
 }

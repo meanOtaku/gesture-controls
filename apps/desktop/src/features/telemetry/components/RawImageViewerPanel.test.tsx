@@ -112,7 +112,10 @@ function compactWindow(
     precedingTimestampNs: null,
     recordingMin: 1.5,
     recordingMax: 9.5,
-    recordingMaxAbsSampleOrderDerivative: 8,
+    transformValues: [null, 8],
+    transformAvailable: true,
+    transformUnavailableReason: null,
+    recordingMaxAbsTransform: 8,
     ...overrides,
   };
 }
@@ -193,6 +196,11 @@ afterEach(() => {
   cleanup();
   rawImageViewerStore.setChannel(null);
   rawImageViewerStore.setRecording(null);
+  // Reset to the store's real default ("first_derivative") so every test
+  // starts from the same state regardless of run order — a test that
+  // selects a different method (e.g. "reloads the derivative canvas with
+  // the newly selected method") must not leak that selection into the next.
+  rawImageViewerStore.setSpikeExtractionMethod("first_derivative");
   // Reset to the store's real default ("observedSamples", GC-033 follow-up)
   // so every test starts from the same state regardless of run order.
   rawImageViewerStore.setViewMode("observedSamples");
@@ -492,11 +500,65 @@ describe("RawImageViewerPanel derivative canvas", () => {
 
     selectRecordingInRawRowsMode("rec-a");
 
-    const derivativeImage = await screen.findByRole("img", { name: /Derivative \(Savitzky–Golay\)/ });
+    const derivativeImage = await screen.findByRole("img", { name: /First derivative \(Savitzky–Golay\)/ });
     expect(derivativeImage).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /Grayscale/ })).toHaveAccessibleName(/raw rows 0 to 4095/);
     expect(derivativeImage).toHaveAccessibleName(/raw rows 0 to 4095/);
     expect(derivativeImage).toHaveAccessibleName(/Not a live signal/);
+  });
+
+  it("exposes a 'Spike extraction method' select offering all six backend methods, defaulting to First derivative", async () => {
+    mockInvoke({
+      recordings: [summary("rec-a")],
+      detailByRecording: {
+        "rec-a": () =>
+          Promise.resolve({ recording: {}, annotations: { format_version: 1, recording_id: "rec-a", intervals: [] } }),
+      },
+    });
+    renderPanel();
+    await screen.findByRole("combobox", { name: "Saved recording" });
+
+    const methodSelect = await screen.findByRole("combobox", { name: "Spike extraction method" });
+    expect(methodSelect).toBeInTheDocument();
+    expect(rawImageViewerStore.getSpikeExtractionMethod()).toBe("first_derivative");
+  });
+
+  it("reloads the derivative canvas with the newly selected method and reflects it in the heading and legend", async () => {
+    const seenMethods: unknown[] = [];
+    invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
+      if (command === "list_recording_bundles") return Promise.resolve([summary("rec-a")]);
+      if (command === "load_recording_bundle") {
+        return Promise.resolve({ recording: {}, annotations: { format_version: 1, recording_id: "rec-a", intervals: [] } });
+      }
+      if (command === "get_raw_recording_window") return Promise.resolve(rawWindow(args?.recordingId as string));
+      if (command === "get_recording_quality_summary") return Promise.resolve(qualitySummary(args?.recordingId as string));
+      if (command === "get_raw_recording_derivative_window") {
+        seenMethods.push(args?.method);
+        return Promise.resolve(
+          derivativeWindow(args?.recordingId as string, {
+            units: args?.method === "first_derivative" ? "per_second" : "value_units",
+            recordingMaxAbsDerivative: 5,
+          }),
+        );
+      }
+      return Promise.reject(new Error(`unmocked command ${command}`));
+    });
+    renderPanel();
+    await screen.findByRole("combobox", { name: "Saved recording" });
+
+    selectRecordingInRawRowsMode("rec-a");
+    await screen.findByRole("img", { name: /First derivative \(Savitzky–Golay\)/ });
+
+    act(() => {
+      rawImageViewerStore.setSpikeExtractionMethod("haar_wavelet_detail");
+    });
+
+    await screen.findByRole("img", { name: /Haar wavelet detail/ });
+    expect(screen.getByText(/wavelet detail coefficient/i)).toBeInTheDocument();
+    expect(screen.getByText(/value units/)).toBeInTheDocument();
+    expect(seenMethods).toContain("haar_wavelet_detail");
+    // Changing the method must not re-fetch the raw Grayscale/Rainbow window.
+    expect(screen.getByRole("img", { name: /Grayscale/ })).toBeInTheDocument();
   });
 
   it("shows an explicit unavailable state (not blank/missing) when the recording's cadence fails the M2 regularity gate", async () => {
@@ -524,7 +586,7 @@ describe("RawImageViewerPanel derivative canvas", () => {
     await waitFor(() => {
       expect(screen.getByText(/timestamp cadence is too irregular/)).toBeInTheDocument();
     });
-    expect(screen.queryByRole("img", { name: /Derivative \(Savitzky–Golay\)/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /First derivative \(Savitzky–Golay\)/ })).not.toBeInTheDocument();
     // The raw canvases are unaffected by the derivative being unavailable.
     expect(screen.getByRole("img", { name: /Grayscale/ })).toBeInTheDocument();
     // Not offered when the recording simply has too few rows, only for a genuine cadence problem.
@@ -621,7 +683,7 @@ describe("RawImageViewerPanel compact observed-samples mode (M3, GC-033)", () =>
     );
   });
 
-  it("renders the sample-order derivative preview canvas alongside the observed-samples canvases", async () => {
+  it("renders the selected method's transform preview canvas alongside the observed-samples canvases", async () => {
     mockInvokeWithCompact();
     renderPanel();
     await screen.findByRole("combobox", { name: "Saved recording" });
@@ -629,9 +691,31 @@ describe("RawImageViewerPanel compact observed-samples mode (M3, GC-033)", () =>
     rawImageViewerStore.setRecording("rec-a");
     rawImageViewerStore.setChannel("ppg_green");
 
-    const derivativePreview = await screen.findByRole("img", { name: /Derivative preview \(sample order\)/ });
-    expect(derivativePreview).toHaveAccessibleName(/Not time-normalized, not Savitzky–Golay, not valid for training, export, or inference/);
-    expect(screen.getByText(/Not the Savitzky–Golay time-based derivative/)).toBeInTheDocument();
+    const derivativePreview = await screen.findByRole("img", { name: /First difference \(per sample\) \(observed samples\)/ });
+    expect(derivativePreview).toHaveAccessibleName(/Not time-normalized, not the Savitzky–Golay time-based derivative/);
+    expect(derivativePreview).toHaveAccessibleName(/Not valid for training, export, or inference/);
+  });
+
+  it("selecting a different spike-extraction method changes the third imager's title and request, and refetches the compact window (GC-036 follow-up)", async () => {
+    mockInvokeWithCompact();
+    renderPanel();
+    await screen.findByRole("combobox", { name: "Saved recording" });
+
+    rawImageViewerStore.setRecording("rec-a");
+    rawImageViewerStore.setChannel("ppg_green");
+    await screen.findByRole("img", { name: /First difference \(per sample\) \(observed samples\)/ });
+
+    act(() => {
+      rawImageViewerStore.setSpikeExtractionMethod("haar_wavelet_detail");
+    });
+
+    expect(await screen.findByRole("img", { name: /Haar wavelet detail \(observed samples\)/ })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith(
+        "get_compact_observation_window",
+        expect.objectContaining({ recordingId: "rec-a", column: "ppg_green", method: "haar_wavelet_detail" }),
+      );
+    });
   });
 
   it("switches to Raw rows mode on request and renders its unchanged null-preserving raw-row view", async () => {

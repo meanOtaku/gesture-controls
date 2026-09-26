@@ -86,6 +86,11 @@ function compactWindow(overrides: Partial<RawRecordingCompactWindow> = {}): RawR
     precedingTimestampNs: null,
     recordingMin: 1,
     recordingMax: 4,
+    transformValues: [null, 1, 1, 1],
+    transformAvailable: true,
+    transformUnavailableReason: null,
+    recordingMaxAbsTransform: 1,
+
     ...overrides,
   };
 }
