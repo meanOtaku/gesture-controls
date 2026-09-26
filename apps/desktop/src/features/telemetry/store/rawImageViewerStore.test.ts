@@ -37,6 +37,7 @@ function compactWindow(overrides: Partial<RawRecordingCompactWindow> = {}): RawR
     precedingTimestampNs: null,
     recordingMin: 1.5,
     recordingMax: 9.5,
+    recordingMaxAbsSampleOrderDerivative: 8,
     ...overrides,
   };
 }

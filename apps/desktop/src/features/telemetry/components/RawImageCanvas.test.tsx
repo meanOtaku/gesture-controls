@@ -265,6 +265,7 @@ const compactWindow: RawRecordingCompactWindow = {
   precedingTimestampNs: null,
   recordingMin: 1,
   recordingMax: 10,
+  recordingMaxAbsSampleOrderDerivative: 8,
 };
 
 describe("RawImageCanvas compact sample-order derivative preview (GC-033 follow-up)", () => {
@@ -300,7 +301,7 @@ describe("RawImageCanvas compact sample-order derivative preview (GC-033 follow-
   });
 
   it("does not paint pixel 0 with the missing-value magenta fill — every compact sample is a real observation, not a withheld field", () => {
-    const { imageData } = buildCompactDivergingImageData(compactWindow);
+    const { imageData } = buildCompactDivergingImageData(compactWindow, "recording");
     const [r, g, b] = [imageData.data[0], imageData.data[1], imageData.data[2]];
     expect([r, g, b]).not.toEqual([217, 70, 239]); // MISSING_COLOR
     expect([r, g, b]).toEqual([128, 128, 128]); // CONSTANT_COLOR: nothing computable at the window edge
@@ -358,5 +359,77 @@ describe("RawImageCanvas compact sample-order derivative preview (GC-033 follow-
     expect(screen.getByRole("img", { name: /Not time-normalized, not Savitzky–Golay/ })).toBeInTheDocument();
     expect(screen.getByText(/Scale: ±\d+(\.\d+)? per sample \(not per second, not time-normalized\)/)).toBeInTheDocument();
     expect(screen.getByText(/Not the Savitzky–Golay time-based derivative/)).toBeInTheDocument();
+  });
+
+  it("honors the shared normalization selector: recording-scale uses the recording-wide max abs sample-order derivative, not the visible window's own max", () => {
+    // This window's own adjacent diffs only reach ±3 (values 1,4,2), but the
+    // recording-wide max (as computed over the whole channel's observed
+    // sequence by the backend) is 8 — recording-scale must use the latter.
+    const narrowWindow: RawRecordingCompactWindow = {
+      ...compactWindow,
+      values: [1, 4, 2, 3],
+      recordingMaxAbsSampleOrderDerivative: 8,
+    };
+    render(
+      <RawImageCanvas
+        compactWindow={narrowWindow}
+        normalizationMode="recording"
+        title="Derivative preview (sample order)"
+        colorMode="diverging"
+      />,
+    );
+    expect(screen.getByText(/recording-scale/)).toBeInTheDocument();
+    expect(screen.getByText(/Scale: ±8 per sample/)).toBeInTheDocument();
+  });
+
+  it("frame-scale mode instead scales to the visible window's own max abs adjacent diff, distinct from recording-scale", () => {
+    const narrowWindow: RawRecordingCompactWindow = {
+      ...compactWindow,
+      values: [1, 4, 2, 3],
+      recordingMaxAbsSampleOrderDerivative: 8,
+    };
+    render(
+      <RawImageCanvas
+        compactWindow={narrowWindow}
+        normalizationMode="frame"
+        title="Derivative preview (sample order)"
+        colorMode="diverging"
+      />,
+    );
+    expect(screen.getByText(/frame-scale/)).toBeInTheDocument();
+    expect(screen.getByText(/Scale: ±3 per sample/)).toBeInTheDocument();
+  });
+
+  it("keeps the recording-scale extent stable across two different compact windows sharing the same recording-wide max", () => {
+    const windowA: RawRecordingCompactWindow = { ...compactWindow, recordingMaxAbsSampleOrderDerivative: 8 };
+    const windowB: RawRecordingCompactWindow = {
+      ...compactWindow,
+      startSampleIndex: 4,
+      endSampleIndex: 8,
+      sourceRawRowIndices: [50, 51, 52, 53],
+      timestampsNs: [50_000_000, 51_000_000, 52_000_000, 53_000_000],
+      values: [20, 21, 19, 19.5],
+      precedingTimestampNs: 40_000_000,
+      recordingMaxAbsSampleOrderDerivative: 8,
+    };
+    const { rerender } = render(
+      <RawImageCanvas
+        compactWindow={windowA}
+        normalizationMode="recording"
+        title="Derivative preview (sample order)"
+        colorMode="diverging"
+      />,
+    );
+    expect(screen.getByText(/Scale: ±8 per sample/)).toBeInTheDocument();
+
+    rerender(
+      <RawImageCanvas
+        compactWindow={windowB}
+        normalizationMode="recording"
+        title="Derivative preview (sample order)"
+        colorMode="diverging"
+      />,
+    );
+    expect(screen.getByText(/Scale: ±8 per sample/)).toBeInTheDocument();
   });
 });

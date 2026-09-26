@@ -23,10 +23,10 @@ const CONSTANT_COLOR: readonly [number, number, number] = [128, 128, 128];
 
 /** Rendering palette for the value gradient only; `MISSING_COLOR`, `BEYOND_COLOR`,
  * and `CONSTANT_COLOR` are shared "not data" fills, unaffected by this choice.
- * `"diverging"` is the M3 derivative palette: always zero-centred; the raw-row
- * derivative canvas honors `normalizationMode` for its scale (recording-wide
- * fixed vs. per-visible-window), while the GC-033 compact sample-order
- * preview stays frame-scale only by design. */
+ * `"diverging"` is the M3 derivative palette: always zero-centred; both the
+ * raw-row derivative canvas and the GC-033 compact sample-order preview honor
+ * `normalizationMode` for their scale (recording-wide fixed vs.
+ * per-visible-window). */
 export type RawImageColorMode = "grayscale" | "rainbow" | "diverging";
 
 /** Diverging-scale endpoints: cool blue = decreasing, white = ~no change, warm red = increasing. */
@@ -360,12 +360,11 @@ type CompactDerivativePixelInfo = {
 };
 
 /**
- * GC-033 sample-order derivative preview: reuses the already-loaded compact
- * window's own `values` (no new fetch, no backend contract) and differences
- * only two positions that are genuinely adjacent *in this window's loaded
- * array* — never across a navigation boundary, never time-weighted. This is
- * expressly a visual preview, not the M2 Savitzky–Golay time-based
- * derivative and not comparable to it.
+ * GC-033 sample-order derivative preview: differences only two positions that
+ * are genuinely adjacent *in this window's loaded array* — never across a
+ * navigation boundary, never time-weighted. This is expressly a visual
+ * preview, not the M2 Savitzky–Golay time-based derivative and not
+ * comparable to it.
  */
 function compactDerivativePixelInfoAt(compactWindow: RawRecordingCompactWindow, index: number): CompactDerivativePixelInfo {
   const gridSize = compactWindow.gridSize;
@@ -391,24 +390,36 @@ function compactDerivativePixelInfoAt(compactWindow: RawRecordingCompactWindow, 
   };
 }
 
-/** Zero-centred, frame-scale diverging palette over consecutive-sample
- * differences, reusing the same "beyond" fill as the time-based derivative
- * canvas so it reads identically everywhere. Pixel 0 uses `CONSTANT_COLOR`
- * rather than `MISSING_COLOR`: every compact sample is a genuine observation
- * (unlike a raw-row's withheld field), so pixel 0 is not "missing data" — it
- * is simply a window edge with no actually-adjacent loaded sample to
- * difference against, the same "nothing to compute" case `CONSTANT_COLOR`
- * already covers elsewhere in this file. */
+/** Zero-centred diverging palette over consecutive-sample differences,
+ * honoring the same `normalizationMode` selector as the grayscale/rainbow
+ * compact imagers and the raw-row derivative canvas: in `"recording"` mode
+ * the scale is `±recordingMaxAbsSampleOrderDerivative` (the max absolute
+ * finite adjacent-sample diff over the whole selected recording/channel's
+ * observed values, so a given magnitude keeps the same color across compact
+ * windows); in `"frame"` mode it stays `±(max absolute diff visible in this
+ * window)`, as before. Reuses the same "beyond" fill as the time-based
+ * derivative canvas so it reads identically everywhere. Pixel 0 uses
+ * `CONSTANT_COLOR` rather than `MISSING_COLOR`: every compact sample is a
+ * genuine observation (unlike a raw-row's withheld field), so pixel 0 is not
+ * "missing data" — it is simply a window edge with no actually-adjacent
+ * loaded sample to difference against, the same "nothing to compute" case
+ * `CONSTANT_COLOR` already covers elsewhere in this file. */
 export function buildCompactDivergingImageData(
   compactWindow: RawRecordingCompactWindow,
+  mode: RawImageNormalizationMode,
 ): { imageData: ImageData; extent: { min: number; max: number } | null; isConstant: boolean } {
   const gridSize = compactWindow.gridSize;
   const pixelCount = gridSize * gridSize;
 
-  let maxAbs: number | null = null;
-  for (let index = 1; index < compactWindow.values.length; index += 1) {
-    const abs = Math.abs(compactWindow.values[index] - compactWindow.values[index - 1]);
-    maxAbs = maxAbs === null ? abs : Math.max(maxAbs, abs);
+  let maxAbs: number | null;
+  if (mode === "recording") {
+    maxAbs = compactWindow.recordingMaxAbsSampleOrderDerivative;
+  } else {
+    maxAbs = null;
+    for (let index = 1; index < compactWindow.values.length; index += 1) {
+      const abs = Math.abs(compactWindow.values[index] - compactWindow.values[index - 1]);
+      maxAbs = maxAbs === null ? abs : Math.max(maxAbs, abs);
+    }
   }
   const extent = maxAbs === null ? null : { min: -maxAbs, max: maxAbs };
   const isConstant = extent !== null && extent.min === extent.max;
@@ -580,7 +591,7 @@ export function RawImageCanvas({
   const isDiverging = isCompactDerivative || (!isCompact && colorMode === "diverging" && derivativeWindow !== undefined);
 
   const built = useMemo(() => {
-    if (isCompactDerivative) return buildCompactDivergingImageData(compactWindow as RawRecordingCompactWindow);
+    if (isCompactDerivative) return buildCompactDivergingImageData(compactWindow as RawRecordingCompactWindow, normalizationMode);
     if (isCompact) return buildCompactImageData(compactWindow as RawRecordingCompactWindow, normalizationMode, colorMode);
     if (isDiverging) return buildDivergingImageData(derivativeWindow as RawRecordingDerivativeWindow, normalizationMode);
     return buildImageData(rawWindow as RawRecordingWindow, normalizationMode, colorMode);
@@ -771,10 +782,9 @@ function RawImageLegend({
   sampleOrderDerivative = false,
 }: RawImageLegendProps) {
   if (colorMode === "diverging") {
-    // GC-033's compact sample-order preview (`isCompact`) is always
-    // frame-scale only by design; the raw-row derivative canvas honors the
-    // shared normalization selector like the other two viewers.
-    const scaleLabel = isCompact ? "frame-scale" : `${normalizationMode}-scale`;
+    // Both the compact sample-order preview and the raw-row derivative
+    // canvas honor the shared normalization selector, like the other imagers.
+    const scaleLabel = `${normalizationMode}-scale`;
     return (
       <dl className="flex flex-col gap-1.5 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">

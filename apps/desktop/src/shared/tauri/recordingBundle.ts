@@ -242,6 +242,13 @@ export type RawRecordingCompactWindow = {
   precedingTimestampNs: number | null;
   recordingMin: number | null;
   recordingMax: number | null;
+  /** Maximum absolute finite difference between two consecutive observed
+   * samples (sample-order, never time-weighted) over the entire channel's
+   * observed sequence — computed before slicing, so it stays fixed across
+   * compact windows. `null` with fewer than two observed samples or no
+   * finite adjacent diff. The fixed scale `"recording"`-mode normalization
+   * uses for the sample-order derivative preview. */
+  recordingMaxAbsSampleOrderDerivative: number | null;
 };
 
 function toResult<T>(promise: Promise<T>): Promise<RecordingBundleResult<T>> {

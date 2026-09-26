@@ -855,6 +855,14 @@ pub struct CompactObservationWindow {
     pub preceding_timestamp_ns: Option<i64>,
     pub recording_min: Option<f64>,
     pub recording_max: Option<f64>,
+    /// Maximum absolute finite difference between two consecutive observed
+    /// samples (sample-order, never time-weighted) over the entire channel's
+    /// observed sequence — computed before slicing to `start_sample_index`,
+    /// so it stays fixed while paging through compact windows. `None` when
+    /// there are fewer than two observed samples or no finite adjacent diff
+    /// exists. This is the fixed scale the sample-order derivative preview
+    /// uses in `"recording"` normalization mode.
+    pub recording_max_abs_sample_order_derivative: Option<f64>,
 }
 
 /// Pure computation behind `get_compact_observation_window`, kept separate
@@ -905,6 +913,13 @@ fn compute_compact_observation_window(
         .map(|(_, _, value)| *value)
         .fold(None, |acc: Option<f64>, value| Some(acc.map_or(value, |current| current.max(value))));
 
+    let recording_max_abs_sample_order_derivative = present
+        .windows(2)
+        .map(|pair| pair[1].2 - pair[0].2)
+        .filter(|diff| diff.is_finite())
+        .map(f64::abs)
+        .fold(None, |max, abs| Some(max.map_or(abs, |m: f64| m.max(abs))));
+
     Ok(CompactObservationWindow {
         recording_id,
         column,
@@ -918,6 +933,7 @@ fn compute_compact_observation_window(
         preceding_timestamp_ns,
         recording_min,
         recording_max,
+        recording_max_abs_sample_order_derivative,
     })
 }
 
@@ -2394,6 +2410,38 @@ mod tests {
         let window = compact_window(&timestamps_ns, &values, 0, 4).expect("valid window");
         assert_eq!(window.source_raw_row_indices, vec![0, 3]);
         assert_eq!(window.values, vec![1.0, 2.0]);
+    }
+
+    #[test]
+    fn compact_window_recording_max_abs_sample_order_derivative_is_stable_across_frames() {
+        // Observed sample sequence: 1, 5, 2, 20 -> adjacent diffs |4|, |3|, |18| -> max 18.
+        let timestamps_ns: Vec<i64> = (0..4).map(|i| i * 1_000_000).collect();
+        let values = vec![Some(1.0), Some(5.0), Some(2.0), Some(20.0)];
+        let first_frame = compact_window(&timestamps_ns, &values, 0, 2).expect("valid first frame");
+        let second_frame = compact_window(&timestamps_ns, &values, 2, 2).expect("valid second frame");
+        assert_eq!(first_frame.recording_max_abs_sample_order_derivative, Some(18.0));
+        assert_eq!(
+            first_frame.recording_max_abs_sample_order_derivative,
+            second_frame.recording_max_abs_sample_order_derivative,
+        );
+    }
+
+    #[test]
+    fn compact_window_recording_max_abs_sample_order_derivative_none_for_zero_or_one_sample() {
+        let empty = compact_window(&[], &[], 0, 4).expect("empty channel is not an error");
+        assert_eq!(empty.recording_max_abs_sample_order_derivative, None);
+
+        let single = compact_window(&[0], &[Some(1.0)], 0, 4).expect("single-sample channel is not an error");
+        assert_eq!(single.recording_max_abs_sample_order_derivative, None);
+    }
+
+    #[test]
+    fn compact_window_recording_max_abs_sample_order_derivative_ignores_non_finite_diffs() {
+        // f64::MAX - (-f64::MAX) overflows to +inf, which must not become "the" scale.
+        let timestamps_ns = vec![0, 1_000_000, 2_000_000];
+        let values = vec![Some(-f64::MAX), Some(f64::MAX), Some(f64::MAX - 1.0)];
+        let window = compact_window(&timestamps_ns, &values, 0, 4).expect("valid window");
+        assert_eq!(window.recording_max_abs_sample_order_derivative, Some(1.0));
     }
 
     // --- M2: Savitzky–Golay derivative helper ---
