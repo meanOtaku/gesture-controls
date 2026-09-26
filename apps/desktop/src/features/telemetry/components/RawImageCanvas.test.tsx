@@ -124,6 +124,7 @@ const derivativeWindow: RawRecordingDerivativeWindow = {
   mode: "time",
   units: "per_second",
   unavailableIsCadenceIssue: false,
+  recordingMaxAbsDerivative: 8,
 };
 
 describe("RawImageCanvas diverging derivative mode", () => {
@@ -174,6 +175,79 @@ describe("RawImageCanvas diverging derivative mode", () => {
       />,
     );
     expect(screen.getByText(/Blue = decreasing, white ≈ no change, red = increasing/)).toBeInTheDocument();
+    expect(screen.getByText(/Scale: ±8 per second/)).toBeInTheDocument();
+  });
+
+  it("honors the shared normalization selector: recording-scale uses the recording-wide max abs derivative, not the visible window's own max", () => {
+    // This window's own visible derivative values only reach ±5, but the
+    // recording-wide max (as computed over the whole selected recording by
+    // the backend) is 8 — recording-scale must use the latter.
+    const narrowWindow: RawRecordingDerivativeWindow = {
+      ...derivativeWindow,
+      derivativeValues: Array.from({ length: 16 }, (_, i) => (i === 3 ? null : i - 8 < -5 ? -5 : i - 8 > 5 ? 5 : i - 8)),
+      recordingMaxAbsDerivative: 8,
+    };
+    render(
+      <RawImageCanvas
+        rawWindow={rawWindow}
+        normalizationMode="recording"
+        title="Derivative (Savitzky–Golay)"
+        colorMode="diverging"
+        derivativeWindow={narrowWindow}
+      />,
+    );
+    expect(screen.getByText(/recording-scale/)).toBeInTheDocument();
+    expect(screen.getByText(/Scale: ±8 per second/)).toBeInTheDocument();
+  });
+
+  it("frame-scale mode instead scales to the visible window's own max abs derivative, distinct from recording-scale", () => {
+    const narrowWindow: RawRecordingDerivativeWindow = {
+      ...derivativeWindow,
+      derivativeValues: Array.from({ length: 16 }, (_, i) => (i === 3 ? null : i - 8 < -5 ? -5 : i - 8 > 5 ? 5 : i - 8)),
+      recordingMaxAbsDerivative: 8,
+    };
+    render(
+      <RawImageCanvas
+        rawWindow={rawWindow}
+        normalizationMode="frame"
+        title="Derivative (Savitzky–Golay)"
+        colorMode="diverging"
+        derivativeWindow={narrowWindow}
+      />,
+    );
+    expect(screen.getByText(/frame-scale/)).toBeInTheDocument();
+    expect(screen.getByText(/Scale: ±5 per second/)).toBeInTheDocument();
+  });
+
+  it("keeps the recording-scale extent stable across two different visible windows sharing the same recording-wide max", () => {
+    const windowA: RawRecordingDerivativeWindow = { ...derivativeWindow, recordingMaxAbsDerivative: 8 };
+    const windowB: RawRecordingDerivativeWindow = {
+      ...derivativeWindow,
+      startRawRow: 16,
+      endRawRow: 32,
+      derivativeValues: Array.from({ length: 16 }, () => 1),
+      recordingMaxAbsDerivative: 8,
+    };
+    const { rerender } = render(
+      <RawImageCanvas
+        rawWindow={rawWindow}
+        normalizationMode="recording"
+        title="Derivative (Savitzky–Golay)"
+        colorMode="diverging"
+        derivativeWindow={windowA}
+      />,
+    );
+    expect(screen.getByText(/Scale: ±8 per second/)).toBeInTheDocument();
+
+    rerender(
+      <RawImageCanvas
+        rawWindow={rawWindow}
+        normalizationMode="recording"
+        title="Derivative (Savitzky–Golay)"
+        colorMode="diverging"
+        derivativeWindow={windowB}
+      />,
+    );
     expect(screen.getByText(/Scale: ±8 per second/)).toBeInTheDocument();
   });
 });

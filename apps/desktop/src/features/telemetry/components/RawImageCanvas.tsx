@@ -23,7 +23,10 @@ const CONSTANT_COLOR: readonly [number, number, number] = [128, 128, 128];
 
 /** Rendering palette for the value gradient only; `MISSING_COLOR`, `BEYOND_COLOR`,
  * and `CONSTANT_COLOR` are shared "not data" fills, unaffected by this choice.
- * `"diverging"` is the M3 derivative palette: zero-centred, frame-scale only. */
+ * `"diverging"` is the M3 derivative palette: always zero-centred; the raw-row
+ * derivative canvas honors `normalizationMode` for its scale (recording-wide
+ * fixed vs. per-visible-window), while the GC-033 compact sample-order
+ * preview stays frame-scale only by design. */
 export type RawImageColorMode = "grayscale" | "rainbow" | "diverging";
 
 /** Diverging-scale endpoints: cool blue = decreasing, white = ~no change, warm red = increasing. */
@@ -187,23 +190,32 @@ function derivativePixelInfoAt(
 }
 
 /**
- * Zero-centred, frame-scale-only colour mapping for the M3 derivative
- * canvas: the extent is always `±(max absolute derivative visible in this
- * frame)`, independent of the raw Grayscale/Rainbow `normalizationMode`
- * controls. Missing/beyond fills are shared with the raw canvases so they
- * read as the same "not data" facts everywhere.
+ * Zero-centred colour mapping for the M3 derivative canvas, honoring the
+ * same `normalizationMode` selector as the raw/compact viewers: in
+ * `"recording"` mode the scale is `±recordingMaxAbsDerivative` (the max
+ * absolute finite derivative over the whole selected recording/channel, so a
+ * given magnitude keeps the same color while scrolling); in `"frame"` mode
+ * it stays `±(max absolute derivative visible in this window)`, as before.
+ * Missing/beyond fills are shared with the raw canvases so they read as the
+ * same "not data" facts everywhere.
  */
 function buildDivergingImageData(
   derivativeWindow: RawRecordingDerivativeWindow,
+  mode: RawImageNormalizationMode,
 ): { imageData: ImageData; extent: { min: number; max: number } | null; isConstant: boolean } {
   const gridSize = derivativeWindow.gridSize;
   const pixelCount = gridSize * gridSize;
 
-  let maxAbs: number | null = null;
-  for (const value of derivativeWindow.derivativeValues) {
-    if (value === null) continue;
-    const abs = Math.abs(value);
-    maxAbs = maxAbs === null ? abs : Math.max(maxAbs, abs);
+  let maxAbs: number | null;
+  if (mode === "recording") {
+    maxAbs = derivativeWindow.recordingMaxAbsDerivative;
+  } else {
+    maxAbs = null;
+    for (const value of derivativeWindow.derivativeValues) {
+      if (value === null) continue;
+      const abs = Math.abs(value);
+      maxAbs = maxAbs === null ? abs : Math.max(maxAbs, abs);
+    }
   }
   const extent = maxAbs === null ? null : { min: -maxAbs, max: maxAbs };
   const isConstant = extent !== null && extent.min === extent.max;
@@ -570,7 +582,7 @@ export function RawImageCanvas({
   const built = useMemo(() => {
     if (isCompactDerivative) return buildCompactDivergingImageData(compactWindow as RawRecordingCompactWindow);
     if (isCompact) return buildCompactImageData(compactWindow as RawRecordingCompactWindow, normalizationMode, colorMode);
-    if (isDiverging) return buildDivergingImageData(derivativeWindow as RawRecordingDerivativeWindow);
+    if (isDiverging) return buildDivergingImageData(derivativeWindow as RawRecordingDerivativeWindow, normalizationMode);
     return buildImageData(rawWindow as RawRecordingWindow, normalizationMode, colorMode);
   }, [rawWindow, compactWindow, normalizationMode, colorMode, derivativeWindow, isDiverging, isCompact, isCompactDerivative]);
 
@@ -759,6 +771,10 @@ function RawImageLegend({
   sampleOrderDerivative = false,
 }: RawImageLegendProps) {
   if (colorMode === "diverging") {
+    // GC-033's compact sample-order preview (`isCompact`) is always
+    // frame-scale only by design; the raw-row derivative canvas honors the
+    // shared normalization selector like the other two viewers.
+    const scaleLabel = isCompact ? "frame-scale" : `${normalizationMode}-scale`;
     return (
       <dl className="flex flex-col gap-1.5 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
@@ -772,8 +788,8 @@ function RawImageLegend({
               ? "No change: every derivative value in this frame is zero (or unavailable), shown as neutral white."
               : extent
                 ? sampleOrderDerivative
-                  ? `Palette: diverging, zero-centred, frame-scale. Blue = decreasing, white ≈ no change, red = increasing. Scale: ±${extent.max} per sample (not per second, not time-normalized).`
-                  : `Palette: diverging, zero-centred, frame-scale. Blue = decreasing, white ≈ no change, red = increasing. Scale: ±${extent.max} per second.`
+                  ? `Palette: diverging, zero-centred, ${scaleLabel}. Blue = decreasing, white ≈ no change, red = increasing. Scale: ±${extent.max} per sample (not per second, not time-normalized).`
+                  : `Palette: diverging, zero-centred, ${scaleLabel}. Blue = decreasing, white ≈ no change, red = increasing. Scale: ±${extent.max} per second.`
                 : "No available derivative values in this frame to scale against."}
           </span>
         </div>

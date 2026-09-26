@@ -1112,12 +1112,25 @@ fn is_cadence_only_unavailable_reason(reason: &str) -> bool {
 /// timeline, which would mix this channel's cadence with unrelated channels'
 /// arrival timing. Rows where the column is absent simply stay `None`,
 /// independent of whether the channel's own cadence is regular.
+/// Maximum absolute finite value across every recording-wide computed
+/// derivative (not just the sliced display window) — the fixed scale
+/// `"recording"`-mode normalization needs so a given magnitude keeps the same
+/// color while scrolling. `None` when no derivative could be computed anywhere.
+fn max_abs_finite(derivative_by_row: &std::collections::HashMap<usize, f64>) -> Option<f64> {
+    derivative_by_row
+        .values()
+        .copied()
+        .filter(|value| value.is_finite())
+        .map(f64::abs)
+        .fold(None, |max, abs| Some(max.map_or(abs, |m: f64| m.max(abs))))
+}
+
 fn compute_sg_derivative_window(
     timestamps_ns: &[i64],
     values: &[Option<f64>],
     start: usize,
     end: usize,
-) -> (Vec<Option<f64>>, bool, Option<String>, Option<f64>) {
+) -> (Vec<Option<f64>>, bool, Option<String>, Option<f64>, Option<f64>) {
     debug_assert_eq!(timestamps_ns.len(), values.len());
     let row_count = values.len();
 
@@ -1136,7 +1149,7 @@ fn compute_sg_derivative_window(
     let placeholder_len = end.saturating_sub(start).min(row_count.saturating_sub(start));
     let (median_dt_ns, effective_sample_rate_hz) = match assess_cadence_regularity(&present_timestamps_ns) {
         CadenceRegularity::Irregular(reason) => {
-            return (vec![None; placeholder_len], false, Some(reason), None);
+            return (vec![None; placeholder_len], false, Some(reason), None, None);
         }
         CadenceRegularity::Regular { median_dt_ns } => {
             (median_dt_ns, Some(1_000_000_000.0 / median_dt_ns))
@@ -1155,9 +1168,10 @@ fn compute_sg_derivative_window(
         .into_iter()
         .map(|(row, raw)| (row, raw / dt_seconds))
         .collect();
+    let recording_max_abs_derivative = max_abs_finite(&derivative_by_row);
 
     let derivative_values = (start..end).map(|row| derivative_by_row.get(&row).copied()).collect();
-    (derivative_values, true, None, effective_sample_rate_hz)
+    (derivative_values, true, None, effective_sample_rate_hz, recording_max_abs_derivative)
 }
 
 /// GC-032 legacy fallback: the same Savitzky–Golay first-difference filter as
@@ -1174,7 +1188,7 @@ fn compute_sample_order_derivative_window(
     values: &[Option<f64>],
     start: usize,
     end: usize,
-) -> (Vec<Option<f64>>, bool, Option<String>) {
+) -> (Vec<Option<f64>>, bool, Option<String>, Option<f64>) {
     let row_count = values.len();
     let present: Vec<(usize, f64)> = values
         .iter()
@@ -1190,6 +1204,7 @@ fn compute_sample_order_derivative_window(
             Some(format!(
                 "fewer than {MIN_ROWS_FOR_DERIVATIVE} finite samples in this channel; a {SG_WINDOW_SIZE}-sample Savitzky–Golay window needs at least that many rows of context even in sample order"
             )),
+            None,
         );
     }
 
@@ -1198,9 +1213,10 @@ fn compute_sample_order_derivative_window(
     // the coefficients already yield "value units per sample", which is
     // exactly this fallback's unit.
     let derivative_by_row = convolve_symmetric_sg(&present, &coefficients, SG_HALF_WIDTH);
+    let recording_max_abs_derivative = max_abs_finite(&derivative_by_row);
 
     let derivative_values = (start..end).map(|row| derivative_by_row.get(&row).copied()).collect();
-    (derivative_values, true, None)
+    (derivative_values, true, None, recording_max_abs_derivative)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1263,6 +1279,12 @@ pub struct RawRecordingDerivativeWindow {
     /// `preview_by_sample_order` fallback exists for. Always false in
     /// `"sample_order"` mode.
     pub unavailable_is_cadence_issue: bool,
+    /// Maximum absolute finite derivative value over the *entire* selected
+    /// recording/channel (not just this sliced display window) — the fixed,
+    /// zero-centred scale `"recording"`-mode normalization uses so a given
+    /// magnitude keeps the same color while scrolling. `None` when
+    /// unavailable or no derivative could be computed anywhere.
+    pub recording_max_abs_derivative: Option<f64>,
 }
 
 /// Returns the offline Savitzky–Golay first-derivative window matching
@@ -1314,28 +1336,46 @@ pub fn get_raw_recording_derivative_window(
     let window_timestamps = timestamps_ns[resolved_start..resolved_end].to_vec();
     let row_indices: Vec<usize> = (resolved_start..resolved_end).collect();
 
-    let (derivative_values, available, unavailable_reason, effective_sample_rate_hz, mode, units, unavailable_is_cadence_issue) =
-        if preview_by_sample_order.unwrap_or(false) {
-            let (derivative_values, available, unavailable_reason) =
-                compute_sample_order_derivative_window(&all_values, resolved_start, resolved_end);
-            (derivative_values, available, unavailable_reason, None, "sample_order", "per_sample", false)
-        } else {
-            let (derivative_values, available, unavailable_reason, effective_sample_rate_hz) =
-                compute_sg_derivative_window(&timestamps_ns, &all_values, resolved_start, resolved_end);
-            let unavailable_is_cadence_issue = !available
-                && unavailable_reason
-                    .as_deref()
-                    .is_some_and(is_cadence_only_unavailable_reason);
-            (
-                derivative_values,
-                available,
-                unavailable_reason,
-                effective_sample_rate_hz,
-                "time",
-                "per_second",
-                unavailable_is_cadence_issue,
-            )
-        };
+    let (
+        derivative_values,
+        available,
+        unavailable_reason,
+        effective_sample_rate_hz,
+        mode,
+        units,
+        unavailable_is_cadence_issue,
+        recording_max_abs_derivative,
+    ) = if preview_by_sample_order.unwrap_or(false) {
+        let (derivative_values, available, unavailable_reason, recording_max_abs_derivative) =
+            compute_sample_order_derivative_window(&all_values, resolved_start, resolved_end);
+        (
+            derivative_values,
+            available,
+            unavailable_reason,
+            None,
+            "sample_order",
+            "per_sample",
+            false,
+            recording_max_abs_derivative,
+        )
+    } else {
+        let (derivative_values, available, unavailable_reason, effective_sample_rate_hz, recording_max_abs_derivative) =
+            compute_sg_derivative_window(&timestamps_ns, &all_values, resolved_start, resolved_end);
+        let unavailable_is_cadence_issue = !available
+            && unavailable_reason
+                .as_deref()
+                .is_some_and(is_cadence_only_unavailable_reason);
+        (
+            derivative_values,
+            available,
+            unavailable_reason,
+            effective_sample_rate_hz,
+            "time",
+            "per_second",
+            unavailable_is_cadence_issue,
+            recording_max_abs_derivative,
+        )
+    };
 
     Ok(RawRecordingDerivativeWindow {
         recording_id,
@@ -1354,6 +1394,7 @@ pub fn get_raw_recording_derivative_window(
         mode: mode.to_string(),
         units: units.to_string(),
         unavailable_is_cadence_issue,
+        recording_max_abs_derivative,
     })
 }
 
@@ -1931,7 +1972,7 @@ mod tests {
     fn legacy_densely_populated_bundle_derivative_is_unaffected_by_the_per_channel_fix() {
         let timestamps_ns = uniform_timestamps(21, 20_000_000);
         let values: Vec<Option<f64>> = (0..21).map(|i| Some(i as f64 * 0.5)).collect(); // every row populated
-        let (derivative, available, reason, rate) =
+        let (derivative, available, reason, rate, _) =
             compute_sg_derivative_window(&timestamps_ns, &values, 0, 21);
         assert!(available, "reason: {reason:?}");
         assert!((rate.unwrap() - 50.0).abs() < 1e-6);
@@ -2410,7 +2451,7 @@ mod tests {
     fn constant_signal_has_zero_derivative_everywhere_available() {
         let timestamps_ns = uniform_timestamps(20, 20_000_000); // 50Hz
         let values: Vec<Option<f64>> = vec![Some(3.0); 20];
-        let (derivative, available, reason, rate) =
+        let (derivative, available, reason, rate, _) =
             compute_sg_derivative_window(&timestamps_ns, &values, 0, 20);
         assert!(available);
         assert!(reason.is_none());
@@ -2439,7 +2480,7 @@ mod tests {
             .iter()
             .map(|&t| Some(2.0 * (t as f64 / 1_000_000_000.0)))
             .collect();
-        let (derivative, available, _reason, _rate) =
+        let (derivative, available, _reason, _rate, _) =
             compute_sg_derivative_window(&timestamps_ns, &values, 0, 21);
         assert!(available);
         for row in SG_HALF_WIDTH..(21 - SG_HALF_WIDTH) {
@@ -2450,7 +2491,7 @@ mod tests {
             );
         }
         // Requesting a sub-window [8,13) still aligns 1:1 with rows 8..13 of the full series.
-        let (sub_derivative, _, _, _) =
+        let (sub_derivative, _, _, _, _) =
             compute_sg_derivative_window(&timestamps_ns, &values, 8, 13);
         assert_eq!(sub_derivative.len(), 5);
         for value in &sub_derivative {
@@ -2479,7 +2520,7 @@ mod tests {
         }
         let row_count = timestamps_ns.len();
 
-        let (derivative, available, reason, rate) =
+        let (derivative, available, reason, rate, _) =
             compute_sg_derivative_window(&timestamps_ns, &values, 0, row_count);
         assert!(available, "reason: {reason:?}");
         assert!((rate.unwrap() - 50.0).abs() < 1e-6);
@@ -2510,7 +2551,7 @@ mod tests {
         values.insert(1, Some(f64::NAN));
         let row_count = timestamps_ns.len();
 
-        let (derivative, available, reason, rate) =
+        let (derivative, available, reason, rate, _) =
             compute_sg_derivative_window(&timestamps_ns, &values, 0, row_count);
         assert!(available, "reason: {reason:?}");
         assert!((rate.unwrap() - 50.0).abs() < 1e-6);
@@ -2521,7 +2562,7 @@ mod tests {
     fn short_input_is_unavailable_with_reason() {
         let timestamps_ns = uniform_timestamps(5, 20_000_000); // fewer than SG_WINDOW_SIZE
         let values: Vec<Option<f64>> = vec![Some(1.0); 5];
-        let (derivative, available, reason, rate) =
+        let (derivative, available, reason, rate, _) =
             compute_sg_derivative_window(&timestamps_ns, &values, 0, 5);
         assert!(!available);
         assert!(derivative.iter().all(Option::is_none));
@@ -2534,7 +2575,7 @@ mod tests {
         let mut timestamps_ns = uniform_timestamps(15, 20_000_000);
         timestamps_ns[7] = timestamps_ns[6]; // duplicate/non-increasing
         let values: Vec<Option<f64>> = vec![Some(1.0); 15];
-        let (derivative, available, reason, _rate) =
+        let (derivative, available, reason, _rate, _) =
             compute_sg_derivative_window(&timestamps_ns, &values, 0, 15);
         assert!(!available);
         assert!(derivative.iter().all(Option::is_none));
@@ -2549,7 +2590,7 @@ mod tests {
             *t += 500_000_000; // a huge jump partway through
         }
         let values: Vec<Option<f64>> = vec![Some(1.0); 15];
-        let (derivative, available, reason, _rate) =
+        let (derivative, available, reason, _rate, _) =
             compute_sg_derivative_window(&timestamps_ns, &values, 0, 15);
         assert!(!available);
         assert!(derivative.iter().all(Option::is_none));
@@ -2560,7 +2601,7 @@ mod tests {
     fn ordinary_uniform_50hz_stream_is_accepted() {
         let timestamps_ns = uniform_timestamps(50, 20_000_000);
         let values: Vec<Option<f64>> = (0..50).map(|i| Some(i as f64 * 0.1)).collect();
-        let (_derivative, available, reason, rate) =
+        let (_derivative, available, reason, rate, _) =
             compute_sg_derivative_window(&timestamps_ns, &values, 0, 50);
         assert!(available);
         assert!(reason.is_none());
@@ -2577,7 +2618,7 @@ mod tests {
             .iter()
             .map(|&t| Some(3.0 * (t as f64 / 1_000_000_000.0)))
             .collect();
-        let (derivative, available, _reason, _rate) =
+        let (derivative, available, _reason, _rate, _) =
             compute_sg_derivative_window(&timestamps_ns, &values, 20, 30);
         assert!(available);
         assert_eq!(derivative.len(), 10);
@@ -2622,7 +2663,7 @@ mod tests {
             .iter()
             .map(|&t| Some(2.0 * (t as f64 / 1_000_000_000.0)))
             .collect();
-        let (sample_order, available, reason) =
+        let (sample_order, available, reason, _) =
             compute_sample_order_derivative_window(&values, 0, 21);
         assert!(available, "reason: {reason:?}");
         for row in SG_HALF_WIDTH..(21 - SG_HALF_WIDTH) {
@@ -2642,12 +2683,12 @@ mod tests {
         }
         let values: Vec<Option<f64>> = (0..15).map(|i| Some(i as f64)).collect();
 
-        let (_time_derivative, time_available, time_reason, _rate) =
+        let (_time_derivative, time_available, time_reason, _rate, _) =
             compute_sg_derivative_window(&timestamps_ns, &values, 0, 15);
         assert!(!time_available);
         assert!(is_cadence_only_unavailable_reason(&time_reason.unwrap()));
 
-        let (sample_order, available, reason) =
+        let (sample_order, available, reason, _) =
             compute_sample_order_derivative_window(&values, 0, 15);
         assert!(available, "reason: {reason:?}");
         for row in SG_HALF_WIDTH..(15 - SG_HALF_WIDTH) {
@@ -2666,7 +2707,7 @@ mod tests {
         values.insert(1, Some(f64::NAN)); // an explicit non-finite reading
         let row_count = values.len();
 
-        let (derivative, available, reason) =
+        let (derivative, available, reason, _) =
             compute_sample_order_derivative_window(&values, 0, row_count);
         assert!(available, "reason: {reason:?}");
         assert!(derivative[10].is_none(), "gap row must have no derivative");
@@ -2676,7 +2717,7 @@ mod tests {
     #[test]
     fn sample_order_derivative_too_few_finite_samples_is_unavailable_with_reason() {
         let values: Vec<Option<f64>> = vec![Some(1.0); 5]; // fewer than SG_WINDOW_SIZE
-        let (derivative, available, reason) = compute_sample_order_derivative_window(&values, 0, 5);
+        let (derivative, available, reason, _) = compute_sample_order_derivative_window(&values, 0, 5);
         assert!(!available);
         assert!(derivative.iter().all(Option::is_none));
         let reason = reason.unwrap();

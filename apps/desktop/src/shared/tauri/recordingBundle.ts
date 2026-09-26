@@ -207,6 +207,8 @@ export type RawRecordingDerivativeWindow = {
   units: "per_second" | "per_sample";
   /** Only meaningful in `"time"` mode: true when unavailable solely because of a timestamp/cadence irregularity (not too few rows) — exactly when the sample-order preview fallback may be offered. */
   unavailableIsCadenceIssue: boolean;
+  /** Maximum absolute finite derivative value over the entire selected recording/channel (not just this sliced display window) — the fixed, zero-centred scale `"recording"`-mode normalization uses. `null` when unavailable or no derivative could be computed anywhere. */
+  recordingMaxAbsDerivative: number | null;
 };
 
 /**

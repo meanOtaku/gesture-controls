@@ -90,6 +90,7 @@ function derivativeWindow(
     mode: "time",
     units: "per_second",
     unavailableIsCadenceIssue: false,
+    recordingMaxAbsDerivative: null,
     ...overrides,
   };
 }
