@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Gesture Watch</string>
+    <string name="transport_heading">Desktop link</string>
+    <string name="transport_bluetooth">Bluetooth</string>
+    <string name="transport_wifi">Wi-Fi</string>
+    <string name="status_awaiting_trust">Awaiting approval</string>
+    <string name="action_trust">Trust this computer</string>
+    <string name="action_forget_trust">Forget trusted computer</string>
+    <string name="ble_advertising">Advertising over Bluetooth…</string>
+    <string name="ble_permission_required">Bluetooth permission is required</string>
     <string name="action_connect">Find desktop</string>
     <string name="action_disconnect">Disconnect</string>
     <string name="status_disconnected">Disconnected</string>

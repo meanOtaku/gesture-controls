@@ -12,7 +12,7 @@ use spatial_protocol::{
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 use tracing::{debug, warn};
-use watch_bridge::{SensorControlCommand, SensorRateCommand, WatchBridgeServer};
+use watch_bridge::{SensorControlCommand, SensorRateCommand, WatchBridgeServer, WatchTransport};
 
 pub const SETTINGS_UPDATED_EVENT: &str = "settings-updated";
 const SETTINGS_FILE_NAME: &str = "settings.json";
@@ -72,6 +72,14 @@ pub struct AppSettings {
     pub wrist_max_angular_velocity_degrees_per_second: f64,
     #[serde(default = "default_wrist_max_volume_points_per_second")]
     pub wrist_max_volume_points_per_second: f64,
+    /// Missing entirely (e.g. a settings.json from before this field
+    /// existed) falls back to every controllable sensor enabled via
+    /// [`default_watch_sensors_enabled`], not to the whole-struct default —
+    /// so an older persisted file only migrates this one field forward and
+    /// keeps the rest of the user's settings. A key present with `false`
+    /// (an explicit user disable) is never overridden; only an *absent* key
+    /// is treated as "enabled" — see [`apply_watch_settings`].
+    #[serde(default = "default_watch_sensors_enabled")]
     pub watch_sensors_enabled: HashMap<String, bool>,
     /// Explicit opt-in for the corner-gated demo interaction: dwelling on the
     /// calibrated top-right target grabs the volume overlay directly (no
@@ -85,6 +93,12 @@ pub struct AppSettings {
     /// opposite sign. Has no effect on the Watch-button/desktop-model paths.
     #[serde(default)]
     pub corner_wrist_volume_invert_direction: bool,
+    /// Which link reaches the Watch. Absent from an older settings.json — every
+    /// file written before GC-037 — migrates to [`WatchTransport::Bluetooth`],
+    /// which is also what a fresh install gets. Only one transport is ever
+    /// live: see `lib.rs`'s `apply_watch_transport`.
+    #[serde(default)]
+    pub watch_transport: WatchTransport,
 }
 
 impl Default for AppSettings {
@@ -109,14 +123,19 @@ impl Default for AppSettings {
             wrist_max_angular_velocity_degrees_per_second:
                 default_wrist_max_angular_velocity_degrees_per_second(),
             wrist_max_volume_points_per_second: default_wrist_max_volume_points_per_second(),
-            watch_sensors_enabled: CONTROLLABLE_SENSOR_IDS
-                .iter()
-                .map(|&sensor| (sensor.to_string(), true))
-                .collect(),
+            watch_sensors_enabled: default_watch_sensors_enabled(),
             corner_wrist_volume_demo_enabled: false,
             corner_wrist_volume_invert_direction: false,
+            watch_transport: WatchTransport::default(),
         }
     }
+}
+
+fn default_watch_sensors_enabled() -> HashMap<String, bool> {
+    CONTROLLABLE_SENSOR_IDS
+        .iter()
+        .map(|&sensor| (sensor.to_string(), true))
+        .collect()
 }
 
 fn default_health_acceptance_rate_hz() -> f64 {
@@ -415,6 +434,19 @@ impl SettingsRuntime {
     }
 }
 
+/// A sensor absent from `watch_sensors_enabled` (a legacy/persisted settings
+/// object migrating forward, or a sensor added to `CONTROLLABLE_SENSOR_IDS`
+/// after the file was written) is treated as enabled by default. A sensor
+/// *present* with `false` is an explicit user disable and is never
+/// overridden.
+fn effective_sensor_enabled(settings: &AppSettings, sensor: &str) -> bool {
+    settings
+        .watch_sensors_enabled
+        .get(sensor)
+        .copied()
+        .unwrap_or(true)
+}
+
 /// Pushes `settings`' watch-facing configuration (per-IMU enable state and
 /// sampling rate) to the connected watch. Best-effort: errors (most commonly
 /// "no watch connected") are logged and swallowed, since settings must always
@@ -423,11 +455,7 @@ impl SettingsRuntime {
 /// `WatchEvent::Connected` replay in `lib.rs`.
 pub fn apply_watch_settings(server: &WatchBridgeServer, settings: &AppSettings) {
     for &sensor in CONTROLLABLE_SENSOR_IDS {
-        let enabled = settings
-            .watch_sensors_enabled
-            .get(sensor)
-            .copied()
-            .unwrap_or(true);
+        let enabled = effective_sensor_enabled(settings, sensor);
         let command = if enabled {
             SensorControlCommand::Enable(sensor.to_string())
         } else {
@@ -454,6 +482,56 @@ pub fn apply_watch_settings(server: &WatchBridgeServer, settings: &AppSettings) 
     }
 }
 
+/// Makes `transport` the live Watch link. Starting one transport stops the
+/// other outright: selecting Bluetooth tears down the WebSocket listener, its
+/// mDNS advertisement and the pairing browser, and selecting Wi-Fi releases the
+/// BLE scan, GATT connection and notification subscription. A failure to start
+/// the selected transport is reported, never papered over by falling back to
+/// the other one.
+pub async fn apply_watch_transport(
+    app: &AppHandle,
+    transport: WatchTransport,
+) -> Result<(), String> {
+    let Some(server) = app.try_state::<std::sync::Arc<WatchBridgeServer>>() else {
+        // The bridge task hasn't published the server yet; it reads the
+        // persisted setting itself when it does.
+        return Ok(());
+    };
+    match transport {
+        WatchTransport::Bluetooth => {
+            server.stop().await.map_err(|error| error.to_string())?;
+            server.start_ble().map_err(|error| error.to_string())
+        }
+        WatchTransport::WiFi => {
+            server.stop_ble().await.map_err(|error| error.to_string())?;
+            server.start().await.map_err(|error| error.to_string())
+        }
+    }
+}
+
+/// Persists `transport` and switches to it.
+pub async fn set_watch_transport(app: &AppHandle, transport: WatchTransport) -> Result<(), String> {
+    let runtime = app.state::<SettingsRuntime>();
+    let mut settings = runtime.get()?;
+    if settings.watch_transport == transport {
+        return Ok(());
+    }
+    settings.watch_transport = transport;
+    let applied = runtime.update(app, settings)?;
+    apply_watch_transport(app, transport).await?;
+    let _ = app.emit(SETTINGS_UPDATED_EVENT, &applied);
+    Ok(())
+}
+
+/// Stops and restarts the BLE session, for a user-initiated rescan.
+pub async fn restart_watch_ble(app: &AppHandle) -> Result<(), String> {
+    let Some(server) = app.try_state::<std::sync::Arc<WatchBridgeServer>>() else {
+        return Err("watch bridge is not running yet".to_string());
+    };
+    server.stop_ble().await.map_err(|error| error.to_string())?;
+    server.start_ble().map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 pub fn get_settings(runtime: State<'_, SettingsRuntime>) -> Result<AppSettings, String> {
     runtime.get()
@@ -465,9 +543,21 @@ pub fn update_settings(
     runtime: State<'_, SettingsRuntime>,
     app: AppHandle,
 ) -> Result<AppSettings, String> {
+    let previous_transport = runtime.get().map(|current| current.watch_transport).ok();
     let applied = runtime.update(&app, settings)?;
     if let Some(server) = app.try_state::<std::sync::Arc<WatchBridgeServer>>() {
         apply_watch_settings(&server, &applied);
+    }
+    // Transport switches are asynchronous (they stop listeners and GATT
+    // connections), so they can't run inline in this sync command.
+    if previous_transport != Some(applied.watch_transport) {
+        let handle = app.clone();
+        let transport = applied.watch_transport;
+        tauri::async_runtime::spawn(async move {
+            if let Err(error) = apply_watch_transport(&handle, transport).await {
+                warn!(%error, "failed to switch the watch transport");
+            }
+        });
     }
     let _ = app.emit(SETTINGS_UPDATED_EVENT, &applied);
     Ok(applied)
@@ -513,5 +603,129 @@ mod tests {
             .watch_sensors_enabled
             .insert("bogus".to_string(), true);
         assert!(settings.validate().is_err());
+    }
+
+    // GC-037: Bluetooth is the default Watch transport, for fresh installs and
+    // for settings files written before the field existed.
+
+    #[test]
+    fn fresh_settings_select_the_bluetooth_watch_transport() {
+        assert_eq!(
+            AppSettings::default().watch_transport,
+            WatchTransport::Bluetooth
+        );
+    }
+
+    #[test]
+    fn legacy_settings_json_without_a_transport_field_migrates_to_bluetooth() {
+        let json = serde_json::json!({
+            "headphonesEnabled": true,
+            "headphonesRateHz": 60.0,
+            "recordingRateHz": 30.0,
+            "graphRefreshRateHz": 15.0,
+            "watchOrientationRateHz": 50.0,
+            "watchAccelerationRateHz": 50.0,
+            "watchGyroscopeRateHz": 50.0,
+        });
+        let settings: AppSettings =
+            serde_json::from_value(json).expect("legacy settings must deserialize");
+        settings
+            .validate()
+            .expect("migrated settings must be valid");
+        assert_eq!(settings.watch_transport, WatchTransport::Bluetooth);
+    }
+
+    #[test]
+    fn an_explicit_wifi_choice_survives_a_persistence_round_trip() {
+        let mut settings = AppSettings::default();
+        settings.watch_transport = WatchTransport::WiFi;
+        let json = serde_json::to_value(&settings).expect("serializable");
+        assert_eq!(json["watchTransport"], "wifi");
+        let restored: AppSettings = serde_json::from_value(json).expect("deserializable");
+        assert_eq!(restored.watch_transport, WatchTransport::WiFi);
+    }
+
+    // GC-035: a connected Watch must receive its current configured motion
+    // settings. These test the pure `effective_sensor_enabled` decision that
+    // `apply_watch_settings` replays on every `WatchEvent::Connected` (see
+    // `lib.rs`) without needing a live `WatchBridgeServer`/connection.
+
+    #[test]
+    fn fresh_settings_enable_every_motion_sensor() {
+        let settings = AppSettings::default();
+        for sensor in [SENSOR_ORIENTATION, SENSOR_ACCELERATION, SENSOR_GYROSCOPE] {
+            assert!(
+                effective_sensor_enabled(&settings, sensor),
+                "{sensor} must be enabled by default"
+            );
+        }
+    }
+
+    #[test]
+    fn legacy_settings_json_missing_watch_sensors_enabled_field_defaults_motion_sensors_on() {
+        // Simulates a settings.json persisted before `watchSensorsEnabled`
+        // existed: the field is absent from the JSON entirely, not merely
+        // empty.
+        let json = serde_json::json!({
+            "headphonesEnabled": true,
+            "headphonesRateHz": 60.0,
+            "recordingRateHz": 30.0,
+            "graphRefreshRateHz": 15.0,
+            "watchOrientationRateHz": 50.0,
+            "watchAccelerationRateHz": 50.0,
+            "watchGyroscopeRateHz": 50.0,
+        });
+        let settings: AppSettings =
+            serde_json::from_value(json).expect("legacy settings must deserialize");
+        settings
+            .validate()
+            .expect("migrated settings must be valid");
+        for sensor in [SENSOR_ORIENTATION, SENSOR_ACCELERATION, SENSOR_GYROSCOPE] {
+            assert!(
+                effective_sensor_enabled(&settings, sensor),
+                "{sensor} missing from a legacy settings file must migrate to enabled"
+            );
+        }
+    }
+
+    #[test]
+    fn persisted_explicit_disable_is_preserved_while_missing_entries_migrate_to_enabled() {
+        // A persisted settings object where the user explicitly disabled
+        // orientation, but the file predates acceleration/gyroscope having
+        // their own persisted entries.
+        let mut settings = AppSettings::default();
+        settings.watch_sensors_enabled = HashMap::from([(SENSOR_ORIENTATION.to_string(), false)]);
+        settings
+            .validate()
+            .expect("partial map must still validate");
+
+        assert!(
+            !effective_sensor_enabled(&settings, SENSOR_ORIENTATION),
+            "an explicit user disable must never be force-enabled"
+        );
+        for sensor in [SENSOR_ACCELERATION, SENSOR_GYROSCOPE] {
+            assert!(
+                effective_sensor_enabled(&settings, sensor),
+                "{sensor} absent from the persisted map must migrate to enabled"
+            );
+        }
+    }
+
+    #[test]
+    fn ppg_flush_rate_is_independent_of_motion_sensor_enable_state() {
+        // PPG isn't in `watch_sensors_enabled`/`CONTROLLABLE_SENSOR_IDS` at
+        // all (it's controlled purely by rate, see `SENSOR_PPG_FLUSH`), so
+        // disabling every motion sensor must leave its rate untouched.
+        let mut settings = AppSettings::default();
+        settings.watch_sensors_enabled = HashMap::from([
+            (SENSOR_ORIENTATION.to_string(), false),
+            (SENSOR_ACCELERATION.to_string(), false),
+            (SENSOR_GYROSCOPE.to_string(), false),
+        ]);
+        assert!(!CONTROLLABLE_SENSOR_IDS.contains(&SENSOR_PPG_FLUSH));
+        assert_eq!(
+            settings.watch_ppg_flush_rate_hz,
+            default_ppg_flush_rate_hz()
+        );
     }
 }

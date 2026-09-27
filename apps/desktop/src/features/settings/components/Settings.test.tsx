@@ -25,6 +25,7 @@ const settings: AppSettings = {
   watchSensorsEnabled: { orientation: true, acceleration: true, gyroscope: true },
   cornerWristVolumeDemoEnabled: false,
   cornerWristVolumeInvertDirection: false,
+  watchTransport: "bluetooth",
 };
 
 describe("Settings", () => {

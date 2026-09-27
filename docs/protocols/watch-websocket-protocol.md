@@ -1,5 +1,10 @@
 # Galaxy Watch WebSocket protocol
 
+> This is the **Wi-Fi** transport. Bluetooth LE is the default since GC-037 and
+> carries these exact same envelopes over GATT; see
+> [`watch-ble-transport.md`](./watch-ble-transport.md). Only one transport runs
+> at a time.
+
 The desktop listens on `ws://DESKTOP_IP:8766/ws/watch` on the local network. Only one watch connection is accepted at a time. The desktop disconnects a silent client after three seconds.
 
 ## Local discovery

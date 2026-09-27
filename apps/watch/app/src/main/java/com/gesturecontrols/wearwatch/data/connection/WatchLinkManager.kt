@@ -18,29 +18,36 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
-import okhttp3.WebSocket
-import okhttp3.WebSocketListener
 import org.json.JSONObject
 
-enum class ConnectionState { DISCONNECTED, CONNECTING, CONNECTED, RECONNECTING, FAILED }
+enum class ConnectionState {
+    DISCONNECTED,
+    CONNECTING,
+    CONNECTED,
+    RECONNECTING,
+
+    /** BLE only: a central is connected and bonded but not yet approved on the watch. */
+    AWAITING_TRUST,
+    FAILED,
+}
 
 /**
- * Owns the single WebSocket connection to the desktop watch bridge
- * (docs/protocols/watch-websocket-protocol.md). Reconnects with a capped exponential
- * backoff for as long as the user has asked to stay connected, and gives up
- * after [MAX_RECONNECT_ATTEMPTS] so a dead endpoint doesn't retry forever.
+ * Owns the single link to the desktop — Wi-Fi WebSocket or Bluetooth LE,
+ * whichever [WatchTransportLink] the user selected — and everything layered on
+ * top of it: envelope construction, sequencing, the heartbeat, and the batched
+ * PPG/medical flush timers (docs/protocols/watch-websocket-protocol.md,
+ * docs/protocols/watch-ble-transport.md).
+ *
+ * The transport itself owns connection establishment and its own retry policy;
+ * this class never reaches past [WatchTransportLink], and never substitutes one
+ * transport for another.
  */
 class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
 
-    private val client = OkHttpClient.Builder().build()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    private var webSocket: WebSocket? = null
+    private var link: WatchTransportLink? = null
     private var heartbeatJob: Job? = null
-    private var reconnectJob: Job? = null
     private var ppgFlushJob: Job? = null
     private val ppgBuffer = mutableListOf<PpgSample>()
     @Volatile private var lastPpgStatus: String? = null
@@ -49,13 +56,6 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
     private val skinTemperatureBuffer = mutableListOf<SkinTemperatureSample>()
     private val edaBuffer = mutableListOf<EdaSample>()
     private val sequence = AtomicLong(0)
-    private var attempt = 0
-    private var userRequestedConnection = false
-    private var currentUrl: String? = null
-    // Set right before we close a socket ourselves, so the async onClosed/onFailure
-    // callback OkHttp delivers afterwards is recognized as expected and doesn't
-    // trigger a reconnect (e.g. right after pauseForLifecycle or a fresh connect()).
-    private var closeExpected = false
 
     /** Supplies battery percent for outgoing heartbeats; wired by MainActivity. */
     var batteryPercentProvider: (() -> Int?)? = null
@@ -79,59 +79,67 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
     val lastOrientationSequence: StateFlow<Long> = _lastOrientationSequence.asStateFlow()
 
     // Short, sanitized category (never a raw exception message/stack trace,
-    // which could echo internal detail beyond the LAN endpoint already shown
-    // in the UI) describing the most recent socket failure/retry.
+    // which could echo internal detail beyond the endpoint already shown in
+    // the UI) describing the most recent link failure/retry.
     private val _lastFailureReason = MutableStateFlow<String?>(null)
     val lastFailureReason: StateFlow<String?> = _lastFailureReason.asStateFlow()
-    private var pendingFailureCategory: String = "Connection closed"
 
-    fun connect(url: String) {
-        userRequestedConnection = true
-        currentUrl = url
-        attempt = 0
+    /** Which transport is currently installed, or null when disconnected. */
+    val activeTransport: WatchTransportKind?
+        get() = link?.kind
+
+    /**
+     * Installs [transport] as the one active link and starts it, replacing and
+     * fully releasing whatever was installed before. Switching transports
+     * therefore cannot leave the previous one holding a socket, an mDNS
+     * registration, or an advertising GATT server in the background.
+     */
+    fun connect(transport: WatchTransportLink) {
+        val previous = link
+        if (previous !== transport) {
+            previous?.onState = null
+            previous?.onMessage = null
+            previous?.shutdown()
+        }
+        resetStreamingState()
+        link = transport
+        transport.onState = { state, reason -> scope.launch { handleState(state, reason) } }
+        transport.onMessage = { text -> scope.launch { handleInbound(text) } }
         _lastFailureReason.value = null
-        reconnectJob?.cancel()
-        openSocket(url)
+        transport.start()
     }
 
-    /** User-initiated stop: no reconnect attempts follow this. */
+    /** User-initiated stop: the transport releases everything and does not retry. */
     fun disconnect() {
-        userRequestedConnection = false
-        reconnectJob?.cancel()
-        reconnectJob = null
-        closeSocket()
+        resetStreamingState()
+        link?.stop()
         _state.value = ConnectionState.DISCONNECTED
         _lastFailureReason.value = null
     }
 
-    /** Call from Activity#onDestroy to release the coroutine scope and client threads. */
+    /** Call from Activity#onDestroy to release the coroutine scope and transport resources. */
     fun shutdown() {
-        disconnect()
+        resetStreamingState()
+        link?.onState = null
+        link?.onMessage = null
+        link?.shutdown()
+        link = null
+        _state.value = ConnectionState.DISCONNECTED
         scope.cancel()
     }
 
     /**
-     * Closes the socket when the activity leaves the foreground without
-     * forgetting that the user wants a connection, so [resumeForLifecycle]
-     * can re-open it. Keeps a backgrounded app from holding a socket + wake
-     * source it can't act on.
+     * Releases the link when the activity leaves the foreground without
+     * forgetting that the user wants a connection, so [resumeForLifecycle] can
+     * re-establish it.
      */
     fun pauseForLifecycle() {
-        reconnectJob?.cancel()
-        reconnectJob = null
-        closeSocket()
-        if (userRequestedConnection) {
-            _state.value = ConnectionState.DISCONNECTED
-        }
+        link?.pause()
     }
 
-    /** Re-opens the connection if the user had requested one before the activity paused. */
+    /** Re-establishes the connection if the user had requested one before the activity paused. */
     fun resumeForLifecycle() {
-        val url = currentUrl
-        if (userRequestedConnection && url != null && webSocket == null) {
-            attempt = 0
-            openSocket(url)
-        }
+        link?.resume()
     }
 
     fun sendOrientation(
@@ -140,8 +148,7 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         gyroscope: FloatArray?,
         timestampNs: Long,
     ) {
-        val socket = webSocket ?: return
-        if (_state.value != ConnectionState.CONNECTED) return
+        val link = streamingLink() ?: return
         val seq = sequence.incrementAndGet()
         val message = WatchProtocol.orientationMessage(
             deviceId,
@@ -151,7 +158,7 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
             accelerometer,
             gyroscope,
         )
-        socket.send(message)
+        link.send(message)
         _lastOrientationSequence.value = seq
     }
 
@@ -170,21 +177,19 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
 
     private fun sendStoredPpgStatus() {
         val state = lastPpgStatus ?: return
-        val socket = webSocket ?: return
-        if (_state.value != ConnectionState.CONNECTED) return
+        val link = streamingLink() ?: return
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        socket.send(WatchProtocol.ppgStatusMessage(deviceId, seq, timestampNs, state))
+        link.send(WatchProtocol.ppgStatusMessage(deviceId, seq, timestampNs, state))
     }
 
     /** Sends a STEM button press/release, grabbing or releasing the desktop's volume overlay. */
     fun sendButtonEvent(pressed: Boolean) {
-        val socket = webSocket ?: return
-        if (_state.value != ConnectionState.CONNECTED) return
+        val link = streamingLink() ?: return
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
         val buttonState = if (pressed) WatchProtocol.BUTTON_STATE_DOWN else WatchProtocol.BUTTON_STATE_UP
-        socket.send(WatchProtocol.buttonMessage(deviceId, seq, timestampNs, buttonState))
+        link.send(WatchProtocol.buttonMessage(deviceId, seq, timestampNs, buttonState))
     }
 
     /** Buffers HEART_RATE_CONTINUOUS samples for the next medical flush tick; dropped if not connected. */
@@ -211,131 +216,98 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
     /** Sends a bounded SPO2_ON_DEMAND session's samples immediately; on-demand data is low-volume, unlike the continuous trackers. */
     fun sendSpo2Samples(samples: List<Spo2Sample>) {
         if (samples.isEmpty()) return
-        val socket = webSocket ?: return
-        if (_state.value != ConnectionState.CONNECTED) return
+        val link = streamingLink() ?: return
         for (chunk in samples.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
             val timestampNs = SystemClock.elapsedRealtimeNanos()
             val seq = sequence.incrementAndGet()
-            socket.send(WatchProtocol.spo2BatchMessage(deviceId, seq, timestampNs, chunk))
+            link.send(WatchProtocol.spo2BatchMessage(deviceId, seq, timestampNs, chunk))
         }
     }
 
     /** Sends a bounded ECG_ON_DEMAND session's samples immediately; see [sendSpo2Samples]. */
     fun sendEcgSamples(samples: List<EcgSample>) {
         if (samples.isEmpty()) return
-        val socket = webSocket ?: return
-        if (_state.value != ConnectionState.CONNECTED) return
+        val link = streamingLink() ?: return
         for (chunk in samples.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
             val timestampNs = SystemClock.elapsedRealtimeNanos()
             val seq = sequence.incrementAndGet()
-            socket.send(WatchProtocol.ecgBatchMessage(deviceId, seq, timestampNs, chunk))
+            link.send(WatchProtocol.ecgBatchMessage(deviceId, seq, timestampNs, chunk))
         }
     }
 
     /** Sends a bounded SWEAT_LOSS session's samples immediately; see [sendSpo2Samples]. */
     fun sendSweatLossSamples(samples: List<SweatLossSample>) {
         if (samples.isEmpty()) return
-        val socket = webSocket ?: return
-        if (_state.value != ConnectionState.CONNECTED) return
+        val link = streamingLink() ?: return
         for (chunk in samples.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
             val timestampNs = SystemClock.elapsedRealtimeNanos()
             val seq = sequence.incrementAndGet()
-            socket.send(WatchProtocol.sweatLossBatchMessage(deviceId, seq, timestampNs, chunk))
+            link.send(WatchProtocol.sweatLossBatchMessage(deviceId, seq, timestampNs, chunk))
         }
     }
 
     /** Sends a BIA_ON_DEMAND progress/result update from the current bounded session. */
     fun sendBiaResult(result: BiaResult) {
-        val socket = webSocket ?: return
-        if (_state.value != ConnectionState.CONNECTED) return
+        val link = streamingLink() ?: return
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        socket.send(WatchProtocol.biaResultMessage(deviceId, seq, timestampNs, result))
+        link.send(WatchProtocol.biaResultMessage(deviceId, seq, timestampNs, result))
     }
 
     /** Reports a medical tracker's [MedicalTrackerState.wireValue], continuous or on-demand, supported or not. */
     fun sendMedicalStatus(tracker: String, state: String) {
-        val socket = webSocket ?: return
-        if (_state.value != ConnectionState.CONNECTED) return
+        val link = streamingLink() ?: return
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        socket.send(WatchProtocol.medicalStatusMessage(deviceId, seq, timestampNs, tracker, state))
+        link.send(WatchProtocol.medicalStatusMessage(deviceId, seq, timestampNs, tracker, state))
     }
 
     /** Reports an IMU sensor's current enabled state ([SENSOR_ORIENTATION] etc.). */
     fun sendSensorStatus(sensor: String, enabled: Boolean) {
-        val socket = webSocket ?: return
-        if (_state.value != ConnectionState.CONNECTED) return
+        val link = streamingLink() ?: return
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        socket.send(WatchProtocol.sensorStatusMessage(deviceId, seq, timestampNs, sensor, enabled))
+        link.send(WatchProtocol.sensorStatusMessage(deviceId, seq, timestampNs, sensor, enabled))
     }
 
-    private fun openSocket(url: String) {
-        closeSocket()
-        _state.value = if (attempt == 0) ConnectionState.CONNECTING else ConnectionState.RECONNECTING
-        val request = Request.Builder().url(url).build()
-        webSocket = client.newWebSocket(request, listener)
+    /** The active link, but only while it is actually carrying traffic. */
+    private fun streamingLink(): WatchTransportLink? =
+        if (_state.value == ConnectionState.CONNECTED) link else null
+
+    /**
+     * Applies a transport-reported state change: a fresh CONNECTED restarts the
+     * sequence and the periodic senders; anything else tears them down so no
+     * timer keeps firing against a dead link.
+     */
+    private fun handleState(state: ConnectionState, reason: String?) {
+        val wasConnected = _state.value == ConnectionState.CONNECTED
+        _state.value = state
+        _lastFailureReason.value = reason
+        if (state == ConnectionState.CONNECTED) {
+            if (!wasConnected) {
+                sequence.set(0)
+                startHeartbeat()
+                startPpgFlushTimer()
+                startMedicalFlushTimer()
+                sendStoredPpgStatus()
+            }
+        } else {
+            resetStreamingState()
+        }
     }
 
-    private fun closeSocket() {
+    /** Stops the periodic senders and drops every buffered batch. */
+    private fun resetStreamingState() {
         heartbeatJob?.cancel()
         heartbeatJob = null
         ppgFlushJob?.cancel()
         ppgFlushJob = null
-        synchronized(ppgBuffer) { ppgBuffer.clear() }
         medicalFlushJob?.cancel()
         medicalFlushJob = null
+        synchronized(ppgBuffer) { ppgBuffer.clear() }
         synchronized(heartRateBuffer) { heartRateBuffer.clear() }
         synchronized(skinTemperatureBuffer) { skinTemperatureBuffer.clear() }
         synchronized(edaBuffer) { edaBuffer.clear() }
-        if (webSocket != null) {
-            closeExpected = true
-        }
-        webSocket?.close(1000, "client closing")
-        webSocket = null
-    }
-
-    private val listener = object : WebSocketListener() {
-        override fun onOpen(webSocket: WebSocket, response: Response) {
-            scope.launch {
-                attempt = 0
-                sequence.set(0)
-                _state.value = ConnectionState.CONNECTED
-                _lastFailureReason.value = null
-                sendStoredPpgStatus()
-                startHeartbeat()
-                startPpgFlushTimer()
-                startMedicalFlushTimer()
-            }
-        }
-
-        override fun onMessage(webSocket: WebSocket, text: String) {
-            scope.launch { handleInbound(text) }
-        }
-
-        override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-            webSocket.close(1000, null)
-        }
-
-        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            pendingFailureCategory = if (code == 1000) "Connection closed" else "Server closed connection"
-            scope.launch { handleDisconnect() }
-        }
-
-        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            pendingFailureCategory = classifyFailure(t)
-            scope.launch { handleDisconnect() }
-        }
-    }
-
-    /** Maps a socket exception to a short, sanitized category — no message/stack trace. */
-    private fun classifyFailure(t: Throwable): String = when (t) {
-        is java.net.ConnectException -> "Connection refused"
-        is java.net.UnknownHostException -> "Host not found"
-        is java.net.SocketTimeoutException -> "Timed out"
-        is java.io.EOFException -> "Connection closed unexpectedly"
-        else -> "Connection error"
     }
 
     private fun handleInbound(text: String) {
@@ -353,10 +325,10 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
     private fun handleTimeSync(payload: JSONObject) {
         val desktopTimeNs = payload.optLong("desktopTimeNs", -1L)
         if (desktopTimeNs < 0) return
+        val link = streamingLink() ?: return
         val watchTimeNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        val reply = WatchProtocol.timeSyncMessage(deviceId, seq, watchTimeNs, desktopTimeNs, watchTimeNs)
-        webSocket?.send(reply)
+        link.send(WatchProtocol.timeSyncMessage(deviceId, seq, watchTimeNs, desktopTimeNs, watchTimeNs))
     }
 
     /** Forwards a `desktop.start_measurement`/`desktop.stop_measurement` command to [onMeasurementCommand]; ignored if `tracker` is missing. */
@@ -394,15 +366,19 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
         heartbeatJob?.cancel()
         heartbeatJob = scope.launch {
             while (isActive) {
-                val timestampNs = SystemClock.elapsedRealtimeNanos()
-                val seq = sequence.incrementAndGet()
-                val message = WatchProtocol.heartbeatMessage(
-                    deviceId,
-                    seq,
-                    timestampNs,
-                    batteryPercentProvider?.invoke(),
-                )
-                webSocket?.send(message)
+                val link = streamingLink()
+                if (link != null) {
+                    val timestampNs = SystemClock.elapsedRealtimeNanos()
+                    val seq = sequence.incrementAndGet()
+                    link.send(
+                        WatchProtocol.heartbeatMessage(
+                            deviceId,
+                            seq,
+                            timestampNs,
+                            batteryPercentProvider?.invoke(),
+                        )
+                    )
+                }
                 delay(HEARTBEAT_INTERVAL_MS)
             }
         }
@@ -425,11 +401,11 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
             ppgBuffer.clear()
             copy
         }
-        val socket = webSocket ?: return
+        val link = streamingLink() ?: return
         for (chunk in batch.chunked(PPG_BATCH_MAX_SAMPLES)) {
             val timestampNs = SystemClock.elapsedRealtimeNanos()
             val seq = sequence.incrementAndGet()
-            socket.send(WatchProtocol.ppgBatchMessage(deviceId, seq, timestampNs, chunk))
+            link.send(WatchProtocol.ppgBatchMessage(deviceId, seq, timestampNs, chunk))
         }
     }
 
@@ -444,7 +420,7 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
     }
 
     private fun flushMedicalBuffers() {
-        val socket = webSocket ?: return
+        val link = streamingLink() ?: return
         val heartRateBatch = synchronized(heartRateBuffer) {
             if (heartRateBuffer.isEmpty()) null else heartRateBuffer.toList().also { heartRateBuffer.clear() }
         }
@@ -452,7 +428,7 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
             for (chunk in batch.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
                 val timestampNs = SystemClock.elapsedRealtimeNanos()
                 val seq = sequence.incrementAndGet()
-                socket.send(WatchProtocol.heartRateBatchMessage(deviceId, seq, timestampNs, chunk))
+                link.send(WatchProtocol.heartRateBatchMessage(deviceId, seq, timestampNs, chunk))
             }
         }
 
@@ -467,7 +443,7 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
             for (chunk in batch.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
                 val timestampNs = SystemClock.elapsedRealtimeNanos()
                 val seq = sequence.incrementAndGet()
-                socket.send(WatchProtocol.skinTemperatureBatchMessage(deviceId, seq, timestampNs, chunk))
+                link.send(WatchProtocol.skinTemperatureBatchMessage(deviceId, seq, timestampNs, chunk))
             }
         }
 
@@ -478,53 +454,13 @@ class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
             for (chunk in batch.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
                 val timestampNs = SystemClock.elapsedRealtimeNanos()
                 val seq = sequence.incrementAndGet()
-                socket.send(WatchProtocol.edaBatchMessage(deviceId, seq, timestampNs, chunk))
+                link.send(WatchProtocol.edaBatchMessage(deviceId, seq, timestampNs, chunk))
             }
         }
-    }
-
-    private fun handleDisconnect() {
-        heartbeatJob?.cancel()
-        heartbeatJob = null
-        webSocket = null
-        if (closeExpected) {
-            closeExpected = false
-            return
-        }
-        if (!userRequestedConnection) {
-            _state.value = ConnectionState.DISCONNECTED
-            _lastFailureReason.value = null
-            return
-        }
-        if (attempt >= MAX_RECONNECT_ATTEMPTS) {
-            _state.value = ConnectionState.FAILED
-            _lastFailureReason.value = "$pendingFailureCategory — gave up after $MAX_RECONNECT_ATTEMPTS attempts"
-            return
-        }
-        val delayMs = backoffDelayMs(attempt)
-        attempt += 1
-        _state.value = ConnectionState.RECONNECTING
-        _lastFailureReason.value = "$pendingFailureCategory — retrying ($attempt/$MAX_RECONNECT_ATTEMPTS)"
-        reconnectJob?.cancel()
-        reconnectJob = scope.launch {
-            delay(delayMs)
-            val url = currentUrl
-            if (userRequestedConnection && url != null) {
-                openSocket(url)
-            }
-        }
-    }
-
-    private fun backoffDelayMs(attempt: Int): Long {
-        val scaled = INITIAL_BACKOFF_MS shl attempt.coerceAtMost(8)
-        return scaled.coerceAtMost(MAX_BACKOFF_MS)
     }
 
     companion object {
         private const val HEARTBEAT_INTERVAL_MS = 1000L
-        private const val INITIAL_BACKOFF_MS = 1000L
-        private const val MAX_BACKOFF_MS = 30_000L
-        private const val MAX_RECONNECT_ATTEMPTS = 8
         private const val PPG_DELIVERY_INTERVAL_MS = 40L
         private const val PPG_BATCH_INTERVAL_MS = 100L
         private const val PPG_BATCH_MAX_SAMPLES = 32

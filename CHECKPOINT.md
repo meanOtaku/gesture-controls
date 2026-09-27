@@ -483,3 +483,43 @@ remain **DEFERRED / NOT CLEARED**.
   `SidebarRail` within `AppNav`. The collapse affordance stays on the sidebar
   boundary and cannot overlap or clip a page heading.
 - No validation gates were run; they remain **DEFERRED / NOT CLEARED**.
+
+### GC-037 — Selectable Bluetooth LE Watch transport (Bluetooth default)
+
+- The Watch now offers a persisted Wi-Fi/Bluetooth selector, with **Bluetooth
+  as the default** for fresh installs and for any preference file or
+  `settings.json` written before the field existed. Wi-Fi remains fully
+  functional and selectable.
+- One narrow seam, two real transports, on each side:
+  `WatchTransportLink` (Kotlin) and `WatchLinkTransport` (Rust). Envelope
+  construction, sequencing, heartbeat/flush timers, time sync, command
+  encoding and telemetry decoding are unchanged and shared — neither transport
+  re-implements the protocol.
+- The Watch is the GATT peripheral (advertising + GATT server); the desktop is
+  the central (btleplug 0.13). Same JSON envelopes, fragmented with a 3-byte
+  `[flags][index:u16]` header, bounded at 16 KiB, MTU-aware on both sides, with
+  notification backpressure on the Watch and write-with-response on the desktop.
+- Trust model: encrypted ATT permissions (OS bonding) **plus** an explicit
+  per-desktop approval on the Watch. Nothing is notified and no command is
+  parsed before approval, and the desktop reports `awaitingWatchTrust` rather
+  than "connected" until a first valid envelope arrives. Documented, with its
+  limitations, in `docs/protocols/watch-ble-transport.md`.
+- Selecting a transport stops the other outright on both sides: no mDNS,
+  pairing listener, WebSocket, advertising or GATT connection is retained.
+  A Bluetooth failure never falls back to Wi-Fi; it reports why.
+- Validation: `cargo test -p watch-bridge` — 13 passed (8 new BLE framing /
+  reassembly cases). `npx vitest run src/features/settings` — 23 passed
+  (6 new `WatchTransportSection` cases). `npm run typecheck` — no errors in
+  any file this change touches; the same 5 pre-existing errors documented
+  under GC-019 remain in `model-lab` and `RecordingTimelineEditor`, untouched
+  here. `cargo clippy -p watch-bridge --all-targets -- -D warnings` — clean;
+  focused `rustfmt --check` clean on every Rust file this change touches.
+  `git diff --check` — clean. `graphify update .` — run.
+- **Not cleared:** the Tauri desktop crate and the Wear OS module were not
+  compiled here. `cargo check -p spatial-gesture-desktop` still fails on the
+  pre-existing host `pkg-config`/GTK blocker (GC-002/GC-009/GC-018/GC-019/
+  GC-024/GC-025), so the new `settings.rs`/`watch.rs`/`lib.rs` code and its 3
+  new settings tests are unrun; the Gradle wrapper starts, but no Android SDK
+  is installed on this host, so the 2 new Wear OS test classes are unrun. All
+  BLE behaviour needs the hardware walkthrough listed in
+  `docs/protocols/watch-ble-transport.md`.

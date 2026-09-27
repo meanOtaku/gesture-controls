@@ -1,4 +1,12 @@
-//! Axum WebSocket server that accepts a single Galaxy Watch connection.
+//! Transport layer between the desktop and a single Galaxy Watch.
+//!
+//! Two real transports sit behind one seam, [`WatchLinkTransport`]: the Wi-Fi
+//! WebSocket server in this module, and the BLE central in [`ble`]. Everything
+//! above the seam — sequencing, time sync, heartbeat timeout, desktop command
+//! encoding, telemetry decoding — is shared by [`run_connection`], so neither
+//! transport re-implements the protocol.
+
+pub mod ble;
 
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
@@ -8,6 +16,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use crate::ble::{BleLink, BleStatus};
 use axum::Router;
 use axum::extract::State;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
@@ -32,7 +41,8 @@ use spatial_protocol::{
 };
 use thiserror::Error;
 use tokio::net::TcpListener;
-use tokio::sync::broadcast;
+use tokio::sync::{Notify, broadcast};
+
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
@@ -48,6 +58,16 @@ const PAIRING_RETRY_INTERVAL: Duration = Duration::from_secs(10);
 const TIME_SYNC_INTERVAL: Duration = Duration::from_secs(5);
 const CLOCK_OFFSET_SAMPLE_COUNT: usize = 5;
 const DEVICE_ALREADY_CONNECTED_CLOSE_CODE: u16 = 4409;
+/// How long the desktop waits, connected and subscribed, for the watch's trust
+/// gate to release a first envelope before reporting
+/// [`BleStatus::AwaitingWatchTrust`] to the UI.
+const BLE_TRUST_GATE_POLL: Duration = Duration::from_secs(5);
+/// Pause between BLE reconnect attempts, so a watch that is off or out of range
+/// doesn't spin the adapter.
+const BLE_RETRY_INTERVAL: Duration = Duration::from_secs(5);
+/// Upper bound on how long [`WatchBridgeServer::stop_ble`] waits for the BLE
+/// session to unwind (scan stop + GATT disconnect) before giving up on it.
+const BLE_STOP_TIMEOUT: Duration = Duration::from_secs(20);
 
 #[derive(Debug, Clone)]
 pub enum WatchEvent {
@@ -139,6 +159,22 @@ pub enum WatchBridgeError {
     SensorRateOutOfRange(f64),
     #[error("haptic duration {0}ms is outside the allowed range")]
     HapticDurationOutOfRange(u32),
+    #[error("watch BLE transport is already running")]
+    BleAlreadyRunning,
+}
+
+/// Which transport the desktop uses to reach the watch. Only one is ever live:
+/// selecting one tears the other down completely (no background mDNS, pairing
+/// listener, WebSocket, or GATT connection is retained).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum WatchTransport {
+    /// BLE GATT central; the default since GC-037.
+    #[default]
+    Bluetooth,
+    /// Wi-Fi LAN WebSocket server with mDNS discovery and pairing callback.
+    #[serde(rename = "wifi")]
+    WiFi,
 }
 
 struct SharedState {
@@ -149,6 +185,43 @@ struct SharedState {
     haptic_commands: broadcast::Sender<HapticCommand>,
     active: AtomicBool,
     heartbeat_timeout: Duration,
+    ble_status: Mutex<BleStatus>,
+}
+
+impl SharedState {
+    fn set_ble_status(&self, status: BleStatus) {
+        if let Ok(mut guard) = self.ble_status.lock() {
+            *guard = status;
+        }
+    }
+}
+
+/// Cooperative cancellation for the BLE session. A bare [`Notify`] isn't
+/// enough on its own: `notify_waiters` only wakes futures that are *already*
+/// awaiting, so a stop landing between two `select!`s would be missed. The flag
+/// is checked first, which closes that window.
+#[derive(Default)]
+struct BleCancel {
+    flag: AtomicBool,
+    notify: Notify,
+}
+
+impl BleCancel {
+    fn cancel(&self) {
+        self.flag.store(true, Ordering::Release);
+        self.notify.notify_waiters();
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.flag.load(Ordering::Acquire)
+    }
+
+    /// Resolves once cancelled, immediately if it already has been.
+    async fn cancelled(&self) {
+        while !self.is_cancelled() {
+            self.notify.notified().await;
+        }
+    }
 }
 
 /// A registered mDNS/DNS-SD advertisement, kept alive until unregistered.
@@ -171,6 +244,10 @@ pub struct WatchBridgeServer {
     task: Mutex<Option<JoinHandle<()>>>,
     mdns: Mutex<Option<MdnsAdvertisement>>,
     pairing_discovery: Mutex<Option<WatchPairingDiscovery>>,
+    /// The running BLE session and its cancellation handle. Aborting the task
+    /// instead of cancelling it would drop the future mid-GATT-operation and
+    /// leave the OS holding an open connection and an active scan.
+    ble: Mutex<Option<(JoinHandle<()>, Arc<BleCancel>)>>,
     shared: Arc<SharedState>,
 }
 
@@ -197,6 +274,7 @@ impl WatchBridgeServer {
             task: Mutex::new(None),
             mdns: Mutex::new(None),
             pairing_discovery: Mutex::new(None),
+            ble: Mutex::new(None),
             shared: Arc::new(SharedState {
                 events,
                 commands,
@@ -205,6 +283,7 @@ impl WatchBridgeServer {
                 haptic_commands,
                 active: AtomicBool::new(false),
                 heartbeat_timeout,
+                ble_status: Mutex::new(BleStatus::Idle),
             }),
         })
     }
@@ -308,19 +387,44 @@ impl WatchBridgeServer {
     }
 
     pub async fn start(&self) -> Result<(), WatchBridgeError> {
+        if self
+            .task
+            .lock()
+            .map_err(|_| WatchBridgeError::StatePoisoned)?
+            .is_some()
+        {
+            return Err(WatchBridgeError::AlreadyRunning);
+        }
+        // `stop()` drops the listener, so a Wi-Fi → BLE → Wi-Fi round trip
+        // rebinds the same address here rather than failing as "already
+        // running" for the rest of the process's life. The rebind must happen
+        // with no lock held: these are std mutexes, and holding one across an
+        // await would block the whole executor thread.
+        let existing = self
+            .listener
+            .lock()
+            .map_err(|_| WatchBridgeError::StatePoisoned)?
+            .take();
+        let listener = match existing {
+            Some(listener) => listener,
+            None => TcpListener::bind(self.local_addr)
+                .await
+                .map_err(WatchBridgeError::SocketBindFailed)?,
+        };
+
         let mut task_guard = self
             .task
             .lock()
             .map_err(|_| WatchBridgeError::StatePoisoned)?;
         if task_guard.is_some() {
+            // Lost a race with a concurrent start; hand the listener back so it
+            // isn't leaked out of the server's state.
+            *self
+                .listener
+                .lock()
+                .map_err(|_| WatchBridgeError::StatePoisoned)? = Some(listener);
             return Err(WatchBridgeError::AlreadyRunning);
         }
-        let listener = self
-            .listener
-            .lock()
-            .map_err(|_| WatchBridgeError::StatePoisoned)?
-            .take()
-            .ok_or(WatchBridgeError::AlreadyRunning)?;
         let shared = Arc::clone(&self.shared);
         let app = Router::new()
             .route(WATCH_WEBSOCKET_PATH, get(ws_handler))
@@ -421,6 +525,62 @@ impl WatchBridgeServer {
         Ok(())
     }
 
+    /// Last reported state of the BLE transport, for the settings UI.
+    pub fn ble_status(&self) -> BleStatus {
+        self.shared
+            .ble_status
+            .lock()
+            .map(|status| status.clone())
+            .unwrap_or(BleStatus::Idle)
+    }
+
+    /// Starts the BLE central: scan → connect → subscribe → stream, retrying
+    /// until [`stop_ble`] is called. Never falls back to Wi-Fi on failure —
+    /// a failed BLE attempt is surfaced through [`ble_status`] instead.
+    ///
+    /// [`stop_ble`]: Self::stop_ble
+    /// [`ble_status`]: Self::ble_status
+    pub fn start_ble(&self) -> Result<(), WatchBridgeError> {
+        let mut guard = self
+            .ble
+            .lock()
+            .map_err(|_| WatchBridgeError::StatePoisoned)?;
+        if guard.is_some() {
+            return Err(WatchBridgeError::BleAlreadyRunning);
+        }
+        let shared = Arc::clone(&self.shared);
+        let cancel = Arc::new(BleCancel::default());
+        let task = tokio::spawn({
+            let cancel = Arc::clone(&cancel);
+            async move { run_ble_transport(shared, cancel).await }
+        });
+        *guard = Some((task, cancel));
+        Ok(())
+    }
+
+    /// Stops the BLE central and releases every BLE resource it holds (scan,
+    /// GATT connection, notification subscription). Idempotent.
+    pub async fn stop_ble(&self) -> Result<(), WatchBridgeError> {
+        let task = self
+            .ble
+            .lock()
+            .map_err(|_| WatchBridgeError::StatePoisoned)?
+            .take();
+        let Some((task, cancel)) = task else {
+            return Ok(());
+        };
+        cancel.cancel();
+        if tokio::time::timeout(BLE_STOP_TIMEOUT, task).await.is_err() {
+            warn!("watch BLE session did not stop within the timeout");
+        }
+        self.shared.set_ble_status(BleStatus::Idle);
+        Ok(())
+    }
+
+    /// Stops the Wi-Fi WebSocket server, its mDNS advertisement, and the watch
+    /// pairing browser. Leaves the BLE session alone; see [`stop_ble`].
+    ///
+    /// [`stop_ble`]: Self::stop_ble
     pub async fn stop(&self) -> Result<(), WatchBridgeError> {
         let task = self
             .task
@@ -481,6 +641,179 @@ fn request_watch_pairing(watch: SocketAddr) -> std::io::Result<()> {
     }
 }
 
+/// The one seam the two watch transports differ at. Everything above it is
+/// shared by [`run_connection`]; implementors only move bytes.
+#[async_trait::async_trait]
+trait WatchLinkTransport: Send {
+    /// Sends one serialized protocol envelope. `Err(())` ends the connection.
+    async fn send_text(&mut self, text: String) -> Result<(), ()>;
+    /// Next inbound envelope's bytes, or `None` once the link is closed.
+    async fn recv(&mut self) -> Option<Vec<u8>>;
+}
+
+#[async_trait::async_trait]
+impl WatchLinkTransport for WebSocket {
+    async fn send_text(&mut self, text: String) -> Result<(), ()> {
+        self.send(Message::Text(text.into())).await.map_err(|_| ())
+    }
+
+    async fn recv(&mut self) -> Option<Vec<u8>> {
+        loop {
+            match self.next().await {
+                Some(Ok(Message::Text(text))) => return Some(text.as_bytes().to_vec()),
+                Some(Ok(Message::Close(_))) | None => return None,
+                // Ping/pong/binary frames aren't part of this protocol; keep
+                // waiting rather than treating them as a message or a close.
+                Some(Ok(_)) => continue,
+                Some(Err(error)) => {
+                    warn!(%error, "watch WebSocket receive error");
+                    return None;
+                }
+            }
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl WatchLinkTransport for BleLink {
+    async fn send_text(&mut self, text: String) -> Result<(), ()> {
+        BleLink::send_text(self, &text).await.map_err(|error| {
+            warn!(%error, "failed to write desktop command over watch BLE");
+        })
+    }
+
+    async fn recv(&mut self) -> Option<Vec<u8>> {
+        BleLink::recv(self).await
+    }
+}
+
+/// Drives one BLE session end to end, retrying until cancelled. The `active`
+/// slot is claimed exactly as the WebSocket path claims it, so the two
+/// transports can never both believe a watch is attached.
+async fn run_ble_transport(shared: Arc<SharedState>, cancel: Arc<BleCancel>) {
+    let adapter = match ble::open_adapter().await {
+        Ok(adapter) => adapter,
+        Err(error) => {
+            warn!(%error, "watch BLE transport could not open an adapter");
+            shared.set_ble_status(BleStatus::Failed(error.to_string()));
+            return;
+        }
+    };
+    while !cancel.is_cancelled() {
+        shared.set_ble_status(BleStatus::Scanning);
+        let connect = tokio::select! {
+            result = BleLink::connect(&adapter, ble::BLE_SCAN_TIMEOUT) => result,
+            // Cancelling drops the scan future partway, so its own stop_scan
+            // never ran; stop the radio explicitly before leaving.
+            _ = cancel.cancelled() => {
+                ble::stop_scan(&adapter).await;
+                break;
+            }
+        };
+        let mut link = match connect {
+            Ok(link) => link,
+            Err(error) => {
+                warn!(%error, "watch BLE connect failed");
+                shared.set_ble_status(BleStatus::Failed(error.to_string()));
+                tokio::select! {
+                    _ = tokio::time::sleep(BLE_RETRY_INTERVAL) => continue,
+                    _ = cancel.cancelled() => break,
+                }
+            }
+        };
+        shared.set_ble_status(BleStatus::Connecting);
+
+        // The watch's trust gate: until the user approves this desktop there,
+        // it notifies nothing. Reaching "connected" on a link that has never
+        // carried an envelope would misreport an unapproved pairing as live.
+        let trusted = tokio::select! {
+            trusted = await_watch_trust(&mut link, &shared) => trusted,
+            _ = cancel.cancelled() => {
+                link.close().await;
+                break;
+            }
+        };
+        if !trusted {
+            // The link dropped before the user approved this desktop; that's a
+            // normal "watch walked away" case, not a reason to stop the
+            // transport the user still has selected.
+            link.close().await;
+            shared.set_ble_status(BleStatus::Failed(
+                "watch BLE link dropped before approval; retrying".to_string(),
+            ));
+            tokio::select! {
+                _ = tokio::time::sleep(BLE_RETRY_INTERVAL) => continue,
+                _ = cancel.cancelled() => break,
+            }
+        }
+
+        if shared
+            .active
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            warn!("a watch is already connected; ignoring the BLE link");
+            link.close().await;
+            tokio::select! {
+                _ = tokio::time::sleep(BLE_RETRY_INTERVAL) => continue,
+                _ = cancel.cancelled() => break,
+            }
+        }
+
+        // Subscribe before announcing `Connected` for the same reason the
+        // WebSocket path does: broadcast only reaches receivers that already
+        // exist, so the settings replay `Connected` triggers must not race.
+        let commands = shared.commands.subscribe();
+        let sensor_commands = shared.sensor_commands.subscribe();
+        let sensor_rate_commands = shared.sensor_rate_commands.subscribe();
+        let haptic_commands = shared.haptic_commands.subscribe();
+
+        shared.set_ble_status(BleStatus::Streaming);
+        let _ = shared.events.send(WatchEvent::Connected);
+        info!("watch device connected over BLE");
+        let cancelled = tokio::select! {
+            _ = run_connection(
+                &mut link,
+                &shared,
+                commands,
+                sensor_commands,
+                sensor_rate_commands,
+                haptic_commands,
+            ) => false,
+            _ = cancel.cancelled() => true,
+        };
+        link.close().await;
+        shared.active.store(false, Ordering::Release);
+        let _ = shared.events.send(WatchEvent::Disconnected);
+        info!("watch device disconnected from BLE");
+        if cancelled {
+            break;
+        }
+        shared.set_ble_status(BleStatus::Failed(
+            "watch BLE link dropped; retrying".to_string(),
+        ));
+        tokio::select! {
+            _ = tokio::time::sleep(BLE_RETRY_INTERVAL) => {}
+            _ = cancel.cancelled() => break,
+        }
+    }
+    ble::stop_scan(&adapter).await;
+    shared.set_ble_status(BleStatus::Idle);
+}
+
+/// Waits for the first envelope the watch's trust gate lets through, keeping
+/// the UI honest about *why* nothing is streaming. `false` means the link died
+/// before trust was granted.
+async fn await_watch_trust(link: &mut BleLink, shared: &Arc<SharedState>) -> bool {
+    loop {
+        match link.await_first_message(BLE_TRUST_GATE_POLL).await {
+            Some(true) => return true,
+            Some(false) => shared.set_ble_status(BleStatus::AwaitingWatchTrust),
+            None => return false,
+        }
+    }
+}
+
 async fn ws_handler(
     State(shared): State<Arc<SharedState>>,
     ws: WebSocketUpgrade,
@@ -502,6 +835,16 @@ async fn handle_socket(mut socket: WebSocket, shared: Arc<SharedState>) {
         return;
     }
 
+    // Subscribe to every command channel before announcing `Connected` (and
+    // before the resulting settings replay it triggers in the desktop app):
+    // broadcast channels only deliver to receivers that already exist at
+    // send time, so subscribing after the announcement can silently drop the
+    // very first `set_sensor`/`set_sensor_rate` replay for this connection.
+    let commands = shared.commands.subscribe();
+    let sensor_commands = shared.sensor_commands.subscribe();
+    let sensor_rate_commands = shared.sensor_rate_commands.subscribe();
+    let haptic_commands = shared.haptic_commands.subscribe();
+
     let connected_at_ns = now_ns();
     let ack = DesktopOutboundEnvelope::new(
         DESKTOP_CONNECTED_TYPE,
@@ -511,10 +854,18 @@ async fn handle_socket(mut socket: WebSocket, shared: Arc<SharedState>) {
             server_time_ns: connected_at_ns,
         },
     );
-    if send_json(&mut socket, &ack).await.is_ok() {
+    if send_envelope(&mut socket, &ack).await.is_ok() {
         let _ = shared.events.send(WatchEvent::Connected);
         info!("watch device connected");
-        run_connection(&mut socket, &shared).await;
+        run_connection(
+            &mut socket,
+            &shared,
+            commands,
+            sensor_commands,
+            sensor_rate_commands,
+            haptic_commands,
+        )
+        .await;
     }
 
     shared.active.store(false, Ordering::Release);
@@ -522,16 +873,19 @@ async fn handle_socket(mut socket: WebSocket, shared: Arc<SharedState>) {
     info!("watch device disconnected");
 }
 
-async fn run_connection(socket: &mut WebSocket, shared: &Arc<SharedState>) {
+async fn run_connection<L: WatchLinkTransport + ?Sized>(
+    link: &mut L,
+    shared: &Arc<SharedState>,
+    mut commands: broadcast::Receiver<MeasurementCommand>,
+    mut sensor_commands: broadcast::Receiver<SensorControlCommand>,
+    mut sensor_rate_commands: broadcast::Receiver<SensorRateCommand>,
+    mut haptic_commands: broadcast::Receiver<HapticCommand>,
+) {
     let mut last_activity = Instant::now();
     let mut last_sequence: Option<u64> = None;
     let mut time_sync_ticker = tokio::time::interval(TIME_SYNC_INTERVAL);
     let mut pending_time_sync_at: Option<u64> = None;
     let mut clock_offset_samples = VecDeque::with_capacity(CLOCK_OFFSET_SAMPLE_COUNT);
-    let mut commands = shared.commands.subscribe();
-    let mut sensor_commands = shared.sensor_commands.subscribe();
-    let mut sensor_rate_commands = shared.sensor_rate_commands.subscribe();
-    let mut haptic_commands = shared.haptic_commands.subscribe();
 
     loop {
         let remaining = shared
@@ -550,7 +904,7 @@ async fn run_connection(socket: &mut WebSocket, shared: &Arc<SharedState>) {
                     desktop_time_ns,
                     DesktopTimeSyncPayload { desktop_time_ns },
                 );
-                if send_json(socket, &request).await.is_err() {
+                if send_envelope(link, &request).await.is_err() {
                     break;
                 }
                 pending_time_sync_at = Some(desktop_time_ns);
@@ -566,7 +920,7 @@ async fn run_connection(socket: &mut WebSocket, shared: &Arc<SharedState>) {
                     now_ns(),
                     DesktopMeasurementCommandPayload { tracker },
                 );
-                if send_json(socket, &request).await.is_err() {
+                if send_envelope(link, &request).await.is_err() {
                     break;
                 }
             }
@@ -581,7 +935,7 @@ async fn run_connection(socket: &mut WebSocket, shared: &Arc<SharedState>) {
                     now_ns(),
                     DesktopSensorControlPayload { sensor, enabled },
                 );
-                if send_json(socket, &request).await.is_err() {
+                if send_envelope(link, &request).await.is_err() {
                     break;
                 }
             }
@@ -595,7 +949,7 @@ async fn run_connection(socket: &mut WebSocket, shared: &Arc<SharedState>) {
                     now_ns(),
                     DesktopSensorRateCommandPayload { sensor, rate_hz },
                 );
-                if send_json(socket, &request).await.is_err() {
+                if send_envelope(link, &request).await.is_err() {
                     break;
                 }
             }
@@ -609,28 +963,23 @@ async fn run_connection(socket: &mut WebSocket, shared: &Arc<SharedState>) {
                     now_ns(),
                     DesktopHapticPayload { duration_ms },
                 );
-                if send_json(socket, &request).await.is_err() {
+                if send_envelope(link, &request).await.is_err() {
                     break;
                 }
             }
-            message = tokio::time::timeout(remaining, socket.next()) => {
+            message = tokio::time::timeout(remaining, link.recv()) => {
                 match message {
-                    Ok(Some(Ok(Message::Text(text)))) => {
+                    Ok(Some(bytes)) => {
                         last_activity = Instant::now();
                         handle_inbound(
-                            text.as_bytes(),
+                            &bytes,
                             &mut last_sequence,
                             &mut pending_time_sync_at,
                             &mut clock_offset_samples,
                             shared,
                         );
                     }
-                    Ok(Some(Ok(Message::Close(_)))) | Ok(None) => break,
-                    Ok(Some(Ok(_))) => {}
-                    Ok(Some(Err(error))) => {
-                        warn!(%error, "watch WebSocket receive error");
-                        break;
-                    }
+                    Ok(None) => break,
                     Err(_) => {
                         debug!("watch heartbeat timed out");
                         break;
@@ -759,12 +1108,12 @@ fn estimate_clock_offset(
     })
 }
 
-async fn send_json<T: serde::Serialize>(
-    socket: &mut WebSocket,
+async fn send_envelope<L: WatchLinkTransport + ?Sized, T: serde::Serialize>(
+    link: &mut L,
     value: &T,
-) -> Result<(), axum::Error> {
-    let text = serde_json::to_string(value).unwrap_or_default();
-    socket.send(Message::Text(text.into())).await
+) -> Result<(), ()> {
+    link.send_text(serde_json::to_string(value).unwrap_or_default())
+        .await
 }
 
 fn now_ns() -> u64 {
@@ -795,6 +1144,7 @@ mod tests {
             haptic_commands,
             active: AtomicBool::new(false),
             heartbeat_timeout: Duration::from_secs(3),
+            ble_status: Mutex::new(BleStatus::Idle),
         })
     }
 

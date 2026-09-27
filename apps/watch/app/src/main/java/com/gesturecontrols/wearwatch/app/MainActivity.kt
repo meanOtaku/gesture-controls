@@ -18,13 +18,16 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.view.KeyEvent
+import android.view.View
 import android.widget.Button
+import android.widget.RadioButton
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
@@ -33,6 +36,9 @@ class MainActivity : AppCompatActivity() {
     private enum class EndpointSource { DISCOVERED, PERSISTED_FALLBACK, DESKTOP_INITIATED }
 
     private lateinit var prefs: ConnectionPrefs
+    private lateinit var transportBluetoothButton: RadioButton
+    private lateinit var transportWifiButton: RadioButton
+    private lateinit var trustButton: Button
     private lateinit var connectButton: Button
     private lateinit var connectionStatusText: TextView
     private lateinit var discoveryStatusText: TextView
@@ -63,6 +69,11 @@ class MainActivity : AppCompatActivity() {
     }
     private lateinit var desktopDiscovery: DesktopDiscovery
     private lateinit var pairingServer: WatchPairingServer
+
+    /** Live only while [WatchTransportKind.BLUETOOTH] is selected; see [applyTransport]. */
+    private var bleTransport: BleGattTransport? = null
+    private var bleObserverJob: Job? = null
+    private var selectedTransport: WatchTransportKind = WatchTransportKind.DEFAULT
     private var endpointSource: EndpointSource = EndpointSource.DISCOVERED
     private lateinit var sensorCollector: SensorCollector
     private lateinit var ppgCollector: PpgCollector
@@ -72,6 +83,19 @@ class MainActivity : AppCompatActivity() {
     // Tracks whether we've sent a button-down without a matching button-up yet,
     // so backgrounding the activity mid-hold can't leave the desktop overlay grabbed.
     private var stemButtonPressed = false
+
+    // BLUETOOTH_ADVERTISE/BLUETOOTH_CONNECT on API 31+. A denial leaves
+    // Bluetooth selected and shows why it can't start; it never silently falls
+    // back to Wi-Fi.
+    private val requestBluetoothPermissions =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+            if (grants.values.all { it }) {
+                startBluetoothTransport()
+            } else {
+                connectionStatusText.setText(R.string.ble_permission_required)
+                linkDiagnosticsText.text = getString(R.string.ble_permission_required)
+            }
+        }
 
     // Samsung Health Sensor SDK's own consent flow is separate from this; see
     // PpgCollector's kdoc. Must be registered before onStart, so it's a field.
@@ -88,6 +112,9 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         prefs = ConnectionPrefs(this)
+        transportBluetoothButton = findViewById(R.id.transportBluetoothButton)
+        transportWifiButton = findViewById(R.id.transportWifiButton)
+        trustButton = findViewById(R.id.trustButton)
         connectButton = findViewById(R.id.connectButton)
         connectionStatusText = findViewById(R.id.connectionStatusText)
         discoveryStatusText = findViewById(R.id.discoveryStatusText)
@@ -103,7 +130,6 @@ class MainActivity : AppCompatActivity() {
         biaButton = findViewById(R.id.biaButton)
         sweatLossButton = findViewById(R.id.sweatLossButton)
 
-        val persistedEndpoint = prefs.endpoint
         renderEndpointSource()
 
         watchLink.batteryPercentProvider = { readBatteryPercent() }
@@ -165,22 +191,16 @@ class MainActivity : AppCompatActivity() {
         watchLink.onHapticCommand = { durationMs -> triggerHaptic(durationMs) }
 
         connectButton.setOnClickListener { onConnectButtonClicked() }
+        trustButton.setOnClickListener { onTrustButtonClicked() }
+        transportBluetoothButton.setOnClickListener { onTransportSelected(WatchTransportKind.BLUETOOTH) }
+        transportWifiButton.setOnClickListener { onTransportSelected(WatchTransportKind.WIFI) }
         spo2Button.setOnClickListener { onOnDemandButtonClicked(TRACKER_SPO2_ON_DEMAND) }
         ecgButton.setOnClickListener { onOnDemandButtonClicked(TRACKER_ECG_ON_DEMAND) }
         biaButton.setOnClickListener { onOnDemandButtonClicked(TRACKER_BIA_ON_DEMAND) }
         sweatLossButton.setOnClickListener { onOnDemandButtonClicked(TRACKER_SWEAT_LOSS_ON_DEMAND) }
-        desktopDiscovery.start()
-        pairingServer.start()
-
-        // Durable pairing fallback: reconnect to whatever we last used, right
-        // away, so the watch doesn't sit idle waiting on a fresh mDNS
-        // resolve every cold start. Not "manual", so a subsequent discovery
-        // result is still free to replace it.
-        if (!persistedEndpoint.isNullOrBlank()) {
-            endpointSource = EndpointSource.PERSISTED_FALLBACK
-            renderEndpointSource()
-            connectToDesktop(persistedEndpoint)
-        }
+        // Restores the persisted selection; a fresh install (and any install
+        // upgrading from the Wi-Fi-only build) starts on Bluetooth.
+        applyTransport(prefs.transport, persist = false)
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -229,7 +249,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (!watchLink.state.value.isConnectionActive()) {
+        if (selectedTransport == WatchTransportKind.WIFI && !watchLink.state.value.isConnectionActive()) {
             sensorCollector.stop()
             desktopDiscovery.start()
             pairingServer.start()
@@ -242,7 +262,12 @@ class MainActivity : AppCompatActivity() {
         stopSensorCollection()
         desktopDiscovery.stop()
         pairingServer.stop()
+        bleObserverJob?.cancel()
+        bleObserverJob = null
+        // `shutdown` releases whichever transport is installed, including the
+        // GATT server and its advertisement.
         watchLink.shutdown()
+        bleTransport = null
         StreamingForegroundService.stop(this)
     }
 
@@ -276,6 +301,108 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun onTransportSelected(kind: WatchTransportKind) {
+        if (kind == selectedTransport) return
+        applyTransport(kind, persist = true)
+    }
+
+    /**
+     * Makes [kind] the one live transport. The other one is torn down first and
+     * completely: Wi-Fi releases its WebSocket, mDNS browser and pairing
+     * listener; Bluetooth releases its advertisement and GATT server. Neither
+     * is ever left running in the background behind the other.
+     */
+    private fun applyTransport(kind: WatchTransportKind, persist: Boolean) {
+        selectedTransport = kind
+        if (persist) prefs.transport = kind
+
+        stopSensorCollection()
+        StreamingForegroundService.stop(this)
+        sensorStatusText.setText(R.string.sensors_idle)
+        watchLink.disconnect()
+
+        desktopDiscovery.stop(showWifiStatus = false)
+        pairingServer.stop()
+        bleObserverJob?.cancel()
+        bleObserverJob = null
+        bleTransport?.shutdown()
+        bleTransport = null
+
+        renderTransportSelector()
+        when (kind) {
+            WatchTransportKind.BLUETOOTH -> startBluetoothTransport()
+            WatchTransportKind.WIFI -> startWifiTransport()
+        }
+    }
+
+    private fun startBluetoothTransport() {
+        val transport = BleGattTransport(this, prefs)
+        val missing = transport.missingPermissions()
+        if (missing.isNotEmpty()) {
+            connectionStatusText.setText(R.string.ble_permission_required)
+            requestBluetoothPermissions.launch(missing.toTypedArray())
+            return
+        }
+        bleTransport = transport
+        bleObserverJob = lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                transport.pendingTrustedCentral.collect { renderTrustPrompt(it) }
+            }
+        }
+        discoveryStatusText.setText(R.string.ble_advertising)
+        discoveryHistoryText.text = ""
+        watchLink.connect(transport)
+    }
+
+    private fun startWifiTransport() {
+        desktopDiscovery.start()
+        pairingServer.start()
+        // Durable pairing fallback: reconnect to whatever we last used, right
+        // away, so the watch doesn't sit idle waiting on a fresh mDNS
+        // resolve. Not "manual", so a subsequent discovery result is still
+        // free to replace it.
+        val persistedEndpoint = prefs.endpoint
+        if (!persistedEndpoint.isNullOrBlank()) {
+            endpointSource = EndpointSource.PERSISTED_FALLBACK
+            renderEndpointSource()
+            connectToDesktop(persistedEndpoint)
+        }
+    }
+
+    private fun renderTransportSelector() {
+        transportBluetoothButton.isChecked = selectedTransport == WatchTransportKind.BLUETOOTH
+        transportWifiButton.isChecked = selectedTransport == WatchTransportKind.WIFI
+        val wifiOnly = if (selectedTransport == WatchTransportKind.WIFI) View.VISIBLE else View.GONE
+        connectButton.visibility = wifiOnly
+        endpointSourceText.visibility = wifiOnly
+        discoveryHistoryText.visibility = wifiOnly
+        if (selectedTransport != WatchTransportKind.BLUETOOTH) {
+            trustButton.visibility = View.GONE
+        }
+    }
+
+    /** Shows the explicit per-desktop trust gate; see `BleGattTransport`'s trust model. */
+    private fun renderTrustPrompt(pendingCentral: String?) {
+        if (pendingCentral == null) {
+            val trusted = bleTransport?.trustedCentral?.value
+            trustButton.visibility = if (trusted == null) View.GONE else View.VISIBLE
+            trustButton.setText(R.string.action_forget_trust)
+            return
+        }
+        trustButton.visibility = View.VISIBLE
+        trustButton.text = getString(R.string.action_trust) + "\n" + pendingCentral
+    }
+
+    private fun onTrustButtonClicked() {
+        val transport = bleTransport ?: return
+        if (transport.pendingTrustedCentral.value != null) {
+            transport.approvePendingCentral()
+        } else {
+            transport.forgetTrustedCentral()
+        }
+        renderTrustPrompt(transport.pendingTrustedCentral.value)
+    }
+
     private fun onConnectButtonClicked() {
         if (watchLink.state.value.isConnectionActive()) {
             stopSensorCollection()
@@ -292,6 +419,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun connectDesktop(url: String, source: EndpointSource) {
+        if (selectedTransport != WatchTransportKind.WIFI) return
         if (watchLink.state.value.isConnectionActive()) return
         endpointSource = source
         renderEndpointSource()
@@ -311,7 +439,7 @@ class MainActivity : AppCompatActivity() {
         StreamingForegroundService.start(this)
         sensorCollector.start()
         sensorStatusText.setText(R.string.sensors_streaming)
-        watchLink.connect(url)
+        watchLink.connect(WebSocketTransport(url))
         startBodySensorCollection()
     }
 
@@ -335,7 +463,8 @@ class MainActivity : AppCompatActivity() {
     private fun ConnectionState.isConnectionActive(): Boolean =
         this == ConnectionState.CONNECTED ||
             this == ConnectionState.CONNECTING ||
-            this == ConnectionState.RECONNECTING
+            this == ConnectionState.RECONNECTING ||
+            this == ConnectionState.AWAITING_TRUST
 
     /** Same foreground, single-session start/stop the desktop drives via `desktop.start_measurement`; see [OnDemandMedicalSampler]. */
     private fun onOnDemandButtonClicked(trackerId: String) {
@@ -370,9 +499,13 @@ class MainActivity : AppCompatActivity() {
             // Restarting here (idempotent, preserves each sensor's individual
             // enable flag) covers reconnects that never go through
             // connectToDesktop(), e.g. a CONNECTING/RECONNECTING session that
-            // was backgrounded and resumed before landing on CONNECTED.
+            // was backgrounded and resumed before landing on CONNECTED, and
+            // every Bluetooth session, which only starts capturing once a
+            // trusted desktop has actually subscribed.
+            StreamingForegroundService.start(this)
             sensorCollector.start()
             sensorStatusText.setText(R.string.sensors_streaming)
+            startBodySensorCollection()
         }
         if (state == ConnectionState.FAILED) {
             StreamingForegroundService.stop(this)
@@ -382,11 +515,12 @@ class MainActivity : AppCompatActivity() {
             ConnectionState.CONNECTING -> getString(R.string.status_connecting)
             ConnectionState.CONNECTED -> getString(R.string.status_connected)
             ConnectionState.RECONNECTING -> getString(R.string.status_reconnecting)
+            ConnectionState.AWAITING_TRUST -> getString(R.string.status_awaiting_trust)
             ConnectionState.FAILED -> getString(R.string.status_failed)
         }
         connectButton.text = when (state) {
-            ConnectionState.CONNECTED, ConnectionState.CONNECTING, ConnectionState.RECONNECTING ->
-                getString(R.string.action_disconnect)
+            ConnectionState.CONNECTED, ConnectionState.CONNECTING, ConnectionState.RECONNECTING,
+            ConnectionState.AWAITING_TRUST -> getString(R.string.action_disconnect)
             ConnectionState.DISCONNECTED, ConnectionState.FAILED ->
                 getString(R.string.action_connect)
         }

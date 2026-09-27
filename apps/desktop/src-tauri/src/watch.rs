@@ -6,10 +6,10 @@ use spatial_protocol::{
     CONTROLLABLE_SENSOR_IDS, MEDICAL_TRACKER_IDS, WatchBiaResultSample, WatchHeartbeatSample,
     WatchOrientationSample,
 };
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use watch_bridge::{
     ClockOffsetEstimate, MeasurementCommand, SensorControlCommand, SensorRateCommand,
-    WatchBridgeServer, WatchEvent,
+    WatchBridgeServer, WatchEvent, WatchTransport, ble::BleStatus,
 };
 
 pub const WATCH_STATUS_EVENT: &str = "watch-status";
@@ -469,4 +469,51 @@ pub fn set_sensor_rate(
     server
         .send_sensor_rate_command(SensorRateCommand { sensor, rate_hz })
         .map_err(|error| error.to_string())
+}
+
+/// The selected Watch transport plus what the BLE central is currently doing,
+/// so the settings UI can show both without a second round trip.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WatchTransportStatus {
+    pub selected: WatchTransport,
+    pub ble: BleStatus,
+}
+
+#[tauri::command]
+pub fn get_watch_transport_status(app: AppHandle) -> Result<WatchTransportStatus, String> {
+    Ok(WatchTransportStatus {
+        selected: app
+            .state::<crate::settings::SettingsRuntime>()
+            .get()?
+            .watch_transport,
+        // The bridge task publishes the server asynchronously at startup, so
+        // the UI can legitimately ask before it exists.
+        ble: app
+            .try_state::<std::sync::Arc<WatchBridgeServer>>()
+            .map(|server| server.ble_status())
+            .unwrap_or(BleStatus::Idle),
+    })
+}
+
+/// Switches the live Watch transport and persists the choice. Starting one
+/// stops the other completely — no mDNS advertisement, pairing browser,
+/// WebSocket listener, or GATT connection is left running behind it.
+#[tauri::command]
+pub async fn set_watch_transport(app: AppHandle, transport: WatchTransport) -> Result<(), String> {
+    crate::settings::set_watch_transport(&app, transport).await
+}
+
+/// Re-runs the BLE scan/connect cycle (for a "Scan again" button): stops the
+/// current session, then starts a fresh one. Only valid while BLE is selected.
+#[tauri::command]
+pub async fn rescan_watch_ble(app: AppHandle) -> Result<(), String> {
+    let transport = app
+        .state::<crate::settings::SettingsRuntime>()
+        .get()?
+        .watch_transport;
+    if transport != WatchTransport::Bluetooth {
+        return Err("Bluetooth is not the selected Watch transport".to_string());
+    }
+    crate::settings::restart_watch_ble(&app).await
 }

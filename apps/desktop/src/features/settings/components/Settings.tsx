@@ -9,6 +9,7 @@ import { RecordingGraphSettingsSection } from "./RecordingGraphSettingsSection";
 import { WatchHealthDeliverySettingsSection } from "./WatchHealthDeliverySettingsSection";
 import { WatchRateSettingsSection } from "./WatchRateSettingsSection";
 import { WatchSensorSwitchSection } from "./WatchSensorSwitchSection";
+import { WatchTransportSection } from "./WatchTransportSection";
 import { WristRotationSettings } from "./WristRotationSettings";
 
 const EMPTY_OVERLAY_STATE: OverlayState = {
@@ -55,6 +56,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   watchSensorsEnabled: Object.fromEntries(CONTROLLABLE_SENSORS.map(({ id }) => [id, true])),
   cornerWristVolumeDemoEnabled: false,
   cornerWristVolumeInvertDirection: false,
+  watchTransport: "bluetooth",
 };
 
 function clamp(raw: string | undefined, min: number, max: number, fallback: number): number {
@@ -161,6 +163,11 @@ export function Settings({
         graphRefreshRateHz={current.graphRefreshRateHz}
         recordingRateInputRef={recordingRateInput}
         graphRefreshRateInputRef={graphRefreshRateInput}
+      />
+
+      <WatchTransportSection
+        selected={current.watchTransport}
+        onSelect={(watchTransport) => onUpdate({ ...current, watchTransport })}
       />
 
       <WatchRateSettingsSection

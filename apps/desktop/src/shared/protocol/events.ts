@@ -238,6 +238,23 @@ export interface AppSettings {
   cornerWristVolumeDemoEnabled: boolean;
   /** Direction calibration for the corner-gated demo only; does not affect the Watch-button/desktop-model paths. */
   cornerWristVolumeInvertDirection: boolean;
+  /** Which link reaches the Watch. Defaults to Bluetooth, including for settings files written before the field existed. */
+  watchTransport: WatchTransport;
+}
+
+/** Mirrors `watch_bridge::WatchTransport`. */
+export type WatchTransport = "bluetooth" | "wifi";
+
+/** Mirrors `watch_bridge::ble::BleStatus`; `detail` is only set on `failed`. */
+export type WatchBleStatus = {
+  state: "idle" | "scanning" | "connecting" | "awaitingWatchTrust" | "streaming" | "failed";
+  detail?: string;
+};
+
+/** Mirrors `watch::WatchTransportStatus`, returned by `get_watch_transport_status`. */
+export interface WatchTransportStatus {
+  selected: WatchTransport;
+  ble: WatchBleStatus;
 }
 
 export const SETTINGS_UPDATED_EVENT = "settings-updated";

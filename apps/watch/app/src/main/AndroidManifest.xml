@@ -7,6 +7,19 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- Needed for reliable local mDNS/DNS-SD discovery on Wi-Fi. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- Bluetooth LE transport (GC-037): the watch runs a GATT server and
+         advertises it, so the desktop can connect as a central. It never
+         scans, which is why BLUETOOTH_SCAN is deliberately not declared.
+         API 31+ requires the runtime permissions; API 30 (Wear OS 3, the
+         Galaxy Watch 4's shipping level) uses the older install-time pair. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <!-- Keeps the CPU awake while a streaming session is active so orientation
          samples keep flowing once the screen dims. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -19,6 +32,11 @@
     <uses-permission android:name="android.permission.VIBRATE" />
 
     <uses-feature android:name="android.hardware.type.watch" />
+    <!-- Not required: a watch without BLE peripheral support still runs the
+         Wi-Fi transport; BleGattTransport reports the limitation at runtime. -->
+    <uses-feature
+        android:name="android.hardware.bluetooth_le"
+        android:required="false" />
     <uses-feature
         android:name="android.hardware.sensor.gyroscope"
         android:required="true" />

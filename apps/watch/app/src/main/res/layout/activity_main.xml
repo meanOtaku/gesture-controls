@@ -18,6 +18,43 @@
             android:padding="16dp"
             android:gravity="center_horizontal">
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="@string/transport_heading"
+                android:textColor="#888888"
+                android:textSize="10sp" />
+
+            <RadioGroup
+                android:id="@+id/transportGroup"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:orientation="vertical">
+
+                <RadioButton
+                    android:id="@+id/transportBluetoothButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/transport_bluetooth"
+                    android:textColor="#FFFFFF" />
+
+                <RadioButton
+                    android:id="@+id/transportWifiButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/transport_wifi"
+                    android:textColor="#FFFFFF" />
+            </RadioGroup>
+
+            <Button
+                android:id="@+id/trustButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/action_trust"
+                android:visibility="gone" />
+
             <Button
                 android:id="@+id/connectButton"
                 android:layout_width="wrap_content"

@@ -21,6 +21,7 @@ repository = "https://github.com/meanOtaku/gesture-controls"
 anyhow = "1"
 async-trait = "0.1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+btleplug = "0.13"
 axum = { version = "0.8", default-features = false, features = ["ws", "tokio", "http1"] }
 futures-util = "0.3"
 mdns-sd = "0.21"

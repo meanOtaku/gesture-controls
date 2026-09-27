@@ -856,3 +856,46 @@ new timestamp/label-quality rule was added or duplicated.
 - [ ] Rust backend untouched by this slice, so the pre-existing
       `pkg-config`/GTK build blocker (GC-002/GC-009/GC-018/GC-019/GC-024/
       GC-025) was not re-checked here; nothing in this change depends on it.
+
+## GC-037 — Selectable Bluetooth LE Watch transport
+
+- [x] `apps/watch/.../data/connection/WatchTransportLink.kt`: new
+      `WatchTransportKind` (persisted, Bluetooth-default) and the single
+      transport seam both Watch transports implement.
+- [x] `apps/watch/.../data/connection/BleFraming.kt`: MTU-aware
+      fragmentation/reassembly, byte-compatible with the desktop.
+- [x] `apps/watch/.../data/connection/BleGattTransport.kt`: GATT server +
+      advertising, encrypted characteristic permissions, explicit per-desktop
+      trust gate, bounded outbound queue drained on `onNotificationSent`.
+- [x] `apps/watch/.../data/connection/WebSocketTransport.kt`: the existing
+      Wi-Fi socket lifecycle extracted behind the same seam, unchanged.
+- [x] `apps/watch/.../data/connection/WatchLinkManager.kt`: now transport-
+      agnostic; every `send*`, the heartbeat and both flush timers are shared.
+- [x] `apps/watch/.../data/preferences/ConnectionPrefs.kt`: persists the
+      transport choice and the trusted desktop address.
+- [x] `apps/watch/.../app/MainActivity.kt`, layout, strings, manifest:
+      transport radio selector, trust/forget button, `AWAITING_TRUST` state,
+      BLE runtime permissions, and per-mode start/stop of the other transport.
+- [x] `crates/watch-bridge/src/ble.rs`: btleplug central — scan filtered on the
+      service UUID, connect, discover, subscribe, framed notify/write, typed
+      actionable errors, `BleStatus` for the UI.
+- [x] `crates/watch-bridge/src/lib.rs`: `WatchLinkTransport` seam,
+      `run_connection` made generic over it, BLE session with cooperative
+      cancellation, `WatchTransport` enum, rebindable Wi-Fi listener.
+- [x] Desktop `settings.rs`/`watch.rs`/`lib.rs`: persisted `watchTransport`
+      (default Bluetooth), `apply_watch_transport` starting one and stopping
+      the other, and `get_watch_transport_status`/`set_watch_transport`/
+      `rescan_watch_ble` commands.
+- [x] `WatchTransportSection.tsx`: transport selector, BLE state, rescan;
+      existing Wi-Fi controls untouched.
+- [x] `docs/protocols/watch-ble-transport.md`: UUIDs, framing, backpressure,
+      trust model and its limitations, platform support, hardware checklist.
+- [x] Tests: 8 Rust BLE framing cases, 3 Rust settings transport-default/
+      migration cases, 2 Wear OS test classes (framing + preference default),
+      6 frontend transport-section cases.
+- [ ] `cargo check -p spatial-gesture-desktop`: still blocked by the
+      pre-existing host `pkg-config`/GTK dependency gap, so the desktop
+      `settings.rs` tests were not run here.
+- [ ] Wear OS module not compiled and its unit tests not run: no Android
+      SDK/Gradle on this host.
+- [ ] Hardware validation on a real Galaxy Watch + BLE desktop still required.

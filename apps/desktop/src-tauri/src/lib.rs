@@ -99,6 +99,9 @@ pub fn run() {
             model_registry::set_inference_mode,
             inference::report_pinch_transition,
             inference::report_model_runtime_failure,
+            watch::get_watch_transport_status,
+            watch::set_watch_transport,
+            watch::rescan_watch_ble,
         ])
         .on_window_event(|window, event| {
             if window.label() == MAIN_WINDOW
@@ -107,10 +110,16 @@ pub fn run() {
                 api.prevent_close();
                 let handle = window.app_handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    if let Some(server) = handle.try_state::<Arc<WatchBridgeServer>>()
-                        && let Err(error) = server.stop().await
-                    {
-                        warn!(%error, "failed to stop watch bridge server during teardown");
+                    if let Some(server) = handle.try_state::<Arc<WatchBridgeServer>>() {
+                        // Both transports are torn down on exit regardless of
+                        // which one is selected, so neither a listener nor a
+                        // GATT connection outlives the window.
+                        if let Err(error) = server.stop_ble().await {
+                            warn!(%error, "failed to stop watch BLE transport during teardown");
+                        }
+                        if let Err(error) = server.stop().await {
+                            warn!(%error, "failed to stop watch bridge server during teardown");
+                        }
                     }
                     handle.exit(0);
                 });
@@ -152,12 +161,22 @@ pub fn run() {
                 };
 
                 let mut events = server.subscribe();
-                if let Err(error) = server.start().await {
-                    error!(%error, "watch bridge server failed to start");
-                    return;
+                let server = Arc::new(server);
+                watch_handle.manage(Arc::clone(&server));
+
+                // Start only the transport the user selected; a fresh install
+                // (and any settings.json predating the field) selects
+                // Bluetooth. A failure is surfaced through the transport's own
+                // status, never by quietly starting the other one.
+                let transport = watch_handle
+                    .state::<settings::SettingsRuntime>()
+                    .get()
+                    .map(|settings| settings.watch_transport)
+                    .unwrap_or_default();
+                if let Err(error) = settings::apply_watch_transport(&watch_handle, transport).await {
+                    error!(%error, ?transport, "watch transport failed to start");
                 }
-                info!(address = %WATCH_WEBSOCKET_ADDRESS, "watch WebSocket server started");
-                watch_handle.manage(Arc::new(server));
+                info!(?transport, "watch bridge started");
 
                 let runtime = watch_handle.state::<watch::WatchRuntime>();
                 loop {
