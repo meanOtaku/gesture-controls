@@ -12,7 +12,10 @@
 //! Releasing is always safe to actually execute -- it can only stop
 //! something, never start it -- so [`PolicyDecision::live`] is only ever
 //! gated behind [`PolicyMode::Live`] for intents that *initiate* an action
-//! (see [`GestureIntent::requires_live_mode`]).
+//! (see [`GestureIntent::requires_live_mode`]). The one thing a release is
+//! gated on is whether the grab it ends was itself ever executed: a grab
+//! recorded while merely monitoring never reached the desktop, so releasing
+//! it must not reach the desktop either (see [`PolicyState`]).
 
 use std::time::Duration;
 
@@ -70,8 +73,11 @@ pub enum GestureIntent {
 impl GestureIntent {
     /// `true` for intents that *initiate* a real effect. These may only be
     /// executed in [`PolicyMode::Live`]. Intents that only stop or no-op are
-    /// always safe to execute, even while merely monitoring, since a stuck
-    /// grab is a bigger risk than a redundant release.
+    /// never blocked by the mode itself, since a stuck grab is a bigger risk
+    /// than a redundant release -- a [`GestureIntent::VolumeRelease`] is
+    /// instead gated on whether the grab it ends was actually executed (see
+    /// [`GesturePolicy::release_decision`]), which is what keeps monitoring
+    /// from tearing down a grab it never started.
     pub fn requires_live_mode(self) -> bool {
         !matches!(self, GestureIntent::NoAction | GestureIntent::VolumeRelease)
     }
@@ -128,14 +134,33 @@ pub struct PolicyDecision {
     pub reason: DecisionReason,
     /// Whether the caller should actually execute `intent`. `false` means
     /// the policy still ran (useful for Monitor-mode observability) but the
-    /// effect must not reach any real system.
+    /// effect must not reach any real system. For a release this tracks the
+    /// grab being ended rather than the current mode, so a grab only ever
+    /// recorded while monitoring is discarded silently instead of reaching
+    /// the desktop on its way out.
     pub live: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PolicyState {
     Idle,
-    Grabbed,
+    Grabbed {
+        /// Whether the `Started` that opened this grab was actually executed
+        /// against the desktop, i.e. whether it was decided in
+        /// [`PolicyMode::Live`]. A grab recorded while `Off`/`Monitor` never
+        /// reached the overlay or the volume backend at all, so the release
+        /// that ends it must not reach them either: the desktop's overlay
+        /// release hides the window and ends the wrist-rotation interaction
+        /// outright, which would tear down an unrelated Watch-button grab
+        /// that monitoring has no business touching.
+        executed: bool,
+    },
+}
+
+impl PolicyState {
+    fn is_grabbed(self) -> bool {
+        matches!(self, PolicyState::Grabbed { .. })
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -178,16 +203,19 @@ impl GesturePolicy {
         self.mode
     }
 
-    /// Switches the global mode. If a grab was live (mode was `Live`) and
-    /// the new mode is not `Live`, forces an immediate release so a mode
-    /// downgrade mid-gesture can never leave real volume control grabbed.
+    /// Switches the global mode, forcing an immediate release of any grab in
+    /// progress. A downgrade out of `Live` mid-gesture must never leave real
+    /// volume control grabbed; an upgrade *into* `Live` must not either
+    /// inherit a grab that was only ever recorded (never executed) while
+    /// monitoring, since that grab would then block the user's first real
+    /// pinch as `IgnoredAlreadyGrabbed`. Either way the released grab's own
+    /// executed-ness decides whether the resulting decision is `live` (see
+    /// [`Self::release_decision`]), so a monitored grab is discarded without
+    /// touching the desktop.
     pub fn set_mode(&mut self, mode: PolicyMode) -> Option<PolicyDecision> {
         let previous = self.mode;
         self.mode = mode;
-        if previous == PolicyMode::Live
-            && mode != PolicyMode::Live
-            && self.state == PolicyState::Grabbed
-        {
+        if previous != mode && self.state.is_grabbed() {
             Some(self.force_release(ForceReleaseReason::ModeChanged))
         } else {
             None
@@ -212,20 +240,27 @@ impl GesturePolicy {
 
         match (self.state, transition) {
             (PolicyState::Idle, PinchTransition::Started { .. }) => {
-                self.state = PolicyState::Grabbed;
+                let decision = self.decision(GestureIntent::VolumeGrab, DecisionReason::Started);
+                // Record exactly what the caller was told to do, not what the
+                // mode merely allowed: `decision.live` is the single source of
+                // truth for whether this grab reached the desktop, so the
+                // release that ends it can mirror it precisely.
+                self.state = PolicyState::Grabbed {
+                    executed: decision.live,
+                };
                 self.last_event_at_ns = Some(timestamp_ns);
-                self.decision(GestureIntent::VolumeGrab, DecisionReason::Started)
+                decision
             }
-            (PolicyState::Grabbed, PinchTransition::Held { .. }) => {
+            (PolicyState::Grabbed { .. }, PinchTransition::Held { .. }) => {
                 self.last_event_at_ns = Some(timestamp_ns);
                 self.decision(GestureIntent::NoAction, DecisionReason::Held)
             }
-            (PolicyState::Grabbed, PinchTransition::Released { .. }) => {
+            (PolicyState::Grabbed { executed }, PinchTransition::Released { .. }) => {
                 self.state = PolicyState::Idle;
                 self.last_event_at_ns = None;
-                self.decision(GestureIntent::VolumeRelease, DecisionReason::Released)
+                self.release_decision(executed, DecisionReason::Released)
             }
-            (PolicyState::Grabbed, PinchTransition::Started { .. }) => {
+            (PolicyState::Grabbed { .. }, PinchTransition::Started { .. }) => {
                 self.last_event_at_ns = Some(timestamp_ns);
                 self.decision(
                     GestureIntent::NoAction,
@@ -243,7 +278,7 @@ impl GesturePolicy {
     /// a grab is never left open by a pipeline that simply stops sending
     /// Held confirmations without an explicit Released or failure report.
     pub fn on_tick(&mut self, now_ns: u64) -> Option<PolicyDecision> {
-        if self.state != PolicyState::Grabbed {
+        if !self.state.is_grabbed() {
             return None;
         }
         let last = self.last_event_at_ns?;
@@ -260,15 +295,34 @@ impl GesturePolicy {
     /// disconnects, sensor-quality rejections, explicit model-runtime
     /// failure reports, and mode downgrades.
     pub fn force_release(&mut self, reason: ForceReleaseReason) -> PolicyDecision {
-        let was_grabbed = self.state == PolicyState::Grabbed;
+        let was_grabbed = self.state;
         self.state = PolicyState::Idle;
         self.last_event_at_ns = None;
-        let intent = if was_grabbed {
-            GestureIntent::VolumeRelease
-        } else {
-            GestureIntent::NoAction
-        };
-        self.decision(intent, DecisionReason::ForcedRelease(reason))
+        match was_grabbed {
+            PolicyState::Grabbed { executed } => {
+                self.release_decision(executed, DecisionReason::ForcedRelease(reason))
+            }
+            PolicyState::Idle => self.decision(
+                GestureIntent::NoAction,
+                DecisionReason::ForcedRelease(reason),
+            ),
+        }
+    }
+
+    /// The decision that ends a grab. Always reports the release intent so
+    /// Monitor-mode observability still sees the full grab/release arc, but
+    /// only marks it `live` when the grab it ends was actually executed
+    /// against the desktop -- a release is unconditionally safe to run only
+    /// against something this policy itself started. A grab that was merely
+    /// recorded while `Off`/`Monitor` was never handed to the overlay, so
+    /// executing its release would reach out and cancel whatever the overlay
+    /// *is* doing (in practice, a Watch-button grab).
+    fn release_decision(&self, executed: bool, reason: DecisionReason) -> PolicyDecision {
+        PolicyDecision {
+            intent: GestureIntent::VolumeRelease,
+            reason,
+            live: executed,
+        }
     }
 
     fn decision(&self, intent: GestureIntent, reason: DecisionReason) -> PolicyDecision {
@@ -379,16 +433,61 @@ mod tests {
     }
 
     #[test]
-    fn released_after_started_is_always_live_even_in_monitor_mode() {
+    fn released_after_a_live_grab_is_live() {
         let mut policy = GesturePolicy::default();
-        policy.set_mode(PolicyMode::Monitor);
+        policy.set_mode(PolicyMode::Live);
         policy.on_transition(started(0.9, 1));
         let decision = policy.on_transition(released(0.9, 2));
         assert_eq!(decision.intent, GestureIntent::VolumeRelease);
         assert!(
             decision.live,
-            "release must always be safe to actually execute"
+            "a grab that really executed must always be releasable"
         );
+    }
+
+    #[test]
+    fn released_after_a_monitor_grab_is_reported_but_never_live() {
+        // Monitor never executed the grab, so executing its release would
+        // reach the overlay for the first time on the way *out* -- cancelling
+        // whatever the overlay is actually doing (a Watch-button grab).
+        let mut policy = GesturePolicy::default();
+        policy.set_mode(PolicyMode::Monitor);
+        policy.on_transition(started(0.9, 1));
+        let decision = policy.on_transition(released(0.9, 2));
+        assert_eq!(decision.intent, GestureIntent::VolumeRelease);
+        assert_eq!(decision.reason, DecisionReason::Released);
+        assert!(!decision.live);
+    }
+
+    #[test]
+    fn a_full_monitor_mode_gesture_never_produces_a_live_actuating_decision() {
+        let mut policy = GesturePolicy::default();
+        policy.set_mode(PolicyMode::Monitor);
+        for transition in [
+            started(0.9, 1),
+            held(0.9, 2),
+            held(0.9, 3),
+            released(0.9, 4),
+        ] {
+            let decision = policy.on_transition(transition);
+            assert!(
+                !(decision.live && decision.intent != GestureIntent::NoAction),
+                "Monitor emitted an executable {:?} for {transition:?}",
+                decision.intent
+            );
+        }
+    }
+
+    #[test]
+    fn a_full_off_mode_gesture_never_produces_a_live_actuating_decision() {
+        // `Off` should never see a transition at all (the desktop skips
+        // classification entirely), but if one arrives anyway it must be
+        // just as inert as Monitor.
+        let mut policy = GesturePolicy::default();
+        for transition in [started(0.9, 1), held(0.9, 2), released(0.9, 3)] {
+            let decision = policy.on_transition(transition);
+            assert!(!(decision.live && decision.intent != GestureIntent::NoAction));
+        }
     }
 
     #[test]
@@ -476,6 +575,41 @@ mod tests {
     }
 
     #[test]
+    fn setting_the_same_mode_again_while_grabbed_is_a_no_op() {
+        let mut policy = GesturePolicy::default();
+        policy.set_mode(PolicyMode::Live);
+        policy.on_transition(started(0.9, 1));
+        assert!(policy.set_mode(PolicyMode::Live).is_none());
+        // The grab survives a redundant mode write.
+        let decision = policy.on_transition(released(0.9, 2));
+        assert_eq!(decision.intent, GestureIntent::VolumeRelease);
+        assert!(decision.live);
+    }
+
+    #[test]
+    fn upgrading_monitor_to_live_discards_a_monitored_grab_without_acting() {
+        let mut policy = GesturePolicy::default();
+        policy.set_mode(PolicyMode::Monitor);
+        policy.on_transition(started(0.9, 1));
+        let decision = policy
+            .set_mode(PolicyMode::Live)
+            .expect("a grab in progress must not survive a mode change");
+        assert_eq!(
+            decision.reason,
+            DecisionReason::ForcedRelease(ForceReleaseReason::ModeChanged)
+        );
+        assert!(
+            !decision.live,
+            "the monitored grab never reached the desktop, so neither may its release"
+        );
+        // And the discarded grab must not block the user's first real pinch.
+        let first_live = policy.on_transition(started(0.9, 2));
+        assert_eq!(first_live.intent, GestureIntent::VolumeGrab);
+        assert_eq!(first_live.reason, DecisionReason::Started);
+        assert!(first_live.live);
+    }
+
+    #[test]
     fn force_release_when_already_idle_reports_no_action() {
         let mut policy = GesturePolicy::default();
         policy.set_mode(PolicyMode::Live);
@@ -507,18 +641,24 @@ mod tests {
     }
 
     #[test]
-    fn force_release_while_grabbed_releases_live_regardless_of_mode() {
-        // A grab recorded internally under any mode (even Off/Monitor, where
-        // the grab itself was never actually executed) must still report a
-        // live release: releasing is always safe, so the internal state
-        // machine never gets stuck reporting `Grabbed` after a failure.
-        for mode in [PolicyMode::Off, PolicyMode::Monitor, PolicyMode::Live] {
+    fn force_release_always_clears_the_grab_but_only_executes_one_it_started() {
+        // A grab recorded internally under any mode must always be cleared,
+        // so the state machine never gets stuck reporting `Grabbed` after a
+        // failure. Whether the release is actually *executed* still follows
+        // the grab: only a Live grab ever reached the desktop.
+        for (mode, expected_live) in [
+            (PolicyMode::Off, false),
+            (PolicyMode::Monitor, false),
+            (PolicyMode::Live, true),
+        ] {
             let mut policy = GesturePolicy::default();
             policy.set_mode(mode);
             policy.on_transition(started(0.9, 1));
             let decision = policy.force_release(ForceReleaseReason::ModelRuntimeFailure);
             assert_eq!(decision.intent, GestureIntent::VolumeRelease);
-            assert!(decision.live);
+            assert_eq!(decision.live, expected_live, "mode {mode:?}");
+            let after = policy.on_transition(held(0.9, 2));
+            assert_eq!(after.reason, DecisionReason::IgnoredNotGrabbed, "{mode:?}");
         }
     }
 

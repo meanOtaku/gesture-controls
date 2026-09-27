@@ -73,6 +73,71 @@ Progress in this commit:
 - [ ] **Deferred / not cleared:** feature-enabled LiteRT build, package, and
       real-device validation. Do not run validation until explicitly requested.
 
+### Off/Monitor/Live gating of the live inference path
+
+The wiring that loads a verified active model into
+`DesktopPinchRuntime<Box<dyn PinchModel>>` and feeds its transitions to
+`GesturePolicyRuntime` already existed. This slice makes the Off/Monitor/Live
+contract explicit, closes the one place `Monitor` could still reach the
+desktop, and pins all three modes with tests.
+
+- [x] `inference::mode_classifies` is now the single, named, unit-tested
+      Off/Monitor/Live gate. `active_model_runtime_config` no longer folds
+      `Off` into its `None` (it returns the mode in a new
+      `ActiveModelRuntimeConfig`), so "`Off` never reaches a model" is stated
+      in the live path itself rather than hidden in a registry lookup.
+- [x] `inference::decision_actuates` is now the single predicate separating
+      `Monitor` from `Live` on the desktop side; `apply_decision` branches on
+      it. Every decision is still emitted on `GESTURE_POLICY_EVENT` first, so
+      Monitor keeps full observability.
+- [x] **Bug fixed:** `Monitor` could perform a real OS-level action. A release
+      was unconditionally `live` ("releasing is always safe"), so a
+      model-driven `Released` — or any forced release from a rejected/stale
+      window — reached `OverlayRuntime::release`, which hides the overlay
+      window and ends the wrist-rotation interaction. Since the Watch button
+      grabs that same overlay directly (`WatchEvent::Button` in `lib.rs`,
+      routing around the policy), monitoring could tear down a Watch-button
+      grab it never started. `GesturePolicy` now records whether the grab in
+      progress was actually executed (`PolicyState::Grabbed { executed }`) and
+      a release is `live` only if the grab it ends was. A Live grab is still
+      always releasable, so the fail-closed guarantee is unchanged.
+- [x] `GesturePolicy::set_mode` now force-releases on *any* mode change while
+      grabbed, not just a downgrade out of `Live`. Previously a grab recorded
+      under Monitor survived an upgrade into Live and swallowed the user's
+      first real pinch as `IgnoredAlreadyGrabbed`.
+- [x] Fail-closed on an absent `litert` feature is unchanged and still correct:
+      `load_model_backend` returns `UnavailablePinchModel`, whose every
+      `predict` errors, so `DesktopPinchRuntime::submit` fails closed and the
+      desktop behaves as `Off`. Default builds remain LiteRT-free.
+- [x] Tests: 4 new/updated `interaction-engine` gesture-policy cases plus 6 new
+      `pinch-inference` cases driving a stub model through a real
+      `GesturePolicy` per mode, and 8 new `InferenceMode` gating cases
+      colocated with `inference.rs`.
+- [x] Ran locally: `cargo test -p pinch-inference -p interaction-engine`
+      — 112 passed, 0 failed (pinch-inference lib 50; interaction-engine lib
+      25 plus its 5 integration binaries 7/4/1/2/23) and
+      `cargo clippy -p pinch-inference -p interaction-engine --all-targets
+      -- -D warnings` clean (with `-A clippy::doc_lazy_continuation`, a
+      pre-existing lint at `interaction-engine/src/lib.rs:562-566` that this
+      slice does not touch). `rustfmt --check` clean on every file changed.
+- [ ] **CI-verified only:** `cargo test -p spatial-gesture-desktop`,
+      `cargo clippy --all-targets -- -D warnings`, and
+      `cargo fmt --all -- --check`. This host has no Rust toolchain
+      preinstalled (rustup was installed into the run), no `pkg-config`, no
+      GTK/glib/webkit dev headers, and no passwordless root — the same
+      recurring blocker as GC-002/GC-009/GC-018/GC-019/GC-024/GC-025/GC-037.
+      Staging the 747-package dependency closure in user space was rejected as
+      impractical. The `inference.rs`/`model_registry.rs` changes and the 8 new
+      `InferenceMode` tests are therefore **unrun locally**;
+      `.github/workflows/desktop-ci.yml` is the verification path.
+      Note: `cargo fmt --all -- --check` also reports pre-existing drift in
+      `recording_bundle.rs`, `training_label_mapping.rs`, and unrelated regions
+      of `model_registry.rs` under rustfmt 1.9.0; those were already unformatted
+      at `c12899f` and were deliberately left alone.
+- [ ] **Still deferred / not cleared:** feature-enabled cross-platform
+      packaging/build validation, and any real Galaxy Watch hardware
+      Off/Monitor/Live walkthrough.
+
 ## GC-004 — LiteRT desktop runtime packaging
 
 Package the optional `litert-inference` desktop backend deliberately, without

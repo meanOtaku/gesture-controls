@@ -663,23 +663,39 @@ fn force_release_before_swap(
     }
 }
 
-/// The active model's id, thresholds, and sensor-quality gate, or `None` if
-/// inference is `Off` or no model is active -- callers should skip quality
-/// gating and classification entirely in that case, since there is nothing
-/// running that a stale/degraded window could corrupt.
-pub(crate) fn active_model_runtime_config(
-    app: &AppHandle,
-) -> Option<(String, ModelThresholds, QualityGateConfig)> {
+/// Everything the live inference path needs to decide what to do with one
+/// raw sensor window: which model is active, what mode the registry is in,
+/// and that model's own thresholds and sensor-quality gate.
+pub(crate) struct ActiveModelRuntimeConfig {
+    pub model_id: String,
+    pub inference_mode: InferenceMode,
+    pub thresholds: ModelThresholds,
+    pub quality_gate: QualityGateConfig,
+}
+
+/// The [`ActiveModelRuntimeConfig`] for the currently active model, or
+/// `None` if no model is active at all -- in which case there is nothing
+/// running that a stale/degraded window could corrupt, so callers should
+/// skip quality gating and classification entirely.
+///
+/// The Off/Monitor/Live gate itself is deliberately *not* applied here: it
+/// belongs to the single live-path choke point in
+/// [`crate::inference::ingest_ppg_window`] (see `inference::mode_classifies`),
+/// so the rule that `Off` never reaches a model is stated and unit-tested in
+/// one obvious place rather than hidden behind this lookup's `None`.
+pub(crate) fn active_model_runtime_config(app: &AppHandle) -> Option<ActiveModelRuntimeConfig> {
     let index = load_registry(app);
-    if index.inference_mode == InferenceMode::Off {
-        return None;
-    }
     let active_id = index.active_model_id.clone()?;
     index
         .models
         .iter()
         .find(|model| model.id == active_id)
-        .map(|model| (active_id, model.thresholds, model.quality_gate))
+        .map(|model| ActiveModelRuntimeConfig {
+            model_id: active_id,
+            inference_mode: index.inference_mode,
+            thresholds: model.thresholds,
+            quality_gate: model.quality_gate,
+        })
 }
 
 /// Absolute path to `model_id`'s `model.tflite` file, for loading into a real
