@@ -349,11 +349,11 @@ class BleGattTransport(
     }
 
     private fun advertiseFailureReason(errorCode: Int): String = when (errorCode) {
-        ADVERTISE_FAILED_DATA_TOO_LARGE -> "Bluetooth advertisement payload too large"
-        ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "Too many Bluetooth advertisers active"
-        ADVERTISE_FAILED_ALREADY_STARTED -> "Bluetooth advertising already running"
-        ADVERTISE_FAILED_INTERNAL_ERROR -> "Bluetooth advertising failed inside the system"
-        ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "This watch cannot advertise as a Bluetooth LE peripheral"
+        AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE -> "Bluetooth advertisement payload too large"
+        AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "Too many Bluetooth advertisers active"
+        AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED -> "Bluetooth advertising already running"
+        AdvertiseCallback.ADVERTISE_FAILED_INTERNAL_ERROR -> "Bluetooth advertising failed inside the system"
+        AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "This watch cannot advertise as a Bluetooth LE peripheral"
         else -> "Bluetooth advertising failed"
     }
 
