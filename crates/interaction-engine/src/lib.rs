@@ -557,9 +557,11 @@ impl WristRotation {
     }
 
     /// Computes the absolute target volume percent (0.0..=100.0) for the
-    /// current orientation sample: `activation_volume + signed(relative_roll)
-    /// * volume_points_per_degree`, clamped to the valid range. A pure
-    /// function of the reference pose, the activation-volume baseline, and
+    /// current orientation sample using
+    /// `activation_volume + signed(relative_roll) * volume_points_per_degree`,
+    /// clamped to the valid range.
+    ///
+    /// This is a pure function of the reference pose, the activation-volume baseline, and
     /// this sample alone -- never of any previously applied volume -- so
     /// holding a fixed wrist angle holds a fixed target and returning to the
     /// reference angle restores the activation volume exactly, with nothing

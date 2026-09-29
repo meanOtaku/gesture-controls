@@ -136,7 +136,9 @@ export function LabelMappingEditor({
                     {entry?.role === "target" && (
                       <Select
                         value={entry.target}
-                        onValueChange={(target) => handleRoleChange(labelId, "target", target)}
+                        onValueChange={(target) => {
+                          if (target !== null) handleRoleChange(labelId, "target", target);
+                        }}
                       >
                         <SelectTrigger className="w-[150px]" aria-label={`Target class for ${labelId}`}>
                           <SelectValue />

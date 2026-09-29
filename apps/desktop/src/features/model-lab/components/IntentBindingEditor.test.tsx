@@ -6,7 +6,13 @@ import type { ModelRegistryModel } from "../types";
 
 afterEach(() => cleanup());
 
-const MODEL: ModelRegistryModel = { id: "model-a", state: "draft", createdAt: "2026-08-31T01:00:00Z", intentBindings: [] };
+const MODEL: ModelRegistryModel = {
+  id: "model-a",
+  state: "draft",
+  createdAt: "2026-08-31T01:00:00Z",
+  intentBindings: [],
+  importedTfliteBundle: false,
+};
 
 function renderEditor(overrides: Partial<React.ComponentProps<typeof IntentBindingEditor>> = {}) {
   const props: React.ComponentProps<typeof IntentBindingEditor> = {

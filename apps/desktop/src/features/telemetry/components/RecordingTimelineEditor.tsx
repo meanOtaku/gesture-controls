@@ -117,7 +117,12 @@ export function RecordingTimelineEditor({
               {formatMmSs(elapsedSeconds(rows, interval.startRawRow))} – {formatMmSs(elapsedSeconds(rows, (interval.endRawRow ?? interval.startRawRow) - 1))}
             </span>
 
-            <Select value={interval.labelId} onValueChange={(label) => guard("Relabel", onRelabel(interval.intervalId, label))}>
+            <Select
+              value={interval.labelId}
+              onValueChange={(label) => {
+                if (label !== null) guard("Relabel", onRelabel(interval.intervalId, label));
+              }}
+            >
               <SelectTrigger className="w-[140px]" aria-label={`Relabel interval starting at ${formatMmSs(elapsedSeconds(rows, interval.startRawRow))}`}>
                 <SelectValue />
               </SelectTrigger>
@@ -130,7 +135,11 @@ export function RecordingTimelineEditor({
 
             <Select
               value={interval.curationStatus}
-              onValueChange={(status) => guard("Curation status", onSetCurationStatus(interval.intervalId, status as CurationStatus))}
+              onValueChange={(status) => {
+                if (status !== null) {
+                  guard("Curation status", onSetCurationStatus(interval.intervalId, status as CurationStatus));
+                }
+              }}
             >
               <SelectTrigger className="w-[120px]" aria-label={`Curation status for ${interval.labelId}`}>
                 <SelectValue />
@@ -244,7 +253,7 @@ function GapFiller({
       </span>
       {sessionLabels.length > 0 ? (
         <>
-          <Select value={label} onValueChange={setLabel}>
+          <Select value={label} onValueChange={(value) => value !== null && setLabel(value)}>
             <SelectTrigger className="w-[140px]" aria-label="Label for new interval">
               <SelectValue />
             </SelectTrigger>
