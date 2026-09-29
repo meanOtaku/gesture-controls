@@ -765,7 +765,7 @@ fn resolve_raw_window_bounds(
     }
     let row_hop = grid_size;
     let max_values = grid_size * grid_size;
-    if start_raw_row as u64 % row_hop as u64 != 0 {
+    if !(start_raw_row as u64).is_multiple_of(row_hop as u64) {
         return Err(format!(
             "start raw row {start_raw_row} must be a multiple of {row_hop}"
         ));
@@ -922,12 +922,12 @@ fn compute_compact_observation_window(
     recording_id: String,
     column: String,
     grid_size: u32,
-    grid_size_usize: usize,
     start_sample_index: i64,
     timestamps_ns: &[i64],
     all_values: &[Option<f64>],
     method: SpikeExtractionMethod,
 ) -> Result<CompactObservationWindow, String> {
+    let grid_size_usize = grid_size as usize;
     // This channel's own finite observed samples, in source row/timestamp
     // order — the same "present" extraction `compute_sg_derivative_window`
     // uses, kept independent here since this command never derives anything.
@@ -1132,7 +1132,6 @@ pub fn get_compact_observation_window(
         recording_id,
         column,
         grid_size,
-        grid_size_usize,
         start_sample_index,
         &timestamps_ns,
         &all_values,
@@ -1184,21 +1183,16 @@ fn sg_first_derivative_coefficients(half_width: usize) -> Vec<f64> {
 /// but `FirstDerivative` runs in this channel's own present-sample order
 /// (never raw-row index) and is a pure visual-inspection view: never
 /// persisted, never used for training/export/inference.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SpikeExtractionMethod {
+    #[default]
     FirstDerivative,
     RollingMedianResidual,
     MorphologicalTopHat,
     ButterworthHighPass,
     SavitzkyGolayResidual,
     HaarWaveletDetail,
-}
-
-impl Default for SpikeExtractionMethod {
-    fn default() -> Self {
-        SpikeExtractionMethod::FirstDerivative
-    }
 }
 
 impl SpikeExtractionMethod {
@@ -1308,7 +1302,7 @@ fn rolling_median_residual_by_row(
                 .expect("finite present values are always comparable")
         });
         let mid = window.len() / 2;
-        let median = if window.len() % 2 == 0 {
+        let median = if window.len().is_multiple_of(2) {
             (window[mid - 1] + window[mid]) / 2.0
         } else {
             window[mid]
@@ -1608,7 +1602,7 @@ fn assess_cadence_regularity(timestamps_ns: &[i64]) -> CadenceRegularity {
     let mut sorted_deltas = deltas.clone();
     sorted_deltas.sort_unstable();
     let mid = sorted_deltas.len() / 2;
-    let median_dt_ns = if sorted_deltas.len() % 2 == 0 {
+    let median_dt_ns = if sorted_deltas.len().is_multiple_of(2) {
         (sorted_deltas[mid - 1] + sorted_deltas[mid]) as f64 / 2.0
     } else {
         sorted_deltas[mid] as f64
@@ -1669,18 +1663,22 @@ fn max_abs_finite(derivative_by_row: &std::collections::HashMap<usize, f64>) -> 
         .fold(None, |max, abs| Some(max.map_or(abs, |m: f64| m.max(abs))))
 }
 
-fn compute_sg_derivative_window(
-    timestamps_ns: &[i64],
-    values: &[Option<f64>],
-    start: usize,
-    end: usize,
-) -> (
+/// `(derivative_values, available, unavailable_reason,
+/// effective_sample_rate_hz, recording_max_abs_derivative)`.
+type SgDerivativeWindow = (
     Vec<Option<f64>>,
     bool,
     Option<String>,
     Option<f64>,
     Option<f64>,
-) {
+);
+
+fn compute_sg_derivative_window(
+    timestamps_ns: &[i64],
+    values: &[Option<f64>],
+    start: usize,
+    end: usize,
+) -> SgDerivativeWindow {
     debug_assert_eq!(timestamps_ns.len(), values.len());
     let row_count = values.len();
 
@@ -2121,7 +2119,7 @@ fn compute_quality_summary(
             .collect();
         deltas.sort_unstable();
         let mid = deltas.len() / 2;
-        let median_delta_ns = if deltas.len() % 2 == 0 {
+        let median_delta_ns = if deltas.len().is_multiple_of(2) {
             (deltas[mid - 1] + deltas[mid]) as f64 / 2.0
         } else {
             deltas[mid] as f64
@@ -2503,9 +2501,10 @@ mod tests {
                 "0".to_string(),
                 ppg_green.to_string(),
             ];
-            fields.extend(
-                std::iter::repeat("".to_string()).take(RAW_CSV_HEADER.len() - fields.len()),
-            );
+            fields.extend(std::iter::repeat_n(
+                "".to_string(),
+                RAW_CSV_HEADER.len() - fields.len(),
+            ));
             lines.push(fields.join(","));
         }
         lines.join("\n")
@@ -2520,7 +2519,11 @@ mod tests {
         assert_eq!(values, vec![Some(1.5), None, Some(3.5)]);
 
         assert!(parse_raw_csv_column("not,a,header", "ppg_green").is_err());
-        assert!(parse_raw_csv_column(&csv, "sequence").is_err());
+        // "sequence" is a real `RAW_CSV_HEADER` column (metadata columns are
+        // rejected by the allow-list one layer up, in the command handlers,
+        // not by this low-level parser) -- use a column absent from the
+        // header entirely to exercise the "unsupported raw column" error.
+        assert!(parse_raw_csv_column(&csv, "not_a_real_column").is_err());
     }
 
     #[test]
@@ -2530,7 +2533,10 @@ mod tests {
         assert!(parse_raw_csv_column(&short_row, "ppg_green").is_err());
 
         let mut fields = vec!["1".to_string(), "0".to_string(), "not_a_number".to_string()];
-        fields.extend(std::iter::repeat("".to_string()).take(RAW_CSV_HEADER.len() - fields.len()));
+        fields.extend(std::iter::repeat_n(
+            "".to_string(),
+            RAW_CSV_HEADER.len() - fields.len(),
+        ));
         let non_numeric_value = format!("{header}\n{}", fields.join(","));
         assert!(parse_raw_csv_column(&non_numeric_value, "ppg_green").is_err());
     }
@@ -2578,11 +2584,30 @@ mod tests {
         }
     }
 
+    // `raw_csv_with_rows` deliberately only ever populates `ppg_green`
+    // (every other allow-listed channel is left blank, see
+    // `quality_summary_reports_fully_missing_channels` below), so it can
+    // never exercise a genuinely warning-free summary. This instead
+    // populates every allow-listed channel, for a clean-timestamps case
+    // that must report zero warnings of any kind.
+    fn raw_csv_with_every_channel_populated(rows: &[i64]) -> String {
+        let mut lines = vec![RAW_CSV_HEADER.join(",")];
+        for timestamp_ns in rows {
+            let mut fields = vec![timestamp_ns.to_string(), "0".to_string()];
+            fields.extend(std::iter::repeat_n(
+                "1.0".to_string(),
+                RAW_CSV_HEADER.len() - fields.len(),
+            ));
+            lines.push(fields.join(","));
+        }
+        lines.join("\n")
+    }
+
     #[test]
     fn quality_summary_reports_ok_for_uniform_monotonic_timestamps() {
         // 11 rows at exactly 20ms spacing => 50Hz effective rate.
-        let rows: Vec<(i64, &str)> = (0..11).map(|i| (i * 20_000_000, "1.0")).collect();
-        let csv = raw_csv_with_rows(&rows);
+        let rows: Vec<i64> = (0..11).map(|i| i * 20_000_000).collect();
+        let csv = raw_csv_with_every_channel_populated(&rows);
         let id = Uuid::new_v4().to_string();
         let summary = compute_quality_summary(id.clone(), &csv, &empty_annotations(&id)).unwrap();
         assert_eq!(summary.row_count, 11);
@@ -2682,8 +2707,12 @@ mod tests {
             compute_sg_derivative_window(&timestamps_ns, &values, 0, 21);
         assert!(available, "reason: {reason:?}");
         assert!((rate.unwrap() - 50.0).abs() < 1e-6);
-        for row in SG_HALF_WIDTH..(21 - SG_HALF_WIDTH) {
-            assert!((derivative[row].unwrap() - 25.0).abs() < 1e-9); // d/dt(0.5*i) at 50Hz = 0.5*50
+        for value in derivative
+            .iter()
+            .take(21 - SG_HALF_WIDTH)
+            .skip(SG_HALF_WIDTH)
+        {
+            assert!((value.unwrap() - 25.0).abs() < 1e-9); // d/dt(0.5*i) at 50Hz = 0.5*50
         }
     }
 
@@ -2773,7 +2802,10 @@ mod tests {
         assert!(validate_raw_csv_full(&short_row).is_err());
 
         let mut fields = vec!["1".to_string(), "not_a_number".to_string()];
-        fields.extend(std::iter::repeat("".to_string()).take(RAW_CSV_HEADER.len() - fields.len()));
+        fields.extend(std::iter::repeat_n(
+            "".to_string(),
+            RAW_CSV_HEADER.len() - fields.len(),
+        ));
         let non_numeric = format!("{header}\n{}", fields.join(","));
         assert!(validate_raw_csv_full(&non_numeric).is_err());
     }
@@ -2784,9 +2816,10 @@ mod tests {
             "0".to_string(),
             ppg_green.to_string(),
         ];
-        fields.extend(
-            std::iter::repeat("".to_string()).take(DATASET_CSV_HEADER.len() - 1 - fields.len()),
-        );
+        fields.extend(std::iter::repeat_n(
+            "".to_string(),
+            DATASET_CSV_HEADER.len() - 1 - fields.len(),
+        ));
         fields.push(label.to_string());
         fields.join(",")
     }
@@ -2806,9 +2839,15 @@ mod tests {
             .expect("converted csv must be valid raw.csv");
         assert_eq!(values, vec![Some(1.5), None]);
         assert_eq!(converted.lines().count(), 3);
-        assert_eq!(runs.len(), 1);
+        // "idle" is a distinct, non-blank label from "pinch", so -- like any
+        // other label change (see
+        // `convert_legacy_dataset_csv_groups_labels_into_maximal_contiguous_runs`)
+        // -- it starts its own run rather than extending or erasing the prior one.
+        assert_eq!(runs.len(), 2);
         assert_eq!(runs[0].label, "pinch");
         assert_eq!((runs[0].start_row, runs[0].end_row), (0, 0));
+        assert_eq!(runs[1].label, "idle");
+        assert_eq!((runs[1].start_row, runs[1].end_row), (1, 1));
     }
 
     #[test]
@@ -3063,7 +3102,6 @@ mod tests {
             "rec-a".to_string(),
             "ppg_green".to_string(),
             grid_size as u32,
-            grid_size,
             start_sample_index,
             timestamps_ns,
             values,
@@ -3373,8 +3411,13 @@ mod tests {
         let (derivative, available, _reason, _rate, _) =
             compute_sg_derivative_window(&timestamps_ns, &values, 0, 21);
         assert!(available);
-        for row in SG_HALF_WIDTH..(21 - SG_HALF_WIDTH) {
-            let value = derivative[row].expect("interior row must have a derivative");
+        for (row, value) in derivative
+            .iter()
+            .enumerate()
+            .take(21 - SG_HALF_WIDTH)
+            .skip(SG_HALF_WIDTH)
+        {
+            let value = value.expect("interior row must have a derivative");
             assert!(
                 (value - 2.0).abs() < 1e-9,
                 "row {row}: expected slope 2.0, got {value}"
@@ -3565,8 +3608,13 @@ mod tests {
         let (sample_order, available, reason, _) =
             compute_sample_order_derivative_window(&values, 0, 21);
         assert!(available, "reason: {reason:?}");
-        for row in SG_HALF_WIDTH..(21 - SG_HALF_WIDTH) {
-            let value = sample_order[row].expect("interior row must have a derivative");
+        for (row, value) in sample_order
+            .iter()
+            .enumerate()
+            .take(21 - SG_HALF_WIDTH)
+            .skip(SG_HALF_WIDTH)
+        {
+            let value = value.expect("interior row must have a derivative");
             assert!(
                 (value - 0.04).abs() < 1e-9,
                 "row {row}: expected 0.04/sample, got {value}"
@@ -3593,11 +3641,15 @@ mod tests {
         let (sample_order, available, reason, _) =
             compute_sample_order_derivative_window(&values, 0, 15);
         assert!(available, "reason: {reason:?}");
-        for row in SG_HALF_WIDTH..(15 - SG_HALF_WIDTH) {
+        for (row, value) in sample_order
+            .iter()
+            .enumerate()
+            .take(15 - SG_HALF_WIDTH)
+            .skip(SG_HALF_WIDTH)
+        {
             assert!(
-                (sample_order[row].unwrap() - 1.0).abs() < 1e-9,
-                "row {row}: unit-slope-per-sample expected, got {:?}",
-                sample_order[row]
+                (value.unwrap() - 1.0).abs() < 1e-9,
+                "row {row}: unit-slope-per-sample expected, got {value:?}"
             );
         }
     }
@@ -3606,13 +3658,13 @@ mod tests {
     fn sample_order_derivative_skips_gaps_and_nonfinite_values_like_time_mode() {
         let mut values: Vec<Option<f64>> = (0..21).map(|i| Some(i as f64)).collect();
         values[10] = None; // a gap (another channel's row)
-        values.insert(1, Some(f64::NAN)); // an explicit non-finite reading
+        values.insert(1, Some(f64::NAN)); // an explicit non-finite reading, shifting the gap above to index 11
         let row_count = values.len();
 
         let (derivative, available, reason, _) =
             compute_sample_order_derivative_window(&values, 0, row_count);
         assert!(available, "reason: {reason:?}");
-        assert!(derivative[10].is_none(), "gap row must have no derivative");
+        assert!(derivative[11].is_none(), "gap row must have no derivative");
         assert!(
             derivative[1].is_none(),
             "nonfinite row must have no derivative"
@@ -3769,7 +3821,16 @@ mod tests {
             spike.abs() > baseline.abs() * 3.0,
             "spike ({spike}) should dominate drift ({baseline})"
         );
-        assert!((max_abs.unwrap() - spike.abs()).abs() < 1e-9);
+        // `max_abs` is the recording-wide max over every computed detail
+        // coefficient -- not necessarily the value exactly at the labeled
+        // spike row: this asymmetric (before-excludes/after-includes-self)
+        // window combined with a monotonic drift makes the row just *before*
+        // an isolated spike swing slightly further than the spike row itself.
+        let true_peak = detail
+            .iter()
+            .flatten()
+            .fold(0.0_f64, |max, value| max.max(value.abs()));
+        assert!((max_abs.unwrap() - true_peak).abs() < 1e-9);
         // Only the true last present sample of the whole recording (nothing
         // after it to compare against) lacks a detail coefficient; the first
         // present sample's "before" window shrinks to just itself instead.
@@ -3805,12 +3866,10 @@ mod tests {
     /// normalization scale either.
     #[test]
     fn window_slice_matches_the_corresponding_slice_of_the_whole_recording_transform() {
+        type SpikeTransformFn = fn(&[(usize, f64)], usize) -> std::collections::HashMap<usize, f64>;
+
         let values = drift_with_spike_values(20, 10.0);
-        let methods: [(
-            &str,
-            fn(&[(usize, f64)], usize) -> std::collections::HashMap<usize, f64>,
-            usize,
-        ); 5] = [
+        let methods: [(&str, SpikeTransformFn, usize); 5] = [
             ("rolling_median_residual", rolling_median_residual_by_row, 9),
             ("morphological_top_hat", morphological_top_hat_by_row, 9),
             ("butterworth_high_pass", butterworth_high_pass_by_row, 20),
