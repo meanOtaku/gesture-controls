@@ -1113,7 +1113,7 @@ pub fn get_compact_observation_window(
     if !RAW_WINDOW_ALLOWED_COLUMNS.contains(&column.as_str()) {
         return Err(format!("unsupported raw column '{column}'"));
     }
-    let grid_size_usize = validate_grid_size(grid_size)?;
+    validate_grid_size(grid_size)?;
 
     let dir = recording_bundles_dir(&app)?.join(&recording_id);
     let csv_path = raw_csv_path(&dir);
