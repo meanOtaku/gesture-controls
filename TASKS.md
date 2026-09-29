@@ -961,6 +961,7 @@ new timestamp/label-quality rule was added or duplicated.
 - [ ] `cargo check -p spatial-gesture-desktop`: still blocked by the
       pre-existing host `pkg-config`/GTK dependency gap, so the desktop
       `settings.rs` tests were not run here.
-- [ ] Wear OS module not compiled and its unit tests not run: the Gradle wrapper
-      starts, but no Android SDK is installed on this host.
+- [x] Wear OS: installed a user-local Android SDK/JDK, fixed the first real
+      compile failure by qualifying `AdvertiseCallback` constants, and ran
+      `./gradlew --no-daemon test assembleDebug` successfully (40 tasks).
 - [ ] Hardware validation on a real Galaxy Watch + BLE desktop still required.

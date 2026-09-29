@@ -577,11 +577,12 @@ remain **DEFERRED / NOT CLEARED**.
   here. `cargo clippy -p watch-bridge --all-targets -- -D warnings` — clean;
   focused `rustfmt --check` clean on every Rust file this change touches.
   `git diff --check` — clean. `graphify update .` — run.
-- **Not cleared:** the Tauri desktop crate and the Wear OS module were not
-  compiled here. `cargo check -p spatial-gesture-desktop` still fails on the
-  pre-existing host `pkg-config`/GTK blocker (GC-002/GC-009/GC-018/GC-019/
-  GC-024/GC-025), so the new `settings.rs`/`watch.rs`/`lib.rs` code and its 3
-  new settings tests are unrun; the Gradle wrapper starts, but no Android SDK
-  is installed on this host, so the 2 new Wear OS test classes are unrun. All
-  BLE behaviour needs the hardware walkthrough listed in
-  `docs/protocols/watch-ble-transport.md`.
+- **Wear OS cleared:** installed a user-local Android SDK/JDK, fixed the
+  unqualified `AdvertiseCallback` failure constants found by the first real
+  compile, then ran `./gradlew --no-daemon test assembleDebug` successfully
+  (40 tasks). Both BLE test classes now run and a debug APK is produced.
+- **Still hardware-blocked:** no Android device is attached and this VM has no
+  Bluetooth adapter, so the real Galaxy Watch + desktop walkthrough in
+  `docs/protocols/watch-ble-transport.md` remains a physical-device gate.
+- The Tauri desktop crate remains CI-verified because this host still lacks
+  the system GTK/WebKit development packages required for a local build.
