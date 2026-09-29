@@ -506,9 +506,7 @@ fn load_and_verify_bundle(dir: &Path) -> Result<(BundleMetadata, String, Vec<usi
     }
 
     if metadata.feature_contract.count != metadata.feature_contract.ordered_names.len() {
-        return Err(
-            "bundle feature_contract.count must match ordered_names length".to_string(),
-        );
+        return Err("bundle feature_contract.count must match ordered_names length".to_string());
     }
     let feature_indices = validate_feature_subset(&metadata.feature_contract.ordered_names)?;
 
@@ -836,17 +834,17 @@ pub fn import_custom_tflite_bundle(
     runtime: State<'_, ModelRegistryRuntime>,
 ) -> Result<RegistryView, String> {
     let source_metadata = PathBuf::from(&metadata_path);
-    if source_metadata.file_name().and_then(|name| name.to_str()) != Some(TFLITE_METADATA_FILE_NAME) {
+    if source_metadata.file_name().and_then(|name| name.to_str()) != Some(TFLITE_METADATA_FILE_NAME)
+    {
         return Err(format!(
             "select the bundle's {TFLITE_METADATA_FILE_NAME}, not an arbitrary file"
         ));
     }
-    let source_dir = source_metadata.parent().ok_or_else(|| {
-        format!("{TFLITE_METADATA_FILE_NAME} has no containing bundle directory")
-    })?;
-    load_and_verify_bundle(source_dir).map_err(|error| {
-        format!("custom bundle rejected before import: {error}")
-    })?;
+    let source_dir = source_metadata
+        .parent()
+        .ok_or_else(|| format!("{TFLITE_METADATA_FILE_NAME} has no containing bundle directory"))?;
+    load_and_verify_bundle(source_dir)
+        .map_err(|error| format!("custom bundle rejected before import: {error}"))?;
 
     let _guard = runtime
         .lock
@@ -857,10 +855,16 @@ pub fn import_custom_tflite_bundle(
     fs::create_dir_all(&destination)
         .map_err(|error| format!("failed to create private bundle storage: {error}"))?;
     let copy_result = (|| -> Result<(), String> {
-        fs::copy(source_dir.join(TFLITE_METADATA_FILE_NAME), destination.join(TFLITE_METADATA_FILE_NAME))
-            .map_err(|error| format!("failed to copy {TFLITE_METADATA_FILE_NAME}: {error}"))?;
-        fs::copy(source_dir.join(TFLITE_MODEL_FILE_NAME), destination.join(TFLITE_MODEL_FILE_NAME))
-            .map_err(|error| format!("failed to copy {TFLITE_MODEL_FILE_NAME}: {error}"))?;
+        fs::copy(
+            source_dir.join(TFLITE_METADATA_FILE_NAME),
+            destination.join(TFLITE_METADATA_FILE_NAME),
+        )
+        .map_err(|error| format!("failed to copy {TFLITE_METADATA_FILE_NAME}: {error}"))?;
+        fs::copy(
+            source_dir.join(TFLITE_MODEL_FILE_NAME),
+            destination.join(TFLITE_MODEL_FILE_NAME),
+        )
+        .map_err(|error| format!("failed to copy {TFLITE_MODEL_FILE_NAME}: {error}"))?;
         load_and_verify_bundle(&destination)
             .map_err(|error| format!("custom bundle rejected after copy: {error}"))?;
         Ok(())
