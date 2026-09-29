@@ -69,8 +69,10 @@ test("commits refreshed show state only after fallible window operations succeed
     showBody.indexOf("commit_visibility_after") < showBody.indexOf("state.volume ="),
     "show must not mutate volume before prepare, position, and native show have succeeded",
   );
+  const volumeCommit = showBody.indexOf("state.volume =");
+  const generationAfterVolume = showBody.indexOf("state_generation.fetch_add", volumeCommit);
   assert.ok(
-    showBody.indexOf("state.volume =") < showBody.indexOf("state_generation.fetch_add"),
+    volumeCommit < generationAfterVolume,
     "show must invalidate admitted refreshes after committing its volume",
   );
 });
