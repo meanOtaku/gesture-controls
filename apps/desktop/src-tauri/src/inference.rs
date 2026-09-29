@@ -299,6 +299,22 @@ pub(crate) fn ingest_ppg_window(app: &AppHandle, sample: &WatchPpgBatchSample) {
             match gesture_policy.on_transition(transition) {
                 Ok(decision) => {
                     let decision = pinch.resolve_intent(decision);
+                    // `on_transition` recorded `executed` from the generic,
+                    // pre-binding intent (every `Started` is provisionally
+                    // `VolumeGrab`); now that `resolve_intent` has remapped it
+                    // through the active model's bindings, correct the
+                    // policy's internal state to match -- otherwise a model
+                    // that binds `pinch_start` to `NoAction` would still be
+                    // recorded as having executed, so its later
+                    // `pinch_release` (bound to `VolumeRelease`) would
+                    // actuate a real overlay release for a grab that never
+                    // happened.
+                    if decision.reason == DecisionReason::Started
+                        && let Err(error) =
+                            gesture_policy.correct_grab_executed(decision_actuates(decision))
+                    {
+                        warn!(%error, "failed to correct gesture policy executed state");
+                    }
                     apply_decision(app, decision);
                 }
                 Err(error) => warn!(%error, "failed to apply classified pinch transition"),
@@ -596,6 +612,19 @@ impl GesturePolicyRuntime {
             .lock()
             .map_err(|_| "gesture policy lock was poisoned".to_string())?;
         Ok(policy.on_transition(transition))
+    }
+
+    /// See [`GesturePolicy::correct_grab_executed`]. Called from
+    /// [`ingest_ppg_window`] right after [`PinchInferenceRuntime::resolve_intent`]
+    /// remaps a `Started` decision through the active model's bindings, since
+    /// `on_transition` above only ever sees the generic pre-binding intent.
+    fn correct_grab_executed(&self, executed: bool) -> Result<(), String> {
+        let mut policy = self
+            .policy
+            .lock()
+            .map_err(|_| "gesture policy lock was poisoned".to_string())?;
+        policy.correct_grab_executed(executed);
+        Ok(())
     }
 
     pub(crate) fn force_release(
@@ -1146,5 +1175,52 @@ mod ppg_window_tests {
             DecisionReason::IgnoredAlreadyGrabbed,
         );
         assert_eq!(runtime.resolve_intent(ignored), ignored);
+    }
+
+    /// End-to-end regression for the asymmetric-binding gap: a valid model
+    /// may bind `pinch_start` to `NoAction` while `pinch_release` stays bound
+    /// to `VolumeRelease`. Drives a real `GesturePolicy` through the same
+    /// `on_transition` -> `resolve_intent` -> correct-executed sequence
+    /// `ingest_ppg_window` uses, and proves the eventual `Released` -- for a
+    /// `Started` that resolved to `NoAction` -- never actuates. Before the
+    /// fix, `GesturePolicy` recorded `executed` from the raw pre-binding
+    /// `VolumeGrab` decision (live in `Live` mode), so the matching release
+    /// would actuate and tear down an unrelated Watch-button grab even
+    /// though nothing was ever really grabbed.
+    #[test]
+    fn asymmetric_bindings_prevent_a_resolved_no_action_start_from_leaking_into_the_release() {
+        let runtime = runtime_with_loaded_snapshot(&[
+            ("negative", GestureIntent::NoAction),
+            ("pinch_start", GestureIntent::NoAction),
+            ("pinch_release", GestureIntent::VolumeRelease),
+        ]);
+        let mut policy = GesturePolicy::new(GesturePolicyConfig::default());
+        policy.set_mode(PolicyMode::Live);
+
+        let started = policy.on_transition(PinchTransition::Started {
+            confidence: 0.9,
+            timestamp_ns: 1,
+        });
+        let started = runtime.resolve_intent(started);
+        assert_eq!(started.intent, GestureIntent::NoAction);
+        if started.reason == DecisionReason::Started {
+            policy.correct_grab_executed(decision_actuates(started));
+        }
+        assert!(
+            !decision_actuates(started),
+            "a NoAction start must never actuate"
+        );
+
+        let released = policy.on_transition(PinchTransition::Released {
+            confidence: 0.9,
+            timestamp_ns: 2,
+        });
+        let released = runtime.resolve_intent(released);
+        assert_eq!(released.intent, GestureIntent::VolumeRelease);
+        assert!(
+            !decision_actuates(released),
+            "a start that resolved to NoAction must never let its matching release actuate \
+             and tear down an unrelated Watch-button grab"
+        );
     }
 }

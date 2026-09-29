@@ -309,6 +309,23 @@ impl GesturePolicy {
         }
     }
 
+    /// Overrides whether the currently in-progress grab actually reached the
+    /// desktop, for a caller that resolves a transition's generic intent
+    /// through model-specific bindings this policy has no visibility into
+    /// (e.g. `PinchInferenceRuntime::resolve_intent`, which can remap a
+    /// `Started` decision's provisional [`GestureIntent::VolumeGrab`] down to
+    /// [`GestureIntent::NoAction`]). `on_transition` can only record
+    /// `executed` from the generic intent it decided, so a caller that
+    /// remaps `Started` must call this immediately afterward, before any
+    /// further transition arrives -- otherwise the eventual `Released` sees
+    /// the stale `executed` and may actuate a release for a grab that never
+    /// really started. A no-op while not currently grabbed.
+    pub fn correct_grab_executed(&mut self, executed: bool) {
+        if let PolicyState::Grabbed { executed: current } = &mut self.state {
+            *current = executed;
+        }
+    }
+
     /// The decision that ends a grab. Always reports the release intent so
     /// Monitor-mode observability still sees the full grab/release arc, but
     /// only marks it `live` when the grab it ends was actually executed
