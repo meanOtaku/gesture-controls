@@ -186,20 +186,36 @@ export function DatasetManager({
             </div>
             <CollapsibleContent>
               <div className="vectors model-lab-labels">
-                {labels.map((label) => {
-                  const count = coverageByLabel.get(label.id) ?? 0;
-                  const hasTrainingRole = label.id in LEGACY_COMPATIBILITY_LABEL_MAPPING.entries;
-                  return (
-                    <div className="vector-row model-lab-label-row" key={label.id}>
-                      <span className="label">{label.displayName} <code>{label.id}</code></span>
-                      <span className="model-lab-coverage-count">{count} session{count === 1 ? "" : "s"}</span>
-                      <Badge variant={hasTrainingRole ? "outline" : "destructive"}>
-                        {hasTrainingRole ? "Legacy training role" : "Needs training role mapping"}
-                      </Badge>
-                      {label.archivedAt && <span className="hint">Archived</span>}
-                    </div>
-                  );
-                })}
+                {Array.from(new Set([
+                  ...Object.keys(LEGACY_COMPATIBILITY_LABEL_MAPPING.entries),
+                  ...coverageByLabel.keys(),
+                  ...labels.map((label) => label.id),
+                ]))
+                  .sort()
+                  .map((labelId) => {
+                    const label = labels.find((l) => l.id === labelId);
+                    const count = coverageByLabel.get(labelId) ?? 0;
+                    const hasTrainingRole = labelId in LEGACY_COMPATIBILITY_LABEL_MAPPING.entries;
+                    const displayText = label?.displayName ?? labelId.replaceAll("_", " ");
+                    return (
+                      <div className="vector-row model-lab-label-row" key={labelId}>
+                        <span className="label">
+                          {displayText}
+                          {displayText !== labelId && (
+                            <>
+                              {" "}
+                              <code>{labelId}</code>
+                            </>
+                          )}
+                        </span>
+                        <span className="model-lab-coverage-count">{count} session{count === 1 ? "" : "s"}</span>
+                        <Badge variant={hasTrainingRole ? "outline" : "destructive"}>
+                          {hasTrainingRole ? "Legacy training role" : "Needs training role mapping"}
+                        </Badge>
+                        {label?.archivedAt && <span className="hint">Archived</span>}
+                      </div>
+                    );
+                  })}
               </div>
               <p className="hint">
                 Record at least 2 separate session files per label you plan to train on: evaluation is a grouped

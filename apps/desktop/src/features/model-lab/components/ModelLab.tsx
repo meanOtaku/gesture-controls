@@ -537,7 +537,7 @@ export function ModelLab() {
             />
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            <Alert>
+            <Alert role="note">
               <AlertDescription>Only validated TFLite bundles are accepted. Do not select model.tflite directly; choose its adjacent metadata.json.</AlertDescription>
             </Alert>
             <div className="flex flex-wrap items-center gap-2">

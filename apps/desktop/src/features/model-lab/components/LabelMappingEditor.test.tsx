@@ -177,6 +177,9 @@ describe("LabelMappingEditor", () => {
     });
     fireEvent.click(screen.getByRole("combobox", { name: "Target class for wrist_flick" }));
     const releaseOption = screen.getByRole("option", { name: "pinch release" });
+    // Base UI's Select commits an item selection on pointerdown/pointerup, not a bare click.
+    fireEvent.pointerDown(releaseOption, { button: 0, pointerId: 1 });
+    fireEvent.pointerUp(releaseOption, { button: 0, pointerId: 1 });
     fireEvent.click(releaseOption);
     expect(onMappingChange).toHaveBeenCalled();
     const mapping = onMappingChange.mock.calls[0][0] as LabelMapping;
