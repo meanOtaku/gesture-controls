@@ -21,7 +21,9 @@ use uuid::Uuid;
 use crate::inference::{GesturePolicyRuntime, PinchInferenceRuntime};
 use crate::model_lab::{self, MODEL_LAB_DIR_NAME};
 use interaction_engine::{ForceReleaseReason, GestureIntent};
-use pinch_inference::{CLASS_COUNT, FEATURE_COUNT, FEATURE_NAMES};
+#[cfg(test)]
+use pinch_inference::FEATURE_COUNT;
+use pinch_inference::{CLASS_COUNT, FEATURE_NAMES};
 
 /// Filename of the validated TFLite bundle's metadata (see `bundle.py`'s
 /// `METADATA_FILENAME`). Only a model directory containing this file (plus
@@ -375,6 +377,9 @@ struct BundleClassEntry {
 
 #[derive(Debug, Deserialize)]
 struct BundleFeatureContract {
+    // Accepted for forward-compatible parsing of the bundle schema but not
+    // yet read by any validation.
+    #[allow(dead_code)]
     #[serde(default)]
     version: Option<u64>,
     count: usize,
@@ -387,8 +392,12 @@ struct BundleMetadata {
     model: BundleModelField,
     classes: Vec<BundleClassEntry>,
     feature_contract: BundleFeatureContract,
+    // Accepted for forward-compatible parsing of the bundle schema but not
+    // yet read by any validation.
+    #[allow(dead_code)]
     #[serde(default)]
     preprocessing: Option<serde_json::Value>,
+    #[allow(dead_code)]
     #[serde(default)]
     window_semantics: Option<serde_json::Value>,
 }

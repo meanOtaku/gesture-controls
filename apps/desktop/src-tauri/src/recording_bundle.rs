@@ -88,8 +88,12 @@ const RAW_WINDOW_ALLOWED_COLUMNS: [&str; 14] = [
 const RAW_GRID_SIZES: [u32; 16] = [
     4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64,
 ];
+// Only exercised by the invariant assertions in `mod tests` below, so both
+// consts are otherwise dead outside test builds.
+#[allow(dead_code)]
 const DEFAULT_RAW_GRID_SIZE: u32 = 64;
 /// Absolute upper bound on values returned by any allow-listed grid size.
+#[allow(dead_code)]
 const RAW_WINDOW_MAX_VALUES: usize = 4_096;
 
 fn validate_grid_size(grid_size: u32) -> Result<usize, String> {
@@ -2715,10 +2719,6 @@ mod tests {
         }];
         metadata.raw_source_row_counts = BTreeMap::from([(IMPORTED_SOURCE_ID.to_string(), 2)]);
         metadata
-    }
-
-    fn empty_annotations(id: &str) -> AnnotationsFile {
-        AnnotationsFile { format_version: 1, recording_id: id.to_string(), intervals: Vec::new() }
     }
 
     #[test]
