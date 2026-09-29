@@ -118,9 +118,7 @@ pub fn validate_mapping_targets(
         .entries
         .values()
         .filter_map(|entry| match entry {
-            LabelMappingEntry::Target { target }
-                if !allowed_targets.contains(&target.as_str()) =>
-            {
+            LabelMappingEntry::Target { target } if !allowed_targets.contains(&target.as_str()) => {
                 Some(target.as_str())
             }
             _ => None,
@@ -167,7 +165,13 @@ mod tests {
     #[test]
     fn legacy_mapping_covers_the_original_fixed_vocabulary() {
         let mapping = legacy_compatibility_mapping();
-        let required = labels(&["idle", "pinch_start", "pinch_hold", "pinch_release", "walking"]);
+        let required = labels(&[
+            "idle",
+            "pinch_start",
+            "pinch_hold",
+            "pinch_release",
+            "walking",
+        ]);
         assert!(validate_mapping_covers(&mapping, &required).is_ok());
     }
 
@@ -175,7 +179,8 @@ mod tests {
     fn rejects_a_label_absent_from_both_legacy_and_explicit_mappings() {
         let mapping = effective_mapping(None).expect("legacy-only mapping is always valid");
         let required = labels(&["idle", "double_tap"]);
-        let error = validate_mapping_covers(&mapping, &required).expect_err("double_tap has no entry");
+        let error =
+            validate_mapping_covers(&mapping, &required).expect_err("double_tap has no entry");
         assert!(error.contains("double_tap"));
         assert!(!error.contains("idle"));
     }

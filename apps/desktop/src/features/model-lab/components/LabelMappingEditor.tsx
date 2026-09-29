@@ -12,6 +12,11 @@ import {
   type LabelMappingEntry,
 } from "../types";
 
+function sameLabelRole(a: LabelMappingEntry, b: LabelMappingEntry): boolean {
+  if (a.role !== b.role) return false;
+  return a.role === "target" && b.role === "target" ? a.target === b.target : true;
+}
+
 type LabelMappingEditorProps = {
   selectedDatasetLabels: Set<string>;
   labels: DatasetLabel[];
@@ -43,14 +48,19 @@ export function LabelMappingEditor({
     onMappingChange({ ...mapping, entries: newEntries });
   };
 
-  const handleRemoveCustom = (labelId: string) => {
+  const handleResetToDefault = (labelId: string) => {
+    const legacyEntry = LEGACY_COMPATIBILITY_LABEL_MAPPING.entries[labelId];
     const newEntries = { ...mapping.entries };
-    delete newEntries[labelId];
+    if (legacyEntry) {
+      newEntries[labelId] = legacyEntry;
+    } else {
+      delete newEntries[labelId];
+    }
     onMappingChange({ ...mapping, entries: newEntries });
   };
 
   return (
-    <div aria-label="Training label role mapping" className="flex flex-col gap-4">
+    <div role="region" aria-label="Training label role mapping" className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
         <span className="label">Label training roles</span>
         <HelpTooltip label="About label training roles">
@@ -72,9 +82,11 @@ export function LabelMappingEditor({
           .sort()
           .map((labelId) => {
             const label = labels.find((l) => l.id === labelId);
-            const isLegacy = labelId in LEGACY_COMPATIBILITY_LABEL_MAPPING.entries;
+            const legacyEntry = LEGACY_COMPATIBILITY_LABEL_MAPPING.entries[labelId];
+            const isLegacy = legacyEntry !== undefined;
             const entry = mapping.entries[labelId];
             const isMissing = !entry && !isLegacy;
+            const isUsingLegacyDefault = isLegacy && (!entry || sameLabelRole(entry, legacyEntry));
 
             return (
               <div
@@ -86,11 +98,11 @@ export function LabelMappingEditor({
                     <span className="label">{label?.displayName || labelId}</span>
                     <code>{labelId}</code>
                     {isLegacy && <Badge variant="outline">Legacy default</Badge>}
-                    {isMissing && <Badge variant="destructive">Needs assignment</Badge>}
+                    {isMissing && <Badge variant="destructive">Needs training role</Badge>}
                   </div>
                 </div>
 
-                {isLegacy && !entry ? (
+                {isUsingLegacyDefault ? (
                   <span className="hint">Using legacy default</span>
                 ) : (
                   <div className="flex items-center gap-3">
@@ -108,15 +120,15 @@ export function LabelMappingEditor({
                       className="flex items-center gap-2"
                     >
                       <label className="flex items-center gap-2 cursor-pointer">
-                        <RadioGroupItem value="target" id={`${labelId}-target`} />
+                        <RadioGroupItem value="target" id={`${labelId}-target`} aria-label={`${labelId}-target`} />
                         <span className="text-sm">Target</span>
                       </label>
                       <label className="flex items-center gap-2 cursor-pointer">
-                        <RadioGroupItem value="negative" id={`${labelId}-negative`} />
+                        <RadioGroupItem value="negative" id={`${labelId}-negative`} aria-label={`${labelId}-negative`} />
                         <span className="text-sm">Negative</span>
                       </label>
                       <label className="flex items-center gap-2 cursor-pointer">
-                        <RadioGroupItem value="exclude" id={`${labelId}-exclude`} />
+                        <RadioGroupItem value="exclude" id={`${labelId}-exclude`} aria-label={`${labelId}-exclude`} />
                         <span className="text-sm">Exclude</span>
                       </label>
                     </RadioGroup>
@@ -124,7 +136,9 @@ export function LabelMappingEditor({
                     {entry?.role === "target" && (
                       <Select
                         value={entry.target}
-                        onValueChange={(target) => handleRoleChange(labelId, "target", target)}
+                        onValueChange={(target) => {
+                          if (target !== null) handleRoleChange(labelId, "target", target);
+                        }}
                       >
                         <SelectTrigger className="w-[150px]" aria-label={`Target class for ${labelId}`}>
                           <SelectValue />
@@ -144,7 +158,7 @@ export function LabelMappingEditor({
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => handleRemoveCustom(labelId)}
+                        onClick={() => handleResetToDefault(labelId)}
                       >
                         Reset to default
                       </Button>

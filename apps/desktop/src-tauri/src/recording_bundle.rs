@@ -85,11 +85,13 @@ const RAW_WINDOW_ALLOWED_COLUMNS: [&str; 14] = [
 /// (one displayed row of raw rows), and the window is always `size * size`
 /// values, so `RAW_WINDOW_MAX_VALUES` (the largest allowed size squared)
 /// remains the absolute upper bound on any response.
-const RAW_GRID_SIZES: [u32; 16] = [
-    4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64,
-];
+const RAW_GRID_SIZES: [u32; 16] = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64];
+// Only exercised by the invariant assertions in `mod tests` below, so both
+// consts are otherwise dead outside test builds.
+#[allow(dead_code)]
 const DEFAULT_RAW_GRID_SIZE: u32 = 64;
 /// Absolute upper bound on values returned by any allow-listed grid size.
+#[allow(dead_code)]
 const RAW_WINDOW_MAX_VALUES: usize = 4_096;
 
 fn validate_grid_size(grid_size: u32) -> Result<usize, String> {
@@ -222,7 +224,10 @@ pub struct RecordingBundleDetail {
     pub annotations: AnnotationsFile,
 }
 
-fn summarize_bundle(recording: &RecordingMetadata, annotations: &AnnotationsFile) -> RecordingBundleSummary {
+fn summarize_bundle(
+    recording: &RecordingMetadata,
+    annotations: &AnnotationsFile,
+) -> RecordingBundleSummary {
     let mut label_ids: Vec<String> = annotations
         .intervals
         .iter()
@@ -252,8 +257,8 @@ fn summarize_bundle(recording: &RecordingMetadata, annotations: &AnnotationsFile
 }
 
 fn load_bundle_pair(dir: &std::path::Path) -> Result<(RecordingMetadata, AnnotationsFile), String> {
-    let recording_json =
-        fs::read_to_string(dir.join(RECORDING_METADATA_FILE_NAME)).map_err(|error| error.to_string())?;
+    let recording_json = fs::read_to_string(dir.join(RECORDING_METADATA_FILE_NAME))
+        .map_err(|error| error.to_string())?;
     let recording: RecordingMetadata =
         serde_json::from_str(&recording_json).map_err(|error| error.to_string())?;
     let annotations_json =
@@ -368,15 +373,16 @@ fn validate_raw_csv_full(content: &str) -> Result<(usize, i64, i64), String> {
                 RAW_CSV_HEADER.len()
             ));
         }
-        let timestamp_ns: i64 = fields[0]
-            .trim()
-            .parse()
-            .map_err(|_| format!("malformed raw.csv: row {row_number} has a non-numeric timestamp_ns"))?;
+        let timestamp_ns: i64 = fields[0].trim().parse().map_err(|_| {
+            format!("malformed raw.csv: row {row_number} has a non-numeric timestamp_ns")
+        })?;
         for (column_index, column_name) in RAW_CSV_HEADER.iter().enumerate().skip(1) {
             let raw_value = fields[column_index].trim();
             if !raw_value.is_empty() {
                 raw_value.parse::<f64>().map_err(|_| {
-                    format!("malformed raw.csv: row {row_number} column '{column_name}' is not numeric")
+                    format!(
+                        "malformed raw.csv: row {row_number} column '{column_name}' is not numeric"
+                    )
                 })?;
             }
         }
@@ -388,7 +394,11 @@ fn validate_raw_csv_full(content: &str) -> Result<(usize, i64, i64), String> {
     if row_count == 0 {
         return Err("raw CSV must contain at least one data row".to_string());
     }
-    Ok((row_count, first_timestamp_ns.unwrap(), last_timestamp_ns.unwrap()))
+    Ok((
+        row_count,
+        first_timestamp_ns.unwrap(),
+        last_timestamp_ns.unwrap(),
+    ))
 }
 
 /// One maximal contiguous run of non-blank, same-label rows found while
@@ -422,7 +432,9 @@ struct LegacyLabelRun {
 /// legacy header with an empty label, e.g. for unannotated rows; label
 /// presence/validity stays `model_lab.rs`'s concern for the training-import
 /// path.
-fn convert_legacy_dataset_csv(content: &str) -> Option<Result<(String, Vec<LegacyLabelRun>), String>> {
+fn convert_legacy_dataset_csv(
+    content: &str,
+) -> Option<Result<(String, Vec<LegacyLabelRun>), String>> {
     let lines: Vec<&str> = content.lines().collect();
     let mut index = 0;
     while index < lines.len() && lines[index].trim_start().starts_with('#') {
@@ -501,7 +513,10 @@ fn convert_legacy_dataset_csv(content: &str) -> Option<Result<(String, Vec<Legac
 /// labels likewise gets no annotations. The bundle is written through the
 /// same atomic stage-then-rename path as `save_recording_bundle`.
 #[tauri::command]
-pub fn import_recording_from_raw_csv(csv_text: String, app: AppHandle) -> Result<RecordingBundleSummary, String> {
+pub fn import_recording_from_raw_csv(
+    csv_text: String,
+    app: AppHandle,
+) -> Result<RecordingBundleSummary, String> {
     if csv_text.trim().is_empty() {
         return Err("raw CSV must not be empty".to_string());
     }
@@ -519,14 +534,21 @@ pub fn import_recording_from_raw_csv(csv_text: String, app: AppHandle) -> Result
 
     let recording_id = Uuid::new_v4().to_string();
     let imported_at = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
-    let actual_duration_ms = last_timestamp_ns.saturating_sub(first_timestamp_ns).max(0) as u64 / 1_000_000;
+    let actual_duration_ms =
+        last_timestamp_ns.saturating_sub(first_timestamp_ns).max(0) as u64 / 1_000_000;
 
     let recording = RecordingMetadata {
         format_version: 1,
         recording_id: recording_id.clone(),
         requested_start_at: imported_at.clone(),
-        actual_start: MonotonicWallClock { monotonic_ns: first_timestamp_ns, wall_clock_at: imported_at.clone() },
-        actual_end: MonotonicWallClock { monotonic_ns: last_timestamp_ns, wall_clock_at: imported_at },
+        actual_start: MonotonicWallClock {
+            monotonic_ns: first_timestamp_ns,
+            wall_clock_at: imported_at.clone(),
+        },
+        actual_end: MonotonicWallClock {
+            monotonic_ns: last_timestamp_ns,
+            wall_clock_at: imported_at,
+        },
         requested_duration_ms: None,
         actual_duration_ms,
         stop_reason: StopReason::ManualStop,
@@ -544,8 +566,14 @@ pub fn import_recording_from_raw_csv(csv_text: String, app: AppHandle) -> Result
             label_id: run.label,
             requested_start_monotonic_ns: run.start_timestamp_ns,
             requested_end_monotonic_ns: run.end_timestamp_ns,
-            resolved_start: ResolvedBoundary { raw_row: run.start_row, source_timestamp_ns: run.start_timestamp_ns },
-            resolved_end: ResolvedBoundary { raw_row: run.end_row, source_timestamp_ns: run.end_timestamp_ns },
+            resolved_start: ResolvedBoundary {
+                raw_row: run.start_row,
+                source_timestamp_ns: run.start_timestamp_ns,
+            },
+            resolved_end: ResolvedBoundary {
+                raw_row: run.end_row,
+                source_timestamp_ns: run.end_timestamp_ns,
+            },
             resolution_rule_version: 1,
             creation_mechanism: CreationMechanism::TimelineEdit,
             curation_status: CurationStatus::Unreviewed,
@@ -617,7 +645,10 @@ pub fn load_recording_bundle(
     validate_recording_id(&recording_id)?;
     let dir = recording_bundles_dir(&app)?.join(&recording_id);
     let (recording, annotations) = load_bundle_pair(&dir)?;
-    Ok(RecordingBundleDetail { recording, annotations })
+    Ok(RecordingBundleDetail {
+        recording,
+        annotations,
+    })
 }
 
 /// Permanently deletes one saved recording bundle's directory (`raw.csv`,
@@ -670,7 +701,10 @@ fn raw_csv_path(dir: &std::path::Path) -> PathBuf {
 /// value; any non-empty field that fails to parse as a number, any row with
 /// the wrong column count, or a header that does not match
 /// `RAW_CSV_HEADER` is a malformed-CSV error.
-fn parse_raw_csv_column(content: &str, column: &str) -> Result<(Vec<i64>, Vec<Option<f64>>), String> {
+fn parse_raw_csv_column(
+    content: &str,
+    column: &str,
+) -> Result<(Vec<i64>, Vec<Option<f64>>), String> {
     let mut lines = content.lines();
     let header = lines.next().ok_or_else(|| "raw.csv is empty".to_string())?;
     let expected_header = RAW_CSV_HEADER.join(",");
@@ -699,10 +733,9 @@ fn parse_raw_csv_column(content: &str, column: &str) -> Result<(Vec<i64>, Vec<Op
                 RAW_CSV_HEADER.len()
             ));
         }
-        let timestamp_ns: i64 = fields[0]
-            .trim()
-            .parse()
-            .map_err(|_| format!("malformed raw.csv: row {row_number} has a non-numeric timestamp_ns"))?;
+        let timestamp_ns: i64 = fields[0].trim().parse().map_err(|_| {
+            format!("malformed raw.csv: row {row_number} has a non-numeric timestamp_ns")
+        })?;
         let raw_value = fields[column_index].trim();
         let value = if raw_value.is_empty() {
             None
@@ -732,7 +765,7 @@ fn resolve_raw_window_bounds(
     }
     let row_hop = grid_size;
     let max_values = grid_size * grid_size;
-    if start_raw_row as u64 % row_hop as u64 != 0 {
+    if !(start_raw_row as u64).is_multiple_of(row_hop as u64) {
         return Err(format!(
             "start raw row {start_raw_row} must be a multiple of {row_hop}"
         ));
@@ -769,8 +802,9 @@ pub fn get_raw_recording_window(
 
     let dir = recording_bundles_dir(&app)?.join(&recording_id);
     let csv_path = raw_csv_path(&dir);
-    let content = fs::read_to_string(&csv_path)
-        .map_err(|error| format!("failed to read raw.csv for recording '{recording_id}': {error}"))?;
+    let content = fs::read_to_string(&csv_path).map_err(|error| {
+        format!("failed to read raw.csv for recording '{recording_id}': {error}")
+    })?;
     if content.len() > MAX_RAW_CSV_BYTES {
         return Err(format!(
             "raw.csv exceeds the {MAX_RAW_CSV_BYTES}-byte limit (got {} bytes)",
@@ -888,12 +922,12 @@ fn compute_compact_observation_window(
     recording_id: String,
     column: String,
     grid_size: u32,
-    grid_size_usize: usize,
     start_sample_index: i64,
     timestamps_ns: &[i64],
     all_values: &[Option<f64>],
     method: SpikeExtractionMethod,
 ) -> Result<CompactObservationWindow, String> {
+    let grid_size_usize = grid_size as usize;
     // This channel's own finite observed samples, in source row/timestamp
     // order — the same "present" extraction `compute_sg_derivative_window`
     // uses, kept independent here since this command never derives anything.
@@ -902,17 +936,25 @@ fn compute_compact_observation_window(
         .zip(all_values.iter())
         .enumerate()
         .filter_map(|(row, (&timestamp_ns, &value))| {
-            value.filter(|v| v.is_finite()).map(|v| (row, timestamp_ns, v))
+            value
+                .filter(|v| v.is_finite())
+                .map(|v| (row, timestamp_ns, v))
         })
         .collect();
 
     let total_observed_sample_count = present.len();
-    let (resolved_start, resolved_end) =
-        resolve_raw_window_bounds(total_observed_sample_count, start_sample_index, grid_size_usize)?;
+    let (resolved_start, resolved_end) = resolve_raw_window_bounds(
+        total_observed_sample_count,
+        start_sample_index,
+        grid_size_usize,
+    )?;
 
     let window = &present[resolved_start..resolved_end];
     let source_raw_row_indices = window.iter().map(|(row, _, _)| *row).collect();
-    let window_timestamps = window.iter().map(|(_, timestamp_ns, _)| *timestamp_ns).collect();
+    let window_timestamps = window
+        .iter()
+        .map(|(_, timestamp_ns, _)| *timestamp_ns)
+        .collect();
     let values = window.iter().map(|(_, _, value)| *value).collect();
     let preceding_timestamp_ns = if resolved_start == 0 {
         None
@@ -923,14 +965,22 @@ fn compute_compact_observation_window(
     let recording_min = present
         .iter()
         .map(|(_, _, value)| *value)
-        .fold(None, |acc: Option<f64>, value| Some(acc.map_or(value, |current| current.min(value))));
+        .fold(None, |acc: Option<f64>, value| {
+            Some(acc.map_or(value, |current| current.min(value)))
+        });
     let recording_max = present
         .iter()
         .map(|(_, _, value)| *value)
-        .fold(None, |acc: Option<f64>, value| Some(acc.map_or(value, |current| current.max(value))));
+        .fold(None, |acc: Option<f64>, value| {
+            Some(acc.map_or(value, |current| current.max(value)))
+        });
 
-    let (transform_values, transform_available, transform_unavailable_reason, recording_max_abs_transform) =
-        compute_compact_transform_window(method, all_values, resolved_start, resolved_end);
+    let (
+        transform_values,
+        transform_available,
+        transform_unavailable_reason,
+        recording_max_abs_transform,
+    ) = compute_compact_transform_window(method, all_values, resolved_start, resolved_end);
 
     Ok(CompactObservationWindow {
         recording_id,
@@ -1000,14 +1050,26 @@ fn compute_compact_transform_window(
     let window_samples = method.default_window_samples();
     let by_row = match method {
         SpikeExtractionMethod::FirstDerivative => unreachable!("handled above"),
-        SpikeExtractionMethod::RollingMedianResidual => rolling_median_residual_by_row(&present, window_samples),
-        SpikeExtractionMethod::MorphologicalTopHat => morphological_top_hat_by_row(&present, window_samples),
-        SpikeExtractionMethod::ButterworthHighPass => butterworth_high_pass_by_row(&present, window_samples),
-        SpikeExtractionMethod::SavitzkyGolayResidual => savitzky_golay_residual_by_row(&present, window_samples),
-        SpikeExtractionMethod::HaarWaveletDetail => haar_wavelet_detail_by_row(&present, window_samples),
+        SpikeExtractionMethod::RollingMedianResidual => {
+            rolling_median_residual_by_row(&present, window_samples)
+        }
+        SpikeExtractionMethod::MorphologicalTopHat => {
+            morphological_top_hat_by_row(&present, window_samples)
+        }
+        SpikeExtractionMethod::ButterworthHighPass => {
+            butterworth_high_pass_by_row(&present, window_samples)
+        }
+        SpikeExtractionMethod::SavitzkyGolayResidual => {
+            savitzky_golay_residual_by_row(&present, window_samples)
+        }
+        SpikeExtractionMethod::HaarWaveletDetail => {
+            haar_wavelet_detail_by_row(&present, window_samples)
+        }
     };
     let recording_max_abs = max_abs_finite(&by_row);
-    let sliced = (start..end).map(|i| by_row.get(&present[i].0).copied()).collect();
+    let sliced = (start..end)
+        .map(|i| by_row.get(&present[i].0).copied())
+        .collect();
     (sliced, true, None, recording_max_abs)
 }
 
@@ -1051,12 +1113,13 @@ pub fn get_compact_observation_window(
     if !RAW_WINDOW_ALLOWED_COLUMNS.contains(&column.as_str()) {
         return Err(format!("unsupported raw column '{column}'"));
     }
-    let grid_size_usize = validate_grid_size(grid_size)?;
+    validate_grid_size(grid_size)?;
 
     let dir = recording_bundles_dir(&app)?.join(&recording_id);
     let csv_path = raw_csv_path(&dir);
-    let content = fs::read_to_string(&csv_path)
-        .map_err(|error| format!("failed to read raw.csv for recording '{recording_id}': {error}"))?;
+    let content = fs::read_to_string(&csv_path).map_err(|error| {
+        format!("failed to read raw.csv for recording '{recording_id}': {error}")
+    })?;
     if content.len() > MAX_RAW_CSV_BYTES {
         return Err(format!(
             "raw.csv exceeds the {MAX_RAW_CSV_BYTES}-byte limit (got {} bytes)",
@@ -1069,7 +1132,6 @@ pub fn get_compact_observation_window(
         recording_id,
         column,
         grid_size,
-        grid_size_usize,
         start_sample_index,
         &timestamps_ns,
         &all_values,
@@ -1121,21 +1183,16 @@ fn sg_first_derivative_coefficients(half_width: usize) -> Vec<f64> {
 /// but `FirstDerivative` runs in this channel's own present-sample order
 /// (never raw-row index) and is a pure visual-inspection view: never
 /// persisted, never used for training/export/inference.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SpikeExtractionMethod {
+    #[default]
     FirstDerivative,
     RollingMedianResidual,
     MorphologicalTopHat,
     ButterworthHighPass,
     SavitzkyGolayResidual,
     HaarWaveletDetail,
-}
-
-impl Default for SpikeExtractionMethod {
-    fn default() -> Self {
-        SpikeExtractionMethod::FirstDerivative
-    }
 }
 
 impl SpikeExtractionMethod {
@@ -1204,7 +1261,9 @@ fn compute_present_order_spike_window(
 ) -> (Vec<Option<f64>>, bool, Option<String>, Option<f64>) {
     let row_count = values.len();
     let present = extract_present_by_row(values);
-    let placeholder_len = end.saturating_sub(start).min(row_count.saturating_sub(start));
+    let placeholder_len = end
+        .saturating_sub(start)
+        .min(row_count.saturating_sub(start));
 
     if present.len() < 2 {
         return (
@@ -1238,9 +1297,12 @@ fn rolling_median_residual_by_row(
         let lo = i.saturating_sub(radius);
         let hi = (i + radius + 1).min(len);
         let mut window: Vec<f64> = present[lo..hi].iter().map(|&(_, value)| value).collect();
-        window.sort_by(|a, b| a.partial_cmp(b).expect("finite present values are always comparable"));
+        window.sort_by(|a, b| {
+            a.partial_cmp(b)
+                .expect("finite present values are always comparable")
+        });
         let mid = window.len() / 2;
-        let median = if window.len() % 2 == 0 {
+        let median = if window.len().is_multiple_of(2) {
             (window[mid - 1] + window[mid]) / 2.0
         } else {
             window[mid]
@@ -1274,7 +1336,10 @@ fn morphological_top_hat_by_row(
     for i in 0..len {
         let lo = i.saturating_sub(radius);
         let hi = (i + radius + 1).min(len);
-        let opening = erosion[lo..hi].iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let opening = erosion[lo..hi]
+            .iter()
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max);
         let (row, _) = present[i];
         result.insert(row, values[i] - opening);
     }
@@ -1347,7 +1412,9 @@ fn sg_smoothing_coefficients(half_width: usize) -> Vec<f64> {
     let s2: f64 = (-m..=m).map(|i| (i * i) as f64).sum();
     let s4: f64 = (-m..=m).map(|i| (i * i * i * i) as f64).sum();
     let denom = s0 * s4 - s2 * s2;
-    (-m..=m).map(|i| (s4 - s2 * (i * i) as f64) / denom).collect()
+    (-m..=m)
+        .map(|i| (s4 - s2 * (i * i) as f64) / denom)
+        .collect()
 }
 
 /// Residual after subtracting a quadratic Savitzky–Golay *smoothing* filter
@@ -1535,7 +1602,7 @@ fn assess_cadence_regularity(timestamps_ns: &[i64]) -> CadenceRegularity {
     let mut sorted_deltas = deltas.clone();
     sorted_deltas.sort_unstable();
     let mid = sorted_deltas.len() / 2;
-    let median_dt_ns = if sorted_deltas.len() % 2 == 0 {
+    let median_dt_ns = if sorted_deltas.len().is_multiple_of(2) {
         (sorted_deltas[mid - 1] + sorted_deltas[mid]) as f64 / 2.0
     } else {
         sorted_deltas[mid] as f64
@@ -1596,12 +1663,22 @@ fn max_abs_finite(derivative_by_row: &std::collections::HashMap<usize, f64>) -> 
         .fold(None, |max, abs| Some(max.map_or(abs, |m: f64| m.max(abs))))
 }
 
+/// `(derivative_values, available, unavailable_reason,
+/// effective_sample_rate_hz, recording_max_abs_derivative)`.
+type SgDerivativeWindow = (
+    Vec<Option<f64>>,
+    bool,
+    Option<String>,
+    Option<f64>,
+    Option<f64>,
+);
+
 fn compute_sg_derivative_window(
     timestamps_ns: &[i64],
     values: &[Option<f64>],
     start: usize,
     end: usize,
-) -> (Vec<Option<f64>>, bool, Option<String>, Option<f64>, Option<f64>) {
+) -> SgDerivativeWindow {
     debug_assert_eq!(timestamps_ns.len(), values.len());
     let row_count = values.len();
 
@@ -1612,20 +1689,25 @@ fn compute_sg_derivative_window(
         .zip(values.iter())
         .enumerate()
         .filter_map(|(row, (&timestamp_ns, &value))| {
-            value.filter(|v| v.is_finite()).map(|v| (row, timestamp_ns, v))
+            value
+                .filter(|v| v.is_finite())
+                .map(|v| (row, timestamp_ns, v))
         })
         .collect();
     let present_timestamps_ns: Vec<i64> = present.iter().map(|(_, ts, _)| *ts).collect();
 
-    let placeholder_len = end.saturating_sub(start).min(row_count.saturating_sub(start));
-    let (median_dt_ns, effective_sample_rate_hz) = match assess_cadence_regularity(&present_timestamps_ns) {
-        CadenceRegularity::Irregular(reason) => {
-            return (vec![None; placeholder_len], false, Some(reason), None, None);
-        }
-        CadenceRegularity::Regular { median_dt_ns } => {
-            (median_dt_ns, Some(1_000_000_000.0 / median_dt_ns))
-        }
-    };
+    let placeholder_len = end
+        .saturating_sub(start)
+        .min(row_count.saturating_sub(start));
+    let (median_dt_ns, effective_sample_rate_hz) =
+        match assess_cadence_regularity(&present_timestamps_ns) {
+            CadenceRegularity::Irregular(reason) => {
+                return (vec![None; placeholder_len], false, Some(reason), None, None);
+            }
+            CadenceRegularity::Regular { median_dt_ns } => {
+                (median_dt_ns, Some(1_000_000_000.0 / median_dt_ns))
+            }
+        };
     let dt_seconds = median_dt_ns / 1_000_000_000.0;
     let coefficients = sg_first_derivative_coefficients(SG_HALF_WIDTH);
 
@@ -1633,7 +1715,10 @@ fn compute_sg_derivative_window(
     // original row it came from; a full symmetric SG window needs
     // SG_HALF_WIDTH genuine neighbors on each side within this channel's own
     // present-sample sequence, not within the raw row index space.
-    let present_values: Vec<(usize, f64)> = present.iter().map(|&(row, _, value)| (row, value)).collect();
+    let present_values: Vec<(usize, f64)> = present
+        .iter()
+        .map(|&(row, _, value)| (row, value))
+        .collect();
     let derivative_by_row = convolve_symmetric_sg(&present_values, &coefficients, SG_HALF_WIDTH);
     let derivative_by_row: std::collections::HashMap<usize, f64> = derivative_by_row
         .into_iter()
@@ -1641,8 +1726,16 @@ fn compute_sg_derivative_window(
         .collect();
     let recording_max_abs_derivative = max_abs_finite(&derivative_by_row);
 
-    let derivative_values = (start..end).map(|row| derivative_by_row.get(&row).copied()).collect();
-    (derivative_values, true, None, effective_sample_rate_hz, recording_max_abs_derivative)
+    let derivative_values = (start..end)
+        .map(|row| derivative_by_row.get(&row).copied())
+        .collect();
+    (
+        derivative_values,
+        true,
+        None,
+        effective_sample_rate_hz,
+        recording_max_abs_derivative,
+    )
 }
 
 /// GC-032 legacy fallback: the same Savitzky–Golay first-difference filter as
@@ -1667,7 +1760,9 @@ fn compute_sample_order_derivative_window(
         .filter_map(|(row, &value)| value.filter(|v| v.is_finite()).map(|v| (row, v)))
         .collect();
 
-    let placeholder_len = end.saturating_sub(start).min(row_count.saturating_sub(start));
+    let placeholder_len = end
+        .saturating_sub(start)
+        .min(row_count.saturating_sub(start));
     if present.len() < MIN_ROWS_FOR_DERIVATIVE {
         return (
             vec![None; placeholder_len],
@@ -1686,7 +1781,9 @@ fn compute_sample_order_derivative_window(
     let derivative_by_row = convolve_symmetric_sg(&present, &coefficients, SG_HALF_WIDTH);
     let recording_max_abs_derivative = max_abs_finite(&derivative_by_row);
 
-    let derivative_values = (start..end).map(|row| derivative_by_row.get(&row).copied()).collect();
+    let derivative_values = (start..end)
+        .map(|row| derivative_by_row.get(&row).copied())
+        .collect();
     (derivative_values, true, None, recording_max_abs_derivative)
 }
 
@@ -1824,8 +1921,9 @@ pub fn get_raw_recording_derivative_window(
 
     let dir = recording_bundles_dir(&app)?.join(&recording_id);
     let csv_path = raw_csv_path(&dir);
-    let content = fs::read_to_string(&csv_path)
-        .map_err(|error| format!("failed to read raw.csv for recording '{recording_id}': {error}"))?;
+    let content = fs::read_to_string(&csv_path).map_err(|error| {
+        format!("failed to read raw.csv for recording '{recording_id}': {error}")
+    })?;
     if content.len() > MAX_RAW_CSV_BYTES {
         return Err(format!(
             "raw.csv exceeds the {MAX_RAW_CSV_BYTES}-byte limit (got {} bytes)",
@@ -1867,8 +1965,13 @@ pub fn get_raw_recording_derivative_window(
             sg_filter_config(),
         )
     } else if method == SpikeExtractionMethod::FirstDerivative {
-        let (derivative_values, available, unavailable_reason, effective_sample_rate_hz, recording_max_abs_derivative) =
-            compute_sg_derivative_window(&timestamps_ns, &all_values, resolved_start, resolved_end);
+        let (
+            derivative_values,
+            available,
+            unavailable_reason,
+            effective_sample_rate_hz,
+            recording_max_abs_derivative,
+        ) = compute_sg_derivative_window(&timestamps_ns, &all_values, resolved_start, resolved_end);
         let unavailable_is_cadence_issue = !available
             && unavailable_reason
                 .as_deref()
@@ -1887,7 +1990,13 @@ pub fn get_raw_recording_derivative_window(
     } else {
         let effective_window_samples = method.default_window_samples();
         let (derivative_values, available, unavailable_reason, recording_max_abs_derivative) =
-            compute_spike_extraction_window(method, &all_values, resolved_start, resolved_end, effective_window_samples);
+            compute_spike_extraction_window(
+                method,
+                &all_values,
+                resolved_start,
+                resolved_end,
+                effective_window_samples,
+            );
         (
             derivative_values,
             available,
@@ -2004,10 +2113,13 @@ fn compute_quality_summary(
     // reported as "Timing OK"). Flag that case explicitly instead of
     // presenting a misleadingly tiny effective rate as trustworthy.
     let has_dominant_outlier_gap = row_count >= 3 && {
-        let mut deltas: Vec<i64> = timestamps_ns.windows(2).map(|pair| pair[1] - pair[0]).collect();
+        let mut deltas: Vec<i64> = timestamps_ns
+            .windows(2)
+            .map(|pair| pair[1] - pair[0])
+            .collect();
         deltas.sort_unstable();
         let mid = deltas.len() / 2;
-        let median_delta_ns = if deltas.len() % 2 == 0 {
+        let median_delta_ns = if deltas.len().is_multiple_of(2) {
             (deltas[mid - 1] + deltas[mid]) as f64 / 2.0
         } else {
             deltas[mid] as f64
@@ -2121,8 +2233,9 @@ pub fn get_recording_quality_summary(
     validate_recording_id(&recording_id)?;
     let dir = recording_bundles_dir(&app)?.join(&recording_id);
     let (_, annotations) = load_bundle_pair(&dir)?;
-    let content = fs::read_to_string(raw_csv_path(&dir))
-        .map_err(|error| format!("failed to read raw.csv for recording '{recording_id}': {error}"))?;
+    let content = fs::read_to_string(raw_csv_path(&dir)).map_err(|error| {
+        format!("failed to read raw.csv for recording '{recording_id}': {error}")
+    })?;
     if content.len() > MAX_RAW_CSV_BYTES {
         return Err(format!(
             "raw.csv exceeds the {MAX_RAW_CSV_BYTES}-byte limit (got {} bytes)",
@@ -2154,7 +2267,9 @@ pub fn set_interval_curation_status(
         .intervals
         .iter_mut()
         .find(|interval| interval.interval_id == interval_id)
-        .ok_or_else(|| format!("interval '{interval_id}' not found in recording '{recording_id}'"))?;
+        .ok_or_else(|| {
+            format!("interval '{interval_id}' not found in recording '{recording_id}'")
+        })?;
     interval.curation_status = curation_status;
     interval.revision += 1;
     let updated = interval.clone();
@@ -2257,12 +2372,18 @@ mod tests {
     fn write_bundle_files_creates_all_three_files() {
         let id = Uuid::new_v4().to_string();
         let tmp_dir = std::env::temp_dir().join(format!("recording-bundle-test-{id}"));
-        write_bundle_files(&tmp_dir, "timestamp_ns\n1\n", &sample_metadata(&id), &sample_annotations(&id))
-            .expect("writing a fresh bundle must succeed");
+        write_bundle_files(
+            &tmp_dir,
+            "timestamp_ns\n1\n",
+            &sample_metadata(&id),
+            &sample_annotations(&id),
+        )
+        .expect("writing a fresh bundle must succeed");
         assert!(tmp_dir.join(RAW_CSV_FILE_NAME).exists());
         assert!(tmp_dir.join(RECORDING_METADATA_FILE_NAME).exists());
         assert!(tmp_dir.join(ANNOTATIONS_FILE_NAME).exists());
-        let recording_json = fs::read_to_string(tmp_dir.join(RECORDING_METADATA_FILE_NAME)).unwrap();
+        let recording_json =
+            fs::read_to_string(tmp_dir.join(RECORDING_METADATA_FILE_NAME)).unwrap();
         let parsed: RecordingMetadata = serde_json::from_str(&recording_json).unwrap();
         assert_eq!(parsed.recording_id, id);
         assert_eq!(parsed.stop_reason, StopReason::ManualStop);
@@ -2283,8 +2404,14 @@ mod tests {
             label_id: "idle".to_string(),
             requested_start_monotonic_ns: 0,
             requested_end_monotonic_ns: 1,
-            resolved_start: ResolvedBoundary { raw_row: 0, source_timestamp_ns: 0 },
-            resolved_end: ResolvedBoundary { raw_row: 0, source_timestamp_ns: 0 },
+            resolved_start: ResolvedBoundary {
+                raw_row: 0,
+                source_timestamp_ns: 0,
+            },
+            resolved_end: ResolvedBoundary {
+                raw_row: 0,
+                source_timestamp_ns: 0,
+            },
             resolution_rule_version: 1,
             creation_mechanism: CreationMechanism::TimelineEdit,
             curation_status: CurationStatus::Excluded,
@@ -2293,7 +2420,10 @@ mod tests {
         });
         let summary = summarize_bundle(&sample_metadata(&id), &annotations);
         assert_eq!(summary.interval_count, 2);
-        assert_eq!(summary.label_ids, vec!["idle".to_string(), "pinch_start".to_string()]);
+        assert_eq!(
+            summary.label_ids,
+            vec!["idle".to_string(), "pinch_start".to_string()]
+        );
         assert_eq!(summary.unreviewed_count, 1);
         assert_eq!(summary.excluded_count, 1);
         assert_eq!(summary.approved_count, 0);
@@ -2301,8 +2431,13 @@ mod tests {
 
     fn write_temp_bundle(id: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("recording-bundle-curation-test-{id}"));
-        write_bundle_files(&dir, "timestamp_ns\n1\n", &sample_metadata(id), &sample_annotations(id))
-            .expect("writing a fresh bundle must succeed");
+        write_bundle_files(
+            &dir,
+            "timestamp_ns\n1\n",
+            &sample_metadata(id),
+            &sample_annotations(id),
+        )
+        .expect("writing a fresh bundle must succeed");
         dir
     }
 
@@ -2331,15 +2466,27 @@ mod tests {
         let mut annotations: AnnotationsFile =
             serde_json::from_str(&fs::read_to_string(&annotations_path).unwrap()).unwrap();
         let interval_id = annotations.intervals[0].interval_id.clone();
-        let interval = annotations.intervals.iter_mut().find(|i| i.interval_id == interval_id).unwrap();
+        let interval = annotations
+            .intervals
+            .iter_mut()
+            .find(|i| i.interval_id == interval_id)
+            .unwrap();
         interval.curation_status = CurationStatus::Approved;
         interval.revision += 1;
         let expected_revision = interval.revision;
-        fs::write(&annotations_path, serde_json::to_string_pretty(&annotations).unwrap()).unwrap();
+        fs::write(
+            &annotations_path,
+            serde_json::to_string_pretty(&annotations).unwrap(),
+        )
+        .unwrap();
 
         let reloaded: AnnotationsFile =
             serde_json::from_str(&fs::read_to_string(&annotations_path).unwrap()).unwrap();
-        let reloaded_interval = reloaded.intervals.iter().find(|i| i.interval_id == interval_id).unwrap();
+        let reloaded_interval = reloaded
+            .intervals
+            .iter()
+            .find(|i| i.interval_id == interval_id)
+            .unwrap();
         assert_eq!(reloaded_interval.curation_status, CurationStatus::Approved);
         assert_eq!(reloaded_interval.revision, expected_revision);
 
@@ -2349,8 +2496,15 @@ mod tests {
     fn raw_csv_with_rows(rows: &[(i64, &str)]) -> String {
         let mut lines = vec![RAW_CSV_HEADER.join(",")];
         for (timestamp_ns, ppg_green) in rows {
-            let mut fields = vec![timestamp_ns.to_string(), "0".to_string(), ppg_green.to_string()];
-            fields.extend(std::iter::repeat("".to_string()).take(RAW_CSV_HEADER.len() - fields.len()));
+            let mut fields = vec![
+                timestamp_ns.to_string(),
+                "0".to_string(),
+                ppg_green.to_string(),
+            ];
+            fields.extend(std::iter::repeat_n(
+                "".to_string(),
+                RAW_CSV_HEADER.len() - fields.len(),
+            ));
             lines.push(fields.join(","));
         }
         lines.join("\n")
@@ -2359,12 +2513,17 @@ mod tests {
     #[test]
     fn parse_raw_csv_column_preserves_nulls_and_rejects_bad_header() {
         let csv = raw_csv_with_rows(&[(1, "1.5"), (2, ""), (3, "3.5")]);
-        let (timestamps, values) = parse_raw_csv_column(&csv, "ppg_green").expect("valid csv must parse");
+        let (timestamps, values) =
+            parse_raw_csv_column(&csv, "ppg_green").expect("valid csv must parse");
         assert_eq!(timestamps, vec![1, 2, 3]);
         assert_eq!(values, vec![Some(1.5), None, Some(3.5)]);
 
         assert!(parse_raw_csv_column("not,a,header", "ppg_green").is_err());
-        assert!(parse_raw_csv_column(&csv, "sequence").is_err());
+        // "sequence" is a real `RAW_CSV_HEADER` column (metadata columns are
+        // rejected by the allow-list one layer up, in the command handlers,
+        // not by this low-level parser) -- use a column absent from the
+        // header entirely to exercise the "unsupported raw column" error.
+        assert!(parse_raw_csv_column(&csv, "not_a_real_column").is_err());
     }
 
     #[test]
@@ -2374,7 +2533,10 @@ mod tests {
         assert!(parse_raw_csv_column(&short_row, "ppg_green").is_err());
 
         let mut fields = vec!["1".to_string(), "0".to_string(), "not_a_number".to_string()];
-        fields.extend(std::iter::repeat("".to_string()).take(RAW_CSV_HEADER.len() - fields.len()));
+        fields.extend(std::iter::repeat_n(
+            "".to_string(),
+            RAW_CSV_HEADER.len() - fields.len(),
+        ));
         let non_numeric_value = format!("{header}\n{}", fields.join(","));
         assert!(parse_raw_csv_column(&non_numeric_value, "ppg_green").is_err());
     }
@@ -2388,7 +2550,11 @@ mod tests {
     }
 
     fn empty_annotations(id: &str) -> AnnotationsFile {
-        AnnotationsFile { format_version: 1, recording_id: id.to_string(), intervals: vec![] }
+        AnnotationsFile {
+            format_version: 1,
+            recording_id: id.to_string(),
+            intervals: vec![],
+        }
     }
 
     fn interval(
@@ -2402,8 +2568,14 @@ mod tests {
             label_id: "pinch".to_string(),
             requested_start_monotonic_ns: start_ns,
             requested_end_monotonic_ns: end_ns,
-            resolved_start: ResolvedBoundary { raw_row: raw_row_start, source_timestamp_ns: start_ns },
-            resolved_end: ResolvedBoundary { raw_row: raw_row_end, source_timestamp_ns: end_ns },
+            resolved_start: ResolvedBoundary {
+                raw_row: raw_row_start,
+                source_timestamp_ns: start_ns,
+            },
+            resolved_end: ResolvedBoundary {
+                raw_row: raw_row_end,
+                source_timestamp_ns: end_ns,
+            },
             resolution_rule_version: 1,
             creation_mechanism: CreationMechanism::TimelineEdit,
             curation_status: CurationStatus::Unreviewed,
@@ -2412,11 +2584,30 @@ mod tests {
         }
     }
 
+    // `raw_csv_with_rows` deliberately only ever populates `ppg_green`
+    // (every other allow-listed channel is left blank, see
+    // `quality_summary_reports_fully_missing_channels` below), so it can
+    // never exercise a genuinely warning-free summary. This instead
+    // populates every allow-listed channel, for a clean-timestamps case
+    // that must report zero warnings of any kind.
+    fn raw_csv_with_every_channel_populated(rows: &[i64]) -> String {
+        let mut lines = vec![RAW_CSV_HEADER.join(",")];
+        for timestamp_ns in rows {
+            let mut fields = vec![timestamp_ns.to_string(), "0".to_string()];
+            fields.extend(std::iter::repeat_n(
+                "1.0".to_string(),
+                RAW_CSV_HEADER.len() - fields.len(),
+            ));
+            lines.push(fields.join(","));
+        }
+        lines.join("\n")
+    }
+
     #[test]
     fn quality_summary_reports_ok_for_uniform_monotonic_timestamps() {
         // 11 rows at exactly 20ms spacing => 50Hz effective rate.
-        let rows: Vec<(i64, &str)> = (0..11).map(|i| (i * 20_000_000, "1.0")).collect();
-        let csv = raw_csv_with_rows(&rows);
+        let rows: Vec<i64> = (0..11).map(|i| i * 20_000_000).collect();
+        let csv = raw_csv_with_every_channel_populated(&rows);
         let id = Uuid::new_v4().to_string();
         let summary = compute_quality_summary(id.clone(), &csv, &empty_annotations(&id)).unwrap();
         assert_eq!(summary.row_count, 11);
@@ -2466,7 +2657,12 @@ mod tests {
         assert!(!summary.missing_channels.contains(&"ppg_green".to_string()));
         assert!(summary.missing_channels.contains(&"accel_x".to_string()));
         assert_eq!(summary.missing_value_counts["accel_x"], 2);
-        assert!(summary.warnings.iter().any(|warning| warning.contains("no recorded values")));
+        assert!(
+            summary
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("no recorded values"))
+        );
     }
 
     /// GC-030 repro: a mixed/incomparable-clock-domain bug (fixed upstream in
@@ -2482,10 +2678,21 @@ mod tests {
         let id = Uuid::new_v4().to_string();
         let summary = compute_quality_summary(id.clone(), &csv, &empty_annotations(&id)).unwrap();
 
-        assert_eq!(summary.non_monotonic_row_count, 0, "rows are still strictly increasing");
+        assert_eq!(
+            summary.non_monotonic_row_count, 0,
+            "rows are still strictly increasing"
+        );
         assert_eq!(summary.timestamp_status, TimestampStatus::Warning);
-        assert!(summary.effective_sample_rate_hz.is_none(), "a misleading near-zero rate must not be reported");
-        assert!(summary.warnings.iter().any(|warning| warning.contains("typical row spacing")));
+        assert!(
+            summary.effective_sample_rate_hz.is_none(),
+            "a misleading near-zero rate must not be reported"
+        );
+        assert!(
+            summary
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("typical row spacing"))
+        );
     }
 
     /// Old bundles saved before GC-030 densely populate every column on every
@@ -2500,8 +2707,12 @@ mod tests {
             compute_sg_derivative_window(&timestamps_ns, &values, 0, 21);
         assert!(available, "reason: {reason:?}");
         assert!((rate.unwrap() - 50.0).abs() < 1e-6);
-        for row in SG_HALF_WIDTH..(21 - SG_HALF_WIDTH) {
-            assert!((derivative[row].unwrap() - 25.0).abs() < 1e-9); // d/dt(0.5*i) at 50Hz = 0.5*50
+        for value in derivative
+            .iter()
+            .take(21 - SG_HALF_WIDTH)
+            .skip(SG_HALF_WIDTH)
+        {
+            assert!((value.unwrap() - 25.0).abs() < 1e-9); // d/dt(0.5*i) at 50Hz = 0.5*50
         }
     }
 
@@ -2568,7 +2779,10 @@ mod tests {
         assert!(validate_grid_size(128).is_err());
         assert!(RAW_GRID_SIZES.contains(&DEFAULT_RAW_GRID_SIZE));
         let max_grid_size = RAW_GRID_SIZES.iter().max().copied().unwrap();
-        assert_eq!((max_grid_size * max_grid_size) as usize, RAW_WINDOW_MAX_VALUES);
+        assert_eq!(
+            (max_grid_size * max_grid_size) as usize,
+            RAW_WINDOW_MAX_VALUES
+        );
     }
 
     #[test]
@@ -2588,14 +2802,24 @@ mod tests {
         assert!(validate_raw_csv_full(&short_row).is_err());
 
         let mut fields = vec!["1".to_string(), "not_a_number".to_string()];
-        fields.extend(std::iter::repeat("".to_string()).take(RAW_CSV_HEADER.len() - fields.len()));
+        fields.extend(std::iter::repeat_n(
+            "".to_string(),
+            RAW_CSV_HEADER.len() - fields.len(),
+        ));
         let non_numeric = format!("{header}\n{}", fields.join(","));
         assert!(validate_raw_csv_full(&non_numeric).is_err());
     }
 
     fn legacy_row(timestamp_ns: i64, ppg_green: &str, label: &str) -> String {
-        let mut fields = vec![timestamp_ns.to_string(), "0".to_string(), ppg_green.to_string()];
-        fields.extend(std::iter::repeat("".to_string()).take(DATASET_CSV_HEADER.len() - 1 - fields.len()));
+        let mut fields = vec![
+            timestamp_ns.to_string(),
+            "0".to_string(),
+            ppg_green.to_string(),
+        ];
+        fields.extend(std::iter::repeat_n(
+            "".to_string(),
+            DATASET_CSV_HEADER.len() - 1 - fields.len(),
+        ));
         fields.push(label.to_string());
         fields.join(",")
     }
@@ -2611,12 +2835,19 @@ mod tests {
         let (converted, runs) = convert_legacy_dataset_csv(&legacy)
             .expect("legacy header must be recognized")
             .expect("well-formed legacy csv must convert");
-        let (_, values) = parse_raw_csv_column(&converted, "ppg_green").expect("converted csv must be valid raw.csv");
+        let (_, values) = parse_raw_csv_column(&converted, "ppg_green")
+            .expect("converted csv must be valid raw.csv");
         assert_eq!(values, vec![Some(1.5), None]);
         assert_eq!(converted.lines().count(), 3);
-        assert_eq!(runs.len(), 1);
+        // "idle" is a distinct, non-blank label from "pinch", so -- like any
+        // other label change (see
+        // `convert_legacy_dataset_csv_groups_labels_into_maximal_contiguous_runs`)
+        // -- it starts its own run rather than extending or erasing the prior one.
+        assert_eq!(runs.len(), 2);
         assert_eq!(runs[0].label, "pinch");
         assert_eq!((runs[0].start_row, runs[0].end_row), (0, 0));
+        assert_eq!(runs[1].label, "idle");
+        assert_eq!((runs[1].start_row, runs[1].end_row), (1, 1));
     }
 
     #[test]
@@ -2629,7 +2860,10 @@ mod tests {
             .expect("legacy header must be recognized")
             .expect("an empty per-row label must not be rejected");
         assert!(validate_raw_csv_full(&converted).is_ok());
-        assert!(runs.is_empty(), "an all-blank label column must derive no intervals");
+        assert!(
+            runs.is_empty(),
+            "an all-blank label column must derive no intervals"
+        );
 
         let wrong_columns = format!("{header}\n1,0,1.5\n");
         assert!(convert_legacy_dataset_csv(&wrong_columns).unwrap().is_err());
@@ -2640,12 +2874,12 @@ mod tests {
         let header = DATASET_CSV_HEADER.join(",");
         let legacy = format!(
             "{header}\n{}\n{}\n{}\n{}\n{}\n{}\n",
-            legacy_row(1, "1.0", "pinch"),  // row 0: pinch run starts
-            legacy_row(2, "1.1", "pinch"),  // row 1: adjacent identical label, same run
-            legacy_row(3, "1.2", ""),       // row 2: blank label ends the pinch run
-            legacy_row(4, "1.3", "wave"),   // row 3: different label starts a new run
-            legacy_row(5, "1.4", "pinch"),  // row 4: same text as first run, but not adjacent
-            legacy_row(6, "1.5", "pinch"),  // row 5: adjacent identical label, same run
+            legacy_row(1, "1.0", "pinch"), // row 0: pinch run starts
+            legacy_row(2, "1.1", "pinch"), // row 1: adjacent identical label, same run
+            legacy_row(3, "1.2", ""),      // row 2: blank label ends the pinch run
+            legacy_row(4, "1.3", "wave"),  // row 3: different label starts a new run
+            legacy_row(5, "1.4", "pinch"), // row 4: same text as first run, but not adjacent
+            legacy_row(6, "1.5", "pinch"), // row 5: adjacent identical label, same run
         );
         let (_, runs) = convert_legacy_dataset_csv(&legacy)
             .expect("legacy header must be recognized")
@@ -2655,21 +2889,34 @@ mod tests {
 
         assert_eq!(runs[0].label, "pinch");
         assert_eq!((runs[0].start_row, runs[0].end_row), (0, 1));
-        assert_eq!((runs[0].start_timestamp_ns, runs[0].end_timestamp_ns), (1, 2));
+        assert_eq!(
+            (runs[0].start_timestamp_ns, runs[0].end_timestamp_ns),
+            (1, 2)
+        );
 
         assert_eq!(runs[1].label, "wave");
         assert_eq!((runs[1].start_row, runs[1].end_row), (3, 3));
-        assert_eq!((runs[1].start_timestamp_ns, runs[1].end_timestamp_ns), (4, 4));
+        assert_eq!(
+            (runs[1].start_timestamp_ns, runs[1].end_timestamp_ns),
+            (4, 4)
+        );
 
         assert_eq!(runs[2].label, "pinch");
         assert_eq!((runs[2].start_row, runs[2].end_row), (4, 5));
-        assert_eq!((runs[2].start_timestamp_ns, runs[2].end_timestamp_ns), (5, 6));
+        assert_eq!(
+            (runs[2].start_timestamp_ns, runs[2].end_timestamp_ns),
+            (5, 6)
+        );
     }
 
     #[test]
     fn convert_legacy_dataset_csv_trims_label_whitespace_without_other_normalization() {
         let header = DATASET_CSV_HEADER.join(",");
-        let legacy = format!("{header}\n{}\n{}\n", legacy_row(1, "1.0", "  Pinch  "), legacy_row(2, "1.1", "   "));
+        let legacy = format!(
+            "{header}\n{}\n{}\n",
+            legacy_row(1, "1.0", "  Pinch  "),
+            legacy_row(2, "1.1", "   ")
+        );
         let (_, runs) = convert_legacy_dataset_csv(&legacy)
             .expect("legacy header must be recognized")
             .expect("well-formed legacy csv must convert");
@@ -2693,7 +2940,10 @@ mod tests {
         assert_eq!(runs.len(), 1);
         assert_eq!(runs[0].label, "pinch");
         assert_eq!((runs[0].start_row, runs[0].end_row), (0, 1));
-        assert_eq!((runs[0].start_timestamp_ns, runs[0].end_timestamp_ns), (1_000_000_000, 2_000_000_000));
+        assert_eq!(
+            (runs[0].start_timestamp_ns, runs[0].end_timestamp_ns),
+            (1_000_000_000, 2_000_000_000)
+        );
     }
 
     #[test]
@@ -2717,10 +2967,6 @@ mod tests {
         metadata
     }
 
-    fn empty_annotations(id: &str) -> AnnotationsFile {
-        AnnotationsFile { format_version: 1, recording_id: id.to_string(), intervals: Vec::new() }
-    }
-
     #[test]
     fn is_imported_only_matches_the_exact_imported_source_shape() {
         let id = Uuid::new_v4().to_string();
@@ -2728,7 +2974,10 @@ mod tests {
         assert!(!is_imported_only(&sample_metadata(&id))); // manually-saved: "watch" source
 
         let mut mixed = imported_metadata(&id);
-        mixed.sources.push(RecordingSource { source_id: "watch".to_string(), configuration: serde_json::json!({}) });
+        mixed.sources.push(RecordingSource {
+            source_id: "watch".to_string(),
+            configuration: serde_json::json!({}),
+        });
         assert!(!is_imported_only(&mixed));
     }
 
@@ -2736,8 +2985,13 @@ mod tests {
     fn delete_recording_bundle_removes_an_imported_recording() {
         let id = Uuid::new_v4().to_string();
         let dir = std::env::temp_dir().join(format!("recording-bundle-delete-imported-{id}"));
-        write_bundle_files(&dir, "timestamp_ns\n1\n", &imported_metadata(&id), &empty_annotations(&id))
-            .expect("writing a fresh bundle must succeed");
+        write_bundle_files(
+            &dir,
+            "timestamp_ns\n1\n",
+            &imported_metadata(&id),
+            &empty_annotations(&id),
+        )
+        .expect("writing a fresh bundle must succeed");
         assert!(dir.exists());
 
         let (recording, _annotations) = load_bundle_pair(&dir).expect("bundle must parse");
@@ -2758,7 +3012,10 @@ mod tests {
         assert!(dir.exists());
 
         let (recording, _annotations) = load_bundle_pair(&dir).expect("bundle must parse");
-        assert!(!is_imported_only(&recording), "this bundle is manually-saved, not imported");
+        assert!(
+            !is_imported_only(&recording),
+            "this bundle is manually-saved, not imported"
+        );
 
         fs::remove_dir_all(&dir).expect("delete must succeed for a manually-saved bundle too");
         assert!(!dir.exists());
@@ -2770,8 +3027,13 @@ mod tests {
         let sibling_id = Uuid::new_v4().to_string();
         let target_dir = write_temp_bundle(&target_id);
         let sibling_dir = std::env::temp_dir().join(format!("recording-bundle-{sibling_id}"));
-        write_bundle_files(&sibling_dir, "timestamp_ns\n1\n", &sample_metadata(&sibling_id), &empty_annotations(&sibling_id))
-            .expect("writing the sibling bundle must succeed");
+        write_bundle_files(
+            &sibling_dir,
+            "timestamp_ns\n1\n",
+            &sample_metadata(&sibling_id),
+            &empty_annotations(&sibling_id),
+        )
+        .expect("writing the sibling bundle must succeed");
         assert!(target_dir.exists());
         assert!(sibling_dir.exists());
 
@@ -2779,7 +3041,10 @@ mod tests {
         fs::remove_dir_all(&target_dir).expect("deleting the target bundle must succeed");
 
         assert!(!target_dir.exists());
-        assert!(sibling_dir.exists(), "a sibling bundle must be untouched by deleting another one");
+        assert!(
+            sibling_dir.exists(),
+            "a sibling bundle must be untouched by deleting another one"
+        );
         fs::remove_dir_all(&sibling_dir).ok();
     }
 
@@ -2795,7 +3060,8 @@ mod tests {
     fn delete_recording_bundle_rejects_an_id_with_no_matching_bundle_on_disk() {
         // `load_bundle_pair` is what `delete_recording_bundle` calls to confirm the id
         // resolves to a real bundle before ever calling `remove_dir_all`.
-        let missing_dir = std::env::temp_dir().join(format!("recording-bundle-missing-{}", Uuid::new_v4()));
+        let missing_dir =
+            std::env::temp_dir().join(format!("recording-bundle-missing-{}", Uuid::new_v4()));
         assert!(load_bundle_pair(&missing_dir).is_err());
     }
 
@@ -2836,7 +3102,6 @@ mod tests {
             "rec-a".to_string(),
             "ppg_green".to_string(),
             grid_size as u32,
-            grid_size,
             start_sample_index,
             timestamps_ns,
             values,
@@ -2870,7 +3135,8 @@ mod tests {
     fn compact_window_all_null_channel_is_empty_not_an_error() {
         let timestamps_ns = vec![0, 1_000_000, 2_000_000];
         let values = vec![None, None, None];
-        let window = compact_window(&timestamps_ns, &values, 0, 4).expect("empty channel is not an error");
+        let window =
+            compact_window(&timestamps_ns, &values, 0, 4).expect("empty channel is not an error");
         assert_eq!(window.total_observed_sample_count, 0);
         assert!(window.values.is_empty());
         assert!(window.source_raw_row_indices.is_empty());
@@ -2910,7 +3176,8 @@ mod tests {
         let timestamps_ns: Vec<i64> = (0..20).map(|i| i * 1_000_000).collect();
         let values: Vec<Option<f64>> = (0..20).map(|i| Some(i as f64)).collect();
         // 20 observed samples, grid_size 4 -> max_values 16; last valid start is 4.
-        let window = compact_window(&timestamps_ns, &values, 1_000, 4).expect("oversized start is clamped, not rejected");
+        let window = compact_window(&timestamps_ns, &values, 1_000, 4)
+            .expect("oversized start is clamped, not rejected");
         assert_eq!(window.start_sample_index, 4);
         assert_eq!(window.end_sample_index, 20);
     }
@@ -2943,9 +3210,13 @@ mod tests {
         let timestamps_ns: Vec<i64> = (0..4).map(|i| i * 1_000_000).collect();
         let values = vec![Some(1.0), Some(5.0), Some(2.0), Some(20.0)];
         let first_frame = compact_window(&timestamps_ns, &values, 0, 2).expect("valid first frame");
-        let second_frame = compact_window(&timestamps_ns, &values, 2, 2).expect("valid second frame");
+        let second_frame =
+            compact_window(&timestamps_ns, &values, 2, 2).expect("valid second frame");
         assert_eq!(first_frame.recording_max_abs_transform, Some(18.0));
-        assert_eq!(first_frame.recording_max_abs_transform, second_frame.recording_max_abs_transform,);
+        assert_eq!(
+            first_frame.recording_max_abs_transform,
+            second_frame.recording_max_abs_transform,
+        );
     }
 
     #[test]
@@ -2954,7 +3225,8 @@ mod tests {
         assert_eq!(empty.recording_max_abs_transform, None);
         assert!(!empty.transform_available);
 
-        let single = compact_window(&[0], &[Some(1.0)], 0, 4).expect("single-sample channel is not an error");
+        let single = compact_window(&[0], &[Some(1.0)], 0, 4)
+            .expect("single-sample channel is not an error");
         assert_eq!(single.recording_max_abs_transform, None);
         assert!(!single.transform_available);
     }
@@ -2974,7 +3246,10 @@ mod tests {
         let timestamps_ns: Vec<i64> = (0..4).map(|i| i * 1_000_000).collect();
         let values = vec![Some(1.0), Some(5.0), Some(2.0), Some(20.0)];
         let window = compact_window(&timestamps_ns, &values, 0, 4).expect("valid window");
-        assert_eq!(window.transform_values, vec![None, Some(4.0), Some(-3.0), Some(18.0)]);
+        assert_eq!(
+            window.transform_values,
+            vec![None, Some(4.0), Some(-3.0), Some(18.0)]
+        );
         assert!(window.transform_available);
     }
 
@@ -2984,14 +3259,20 @@ mod tests {
         // produce different `transform_values` — this is the GC-036 selector's
         // whole point for the observed-samples viewer, not just the raw-row one.
         let timestamps_ns: Vec<i64> = (0..12).map(|i| i * 1_000_000).collect();
-        let values: Vec<Option<f64>> = vec![1.0, 5.0, 2.0, 20.0, 3.0, 4.0, 1.0, 9.0, 2.0, 6.0, 3.0, 8.0]
-            .into_iter()
-            .map(Some)
-            .collect();
+        let values: Vec<Option<f64>> =
+            vec![1.0, 5.0, 2.0, 20.0, 3.0, 4.0, 1.0, 9.0, 2.0, 6.0, 3.0, 8.0]
+                .into_iter()
+                .map(Some)
+                .collect();
 
-        let first_derivative =
-            compact_window_with_method(&timestamps_ns, &values, 0, 4, SpikeExtractionMethod::FirstDerivative)
-                .expect("valid window");
+        let first_derivative = compact_window_with_method(
+            &timestamps_ns,
+            &values,
+            0,
+            4,
+            SpikeExtractionMethod::FirstDerivative,
+        )
+        .expect("valid window");
         let rolling_median = compact_window_with_method(
             &timestamps_ns,
             &values,
@@ -3000,13 +3281,25 @@ mod tests {
             SpikeExtractionMethod::RollingMedianResidual,
         )
         .expect("valid window");
-        let haar = compact_window_with_method(&timestamps_ns, &values, 0, 4, SpikeExtractionMethod::HaarWaveletDetail)
-            .expect("valid window");
+        let haar = compact_window_with_method(
+            &timestamps_ns,
+            &values,
+            0,
+            4,
+            SpikeExtractionMethod::HaarWaveletDetail,
+        )
+        .expect("valid window");
 
-        assert_ne!(first_derivative.transform_values, rolling_median.transform_values);
+        assert_ne!(
+            first_derivative.transform_values,
+            rolling_median.transform_values
+        );
         assert_ne!(first_derivative.transform_values, haar.transform_values);
         assert_ne!(rolling_median.transform_values, haar.transform_values);
-        assert_ne!(first_derivative.recording_max_abs_transform, rolling_median.recording_max_abs_transform);
+        assert_ne!(
+            first_derivative.recording_max_abs_transform,
+            rolling_median.recording_max_abs_transform
+        );
     }
 
     #[test]
@@ -3023,7 +3316,8 @@ mod tests {
         let first_frame = compact_window(&timestamps_ns, &values, 0, 4).expect("valid first frame");
         assert_eq!(first_frame.transform_values[0], None);
 
-        let second_frame = compact_window(&timestamps_ns, &values, 4, 4).expect("valid second frame");
+        let second_frame =
+            compact_window(&timestamps_ns, &values, 4, 4).expect("valid second frame");
         assert_eq!(second_frame.transform_values[0], Some(1.0));
     }
 
@@ -3074,7 +3368,10 @@ mod tests {
             );
         }
         for row in [0usize, 1, 2, 3, 4, 11, 12, 13, 14, 15] {
-            assert!(!result.contains_key(&row), "row {row} should have no full window");
+            assert!(
+                !result.contains_key(&row),
+                "row {row} should have no full window"
+            );
         }
     }
 
@@ -3114,8 +3411,13 @@ mod tests {
         let (derivative, available, _reason, _rate, _) =
             compute_sg_derivative_window(&timestamps_ns, &values, 0, 21);
         assert!(available);
-        for row in SG_HALF_WIDTH..(21 - SG_HALF_WIDTH) {
-            let value = derivative[row].expect("interior row must have a derivative");
+        for (row, value) in derivative
+            .iter()
+            .enumerate()
+            .take(21 - SG_HALF_WIDTH)
+            .skip(SG_HALF_WIDTH)
+        {
+            let value = value.expect("interior row must have a derivative");
             assert!(
                 (value - 2.0).abs() < 1e-9,
                 "row {row}: expected slope 2.0, got {value}"
@@ -3158,14 +3460,20 @@ mod tests {
 
         for (row, value) in values.iter().enumerate() {
             if value.is_none() {
-                assert!(derivative[row].is_none(), "other-channel row {row} must have no derivative");
+                assert!(
+                    derivative[row].is_none(),
+                    "other-channel row {row} must have no derivative"
+                );
             }
         }
         // Interior rows of this channel's own present-sample sequence still
         // get a real derivative, purely from this channel's own neighbors.
         for i in SG_HALF_WIDTH..(21 - SG_HALF_WIDTH) {
             let row = 2 * i;
-            assert!(derivative[row].is_some(), "row {row} should have a derivative");
+            assert!(
+                derivative[row].is_some(),
+                "row {row} should have a derivative"
+            );
         }
     }
 
@@ -3186,7 +3494,10 @@ mod tests {
             compute_sg_derivative_window(&timestamps_ns, &values, 0, row_count);
         assert!(available, "reason: {reason:?}");
         assert!((rate.unwrap() - 50.0).abs() < 1e-6);
-        assert!(derivative[1].is_none(), "nonfinite row must have no derivative");
+        assert!(
+            derivative[1].is_none(),
+            "nonfinite row must have no derivative"
+        );
     }
 
     #[test]
@@ -3297,9 +3608,17 @@ mod tests {
         let (sample_order, available, reason, _) =
             compute_sample_order_derivative_window(&values, 0, 21);
         assert!(available, "reason: {reason:?}");
-        for row in SG_HALF_WIDTH..(21 - SG_HALF_WIDTH) {
-            let value = sample_order[row].expect("interior row must have a derivative");
-            assert!((value - 0.04).abs() < 1e-9, "row {row}: expected 0.04/sample, got {value}");
+        for (row, value) in sample_order
+            .iter()
+            .enumerate()
+            .take(21 - SG_HALF_WIDTH)
+            .skip(SG_HALF_WIDTH)
+        {
+            let value = value.expect("interior row must have a derivative");
+            assert!(
+                (value - 0.04).abs() < 1e-9,
+                "row {row}: expected 0.04/sample, got {value}"
+            );
         }
     }
 
@@ -3322,11 +3641,15 @@ mod tests {
         let (sample_order, available, reason, _) =
             compute_sample_order_derivative_window(&values, 0, 15);
         assert!(available, "reason: {reason:?}");
-        for row in SG_HALF_WIDTH..(15 - SG_HALF_WIDTH) {
+        for (row, value) in sample_order
+            .iter()
+            .enumerate()
+            .take(15 - SG_HALF_WIDTH)
+            .skip(SG_HALF_WIDTH)
+        {
             assert!(
-                (sample_order[row].unwrap() - 1.0).abs() < 1e-9,
-                "row {row}: unit-slope-per-sample expected, got {:?}",
-                sample_order[row]
+                (value.unwrap() - 1.0).abs() < 1e-9,
+                "row {row}: unit-slope-per-sample expected, got {value:?}"
             );
         }
     }
@@ -3335,20 +3658,24 @@ mod tests {
     fn sample_order_derivative_skips_gaps_and_nonfinite_values_like_time_mode() {
         let mut values: Vec<Option<f64>> = (0..21).map(|i| Some(i as f64)).collect();
         values[10] = None; // a gap (another channel's row)
-        values.insert(1, Some(f64::NAN)); // an explicit non-finite reading
+        values.insert(1, Some(f64::NAN)); // an explicit non-finite reading, shifting the gap above to index 11
         let row_count = values.len();
 
         let (derivative, available, reason, _) =
             compute_sample_order_derivative_window(&values, 0, row_count);
         assert!(available, "reason: {reason:?}");
-        assert!(derivative[10].is_none(), "gap row must have no derivative");
-        assert!(derivative[1].is_none(), "nonfinite row must have no derivative");
+        assert!(derivative[11].is_none(), "gap row must have no derivative");
+        assert!(
+            derivative[1].is_none(),
+            "nonfinite row must have no derivative"
+        );
     }
 
     #[test]
     fn sample_order_derivative_too_few_finite_samples_is_unavailable_with_reason() {
         let values: Vec<Option<f64>> = vec![Some(1.0); 5]; // fewer than SG_WINDOW_SIZE
-        let (derivative, available, reason, _) = compute_sample_order_derivative_window(&values, 0, 5);
+        let (derivative, available, reason, _) =
+            compute_sample_order_derivative_window(&values, 0, 5);
         assert!(!available);
         assert!(derivative.iter().all(Option::is_none));
         let reason = reason.unwrap();
@@ -3376,7 +3703,11 @@ mod tests {
         (0..40)
             .map(|i| {
                 let drift = 0.1 * i as f64;
-                Some(if i == spike_index { drift + spike_height } else { drift })
+                Some(if i == spike_index {
+                    drift + spike_height
+                } else {
+                    drift
+                })
             })
             .collect()
     }
@@ -3385,13 +3716,21 @@ mod tests {
     fn rolling_median_residual_highlights_an_isolated_spike_over_drift() {
         let values = drift_with_spike_values(20, 10.0);
         let (residual, available, reason, max_abs) = compute_present_order_spike_window(
-            &values, 0, 40, 9, "test", rolling_median_residual_by_row,
+            &values,
+            0,
+            40,
+            9,
+            "test",
+            rolling_median_residual_by_row,
         );
         assert!(available, "reason: {reason:?}");
         let spike = residual[20].expect("spike row must have a residual");
         let baseline = residual[10].expect("drift-only row must have a residual");
         assert!(spike.abs() > 5.0, "spike residual too small: {spike}");
-        assert!(baseline.abs() < 1.0, "drift-only residual should stay small: {baseline}");
+        assert!(
+            baseline.abs() < 1.0,
+            "drift-only residual should stay small: {baseline}"
+        );
         assert!((max_abs.unwrap() - spike.abs()).abs() < 1e-9);
     }
 
@@ -3399,13 +3738,21 @@ mod tests {
     fn morphological_top_hat_highlights_an_isolated_spike_over_drift() {
         let values = drift_with_spike_values(20, 10.0);
         let (top_hat, available, reason, max_abs) = compute_present_order_spike_window(
-            &values, 0, 40, 9, "test", morphological_top_hat_by_row,
+            &values,
+            0,
+            40,
+            9,
+            "test",
+            morphological_top_hat_by_row,
         );
         assert!(available, "reason: {reason:?}");
         let spike = top_hat[20].expect("spike row must have a top-hat value");
         let baseline = top_hat[10].expect("drift-only row must have a top-hat value");
         assert!(spike.abs() > 5.0, "spike top-hat too small: {spike}");
-        assert!(baseline.abs() < 1e-9, "drift-only top-hat should be ~0: {baseline}");
+        assert!(
+            baseline.abs() < 1e-9,
+            "drift-only top-hat should be ~0: {baseline}"
+        );
         assert!((max_abs.unwrap() - spike.abs()).abs() < 1e-9);
     }
 
@@ -3413,25 +3760,41 @@ mod tests {
     fn butterworth_high_pass_highlights_an_isolated_spike_over_drift() {
         let values = drift_with_spike_values(20, 10.0);
         let (filtered, available, reason, _max_abs) = compute_present_order_spike_window(
-            &values, 0, 40, 20, "test", butterworth_high_pass_by_row,
+            &values,
+            0,
+            40,
+            20,
+            "test",
+            butterworth_high_pass_by_row,
         );
         assert!(available, "reason: {reason:?}");
         let spike = filtered[20].expect("spike row must have a filtered value");
         let baseline = filtered[35].expect("late drift-only row must have a filtered value");
-        assert!(spike.abs() > baseline.abs() * 3.0, "spike ({spike}) should dominate drift ({baseline})");
+        assert!(
+            spike.abs() > baseline.abs() * 3.0,
+            "spike ({spike}) should dominate drift ({baseline})"
+        );
     }
 
     #[test]
     fn savitzky_golay_residual_highlights_an_isolated_spike_over_drift() {
         let values = drift_with_spike_values(20, 10.0);
         let (residual, available, reason, max_abs) = compute_present_order_spike_window(
-            &values, 0, 40, 11, "test", savitzky_golay_residual_by_row,
+            &values,
+            0,
+            40,
+            11,
+            "test",
+            savitzky_golay_residual_by_row,
         );
         assert!(available, "reason: {reason:?}");
         let spike = residual[20].expect("spike row must have a residual");
         let baseline = residual[10].expect("drift-only row must have a residual");
         assert!(spike.abs() > 5.0, "spike residual too small: {spike}");
-        assert!(baseline.abs() < 1e-6, "drift-only residual should be ~0: {baseline}");
+        assert!(
+            baseline.abs() < 1e-6,
+            "drift-only residual should be ~0: {baseline}"
+        );
         assert!((max_abs.unwrap() - spike.abs()).abs() < 1e-9);
         // True recording edges (present index 0 and 39) still get a value --
         // half-width 0 smooths to the point itself, so the residual is
@@ -3444,13 +3807,30 @@ mod tests {
     fn haar_wavelet_detail_highlights_an_isolated_spike_over_drift() {
         let values = drift_with_spike_values(20, 10.0);
         let (detail, available, reason, max_abs) = compute_present_order_spike_window(
-            &values, 0, 40, 8, "test", haar_wavelet_detail_by_row,
+            &values,
+            0,
+            40,
+            8,
+            "test",
+            haar_wavelet_detail_by_row,
         );
         assert!(available, "reason: {reason:?}");
         let spike = detail[20].expect("spike row must have a detail coefficient");
         let baseline = detail[10].expect("drift-only row must have a detail coefficient");
-        assert!(spike.abs() > baseline.abs() * 3.0, "spike ({spike}) should dominate drift ({baseline})");
-        assert!((max_abs.unwrap() - spike.abs()).abs() < 1e-9);
+        assert!(
+            spike.abs() > baseline.abs() * 3.0,
+            "spike ({spike}) should dominate drift ({baseline})"
+        );
+        // `max_abs` is the recording-wide max over every computed detail
+        // coefficient -- not necessarily the value exactly at the labeled
+        // spike row: this asymmetric (before-excludes/after-includes-self)
+        // window combined with a monotonic drift makes the row just *before*
+        // an isolated spike swing slightly further than the spike row itself.
+        let true_peak = detail
+            .iter()
+            .flatten()
+            .fold(0.0_f64, |max, value| max.max(value.abs()));
+        assert!((max_abs.unwrap() - true_peak).abs() < 1e-9);
         // Only the true last present sample of the whole recording (nothing
         // after it to compare against) lacks a detail coefficient; the first
         // present sample's "before" window shrinks to just itself instead.
@@ -3462,7 +3842,8 @@ mod tests {
     fn present_order_spike_methods_are_unavailable_with_fewer_than_two_present_samples() {
         let values: Vec<Option<f64>> = vec![Some(1.0)];
         for transform in [
-            rolling_median_residual_by_row as fn(&[(usize, f64)], usize) -> std::collections::HashMap<usize, f64>,
+            rolling_median_residual_by_row
+                as fn(&[(usize, f64)], usize) -> std::collections::HashMap<usize, f64>,
             morphological_top_hat_by_row,
             butterworth_high_pass_by_row,
             savitzky_golay_residual_by_row,
@@ -3485,12 +3866,18 @@ mod tests {
     /// normalization scale either.
     #[test]
     fn window_slice_matches_the_corresponding_slice_of_the_whole_recording_transform() {
+        type SpikeTransformFn = fn(&[(usize, f64)], usize) -> std::collections::HashMap<usize, f64>;
+
         let values = drift_with_spike_values(20, 10.0);
-        let methods: [(&str, fn(&[(usize, f64)], usize) -> std::collections::HashMap<usize, f64>, usize); 5] = [
+        let methods: [(&str, SpikeTransformFn, usize); 5] = [
             ("rolling_median_residual", rolling_median_residual_by_row, 9),
             ("morphological_top_hat", morphological_top_hat_by_row, 9),
             ("butterworth_high_pass", butterworth_high_pass_by_row, 20),
-            ("savitzky_golay_residual", savitzky_golay_residual_by_row, 11),
+            (
+                "savitzky_golay_residual",
+                savitzky_golay_residual_by_row,
+                11,
+            ),
             ("haar_wavelet_detail", haar_wavelet_detail_by_row, 8),
         ];
         for (name, transform, window) in methods {
@@ -3501,7 +3888,8 @@ mod tests {
             assert!(whole_available && sub_available, "method {name}");
             for row in 15..25 {
                 assert_eq!(
-                    whole[row], sub[row - 15],
+                    whole[row],
+                    sub[row - 15],
                     "method {name}, row {row}: window slice must match the whole-recording transform"
                 );
             }
@@ -3514,7 +3902,10 @@ mod tests {
 
     #[test]
     fn spike_extraction_method_defaults_to_first_derivative_and_units_are_method_specific() {
-        assert_eq!(SpikeExtractionMethod::default(), SpikeExtractionMethod::FirstDerivative);
+        assert_eq!(
+            SpikeExtractionMethod::default(),
+            SpikeExtractionMethod::FirstDerivative
+        );
         assert_eq!(SpikeExtractionMethod::FirstDerivative.units(), "per_second");
         for method in [
             SpikeExtractionMethod::RollingMedianResidual,

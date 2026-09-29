@@ -637,8 +637,10 @@ mod tests {
 
     #[test]
     fn an_explicit_wifi_choice_survives_a_persistence_round_trip() {
-        let mut settings = AppSettings::default();
-        settings.watch_transport = WatchTransport::WiFi;
+        let settings = AppSettings {
+            watch_transport: WatchTransport::WiFi,
+            ..Default::default()
+        };
         let json = serde_json::to_value(&settings).expect("serializable");
         assert_eq!(json["watchTransport"], "wifi");
         let restored: AppSettings = serde_json::from_value(json).expect("deserializable");
@@ -693,8 +695,10 @@ mod tests {
         // A persisted settings object where the user explicitly disabled
         // orientation, but the file predates acceleration/gyroscope having
         // their own persisted entries.
-        let mut settings = AppSettings::default();
-        settings.watch_sensors_enabled = HashMap::from([(SENSOR_ORIENTATION.to_string(), false)]);
+        let settings = AppSettings {
+            watch_sensors_enabled: HashMap::from([(SENSOR_ORIENTATION.to_string(), false)]),
+            ..Default::default()
+        };
         settings
             .validate()
             .expect("partial map must still validate");
@@ -716,12 +720,14 @@ mod tests {
         // PPG isn't in `watch_sensors_enabled`/`CONTROLLABLE_SENSOR_IDS` at
         // all (it's controlled purely by rate, see `SENSOR_PPG_FLUSH`), so
         // disabling every motion sensor must leave its rate untouched.
-        let mut settings = AppSettings::default();
-        settings.watch_sensors_enabled = HashMap::from([
-            (SENSOR_ORIENTATION.to_string(), false),
-            (SENSOR_ACCELERATION.to_string(), false),
-            (SENSOR_GYROSCOPE.to_string(), false),
-        ]);
+        let settings = AppSettings {
+            watch_sensors_enabled: HashMap::from([
+                (SENSOR_ORIENTATION.to_string(), false),
+                (SENSOR_ACCELERATION.to_string(), false),
+                (SENSOR_GYROSCOPE.to_string(), false),
+            ]),
+            ..Default::default()
+        };
         assert!(!CONTROLLABLE_SENSOR_IDS.contains(&SENSOR_PPG_FLUSH));
         assert_eq!(
             settings.watch_ppg_flush_rate_hz,

@@ -113,22 +113,40 @@ impl<M: PinchModel> DesktopPinchRuntime<M> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use interaction_engine::{
+        DecisionReason, ForceReleaseReason, GestureIntent, GesturePolicy, PolicyDecision,
+        PolicyMode,
+    };
+
     use super::*;
 
     struct StubModel {
         outputs: std::collections::VecDeque<Result<[f32; 3], PinchModelError>>,
+        /// Shared with the test so it can assert not just *what* the runtime
+        /// decided but whether the model was invoked at all -- the only way
+        /// to prove a fail-closed path short-circuits before inference.
+        calls: Arc<AtomicUsize>,
     }
 
     impl StubModel {
         fn new(outputs: Vec<Result<[f32; 3], PinchModelError>>) -> Self {
             Self {
                 outputs: outputs.into(),
+                calls: Arc::new(AtomicUsize::new(0)),
             }
+        }
+
+        fn call_counter(&self) -> Arc<AtomicUsize> {
+            Arc::clone(&self.calls)
         }
     }
 
     impl PinchModel for StubModel {
         fn predict(&mut self, _features: &[f32]) -> Result<[f32; 3], PinchModelError> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
             self.outputs
                 .pop_front()
                 .unwrap_or(Err(PinchModelError::Backend(
@@ -241,10 +259,31 @@ mod tests {
     #[test]
     fn non_finite_input_features_fail_closed_without_calling_model() {
         let model = StubModel::new(vec![]);
+        let calls = model.call_counter();
         let mut runtime = DesktopPinchRuntime::new(model, 0.80, 0.80);
         let mut bad_features = features();
         bad_features[0] = f32::NAN;
         assert_eq!(runtime.submit(&bad_features, 100), None);
+        assert_eq!(
+            calls.load(Ordering::Relaxed),
+            0,
+            "the model must never see a non-finite input"
+        );
+    }
+
+    #[test]
+    fn reset_never_invokes_the_model() {
+        let model = StubModel::new(vec![Ok([0.1, 0.9, 0.0])]);
+        let calls = model.call_counter();
+        let mut runtime = DesktopPinchRuntime::new(model, 0.80, 0.80);
+        runtime.submit(&features(), 100);
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+        runtime.reset(150);
+        assert_eq!(
+            calls.load(Ordering::Relaxed),
+            1,
+            "reset must not run inference"
+        );
     }
 
     #[test]
@@ -312,6 +351,135 @@ mod tests {
         let model = StubModel::new(vec![]);
         let mut runtime = DesktopPinchRuntime::new(model, 0.80, 0.80);
         assert_eq!(runtime.reset(150), None);
+    }
+
+    /// Mirrors the desktop's live seam (`inference.rs::ingest_ppg_window`):
+    /// `Off` must never reach the model, `Monitor`/`Live` classify and hand
+    /// every resulting transition to `GesturePolicy` and nothing else. Kept
+    /// here so the crate that owns the classifier proves the mode contract
+    /// against a real `GesturePolicy`, not a restatement of it.
+    fn run_windows(
+        mode: PolicyMode,
+        outputs: Vec<Result<[f32; 3], PinchModelError>>,
+    ) -> (Vec<PolicyDecision>, usize) {
+        let window_count = outputs.len();
+        let model = StubModel::new(outputs);
+        let calls = model.call_counter();
+        let mut runtime = DesktopPinchRuntime::new(model, 0.80, 0.80);
+        let mut policy = GesturePolicy::default();
+        policy.set_mode(mode);
+
+        let mut decisions = Vec::new();
+        for index in 0..window_count {
+            if mode == PolicyMode::Off {
+                continue;
+            }
+            let timestamp_ns = (index as u64 + 1) * 100;
+            if let Some(transition) = runtime.submit(&features(), timestamp_ns) {
+                decisions.push(policy.on_transition(transition));
+            }
+        }
+        (decisions, calls.load(Ordering::Relaxed))
+    }
+
+    /// A decision that would actually reach an action-performing desktop
+    /// adapter (the overlay / volume backend), matching
+    /// `inference.rs::decision_actuates`.
+    fn actuates(decision: &PolicyDecision) -> bool {
+        decision.live
+            && matches!(
+                decision.intent,
+                GestureIntent::VolumeGrab | GestureIntent::VolumeRelease
+            )
+    }
+
+    fn pinch_arc() -> Vec<Result<[f32; 3], PinchModelError>> {
+        vec![
+            Ok([0.05, 0.9, 0.05]),  // start
+            Ok([0.1, 0.6, 0.3]),    // hold
+            Ok([0.05, 0.05, 0.90]), // release
+        ]
+    }
+
+    #[test]
+    fn off_mode_never_invokes_the_model_and_produces_no_decisions() {
+        let (decisions, calls) = run_windows(PolicyMode::Off, pinch_arc());
+        assert_eq!(calls, 0, "Off must never reach the model backend");
+        assert!(decisions.is_empty());
+    }
+
+    #[test]
+    fn monitor_mode_classifies_every_window_but_actuates_nothing() {
+        let (decisions, calls) = run_windows(PolicyMode::Monitor, pinch_arc());
+        assert_eq!(calls, 3, "Monitor must still classify every window");
+        let reasons: Vec<_> = decisions.iter().map(|decision| decision.reason).collect();
+        assert_eq!(
+            reasons,
+            vec![
+                DecisionReason::Started,
+                DecisionReason::Held,
+                DecisionReason::Released
+            ],
+            "Monitor must record the full grab/release arc for observability"
+        );
+        assert!(
+            !decisions.iter().any(actuates),
+            "Monitor produced an executable decision: {decisions:?}"
+        );
+    }
+
+    #[test]
+    fn live_mode_classifies_and_actuates_the_grab_and_its_release() {
+        let (decisions, calls) = run_windows(PolicyMode::Live, pinch_arc());
+        assert_eq!(calls, 3);
+        assert!(actuates(&decisions[0]));
+        assert_eq!(decisions[0].intent, GestureIntent::VolumeGrab);
+        assert!(!actuates(&decisions[1]), "Held must not actuate");
+        assert!(actuates(&decisions[2]));
+        assert_eq!(decisions[2].intent, GestureIntent::VolumeRelease);
+    }
+
+    #[test]
+    fn a_backend_failure_mid_grab_releases_in_live_but_stays_inert_in_monitor() {
+        let failing_arc = || {
+            vec![
+                Ok([0.05, 0.9, 0.05]),
+                Err(PinchModelError::Backend("backend died".to_string())),
+            ]
+        };
+        let (live, _) = run_windows(PolicyMode::Live, failing_arc());
+        assert_eq!(live[1].intent, GestureIntent::VolumeRelease);
+        assert!(
+            live[1].live,
+            "a failed backend must release a grab it really took"
+        );
+
+        let (monitor, calls) = run_windows(PolicyMode::Monitor, failing_arc());
+        assert_eq!(calls, 2, "Monitor still runs the failing window");
+        assert_eq!(monitor[1].intent, GestureIntent::VolumeRelease);
+        assert!(
+            !monitor[1].live,
+            "Monitor must not reach the overlay even to release"
+        );
+    }
+
+    #[test]
+    fn a_monitor_grab_survives_no_mode_change_and_its_forced_release_stays_inert() {
+        // The desktop force-releases the policy on a rejected/stale window
+        // (`force_release_policy`). Under Monitor that must stay inert, or a
+        // dropped PPG window would cancel an unrelated Watch-button grab.
+        let model = StubModel::new(vec![Ok([0.05, 0.9, 0.05])]);
+        let mut runtime = DesktopPinchRuntime::new(model, 0.80, 0.80);
+        let mut policy = GesturePolicy::default();
+        policy.set_mode(PolicyMode::Monitor);
+        let transition = runtime.submit(&features(), 100).expect("must start");
+        assert!(!policy.on_transition(transition).live);
+
+        runtime.reset(200);
+        let decision = policy.force_release(ForceReleaseReason::SensorQualityRejected);
+        assert_eq!(decision.intent, GestureIntent::VolumeRelease);
+        assert!(!decision.live);
+        assert!(!runtime.is_active());
     }
 
     #[test]

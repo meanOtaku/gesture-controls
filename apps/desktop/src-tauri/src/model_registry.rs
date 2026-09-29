@@ -21,7 +21,9 @@ use uuid::Uuid;
 use crate::inference::{GesturePolicyRuntime, PinchInferenceRuntime};
 use crate::model_lab::{self, MODEL_LAB_DIR_NAME};
 use interaction_engine::{ForceReleaseReason, GestureIntent};
-use pinch_inference::{CLASS_COUNT, FEATURE_COUNT, FEATURE_NAMES};
+#[cfg(test)]
+use pinch_inference::FEATURE_COUNT;
+use pinch_inference::{CLASS_COUNT, FEATURE_NAMES};
 
 /// Filename of the validated TFLite bundle's metadata (see `bundle.py`'s
 /// `METADATA_FILENAME`). Only a model directory containing this file (plus
@@ -375,6 +377,9 @@ struct BundleClassEntry {
 
 #[derive(Debug, Deserialize)]
 struct BundleFeatureContract {
+    // Accepted for forward-compatible parsing of the bundle schema but not
+    // yet read by any validation.
+    #[allow(dead_code)]
     #[serde(default)]
     version: Option<u64>,
     count: usize,
@@ -387,8 +392,12 @@ struct BundleMetadata {
     model: BundleModelField,
     classes: Vec<BundleClassEntry>,
     feature_contract: BundleFeatureContract,
+    // Accepted for forward-compatible parsing of the bundle schema but not
+    // yet read by any validation.
+    #[allow(dead_code)]
     #[serde(default)]
     preprocessing: Option<serde_json::Value>,
+    #[allow(dead_code)]
     #[serde(default)]
     window_semantics: Option<serde_json::Value>,
 }
@@ -497,9 +506,7 @@ fn load_and_verify_bundle(dir: &Path) -> Result<(BundleMetadata, String, Vec<usi
     }
 
     if metadata.feature_contract.count != metadata.feature_contract.ordered_names.len() {
-        return Err(
-            "bundle feature_contract.count must match ordered_names length".to_string(),
-        );
+        return Err("bundle feature_contract.count must match ordered_names length".to_string());
     }
     let feature_indices = validate_feature_subset(&metadata.feature_contract.ordered_names)?;
 
@@ -663,23 +670,39 @@ fn force_release_before_swap(
     }
 }
 
-/// The active model's id, thresholds, and sensor-quality gate, or `None` if
-/// inference is `Off` or no model is active -- callers should skip quality
-/// gating and classification entirely in that case, since there is nothing
-/// running that a stale/degraded window could corrupt.
-pub(crate) fn active_model_runtime_config(
-    app: &AppHandle,
-) -> Option<(String, ModelThresholds, QualityGateConfig)> {
+/// Everything the live inference path needs to decide what to do with one
+/// raw sensor window: which model is active, what mode the registry is in,
+/// and that model's own thresholds and sensor-quality gate.
+pub(crate) struct ActiveModelRuntimeConfig {
+    pub model_id: String,
+    pub inference_mode: InferenceMode,
+    pub thresholds: ModelThresholds,
+    pub quality_gate: QualityGateConfig,
+}
+
+/// The [`ActiveModelRuntimeConfig`] for the currently active model, or
+/// `None` if no model is active at all -- in which case there is nothing
+/// running that a stale/degraded window could corrupt, so callers should
+/// skip quality gating and classification entirely.
+///
+/// The Off/Monitor/Live gate itself is deliberately *not* applied here: it
+/// belongs to the single live-path choke point in
+/// [`crate::inference::ingest_ppg_window`] (see `inference::mode_classifies`),
+/// so the rule that `Off` never reaches a model is stated and unit-tested in
+/// one obvious place rather than hidden behind this lookup's `None`.
+pub(crate) fn active_model_runtime_config(app: &AppHandle) -> Option<ActiveModelRuntimeConfig> {
     let index = load_registry(app);
-    if index.inference_mode == InferenceMode::Off {
-        return None;
-    }
     let active_id = index.active_model_id.clone()?;
     index
         .models
         .iter()
         .find(|model| model.id == active_id)
-        .map(|model| (active_id, model.thresholds, model.quality_gate))
+        .map(|model| ActiveModelRuntimeConfig {
+            model_id: active_id,
+            inference_mode: index.inference_mode,
+            thresholds: model.thresholds,
+            quality_gate: model.quality_gate,
+        })
 }
 
 /// Absolute path to `model_id`'s `model.tflite` file, for loading into a real
@@ -811,17 +834,17 @@ pub fn import_custom_tflite_bundle(
     runtime: State<'_, ModelRegistryRuntime>,
 ) -> Result<RegistryView, String> {
     let source_metadata = PathBuf::from(&metadata_path);
-    if source_metadata.file_name().and_then(|name| name.to_str()) != Some(TFLITE_METADATA_FILE_NAME) {
+    if source_metadata.file_name().and_then(|name| name.to_str()) != Some(TFLITE_METADATA_FILE_NAME)
+    {
         return Err(format!(
             "select the bundle's {TFLITE_METADATA_FILE_NAME}, not an arbitrary file"
         ));
     }
-    let source_dir = source_metadata.parent().ok_or_else(|| {
-        format!("{TFLITE_METADATA_FILE_NAME} has no containing bundle directory")
-    })?;
-    load_and_verify_bundle(source_dir).map_err(|error| {
-        format!("custom bundle rejected before import: {error}")
-    })?;
+    let source_dir = source_metadata
+        .parent()
+        .ok_or_else(|| format!("{TFLITE_METADATA_FILE_NAME} has no containing bundle directory"))?;
+    load_and_verify_bundle(source_dir)
+        .map_err(|error| format!("custom bundle rejected before import: {error}"))?;
 
     let _guard = runtime
         .lock
@@ -832,10 +855,16 @@ pub fn import_custom_tflite_bundle(
     fs::create_dir_all(&destination)
         .map_err(|error| format!("failed to create private bundle storage: {error}"))?;
     let copy_result = (|| -> Result<(), String> {
-        fs::copy(source_dir.join(TFLITE_METADATA_FILE_NAME), destination.join(TFLITE_METADATA_FILE_NAME))
-            .map_err(|error| format!("failed to copy {TFLITE_METADATA_FILE_NAME}: {error}"))?;
-        fs::copy(source_dir.join(TFLITE_MODEL_FILE_NAME), destination.join(TFLITE_MODEL_FILE_NAME))
-            .map_err(|error| format!("failed to copy {TFLITE_MODEL_FILE_NAME}: {error}"))?;
+        fs::copy(
+            source_dir.join(TFLITE_METADATA_FILE_NAME),
+            destination.join(TFLITE_METADATA_FILE_NAME),
+        )
+        .map_err(|error| format!("failed to copy {TFLITE_METADATA_FILE_NAME}: {error}"))?;
+        fs::copy(
+            source_dir.join(TFLITE_MODEL_FILE_NAME),
+            destination.join(TFLITE_MODEL_FILE_NAME),
+        )
+        .map_err(|error| format!("failed to copy {TFLITE_MODEL_FILE_NAME}: {error}"))?;
         load_and_verify_bundle(&destination)
             .map_err(|error| format!("custom bundle rejected after copy: {error}"))?;
         Ok(())

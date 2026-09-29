@@ -139,6 +139,68 @@ is a local-environment limitation, not an unverified code path in CI.
   Draft → Evaluated → Approved lifecycle and complete safe intent bindings;
   activation revalidates the stored artifact.
 
+## GC-003 — Off/Monitor/Live gating of the live inference path (2026-09-27)
+
+- State found: the wiring this task was scoped around was already in place.
+  `ingest_ppg_window` already quality-gated a window, fused it, loaded the
+  active model through `ActiveModelSnapshot::verified` /
+  `active_model_file_path` into `DesktopPinchRuntime<Box<dyn PinchModel>>`,
+  and fed the resulting `PinchTransition` to `GesturePolicyRuntime`. What was
+  missing was an explicit, testable Off/Monitor/Live contract — and Monitor
+  was not actually action-free.
+- **Real defect found and fixed.** `GesturePolicy` marked every release
+  `live` on the rationale that "releasing is always safe". It is not safe
+  when the policy never took the grab: `OverlayRuntime::release` hides the
+  overlay window and ends the wrist-rotation interaction outright, and the
+  Watch button grabs that same overlay directly (`WatchEvent::Button` in
+  `lib.rs`) without going through the policy. So under `Monitor`, a
+  model-driven `Released` — or any forced release from a rejected/stale PPG
+  window, a fusion rejection, or a model load failure — would tear down a
+  live Watch-button volume grab. `PolicyState::Grabbed` now carries
+  `executed`, set from the `Started` decision's own `live` flag, and
+  `release_decision` marks the release `live` only when the grab it ends was
+  executed. A Live grab is still unconditionally releasable, so nothing about
+  the fail-closed guarantee weakens.
+- `set_mode` now force-releases on any mode change while grabbed. Previously
+  a Monitor-recorded grab survived an upgrade into Live and swallowed the
+  user's first real pinch as `IgnoredAlreadyGrabbed`.
+- The gate itself is now named and testable rather than implicit:
+  `inference::mode_classifies` (does a window reach the model at all?) and
+  `inference::decision_actuates` (does a decision reach the overlay/volume
+  backend?). `model_registry::active_model_runtime_config` returns a new
+  `ActiveModelRuntimeConfig` carrying the mode instead of silently folding
+  `Off` into `None`.
+- Absent-`litert` behavior is unchanged and was re-confirmed by reading:
+  `load_model_backend` yields `UnavailablePinchModel`, whose `predict`
+  always errors, so `DesktopPinchRuntime::submit` fails closed and the
+  desktop behaves exactly as `Off`. Default builds stay LiteRT-free.
+- Verified locally (real output):
+  `cargo test -p pinch-inference -p interaction-engine` — **112 passed, 0
+  failed** (pinch-inference lib 50, interaction-engine lib 25, plus
+  interaction-engine's 5 integration binaries at 7/4/1/2/23).
+  `cargo clippy -p pinch-inference -p interaction-engine --all-targets --
+  -D warnings -A clippy::doc_lazy_continuation` — clean. That one allow is
+  for 5 pre-existing `doc_lazy_continuation` errors at
+  `crates/interaction-engine/src/lib.rs:562-566`, untouched by this slice and
+  already failing at `c12899f` under rustfmt/clippy 1.9.0.
+  `rustfmt --edition 2024 --check` — clean on all three changed Rust files.
+- **Not cleared / CI-verified only:** `cargo test -p spatial-gesture-desktop`,
+  `cargo clippy --all-targets -- -D warnings`, `cargo fmt --all -- --check`.
+  This host had no Rust toolchain at all (rustup was installed into the run's
+  scratch), and still has no `pkg-config`, no GTK/glib/webkit dev headers, and
+  no passwordless root — the same recurring blocker as GC-002/GC-009/GC-018/
+  GC-019/GC-024/GC-025/GC-037. Staging the 747-package apt dependency closure
+  in user space was evaluated and rejected as impractical. The
+  `inference.rs`/`model_registry.rs` edits and the 8 new `InferenceMode`
+  gating tests are therefore **unrun locally**; `desktop-ci.yml` is the
+  verification path. `cargo fmt --all -- --check` additionally reports
+  pre-existing drift in `recording_bundle.rs`, `training_label_mapping.rs`,
+  and unrelated regions of `model_registry.rs`; that drift predates this
+  change and was deliberately left alone.
+- **Still deferred:** feature-enabled cross-platform packaging/build
+  validation, and any real Galaxy Watch Off/Monitor/Live hardware walkthrough.
+  No Wear OS / Android change was made — this slice is desktop-only.
+
 ## Remaining work
 
 ## GC-008 — Bright electric-blue desktop outlines (2026-09-15)
@@ -515,11 +577,12 @@ remain **DEFERRED / NOT CLEARED**.
   here. `cargo clippy -p watch-bridge --all-targets -- -D warnings` — clean;
   focused `rustfmt --check` clean on every Rust file this change touches.
   `git diff --check` — clean. `graphify update .` — run.
-- **Not cleared:** the Tauri desktop crate and the Wear OS module were not
-  compiled here. `cargo check -p spatial-gesture-desktop` still fails on the
-  pre-existing host `pkg-config`/GTK blocker (GC-002/GC-009/GC-018/GC-019/
-  GC-024/GC-025), so the new `settings.rs`/`watch.rs`/`lib.rs` code and its 3
-  new settings tests are unrun; the Gradle wrapper starts, but no Android SDK
-  is installed on this host, so the 2 new Wear OS test classes are unrun. All
-  BLE behaviour needs the hardware walkthrough listed in
-  `docs/protocols/watch-ble-transport.md`.
+- **Wear OS cleared:** installed a user-local Android SDK/JDK, fixed the
+  unqualified `AdvertiseCallback` failure constants found by the first real
+  compile, then ran `./gradlew --no-daemon test assembleDebug` successfully
+  (40 tasks). Both BLE test classes now run and a debug APK is produced.
+- **Still hardware-blocked:** no Android device is attached and this VM has no
+  Bluetooth adapter, so the real Galaxy Watch + desktop walkthrough in
+  `docs/protocols/watch-ble-transport.md` remains a physical-device gate.
+- The Tauri desktop crate remains CI-verified because this host still lacks
+  the system GTK/WebKit development packages required for a local build.

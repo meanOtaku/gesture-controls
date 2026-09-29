@@ -9,15 +9,26 @@
 //!
 //! [`ingest_ppg_window`] is the desktop's single entry point for a raw fused
 //! PPG window (see `crate::watch::WatchEvent::Ppg` handling in
-//! `crate::lib::run`): it gates the window on sensor quality and ordering,
-//! then emits a [`PpgWindowObservation`] regardless of outcome. An accepted
-//! window is fused with the last-known watch orientation (see
+//! `crate::lib::run`): it gates the window first on the registry's
+//! [`InferenceMode`] (see [`mode_classifies`] -- under `Off` it returns
+//! before the window is inspected at all, so no model execution can
+//! happen), then on sensor quality and ordering, then emits a
+//! [`PpgWindowObservation`] regardless of outcome. An accepted window is
+//! fused with the last-known watch orientation (see
 //! [`PinchInferenceRuntime::observe_orientation`], driven by
 //! `WatchEvent::Orientation`) and classified by the active model from
-//! [`crate::model_registry`] via the `pinch-inference` crate. [`ingest_ppg_window`]
-//! plus [`report_pinch_transition`] are both seams into
-//! [`GesturePolicyRuntime`]: the former is live desktop inference, the latter
-//! is for replay/testing tooling that has already classified a window itself.
+//! [`crate::model_registry`] via the `pinch-inference` crate -- running the
+//! real LiteRT backend when this build carries the `litert-inference`
+//! feature, and failing closed against
+//! [`pinch_inference::UnavailablePinchModel`] when it does not (see
+//! [`load_model_backend`]). [`ingest_ppg_window`] plus
+//! [`report_pinch_transition`] are both seams into [`GesturePolicyRuntime`]:
+//! the former is live desktop inference, the latter is for replay/testing
+//! tooling that has already classified a window itself. Neither executes
+//! anything directly: [`apply_decision`] is the sole actuation point and
+//! only ever runs what [`GesturePolicy`] itself marked live, which is why
+//! `Monitor` classifies and reports without ever reaching the overlay or
+//! the volume backend.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -55,9 +66,10 @@ pub const GESTURE_POLICY_EVENT: &str = "gesture-policy-decision";
 pub const PPG_WINDOW_OBSERVED_EVENT: &str = "gesture-ppg-window-observed";
 
 /// Why [`ingest_ppg_window`] did or did not let a window proceed.
-/// `Accepted` is the architecture seam: no LiteRT execution runs here yet
-/// (see module docs) -- this is what a future local inference runner or
-/// offline replay tool would consume to classify the window and call
+/// `Accepted` is the architecture seam: an accepted window is what the live
+/// path fuses and classifies against the active model (see
+/// [`PinchInferenceRuntime::classify`]), and equally what an offline replay
+/// tool consumes to classify the same window itself and call
 /// [`report_pinch_transition`].
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -194,24 +206,47 @@ impl PpgIngestRuntime {
     }
 }
 
+/// The Off/Monitor/Live gate for the live desktop inference path, and the
+/// only place `Off` is interpreted. `Off` must never reach a model at all --
+/// not the fusion state, not the feature extractor, not the backend -- so
+/// [`ingest_ppg_window`] returns on `false` before it touches the window.
+/// `Monitor` and `Live` both classify identically; the difference between
+/// them is decided downstream by [`GesturePolicy`] alone and enforced in
+/// [`decision_actuates`], never by short-circuiting classification here
+/// (which is exactly what makes Monitor a faithful preview of Live).
+fn mode_classifies(mode: InferenceMode) -> bool {
+    match mode {
+        InferenceMode::Off => false,
+        InferenceMode::Monitor | InferenceMode::Live => true,
+    }
+}
+
 /// Ingests one raw PPG batch into the desktop gesture-policy pipeline: the
 /// single call site `WatchEvent::Ppg` is routed through (see `crate::lib`).
-/// Skipped entirely when inference is `Off` or no model is active (see
-/// [`model_registry::active_model_runtime_config`]) -- there is no grab to
-/// protect and nothing for replay tooling to usefully compare against.
-/// Otherwise every window -- accepted or rejected -- is reported once via
-/// [`PPG_WINDOW_OBSERVED_EVENT`] for replay/comparison observability. A
-/// rejection (whether from stale/out-of-order ordering or the sensor-quality
-/// gate) forces an immediate, safe release, exactly like an explicit
-/// model-runtime failure. An accepted window is fused with the last-known
-/// watch orientation and classified against the active model; the resulting
-/// transition (if any) is fed straight into [`GesturePolicyRuntime`].
+/// Skipped entirely when inference is `Off` (see [`mode_classifies`]) or no
+/// model is active (see [`model_registry::active_model_runtime_config`]) --
+/// there is no grab to protect and nothing for replay tooling to usefully
+/// compare against. Otherwise every window -- accepted or rejected -- is
+/// reported once via [`PPG_WINDOW_OBSERVED_EVENT`] for replay/comparison
+/// observability. A rejection (whether from stale/out-of-order ordering or
+/// the sensor-quality gate) forces an immediate, safe release, exactly like
+/// an explicit model-runtime failure. An accepted window is fused with the
+/// last-known watch orientation and classified against the active model; the
+/// resulting transition (if any) is fed straight into
+/// [`GesturePolicyRuntime`] and nowhere else.
 pub(crate) fn ingest_ppg_window(app: &AppHandle, sample: &WatchPpgBatchSample) {
-    let Some((active_model_id, thresholds, quality_gate)) =
-        model_registry::active_model_runtime_config(app)
-    else {
+    let Some(config) = model_registry::active_model_runtime_config(app) else {
         return;
     };
+    if !mode_classifies(config.inference_mode) {
+        return;
+    }
+    let model_registry::ActiveModelRuntimeConfig {
+        model_id: active_model_id,
+        thresholds,
+        quality_gate,
+        ..
+    } = config;
     let ingest = app.state::<PpgIngestRuntime>();
     let outcome = match ingest.evaluate(sample, &quality_gate) {
         Ok(outcome) => outcome,
@@ -264,6 +299,22 @@ pub(crate) fn ingest_ppg_window(app: &AppHandle, sample: &WatchPpgBatchSample) {
             match gesture_policy.on_transition(transition) {
                 Ok(decision) => {
                     let decision = pinch.resolve_intent(decision);
+                    // `on_transition` recorded `executed` from the generic,
+                    // pre-binding intent (every `Started` is provisionally
+                    // `VolumeGrab`); now that `resolve_intent` has remapped it
+                    // through the active model's bindings, correct the
+                    // policy's internal state to match -- otherwise a model
+                    // that binds `pinch_start` to `NoAction` would still be
+                    // recorded as having executed, so its later
+                    // `pinch_release` (bound to `VolumeRelease`) would
+                    // actuate a real overlay release for a grab that never
+                    // happened.
+                    if decision.reason == DecisionReason::Started
+                        && let Err(error) =
+                            gesture_policy.correct_grab_executed(decision_actuates(decision))
+                    {
+                        warn!(%error, "failed to correct gesture policy executed state");
+                    }
                     apply_decision(app, decision);
                 }
                 Err(error) => warn!(%error, "failed to apply classified pinch transition"),
@@ -563,6 +614,19 @@ impl GesturePolicyRuntime {
         Ok(policy.on_transition(transition))
     }
 
+    /// See [`GesturePolicy::correct_grab_executed`]. Called from
+    /// [`ingest_ppg_window`] right after [`PinchInferenceRuntime::resolve_intent`]
+    /// remaps a `Started` decision through the active model's bindings, since
+    /// `on_transition` above only ever sees the generic pre-binding intent.
+    fn correct_grab_executed(&self, executed: bool) -> Result<(), String> {
+        let mut policy = self
+            .policy
+            .lock()
+            .map_err(|_| "gesture policy lock was poisoned".to_string())?;
+        policy.correct_grab_executed(executed);
+        Ok(())
+    }
+
     pub(crate) fn force_release(
         &self,
         reason: ForceReleaseReason,
@@ -583,17 +647,29 @@ impl GesturePolicyRuntime {
     }
 }
 
+/// Whether `decision` will reach an action-performing desktop adapter (the
+/// overlay window / volume backend) at all. This is the single predicate
+/// that separates `Monitor` from `Live` on the desktop side: every decision
+/// is emitted for observability, but only one this returns `true` for is
+/// executed. Intents not yet wired to a desktop action (`Mute`, `PlayPause`,
+/// `PreviousTrack`, `NextTrack`) are reported but never executed: no model
+/// in this milestone produces them, and adding the action here without a
+/// real producer would be dead code.
+fn decision_actuates(decision: PolicyDecision) -> bool {
+    decision.live
+        && matches!(
+            decision.intent,
+            GestureIntent::VolumeGrab | GestureIntent::VolumeRelease
+        )
+}
+
 /// Emits `decision` for observability, then executes it against the overlay
-/// if (and only if) [`PolicyDecision::live`] says it is safe to. Intents not
-/// yet wired to a desktop action (`Mute`, `PlayPause`, `PreviousTrack`,
-/// `NextTrack`) are reported but intentionally not executed: no model in
-/// this milestone produces them, and adding the action here without a real
-/// producer would be dead code.
+/// if (and only if) [`decision_actuates`] says it may.
 pub(crate) fn apply_decision(app: &AppHandle, decision: PolicyDecision) {
     if let Err(error) = app.emit(GESTURE_POLICY_EVENT, decision) {
         warn!(%error, "failed to emit gesture policy decision");
     }
-    if !decision.live {
+    if !decision_actuates(decision) {
         return;
     }
     let overlay = app.state::<OverlayRuntime>();
@@ -657,6 +733,151 @@ pub fn report_model_runtime_failure(
     let decision = runtime.force_release(ForceReleaseReason::ModelRuntimeFailure)?;
     apply_decision(&app, decision);
     Ok(decision)
+}
+
+/// Covers the Off/Monitor/Live gating this module owns, end to end over a
+/// real [`GesturePolicy`], without needing a Tauri `AppHandle`: the two pure
+/// seams [`mode_classifies`] (does a window reach the model at all?) and
+/// [`decision_actuates`] (does a decision reach the overlay/volume backend?)
+/// are exactly what `ingest_ppg_window` and `apply_decision` branch on, so
+/// pinning them pins the modes' real behavior.
+#[cfg(test)]
+mod inference_mode_tests {
+    use super::*;
+
+    /// Drives `transitions` through a policy in `mode` and returns every
+    /// decision that `apply_decision` would actually execute.
+    fn actuated(mode: InferenceMode, transitions: &[PinchTransition]) -> Vec<PolicyDecision> {
+        let mut policy = GesturePolicy::new(GesturePolicyConfig::default());
+        policy.set_mode(to_policy_mode(mode));
+        transitions
+            .iter()
+            .map(|transition| policy.on_transition(*transition))
+            .filter(|decision| decision_actuates(*decision))
+            .collect()
+    }
+
+    fn pinch_arc() -> [PinchTransition; 3] {
+        [
+            PinchTransition::Started {
+                confidence: 0.9,
+                timestamp_ns: 100,
+            },
+            PinchTransition::Held {
+                confidence: 0.9,
+                timestamp_ns: 200,
+            },
+            PinchTransition::Released {
+                confidence: 0.9,
+                timestamp_ns: 300,
+            },
+        ]
+    }
+
+    #[test]
+    fn only_monitor_and_live_ever_reach_the_model() {
+        assert!(!mode_classifies(InferenceMode::Off));
+        assert!(mode_classifies(InferenceMode::Monitor));
+        assert!(mode_classifies(InferenceMode::Live));
+    }
+
+    #[test]
+    fn off_is_the_registrys_default_so_a_fresh_install_never_classifies() {
+        assert!(!mode_classifies(InferenceMode::default()));
+    }
+
+    #[test]
+    fn a_full_monitor_gesture_never_reaches_an_action_performing_adapter() {
+        assert_eq!(
+            actuated(InferenceMode::Monitor, &pinch_arc()),
+            Vec::new(),
+            "Monitor must classify and report only -- never touch the overlay"
+        );
+    }
+
+    #[test]
+    fn a_full_off_gesture_never_reaches_an_action_performing_adapter() {
+        // `Off` never gets this far (see `mode_classifies`), but if a
+        // transition arrives anyway -- e.g. via `report_pinch_transition`
+        // from replay tooling -- it must be just as inert.
+        assert_eq!(actuated(InferenceMode::Off, &pinch_arc()), Vec::new());
+    }
+
+    #[test]
+    fn a_full_live_gesture_actuates_exactly_the_grab_and_its_release() {
+        let executed = actuated(InferenceMode::Live, &pinch_arc());
+        let intents: Vec<_> = executed.iter().map(|decision| decision.intent).collect();
+        assert_eq!(
+            intents,
+            vec![GestureIntent::VolumeGrab, GestureIntent::VolumeRelease],
+            "Held must not actuate; grab and release must"
+        );
+    }
+
+    #[test]
+    fn a_monitor_mode_forced_release_never_reaches_the_overlay() {
+        // The overlay may well be grabbed right now by the Watch button,
+        // which routes around this policy entirely (see `crate::run`'s
+        // `WatchEvent::Button` handling). A dropped PPG window under Monitor
+        // must not tear that grab down.
+        for reason in [
+            ForceReleaseReason::SensorQualityRejected,
+            ForceReleaseReason::StaleSensorWindow,
+            ForceReleaseReason::ModelRuntimeFailure,
+        ] {
+            let mut policy = GesturePolicy::new(GesturePolicyConfig::default());
+            policy.set_mode(PolicyMode::Monitor);
+            policy.on_transition(pinch_arc()[0]);
+            assert!(
+                !decision_actuates(policy.force_release(reason)),
+                "Monitor actuated a forced release for {reason:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_live_mode_forced_release_does_reach_the_overlay() {
+        for reason in [
+            ForceReleaseReason::SensorQualityRejected,
+            ForceReleaseReason::StaleSensorWindow,
+            ForceReleaseReason::ModelRuntimeFailure,
+            ForceReleaseReason::WatchDisconnected,
+        ] {
+            let mut policy = GesturePolicy::new(GesturePolicyConfig::default());
+            policy.set_mode(PolicyMode::Live);
+            policy.on_transition(pinch_arc()[0]);
+            let decision = policy.force_release(reason);
+            assert!(
+                decision_actuates(decision),
+                "Live failed to release a real grab for {reason:?}"
+            );
+            assert_eq!(decision.intent, GestureIntent::VolumeRelease);
+        }
+    }
+
+    #[test]
+    fn decision_actuates_ignores_intents_with_no_desktop_action() {
+        for intent in [
+            GestureIntent::NoAction,
+            GestureIntent::Mute,
+            GestureIntent::PlayPause,
+            GestureIntent::PreviousTrack,
+            GestureIntent::NextTrack,
+        ] {
+            assert!(!decision_actuates(PolicyDecision {
+                intent,
+                reason: DecisionReason::Started,
+                live: true,
+            }));
+        }
+    }
+
+    #[test]
+    fn inference_mode_maps_onto_the_matching_policy_mode() {
+        assert_eq!(to_policy_mode(InferenceMode::Off), PolicyMode::Off);
+        assert_eq!(to_policy_mode(InferenceMode::Monitor), PolicyMode::Monitor);
+        assert_eq!(to_policy_mode(InferenceMode::Live), PolicyMode::Live);
+    }
 }
 
 #[cfg(test)]
@@ -954,5 +1175,52 @@ mod ppg_window_tests {
             DecisionReason::IgnoredAlreadyGrabbed,
         );
         assert_eq!(runtime.resolve_intent(ignored), ignored);
+    }
+
+    /// End-to-end regression for the asymmetric-binding gap: a valid model
+    /// may bind `pinch_start` to `NoAction` while `pinch_release` stays bound
+    /// to `VolumeRelease`. Drives a real `GesturePolicy` through the same
+    /// `on_transition` -> `resolve_intent` -> correct-executed sequence
+    /// `ingest_ppg_window` uses, and proves the eventual `Released` -- for a
+    /// `Started` that resolved to `NoAction` -- never actuates. Before the
+    /// fix, `GesturePolicy` recorded `executed` from the raw pre-binding
+    /// `VolumeGrab` decision (live in `Live` mode), so the matching release
+    /// would actuate and tear down an unrelated Watch-button grab even
+    /// though nothing was ever really grabbed.
+    #[test]
+    fn asymmetric_bindings_prevent_a_resolved_no_action_start_from_leaking_into_the_release() {
+        let runtime = runtime_with_loaded_snapshot(&[
+            ("negative", GestureIntent::NoAction),
+            ("pinch_start", GestureIntent::NoAction),
+            ("pinch_release", GestureIntent::VolumeRelease),
+        ]);
+        let mut policy = GesturePolicy::new(GesturePolicyConfig::default());
+        policy.set_mode(PolicyMode::Live);
+
+        let started = policy.on_transition(PinchTransition::Started {
+            confidence: 0.9,
+            timestamp_ns: 1,
+        });
+        let started = runtime.resolve_intent(started);
+        assert_eq!(started.intent, GestureIntent::NoAction);
+        if started.reason == DecisionReason::Started {
+            policy.correct_grab_executed(decision_actuates(started));
+        }
+        assert!(
+            !decision_actuates(started),
+            "a NoAction start must never actuate"
+        );
+
+        let released = policy.on_transition(PinchTransition::Released {
+            confidence: 0.9,
+            timestamp_ns: 2,
+        });
+        let released = runtime.resolve_intent(released);
+        assert_eq!(released.intent, GestureIntent::VolumeRelease);
+        assert!(
+            !decision_actuates(released),
+            "a start that resolved to NoAction must never let its matching release actuate \
+             and tear down an unrelated Watch-button grab"
+        );
     }
 }

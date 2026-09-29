@@ -34,7 +34,14 @@ function Harness(props: {
 }
 
 function model(overrides: Partial<ModelRegistryModel> = {}): ModelRegistryModel {
-  return { id: "model-a", state: "draft", createdAt: "2026-08-31T01:00:00Z", intentBindings: [], ...overrides };
+  return {
+    id: "model-a",
+    state: "draft",
+    createdAt: "2026-08-31T01:00:00Z",
+    intentBindings: [],
+    importedTfliteBundle: false,
+    ...overrides,
+  };
 }
 
 describe("ModelLifecycleControls", () => {
