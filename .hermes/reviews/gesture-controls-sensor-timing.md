@@ -536,7 +536,7 @@ What is **not** skewed, checked explicitly: the `ppg_*_slope` and `duration_ms` 
 | V-M2-3 | `cargo run --quiet --offline` (throwaway crate) then `python3 $JOB_TMP/m2/ble_frames_kotlin.py` | 0, 0 | Real `watch_bridge::ble::fragment` bytes captured for four cases; Kotlin algorithm matches all four byte for byte. **0 mismatches** |
 | V-M2-4 | `uv run --directory tools/pinch-classifier python $JOB_TMP/m2/feature_skew.py` | 0 | 39-row / 500.0 ms window built by the real `build_windows`; **11 of 13** features that Rust pins to 0.0 are non-zero; `sample_count` 39 vs one batch's PPG count, `duration_ms` 500.0 vs one batch's span |
 | V-M2-5 | `grep -rn "smoothing_alpha\|max_volume_points_per_second" crates/ apps/desktop/src-tauri/src --include=*.rs` | 0 | 16 hits: declaration, defaults, validation, settings plumbing. **No read site in `observe`** → D-1 |
-| V-M2-6 | `cargo run --quiet --offline --bin smtrace`, then `uv run … python $JOB_TMP/m2/sm_python.py` | 0, 1 | Real Rust `DesktopPinchRuntime` traced over 10 steps; Python reference branches diverge at steps 8 and 9 (exit 1 = divergences found, as designed) |
+| V-M2-6 | `cargo run --quiet --offline --bin smtrace && uv run --directory tools/pinch-classifier python $JOB_TMP/m2/sm_python.py` | 0 | Real Rust `DesktopPinchRuntime` traced over 10 steps against the Python reference's branches: **8/10 agree**, divergent steps exactly `[8, 9]`. The check asserts that *set*, so it also fails on a new or vanished divergence rather than merely on finding one |
 | V-M2-7 | `wc -c vendor/samsung-health-sensor-sdk/1.4.1/docs/*.html .../sample-codes/*.html` | 0 | All nine files 239–296 bytes, 2445 total — inert JS shells → G-M2-1 |
 | V-M2-8 | `javap -p …/DataPoint.class` (temurin-17, on the AAR extracted into the job scratch dir) | 0 | `public long getTimestamp();` only; no unit information → G-M2-1 |
 | V-M2-9 | `cargo test -p watch-bridge -p pinch-inference -p head-tracking -p interaction-engine --all-targets` | 0 | **131 tests passed, 0 failed**, including the four sequence-watermark tests, eight BLE framing tests, `unnormalized_model_output_forces_a_release` and `submit_accepts_a_reduced_length_feature_slice` |
@@ -565,7 +565,7 @@ Not attempted, with reasons: `cargo test -p spatial-gesture-desktop` (G-M2-4, an
 
 - Every citation was read from the primary worktree, never from the three `.claude/worktrees/` copies (M1 R-2).
 - No raw prompts, reasoning traces, credentials, secrets or unbounded logs appear here. `status-resp.json` is referenced by name only.
-- Two checks are reported with a non-zero exit (V-M2-6 by design, since it exits 1 when divergences are found) and neither is presented as a pass.
+- Every check is reported with the exit code it actually returned. V-M2-6 asserts the recorded divergence set (`[8, 9]`) rather than the absence of divergence, so its pass means "the two implementations differ in exactly the two documented places" — it is not a claim that C-4 agrees.
 - Where a claim rests on an unverified device property or on absent hardware, it says so in the same sentence rather than in a footnote — D-4's severity, G-M2-1's consequence and S-2/S-5/S-6/S-8's status in particular.
 - Claims about `spatial-gesture-desktop` and `apps/watch/` are source-level only, as M1's condition 1 requires.
 - Milestone 3–6 material met along the way (model-bundle metadata validation, CI consolidation, module depth) is left where M1 deferred it; nothing new was added to those milestones' scope.
