@@ -52,11 +52,37 @@ pub enum CornerWristVolumeDemoPhase {
     UnavailableVolumeUnsupported,
 }
 
+/// Which producer started the current grab. The overlay has a single
+/// `grabbed` flag, so without an owner a model-driven release (or a Watch
+/// button-up) would tear down a grab some other producer started.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GrabOwner {
+    WatchButton,
+    GestureModel,
+    CornerDemo,
+}
+
+/// A producer may begin a volume interaction when nothing is grabbed, or
+/// when it already owns the grab (a re-begin). It never takes over a grab
+/// another producer owns.
+fn may_begin_grab(current: Option<GrabOwner>, requester: GrabOwner) -> bool {
+    current.is_none_or(|owner| owner == requester)
+}
+
+/// `only_owner: None` is an unconditional release (Escape, force release,
+/// disconnect, target exit); `Some(owner)` is a producer ending its own
+/// grab, which must not end one it does not own.
+fn may_release_grab(current: Option<GrabOwner>, only_owner: Option<GrabOwner>) -> bool {
+    only_owner.is_none_or(|owner| current == Some(owner))
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OverlayState {
     pub visible: bool,
     pub grabbed: bool,
+    #[serde(skip)]
+    grab_owner: Option<GrabOwner>,
     pub volume: f32,
     pub rotation_angle: f32,
     pub screen_x: f64,
@@ -73,11 +99,18 @@ pub struct OverlayState {
     pub last_native_volume_error: Option<String>,
 }
 
+impl OverlayState {
+    pub(crate) fn grabbed_by(&self, owner: GrabOwner) -> bool {
+        self.grabbed && self.grab_owner == Some(owner)
+    }
+}
+
 impl Default for OverlayState {
     fn default() -> Self {
         Self {
             visible: false,
             grabbed: false,
+            grab_owner: None,
             volume: VolumeSimulation::default().current(),
             rotation_angle: 0.0,
             screen_x: 0.0,
@@ -219,6 +252,7 @@ impl OverlayRuntime {
             .lock()
             .map_err(|_| "overlay state lock was poisoned")?;
         state.grabbed = false;
+        state.grab_owner = None;
         state.corner_demo_phase = None;
         state.last_relative_roll_degrees = None;
         self.wrist_rotation
@@ -236,7 +270,7 @@ impl OverlayRuntime {
 
     /// Marks the overlay grabbed by a held watch button. A no-op unless the
     /// overlay is currently shown (dwelling on the calibrated top-right target).
-    pub(crate) fn grab(&self, app: &AppHandle) -> Result<OverlayState, String> {
+    pub(crate) fn grab(&self, app: &AppHandle, owner: GrabOwner) -> Result<OverlayState, String> {
         let mut state = self
             .state
             .lock()
@@ -245,19 +279,43 @@ impl OverlayRuntime {
             return Ok(state.clone());
         }
         state.grabbed = true;
+        state.grab_owner = Some(owner);
         self.state_generation.fetch_add(1, Ordering::AcqRel);
         let snapshot = state.clone();
         let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
         Ok(snapshot)
     }
 
-    /// Releases a watch-button grab and hides the overlay, so a button-up or a
-    /// watch disconnect can never leave the overlay stuck grabbed/visible.
+    /// Releases the grab unconditionally and hides the overlay, so a
+    /// disconnect, Escape, target exit or forced release can never leave the
+    /// overlay stuck grabbed/visible.
     pub(crate) fn release(&self, app: &AppHandle) -> Result<OverlayState, String> {
+        self.release_matching(app, None)
+    }
+
+    /// A producer ending its own interaction (Watch button-up, a model's
+    /// `pinch_release`). A no-op when the current grab belongs to someone
+    /// else, so one producer's normal end cannot tear down another's.
+    pub(crate) fn release_if_owner(
+        &self,
+        app: &AppHandle,
+        owner: GrabOwner,
+    ) -> Result<OverlayState, String> {
+        self.release_matching(app, Some(owner))
+    }
+
+    fn release_matching(
+        &self,
+        app: &AppHandle,
+        only_owner: Option<GrabOwner>,
+    ) -> Result<OverlayState, String> {
         let mut state = self
             .state
             .lock()
             .map_err(|_| "overlay state lock was poisoned")?;
+        if !may_release_grab(state.grab_owner, only_owner) {
+            return Ok(state.clone());
+        }
         if !state.grabbed && !state.visible && state.corner_demo_phase.is_none() {
             return Ok(state.clone());
         }
@@ -294,13 +352,20 @@ impl OverlayRuntime {
     pub(crate) fn begin_volume_interaction(
         &self,
         app: &AppHandle,
+        owner: GrabOwner,
         wrist_config: WristRotationConfig,
         orientation: Option<&WatchOrientationSample>,
         volume_runtime: &VolumeRuntime,
     ) -> Result<OverlayState, String> {
-        let grabbed = self.grab(app)?;
+        let grabbed = self.grab(app, owner)?;
         if !grabbed.grabbed {
             // Overlay was not visible/dwelling: grab() correctly no-op'd.
+            return Ok(grabbed);
+        }
+        if !may_begin_grab(grabbed.grab_owner, owner) {
+            // Someone else owns the active grab; never take over its
+            // reference pose or tear it down.
+            warn!(?owner, current = ?grabbed.grab_owner, "volume interaction already owned by another producer; not starting");
             return Ok(grabbed);
         }
         let Some(orientation) = orientation else {
@@ -777,6 +842,27 @@ pub async fn refresh_system_volume(app: AppHandle) -> Result<OverlayState, Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// R-M4-3: the overlay has one `grabbed` flag; ownership decides who may
+    /// start and who may end an interaction.
+    #[test]
+    fn a_producer_never_takes_over_or_ends_a_grab_it_does_not_own() {
+        use GrabOwner::*;
+        assert!(may_begin_grab(None, GestureModel));
+        assert!(may_begin_grab(Some(GestureModel), GestureModel));
+        assert!(!may_begin_grab(Some(WatchButton), GestureModel));
+        assert!(!may_begin_grab(Some(GestureModel), CornerDemo));
+
+        // A model release must not end a Watch-button grab, or vice versa.
+        assert!(!may_release_grab(Some(WatchButton), Some(GestureModel)));
+        assert!(!may_release_grab(Some(GestureModel), Some(WatchButton)));
+        assert!(!may_release_grab(None, Some(GestureModel)));
+        assert!(may_release_grab(Some(GestureModel), Some(GestureModel)));
+        // Escape / force release / disconnect end any grab.
+        assert!(may_release_grab(Some(WatchButton), None));
+        assert!(may_release_grab(Some(CornerDemo), None));
+        assert!(may_release_grab(None, None));
+    }
 
     /// D-M4-3: a native volume write used to hold the overlay state lock for
     /// the adapter's whole timeout, stalling every cancellation path. The

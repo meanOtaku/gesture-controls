@@ -128,6 +128,7 @@ pub fn run() {
             let handle = app.handle().clone();
             app.manage(settings::SettingsRuntime::load(&handle));
             overlay::prepare_window(&handle).map_err(std::io::Error::other)?;
+            model_registry::reconcile_inference_mode_at_startup(&handle);
             head_pose::spawn(handle.clone());
 
             let policy_watchdog_handle = app.handle().clone();
@@ -202,6 +203,7 @@ pub fn run() {
                                                 watch_handle.state::<overlay::VolumeRuntime>();
                                             if let Err(error) = overlay.begin_volume_interaction(
                                                 &watch_handle,
+                                                overlay::GrabOwner::WatchButton,
                                                 settings.wrist_rotation_config(),
                                                 orientation.as_ref(),
                                                 &volume_runtime,
@@ -218,7 +220,9 @@ pub fn run() {
                                     if sample.button == STEM_PRIMARY_BUTTON_ID
                                         && sample.state == BUTTON_STATE_UP =>
                                 {
-                                    if let Err(error) = overlay.release(&watch_handle) {
+                                    if let Err(error) = overlay
+                                        .release_if_owner(&watch_handle, overlay::GrabOwner::WatchButton)
+                                    {
                                         warn!(%error, "failed to release volume overlay");
                                     }
                                 }

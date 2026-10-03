@@ -1290,6 +1290,81 @@ pub fn rollback_active_model(
 /// against the overlay -- see the non-negotiable rule that all gesture
 /// decisions run on the desktop, in `docs/architecture/project-brief.md`
 /// Milestone 11.
+/// The mode a freshly started app may run in. The persisted mode survives a
+/// restart so the user's `Monitor` choice does, but `Live` is capped to
+/// `Monitor`: real actions only start after an explicit `Live` selection in
+/// this session, once the Monitor results are in front of the user (see the
+/// release-readiness checklist). Without this the persisted mode said `Live`
+/// while the freshly built policy was `Off`, so the UI showed `Live` and
+/// nothing actuated.
+fn startup_inference_mode(persisted: InferenceMode) -> InferenceMode {
+    match persisted {
+        InferenceMode::Live => InferenceMode::Monitor,
+        other => other,
+    }
+}
+
+/// Brings the policy and the persisted registry mode into agreement at
+/// startup (see [`startup_inference_mode`]). Failing closed: if the registry
+/// cannot be read the policy stays `Off`.
+pub(crate) fn reconcile_inference_mode_at_startup(app: &AppHandle) {
+    let runtime = app.state::<ModelRegistryRuntime>();
+    let gesture_policy = app.state::<crate::inference::GesturePolicyRuntime>();
+    let persisted = {
+        let Ok(_guard) = runtime.lock.lock() else {
+            return;
+        };
+        match load_registry(app) {
+            Ok(index) => index.inference_mode,
+            Err(error) => {
+                tracing::warn!(%error, "model registry unavailable at startup; inference stays off");
+                return;
+            }
+        }
+    };
+    let effective = startup_inference_mode(persisted);
+    if effective != persisted
+        && let Err(error) = with_registry_mutation(app, &runtime, |index| {
+            index.inference_mode = effective;
+            Ok(())
+        })
+    {
+        tracing::warn!(%error, "failed to persist the startup inference mode cap");
+        return;
+    }
+    if let Err(error) = gesture_policy.set_mode(effective) {
+        tracing::warn!(%error, "failed to apply the startup inference mode");
+    }
+}
+
+/// Changes the inference mode with the policy and the persisted copy kept in
+/// agreement: `apply` (the policy) runs first and `persist` second, so a
+/// failure to apply leaves the persisted mode untouched, and a failure to
+/// persist puts the policy back on `previous`. The reverse order let a
+/// persisted `Off` sit beside a policy still running `Live`.
+fn change_inference_mode<T>(
+    previous: InferenceMode,
+    next: InferenceMode,
+    mut apply: impl FnMut(InferenceMode) -> Result<(), String>,
+    persist: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    apply(next)?;
+    match persist() {
+        Ok(value) => Ok(value),
+        Err(error) => {
+            if let Err(revert_error) = apply(previous) {
+                tracing::warn!(%revert_error, "failed to restore the previous inference mode after a persist failure");
+            }
+            Err(error)
+        }
+    }
+}
+
+/// Also drives [`crate::inference::GesturePolicyRuntime`], which is the
+/// component that actually gates whether pinch-transition decisions execute
+/// against the overlay -- see the non-negotiable rule that all gesture
+/// decisions run on the desktop, in `docs/architecture/project-brief.md`
+/// Milestone 11.
 #[tauri::command]
 pub fn set_inference_mode(
     mode: InferenceMode,
@@ -1297,19 +1372,102 @@ pub fn set_inference_mode(
     runtime: State<'_, ModelRegistryRuntime>,
     gesture_policy: State<'_, crate::inference::GesturePolicyRuntime>,
 ) -> Result<RegistryView, String> {
-    let view = with_registry_mutation(&app, &runtime, |index| {
-        index.inference_mode = mode;
-        Ok(())
-    })?;
-    if let Some(decision) = gesture_policy.set_mode(mode)? {
-        crate::inference::apply_decision(&app, decision);
-    }
-    Ok(view)
+    let previous = {
+        let _guard = runtime
+            .lock
+            .lock()
+            .map_err(|_| "model registry lock was poisoned".to_string())?;
+        load_registry(&app)?.inference_mode
+    };
+    change_inference_mode(
+        previous,
+        mode,
+        |target| {
+            if let Some(decision) = gesture_policy.set_mode(target)? {
+                crate::inference::apply_decision(&app, decision);
+            }
+            Ok(())
+        },
+        || {
+            with_registry_mutation(&app, &runtime, |index| {
+                index.inference_mode = mode;
+                Ok(())
+            })
+        },
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// R-M4-6: the policy and the persisted mode must not disagree.
+    #[test]
+    fn startup_caps_a_persisted_live_mode_to_monitor() {
+        assert_eq!(
+            startup_inference_mode(InferenceMode::Live),
+            InferenceMode::Monitor
+        );
+        assert_eq!(
+            startup_inference_mode(InferenceMode::Monitor),
+            InferenceMode::Monitor
+        );
+        assert_eq!(
+            startup_inference_mode(InferenceMode::Off),
+            InferenceMode::Off
+        );
+    }
+
+    #[test]
+    fn mode_change_applies_to_the_policy_before_persisting() {
+        let mut order = Vec::new();
+        let result = change_inference_mode(
+            InferenceMode::Off,
+            InferenceMode::Live,
+            |mode| {
+                order.push(format!("apply {mode:?}"));
+                Ok(())
+            },
+            || {
+                // persist runs after the first apply
+                Ok::<_, String>("persisted")
+            },
+        );
+        assert_eq!(result, Ok("persisted"));
+        assert_eq!(order, vec!["apply Live".to_string()]);
+    }
+
+    #[test]
+    fn a_failed_apply_never_reaches_persist() {
+        let mut persisted = false;
+        let result = change_inference_mode(
+            InferenceMode::Off,
+            InferenceMode::Live,
+            |_| Err("policy lock poisoned".to_string()),
+            || {
+                persisted = true;
+                Ok::<_, String>(())
+            },
+        );
+        assert!(result.is_err());
+        assert!(!persisted, "the persisted mode must stay untouched");
+    }
+
+    #[test]
+    fn a_failed_persist_restores_the_previous_policy_mode() {
+        let mut applied = Vec::new();
+        let result: Result<(), String> = change_inference_mode(
+            InferenceMode::Monitor,
+            InferenceMode::Live,
+            |mode| {
+                applied.push(mode);
+                Ok(())
+            },
+            || Err("disk full".to_string()),
+        );
+        assert_eq!(result, Err("disk full".to_string()));
+        assert_eq!(applied, vec![InferenceMode::Live, InferenceMode::Monitor]);
+    }
 
     #[test]
     fn quality_gate_rejects_low_sample_count() {

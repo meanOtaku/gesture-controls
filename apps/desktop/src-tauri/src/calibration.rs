@@ -5,7 +5,7 @@ use interaction_engine::{CalibrationEvent, CalibrationState, CalibrationTarget, 
 use tauri::{AppHandle, Emitter, Manager, State};
 use tracing::warn;
 
-use crate::overlay::{CornerWristVolumeDemoPhase, OverlayRuntime, VolumeRuntime};
+use crate::overlay::{CornerWristVolumeDemoPhase, GrabOwner, OverlayRuntime, VolumeRuntime};
 use crate::settings::SettingsRuntime;
 use crate::watch::WatchRuntime;
 
@@ -325,11 +325,12 @@ fn start_corner_wrist_volume_demo(app: &AppHandle) {
         CornerDemoStart::Ready => {
             match overlay.begin_volume_interaction(
                 app,
+                GrabOwner::CornerDemo,
                 settings.corner_wrist_volume_config(),
                 orientation.as_ref(),
                 &volume_runtime,
             ) {
-                Ok(state) if state.grabbed => {
+                Ok(state) if state.grabbed_by(GrabOwner::CornerDemo) => {
                     let _ =
                         overlay.set_corner_demo_phase(app, Some(CornerWristVolumeDemoPhase::Ready));
                 }

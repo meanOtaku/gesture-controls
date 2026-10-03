@@ -48,7 +48,7 @@ use tracing::warn;
 use crate::model_registry::{
     self, InferenceMode, ModelThresholds, QualityGateConfig, QualityGateRejection,
 };
-use crate::overlay::OverlayRuntime;
+use crate::overlay::{GrabOwner, OverlayRuntime};
 use crate::settings::SettingsRuntime;
 use crate::watch::WatchRuntime;
 
@@ -700,6 +700,7 @@ pub(crate) fn apply_decision(app: &AppHandle, decision: PolicyDecision) {
                 let volume_runtime = app.state::<crate::overlay::VolumeRuntime>();
                 if let Err(error) = overlay.begin_volume_interaction(
                     app,
+                    GrabOwner::GestureModel,
                     settings.wrist_rotation_config(),
                     orientation.as_ref(),
                     &volume_runtime,
@@ -712,7 +713,14 @@ pub(crate) fn apply_decision(app: &AppHandle, decision: PolicyDecision) {
             }
         },
         GestureIntent::VolumeRelease => {
-            if let Err(error) = overlay.release(app) {
+            // A model's own release may only end a grab the model started;
+            // forced releases never reach here as `VolumeRelease` ownership
+            // checks -- they go through `force_release_and_hide`.
+            let result = match decision.reason {
+                DecisionReason::ForcedRelease(_) => overlay.release(app),
+                _ => overlay.release_if_owner(app, GrabOwner::GestureModel),
+            };
+            if let Err(error) = result {
                 warn!(%error, "failed to release overlay from gesture policy decision");
             }
         }
