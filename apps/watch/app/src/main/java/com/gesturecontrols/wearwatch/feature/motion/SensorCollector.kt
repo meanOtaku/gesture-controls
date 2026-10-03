@@ -5,7 +5,8 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-
+import android.os.SystemClock
+import android.util.Log
 
 /**
  * Wraps SensorManager for the three IMU inputs the protocol cares about.
@@ -32,6 +33,10 @@ class SensorCollector(
     private var lastAccelerometerTimestampNs = Long.MIN_VALUE
     private var lastGyroscopeTimestampNs = Long.MIN_VALUE
     private val quaternionBuffer = FloatArray(4)
+    // Orientation is the only message stamped with the sensor's own clock;
+    // put it on the elapsedRealtimeNanos base every other message uses.
+    private val orientationClock = SensorClockRebaser()
+    private var loggedClockRebase = false
 
     // Desktop-controlled per-sensor toggles (`desktop.set_sensor`); all on by
     // default so existing start()/startMonitoring()/stop() behavior is
@@ -93,6 +98,7 @@ class SensorCollector(
         unregisterAll()
         lastAccelerometer = null
         lastGyroscope = null
+        orientationClock.reset()
         isRegistered = false
         isMonitoring = false
     }
@@ -218,11 +224,25 @@ class SensorCollector(
             }
             Sensor.TYPE_ROTATION_VECTOR -> {
                 SensorManager.getQuaternionFromVector(quaternionBuffer, event.values)
+                val envelopeTimestampNs = orientationClock.toElapsedRealtime(
+                    event.timestamp,
+                    SystemClock.elapsedRealtimeNanos(),
+                )
+                if (orientationClock.isRebasing && !loggedClockRebase) {
+                    loggedClockRebase = true
+                    Log.w(
+                        TAG,
+                        "SensorEvent.timestamp is not on the elapsedRealtimeNanos base on this device; " +
+                            "rebasing orientation timestamps so they match every other watch message",
+                    )
+                }
+                // Companion-sensor freshness stays on the sensor clock: both sides
+                // of that comparison are raw SensorEvent timestamps.
                 onOrientation(
                     quaternionBuffer.copyOf(4),
                     freshSample(lastAccelerometer, lastAccelerometerTimestampNs, event.timestamp),
                     freshSample(lastGyroscope, lastGyroscopeTimestampNs, event.timestamp),
-                    event.timestamp,
+                    envelopeTimestampNs,
                 )
             }
         }
@@ -243,6 +263,7 @@ class SensorCollector(
     }
 
     private companion object {
+        const val TAG = "SensorCollector"
         const val ACCELERATION_ALPHA = 0.2f
         const val GYROSCOPE_ALPHA = 0.15f
         const val MAX_COMPANION_SENSOR_AGE_NS = 100_000_000L

@@ -164,7 +164,9 @@ export interface WatchPpgBatch {
   sequence: number;
   /**
    * Envelope timestamp (watch `SystemClock.elapsedRealtimeNanos()` domain) —
-   * the same clock domain `WatchOrientationSample.timestampNs` uses. Distinct
+   * the same clock domain `WatchOrientationSample.timestampNs` uses (the watch
+   * verifies this per event and rebases orientation if a device's sensor clock
+   * differs; see docs/protocols/watch-websocket-protocol.md). Distinct
    * from `timestampsNs` below, which are on the Samsung Health Sensor SDK's
    * own, incomparable per-sample clock (see
    * docs/protocols/watch-websocket-protocol.md).

@@ -25,7 +25,7 @@ boundaries, or multicast-blocking routers can prevent pairing.
 
 ## Watch messages
 
-All messages are UTF-8 JSON with the required envelope fields `type`, `version` (`1`), `deviceId`, `sequence`, `timestampNs`, and `payload`. `timestampNs` is the watch monotonic-clock timestamp. Sequences must increase across a connection.
+All messages are UTF-8 JSON with the required envelope fields `type`, `version` (`1`), `deviceId`, `sequence`, `timestampNs`, and `payload`. `timestampNs` is the watch `SystemClock.elapsedRealtimeNanos()` timestamp (boot-relative) on **every** message, including `watch.orientation`. Orientation is built from `SensorEvent.timestamp`; Android requires that clock to share `elapsedRealtimeNanos()`'s base, and the watch verifies it on each event, rebasing orientation onto that base (and logging once) on a device where it does not hold, so the desktop can always order orientation against every other message. The per-sample `timestampsNs` inside a `watch.ppg_batch` are the exception: they are on the Samsung Health Sensor SDK's own clock (see below). Sequences must increase across a connection.
 
 `watch.orientation` carries a quaternion and optional accelerometer and gyroscope vectors:
 

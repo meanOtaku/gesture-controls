@@ -105,7 +105,8 @@ function datasetCsvValue(value: number | null): string {
  * Samsung Health Sensor SDK's own clock (`DataPoint.getTimestamp()`), a
  * different, incomparable domain from the watch `SystemClock`-based envelope
  * timestamp used everywhere else, including `WatchOrientationSample.timestampNs`
- * (see docs/protocols/watch-websocket-protocol.md). This is the single
+ * (the watch's `SensorClockRebaser` guarantees that for orientation on every
+ * device; see docs/protocols/watch-websocket-protocol.md). This is the single
  * canonical capture-time basis for newly captured rows: anchoring on the
  * envelope timestamp (the last sample = batch arrival, same domain as every
  * other channel) and applying the SDK domain's own intra-batch deltas — valid
