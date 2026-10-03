@@ -52,6 +52,12 @@ details** panel. Start there; each entry below says what you will see and what i
   check existed (older builds), a watch that was off the wrist when its app died left the desktop waiting
   for up to 30 minutes; restarting the desktop app clears it. The watch app must also be running to advertise: a
   reinstall does not start it, so open it once.
+- **The desktop does not find the watch after `npm start` was closed and restarted.** Closing it
+  now quits the app cleanly (it disconnects Bluetooth first, which `npm start` waits for), and the app
+  does the same for Ctrl+C, SIGTERM, Cmd+Q and closing the window. If a session still ends uncleanly (a
+  crash, `kill -9`), a restarted desktop also looks for a watch the system already holds connected, and
+  the watch drops a desktop that has been silent for 25 s while streaming and advertises again.
+  The Link health events say `the watch was already connected ... reusing that connection` when this happens.
 - **Bluetooth off.** The desktop keeps checking for an adapter every 3 s and the watch rebuilds its
   server when Bluetooth returns; the phase reads `Retrying` with `is Bluetooth on?` until then.
 
