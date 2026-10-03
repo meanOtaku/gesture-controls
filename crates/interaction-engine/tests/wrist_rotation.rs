@@ -627,13 +627,18 @@ fn a_genuine_outlier_does_not_block_the_legitimate_reversal_samples_that_follow_
         )
         .unwrap();
 
-    let settled = rotation
-        .observe(rotated_around_forearm(20.0), 20_000_000)
-        .unwrap();
+    // Ramp up at the real 5-degrees/tick pace; the first sample is itself
+    // velocity-checked against the reference pose, so it must be realistic.
+    let mut settled = 0.0;
+    for (degrees, ms) in [(5.0, 20), (10.0, 40), (15.0, 60), (20.0, 80)] {
+        settled = rotation
+            .observe(rotated_around_forearm(degrees), ms * 1_000_000)
+            .unwrap();
+    }
 
     // A single sensor glitch: huge implied velocity, must freeze.
     let outlier = rotation
-        .observe(rotated_around_forearm(-150.0), 40_000_000)
+        .observe(rotated_around_forearm(-150.0), 100_000_000)
         .unwrap();
     assert!(
         (outlier - settled).abs() < 1e-5,
@@ -644,7 +649,13 @@ fn a_genuine_outlier_does_not_block_the_legitimate_reversal_samples_that_follow_
     // glitch. Each of these must be accepted (not still frozen at `settled`)
     // and keep moving the target down toward and then past the baseline.
     let mut previous = settled;
-    for (degrees, ms) in [(10.0, 60), (5.0, 80), (0.0, 100), (-5.0, 120)] {
+    for (degrees, ms) in [
+        (15.0, 120),
+        (10.0, 140),
+        (5.0, 160),
+        (0.0, 180),
+        (-5.0, 200),
+    ] {
         let target = rotation
             .observe(rotated_around_forearm(degrees), ms * 1_000_000)
             .unwrap();
@@ -658,4 +669,38 @@ fn a_genuine_outlier_does_not_block_the_legitimate_reversal_samples_that_follow_
         previous < settled,
         "reversal must eventually cross below the original settled target"
     );
+}
+
+// D-M4-7: the first orientation sample after a grab opens used to bypass the
+// velocity-outlier gate (no previous sample to compare against), so a huge
+// step could traverse the whole volume range in one write.
+#[test]
+fn first_sample_after_begin_is_velocity_checked_against_the_reference_pose() {
+    let mut rotation = WristRotation::default();
+    rotation
+        .begin_with_config(
+            WristRotationConfig::default(),
+            IDENTITY,
+            0,
+            ACTIVATION_VOLUME,
+        )
+        .unwrap();
+
+    // 170 degrees in 20ms (8500 deg/s) must freeze at the activation volume.
+    let target = rotation
+        .observe(rotated_around_forearm(170.0), 20_000_000)
+        .unwrap();
+    assert_eq!(target, f64::from(ACTIVATION_VOLUME));
+}
+
+#[test]
+fn first_sample_after_begin_still_accepts_a_realistic_rotation() {
+    let mut rotation = WristRotation::default();
+    rotation.begin(IDENTITY, 0, ACTIVATION_VOLUME).unwrap();
+
+    // 5 degrees in 20ms is 250 deg/s, under the 360 deg/s default cap.
+    let target = rotation
+        .observe(rotated_around_forearm(5.0), 20_000_000)
+        .unwrap();
+    assert!(target > f64::from(ACTIVATION_VOLUME));
 }

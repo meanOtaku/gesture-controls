@@ -296,25 +296,18 @@ pub(crate) fn ingest_ppg_window(app: &AppHandle, sample: &WatchPpgBatchSample) {
     ) {
         ClassifyOutcome::Transition(transition) => {
             let gesture_policy = app.state::<GesturePolicyRuntime>();
-            match gesture_policy.on_transition(transition) {
+            // `on_transition` only sees the generic, pre-binding intent (every
+            // `Started` is provisionally `VolumeGrab`). The bindings remap
+            // runs and the policy's `executed` flag is corrected inside one
+            // policy-lock acquisition, so no other transition (watchdog,
+            // `report_pinch_transition`, mode change) can interleave and see
+            // the stale flag -- otherwise a model that binds `pinch_start` to
+            // `NoAction` would still have its later `pinch_release` actuate a
+            // real overlay release for a grab that never happened.
+            match gesture_policy
+                .on_transition_resolved(transition, |decision| pinch.resolve_intent(decision))
+            {
                 Ok(decision) => {
-                    let decision = pinch.resolve_intent(decision);
-                    // `on_transition` recorded `executed` from the generic,
-                    // pre-binding intent (every `Started` is provisionally
-                    // `VolumeGrab`); now that `resolve_intent` has remapped it
-                    // through the active model's bindings, correct the
-                    // policy's internal state to match -- otherwise a model
-                    // that binds `pinch_start` to `NoAction` would still be
-                    // recorded as having executed, so its later
-                    // `pinch_release` (bound to `VolumeRelease`) would
-                    // actuate a real overlay release for a grab that never
-                    // happened.
-                    if decision.reason == DecisionReason::Started
-                        && let Err(error) =
-                            gesture_policy.correct_grab_executed(decision_actuates(decision))
-                    {
-                        warn!(%error, "failed to correct gesture policy executed state");
-                    }
                     apply_decision(app, decision);
                 }
                 Err(error) => warn!(%error, "failed to apply classified pinch transition"),
@@ -614,17 +607,28 @@ impl GesturePolicyRuntime {
         Ok(policy.on_transition(transition))
     }
 
-    /// See [`GesturePolicy::correct_grab_executed`]. Called from
-    /// [`ingest_ppg_window`] right after [`PinchInferenceRuntime::resolve_intent`]
-    /// remaps a `Started` decision through the active model's bindings, since
-    /// `on_transition` above only ever sees the generic pre-binding intent.
-    fn correct_grab_executed(&self, executed: bool) -> Result<(), String> {
+    /// [`Self::on_transition`] plus model-binding resolution as one atomic
+    /// step. `resolve` remaps the generic decision through the active
+    /// model's intent bindings; when that remaps a `Started` decision, the
+    /// policy's recorded `executed` state is corrected to match (see
+    /// [`GesturePolicy::correct_grab_executed`], which must run before any
+    /// further transition). The policy lock is held across all three, so the
+    /// correction can never be interleaved by another producer. `resolve`
+    /// must not take the policy lock.
+    fn on_transition_resolved(
+        &self,
+        transition: PinchTransition,
+        resolve: impl FnOnce(PolicyDecision) -> PolicyDecision,
+    ) -> Result<PolicyDecision, String> {
         let mut policy = self
             .policy
             .lock()
             .map_err(|_| "gesture policy lock was poisoned".to_string())?;
-        policy.correct_grab_executed(executed);
-        Ok(())
+        let decision = resolve(policy.on_transition(transition));
+        if decision.reason == DecisionReason::Started {
+            policy.correct_grab_executed(decision_actuates(decision));
+        }
+        Ok(decision)
     }
 
     pub(crate) fn force_release(
@@ -1221,6 +1225,54 @@ mod ppg_window_tests {
             !decision_actuates(released),
             "a start that resolved to NoAction must never let its matching release actuate \
              and tear down an unrelated Watch-button grab"
+        );
+    }
+
+    /// D-M4-2 regression: the `executed` correction used to run in a separate
+    /// lock acquisition from `on_transition`, so a `Released` from another
+    /// producer could interleave and actuate a live release for a grab the
+    /// model bound to `NoAction`. Here a second thread submits that
+    /// `Released` while the first is still inside its resolve step.
+    #[test]
+    fn interleaved_release_cannot_see_the_uncorrected_executed_flag() {
+        let runtime = GesturePolicyRuntime::default();
+        runtime.set_mode(InferenceMode::Live).unwrap();
+
+        let (started, released) = std::thread::scope(|scope| {
+            let mut interposed = None;
+            let started = runtime
+                .on_transition_resolved(
+                    PinchTransition::Started {
+                        confidence: 0.9,
+                        timestamp_ns: 1,
+                    },
+                    |decision| {
+                        interposed = Some(scope.spawn(|| {
+                            runtime
+                                .on_transition(PinchTransition::Released {
+                                    confidence: 0.9,
+                                    timestamp_ns: 2,
+                                })
+                                .unwrap()
+                        }));
+                        // Give the other thread ample time to win the lock if
+                        // the policy lock were not held across this step.
+                        std::thread::sleep(Duration::from_millis(100));
+                        PolicyDecision {
+                            intent: GestureIntent::NoAction,
+                            ..decision
+                        }
+                    },
+                )
+                .unwrap();
+            (started, interposed.unwrap().join().unwrap())
+        });
+
+        assert!(!decision_actuates(started));
+        assert_eq!(released.intent, GestureIntent::VolumeRelease);
+        assert!(
+            !decision_actuates(released),
+            "a start resolved to NoAction must never let an interleaved release actuate"
         );
     }
 }

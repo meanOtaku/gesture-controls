@@ -494,8 +494,12 @@ impl WristRotation {
         self.start = Some(normalized_quaternion(quaternion)?);
         let clamped = activation_volume_percent.clamp(0.0, 100.0);
         self.activation_volume_percent = Some(clamped);
-        self.previous_raw_degrees = None;
-        self.previous_raw_degrees_at_ns = None;
+        // The reference pose is, by definition, 0 degrees at `timestamp_ns`.
+        // Seeding the velocity baseline with it means the very first sample
+        // is outlier-checked like every later one, instead of being able to
+        // jump the target across the whole range in one step.
+        self.previous_raw_degrees = Some(0.0);
+        self.previous_raw_degrees_at_ns = Some(timestamp_ns);
         self.last_target_volume_percent = Some(clamped);
         self.last_timestamp_ns = Some(timestamp_ns);
         self.last_relative_degrees = None;
@@ -524,8 +528,12 @@ impl WristRotation {
         self.config = config;
         self.start = Some(start);
         self.activation_volume_percent = Some(clamped);
-        self.previous_raw_degrees = None;
-        self.previous_raw_degrees_at_ns = None;
+        // The reference pose is, by definition, 0 degrees at `timestamp_ns`.
+        // Seeding the velocity baseline with it means the very first sample
+        // is outlier-checked like every later one, instead of being able to
+        // jump the target across the whole range in one step.
+        self.previous_raw_degrees = Some(0.0);
+        self.previous_raw_degrees_at_ns = Some(timestamp_ns);
         self.last_target_volume_percent = Some(clamped);
         self.last_timestamp_ns = Some(timestamp_ns);
         self.last_relative_degrees = None;

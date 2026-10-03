@@ -23,6 +23,11 @@ const OVERLAY_WINDOW: &str = "overlay";
 const SCREEN_EDGE_MARGIN: f64 = 16.0;
 const WRIST_ROTATION_HAPTIC_DURATION_MS: u32 = 20;
 const WRIST_ROTATION_HAPTIC_MIN_INTERVAL: Duration = Duration::from_millis(125);
+/// Minimum spacing between native volume writes driven by wrist rotation.
+/// The Watch streams orientation at up to ~50Hz and every write is a blocking
+/// native call (a `wpctl`/`pactl` subprocess on Linux). Targets are absolute,
+/// so a skipped sample loses nothing: the next one carries the current angle.
+const WRIST_ROTATION_VOLUME_WRITE_MIN_INTERVAL: Duration = Duration::from_millis(100);
 /// Caps how often the raw relative-roll diagnostic (below) can update and
 /// emit, independent of the Watch orientation sample rate (up to ~50Hz) --
 /// enough for a human to see the wrist roll changing during macOS bring-up
@@ -88,6 +93,7 @@ pub struct OverlayRuntime {
     state_generation: AtomicU64,
     refresh_in_flight: AtomicBool,
     last_wrist_rotation_haptic_at: Mutex<Option<Instant>>,
+    last_wrist_rotation_volume_write_at: Mutex<Option<Instant>>,
     last_relative_roll_diagnostic_at: Mutex<Option<Instant>>,
 }
 
@@ -129,6 +135,7 @@ impl Default for OverlayRuntime {
             state_generation: AtomicU64::new(0),
             refresh_in_flight: AtomicBool::new(false),
             last_wrist_rotation_haptic_at: Mutex::new(None),
+            last_wrist_rotation_volume_write_at: Mutex::new(None),
             last_relative_roll_diagnostic_at: Mutex::new(None),
         }
     }
@@ -315,6 +322,9 @@ impl OverlayRuntime {
             warn!(%error, "failed to begin wrist rotation reference; releasing grab");
             return self.release(app);
         }
+        if let Ok(mut last_write) = self.last_wrist_rotation_volume_write_at.lock() {
+            *last_write = None;
+        }
         self.state()
     }
 
@@ -343,6 +353,9 @@ impl OverlayRuntime {
             }
             return Ok(state);
         }
+        if !self.claim_wrist_rotation_volume_write() {
+            return Ok(state);
+        }
         let applied = self.set_absolute_system_volume(app, target_volume, volume_runtime)?;
         if (applied.volume - state.volume).abs() >= f32::EPSILON {
             self.notify_wrist_rotation_haptic(app);
@@ -352,6 +365,22 @@ impl OverlayRuntime {
             return self.set_corner_demo_phase(app, next_phase);
         }
         Ok(applied)
+    }
+
+    /// Claims the next wrist-rotation volume write slot, returning `false`
+    /// (skip this sample) if one was claimed less than
+    /// [`WRIST_ROTATION_VOLUME_WRITE_MIN_INTERVAL`] ago. Fails closed: a
+    /// poisoned lock skips the write.
+    fn claim_wrist_rotation_volume_write(&self) -> bool {
+        let Ok(mut last_write) = self.last_wrist_rotation_volume_write_at.lock() else {
+            return false;
+        };
+        let now = Instant::now();
+        if !volume_write_due(*last_write, now) {
+            return false;
+        }
+        *last_write = Some(now);
+        true
     }
 
     /// Sets the corner-demo status shown on the overlay; a no-op (no emit, no
@@ -553,6 +582,14 @@ impl OverlayRuntime {
     }
 }
 
+/// Whether enough time has passed since `last_write` for another wrist
+/// rotation volume write.
+fn volume_write_due(last_write: Option<Instant>, now: Instant) -> bool {
+    last_write.is_none_or(|previous| {
+        now.duration_since(previous) >= WRIST_ROTATION_VOLUME_WRITE_MIN_INTERVAL
+    })
+}
+
 /// Pure phase-transition rule for the corner-demo status while a sample is
 /// applied: while the demo interaction is `Ready`/`Adjusting`, reflects
 /// whether *this* sample actually produced a volume delta; every other
@@ -695,6 +732,39 @@ pub async fn refresh_system_volume(app: AppHandle) -> Result<OverlayState, Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn volume_write_is_due_for_the_first_write_and_after_the_interval() {
+        let now = Instant::now();
+        assert!(volume_write_due(None, now));
+        assert!(!volume_write_due(Some(now), now));
+        assert!(!volume_write_due(
+            Some(now),
+            now + WRIST_ROTATION_VOLUME_WRITE_MIN_INTERVAL - Duration::from_millis(1)
+        ));
+        assert!(volume_write_due(
+            Some(now),
+            now + WRIST_ROTATION_VOLUME_WRITE_MIN_INTERVAL
+        ));
+    }
+
+    /// D-M4-1: a 50Hz orientation stream must yield at most one native
+    /// write per interval, not one per sample.
+    #[test]
+    fn a_fifty_hertz_stream_is_throttled_to_the_write_interval() {
+        let start = Instant::now();
+        let mut last = None;
+        let mut writes = 0;
+        for tick in 0..20u32 {
+            let now = start + Duration::from_millis(u64::from(tick) * 20);
+            if volume_write_due(last, now) {
+                last = Some(now);
+                writes += 1;
+            }
+        }
+        // 400ms of samples at a 100ms interval: writes at 0, 100, 200, 300.
+        assert_eq!(writes, 4);
+    }
 
     #[test]
     fn corner_demo_phase_toggles_between_ready_and_adjusting_while_active() {
