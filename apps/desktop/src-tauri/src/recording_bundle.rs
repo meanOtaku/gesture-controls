@@ -287,6 +287,94 @@ fn recording_bundles_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(base.join(RECORDING_BUNDLES_DIR_NAME))
 }
 
+/// Checks everything in a webview-supplied save request that can be verified
+/// against the `raw.csv` it ships with, so the persisted "immutable evidence"
+/// bundle is never internally inconsistent: the CSV must satisfy the same
+/// full header/field contract an import does, the declared row counts must
+/// match what is actually in it, and every annotation interval must point at
+/// rows that exist, in order. (`actual_start`/`actual_end` and
+/// `actual_duration_ms` come from the webview's own clocks, not from CSV
+/// timestamps, so they cannot be cross-checked here. Labels are not required
+/// to exist in the label registry and CSV timestamps are not required to be
+/// ordered: rejecting either would discard a capture that can never be
+/// re-recorded.)
+fn validate_save_request(
+    raw_csv: &str,
+    recording: &RecordingMetadata,
+    annotations: &AnnotationsFile,
+) -> Result<(), String> {
+    const SUPPORTED_FORMAT_VERSION: u32 = 1;
+    if recording.format_version != SUPPORTED_FORMAT_VERSION
+        || annotations.format_version != SUPPORTED_FORMAT_VERSION
+    {
+        return Err(format!(
+            "unsupported recording bundle format_version (expected {SUPPORTED_FORMAT_VERSION})"
+        ));
+    }
+    let (row_count, _, _) = validate_raw_csv_full(raw_csv)?;
+    if recording.raw_row_count != row_count {
+        return Err(format!(
+            "recording.raw_row_count ({}) does not match the {row_count} data rows in raw.csv",
+            recording.raw_row_count
+        ));
+    }
+    if recording.sources.is_empty() {
+        return Err("recording must declare at least one source".to_string());
+    }
+    let source_row_total: usize = recording.raw_source_row_counts.values().sum();
+    if source_row_total != row_count {
+        return Err(format!(
+            "recording.raw_source_row_counts sums to {source_row_total}, not the {row_count} data rows in raw.csv"
+        ));
+    }
+    for source_id in recording.raw_source_row_counts.keys() {
+        if !recording
+            .sources
+            .iter()
+            .any(|source| &source.source_id == source_id)
+        {
+            return Err(format!(
+                "recording.raw_source_row_counts names source '{source_id}', which is not in recording.sources"
+            ));
+        }
+    }
+    if recording.actual_end.monotonic_ns < recording.actual_start.monotonic_ns {
+        return Err("recording.actual_end must not precede recording.actual_start".to_string());
+    }
+
+    let mut seen_interval_ids = std::collections::HashSet::new();
+    for interval in &annotations.intervals {
+        if interval.interval_id.is_empty()
+            || !seen_interval_ids.insert(interval.interval_id.as_str())
+        {
+            return Err("annotation interval ids must be non-empty and unique".to_string());
+        }
+        if interval.label_id.trim().is_empty() {
+            return Err("annotation interval label_id must not be empty".to_string());
+        }
+        if interval.revision == 0 || interval.resolution_rule_version == 0 {
+            return Err(
+                "annotation interval revision and resolution_rule_version must be at least 1"
+                    .to_string(),
+            );
+        }
+        let (start, end) = (&interval.resolved_start, &interval.resolved_end);
+        if start.raw_row > end.raw_row || end.raw_row >= row_count {
+            return Err(format!(
+                "annotation interval '{}' resolves to rows {}..={}, outside the {row_count} rows in raw.csv or out of order",
+                interval.interval_id, start.raw_row, end.raw_row
+            ));
+        }
+        if interval.requested_start_monotonic_ns > interval.requested_end_monotonic_ns {
+            return Err(format!(
+                "annotation interval '{}' requested start follows its requested end",
+                interval.interval_id
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Writes the three-file bundle atomically: everything is staged in a sibling
 /// `<id>.tmp` directory, then the whole directory is renamed into place in one
 /// filesystem operation, so `raw.csv` never exists half-written and a
@@ -311,6 +399,7 @@ pub fn save_recording_bundle(
             raw_csv.len()
         ));
     }
+    validate_save_request(&raw_csv, &recording, &annotations)?;
 
     let dir = recording_bundles_dir(&app)?;
     fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
@@ -2356,6 +2445,94 @@ mod tests {
                 revision: 1,
             }],
         }
+    }
+
+    fn valid_raw_csv(rows: usize) -> String {
+        let mut lines = vec![RAW_CSV_HEADER.join(",")];
+        for row in 0..rows {
+            let mut fields = vec![(1_000 * (row as i64 + 1)).to_string(), row.to_string()];
+            fields.extend(std::iter::repeat_n(String::new(), RAW_CSV_HEADER.len() - 2));
+            lines.push(fields.join(","));
+        }
+        lines.join("\n")
+    }
+
+    /// D-M3-2: `save_recording_bundle` used to persist whatever the webview
+    /// sent -- counts, interval rows and all -- into the file the module calls
+    /// immutable evidence.
+    #[test]
+    fn validate_save_request_accepts_a_consistent_request() {
+        let id = Uuid::new_v4().to_string();
+        validate_save_request(
+            &valid_raw_csv(2),
+            &sample_metadata(&id),
+            &sample_annotations(&id),
+        )
+        .expect("a consistent request must be accepted");
+    }
+
+    #[test]
+    fn validate_save_request_rejects_a_wrong_header_or_malformed_row() {
+        let id = Uuid::new_v4().to_string();
+        let (meta, ann) = (sample_metadata(&id), sample_annotations(&id));
+        assert!(validate_save_request("a,b,c\n1,2,3", &meta, &ann).is_err());
+        let bad_row = valid_raw_csv(2).replace("2000,1", "2000,x");
+        assert!(validate_save_request(&bad_row, &meta, &ann).is_err());
+    }
+
+    #[test]
+    fn validate_save_request_rejects_row_count_mismatches() {
+        let id = Uuid::new_v4().to_string();
+        let ann = sample_annotations(&id);
+        // sample_metadata declares 2 rows.
+        assert!(validate_save_request(&valid_raw_csv(3), &sample_metadata(&id), &ann).is_err());
+        let mut meta = sample_metadata(&id);
+        meta.raw_source_row_counts = BTreeMap::from([("watch".to_string(), 5)]);
+        assert!(validate_save_request(&valid_raw_csv(2), &meta, &ann).is_err());
+        let mut meta = sample_metadata(&id);
+        meta.raw_source_row_counts = BTreeMap::from([("ghost".to_string(), 2)]);
+        assert!(validate_save_request(&valid_raw_csv(2), &meta, &ann).is_err());
+    }
+
+    #[test]
+    fn validate_save_request_rejects_intervals_outside_the_rows() {
+        let id = Uuid::new_v4().to_string();
+        let meta = sample_metadata(&id);
+        let mut ann = sample_annotations(&id);
+        ann.intervals[0].resolved_end.raw_row = 2; // only rows 0..=1 exist
+        assert!(validate_save_request(&valid_raw_csv(2), &meta, &ann).is_err());
+
+        let mut ann = sample_annotations(&id);
+        ann.intervals[0].resolved_start.raw_row = 1;
+        ann.intervals[0].resolved_end.raw_row = 0;
+        assert!(validate_save_request(&valid_raw_csv(2), &meta, &ann).is_err());
+    }
+
+    #[test]
+    fn validate_save_request_rejects_empty_labels_duplicate_ids_and_bad_versions() {
+        let id = Uuid::new_v4().to_string();
+        let meta = sample_metadata(&id);
+        let mut ann = sample_annotations(&id);
+        ann.intervals[0].label_id = "  ".to_string();
+        assert!(validate_save_request(&valid_raw_csv(2), &meta, &ann).is_err());
+
+        let mut ann = sample_annotations(&id);
+        let duplicate = ann.intervals[0].clone();
+        ann.intervals.push(duplicate);
+        assert!(validate_save_request(&valid_raw_csv(2), &meta, &ann).is_err());
+
+        let mut ann = sample_annotations(&id);
+        ann.format_version = 2;
+        assert!(validate_save_request(&valid_raw_csv(2), &meta, &ann).is_err());
+    }
+
+    #[test]
+    fn validate_save_request_accepts_a_capture_with_no_intervals() {
+        let id = Uuid::new_v4().to_string();
+        let mut ann = sample_annotations(&id);
+        ann.intervals.clear();
+        validate_save_request(&valid_raw_csv(2), &sample_metadata(&id), &ann)
+            .expect("an unannotated capture is still evidence worth saving");
     }
 
     #[test]
