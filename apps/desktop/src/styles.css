@@ -282,3 +282,26 @@ html.overlay-document body::before { display:none; }
 .model-lab-log li>span { flex:0 0 auto; color:var(--ink-3); font-family:var(--font-mono); }
 .model-lab-log li[data-level="warn"] { color:var(--yellow); }
 .model-lab-log li[data-level="error"] { color:var(--red); }
+
+/* Form fields: a label row, the input with its unit inside, and one line that is either the hint or the error. */
+.field { display:flex; flex-direction:column; gap:.35rem; min-width:0; }
+.field-head { display:flex; align-items:center; justify-content:space-between; gap:.5rem; min-height:1.25rem; }
+.field-head label { font-family:var(--font-display); text-transform:uppercase; letter-spacing:.1em; font-size:.85rem; font-weight:500; color:var(--ink); }
+.field-edited { font-family:var(--font-display); text-transform:uppercase; letter-spacing:.1em; font-size:.7rem; color:var(--blue); background:var(--yellow); padding:0 .4rem; line-height:1.25rem; }
+.field-control { position:relative; display:flex; align-items:center; }
+.field-control [data-slot="input"] { height:2.25rem; padding-right:3.4rem; font-family:var(--font-mono); font-size:.95rem; font-variant-numeric:tabular-nums; }
+.field-control [data-slot="input"]:focus-visible { border-color:var(--yellow); box-shadow:none; outline:2px solid var(--yellow); outline-offset:0; }
+.field-unit { position:absolute; right:.6rem; pointer-events:none; font-family:var(--font-display); text-transform:uppercase; letter-spacing:.08em; font-size:.8rem; color:var(--ink-3); }
+.field-reset { position:absolute; right:2.6rem; }
+.field-control:has(.field-reset) [data-slot="input"] { padding-right:5.4rem; }
+.field-control:has(.field-reset) .field-unit { right:.6rem; }
+.field-hint, .field-error { margin:0; font-size:.76rem; line-height:1.4; min-height:1.05rem; }
+.field-hint { color:var(--ink-3); }
+.field-default { color:var(--ink-3); opacity:.85; }
+.field-error { color:var(--red); }
+.field[data-invalid] [data-slot="input"] { border-color:var(--red); }
+.field[data-dirty]:not([data-invalid]) [data-slot="input"] { border-color:var(--yellow); }
+.field-control [data-slot="input"]::-webkit-outer-spin-button, .field-control [data-slot="input"]::-webkit-inner-spin-button { opacity:.6; }
+
+/* The settings action bar stays reachable while a long form scrolls beneath it. */
+.settings-footer { position:sticky; bottom:1rem; z-index:5; background:var(--surface-2); border:1px solid var(--ink); }

@@ -1,6 +1,7 @@
-import { useRef } from "react";
+import type { FormEvent } from "react";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
-import { CONTROLLABLE_SENSORS, type AppSettings, type OverlayState, type WatchStatus } from "../../../shared/protocol/events";
+import { useNumberDrafts } from "../../../shared/forms/useNumberDrafts";
+import type { AppSettings, OverlayState, WatchStatus } from "../../../shared/protocol/events";
 import { ApplySettingsFooter } from "./ApplySettingsFooter";
 import { CornerWristVolumeDemoSection } from "./CornerWristVolumeDemoSection";
 import { CornerWristVolumeDiagnosticsSection } from "./CornerWristVolumeDiagnosticsSection";
@@ -11,6 +12,8 @@ import { WatchRateSettingsSection } from "./WatchRateSettingsSection";
 import { WatchSensorSwitchSection } from "./WatchSensorSwitchSection";
 import { WatchTransportSection } from "./WatchTransportSection";
 import { WristRotationSettings } from "./WristRotationSettings";
+import { DEFAULT_SETTINGS, SETTINGS_FIELDS, numericValues } from "../settingsFields";
+import { SettingsFormProvider, settingInputId } from "../settingsForm";
 
 const EMPTY_OVERLAY_STATE: OverlayState = {
   visible: false,
@@ -35,34 +38,6 @@ interface SettingsProps {
   onReset: () => void;
 }
 
-/** Mirrors `AppSettings::default()` in `apps/desktop/src-tauri/src/settings.rs`, used only until the real settings load. */
-const DEFAULT_SETTINGS: AppSettings = {
-  headphonesEnabled: true,
-  headphonesRateHz: 60,
-  recordingRateHz: 30,
-  graphRefreshRateHz: 15,
-  watchOrientationRateHz: 50,
-  watchAccelerationRateHz: 50,
-  watchGyroscopeRateHz: 50,
-  watchPpgFlushRateHz: 1,
-  watchHeartRateAcceptanceRateHz: 200,
-  watchSkinTemperatureAcceptanceRateHz: 200,
-  watchEdaAcceptanceRateHz: 200,
-  wristDeadZoneDegrees: 3,
-  wristVolumePointsPerDegree: 1 / 3,
-  wristMaxAngularVelocityDegreesPerSecond: 360,
-  wristMaxVolumePointsPerSecond: 30,
-  watchSensorsEnabled: Object.fromEntries(CONTROLLABLE_SENSORS.map(({ id }) => [id, true])),
-  cornerWristVolumeDemoEnabled: false,
-  cornerWristVolumeInvertDirection: false,
-  watchTransport: "bluetooth",
-};
-
-function clamp(raw: string | undefined, min: number, max: number, fallback: number): number {
-  const value = Number(raw);
-  return Number.isFinite(value) && value >= min && value <= max ? value : fallback;
-}
-
 export function Settings({
   settings,
   error,
@@ -73,39 +48,18 @@ export function Settings({
   onReset,
 }: SettingsProps) {
   const current = settings ?? DEFAULT_SETTINGS;
-  const headphonesRateInput = useRef<HTMLInputElement>(null);
-  const recordingRateInput = useRef<HTMLInputElement>(null);
-  const graphRefreshRateInput = useRef<HTMLInputElement>(null);
-  const watchOrientationRateInput = useRef<HTMLInputElement>(null);
-  const watchAccelerationRateInput = useRef<HTMLInputElement>(null);
-  const watchGyroscopeRateInput = useRef<HTMLInputElement>(null);
-  const watchPpgFlushRateInput = useRef<HTMLInputElement>(null);
-  const watchHeartRateAcceptanceRateInput = useRef<HTMLInputElement>(null);
-  const watchSkinTemperatureAcceptanceRateInput = useRef<HTMLInputElement>(null);
-  const watchEdaAcceptanceRateInput = useRef<HTMLInputElement>(null);
-  const wristDeadZoneInput = useRef<HTMLInputElement>(null);
-  const wristSensitivityInput = useRef<HTMLInputElement>(null);
-  const wristVelocityInput = useRef<HTMLInputElement>(null);
-  const wristVolumeRateInput = useRef<HTMLInputElement>(null);
+  const drafts = useNumberDrafts(SETTINGS_FIELDS, numericValues(current));
 
-  const commitRates = () => {
-    onUpdate({
-      ...current,
-      headphonesRateHz: clamp(headphonesRateInput.current?.value, 1, 200, current.headphonesRateHz),
-      recordingRateHz: clamp(recordingRateInput.current?.value, 1, 200, current.recordingRateHz),
-      graphRefreshRateHz: clamp(graphRefreshRateInput.current?.value, 1, 60, current.graphRefreshRateHz),
-      watchOrientationRateHz: clamp(watchOrientationRateInput.current?.value, 1, 200, current.watchOrientationRateHz),
-      watchAccelerationRateHz: clamp(watchAccelerationRateInput.current?.value, 1, 200, current.watchAccelerationRateHz),
-      watchGyroscopeRateHz: clamp(watchGyroscopeRateInput.current?.value, 1, 200, current.watchGyroscopeRateHz),
-      watchPpgFlushRateHz: clamp(watchPpgFlushRateInput.current?.value, 0.1, 10, current.watchPpgFlushRateHz),
-      watchHeartRateAcceptanceRateHz: clamp(watchHeartRateAcceptanceRateInput.current?.value, 0.1, 200, current.watchHeartRateAcceptanceRateHz),
-      watchSkinTemperatureAcceptanceRateHz: clamp(watchSkinTemperatureAcceptanceRateInput.current?.value, 0.1, 200, current.watchSkinTemperatureAcceptanceRateHz),
-      watchEdaAcceptanceRateHz: clamp(watchEdaAcceptanceRateInput.current?.value, 0.1, 200, current.watchEdaAcceptanceRateHz),
-      wristDeadZoneDegrees: clamp(wristDeadZoneInput.current?.value, 0, 45, current.wristDeadZoneDegrees),
-      wristVolumePointsPerDegree: clamp(wristSensitivityInput.current?.value, 0.01, 5, current.wristVolumePointsPerDegree),
-      wristMaxAngularVelocityDegreesPerSecond: clamp(wristVelocityInput.current?.value, 1, 2000, current.wristMaxAngularVelocityDegreesPerSecond),
-      wristMaxVolumePointsPerSecond: clamp(wristVolumeRateInput.current?.value, 1, 100, current.wristMaxVolumePointsPerSecond),
-    });
+  // Validates every edited field at once. An invalid value is never applied or quietly replaced: the
+  // fields say what is wrong and focus goes to the first one.
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const result = drafts.submit();
+    if (result.values === null) {
+      document.getElementById(settingInputId(result.firstInvalid))?.focus();
+      return;
+    }
+    onUpdate({ ...current, ...result.values });
   };
 
   const toggleHeadphonesEnabled = () => onUpdate({ ...current, headphonesEnabled: !current.headphonesEnabled });
@@ -135,79 +89,50 @@ export function Settings({
         </Alert>
       )}
 
-      <HeadphonesSettingsSection
-        enabled={current.headphonesEnabled}
-        rateHz={current.headphonesRateHz}
-        rateInputRef={headphonesRateInput}
-        onToggleEnabled={toggleHeadphonesEnabled}
-      />
+      <SettingsFormProvider value={drafts}>
+        <form noValidate aria-label="Settings" className="flex flex-col gap-8" onSubmit={submit}>
+          <HeadphonesSettingsSection enabled={current.headphonesEnabled} onToggleEnabled={toggleHeadphonesEnabled} />
 
-      <WristRotationSettings
-        deadZoneDegrees={current.wristDeadZoneDegrees}
-        volumePointsPerDegree={current.wristVolumePointsPerDegree}
-        maxAngularVelocityDegreesPerSecond={current.wristMaxAngularVelocityDegreesPerSecond}
-        maxVolumePointsPerSecond={current.wristMaxVolumePointsPerSecond}
-        deadZoneInputRef={wristDeadZoneInput}
-        sensitivityInputRef={wristSensitivityInput}
-        velocityInputRef={wristVelocityInput}
-        volumeRateInputRef={wristVolumeRateInput}
-      />
+          <WristRotationSettings />
 
-      <RecordingGraphSettingsSection
-        recordingRateHz={current.recordingRateHz}
-        graphRefreshRateHz={current.graphRefreshRateHz}
-        recordingRateInputRef={recordingRateInput}
-        graphRefreshRateInputRef={graphRefreshRateInput}
-      />
+          <RecordingGraphSettingsSection />
 
-      <WatchTransportSection
-        selected={current.watchTransport}
-        onSelect={(watchTransport) => onUpdate({ ...current, watchTransport })}
-      />
+          <WatchTransportSection
+            selected={current.watchTransport}
+            onSelect={(watchTransport) => onUpdate({ ...current, watchTransport })}
+          />
 
-      <WatchRateSettingsSection
-        orientationRateHz={current.watchOrientationRateHz}
-        accelerationRateHz={current.watchAccelerationRateHz}
-        gyroscopeRateHz={current.watchGyroscopeRateHz}
-        orientationRateInputRef={watchOrientationRateInput}
-        accelerationRateInputRef={watchAccelerationRateInput}
-        gyroscopeRateInputRef={watchGyroscopeRateInput}
-      />
+          <WatchRateSettingsSection />
 
-      <WatchHealthDeliverySettingsSection
-        ppgFlushRateHz={current.watchPpgFlushRateHz}
-        heartRateAcceptanceRateHz={current.watchHeartRateAcceptanceRateHz}
-        skinTemperatureAcceptanceRateHz={current.watchSkinTemperatureAcceptanceRateHz}
-        edaAcceptanceRateHz={current.watchEdaAcceptanceRateHz}
-        ppgFlushRateInputRef={watchPpgFlushRateInput}
-        heartRateAcceptanceRateInputRef={watchHeartRateAcceptanceRateInput}
-        skinTemperatureAcceptanceRateInputRef={watchSkinTemperatureAcceptanceRateInput}
-        edaAcceptanceRateInputRef={watchEdaAcceptanceRateInput}
-      />
+          <WatchHealthDeliverySettingsSection />
 
-      <WatchSensorSwitchSection watchSensorsEnabled={current.watchSensorsEnabled} onToggle={toggleWatchSensor} />
+          <WatchSensorSwitchSection watchSensorsEnabled={current.watchSensorsEnabled} onToggle={toggleWatchSensor} />
 
-      <CornerWristVolumeDemoSection
-        enabled={current.cornerWristVolumeDemoEnabled}
-        invertDirection={current.cornerWristVolumeInvertDirection}
-        onToggleEnabled={toggleCornerWristVolumeDemoEnabled}
-        onToggleInvertDirection={toggleCornerWristVolumeInvertDirection}
-      />
+          <CornerWristVolumeDemoSection
+            enabled={current.cornerWristVolumeDemoEnabled}
+            invertDirection={current.cornerWristVolumeInvertDirection}
+            onToggleEnabled={toggleCornerWristVolumeDemoEnabled}
+            onToggleInvertDirection={toggleCornerWristVolumeInvertDirection}
+          />
 
-      {current.cornerWristVolumeDemoEnabled && (
-        <CornerWristVolumeDiagnosticsSection
-          overlay={overlay}
-          watchStatus={watchStatus}
-          invertDirection={current.cornerWristVolumeInvertDirection}
-        />
-      )}
+          {current.cornerWristVolumeDemoEnabled && (
+            <CornerWristVolumeDiagnosticsSection
+              overlay={overlay}
+              watchStatus={watchStatus}
+              invertDirection={current.cornerWristVolumeInvertDirection}
+            />
+          )}
 
-      <ApplySettingsFooter
-        applyPending={isPending("settings:apply")}
-        resetPending={isPending("settings:reset")}
-        onApply={commitRates}
-        onReset={onReset}
-      />
+          <ApplySettingsFooter
+            dirtyCount={drafts.dirtyCount}
+            invalidCount={drafts.invalidCount}
+            applyPending={isPending("settings:apply")}
+            resetPending={isPending("settings:reset")}
+            onDiscard={drafts.discard}
+            onReset={onReset}
+          />
+        </form>
+      </SettingsFormProvider>
     </main>
   );
 }

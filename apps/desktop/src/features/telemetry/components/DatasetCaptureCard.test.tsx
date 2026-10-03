@@ -82,8 +82,31 @@ describe("DatasetCaptureCard", () => {
     renderCard({ onSelectLabel: vi.fn(() => false) });
     fireEvent.change(screen.getByLabelText("Dataset label"), { target: { value: "9bad" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply label" }));
-    expect(screen.getByRole("alert")).toHaveTextContent(/letters, numbers, or underscores/);
+    expect(screen.getByRole("alert")).toHaveTextContent(/letters, numbers or underscores/);
     expect(screen.getByLabelText("Dataset label")).toHaveValue("9bad");
+    expect(screen.getByLabelText("Dataset label")).toHaveFocus();
+  });
+
+  it("tells the user, as they type, what the label will be saved as", () => {
+    renderCard();
+    expect(screen.getByText(/Name what you are about to record/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Dataset label"), { target: { value: "Wrist Flick" } });
+    expect(screen.getByText("wrist_flick")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("flags a label that can never be valid as soon as it is typed, without waiting for Apply", () => {
+    renderCard();
+    fireEvent.change(screen.getByLabelText("Dataset label"), { target: { value: "9" } });
+    expect(screen.getByLabelText("Dataset label")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("alert")).toHaveTextContent(/Start with a letter/);
+  });
+
+  it("applies the label when Enter submits the form", () => {
+    const props = renderCard();
+    fireEvent.change(screen.getByLabelText("Dataset label"), { target: { value: "wrist_flick" } });
+    fireEvent.submit(screen.getByLabelText("Dataset label").closest("form")!);
+    expect(props.onSelectLabel).toHaveBeenCalledWith("wrist_flick");
   });
 
   it("disables label editing while a dataset session is recording", () => {
@@ -97,14 +120,17 @@ describe("DatasetCaptureCard", () => {
     const onStart = vi.fn();
     renderCard({ onStart, selectedLabel: null });
 
-    const durationInput = screen.getByLabelText("Recording duration in seconds");
+    const durationInput = screen.getByLabelText("Recording duration");
     const startButton = screen.getByRole("button", { name: "Start dataset capture" });
 
     fireEvent.change(durationInput, { target: { value: "0" } });
     expect(startButton).toBeDisabled();
+    // The button is not left disabled without a reason: the field says what is wrong.
+    expect(durationInput).toHaveAccessibleDescription("Too low: the minimum is 1 s.");
 
     fireEvent.change(durationInput, { target: { value: "3601" } });
     expect(startButton).toBeDisabled();
+    expect(durationInput).toHaveAccessibleDescription("Too high: the maximum is 3,600 s.".replace(",", ""));
 
     fireEvent.change(durationInput, { target: { value: "45" } });
     expect(startButton).toBeEnabled();

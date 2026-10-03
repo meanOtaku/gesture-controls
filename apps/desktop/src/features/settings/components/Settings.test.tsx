@@ -28,11 +28,15 @@ const settings: AppSettings = {
 };
 
 describe("Settings", () => {
-  it("renders every rate control with its current value", () => {
+  it("renders every numeric control with its current value, unit and allowed range", () => {
     render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
-    expect(screen.getByLabelText("Headphones rate Hz")).toHaveValue(60);
-    expect(screen.getByLabelText("Wrist rotation dead zone degrees")).toHaveValue(3);
-    expect(screen.getByLabelText("Watch PPG flush rate Hz")).toHaveValue(1);
+    expect(screen.getByLabelText("Headphones rate")).toHaveValue(60);
+    expect(screen.getByLabelText("Dead zone")).toHaveValue(3);
+    expect(screen.getByLabelText("Raw PPG flush")).toHaveValue(1);
+    // A long float is shown trimmed, not as 0.3333333333333333.
+    expect(screen.getByLabelText("Sensitivity")).toHaveValue(0.3333);
+    // The range and default are stated up front, not discovered by failing.
+    expect(screen.getByLabelText("Headphones rate")).toHaveAccessibleDescription(/Allowed: 1–200 Hz.*default 60 Hz/);
   });
 
   it("shows the settings error near the affected controls", () => {
@@ -40,17 +44,103 @@ describe("Settings", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Settings write failed");
   });
 
-  it("applies every edited rate together, clamped to its valid range", () => {
+  it("starts with nothing to apply, and says so", () => {
+    render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
+    expect(screen.getByRole("button", { name: "Apply changes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Discard changes" })).toBeDisabled();
+    expect(screen.getByText("All changes are applied.")).toBeInTheDocument();
+  });
+
+  it("applies every edited value together", () => {
     const updates: AppSettings[] = [];
     render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
 
-    fireEvent.change(screen.getByLabelText("Headphones rate Hz"), { target: { value: "999" } });
-    fireEvent.change(screen.getByLabelText("Wrist rotation dead zone degrees"), { target: { value: "10" } });
-    fireEvent.click(screen.getByRole("button", { name: "Apply rates" }));
+    fireEvent.change(screen.getByLabelText("Headphones rate"), { target: { value: "90" } });
+    fireEvent.change(screen.getByLabelText("Dead zone"), { target: { value: "10" } });
+    expect(screen.getByText("2 changes not applied yet.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
 
     expect(updates).toHaveLength(1);
-    expect(updates[0].headphonesRateHz).toBe(60);
+    expect(updates[0].headphonesRateHz).toBe(90);
     expect(updates[0].wristDeadZoneDegrees).toBe(10);
+    // A field nobody touched keeps its exact saved value, not the rounded text shown for it.
+    expect(updates[0].wristVolumePointsPerDegree).toBe(1 / 3);
+  });
+
+  it("refuses an out-of-range value, says why, and applies nothing", () => {
+    const updates: AppSettings[] = [];
+    render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText("Headphones rate"), { target: { value: "999" } });
+    fireEvent.change(screen.getByLabelText("Dead zone"), { target: { value: "10" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+
+    expect(updates).toHaveLength(0); // the old behaviour silently applied 60 for the bad field
+    const input = screen.getByLabelText("Headphones rate");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription("Too high: the maximum is 200 Hz.");
+    expect(screen.getByText("1 field needs attention before it can be applied.")).toBeInTheDocument();
+    // What was typed is kept, so it can be corrected rather than retyped.
+    expect(input).toHaveValue(999);
+    // The valid edit beside it is not lost.
+    expect(screen.getByLabelText("Dead zone")).toHaveValue(10);
+  });
+
+  it("moves focus to the first invalid field when applying fails", () => {
+    render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
+    fireEvent.change(screen.getByLabelText("Headphones rate"), { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    expect(screen.getByLabelText("Headphones rate")).toHaveFocus();
+  });
+
+  it("holds back an error until the field is left, so typing is not scolded mid-word", () => {
+    render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
+    const input = screen.getByLabelText("Headphones rate");
+    fireEvent.change(input, { target: { value: "" } });
+    expect(input).toHaveAttribute("aria-invalid", "false");
+    fireEvent.blur(input);
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription("Enter a value.");
+  });
+
+  it("submits from the keyboard: Enter in a field applies, like the button", () => {
+    const updates: AppSettings[] = [];
+    render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
+    fireEvent.change(screen.getByLabelText("Recording rate"), { target: { value: "45" } });
+    fireEvent.submit(screen.getByRole("form", { name: "Settings" }));
+    expect(updates[0].recordingRateHz).toBe(45);
+  });
+
+  it("discards edits and their errors", () => {
+    render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
+    fireEvent.change(screen.getByLabelText("Headphones rate"), { target: { value: "999" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(screen.getByLabelText("Headphones rate")).toHaveValue(60);
+    expect(screen.getByLabelText("Headphones rate")).toHaveAttribute("aria-invalid", "false");
+    expect(screen.getByText("All changes are applied.")).toBeInTheDocument();
+  });
+
+  it("marks an edited field, and resets a field to its default as a pending edit", () => {
+    render(<Settings settings={{ ...settings, headphonesRateHz: 120 }} onUpdate={() => {}} onReset={() => {}} />);
+    expect(screen.queryByText("Edited")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reset Headphones rate to its default, 60 Hz" }));
+    expect(screen.getByLabelText("Headphones rate")).toHaveValue(60);
+    expect(screen.getByText("Edited")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Apply changes" })).toBeEnabled();
+  });
+
+  it("keeps a half-typed value when a switch elsewhere changes the saved settings", () => {
+    const { rerender } = render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
+    fireEvent.change(screen.getByLabelText("Headphones rate"), { target: { value: "75" } });
+    rerender(
+      <Settings
+        settings={{ ...settings, watchSensorsEnabled: { ...settings.watchSensorsEnabled, orientation: false } }}
+        onUpdate={() => {}}
+        onReset={() => {}}
+      />,
+    );
+    expect(screen.getByLabelText("Headphones rate")).toHaveValue(75);
   });
 
   it("toggles a watch sensor switch immediately without a confirmation dialog", () => {

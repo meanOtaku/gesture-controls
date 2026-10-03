@@ -1,3 +1,4 @@
+import { parseNumber } from "../../../shared/forms/numberField";
 import { useState } from "react";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -195,39 +196,112 @@ export function RecordingTimelineEditor({
   );
 }
 
-function BoundaryEditor({ label, seconds, onCommit }: { label: string; seconds: number; onCommit: (seconds: number) => void }) {
-  const [value, setValue] = useState(seconds.toFixed(1));
+const TIME_SPEC = { min: 0, max: 1_000_000, unit: "s" } as const;
+
+/** A small seconds input that says what is wrong instead of ignoring it (an empty box is not 0). */
+function TimeInput({
+  id,
+  label,
+  value,
+  error,
+  onChange,
+  onCommit,
+  onBlur,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  error: string | null;
+  onChange: (text: string) => void;
+  onCommit: () => void;
+  onBlur?: () => void;
+}) {
   return (
-    <div className="flex items-center gap-1">
-      <span className="text-xs text-muted-foreground">{label}</span>
+    <span className="inline-flex flex-col gap-0.5">
       <Input
-        aria-label={`${label} time in seconds`}
+        id={id}
+        aria-label={label}
+        aria-invalid={error !== null}
+        aria-describedby={error ? `${id}-error` : undefined}
         className="w-20"
+        inputMode="decimal"
         value={value}
-        onChange={(event) => setValue(event.target.value)}
-        onBlur={() => {
-          const parsed = Number(value);
-          if (Number.isFinite(parsed)) onCommit(parsed);
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            onCommit();
+          }
         }}
+      />
+      {error && <small id={`${id}-error`} className="field-error" role="alert">{error}</small>}
+    </span>
+  );
+}
+
+export function BoundaryEditor({ label, seconds, onCommit }: { label: string; seconds: number; onCommit: (seconds: number) => void }) {
+  const initial = seconds.toFixed(1);
+  const [value, setValue] = useState(initial);
+  const [error, setError] = useState<string | null>(null);
+  const commit = () => {
+    if (value === initial) {
+      setError(null);
+      return;
+    }
+    const parsed = parseNumber(value, TIME_SPEC);
+    if (!parsed.ok) {
+      setError(parsed.message);
+      return;
+    }
+    setError(null);
+    onCommit(parsed.value);
+  };
+  return (
+    <div className="flex items-start gap-1">
+      <span className="text-xs text-muted-foreground pt-2">{label}</span>
+      <TimeInput
+        id={`boundary-${label.toLowerCase().replaceAll(" ", "-")}`}
+        label={`${label} time in seconds`}
+        value={value}
+        error={error}
+        onChange={(text) => {
+          setValue(text);
+          setError(null);
+        }}
+        onCommit={commit}
+        onBlur={commit}
       />
     </div>
   );
 }
 
-function SplitControl({ seconds, onSplit }: { seconds: number; onSplit: (seconds: number) => void }) {
+export function SplitControl({ seconds, onSplit }: { seconds: number; onSplit: (seconds: number) => void }) {
   const [value, setValue] = useState((seconds + 1).toFixed(1));
+  const [error, setError] = useState<string | null>(null);
+  const split = () => {
+    const parsed = parseNumber(value, TIME_SPEC);
+    if (!parsed.ok) {
+      setError(parsed.message);
+      return;
+    }
+    setError(null);
+    onSplit(parsed.value);
+  };
   return (
-    <div className="flex items-center gap-1">
-      <Input aria-label="Split at time in seconds" className="w-20" value={value} onChange={(event) => setValue(event.target.value)} />
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => {
-          const parsed = Number(value);
-          if (Number.isFinite(parsed)) onSplit(parsed);
+    <div className="flex items-start gap-1">
+      <TimeInput
+        id="split-at"
+        label="Split at time in seconds"
+        value={value}
+        error={error}
+        onChange={(text) => {
+          setValue(text);
+          setError(null);
         }}
-      >
+        onCommit={split}
+      />
+      <Button type="button" variant="outline" size="sm" onClick={split}>
         Split
       </Button>
     </div>

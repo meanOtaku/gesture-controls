@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AsyncActionButton } from "../../../components/app/AsyncActionButton";
 import { HelpTooltip } from "../../../components/app/HelpTooltip";
 import {
@@ -16,6 +16,9 @@ import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
+import { NumberField } from "../../../components/app/NumberField";
+import { parseNumber, type NumberSpec } from "../../../shared/forms/numberField";
+import type { FieldState } from "../../../shared/forms/useNumberDrafts";
 import { Label } from "../../../components/ui/label";
 import type { RecordingQualitySummary } from "../../../shared/tauri/recordingBundle";
 import type { LiveInterval } from "../annotations/timeline";
@@ -26,6 +29,7 @@ import {
   type DatasetRow,
   type DatasetSessionMetadata,
   type GestureDatasetLabel,
+  normalizeDatasetLabel,
 } from "../store/telemetryStore";
 
 /** Timeline Capture's timed-recording duration must stay well under the ~6,666s
@@ -34,6 +38,16 @@ import {
 export const TIMELINE_DURATION_SECONDS_MIN = 1;
 export const TIMELINE_DURATION_SECONDS_MAX = 3600;
 const DEFAULT_TIMELINE_DURATION_SECONDS = 30;
+const DURATION_SPEC: NumberSpec = {
+  label: "Recording duration",
+  unit: "s",
+  min: TIMELINE_DURATION_SECONDS_MIN,
+  max: TIMELINE_DURATION_SECONDS_MAX,
+  step: 1,
+  integer: true,
+  defaultValue: DEFAULT_TIMELINE_DURATION_SECONDS,
+  description: "Stops by itself after this long, counted from the first sample",
+};
 
 type DatasetCaptureCardProps = {
   selectedLabel: GestureDatasetLabel | null;
@@ -111,14 +125,28 @@ export function DatasetCaptureCard({
   timelineIntervals = [],
 }: DatasetCaptureCardProps) {
   const [customLabel, setCustomLabel] = useState("");
-  const [labelError, setLabelError] = useState<string | null>(null);
   const [exportReviewOpen, setExportReviewOpen] = useState(false);
   const [exportReviewSummary, setExportReviewSummary] = useState<RecordingQualitySummary | null>(null);
   const [exportReviewError, setExportReviewError] = useState<string | null>(null);
-  const [timelineDurationSeconds, setTimelineDurationSeconds] = useState(DEFAULT_TIMELINE_DURATION_SECONDS);
-  const timelineDurationValid = Number.isInteger(timelineDurationSeconds)
-    && timelineDurationSeconds >= TIMELINE_DURATION_SECONDS_MIN
-    && timelineDurationSeconds <= TIMELINE_DURATION_SECONDS_MAX;
+  const [durationText, setDurationText] = useState(String(DEFAULT_TIMELINE_DURATION_SECONDS));
+  const [durationTouched, setDurationTouched] = useState(false);
+  const [labelTouched, setLabelTouched] = useState(false);
+  const labelInputRef = useRef<HTMLInputElement>(null);
+  const duration = parseNumber(durationText, DURATION_SPEC);
+  const timelineDurationValid = duration.ok;
+  const timelineDurationSeconds = duration.ok ? duration.value : DEFAULT_TIMELINE_DURATION_SECONDS;
+  const durationDefaultText = String(DEFAULT_TIMELINE_DURATION_SECONDS);
+  const durationState: FieldState = {
+    text: durationText,
+    dirty: durationText !== durationDefaultText,
+    // An out-of-range number is wrong however it was typed; an empty or half-typed one waits for the field to be left.
+    error: !duration.ok && (durationTouched || durationText.trim() !== "") ? duration.message : null,
+    differsFromDefault: durationText !== durationDefaultText,
+  };
+  const normalizedLabel = normalizeDatasetLabel(customLabel);
+  const labelProblem = customLabel.trim() !== "" && normalizedLabel === null
+    ? "Start with a letter, then use letters, numbers or underscores, up to 64 characters."
+    : null;
   const isRecording = datasetRecordingState === "recording";
   const isMarking = isRecording && activeMarkerLabel !== null && activeMarkerLabel === selectedLabel;
   const canMark = isRecording && !!selectedLabel;
@@ -178,12 +206,14 @@ export function DatasetCaptureCard({
 
   const exportReviewHasWarnings = (exportReviewSummary?.warnings.length ?? 0) > 0;
 
-  const applyCustomLabel = () => {
+  const applyCustomLabel = (event?: FormEvent) => {
+    event?.preventDefault();
     if (onSelectLabel(customLabel)) {
       setCustomLabel("");
-      setLabelError(null);
+      setLabelTouched(false);
     } else {
-      setLabelError("Use a label beginning with a letter, followed by letters, numbers, or underscores (up to 64 characters).");
+      setLabelTouched(true);
+      labelInputRef.current?.focus();
     }
   };
 
@@ -217,23 +247,44 @@ export function DatasetCaptureCard({
       <CardContent className="flex flex-col gap-3">
         <p className="text-xs text-muted-foreground">{datasetRowCount.toLocaleString()} rows buffered</p>
         <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Label htmlFor="dataset-custom-label" className="sr-only">Dataset label</Label>
-            <Input
-              id="dataset-custom-label"
-              aria-label="Dataset label"
-              value={customLabel}
-              disabled={datasetRecording}
-              placeholder="Enter a label"
-              onChange={(event) => setCustomLabel(event.target.value)}
-            />
-            <Button type="button" variant="outline" disabled={datasetRecording || customLabel.trim().length === 0} onClick={applyCustomLabel}>
-              Apply label
-            </Button>
-            <HelpTooltip label="About labels">
-              Labels must start with a letter and contain only letters, numbers, or underscores (up to 64 characters).
-            </HelpTooltip>
-          </div>
+          <form className="field" noValidate onSubmit={applyCustomLabel} data-invalid={(labelTouched || customLabel !== "") && labelProblem ? true : undefined}>
+            <div className="field-head">
+              <Label htmlFor="dataset-custom-label">Dataset label</Label>
+              <HelpTooltip label="About labels">
+                A label names what you are about to record. It is saved in lower case with underscores in place of anything else, so
+                "Wrist Flick" becomes wrist_flick. It must start with a letter and be at most 64 characters.
+              </HelpTooltip>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                id="dataset-custom-label"
+                ref={labelInputRef}
+                value={customLabel}
+                disabled={datasetRecording}
+                placeholder="e.g. wrist flick"
+                aria-invalid={labelProblem !== null}
+                aria-describedby="dataset-custom-label-message"
+                autoComplete="off"
+                className="min-w-0 flex-1"
+                onChange={(event) => setCustomLabel(event.target.value)}
+                onBlur={() => setLabelTouched(true)}
+              />
+              <Button type="submit" variant="outline" disabled={datasetRecording || customLabel.trim().length === 0}>
+                Apply label
+              </Button>
+            </div>
+            <p
+              id="dataset-custom-label-message"
+              className={labelProblem ? "field-error" : "field-hint"}
+              role={labelProblem ? "alert" : undefined}
+              aria-live={labelProblem ? undefined : "polite"}
+            >
+              {labelProblem
+                ?? (normalizedLabel
+                  ? <>Will be saved as <strong>{normalizedLabel}</strong>. Press Enter to apply.</>
+                  : "Name what you are about to record, then press Enter.")}
+            </p>
+          </form>
           {sessionLabels.length > 0 && (
             <div className="flex flex-wrap gap-2">
               <Label className="text-xs text-muted-foreground w-full">Previously used labels</Label>
@@ -273,27 +324,20 @@ export function DatasetCaptureCard({
               Selected label: <span className="font-semibold">{selectedLabel.replaceAll("_", " ")}</span>
             </p>
           )}
-          <div className="flex flex-wrap items-center gap-2">
-            <Label htmlFor="timeline-duration-seconds" className="text-xs text-muted-foreground">
-              Duration (seconds):
-            </Label>
-            <Input
+          <div className="max-w-xs">
+            <NumberField
               id="timeline-duration-seconds"
-              type="number"
-              aria-label="Recording duration in seconds"
-              required
-              min={TIMELINE_DURATION_SECONDS_MIN}
-              max={TIMELINE_DURATION_SECONDS_MAX}
-              step={1}
-              value={timelineDurationSeconds}
+              spec={DURATION_SPEC}
+              state={durationState}
               disabled={datasetRecording}
-              className="w-24"
-              onChange={(event) => setTimelineDurationSeconds(Number(event.target.value))}
+              showEdited={false}
+              onChange={setDurationText}
+              onBlur={() => setDurationTouched(true)}
+              onResetToDefault={() => {
+                setDurationText(durationDefaultText);
+                setDurationTouched(true);
+              }}
             />
-            <HelpTooltip label="About the recording duration">
-              Runs for exactly this many seconds once the first sample lands, then stops. Must be
-              between {TIMELINE_DURATION_SECONDS_MIN} and {TIMELINE_DURATION_SECONDS_MAX} seconds.
-            </HelpTooltip>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -423,11 +467,6 @@ export function DatasetCaptureCard({
             </AlertDialogContent>
           </AlertDialog>
         </div>
-        {labelError && (
-          <Alert variant="destructive" role="alert">
-            <AlertDescription>{labelError}</AlertDescription>
-          </Alert>
-        )}
       </CardContent>
     </Card>
   );

@@ -73,14 +73,40 @@ describe("Dashboard", () => {
     fireEvent.click(dashboard.getByRole("button", { name: /Capture top-right/ }));
     expect(captures).toEqual(["center", "topRight"]);
 
-    const threshold = dashboard.getByLabelText("Activation threshold degrees");
+    const threshold = dashboard.getByLabelText("Activation threshold");
     fireEvent.change(threshold, { target: { value: "18" } });
     expect(settings).toEqual([]);
     fireEvent.blur(threshold);
-    const dwell = dashboard.getByLabelText("Activation dwell milliseconds");
+    const dwell = dashboard.getByLabelText("Activation dwell");
     fireEvent.change(dwell, { target: { value: "650" } });
     fireEvent.blur(dwell);
     expect(settings).toEqual([[18, 400], [18, 650]]);
+  });
+
+  it("does not look as if an invalid calibration value was accepted", () => {
+    const settings: Array<[number, number]> = [];
+    const { container } = render(
+      <Dashboard
+        view="headphone"
+        status={null}
+        calibration={{
+          centerCalibrated: true,
+          topRightCalibrated: true,
+          requiresRecalibration: false,
+          activationThresholdDegrees: 12,
+          dwellMs: 400,
+          activeTarget: null,
+        }}
+        onUpdateCalibration={(threshold, dwell) => settings.push([threshold, dwell])}
+      />,
+    );
+    const threshold = within(container).getByLabelText("Activation threshold");
+    fireEvent.change(threshold, { target: { value: "500" } });
+    fireEvent.blur(threshold);
+    expect(settings).toEqual([]); // nothing was applied...
+    expect(threshold).toHaveAttribute("aria-invalid", "true"); // ...and the field says so
+    expect(threshold).toHaveAccessibleDescription("Too high: the maximum is 180 °.");
+    expect(threshold).toHaveValue(500); // kept, so it can be corrected rather than retyped
   });
 
   it("shows a clear waiting state and one-command launch guidance before the first packet", () => {

@@ -1,31 +1,9 @@
-import type { RefObject } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
-import { Input } from "../../../components/ui/input";
-import { Label } from "../../../components/ui/label";
-
-type WristRotationSettingsProps = {
-  deadZoneDegrees: number;
-  volumePointsPerDegree: number;
-  maxAngularVelocityDegreesPerSecond: number;
-  maxVolumePointsPerSecond: number;
-  deadZoneInputRef: RefObject<HTMLInputElement | null>;
-  sensitivityInputRef: RefObject<HTMLInputElement | null>;
-  velocityInputRef: RefObject<HTMLInputElement | null>;
-  volumeRateInputRef: RefObject<HTMLInputElement | null>;
-};
+import { SettingsNumberField } from "../settingsForm";
 
 /** Wrist-rotation tuning for the volume knob gesture: sensitivity, and rate limiting. */
-export function WristRotationSettings({
-  deadZoneDegrees,
-  volumePointsPerDegree,
-  maxAngularVelocityDegreesPerSecond,
-  maxVolumePointsPerSecond,
-  deadZoneInputRef,
-  sensitivityInputRef,
-  velocityInputRef,
-  volumeRateInputRef,
-}: WristRotationSettingsProps) {
+export function WristRotationSettings() {
   return (
     <Card role="region" aria-label="Wrist rotation controls">
       <CardHeader>
@@ -38,27 +16,11 @@ export function WristRotationSettings({
           }}
         />
       </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-        <Label className="flex flex-col items-start gap-1">
-          Dead zone
-          <Input aria-label="Wrist rotation dead zone degrees" type="number" min="0" max="45" step="0.5" ref={deadZoneInputRef} key={`wrist-dead-zone-${deadZoneDegrees}`} defaultValue={deadZoneDegrees} />
-          <small>degrees</small>
-        </Label>
-        <Label className="flex flex-col items-start gap-1">
-          Sensitivity
-          <Input aria-label="Wrist rotation volume points per degree" type="number" min="0.01" max="5" step="0.01" ref={sensitivityInputRef} key={`wrist-sensitivity-${volumePointsPerDegree}`} defaultValue={volumePointsPerDegree} />
-          <small>points / degree</small>
-        </Label>
-        <Label className="flex flex-col items-start gap-1">
-          Max angular velocity
-          <Input aria-label="Wrist rotation max angular velocity" type="number" min="1" max="2000" step="1" ref={velocityInputRef} key={`wrist-velocity-${maxAngularVelocityDegreesPerSecond}`} defaultValue={maxAngularVelocityDegreesPerSecond} />
-          <small>degrees / second</small>
-        </Label>
-        <Label className="flex flex-col items-start gap-1">
-          Max volume rate
-          <Input aria-label="Wrist rotation max volume rate" type="number" min="1" max="100" step="1" ref={volumeRateInputRef} key={`wrist-volume-rate-${maxVolumePointsPerSecond}`} defaultValue={maxVolumePointsPerSecond} />
-          <small>points / second</small>
-        </Label>
+      <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <SettingsNumberField name="wristDeadZoneDegrees" />
+        <SettingsNumberField name="wristVolumePointsPerDegree" />
+        <SettingsNumberField name="wristMaxAngularVelocityDegreesPerSecond" />
+        <SettingsNumberField name="wristMaxVolumePointsPerSecond" />
       </CardContent>
     </Card>
   );

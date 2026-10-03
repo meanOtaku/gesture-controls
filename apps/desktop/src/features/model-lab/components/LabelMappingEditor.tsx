@@ -117,18 +117,19 @@ export function LabelMappingEditor({
                           handleRoleChange(labelId, "exclude");
                         }
                       }}
+                      aria-label={`Training role for ${labelId}`}
                       className="flex items-center gap-2"
                     >
                       <label className="flex items-center gap-2 cursor-pointer">
-                        <RadioGroupItem value="target" id={`${labelId}-target`} aria-label={`${labelId}-target`} />
+                        <RadioGroupItem value="target" id={`${labelId}-target`} />
                         <span className="text-sm">Target</span>
                       </label>
                       <label className="flex items-center gap-2 cursor-pointer">
-                        <RadioGroupItem value="negative" id={`${labelId}-negative`} aria-label={`${labelId}-negative`} />
+                        <RadioGroupItem value="negative" id={`${labelId}-negative`} />
                         <span className="text-sm">Negative</span>
                       </label>
                       <label className="flex items-center gap-2 cursor-pointer">
-                        <RadioGroupItem value="exclude" id={`${labelId}-exclude`} aria-label={`${labelId}-exclude`} />
+                        <RadioGroupItem value="exclude" id={`${labelId}-exclude`} />
                         <span className="text-sm">Exclude</span>
                       </label>
                     </RadioGroup>

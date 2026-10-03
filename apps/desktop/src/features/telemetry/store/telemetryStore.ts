@@ -39,7 +39,8 @@ export const DEFAULT_ORDINARY_LABEL = "NA";
 /** Labels are user-owned stable slugs; no built-in templates. */
 export type GestureDatasetLabel = string;
 
-function normalizeDatasetLabel(label: string): GestureDatasetLabel | null {
+/** The stored form of a typed label (lower-case, underscores for anything else), or null when no valid label can be made of it. */
+export function normalizeDatasetLabel(label: string): GestureDatasetLabel | null {
   const normalized = label.trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, "_").replaceAll(/^_+|_+$/g, "");
   return /^[a-z][a-z0-9_]{0,63}$/.test(normalized) ? normalized : null;
 }

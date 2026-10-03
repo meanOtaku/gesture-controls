@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LabelMappingEditor } from "./LabelMappingEditor";
 import { LEGACY_COMPATIBILITY_LABEL_MAPPING, type DatasetLabel, type LabelMapping } from "../types";
@@ -49,6 +49,10 @@ function renderEditor(overrides: Partial<React.ComponentProps<typeof LabelMappin
   return props;
 }
 
+/** A role radio inside one label's group: the options are named by their text, within a group named for the label. */
+const roleRadio = (labelId: string, role: string) =>
+  within(screen.getByRole("radiogroup", { name: `Training role for ${labelId}` })).getByRole("radio", { name: role });
+
 describe("LabelMappingEditor", () => {
   it("renders an accessible region", () => {
     renderEditor();
@@ -84,7 +88,7 @@ describe("LabelMappingEditor", () => {
       selectedDatasetLabels: new Set(["wrist_flick"]),
       onMappingChange,
     });
-    fireEvent.click(screen.getByLabelText("wrist_flick-target"));
+    fireEvent.click(roleRadio("wrist_flick", "Target"));
     expect(onMappingChange).toHaveBeenCalled();
     const mapping = onMappingChange.mock.calls[0][0] as LabelMapping;
     expect(mapping.entries.wrist_flick).toEqual({ role: "target", target: "pinch_start" });
@@ -96,7 +100,7 @@ describe("LabelMappingEditor", () => {
       selectedDatasetLabels: new Set(["wrist_flick"]),
       onMappingChange,
     });
-    fireEvent.click(screen.getByLabelText("wrist_flick-target"));
+    fireEvent.click(roleRadio("wrist_flick", "Target"));
     expect(onMappingChange).toHaveBeenCalled();
     const mapping = onMappingChange.mock.calls[0][0] as LabelMapping;
     const newMapping = { ...LEGACY_COMPATIBILITY_LABEL_MAPPING, entries: mapping.entries };
@@ -115,7 +119,7 @@ describe("LabelMappingEditor", () => {
       selectedDatasetLabels: new Set(["wrist_flick"]),
       onMappingChange,
     });
-    fireEvent.click(screen.getByLabelText("wrist_flick-negative"));
+    fireEvent.click(roleRadio("wrist_flick", "Negative"));
     expect(onMappingChange).toHaveBeenCalled();
     const mapping = onMappingChange.mock.calls[0][0] as LabelMapping;
     expect(mapping.entries.wrist_flick).toEqual({ role: "negative" });
@@ -127,7 +131,7 @@ describe("LabelMappingEditor", () => {
       selectedDatasetLabels: new Set(["wrist_flick"]),
       onMappingChange,
     });
-    fireEvent.click(screen.getByLabelText("wrist_flick-exclude"));
+    fireEvent.click(roleRadio("wrist_flick", "Exclude"));
     expect(onMappingChange).toHaveBeenCalled();
     const mapping = onMappingChange.mock.calls[0][0] as LabelMapping;
     expect(mapping.entries.wrist_flick).toEqual({ role: "exclude" });

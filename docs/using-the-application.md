@@ -242,7 +242,14 @@ Replay runs a managed dataset against an approved or active validated TFLite bun
 
 ### Settings
 
-The **Settings** tab controls desktop acceptance/recording rates and Watch delivery settings. Edit values, then choose **Apply rates**; use **Reset to defaults** to restore defaults.
+The **Settings** tab controls desktop acceptance/recording rates and Watch delivery settings.
+
+- Every number states its unit, allowed range and default under the field. A field you have changed is marked **Edited**, and a small reset button puts it back to its default (you still apply the change).
+- Nothing is applied until you choose **Apply changes** (or press Enter in any field), and then everything is applied together. The bar at the bottom says how many changes are waiting.
+- A value that is empty, not a number, or outside its range is **never silently corrected**: the field turns red, says what is wrong (for example "Too high: the maximum is 200 Hz."), keeps what you typed so you can fix it, and the first bad field takes focus. Nothing is applied until every edited field is valid.
+- **Discard changes** drops your edits. **Reset to defaults** restores every setting after a confirmation. Switches (sensors, transport, demos) take effect immediately.
+
+The other forms follow the same rules: the Timeline recorder's label shows what it will be saved as while you type (`Wrist Flick` is saved as `wrist_flick`) and applies on Enter, its duration says why Start is unavailable, the head-calibration threshold and dwell apply when you leave a field but only if valid, and the timeline editor's time boxes no longer treat an empty box as 0.
 
 #### Headphones
 
