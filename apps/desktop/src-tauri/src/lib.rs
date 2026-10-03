@@ -68,6 +68,7 @@ pub fn run() {
             overlay::adjust_system_volume,
             overlay::refresh_system_volume,
             watch::get_watch_status,
+            watch::get_watch_link_diagnostics,
             watch::get_medical_tracker_ids,
             watch::start_measurement,
             watch::stop_measurement,
@@ -182,6 +183,7 @@ pub fn run() {
                 let mut events = server.subscribe();
                 let server = Arc::new(server);
                 watch_handle.manage(Arc::clone(&server));
+                watch::spawn_link_diagnostics_emitter(watch_handle.clone(), Arc::clone(&server));
 
                 // Start only the transport the user selected; a fresh install
                 // (and any settings.json predating the field) selects

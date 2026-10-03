@@ -275,3 +275,10 @@ html.overlay-document body::before { display:none; }
 .overview-grid [data-slot="card-content"] > .label,.overview-grid [data-slot="card-content"] > strong,.overview-grid [data-slot="card-content"] > small { display:block; }
 .overview-grid [data-slot="card-content"] > strong { margin:.35rem 0 .2rem; font-size:2rem; line-height:1; text-transform:uppercase; letter-spacing:.02em; }
 .overview-grid [data-slot="card-content"] > small { color:var(--ink-2); font-size:.82rem; line-height:1.4; }
+
+/* Link health: the event history reads as a log, with warnings and errors picked out. */
+.model-lab-log { list-style:none; margin:0; padding:12px 14px; }
+.model-lab-log li { display:flex; gap:10px; padding:2px 0; font-size:.8rem; }
+.model-lab-log li>span { flex:0 0 auto; color:var(--ink-3); font-family:var(--font-mono); }
+.model-lab-log li[data-level="warn"] { color:var(--yellow); }
+.model-lab-log li[data-level="error"] { color:var(--red); }

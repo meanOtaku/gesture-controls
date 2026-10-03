@@ -276,3 +276,42 @@ export const CONTROLLABLE_SENSORS: Array<{ id: string; label: string }> = [
   { id: "skin_temperature_continuous", label: "Skin temperature" },
   { id: "eda_continuous", label: "EDA" },
 ];
+
+/** Emitted once a second with the watch link's phase, counters and recent events. */
+export const WATCH_LINK_DIAGNOSTICS_EVENT = "watch-link-diagnostics";
+
+export type LinkPhase = "idle" | "scanning" | "connecting" | "awaiting_trust" | "streaming" | "failed" | "listening";
+
+export interface LinkEvent { atUnixMs: number; level: "info" | "warn" | "error"; message: string; }
+
+export interface LinkEnd {
+  atUnixMs: number;
+  /** `heartbeat_timeout`, `stream_closed`, `write_failed` or `cancelled`. */
+  reason: string;
+  detail: string;
+  sessionSeconds: number;
+}
+
+/** Mirrors `watch_bridge::LinkDiagnostics`. */
+export interface LinkDiagnostics {
+  transport: "bluetooth" | "wifi" | null;
+  phase: LinkPhase;
+  phaseDetail: string | null;
+  sessions: number;
+  drops: number;
+  scanAttempts: number;
+  connectedSinceUnixMs: number | null;
+  lastMessageUnixMs: number | null;
+  lastEnd: LinkEnd | null;
+  messagesReceived: number;
+  invalidMessages: number;
+  outOfOrderMessages: number;
+  writes: number;
+  writeFailures: number;
+  writeLastMs: number | null;
+  writeMaxMs: number | null;
+  maxGapMs: number | null;
+  mtu: number | null;
+  retryInMs: number | null;
+  events: LinkEvent[];
+}

@@ -9,11 +9,13 @@ use spatial_protocol::{
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 use watch_bridge::{
-    ClockOffsetEstimate, MeasurementCommand, SensorControlCommand, SensorRateCommand,
-    WatchBridgeServer, WatchEvent, WatchTransport, ble::BleStatus,
+    ClockOffsetEstimate, LinkDiagnostics, MeasurementCommand, SensorControlCommand,
+    SensorRateCommand, WatchBridgeServer, WatchEvent, WatchTransport, ble::BleStatus,
 };
 
 pub const WATCH_STATUS_EVENT: &str = "watch-status";
+/// The link's phase, counters, latencies and recent events, once a second.
+pub const WATCH_LINK_DIAGNOSTICS_EVENT: &str = "watch-link-diagnostics";
 pub const WATCH_ORIENTATION_EVENT: &str = "watch-orientation";
 pub const WATCH_PPG_BATCH_EVENT: &str = "watch-ppg-batch";
 pub const WATCH_HEART_RATE_BATCH_EVENT: &str = "watch-heart-rate-batch";
@@ -430,6 +432,28 @@ impl WatchRuntime {
             .map(|state| state.clone())
             .map_err(|_| "watch status lock was poisoned".to_string())
     }
+}
+
+#[tauri::command]
+pub fn get_watch_link_diagnostics(app: AppHandle) -> LinkDiagnostics {
+    app.try_state::<std::sync::Arc<WatchBridgeServer>>()
+        .map(|server| server.link_diagnostics())
+        .unwrap_or_else(|| LinkDiagnostics {
+            phase: "idle",
+            ..LinkDiagnostics::default()
+        })
+}
+
+/// Publishes the link diagnostics once a second for the "Link health" card. The card also asks
+/// for a snapshot when it opens, so it never waits for the next tick.
+pub fn spawn_link_diagnostics_emitter(app: AppHandle, server: std::sync::Arc<WatchBridgeServer>) {
+    tauri::async_runtime::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(1));
+        loop {
+            ticker.tick().await;
+            let _ = app.emit(WATCH_LINK_DIAGNOSTICS_EVENT, server.link_diagnostics());
+        }
+    });
 }
 
 #[tauri::command]

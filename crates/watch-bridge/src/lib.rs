@@ -7,6 +7,9 @@
 //! transport re-implements the protocol.
 
 pub mod ble;
+pub mod diagnostics;
+
+pub use diagnostics::{LinkDiagnostics, LinkEnd, LinkEvent};
 
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
@@ -69,7 +72,11 @@ const BLE_TRUST_GATE_POLL: Duration = Duration::from_secs(5);
 const OFF_BODY_IDLE_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 /// Pause between BLE reconnect attempts, so a watch that is off or out of range
 /// doesn't spin the adapter.
-const BLE_RETRY_INTERVAL: Duration = Duration::from_secs(5);
+/// Wait after a failed scan or connect before trying again.
+const BLE_RETRY_INTERVAL: Duration = Duration::from_secs(2);
+/// Wait after an established session ended, before scanning for the watch again. The watch is
+/// usually still advertising, so this is short: every second here is a second without data.
+const BLE_RECONNECT_DELAY: Duration = Duration::from_millis(500);
 /// Upper bound on how long [`WatchBridgeServer::stop_ble`] waits for the BLE
 /// session to unwind (scan stop + GATT disconnect) before giving up on it.
 const BLE_STOP_TIMEOUT: Duration = Duration::from_secs(20);
@@ -195,10 +202,21 @@ struct SharedState {
     active: AtomicBool,
     heartbeat_timeout: Duration,
     ble_status: Mutex<BleStatus>,
+    /// What the link is doing and why, for the desktop's "Link health" card.
+    link: diagnostics::LinkLog,
 }
 
 impl SharedState {
     fn set_ble_status(&self, status: BleStatus) {
+        let (phase, detail) = match &status {
+            BleStatus::Idle => ("idle", None),
+            BleStatus::Scanning => ("scanning", None),
+            BleStatus::Connecting => ("connecting", None),
+            BleStatus::AwaitingWatchTrust => ("awaiting_trust", None),
+            BleStatus::Streaming => ("streaming", None),
+            BleStatus::Failed(reason) => ("failed", Some(reason.clone())),
+        };
+        self.link.phase(phase, detail);
         if let Ok(mut guard) = self.ble_status.lock() {
             *guard = status;
         }
@@ -293,6 +311,7 @@ impl WatchBridgeServer {
                 active: AtomicBool::new(false),
                 heartbeat_timeout,
                 ble_status: Mutex::new(BleStatus::Idle),
+                link: diagnostics::LinkLog::default(),
             }),
         })
     }
@@ -449,11 +468,32 @@ impl WatchBridgeServer {
         // Advertisement is best-effort: a network that blocks multicast (or a
         // platform without it) shouldn't prevent the WebSocket server itself
         // from serving a manually entered endpoint.
-        if let Err(error) = self.advertise() {
-            warn!(%error, "failed to advertise watch bridge via mDNS");
+        self.shared.link.transport("wifi");
+        self.shared.link.phase("listening", None);
+        match self.advertise() {
+            Ok(()) => self
+                .shared
+                .link
+                .event("info", "announcing this desktop to the watch over mDNS"),
+            Err(error) => {
+                warn!(%error, "failed to advertise watch bridge via mDNS");
+                self.shared
+                    .link
+                    .event("warn", format!("could not announce over mDNS: {error}"));
+            }
         }
-        if let Err(error) = self.start_pairing_discovery() {
-            warn!(%error, "failed to browse for watch pairing services");
+        match self.start_pairing_discovery() {
+            Ok(()) => self
+                .shared
+                .link
+                .event("info", "looking for the watch's pairing service"),
+            Err(error) => {
+                warn!(%error, "failed to browse for watch pairing services");
+                self.shared.link.event(
+                    "warn",
+                    format!("could not look for the watch's pairing service: {error}"),
+                );
+            }
         }
         Ok(())
     }
@@ -463,6 +503,7 @@ impl WatchBridgeServer {
         let receiver = daemon
             .browse(WATCH_PAIRING_SERVICE_TYPE)
             .map_err(WatchBridgeError::MdnsBrowseFailed)?;
+        let shared = Arc::clone(&self.shared);
         let task = thread::spawn(move || {
             let mut last_attempt: HashMap<SocketAddr, Instant> = HashMap::new();
             while let Ok(event) = receiver.recv() {
@@ -482,8 +523,20 @@ impl WatchBridgeServer {
                 }
                 last_attempt.insert(watch, now);
                 match request_watch_pairing(watch) {
-                    Ok(()) => info!(%watch, "requested watch pairing via mDNS discovery"),
-                    Err(error) => warn!(%watch, %error, "watch pairing request failed"),
+                    Ok(()) => {
+                        info!(%watch, "requested watch pairing via mDNS discovery");
+                        shared.link.event(
+                            "info",
+                            format!("watch found at {watch}; pairing request accepted"),
+                        );
+                    }
+                    Err(error) => {
+                        warn!(%watch, %error, "watch pairing request failed");
+                        shared.link.event(
+                            "warn",
+                            format!("watch found at {watch}, but its pairing server did not answer: {error}"),
+                        );
+                    }
                 }
             }
         });
@@ -532,6 +585,11 @@ impl WatchBridgeServer {
             .map_err(|_| WatchBridgeError::StatePoisoned)? =
             Some(MdnsAdvertisement { daemon, fullname });
         Ok(())
+    }
+
+    /// A snapshot of the link's phase, counters, latencies and recent events.
+    pub fn link_diagnostics(&self) -> LinkDiagnostics {
+        self.shared.link.snapshot()
     }
 
     /// Last reported state of the BLE transport, for the settings UI.
@@ -720,7 +778,9 @@ async fn run_ble_transport(shared: Arc<SharedState>, cancel: Arc<BleCancel>) {
             return;
         }
     };
+    shared.link.transport("bluetooth");
     while !cancel.is_cancelled() {
+        shared.link.scan_started();
         shared.set_ble_status(BleStatus::Scanning);
         let connect = tokio::select! {
             result = BleLink::connect(&adapter, ble::BLE_SCAN_TIMEOUT) => result,
@@ -736,6 +796,7 @@ async fn run_ble_transport(shared: Arc<SharedState>, cancel: Arc<BleCancel>) {
             Err(error) => {
                 warn!(%error, "watch BLE connect failed");
                 shared.set_ble_status(BleStatus::Failed(error.to_string()));
+                shared.link.retry_in(BLE_RETRY_INTERVAL);
                 tokio::select! {
                     _ = tokio::time::sleep(BLE_RETRY_INTERVAL) => continue,
                     _ = cancel.cancelled() => break,
@@ -792,17 +853,25 @@ async fn run_ble_transport(shared: Arc<SharedState>, cancel: Arc<BleCancel>) {
         shared.set_ble_status(BleStatus::Streaming);
         let _ = shared.events.send(WatchEvent::Connected);
         info!("watch device connected over BLE");
-        let cancelled = tokio::select! {
-            _ = run_connection(
+        shared.link.session_started(Some(link.mtu()));
+        let outcome = tokio::select! {
+            end = run_connection(
                 &mut link,
                 &shared,
                 commands,
                 sensor_commands,
                 sensor_rate_commands,
                 haptic_commands,
-            ) => false,
-            _ = cancel.cancelled() => true,
+            ) => Some(end),
+            _ = cancel.cancelled() => None,
         };
+        let cancelled = outcome.is_none();
+        match outcome {
+            Some(end) => shared.link.session_ended(end.reason(), end.detail(), false),
+            None => shared
+                .link
+                .session_ended("cancelled", "stopped by the desktop", true),
+        }
         link.close().await;
         shared.active.store(false, Ordering::Release);
         let _ = shared.events.send(WatchEvent::Disconnected);
@@ -811,10 +880,11 @@ async fn run_ble_transport(shared: Arc<SharedState>, cancel: Arc<BleCancel>) {
             break;
         }
         shared.set_ble_status(BleStatus::Failed(
-            "watch BLE link dropped; retrying".to_string(),
+            "watch BLE link dropped; reconnecting".to_string(),
         ));
+        shared.link.retry_in(BLE_RECONNECT_DELAY);
         tokio::select! {
-            _ = tokio::time::sleep(BLE_RETRY_INTERVAL) => {}
+            _ = tokio::time::sleep(BLE_RECONNECT_DELAY) => {}
             _ = cancel.cancelled() => break,
         }
     }
@@ -848,6 +918,10 @@ async fn handle_socket(mut socket: WebSocket, shared: Arc<SharedState>) {
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_err()
     {
+        shared.link.event(
+            "warn",
+            "a second watch connection was refused (one is already attached)",
+        );
         let close = Message::Close(Some(CloseFrame {
             code: DEVICE_ALREADY_CONNECTED_CLOSE_CODE,
             reason: "watch device already connected".into(),
@@ -875,10 +949,13 @@ async fn handle_socket(mut socket: WebSocket, shared: Arc<SharedState>) {
             server_time_ns: connected_at_ns,
         },
     );
-    if send_envelope(&mut socket, &ack).await.is_ok() {
+    if send_envelope(&mut socket, &ack, &shared.link).await.is_ok() {
         let _ = shared.events.send(WatchEvent::Connected);
         info!("watch device connected");
-        run_connection(
+        shared.link.transport("wifi");
+        shared.link.phase("streaming", None);
+        shared.link.session_started(None);
+        let end = run_connection(
             &mut socket,
             &shared,
             commands,
@@ -887,11 +964,44 @@ async fn handle_socket(mut socket: WebSocket, shared: Arc<SharedState>) {
             haptic_commands,
         )
         .await;
+        shared.link.session_ended(end.reason(), end.detail(), false);
+        shared.link.phase("listening", None);
     }
 
     shared.active.store(false, Ordering::Release);
     let _ = shared.events.send(WatchEvent::Disconnected);
     info!("watch device disconnected");
+}
+
+/// Why a session's message loop returned (as opposed to being cancelled from outside).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConnectionEnd {
+    /// Nothing arrived, and no write completed, for the idle timeout.
+    HeartbeatTimeout,
+    /// The transport reported the link closed.
+    StreamClosed,
+    /// A desktop-to-watch write failed.
+    WriteFailed,
+}
+
+impl ConnectionEnd {
+    fn reason(self) -> &'static str {
+        match self {
+            ConnectionEnd::HeartbeatTimeout => "heartbeat_timeout",
+            ConnectionEnd::StreamClosed => "stream_closed",
+            ConnectionEnd::WriteFailed => "write_failed",
+        }
+    }
+
+    fn detail(self) -> &'static str {
+        match self {
+            ConnectionEnd::HeartbeatTimeout => {
+                "the watch went silent (no message, and no write completed, within the timeout)"
+            }
+            ConnectionEnd::StreamClosed => "the link closed (the watch or the radio ended it)",
+            ConnectionEnd::WriteFailed => "a command write to the watch failed",
+        }
+    }
 }
 
 async fn run_connection<L: WatchLinkTransport + ?Sized>(
@@ -901,7 +1011,7 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
     mut sensor_commands: broadcast::Receiver<SensorControlCommand>,
     mut sensor_rate_commands: broadcast::Receiver<SensorRateCommand>,
     mut haptic_commands: broadcast::Receiver<HapticCommand>,
-) {
+) -> ConnectionEnd {
     // Established once per connection by the transport (for BLE, the
     // discovered peripheral), not read from each envelope.
     let peer_identity = link.peer_identity();
@@ -922,7 +1032,7 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
         let remaining = idle_timeout.saturating_sub(last_activity.elapsed());
         if remaining.is_zero() {
             info!("watch link ended: heartbeat timed out");
-            break;
+            break ConnectionEnd::HeartbeatTimeout;
         }
 
         tokio::select! {
@@ -938,8 +1048,8 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
                     desktop_time_ns,
                     DesktopTimeSyncPayload { desktop_time_ns },
                 );
-                if send_envelope(link, &request).await.is_err() {
-                    break;
+                if send_envelope(link, &request, &shared.link).await.is_err() {
+                    break ConnectionEnd::WriteFailed;
                 }
                 // A write-with-response only completes when the watch's app answered it, so
                 // this is proof of life. Without it a slow write (a busy radio can hold one
@@ -959,8 +1069,8 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
                     now_ns(),
                     DesktopMeasurementCommandPayload { tracker },
                 );
-                if send_envelope(link, &request).await.is_err() {
-                    break;
+                if send_envelope(link, &request, &shared.link).await.is_err() {
+                    break ConnectionEnd::WriteFailed;
                 }
                 // A write-with-response only completes when the watch's app answered it, so
                 // this is proof of life. Without it a slow write (a busy radio can hold one
@@ -979,8 +1089,8 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
                     now_ns(),
                     DesktopSensorControlPayload { sensor, enabled },
                 );
-                if send_envelope(link, &request).await.is_err() {
-                    break;
+                if send_envelope(link, &request, &shared.link).await.is_err() {
+                    break ConnectionEnd::WriteFailed;
                 }
                 // A write-with-response only completes when the watch's app answered it, so
                 // this is proof of life. Without it a slow write (a busy radio can hold one
@@ -998,8 +1108,8 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
                     now_ns(),
                     DesktopSensorRateCommandPayload { sensor, rate_hz },
                 );
-                if send_envelope(link, &request).await.is_err() {
-                    break;
+                if send_envelope(link, &request, &shared.link).await.is_err() {
+                    break ConnectionEnd::WriteFailed;
                 }
                 // A write-with-response only completes when the watch's app answered it, so
                 // this is proof of life. Without it a slow write (a busy radio can hold one
@@ -1017,8 +1127,8 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
                     now_ns(),
                     DesktopHapticPayload { duration_ms },
                 );
-                if send_envelope(link, &request).await.is_err() {
-                    break;
+                if send_envelope(link, &request, &shared.link).await.is_err() {
+                    break ConnectionEnd::WriteFailed;
                 }
                 // A write-with-response only completes when the watch's app answered it, so
                 // this is proof of life. Without it a slow write (a busy radio can hold one
@@ -1030,6 +1140,7 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
                 match message {
                     Ok(Some(bytes)) => {
                         let gap = last_activity.elapsed();
+                        shared.link.message_received(gap);
                         if gap >= Duration::from_millis(500) {
                             warn!(gap_ms = gap.as_millis() as u64, "no watch message for a while before this one");
                         }
@@ -1047,11 +1158,11 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
                     }
                     Ok(None) => {
                         info!("watch link ended: notification stream closed");
-                        break;
+                        break ConnectionEnd::StreamClosed;
                     }
                     Err(_) => {
                         info!("watch link ended: heartbeat timed out");
-                        break;
+                        break ConnectionEnd::HeartbeatTimeout;
                     }
                 }
             }
@@ -1073,6 +1184,7 @@ fn handle_inbound(
         Ok(envelope) => envelope,
         Err(error) => {
             warn!(%error, "ignoring invalid watch message");
+            shared.link.invalid_message();
             let _ = shared.events.send(WatchEvent::InvalidMessage {
                 reason: error.to_string(),
             });
@@ -1099,6 +1211,7 @@ fn handle_inbound(
             sequence = envelope.sequence,
             previous, "ignoring out-of-order or duplicate watch sequence"
         );
+        shared.link.out_of_order_message();
         let _ = shared.events.send(WatchEvent::InvalidMessage {
             reason: format!(
                 "out-of-order or duplicate sequence {} (previous {previous})",
@@ -1169,6 +1282,7 @@ fn handle_inbound(
         }
         Err(error) => {
             warn!(%error, "ignoring unparseable watch message payload");
+            shared.link.invalid_message();
             let _ = shared.events.send(WatchEvent::InvalidMessage {
                 reason: error.to_string(),
             });
@@ -1201,12 +1315,14 @@ fn estimate_clock_offset(
 async fn send_envelope<L: WatchLinkTransport + ?Sized, T: serde::Serialize>(
     link: &mut L,
     value: &T,
+    log: &diagnostics::LinkLog,
 ) -> Result<(), ()> {
     let started = Instant::now();
     let text = serde_json::to_string(value).unwrap_or_default();
     let bytes = text.len();
     let result = link.send_text(text).await;
     let elapsed = started.elapsed();
+    log.write_finished(elapsed, result.is_ok());
     if elapsed >= Duration::from_millis(250) || result.is_err() {
         warn!(
             bytes,
@@ -1247,6 +1363,7 @@ mod tests {
             active: AtomicBool::new(false),
             heartbeat_timeout: Duration::from_secs(3),
             ble_status: Mutex::new(BleStatus::Idle),
+            link: diagnostics::LinkLog::default(),
         })
     }
 
@@ -1402,6 +1519,54 @@ mod tests {
         }
     }
 
+    /// Delivers its messages, then reports the link closed.
+    struct ScriptedLink {
+        inbound: VecDeque<Vec<u8>>,
+    }
+
+    #[async_trait::async_trait]
+    impl WatchLinkTransport for ScriptedLink {
+        async fn send_text(&mut self, _text: String) -> Result<(), ()> {
+            Ok(())
+        }
+
+        async fn recv(&mut self) -> Option<Vec<u8>> {
+            self.inbound.pop_front()
+        }
+    }
+
+    #[test]
+    fn a_session_feeds_the_link_diagnostics_and_reports_why_it_ended() {
+        let shared = shared_state();
+        let mut link = ScriptedLink {
+            inbound: VecDeque::from([
+                orientation_envelope(1),
+                orientation_envelope(2),
+                // A repeat of an earlier sequence, and a message that is not JSON at all.
+                orientation_envelope(2),
+                b"not json".to_vec(),
+            ]),
+        };
+        let end = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(run_connection(
+                &mut link,
+                &shared,
+                shared.commands.subscribe(),
+                shared.sensor_commands.subscribe(),
+                shared.sensor_rate_commands.subscribe(),
+                shared.haptic_commands.subscribe(),
+            ));
+        assert_eq!(end, ConnectionEnd::StreamClosed);
+        let snapshot = shared.link.snapshot();
+        assert_eq!(snapshot.messages_received, 4);
+        assert_eq!(snapshot.out_of_order_messages, 1);
+        assert_eq!(snapshot.invalid_messages, 1);
+        assert!(snapshot.last_message_unix_ms.is_some());
+    }
+
     #[test]
     fn a_write_that_outlasts_the_silence_timeout_does_not_end_a_live_link() {
         let (events, mut receiver) = broadcast::channel(16);
@@ -1418,6 +1583,7 @@ mod tests {
             active: AtomicBool::new(false),
             heartbeat_timeout: Duration::from_millis(150),
             ble_status: Mutex::new(BleStatus::Idle),
+            link: diagnostics::LinkLog::default(),
         });
         let commands_rx = shared.commands.subscribe();
         let sensor_rx = shared.sensor_commands.subscribe();

@@ -13,6 +13,7 @@ import { CalibrationPanel } from "./CalibrationPanel";
 import { HeadphoneTelemetryPanel } from "./HeadphoneTelemetryPanel";
 import { OverviewSection } from "./OverviewSection";
 import { WatchSensorControls } from "./WatchSensorControls";
+import { LinkHealthCard } from "./LinkHealthCard";
 import { WatchTelemetryPanel } from "./WatchTelemetryPanel";
 import { WatchWellnessPanel } from "./WatchWellnessPanel";
 
@@ -140,7 +141,12 @@ export function Dashboard({
         />
       )}
 
-      {view === "watch" && <WatchTelemetryPanel watchStatus={watchStatus ?? null} />}
+      {view === "watch" && (
+        <>
+          <WatchTelemetryPanel watchStatus={watchStatus ?? null} />
+          <LinkHealthCard />
+        </>
+      )}
       {view === "watch" && <WatchWellnessPanel watchStatus={watchStatus ?? null} />}
       {view === "watch" && (
         <WatchSensorControls

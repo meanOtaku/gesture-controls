@@ -262,6 +262,11 @@ pub async fn stop_scan(adapter: &Adapter) {
 }
 
 impl BleLink {
+    /// The negotiated ATT MTU, or 0 when the backend does not report one.
+    pub fn mtu(&self) -> u32 {
+        u32::from(self.peripheral.mtu())
+    }
+
     /// This watch's desktop-assigned device id; see [`ble_device_id`].
     pub fn device_id(&self) -> String {
         ble_device_id(&self.peripheral.id())
