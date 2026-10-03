@@ -397,6 +397,15 @@ struct BundleClassEntry {
     label: String,
 }
 
+/// The window settings the model was trained under (`bundle.py`'s
+/// `window_config`); the other keys of that object are validated by
+/// [`validate_inference_contract`] and not otherwise read.
+#[derive(Debug, Deserialize)]
+struct BundleWindowConfig {
+    window_ms: f64,
+    min_samples_per_window: u32,
+}
+
 #[derive(Debug, Deserialize)]
 struct BundleFeatureContract {
     // Accepted for forward-compatible parsing of the bundle schema but not
@@ -414,6 +423,7 @@ struct BundleMetadata {
     model: BundleModelField,
     classes: Vec<BundleClassEntry>,
     feature_contract: BundleFeatureContract,
+    window_config: BundleWindowConfig,
     // The remaining inference-critical sections (preprocessing, window_config,
     // conversion_parity, training, dtypes) are checked against the raw JSON
     // by `validate_inference_contract`.
@@ -568,9 +578,14 @@ fn validate_inference_contract(root: &serde_json::Value) -> Result<(), String> {
             return Err(format!("bundle window_config.{field} must be positive"));
         }
     }
-    if !positive_integer(&window["min_samples_per_window"]) {
+    // At least 2, like the trainer's `WindowConfig`: a window of one sample has
+    // no duration and none of the slope/std features mean anything.
+    if window["min_samples_per_window"]
+        .as_u64()
+        .is_none_or(|samples| samples < 2)
+    {
         return Err(
-            "bundle window_config.min_samples_per_window must be a positive integer".into(),
+            "bundle window_config.min_samples_per_window must be an integer of at least 2".into(),
         );
     }
 
@@ -756,6 +771,70 @@ fn load_and_verify_bundle(dir: &Path) -> Result<(BundleMetadata, String, Vec<usi
     Ok((metadata, actual_digest, feature_indices))
 }
 
+/// How far a live PPG window's duration may stray from the window the bundle
+/// was trained on before the two are considered different inputs.
+const WINDOW_DURATION_TOLERANCE: f64 = 0.25;
+
+/// The window settings a bundle declares, which the live runtime must hold
+/// each window to (R-M3-1).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DeclaredWindow {
+    pub window_ms: f64,
+    pub min_samples_per_window: u32,
+}
+
+/// One live window's duration measured against the bundle's declared window.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowCheck {
+    pub declared_ms: f64,
+    /// `None` when the window has fewer than two timestamps.
+    pub observed_ms: Option<f64>,
+    pub compatible: bool,
+}
+
+impl WindowCheck {
+    pub fn describe(&self) -> String {
+        match self.observed_ms {
+            Some(observed) => format!(
+                "live PPG windows span {observed:.0} ms but this model was trained on {:.0} ms windows (±{:.0}%)",
+                self.declared_ms,
+                WINDOW_DURATION_TOLERANCE * 100.0
+            ),
+            None => format!(
+                "live PPG window has no measurable duration but this model was trained on {:.0} ms windows",
+                self.declared_ms
+            ),
+        }
+    }
+}
+
+/// A window is compatible when its duration is within
+/// [`WINDOW_DURATION_TOLERANCE`] of the declared `window_ms` (a trained window
+/// spans up to one sample period less than `window_ms`, hence a tolerance
+/// rather than equality).
+pub fn check_window(declared: DeclaredWindow, observed_ms: Option<f64>) -> WindowCheck {
+    let compatible = observed_ms.is_some_and(|observed| {
+        observed.is_finite()
+            && (observed - declared.window_ms).abs()
+                <= declared.window_ms * WINDOW_DURATION_TOLERANCE
+    });
+    WindowCheck {
+        declared_ms: declared.window_ms,
+        observed_ms,
+        compatible,
+    }
+}
+
+/// Duration of a raw PPG batch from its own per-sample timestamps -- the same
+/// quantity the `duration_ms` feature measures.
+pub fn observed_window_ms(timestamps_ns: &[u64]) -> Option<f64> {
+    match (timestamps_ns.first(), timestamps_ns.last()) {
+        (Some(&first), Some(&last)) if last > first => Some((last - first) as f64 / 1_000_000.0),
+        _ => None,
+    }
+}
+
 /// Immutable, contract-verified snapshot of one model: the only shape
 /// [`crate::inference::PinchInferenceRuntime`] is allowed to classify
 /// against or resolve class outcomes with. Building one is the sole path
@@ -775,6 +854,8 @@ pub struct ActiveModelSnapshot {
     /// values out of the full extracted canonical feature vector. A full
     /// legacy/app-trained bundle resolves to `0..FEATURE_COUNT`.
     pub feature_indices: Vec<usize>,
+    /// The window settings the bundle was trained under; see [`check_window`].
+    pub declared_window: DeclaredWindow,
     bindings: HashMap<String, GestureIntent>,
 }
 
@@ -827,6 +908,10 @@ impl ActiveModelSnapshot {
             class_order,
             digest,
             feature_indices,
+            declared_window: DeclaredWindow {
+                window_ms: metadata.window_config.window_ms,
+                min_samples_per_window: metadata.window_config.min_samples_per_window,
+            },
             bindings,
         })
     }
@@ -856,6 +941,10 @@ impl ActiveModelSnapshot {
                 .collect(),
             digest: "test-digest".to_string(),
             feature_indices: (0..FEATURE_COUNT).collect(),
+            declared_window: DeclaredWindow {
+                window_ms: 500.0,
+                min_samples_per_window: 3,
+            },
             bindings: bindings
                 .iter()
                 .map(|(label, intent)| (label.to_string(), *intent))
@@ -1337,6 +1426,17 @@ pub(crate) fn reconcile_inference_mode_at_startup(app: &AppHandle) {
     }
 }
 
+/// Why `Live` cannot be selected while the active model's training window and
+/// the live PPG window disagree (R-M3-1). `Monitor` still runs, so the
+/// mismatch can be inspected there.
+fn live_refusal_message(check: &WindowCheck) -> String {
+    format!(
+        "Live is unavailable: {}. Align the Watch PPG flush rate with the model's window or \
+         retrain with a matching --window-ms; Monitor still classifies so you can inspect it.",
+        check.describe()
+    )
+}
+
 /// Changes the inference mode with the policy and the persisted copy kept in
 /// agreement: `apply` (the policy) runs first and `persist` second, so a
 /// failure to apply leaves the persisted mode untouched, and a failure to
@@ -1371,14 +1471,22 @@ pub fn set_inference_mode(
     app: AppHandle,
     runtime: State<'_, ModelRegistryRuntime>,
     gesture_policy: State<'_, crate::inference::GesturePolicyRuntime>,
+    ppg_ingest: State<'_, crate::inference::PpgIngestRuntime>,
 ) -> Result<RegistryView, String> {
-    let previous = {
+    let (previous, active_model_id) = {
         let _guard = runtime
             .lock
             .lock()
             .map_err(|_| "model registry lock was poisoned".to_string())?;
-        load_registry(&app)?.inference_mode
+        let index = load_registry(&app)?;
+        (index.inference_mode, index.active_model_id)
     };
+    if mode == InferenceMode::Live
+        && let Some(model_id) = &active_model_id
+        && let Some(check) = ppg_ingest.live_blocking_window_mismatch(model_id)
+    {
+        return Err(live_refusal_message(&check));
+    }
     change_inference_mode(
         previous,
         mode,
@@ -1402,6 +1510,64 @@ mod tests {
     use super::*;
 
     /// R-M4-6: the policy and the persisted mode must not disagree.
+    /// R-M3-1: a window is compatible when its duration is within tolerance
+    /// of the window the bundle declares it was trained on.
+    #[test]
+    fn check_window_compares_the_live_duration_with_the_declared_window() {
+        let declared = DeclaredWindow {
+            window_ms: 500.0,
+            min_samples_per_window: 3,
+        };
+        // A trained 500 ms window spans slightly less than 500 ms of samples.
+        assert!(check_window(declared, Some(470.0)).compatible);
+        assert!(check_window(declared, Some(500.0)).compatible);
+        assert!(check_window(declared, Some(620.0)).compatible);
+        // The default 1 Hz PPG flush is roughly 960 ms: not the trained window.
+        assert!(!check_window(declared, Some(960.0)).compatible);
+        assert!(!check_window(declared, Some(300.0)).compatible);
+        // No measurable duration is never compatible, and never panics.
+        assert!(!check_window(declared, None).compatible);
+        assert!(!check_window(declared, Some(f64::NAN)).compatible);
+    }
+
+    #[test]
+    fn observed_window_ms_measures_first_to_last_timestamp() {
+        assert_eq!(observed_window_ms(&[0, 20_000_000, 40_000_000]), Some(40.0));
+        assert_eq!(observed_window_ms(&[5]), None);
+        assert_eq!(observed_window_ms(&[]), None);
+        assert_eq!(observed_window_ms(&[10, 10]), None);
+    }
+
+    #[test]
+    fn the_live_refusal_names_the_mismatch_and_how_to_fix_it() {
+        let declared = DeclaredWindow {
+            window_ms: 500.0,
+            min_samples_per_window: 3,
+        };
+        let message = live_refusal_message(&check_window(declared, Some(960.0)));
+        assert!(message.contains("960"), "{message}");
+        assert!(message.contains("500"), "{message}");
+        assert!(message.contains("flush rate"), "{message}");
+        assert!(message.contains("Monitor"), "{message}");
+    }
+
+    #[test]
+    fn load_and_verify_bundle_rejects_a_one_sample_minimum_window() {
+        assert_mutation_is_rejected("min-samples-one", |m| {
+            m["window_config"]["min_samples_per_window"] = serde_json::json!(1);
+        });
+    }
+
+    #[test]
+    fn load_and_verify_bundle_exposes_the_declared_window() {
+        let dir = unique_bundle_dir("declared-window");
+        write_valid_bundle(&dir);
+        let (metadata, _, _) = load_and_verify_bundle(&dir).unwrap();
+        fs::remove_dir_all(&dir).ok();
+        assert_eq!(metadata.window_config.window_ms, 500.0);
+        assert_eq!(metadata.window_config.min_samples_per_window, 3);
+    }
+
     #[test]
     fn startup_caps_a_persisted_live_mode_to_monitor() {
         assert_eq!(

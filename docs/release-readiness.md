@@ -81,6 +81,12 @@ unexecuted and are not being claimed as passed.
   labels before enabling any live control.
 - [ ] Select **Monitor** and replay/live-stream telemetry. Confirm diagnostics record
   accepted/rejected decisions while no desktop volume or other action occurs.
+  Check each window's diagnostics for a **window mismatch**: the live PPG window
+  duration must be within 25% of the `window_ms` the bundle was trained on. The
+  default 1 Hz Watch PPG flush gives roughly 960 ms windows, so a default 500 ms
+  bundle will show a mismatch and **Live will refuse to start** until the PPG flush
+  rate is aligned (about 2 Hz for 500 ms) or the model is retrained with a matching
+  `--window-ms`. A bundle's `min_samples_per_window` is also enforced live.
 - [ ] Select **Live** only after the Monitor result is accepted. Confirm diagnostics
   identify the active model and each decision's intent/reason, and confirm only the
   approved binding is eligible to act.

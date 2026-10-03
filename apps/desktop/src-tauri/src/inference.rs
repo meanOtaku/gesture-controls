@@ -106,6 +106,10 @@ pub struct PpgWindowObservation {
     pub contact_quality_mean: Option<f64>,
     pub active_model_id: String,
     pub outcome: PpgWindowOutcome,
+    /// This window's duration against the window the active model was
+    /// trained on (R-M3-1). `None` when the bundle could not be loaded.
+    #[serde(default)]
+    pub window: Option<model_registry::WindowCheck>,
 }
 
 /// Samsung's PPG status convention is 0 = valid, non-zero = degraded/invalid
@@ -186,6 +190,10 @@ fn evaluate_ppg_window(
 #[derive(Default)]
 pub struct PpgIngestRuntime {
     last_timestamp_ns: Mutex<HashMap<String, u64>>,
+    /// The most recent window check and the model it was made against, so
+    /// selecting `Live` can be refused while the live windows do not match
+    /// what the active model was trained on.
+    last_window_check: Mutex<Option<(String, model_registry::WindowCheck)>>,
 }
 
 impl PpgIngestRuntime {
@@ -199,6 +207,31 @@ impl PpgIngestRuntime {
         match self.last_timestamp_ns.lock() {
             Ok(mut last_seen) => last_seen.clear(),
             Err(_) => warn!("PPG ingest watermark lock was poisoned; could not clear"),
+        }
+        // A new connection may stream different windows; forget the old verdict.
+        if let Ok(mut check) = self.last_window_check.lock() {
+            *check = None;
+        }
+    }
+
+    fn record_window_check(&self, model_id: &str, check: Option<model_registry::WindowCheck>) {
+        if let Ok(mut last) = self.last_window_check.lock() {
+            *last = check.map(|check| (model_id.to_string(), check));
+        }
+    }
+
+    /// The mismatch that must keep `model_id` out of `Live`: its most recent
+    /// observed window did not match the window it was trained on. `None`
+    /// when compatible or when no window has been observed yet (the per-window
+    /// enforcement in [`ingest_ppg_window`] still applies in `Live`).
+    pub(crate) fn live_blocking_window_mismatch(
+        &self,
+        model_id: &str,
+    ) -> Option<model_registry::WindowCheck> {
+        let last = self.last_window_check.lock().ok()?;
+        match last.as_ref() {
+            Some((id, check)) if id == model_id && !check.compatible => Some(*check),
+            _ => None,
         }
     }
 
@@ -235,6 +268,13 @@ fn mode_classifies(mode: InferenceMode) -> bool {
     }
 }
 
+/// A window that does not match what the model was trained on is still
+/// classified and reported in `Monitor` (so the mismatch can be inspected),
+/// but never reaches a model in `Live`, where it could drive real actions.
+fn window_mismatch_blocks(mode: InferenceMode) -> bool {
+    matches!(mode, InferenceMode::Live)
+}
+
 /// Ingests one raw PPG batch into the desktop gesture-policy pipeline: the
 /// single call site `WatchEvent::Ppg` is routed through (see `crate::lib`).
 /// Skipped entirely when inference is `Off` (see [`mode_classifies`]) or no
@@ -255,6 +295,7 @@ pub(crate) fn ingest_ppg_window(app: &AppHandle, sample: &WatchPpgBatchSample) {
     if !mode_classifies(config.inference_mode) {
         return;
     }
+    let config_mode = config.inference_mode;
     let model_registry::ActiveModelRuntimeConfig {
         model_id: active_model_id,
         thresholds,
@@ -262,6 +303,28 @@ pub(crate) fn ingest_ppg_window(app: &AppHandle, sample: &WatchPpgBatchSample) {
         ..
     } = config;
     let ingest = app.state::<PpgIngestRuntime>();
+    let pinch = app.state::<PinchInferenceRuntime>();
+    // Hold the window to what the model was trained on (R-M3-1): the bundle's
+    // `min_samples_per_window` can only tighten the registry's sample gate,
+    // and the window's duration is compared with its `window_ms`. A bundle
+    // that cannot be loaded yields no declaration; classification below then
+    // fails closed on the same load error.
+    let declared = pinch
+        .declared_window(app, &active_model_id, thresholds)
+        .ok();
+    let mut quality_gate = quality_gate;
+    if let Some(declared) = declared {
+        quality_gate.min_sample_count = quality_gate
+            .min_sample_count
+            .max(declared.min_samples_per_window);
+    }
+    let window_check = declared.map(|declared| {
+        model_registry::check_window(
+            declared,
+            model_registry::observed_window_ms(&sample.timestamps_ns),
+        )
+    });
+    ingest.record_window_check(&active_model_id, window_check);
     let outcome = match ingest.evaluate(sample, &quality_gate) {
         Ok(outcome) => outcome,
         Err(error) => {
@@ -278,6 +341,7 @@ pub(crate) fn ingest_ppg_window(app: &AppHandle, sample: &WatchPpgBatchSample) {
         contact_quality_mean,
         active_model_id: active_model_id.clone(),
         outcome,
+        window: window_check,
     };
     if let Err(error) = app.emit(PPG_WINDOW_OBSERVED_EVENT, &observation) {
         warn!(%error, "failed to emit PPG window observation");
@@ -300,7 +364,14 @@ pub(crate) fn ingest_ppg_window(app: &AppHandle, sample: &WatchPpgBatchSample) {
         warn!("accepted PPG window unexpectedly had no contact-quality mean");
         return;
     };
-    let pinch = app.state::<PinchInferenceRuntime>();
+    if let Some(check) = window_check
+        && !check.compatible
+        && window_mismatch_blocks(config_mode)
+    {
+        warn!(model_id = %active_model_id, "{}; refusing to classify in Live", check.describe());
+        force_release_policy(app, ForceReleaseReason::ModelRuntimeFailure);
+        return;
+    }
     match pinch.classify(
         app,
         &active_model_id,
@@ -453,6 +524,59 @@ impl PinchInferenceRuntime {
         }
     }
 
+    /// Returns the loaded backend for `model_id`, (re)loading it first if it
+    /// is missing or was built for a different model or thresholds.
+    fn ensure_loaded<'a>(
+        loaded: &'a mut Option<LoadedPinchModel>,
+        app: &AppHandle,
+        model_id: &str,
+        thresholds: ModelThresholds,
+    ) -> Result<&'a mut LoadedPinchModel, String> {
+        let needs_reload = match loaded.as_ref() {
+            Some(current) => {
+                current.snapshot.model_id != model_id || current.snapshot.thresholds != thresholds
+            }
+            None => true,
+        };
+        if needs_reload {
+            // Revalidate the full bundle contract, digest, and bindings at
+            // every (re)load -- never trust that activation's earlier
+            // validation still holds for bytes now on disk.
+            let snapshot = model_registry::ActiveModelSnapshot::verified(app, model_id)?;
+            let path = model_registry::active_model_file_path(app, model_id)?;
+            let backend = load_model_backend(&path)?;
+            *loaded = Some(LoadedPinchModel {
+                runtime: DesktopPinchRuntime::new(
+                    backend,
+                    snapshot.thresholds.start_threshold as f32,
+                    snapshot.thresholds.release_threshold as f32,
+                ),
+                snapshot,
+            });
+        }
+        loaded
+            .as_mut()
+            .ok_or_else(|| "pinch inference model failed to load".to_string())
+    }
+
+    /// The window settings the active model's bundle declares, loading (and
+    /// fully revalidating) the model first if needed. Used to hold each live
+    /// window to what the model was trained on before it is classified.
+    fn declared_window(
+        &self,
+        app: &AppHandle,
+        model_id: &str,
+        thresholds: ModelThresholds,
+    ) -> Result<model_registry::DeclaredWindow, String> {
+        let mut loaded = self
+            .loaded
+            .lock()
+            .map_err(|_| "pinch inference model lock was poisoned".to_string())?;
+        Ok(Self::ensure_loaded(&mut loaded, app, model_id, thresholds)?
+            .snapshot
+            .declared_window)
+    }
+
     /// Fuses `sample` with the last-known orientation, extracts features, and
     /// classifies the window against `model_id`'s backend -- (re)loading it
     /// first if it isn't already loaded with matching `thresholds`.
@@ -492,39 +616,9 @@ impl PinchInferenceRuntime {
                 );
             }
         };
-        let needs_reload = match loaded.as_ref() {
-            Some(current) => {
-                current.snapshot.model_id != model_id || current.snapshot.thresholds != thresholds
-            }
-            None => true,
-        };
-        if needs_reload {
-            // Revalidate the full bundle contract, digest, and bindings at
-            // every (re)load -- never trust that activation's earlier
-            // validation still holds for bytes now on disk.
-            let snapshot = match model_registry::ActiveModelSnapshot::verified(app, model_id) {
-                Ok(snapshot) => snapshot,
-                Err(error) => return ClassifyOutcome::LoadFailed(error),
-            };
-            let path = match model_registry::active_model_file_path(app, model_id) {
-                Ok(path) => path,
-                Err(error) => return ClassifyOutcome::LoadFailed(error),
-            };
-            let backend = match load_model_backend(&path) {
-                Ok(backend) => backend,
-                Err(error) => return ClassifyOutcome::LoadFailed(error),
-            };
-            *loaded = Some(LoadedPinchModel {
-                runtime: DesktopPinchRuntime::new(
-                    backend,
-                    snapshot.thresholds.start_threshold as f32,
-                    snapshot.thresholds.release_threshold as f32,
-                ),
-                snapshot,
-            });
-        }
-        let Some(model) = loaded.as_mut() else {
-            return ClassifyOutcome::LoadFailed("pinch inference model failed to load".to_string());
+        let model = match Self::ensure_loaded(&mut loaded, app, model_id, thresholds) {
+            Ok(model) => model,
+            Err(error) => return ClassifyOutcome::LoadFailed(error),
         };
         // A custom bundle may declare a strict subset of the canonical
         // feature registry; select exactly the values this model's own
@@ -1090,6 +1184,45 @@ mod ppg_window_tests {
         ));
     }
 
+    /// R-M3-1: only `Live` may refuse a window for not matching the model's
+    /// training window; `Monitor` and `Off` never block on it.
+    #[test]
+    fn only_live_blocks_on_a_window_mismatch() {
+        assert!(window_mismatch_blocks(InferenceMode::Live));
+        assert!(!window_mismatch_blocks(InferenceMode::Monitor));
+        assert!(!window_mismatch_blocks(InferenceMode::Off));
+    }
+
+    #[test]
+    fn a_mismatched_window_keeps_its_model_out_of_live_until_a_compatible_one_arrives() {
+        let runtime = PpgIngestRuntime::default();
+        let declared = model_registry::DeclaredWindow {
+            window_ms: 500.0,
+            min_samples_per_window: 3,
+        };
+        let mismatched = model_registry::check_window(declared, Some(960.0));
+        let compatible = model_registry::check_window(declared, Some(480.0));
+
+        // Nothing observed yet: nothing to refuse on.
+        assert!(runtime.live_blocking_window_mismatch("m1").is_none());
+
+        runtime.record_window_check("m1", Some(mismatched));
+        assert_eq!(
+            runtime.live_blocking_window_mismatch("m1"),
+            Some(mismatched)
+        );
+        // The verdict belongs to the model it was made against.
+        assert!(runtime.live_blocking_window_mismatch("m2").is_none());
+
+        runtime.record_window_check("m1", Some(compatible));
+        assert!(runtime.live_blocking_window_mismatch("m1").is_none());
+
+        // A disconnect forgets the verdict.
+        runtime.record_window_check("m1", Some(mismatched));
+        runtime.clear();
+        assert!(runtime.live_blocking_window_mismatch("m1").is_none());
+    }
+
     #[test]
     fn ppg_window_observation_round_trips_through_json() {
         let observation = PpgWindowObservation {
@@ -1100,6 +1233,13 @@ mod ppg_window_tests {
             contact_quality_mean: Some(0.0),
             active_model_id: "model-1".to_string(),
             outcome: PpgWindowOutcome::Accepted,
+            window: Some(model_registry::check_window(
+                model_registry::DeclaredWindow {
+                    window_ms: 500.0,
+                    min_samples_per_window: 3,
+                },
+                Some(480.0),
+            )),
         };
         let json = serde_json::to_string(&observation).expect("must serialize");
         assert!(json.contains("\"outcome\":{\"kind\":\"accepted\"}"));

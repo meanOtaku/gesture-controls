@@ -131,8 +131,8 @@ def validate_metadata(metadata: dict[str, Any], bundle_dir: Path | None = None) 
         if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
             raise BundleValidationError(f"window_config.{field} must be positive")
     minimum = window_config["min_samples_per_window"]
-    if not isinstance(minimum, int) or isinstance(minimum, bool) or minimum <= 0:
-        raise BundleValidationError("window_config.min_samples_per_window must be a positive integer")
+    if not isinstance(minimum, int) or isinstance(minimum, bool) or minimum < 2:
+        raise BundleValidationError("window_config.min_samples_per_window must be an integer of at least 2")
 
     model = metadata.get("model")
     if not isinstance(model, dict):

@@ -203,6 +203,13 @@ export function bindingsAreComplete(bindings: ModelIntentBinding[]): boolean {
   });
 }
 
+/** Mirrors `model_registry::WindowCheck`: a live window's duration against the model's training window. */
+export interface WindowCheck {
+  declaredMs: number;
+  observedMs: number | null;
+  compatible: boolean;
+}
+
 export interface PpgWindowObservation {
   deviceId: string;
   sequence: number;
@@ -211,6 +218,8 @@ export interface PpgWindowObservation {
   contactQualityMean: number | null;
   activeModelId: string;
   outcome: { kind: string; [key: string]: unknown };
+  /** Absent or null when the model's bundle could not be loaded. */
+  window?: WindowCheck | null;
 }
 
 export interface GesturePolicyDecision {
@@ -233,9 +242,15 @@ export function describeDiagnosticValue(value: unknown): string {
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
+function describeWindowMismatch(window: WindowCheck | null | undefined): string {
+  if (!window || window.compatible) return "";
+  const observed = window.observedMs == null ? "unmeasurable" : `${Math.round(window.observedMs)} ms`;
+  return `; window mismatch: live ${observed} vs trained ${Math.round(window.declaredMs)} ms (Live is blocked)`;
+}
+
 export function describeWindow(observation: PpgWindowObservation): string {
   if (observation.outcome.kind === "accepted") {
-    return `accepted ${observation.sampleCount} samples; contact quality ${observation.contactQualityMean ?? "unknown"}`;
+    return `accepted ${observation.sampleCount} samples; contact quality ${observation.contactQualityMean ?? "unknown"}${describeWindowMismatch(observation.window)}`;
   }
   if (observation.outcome.kind === "rejectedStaleOrOutOfOrder") {
     return `rejected stale/out-of-order (last ${describeDiagnosticValue(observation.outcome.lastTimestampNs)})`;

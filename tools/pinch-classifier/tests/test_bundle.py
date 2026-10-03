@@ -119,3 +119,12 @@ SHARED_FIXTURE = Path(__file__).parent / "fixtures" / "valid_bundle"
 def test_shared_fixture_bundle_is_accepted_by_the_trainer_contract():
     metadata = json.loads((SHARED_FIXTURE / "metadata.json").read_text(encoding="utf-8"))
     validate_metadata(metadata, SHARED_FIXTURE)
+
+
+def test_metadata_rejects_a_single_sample_minimum_window(tmp_path):
+    # WindowConfig requires >= 2 samples; the validator must agree, or a bundle the
+    # desktop activates would make offline replay raise.
+    metadata = _metadata(tmp_path)
+    metadata["window_config"]["min_samples_per_window"] = 1
+    with pytest.raises(BundleValidationError, match="at least 2"):
+        validate_metadata(metadata, tmp_path)
