@@ -76,6 +76,45 @@ is guarded by a test that compares it with the original implementation (see
   1.5 minutes per OS to every CI package build with no demonstrated runtime gain, so it is not
   enabled. `panic = "abort"` was not applied because it would change crash behavior.
 
+## The watch app: battery and CPU
+
+The watch app was reviewed by reading what runs while no desktop is receiving, then fixed.
+**None of this has been measured on a watch's battery**; the only numbers below are a JVM
+microbenchmark and counts of avoidable work. A real before/after needs a full-charge drain
+test on hardware (see "How to measure it" at the end of this section).
+
+| Cost | Before | After |
+| --- | --- | --- |
+| Sensors, PPG and the CPU wake lock while **waiting for the desktop** (BLE advertising, awaiting trust, retrying) | Left running: three IMU sensors at the configured rate, the PPG tracker and a partial wake lock, producing readings that were dropped unsent | Run only while `CONNECTED`; the foreground service stays so the process is not frozen, but the wake lock and every sensor are released |
+| "Monitor mode" listener when the app is backgrounded and disconnected | Rotation-vector sensor registered with no consumer | Removed |
+| `watch.ppg_status` messages | One per PPG diagnostic text change: three per flush, so 30+ BLE messages a second at the 10 Hz flush rate, plus a screen redraw each | One per actual state change; the diagnostic text is published at most once a second |
+| PPG delivery | A 40 ms polling timer (25 wake-ups a second, almost always finding an empty buffer) | Sent when the SDK delivers samples (same batches, one wake-up per delivery) |
+| Medical-tracker flush | A permanent 100 ms timer (10 a second) even with no medical tracker running | A one-shot, 100 ms after the first sample arrives |
+| BLE advertising | Low-latency mode, and it kept running while a desktop was connected | Balanced mode, stopped while a desktop is connected, resumed on disconnect |
+| Orientation message encoding (up to 50 a second) | A `JSONObject`, two `JSONArray`s and a boxed `Double` per component: 3.2 us per message (JVM) | One `StringBuilder`: 0.4 us per message (JVM, 8x), output checked against the old encoder on 2,000 random readings |
+| Status text redraw | Orientation sequence redrawn at the sensor rate | At most twice a second |
+
+Two behaviours changed on purpose: a reading with a non-finite component is now dropped (the old
+encoder threw inside the sensor callback), and streaming control no longer depends on the screen
+being on, so a reconnect that lands with the display off now starts the sensors.
+
+**What was not changed, and why**
+
+- **Sensor rates.** `watchOrientationRateHz`, the acceleration and gyroscope rates and
+  `watchPpgFlushRateHz` are desktop settings that decide what the model sees. The largest single
+  lever is `watchPpgFlushRateHz`: it is **10** in the settings file reviewed (the maximum; the default is 1),
+  which makes the Samsung sensor service flush ten times a second. Lowering it would save more than
+  everything above, but it also changes the live window length the model is validated against.
+- **Batching the companion sensors** (acceleration, gyroscope) would cut CPU wake-ups, but it makes the
+  attached readings up to 40 ms staler than the training data assumed.
+- **Dim theme.** The watch uses the darkest navy as its background; an OLED panel pays for every lit
+  pixel, so a mid-blue field would cost far more than this.
+
+**How to measure it.** Charge to 100%, reset `adb shell dumpsys batterystats --reset`, run a Bluetooth
+session for a fixed time (and, separately, leave the app advertising with no desktop for the same time),
+then compare `adb shell dumpsys batterystats` (CPU, wake lock, sensor and Bluetooth time) and the battery
+percentage between builds `719c4f3` and later.
+
 ## Measured and left alone
 
 These were each measured and found cheap enough that changing them would add risk for no

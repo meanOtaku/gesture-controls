@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Same palette as the desktop app (apps/desktop/src/styles.css). The watch uses the
+     desktop's darkest navy as its field: an OLED panel pays for every lit pixel, and a
+     full-screen mid-blue costs far more than this. -->
+<resources>
+    <color name="gc_bg">#00003A</color>
+    <color name="gc_panel">#00004A</color>
+    <color name="gc_blue">#000066</color>
+    <color name="gc_ink">#F2F2F2</color>
+    <color name="gc_ink_2">#D1F2F2F2</color>
+    <color name="gc_ink_3">#B3F2F2F2</color>
+    <color name="gc_line">#66F2F2F2</color>
+    <color name="gc_wash">#24F2F2F2</color>
+    <color name="gc_yellow">#F2F200</color>
+    <color name="gc_green">#00F279</color>
+    <color name="gc_cyan">#00F2F2</color>
+    <color name="gc_red">#FF9D9D</color>
+</resources>

@@ -24,6 +24,7 @@ import android.widget.RadioButton
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -511,6 +512,17 @@ class MainActivity : AppCompatActivity() {
             // May need to ask for BODY_SENSORS, which only works while visible.
             startBodySensorCollection()
         }
+        connectionStatusText.setTextColor(
+            ContextCompat.getColor(
+                this,
+                when (state) {
+                    ConnectionState.CONNECTED -> R.color.gc_green
+                    ConnectionState.FAILED -> R.color.gc_red
+                    ConnectionState.CONNECTING, ConnectionState.RECONNECTING, ConnectionState.AWAITING_TRUST -> R.color.gc_yellow
+                    ConnectionState.DISCONNECTED -> R.color.gc_ink
+                },
+            ),
+        )
         connectionStatusText.text = when (state) {
             ConnectionState.DISCONNECTED -> getString(R.string.status_disconnected)
             ConnectionState.CONNECTING -> getString(R.string.status_connecting)
