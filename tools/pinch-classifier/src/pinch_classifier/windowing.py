@@ -59,12 +59,10 @@ def _contiguous_same_label_segments(recording: Recording, max_gap_ns: int) -> li
     labels = recording.raw_labels
     row_count = timestamps.shape[0]
 
-    boundaries = [0]
-    for index in range(1, row_count):
-        gap = timestamps[index] - timestamps[index - 1]
-        if gap > max_gap_ns or labels[index] != labels[index - 1]:
-            boundaries.append(index)
-    boundaries.append(row_count)
+    # A new segment starts wherever the gap to the previous row exceeds `max_gap_ns` or the
+    # label changes. Computed over whole arrays instead of one Python iteration per row.
+    breaks = np.flatnonzero((np.diff(timestamps) > max_gap_ns) | (labels[1:] != labels[:-1])) + 1
+    boundaries = [0, *breaks.tolist(), row_count]
 
     return [np.arange(boundaries[i], boundaries[i + 1]) for i in range(len(boundaries) - 1)]
 
@@ -86,9 +84,12 @@ def build_windows(recording: Recording, config: WindowConfig) -> list[Window]:
         window_start_ns = segment_start_ns
         while window_start_ns + window_ns <= segment_end_ns:
             window_end_ns = window_start_ns + window_ns
-            in_window = segment[
-                (segment_timestamps >= window_start_ns) & (segment_timestamps <= window_end_ns)
-            ]
+            # Timestamps are non-decreasing (the loader rejects anything else), so the rows in
+            # [start, end] are one contiguous run found by binary search. Masking the whole
+            # segment for every window made this quadratic in the segment length.
+            first = np.searchsorted(segment_timestamps, window_start_ns, side="left")
+            last = np.searchsorted(segment_timestamps, window_end_ns, side="right")
+            in_window = segment[first:last]
             if in_window.shape[0] >= config.min_samples_per_window:
                 windows.append(
                     Window(

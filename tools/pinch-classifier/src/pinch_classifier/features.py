@@ -16,7 +16,14 @@ from collections.abc import Sequence
 import numpy as np
 
 from .csv_io import Recording
-from .schema import ACCEL_COLUMNS, CONTACT_QUALITY_COLUMN, GYRO_COLUMNS, PPG_COLUMNS, QUAT_COLUMNS
+from .schema import (
+    ACCEL_COLUMNS,
+    CONTACT_QUALITY_COLUMN,
+    GYRO_COLUMNS,
+    NUMERIC_COLUMNS,
+    PPG_COLUMNS,
+    QUAT_COLUMNS,
+)
 from .windowing import Window
 
 FEATURE_NAMES: tuple[str, ...] = (
@@ -100,63 +107,106 @@ def _quat_delta_angle_deg(quat_first: np.ndarray, quat_last: np.ndarray) -> floa
     return float(np.degrees(2.0 * np.arccos(dot)))
 
 
+def _channel_rows(columns: tuple[str, ...]) -> slice:
+    """The contiguous `NUMERIC_COLUMNS` rows (of `Recording.channel_matrix`) holding `columns`."""
+    first = NUMERIC_COLUMNS.index(columns[0])
+    rows = slice(first, first + len(columns))
+    if NUMERIC_COLUMNS[rows] != columns:
+        raise AssertionError(f"{columns} are not contiguous in NUMERIC_COLUMNS")
+    return rows
+
+
+_PPG_ROWS = _channel_rows(PPG_COLUMNS)
+_ACCEL_ROWS = _channel_rows(ACCEL_COLUMNS)
+_GYRO_ROWS = _channel_rows(GYRO_COLUMNS)
+_QUAT_ROWS = _channel_rows(QUAT_COLUMNS)
+_CONTACT_ROW = NUMERIC_COLUMNS.index(CONTACT_QUALITY_COLUMN)
+
+
+def _mean_and_std_by_row(block: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Per-row population mean and standard deviation, bit-identical to `np.mean`/`np.std`.
+
+    `block.mean(axis=1)` is *not* a substitute: reducing a 2-D array along its last axis sums in
+    a different order from the 1-D pairwise sum `np.mean` uses on a single channel, which moves
+    27 of the 55 features by up to thousands of ulps and so would change every trained model
+    for no reason. This replays exactly the operations numpy performs for one 1-D array (one
+    `add.reduce`, the centered squares, another `add.reduce`, a divide, a square root) per row,
+    skipping only the Python-level wrapper overhead that dominated the original cost.
+    """
+    sample_count = block.shape[1]
+    add_reduce = np.add.reduce
+    rows = block.shape[0]
+    means = np.empty(rows)
+    stds = np.empty(rows)
+    for index in range(rows):
+        row = block[index]
+        mean = add_reduce(row) / sample_count
+        centered = row - mean
+        means[index] = mean
+        stds[index] = np.sqrt(add_reduce(centered * centered) / sample_count)
+    return means, stds
+
+
 def extract_features(recording: Recording, window: Window) -> np.ndarray:
+    """The 55-feature vector for one window, in `FEATURE_NAMES` order.
+
+    The per-channel statistics are computed over one (channels x samples) slice instead of one
+    numpy call per channel per statistic, and the result is bit-identical to the per-channel
+    computation (population variance, `ddof=0`; same left-to-right order for the magnitude
+    sums); `tests/test_optimized_equivalence.py` pins that against the original implementation.
+    """
     indices = window.row_indices
     timestamps_ns = recording.timestamps_ns[indices]
+    block = recording.channel_matrix[:, indices]
 
-    values: list[float] = []
+    means, stds = _mean_and_std_by_row(block)
+    # min and max do not depend on summation order, so one reduction over the whole block is
+    # exact (unlike mean/std; see `_mean_and_std_by_row`).
+    mins = block.min(axis=1)
+    maxs = block.max(axis=1)
 
-    ppg_arrays = [recording.channels[column][indices] for column in PPG_COLUMNS]
-    for array in ppg_arrays:
-        values.append(float(np.mean(array)))
-    for array in ppg_arrays:
-        values.append(float(np.std(array)))
-    for array in ppg_arrays:
-        values.append(float(np.min(array)))
-    for array in ppg_arrays:
-        values.append(float(np.max(array)))
-    for array in ppg_arrays:
-        values.append(_slope(array, timestamps_ns))
+    duration_ms = (timestamps_ns[-1] - timestamps_ns[0]) / 1_000_000.0
+    ppg = block[_PPG_ROWS]
+    if duration_ms <= 0:
+        slopes = np.zeros(ppg.shape[0])
+    else:
+        slopes = (ppg[:, -1] - ppg[:, 0]) / duration_ms
 
-    accel_arrays = [recording.channels[column][indices] for column in ACCEL_COLUMNS]
-    for array in accel_arrays:
-        values.append(float(np.mean(array)))
-    for array in accel_arrays:
-        values.append(float(np.std(array)))
-    for array in accel_arrays:
-        values.append(float(np.min(array)))
-    for array in accel_arrays:
-        values.append(float(np.max(array)))
-    accel_magnitude = np.sqrt(sum(array**2 for array in accel_arrays))
-    values.append(float(np.mean(accel_magnitude)))
-    values.append(float(np.std(accel_magnitude)))
+    def magnitude_stats(rows: slice) -> tuple[float, float]:
+        x, y, z = block[rows]
+        magnitude = np.sqrt(x**2 + y**2 + z**2)
+        return float(np.mean(magnitude)), float(np.std(magnitude))
 
-    gyro_arrays = [recording.channels[column][indices] for column in GYRO_COLUMNS]
-    for array in gyro_arrays:
-        values.append(float(np.mean(array)))
-    for array in gyro_arrays:
-        values.append(float(np.std(array)))
-    for array in gyro_arrays:
-        values.append(float(np.min(array)))
-    for array in gyro_arrays:
-        values.append(float(np.max(array)))
-    gyro_magnitude = np.sqrt(sum(array**2 for array in gyro_arrays))
-    values.append(float(np.mean(gyro_magnitude)))
-    values.append(float(np.std(gyro_magnitude)))
+    accel_magnitude_mean, accel_magnitude_std = magnitude_stats(_ACCEL_ROWS)
+    gyro_magnitude_mean, gyro_magnitude_std = magnitude_stats(_GYRO_ROWS)
 
-    quat_arrays = [recording.channels[column][indices] for column in QUAT_COLUMNS]
-    for array in quat_arrays:
-        values.append(float(np.mean(array)))
-    for array in quat_arrays:
-        values.append(float(np.std(array)))
-    quat_first = np.array([recording.channels[column][indices[0]] for column in QUAT_COLUMNS])
-    quat_last = np.array([recording.channels[column][indices[-1]] for column in QUAT_COLUMNS])
-    values.append(_quat_delta_angle_deg(quat_first, quat_last))
+    quat = block[_QUAT_ROWS]
+    quat_delta = _quat_delta_angle_deg(quat[:, 0], quat[:, -1])
 
-    values.append(float(np.mean(recording.channels[CONTACT_QUALITY_COLUMN][indices])))
-    values.append(float(indices.shape[0]))
-    values.append(float((timestamps_ns[-1] - timestamps_ns[0]) / 1_000_000.0))
-
-    vector = np.array(values, dtype=np.float64)
+    vector = np.concatenate(
+        (
+            means[_PPG_ROWS],
+            stds[_PPG_ROWS],
+            mins[_PPG_ROWS],
+            maxs[_PPG_ROWS],
+            slopes,
+            means[_ACCEL_ROWS],
+            stds[_ACCEL_ROWS],
+            mins[_ACCEL_ROWS],
+            maxs[_ACCEL_ROWS],
+            (accel_magnitude_mean, accel_magnitude_std),
+            means[_GYRO_ROWS],
+            stds[_GYRO_ROWS],
+            mins[_GYRO_ROWS],
+            maxs[_GYRO_ROWS],
+            (gyro_magnitude_mean, gyro_magnitude_std),
+            means[_QUAT_ROWS],
+            stds[_QUAT_ROWS],
+            (quat_delta,),
+            (means[_CONTACT_ROW],),
+            (float(indices.shape[0]),),
+            (float(duration_ms),),
+        )
+    ).astype(np.float64, copy=False)
     assert vector.shape[0] == len(FEATURE_NAMES)
     return vector

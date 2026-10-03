@@ -17,6 +17,16 @@ pip install -e ".[dev]"              # baseline and tests
 pip install -e ".[dev,tensorflow]"   # also train/export TFLite
 ```
 
+## Performance notes
+
+Dataset building is vectorized and benchmarked in
+[`docs/performance.md`](../../docs/performance.md) (100,000 rows in about one second). The
+vectorized loader, windowing, carry-forward and feature extraction are required to be
+**bit-identical** to the original loops, which are kept as `tests/reference_impl.py`;
+`tests/test_optimized_equivalence.py` enforces it. If you change feature extraction, update
+the production code and the reference together, deliberately: a change to a feature value is a
+change to every trained model.
+
 ## Running tests
 
 ```bash
