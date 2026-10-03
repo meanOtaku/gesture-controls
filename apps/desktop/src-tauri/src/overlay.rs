@@ -209,8 +209,15 @@ impl OverlayRuntime {
         let window = app
             .get_webview_window(OVERLAY_WINDOW)
             .ok_or("overlay window is not configured")?;
-        // Read the native volume before taking the state lock, so a slow or
-        // hung audio adapter cannot stall `hide`/`release` behind this read.
+        // Serialize the native volume read with volume writes (they hold the
+        // same lock for the whole of theirs), so a write cannot land between
+        // this read and the commit below and leave a stale volume on screen.
+        // This is deliberately *not* the state lock: `hide`/`release` take only
+        // that one, so a slow or hung audio adapter cannot stall them.
+        let _write_order = self
+            .native_write_lock
+            .lock()
+            .map_err(|_| "native volume write lock was poisoned")?;
         let available_volume = volume_runtime.available_volume();
         let mut state = self
             .state

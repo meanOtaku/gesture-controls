@@ -1038,4 +1038,3 @@ safety). The per-finding status, with commits, is the canonical record:
 - [ ] **No physical hardware validation.** Every "fixed" item above is covered by
       automated tests only; the rows marked *(remediation)* in
       `docs/release-readiness.md` are the real-device confirmations still required.
-

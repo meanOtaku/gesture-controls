@@ -116,15 +116,48 @@ test("wires keyboard adjustments and live refresh to the platform volume control
     /fn refresh_system_volume[\s\S]*available_volume[\s\S]*state_generation/,
     "refresh must validate its generation after reading native volume",
   );
+  // The adjustment is split into three steps so the overlay state lock is never
+  // held across the blocking native call (a hung audio adapter must not stall
+  // hide/release): a gate that bumps the generation, the native call, and a
+  // publish that commits state. The invariants asserted are unchanged.
   const adjustBody = extractFunctionBody(overlaySource, "fn adjust_system_volume(");
+  const gateBody = extractFunctionBody(overlaySource, "fn require_visible_for_write(");
+  const publishBody = extractFunctionBody(overlaySource, "fn publish_native_write(");
   assert.ok(adjustBody, "the overlay adjustment implementation exists");
+  assert.ok(gateBody, "the pre-write gate exists");
+  assert.ok(publishBody, "the post-write publish exists");
+
   assert.ok(
-    adjustBody.indexOf("state_generation.fetch_add") <
-      adjustBody.indexOf("adjust_native_volume"),
+    gateBody.includes("state_generation.fetch_add"),
+    "the gate must invalidate older refreshes",
+  );
+  assert.ok(
+    !gateBody.includes("adjust_native_volume") && !gateBody.includes("set_native_volume"),
+    "the gate must not perform native I/O",
+  );
+  assert.ok(
+    adjustBody.indexOf("require_visible_for_write") < adjustBody.indexOf("adjust_native_volume"),
     "an adjustment attempt must invalidate older refreshes before native I/O can partially succeed",
   );
   assert.ok(
-    adjustBody.indexOf("adjust_native_volume") < adjustBody.indexOf("state.volume ="),
-    "adjustment state must commit only after native I/O succeeds",
+    adjustBody.indexOf("adjust_native_volume") < adjustBody.indexOf("publish_native_write"),
+    "adjustment state must commit only after native I/O has returned",
   );
+  assert.ok(
+    !publishBody.includes("adjust_native_volume") && !publishBody.includes("set_native_volume"),
+    "publishing state must never perform native I/O",
+  );
+  assert.ok(
+    publishBody.indexOf("Ok(volume_percent)") !== -1 &&
+      publishBody.indexOf("Ok(volume_percent)") < publishBody.indexOf("state.volume ="),
+    "state.volume is only assigned on the success arm",
+  );
+  for (const signature of ["fn release_matching(", "fn hide("]) {
+    const body = extractFunctionBody(overlaySource, signature);
+    assert.ok(body, `${signature} exists`);
+    assert.ok(
+      !body.includes("native_write_lock"),
+      `${signature} must not take the native write lock, or a hung audio adapter would stall cancellation`,
+    );
+  }
 });
