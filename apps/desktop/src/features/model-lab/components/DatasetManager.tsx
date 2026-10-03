@@ -81,13 +81,13 @@ export function DatasetManager({
               <>
                 Use the Live data tab&apos;s labeled dataset recorder to capture one CSV per session: pick a label,
                 start recording, perform the gesture (or the background activity), stop, then Export Dataset CSV.
-                Each exported file is one recording session, labeled uniformly for its whole duration. Check the
+                Each exported file is one recording session: a Quick Capture session is labeled uniformly, while a Timeline Capture session keeps the label of each interval (rows outside any interval are dropped on import). Check the
                 sessions you want to train on below.
               </>
             }
             help={{
               label: "About importing datasets",
-              content: "Only CSVs exported from the Live data tab's labeled dataset recorder are supported; each file becomes one managed, selectable training session. This is a legacy-compatible import path: it never reads or modifies any Timeline Capture recording bundle, and it only shares the label catalogue with that newer format. An import either fully succeeds or writes nothing — a failure (unknown label, malformed file, size limit) is reported with its exact cause so you can fix it and retry.",
+              content: "Only CSVs exported from the Live data tab's labeled dataset recorder are supported (Quick Capture or Timeline Capture); each file becomes one managed, selectable training session. A Timeline Capture file's interval labels are all checked against the label catalogue and each needs a training role. This is a legacy-compatible import path: it never reads or modifies any Timeline Capture recording bundle, and it only shares the label catalogue with that newer format. An import either fully succeeds or writes nothing — a failure (unknown label, malformed file, size limit) is reported with its exact cause so you can fix it and retry.",
             }}
           />
         </CardHeader>

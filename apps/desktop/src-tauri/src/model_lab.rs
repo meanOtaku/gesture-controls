@@ -65,8 +65,28 @@ pub struct DatasetSummary {
     pub id: String,
     pub original_filename: String,
     pub imported_at: String,
+    /// Display text: the single label of a legacy one-label session, or the
+    /// labels of a multi-label (Timeline Capture) export joined by ", ".
+    /// Use [`DatasetSummary::effective_labels`] for anything functional.
     pub label: String,
+    /// Every distinct label present on the dataset's rows, sorted. Absent in
+    /// an index written before multi-label datasets existed, in which case
+    /// the dataset is the single `label`.
+    #[serde(default)]
+    pub labels: Vec<String>,
     pub row_count: usize,
+}
+
+impl DatasetSummary {
+    /// The labels this dataset trains on: what registry and training-role
+    /// coverage checks must be applied to.
+    pub fn effective_labels(&self) -> Vec<String> {
+        if self.labels.is_empty() {
+            vec![self.label.clone()]
+        } else {
+            self.labels.clone()
+        }
+    }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -226,11 +246,31 @@ fn extract_label(comment_lines: &[&str]) -> Option<String> {
     None
 }
 
+/// A validated dataset CSV, ready to store.
+#[derive(Debug, PartialEq)]
+struct ParsedDataset {
+    /// Distinct labels present on the stored rows, sorted. Row labels are
+    /// authoritative: they are what the trainer resolves.
+    labels: Vec<String>,
+    row_count: usize,
+    /// The CSV to persist: `content` unchanged, or, for a multi-label
+    /// (Timeline Capture) export, with its unlabeled gap rows removed.
+    csv: String,
+}
+
 /// Validates a dataset CSV against the Milestone 9 export contract: optional
-/// leading `#` metadata lines (one of which must be `# label: <value>`),
-/// then the exact header row, then at least one data row with the right
-/// column count. Returns `(label, row_count)` on success.
-fn parse_csv(content: &str) -> Result<(String, usize), String> {
+/// leading `#` metadata lines, then the exact header row, then data rows with
+/// the right column count, each carrying its own `label`.
+///
+/// Two shapes are accepted:
+/// - A single-label session (Quick Capture): `# label: <value>` is present, so
+///   every row must carry exactly that label.
+/// - A multi-label session (Timeline Capture), whose `# label:` line is empty
+///   because its labels live on the rows: rows with no label are the
+///   unannotated gaps between intervals and are dropped, and the remaining
+///   rows' labels are what the dataset is attributed to. Rows are never
+///   relabeled; at least one labeled row is required.
+fn parse_csv(content: &str) -> Result<ParsedDataset, String> {
     let lines: Vec<&str> = content.lines().collect();
     if lines.iter().all(|line| line.trim().is_empty()) {
         return Err("dataset CSV is empty".to_string());
@@ -270,21 +310,77 @@ fn parse_csv(content: &str) -> Result<(String, usize), String> {
         return Err("header present but no data rows".to_string());
     }
 
+    let mut row_labels: Vec<&str> = Vec::with_capacity(data_lines.len());
     for (offset, line) in data_lines.iter().enumerate() {
-        let column_count = line.split(',').count();
-        if column_count != DATASET_CSV_HEADER.len() {
+        let fields: Vec<&str> = line.split(',').collect();
+        if fields.len() != DATASET_CSV_HEADER.len() {
             return Err(format!(
-                "row {}: expected {} columns, got {column_count}",
+                "row {}: expected {} columns, got {}",
                 offset + 1,
                 DATASET_CSV_HEADER.len(),
+                fields.len()
             ));
         }
+        row_labels.push(fields[fields.len() - 1].trim());
     }
 
-    let label = extract_label(&comment_lines).ok_or_else(|| {
-        "missing '# label: <value>' metadata line required to import a dataset".to_string()
-    })?;
-    Ok((label, data_lines.len()))
+    let comment_label = extract_label(&comment_lines);
+    if let Some(comment_label) = &comment_label {
+        if let Some(offset) = row_labels.iter().position(|label| label.is_empty()) {
+            return Err(format!(
+                "row {}: no label, but the file declares a single '# label: {comment_label}' session",
+                offset + 1
+            ));
+        }
+        if let Some((offset, found)) = row_labels
+            .iter()
+            .enumerate()
+            .find(|(_, label)| **label != comment_label.as_str())
+        {
+            return Err(format!(
+                "row {}: labeled '{found}', but the file declares '# label: {comment_label}'",
+                offset + 1
+            ));
+        }
+        return Ok(ParsedDataset {
+            labels: vec![comment_label.clone()],
+            row_count: data_lines.len(),
+            csv: content.to_string(),
+        });
+    }
+
+    let kept: Vec<&str> = data_lines
+        .iter()
+        .zip(&row_labels)
+        .filter(|(_, label)| !label.is_empty())
+        .map(|(line, _)| *line)
+        .collect();
+    if kept.is_empty() {
+        return Err(
+            "no labeled rows: add a '# label: <value>' line for a single-label session, or label the rows"
+                .to_string(),
+        );
+    }
+    let labels: Vec<String> = row_labels
+        .iter()
+        .filter(|label| !label.is_empty())
+        .map(|label| label.to_string())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let csv = if kept.len() == data_lines.len() {
+        content.to_string()
+    } else {
+        let mut out: Vec<&str> = comment_lines.clone();
+        out.push(header_line);
+        out.extend(kept.iter().copied());
+        out.join("\n") + "\n"
+    };
+    Ok(ParsedDataset {
+        labels,
+        row_count: kept.len(),
+        csv,
+    })
 }
 
 fn datasets_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -352,11 +448,13 @@ pub fn import_model_dataset(
             csv_content.len()
         ));
     }
-    let (label, row_count) = parse_csv(&csv_content)?;
-    if !crate::label_registry::contains_label(&app, &label) {
-        return Err(format!(
-            "unknown label '{label}'; create it in Model Lab before importing recordings"
-        ));
+    let parsed = parse_csv(&csv_content)?;
+    for label in &parsed.labels {
+        if !crate::label_registry::contains_label(&app, label) {
+            return Err(format!(
+                "unknown label '{label}'; create it in Model Lab before importing recordings"
+            ));
+        }
     }
 
     let _guard = runtime
@@ -376,15 +474,16 @@ pub fn import_model_dataset(
 
     let csv_path = dataset_csv_path(&dir, &id);
     let tmp_path = csv_path.with_extension("csv.tmp");
-    fs::write(&tmp_path, &csv_content).map_err(|error| error.to_string())?;
+    fs::write(&tmp_path, &parsed.csv).map_err(|error| error.to_string())?;
     fs::rename(&tmp_path, &csv_path).map_err(|error| error.to_string())?;
 
     let summary = DatasetSummary {
         id,
         original_filename: filename,
         imported_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
-        label,
-        row_count,
+        label: parsed.labels.join(", "),
+        labels: parsed.labels,
+        row_count: parsed.row_count,
     };
 
     let mut index = load_index(&app);
@@ -684,13 +783,8 @@ pub async fn start_training_job(
 
     let required_labels: std::collections::BTreeSet<String> = dataset_ids
         .iter()
-        .filter_map(|id| {
-            index
-                .datasets
-                .iter()
-                .find(|dataset| &dataset.id == id)
-                .map(|dataset| dataset.label.clone())
-        })
+        .filter_map(|id| index.datasets.iter().find(|dataset| &dataset.id == id))
+        .flat_map(DatasetSummary::effective_labels)
         .collect();
     let effective_mapping = crate::training_label_mapping::effective_mapping(label_mapping)?;
     crate::training_label_mapping::validate_mapping_covers(&effective_mapping, &required_labels)?;
@@ -911,9 +1005,14 @@ mod tests {
 
     #[test]
     fn parses_valid_csv() {
-        let (label, row_count) = parse_csv(&valid_csv()).expect("valid CSV must parse");
-        assert_eq!(label, "pinch_start");
-        assert_eq!(row_count, 2);
+        let parsed = parse_csv(&valid_csv()).expect("valid CSV must parse");
+        assert_eq!(parsed.labels, vec!["pinch_start".to_string()]);
+        assert_eq!(parsed.row_count, 2);
+        assert_eq!(
+            parsed.csv,
+            valid_csv(),
+            "a single-label file is stored as-is"
+        );
     }
 
     #[test]
@@ -923,17 +1022,97 @@ mod tests {
     }
 
     #[test]
-    fn rejects_missing_label_metadata() {
-        let csv = valid_csv().replace("# label: pinch_start\n", "");
-        assert!(parse_csv(&csv).unwrap_err().contains("label"));
+    fn a_file_with_no_label_anywhere_is_rejected() {
+        let csv = valid_csv()
+            .replace("# label: pinch_start\n", "")
+            .replace(",pinch_start", ",");
+        assert!(parse_csv(&csv).unwrap_err().contains("no labeled rows"));
+    }
+
+    /// D-M3-1: a Timeline Capture export has an empty `# label:` line and a
+    /// blank label on every unannotated gap row. It used to be rejected at the
+    /// `# label:` gate (and, past it, by the trainer's per-row label check).
+    fn timeline_csv() -> String {
+        let row = |t: u32, label: &str| {
+            format!("{t},{t},0.1,0.2,0.3,0.0,0.0,1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,90,{label}")
+        };
+        [
+            "# gesture-dataset-export: 1".to_string(),
+            "# label: ".to_string(),
+            DATASET_CSV_HEADER.join(","),
+            row(1, ""),
+            row(2, "idle"),
+            row(3, "idle"),
+            row(4, ""),
+            row(5, "pinch_start"),
+            row(6, ""),
+        ]
+        .join("\n")
+    }
+
+    #[test]
+    fn a_timeline_capture_export_is_accepted_with_its_gap_rows_dropped() {
+        let parsed = parse_csv(&timeline_csv()).expect("timeline export must import");
+        assert_eq!(
+            parsed.labels,
+            vec!["idle".to_string(), "pinch_start".to_string()]
+        );
+        assert_eq!(parsed.row_count, 3);
+        let stored: Vec<&str> = parsed.csv.lines().collect();
+        assert_eq!(stored.iter().filter(|l| l.starts_with("1,")).count(), 0);
+        assert_eq!(
+            stored.last().unwrap().split(',').next_back(),
+            Some("pinch_start")
+        );
+        // Every stored data row carries a label, which the trainer requires.
+        assert!(
+            stored
+                .iter()
+                .skip(3)
+                .all(|line| !line.split(',').next_back().unwrap().is_empty())
+        );
+        // And the stored file is itself a valid dataset.
+        assert_eq!(parse_csv(&parsed.csv).unwrap().row_count, 3);
+    }
+
+    #[test]
+    fn a_comment_label_that_disagrees_with_the_rows_is_rejected() {
+        let csv = valid_csv().replace("# label: pinch_start", "# label: idle");
+        let error = parse_csv(&csv).unwrap_err();
+        assert!(error.contains("declares"), "{error}");
+    }
+
+    #[test]
+    fn a_single_label_session_with_a_blank_row_label_is_rejected() {
+        let mut csv = valid_csv();
+        csv = csv.replacen(",90,pinch_start", ",90,", 1);
+        assert!(parse_csv(&csv).unwrap_err().contains("no label"));
+    }
+
+    #[test]
+    fn a_multi_label_dataset_requires_every_label_to_have_a_training_role() {
+        let dataset = DatasetSummary {
+            id: "a".into(),
+            original_filename: "t.csv".into(),
+            imported_at: String::new(),
+            label: "idle, pinch_start".into(),
+            labels: vec!["idle".into(), "pinch_start".into()],
+            row_count: 3,
+        };
+        assert_eq!(dataset.effective_labels(), vec!["idle", "pinch_start"]);
+        // An index written before multi-label datasets existed has no `labels`.
+        let legacy: DatasetSummary = serde_json::from_str(
+            r#"{"id":"a","originalFilename":"t.csv","importedAt":"","label":"idle","rowCount":3}"#,
+        )
+        .unwrap();
+        assert_eq!(legacy.effective_labels(), vec!["idle"]);
     }
 
     #[test]
     fn parses_custom_label_for_registry_validation() {
         let csv = valid_csv().replace("pinch_start", "not_a_real_label");
-        let (label, _) =
-            parse_csv(&csv).expect("custom labels are resolved by the persisted registry");
-        assert_eq!(label, "not_a_real_label");
+        let parsed = parse_csv(&csv).expect("custom labels are resolved by the persisted registry");
+        assert_eq!(parsed.labels, vec!["not_a_real_label".to_string()]);
     }
 
     #[test]
@@ -1005,6 +1184,7 @@ mod tests {
                     original_filename: "session-1.csv".to_string(),
                     imported_at: "2026-08-31T00:00:00Z".to_string(),
                     label: "pinch_start".to_string(),
+                    labels: vec!["pinch_start".to_string()],
                     row_count: 10,
                 },
                 DatasetSummary {
@@ -1012,6 +1192,7 @@ mod tests {
                     original_filename: "session-2.csv".to_string(),
                     imported_at: "2026-08-31T00:00:00Z".to_string(),
                     label: "idle".to_string(),
+                    labels: vec!["idle".to_string()],
                     row_count: 20,
                 },
             ],

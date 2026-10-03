@@ -14,6 +14,7 @@ import {
   DEPLOYABLE_CLASS_LABELS,
   LEGACY_COMPATIBILITY_LABEL_MAPPING,
   appendRuntimeEvent,
+  datasetLabels,
   describeDiagnosticValue,
   describeWindow,
   missingLabelMappings,
@@ -327,7 +328,7 @@ export function ModelLab() {
     if (datasetIds.length === 0 || status.phase === "running") return;
     setTrainingError(null);
     const selectedLabelIds = new Set(
-      datasets.filter((dataset) => selectedDatasetIds.has(dataset.id)).map((dataset) => dataset.label),
+      datasets.filter((dataset) => selectedDatasetIds.has(dataset.id)).flatMap(datasetLabels),
     );
     const unmapped = missingLabelMappings(labelMapping, selectedLabelIds);
     if (unmapped.length > 0) {
@@ -439,7 +440,9 @@ export function ModelLab() {
 
   const coverageByLabel = new Map<string, number>();
   for (const dataset of datasets) {
-    coverageByLabel.set(dataset.label, (coverageByLabel.get(dataset.label) ?? 0) + 1);
+    for (const label of datasetLabels(dataset)) {
+      coverageByLabel.set(label, (coverageByLabel.get(label) ?? 0) + 1);
+    }
   }
 
   const isRunning = status.phase === "running";
@@ -519,7 +522,7 @@ export function ModelLab() {
             <CardContent>
               <LabelMappingEditor
                 selectedDatasetLabels={new Set(
-                  datasets.filter((dataset) => selectedDatasetIds.has(dataset.id)).map((dataset) => dataset.label),
+                  datasets.filter((dataset) => selectedDatasetIds.has(dataset.id)).flatMap(datasetLabels),
                 )}
                 labels={labels}
                 mapping={labelMapping}
