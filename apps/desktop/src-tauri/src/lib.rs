@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use spatial_protocol::{BUTTON_STATE_DOWN, BUTTON_STATE_UP, STEM_PRIMARY_BUTTON_ID};
 use tauri::Manager;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use watch_bridge::{WatchBridgeServer, WatchEvent};
 
 mod calibration;
@@ -271,6 +271,9 @@ pub fn run() {
                                         &watch_handle,
                                         interaction_engine::ForceReleaseReason::StaleSensorWindow,
                                     );
+                                }
+                                WatchEvent::WearStateUpdated(sample) if sample.worn => {
+                                    debug!("watch wear state: worn");
                                 }
                                 WatchEvent::WearStateUpdated(sample) if !sample.worn => {
                                     // Off the wrist the watch stops streaming on purpose; a held

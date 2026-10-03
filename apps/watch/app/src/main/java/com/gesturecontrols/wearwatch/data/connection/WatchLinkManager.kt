@@ -208,11 +208,13 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
     }
 
     /**
-     * Tells the desktop whether the watch is on a wrist. Sent when the state changes; the
-     * stored value is forgotten on disconnect so a new connection never starts with a stale one.
+     * Tells the desktop whether the watch is on a wrist. Sent when the state changes (and again
+     * with [repeat] set, which the activity does every few seconds so one lost message cannot
+     * leave the desktop without it); the stored value is forgotten on disconnect so a new
+     * connection never starts with a stale one.
      */
-    fun sendWearState(worn: Boolean) {
-        if (worn == lastWearState) return
+    fun sendWearState(worn: Boolean, repeat: Boolean = false) {
+        if (!repeat && worn == lastWearState) return
         val link = streamingLink() ?: return
         lastWearState = worn
         val timestampNs = SystemClock.elapsedRealtimeNanos()

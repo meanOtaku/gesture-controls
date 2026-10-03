@@ -49,6 +49,7 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         /** Fast-changing status text is redrawn at most this often. */
         const val UI_REFRESH_INTERVAL_MS = 500L
+        const val WEAR_STATE_REPEAT_MS = 5_000L
         const val STATUS_MAX_SP = 34f
         const val STATUS_MIN_SP = 14f
 
@@ -278,7 +279,15 @@ class MainActivity : AppCompatActivity() {
                 applyStreamingPlan(plan)
             }
         }
-        lifecycleScope.launch { wearDetector.worn.collect { worn -> worn?.let(watchLink::sendWearState) } }
+        lifecycleScope.launch { wearDetector.worn.collect { worn -> worn?.let { watchLink.sendWearState(it) } } }
+        // The wear state is sent when it changes; repeating it makes a lost or reordered message
+        // heal itself instead of leaving the desktop's "On wrist" empty for the whole session.
+        lifecycleScope.launch {
+            while (true) {
+                delay(WEAR_STATE_REPEAT_MS)
+                wearDetector.worn.value?.let { watchLink.sendWearState(it, repeat = true) }
+            }
+        }
         lifecycleScope.launch { ppgCollector.state.collect { watchLink.sendPpgStatus(it.wireValue()) } }
         lifecycleScope.launch {
             medicalCollector.state.collect { statuses ->
