@@ -83,7 +83,10 @@ struct TerminationSignals {
 }
 
 impl TerminationSignals {
-    fn register() -> std::io::Result<Self> {
+    /// `async` on purpose: tokio's signal registration needs a running reactor and panics
+    /// without one (as it did when this was called from the synchronous `setup` callback), so
+    /// the signature forces every caller into an async context.
+    async fn register() -> std::io::Result<Self> {
         #[cfg(unix)]
         {
             use tokio::signal::unix::{SignalKind, signal};
@@ -242,16 +245,16 @@ pub fn run() {
             }
 
             // Ctrl+C / SIGTERM / SIGHUP take the same graceful path as closing the window.
-            match TerminationSignals::register() {
-                Ok(mut signals) => {
-                    let signal_handle = app.handle().clone();
-                    tauri::async_runtime::spawn(async move {
+            let signal_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                match TerminationSignals::register().await {
+                    Ok(mut signals) => {
                         signals.wait().await;
                         exit_gracefully(signal_handle, "termination signal");
-                    });
+                    }
+                    Err(error) => warn!(%error, "could not install the termination signal handlers"),
                 }
-                Err(error) => warn!(%error, "could not install the termination signal handlers"),
-            }
+            });
 
             let watch_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -448,7 +451,7 @@ mod tests {
                 .build()
                 .unwrap()
                 .block_on(async {
-                    let mut signals = TerminationSignals::register().unwrap();
+                    let mut signals = TerminationSignals::register().await.unwrap();
                     raise(signal);
                     tokio::time::timeout(Duration::from_secs(3), signals.wait())
                         .await
