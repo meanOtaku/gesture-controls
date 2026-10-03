@@ -28,7 +28,7 @@ use std::time::Duration;
 
 use btleplug::api::{
     Central, CentralEvent, CharPropFlags, Characteristic, Manager as _, Peripheral as _,
-    ScanFilter, ValueNotification, WriteType,
+    RetrievePeripheralsOptions, ScanFilter, ValueNotification, WriteType,
 };
 use btleplug::platform::{Adapter, Manager, Peripheral};
 use futures_util::{Stream, StreamExt};
@@ -219,6 +219,9 @@ pub struct BleLink {
     tag: Option<String>,
     /// Signal strength when the watch was found, in dBm.
     rssi: Option<i16>,
+    /// The watch was already connected to this computer when found (left over from a session
+    /// that did not disconnect), rather than newly discovered by scanning.
+    found_connected: bool,
 }
 
 /// The device id the desktop assigns a watch it discovered over BLE: derived
@@ -293,6 +296,12 @@ impl BleLink {
         self.rssi
     }
 
+    /// True when the watch was found already connected to this computer, which means an earlier
+    /// session ended without disconnecting.
+    pub fn found_connected(&self) -> bool {
+        self.found_connected
+    }
+
     /// The negotiated ATT MTU, or 0 when the backend does not report one.
     pub fn mtu(&self) -> u32 {
         u32::from(self.peripheral.mtu())
@@ -307,7 +316,7 @@ impl BleLink {
     /// [`WATCH_BLE_SERVICE_UUID`]. Every failure carries an actionable message.
     pub async fn connect(adapter: &Adapter, scan_timeout: Duration) -> Result<Self, BleError> {
         let found = scan_for_watch(adapter, scan_timeout).await?;
-        let (tag, rssi) = (found.tag, found.rssi);
+        let (tag, rssi, already_connected) = (found.tag, found.rssi, found.already_connected);
         let peripheral = found.peripheral;
         peripheral
             .connect_with_timeout(BLE_CONNECT_TIMEOUT)
@@ -320,6 +329,7 @@ impl BleLink {
             Ok(mut link) => {
                 link.tag = tag;
                 link.rssi = rssi;
+                link.found_connected = already_connected;
                 Ok(link)
             }
             Err(error) => {
@@ -374,6 +384,7 @@ impl BleLink {
             pending: None,
             tag: None,
             rssi: None,
+            found_connected: false,
         })
     }
 
@@ -517,6 +528,8 @@ struct FoundWatch {
     tag: Option<String>,
     /// Signal strength when last seen, in dBm.
     rssi: Option<i16>,
+    /// The system already held a connection to this watch (from an earlier session) when it was found.
+    already_connected: bool,
 }
 
 /// The watch's stable short identity, from the service data it advertises under the watch
@@ -531,6 +544,27 @@ pub fn watch_tag(service_data: &std::collections::HashMap<Uuid, Vec<u8>>) -> Opt
 }
 
 async fn first_matching(adapter: &Adapter) -> Result<Option<FoundWatch>, BleError> {
+    // A watch the system already holds a connection to is not advertising, and a scan does not
+    // report a connected peripheral, so a previous session that ended without disconnecting (a
+    // killed launcher, a crash) leaves a watch the scan can never find. Ask the system for
+    // connected peripherals offering the watch service. Backends that cannot answer return an
+    // error, which only means there is nothing extra to look at.
+    let connected = adapter
+        .retrieve_peripherals(RetrievePeripheralsOptions {
+            identifiers: None,
+            services: Some(vec![WATCH_BLE_SERVICE_UUID]),
+        })
+        .await
+        .unwrap_or_default();
+    if let Some(peripheral) = connected.into_iter().next() {
+        let properties = peripheral.properties().await.ok().flatten();
+        return Ok(Some(FoundWatch {
+            tag: properties.as_ref().and_then(|p| watch_tag(&p.service_data)),
+            rssi: properties.and_then(|p| p.rssi),
+            already_connected: true,
+            peripheral,
+        }));
+    }
     for peripheral in adapter.peripherals().await.map_err(BleError::Adapter)? {
         let Some(properties) = peripheral.properties().await.ok().flatten() else {
             continue;
@@ -539,6 +573,7 @@ async fn first_matching(adapter: &Adapter) -> Result<Option<FoundWatch>, BleErro
             return Ok(Some(FoundWatch {
                 tag: watch_tag(&properties.service_data),
                 rssi: properties.rssi,
+                already_connected: false,
                 peripheral,
             }));
         }

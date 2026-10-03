@@ -27,7 +27,96 @@ const WATCH_HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(3);
 const MAIN_WINDOW: &str = "main";
 /// Upper bound on stopping both watch transports when the main window
 /// closes (each is internally bounded, but nothing bounded the pair).
-const TEARDOWN_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long the watch transports get to disconnect before the app exits regardless. Shorter than
+/// the launcher's own grace period (5 s), so a closed `npm start` finishes the teardown before it
+/// would be killed.
+const TEARDOWN_TIMEOUT: Duration = Duration::from_secs(4);
+
+/// A graceful exit has begun (the first caller of [`exit_gracefully`] wins).
+static EXITING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// The watch transports have been released; from here the runtime may exit.
+static TORN_DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Releases the watch transports (disconnecting Bluetooth, closing the listener), then exits.
+///
+/// Every way out goes through here: closing the window, Cmd+Q, and the signals a terminal or the
+/// launcher sends (Ctrl+C, SIGTERM, SIGHUP). Dying without it leaves the Bluetooth connection to
+/// the watch for the system to clean up eventually, and the watch can go on believing a desktop
+/// is attached (it stops advertising while one is) so the next launch cannot find it.
+fn exit_gracefully(handle: tauri::AppHandle, reason: &'static str) {
+    use std::sync::atomic::Ordering;
+    if EXITING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    info!(reason, "shutting down: releasing the watch transports");
+    tauri::async_runtime::spawn(async move {
+        if let Some(server) = handle.try_state::<Arc<WatchBridgeServer>>() {
+            // Both transports are torn down regardless of which one is selected, so neither a
+            // listener nor a GATT connection outlives the app. The whole teardown is bounded:
+            // a hung transport must not be able to keep a closed app's process alive.
+            let teardown = async {
+                if let Err(error) = server.stop_ble().await {
+                    warn!(%error, "failed to stop watch BLE transport during teardown");
+                }
+                if let Err(error) = server.stop().await {
+                    warn!(%error, "failed to stop watch bridge server during teardown");
+                }
+            };
+            if tokio::time::timeout(TEARDOWN_TIMEOUT, teardown)
+                .await
+                .is_err()
+            {
+                warn!(timeout = ?TEARDOWN_TIMEOUT, "watch transport teardown timed out; exiting anyway");
+            }
+        }
+        TORN_DOWN.store(true, Ordering::SeqCst);
+        handle.exit(0);
+    });
+}
+
+/// The signals that mean "stop": Ctrl+C, a terminate request from the launcher or a shell, and a
+/// hangup when the terminal goes away. Registered up front, so a signal that arrives before anyone
+/// is waiting is not lost.
+struct TerminationSignals {
+    #[cfg(unix)]
+    streams: [tokio::signal::unix::Signal; 3],
+}
+
+impl TerminationSignals {
+    fn register() -> std::io::Result<Self> {
+        #[cfg(unix)]
+        {
+            use tokio::signal::unix::{SignalKind, signal};
+            Ok(Self {
+                streams: [
+                    signal(SignalKind::interrupt())?,
+                    signal(SignalKind::terminate())?,
+                    signal(SignalKind::hangup())?,
+                ],
+            })
+        }
+        #[cfg(not(unix))]
+        {
+            Ok(Self {})
+        }
+    }
+
+    async fn wait(&mut self) {
+        #[cfg(unix)]
+        {
+            let [interrupt, terminate, hangup] = &mut self.streams;
+            tokio::select! {
+                _ = interrupt.recv() => {}
+                _ = terminate.recv() => {}
+                _ = hangup.recv() => {}
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = tokio::signal::ctrl_c().await;
+        }
+    }
+}
 
 /// True when the watch event channel can never deliver again (every sender
 /// dropped), as opposed to `Lagged`, which only means some events were
@@ -120,28 +209,7 @@ pub fn run() {
                 && let tauri::WindowEvent::CloseRequested { api, .. } = event
             {
                 api.prevent_close();
-                let handle = window.app_handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    if let Some(server) = handle.try_state::<Arc<WatchBridgeServer>>() {
-                        // Both transports are torn down on exit regardless of
-                        // which one is selected, so neither a listener nor a
-                        // GATT connection outlives the window. The whole
-                        // teardown is bounded: a hung transport must not be
-                        // able to keep a closed window's process alive.
-                        let teardown = async {
-                            if let Err(error) = server.stop_ble().await {
-                                warn!(%error, "failed to stop watch BLE transport during teardown");
-                            }
-                            if let Err(error) = server.stop().await {
-                                warn!(%error, "failed to stop watch bridge server during teardown");
-                            }
-                        };
-                        if tokio::time::timeout(TEARDOWN_TIMEOUT, teardown).await.is_err() {
-                            warn!(timeout = ?TEARDOWN_TIMEOUT, "watch transport teardown timed out; exiting anyway");
-                        }
-                    }
-                    handle.exit(0);
-                });
+                exit_gracefully(window.app_handle().clone(), "window closed");
             }
         })
         .setup(|app| {
@@ -164,6 +232,26 @@ pub fn run() {
                     }
                 }
             });
+
+            // `npm start` asks where to send its "please quit" first, so it can wait for the
+            // watch to be disconnected before tearing the rest of the process tree down.
+            if let Some(path) = std::env::var_os("SPATIAL_APP_PID_FILE")
+                && let Err(error) = std::fs::write(&path, std::process::id().to_string())
+            {
+                warn!(%error, "could not write the app's pid file");
+            }
+
+            // Ctrl+C / SIGTERM / SIGHUP take the same graceful path as closing the window.
+            match TerminationSignals::register() {
+                Ok(mut signals) => {
+                    let signal_handle = app.handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        signals.wait().await;
+                        exit_gracefully(signal_handle, "termination signal");
+                    });
+                }
+                Err(error) => warn!(%error, "could not install the termination signal handlers"),
+            }
 
             let watch_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -320,14 +408,54 @@ pub fn run() {
             });
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Spatial Gesture Control");
+        .build(tauri::generate_context!())
+        .expect("error while building Spatial Gesture Control")
+        .run(|handle, event| {
+            // Cmd+Q and the app menu's Quit ask to exit without going through a window; hold
+            // them until the transports are released, then let the exit through.
+            if let tauri::RunEvent::ExitRequested { api, .. } = event
+                && !TORN_DOWN.load(std::sync::atomic::Ordering::SeqCst)
+            {
+                api.prevent_exit();
+                exit_gracefully(handle.clone(), "quit requested");
+            }
+        });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use tokio::sync::broadcast::error::RecvError;
+
+    /// Sends `signal` to this very process. Safe only once a handler for it is registered.
+    #[cfg(unix)]
+    fn raise(signal: &str) {
+        let status = std::process::Command::new("kill")
+            .args([format!("-{signal}"), std::process::id().to_string()])
+            .status()
+            .expect("kill is available");
+        assert!(status.success());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_termination_signal_is_caught_rather_than_killing_the_process() {
+        // The point of the handler: SIGTERM from the launcher used to end the app on the spot,
+        // before the Bluetooth connection to the watch was released.
+        for signal in ["TERM", "INT", "HUP"] {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(async {
+                    let mut signals = TerminationSignals::register().unwrap();
+                    raise(signal);
+                    tokio::time::timeout(Duration::from_secs(3), signals.wait())
+                        .await
+                        .unwrap_or_else(|_| panic!("SIG{signal} was not delivered to the handler"));
+                });
+        }
+    }
 
     /// R-M4-1: only `Closed` may end the watch event loop.
     #[test]

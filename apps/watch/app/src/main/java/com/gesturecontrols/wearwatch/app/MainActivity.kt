@@ -447,6 +447,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
         bleTransport = transport
+        // A desktop is expected to be writing only while the watch is worn and streaming.
+        transport.expectDesktopTraffic = { streamingPlan.value == StreamingPlan.STREAM }
         bleObserverJob = lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 transport.pendingTrustedCentral.collect { renderTrustPrompt(it) }

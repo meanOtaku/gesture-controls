@@ -24,6 +24,9 @@ import android.content.Intent
 import android.content.BroadcastReceiver
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.os.ParcelUuid
 import androidx.core.content.ContextCompat
@@ -151,6 +154,9 @@ class BleGattTransport(
         started = true
         LinkLog.add("bluetooth: starting (GATT server and advertising)")
         registerAdapterStateReceiver()
+        desktopSilence.heard(SystemClock.elapsedRealtime())
+        watchdogHandler.removeCallbacks(watchdog)
+        watchdogHandler.postDelayed(watchdog, WATCHDOG_INTERVAL_MS)
         report(ConnectionState.CONNECTING, null)
         if (!openGattServer()) {
             started = false
@@ -167,6 +173,7 @@ class BleGattTransport(
         }
         started = false
         unregisterAdapterStateReceiver()
+        watchdogHandler.removeCallbacks(watchdog)
         LinkLog.add("bluetooth: stopped")
         teardown()
         report(ConnectionState.DISCONNECTED, null)
@@ -335,6 +342,29 @@ class BleGattTransport(
     }
 
     private var adapterReceiverRegistered = false
+
+    /**
+     * Whether a desktop is expected to be writing to the watch right now; set by the activity
+     * (true while streaming on the wrist). Silence outside that is not a fault.
+     */
+    @Volatile var expectDesktopTraffic: () -> Boolean = { false }
+
+    private val desktopSilence = DesktopSilence(DESKTOP_SILENCE_MS)
+    private val watchdogHandler = Handler(Looper.getMainLooper())
+    private val watchdog = object : Runnable {
+        override fun run() {
+            val device = central
+            val now = SystemClock.elapsedRealtime()
+            val connected = device != null && subscribed && isTrusted(device)
+            if (device != null && desktopSilence.shouldDrop(now, connected, expectDesktopTraffic())) {
+                LinkLog.add("no message from the desktop for ${DESKTOP_SILENCE_MS / 1000} s while streaming; dropping the connection so a desktop can find this watch again")
+                runCatching { gattServer?.cancelConnection(device) }
+            } else if (device == null) {
+                desktopSilence.heard(now)
+            }
+            watchdogHandler.postDelayed(this, WATCHDOG_INTERVAL_MS)
+        }
+    }
 
     /**
      * Bluetooth being switched off tears the GATT server down underneath this class; without
@@ -506,6 +536,7 @@ class BleGattTransport(
                     return
                 }
                 LinkLog.add("desktop ${short(device)} connected")
+                desktopSilence.heard(SystemClock.elapsedRealtime())
                 central = device
                 subscribed = false
                 mtu = DEFAULT_MTU
@@ -614,6 +645,7 @@ class BleGattTransport(
                 return
             }
             respond(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, responseNeeded)
+            desktopSilence.heard(SystemClock.elapsedRealtime())
             val envelope = reassembler.push(value) ?: return
             onMessage?.invoke(String(envelope, Charsets.UTF_8))
         }
@@ -660,6 +692,10 @@ class BleGattTransport(
 
         private const val TAG = "BleGattTransport"
         private const val DEFAULT_MTU = 23
+
+        /** The desktop writes a time sync every 5 s while the watch is worn and streaming; five missed ones is a dead desktop. */
+        private const val DESKTOP_SILENCE_MS = 25_000L
+        private const val WATCHDOG_INTERVAL_MS = 5_000L
 
         /**
          * Roughly two seconds of orientation frames at 50Hz and the default

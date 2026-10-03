@@ -11,6 +11,7 @@ import {
   ensureTracker,
   needsExternalBridge,
   runSystem,
+  stopAppGracefully,
   superviseChildren,
 } from "./run-system.mjs";
 
@@ -283,4 +284,80 @@ test("a cleanup error cannot prevent the launcher from completing shutdown", asy
   host.emit("SIGTERM");
   assert.equal(await completion, 143);
   assert.equal(attempts, 2);
+});
+
+test("stopAppGracefully asks the app to quit and waits until it is gone", async () => {
+  const signals = [];
+  let alive = true;
+  const kill = (pid, signal) => {
+    signals.push([pid, signal]);
+    if (signal === "SIGTERM") setTimeout(() => (alive = false), 30);
+    if (signal === 0 && !alive) {
+      const error = new Error("gone");
+      error.code = "ESRCH";
+      throw error;
+    }
+  };
+  const stopped = await stopAppGracefully({
+    pidFile: "/tmp/app.pid",
+    platform: "darwin",
+    kill,
+    readPid: async () => 4242,
+    sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
+    pollMs: 10,
+    timeoutMs: 1_000,
+  });
+  assert.equal(stopped, true);
+  assert.deepEqual(signals[0], [4242, "SIGTERM"]);
+});
+
+test("stopAppGracefully gives up after the timeout and reports the app still running", async () => {
+  const stopped = await stopAppGracefully({
+    pidFile: "/tmp/app.pid",
+    platform: "darwin",
+    kill: () => {}, // never dies
+    readPid: async () => 4242,
+    sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
+    pollMs: 5,
+    timeoutMs: 40,
+  });
+  assert.equal(stopped, false);
+});
+
+test("stopAppGracefully does nothing without a usable pid, on Windows, or with no pid file", async () => {
+  const never = () => assert.fail("must not signal anything");
+  assert.equal(await stopAppGracefully({ pidFile: "/x", platform: "win32", kill: never, readPid: async () => 4242 }), false);
+  assert.equal(await stopAppGracefully({ pidFile: null, platform: "darwin", kill: never }), false);
+  assert.equal(
+    await stopAppGracefully({ pidFile: "/x", platform: "darwin", kill: never, readPid: async () => { throw new Error("ENOENT"); } }),
+    false,
+  );
+  // pid 1 (or a garbage value) is never signalled.
+  assert.equal(await stopAppGracefully({ pidFile: "/x", platform: "darwin", kill: never, readPid: async () => 1 }), false);
+  assert.equal(await stopAppGracefully({ pidFile: "/x", platform: "darwin", kill: never, readPid: async () => Number.NaN }), false);
+});
+
+test("stopAppGracefully treats an app that already exited as stopped", async () => {
+  const kill = () => {
+    const error = new Error("gone");
+    error.code = "ESRCH";
+    throw error;
+  };
+  assert.equal(await stopAppGracefully({ pidFile: "/x", platform: "darwin", kill, readPid: async () => 4242 }), true);
+});
+
+test("the app is stopped before the process tree is terminated", async () => {
+  const order = [];
+  const host = new EventEmitter();
+  const tauri = new EventEmitter();
+  const completion = superviseChildren({
+    tauri,
+    platform: "darwin",
+    host,
+    beforeTerminate: async () => order.push("app"),
+    terminateChild: async () => order.push("tree"),
+  });
+  host.emit("SIGINT");
+  await completion;
+  assert.deepEqual(order, ["app", "tree"]);
 });

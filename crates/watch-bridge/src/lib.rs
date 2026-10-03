@@ -899,6 +899,12 @@ async fn run_ble_transport(shared: Arc<SharedState>, cancel: Arc<BleCancel>) {
             (None, None) => "a watch".to_string(),
         };
         shared.link.event("info", format!("found {sighting}"));
+        if link.found_connected() {
+            shared.link.event(
+                "warn",
+                "the watch was already connected to this computer, left over from a session that did not disconnect; reusing that connection",
+            );
+        }
         shared.link.peer(Some(
             link.watch_tag()
                 .map_or_else(|| "watch".to_string(), |tag| format!("watch {tag}")),

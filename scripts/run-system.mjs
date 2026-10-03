@@ -1,10 +1,59 @@
-import { access, chmod } from "node:fs/promises";
+import { access, chmod, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { constants as fsConstants } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 
 const RELEASE_VERSION = "2.2.0";
+
+/** The app writes its process id to this file at startup; see `exit_gracefully` in the desktop crate. */
+export const APP_PID_FILE_ENV = "SPATIAL_APP_PID_FILE";
+
+const processIsGone = (kill, pid) => {
+  try {
+    kill(pid, 0);
+    return false;
+  } catch (error) {
+    return error?.code === "ESRCH";
+  }
+};
+
+/**
+ * Asks the app itself to quit and waits for it to finish, before the rest of the process tree is
+ * torn down. The launcher otherwise signals the whole process group at once, and the `tauri dev`
+ * wrapper in that group can kill the app before it has disconnected from the watch, which leaves
+ * the watch believing a desktop is still attached. Returns true if the app is gone.
+ */
+export async function stopAppGracefully({
+  pidFile,
+  platform = process.platform,
+  kill = process.kill.bind(process),
+  readPid = async (path) => Number.parseInt(await readFile(path, "utf8"), 10),
+  timeoutMs = 6_000,
+  pollMs = 50,
+  sleep = (ms) => new Promise((resolveDelay) => setTimeout(resolveDelay, ms)),
+}) {
+  if (platform === "win32" || !pidFile) return false;
+  let pid;
+  try {
+    pid = await readPid(pidFile);
+  } catch {
+    return false; // The app never wrote one (it did not start, or is not a build that does).
+  }
+  if (!Number.isInteger(pid) || pid <= 1) return false;
+  try {
+    kill(pid, "SIGTERM");
+  } catch (error) {
+    return error?.code === "ESRCH";
+  }
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (processIsGone(kill, pid)) return true;
+    await sleep(pollMs);
+  }
+  return processIsGone(kill, pid);
+}
 
 export function bundledTrackerPath(prebuildsRoot, platform, arch) {
   if (platform === "darwin" && (arch === "arm64" || arch === "x64")) {
@@ -133,6 +182,7 @@ export function superviseChildren({
   platform,
   host = process,
   terminateChild = terminate,
+  beforeTerminate = null,
 }) {
   return new Promise((resolveCompletion) => {
     let stopping = false;
@@ -142,6 +192,11 @@ export function superviseChildren({
       stopping = true;
       host.removeListener("SIGINT", onSigint);
       host.removeListener("SIGTERM", onSigterm);
+      try {
+        await beforeTerminate?.();
+      } catch (error) {
+        console.error(`[system] Could not stop the app gracefully: ${error?.message ?? error}`);
+      }
       const targets = tracker ? [tauri, tracker] : [tauri];
       const cleanup = await Promise.allSettled(
         targets.map((child) => terminateChild(child, platform)),
@@ -221,12 +276,24 @@ export async function runSystem({
   }
 
   console.log("[system] Starting Spatial Gesture Control");
+  const pidFile = join(tmpdir(), `spatial-gesture-app-${process.pid}.pid`);
   const tauri = spawnChild(tauriSpec.command, tauriSpec.args, {
     stdio: "inherit",
     detached,
+    env: { ...process.env, [APP_PID_FILE_ENV]: pidFile },
   });
 
-  await superviseChildren({ tracker, tauri, platform });
+  await superviseChildren({
+    tracker,
+    tauri,
+    platform,
+    beforeTerminate: async () => {
+      if (await stopAppGracefully({ pidFile, platform })) {
+        console.log("[system] The app closed cleanly");
+      }
+    },
+  });
+  await rm(pidFile, { force: true });
 }
 
 const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : "";

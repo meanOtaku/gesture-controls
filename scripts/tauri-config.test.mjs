@@ -77,13 +77,27 @@ test("commits refreshed show state only after fallible window operations succeed
   );
 });
 
-test("closing the main UI stops the watch bridge and exits Tauri", async () => {
+test("every way out of the app releases the watch transports before exiting", async () => {
   const libSource = await readFile(libSourceUrl, "utf8");
 
+  // Closing the main window defers to the shared graceful exit instead of ending the process.
   assert.match(
     libSource,
-    /on_window_event[\s\S]*label\(\)\s*==\s*MAIN_WINDOW[\s\S]*CloseRequested[\s\S]*prevent_close\(\)[\s\S]*WatchBridgeServer[\s\S]*server\.stop\(\)\.await[\s\S]*handle\.exit\(0\)/,
-    "the main window close request must stop the watch bridge before terminating Tauri",
+    /on_window_event[\s\S]*label\(\)\s*==\s*MAIN_WINDOW[\s\S]*CloseRequested[\s\S]*prevent_close\(\)[\s\S]*exit_gracefully\(/,
+    "the main window close request must go through the graceful exit",
+  );
+  // The graceful exit stops both transports (disconnecting Bluetooth) and only then exits.
+  assert.match(
+    libSource,
+    /fn exit_gracefully[\s\S]*WatchBridgeServer[\s\S]*server\.stop_ble\(\)\.await[\s\S]*server\.stop\(\)\.await[\s\S]*handle\.exit\(0\)/,
+    "the graceful exit must stop the watch bridge before terminating Tauri",
+  );
+  // Terminal and launcher signals take the same path, and so does Cmd+Q.
+  assert.match(libSource, /TerminationSignals::register\(\)[\s\S]*exit_gracefully\(/);
+  assert.match(
+    libSource,
+    /RunEvent::ExitRequested[\s\S]*prevent_exit\(\)[\s\S]*exit_gracefully\(/,
+    "a quit request must be held until the transports are released",
   );
 });
 
