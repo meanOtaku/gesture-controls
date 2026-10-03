@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Round screens clip the corners, so content needs room at the sides and, more so,
+         at the very top and bottom of the scroll (a chord at 36dp from the top of a 198dp
+         circle is only ~152dp wide). Square screens have no curve to avoid. The -round and
+         -notround folders override these. -->
+    <dimen name="gc_pad_horizontal">12dp</dimen>
+    <dimen name="gc_pad_top">12dp</dimen>
+    <dimen name="gc_pad_bottom">16dp</dimen>
+    <dimen name="gc_touch_min">48dp</dimen>
+    <dimen name="gc_gap">8dp</dimen>
+    <dimen name="gc_section_gap">18dp</dimen>
+</resources>

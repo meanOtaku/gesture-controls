@@ -31,5 +31,17 @@
     <string name="ppg_streaming">PPG streaming</string>
     <string name="ppg_unavailable">PPG unavailable on this watch</string>
     <string name="ppg_error">PPG error</string>
-    <string name="on_demand_heading">On-demand (foreground only, one at a time)</string>
+    <string name="on_demand_heading">One at a time, screen on</string>
+    <string name="status_waiting">Waiting</string>
+    <string name="status_approve">Approve?</string>
+    <string name="status_ready">Ready</string>
+    <string name="hint_waiting_ble">Open the desktop app to connect</string>
+    <string name="hint_connected">Streaming to your desktop</string>
+    <string name="section_details">Details</string>
+    <string name="section_measure">Measure</string>
+    <string name="section_link">Link</string>
+    <string name="details_show">Show details</string>
+    <string name="details_hide">Hide details</string>
+    <string name="action_forget_confirm">Tap again to forget</string>
+    <string name="hint_approve">Tap below to trust this desktop</string>
 </resources>

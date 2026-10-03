@@ -17,14 +17,19 @@ import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.view.InputDevice
 import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.ViewConfiguration
 import android.view.View
 import android.widget.Button
 import android.widget.RadioButton
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewConfigurationCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -40,12 +45,22 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         /** Fast-changing status text is redrawn at most this often. */
         const val UI_REFRESH_INTERVAL_MS = 500L
+        const val STATUS_MAX_SP = 34f
+        const val STATUS_MIN_SP = 14f
+
+        /** After the first tap on "forget", the second tap must land within this long. */
+        const val FORGET_CONFIRM_WINDOW_MS = 3_000L
     }
 
     private lateinit var prefs: ConnectionPrefs
     private lateinit var transportBluetoothButton: RadioButton
     private lateinit var transportWifiButton: RadioButton
     private lateinit var trustButton: Button
+    private lateinit var forgetTrustButton: Button
+    private lateinit var detailsToggleButton: Button
+    private lateinit var detailsPanel: View
+    private lateinit var rootScroll: ScrollView
+    private var forgetArmed = false
     private lateinit var connectButton: Button
     private lateinit var connectionStatusText: TextView
     private lateinit var discoveryStatusText: TextView
@@ -123,6 +138,10 @@ class MainActivity : AppCompatActivity() {
         transportBluetoothButton = findViewById(R.id.transportBluetoothButton)
         transportWifiButton = findViewById(R.id.transportWifiButton)
         trustButton = findViewById(R.id.trustButton)
+        forgetTrustButton = findViewById(R.id.forgetTrustButton)
+        detailsToggleButton = findViewById(R.id.detailsToggleButton)
+        detailsPanel = findViewById(R.id.detailsPanel)
+        rootScroll = findViewById(R.id.rootScroll)
         connectButton = findViewById(R.id.connectButton)
         connectionStatusText = findViewById(R.id.connectionStatusText)
         discoveryStatusText = findViewById(R.id.discoveryStatusText)
@@ -200,6 +219,18 @@ class MainActivity : AppCompatActivity() {
 
         connectButton.setOnClickListener { onConnectButtonClicked() }
         trustButton.setOnClickListener { onTrustButtonClicked() }
+        forgetTrustButton.setOnClickListener { onForgetButtonClicked() }
+        detailsToggleButton.setOnClickListener { toggleDetails() }
+        // The rotating bezel / crown scrolls the column, as on every other Wear screen.
+        rootScroll.setOnGenericMotionListener { _, event ->
+            if (event.action == MotionEvent.ACTION_SCROLL && event.isFromSource(InputDevice.SOURCE_ROTARY_ENCODER)) {
+                val factor = ViewConfigurationCompat.getScaledVerticalScrollFactor(ViewConfiguration.get(this), this)
+                rootScroll.scrollBy(0, Math.round(-event.getAxisValue(MotionEvent.AXIS_SCROLL) * factor))
+                true
+            } else {
+                false
+            }
+        }
         transportBluetoothButton.setOnClickListener { onTransportSelected(WatchTransportKind.BLUETOOTH) }
         transportWifiButton.setOnClickListener { onTransportSelected(WatchTransportKind.WIFI) }
         spo2Button.setOnClickListener { onOnDemandButtonClicked(TRACKER_SPO2_ON_DEMAND) }
@@ -265,6 +296,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        rootScroll.requestFocus()
         if (selectedTransport == WatchTransportKind.WIFI && !watchLink.state.value.isConnectionActive()) {
             sensorCollector.stop()
             desktopDiscovery.start()
@@ -394,29 +426,57 @@ class MainActivity : AppCompatActivity() {
         discoveryHistoryText.visibility = wifiOnly
         if (selectedTransport != WatchTransportKind.BLUETOOTH) {
             trustButton.visibility = View.GONE
+            forgetTrustButton.visibility = View.GONE
         }
     }
 
-    /** Shows the explicit per-desktop trust gate; see `BleGattTransport`'s trust model. */
+    /**
+     * Shows the explicit per-desktop trust gate; see `BleGattTransport`'s trust model.
+     * Approving is a prominent action under the status; forgetting a trusted desktop is
+     * rare and destructive, so it lives in the Link section and needs a second tap.
+     */
     private fun renderTrustPrompt(pendingCentral: String?) {
-        if (pendingCentral == null) {
-            val trusted = bleTransport?.trustedCentral?.value
-            trustButton.visibility = if (trusted == null) View.GONE else View.VISIBLE
-            trustButton.setText(R.string.action_forget_trust)
-            return
+        val bluetooth = selectedTransport == WatchTransportKind.BLUETOOTH
+        if (pendingCentral != null && bluetooth) {
+            trustButton.visibility = View.VISIBLE
+            trustButton.text = getString(R.string.action_trust) + "\n" + pendingCentral
+        } else {
+            trustButton.visibility = View.GONE
         }
-        trustButton.visibility = View.VISIBLE
-        trustButton.text = getString(R.string.action_trust) + "\n" + pendingCentral
+        val trusted = bleTransport?.trustedCentral?.value
+        forgetTrustButton.visibility = if (bluetooth && trusted != null && pendingCentral == null) View.VISIBLE else View.GONE
+        disarmForget()
     }
 
     private fun onTrustButtonClicked() {
         val transport = bleTransport ?: return
         if (transport.pendingTrustedCentral.value != null) {
             transport.approvePendingCentral()
-        } else {
-            transport.forgetTrustedCentral()
+            renderTrustPrompt(transport.pendingTrustedCentral.value)
         }
+    }
+
+    private fun onForgetButtonClicked() {
+        val transport = bleTransport ?: return
+        if (!forgetArmed) {
+            forgetArmed = true
+            forgetTrustButton.setText(R.string.action_forget_confirm)
+            forgetTrustButton.postDelayed({ disarmForget() }, FORGET_CONFIRM_WINDOW_MS)
+            return
+        }
+        transport.forgetTrustedCentral()
         renderTrustPrompt(transport.pendingTrustedCentral.value)
+    }
+
+    private fun disarmForget() {
+        forgetArmed = false
+        forgetTrustButton.setText(R.string.action_forget_trust)
+    }
+
+    private fun toggleDetails() {
+        val show = detailsPanel.visibility != View.VISIBLE
+        detailsPanel.visibility = if (show) View.VISIBLE else View.GONE
+        detailsToggleButton.setText(if (show) R.string.details_hide else R.string.details_show)
     }
 
     private fun onConnectButtonClicked() {
@@ -493,13 +553,18 @@ class MainActivity : AppCompatActivity() {
             val state = statuses[trackerId] ?: MedicalTrackerState.IDLE
             val measuring = state == MedicalTrackerState.MEASURING
             val anotherActive = statuses.any { (id, other) -> id != trackerId && other == MedicalTrackerState.MEASURING }
-            button.text = if (measuring) "Stop $name" else "$name (${state.wireValue()})"
+            // Two columns on a round screen leave room for a word, not a sentence.
+            button.text = when {
+                measuring -> "Stop\n$name"
+                state == MedicalTrackerState.IDLE -> name
+                else -> "$name\n${state.wireValue().replace('_', ' ')}"
+            }
             button.isEnabled = !anotherActive && (state == MedicalTrackerState.IDLE || measuring)
         }
         apply(spo2Button, TRACKER_SPO2_ON_DEMAND, "SpO2")
         apply(ecgButton, TRACKER_ECG_ON_DEMAND, "ECG")
         apply(biaButton, TRACKER_BIA_ON_DEMAND, "BIA")
-        apply(sweatLossButton, TRACKER_SWEAT_LOSS_ON_DEMAND, "Sweat loss")
+        apply(sweatLossButton, TRACKER_SWEAT_LOSS_ON_DEMAND, "Sweat")
     }
 
     private fun renderState(state: ConnectionState) {
@@ -523,14 +588,27 @@ class MainActivity : AppCompatActivity() {
                 },
             ),
         )
+        // Over Bluetooth the watch is the peripheral: "connecting" really means it is
+        // advertising and waiting for the desktop to find it, which reads very differently.
+        val bluetooth = selectedTransport == WatchTransportKind.BLUETOOTH
+        if (bluetooth) {
+            when (state) {
+                ConnectionState.CONNECTED -> discoveryStatusText.setText(R.string.hint_connected)
+                ConnectionState.CONNECTING -> discoveryStatusText.setText(R.string.hint_waiting_ble)
+                ConnectionState.AWAITING_TRUST -> discoveryStatusText.setText(R.string.hint_approve)
+                else -> Unit
+            }
+        }
         connectionStatusText.text = when (state) {
             ConnectionState.DISCONNECTED -> getString(R.string.status_disconnected)
-            ConnectionState.CONNECTING -> getString(R.string.status_connecting)
+            ConnectionState.CONNECTING ->
+                getString(if (bluetooth) R.string.status_waiting else R.string.status_connecting)
             ConnectionState.CONNECTED -> getString(R.string.status_connected)
             ConnectionState.RECONNECTING -> getString(R.string.status_reconnecting)
-            ConnectionState.AWAITING_TRUST -> getString(R.string.status_awaiting_trust)
+            ConnectionState.AWAITING_TRUST -> getString(R.string.status_approve)
             ConnectionState.FAILED -> getString(R.string.status_failed)
         }
+        fitStatusText()
         connectButton.text = when (state) {
             ConnectionState.CONNECTED, ConnectionState.CONNECTING, ConnectionState.RECONNECTING,
             ConnectionState.AWAITING_TRUST -> getString(R.string.action_disconnect)
@@ -567,6 +645,29 @@ class MainActivity : AppCompatActivity() {
                 stopSensorCollection()
                 StreamingForegroundService.releaseWakeLock(this)
             }
+        }
+    }
+
+    /**
+     * Picks the largest size, up to [STATUS_MAX_SP], at which the status word fits on one
+     * line in the room the screen shape leaves it. Measured rather than auto-sized: the same
+     * word has to fit a 198 dp round face and a larger square one without ever wrapping
+     * mid-word.
+     */
+    private fun fitStatusText() {
+        val view = connectionStatusText
+        view.post {
+            val room = view.width - view.paddingLeft - view.paddingRight
+            if (room <= 0) return@post
+            val scale = resources.displayMetrics.scaledDensity
+            val text = view.text.toString().uppercase()
+            var size = STATUS_MAX_SP
+            while (size > STATUS_MIN_SP) {
+                view.paint.textSize = size * scale
+                if (view.paint.measureText(text) + view.paint.letterSpacing * view.paint.textSize * text.length <= room) break
+                size -= 1f
+            }
+            view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, size)
         }
     }
 

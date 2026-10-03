@@ -1,50 +1,107 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.wear.widget.BoxInsetLayout
+<!-- One scrolling column, padded per screen shape (values-round / values-notround) rather
+     than by BoxInsetLayout: a boxed inset also clips the scroll viewport, so content could
+     never scroll into the screen's corners. Order is by how often each part is needed:
+     status and the one action that matters first, rarely-used controls last. -->
+<ScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootScroll"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/gc_bg">
+    android:background="@color/gc_bg"
+    android:fillViewport="true"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:scrollbars="none">
 
-    <ScrollView
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:boxedEdges="all">
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/gc_pad_horizontal"
+        android:paddingTop="@dimen/gc_pad_top"
+        android:paddingEnd="@dimen/gc_pad_horizontal"
+        android:paddingBottom="@dimen/gc_pad_bottom">
 
-        <LinearLayout
+        <TextView
+            style="@style/Gc.Label"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:text="@string/app_name" />
+
+        <!-- Sized in code (MainActivity.fitStatusText) to the widest that fits one line: a status word must never wrap mid-word. -->
+        <TextView
+            android:id="@+id/connectionStatusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-condensed"
+            android:gravity="center"
+            android:letterSpacing="0.04"
+            android:maxLines="1"
+            android:text="@string/status_disconnected"
+            android:textAllCaps="true"
+            android:textColor="@color/gc_ink"
+            android:textSize="34sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/discoveryStatusText"
+            style="@style/Gc.Body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/discovery_searching" />
+
+        <TextView
+            android:id="@+id/linkDiagnosticsText"
+            style="@style/Gc.Body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="@color/gc_red"
+            android:textSize="10sp" />
+
+        <Button
+            android:id="@+id/trustButton"
+            style="@style/Gc.Button.Attention"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/gc_gap"
+            android:text="@string/action_trust"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/connectButton"
+            style="@style/Gc.Button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/gc_gap"
+            android:text="@string/action_connect" />
+
+        <Button
+            android:id="@+id/detailsToggleButton"
+            style="@style/Gc.Button.Text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/gc_gap"
+            android:text="@string/details_show" />
+
+        <LinearLayout
+            android:id="@+id/detailsPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/gc_gap"
+            android:background="@color/gc_panel"
             android:orientation="vertical"
-            android:padding="14dp"
-            android:gravity="center_horizontal">
+            android:padding="8dp"
+            android:visibility="gone">
 
             <TextView
+                android:id="@+id/endpointSourceText"
                 style="@style/Gc.Label"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/app_name" />
-
-            <!-- The one thing worth reading at a glance: is a desktop receiving? Coloured in code. -->
-            <TextView
-                android:id="@+id/connectionStatusText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:fontFamily="sans-serif-condensed"
-                android:gravity="center"
-                android:letterSpacing="0.04"
-                android:text="@string/status_disconnected"
-                android:textAllCaps="true"
-                android:textColor="@color/gc_ink"
-                android:textSize="26sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/discoveryStatusText"
-                style="@style/Gc.Body"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/discovery_searching" />
+                android:layout_height="wrap_content" />
 
             <TextView
                 android:id="@+id/discoveryHistoryText"
@@ -55,74 +112,10 @@
                 android:textSize="9sp" />
 
             <TextView
-                android:id="@+id/endpointSourceText"
-                style="@style/Gc.Label"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <TextView
-                android:id="@+id/linkDiagnosticsText"
-                style="@style/Gc.Body"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textColor="@color/gc_red"
-                android:textSize="10sp" />
-
-            <Button
-                android:id="@+id/trustButton"
-                style="@style/Gc.Button.Attention"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/action_trust"
-                android:visibility="gone" />
-
-            <Button
-                android:id="@+id/connectButton"
-                style="@style/Gc.Button"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/action_connect" />
-
-            <TextView
-                style="@style/Gc.Label"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:text="@string/transport_heading" />
-
-            <RadioGroup
-                android:id="@+id/transportGroup"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:orientation="horizontal">
-
-                <RadioButton
-                    android:id="@+id/transportBluetoothButton"
-                    style="@style/Gc.Segment"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/transport_bluetooth" />
-
-                <RadioButton
-                    android:id="@+id/transportWifiButton"
-                    style="@style/Gc.Segment"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
-                    android:layout_weight="1"
-                    android:text="@string/transport_wifi" />
-            </RadioGroup>
-
-            <TextView
                 android:id="@+id/sensorStatusText"
                 style="@style/Gc.Label"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
                 android:text="@string/sensors_idle"
                 android:textColor="@color/gc_ink_2" />
 
@@ -144,46 +137,124 @@
                 android:text="@string/ppg_idle"
                 android:textColor="@color/gc_ink_2"
                 android:textSize="10sp" />
+        </LinearLayout>
 
-            <TextView
-                style="@style/Gc.Label"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:text="@string/on_demand_heading" />
+        <TextView
+            style="@style/Gc.Label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/gc_section_gap"
+            android:text="@string/section_measure" />
+
+        <TextView
+            style="@style/Gc.Body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/on_demand_heading"
+            android:textColor="@color/gc_ink_3"
+            android:textSize="9sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:orientation="horizontal">
 
             <Button
                 android:id="@+id/spo2Button"
                 style="@style/Gc.Button.Outline"
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_weight="1"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
                 android:text="SpO2" />
 
             <Button
                 android:id="@+id/ecgButton"
                 style="@style/Gc.Button.Outline"
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
                 android:text="ECG" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:orientation="horizontal">
 
             <Button
                 android:id="@+id/biaButton"
                 style="@style/Gc.Button.Outline"
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_weight="1"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
                 android:text="BIA" />
 
             <Button
                 android:id="@+id/sweatLossButton"
                 style="@style/Gc.Button.Outline"
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="Sweat loss" />
-
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:text="Sweat" />
         </LinearLayout>
-    </ScrollView>
-</androidx.wear.widget.BoxInsetLayout>
+
+        <TextView
+            style="@style/Gc.Label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/gc_section_gap"
+            android:text="@string/section_link" />
+
+        <RadioGroup
+            android:id="@+id/transportGroup"
+            android:baselineAligned="false"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/transportBluetoothButton"
+                style="@style/Gc.Segment"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/gc_touch_min"
+                android:layout_weight="1"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:text="@string/transport_bluetooth" />
+
+            <RadioButton
+                android:id="@+id/transportWifiButton"
+                style="@style/Gc.Segment"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/gc_touch_min"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:text="@string/transport_wifi" />
+        </RadioGroup>
+
+        <Button
+            android:id="@+id/forgetTrustButton"
+            style="@style/Gc.Button.Text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/gc_gap"
+            android:text="@string/action_forget_trust"
+            android:visibility="gone" />
+
+    </LinearLayout>
+</ScrollView>

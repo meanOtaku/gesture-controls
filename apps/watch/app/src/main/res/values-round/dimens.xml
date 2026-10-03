@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="gc_pad_horizontal">22dp</dimen>
+    <dimen name="gc_pad_top">38dp</dimen>
+    <dimen name="gc_pad_bottom">52dp</dimen>
+</resources>
