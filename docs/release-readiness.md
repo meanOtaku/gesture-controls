@@ -153,6 +153,17 @@ unexecuted and are not being claimed as passed.
   responsive while the volume backend is slow (for example by saturating the audio
   service), and that quitting the app exits within about ten seconds of closing the
   window even with a stuck transport.
+- [ ] *(performance)* On macOS, rotate the wrist through a large range while a model or the
+  Watch button holds the grab, and confirm the volume follows the wrist without the overlay,
+  the button release, or Monitor/Live decisions lagging. Volume writes are now applied by a
+  dedicated writer thread (each `osascript` call takes 130-190 ms); confirm a release ends the
+  change promptly and no volume write lands after the release or on the next grab.
+- [ ] *(performance)* Open a long recording in the raw image viewer and scrub the slider and the
+  prev/next controls: the first frame may take a moment, every later frame should be
+  immediate. Delete the recording and confirm it disappears and no stale frame is served.
+- [ ] *(performance)* Run a Timeline Capture past 200,000 rows (about an hour at typical
+  rates) and confirm the saved recording is in row order and each interval still covers the
+  rows it was drawn over.
 - [ ] Reconnect the Watch. Confirm desktop-owned live settings are replayed, raw
   telemetry resumes, and no old grab/action state is resurrected.
 - [ ] Disconnect Sony tracking during an overlay interaction and press Escape. Confirm

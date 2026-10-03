@@ -87,6 +87,7 @@ Galaxy Watch ──BLE (default) or Wi-Fi WebSocket──► Tauri backend (Rust
 | Time sync | every 5 s while connected | Estimates the watch/desktop clock offset (displayed only; never applied to samples) |
 | BLE session loop | scan 20 s, retry 5 s | Scan, connect, wait for the watch's trust approval, stream |
 | Head-pose provider | continuous | Feeds calibration and dwell |
+| Wrist volume writer | on demand, paced to at least 100 ms between writes | A dedicated thread that applies the newest wrist-rotation volume target; keeps the blocking native call off the watch event loop |
 
 ## 3. Data at rest
 
@@ -102,6 +103,8 @@ identifier is `dev.meanotaku.spatial-gesture-control`.
 | `model-lab/datasets/<id>.csv`, `index.json` | Imported training sessions and their index | `model_lab.rs` |
 | `model-lab/models/<id>/` | A model bundle: `model.tflite`, `metadata.json`, `label_mapping.json`, `model_card.json` | The trainer, or an explicit bundle import |
 | `model-lab/registry.json` | Model lifecycle state, thresholds, quality gates, intent bindings, active model, **inference mode** | `model_registry.rs`, atomic write |
+
+Caches (memory only, never persisted): a bounded cache of parsed `raw.csv` columns (4 entries, keyed on the file's size and modification time and dropped when a recording is deleted) serves the raw-image viewer, so scrubbing does not re-parse the file on every step.
 
 Integrity rules: a corrupt `registry.json` is an **error that leaves the file
 untouched** (never an empty registry that the next write would persist); a model
@@ -139,6 +142,7 @@ closed.
 | Native head-tracking FFI | `cargo test -p native-head-tracking` | `CI` jobs on `macos-14` and `windows-2022` |
 | Sony tracker compatibility | `uv run --directory tools/sony-head-tracker --with pytest pytest -q` | `CI` |
 | Package build | `npm run tauri -- build` | `Desktop CI` package matrix and `CI` desktop-build matrix |
+| Raw-CSV parse and cache timing probes | `cargo test --release -p spatial-gesture-desktop --lib perf_probes -- --ignored --nocapture` | Not run by default; see [Performance review](../performance.md) |
 | **Trainer / replay (Python)** | `cd tools/pinch-classifier && uv run --with pytest pytest tests -q` | **Not in CI** |
 | **Watch JVM unit tests** | `cd apps/watch && ./gradlew :app:testDebugUnitTest` | **Not in CI** |
 

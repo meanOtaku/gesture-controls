@@ -1038,3 +1038,31 @@ safety). The per-finding status, with commits, is the canonical record:
 - [ ] **No physical hardware validation.** Every "fixed" item above is covered by
       automated tests only; the rows marked *(remediation)* in
       `docs/release-readiness.md` are the real-device confirmations still required.
+
+## GC-039 — Performance review and optimization
+
+A measured review of every per-sample and per-action path; the full account, numbers and
+reproduction commands are in [`docs/performance.md`](docs/performance.md). Each change was
+measured before it was made, and paths that proved cheap were left alone.
+
+- [x] `RingBuffer.insertAt` corrupted a full buffer and cost ~450 us per append: fixed (it is
+      now `push` for an in-order append), extracted to `store/ringBuffer.ts`, randomized
+      against a reference model.
+- [x] Timeline intervals now move with the rows when a full buffer evicts its oldest row.
+- [x] The dataset buffer is no longer copied on every render; idle tabs (Model Lab, Live data)
+      are no longer re-rendered by every telemetry publish (render-count test).
+- [x] Raw-image viewer: allocation-free CSV parse (52 ms to 16-32 ms for 15 MB) and a bounded
+      cache of parsed columns (later requests 1.3 us), invalidated on delete and keyed on the
+      file's size and modification time.
+- [x] Wrist volume writes moved off the watch event loop onto a writer thread with a
+      latest-wins mailbox and an interaction epoch (macOS `osascript` takes 130-190 ms per call).
+- [x] Orientation-driven status events coalesced to <= ~10/s and serialized in place.
+- [x] Python trainer: vectorized loader, carry-forward, feature extraction and (previously
+      quadratic) windowing, bit-identical to the originals (100k rows: 2.67 s to 1.01 s).
+- [x] `strip = "symbols"` in the release profile (17.5 MB to 12.0 MB).
+- [x] A stale `grab_owner` after release is cleared.
+- [ ] Not done: replace macOS `osascript` with CoreAudio (needs hardware validation), measure
+      the WebView side of the event traffic, profile the packaged app with a real watch,
+      thin LTO (+~1.5 min of CI per OS, no measured runtime gain).
+- [ ] **No packaged-app or hardware validation.** The writer thread is covered by unit tests
+      of its mailbox, pacing and epoch logic but has not run against a live Tauri app.

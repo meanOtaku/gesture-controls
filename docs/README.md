@@ -8,6 +8,7 @@
 ## Architecture
 
 - [Components and deployment](architecture/components-and-deployment.md): what runs where, how the pieces communicate, data at rest, build, packaging and CI
+- [Performance review](performance.md): what was measured, what changed because of it, what was deliberately left alone, and how to reproduce the numbers
 - [Safety and fail-closed behavior](architecture/safety-and-fail-closed-behavior.md): the invariants that bound what the desktop can do, and what is not guaranteed
 - [Project brief](architecture/project-brief.md): the original design specification and milestone plan (see its status note for where the implementation differs)
 - Per-app structure: [desktop](../apps/desktop/ARCHITECTURE.md), [watch](../apps/watch/ARCHITECTURE.md), [Sony tracker](../tools/sony-head-tracker/ARCHITECTURE.md)

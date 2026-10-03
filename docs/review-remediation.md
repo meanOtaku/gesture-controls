@@ -18,6 +18,19 @@ and `npm run typecheck`; the trainer's `pytest`; and the watch's
 `./gradlew :app:testDebugUnitTest`. The last two are not run by CI (see
 [Components and deployment §5](architecture/components-and-deployment.md#5-tests-and-ci)).
 
+## Found during the performance review
+
+The [performance review](performance.md) turned up defects the four engineering reviews did
+not list. Each is fixed and covered by tests.
+
+| Defect | Effect | Fix |
+| --- | --- | --- |
+| `RingBuffer.insertAt` scrambled a full buffer (inserting 99 at the end of `[10,20,30,40,50]` gave `[30,40,50,99,20]`) and cost ~450 µs per append | A dataset recording past 200,000 rows came out of row order, which the trainer rejects | In-order append is `push`; out-of-order insert shifts only what follows it; randomized comparison against a reference model |
+| Timeline interval bounds were not moved when a full buffer evicted its oldest row | Past 200,000 rows every interval pointed one row too late per further row recorded | `reindexIntervalsAfterInsert` moves bounds with the rows, clamps, and drops fully evicted intervals |
+| `release_matching` did not clear `grab_owner` (the earlier ownership change cleared it only in `hide`) | Stale state after a release; harmless today because the next grab overwrites it | Cleared on every release |
+
+Performance changes themselves are listed in [the performance review](performance.md#changes-made).
+
 ## M4 — gesture to action safety
 
 | ID | Finding | Status | Commit |

@@ -72,9 +72,17 @@ The overlay has one `grabbed` flag, so it also records an **owner**:
 - The **first** orientation sample after a grab begins is velocity-checked against
   the reference pose like every later sample; samples above
   `max_angular_velocity_degrees_per_second` freeze the target.
-- Native volume writes from wrist rotation are limited to one per 100 ms; the
-  haptic pulse to one per 125 ms. A failed haptic send does not consume the
-  slot, and a failure streak logs once.
+- Native volume writes from wrist rotation are paced to at least 100 ms apart and
+  are applied by a dedicated writer thread, not on the watch event loop. Every
+  orientation sample still passes through the wrist mapper on the loop (so the
+  velocity-outlier and monotonicity checks see all of them); only the native call is
+  handed off, and a newer target replaces an older one that has not been written yet.
+  The haptic pulse is limited to one per 125 ms. A failed haptic send does not
+  consume the slot, and a failure streak logs once.
+- Each volume interaction has an *epoch*, bumped whenever one begins or ends. A write
+  that was waiting for the writer when the grab was released (or a new one began) is
+  dropped, as is one whose target is no longer the applied volume. At most the single
+  write already in flight when a release happens can still complete.
 - Every write is clamped to 0–100 and never claims a change the OS did not make.
 
 ### What cannot be reached from the webview
@@ -92,7 +100,9 @@ The overlay has one `grabbed` flag, so it also records an **owner**:
 - Intent resolution through the model's bindings and the policy's "was this grab
   actually executed" bookkeeping happen under **one** policy-lock acquisition, so
   a release from another producer can never see a half-updated grab.
-- The overlay state lock is **never held across a native volume call**. Writes
+- The watch event loop never waits on a native volume call during wrist rotation (on macOS
+  one such call, an `osascript` process, takes 130-190 ms). The overlay state lock is
+  **never held across a native volume call**. Writes
   order on a separate lock, so a hung audio adapter cannot stall Escape,
   button-up, disconnect or a model swap, and a write queued behind a slow one is
   dropped if the overlay was hidden in the meantime. The native command itself is
