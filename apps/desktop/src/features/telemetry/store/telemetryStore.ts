@@ -135,6 +135,8 @@ export type TelemetrySeries =
   | "spo2"
   | "ecg";
 
+/** How long the watch must be silent, after reporting it is off the wrist, before its charts are emptied. */
+const WATCH_PAUSE_QUIET_MS = 1500;
 export const MAX_VISIBLE_SAMPLES = 600;
 export const MAX_CSV_ROWS = 200_000;
 export const ESTIMATED_BYTES_PER_CSV_ROW = 200;
@@ -192,6 +194,12 @@ class TelemetryStore {
   private headDiagnostic: HeadTrackerDiagnostic | null = null;
   private headTrackerProvider: "native" | "external" | null = null;
   private watchStatus: WatchStatus = EMPTY_WATCH_STATUS;
+  // The watch reports it is off the wrist and has stopped sending. Distinct from "worn is
+  // false": with the watch's off-wrist streaming switch on it keeps sending, and its charts must
+  // keep showing that data.
+  private watchPaused = false;
+  private lastWatchSampleAt = 0;
+  private watchPauseTimer: ReturnType<typeof setTimeout> | null = null;
   private recording = false;
   private savedCount = 0;
   // Ordinary CSV capture label: applied explicitly via `applyOrdinaryLabel`/
@@ -802,8 +810,19 @@ class TelemetryStore {
     this.schedulePublish();
   }
 
+  /** True once the watch has said it is off the wrist and its samples have actually stopped. */
+  getWatchPaused(): boolean {
+    return this.watchPaused;
+  }
+
   ingestWatchStatus(status: WatchStatus): void {
     this.watchStatus = status;
+    if (status.worn === false) {
+      this.armWatchPauseCheck();
+    } else {
+      this.cancelWatchPauseCheck();
+      this.watchPaused = false;
+    }
     const orientation = status.lastOrientation;
     if (status.connected && orientation) this.ingestWatchOrientation(orientation);
     this.ingestOnDemand(status);
@@ -816,6 +835,7 @@ class TelemetryStore {
     if (!Number.isFinite(orientation.timestampNs)) return;
     if (orientation.sequence === this.lastWatchOrientationSequence) return;
     this.lastWatchOrientationSequence = orientation.sequence;
+    this.noteWatchSample();
     const at = Date.now();
     const euler = quaternionToEulerDegrees(orientation.quaternion);
     this.series.get("watchOrientation")?.push({ at, values: euler });
@@ -868,6 +888,7 @@ class TelemetryStore {
   }
 
   ingestPpgBatch(batch: WatchPpgBatch): void {
+    this.noteWatchSample();
     // Translate the SDK-clock-domain per-sample timestamps onto the same
     // watch-monotonic domain orientation samples use before they ever reach
     // row ordering/timing — see `translateToWatchClockDomain`.
@@ -962,6 +983,9 @@ class TelemetryStore {
     this.headStatus = null;
     this.headDiagnostic = null;
     this.watchStatus = EMPTY_WATCH_STATUS;
+    this.cancelWatchPauseCheck();
+    this.watchPaused = false;
+    this.lastWatchSampleAt = 0;
     this.recording = false;
     this.savedCount = 0;
     this.appliedOrdinaryLabel = DEFAULT_ORDINARY_LABEL;
@@ -1084,6 +1108,37 @@ class TelemetryStore {
         label: this.appliedOrdinaryLabel,
       });
     }
+  }
+
+  private noteWatchSample(): void {
+    this.lastWatchSampleAt = Date.now();
+    this.watchPaused = false;
+  }
+
+  /**
+   * Once the watch reports `worn: false`, waits for its samples to go quiet and then empties the
+   * watch charts, so they return to their "waiting for samples" state instead of freezing on
+   * the last readings. A watch that keeps streaming off-wrist never goes quiet, and keeps its charts.
+   */
+  private armWatchPauseCheck(): void {
+    if (this.watchPauseTimer !== null || this.watchPaused) return;
+    this.watchPauseTimer = setTimeout(() => {
+      this.watchPauseTimer = null;
+      if (this.watchStatus.worn !== false) return;
+      if (Date.now() - this.lastWatchSampleAt < WATCH_PAUSE_QUIET_MS) {
+        this.armWatchPauseCheck();
+        return;
+      }
+      this.watchPaused = true;
+      this.series.get("watchOrientation")?.clear();
+      this.series.get("ppg")?.clear();
+      this.schedulePublish();
+    }, WATCH_PAUSE_QUIET_MS);
+  }
+
+  private cancelWatchPauseCheck(): void {
+    if (this.watchPauseTimer !== null) clearTimeout(this.watchPauseTimer);
+    this.watchPauseTimer = null;
   }
 
   private schedulePublish(): void {

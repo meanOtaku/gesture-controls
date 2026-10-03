@@ -86,6 +86,82 @@ describe("telemetryStore", () => {
     expect(telemetryStore.getSeries("watchOrientation")).toHaveLength(1);
   });
 
+  describe("watch taken off the wrist", () => {
+    const orientation = (sequence: number) => ({
+      deviceId: "watch-test",
+      sequence,
+      timestampNs: 1_000 + sequence,
+      quaternion: [1, 0, 0, 0] as [number, number, number, number],
+      accelerometer: null,
+      gyroscope: null,
+    });
+    const ppg = (sequence: number) => ({
+      deviceId: "watch-test",
+      sequence,
+      timestampNs: 5_000_000_000 + sequence,
+      sampleCount: 1,
+      timestampsNs: [5_000_000_000 + sequence],
+      green: [1],
+      greenStatus: [0],
+      red: [2],
+      redStatus: [0],
+      ir: [3],
+      irStatus: [0],
+    });
+    const status = (worn: boolean | null) => ({ ...EMPTY_WATCH_STATUS, connected: true, worn });
+
+    it("empties the watch charts once the watch reports it is off and has gone quiet", () => {
+      telemetryStore.ingestWatchOrientation(orientation(1));
+      telemetryStore.ingestPpgBatch(ppg(2));
+      expect(telemetryStore.getSeries("watchOrientation")).toHaveLength(1);
+      expect(telemetryStore.getSeries("ppg")).toHaveLength(1);
+
+      telemetryStore.ingestWatchStatus(status(false));
+      expect(telemetryStore.getWatchPaused()).toBe(false); // not until the samples have stopped
+      vi.advanceTimersByTime(1600);
+
+      expect(telemetryStore.getWatchPaused()).toBe(true);
+      expect(telemetryStore.getSeries("watchOrientation")).toHaveLength(0);
+      expect(telemetryStore.getSeries("ppg")).toHaveLength(0);
+    });
+
+    it("keeps the charts while samples keep arriving (the watch's off-wrist streaming switch)", () => {
+      telemetryStore.ingestWatchOrientation(orientation(1));
+      telemetryStore.ingestWatchStatus(status(false));
+      for (let sequence = 2; sequence < 8; sequence += 1) {
+        vi.advanceTimersByTime(400);
+        telemetryStore.ingestWatchOrientation(orientation(sequence));
+      }
+      vi.advanceTimersByTime(1000);
+      expect(telemetryStore.getWatchPaused()).toBe(false);
+      expect(telemetryStore.getSeries("watchOrientation").length).toBeGreaterThan(1);
+    });
+
+    it("resumes as soon as the watch is worn again or a sample arrives", () => {
+      telemetryStore.ingestWatchOrientation(orientation(1));
+      telemetryStore.ingestWatchStatus(status(false));
+      vi.advanceTimersByTime(1600);
+      expect(telemetryStore.getWatchPaused()).toBe(true);
+
+      telemetryStore.ingestWatchStatus(status(true));
+      expect(telemetryStore.getWatchPaused()).toBe(false);
+
+      telemetryStore.ingestWatchStatus(status(false));
+      vi.advanceTimersByTime(1600);
+      expect(telemetryStore.getWatchPaused()).toBe(true);
+      telemetryStore.ingestWatchOrientation(orientation(9));
+      expect(telemetryStore.getWatchPaused()).toBe(false);
+    });
+
+    it("never pauses a watch that has not said it is off", () => {
+      telemetryStore.ingestWatchOrientation(orientation(1));
+      telemetryStore.ingestWatchStatus(status(null));
+      vi.advanceTimersByTime(10_000);
+      expect(telemetryStore.getWatchPaused()).toBe(false);
+      expect(telemetryStore.getSeries("watchOrientation")).toHaveLength(1);
+    });
+  });
+
   it("clears the head-tracker diagnostic on reset but keeps the last-selected provider", () => {
     telemetryStore.setHeadTrackerProvider("native");
     telemetryStore.setHeadDiagnostic({

@@ -57,7 +57,11 @@ export function LiveTelemetry() {
   // arrived (transport rejected it or the Watch never sent one), or the
   // backend already has a sample the UI store isn't reflecting (GC-035
   // regression triage: "Watch IMU data is no longer loading").
-  const watchOrientationHint = !watchStatus?.connected
+  const watchPaused = telemetryStore.getWatchPaused();
+  const WATCH_OFF_WRIST_HINT = "Watch is off your wrist — sensors are paused to save battery. Put it on to resume.";
+  const watchOrientationHint = watchPaused
+    ? WATCH_OFF_WRIST_HINT
+    : !watchStatus?.connected
     ? "Watch is disconnected — reconnect to resume orientation data."
     : watchOrientationPoints.length === 0 && watchStatus.lastOrientation
       ? "The Watch reports live orientation, but it isn't reaching this chart — this looks like a UI issue, please report it."
@@ -177,6 +181,7 @@ export function LiveTelemetry() {
           watchOrientationPoints={watchOrientationPoints}
           ppgPoints={ppgPoints}
           watchOrientationHint={watchOrientationHint}
+          ppgHint={watchPaused ? WATCH_OFF_WRIST_HINT : undefined}
         />
         <WellnessCapturePanel
           desktopAvailable={desktopAvailable}

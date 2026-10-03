@@ -25,6 +25,8 @@ type SignalMonitorProps = {
    * already connected (GC-035 regression triage).
    */
   watchOrientationHint?: string;
+  /** Why the PPG chart is empty when something other than "PPG is off" explains it, e.g. the watch is off the wrist. */
+  ppgHint?: string;
 };
 
 /** Live signal charts plus the motion/optical filter that scopes which charts are shown. */
@@ -36,6 +38,7 @@ export function SignalMonitor({
   watchOrientationPoints,
   ppgPoints,
   watchOrientationHint,
+  ppgHint,
 }: SignalMonitorProps) {
   return (
     <section aria-label="Signal monitor">
@@ -71,7 +74,7 @@ export function SignalMonitor({
           />
         )}
         {signalView !== "motion" && (
-          <TimeChart title="Raw PPG" points={ppgPoints} labels={["Green", "Red", "IR"]} unit="raw counts" emptyHint="Enable PPG on a supported Watch to see optical signals." colors={["#00f279", "#ff9d9d", "#f2f200"]} />
+          <TimeChart title="Raw PPG" points={ppgPoints} labels={["Green", "Red", "IR"]} unit="raw counts" emptyHint={ppgHint ?? "Enable PPG on a supported Watch to see optical signals."} colors={["#00f279", "#ff9d9d", "#f2f200"]} />
         )}
       </div>
     </section>
