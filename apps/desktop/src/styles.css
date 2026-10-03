@@ -11,9 +11,9 @@
    display type, and only fully saturated accents (palette taken from hermes-agent.nousresearch.com).
    Every colour below is a token; the rest of this file refers to them, never to a literal. */
 :root, .dark {
-  --blue:#0000f2; --ink:#f2f2f2;
+  --blue:#000066; --ink:#f2f2f2;
   --yellow:#f2f200; --green:#00f279; --cyan:#00f2f2; --orange:#ff9a3d; --red:#ff9d9d;
-  --surface:#0000c2; --surface-2:#0000a0; --frame:#3a3af5;
+  --surface:#00004a; --surface-2:#00003a; --frame:#2a2a9c;
   --ink-2:rgba(242,242,242,.82); --ink-3:rgba(242,242,242,.7);
   --line:rgba(242,242,242,.4); --line-soft:rgba(242,242,242,.2); --wash:rgba(242,242,242,.14);
   color:var(--ink); background:var(--blue);
