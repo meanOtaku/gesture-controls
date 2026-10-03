@@ -44,4 +44,8 @@
     <string name="details_hide">Hide details</string>
     <string name="action_forget_confirm">Tap again to forget</string>
     <string name="hint_approve">Tap below to trust this desktop</string>
+    <string name="status_paused">Paused</string>
+    <string name="hint_paused">Off wrist · sensors paused</string>
+    <string name="off_wrist_streaming_off">Off-wrist streaming: off</string>
+    <string name="off_wrist_streaming_on">Off-wrist streaming: on</string>
 </resources>

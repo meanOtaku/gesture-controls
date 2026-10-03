@@ -69,6 +69,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
     private var heartbeatJob: Job? = null
     private val ppgBuffer = mutableListOf<PpgSample>()
     @Volatile private var lastPpgStatus: String? = null
+    @Volatile private var lastWearState: Boolean? = null
     private var medicalFlushJob: Job? = null
     private val heartRateBuffer = mutableListOf<HeartRateSample>()
     private val skinTemperatureBuffer = mutableListOf<SkinTemperatureSample>()
@@ -206,6 +207,19 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         link.send(WatchProtocol.ppgStatusMessage(wireDeviceId, seq, timestampNs, state))
     }
 
+    /**
+     * Tells the desktop whether the watch is on a wrist. Sent when the state changes; the
+     * stored value is forgotten on disconnect so a new connection never starts with a stale one.
+     */
+    fun sendWearState(worn: Boolean) {
+        if (worn == lastWearState) return
+        val link = streamingLink() ?: return
+        lastWearState = worn
+        val timestampNs = SystemClock.elapsedRealtimeNanos()
+        val seq = sequence.incrementAndGet()
+        link.send(WatchProtocol.wearStateMessage(wireDeviceId, seq, timestampNs, worn))
+    }
+
     /** Sends a STEM button press/release, grabbing or releasing the desktop's volume overlay. */
     fun sendButtonEvent(pressed: Boolean) {
         val link = streamingLink() ?: return
@@ -325,6 +339,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
 
     /** Stops the periodic senders and drops every buffered batch. */
     private fun resetStreamingState() {
+        lastWearState = null
         heartbeatJob?.cancel()
         heartbeatJob = null
         medicalFlushJob?.cancel()

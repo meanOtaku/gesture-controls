@@ -114,6 +114,10 @@ pub struct WatchStatus {
     /// Latest `watch.button` state (`"down"` or `"up"`) for the STEM button
     /// that grabs the volume overlay. Reset on disconnect.
     pub last_button_state: Option<String>,
+    /// Whether the watch's off-body detector says it is on a wrist (`watch.wear_state`).
+    /// `None` until it reports, and again after a disconnect. While `Some(false)` the watch
+    /// has stopped its IMU and PPG collection on purpose, so no samples are expected.
+    pub worn: Option<bool>,
     /// Latest `watch.medical_status` state per tracker id (see
     /// `spatial_protocol::MEDICAL_TRACKER_IDS`/`MEDICAL_TRACKER_STATES`).
     /// Populated for every supported *and* unsupported tracker the watch
@@ -253,6 +257,10 @@ impl WatchRuntime {
             WatchEvent::PpgStatusUpdated(sample) => {
                 state.connected = true;
                 state.ppg_state = Some(sample.state);
+            }
+            WatchEvent::WearStateUpdated(sample) => {
+                state.connected = true;
+                state.worn = Some(sample.worn);
             }
             WatchEvent::Button(sample) => {
                 state.connected = true;

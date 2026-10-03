@@ -43,6 +43,10 @@ export function WatchTelemetryPanel({ watchStatus }: WatchTelemetryPanelProps) {
             value={watchStatus?.roundTripNs != null ? `${number(watchStatus.roundTripNs / 1_000_000, 2)} ms` : "—"}
           />
           <Metric
+            label="On wrist"
+            value={watchStatus?.worn === true ? "Worn" : watchStatus?.worn === false ? "Not worn · sensors paused" : "—"}
+          />
+          <Metric
             label="STEM button"
             value={
               watchStatus?.lastButtonState === "down" ? "Held"

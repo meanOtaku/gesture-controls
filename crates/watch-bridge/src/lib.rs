@@ -37,7 +37,7 @@ use spatial_protocol::{
     WatchHeartRateBatchSample, WatchHeartbeatSample, WatchInboundMessage, WatchMedicalStatusSample,
     WatchOrientationSample, WatchPpgBatchSample, WatchPpgStatusSample, WatchSensorStatusSample,
     WatchSkinTemperatureBatchSample, WatchSpo2BatchSample, WatchSweatLossBatchSample,
-    WatchTimeSyncSample,
+    WatchTimeSyncSample, WatchWearStateSample,
 };
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -62,6 +62,11 @@ const DEVICE_ALREADY_CONNECTED_CLOSE_CODE: u16 = 4409;
 /// gate to release a first envelope before reporting
 /// [`BleStatus::AwaitingWatchTrust`] to the UI.
 const BLE_TRUST_GATE_POLL: Duration = Duration::from_secs(5);
+/// A watch that reports it is off the wrist stops its sensors and lets its CPU sleep, so it
+/// sends nothing for as long as it stays off. Silence of the ordinary heartbeat length would
+/// then end a healthy link; the Bluetooth link's own supervision timeout still reports a
+/// watch that really went away.
+const OFF_BODY_IDLE_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 /// Pause between BLE reconnect attempts, so a watch that is off or out of range
 /// doesn't spin the adapter.
 const BLE_RETRY_INTERVAL: Duration = Duration::from_secs(5);
@@ -78,6 +83,8 @@ pub enum WatchEvent {
     ClockOffsetUpdated(ClockOffsetEstimate),
     Ppg(WatchPpgBatchSample),
     PpgStatusUpdated(WatchPpgStatusSample),
+    /// The watch's off-body detector changed (or was reported on connect).
+    WearStateUpdated(WatchWearStateSample),
     Button(WatchButtonSample),
     HeartRate(WatchHeartRateBatchSample),
     SkinTemperature(WatchSkinTemperatureBatchSample),
@@ -88,7 +95,9 @@ pub enum WatchEvent {
     SweatLoss(WatchSweatLossBatchSample),
     MedicalStatusUpdated(WatchMedicalStatusSample),
     SensorStatusUpdated(WatchSensorStatusSample),
-    InvalidMessage { reason: String },
+    InvalidMessage {
+        reason: String,
+    },
 }
 
 /// A desktop-initiated command to start or stop a bounded on-demand medical
@@ -901,11 +910,16 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
     let mut time_sync_ticker = tokio::time::interval(TIME_SYNC_INTERVAL);
     let mut pending_time_sync_at: Option<u64> = None;
     let mut clock_offset_samples = VecDeque::with_capacity(CLOCK_OFFSET_SAMPLE_COUNT);
+    // Set from the watch's own `watch.wear_state`; false (worn) until it says otherwise.
+    let mut off_body = false;
 
     loop {
-        let remaining = shared
-            .heartbeat_timeout
-            .saturating_sub(last_activity.elapsed());
+        let idle_timeout = if off_body {
+            OFF_BODY_IDLE_TIMEOUT
+        } else {
+            shared.heartbeat_timeout
+        };
+        let remaining = idle_timeout.saturating_sub(last_activity.elapsed());
         if remaining.is_zero() {
             info!("watch link ended: heartbeat timed out");
             break;
@@ -913,6 +927,11 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
 
         tokio::select! {
             _ = time_sync_ticker.tick() => {
+                // A write would wake a sleeping watch's CPU every few seconds for an
+                // offset nothing is using while it is not streaming.
+                if off_body {
+                    continue;
+                }
                 let desktop_time_ns = now_ns();
                 let request = DesktopOutboundEnvelope::new(
                     DESKTOP_TIME_SYNC_TYPE,
@@ -990,14 +1009,16 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
                             warn!(gap_ms = gap.as_millis() as u64, "no watch message for a while before this one");
                         }
                         last_activity = Instant::now();
-                        handle_inbound(
+                        if let Some(worn) = handle_inbound(
                             &bytes,
                             &mut last_sequence,
                             &mut pending_time_sync_at,
                             &mut clock_offset_samples,
                             shared,
                             peer_identity.as_deref(),
-                        );
+                        ) {
+                            off_body = !worn;
+                        }
                     }
                     Ok(None) => {
                         info!("watch link ended: notification stream closed");
@@ -1013,6 +1034,8 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
     }
 }
 
+/// Decodes and forwards one inbound message. Returns `Some(worn)` when it was a
+/// `watch.wear_state`, so the caller can adjust how long a silent link is tolerated.
 fn handle_inbound(
     bytes: &[u8],
     last_sequence: &mut Option<u64>,
@@ -1020,7 +1043,7 @@ fn handle_inbound(
     clock_offset_samples: &mut VecDeque<i64>,
     shared: &Arc<SharedState>,
     peer_identity: Option<&str>,
-) {
+) -> Option<bool> {
     let envelope = match WatchEnvelope::from_json(bytes) {
         Ok(envelope) => envelope,
         Err(error) => {
@@ -1028,7 +1051,7 @@ fn handle_inbound(
             let _ = shared.events.send(WatchEvent::InvalidMessage {
                 reason: error.to_string(),
             });
-            return;
+            return None;
         }
     };
 
@@ -1057,7 +1080,7 @@ fn handle_inbound(
                 envelope.sequence
             ),
         });
-        return;
+        return None;
     }
     *last_sequence = Some(envelope.sequence);
 
@@ -1083,6 +1106,11 @@ fn handle_inbound(
         }
         Ok(WatchInboundMessage::PpgStatus(sample)) => {
             let _ = shared.events.send(WatchEvent::PpgStatusUpdated(sample));
+        }
+        Ok(WatchInboundMessage::WearState(sample)) => {
+            let worn = sample.worn;
+            let _ = shared.events.send(WatchEvent::WearStateUpdated(sample));
+            return Some(worn);
         }
         Ok(WatchInboundMessage::Button(sample)) => {
             let _ = shared.events.send(WatchEvent::Button(sample));
@@ -1121,6 +1149,7 @@ fn handle_inbound(
             });
         }
     }
+    None
 }
 
 fn median_clock_offset(samples: &VecDeque<i64>) -> i64 {
@@ -1248,6 +1277,77 @@ mod tests {
             WatchEvent::Orientation(sample) => assert_eq!(sample.device_id, "watch-1"),
             other => panic!("expected Orientation, got {other:?}"),
         }
+    }
+
+    fn wear_state_envelope(sequence: u64, worn: bool) -> Vec<u8> {
+        serde_json::to_vec(&json!({
+            "type": "watch.wear_state",
+            "version": WATCH_PROTOCOL_VERSION,
+            "deviceId": "watch-1",
+            "sequence": sequence,
+            "timestampNs": 5,
+            "payload": { "worn": worn },
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_wear_state_message_is_forwarded_and_reported_to_the_caller() {
+        let shared = shared_state();
+        let mut receiver = shared.events.subscribe();
+        let mut last_sequence = None;
+        let reported = |bytes: &[u8], last_sequence: &mut Option<u64>| {
+            handle_inbound(
+                bytes,
+                last_sequence,
+                &mut None,
+                &mut VecDeque::new(),
+                &shared,
+                None,
+            )
+        };
+        assert_eq!(
+            reported(&wear_state_envelope(1, false), &mut last_sequence),
+            Some(false)
+        );
+        match receiver.try_recv().unwrap() {
+            WatchEvent::WearStateUpdated(sample) => assert!(!sample.worn),
+            other => panic!("expected WearStateUpdated, got {other:?}"),
+        }
+        assert_eq!(
+            reported(&wear_state_envelope(2, true), &mut last_sequence),
+            Some(true)
+        );
+        // Anything else tells the caller nothing about wear state.
+        assert_eq!(reported(&orientation_envelope(3), &mut last_sequence), None);
+    }
+
+    #[test]
+    fn a_wear_state_without_a_boolean_is_rejected_not_read_as_worn() {
+        let shared = shared_state();
+        let mut receiver = shared.events.subscribe();
+        let bad = serde_json::to_vec(&json!({
+            "type": "watch.wear_state",
+            "version": WATCH_PROTOCOL_VERSION,
+            "deviceId": "watch-1",
+            "sequence": 1,
+            "timestampNs": 5,
+            "payload": { "worn": "yes" },
+        }))
+        .unwrap();
+        let result = handle_inbound(
+            &bad,
+            &mut None,
+            &mut None,
+            &mut VecDeque::new(),
+            &shared,
+            None,
+        );
+        assert_eq!(result, None);
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            WatchEvent::InvalidMessage { .. }
+        ));
     }
 
     #[test]

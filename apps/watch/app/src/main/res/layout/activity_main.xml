@@ -256,5 +256,12 @@
             android:text="@string/action_forget_trust"
             android:visibility="gone" />
 
+        <Button
+            android:id="@+id/offWristButton"
+            style="@style/Gc.Button.Text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/off_wrist_streaming_off" />
+
     </LinearLayout>
 </ScrollView>

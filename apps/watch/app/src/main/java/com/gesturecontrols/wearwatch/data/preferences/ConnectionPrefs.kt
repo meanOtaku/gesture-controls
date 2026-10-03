@@ -35,6 +35,15 @@ class ConnectionPrefs(context: Context) {
         set(value) = prefs.edit().putString(KEY_TRUSTED_CENTRAL, value).apply()
 
     /**
+     * Keep streaming while the watch is off the wrist. Off by default: nothing useful is
+     * measured off-body and the sensors are the battery's biggest cost. Turn it on to
+     * test or record with the watch on a desk.
+     */
+    var streamWhenNotWorn: Boolean
+        get() = prefs.getBoolean(KEY_STREAM_WHEN_NOT_WORN, false)
+        set(value) = prefs.edit().putBoolean(KEY_STREAM_WHEN_NOT_WORN, value).apply()
+
+    /**
      * This install's identity on the Wi-Fi transport, where the desktop has no
      * Bluetooth peripheral to identify the watch by and can only go by what the
      * watch claims. Generated once and kept, so two watches never share an id
@@ -54,6 +63,7 @@ class ConnectionPrefs(context: Context) {
         private const val KEY_ENDPOINT = "endpoint"
         private const val KEY_TRANSPORT = "transport"
         private const val KEY_TRUSTED_CENTRAL = "trusted_central"
+        private const val KEY_STREAM_WHEN_NOT_WORN = "stream_when_not_worn"
 
         /** A fresh, unique, protocol-safe device id. */
         fun newDeviceId(): String = "watch-" + UUID.randomUUID().toString()

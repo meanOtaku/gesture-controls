@@ -36,6 +36,7 @@ const watchStatus: WatchStatus = {
   ppgLastSample: null,
   ppgRateHz: null,
   lastButtonState: null,
+  worn: null,
   medicalStatus: {},
   sensorStatus: {},
   heartRateLast: null,

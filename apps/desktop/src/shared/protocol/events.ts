@@ -122,6 +122,8 @@ export interface WatchStatus {
   ppgRateHz: number | null;
   /** Latest `watch.button` state ("down"/"up") for the STEM button that grabs the volume overlay. */
   lastButtonState: "down" | "up" | null;
+  /** Watch off-body detector: true on a wrist, false when taken off (the watch then pauses its sensors on purpose), null until reported. */
+  worn: boolean | null;
   medicalStatus: Record<string, string>;
   sensorStatus: Record<string, boolean>;
   heartRateLast: HeartRateSampleSnapshot | null;

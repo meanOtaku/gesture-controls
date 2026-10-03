@@ -37,6 +37,32 @@ All messages are UTF-8 JSON with the required envelope fields `type`, `version` 
 
 `watch.heartbeat` carries an optional `batteryPercent` value. Send it at least once every three seconds, including while no IMU samples are available.
 
+## Wear state (on or off the wrist)
+
+`watch.wear_state` reports the watch's off-body detector (the standard
+`low_latency_offbody_detect` sensor):
+
+```json
+{ "type": "watch.wear_state", "payload": { "worn": false } }
+```
+
+The watch sends it when the state changes, and once after each connection starts (the
+sensor reports its current value on registration, and a watch with no such sensor reports
+`worn: true`). Taking the watch off is confirmed for 3 seconds before it is reported; putting
+it on is reported at once.
+
+While `worn` is `false` the watch **stops its IMU, PPG and medical collection**, so no
+`watch.orientation` or `watch.ppg_batch` messages are expected, and over Bluetooth it releases
+its CPU wake lock and may sleep. The desktop therefore:
+
+- releases any held interaction (fail closed: the data that drove it has stopped),
+- tolerates silence for up to 30 minutes instead of the 3-second heartbeat timeout (a link that
+  really went away is still reported by Bluetooth itself), and
+- stops its 5-second `desktop.time_sync` writes, which would otherwise wake the sleeping watch.
+
+The watch has an "off-wrist streaming" toggle for testing with the watch on a desk; with it on the
+watch streams regardless and still reports its wear state.
+
 ## Volume overlay grab (STEM button)
 
 When the head tracker dwells on the calibrated top-right target, the desktop

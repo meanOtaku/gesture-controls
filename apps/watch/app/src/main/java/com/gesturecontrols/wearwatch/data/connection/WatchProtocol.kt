@@ -20,6 +20,8 @@ object WatchProtocol {
     const val TYPE_PPG_BATCH = "watch.ppg_batch"
     const val TYPE_PPG_STATUS = "watch.ppg_status"
     const val TYPE_BUTTON = "watch.button"
+    /** Whether the watch is on a wrist; while it is not, the watch stops its sensors. */
+    const val TYPE_WEAR_STATE = "watch.wear_state"
     const val TYPE_DESKTOP_CONNECTED = "desktop.connected"
     const val TYPE_DESKTOP_TIME_SYNC = "desktop.time_sync"
 
@@ -230,6 +232,18 @@ object WatchProtocol {
         val payload = JSONObject()
         payload.put("state", state)
         return envelope(TYPE_PPG_STATUS, deviceId, sequence, timestampNs, payload)
+    }
+
+    /** Encodes the off-body detector's verdict: `worn` is true on a wrist. */
+    fun wearStateMessage(
+        deviceId: String,
+        sequence: Long,
+        timestampNs: Long,
+        worn: Boolean,
+    ): String {
+        val payload = JSONObject()
+        payload.put("worn", worn)
+        return envelope(TYPE_WEAR_STATE, deviceId, sequence, timestampNs, payload)
     }
 
     /** Encodes a STEM button press/release that grabs or releases the desktop's volume overlay. */

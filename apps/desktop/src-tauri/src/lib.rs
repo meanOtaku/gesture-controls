@@ -272,6 +272,15 @@ pub fn run() {
                                         interaction_engine::ForceReleaseReason::StaleSensorWindow,
                                     );
                                 }
+                                WatchEvent::WearStateUpdated(sample) if !sample.worn => {
+                                    // Off the wrist the watch stops streaming on purpose; a held
+                                    // grab must not outlive the data that was driving it.
+                                    info!("watch taken off the wrist; releasing any interaction");
+                                    inference::force_release_and_hide(
+                                        &watch_handle,
+                                        interaction_engine::ForceReleaseReason::StaleSensorWindow,
+                                    );
+                                }
                                 WatchEvent::PpgStatusUpdated(sample)
                                     if sample.state == "unavailable" || sample.state == "error" =>
                                 {

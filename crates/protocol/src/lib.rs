@@ -82,6 +82,9 @@ pub const WATCH_HEARTBEAT_TYPE: &str = "watch.heartbeat";
 pub const WATCH_TIME_SYNC_TYPE: &str = "watch.time_sync";
 pub const WATCH_PPG_BATCH_TYPE: &str = "watch.ppg_batch";
 pub const WATCH_PPG_STATUS_TYPE: &str = "watch.ppg_status";
+/// Whether the watch is on a wrist, from its off-body detector. While it is `false` the
+/// watch stops its IMU and PPG collection (and, over Bluetooth, lets the CPU sleep).
+pub const WATCH_WEAR_STATE_TYPE: &str = "watch.wear_state";
 pub const WATCH_BUTTON_TYPE: &str = "watch.button";
 pub const DESKTOP_CONNECTED_TYPE: &str = "desktop.connected";
 pub const DESKTOP_TIME_SYNC_TYPE: &str = "desktop.time_sync";
@@ -367,6 +370,16 @@ impl WatchEnvelope {
                     sequence: self.sequence,
                     timestamp_ns: self.timestamp_ns,
                     state: payload.state,
+                }))
+            }
+            WATCH_WEAR_STATE_TYPE => {
+                let payload: WatchWearStatePayload = serde_json::from_value(self.payload)
+                    .map_err(WatchPacketError::InvalidPayload)?;
+                Ok(WatchInboundMessage::WearState(WatchWearStateSample {
+                    device_id: self.device_id,
+                    sequence: self.sequence,
+                    timestamp_ns: self.timestamp_ns,
+                    worn: payload.worn,
                 }))
             }
             WATCH_BUTTON_TYPE => {
@@ -726,6 +739,22 @@ pub struct WatchPpgStatusSample {
     pub state: String,
 }
 
+/// `watch.wear_state` payload: `worn` is the watch's off-body detector, `true` on a wrist.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WatchWearStatePayload {
+    pub worn: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WatchWearStateSample {
+    pub device_id: String,
+    pub sequence: u64,
+    pub timestamp_ns: u64,
+    pub worn: bool,
+}
+
 // --- Medical tracker payloads/samples ---
 //
 // Field units and types below are read from the Samsung Health Sensor SDK
@@ -1035,6 +1064,7 @@ pub enum WatchInboundMessage {
     TimeSync(WatchTimeSyncSample),
     PpgBatch(WatchPpgBatchSample),
     PpgStatus(WatchPpgStatusSample),
+    WearState(WatchWearStateSample),
     Button(WatchButtonSample),
     HeartRateBatch(WatchHeartRateBatchSample),
     SkinTemperatureBatch(WatchSkinTemperatureBatchSample),

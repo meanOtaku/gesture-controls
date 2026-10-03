@@ -93,6 +93,7 @@ test on hardware (see "How to measure it" at the end of this section).
 | BLE advertising | Low-latency mode, and it kept running while a desktop was connected | Balanced mode, stopped while a desktop is connected, resumed on disconnect |
 | Orientation message encoding (up to 50 a second) | A `JSONObject`, two `JSONArray`s and a boxed `Double` per component: 3.2 us per message (JVM) | One `StringBuilder`: 0.4 us per message (JVM, 8x), output checked against the old encoder on 2,000 random readings |
 | Status text redraw | Orientation sequence redrawn at the sensor rate | At most twice a second |
+| **Off the wrist** | Sensors, PPG, the wake lock and the desktop's 5-second time-sync writes all continued | The standard off-body sensor pauses IMU, PPG and medical collection; over Bluetooth the CPU wake lock is released and the desktop stops time-sync writes (see [the protocol](protocols/watch-websocket-protocol.md#wear-state-on-or-off-the-wrist)). Not yet measured on a battery |
 
 Two behaviours changed on purpose: a reading with a non-finite component is now dropped (the old
 encoder threw inside the sensor callback), and streaming control no longer depends on the screen

@@ -164,6 +164,7 @@ export const EMPTY_WATCH_STATUS: WatchStatus = {
   ppgLastSample: null,
   ppgRateHz: null,
   lastButtonState: null,
+  worn: null,
   medicalStatus: {},
   sensorStatus: {},
   heartRateLast: null,

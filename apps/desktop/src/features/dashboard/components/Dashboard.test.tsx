@@ -147,6 +147,7 @@ describe("Dashboard", () => {
     ppgLastSample: null,
     ppgRateHz: null,
     lastButtonState: null,
+    worn: null,
     medicalStatus: {},
     sensorStatus: { orientation: true },
     heartRateLast: null,

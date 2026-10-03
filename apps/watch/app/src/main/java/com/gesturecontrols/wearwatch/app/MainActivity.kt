@@ -7,6 +7,7 @@ import com.gesturecontrols.wearwatch.data.discovery.*
 import com.gesturecontrols.wearwatch.data.preferences.*
 import com.gesturecontrols.wearwatch.feature.health.*
 import com.gesturecontrols.wearwatch.feature.motion.*
+import com.gesturecontrols.wearwatch.feature.wear.*
 import com.gesturecontrols.wearwatch.platform.service.*
 
 import android.Manifest
@@ -35,6 +36,9 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
@@ -61,6 +65,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var detailsPanel: View
     private lateinit var rootScroll: ScrollView
     private var forgetArmed = false
+    private lateinit var offWristButton: Button
+    private lateinit var wearDetector: WearDetector
+    private val streamWhenNotWorn = MutableStateFlow(false)
+
+    /** What the sensors are currently meant to be doing; also drives the "Paused" status. */
+    private val streamingPlan = MutableStateFlow(StreamingPlan.STOPPED)
     private lateinit var connectButton: Button
     private lateinit var connectionStatusText: TextView
     private lateinit var discoveryStatusText: TextView
@@ -135,10 +145,13 @@ class MainActivity : AppCompatActivity() {
 
         prefs = ConnectionPrefs(this)
         watchLink.deviceId = prefs.deviceId
+        wearDetector = WearDetector(this, lifecycleScope)
+        streamWhenNotWorn.value = prefs.streamWhenNotWorn
         transportBluetoothButton = findViewById(R.id.transportBluetoothButton)
         transportWifiButton = findViewById(R.id.transportWifiButton)
         trustButton = findViewById(R.id.trustButton)
         forgetTrustButton = findViewById(R.id.forgetTrustButton)
+        offWristButton = findViewById(R.id.offWristButton)
         detailsToggleButton = findViewById(R.id.detailsToggleButton)
         detailsPanel = findViewById(R.id.detailsPanel)
         rootScroll = findViewById(R.id.rootScroll)
@@ -220,6 +233,13 @@ class MainActivity : AppCompatActivity() {
         connectButton.setOnClickListener { onConnectButtonClicked() }
         trustButton.setOnClickListener { onTrustButtonClicked() }
         forgetTrustButton.setOnClickListener { onForgetButtonClicked() }
+        renderOffWristButton()
+        offWristButton.setOnClickListener {
+            val enabled = !streamWhenNotWorn.value
+            prefs.streamWhenNotWorn = enabled
+            streamWhenNotWorn.value = enabled
+            renderOffWristButton()
+        }
         detailsToggleButton.setOnClickListener { toggleDetails() }
         // The rotating bezel / crown scrolls the column, as on every other Wear screen.
         rootScroll.setOnGenericMotionListener { _, event ->
@@ -244,7 +264,21 @@ class MainActivity : AppCompatActivity() {
         // Streaming control and status reporting must not depend on the screen being
         // on: a reconnect that lands while the display is off still has to start
         // (or stop) the sensors. Only rendering is tied to STARTED, below.
-        lifecycleScope.launch { watchLink.state.collect { applyStreamingState(it) } }
+        // The wear state only matters while a desktop is connected; the sensor is not held otherwise.
+        lifecycleScope.launch {
+            watchLink.state.collect { state ->
+                if (state == ConnectionState.CONNECTED) wearDetector.start() else wearDetector.stop()
+            }
+        }
+        lifecycleScope.launch {
+            combine(watchLink.state, wearDetector.worn, streamWhenNotWorn) { state, worn, override ->
+                StreamingPolicy.plan(state, worn, override)
+            }.distinctUntilChanged().collect { plan ->
+                streamingPlan.value = plan
+                applyStreamingPlan(plan)
+            }
+        }
+        lifecycleScope.launch { wearDetector.worn.collect { worn -> worn?.let(watchLink::sendWearState) } }
         lifecycleScope.launch { ppgCollector.state.collect { watchLink.sendPpgStatus(it.wireValue()) } }
         lifecycleScope.launch {
             medicalCollector.state.collect { statuses ->
@@ -260,6 +294,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { watchLink.state.collect { renderState(it) } }
+                launch { streamingPlan.collect { renderState(watchLink.state.value) } }
                 launch { watchLink.lastFailureReason.collect { reason -> linkDiagnosticsText.text = reason.orEmpty() } }
                 launch {
                     // Sequence changes at the sensor rate (up to 50 Hz); the screen needs two updates a second.
@@ -573,9 +608,11 @@ class MainActivity : AppCompatActivity() {
             pairingServer.stop()
             discoveryStatusText.text = "Connected to desktop"
             discoveryHistoryText.text = ""
-            sensorStatusText.setText(R.string.sensors_streaming)
-            // May need to ask for BODY_SENSORS, which only works while visible.
-            startBodySensorCollection()
+            if (streamingPlan.value == StreamingPlan.STREAM) {
+                sensorStatusText.setText(R.string.sensors_streaming)
+                // May need to ask for BODY_SENSORS, which only works while visible.
+                startBodySensorCollection()
+            }
         }
         connectionStatusText.setTextColor(
             ContextCompat.getColor(
@@ -608,6 +645,12 @@ class MainActivity : AppCompatActivity() {
             ConnectionState.AWAITING_TRUST -> getString(R.string.status_approve)
             ConnectionState.FAILED -> getString(R.string.status_failed)
         }
+        if (state == ConnectionState.CONNECTED && streamingPlan.value == StreamingPlan.PAUSED_OFF_BODY) {
+            connectionStatusText.setText(R.string.status_paused)
+            connectionStatusText.setTextColor(ContextCompat.getColor(this, R.color.gc_yellow))
+            discoveryStatusText.setText(R.string.hint_paused)
+            sensorStatusText.setText(R.string.sensors_idle)
+        }
         fitStatusText()
         connectButton.text = when (state) {
             ConnectionState.CONNECTED, ConnectionState.CONNECTING, ConnectionState.RECONNECTING,
@@ -621,15 +664,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * What runs follows the link, not the screen: sensors, PPG and the CPU wake lock
-     * exist only while a desktop is actually receiving. While waiting to reconnect
-     * (advertising, awaiting trust, retrying) the foreground service stays so the
-     * process is not frozen, but the wake lock and every sensor are released.
-     * Idempotent: each collector ignores a start it is already in.
+     * What runs follows the link and the wrist, not the screen: sensors, PPG and the CPU
+     * wake lock exist only while a desktop is receiving *and* the watch is worn. While waiting
+     * to reconnect (advertising, awaiting trust, retrying) or while off the wrist, the foreground
+     * service stays so the process is not frozen, but the wake lock and every sensor are
+     * released. Off the wrist over Bluetooth the CPU is then free to sleep; the desktop knows
+     * not to expect heartbeats (see `OFF_BODY_IDLE_TIMEOUT` in the bridge). Over Wi-Fi the lock
+     * stays, since a sleeping CPU would drop the socket. Idempotent: each collector ignores a
+     * start it is already in.
      */
-    private fun applyStreamingState(state: ConnectionState) {
-        when (state) {
-            ConnectionState.CONNECTED -> {
+    private fun applyStreamingPlan(plan: StreamingPlan) {
+        when (plan) {
+            StreamingPlan.STREAM -> {
                 StreamingForegroundService.start(this)
                 sensorCollector.start()
                 if (ppgCollector.hasBodySensorsPermission()) {
@@ -637,15 +683,29 @@ class MainActivity : AppCompatActivity() {
                     medicalCollector.start()
                 }
             }
-            ConnectionState.DISCONNECTED, ConnectionState.FAILED -> {
+            StreamingPlan.PAUSED_OFF_BODY -> {
                 stopSensorCollection()
-                StreamingForegroundService.stop(this)
+                StreamingForegroundService.start(this)
+                if (selectedTransport == WatchTransportKind.BLUETOOTH) {
+                    StreamingForegroundService.releaseWakeLock(this)
+                }
             }
-            else -> {
+            StreamingPlan.PENDING -> Unit
+            StreamingPlan.WAITING -> {
                 stopSensorCollection()
                 StreamingForegroundService.releaseWakeLock(this)
             }
+            StreamingPlan.STOPPED -> {
+                stopSensorCollection()
+                StreamingForegroundService.stop(this)
+            }
         }
+    }
+
+    private fun renderOffWristButton() {
+        offWristButton.setText(
+            if (streamWhenNotWorn.value) R.string.off_wrist_streaming_on else R.string.off_wrist_streaming_off,
+        )
     }
 
     /**

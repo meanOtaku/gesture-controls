@@ -110,4 +110,14 @@ class WatchProtocolOrientationTest {
         val fast = time { WatchProtocol.orientationMessage("w", 1, 2, q, a, g) }
         println("orientation encode (JVM, org.json from Maven): reference %.2f us, fast %.2f us".format(reference, fast))
     }
+
+    @Test
+    fun theWearStateMessageCarriesAPlainBoolean() {
+        for (worn in listOf(true, false)) {
+            val root = JSONObject(WatchProtocol.wearStateMessage("w", 7, 99, worn))
+            assertEquals("watch.wear_state", root.getString("type"))
+            assertEquals(7L, root.getLong("sequence"))
+            assertEquals(worn, root.getJSONObject("payload").getBoolean("worn"))
+        }
+    }
 }
