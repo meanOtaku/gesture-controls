@@ -232,8 +232,10 @@ impl GesturePolicy {
         if !confidence.is_finite() || !(0.0..=1.0).contains(&confidence) {
             return self.force_release(ForceReleaseReason::ModelRuntimeFailure);
         }
+        // Strictly increasing, like the raw-window watermark upstream: a
+        // duplicated timestamp is a replayed or stale event, not a new one.
         if let Some(last) = self.last_event_at_ns
-            && timestamp_ns < last
+            && timestamp_ns <= last
         {
             return self.force_release(ForceReleaseReason::ModelRuntimeFailure);
         }
@@ -558,6 +560,23 @@ mod tests {
             decision.reason,
             DecisionReason::ForcedRelease(ForceReleaseReason::ModelRuntimeFailure)
         );
+    }
+
+    /// D-M4-6: an exactly-duplicated timestamp used to be accepted, so
+    /// `Started(t)` followed by `Released(t)` produced an actuating release.
+    #[test]
+    fn duplicate_timestamp_forces_release_instead_of_being_accepted() {
+        let mut policy = GesturePolicy::default();
+        policy.set_mode(PolicyMode::Live);
+        policy.on_transition(started(0.9, 100));
+        let decision = policy.on_transition(released(0.9, 100));
+        assert_eq!(
+            decision.reason,
+            DecisionReason::ForcedRelease(ForceReleaseReason::ModelRuntimeFailure)
+        );
+        // The forced release ended the grab, so the state machine is idle.
+        let restart = policy.on_transition(started(0.9, 101));
+        assert_eq!(restart.reason, DecisionReason::Started);
     }
 
     #[test]

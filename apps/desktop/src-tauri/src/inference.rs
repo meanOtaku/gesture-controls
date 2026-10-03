@@ -21,11 +21,11 @@
 //! real LiteRT backend when this build carries the `litert-inference`
 //! feature, and failing closed against
 //! [`pinch_inference::UnavailablePinchModel`] when it does not (see
-//! [`load_model_backend`]). [`ingest_ppg_window`] plus
-//! [`report_pinch_transition`] are both seams into [`GesturePolicyRuntime`]:
-//! the former is live desktop inference, the latter is for replay/testing
-//! tooling that has already classified a window itself. Neither executes
-//! anything directly: [`apply_decision`] is the sole actuation point and
+//! [`load_model_backend`]). [`ingest_ppg_window`] is the only way a
+//! classified transition reaches [`GesturePolicyRuntime`]; there is
+//! deliberately no webview command that injects one (a fabricated transition
+//! would bypass the watermark, quality gate, fusion, model and bindings).
+//! Nothing executes anything directly: [`apply_decision`] is the sole actuation point and
 //! only ever runs what [`GesturePolicy`] itself marked live, which is why
 //! `Monitor` classifies and reports without ever reaching the overlay or
 //! the volume backend.
@@ -69,8 +69,7 @@ pub const PPG_WINDOW_OBSERVED_EVENT: &str = "gesture-ppg-window-observed";
 /// `Accepted` is the architecture seam: an accepted window is what the live
 /// path fuses and classifies against the active model (see
 /// [`PinchInferenceRuntime::classify`]), and equally what an offline replay
-/// tool consumes to classify the same window itself and call
-/// [`report_pinch_transition`].
+/// tool consumes to classify the same window itself.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum PpgWindowOutcome {
@@ -313,7 +312,7 @@ pub(crate) fn ingest_ppg_window(app: &AppHandle, sample: &WatchPpgBatchSample) {
             // `Started` is provisionally `VolumeGrab`). The bindings remap
             // runs and the policy's `executed` flag is corrected inside one
             // policy-lock acquisition, so no other transition (watchdog,
-            // `report_pinch_transition`, mode change) can interleave and see
+            // forced release, mode change) can interleave and see
             // the stale flag -- otherwise a model that binds `pinch_start` to
             // `NoAction` would still have its later `pinch_release` actuate a
             // real overlay release for a grab that never happened.
@@ -612,6 +611,7 @@ impl GesturePolicyRuntime {
         Ok(policy.set_mode(to_policy_mode(mode)))
     }
 
+    #[cfg(test)]
     fn on_transition(&self, transition: PinchTransition) -> Result<PolicyDecision, String> {
         let mut policy = self
             .policy
@@ -724,22 +724,6 @@ pub(crate) fn apply_decision(app: &AppHandle, decision: PolicyDecision) {
     }
 }
 
-/// Feeds one classified pinch model transition into the desktop gesture
-/// policy. This is the seam a future desktop inference pipeline calls after
-/// classifying a fused sensor window; it is also usable directly (e.g. from
-/// replay/testing tooling) since the policy itself has no dependency on how
-/// the transition was produced.
-#[tauri::command]
-pub fn report_pinch_transition(
-    transition: PinchTransition,
-    app: AppHandle,
-    runtime: State<'_, GesturePolicyRuntime>,
-) -> Result<PolicyDecision, String> {
-    let decision = runtime.on_transition(transition)?;
-    apply_decision(&app, decision);
-    Ok(decision)
-}
-
 /// Reports that desktop inference itself failed (crashed, threw, produced an
 /// unparseable result, etc.) and forces an immediate, safe release.
 #[tauri::command]
@@ -815,8 +799,7 @@ mod inference_mode_tests {
     #[test]
     fn a_full_off_gesture_never_reaches_an_action_performing_adapter() {
         // `Off` never gets this far (see `mode_classifies`), but if a
-        // transition arrives anyway -- e.g. via `report_pinch_transition`
-        // from replay tooling -- it must be just as inert.
+        // transition arrives anyway, it must be just as inert.
         assert_eq!(actuated(InferenceMode::Off, &pinch_arc()), Vec::new());
     }
 

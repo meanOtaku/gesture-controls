@@ -97,7 +97,6 @@ pub fn run() {
             model_registry::activate_model,
             model_registry::rollback_active_model,
             model_registry::set_inference_mode,
-            inference::report_pinch_transition,
             inference::report_model_runtime_failure,
             watch::get_watch_transport_status,
             watch::set_watch_transport,

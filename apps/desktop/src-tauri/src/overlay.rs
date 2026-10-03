@@ -4,8 +4,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use interaction_engine::{
-    VolumeSimulation, WristRotation, WristRotationConfig, commit_visibility_after,
-    top_right_overlay_position,
+    CalibrationTarget, VolumeSimulation, WristRotation, WristRotationConfig,
+    commit_visibility_after, top_right_overlay_position,
 };
 use serde::Serialize;
 use spatial_protocol::WatchOrientationSample;
@@ -16,6 +16,8 @@ use volume_control::{
     platform_volume_controller, set_system_volume as set_native_volume,
 };
 use watch_bridge::{HapticCommand, WatchBridgeServer};
+
+use crate::calibration::CalibrationRuntime;
 
 pub const OVERLAY_STATE_EVENT: &str = "overlay-state";
 const MAIN_WINDOW: &str = "main";
@@ -94,6 +96,12 @@ pub struct OverlayRuntime {
     refresh_in_flight: AtomicBool,
     last_wrist_rotation_haptic_at: Mutex<Option<Instant>>,
     last_wrist_rotation_volume_write_at: Mutex<Option<Instant>>,
+    /// Orders native volume writes among themselves. Deliberately separate
+    /// from `state`: a blocking native command must never be held under the
+    /// lock that `hide`/`release`/`grab` need, or a hung audio adapter would
+    /// stall every cancellation path (Escape, button-up, disconnect, model
+    /// swap) for the adapter's whole timeout.
+    native_write_lock: Mutex<()>,
     last_relative_roll_diagnostic_at: Mutex<Option<Instant>>,
 }
 
@@ -136,6 +144,7 @@ impl Default for OverlayRuntime {
             refresh_in_flight: AtomicBool::new(false),
             last_wrist_rotation_haptic_at: Mutex::new(None),
             last_wrist_rotation_volume_write_at: Mutex::new(None),
+            native_write_lock: Mutex::new(()),
             last_relative_roll_diagnostic_at: Mutex::new(None),
         }
     }
@@ -163,11 +172,14 @@ impl OverlayRuntime {
         let window = app
             .get_webview_window(OVERLAY_WINDOW)
             .ok_or("overlay window is not configured")?;
+        // Read the native volume before taking the state lock, so a slow or
+        // hung audio adapter cannot stall `hide`/`release` behind this read.
+        let available_volume = volume_runtime.available_volume();
         let mut state = self
             .state
             .lock()
             .map_err(|_| "overlay state lock was poisoned")?;
-        let available_volume = match volume_runtime.available_volume() {
+        let available_volume = match available_volume {
             Ok(volume) => volume,
             Err(error) => {
                 state.last_native_volume_error = Some(error.clone());
@@ -468,32 +480,64 @@ impl OverlayRuntime {
         delta: f32,
         volume_runtime: &VolumeRuntime,
     ) -> Result<OverlayState, String> {
-        let mut state = self
+        let _write = self
+            .native_write_lock
+            .lock()
+            .map_err(|_| "native volume write lock was poisoned")?;
+        self.require_visible_for_write()?;
+        if !delta.is_finite() {
+            return Err(VolumeError::InvalidAdjustment.to_string());
+        }
+        // The native command runs without the state lock held (see
+        // `native_write_lock`).
+        let result = adjust_native_volume(volume_runtime.controller(), true, delta);
+        self.publish_native_write(app, result.map(|normalized| normalized * 100.0))
+    }
+
+    /// Checks the capability gate (overlay visible) under the state lock and
+    /// bumps the generation, then releases the lock before the caller talks
+    /// to the native backend. Called while holding `native_write_lock`, so a
+    /// write queued behind a slow one is dropped here if the overlay was
+    /// hidden (Escape, release, disconnect) in the meantime.
+    fn require_visible_for_write(&self) -> Result<(), String> {
+        let state = self
             .state
             .lock()
             .map_err(|_| "overlay state lock was poisoned")?;
         if !state.visible {
             return Err(VolumeError::OverlayInactive.to_string());
         }
-        if !delta.is_finite() {
-            return Err(VolumeError::InvalidAdjustment.to_string());
-        }
         self.state_generation.fetch_add(1, Ordering::AcqRel);
-        let normalized = match adjust_native_volume(volume_runtime.controller(), true, delta) {
-            Ok(normalized) => normalized,
+        Ok(())
+    }
+
+    /// Records the outcome of a native volume write in the overlay state and
+    /// emits it. `volume_percent` is the applied volume on a 0..=100 scale.
+    fn publish_native_write(
+        &self,
+        app: &AppHandle,
+        result: Result<f32, VolumeError>,
+    ) -> Result<OverlayState, String> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "overlay state lock was poisoned")?;
+        match result {
+            Ok(volume_percent) => {
+                state.last_native_volume_error = None;
+                state.volume = volume_percent;
+                let snapshot = state.clone();
+                let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
+                Ok(snapshot)
+            }
             Err(error) => {
                 let message = error.to_string();
                 state.last_native_volume_error = Some(message.clone());
                 let snapshot = state.clone();
                 let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
-                return Err(message);
+                Err(message)
             }
-        };
-        state.last_native_volume_error = None;
-        state.volume = normalized * 100.0;
-        let snapshot = state.clone();
-        let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
-        Ok(snapshot)
+        }
     }
 
     /// Sets the system volume to `target_percent` outright, unlike
@@ -509,30 +553,13 @@ impl OverlayRuntime {
         target_percent: f32,
         volume_runtime: &VolumeRuntime,
     ) -> Result<OverlayState, String> {
-        let mut state = self
-            .state
+        let _write = self
+            .native_write_lock
             .lock()
-            .map_err(|_| "overlay state lock was poisoned")?;
-        if !state.visible {
-            return Err(VolumeError::OverlayInactive.to_string());
-        }
-        self.state_generation.fetch_add(1, Ordering::AcqRel);
-        let normalized = match set_native_volume(volume_runtime.controller(), true, target_percent)
-        {
-            Ok(normalized) => normalized,
-            Err(error) => {
-                let message = error.to_string();
-                state.last_native_volume_error = Some(message.clone());
-                let snapshot = state.clone();
-                let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
-                return Err(message);
-            }
-        };
-        state.last_native_volume_error = None;
-        state.volume = normalized;
-        let snapshot = state.clone();
-        let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
-        Ok(snapshot)
+            .map_err(|_| "native volume write lock was poisoned")?;
+        self.require_visible_for_write()?;
+        let result = set_native_volume(volume_runtime.controller(), true, target_percent);
+        self.publish_native_write(app, result)
     }
 
     fn refresh_system_volume(
@@ -672,12 +699,30 @@ pub fn get_overlay_state(runtime: State<'_, OverlayRuntime>) -> Result<OverlaySt
     runtime.state()
 }
 
+/// The overlay visibility is the only capability gate on the native volume
+/// commands, so it must be raised by a backend-observed fact rather than on
+/// the webview's say-so: the frontend only calls `show_overlay` in response
+/// to the head-target-entered event, and the backend's own calibration state
+/// must agree that the top-right target is currently active.
+fn overlay_show_permitted(active_target: Option<CalibrationTarget>) -> Result<(), String> {
+    if active_target == Some(CalibrationTarget::TopRight) {
+        Ok(())
+    } else {
+        Err(
+            "the volume overlay can only be shown while the top-right head target is active"
+                .to_string(),
+        )
+    }
+}
+
 #[tauri::command]
 pub fn show_overlay(
     app: AppHandle,
     runtime: State<'_, OverlayRuntime>,
     volume_runtime: State<'_, VolumeRuntime>,
+    calibration: State<'_, CalibrationRuntime>,
 ) -> Result<OverlayState, String> {
+    overlay_show_permitted(calibration.state()?.active_target)?;
     runtime.show(&app, &volume_runtime)
 }
 
@@ -732,6 +777,39 @@ pub async fn refresh_system_volume(app: AppHandle) -> Result<OverlayState, Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// D-M4-3: a native volume write used to hold the overlay state lock for
+    /// the adapter's whole timeout, stalling every cancellation path. The
+    /// write now serializes on its own lock, so while one is in flight (here:
+    /// simulated by holding that lock) state reads and the visibility gate
+    /// stay immediately available.
+    #[test]
+    fn an_in_flight_native_write_does_not_block_the_overlay_state_lock() {
+        let runtime = OverlayRuntime::default();
+        let in_flight_write = runtime.native_write_lock.lock().unwrap();
+
+        std::thread::scope(|scope| {
+            let reader = scope.spawn(|| {
+                runtime.state().expect("state must be readable");
+                runtime.require_visible_for_write()
+            });
+            let gate = reader.join().unwrap();
+            assert_eq!(gate, Err(VolumeError::OverlayInactive.to_string()));
+        });
+        drop(in_flight_write);
+
+        runtime.state.lock().unwrap().visible = true;
+        assert!(runtime.require_visible_for_write().is_ok());
+    }
+
+    /// D-M4-4: the webview must not be able to raise the volume capability
+    /// gate unless the backend itself sees the top-right target active.
+    #[test]
+    fn show_overlay_requires_the_top_right_target_to_be_active() {
+        assert!(overlay_show_permitted(Some(CalibrationTarget::TopRight)).is_ok());
+        assert!(overlay_show_permitted(Some(CalibrationTarget::Center)).is_err());
+        assert!(overlay_show_permitted(None).is_err());
+    }
 
     #[test]
     fn volume_write_is_due_for_the_first_write_and_after_the_interval() {
