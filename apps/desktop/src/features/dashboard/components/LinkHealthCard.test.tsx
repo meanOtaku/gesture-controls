@@ -7,7 +7,7 @@ afterEach(() => cleanup());
 
 const NOW = 1_800_000_000_000;
 const diagnostics = (overrides: Partial<LinkDiagnostics> = {}): LinkDiagnostics => ({
-  transport: "bluetooth", phase: "streaming", phaseDetail: null, sessions: 3, drops: 2, scanAttempts: 5,
+  transport: "bluetooth", peer: "watch a1b2c3d4", phase: "streaming", phaseDetail: null, sessions: 3, drops: 2, scanAttempts: 5,
   connectedSinceUnixMs: NOW - 247_000, lastMessageUnixMs: NOW - 400, lastEnd: null, messagesReceived: 1234,
   invalidMessages: 1, outOfOrderMessages: 2, writes: 40, writeFailures: 1, writeLastMs: 30, writeMaxMs: 3190,
   maxGapMs: 2310, mtu: 517, retryInMs: null, events: [], ...overrides,
@@ -22,6 +22,7 @@ describe("LinkHealthPanel", () => {
   it("shows the phase, uptime, latencies and counters", () => {
     render(<LinkHealthPanel diagnostics={diagnostics()} nowUnixMs={NOW} />);
     expect(screen.getByText("Streaming")).toBeInTheDocument();
+    expect(screen.getByText("watch a1b2c3d4")).toBeInTheDocument();
     expect(screen.getByText("4m 07s")).toBeInTheDocument();
     expect(screen.getByText("just now")).toBeInTheDocument();
     expect(screen.getByText("2 / 3")).toBeInTheDocument();

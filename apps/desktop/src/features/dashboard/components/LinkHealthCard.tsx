@@ -61,6 +61,7 @@ export function LinkHealthPanel({ diagnostics, nowUnixMs, onCopy }: LinkHealthPa
           <p className="hint">Trying again in {formatMs(diagnostics.retryInMs)}.</p>
         )}
         <section className="metric-grid" aria-label="Link metrics">
+          <Metric label="Watch" value={diagnostics.peer ?? "—"} />
           <Metric label="Connected for" value={uptime} />
           <Metric label="Last message" value={formatAgo(diagnostics.lastMessageUnixMs, nowUnixMs)} />
           <Metric label="Drops / sessions" value={`${diagnostics.drops} / ${diagnostics.sessions}`} />

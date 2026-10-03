@@ -206,6 +206,10 @@ pub struct BleLink {
     /// First envelope received while waiting on the watch's trust gate, held
     /// so [`BleLink::recv`] still delivers it to the protocol layer.
     pending: Option<Vec<u8>>,
+    /// The watch's advertised short id, if its advertisement carried one.
+    tag: Option<String>,
+    /// Signal strength when the watch was found, in dBm.
+    rssi: Option<i16>,
 }
 
 /// The device id the desktop assigns a watch it discovered over BLE: derived
@@ -262,6 +266,16 @@ pub async fn stop_scan(adapter: &Adapter) {
 }
 
 impl BleLink {
+    /// The watch's advertised short id, e.g. `a1b2c3d4`.
+    pub fn watch_tag(&self) -> Option<&str> {
+        self.tag.as_deref()
+    }
+
+    /// Signal strength when the watch was found, in dBm.
+    pub fn rssi(&self) -> Option<i16> {
+        self.rssi
+    }
+
     /// The negotiated ATT MTU, or 0 when the backend does not report one.
     pub fn mtu(&self) -> u32 {
         u32::from(self.peripheral.mtu())
@@ -275,7 +289,9 @@ impl BleLink {
     /// Scans for, connects to, and subscribes to a watch advertising
     /// [`WATCH_BLE_SERVICE_UUID`]. Every failure carries an actionable message.
     pub async fn connect(adapter: &Adapter, scan_timeout: Duration) -> Result<Self, BleError> {
-        let peripheral = scan_for_watch(adapter, scan_timeout).await?;
+        let found = scan_for_watch(adapter, scan_timeout).await?;
+        let (tag, rssi) = (found.tag, found.rssi);
+        let peripheral = found.peripheral;
         peripheral
             .connect_with_timeout(BLE_CONNECT_TIMEOUT)
             .await
@@ -284,7 +300,11 @@ impl BleLink {
         // From here on any early return must not leave a half-open GATT
         // connection behind for the OS to keep alive.
         match Self::negotiate(peripheral.clone()).await {
-            Ok(link) => Ok(link),
+            Ok(mut link) => {
+                link.tag = tag;
+                link.rssi = rssi;
+                Ok(link)
+            }
             Err(error) => {
                 let _ = peripheral.disconnect().await;
                 Err(error)
@@ -335,6 +355,8 @@ impl BleLink {
             notifications,
             reassembler: Reassembler::default(),
             pending: None,
+            tag: None,
+            rssi: None,
         })
     }
 
@@ -436,7 +458,7 @@ fn find_characteristic(
 /// Scans until a peripheral advertising [`WATCH_BLE_SERVICE_UUID`] appears.
 /// The filter is passed to the backend *and* re-checked here, because backends
 /// are allowed to surface devices outside the filter.
-async fn scan_for_watch(adapter: &Adapter, timeout: Duration) -> Result<Peripheral, BleError> {
+async fn scan_for_watch(adapter: &Adapter, timeout: Duration) -> Result<FoundWatch, BleError> {
     adapter
         .start_scan(ScanFilter {
             services: vec![WATCH_BLE_SERVICE_UUID],
@@ -449,8 +471,8 @@ async fn scan_for_watch(adapter: &Adapter, timeout: Duration) -> Result<Peripher
         loop {
             // Poll the already-known set first: a watch discovered before this
             // scan started emits no fresh event.
-            if let Some(peripheral) = first_matching(adapter).await? {
-                return Ok(peripheral);
+            if let Some(found) = first_matching(adapter).await? {
+                return Ok(found);
             }
             match tokio::time::timeout(SCAN_POLL_INTERVAL, events.next()).await {
                 Ok(Some(CentralEvent::DeviceDiscovered(_) | CentralEvent::DeviceUpdated(_))) => {}
@@ -471,16 +493,37 @@ async fn scan_for_watch(adapter: &Adapter, timeout: Duration) -> Result<Peripher
     }
 }
 
-async fn first_matching(adapter: &Adapter) -> Result<Option<Peripheral>, BleError> {
+/// A watch seen advertising, with what its advertisement says about it.
+struct FoundWatch {
+    peripheral: Peripheral,
+    /// The short id the watch puts in its scan response (see [`watch_tag`]).
+    tag: Option<String>,
+    /// Signal strength when last seen, in dBm.
+    rssi: Option<i16>,
+}
+
+/// The watch's stable short identity, from the service data it advertises under the watch
+/// service UUID: lowercase hex of the bytes. It tells watches apart in logs and the UI without
+/// needing a connection; it is a label, never a credential, and nothing trusts it.
+pub fn watch_tag(service_data: &std::collections::HashMap<Uuid, Vec<u8>>) -> Option<String> {
+    let bytes = service_data.get(&WATCH_BLE_SERVICE_UUID)?;
+    if bytes.is_empty() || bytes.len() > 8 {
+        return None;
+    }
+    Some(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+async fn first_matching(adapter: &Adapter) -> Result<Option<FoundWatch>, BleError> {
     for peripheral in adapter.peripherals().await.map_err(BleError::Adapter)? {
-        let advertises = peripheral
-            .properties()
-            .await
-            .ok()
-            .flatten()
-            .is_some_and(|properties| properties.services.contains(&WATCH_BLE_SERVICE_UUID));
-        if advertises {
-            return Ok(Some(peripheral));
+        let Some(properties) = peripheral.properties().await.ok().flatten() else {
+            continue;
+        };
+        if properties.services.contains(&WATCH_BLE_SERVICE_UUID) {
+            return Ok(Some(FoundWatch {
+                tag: watch_tag(&properties.service_data),
+                rssi: properties.rssi,
+                peripheral,
+            }));
         }
     }
     Ok(None)
@@ -620,5 +663,22 @@ mod tests {
             }
             assert!(index < 1000, "bound must trip long before this");
         }
+    }
+
+    #[test]
+    fn the_advertised_watch_tag_is_lowercase_hex_and_tolerant_of_odd_input() {
+        use std::collections::HashMap;
+        let mut data = HashMap::new();
+        assert_eq!(watch_tag(&data), None);
+        data.insert(WATCH_BLE_SERVICE_UUID, vec![0xa1, 0x0b, 0xc3, 0xd4]);
+        assert_eq!(watch_tag(&data).as_deref(), Some("a10bc3d4"));
+        data.insert(WATCH_BLE_SERVICE_UUID, vec![]);
+        assert_eq!(watch_tag(&data), None);
+        data.insert(WATCH_BLE_SERVICE_UUID, vec![0; 9]);
+        assert_eq!(watch_tag(&data), None);
+        // Data under some other UUID is not ours.
+        let mut other = HashMap::new();
+        other.insert(WATCH_BLE_COMMAND_UUID, vec![1, 2, 3, 4]);
+        assert_eq!(watch_tag(&other), None);
     }
 }

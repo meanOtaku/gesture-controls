@@ -46,6 +46,9 @@ pub struct LinkEnd {
 pub struct LinkDiagnostics {
     /// `bluetooth` or `wifi`, once a transport has been started.
     pub transport: Option<&'static str>,
+    /// The watch this link is about, as far as it is known: a Wi-Fi address, or a Bluetooth watch's
+    /// short id and signal strength.
+    pub peer: Option<String>,
     /// `idle`, `scanning`, `connecting`, `awaiting_trust`, `streaming`, `failed`.
     pub phase: &'static str,
     pub phase_detail: Option<String>,
@@ -130,6 +133,10 @@ impl LinkLog {
 
     pub fn transport(&self, transport: &'static str) {
         self.with(|inner| inner.data.transport = Some(transport));
+    }
+
+    pub fn peer(&self, peer: Option<String>) {
+        self.with(|inner| inner.data.peer = peer);
     }
 
     pub fn scan_started(&self) {

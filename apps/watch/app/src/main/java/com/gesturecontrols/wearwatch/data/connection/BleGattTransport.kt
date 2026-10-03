@@ -324,7 +324,13 @@ class BleGattTransport(
             .setIncludeDeviceName(false)
             .addServiceUuid(ParcelUuid(SERVICE_UUID))
             .build()
-        runCatching { leAdvertiser.startAdvertising(settings, data, advertiseCallback) }
+        // The scan response carries a short, stable label so a desktop can say which watch it
+        // found without connecting first (it fits: a 128-bit UUID plus 4 bytes is 22 of 31).
+        val scanResponse = AdvertiseData.Builder()
+            .setIncludeDeviceName(false)
+            .addServiceData(ParcelUuid(SERVICE_UUID), WatchTag.bytesFor(prefs.deviceId))
+            .build()
+        runCatching { leAdvertiser.startAdvertising(settings, data, scanResponse, advertiseCallback) }
             .onFailure { report(ConnectionState.FAILED, "Bluetooth advertising was refused") }
     }
 
@@ -466,7 +472,7 @@ class BleGattTransport(
 
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
-            LinkLog.add("advertising: waiting for a desktop to find this watch")
+            LinkLog.add("advertising as watch ${WatchTag.labelFor(prefs.deviceId)}: waiting for a desktop to find it")
         }
 
         override fun onStartFailure(errorCode: Int) {

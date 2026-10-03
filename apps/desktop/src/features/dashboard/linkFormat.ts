@@ -24,9 +24,10 @@ export function phaseHint(diagnostics: LinkDiagnostics): string | null {
     case "failed":
       return diagnostics.phaseDetail ?? "The last attempt failed; retrying.";
     case "listening":
-      return diagnostics.transport === "wifi"
-        ? "Open the Gesture Watch app on the same Wi-Fi network; it finds this computer automatically."
-        : null;
+      if (diagnostics.transport !== "wifi") return null;
+      return diagnostics.phaseDetail === "no watch seen on the network yet"
+        ? "No watch seen on this network yet. Open the Gesture Watch app on the same Wi-Fi network and choose Wi-Fi; this computer then asks it to connect."
+        : "This computer sees the watch and keeps asking it to connect. If it never does, open the Gesture Watch app and check it is on Wi-Fi.";
     default:
       return null;
   }

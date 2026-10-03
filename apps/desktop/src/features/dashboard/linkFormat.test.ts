@@ -3,7 +3,7 @@ import { endReasonLabel, formatAgo, formatDuration, formatMs, phaseHint, phaseLa
 import type { LinkDiagnostics } from "../../shared/protocol/events";
 
 const base: LinkDiagnostics = {
-  transport: "bluetooth", phase: "idle", phaseDetail: null, sessions: 0, drops: 0, scanAttempts: 0,
+  transport: "bluetooth", peer: null, phase: "idle", phaseDetail: null, sessions: 0, drops: 0, scanAttempts: 0,
   connectedSinceUnixMs: null, lastMessageUnixMs: null, lastEnd: null, messagesReceived: 0, invalidMessages: 0,
   outOfOrderMessages: 0, writes: 0, writeFailures: 0, writeLastMs: null, writeMaxMs: null, maxGapMs: null,
   mtu: null, retryInMs: null, events: [],
@@ -38,7 +38,9 @@ describe("link formatting", () => {
     expect(phaseHint({ ...base, phase: "awaiting_trust" })).toMatch(/Trust this computer/);
     expect(phaseHint({ ...base, phase: "scanning" })).toMatch(/Gesture Watch app/);
     expect(phaseHint({ ...base, phase: "failed", phaseDetail: "no watch found" })).toBe("no watch found");
-    expect(phaseHint({ ...base, phase: "listening", transport: "wifi" })).toMatch(/same Wi-Fi/);
+    expect(phaseHint({ ...base, phase: "listening", transport: "wifi", phaseDetail: "no watch seen on the network yet" })).toMatch(/No watch seen/);
+    expect(phaseHint({ ...base, phase: "listening", transport: "wifi", phaseDetail: "watch seen; asking it to connect" })).toMatch(/keeps asking/);
+    expect(phaseHint({ ...base, phase: "listening", transport: "bluetooth" })).toBeNull();
   });
 
   it("explains each way a session can end, and passes an unknown reason through", () => {

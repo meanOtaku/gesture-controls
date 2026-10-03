@@ -221,6 +221,7 @@ class DesktopDiscovery(
     }
 
     private fun emitStatus(status: String) {
+        LinkLog.add("wifi discovery: $status")
         synchronized(statusHistory) {
             if (statusHistory.size >= HISTORY_LIMIT) statusHistory.removeFirst()
             statusHistory.addLast(status)

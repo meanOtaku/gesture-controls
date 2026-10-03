@@ -108,6 +108,7 @@ class WatchPairingServer(
             return
         }
         val endpoint = "ws://${desktopAddress.hostAddress}:$DESKTOP_PORT$WATCH_PATH"
+        LinkLog.add("wifi: the desktop at ${desktopAddress.hostAddress} asked this watch to connect")
         writer.write("HTTP/1.1 202 Accepted\r\nConnection: close\r\n\r\n")
         writer.flush()
         onPairRequest(endpoint)

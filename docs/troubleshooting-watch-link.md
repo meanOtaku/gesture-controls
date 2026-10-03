@@ -37,7 +37,13 @@ details** panel. Start there; each entry below says what you will see and what i
 - **Long write latency and gaps in the data, with `Sony head tracker disconnected` repeating.**
   The Sony tracker searches for a headset that is not there, using the same radio. Start with
   `SONY_HEAD_TRACKER_PROVIDER=off` when the headset is not in use.
-- **Wi-Fi stuck on "Searching for desktop".** The watch's app may be frozen by the battery manager
+- **Wi-Fi: the watch says "Ready · waiting for the desktop to connect" and nothing happens.** The
+  watch is passive on Wi-Fi; the desktop must find it. Check the Link health events: `no watch seen on
+  the network yet` means the desktop cannot see the watch (different network, client isolation, or macOS
+  Local Network access); `did not answer the request to connect` means it sees the watch but its pairing
+  server is not responding (the app may be frozen). **Find desktop** on the watch searches from the
+  watch side instead.
+- **Wi-Fi stuck on "Searching for desktop" (older builds).** The watch's app may be frozen by the battery manager
   (its pairing port times out), or macOS is blocking local-network access for the app that launched
   the desktop (System Settings, Privacy & Security, Local Network). The Link health events show
   `watch found at ..., but its pairing server did not answer` when it is the former.

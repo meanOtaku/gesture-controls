@@ -15,13 +15,27 @@ After the listener starts, the desktop advertises a DNS-SD service as
 bound port. The Wear OS app browses and resolves this service with Android's
 `NsdManager`, then connects to the resolved `ws://HOST:PORT/ws/watch` endpoint.
 
-Discovery is bidirectional. While open, the Wear OS app also advertises a
-`_gesture-watch._tcp.local.` pairing service. The desktop browses that service,
-opens its local `/pair` endpoint, and the watch uses the request's source address
-to connect back to the desktop WebSocket automatically. This avoids typing either
-device's IP address. Both mechanisms remain local multicast only: the watch and
-desktop must share a Wi-Fi/LAN and client isolation, guest networks, VLAN
-boundaries, or multicast-blocking routers can prevent pairing.
+**The desktop does the looking; the watch only listens.** While the Wi-Fi transport is selected the
+watch advertises a `_gesture-watch._tcp.local.` pairing service and answers on it. The desktop
+browses for that service and keeps a table of the watches it has seen. Whenever no watch is
+attached it asks each one, every 4 seconds, to connect: it opens the watch's `/pair` endpoint, and
+the watch uses the request's source address to open the WebSocket back to the desktop. The
+retry is what makes a dropped connection recover: nothing new is announced on the network when a
+link drops, so a desktop that only reacted to announcements would wait forever. A watch that
+leaves the network (or whose app stops) is removed from the table when its service expires.
+
+The watch does not browse for the desktop on its own, since a continuous multicast browse is a
+steady battery cost for a job the desktop already does. Two fallbacks remain on the watch: it
+reconnects to the endpoint it last used, retrying with a backoff capped at 30 s and never giving up,
+and **Find desktop** runs the `_gesture-controls._tcp` search on demand. A connect request from the
+desktop replaces a retry in progress (the watch may be retrying an address the desktop no longer
+has) but never interrupts a live session.
+
+Everything is local multicast and LAN TCP: the watch and desktop must share a Wi-Fi network, and
+client isolation, guest networks, VLAN boundaries or multicast-blocking routers can prevent
+pairing. On macOS the app that launched the desktop also needs Local Network access.
+The Link health card shows which of these the desktop is doing (`no watch seen on the network yet`,
+`asked the watch at ADDRESS to connect; it accepted`, or `did not answer`).
 
 ## Watch messages
 

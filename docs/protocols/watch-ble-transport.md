@@ -142,6 +142,20 @@ as a working link.
 * Address privacy: a desktop with BLE random resolvable addresses may present a
   different address after re-pairing, which requires re-approval on the Watch.
 
+## Discovery
+
+The watch is passive: it advertises the watch service UUID and waits. The advertisement's scan
+response also carries a short, stable label under that UUID: the first 4 bytes of a SHA-256 of the
+install's device id, as 8 lowercase hex characters (`a1b2c3d4`). The desktop reads it when it
+finds the watch and says which one it found, with its signal strength, in the Link health card
+and event history (`found watch a1b2c3d4 (signal -52 dBm)`). It is a label for people and logs only;
+the id is hashed so it is never broadcast, and nothing is trusted because of it. The trust
+gate on the watch is what decides who may stream.
+
+The desktop does all of the connecting: it scans for the service UUID, connects, and waits for the
+watch's approval. After a session ends it rescans after 0.5 s (2 s after a failed attempt), and it
+keeps looking for a Bluetooth adapter if Bluetooth is off.
+
 ## Service Changed and the 30-second disconnect
 
 A bonded macOS central sends the watch a GATT **Service Changed indication** as soon

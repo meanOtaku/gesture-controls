@@ -355,7 +355,6 @@ class MainActivity : AppCompatActivity() {
         rootScroll.requestFocus()
         if (selectedTransport == WatchTransportKind.WIFI && !watchLink.state.value.isConnectionActive()) {
             sensorCollector.stop()
-            desktopDiscovery.start()
             pairingServer.start()
         }
     }
@@ -458,8 +457,15 @@ class MainActivity : AppCompatActivity() {
         watchLink.connect(transport)
     }
 
+    /**
+     * Wi-Fi is passive by default: the watch only advertises its pairing service and the desktop,
+     * which keeps looking, asks it to connect. The watch does not browse for the desktop (a
+     * continuous multicast browse is a steady battery cost for a job the desktop does anyway);
+     * "Find desktop" runs that search on demand as the fallback.
+     */
     private fun startWifiTransport() {
-        desktopDiscovery.start()
+        LinkLog.add("wifi: waiting for the desktop to ask this watch to connect")
+        discoveryStatusText.setText(R.string.discovery_passive)
         pairingServer.start()
         // Durable pairing fallback: reconnect to whatever we last used, right
         // away, so the watch doesn't sit idle waiting on a fresh mDNS
@@ -551,6 +557,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         connectionStatusText.text = "Looking for desktop…"
+        LinkLog.add("wifi: searching for the desktop (started by you)")
         desktopDiscovery.start()
         desktopDiscovery.refresh()
         pairingServer.start()
@@ -558,7 +565,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun connectDesktop(url: String, source: EndpointSource) {
         if (selectedTransport != WatchTransportKind.WIFI) return
-        if (watchLink.state.value.isConnectionActive()) return
+        // Only a live session is protected. A watch that is retrying (it never gives up now) may be
+        // retrying an address the desktop no longer has, so the desktop's request must be able to
+        // replace it; one for the address already being tried is not worth restarting.
+        val state = watchLink.state.value
+        if (state == ConnectionState.CONNECTED ||
+            (state == ConnectionState.CONNECTING && prefs.endpoint == url)
+        ) {
+            LinkLog.add("wifi: ignored a connect request from $url (already ${state.name.lowercase()})")
+            return
+        }
+        LinkLog.add("wifi: connecting to $url (${source.name.lowercase().replace('_', ' ')})")
         endpointSource = source
         renderEndpointSource()
         prefs.endpoint = url

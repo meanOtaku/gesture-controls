@@ -295,6 +295,8 @@ export interface LinkEnd {
 /** Mirrors `watch_bridge::LinkDiagnostics`. */
 export interface LinkDiagnostics {
   transport: "bluetooth" | "wifi" | null;
+  /** The watch this link is about: a Wi-Fi address, or `watch <id>` for a Bluetooth watch. */
+  peer: string | null;
   phase: LinkPhase;
   phaseDetail: string | null;
   sessions: number;

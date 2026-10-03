@@ -8,10 +8,11 @@
 
 pub mod ble;
 pub mod diagnostics;
+mod discovery;
 
 pub use diagnostics::{LinkDiagnostics, LinkEnd, LinkEvent};
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -57,7 +58,10 @@ const MDNS_INSTANCE_NAME: &str = "galaxy-watch-bridge";
 const MDNS_HOST_NAME: &str = "gesture-controls-desktop.local.";
 const MDNS_UNREGISTER_TIMEOUT: Duration = Duration::from_millis(500);
 const PAIRING_CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
-const PAIRING_RETRY_INTERVAL: Duration = Duration::from_secs(10);
+/// How often a known watch is asked to connect while none is attached.
+const PAIRING_RETRY_INTERVAL: Duration = Duration::from_secs(4);
+/// How often the discovery thread wakes to look at the roster when no mDNS event arrives.
+const PAIRING_TICK: Duration = Duration::from_secs(1);
 const TIME_SYNC_INTERVAL: Duration = Duration::from_secs(5);
 const CLOCK_OFFSET_SAMPLE_COUNT: usize = 5;
 const DEVICE_ALREADY_CONNECTED_CLOSE_CODE: u16 = 4409;
@@ -504,6 +508,9 @@ impl WatchBridgeServer {
         Ok(())
     }
 
+    /// Looks for watches' pairing services and keeps asking them to connect for as long as none
+    /// is attached. The watch only listens; making a connection happen is this side's job, so it
+    /// must keep trying after a drop, when nothing new is announced on the network.
     fn start_pairing_discovery(&self) -> Result<(), WatchBridgeError> {
         let daemon = ServiceDaemon::new().map_err(WatchBridgeError::MdnsDaemonFailed)?;
         let receiver = daemon
@@ -511,37 +518,65 @@ impl WatchBridgeServer {
             .map_err(WatchBridgeError::MdnsBrowseFailed)?;
         let shared = Arc::clone(&self.shared);
         let task = thread::spawn(move || {
-            let mut last_attempt: HashMap<SocketAddr, Instant> = HashMap::new();
-            while let Ok(event) = receiver.recv() {
-                let ServiceEvent::ServiceResolved(service) = event else {
-                    continue;
-                };
-                let Some(address) = service.get_addresses_v4().into_iter().min() else {
-                    continue;
-                };
-                let watch = SocketAddr::from((address, service.get_port()));
-                let now = Instant::now();
-                if last_attempt
-                    .get(&watch)
-                    .is_some_and(|previous| now.duration_since(*previous) < PAIRING_RETRY_INTERVAL)
-                {
+            let mut roster = discovery::WatchRoster::default();
+            loop {
+                match receiver.recv_timeout(PAIRING_TICK) {
+                    Ok(ServiceEvent::ServiceResolved(service)) => {
+                        if let Some(address) = service.get_addresses_v4().into_iter().min() {
+                            let watch = SocketAddr::from((address, service.get_port()));
+                            if roster.seen(service.get_fullname().to_string(), watch) {
+                                shared.link.event(
+                                    "info",
+                                    format!("watch found on the network at {watch}"),
+                                );
+                                shared.link.peer(Some(watch.to_string()));
+                            }
+                        }
+                    }
+                    Ok(ServiceEvent::ServiceRemoved(_, fullname)) => {
+                        if let Some(watch) = roster.removed(&fullname) {
+                            shared
+                                .link
+                                .event("info", format!("watch at {watch} left the network"));
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(_) if receiver.is_disconnected() => break,
+                    Err(_) => {}
+                }
+                // A watch is attached: nothing to ask for.
+                if shared.active.load(Ordering::Acquire) {
                     continue;
                 }
-                last_attempt.insert(watch, now);
-                match request_watch_pairing(watch) {
-                    Ok(()) => {
-                        info!(%watch, "requested watch pairing via mDNS discovery");
-                        shared.link.event(
-                            "info",
-                            format!("watch found at {watch}; pairing request accepted"),
-                        );
-                    }
-                    Err(error) => {
-                        warn!(%watch, %error, "watch pairing request failed");
-                        shared.link.event(
-                            "warn",
-                            format!("watch found at {watch}, but its pairing server did not answer: {error}"),
-                        );
+                shared.link.phase(
+                    "listening",
+                    Some(if roster.is_empty() {
+                        "no watch seen on the network yet".to_string()
+                    } else {
+                        "watch seen; asking it to connect".to_string()
+                    }),
+                );
+                let now = Instant::now();
+                for watch in roster.due(now, PAIRING_RETRY_INTERVAL) {
+                    let outcome = request_watch_pairing(watch);
+                    let change = roster.record(watch, now, outcome.is_ok());
+                    match (&outcome, change) {
+                        (Ok(()), discovery::AttemptChange::Same) => {}
+                        (Ok(()), _) => {
+                            info!(%watch, "asked the watch to connect");
+                            shared.link.event(
+                                "info",
+                                format!("asked the watch at {watch} to connect; it accepted"),
+                            );
+                        }
+                        (Err(_), discovery::AttemptChange::Same) => {}
+                        (Err(error), _) => {
+                            warn!(%watch, %error, "watch pairing request failed");
+                            shared.link.event(
+                                "warn",
+                                format!("the watch at {watch} did not answer the request to connect ({error}); will keep trying"),
+                            );
+                        }
                     }
                 }
             }
@@ -554,8 +589,6 @@ impl WatchBridgeServer {
         Ok(())
     }
 
-    /// Publishes this server under [`MDNS_SERVICE_TYPE`] so LAN clients can discover it
-    /// automatically. Only call once the listener is confirmed bound and serving.
     fn advertise(&self) -> Result<(), WatchBridgeError> {
         let daemon = ServiceDaemon::new().map_err(WatchBridgeError::MdnsDaemonFailed)?;
         let version = WATCH_PROTOCOL_VERSION.to_string();
@@ -833,6 +866,19 @@ async fn run_ble_transport(shared: Arc<SharedState>, cancel: Arc<BleCancel>) {
                 }
             }
         };
+        let sighting = match (link.watch_tag(), link.rssi()) {
+            (Some(tag), Some(rssi)) => format!("watch {tag} (signal {rssi} dBm)"),
+            (Some(tag), None) => format!("watch {tag}"),
+            (None, Some(rssi)) => {
+                format!("a watch (signal {rssi} dBm; its advertisement carries no id)")
+            }
+            (None, None) => "a watch".to_string(),
+        };
+        shared.link.event("info", format!("found {sighting}"));
+        shared.link.peer(Some(
+            link.watch_tag()
+                .map_or_else(|| "watch".to_string(), |tag| format!("watch {tag}")),
+        ));
         shared.set_ble_status(BleStatus::Connecting);
 
         // The watch's trust gate: until the user approves this desktop there,
