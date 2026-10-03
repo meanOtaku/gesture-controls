@@ -965,3 +965,77 @@ new timestamp/label-quality rule was added or duplicated.
       compile failure by qualifying `AdvertiseCallback` constants, and ran
       `./gradlew --no-daemon test assembleDebug` successfully (40 tasks).
 - [ ] Hardware validation on a real Galaxy Watch + BLE desktop still required.
+
+## GC-038 — Engineering-review remediation and documentation refresh
+
+Addresses the findings of the four engineering reviews in `.hermes/reviews/`
+(architecture baseline, sensor timing, data/model lifecycle, gesture-to-action
+safety). The per-finding status, with commits, is the canonical record:
+[`docs/review-remediation.md`](docs/review-remediation.md). Summary:
+
+**Actuation safety (M4)**
+
+- [x] D-M4-1/2/7: wrist volume writes throttled to 1 per 100 ms; the
+      "was this grab executed" bookkeeping and intent remap run under one policy
+      lock; the first orientation sample after a grab is velocity-checked.
+- [x] D-M4-3/4/5/6: overlay state lock no longer held across native volume calls
+      (writes order on their own lock); `show_overlay` requires the backend's
+      top-right target; `report_pinch_transition` removed; duplicate transition
+      timestamps rejected.
+- [x] R-M4-1/2/3/4/6/7: closed-channel loop ends; failed haptic keeps its slot;
+      overlay grabs have an owner; teardown bounded at 10 s; mode applied before
+      it is persisted, and a persisted `Live` is capped to `Monitor` at startup;
+      event name declared once with a drift test.
+- [ ] D-M4-7 remainder: the wrist reference pose has no freshness bound.
+
+**Sensor timing (M2)**
+
+- [x] D-1: `max_volume_points_per_second` is a real slew limit; the dead
+      smoothing control was removed (old `settings.json` still loads).
+- [x] D-2: PPG watermark cleared on disconnect.
+- [x] D-3: BLE device id derived from the discovered peripheral and stamped by the
+      desktop; Wi-Fi id is a unique persisted per-install value.
+- [x] D-4: the watch verifies the orientation sensor clock and rebases it onto
+      `elapsedRealtimeNanos` if it differs.
+- [~] R-M2-1: live orientation statistics now run over the samples that arrived in
+      the window (trainer-verified arithmetic); window membership still
+      approximates the offline row model.
+- [ ] D-5, D-6, D-7 and the remaining R-M2 risks are open.
+
+**Data and model lifecycle (M3)**
+
+- [x] D-M3-2/3/5/6, R-M3-11/12: save requests validated against their `raw.csv`;
+      a corrupt registry is an error, never an empty index; replay uses the
+      training label mapping; the desktop holds every bundle to the trainer's
+      contract (shared cross-language fixture); label pre-flight uses row labels.
+- [~] D-M3-1: a Timeline Capture CSV export now imports and trains; curation
+      status and interval boundaries from `annotations.json` still reach nothing.
+- [~] R-M3-1: each live PPG window's duration is checked against the bundle's
+      `window_ms` (Live refused on mismatch, Monitor allowed) and
+      `min_samples_per_window` is enforced; there is no sliding window live.
+- [ ] D-M3-4 (curation/editing unreachable), R-M3-2 (input hashes) and the other
+      R-M3 risks are open.
+
+**Documentation**
+
+- [x] New: `docs/architecture/components-and-deployment.md`,
+      `docs/architecture/safety-and-fail-closed-behavior.md`,
+      `docs/review-remediation.md`.
+- [x] Updated: `README.md` (default Bluetooth transport, full crate list, test
+      commands), `docs/README.md` (complete index), the user guide, running the
+      project, the BLE and WebSocket protocol docs, the Wi-Fi-vs-BLE decision (marked
+      superseded), the release-readiness checklist, both app `ARCHITECTURE.md`
+      files, the watch README, the trainer README, and a status note on the project
+      brief. Closes the documentation items F-3 to F-6 of the architecture review.
+
+**Verification and gaps**
+
+- [x] `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
+      `cargo test --workspace` (excluding the environment-sensitive
+      `native-head-tracking` `ffi_macos` smoke test), `npm test`, `npm run typecheck`,
+      the trainer's `pytest`, and the watch's `testDebugUnitTest` passed.
+- [ ] The trainer's and the watch's test suites are not run by CI (review G-1).
+- [ ] **No physical hardware validation.** Every "fixed" item above is covered by
+      automated tests only; the rows marked *(remediation)* in
+      `docs/release-readiness.md` are the real-device confirmations still required.
+

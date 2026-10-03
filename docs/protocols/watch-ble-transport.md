@@ -42,6 +42,40 @@ message layer is BLE-specific, so both transports share one decoder
 (`handle_inbound`) and one command encoder on the desktop, and one
 `WatchLinkManager` on the Watch.
 
+## Device identity
+
+Over BLE the **desktop** decides which device it is talking to. When the scan
+finds the watch, the desktop derives a device id from the discovered
+peripheral's platform identifier and stamps it onto every inbound envelope,
+**replacing** whatever `deviceId` the watch put there:
+
+| Desktop OS | Peripheral identifier | Resulting id (example) |
+|---|---|---|
+| macOS | CoreBluetooth UUID | `ble-5d3f2b1a-9c4e-4f10-8a6b-1234567890ab` |
+| Windows | Bluetooth address | `ble-aa-bb-cc-dd-ee-ff` |
+| Linux | BlueZ object path | `ble-org-bluez-hci0-dev-aa-bb-cc-dd-ee-ff` |
+
+The id is lowercased and reduced to `[a-z0-9-]`. It is stable for one physical
+watch on one desktop, differs between watches, and is what the desktop's
+per-device state (the PPG ordering watermark and the orientation/PPG fusion
+identity check) is keyed on. A watch therefore cannot choose or spoof its
+identity over BLE. The id is **not** portable across desktops: macOS in
+particular assigns each Mac its own identifier for the same watch.
+
+(Over the Wi-Fi transport there is no peripheral, so the desktop uses the
+watch's own `deviceId`, a unique per-install value; see the
+[WebSocket protocol](./watch-websocket-protocol.md).)
+
+## Time
+
+Every envelope's `timestampNs` is on the watch's
+`SystemClock.elapsedRealtimeNanos()` base. Orientation is built from
+`SensorEvent.timestamp`, which Android requires to share that base; the watch
+verifies this on each orientation event and rebases it if a device's sensor
+clock differs. The desktop still never judges freshness against a watch
+timestamp (it uses its own receive time), and a clock offset estimate from
+`watch.time_sync` is displayed but never applied to samples.
+
 ## Framing
 
 A GATT notification or write carries at most `MTU - 3` bytes — 20 with the
@@ -141,3 +175,13 @@ with a BLE adapter:
 5. Switching to Wi-Fi stops advertising and the GATT server; switching back
    stops mDNS, the pairing listener and the WebSocket. Both survive a restart.
 6. Reconnect after range loss, Bluetooth toggled off/on, and Watch app restart.
+7. The desktop's device id for the watch has the expected `ble-…` shape on each
+   desktop OS, is the same after a reconnect and a Watch app restart, and differs
+   for a second watch.
+8. On a Watch whose sensor clock is not on the `elapsedRealtimeNanos` base, the
+   one-time `SensorCollector` "rebasing orientation timestamps" log line appears;
+   on one that is, it never does. (Either outcome is evidence; it is currently
+   unknown which applies to the target hardware.)
+9. Default-settings Live session: the live PPG window duration shown in Model Lab
+   diagnostics (expected roughly 960 ms at the default 1 Hz flush) against the
+   model's trained window.

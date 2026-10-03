@@ -1,5 +1,29 @@
 # Project Brief: Spatial Gesture Control
 
+> **Status note.** This is the original design specification and milestone plan. It
+> has not been rewritten as the implementation evolved, so read it for intent and
+> rationale, and read the pages below for what exists now. The main places the
+> implementation differs:
+>
+> - **Watch transport.** The brief specifies a WebSocket over local Wi-Fi only. The
+>   default transport is now **Bluetooth LE** (the watch is the GATT peripheral, with
+>   an on-watch trust approval); Wi-Fi remains selectable. See
+>   [Watch BLE transport](../protocols/watch-ble-transport.md).
+> - **`deviceId`.** The `galaxy-watch-4` values in the message examples are
+>   illustrative. Over BLE the desktop assigns the id from the discovered
+>   peripheral; over Wi-Fi the watch sends a unique per-install id.
+> - **Head tracking.** On macOS and Windows the Sony provider runs in-process
+>   (`crates/native-head-tracking`); the "independent executable" described under
+>   System Architecture applies to Linux and to the external fallback.
+> - **Inference and gestures.** The desktop now runs the Off/Monitor/Live pipeline
+>   (fusion, features, LiteRT model, gesture policy) described in
+>   [Safety and fail-closed behavior](safety-and-fail-closed-behavior.md); wrist rotation
+>   uses an absolute angle-to-volume mapping with a rate cap rather than the
+>   smoothing described under Wrist Rotation.
+> - **Operational detail** (components, ports, on-disk state, packaging, CI):
+>   [Components and deployment](components-and-deployment.md).
+> - **Status of engineering review findings:** [Review remediation](../review-remediation.md).
+
 ## Project Goal
 
 Build a cross-platform desktop application that allows users to control laptop, desktop, or projector volume using:

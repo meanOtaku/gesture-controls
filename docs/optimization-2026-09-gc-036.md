@@ -7,7 +7,7 @@ processing. This document is the durable record of what was inspected, what
 changed, what was deliberately left alone and why, and what remains to
 measure. See also
 [`decisions/2026-09-24-wifi-vs-ble-transport.md`](decisions/2026-09-24-wifi-vs-ble-transport.md)
-for the Wi-Fi-vs-BLE record.
+for the Wi-Fi-vs-BLE record. *Update:* the BLE deferral recorded there was later superseded by GC-037; Bluetooth is now the default watch transport, so statements below that Wi-Fi is the only transport describe the tree at the time of this pass.
 
 Constraint honored throughout: uncommitted work already in progress at the
 start of this session (`apps/desktop/src-tauri/src/settings.rs`,

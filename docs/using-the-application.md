@@ -10,7 +10,7 @@ This guide explains how to set up and use the desktop application, what every ta
 
 - A supported desktop host. The packaged application is intended for macOS, Windows, and Linux; actual install/package validation is still a release gate.
 - Sony headset tracking when you want gaze calibration and the overlay. On macOS and Windows, `npm start` builds the tracking support directly into the desktop app (no separate process); on macOS grant it Input Monitoring on first launch, on Windows follow Sony Head Tracker's Repair Tracker instructions yourself if the sensor node is missing. Linux development can use the sample sender because the upstream tracker has no Linux hardware backend.
-- A Galaxy Watch for Watch IMU/PPG telemetry and gesture recording. The desktop and Watch must be on the same local network for discovery and streaming.
+- A Galaxy Watch for Watch IMU/PPG telemetry and gesture recording. The Watch connects over **Bluetooth LE by default** (the desktop needs a Bluetooth adapter, and you approve the desktop once on the Watch with **Trust this computer**), or over Wi-Fi, in which case both devices must be on the same non-isolated local network. Pick the transport in Settings; see the [Bluetooth transport](protocols/watch-ble-transport.md).
 - `uv` and a repository checkout only when using the current development-only training or replay workflow in Model Lab. The app's **Desktop readiness** panel will report missing requirements.
 
 ### Start a development checkout
@@ -35,7 +35,7 @@ For host prerequisites and tracker troubleshooting, see [Running the project](de
 
 1. Open **Model Lab** and review **Desktop readiness**. Use **Recheck** after installing a missing prerequisite.
 2. Confirm the required system-volume backend is reported as available before testing volume control.
-3. Connect the headset and, if used, the Watch. Keep inference **Off** until the model workflow below is complete.
+3. Connect the headset and, if used, the Watch. Keep inference **Off** until the model workflow below is complete. The inference mode is remembered between launches, but a remembered **Live** is always reduced to **Monitor** at startup: select Live again, deliberately, each session.
 4. Do not use Live mode with an unreviewed model or a production audio device.
 
 ## 2. Recommended first-use workflow
@@ -101,7 +101,8 @@ The overlay is deliberately non-focus-stealing. Keyboard volume controls only wo
 
 The **Watch** tab is the Watch connection and sensor-control dashboard.
 
-- Shows whether the Watch is connected and its connection/clock-synchronization state.
+- Shows whether the Watch is connected and its connection/clock-synchronization state. Over Bluetooth it also shows why nothing is streaming yet (scanning, awaiting approval on the Watch, Bluetooth off, and so on).
+- Identifies the Watch by the Bluetooth peripheral the desktop discovered (over Wi-Fi, by the Watch's own per-install id), so two Watches are never confused for one another.
 - Shows raw orientation and PPG status when those streams are available.
 - Shows available Samsung health-sensor telemetry, such as heart rate, skin temperature, or EDA, when supported by the device and permissions.
 - Provides immediate enable/disable controls for supported Watch sensor streams.
@@ -148,7 +149,7 @@ Two capture modes share this same Arming/timer behavior and the same immutable-r
 
 **Export review gate.** Pressing **Export Dataset CSV** with a buffered session first shows this same quality summary as a review dialog. A session with no quality warnings exports immediately from that dialog. A session with warnings requires an explicit **Export anyway** click; **Cancel** closes the dialog and leaves every buffered row and interval untouched. A session with no recording/quality summary available (nothing buffered yet) exports exactly as before, with no dialog.
 
-**Discard** removes the current in-memory session without saving or exporting it — nothing has been written to disk yet at that point, so nothing needs to be cleaned up. **Export Dataset CSV** writes the legacy single-label-per-file CSV format for compatibility with the current Model Lab importer. Preserve a mix of positive gestures and realistic background/negative activities; that is important for false-activation evaluation.
+**Discard** removes the current in-memory session without saving or exporting it — nothing has been written to disk yet at that point, so nothing needs to be cleaned up. **Export Dataset CSV** writes the dataset CSV the Model Lab importer reads: a Quick Capture session is one uniformly labeled file; a Timeline Capture session keeps each row's interval label, with the rows between intervals left unlabeled (the importer drops those). Only these per-row labels reach training; a recording's curation status and interval boundaries in `annotations.json` do not (see [Review remediation](review-remediation.md)). Preserve a mix of positive gestures and realistic background/negative activities; that is important for false-activation evaluation.
 
 **Pinch collection protocol.** A practical routine for capturing usable `pinch` intervals with Timeline Capture:
 
@@ -190,21 +191,23 @@ This panel displays the active model, current inference mode, and a bounded rece
 - **Monitor:** decisions and quality outcomes are visible, but desktop actions are not permitted.
 - **Live:** only a validated active model with complete safe bindings may issue approved safe intents.
 
-Use **Monitor** before **Live**. A stale input, quality rejection, malformed/out-of-order telemetry, runtime error, model swap, mode downgrade, or Watch disconnect force-releases and hides an active interaction.
+Use **Monitor** before **Live**. Each window's diagnostics line also says whether the live PPG window matches the window the model was trained on. A mismatch reads `window mismatch: live 960 ms vs trained 500 ms (Live is blocked)`. Monitor still classifies such a window so you can inspect it, but **Live refuses to start** (and refuses each mismatched window) until the two agree: set the Watch PPG flush rate so windows span about the trained length (roughly 2 Hz for a 500 ms model), or retrain with a matching `--window-ms`. A model's declared minimum samples per window is also enforced live.
+
+A Live selection is only accepted while the live window matches, and a remembered Live is reduced to Monitor when the app starts. A stale input, quality rejection, malformed/out-of-order telemetry, runtime error, model swap, mode downgrade, or Watch disconnect force-releases and hides an active interaction.
 
 #### Dataset and label coverage
 
-1. Import exported dataset CSV files.
+1. Import exported dataset CSV files (Quick Capture or Timeline Capture).
 2. Select the sessions to include in training.
-3. Review per-label coverage and the label catalogue.
+3. Review per-label coverage and the label catalogue, and give every label on the selected sessions a training role (target, negative, or exclude). A Timeline session contributes every label on its rows, so each of them needs a role.
 
 Labels have stable IDs, display metadata, roles, and archive state. Archiving is non-destructive: historical recordings and models retain their label meaning. Do not train a deployable gesture model until relevant positive and negative/background labels have useful coverage.
 
-##### Legacy CSV import and migration state
+##### CSV import and migration state
 
-The **Dataset** panel's importer accepts the legacy single-label-per-file CSV format exported by the labeled dataset recorder above. This importer is a compatibility path, not a converter: it is intentionally kept independent of the newer recording-bundle format (`raw.csv` / `recording.json` / `annotations.json`) used by Timeline Capture, and importing a CSV never reads, writes, or otherwise touches any recording bundle on disk. The two pipelines share only the label catalogue, so a label created in either place is recognized by the other.
+The **Dataset** panel's importer accepts the CSV exported by the labeled dataset recorder above, in either of its two shapes: a single-label session (with a `# label:` line, where every row must carry exactly that label) or a Timeline Capture export (empty `# label:` line, a label on each annotated row, blank labels between intervals, which are dropped on import). This importer is a compatibility path, not a converter: it is intentionally kept independent of the newer recording-bundle format (`raw.csv` / `recording.json` / `annotations.json`) used by Timeline Capture, and importing a CSV never reads, writes, or otherwise touches any recording bundle on disk. The two pipelines share only the label catalogue, so a label created in either place is recognized by the other.
 
-Import is all-or-nothing and recoverable: a CSV is written to the app's dataset store, and the session index is updated, only after the file has been fully validated (byte-size limit, a `# label:` metadata line, and a label that already exists in the catalogue). If any check fails, or if updating the index fails, nothing is left on disk — the failure is reported as the specific error (for example, "unknown label; create it in Model Lab before importing recordings") in the panel rather than a generic failure, so you can create the missing label or fix the file and simply retry the same import. A failed import never partially writes a session and never modifies any existing dataset, recording, or raw sensor file.
+Import is all-or-nothing and recoverable: a CSV is written to the app's dataset store, and the session index is updated, only after the file has been fully validated (byte-size limit, the exact header, consistent labels between the `# label:` line and the rows, and every label on the rows already existing in the catalogue). If any check fails, or if updating the index fails, nothing is left on disk — the failure is reported as the specific error (for example, "unknown label; create it in Model Lab before importing recordings") in the panel rather than a generic failure, so you can create the missing label or fix the file and simply retry the same import. A failed import never partially writes a session and never modifies any existing dataset, recording, or raw sensor file.
 
 Labels themselves migrate forward automatically and non-destructively: previously used label IDs and their display metadata keep working after an app update, and archiving a label only hides it from new selection — it never deletes or renumbers historical sessions that reference it.
 
@@ -228,12 +231,13 @@ Draft → Evaluated → Approved → Active → Archived
 - Use lifecycle controls to promote a reviewed model; only an **Approved** model can become active.
 - Configure every deployable class with one of the offered **safe intents**. Arbitrary shell or desktop commands are never available.
 - A TFLite model with complete bindings is required for activation.
-- The active model bundle, contract, digest, and binding snapshot are revalidated and immutable while active.
+- The active model bundle, contract, digest, and binding snapshot are revalidated and immutable while active. A bundle, whether trained here or imported from elsewhere, is held to the trainer's full contract: tensor shapes and dtypes, the exact preprocessing policy, window configuration, a passed conversion-parity record, training provenance with no session shared between train and test, and a SHA-256 of `model.tflite` recomputed from disk. An imported bundle missing any of these is rejected.
+- If the model registry file on disk is unreadable or corrupt, the app reports the error and **leaves the file untouched** rather than starting an empty registry; restore it from a backup or move it aside deliberately.
 - Use rollback to return to a previously approved model. Model swaps release an active interaction before the swap completes.
 
 #### Offline replay
 
-Replay runs a managed dataset against an approved or active validated TFLite bundle without operating gestures or volume. It produces bounded per-window outcomes and a summary. Use it to compare expected labels with predicted decisions before enabling Live mode.
+Replay runs a managed dataset against an approved or active validated TFLite bundle without operating gestures or volume. It resolves labels through the same label mapping the model was trained with, so a label trained as a target is scored as that target. A bundle without a recorded mapping (for example an imported one) uses the legacy vocabulary and rejects labels it does not cover instead of scoring them as negative. It produces bounded per-window outcomes and a summary. Use it to compare expected labels with predicted decisions before enabling Live mode.
 
 ### Settings
 
@@ -277,13 +281,21 @@ These controls preserve raw source timestamps. For health sensors, Samsung/devic
 
 With model inference Off, the supported Watch-button interaction can begin a volume grab after the gaze target is active. The desktop establishes a fresh wrist-orientation reference, then maps safe wrist rotation to bounded volume changes. Releasing the button ends the interaction.
 
+### One interaction at a time
+
+Each volume interaction has an owner: the Watch button, a model gesture, or the corner demo. A second source cannot take over or reset an interaction another source owns, and a source's normal end (button release, a model's release) only ends its own interaction. Escape, a Watch disconnect, leaving the gaze target, a model swap, and every safety rejection end any interaction regardless of owner.
+
+### How fast volume can change
+
+The volume follows the wrist angle but moves no faster than **Max volume rate** (30 points per second by default), the first wrist reading after a grab is checked against the reference pose like every later one, and wrist-driven changes reach the operating system at most about ten times per second. The overlay only appears while the desktop's own calibration shows you on the top-right target.
+
 ### Model-assisted gesture
 
 With a validated active TFLite model in Live mode, the desktop may begin or release only the intent explicitly bound to the model class. The model does not run on the Watch or headphones. The same desktop transaction is used for model and button initiation so a new interaction always gets a fresh rotation reference.
 
 ### Corner wrist volume (demo)
 
-An explicit, default-off opt-in in Settings. While enabled, dwelling on the calibrated top-right target begins the volume interaction directly — no STEM button press needed — using the same desktop transaction (fresh wrist-orientation reference, dead zone, smoothing, rate limiting, and native volume call) as the Watch-button and model-assisted paths. Clockwise twist raises volume; counter-clockwise lowers it. If your Watch's physical mounting reports the opposite handedness, use the demo's own **Invert twist direction** toggle — it only affects this demo interaction, never the Watch-button or model-assisted paths.
+An explicit, default-off opt-in in Settings. While enabled, dwelling on the calibrated top-right target begins the volume interaction directly — no STEM button press needed — using the same desktop transaction (fresh wrist-orientation reference, dead zone, velocity-outlier rejection, volume-rate cap, and native volume call) as the Watch-button and model-assisted paths. Clockwise twist raises volume; counter-clockwise lowers it. If your Watch's physical mounting reports the opposite handedness, use the demo's own **Invert twist direction** toggle — it only affects this demo interaction, never the Watch-button or model-assisted paths.
 
 The overlay shows a compact status while the demo is enabled: *Targeting…*, *Ready — twist wrist*, *Adjusting*, or an *Unavailable* reason (no live Watch orientation, or the native volume backend on this platform is unsupported).
 
@@ -303,8 +315,12 @@ Use the Desktop readiness screen to check the backend. Backend errors fail close
 
 | Symptom | What to do |
 | --- | --- |
-| Watch is not connected | Confirm both devices are on the same LAN, open the Watch app, check permissions, and use the Watch tab to confirm discovery/connection state. |
+| Watch is not connected | Check which transport is selected. **Bluetooth:** enable Bluetooth on both devices, bond them, then tap **Trust this computer** on the Watch when it shows the desktop's address; the Watch tab reports `awaiting approval` until you do. **Wi-Fi:** confirm both devices are on the same non-isolated LAN and the firewall allows port 8766. Open the Watch app, check permissions, and use the Watch tab to see the connection state. |
 | No PPG or health data | Verify Watch hardware support, permissions, sensor switches, contact quality, and any Samsung Health SDK status. The app will reject unusable data rather than guessing. |
+| Live will not start, or is blocked on every window | Open **Live inference diagnostics** and read the window line: a `window mismatch` means the live PPG window does not match the model's training window. Align the PPG flush rate or retrain with a matching window; Monitor still works meanwhile. |
+| Inference is on Monitor after a restart | By design: a remembered Live is reduced to Monitor at startup. Select Live again once you have checked Monitor. |
+| An error says the model registry is corrupt | The app refused to overwrite it. Restore `registry.json` from a backup, or move it aside to start an empty registry (the model bundles on disk are untouched). |
+| A Timeline CSV is rejected on import | Create any missing label first (the error names it), then retry. Rows with no label are dropped; a file with no labeled rows at all is rejected. |
 | Overlay does not appear | Recalibrate center and top-right, verify headset packets are arriving, then wait for the configured dwell. |
 | Volume does not change | Check Desktop readiness for the platform backend; use a test audio output; ensure the overlay is visible and an interaction is actively grabbed. |
 | Monitor/Live controls are disabled | Activate an Approved, validated TFLite bundle with complete safe intent bindings. LiteRT must also be included in the desktop build. |
@@ -322,4 +338,4 @@ Complete the applicable items in [Release-readiness acceptance checklist](releas
 - test the native volume backend on the target operating system;
 - test the produced package on a clean host.
 
-The current Watch LAN connection does not implement pairing-derived identity or authenticated sessions. That accepted risk is documented in the release checklist and is outside the present feature scope.
+The Watch's Bluetooth link adds OS bonding and an explicit on-Watch approval of the desktop, with the limits described in the [Bluetooth transport doc](protocols/watch-ble-transport.md) (Just Works bonding has no man-in-the-middle protection). The Wi-Fi link is plain `ws://` with no pairing-derived identity or authenticated session; that accepted risk is documented in the release checklist.

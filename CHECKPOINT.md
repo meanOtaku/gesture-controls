@@ -1,5 +1,16 @@
 # CHECKPOINT
 
+> **Latest state (GC-038, on `main`).** The engineering-review remediation and the
+> documentation refresh are the most recent work; start from
+> [`docs/review-remediation.md`](docs/review-remediation.md) and the GC-038 entry in
+> [`TASKS.md`](TASKS.md). Everything below is the **historical** GC-002/GC-003 record
+> from 2026-09-15 on `feature/litert-pinch-model` and is kept as written; where it
+> conflicts with the current docs (for example the claim that a custom bundle declares
+> `window_semantics` and a feature-contract `version`, or that the desktop crate cannot
+> be compiled locally), the current docs win. In particular, the desktop crate now
+> builds and tests locally (242 tests), and the bundle contract is the trainer's
+> `window_config`/`conversion_parity`/`training` contract validated on both sides.
+
 Last updated: 2026-09-15, on `feature/litert-pinch-model` (task GC-002).
 
 ## What this checkpoint covers

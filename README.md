@@ -1,6 +1,6 @@
 # Spatial Gesture Control
 
-A cross-platform Tauri 2 desktop coordinator for spatial controls using Sony headset orientation and, in later milestones, Samsung Galaxy Watch gestures.
+A cross-platform Tauri 2 desktop coordinator for spatial controls using Sony headset orientation and Samsung Galaxy Watch input (wrist rotation, stem button, and a trainable pinch model).
 
 The repository includes the desktop foundation, Sony JSON UDP input, head calibration, volume overlay, Galaxy Watch telemetry and wrist controls, dataset recording, and Model Lab training and deployment workflows. Platform volume adapters exist for macOS, Windows, and Linux; physical-device and release acceptance remain separate validation steps. On macOS and Windows, `npm start` runs the Sony head tracker in-process (see [`crates/native-head-tracking`](crates/native-head-tracking)); Linux still uses the background Sony Head Tracker CLI bridge, since upstream has no Linux hardware backend. The Tauri dashboard is the only tracker window on every platform.
 
@@ -85,7 +85,11 @@ the `bridge` argument to stream JSON without opening a second window.
 - Automatic knob display when the calibrated top-right target activates
 - Keyboard control of real macOS system output volume with arrow or +/- keys, clamped from 0–100%
 - Automatic recalibration prompt after Sony reference-frame resets
-- React, Rust, UDP integration, launcher, Python compatibility, and packaging tests
+- Galaxy Watch telemetry (IMU orientation, raw PPG, health sensors, stem button) over **Bluetooth LE by default**, or over a local-network WebSocket; haptic confirmation back to the watch
+- Wrist-rotation volume control with a Watch-button fallback: absolute angle-to-volume mapping, dead zone, velocity-outlier rejection, a volume-rate cap, and write throttling
+- Dataset recording (Quick and Timeline Capture), a Model Lab for training and evaluating a pinch classifier (scikit-learn baseline or deployable TFLite), a model lifecycle with safe intent bindings, offline replay, and Off/Monitor/Live desktop inference
+- Fail-closed safety behavior throughout; see [Safety and fail-closed behavior](docs/architecture/safety-and-fail-closed-behavior.md)
+- React, Rust, UDP integration, launcher, Python trainer, Kotlin watch, and packaging tests
 
 ## Architecture
 
@@ -105,8 +109,26 @@ interaction-engine calibration + dwell detection
 Tauri event bridge ──► React dashboard + dedicated volume overlay
     │
     ▼
-volume-control trait ──► macOS AppleScript system-volume adapter
+volume-control trait ──► native system-volume adapter (macOS / Windows / Linux)
 ```
+
+The Galaxy Watch and the model pipeline join at the desktop backend:
+
+```text
+Galaxy Watch ──BLE (default) or Wi-Fi WebSocket──► watch-bridge
+    │ orientation · PPG · button                      │ decode, sequence, device identity
+    ▼                                                 ▼
+                          pinch-inference: fuse ► features ► model (LiteRT)
+                                                      │ transition
+                                                      ▼
+                          interaction-engine gesture policy (Off / Monitor / Live)
+                                                      │ decision
+                                                      ▼
+                              overlay grab / release ► volume-control
+```
+
+For what runs where, ports, on-disk state, packaging and CI, see
+[Components and deployment](docs/architecture/components-and-deployment.md).
 
 On macOS and Windows, `crates/native-head-tracking` replaces the first two
 stages above: IOKit/IOBluetooth (macOS) or HID/SetupAPI (Windows) samples are
@@ -117,25 +139,39 @@ immediately into a generic `HeadPose` either way, so calibration does not
 depend on Sony packet structures.
 
 ```text
-apps/desktop/              React frontend + Tauri application
-crates/protocol/           Sony wire types and generic pose domain types
+apps/desktop/              React frontend + Tauri application (src-tauri/ is the Rust backend)
+apps/watch/                Wear OS (Galaxy Watch) client: Kotlin, standalone Gradle project
+crates/protocol/           Sony wire types, watch message types, and generic pose domain types
 crates/head-tracking/      Provider abstraction and strict UDP listener
-crates/interaction-engine/ Quaternion calibration and target dwell state
-crates/pinch-inference/    Desktop-side pinch feature extraction and LiteRT inference
-crates/volume-control/      Normalized controller trait and macOS adapter
-crates/watch-bridge/        Local-network Galaxy Watch WebSocket intake
+crates/interaction-engine/ Quaternion calibration, target dwell, wrist-rotation mapper, gesture policy
+crates/pinch-inference/    Telemetry fusion, feature extraction, model trait, and LiteRT inference
+crates/volume-control/     Normalized controller trait; macOS, Windows, and Linux adapters
+crates/watch-bridge/       Galaxy Watch transports: Bluetooth LE central and Wi-Fi WebSocket server
 crates/native-head-tracking/ In-process macOS/Windows Sony provider (IOKit/IOBluetooth or HID/SetupAPI FFI + conversion)
-scripts/run-system.mjs     one-command external-process orchestrator (Linux tracker, or macOS/Windows external fallback)
-tools/sony-head-tracker/   compatibility tests, sample sender, and reference work
+scripts/                   run-system.mjs launcher, LiteRT packaging, config checks
+tools/pinch-classifier/    Python training, export, and offline replay (development workflow, not shipped)
+tools/sony-head-tracker/   compatibility tests, sample sender, committed upstream prebuilds
+third_party/               vendored Sony head-tracker engine sources and notices
+vendor/                    vendored Samsung Health Sensor SDK (watch app)
+docs/                      user guide, architecture, protocols, decisions, release checklist
 ```
 
-The desktop listens for one Galaxy Watch client at `ws://DESKTOP_IP:8766/ws/watch`.
-The desktop and watch automatically discover each other with local mDNS/DNS-SD;
-the desktop can request the watch to connect without either device typing an IP.
-It publishes connection, IMU, heartbeat, and clock-synchronization status in the
-dashboard. The versioned message contract is documented in
-[`docs/protocols/watch-websocket-protocol.md`](docs/protocols/watch-websocket-protocol.md). The Wear OS
-client that implements this protocol lives in
+The desktop serves one Galaxy Watch at a time over one of two transports, chosen
+in Settings:
+
+- **Bluetooth LE (the default).** The watch is the GATT peripheral and the desktop
+  scans for its service, connects, and subscribes. The watch holds an explicit
+  "Trust this computer" gate, so nothing streams until you approve the desktop on
+  the watch. See [`docs/protocols/watch-ble-transport.md`](docs/protocols/watch-ble-transport.md).
+- **Wi-Fi.** The desktop listens at `ws://DESKTOP_IP:8766/ws/watch` and the watch
+  finds it with local mDNS/DNS-SD; the desktop can also ask the watch to connect
+  without either device typing an IP. Plain `ws://`, trusted LAN only.
+
+Both carry the same versioned JSON messages, documented in
+[`docs/protocols/watch-websocket-protocol.md`](docs/protocols/watch-websocket-protocol.md).
+Over Bluetooth the desktop identifies the watch from the peripheral it discovered
+rather than from anything the watch claims. The dashboard publishes connection, IMU,
+heartbeat, and clock-synchronization status. The Wear OS client lives in
 [`apps/watch/`](apps/watch/README.md), a standalone Gradle project.
 
 ## Platform notes
@@ -195,11 +231,28 @@ python3 tools/sony-head-tracker/scripts/send_sample.py
 npm test
 npm run typecheck
 npm run build
-cargo test -p spatial-protocol -p head-tracking -p interaction-engine -p volume-control -p pinch-inference -p watch-bridge --all-targets
-cargo clippy -p spatial-protocol -p head-tracking -p interaction-engine -p volume-control -p pinch-inference -p watch-bridge --all-targets -- -D warnings
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+(cd tools/pinch-classifier && uv run --with pytest pytest tests -q)
+(cd apps/watch && ./gradlew :app:testDebugUnitTest)
 ```
 
+The Python trainer and the watch's Gradle unit tests are not run by CI yet; run
+them locally. `native-head-tracking`'s `ffi_macos` smoke test touches the macOS
+Bluetooth stack and can abort on a developer machine; CI runs it on a dedicated
+`macos-14` job.
+
 For complete prerequisites, troubleshooting, build commands, and launcher details, see [`docs/development/running-project.md`](docs/development/running-project.md).
+
+## Documentation
+
+Start at [`docs/README.md`](docs/README.md). The most useful entry points:
+[using the application](docs/using-the-application.md),
+[components and deployment](docs/architecture/components-and-deployment.md),
+[safety and fail-closed behavior](docs/architecture/safety-and-fail-closed-behavior.md),
+the [release-readiness checklist](docs/release-readiness.md), and the status of the
+engineering review findings in [`docs/review-remediation.md`](docs/review-remediation.md).
 
 ## Security and provenance
 

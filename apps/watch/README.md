@@ -3,14 +3,17 @@
 Standalone Gradle/Kotlin Wear OS app that implements the watch side of
 [`docs/protocols/watch-websocket-protocol.md`](../../docs/protocols/watch-websocket-protocol.md). It streams
 `TYPE_ROTATION_VECTOR` (as a quaternion) plus accelerometer and gyroscope readings to
-the desktop's `ws://DESKTOP_IP:8766/ws/watch` endpoint, answers `desktop.time_sync`
-immediately, and sends `watch.heartbeat` once a second. On a **Galaxy Watch 4 or
+the desktop, answers `desktop.time_sync` immediately, and sends `watch.heartbeat` once a
+second. It reaches the desktop over **Bluetooth LE by default** (the watch is the GATT
+peripheral; see [`docs/protocols/watch-ble-transport.md`](../../docs/protocols/watch-ble-transport.md))
+or over a local-network WebSocket at `ws://DESKTOP_IP:8766/ws/watch`, selected on the watch
+and in desktop Settings. Both carry the same messages. On a **Galaxy Watch 4 or
 later running Samsung Wear OS**, it also streams raw green/red/IR PPG via the
 [Samsung Health Sensor SDK](../../vendor/samsung-health-sensor-sdk/1.4.1) — see [Raw PPG](#raw-ppg-galaxy-watch-4-samsung-wear-os-only) below.
 
 This module is self-contained: it does not depend on, and is not referenced by,
-`apps/desktop` or the Rust crates. The desktop only ever sees the WebSocket wire
-protocol.
+`apps/desktop` or the Rust crates. The desktop only ever sees the wire protocol, over
+whichever transport is selected.
 
 ## Project layout
 
@@ -18,24 +21,44 @@ protocol.
 apps/watch/
 ├── settings.gradle.kts
 ├── build.gradle.kts
-├── app/
-│   ├── build.gradle.kts
-│   └── src/main/
-│       ├── AndroidManifest.xml
-│       ├── java/com/gesturecontrols/wearwatch/
-│       │   ├── MainActivity.kt        UI, lifecycle, wiring
-│       │   ├── WatchLinkManager.kt    OkHttp WebSocket, sequencing, heartbeat, reconnect, PPG batching
-│       │   ├── SensorCollector.kt     SensorManager (rotation vector, accel, gyro)
-│       │   ├── PpgCollector.kt        Samsung Health Sensor SDK PPG_CONTINUOUS lifecycle
-│       │   ├── WatchProtocol.kt       v1 envelope encode/decode (org.json)
-│       │   ├── ConnectionPrefs.kt     SharedPreferences endpoint persistence
-│       │   └── WatchPairingServer.kt  Desktop-initiated LAN pairing callback
-│       └── res/                       layout, strings, theme
+└── app/
+    ├── build.gradle.kts
+    └── src/
+        ├── main/
+        │   ├── AndroidManifest.xml
+        │   ├── res/                                layout, strings, theme
+        │   └── java/com/gesturecontrols/wearwatch/
+        │       ├── app/MainActivity.kt             UI, lifecycle, wiring, transport switching
+        │       ├── data/
+        │       │   ├── connection/
+        │       │   │   ├── WatchLinkManager.kt     sequencing, heartbeat, PPG/medical batching; transport-agnostic
+        │       │   │   ├── WatchTransportLink.kt   the seam both transports implement
+        │       │   │   ├── BleGattTransport.kt     Bluetooth LE GATT server, trust gate (default transport)
+        │       │   │   ├── BleFraming.kt           fragmentation/reassembly shared with the desktop
+        │       │   │   ├── WebSocketTransport.kt   OkHttp WebSocket (Wi-Fi transport)
+        │       │   │   └── WatchProtocol.kt        v1 envelope encode/decode (org.json)
+        │       │   ├── discovery/                  mDNS desktop discovery and pairing callback (Wi-Fi)
+        │       │   └── preferences/ConnectionPrefs.kt  transport, endpoint, trusted desktop, install device id
+        │       ├── feature/
+        │       │   ├── motion/                     SensorCollector, SensorClockRebaser, sensor protocol
+        │       │   └── health/                     PpgCollector and the medical/health trackers
+        │       └── platform/service/               foreground service and wake lock
+        └── test/                                   JVM unit tests (BLE framing, transport default, clock rebaser, device id)
 ```
 
 ## What it implements
 
-- **Desktop discovery**: the app uses Android `NsdManager` to browse the desktop's
+- **Transport selection**: the watch screen has a Bluetooth/Wi-Fi switch, persisted in
+  `ConnectionPrefs` and mirrored in desktop Settings. Exactly one transport is live at a
+  time, and a failing Bluetooth transport never silently falls back to Wi-Fi. A fresh
+  install, and any install that predates the switch, starts on Bluetooth.
+- **Bluetooth transport** (`BleGattTransport`): advertises the gesture service, notifies
+  fragmented envelopes, and accepts desktop commands as write-with-response. Both
+  characteristics require an encrypted (bonded) link, and nothing is sent until you tap
+  **Trust this computer** on the watch for the desktop's address (**Forget trusted
+  computer** revokes it). Requires the `BLUETOOTH_ADVERTISE` and `BLUETOOTH_CONNECT`
+  runtime permissions on API 31+.
+- **Wi-Fi discovery** (used by the Wi-Fi transport only): the app uses Android `NsdManager` to browse the desktop's
   `_gesture-controls._tcp.local.` mDNS/DNS-SD advertisement, resolves its current
   host and port, persists the endpoint, and begins streaming automatically. Discovery
   is gated by Wi-Fi: a `ConnectivityManager.NetworkCallback` starts the NSD scan only
@@ -58,8 +81,16 @@ apps/watch/
   `TYPE_LINEAR_ACCELERATION` (falling back to `TYPE_ACCELEROMETER`), and
   `TYPE_GYROSCOPE` at `SENSOR_DELAY_GAME`. Accelerometer and gyro vectors are
   low-pass filtered and omitted when stale, then paired with each rotation-vector
-  sample using the sensor event timestamp.
-- **WatchLinkManager**: owns the single OkHttp `WebSocket`. Maintains one
+  sample using the sensor event timestamp. The orientation message's envelope
+  timestamp is put on the `SystemClock.elapsedRealtimeNanos()` base every other
+  message uses: `SensorClockRebaser` checks each event and rebases it only if a
+  device's sensor clock turns out to differ (logging once when it does).
+- **Device identity**: every envelope carries a `deviceId`. Over Wi-Fi it is a unique
+  `watch-<uuid>` generated once per install and persisted (`ConnectionPrefs.deviceId`);
+  over Bluetooth the desktop ignores it and identifies the watch from the Bluetooth
+  peripheral it discovered. `WatchProtocol.DEVICE_ID` is only a pre-initialization fallback.
+- **WatchLinkManager**: owns the single transport link (a `WatchTransportLink`:
+  the GATT server or the OkHttp `WebSocket`). Maintains one
   connection-wide, strictly increasing `sequence` counter shared by every outbound
   message type (orientation, heartbeat, time sync) — the desktop bridge tracks a
   single `last_sequence` per connection, not one per message type. Sends
@@ -99,11 +130,19 @@ For a command-line build, run `./gradlew :app:assembleDebug` on macOS/Linux or
 
 ## Deploying to a Galaxy Watch 4
 
-### 1. Put the watch and your desktop on the same Wi-Fi network
+### 1. Choose a transport and prepare the network or radio
 
-The watch connects to the desktop over plain LAN WebSocket (`ws://`, not `wss://`),
-so both devices must be reachable on the same local network/subnet. Watch-only
-cellular or a guest network that isolates clients from each other will not work.
+**Bluetooth (default):** nothing to configure on the network. The desktop needs a
+Bluetooth adapter, and the watch needs the Bluetooth runtime permissions granted when
+the app first asks.
+
+**Wi-Fi:** the watch connects to the desktop over plain LAN WebSocket (`ws://`, not
+`wss://`), so both devices must be reachable on the same local network/subnet.
+Watch-only cellular or a guest network that isolates clients from each other will not
+work. The Wi-Fi-specific steps below (mDNS pairing, firewall) apply only to this transport.
+
+(Adb debugging over Wi-Fi, in step 2, only needs the watch and your computer on a
+network while you install the app; it is independent of the transport the app uses.)
 
 ### 2. Enable Developer Options and Wi-Fi debugging on the watch
 
@@ -131,14 +170,19 @@ With the watch selected as the deployment target (it should now appear in Androi
 Studio's device dropdown), click **Run ▶**. Android Studio builds the APK, installs
 it, and launches `MainActivity` on the watch.
 
-### 5. Start the desktop app
+### 5. Start the desktop app (and, for Bluetooth, approve it on the watch)
 
-Start the desktop app (`npm start` from the repo root). Its watch bridge listens on
+For **Bluetooth**: start the desktop app, bond the devices when prompted, and when the
+watch shows the desktop's address tap **Trust this computer**. Until you do, the desktop
+shows *awaiting approval* and no telemetry flows. The approval is remembered, so later
+reconnects are silent.
+
+For **Wi-Fi**: start the desktop app (`npm start` from the repo root). Its watch bridge listens on
 `0.0.0.0:8766` and advertises itself as `_gesture-controls._tcp.local.`. With both
 devices on the same Wi-Fi/LAN, the watch finds the service, resolves its current IP,
 and starts streaming automatically.
 
-### 6. Confirm automatic pairing
+### 6. Confirm automatic pairing (Wi-Fi transport)
 
 Open the watch app and desktop app while they share the same Wi-Fi/LAN. No IP entry
 is required: the watch browses the desktop's `_gesture-controls._tcp.local.` service,
@@ -242,22 +286,25 @@ dependency in `app/build.gradle.kts`, not published to any repository). This is
 
 ## Limitations
 
-- **One watch at a time**: the desktop bridge accepts a single connection; a second
-  watch (or a second launch of this app pointed at the same desktop) is rejected with
-  close code `4409`.
+- **One watch at a time**: the desktop bridge accepts a single connection on either
+  transport; over Wi-Fi a second watch (or a second launch of this app pointed at the
+  same desktop) is rejected with close code `4409`, and over Bluetooth a second central
+  is dropped.
 - **No companion phone pairing / Wearable Data Layer API**: the app talks directly to
-  the desktop over Wi-Fi. If the watch has no Wi-Fi (Bluetooth-only companion mode),
-  it cannot reach the desktop.
-- **Plain `ws://`, LAN-only**: there is no TLS and no authentication. This is
-  appropriate for a trusted local network only; do not expose port 8766 beyond your
-  LAN.
+  the desktop, over Bluetooth LE (default) or Wi-Fi, never through a phone.
+- **Plain `ws://`, LAN-only (Wi-Fi transport)**: there is no TLS and no authentication.
+  This is appropriate for a trusted local network only; do not expose port 8766 beyond
+  your LAN. The Bluetooth transport instead relies on OS bonding plus the explicit
+  on-watch trust approval; Just Works bonding has no man-in-the-middle protection (see
+  the [BLE transport doc](../../docs/protocols/watch-ble-transport.md#known-limitations)).
 - **mDNS is local-only**: automatic discovery requires the watch and desktop to share
   a Wi-Fi/LAN multicast domain. It does not cross guest networks, client-isolated
   SSIDs, most VLANs/subnets, or the internet.
-- **Button grab only**: Milestone 7 maps the Wear OS `STEM_1` hardware key to a
-  press-and-hold volume-overlay grab after the desktop has shown that overlay. It
-  does not intercept Back, Home, or Power. Wrist-rotation volume control and
-  on-device pinch inference remain later milestones.
+- **Button grab and desktop-side inference only**: the Wear OS `STEM_1` hardware key is a
+  press-and-hold volume-overlay grab after the desktop has shown that overlay; it does
+  not intercept Back, Home, or Power. Wrist-rotation volume control runs on the desktop
+  from the streamed orientation, and pinch inference runs on the **desktop** too: the
+  watch never classifies anything on-device.
 - **Raw PPG is hardware-gated**: only Galaxy Watch 4+ on Samsung Wear OS exposes
   `PPG_CONTINUOUS`; other watches run normally with `PpgState.UNAVAILABLE` and no
   PPG data in `watch.ppg_batch`.
@@ -269,3 +316,16 @@ dependency in `app/build.gradle.kts`, not published to any repository). This is
   and partial wake lock while connected, so it continues after the display sleeps.
   Disconnect when not using gesture input. System battery restrictions can still stop
   the service under severe memory or power pressure.
+
+## Tests
+
+JVM unit tests (BLE framing byte-compatibility with the desktop, the transport-preference
+default and migration, the orientation clock rebaser, and the per-install device id) run with:
+
+```bash
+./gradlew :app:testDebugUnitTest
+```
+
+from this directory. They need the Android SDK path in `local.properties`; the first run
+downloads the declared test dependencies. They are not run by CI yet, so run them before
+changing the BLE framing, the clock handling, or the device id.

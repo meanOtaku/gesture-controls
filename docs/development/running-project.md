@@ -20,6 +20,11 @@ sections 3 and 4 below.
 Repository:
 https://github.com/meanOtaku/gesture-controls
 
+This document covers running the desktop application and the Sony tracker. For
+the Galaxy Watch app (building the APK, deploying over adb, Bluetooth approval,
+Wi-Fi pairing) see apps/watch/README.md; for what runs where and how it is
+packaged see docs/architecture/components-and-deployment.md.
+
 
 1. COMMON REQUIREMENTS
 ----------------------
@@ -27,7 +32,7 @@ https://github.com/meanOtaku/gesture-controls
 All systems require:
 
 - Git
-- Node.js 20 or newer; Node.js 22 LTS is recommended
+- Node.js 22.12 or newer in the Node 22 release line (see `.nvmrc`)
 - npm
 - Current stable Rust installed through rustup
 - Tauri 2 prerequisites for the host OS
@@ -267,6 +272,10 @@ Frontend preview does not start Rust, UDP, Tauri IPC, or Sony Head Tracker.
 7. TESTS AND QUALITY CHECKS
 ---------------------------
 
+Run the suites that match what you changed; this section lists every suite in the
+repository. A passing CI package build is packaging evidence only, not an install
+test or a physical-device test (see docs/release-readiness.md).
+
 Frontend, launcher, icon, and resource tests:
 
   npm test
@@ -280,23 +289,52 @@ TypeScript and frontend production build:
   npm run typecheck
   npm run build
 
-Rust protocol and UDP provider tests:
-
-  cargo test -p spatial-protocol -p head-tracking --all-targets
-
-Rust formatting and linting:
+Rust formatting, linting, and tests for the whole workspace:
 
   cargo fmt --all -- --check
-  cargo clippy -p spatial-protocol -p head-tracking \
-    --all-targets --all-features -- -D warnings
+  cargo clippy --workspace --all-targets -- -D warnings
+  cargo test --workspace
 
-Python compatibility tests:
+The desktop crate (`spatial-gesture-desktop`) needs the Tauri host prerequisites
+from section 5 to compile. `native-head-tracking`'s `ffi_macos` smoke test touches
+the macOS Bluetooth stack and can abort on a developer machine; CI runs it on a
+dedicated macOS job, so exclude it locally if it does:
+
+  cargo test --workspace --exclude native-head-tracking
+
+Sony tracker compatibility tests (Python):
 
   uv run --directory tools/sony-head-tracker --with pytest pytest -q
 
-Continuous integration runs the JavaScript tests, typecheck, frontend build,
-Rust formatting, and platform-independent Rust tests in the `quality` job on
-Ubuntu. Dedicated `native-head-tracking-macos` (`macos-14`) and
+Pinch trainer and replay tests (Python; the TensorFlow conversion tests skip
+unless the optional `tensorflow` extra is installed):
+
+  cd tools/pinch-classifier
+  uv run --with pytest pytest tests -q
+
+Galaxy Watch (Kotlin) JVM unit tests. These need the Android SDK path in
+`apps/watch/local.properties` and the committed Gradle wrapper; the first run
+downloads the declared test dependencies:
+
+  cd apps/watch
+  ./gradlew :app:testDebugUnitTest
+
+Build the watch APK (deploy it over adb as described in `apps/watch/README.md`):
+
+  cd apps/watch
+  ./gradlew :app:assembleDebug
+
+Two GitHub Actions workflows run on every push to `main` and every pull request.
+`Desktop CI` (`.github/workflows/desktop-ci.yml`) runs the JavaScript tests,
+typecheck, frontend build, `cargo fmt`, workspace `clippy`, and the Rust tests
+(including `watch-bridge` and the desktop crate) on Ubuntu, macOS 14, and Windows
+2022; a LiteRT-feature test job for `pinch-inference`; and a package build per OS.
+`CI` (`.github/workflows/ci.yml`) is described next. **Neither workflow runs the
+pinch-classifier tests or the watch's Gradle unit tests**; run them locally before
+changing the bundle contract, the BLE framing, or the watch's clock/identity code.
+
+The `CI` workflow runs the JavaScript tests, typecheck, frontend build, Rust
+formatting, and platform-independent Rust tests in the `quality` job on Ubuntu. Dedicated `native-head-tracking-macos` (`macos-14`) and
 `native-head-tracking-windows` (`windows-2022`) jobs build and link the real
 native providers (`crates/native-head-tracking` against the vendored
 `third_party/sony-head-tracker` sources) and run their no-hardware FFI smoke

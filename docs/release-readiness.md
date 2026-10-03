@@ -9,7 +9,12 @@ OS/architecture, device model/firmware, and outcome for every applicable row.
 
 - [ ] The working tree is the release candidate commit and `npm ci` completed.
 - [ ] `npm test`, `npm run typecheck`, `npm run build`, `cargo fmt --all -- --check`,
-  and `cargo test -p spatial-protocol -p head-tracking -p interaction-engine -p volume-control --all-targets` pass.
+  `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace`
+  pass. Also run the two suites CI does not: the trainer
+  (`cd tools/pinch-classifier && uv run --with pytest pytest tests -q`) and the
+  watch (`cd apps/watch && ./gradlew :app:testDebugUnitTest`). If
+  `native-head-tracking`'s `ffi_macos` smoke test aborts locally, confirm the
+  `macos-14` CI job passes it instead.
 - [ ] Run the platform bundle command, `npm run tauri -- build`, on every release
   platform. CI's packaging matrix exercises Ubuntu x64, macOS ARM64-host, and Windows
   x64 tooling; it is not a signed-release, cross-architecture, or install test.
@@ -21,6 +26,13 @@ OS/architecture, device model/firmware, and outcome for every applicable row.
   The default build deliberately fails inference closed.
 - [ ] Use an isolated test audio output and a test dataset. Do not enable Live on an
   unreviewed model or a production presentation/audio device.
+
+**Status update (engineering-review remediation):** the findings in
+`.hermes/reviews/` were addressed in code with automated tests; see
+[Review remediation](review-remediation.md) for each finding's status. That work
+changed behavior this checklist must now confirm on real hardware: the rows marked
+*(remediation)* below. None of them has been exercised on a physical watch,
+headset or audio backend.
 
 **Status of this checklist as of GC-004:** GC-004 supplies source/configuration
 for intentional feature-enabled LiteRT packaging, but no native runtime was
@@ -52,11 +64,24 @@ unexecuted and are not being claimed as passed.
 
 ## Watch raw-telemetry and quality gate
 
-- [ ] Install the Watch app on a supported Galaxy Watch, place it and the desktop on
-  the same non-isolated Wi-Fi/LAN, grant the documented permissions, and start the
-  desktop app.
-- [ ] Confirm mDNS pairing reaches **Connected** and the Watch connection card shows
-  increasing sequence numbers, heartbeat, clock synchronization, and raw IMU data.
+- [ ] **Bluetooth (default):** install the Watch app on a supported Galaxy Watch, grant
+  the Bluetooth and sensor permissions, start the desktop app, bond the devices, and
+  approve the desktop with **Trust this computer** on the Watch. Confirm the Watch tab
+  reports awaiting approval until then and **Connected** after, with increasing
+  sequence numbers, heartbeat, clock synchronization, and raw IMU data. Walk the
+  Bluetooth rows in the [BLE transport doc](protocols/watch-ble-transport.md#hardware-validation-still-required).
+- [ ] **Wi-Fi:** repeat on the same non-isolated Wi-Fi/LAN with Wi-Fi selected and
+  confirm mDNS pairing reaches **Connected** with the same evidence.
+- [ ] *(remediation)* Confirm the desktop identifies the Watch consistently: over
+  Bluetooth the device id has the `ble-…` shape and is unchanged after a reconnect
+  and a Watch app restart; over Wi-Fi it is the Watch's own `watch-…` id, different
+  for a second Watch. Reboot the Watch mid-session and confirm gesture ingestion
+  recovers after it reconnects (previously it stayed wedged until the desktop
+  restarted).
+- [ ] *(remediation)* On the target Watch, check the logs for the one-time
+  "rebasing orientation timestamps" line. Record whether the device's sensor clock
+  needed rebasing, and confirm orientation and PPG rows in an exported recording are
+  in plausible time order.
 - [ ] On compatible Galaxy Watch 4+ Samsung Wear OS hardware, verify raw green/red/IR
   PPG reaches the desktop. On unsupported hardware, record the documented PPG-unavailable
   state rather than treating it as a failed inference result.
@@ -87,6 +112,18 @@ unexecuted and are not being claimed as passed.
   bundle will show a mismatch and **Live will refuse to start** until the PPG flush
   rate is aligned (about 2 Hz for 500 ms) or the model is retrained with a matching
   `--window-ms`. A bundle's `min_samples_per_window` is also enforced live.
+- [ ] *(remediation)* Record the live PPG window duration the diagnostics show and the
+  model's trained window. Confirm Live is refused with the actionable message while
+  they disagree, and accepted once the flush rate (or the model) is aligned.
+- [ ] *(remediation)* Quit and relaunch with Live selected: confirm the app starts in
+  **Monitor** (not Live) and that the UI and the actual behavior agree.
+- [ ] *(remediation)* Import a Timeline Capture dataset export: confirm it imports,
+  that every label on it needs a training role before training starts, and that
+  offline replay scores a user-defined target label as that target (not negative).
+- [ ] *(remediation)* Import a hand-edited bundle with its conversion-parity record
+  removed (or a one-sample minimum window): confirm it is rejected. Corrupt
+  `registry.json` on a scratch profile: confirm the app reports an error and leaves
+  the file untouched.
 - [ ] Select **Live** only after the Monitor result is accepted. Confirm diagnostics
   identify the active model and each decision's intent/reason, and confirm only the
   approved binding is eligible to act.
@@ -104,6 +141,18 @@ unexecuted and are not being claimed as passed.
 - [ ] Stop Watch telemetry during an active interaction and repeat with stale samples,
   a Watch disconnect, and an inference/runtime failure. In each case, verify forced
   release/hide occurs and no additional volume change follows.
+- [ ] *(remediation)* With a Watch-button grab active, trigger a model release (and the
+  reverse): confirm one source's normal end does not end the other's interaction, and
+  that a second source cannot take over an active grab. Confirm Escape, a Watch
+  disconnect, and leaving the gaze target still end any grab.
+- [ ] *(remediation)* Roll the wrist quickly through a large angle and confirm the volume
+  follows no faster than the **Max volume rate**, with no jump on the first reading
+  after the grab begins. Confirm haptic pulses stay rate-limited and a disconnected
+  Watch produces no repeated errors.
+- [ ] *(remediation)* On each platform, confirm Escape and Watch button-up remain
+  responsive while the volume backend is slow (for example by saturating the audio
+  service), and that quitting the app exits within about ten seconds of closing the
+  window even with a stuck transport.
 - [ ] Reconnect the Watch. Confirm desktop-owned live settings are replayed, raw
   telemetry resumes, and no old grab/action state is resurrected.
 - [ ] Disconnect Sony tracking during an overlay interaction and press Escape. Confirm
@@ -155,12 +204,19 @@ Do not call the candidate hardware-validated until every applicable checked item
 an attached result. A failed or unavailable device/platform is a release blocker for
 that target, not evidence that the fail-closed desktop behavior was exercised.
 
-**Known, intentionally excluded risk:** the Watch pairs and streams over the LAN
-WebSocket without pairing-derived identity or an authenticated session. This is not a
-gap in the checklist above; it is an accepted, unrepaired risk that remains out of
-scope for every release candidate until a dedicated remediation is scoped and
-completed.
+**Known, intentionally excluded risk:** over the **Wi-Fi** transport the Watch pairs and
+streams over the LAN WebSocket without pairing-derived identity or an authenticated
+session. This is not a gap in the checklist above; it is an accepted, unrepaired risk
+that remains out of scope for every release candidate until a dedicated remediation is
+scoped and completed. The default **Bluetooth** transport adds OS bonding and an
+explicit on-Watch approval of the desktop, but its Just Works bonding has no
+man-in-the-middle protection (see the
+[BLE transport doc](protocols/watch-ble-transport.md#known-limitations)).
 
 Related references: [running the project](development/running-project.md),
 [Watch setup](../apps/watch/README.md), [Watch protocol](protocols/watch-websocket-protocol.md),
-and the [project brief](architecture/project-brief.md).
+[Watch BLE transport](protocols/watch-ble-transport.md),
+[components and deployment](architecture/components-and-deployment.md),
+[safety and fail-closed behavior](architecture/safety-and-fail-closed-behavior.md),
+[review remediation](review-remediation.md), and the
+[project brief](architecture/project-brief.md).

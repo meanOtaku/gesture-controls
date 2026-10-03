@@ -1,6 +1,10 @@
 # Watch-to-desktop transport: Wi-Fi (current) vs. BLE (deferred)
 
-**Status:** Accepted — Wi-Fi stays the transport for GC-036 and until the criteria below are met.
+**Status:** **Superseded by GC-037.** This record is kept as written because it explains what had to exist before BLE could be adopted. Bluetooth LE has since been built and is now the **default** watch transport, with Wi-Fi retained as a selectable alternative. The current design is in [`../protocols/watch-ble-transport.md`](../protocols/watch-ble-transport.md); the task record is GC-037 in [`../../TASKS.md`](../../TASKS.md).
+
+*Original status:* Accepted — Wi-Fi stays the transport for GC-036 and until the criteria below are met.
+
+How the three blockers listed below were addressed: (1) a cross-platform btleplug central now lives in `crates/watch-bridge/src/ble.rs` (CoreBluetooth, WinRT, BlueZ); (2) the watch has a GATT peripheral with encrypted characteristics, runtime Bluetooth permissions and an explicit per-central trust gate (`BleGattTransport.kt`), over the same JSON envelopes; (3) the **real-device battery and latency trial is still outstanding** and is on the hardware validation list in the BLE transport doc.
 **Scope:** `crates/watch-bridge` (desktop WebSocket server) and the watch app's `WatchLinkManager`/`DesktopDiscovery`/`WatchPairingServer`. No transport code changes are implied by this record.
 
 ## Current transport

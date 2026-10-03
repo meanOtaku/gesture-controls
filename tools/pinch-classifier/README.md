@@ -20,8 +20,12 @@ pip install -e ".[dev,tensorflow]"   # also train/export TFLite
 ## Running tests
 
 ```bash
-pytest
+uv run --with pytest pytest tests -q        # or `pytest` inside an activated venv
 ```
+
+The TensorFlow conversion tests skip unless the `tensorflow` extra is installed. CI does
+not run this suite yet, so run it before changing the bundle contract, the label
+mapping, windowing or feature extraction.
 
 ## Baseline training (scikit-learn)
 
@@ -58,14 +62,20 @@ exactly, mirrored in `src/pinch_classifier/schema.py` (source of truth:
 - Header must equal, in order:
   `timestamp_ns,sequence,ppg_green,ppg_red,ppg_ir,accel_x,accel_y,accel_z,gyro_x,gyro_y,gyro_z,quat_w,quat_x,quat_y,quat_z,contact_quality,label`
 - `timestamp_ns` must be non-decreasing row-to-row (recording order).
-- `label` must be one of the recorder's known labels (`idle`, `pinch_start`,
-  `pinch_hold`, `pinch_release`, `walking`, `typing`, `using_mouse`,
-  `touching_face`, `adjusting_headphones`, `picking_up_cup`, `scratching`,
-  `normal_wrist_rotation`, `standing`, `sitting`).
+- Every row must carry a non-empty `label`. A label outside the recorder's legacy
+  vocabulary (`idle`, `pinch_start`, `pinch_hold`, `pinch_release`, `walking`,
+  `typing`, `using_mouse`, `touching_face`, `adjusting_headphones`,
+  `picking_up_cup`, `scratching`, `normal_wrist_rotation`, `standing`, `sitting`) needs
+  an explicit training role from `--label-mapping-file`; without one the run is
+  rejected rather than treating the label as negative.
 - Numeric sensor columns may be blank; blanks are carry-forward filled from
   the last known value in that column (leading blanks fall back to `0.0`).
-- Each CSV file is treated as one recording session, labeled uniformly for
-  the whole file, and its filename stem becomes the `session_id`.
+- Each CSV file is treated as one recording session and its filename stem becomes
+  the `session_id` (the unit the train/test split holds out). A file may carry one
+  label throughout (Quick Capture) or several (Timeline Capture); windows never cross a
+  label boundary. The desktop's Model Lab importer prepares a Timeline Capture export
+  for this loader by dropping the unlabeled gap rows, so the loader itself still
+  requires a label on every row.
 
 A file that doesn't match this contract fails to load with a `CsvFormatError`
 instead of silently producing bad training data.
@@ -150,9 +160,20 @@ The output directory is the deployment bundle:
 
 - `model.tflite` — float32 TFLite flatbuffer with preprocessing embedded.
 - `metadata.json` — validated inference contract containing ordered classes,
-  ordered 55-feature names, tensor shapes/dtypes, windowing and preprocessing
-  policy, grouped split, metrics, TensorFlow/training details, conversion parity,
-  and the lowercase SHA-256 digest of `model.tflite`.
+  ordered 55-feature names (or a canonical-order subset), tensor shapes/dtypes,
+  `window_config` (window, stride, max gap, and a minimum of at least 2 samples per
+  window), preprocessing policy, grouped split, metrics, TensorFlow/training details,
+  conversion parity, and the lowercase SHA-256 digest of `model.tflite`.
+- `label_mapping.json` — written by the desktop next to the bundle when it runs the
+  trainer; the label-to-role mapping the run used. Replay reads it.
+
+`bundle.validate_metadata` is the contract's writer-side check, and the desktop's
+`load_and_verify_bundle` (`apps/desktop/src-tauri/src/model_registry.rs`) enforces the
+same checks on activation, rollback and every runtime load, including for a bundle this
+tool did not produce. `tests/fixtures/valid_bundle/` is a small shared fixture that
+**both** this package's tests and the desktop's Rust tests validate, so the two
+validators cannot drift apart silently; change the contract in both places and
+regenerate that fixture with `bundle.build_metadata`.
 
 Before metadata is accepted, the exporter loads the converted model with the
 TFLite interpreter and runs every held-out feature row through both Keras and
@@ -161,6 +182,21 @@ absolute probability error is within `--parity-atol`. The metadata is then
 written, loaded back, schema-validated, and checked against the model bytes'
 SHA-256. Consumers should perform the same metadata and digest checks before
 loading a deployed model.
+
+## Offline replay
+
+```bash
+pinch-classifier-replay --bundle-dir artifacts/pinch-tflite --input session1.csv session2.csv
+```
+
+Replays recordings against a validated bundle without any desktop actions and prints
+one bounded JSON report (per-window expected vs predicted, accuracy, predicted class
+counts). Windows are built with the bundle's own `window_config`, and labels are
+resolved through the bundle's `label_mapping.json`, the same mapping the model was
+trained with, so a label trained as `pinch_start` is replayed as `pinch_start`. A bundle
+with no mapping file (for example one imported from elsewhere) uses the legacy
+fixed-vocabulary mapping and **rejects any label it does not cover** instead of scoring
+it as negative. Replay requires TensorFlow.
 
 TensorFlow is deliberately optional: baseline users do not install the large
 runtime, and the ordinary test suite skips real conversion tests when the
