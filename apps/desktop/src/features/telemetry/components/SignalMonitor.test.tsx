@@ -15,6 +15,8 @@ describe("SignalMonitor", () => {
         orientationEnabled={true}
         headPoints={points}
         watchOrientationPoints={points}
+        watchAccelerationPoints={points}
+        accelerationEnabled={true}
         ppgPoints={points}
       />,
     );
@@ -31,6 +33,8 @@ describe("SignalMonitor", () => {
         orientationEnabled={true}
         headPoints={points}
         watchOrientationPoints={points}
+        watchAccelerationPoints={points}
+        accelerationEnabled={true}
         ppgPoints={points}
       />,
     );
@@ -46,6 +50,8 @@ describe("SignalMonitor", () => {
         orientationEnabled={false}
         headPoints={points}
         watchOrientationPoints={points}
+        watchAccelerationPoints={points}
+        accelerationEnabled={true}
         ppgPoints={points}
       />,
     );
@@ -60,6 +66,8 @@ describe("SignalMonitor", () => {
         orientationEnabled={true}
         headPoints={points}
         watchOrientationPoints={[]}
+        watchAccelerationPoints={points}
+        accelerationEnabled={true}
         ppgPoints={points}
         watchOrientationHint="Watch is disconnected — reconnect to resume orientation data."
       />,
@@ -78,10 +86,71 @@ describe("SignalMonitor", () => {
         orientationEnabled={true}
         headPoints={points}
         watchOrientationPoints={points}
+        watchAccelerationPoints={points}
+        accelerationEnabled={true}
         ppgPoints={points}
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Optical" }));
     expect(onSignalViewChange).toHaveBeenCalledWith("optical");
+  });
+
+  it("shows the watch acceleration chart with the motion charts, not the optical ones", () => {
+    const { rerender } = render(
+      <SignalMonitor
+        signalView="motion"
+        onSignalViewChange={vi.fn()}
+        orientationEnabled={true}
+        headPoints={points}
+        watchOrientationPoints={points}
+        watchAccelerationPoints={points}
+        accelerationEnabled={true}
+        ppgPoints={points}
+      />,
+    );
+    expect(screen.getByRole("region", { name: "Watch acceleration" })).toBeInTheDocument();
+    rerender(
+      <SignalMonitor
+        signalView="optical"
+        onSignalViewChange={vi.fn()}
+        orientationEnabled={true}
+        headPoints={points}
+        watchOrientationPoints={points}
+        watchAccelerationPoints={points}
+        accelerationEnabled={true}
+        ppgPoints={points}
+      />,
+    );
+    expect(screen.queryByRole("region", { name: "Watch acceleration" })).not.toBeInTheDocument();
+  });
+
+  it("omits the acceleration chart when the watch's acceleration sensor is off, and explains an empty one", () => {
+    const { rerender } = render(
+      <SignalMonitor
+        signalView="all"
+        onSignalViewChange={vi.fn()}
+        orientationEnabled={true}
+        headPoints={points}
+        watchOrientationPoints={points}
+        watchAccelerationPoints={points}
+        accelerationEnabled={false}
+        ppgPoints={points}
+      />,
+    );
+    expect(screen.queryByRole("region", { name: "Watch acceleration" })).not.toBeInTheDocument();
+    rerender(
+      <SignalMonitor
+        signalView="all"
+        onSignalViewChange={vi.fn()}
+        orientationEnabled={true}
+        headPoints={points}
+        watchOrientationPoints={points}
+        watchAccelerationPoints={[]}
+        accelerationEnabled={true}
+        watchAccelerationHint="Watch is off your wrist."
+        ppgPoints={points}
+      />,
+    );
+    expect(screen.getByText("Watch is off your wrist.")).toBeInTheDocument();
   });
 });

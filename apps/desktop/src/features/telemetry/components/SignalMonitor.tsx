@@ -16,6 +16,11 @@ type SignalMonitorProps = {
   orientationEnabled: boolean;
   headPoints: SeriesPoint[];
   watchOrientationPoints: SeriesPoint[];
+  watchAccelerationPoints: SeriesPoint[];
+  /** Whether the watch's acceleration sensor is on (`desktop.set_sensor`); the chart is hidden when it is off. */
+  accelerationEnabled: boolean;
+  /** Why the acceleration chart is empty, when something other than "no samples yet" explains it. */
+  watchAccelerationHint?: string;
   ppgPoints: SeriesPoint[];
   /**
    * Distinguishes why the Watch orientation chart has no samples yet
@@ -36,6 +41,9 @@ export function SignalMonitor({
   orientationEnabled,
   headPoints,
   watchOrientationPoints,
+  watchAccelerationPoints,
+  accelerationEnabled,
+  watchAccelerationHint,
   ppgPoints,
   watchOrientationHint,
   ppgHint,
@@ -71,6 +79,16 @@ export function SignalMonitor({
             unit="degrees"
             colors={["#f2f200", "#00f2f2", "#ff9a3d"]}
             emptyHint={watchOrientationHint}
+          />
+        )}
+        {signalView !== "optical" && accelerationEnabled && (
+          <TimeChart
+            title="Watch acceleration"
+            points={watchAccelerationPoints}
+            labels={["X", "Y", "Z"]}
+            unit="m/s² · gravity removed"
+            colors={["#f2f200", "#00f2f2", "#ff9a3d"]}
+            emptyHint={watchAccelerationHint}
           />
         )}
         {signalView !== "motion" && (

@@ -162,6 +162,35 @@ describe("telemetryStore", () => {
     });
   });
 
+  describe("watch acceleration", () => {
+    const sample = (sequence: number, accelerometer: [number, number, number] | null) => ({
+      deviceId: "watch-test",
+      sequence,
+      timestampNs: 1_000 + sequence,
+      quaternion: [1, 0, 0, 0] as [number, number, number, number],
+      accelerometer,
+      gyroscope: [0.1, 0.2, 0.3] as [number, number, number],
+    });
+
+    it("charts the acceleration that arrives with each orientation sample", () => {
+      telemetryStore.ingestWatchOrientation(sample(1, [0.5, -1.5, 9.8]));
+      expect(telemetryStore.getSeries("watchAcceleration").map((point) => point.values)).toEqual([[0.5, -1.5, 9.8]]);
+    });
+
+    it("leaves a gap, never a zero, when a sample carries no acceleration", () => {
+      telemetryStore.ingestWatchOrientation(sample(1, null));
+      expect(telemetryStore.getSeries("watchAcceleration")).toHaveLength(0);
+      expect(telemetryStore.getSeries("watchOrientation")).toHaveLength(1);
+    });
+
+    it("keeps acceleration and gyroscope in the recorded dataset rows", () => {
+      telemetryStore.startDatasetRecording();
+      telemetryStore.ingestWatchOrientation(sample(1, [0.5, -1.5, 9.8]));
+      const csv = telemetryStore.getDatasetRows().map((row) => ({ ax: row.accelX, ay: row.accelY, az: row.accelZ, gx: row.gyroX }));
+      expect(csv).toContainEqual({ ax: 0.5, ay: -1.5, az: 9.8, gx: 0.1 });
+    });
+  });
+
   it("clears the head-tracker diagnostic on reset but keeps the last-selected provider", () => {
     telemetryStore.setHeadTrackerProvider("native");
     telemetryStore.setHeadDiagnostic({

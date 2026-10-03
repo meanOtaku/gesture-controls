@@ -127,6 +127,7 @@ function translateToWatchClockDomain(envelopeTimestampNs: number, sdkTimestampsN
 export type TelemetrySeries =
   | "head"
   | "watchOrientation"
+  | "watchAcceleration"
   | "ppg"
   | "heartRate"
   | "ibi"
@@ -184,7 +185,7 @@ export const EMPTY_WATCH_STATUS: WatchStatus = {
 class TelemetryStore {
   private readonly listeners = new Set<() => void>();
   private readonly series = new Map<TelemetrySeries, RingBuffer<SeriesPoint>>(
-    (["head", "watchOrientation", "ppg", "heartRate", "ibi", "temperature", "eda", "spo2", "ecg"] as const)
+    (["head", "watchOrientation", "watchAcceleration", "ppg", "heartRate", "ibi", "temperature", "eda", "spo2", "ecg"] as const)
       .map((name) => [name, new RingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES)]),
   );
   private readonly rows = new RingBuffer<CsvRow>(MAX_CSV_ROWS);
@@ -839,6 +840,10 @@ class TelemetryStore {
     const at = Date.now();
     const euler = quaternionToEulerDegrees(orientation.quaternion);
     this.series.get("watchOrientation")?.push({ at, values: euler });
+    // Acceleration rides on each orientation sample and is absent when the watch's
+    // acceleration sensor is off or its reading was stale; a missing reading is a gap in
+    // the chart, never a plotted zero.
+    if (orientation.accelerometer) this.series.get("watchAcceleration")?.push({ at, values: [...orientation.accelerometer] });
     if (this.canRecord("watchOrientation", at)) this.rows.push({
       recordedAt: new Date(at).toISOString(),
       source: "watch",
@@ -1131,6 +1136,7 @@ class TelemetryStore {
       }
       this.watchPaused = true;
       this.series.get("watchOrientation")?.clear();
+      this.series.get("watchAcceleration")?.clear();
       this.series.get("ppg")?.clear();
       this.schedulePublish();
     }, WATCH_PAUSE_QUIET_MS);

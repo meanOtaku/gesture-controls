@@ -32,6 +32,7 @@ export function LiveTelemetry() {
   const headPoints = telemetryStore.getSeries("head");
   const watchOrientationPoints = telemetryStore.getSeries("watchOrientation");
   const ppgPoints = telemetryStore.getSeries("ppg");
+  const watchAccelerationPoints = telemetryStore.getSeries("watchAcceleration");
   const heartRatePoints = telemetryStore.getSeries("heartRate");
   const ibiPoints = telemetryStore.getSeries("ibi");
   const temperaturePoints = telemetryStore.getSeries("temperature");
@@ -67,6 +68,14 @@ export function LiveTelemetry() {
       ? "The Watch reports live orientation, but it isn't reaching this chart — this looks like a UI issue, please report it."
       : watchOrientationPoints.length === 0
         ? "Connected, but no orientation samples have arrived yet — check the Watch transport or pairing."
+        : undefined;
+  const accelerationEnabled = watchStatus?.sensorStatus?.acceleration ?? true;
+  const watchAccelerationHint = watchPaused
+    ? WATCH_OFF_WRIST_HINT
+    : !watchStatus?.connected
+      ? "Watch is disconnected — reconnect to resume acceleration data."
+      : watchAccelerationPoints.length === 0
+        ? "Connected, but no acceleration samples have arrived yet — they arrive with each orientation sample."
         : undefined;
   const heartRateStreaming = watchStatus?.medicalStatus?.heart_rate_continuous === "streaming";
   const skinTemperatureStreaming = watchStatus?.medicalStatus?.skin_temperature_continuous === "streaming";
@@ -179,6 +188,9 @@ export function LiveTelemetry() {
           orientationEnabled={orientationEnabled}
           headPoints={headPoints}
           watchOrientationPoints={watchOrientationPoints}
+          watchAccelerationPoints={watchAccelerationPoints}
+          accelerationEnabled={accelerationEnabled}
+          watchAccelerationHint={watchAccelerationHint}
           ppgPoints={ppgPoints}
           watchOrientationHint={watchOrientationHint}
           ppgHint={watchPaused ? WATCH_OFF_WRIST_HINT : undefined}

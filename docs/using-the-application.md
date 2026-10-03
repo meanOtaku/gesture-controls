@@ -118,7 +118,8 @@ The **Live data** tab is the telemetry viewer and recorder.
 It visualizes available raw streams, including:
 
 - Headphone yaw, pitch, and roll.
-- Watch orientation.
+- Watch orientation (from the watch's rotation-vector sensor).
+- Watch acceleration: linear acceleration with gravity removed, in m/s². It arrives with each orientation sample, is saved in every recording as `accel_x`, `accel_y` and `accel_z` next to the gyroscope columns, and the chart is hidden if the watch's acceleration sensor is switched off.
 - Raw PPG: green, red, and IR.
 - Available health streams such as heart rate, IBI, temperature, EDA, SpO2, and ECG.
 
