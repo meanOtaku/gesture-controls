@@ -112,6 +112,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         prefs = ConnectionPrefs(this)
+        watchLink.deviceId = prefs.deviceId
         transportBluetoothButton = findViewById(R.id.transportBluetoothButton)
         transportWifiButton = findViewById(R.id.transportWifiButton)
         trustButton = findViewById(R.id.trustButton)

@@ -208,6 +208,36 @@ pub struct BleLink {
     pending: Option<Vec<u8>>,
 }
 
+/// The device id the desktop assigns a watch it discovered over BLE: derived
+/// from the peripheral's own platform identifier (a CoreBluetooth UUID on
+/// macOS, the Bluetooth address on Windows, the BlueZ object path on Linux),
+/// which is stable for that physical watch on that desktop. Normalized to a
+/// short, log- and filename-safe token.
+pub fn ble_device_id(peripheral_id: &impl std::fmt::Display) -> String {
+    let normalized: String = peripheral_id
+        .to_string()
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let trimmed = normalized.trim_matches('-');
+    // Collapse the separator runs that path-like ids leave behind.
+    let mut out = String::from("ble-");
+    let mut previous_dash = true;
+    for c in trimmed.chars() {
+        if c == '-' {
+            if !previous_dash {
+                out.push('-');
+            }
+            previous_dash = true;
+        } else {
+            out.push(c);
+            previous_dash = false;
+        }
+    }
+    out
+}
+
 /// Opens the host's first Bluetooth adapter. Held for the whole session so a
 /// reconnect doesn't rebuild it, and so a cancelled scan can still be stopped
 /// (see [`stop_scan`]).
@@ -232,6 +262,11 @@ pub async fn stop_scan(adapter: &Adapter) {
 }
 
 impl BleLink {
+    /// This watch's desktop-assigned device id; see [`ble_device_id`].
+    pub fn device_id(&self) -> String {
+        ble_device_id(&self.peripheral.id())
+    }
+
     /// Scans for, connects to, and subscribes to a watch advertising
     /// [`WATCH_BLE_SERVICE_UUID`]. Every failure carries an actionable message.
     pub async fn connect(adapter: &Adapter, scan_timeout: Duration) -> Result<Self, BleError> {
@@ -441,6 +476,36 @@ async fn first_matching(adapter: &Adapter) -> Result<Option<Peripheral>, BleErro
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn ble_device_id_is_derived_from_the_peripheral_identifier() {
+        // macOS: CoreBluetooth UUID; Windows: Bluetooth address; Linux: BlueZ path.
+        assert_eq!(
+            ble_device_id(&"5D3F2B1A-9C4E-4F10-8A6B-1234567890AB"),
+            "ble-5d3f2b1a-9c4e-4f10-8a6b-1234567890ab"
+        );
+        assert_eq!(ble_device_id(&"AA:BB:CC:DD:EE:FF"), "ble-aa-bb-cc-dd-ee-ff");
+        assert_eq!(
+            ble_device_id(&"/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"),
+            "ble-org-bluez-hci0-dev-aa-bb-cc-dd-ee-ff"
+        );
+    }
+
+    #[test]
+    fn ble_device_id_tells_two_watches_apart_and_is_stable_for_one() {
+        let a = ble_device_id(&"AA:BB:CC:DD:EE:01");
+        let b = ble_device_id(&"AA:BB:CC:DD:EE:02");
+        assert_ne!(a, b);
+        assert_eq!(a, ble_device_id(&"aa:bb:cc:dd:ee:01"));
+    }
+
+    #[test]
+    fn ble_device_id_is_safe_to_log_and_use_as_a_key() {
+        let id = ble_device_id(&"  ../weird id\n");
+        assert!(id.starts_with("ble-"));
+        assert!(id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'));
+        assert!(!id.ends_with('-'));
+    }
+
     use super::*;
 
     fn roundtrip(message: &[u8], att_payload: usize) -> Vec<u8> {

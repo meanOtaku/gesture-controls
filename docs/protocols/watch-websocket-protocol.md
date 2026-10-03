@@ -27,6 +27,8 @@ boundaries, or multicast-blocking routers can prevent pairing.
 
 All messages are UTF-8 JSON with the required envelope fields `type`, `version` (`1`), `deviceId`, `sequence`, `timestampNs`, and `payload`. `timestampNs` is the watch `SystemClock.elapsedRealtimeNanos()` timestamp (boot-relative) on **every** message, including `watch.orientation`. Orientation is built from `SensorEvent.timestamp`; Android requires that clock to share `elapsedRealtimeNanos()`'s base, and the watch verifies it on each event, rebasing orientation onto that base (and logging once) on a device where it does not hold, so the desktop can always order orientation against every other message. The per-sample `timestampsNs` inside a `watch.ppg_batch` are the exception: they are on the Samsung Health Sensor SDK's own clock (see below). Sequences must increase across a connection.
 
+`deviceId` identifies the watch. Over **Bluetooth** the desktop assigns it from the peripheral it discovered (`ble-<platform peripheral id>`, e.g. `ble-aa-bb-cc-dd-ee-ff`) and replaces whatever the watch put in the envelope, so a watch cannot choose or spoof which device it is. Over **Wi-Fi** there is no peripheral, so the desktop uses the watch's own `deviceId`, which is a unique per-install value (`watch-<uuid>`) generated once and persisted on the watch. The `galaxy-watch-4` values in the examples below are illustrative only; the desktop's per-device state (the PPG ordering watermark, orientation/PPG fusion identity checks) is keyed on whichever id applies to the active transport.
+
 `watch.orientation` carries a quaternion and optional accelerometer and gyroscope vectors:
 
 ```json

@@ -3,6 +3,7 @@ package com.gesturecontrols.wearwatch.data.preferences
 import com.gesturecontrols.wearwatch.data.connection.WatchTransportKind
 
 import android.content.Context
+import java.util.UUID
 
 /** Persists the desktop link's configuration locally so it survives app restarts. */
 class ConnectionPrefs(context: Context) {
@@ -33,9 +34,28 @@ class ConnectionPrefs(context: Context) {
         get() = prefs.getString(KEY_TRUSTED_CENTRAL, null)
         set(value) = prefs.edit().putString(KEY_TRUSTED_CENTRAL, value).apply()
 
+    /**
+     * This install's identity on the Wi-Fi transport, where the desktop has no
+     * Bluetooth peripheral to identify the watch by and can only go by what the
+     * watch claims. Generated once and kept, so two watches never share an id
+     * and one watch keeps its id across restarts. (Over Bluetooth the desktop
+     * assigns the id from the discovered peripheral and ignores this.)
+     */
+    val deviceId: String
+        get() {
+            prefs.getString(KEY_DEVICE_ID, null)?.takeIf { it.isNotBlank() }?.let { return it }
+            val created = newDeviceId()
+            prefs.edit().putString(KEY_DEVICE_ID, created).apply()
+            return created
+        }
+
     companion object {
+        private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_ENDPOINT = "endpoint"
         private const val KEY_TRANSPORT = "transport"
         private const val KEY_TRUSTED_CENTRAL = "trusted_central"
+
+        /** A fresh, unique, protocol-safe device id. */
+        fun newDeviceId(): String = "watch-" + UUID.randomUUID().toString()
     }
 }

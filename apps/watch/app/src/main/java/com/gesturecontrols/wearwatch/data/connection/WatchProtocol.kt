@@ -49,7 +49,11 @@ object WatchProtocol {
     const val MIN_HAPTIC_DURATION_MS = 10
     const val MAX_HAPTIC_DURATION_MS = 200
 
-    /** Identifies this app to the desktop; matches the sample deviceId in the protocol doc. */
+    /**
+     * Fallback only: the id used before the install's own persisted id is known
+     * (see `ConnectionPrefs.deviceId`). Shared by every watch, so it must never
+     * be what distinguishes one device from another.
+     */
     const val DEVICE_ID = "galaxy-watch-4"
 
     /** The only hardware button this milestone dispatches; see `MainActivity#onKeyDown`. */

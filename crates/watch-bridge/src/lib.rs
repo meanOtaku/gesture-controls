@@ -649,6 +649,14 @@ trait WatchLinkTransport: Send {
     async fn send_text(&mut self, text: String) -> Result<(), ()>;
     /// Next inbound envelope's bytes, or `None` once the link is closed.
     async fn recv(&mut self) -> Option<Vec<u8>>;
+    /// The identity the transport itself established for the peer, if it has
+    /// one. When present it replaces the `deviceId` the peer claims in its
+    /// envelopes: a claim the peer controls cannot be the authority on which
+    /// device it is. `None` leaves the envelope's `deviceId` in force, as for
+    /// the WebSocket transport, which has no identity of its own.
+    fn peer_identity(&self) -> Option<String> {
+        None
+    }
 }
 
 #[async_trait::async_trait]
@@ -684,6 +692,10 @@ impl WatchLinkTransport for BleLink {
 
     async fn recv(&mut self) -> Option<Vec<u8>> {
         BleLink::recv(self).await
+    }
+
+    fn peer_identity(&self) -> Option<String> {
+        Some(self.device_id())
     }
 }
 
@@ -881,6 +893,9 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
     mut sensor_rate_commands: broadcast::Receiver<SensorRateCommand>,
     mut haptic_commands: broadcast::Receiver<HapticCommand>,
 ) {
+    // Established once per connection by the transport (for BLE, the
+    // discovered peripheral), not read from each envelope.
+    let peer_identity = link.peer_identity();
     let mut last_activity = Instant::now();
     let mut last_sequence: Option<u64> = None;
     let mut time_sync_ticker = tokio::time::interval(TIME_SYNC_INTERVAL);
@@ -977,6 +992,7 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
                             &mut pending_time_sync_at,
                             &mut clock_offset_samples,
                             shared,
+                            peer_identity.as_deref(),
                         );
                     }
                     Ok(None) => break,
@@ -996,6 +1012,7 @@ fn handle_inbound(
     pending_time_sync_at: &mut Option<u64>,
     clock_offset_samples: &mut VecDeque<i64>,
     shared: &Arc<SharedState>,
+    peer_identity: Option<&str>,
 ) {
     let envelope = match WatchEnvelope::from_json(bytes) {
         Ok(envelope) => envelope,
@@ -1007,6 +1024,18 @@ fn handle_inbound(
             return;
         }
     };
+
+    let mut envelope = envelope;
+    if let Some(identity) = peer_identity {
+        if envelope.device_id != identity {
+            debug!(
+                claimed = %envelope.device_id,
+                established = %identity,
+                "replacing the watch's claimed deviceId with the transport's identity"
+            );
+        }
+        envelope.device_id = identity.to_string();
+    }
 
     if let Some(previous) = *last_sequence
         && envelope.sequence <= previous
@@ -1160,6 +1189,48 @@ mod tests {
         .unwrap()
     }
 
+    /// D-M2-3: over BLE the transport knows which peripheral it is talking to,
+    /// so the `deviceId` the watch claims must not decide which device this is.
+    #[test]
+    fn handle_inbound_stamps_the_transports_identity_over_the_claimed_device_id() {
+        let shared = shared_state();
+        let mut receiver = shared.events.subscribe();
+        let mut last_sequence = None;
+        handle_inbound(
+            &orientation_envelope(1),
+            &mut last_sequence,
+            &mut None,
+            &mut VecDeque::new(),
+            &shared,
+            Some("ble-aa-bb-cc-dd-ee-ff"),
+        );
+        match receiver.try_recv().unwrap() {
+            WatchEvent::Orientation(sample) => {
+                assert_eq!(sample.device_id, "ble-aa-bb-cc-dd-ee-ff")
+            }
+            other => panic!("expected Orientation, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn handle_inbound_keeps_the_claimed_device_id_when_the_transport_has_no_identity() {
+        let shared = shared_state();
+        let mut receiver = shared.events.subscribe();
+        let mut last_sequence = None;
+        handle_inbound(
+            &orientation_envelope(1),
+            &mut last_sequence,
+            &mut None,
+            &mut VecDeque::new(),
+            &shared,
+            None,
+        );
+        match receiver.try_recv().unwrap() {
+            WatchEvent::Orientation(sample) => assert_eq!(sample.device_id, "watch-1"),
+            other => panic!("expected Orientation, got {other:?}"),
+        }
+    }
+
     #[test]
     fn handle_inbound_accepts_strictly_increasing_sequence_and_advances_watermark() {
         let shared = shared_state();
@@ -1173,6 +1244,7 @@ mod tests {
             &mut pending_time_sync_at,
             &mut clock_offset_samples,
             &shared,
+            None,
         );
         assert_eq!(last_sequence, Some(2));
         assert!(matches!(
@@ -1194,6 +1266,7 @@ mod tests {
             &mut pending_time_sync_at,
             &mut clock_offset_samples,
             &shared,
+            None,
         );
         assert_eq!(last_sequence, Some(5));
         match receiver.try_recv().unwrap() {
@@ -1215,6 +1288,7 @@ mod tests {
             &mut pending_time_sync_at,
             &mut clock_offset_samples,
             &shared,
+            None,
         );
         assert_eq!(last_sequence, None);
         assert!(matches!(
@@ -1250,6 +1324,7 @@ mod tests {
             &mut pending_time_sync_at,
             &mut clock_offset_samples,
             &shared,
+            None,
         );
         assert_eq!(last_sequence, Some(2));
         assert!(matches!(

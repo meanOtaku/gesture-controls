@@ -42,7 +42,16 @@ enum class ConnectionState {
  * this class never reaches past [WatchTransportLink], and never substitutes one
  * transport for another.
  */
-class WatchLinkManager(private val deviceId: String = WatchProtocol.DEVICE_ID) {
+class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
+
+    /**
+     * The id stamped on every outgoing envelope. Set to the install's persisted
+     * id (`ConnectionPrefs.deviceId`) as soon as preferences exist; the
+     * constructor default is only the pre-initialisation fallback. Over
+     * Bluetooth the desktop ignores it in favour of the peripheral's identity.
+     */
+    @Volatile
+    var deviceId: String = deviceId
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
