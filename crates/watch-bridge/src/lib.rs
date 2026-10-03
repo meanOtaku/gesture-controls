@@ -907,7 +907,7 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
             .heartbeat_timeout
             .saturating_sub(last_activity.elapsed());
         if remaining.is_zero() {
-            debug!("watch heartbeat timed out");
+            info!("watch link ended: heartbeat timed out");
             break;
         }
 
@@ -985,6 +985,10 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
             message = tokio::time::timeout(remaining, link.recv()) => {
                 match message {
                     Ok(Some(bytes)) => {
+                        let gap = last_activity.elapsed();
+                        if gap >= Duration::from_millis(500) {
+                            warn!(gap_ms = gap.as_millis() as u64, "no watch message for a while before this one");
+                        }
                         last_activity = Instant::now();
                         handle_inbound(
                             &bytes,
@@ -995,9 +999,12 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
                             peer_identity.as_deref(),
                         );
                     }
-                    Ok(None) => break,
+                    Ok(None) => {
+                        info!("watch link ended: notification stream closed");
+                        break;
+                    }
                     Err(_) => {
-                        debug!("watch heartbeat timed out");
+                        info!("watch link ended: heartbeat timed out");
                         break;
                     }
                 }
@@ -1141,8 +1148,20 @@ async fn send_envelope<L: WatchLinkTransport + ?Sized, T: serde::Serialize>(
     link: &mut L,
     value: &T,
 ) -> Result<(), ()> {
-    link.send_text(serde_json::to_string(value).unwrap_or_default())
-        .await
+    let started = Instant::now();
+    let text = serde_json::to_string(value).unwrap_or_default();
+    let bytes = text.len();
+    let result = link.send_text(text).await;
+    let elapsed = started.elapsed();
+    if elapsed >= Duration::from_millis(250) || result.is_err() {
+        warn!(
+            bytes,
+            elapsed_ms = elapsed.as_millis() as u64,
+            ok = result.is_ok(),
+            "slow or failed desktop command write to the watch"
+        );
+    }
+    result
 }
 
 fn now_ns() -> u64 {

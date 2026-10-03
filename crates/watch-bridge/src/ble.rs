@@ -317,6 +317,13 @@ impl BleLink {
             .await
             .map_err(BleError::Subscribe)?;
 
+        debug!(
+            mtu = peripheral.mtu(),
+            "watch BLE link negotiated; command writes use {} byte fragments",
+            (peripheral.mtu() as usize)
+                .saturating_sub(ATT_OVERHEAD)
+                .max(MIN_ATT_PAYLOAD)
+        );
         Ok(Self {
             peripheral,
             command,

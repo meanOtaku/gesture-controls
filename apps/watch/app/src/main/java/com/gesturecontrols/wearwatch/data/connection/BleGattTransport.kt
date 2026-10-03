@@ -5,6 +5,7 @@ import com.gesturecontrols.wearwatch.data.preferences.ConnectionPrefs
 import android.Manifest
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattServer
@@ -80,6 +81,44 @@ class BleGattTransport(
     private val outbound = ArrayDeque<ByteArray>()
     private var notificationInFlight = false
     private var droppedBacklogs = 0
+
+    /**
+     * A GATT *client* connection back to the central, held only so the Bluetooth
+     * stack has something to confirm the central's Service Changed indication
+     * with. macOS sends that indication the moment a bonded peer connects and
+     * disconnects the link 30 s later if it is not confirmed; with no client on
+     * the connection the watch never confirmed it, so every session ended after
+     * exactly 30 s. See docs/protocols/watch-ble-transport.md.
+     */
+    private var confirmationClient: BluetoothGatt? = null
+
+    private val confirmationCallback = object : BluetoothGattCallback() {
+        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+            Log.i(TAG, "confirmation client state=$newState status=$status")
+            if (newState == BluetoothProfile.STATE_CONNECTED) {
+                runCatching { gatt.discoverServices() }
+            }
+        }
+
+        override fun onServiceChanged(gatt: BluetoothGatt) {
+            Log.i(TAG, "central reported Service Changed; rediscovering")
+            runCatching { gatt.discoverServices() }
+        }
+    }
+
+    private fun openConfirmationClient(device: BluetoothDevice) {
+        closeConfirmationClient()
+        confirmationClient = runCatching {
+            device.connectGatt(context.applicationContext, false, confirmationCallback, BluetoothDevice.TRANSPORT_LE)
+        }.onFailure { Log.w(TAG, "could not open the confirmation client", it) }.getOrNull()
+    }
+
+    private fun closeConfirmationClient() {
+        val client = confirmationClient ?: return
+        confirmationClient = null
+        runCatching { client.disconnect() }
+        runCatching { client.close() }
+    }
     private val reassembler = BleFraming.Reassembler()
     private var started = false
 
@@ -269,6 +308,7 @@ class BleGattTransport(
         advertiser = null
         val device = central
         central = null
+        closeConfirmationClient()
         subscribed = false
         mtu = DEFAULT_MTU
         _pendingTrustedCentral.value = null
@@ -374,6 +414,7 @@ class BleGattTransport(
                 central = device
                 subscribed = false
                 mtu = DEFAULT_MTU
+                openConfirmationClient(device)
                 reassembler.clear()
                 synchronized(outbound) {
                     outbound.clear()
@@ -384,6 +425,7 @@ class BleGattTransport(
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 if (central?.address != device.address) return
                 central = null
+                closeConfirmationClient()
                 subscribed = false
                 mtu = DEFAULT_MTU
                 _pendingTrustedCentral.value = null

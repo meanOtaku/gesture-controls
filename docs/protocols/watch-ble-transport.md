@@ -142,6 +142,28 @@ as a working link.
 * Address privacy: a desktop with BLE random resolvable addresses may present a
   different address after re-pairing, which requires re-approval on the Watch.
 
+## Service Changed and the 30-second disconnect
+
+A bonded macOS central sends the watch a GATT **Service Changed indication** as soon
+as it connects, and drops the link 30 s later (`Timed out waiting for indication
+response - disconnecting!` in `bluetoothd`) if the watch does not confirm it. A watch
+whose only role on the link is GATT *server* had nothing registered to confirm it, so
+every session ended after exactly 30 s, about 8 s of rescanning followed, and the
+stream was lost each time. The watch now opens a GATT *client* connection back to the
+central (`BleGattTransport.openConfirmationClient`) and rediscovers its services when
+told they changed, which gives the stack a client to confirm with.
+
+Observed on a Galaxy Watch 4 and a Mac: the first connection after installing the
+build still ended at 30 s, the next one received `onServiceChanged` and stayed up for
+the whole observation (over 90 s). That is an observation, not a guarantee; the
+watch logs `confirmation client state=...` and `central reported Service Changed` so a
+recurrence is visible. If it recurs, remove the Mac from the watch's Bluetooth
+settings so the pairing is rebuilt.
+
+The watch's `sequence` counter is no longer restarted when the link reports connected
+again, because the desktop rejects any sequence at or below the last one it accepted
+on the same connection.
+
 ## Failure states
 
 The Watch surfaces, without falling back to Wi-Fi: no adapter, Bluetooth off, no

@@ -59,6 +59,14 @@ fn select_provider_for(native_available: bool, override_value: Option<&str>) -> 
     }
 }
 
+/// `SONY_HEAD_TRACKER_PROVIDER=off` starts no head-pose provider at all. The
+/// native provider keeps trying to connect to a paired headset that is not
+/// there, and those classic-Bluetooth attempts share the radio with the
+/// watch's BLE link, so a watch-only session needs a way to stay off the radio.
+fn provider_disabled(override_value: Option<&str>) -> bool {
+    override_value.is_some_and(|value| value.eq_ignore_ascii_case("off"))
+}
+
 pub fn select_provider() -> ProviderSelection {
     select_provider_for(
         cfg!(target_os = "macos") || cfg!(target_os = "windows"),
@@ -203,6 +211,10 @@ fn diagnostic_payload(
 /// existing calibration/telemetry paths. Spawns its own task; callers do not
 /// need to await this.
 pub fn spawn(handle: AppHandle) {
+    if provider_disabled(std::env::var(PROVIDER_OVERRIDE_ENV).ok().as_deref()) {
+        info!("head-pose provider disabled by {PROVIDER_OVERRIDE_ENV}=off; not starting it");
+        return;
+    }
     tauri::async_runtime::spawn(async move {
         match select_provider() {
             ProviderSelection::Native => {
@@ -425,6 +437,21 @@ mod tests {
             select_provider_for(false, Some("external")),
             ProviderSelection::External
         );
+    }
+
+    #[test]
+    fn off_disables_the_provider_and_nothing_else_does() {
+        assert!(provider_disabled(Some("off")));
+        assert!(provider_disabled(Some("OFF")));
+        for value in [
+            None,
+            Some(""),
+            Some("native"),
+            Some("external"),
+            Some("offline"),
+        ] {
+            assert!(!provider_disabled(value), "{value:?}");
+        }
     }
 
     #[test]

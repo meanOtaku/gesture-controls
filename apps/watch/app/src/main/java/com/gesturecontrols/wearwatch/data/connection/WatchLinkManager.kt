@@ -6,6 +6,7 @@ import com.gesturecontrols.wearwatch.feature.motion.*
 import com.gesturecontrols.wearwatch.platform.service.*
 
 import android.os.SystemClock
+import android.util.Log
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -294,16 +295,19 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
 
     /**
      * Applies a transport-reported state change: a fresh CONNECTED restarts the
-     * sequence and the periodic senders; anything else tears them down so no
-     * timer keeps firing against a dead link.
+     * periodic senders; anything else tears them down so no timer keeps firing
+     * against a dead link. The sequence counter is *not* restarted: the desktop
+     * requires it to increase across a connection, and a transport that reports
+     * CONNECTED twice on one live link (a re-subscribe, say) would otherwise make
+     * the desktop reject everything until the counter caught back up.
      */
     private fun handleState(state: ConnectionState, reason: String?) {
         val wasConnected = _state.value == ConnectionState.CONNECTED
+        Log.i(TAG, "link state ${_state.value} -> $state${reason?.let { " ($it)" } ?: ""}")
         _state.value = state
         _lastFailureReason.value = reason
         if (state == ConnectionState.CONNECTED) {
             if (!wasConnected) {
-                sequence.set(0)
                 startHeartbeat()
                 startPpgFlushTimer()
                 startMedicalFlushTimer()
@@ -478,6 +482,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
     }
 
     companion object {
+        private const val TAG = "WatchLink"
         private const val HEARTBEAT_INTERVAL_MS = 1000L
         private const val PPG_DELIVERY_INTERVAL_MS = 40L
         private const val PPG_BATCH_INTERVAL_MS = 100L
