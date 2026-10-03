@@ -70,8 +70,13 @@ While `worn` is `false` the watch **stops its IMU, PPG and medical collection**,
 its CPU wake lock and may sleep. The desktop therefore:
 
 - releases any held interaction (fail closed: the data that drove it has stopped),
-- tolerates silence for up to 30 minutes instead of the 3-second heartbeat timeout (a link that
-  really went away is still reported by Bluetooth itself), and
+- tolerates silence for up to 10 minutes instead of the normal heartbeat timeout, **over Bluetooth
+  only** (a Wi-Fi watch keeps its wake lock and its heartbeat, so nothing stretches). The allowance is
+  safe because the desktop separately asks the Bluetooth stack once a second whether the watch is
+  still connected, which needs no radio traffic and does not wake the watch; the notification
+  stream itself does not end when a peer disappears, so without that check a watch app that was killed
+  (a reinstall, a crash) while off the wrist would leave the desktop in a dead session instead of
+  looking for it again, and
 - stops its 5-second `desktop.time_sync` writes, which would otherwise wake the sleeping watch.
 
 The watch has an "off-wrist streaming" toggle for testing with the watch on a desk; with it on the

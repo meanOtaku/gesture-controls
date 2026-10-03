@@ -198,6 +198,15 @@ impl Reassembler {
 }
 
 /// A connected, subscribed BLE link to the watch.
+/// Answers "is the watch still connected?" for a [`BleLink`]; see [`BleLink::connection_probe`].
+pub struct ConnectionProbe(Peripheral);
+
+impl ConnectionProbe {
+    pub async fn is_connected(&self) -> bool {
+        self.0.is_connected().await.unwrap_or(false)
+    }
+}
+
 pub struct BleLink {
     peripheral: Peripheral,
     command: Characteristic,
@@ -266,6 +275,14 @@ pub async fn stop_scan(adapter: &Adapter) {
 }
 
 impl BleLink {
+    /// A handle to ask whether the system still holds the connection to the watch (local state,
+    /// no radio traffic). This is how a dead link is noticed, because the notification stream does
+    /// not end when the watch goes away. A clone, so the question can be awaited without
+    /// borrowing the whole link across the await.
+    pub fn connection_probe(&self) -> ConnectionProbe {
+        ConnectionProbe(self.peripheral.clone())
+    }
+
     /// The watch's advertised short id, e.g. `a1b2c3d4`.
     pub fn watch_tag(&self) -> Option<&str> {
         self.tag.as_deref()

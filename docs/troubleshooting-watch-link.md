@@ -47,6 +47,11 @@ details** panel. Start there; each entry below says what you will see and what i
   (its pairing port times out), or macOS is blocking local-network access for the app that launched
   the desktop (System Settings, Privacy & Security, Local Network). The Link health events show
   `watch found at ..., but its pairing server did not answer` when it is the former.
+- **The desktop does not reconnect after the watch app was reinstalled or killed.** A dead link is
+  noticed within a second by asking the Bluetooth stack whether the watch is still connected. Before that
+  check existed (older builds), a watch that was off the wrist when its app died left the desktop waiting
+  for up to 30 minutes; restarting the desktop app clears it. The watch app must also be running to advertise: a
+  reinstall does not start it, so open it once.
 - **Bluetooth off.** The desktop keeps checking for an adapter every 3 s and the watch rebuilds its
   server when Bluetooth returns; the phase reads `Retrying` with `is Bluetooth on?` until then.
 

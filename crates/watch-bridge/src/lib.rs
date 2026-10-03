@@ -72,8 +72,11 @@ const BLE_TRUST_GATE_POLL: Duration = Duration::from_secs(5);
 /// A watch that reports it is off the wrist stops its sensors and lets its CPU sleep, so it
 /// sends nothing for as long as it stays off. Silence of the ordinary heartbeat length would
 /// then end a healthy link; the Bluetooth link's own supervision timeout still reports a
-/// watch that really went away.
-const OFF_BODY_IDLE_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+/// watch that really went away. Only granted to a transport that can report a lost link itself
+/// (`WatchLinkTransport::is_alive`): this is a backstop for that check, not a replacement.
+const OFF_BODY_IDLE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+/// How often the transport is asked whether the peer is still connected.
+const LIVENESS_CHECK_INTERVAL: Duration = Duration::from_secs(1);
 /// Pause between BLE reconnect attempts, so a watch that is off or out of range
 /// doesn't spin the adapter.
 /// Wait after a failed scan or connect before trying again.
@@ -769,6 +772,19 @@ trait WatchLinkTransport: Send {
     fn silence_tolerance(&self) -> Duration {
         Duration::ZERO
     }
+    /// Whether the transport still considers the peer connected, asked of the transport's own
+    /// state with no traffic. Some backends never end the inbound stream when the peer goes away
+    /// (CoreBluetooth through btleplug does not), so without this a dead link is noticed only by a
+    /// failed write or a long silence, and the latter can be very long off the wrist.
+    async fn is_alive(&mut self) -> bool {
+        true
+    }
+    /// Whether the peer may go quiet on purpose when it is off the wrist (it lets its CPU sleep).
+    /// Only a transport that can tell a dead link from a quiet one ([`Self::is_alive`]) may be
+    /// granted [`OFF_BODY_IDLE_TIMEOUT`].
+    fn sleeps_when_off_body(&self) -> bool {
+        false
+    }
 }
 
 #[async_trait::async_trait]
@@ -812,6 +828,14 @@ impl WatchLinkTransport for BleLink {
 
     fn silence_tolerance(&self) -> Duration {
         BLE_SILENCE_TOLERANCE
+    }
+
+    async fn is_alive(&mut self) -> bool {
+        self.connection_probe().is_connected().await
+    }
+
+    fn sleeps_when_off_body(&self) -> bool {
+        true
     }
 }
 
@@ -1092,6 +1116,9 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
     // discovered peripheral), not read from each envelope.
     let peer_identity = link.peer_identity();
     let silence_tolerance = link.silence_tolerance();
+    let may_sleep_off_body = link.sleeps_when_off_body();
+    let mut liveness = tokio::time::interval(LIVENESS_CHECK_INTERVAL);
+    liveness.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut last_activity = Instant::now();
     let mut last_sequence: Option<u64> = None;
     let mut time_sync_ticker = tokio::time::interval(TIME_SYNC_INTERVAL);
@@ -1101,7 +1128,7 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
     let mut off_body = false;
 
     loop {
-        let idle_timeout = if off_body {
+        let idle_timeout = if off_body && may_sleep_off_body {
             OFF_BODY_IDLE_TIMEOUT
         } else {
             shared.heartbeat_timeout.max(silence_tolerance)
@@ -1113,6 +1140,12 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
         }
 
         tokio::select! {
+            _ = liveness.tick() => {
+                if !link.is_alive().await {
+                    info!("watch link ended: the transport reports the watch disconnected");
+                    break ConnectionEnd::StreamClosed;
+                }
+            }
             _ = time_sync_ticker.tick() => {
                 // A write would wake a sleeping watch's CPU every few seconds for an
                 // offset nothing is using while it is not streaming.
@@ -1672,6 +1705,105 @@ mod tests {
         assert_eq!(end, ConnectionEnd::HeartbeatTimeout);
         assert!(short < Duration::from_millis(400), "{short:?}");
         assert!(long >= Duration::from_millis(450), "{long:?}");
+    }
+
+    fn shared_with_heartbeat(heartbeat_timeout: Duration) -> Arc<SharedState> {
+        let (events, _) = broadcast::channel(16);
+        let (commands, _) = broadcast::channel(16);
+        let (sensor_commands, _) = broadcast::channel(16);
+        let (sensor_rate_commands, _) = broadcast::channel(16);
+        let (haptic_commands, _) = broadcast::channel(16);
+        Arc::new(SharedState {
+            events,
+            commands,
+            sensor_commands,
+            sensor_rate_commands,
+            haptic_commands,
+            active: AtomicBool::new(false),
+            heartbeat_timeout,
+            ble_status: Mutex::new(BleStatus::Idle),
+            link: diagnostics::LinkLog::default(),
+        })
+    }
+
+    /// Reports the watch off the wrist, then goes quiet. Whether it can say it has gone away
+    /// (`alive`) and whether it may sleep off the wrist are what differ between the cases.
+    struct OffWristLink {
+        first_message: Option<Vec<u8>>,
+        alive: Arc<AtomicBool>,
+        sleeps: bool,
+    }
+
+    #[async_trait::async_trait]
+    impl WatchLinkTransport for OffWristLink {
+        async fn send_text(&mut self, _text: String) -> Result<(), ()> {
+            Ok(())
+        }
+
+        async fn recv(&mut self) -> Option<Vec<u8>> {
+            match self.first_message.take() {
+                Some(bytes) => Some(bytes),
+                None => std::future::pending().await,
+            }
+        }
+
+        async fn is_alive(&mut self) -> bool {
+            self.alive.load(Ordering::SeqCst)
+        }
+
+        fn sleeps_when_off_body(&self) -> bool {
+            self.sleeps
+        }
+    }
+
+    fn run_off_wrist(sleeps: bool, kill_after: Option<Duration>) -> (ConnectionEnd, Duration) {
+        let shared = shared_with_heartbeat(Duration::from_millis(150));
+        let alive = Arc::new(AtomicBool::new(true));
+        if let Some(delay) = kill_after {
+            let alive = Arc::clone(&alive);
+            thread::spawn(move || {
+                thread::sleep(delay);
+                alive.store(false, Ordering::SeqCst);
+            });
+        }
+        let mut link = OffWristLink {
+            first_message: Some(wear_state_envelope(1, false)),
+            alive,
+            sleeps,
+        };
+        let started = Instant::now();
+        let end = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(run_connection(
+                &mut link,
+                &shared,
+                shared.commands.subscribe(),
+                shared.sensor_commands.subscribe(),
+                shared.sensor_rate_commands.subscribe(),
+                shared.haptic_commands.subscribe(),
+            ));
+        (end, started.elapsed())
+    }
+
+    #[test]
+    fn a_link_that_dies_while_the_watch_is_off_the_wrist_is_noticed_at_once() {
+        // The regression this guards: off the wrist the watch is allowed long silences, and the
+        // desktop stops its clock-sync writes, so nothing else would reveal that the watch app
+        // had been killed, and the desktop sat in a dead session instead of looking again.
+        let (end, elapsed) = run_off_wrist(true, Some(Duration::from_millis(300)));
+        assert_eq!(end, ConnectionEnd::StreamClosed);
+        assert!(elapsed < Duration::from_secs(3), "{elapsed:?}");
+    }
+
+    #[test]
+    fn a_transport_that_does_not_sleep_off_the_wrist_keeps_the_normal_silence_limit() {
+        // Wi-Fi holds its wake lock and keeps its heartbeat, so being off the wrist must not
+        // stretch how long a silent link is tolerated.
+        let (end, elapsed) = run_off_wrist(false, None);
+        assert_eq!(end, ConnectionEnd::HeartbeatTimeout);
+        assert!(elapsed < Duration::from_secs(2), "{elapsed:?}");
     }
 
     #[test]
