@@ -4,6 +4,7 @@
 
 - [Using the application](using-the-application.md): setup, every tab, and the safe workflow from raw telemetry to a desktop-controlled volume gesture
 - [Running the project](development/running-project.md): prerequisites, one-command launch, tracker setup, tests and CI
+- [Troubleshooting the watch link](troubleshooting-watch-link.md): reading Link health, why a link ends, and the causes found so far
 
 ## Architecture
 

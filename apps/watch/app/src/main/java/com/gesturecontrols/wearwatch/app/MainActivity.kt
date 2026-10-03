@@ -49,6 +49,7 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         /** Fast-changing status text is redrawn at most this often. */
         const val UI_REFRESH_INTERVAL_MS = 500L
+        const val LINK_LOG_LINES = 8
         const val WEAR_STATE_REPEAT_MS = 5_000L
         const val STATUS_MAX_SP = 34f
         const val STATUS_MIN_SP = 14f
@@ -82,6 +83,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sensorStatusText: TextView
     private lateinit var detailText: TextView
     private lateinit var ppgStatusText: TextView
+    private lateinit var linkLogText: TextView
+    private lateinit var linkCountersText: TextView
     private lateinit var spo2Button: Button
     private lateinit var ecgButton: Button
     private lateinit var biaButton: Button
@@ -166,6 +169,8 @@ class MainActivity : AppCompatActivity() {
         sensorStatusText = findViewById(R.id.sensorStatusText)
         detailText = findViewById(R.id.detailText)
         ppgStatusText = findViewById(R.id.ppgStatusText)
+        linkLogText = findViewById(R.id.linkLogText)
+        linkCountersText = findViewById(R.id.linkCountersText)
         spo2Button = findViewById(R.id.spo2Button)
         ecgButton = findViewById(R.id.ecgButton)
         biaButton = findViewById(R.id.biaButton)
@@ -326,6 +331,13 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 launch { onDemandSampler.state.collect { updateOnDemandButtons(it) } }
+                launch {
+                    // Only worth drawing while the details are open, and at most twice a second.
+                    LinkLog.revision.collect {
+                        if (detailsPanel.visibility == View.VISIBLE) renderLinkLog()
+                        delay(UI_REFRESH_INTERVAL_MS)
+                    }
+                }
             }
         }
     }
@@ -517,9 +529,15 @@ class MainActivity : AppCompatActivity() {
         forgetTrustButton.setText(R.string.action_forget_trust)
     }
 
+    private fun renderLinkLog() {
+        linkCountersText.text = LinkLog.counters()
+        linkLogText.text = LinkLog.lines(LINK_LOG_LINES).joinToString("\n")
+    }
+
     private fun toggleDetails() {
         val show = detailsPanel.visibility != View.VISIBLE
         detailsPanel.visibility = if (show) View.VISIBLE else View.GONE
+        if (show) renderLinkLog()
         detailsToggleButton.setText(if (show) R.string.details_hide else R.string.details_show)
     }
 

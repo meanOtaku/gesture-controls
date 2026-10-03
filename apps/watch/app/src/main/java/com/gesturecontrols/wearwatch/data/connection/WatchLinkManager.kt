@@ -6,7 +6,6 @@ import com.gesturecontrols.wearwatch.feature.motion.*
 import com.gesturecontrols.wearwatch.platform.service.*
 
 import android.os.SystemClock
-import android.util.Log
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -326,7 +325,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
      */
     private fun handleState(state: ConnectionState, reason: String?) {
         val wasConnected = _state.value == ConnectionState.CONNECTED
-        Log.i(TAG, "link state ${_state.value} -> $state${reason?.let { " ($it)" } ?: ""}")
+        LinkLog.add("link ${_state.value} → $state${reason?.let { " ($it)" } ?: ""}")
         _state.value = state
         _lastFailureReason.value = reason
         if (state == ConnectionState.CONNECTED) {
@@ -491,7 +490,6 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
     }
 
     companion object {
-        private const val TAG = "WatchLink"
         private const val HEARTBEAT_INTERVAL_MS = 1000L
         private const val MEDICAL_BATCH_INTERVAL_MS = 100L
         private const val PPG_BATCH_MAX_SAMPLES = 32

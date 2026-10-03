@@ -77,6 +77,12 @@ const BLE_RETRY_INTERVAL: Duration = Duration::from_secs(2);
 /// Wait after an established session ended, before scanning for the watch again. The watch is
 /// usually still advertising, so this is short: every second here is a second without data.
 const BLE_RECONNECT_DELAY: Duration = Duration::from_millis(500);
+/// How often to look for a Bluetooth adapter that was missing (typically switched off).
+const BLE_ADAPTER_RETRY_INTERVAL: Duration = Duration::from_secs(3);
+/// Silence tolerated on a Bluetooth link. A busy radio was measured holding writes for 3 s and
+/// leaving 2.3 s gaps in the data, and a really lost link is reported by Bluetooth itself
+/// within a second, so six seconds only changes how a merely slow link is treated.
+const BLE_SILENCE_TOLERANCE: Duration = Duration::from_secs(6);
 /// Upper bound on how long [`WatchBridgeServer::stop_ble`] waits for the BLE
 /// session to unwind (scan stop + GATT disconnect) before giving up on it.
 const BLE_STOP_TIMEOUT: Duration = Duration::from_secs(20);
@@ -724,6 +730,12 @@ trait WatchLinkTransport: Send {
     fn peer_identity(&self) -> Option<String> {
         None
     }
+    /// The shortest silence this transport may be held to. A transport with its own, quicker
+    /// detection of a lost link (Bluetooth's supervision timeout) can afford a longer one here,
+    /// which stops a radio that is merely busy from being reported as gone.
+    fn silence_tolerance(&self) -> Duration {
+        Duration::ZERO
+    }
 }
 
 #[async_trait::async_trait]
@@ -764,21 +776,39 @@ impl WatchLinkTransport for BleLink {
     fn peer_identity(&self) -> Option<String> {
         Some(self.device_id())
     }
+
+    fn silence_tolerance(&self) -> Duration {
+        BLE_SILENCE_TOLERANCE
+    }
 }
 
 /// Drives one BLE session end to end, retrying until cancelled. The `active`
 /// slot is claimed exactly as the WebSocket path claims it, so the two
 /// transports can never both believe a watch is attached.
 async fn run_ble_transport(shared: Arc<SharedState>, cancel: Arc<BleCancel>) {
-    let adapter = match ble::open_adapter().await {
-        Ok(adapter) => adapter,
-        Err(error) => {
-            warn!(%error, "watch BLE transport could not open an adapter");
-            shared.set_ble_status(BleStatus::Failed(error.to_string()));
-            return;
+    shared.link.transport("bluetooth");
+    // No adapter usually means Bluetooth is switched off. Keep asking, so turning it back on
+    // reconnects the watch without restarting the app; giving up here would leave the transport
+    // dead for the rest of the session while the UI said "retrying".
+    let adapter = loop {
+        match ble::open_adapter().await {
+            Ok(adapter) => break adapter,
+            Err(error) => {
+                warn!(%error, "watch BLE transport could not open an adapter; will retry");
+                shared.set_ble_status(BleStatus::Failed(format!(
+                    "no Bluetooth adapter available ({error}); is Bluetooth on?"
+                )));
+                shared.link.retry_in(BLE_ADAPTER_RETRY_INTERVAL);
+                tokio::select! {
+                    _ = tokio::time::sleep(BLE_ADAPTER_RETRY_INTERVAL) => continue,
+                    _ = cancel.cancelled() => {
+                        shared.set_ble_status(BleStatus::Idle);
+                        return;
+                    }
+                }
+            }
         }
     };
-    shared.link.transport("bluetooth");
     while !cancel.is_cancelled() {
         shared.link.scan_started();
         shared.set_ble_status(BleStatus::Scanning);
@@ -1015,6 +1045,7 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
     // Established once per connection by the transport (for BLE, the
     // discovered peripheral), not read from each envelope.
     let peer_identity = link.peer_identity();
+    let silence_tolerance = link.silence_tolerance();
     let mut last_activity = Instant::now();
     let mut last_sequence: Option<u64> = None;
     let mut time_sync_ticker = tokio::time::interval(TIME_SYNC_INTERVAL);
@@ -1027,7 +1058,7 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
         let idle_timeout = if off_body {
             OFF_BODY_IDLE_TIMEOUT
         } else {
-            shared.heartbeat_timeout
+            shared.heartbeat_timeout.max(silence_tolerance)
         };
         let remaining = idle_timeout.saturating_sub(last_activity.elapsed());
         if remaining.is_zero() {
@@ -1533,6 +1564,68 @@ mod tests {
         async fn recv(&mut self) -> Option<Vec<u8>> {
             self.inbound.pop_front()
         }
+    }
+
+    /// Never says anything; only its silence tolerance differs.
+    struct SilentLink {
+        tolerance: Duration,
+    }
+
+    #[async_trait::async_trait]
+    impl WatchLinkTransport for SilentLink {
+        async fn send_text(&mut self, _text: String) -> Result<(), ()> {
+            Ok(())
+        }
+
+        async fn recv(&mut self) -> Option<Vec<u8>> {
+            std::future::pending().await
+        }
+
+        fn silence_tolerance(&self) -> Duration {
+            self.tolerance
+        }
+    }
+
+    #[test]
+    fn a_transport_with_its_own_loss_detection_is_given_a_longer_silence_allowance() {
+        let run = |tolerance: Duration| {
+            let (events, _) = broadcast::channel(16);
+            let (commands, _) = broadcast::channel(16);
+            let (sensor_commands, _) = broadcast::channel(16);
+            let (sensor_rate_commands, _) = broadcast::channel(16);
+            let (haptic_commands, _) = broadcast::channel(16);
+            let shared = Arc::new(SharedState {
+                events,
+                commands,
+                sensor_commands,
+                sensor_rate_commands,
+                haptic_commands,
+                active: AtomicBool::new(false),
+                heartbeat_timeout: Duration::from_millis(100),
+                ble_status: Mutex::new(BleStatus::Idle),
+                link: diagnostics::LinkLog::default(),
+            });
+            let started = Instant::now();
+            let end = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(run_connection(
+                    &mut SilentLink { tolerance },
+                    &shared,
+                    shared.commands.subscribe(),
+                    shared.sensor_commands.subscribe(),
+                    shared.sensor_rate_commands.subscribe(),
+                    shared.haptic_commands.subscribe(),
+                ));
+            (end, started.elapsed())
+        };
+        let (end, short) = run(Duration::ZERO);
+        assert_eq!(end, ConnectionEnd::HeartbeatTimeout);
+        let (end, long) = run(Duration::from_millis(500));
+        assert_eq!(end, ConnectionEnd::HeartbeatTimeout);
+        assert!(short < Duration::from_millis(400), "{short:?}");
+        assert!(long >= Duration::from_millis(450), "{long:?}");
     }
 
     #[test]

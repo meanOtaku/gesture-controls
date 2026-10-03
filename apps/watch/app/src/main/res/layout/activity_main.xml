@@ -137,6 +137,24 @@
                 android:text="@string/ppg_idle"
                 android:textColor="@color/gc_ink_2"
                 android:textSize="10sp" />
+
+            <TextView
+                android:id="@+id/linkCountersText"
+                style="@style/Gc.Label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" />
+
+            <!-- The link's own account of itself, newest first: what connected, what dropped and why. -->
+            <TextView
+                android:id="@+id/linkLogText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:fontFamily="monospace"
+                android:gravity="start"
+                android:textColor="@color/gc_ink_3"
+                android:textSize="8sp" />
         </LinearLayout>
 
         <TextView

@@ -4,6 +4,7 @@ import com.gesturecontrols.wearwatch.data.preferences.ConnectionPrefs
 
 import android.Manifest
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
@@ -18,6 +19,9 @@ import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.bluetooth.le.BluetoothLeAdvertiser
 import android.content.Context
+import android.content.IntentFilter
+import android.content.Intent
+import android.content.BroadcastReceiver
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
@@ -101,16 +105,19 @@ class BleGattTransport(
         }
 
         override fun onServiceChanged(gatt: BluetoothGatt) {
-            Log.i(TAG, "central reported Service Changed; rediscovering")
+            LinkLog.add("desktop reported Service Changed; confirming")
             runCatching { gatt.discoverServices() }
         }
     }
+
+    /** A short, stable handle for a central in the log: enough to tell two apart without printing the whole address. */
+    private fun short(device: BluetoothDevice): String = "…" + device.address.takeLast(5)
 
     private fun openConfirmationClient(device: BluetoothDevice) {
         closeConfirmationClient()
         confirmationClient = runCatching {
             device.connectGatt(context.applicationContext, false, confirmationCallback, BluetoothDevice.TRANSPORT_LE)
-        }.onFailure { Log.w(TAG, "could not open the confirmation client", it) }.getOrNull()
+        }.onFailure { LinkLog.add("could not open the Service Changed confirmation client: ${it.javaClass.simpleName}") }.getOrNull()
     }
 
     private fun closeConfirmationClient() {
@@ -142,6 +149,8 @@ class BleGattTransport(
             return
         }
         started = true
+        LinkLog.add("bluetooth: starting (GATT server and advertising)")
+        registerAdapterStateReceiver()
         report(ConnectionState.CONNECTING, null)
         if (!openGattServer()) {
             started = false
@@ -157,6 +166,8 @@ class BleGattTransport(
             return
         }
         started = false
+        unregisterAdapterStateReceiver()
+        LinkLog.add("bluetooth: stopped")
         teardown()
         report(ConnectionState.DISCONNECTED, null)
     }
@@ -176,6 +187,12 @@ class BleGattTransport(
     }
 
     override fun send(message: String): Boolean {
+        val ok = sendMessage(message)
+        LinkLog.noteSend(ok)
+        return ok
+    }
+
+    private fun sendMessage(message: String): Boolean {
         if (!isTrusted(central) || !subscribed) return false
         val fragments = BleFraming.fragment(message.toByteArray(Charsets.UTF_8), BleFraming.attPayloadFor(mtu))
         if (fragments == null) return false
@@ -187,7 +204,7 @@ class BleGattTransport(
             // reassembler, which is worse than losing the backlog outright.
             if (outbound.size + fragments.size > MAX_QUEUED_FRAGMENTS) {
                 droppedBacklogs++
-                Log.w(TAG, "BLE backlog dropped (#$droppedBacklogs): ${outbound.size} queued fragments, mtu=$mtu; the desktop is not keeping up")
+                LinkLog.add("dropped ${outbound.size} queued fragments (#$droppedBacklogs, MTU $mtu): the desktop is not keeping up")
                 outbound.clear()
             }
             fragments.forEach { outbound.addLast(it) }
@@ -199,6 +216,7 @@ class BleGattTransport(
     /** Approves the central currently awaiting trust and starts streaming to it. */
     fun approvePendingCentral() {
         val address = _pendingTrustedCentral.value ?: return
+        LinkLog.add("trusted the desktop …${address.takeLast(5)}")
         prefs.trustedCentral = address
         _trustedCentral.value = address
         _pendingTrustedCentral.value = null
@@ -207,6 +225,7 @@ class BleGattTransport(
 
     /** Revokes the stored trust and drops the current central. */
     fun forgetTrustedCentral() {
+        LinkLog.add("forgot the trusted desktop")
         prefs.trustedCentral = null
         _trustedCentral.value = null
         val device = central
@@ -309,6 +328,53 @@ class BleGattTransport(
             .onFailure { report(ConnectionState.FAILED, "Bluetooth advertising was refused") }
     }
 
+    private var adapterReceiverRegistered = false
+
+    /**
+     * Bluetooth being switched off tears the GATT server down underneath this class; without
+     * this the watch would sit "advertising" a server that no longer exists. Off is reported
+     * as a failure with the way out; on rebuilds the server and advertisement.
+     */
+    private val adapterStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(receiverContext: Context, intent: Intent) {
+            if (intent.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
+            when (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)) {
+                BluetoothAdapter.STATE_OFF -> {
+                    LinkLog.add("Bluetooth was turned off")
+                    if (started) {
+                        teardown()
+                        report(ConnectionState.FAILED, "Bluetooth is off — turn it on to reconnect")
+                    }
+                }
+                BluetoothAdapter.STATE_ON -> {
+                    LinkLog.add("Bluetooth was turned on")
+                    if (started && gattServer == null) {
+                        if (openGattServer()) {
+                            startAdvertising()
+                            report(ConnectionState.CONNECTING, null)
+                        } else {
+                            report(ConnectionState.FAILED, "Could not reopen the Bluetooth GATT server")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun registerAdapterStateReceiver() {
+        if (adapterReceiverRegistered) return
+        runCatching {
+            context.applicationContext.registerReceiver(adapterStateReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
+            adapterReceiverRegistered = true
+        }
+    }
+
+    private fun unregisterAdapterStateReceiver() {
+        if (!adapterReceiverRegistered) return
+        adapterReceiverRegistered = false
+        runCatching { context.applicationContext.unregisterReceiver(adapterStateReceiver) }
+    }
+
     private fun teardown() {
         runCatching { advertiser?.stopAdvertising(advertiseCallback) }
         advertiser = null
@@ -395,14 +461,20 @@ class BleGattTransport(
     /** Only one desktop is served at a time, so nothing needs to find the watch while one is connected. */
     private fun stopAdvertising() {
         runCatching { advertiser?.stopAdvertising(advertiseCallback) }
+        LinkLog.add("advertising paused (a desktop is connected)")
     }
 
     private val advertiseCallback = object : AdvertiseCallback() {
+        override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
+            LinkLog.add("advertising: waiting for a desktop to find this watch")
+        }
+
         override fun onStartFailure(errorCode: Int) {
             if (errorCode == ADVERTISE_FAILED_ALREADY_STARTED) {
-                Log.i(TAG, "advertising was already running")
+                LinkLog.add("advertising was already running")
                 return
             }
+            LinkLog.add("advertising failed: ${advertiseFailureReason(errorCode)}")
             report(ConnectionState.FAILED, advertiseFailureReason(errorCode))
         }
     }
@@ -423,9 +495,11 @@ class BleGattTransport(
                 // One desktop at a time. A second central is refused rather
                 // than allowed to race the first one's session.
                 if (central != null && central?.address != device.address) {
+                    LinkLog.add("refused a second desktop ${short(device)} (one is already attached)")
                     runCatching { gattServer?.cancelConnection(device) }
                     return
                 }
+                LinkLog.add("desktop ${short(device)} connected")
                 central = device
                 subscribed = false
                 mtu = DEFAULT_MTU
@@ -440,6 +514,9 @@ class BleGattTransport(
                 updateConnectedState()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 if (central?.address != device.address) return
+                // Status 0 is a clean close; 8 a supervision timeout (out of range / radio);
+                // 19 the desktop hung up; 22 this watch did.
+                LinkLog.add("desktop ${short(device)} disconnected (status $status)")
                 central = null
                 closeConfirmationClient()
                 if (started && gattServer != null) startAdvertising()
@@ -458,7 +535,7 @@ class BleGattTransport(
         override fun onMtuChanged(device: BluetoothDevice, newMtu: Int) {
             if (central?.address != device.address) return
             mtu = newMtu.coerceAtLeast(DEFAULT_MTU)
-            Log.i(TAG, "BLE MTU negotiated: $newMtu (payload ${BleFraming.attPayloadFor(mtu)} bytes per notification)")
+            LinkLog.add("MTU $newMtu (${BleFraming.attPayloadFor(mtu)} bytes per notification)")
         }
 
         override fun onDescriptorWriteRequest(
@@ -484,6 +561,10 @@ class BleGattTransport(
                 _pendingTrustedCentral.value = device.address
             }
             subscribed = value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+            LinkLog.add(
+                "desktop ${short(device)} turned notifications " + (if (subscribed) "on" else "off") +
+                    (if (isTrusted(device)) "" else " (not trusted yet: waiting for approval)"),
+            )
             respond(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, responseNeeded)
             updateConnectedState()
             if (subscribed) pumpOutbound()
