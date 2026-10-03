@@ -38,6 +38,8 @@ dependencies {
     // Pure JVM unit tests for the transport-preference default/migration and
     // the BLE framing that has to stay byte-compatible with the desktop.
     testImplementation("junit:junit:4.13.2")
+    // The Android SDK jar only stubs org.json in JVM tests; the wire-format tests need the real thing.
+    testImplementation("org.json:json:20240303")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")

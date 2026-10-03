@@ -19,6 +19,7 @@ import android.bluetooth.le.BluetoothLeAdvertiser
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import android.os.ParcelUuid
 import androidx.core.content.ContextCompat
 import java.util.ArrayDeque
@@ -78,6 +79,7 @@ class BleGattTransport(
     /** Fragments waiting on [BluetoothGattServerCallback.onNotificationSent]. */
     private val outbound = ArrayDeque<ByteArray>()
     private var notificationInFlight = false
+    private var droppedBacklogs = 0
     private val reassembler = BleFraming.Reassembler()
     private var started = false
 
@@ -145,6 +147,8 @@ class BleGattTransport(
             // leave a half-sent envelope at the head and desync the desktop's
             // reassembler, which is worse than losing the backlog outright.
             if (outbound.size + fragments.size > MAX_QUEUED_FRAGMENTS) {
+                droppedBacklogs++
+                Log.w(TAG, "BLE backlog dropped (#$droppedBacklogs): ${outbound.size} queued fragments, mtu=$mtu; the desktop is not keeping up")
                 outbound.clear()
             }
             fragments.forEach { outbound.addLast(it) }
@@ -395,6 +399,7 @@ class BleGattTransport(
         override fun onMtuChanged(device: BluetoothDevice, newMtu: Int) {
             if (central?.address != device.address) return
             mtu = newMtu.coerceAtLeast(DEFAULT_MTU)
+            Log.i(TAG, "BLE MTU negotiated: $newMtu (payload ${BleFraming.attPayloadFor(mtu)} bytes per notification)")
         }
 
         override fun onDescriptorWriteRequest(
@@ -507,6 +512,7 @@ class BleGattTransport(
         /** ATT error 0x08; not exposed as a constant by the framework. */
         private const val INSUFFICIENT_AUTHORIZATION = 0x08
 
+        private const val TAG = "BleGattTransport"
         private const val DEFAULT_MTU = 23
 
         /**

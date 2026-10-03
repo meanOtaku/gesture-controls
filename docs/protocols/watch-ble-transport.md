@@ -47,7 +47,11 @@ message layer is BLE-specific, so both transports share one decoder
 Over BLE the **desktop** decides which device it is talking to. When the scan
 finds the watch, the desktop derives a device id from the discovered
 peripheral's platform identifier and stamps it onto every inbound envelope,
-**replacing** whatever `deviceId` the watch put there:
+**replacing** whatever `deviceId` the watch put there. Because of that, the watch
+sends the one-character placeholder `w` over BLE instead of its 42-character
+install id, and writes orientation floats in their shortest exact form (about
+40% fewer bytes per orientation envelope than the previous 17-digit widening);
+the watch logs the negotiated MTU and every dropped backlog (`BleGattTransport`):
 
 | Desktop OS | Peripheral identifier | Resulting id (example) |
 |---|---|---|

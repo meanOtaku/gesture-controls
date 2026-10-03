@@ -53,6 +53,15 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
     @Volatile
     var deviceId: String = deviceId
 
+    /**
+     * What actually goes on the wire. Over Bluetooth the desktop replaces the id
+     * with the peripheral's, so the 42-character install id would only add bytes
+     * to every fragment of every envelope on a link where bytes are the scarce
+     * resource.
+     */
+    private val wireDeviceId: String
+        get() = if (link?.kind == WatchTransportKind.BLUETOOTH) WatchProtocol.BLE_WIRE_DEVICE_ID else deviceId
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private var link: WatchTransportLink? = null
@@ -160,7 +169,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         val link = streamingLink() ?: return
         val seq = sequence.incrementAndGet()
         val message = WatchProtocol.orientationMessage(
-            deviceId,
+            wireDeviceId,
             seq,
             timestampNs,
             quaternion,
@@ -189,7 +198,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         val link = streamingLink() ?: return
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        link.send(WatchProtocol.ppgStatusMessage(deviceId, seq, timestampNs, state))
+        link.send(WatchProtocol.ppgStatusMessage(wireDeviceId, seq, timestampNs, state))
     }
 
     /** Sends a STEM button press/release, grabbing or releasing the desktop's volume overlay. */
@@ -198,7 +207,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
         val buttonState = if (pressed) WatchProtocol.BUTTON_STATE_DOWN else WatchProtocol.BUTTON_STATE_UP
-        link.send(WatchProtocol.buttonMessage(deviceId, seq, timestampNs, buttonState))
+        link.send(WatchProtocol.buttonMessage(wireDeviceId, seq, timestampNs, buttonState))
     }
 
     /** Buffers HEART_RATE_CONTINUOUS samples for the next medical flush tick; dropped if not connected. */
@@ -229,7 +238,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         for (chunk in samples.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
             val timestampNs = SystemClock.elapsedRealtimeNanos()
             val seq = sequence.incrementAndGet()
-            link.send(WatchProtocol.spo2BatchMessage(deviceId, seq, timestampNs, chunk))
+            link.send(WatchProtocol.spo2BatchMessage(wireDeviceId, seq, timestampNs, chunk))
         }
     }
 
@@ -240,7 +249,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         for (chunk in samples.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
             val timestampNs = SystemClock.elapsedRealtimeNanos()
             val seq = sequence.incrementAndGet()
-            link.send(WatchProtocol.ecgBatchMessage(deviceId, seq, timestampNs, chunk))
+            link.send(WatchProtocol.ecgBatchMessage(wireDeviceId, seq, timestampNs, chunk))
         }
     }
 
@@ -251,7 +260,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         for (chunk in samples.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
             val timestampNs = SystemClock.elapsedRealtimeNanos()
             val seq = sequence.incrementAndGet()
-            link.send(WatchProtocol.sweatLossBatchMessage(deviceId, seq, timestampNs, chunk))
+            link.send(WatchProtocol.sweatLossBatchMessage(wireDeviceId, seq, timestampNs, chunk))
         }
     }
 
@@ -260,7 +269,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         val link = streamingLink() ?: return
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        link.send(WatchProtocol.biaResultMessage(deviceId, seq, timestampNs, result))
+        link.send(WatchProtocol.biaResultMessage(wireDeviceId, seq, timestampNs, result))
     }
 
     /** Reports a medical tracker's [MedicalTrackerState.wireValue], continuous or on-demand, supported or not. */
@@ -268,7 +277,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         val link = streamingLink() ?: return
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        link.send(WatchProtocol.medicalStatusMessage(deviceId, seq, timestampNs, tracker, state))
+        link.send(WatchProtocol.medicalStatusMessage(wireDeviceId, seq, timestampNs, tracker, state))
     }
 
     /** Reports an IMU sensor's current enabled state ([SENSOR_ORIENTATION] etc.). */
@@ -276,7 +285,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         val link = streamingLink() ?: return
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        link.send(WatchProtocol.sensorStatusMessage(deviceId, seq, timestampNs, sensor, enabled))
+        link.send(WatchProtocol.sensorStatusMessage(wireDeviceId, seq, timestampNs, sensor, enabled))
     }
 
     /** The active link, but only while it is actually carrying traffic. */
@@ -337,7 +346,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         val link = streamingLink() ?: return
         val watchTimeNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        link.send(WatchProtocol.timeSyncMessage(deviceId, seq, watchTimeNs, desktopTimeNs, watchTimeNs))
+        link.send(WatchProtocol.timeSyncMessage(wireDeviceId, seq, watchTimeNs, desktopTimeNs, watchTimeNs))
     }
 
     /** Forwards a `desktop.start_measurement`/`desktop.stop_measurement` command to [onMeasurementCommand]; ignored if `tracker` is missing. */
@@ -381,7 +390,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
                     val seq = sequence.incrementAndGet()
                     link.send(
                         WatchProtocol.heartbeatMessage(
-                            deviceId,
+                            wireDeviceId,
                             seq,
                             timestampNs,
                             batteryPercentProvider?.invoke(),
@@ -414,7 +423,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         for (chunk in batch.chunked(PPG_BATCH_MAX_SAMPLES)) {
             val timestampNs = SystemClock.elapsedRealtimeNanos()
             val seq = sequence.incrementAndGet()
-            link.send(WatchProtocol.ppgBatchMessage(deviceId, seq, timestampNs, chunk))
+            link.send(WatchProtocol.ppgBatchMessage(wireDeviceId, seq, timestampNs, chunk))
         }
     }
 
@@ -437,7 +446,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
             for (chunk in batch.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
                 val timestampNs = SystemClock.elapsedRealtimeNanos()
                 val seq = sequence.incrementAndGet()
-                link.send(WatchProtocol.heartRateBatchMessage(deviceId, seq, timestampNs, chunk))
+                link.send(WatchProtocol.heartRateBatchMessage(wireDeviceId, seq, timestampNs, chunk))
             }
         }
 
@@ -452,7 +461,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
             for (chunk in batch.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
                 val timestampNs = SystemClock.elapsedRealtimeNanos()
                 val seq = sequence.incrementAndGet()
-                link.send(WatchProtocol.skinTemperatureBatchMessage(deviceId, seq, timestampNs, chunk))
+                link.send(WatchProtocol.skinTemperatureBatchMessage(wireDeviceId, seq, timestampNs, chunk))
             }
         }
 
@@ -463,7 +472,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
             for (chunk in batch.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
                 val timestampNs = SystemClock.elapsedRealtimeNanos()
                 val seq = sequence.incrementAndGet()
-                link.send(WatchProtocol.edaBatchMessage(deviceId, seq, timestampNs, chunk))
+                link.send(WatchProtocol.edaBatchMessage(wireDeviceId, seq, timestampNs, chunk))
             }
         }
     }

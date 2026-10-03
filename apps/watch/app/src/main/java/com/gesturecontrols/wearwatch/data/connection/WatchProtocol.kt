@@ -56,6 +56,9 @@ object WatchProtocol {
      */
     const val DEVICE_ID = "galaxy-watch-4"
 
+    /** Over Bluetooth the desktop overwrites the id with the peripheral's, so one byte is enough on the wire. */
+    const val BLE_WIRE_DEVICE_ID = "w"
+
     /** The only hardware button this milestone dispatches; see `MainActivity#onKeyDown`. */
     const val BUTTON_ID_STEM_PRIMARY = "stem_primary"
     const val BUTTON_STATE_DOWN = "down"
@@ -81,7 +84,9 @@ object WatchProtocol {
     private fun vectorOrNull(values: FloatArray?): JSONArray? {
         if (values == null) return null
         val array = JSONArray()
-        for (component in values) array.put(component.toDouble())
+        // Float.toString is the shortest text that reads back as the same float;
+        // widening to Double first would print ~17 digits per component.
+        for (component in values) array.put(component.toString().toDouble())
         return array
     }
 
