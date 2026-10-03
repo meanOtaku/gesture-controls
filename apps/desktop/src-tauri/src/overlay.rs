@@ -128,6 +128,9 @@ pub struct OverlayRuntime {
     state_generation: AtomicU64,
     refresh_in_flight: AtomicBool,
     last_wrist_rotation_haptic_at: Mutex<Option<Instant>>,
+    /// True while haptic sends are failing (e.g. no active watch connection),
+    /// so a stream of failures logs once instead of on every sample.
+    haptic_send_failing: AtomicBool,
     last_wrist_rotation_volume_write_at: Mutex<Option<Instant>>,
     /// Orders native volume writes among themselves. Deliberately separate
     /// from `state`: a blocking native command must never be held under the
@@ -176,6 +179,7 @@ impl Default for OverlayRuntime {
             state_generation: AtomicU64::new(0),
             refresh_in_flight: AtomicBool::new(false),
             last_wrist_rotation_haptic_at: Mutex::new(None),
+            haptic_send_failing: AtomicBool::new(false),
             last_wrist_rotation_volume_write_at: Mutex::new(None),
             native_write_lock: Mutex::new(()),
             last_relative_roll_diagnostic_at: Mutex::new(None),
@@ -501,12 +505,21 @@ impl OverlayRuntime {
         }) {
             return;
         }
-        *last_sent = Some(now);
-        drop(last_sent);
-        if let Err(error) = server.send_haptic_command(HapticCommand {
+        // The rate-limit slot is only consumed by a pulse that was actually
+        // sent: a failed send (watch disconnected) must not also silence the
+        // first pulse after it reconnects.
+        match server.send_haptic_command(HapticCommand {
             duration_ms: WRIST_ROTATION_HAPTIC_DURATION_MS,
         }) {
-            warn!(%error, "failed to send wrist rotation haptic pulse");
+            Ok(()) => {
+                *last_sent = Some(now);
+                self.haptic_send_failing.store(false, Ordering::Release);
+            }
+            Err(error) => {
+                if first_failure(&self.haptic_send_failing) {
+                    warn!(%error, "failed to send wrist rotation haptic pulse");
+                }
+            }
         }
     }
 
@@ -672,6 +685,12 @@ impl OverlayRuntime {
         }
         Ok(state.clone())
     }
+}
+
+/// Marks a failure streak as started and reports whether this was its first
+/// failure, so a persistent failure is logged once rather than per sample.
+fn first_failure(failing: &AtomicBool) -> bool {
+    !failing.swap(true, Ordering::AcqRel)
 }
 
 /// Whether enough time has passed since `last_write` for another wrist
@@ -842,6 +861,18 @@ pub async fn refresh_system_volume(app: AppHandle) -> Result<OverlayState, Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// R-M4-2: a persistent haptic failure is reported once, then again only
+    /// after a success has reset the streak.
+    #[test]
+    fn a_haptic_failure_streak_logs_only_its_first_failure() {
+        let failing = AtomicBool::new(false);
+        assert!(first_failure(&failing));
+        assert!(!first_failure(&failing));
+        assert!(!first_failure(&failing));
+        failing.store(false, Ordering::Release); // a pulse succeeded
+        assert!(first_failure(&failing));
+    }
 
     /// R-M4-3: the overlay has one `grabbed` flag; ownership decides who may
     /// start and who may end an interaction.

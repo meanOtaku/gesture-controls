@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
+import { GESTURE_POLICY_EVENT } from "../../../shared/protocol/events";
 import { usePendingActions } from "../hooks/usePendingActions";
 import {
   DEPLOYABLE_CLASS_LABELS,
@@ -46,7 +47,6 @@ import { TrainingPanel } from "./TrainingPanel";
 const TRAINING_EVENT = "model-lab-training-event";
 const MODEL_REGISTRY_EVENT = "model-registry-updated";
 const PPG_WINDOW_OBSERVED_EVENT = "gesture-ppg-window-observed";
-const GESTURE_POLICY_EVENT = "gesture-policy-decision";
 
 export function ModelLab() {
   const desktopAvailable = "__TAURI_INTERNALS__" in window;

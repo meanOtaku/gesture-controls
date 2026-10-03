@@ -52,6 +52,8 @@ use crate::overlay::{GrabOwner, OverlayRuntime};
 use crate::settings::SettingsRuntime;
 use crate::watch::WatchRuntime;
 
+/// Mirrored in `src/shared/protocol/events.ts`; `event_names_match_the_frontend_protocol`
+/// fails if the two drift.
 pub const GESTURE_POLICY_EVENT: &str = "gesture-policy-decision";
 
 /// Emitted once per raw PPG window that reaches [`ingest_ppg_window`],
@@ -1309,5 +1311,22 @@ mod ppg_window_tests {
             !decision_actuates(released),
             "a start resolved to NoAction must never let an interleaved release actuate"
         );
+    }
+
+    /// R-M4-7: event names are a hand-maintained cross-language contract; the
+    /// frontend's single declaration must equal the Rust constant.
+    #[test]
+    fn event_names_match_the_frontend_protocol() {
+        let events_ts = include_str!("../../src/shared/protocol/events.ts");
+        for (name, value) in [
+            ("GESTURE_POLICY_EVENT", GESTURE_POLICY_EVENT),
+            ("OVERLAY_STATE_EVENT", crate::overlay::OVERLAY_STATE_EVENT),
+        ] {
+            let declaration = format!("export const {name} = \"{value}\";");
+            assert!(
+                events_ts.contains(&declaration),
+                "events.ts must declare `{declaration}`"
+            );
+        }
     }
 }

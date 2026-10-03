@@ -24,6 +24,16 @@ const WATCH_WEBSOCKET_ADDRESS: SocketAddr =
     SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 8766);
 const WATCH_HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(3);
 const MAIN_WINDOW: &str = "main";
+/// Upper bound on stopping both watch transports when the main window
+/// closes (each is internally bounded, but nothing bounded the pair).
+const TEARDOWN_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// True when the watch event channel can never deliver again (every sender
+/// dropped), as opposed to `Lagged`, which only means some events were
+/// skipped.
+fn watch_events_closed(error: &tokio::sync::broadcast::error::RecvError) -> bool {
+    matches!(error, tokio::sync::broadcast::error::RecvError::Closed)
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -112,12 +122,19 @@ pub fn run() {
                     if let Some(server) = handle.try_state::<Arc<WatchBridgeServer>>() {
                         // Both transports are torn down on exit regardless of
                         // which one is selected, so neither a listener nor a
-                        // GATT connection outlives the window.
-                        if let Err(error) = server.stop_ble().await {
-                            warn!(%error, "failed to stop watch BLE transport during teardown");
-                        }
-                        if let Err(error) = server.stop().await {
-                            warn!(%error, "failed to stop watch bridge server during teardown");
+                        // GATT connection outlives the window. The whole
+                        // teardown is bounded: a hung transport must not be
+                        // able to keep a closed window's process alive.
+                        let teardown = async {
+                            if let Err(error) = server.stop_ble().await {
+                                warn!(%error, "failed to stop watch BLE transport during teardown");
+                            }
+                            if let Err(error) = server.stop().await {
+                                warn!(%error, "failed to stop watch bridge server during teardown");
+                            }
+                        };
+                        if tokio::time::timeout(TEARDOWN_TIMEOUT, teardown).await.is_err() {
+                            warn!(timeout = ?TEARDOWN_TIMEOUT, "watch transport teardown timed out; exiting anyway");
                         }
                     }
                     handle.exit(0);
@@ -275,6 +292,13 @@ pub fn run() {
                                 &watch_handle,
                                 interaction_engine::ForceReleaseReason::StaleSensorWindow,
                             );
+                            // `Lagged` is recoverable (events were dropped, the
+                            // stream continues); `Closed` is permanent, and
+                            // looping on it would spin force-releasing forever.
+                            if watch_events_closed(&error) {
+                                error!("watch event channel closed; stopping the watch event loop");
+                                break;
+                            }
                         }
                     }
                 }
@@ -283,4 +307,17 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running Spatial Gesture Control");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::sync::broadcast::error::RecvError;
+
+    /// R-M4-1: only `Closed` may end the watch event loop.
+    #[test]
+    fn only_a_closed_watch_event_channel_ends_the_loop() {
+        assert!(watch_events_closed(&RecvError::Closed));
+        assert!(!watch_events_closed(&RecvError::Lagged(3)));
+    }
 }

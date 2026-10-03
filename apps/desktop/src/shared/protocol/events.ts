@@ -158,6 +158,8 @@ export const CALIBRATION_STATE_EVENT = "head-calibration-state";
 export const HEAD_TARGET_ENTERED_EVENT = "head-target-entered";
 export const HEAD_TARGET_EXITED_EVENT = "head-target-exited";
 export const OVERLAY_STATE_EVENT = "overlay-state";
+/** Mirrors `inference::GESTURE_POLICY_EVENT`; a Rust test fails if they differ. */
+export const GESTURE_POLICY_EVENT = "gesture-policy-decision";
 export interface WatchPpgBatch {
   sequence: number;
   /**
