@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::Once;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
@@ -18,6 +19,7 @@ use volume_control::{
 use watch_bridge::{HapticCommand, WatchBridgeServer};
 
 use crate::calibration::CalibrationRuntime;
+use crate::latest_write::{LatestWriteSlot, PendingWrite};
 
 pub const OVERLAY_STATE_EVENT: &str = "overlay-state";
 const MAIN_WINDOW: &str = "main";
@@ -131,7 +133,13 @@ pub struct OverlayRuntime {
     /// True while haptic sends are failing (e.g. no active watch connection),
     /// so a stream of failures logs once instead of on every sample.
     haptic_send_failing: AtomicBool,
-    last_wrist_rotation_volume_write_at: Mutex<Option<Instant>>,
+    /// Hand-off of wrist-rotation volume targets to the writer thread; see
+    /// [`crate::latest_write`] for why the write must not run on the watch event loop.
+    wrist_volume_slot: Arc<LatestWriteSlot>,
+    wrist_writer_started: Once,
+    /// Identifies the current volume interaction. Bumped whenever one begins or ends, so a
+    /// queued write from an earlier interaction is dropped instead of landing on a later one.
+    interaction_epoch: AtomicU64,
     /// Orders native volume writes among themselves. Deliberately separate
     /// from `state`: a blocking native command must never be held under the
     /// lock that `hide`/`release`/`grab` need, or a hung audio adapter would
@@ -180,7 +188,9 @@ impl Default for OverlayRuntime {
             refresh_in_flight: AtomicBool::new(false),
             last_wrist_rotation_haptic_at: Mutex::new(None),
             haptic_send_failing: AtomicBool::new(false),
-            last_wrist_rotation_volume_write_at: Mutex::new(None),
+            wrist_volume_slot: Arc::new(LatestWriteSlot::default()),
+            wrist_writer_started: Once::new(),
+            interaction_epoch: AtomicU64::new(0),
             native_write_lock: Mutex::new(()),
             last_relative_roll_diagnostic_at: Mutex::new(None),
         }
@@ -266,6 +276,7 @@ impl OverlayRuntime {
         state.grab_owner = None;
         state.corner_demo_phase = None;
         state.last_relative_roll_degrees = None;
+        self.end_interaction();
         self.wrist_rotation
             .lock()
             .map_err(|_| "wrist rotation lock was poisoned")?
@@ -277,6 +288,13 @@ impl OverlayRuntime {
         let snapshot = state.clone();
         let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
         Ok(snapshot)
+    }
+
+    /// Ends the current volume interaction as far as queued writes are concerned: any write
+    /// waiting for the writer thread belongs to it and must not be applied.
+    fn end_interaction(&self) {
+        self.interaction_epoch.fetch_add(1, Ordering::AcqRel);
+        self.wrist_volume_slot.clear();
     }
 
     /// Marks the overlay grabbed by a held watch button. A no-op unless the
@@ -334,8 +352,10 @@ impl OverlayRuntime {
             .get_webview_window(OVERLAY_WINDOW)
             .ok_or("overlay window is not configured")?;
         state.grabbed = false;
+        state.grab_owner = None;
         state.corner_demo_phase = None;
         state.last_relative_roll_degrees = None;
+        self.end_interaction();
         self.wrist_rotation
             .lock()
             .map_err(|_| "wrist rotation lock was poisoned")?
@@ -410,19 +430,25 @@ impl OverlayRuntime {
             warn!(%error, "failed to begin wrist rotation reference; releasing grab");
             return self.release(app);
         }
-        if let Ok(mut last_write) = self.last_wrist_rotation_volume_write_at.lock() {
-            *last_write = None;
-        }
+        // A new interaction: anything still queued for the previous one is stale.
+        self.end_interaction();
         self.state()
     }
 
+    /// Feeds one orientation sample to the wrist mapper and, if it asks for a different
+    /// volume, hands the new target to the writer thread.
+    ///
+    /// This runs on the watch event loop, so it must stay cheap: every sample is still passed
+    /// through [`WristRotation::observe`] (so its monotonicity and velocity-outlier checks see
+    /// every sample, exactly as before), but the native volume call, which can take 130-190 ms,
+    /// is done by [`Self::ensure_wrist_writer`]'s thread instead. A target is skipped, not queued,
+    /// when a newer one arrives first; see [`crate::latest_write`].
     pub(crate) fn apply_wrist_rotation(
         &self,
         app: &AppHandle,
         sample: &WatchOrientationSample,
-        volume_runtime: &VolumeRuntime,
     ) -> Result<OverlayState, String> {
-        let (target_volume, relative_degrees) = {
+        let (target_volume, relative_degrees, mapper_active) = {
             let mut wrist_rotation = self
                 .wrist_rotation
                 .lock()
@@ -430,45 +456,97 @@ impl OverlayRuntime {
             let target_volume = wrist_rotation
                 .observe(sample.quaternion, sample.timestamp_ns)
                 .map_err(|error| error.to_string())? as f32;
-            (target_volume, wrist_rotation.last_relative_degrees())
+            (
+                target_volume,
+                wrist_rotation.last_relative_degrees(),
+                wrist_rotation.is_active(),
+            )
         };
         self.update_relative_roll_diagnostic(app, relative_degrees.map(|degrees| degrees as f32));
         let state = self.state()?;
-        if !state.grabbed || (target_volume - state.volume).abs() < f32::EPSILON {
+        // An inactive mapper reports a placeholder target of 0.0, which is not a volume to
+        // apply; the overlay can read as grabbed for a moment before the mapper has its
+        // reference pose.
+        if !state.grabbed || !mapper_active || (target_volume - state.volume).abs() < f32::EPSILON {
+            // Nothing to write. If the wrist came back to the applied volume, a target still
+            // waiting for the writer is now wrong and must not go out.
+            self.wrist_volume_slot.clear();
             let next_phase = corner_demo_phase_after_sample(state.corner_demo_phase, false);
             if next_phase != state.corner_demo_phase {
                 return self.set_corner_demo_phase(app, next_phase);
             }
             return Ok(state);
         }
-        if !self.claim_wrist_rotation_volume_write() {
-            return Ok(state);
-        }
-        let applied = self.set_absolute_system_volume(app, target_volume, volume_runtime)?;
-        if (applied.volume - state.volume).abs() >= f32::EPSILON {
-            self.notify_wrist_rotation_haptic(app);
-        }
-        let next_phase = corner_demo_phase_after_sample(state.corner_demo_phase, true);
-        if next_phase != state.corner_demo_phase {
-            return self.set_corner_demo_phase(app, next_phase);
-        }
-        Ok(applied)
+        self.ensure_wrist_writer(app);
+        self.wrist_volume_slot.submit(PendingWrite {
+            target_percent: target_volume,
+            epoch: self.interaction_epoch.load(Ordering::Acquire),
+        });
+        Ok(state)
     }
 
-    /// Claims the next wrist-rotation volume write slot, returning `false`
-    /// (skip this sample) if one was claimed less than
-    /// [`WRIST_ROTATION_VOLUME_WRITE_MIN_INTERVAL`] ago. Fails closed: a
-    /// poisoned lock skips the write.
-    fn claim_wrist_rotation_volume_write(&self) -> bool {
-        let Ok(mut last_write) = self.last_wrist_rotation_volume_write_at.lock() else {
-            return false;
-        };
-        let now = Instant::now();
-        if !volume_write_due(*last_write, now) {
-            return false;
+    /// Starts the writer thread on first use. It lives for the rest of the process, blocking
+    /// on the mailbox while idle, so a quiet period costs nothing.
+    fn ensure_wrist_writer(&self, app: &AppHandle) {
+        self.wrist_writer_started.call_once(|| {
+            let slot = Arc::clone(&self.wrist_volume_slot);
+            let app = app.clone();
+            let spawned = std::thread::Builder::new()
+                .name("wrist-volume-writer".to_string())
+                .spawn(move || {
+                    let mut last_write_at: Option<Instant> = None;
+                    while let Some(mut job) = slot.take_blocking() {
+                        // Pace the writes, then send the freshest target rather than the one
+                        // that woke us.
+                        let wait = write_pacing_wait(last_write_at, Instant::now());
+                        if !wait.is_zero() {
+                            std::thread::sleep(wait);
+                            job = slot.refresh(job);
+                        }
+                        let overlay = app.state::<OverlayRuntime>();
+                        let volume_runtime = app.state::<VolumeRuntime>();
+                        overlay.write_wrist_volume(&app, job, &volume_runtime);
+                        last_write_at = Some(Instant::now());
+                    }
+                });
+            if let Err(error) = spawned {
+                warn!(%error, "failed to start the wrist volume writer; wrist volume control is unavailable");
+            }
+        });
+    }
+
+    /// Applies one queued wrist target, on the writer thread. Checks again, at the moment of
+    /// the write, that the interaction it was queued for is still the current one and still
+    /// grabbed: a release or a new grab while it waited makes it stale.
+    fn write_wrist_volume(
+        &self,
+        app: &AppHandle,
+        job: PendingWrite,
+        volume_runtime: &VolumeRuntime,
+    ) {
+        if job.epoch != self.interaction_epoch.load(Ordering::Acquire) {
+            return;
         }
-        *last_write = Some(now);
-        true
+        let Ok(state) = self.state() else {
+            return;
+        };
+        if !state.grabbed || (job.target_percent - state.volume).abs() < f32::EPSILON {
+            return;
+        }
+        match self.set_absolute_system_volume(app, job.target_percent, volume_runtime) {
+            Ok(applied) => {
+                if (applied.volume - state.volume).abs() >= f32::EPSILON {
+                    self.notify_wrist_rotation_haptic(app);
+                }
+                let next_phase = corner_demo_phase_after_sample(state.corner_demo_phase, true);
+                if next_phase != state.corner_demo_phase
+                    && let Err(error) = self.set_corner_demo_phase(app, next_phase)
+                {
+                    warn!(%error, "failed to update the corner demo phase after a wrist volume write");
+                }
+            }
+            Err(error) => warn!(%error, "failed to apply wrist rotation to volume"),
+        }
     }
 
     /// Sets the corner-demo status shown on the overlay; a no-op (no emit, no
@@ -700,11 +778,12 @@ fn first_failure(failing: &AtomicBool) -> bool {
     !failing.swap(true, Ordering::AcqRel)
 }
 
-/// Whether enough time has passed since `last_write` for another wrist
-/// rotation volume write.
-fn volume_write_due(last_write: Option<Instant>, now: Instant) -> bool {
-    last_write.is_none_or(|previous| {
-        now.duration_since(previous) >= WRIST_ROTATION_VOLUME_WRITE_MIN_INTERVAL
+/// How long the writer must still wait before its next wrist-rotation volume write: nothing
+/// before the first write, then whatever remains of
+/// [`WRIST_ROTATION_VOLUME_WRITE_MIN_INTERVAL`] since the previous one finished.
+fn write_pacing_wait(last_write: Option<Instant>, now: Instant) -> Duration {
+    last_write.map_or(Duration::ZERO, |previous| {
+        WRIST_ROTATION_VOLUME_WRITE_MIN_INTERVAL.saturating_sub(now.duration_since(previous))
     })
 }
 
@@ -936,36 +1015,27 @@ mod tests {
     }
 
     #[test]
-    fn volume_write_is_due_for_the_first_write_and_after_the_interval() {
+    fn the_writer_waits_only_for_what_remains_of_the_minimum_interval() {
         let now = Instant::now();
-        assert!(volume_write_due(None, now));
-        assert!(!volume_write_due(Some(now), now));
-        assert!(!volume_write_due(
-            Some(now),
-            now + WRIST_ROTATION_VOLUME_WRITE_MIN_INTERVAL - Duration::from_millis(1)
-        ));
-        assert!(volume_write_due(
-            Some(now),
-            now + WRIST_ROTATION_VOLUME_WRITE_MIN_INTERVAL
-        ));
-    }
-
-    /// D-M4-1: a 50Hz orientation stream must yield at most one native
-    /// write per interval, not one per sample.
-    #[test]
-    fn a_fifty_hertz_stream_is_throttled_to_the_write_interval() {
-        let start = Instant::now();
-        let mut last = None;
-        let mut writes = 0;
-        for tick in 0..20u32 {
-            let now = start + Duration::from_millis(u64::from(tick) * 20);
-            if volume_write_due(last, now) {
-                last = Some(now);
-                writes += 1;
-            }
-        }
-        // 400ms of samples at a 100ms interval: writes at 0, 100, 200, 300.
-        assert_eq!(writes, 4);
+        assert_eq!(write_pacing_wait(None, now), Duration::ZERO);
+        assert_eq!(
+            write_pacing_wait(Some(now), now),
+            WRIST_ROTATION_VOLUME_WRITE_MIN_INTERVAL
+        );
+        assert_eq!(
+            write_pacing_wait(Some(now), now + Duration::from_millis(40)),
+            WRIST_ROTATION_VOLUME_WRITE_MIN_INTERVAL - Duration::from_millis(40)
+        );
+        assert_eq!(
+            write_pacing_wait(Some(now), now + WRIST_ROTATION_VOLUME_WRITE_MIN_INTERVAL),
+            Duration::ZERO
+        );
+        // A slow native call (an osascript write takes 130-190 ms) already exceeds the
+        // interval, so it adds no extra delay on top.
+        assert_eq!(
+            write_pacing_wait(Some(now), now + Duration::from_millis(150)),
+            Duration::ZERO
+        );
     }
 
     #[test]

@@ -18,7 +18,9 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
 use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
@@ -429,6 +431,23 @@ pub fn save_recording_bundle(
     Ok(summarize_bundle(&recording, &annotations))
 }
 
+/// Rejects a data row whose field count is not `RAW_CSV_HEADER.len()`. Counting
+/// the commas is a single cheap pass; collecting every field into a `Vec` just to
+/// take its length cost an allocation per row (and `raw.csv` can hold hundreds of
+/// thousands of rows). Callers run this *before* parsing any field, so a short or
+/// long row is reported as such rather than as whichever field happened to fail.
+fn check_raw_csv_field_count(line: &str, row_number: usize) -> Result<(), String> {
+    let field_count = line.bytes().filter(|&byte| byte == b',').count() + 1;
+    if field_count == RAW_CSV_HEADER.len() {
+        Ok(())
+    } else {
+        Err(format!(
+            "malformed raw.csv: row {row_number} has {field_count} fields, expected {}",
+            RAW_CSV_HEADER.len()
+        ))
+    }
+}
+
 /// Validates a complete `raw.csv` document against the exact `RAW_CSV_HEADER`
 /// contract and existing per-field parsing rules (empty -> null, non-empty
 /// must parse as its numeric type), and returns the data row count plus the
@@ -454,19 +473,13 @@ fn validate_raw_csv_full(content: &str) -> Result<(usize, i64, i64), String> {
             continue;
         }
         let row_number = offset + 2; // 1-indexed, plus the header line
-        let fields: Vec<&str> = line.split(',').collect();
-        if fields.len() != RAW_CSV_HEADER.len() {
-            return Err(format!(
-                "malformed raw.csv: row {row_number} has {} fields, expected {}",
-                fields.len(),
-                RAW_CSV_HEADER.len()
-            ));
-        }
-        let timestamp_ns: i64 = fields[0].trim().parse().map_err(|_| {
+        check_raw_csv_field_count(line, row_number)?;
+        let mut fields = line.split(',');
+        let timestamp_ns: i64 = fields.next().unwrap_or("").trim().parse().map_err(|_| {
             format!("malformed raw.csv: row {row_number} has a non-numeric timestamp_ns")
         })?;
-        for (column_index, column_name) in RAW_CSV_HEADER.iter().enumerate().skip(1) {
-            let raw_value = fields[column_index].trim();
+        for column_name in RAW_CSV_HEADER.iter().skip(1) {
+            let raw_value = fields.next().unwrap_or("").trim();
             if !raw_value.is_empty() {
                 raw_value.parse::<f64>().map_err(|_| {
                     format!(
@@ -755,7 +768,10 @@ pub fn delete_recording_bundle(recording_id: String, app: AppHandle) -> Result<(
     validate_recording_id(&recording_id)?;
     let dir = recording_bundles_dir(&app)?.join(&recording_id);
     load_bundle_pair(&dir)?;
-    fs::remove_dir_all(&dir).map_err(|error| error.to_string())
+    fs::remove_dir_all(&dir).map_err(|error| error.to_string())?;
+    app.state::<RawColumnCache>()
+        .invalidate_recording(&recording_id);
+    Ok(())
 }
 
 /// A bounded, read-only window into one numeric `raw.csv` column, resolved
@@ -778,6 +794,121 @@ pub struct RawRecordingWindow {
     pub channel_available: bool,
     pub recording_min: Option<f64>,
     pub recording_max: Option<f64>,
+}
+
+/// One parsed `raw.csv` column plus every row's timestamp, shared by reference so a cache
+/// hit costs a pointer copy instead of a re-parse.
+#[derive(Debug)]
+pub struct ParsedColumn {
+    pub timestamps_ns: Vec<i64>,
+    pub values: Vec<Option<f64>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RawColumnKey {
+    recording_id: String,
+    column: String,
+    /// The file's size and modification time when it was read. A recording's `raw.csv` is
+    /// immutable, but keying on its fingerprint means a replaced or rewritten file can never
+    /// be served from a stale entry.
+    len: u64,
+    modified: Option<SystemTime>,
+}
+
+/// How many parsed columns are kept. A parsed column is about 24 bytes per row (a timestamp
+/// and an `Option<f64>`), so a 200,000-row recording is ~5 MB per entry and the whole cache
+/// stays under ~30 MB even for the largest `raw.csv` the app accepts.
+const RAW_COLUMN_CACHE_CAPACITY: usize = 4;
+
+/// Bounded least-recently-used cache of parsed `raw.csv` columns.
+///
+/// Every viewer command (raw window, derivative window, compact window) used to read the
+/// whole file and parse it again to serve one small window, so scrubbing the viewer paid a
+/// full parse (tens of milliseconds for a realistic 15 MB recording) per step. They now share
+/// this cache, so only the first request for a recording and column parses.
+#[derive(Default)]
+pub struct RawColumnCache {
+    entries: Mutex<Vec<(RawColumnKey, Arc<ParsedColumn>)>>,
+}
+
+impl RawColumnCache {
+    /// The parsed `column` of the recording whose `raw.csv` is at `csv_path`, from the cache
+    /// when the file is unchanged. Parsing happens outside the lock, so a slow first parse
+    /// never blocks a request for a different recording.
+    pub fn get_or_parse(
+        &self,
+        recording_id: &str,
+        column: &str,
+        csv_path: &Path,
+    ) -> Result<Arc<ParsedColumn>, String> {
+        let read_error = |error: std::io::Error| {
+            format!("failed to read raw.csv for recording '{recording_id}': {error}")
+        };
+        let metadata = fs::metadata(csv_path).map_err(read_error)?;
+        if metadata.len() > MAX_RAW_CSV_BYTES as u64 {
+            return Err(format!(
+                "raw.csv exceeds the {MAX_RAW_CSV_BYTES}-byte limit (got {} bytes)",
+                metadata.len()
+            ));
+        }
+        let key = RawColumnKey {
+            recording_id: recording_id.to_string(),
+            column: column.to_string(),
+            len: metadata.len(),
+            modified: metadata.modified().ok(),
+        };
+
+        {
+            let mut entries = self
+                .entries
+                .lock()
+                .map_err(|_| "raw column cache lock was poisoned".to_string())?;
+            if let Some(position) = entries.iter().position(|(existing, _)| *existing == key) {
+                let entry = entries.remove(position);
+                let parsed = Arc::clone(&entry.1);
+                entries.push(entry); // most recently used goes last
+                return Ok(parsed);
+            }
+        }
+
+        let content = fs::read_to_string(csv_path).map_err(read_error)?;
+        let (timestamps_ns, values) = parse_raw_csv_column(&content, column)?;
+        drop(content);
+        let parsed = Arc::new(ParsedColumn {
+            timestamps_ns,
+            values,
+        });
+
+        let mut entries = self
+            .entries
+            .lock()
+            .map_err(|_| "raw column cache lock was poisoned".to_string())?;
+        // Replace any earlier entry for this recording and column, whatever its fingerprint:
+        // one that no longer matches the file is stale and only wastes the bounded space.
+        entries.retain(|(existing, _)| {
+            !(existing.recording_id == key.recording_id && existing.column == key.column)
+        });
+        entries.push((key, Arc::clone(&parsed)));
+        while entries.len() > RAW_COLUMN_CACHE_CAPACITY {
+            entries.remove(0);
+        }
+        Ok(parsed)
+    }
+
+    /// Drops everything cached for a recording (used when it is deleted).
+    pub fn invalidate_recording(&self, recording_id: &str) {
+        if let Ok(mut entries) = self.entries.lock() {
+            entries.retain(|(key, _)| key.recording_id != recording_id);
+        }
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.entries
+            .lock()
+            .map(|entries| entries.len())
+            .unwrap_or(0)
+    }
 }
 
 fn raw_csv_path(dir: &std::path::Path) -> PathBuf {
@@ -814,18 +945,23 @@ fn parse_raw_csv_column(
             continue;
         }
         let row_number = offset + 2; // 1-indexed, plus the header line
-        let fields: Vec<&str> = line.split(',').collect();
-        if fields.len() != RAW_CSV_HEADER.len() {
-            return Err(format!(
-                "malformed raw.csv: row {row_number} has {} fields, expected {}",
-                fields.len(),
-                RAW_CSV_HEADER.len()
-            ));
+        check_raw_csv_field_count(line, row_number)?;
+        // Only the timestamp and the requested column are needed: walk the fields
+        // once and stop at the column, instead of materializing all of them.
+        let (mut timestamp_field, mut value_field) = ("", "");
+        for (index, field) in line.split(',').enumerate() {
+            if index == 0 {
+                timestamp_field = field;
+            }
+            if index == column_index {
+                value_field = field;
+                break;
+            }
         }
-        let timestamp_ns: i64 = fields[0].trim().parse().map_err(|_| {
+        let timestamp_ns: i64 = timestamp_field.trim().parse().map_err(|_| {
             format!("malformed raw.csv: row {row_number} has a non-numeric timestamp_ns")
         })?;
-        let raw_value = fields[column_index].trim();
+        let raw_value = value_field.trim();
         let value = if raw_value.is_empty() {
             None
         } else {
@@ -891,16 +1027,10 @@ pub fn get_raw_recording_window(
 
     let dir = recording_bundles_dir(&app)?.join(&recording_id);
     let csv_path = raw_csv_path(&dir);
-    let content = fs::read_to_string(&csv_path).map_err(|error| {
-        format!("failed to read raw.csv for recording '{recording_id}': {error}")
-    })?;
-    if content.len() > MAX_RAW_CSV_BYTES {
-        return Err(format!(
-            "raw.csv exceeds the {MAX_RAW_CSV_BYTES}-byte limit (got {} bytes)",
-            content.len()
-        ));
-    }
-    let (timestamps_ns, all_values) = parse_raw_csv_column(&content, &column)?;
+    let parsed = app
+        .state::<RawColumnCache>()
+        .get_or_parse(&recording_id, &column, &csv_path)?;
+    let (timestamps_ns, all_values) = (&parsed.timestamps_ns, &parsed.values);
 
     let total_raw_row_count = all_values.len();
     let (resolved_start, resolved_end) =
@@ -1206,24 +1336,18 @@ pub fn get_compact_observation_window(
 
     let dir = recording_bundles_dir(&app)?.join(&recording_id);
     let csv_path = raw_csv_path(&dir);
-    let content = fs::read_to_string(&csv_path).map_err(|error| {
-        format!("failed to read raw.csv for recording '{recording_id}': {error}")
-    })?;
-    if content.len() > MAX_RAW_CSV_BYTES {
-        return Err(format!(
-            "raw.csv exceeds the {MAX_RAW_CSV_BYTES}-byte limit (got {} bytes)",
-            content.len()
-        ));
-    }
-    let (timestamps_ns, all_values) = parse_raw_csv_column(&content, &column)?;
+    let parsed = app
+        .state::<RawColumnCache>()
+        .get_or_parse(&recording_id, &column, &csv_path)?;
+    let (timestamps_ns, all_values) = (&parsed.timestamps_ns, &parsed.values);
 
     compute_compact_observation_window(
         recording_id,
         column,
         grid_size,
         start_sample_index,
-        &timestamps_ns,
-        &all_values,
+        timestamps_ns,
+        all_values,
         method.unwrap_or_default(),
     )
 }
@@ -2010,16 +2134,10 @@ pub fn get_raw_recording_derivative_window(
 
     let dir = recording_bundles_dir(&app)?.join(&recording_id);
     let csv_path = raw_csv_path(&dir);
-    let content = fs::read_to_string(&csv_path).map_err(|error| {
-        format!("failed to read raw.csv for recording '{recording_id}': {error}")
-    })?;
-    if content.len() > MAX_RAW_CSV_BYTES {
-        return Err(format!(
-            "raw.csv exceeds the {MAX_RAW_CSV_BYTES}-byte limit (got {} bytes)",
-            content.len()
-        ));
-    }
-    let (timestamps_ns, all_values) = parse_raw_csv_column(&content, &column)?;
+    let parsed = app
+        .state::<RawColumnCache>()
+        .get_or_parse(&recording_id, &column, &csv_path)?;
+    let (timestamps_ns, all_values) = (&parsed.timestamps_ns, &parsed.values);
 
     let total_raw_row_count = all_values.len();
     let (resolved_start, resolved_end) =
@@ -2041,7 +2159,7 @@ pub fn get_raw_recording_derivative_window(
         filter_config,
     ) = if preview_by_sample_order.unwrap_or(false) {
         let (derivative_values, available, unavailable_reason, recording_max_abs_derivative) =
-            compute_sample_order_derivative_window(&all_values, resolved_start, resolved_end);
+            compute_sample_order_derivative_window(all_values, resolved_start, resolved_end);
         (
             derivative_values,
             available,
@@ -2060,7 +2178,7 @@ pub fn get_raw_recording_derivative_window(
             unavailable_reason,
             effective_sample_rate_hz,
             recording_max_abs_derivative,
-        ) = compute_sg_derivative_window(&timestamps_ns, &all_values, resolved_start, resolved_end);
+        ) = compute_sg_derivative_window(timestamps_ns, all_values, resolved_start, resolved_end);
         let unavailable_is_cadence_issue = !available
             && unavailable_reason
                 .as_deref()
@@ -2081,7 +2199,7 @@ pub fn get_raw_recording_derivative_window(
         let (derivative_values, available, unavailable_reason, recording_max_abs_derivative) =
             compute_spike_extraction_window(
                 method,
-                &all_values,
+                all_values,
                 resolved_start,
                 resolved_end,
                 effective_window_samples,
@@ -4093,5 +4211,470 @@ mod tests {
         ] {
             assert_eq!(method.units(), "value_units");
         }
+    }
+}
+
+/// Timing probes for the raw-CSV viewer path, not run by default:
+///
+///     cargo test --release -p spatial-gesture-desktop --lib perf_probes -- --ignored --nocapture
+///
+/// They print the cost of parsing a realistic 200,000-row (~15 MB) recording and of a cached
+/// request, so a change to the parser or the cache can be compared against
+/// `docs/performance.md`.
+#[cfg(test)]
+mod perf_probes {
+    use super::*;
+    use std::time::Instant;
+
+    fn synthetic_csv(rows: usize) -> String {
+        let mut out = String::with_capacity(rows * 110);
+        out.push_str(&RAW_CSV_HEADER.join(","));
+        out.push('\n');
+        for row in 0..rows {
+            let t = 1_000_000_000i64 + row as i64 * 20_000_000;
+            let f = row as f64 * 0.001;
+            if row % 2 == 0 {
+                // orientation row
+                out.push_str(&format!(
+                    "{t},{row},,,,{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.5},{:.5},{:.5},{:.5},\n",
+                    f.sin(),
+                    f.cos(),
+                    9.8,
+                    f.sin() * 0.1,
+                    f.cos() * 0.1,
+                    0.0,
+                    0.99,
+                    0.01,
+                    0.02,
+                    0.03
+                ));
+            } else {
+                out.push_str(&format!(
+                    "{t},{row},{},{},{},,,,,,,,,,,0\n",
+                    812000 + row % 100,
+                    512000 + row % 50,
+                    312000 + row % 30
+                ));
+            }
+        }
+        out
+    }
+
+    #[test]
+    #[ignore]
+    fn parse_cost() {
+        let csv = synthetic_csv(200_000);
+        println!("PERF parse csv_bytes={}", csv.len());
+        for column in ["ppg_green", "accel_x", "quat_w"] {
+            let iters = 20;
+            let start = Instant::now();
+            let mut sink = 0usize;
+            for _ in 0..iters {
+                let (ts, values) = parse_raw_csv_column(&csv, column).unwrap();
+                sink += ts.len() + values.len();
+            }
+            let per_ms = start.elapsed().as_secs_f64() * 1000.0 / iters as f64;
+            println!("PERF parse column={column}: {per_ms:.1} ms/call sink={sink}");
+        }
+        let start = Instant::now();
+        let iters = 20;
+        for _ in 0..iters {
+            let _ = validate_raw_csv_full(&csv).unwrap();
+        }
+        println!(
+            "PARSE validate_raw_csv_full: {:.1} ms/call",
+            start.elapsed().as_secs_f64() * 1000.0 / iters as f64
+        );
+    }
+    #[test]
+    #[ignore]
+    fn cache_cold_vs_warm() {
+        let csv = synthetic_csv(200_000);
+        let dir = std::env::temp_dir().join(format!("bench-{}", Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("raw.csv");
+        fs::write(&path, &csv).unwrap();
+        let iters = 10;
+        let start = Instant::now();
+        for _ in 0..iters {
+            let cache = RawColumnCache::default();
+            let _ = cache.get_or_parse("r", "accel_x", &path).unwrap();
+        }
+        println!(
+            "CACHE cold (stat+read+parse): {:.1} ms/frame",
+            start.elapsed().as_secs_f64() * 1000.0 / iters as f64
+        );
+        let cache = RawColumnCache::default();
+        cache.get_or_parse("r", "accel_x", &path).unwrap();
+        let iters = 2000;
+        let start = Instant::now();
+        let mut sink = 0usize;
+        for _ in 0..iters {
+            sink += cache
+                .get_or_parse("r", "accel_x", &path)
+                .unwrap()
+                .values
+                .len();
+        }
+        println!(
+            "CACHE warm (hit): {:.1} us/frame sink={sink}",
+            start.elapsed().as_secs_f64() * 1e6 / iters as f64
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+}
+
+/// The CSV parsers were rewritten to avoid a `Vec` allocation per row. These tests keep the
+/// previous implementations verbatim as references and require identical results, errors
+/// included, over valid and malformed documents.
+#[cfg(test)]
+mod parse_equivalence_tests {
+    use super::*;
+
+    fn reference_parse_raw_csv_column(
+        content: &str,
+        column: &str,
+    ) -> Result<(Vec<i64>, Vec<Option<f64>>), String> {
+        let mut lines = content.lines();
+        let header = lines.next().ok_or_else(|| "raw.csv is empty".to_string())?;
+        let expected_header = RAW_CSV_HEADER.join(",");
+        if header != expected_header {
+            return Err(format!(
+                "malformed raw.csv: expected header '{expected_header}', got '{header}'"
+            ));
+        }
+        let column_index = RAW_CSV_HEADER
+            .iter()
+            .position(|candidate| *candidate == column)
+            .ok_or_else(|| format!("unsupported raw column '{column}'"))?;
+        let mut timestamps_ns = Vec::new();
+        let mut values = Vec::new();
+        for (offset, line) in lines.enumerate() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            let row_number = offset + 2;
+            let fields: Vec<&str> = line.split(',').collect();
+            if fields.len() != RAW_CSV_HEADER.len() {
+                return Err(format!(
+                    "malformed raw.csv: row {row_number} has {} fields, expected {}",
+                    fields.len(),
+                    RAW_CSV_HEADER.len()
+                ));
+            }
+            let timestamp_ns: i64 = fields[0].trim().parse().map_err(|_| {
+                format!("malformed raw.csv: row {row_number} has a non-numeric timestamp_ns")
+            })?;
+            let raw_value = fields[column_index].trim();
+            let value = if raw_value.is_empty() {
+                None
+            } else {
+                Some(raw_value.parse::<f64>().map_err(|_| {
+                    format!("malformed raw.csv: row {row_number} column '{column}' is not numeric")
+                })?)
+            };
+            timestamps_ns.push(timestamp_ns);
+            values.push(value);
+        }
+        Ok((timestamps_ns, values))
+    }
+
+    fn reference_validate_raw_csv_full(content: &str) -> Result<(usize, i64, i64), String> {
+        let mut lines = content.lines();
+        let header = lines.next().ok_or_else(|| "raw.csv is empty".to_string())?;
+        let expected_header = RAW_CSV_HEADER.join(",");
+        if header != expected_header {
+            return Err(format!(
+                "malformed raw.csv: expected header '{expected_header}', got '{header}'"
+            ));
+        }
+        let mut row_count = 0usize;
+        let mut first: Option<i64> = None;
+        let mut last: Option<i64> = None;
+        for (offset, line) in lines.enumerate() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            let row_number = offset + 2;
+            let fields: Vec<&str> = line.split(',').collect();
+            if fields.len() != RAW_CSV_HEADER.len() {
+                return Err(format!(
+                    "malformed raw.csv: row {row_number} has {} fields, expected {}",
+                    fields.len(),
+                    RAW_CSV_HEADER.len()
+                ));
+            }
+            let timestamp_ns: i64 = fields[0].trim().parse().map_err(|_| {
+                format!("malformed raw.csv: row {row_number} has a non-numeric timestamp_ns")
+            })?;
+            for (column_index, column_name) in RAW_CSV_HEADER.iter().enumerate().skip(1) {
+                let raw_value = fields[column_index].trim();
+                if !raw_value.is_empty() {
+                    raw_value.parse::<f64>().map_err(|_| {
+                        format!(
+                            "malformed raw.csv: row {row_number} column '{column_name}' is not numeric"
+                        )
+                    })?;
+                }
+            }
+            row_count += 1;
+            first.get_or_insert(timestamp_ns);
+            last = Some(timestamp_ns);
+        }
+        if row_count == 0 {
+            return Err("raw CSV must contain at least one data row".to_string());
+        }
+        Ok((row_count, first.unwrap(), last.unwrap()))
+    }
+
+    /// `NaN != NaN`, so compare parsed floats by bit pattern (which also distinguishes -0.0).
+    fn comparable(
+        result: Result<(Vec<i64>, Vec<Option<f64>>), String>,
+    ) -> Result<(Vec<i64>, Vec<Option<u64>>), String> {
+        result.map(|(timestamps, values)| {
+            (
+                timestamps,
+                values
+                    .into_iter()
+                    .map(|value| value.map(f64::to_bits))
+                    .collect(),
+            )
+        })
+    }
+
+    fn header() -> String {
+        RAW_CSV_HEADER.join(",")
+    }
+
+    fn row(timestamp: &str, fill: &str) -> String {
+        let mut fields = vec![timestamp.to_string(), "1".to_string()];
+        fields.extend(std::iter::repeat_n(
+            fill.to_string(),
+            RAW_CSV_HEADER.len() - 2,
+        ));
+        fields.join(",")
+    }
+
+    fn corpus() -> Vec<String> {
+        let mut docs = vec![
+            String::new(),
+            header(),
+            format!("{}\n", header()),
+            format!("{}\n{}", header(), row("100", "1.5")),
+            format!("{}\n{}\n{}\n", header(), row("100", "1.5"), row("200", "")),
+            // blank lines in the middle count towards the reported row number
+            format!(
+                "{}\n\n{}\n   \n{}\n",
+                header(),
+                row("1", "0.5"),
+                row("x", "0.5")
+            ),
+            // CRLF line endings
+            format!("{}\r\n{}\r\n{}\r\n", header(), row("5", "2"), row("6", "3")),
+            // wrong header
+            format!("timestamp_ns,wrong\n{}", row("1", "1")),
+            // too few / too many fields
+            format!("{}\n1,2,3\n", header()),
+            format!("{}\n{},extra\n", header(), row("1", "1")),
+            // non-numeric timestamp, negative and large timestamps, whitespace around fields
+            format!("{}\n{}\n", header(), row("abc", "1")),
+            format!("{}\n{}\n", header(), row("-5", "1")),
+            format!("{}\n{}\n", header(), row("9223372036854775807", "1")),
+            format!("{}\n{}\n", header(), row(" 42 ", " 1.25 ")),
+            // non-numeric value in some column, NaN/inf spellings Rust accepts or rejects
+            format!("{}\n{}\n", header(), row("1", "nope")),
+            format!("{}\n{}\n", header(), row("1", "NaN")),
+            format!("{}\n{}\n", header(), row("1", "inf")),
+            format!("{}\n{}\n", header(), row("1", "1e3")),
+        ];
+        // A bad value in each individual column, and a bad row after several good ones.
+        for column in 1..RAW_CSV_HEADER.len() {
+            let mut fields = vec!["10".to_string(); RAW_CSV_HEADER.len()];
+            fields[column] = "bad".to_string();
+            docs.push(format!(
+                "{}\n{}\n{}\n",
+                header(),
+                row("1", "1"),
+                fields.join(",")
+            ));
+        }
+        docs
+    }
+
+    #[test]
+    fn parse_raw_csv_column_matches_the_reference_on_every_document_and_column() {
+        let mut compared = 0;
+        for document in corpus() {
+            for column in RAW_CSV_HEADER {
+                assert_eq!(
+                    comparable(parse_raw_csv_column(&document, column)),
+                    comparable(reference_parse_raw_csv_column(&document, column)),
+                    "column '{column}' of document {document:?}"
+                );
+                compared += 1;
+            }
+            assert_eq!(
+                comparable(parse_raw_csv_column(&document, "not_a_column")),
+                comparable(reference_parse_raw_csv_column(&document, "not_a_column")),
+            );
+        }
+        assert!(compared > 300);
+    }
+
+    #[test]
+    fn validate_raw_csv_full_matches_the_reference_on_every_document() {
+        for document in corpus() {
+            assert_eq!(
+                validate_raw_csv_full(&document),
+                reference_validate_raw_csv_full(&document),
+                "document {document:?}"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod raw_column_cache_tests {
+    use super::*;
+
+    struct TempCsv(PathBuf);
+
+    impl TempCsv {
+        fn new(rows: &[&str]) -> Self {
+            let dir = std::env::temp_dir().join(format!("raw-column-cache-{}", Uuid::new_v4()));
+            fs::create_dir_all(&dir).unwrap();
+            let path = dir.join("raw.csv");
+            let mut text = RAW_CSV_HEADER.join(",");
+            text.push('\n');
+            for row in rows {
+                text.push_str(row);
+                text.push('\n');
+            }
+            fs::write(&path, text).unwrap();
+            Self(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TempCsv {
+        fn drop(&mut self) {
+            if let Some(dir) = self.0.parent() {
+                let _ = fs::remove_dir_all(dir);
+            }
+        }
+    }
+
+    /// 16 fields: timestamp, sequence, then 14 channels all set to `value`.
+    fn row(timestamp: i64, value: &str) -> String {
+        let mut fields = vec![timestamp.to_string(), "1".into()];
+        fields.extend(std::iter::repeat_n(value.to_string(), 14));
+        fields.join(",")
+    }
+
+    #[test]
+    fn a_second_request_for_the_same_column_reuses_the_parsed_data() {
+        let csv = TempCsv::new(&[&row(1, "1.5"), &row(2, "2.5")]);
+        let cache = RawColumnCache::default();
+
+        let first = cache.get_or_parse("rec", "accel_x", csv.path()).unwrap();
+        let second = cache.get_or_parse("rec", "accel_x", csv.path()).unwrap();
+
+        assert!(Arc::ptr_eq(&first, &second), "a hit must not re-parse");
+        assert_eq!(first.timestamps_ns, vec![1, 2]);
+        assert_eq!(first.values, vec![Some(1.5), Some(2.5)]);
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn different_columns_and_recordings_are_cached_separately() {
+        let csv = TempCsv::new(&[&row(1, "1.5")]);
+        let cache = RawColumnCache::default();
+        let a = cache.get_or_parse("rec", "accel_x", csv.path()).unwrap();
+        let b = cache.get_or_parse("rec", "gyro_x", csv.path()).unwrap();
+        let c = cache.get_or_parse("other", "accel_x", csv.path()).unwrap();
+        assert!(!Arc::ptr_eq(&a, &b));
+        assert!(!Arc::ptr_eq(&a, &c));
+        assert_eq!(cache.len(), 3);
+    }
+
+    #[test]
+    fn a_changed_file_is_re_read_never_served_stale() {
+        let csv = TempCsv::new(&[&row(1, "1.5")]);
+        let cache = RawColumnCache::default();
+        let before = cache.get_or_parse("rec", "accel_x", csv.path()).unwrap();
+        assert_eq!(before.values, vec![Some(1.5)]);
+
+        // Same recording id, different content (and size).
+        let mut text = fs::read_to_string(csv.path()).unwrap();
+        text.push_str(&format!("{}\n", row(2, "9.5")));
+        fs::write(csv.path(), text).unwrap();
+
+        let after = cache.get_or_parse("rec", "accel_x", csv.path()).unwrap();
+        assert!(!Arc::ptr_eq(&before, &after));
+        assert_eq!(after.values, vec![Some(1.5), Some(9.5)]);
+        assert_eq!(
+            cache.len(),
+            1,
+            "the stale entry is replaced, not kept alongside"
+        );
+    }
+
+    #[test]
+    fn the_least_recently_used_entry_is_evicted_at_capacity() {
+        let csv = TempCsv::new(&[&row(1, "1.5")]);
+        let cache = RawColumnCache::default();
+        let columns = ["ppg_green", "ppg_red", "ppg_ir", "accel_x", "accel_y"];
+        let first = cache.get_or_parse("rec", columns[0], csv.path()).unwrap();
+        for column in &columns[1..RAW_COLUMN_CACHE_CAPACITY] {
+            cache.get_or_parse("rec", column, csv.path()).unwrap();
+        }
+        // Touch the first entry so the second is now the least recently used.
+        let touched = cache.get_or_parse("rec", columns[0], csv.path()).unwrap();
+        assert!(Arc::ptr_eq(&first, &touched));
+        cache
+            .get_or_parse("rec", columns[RAW_COLUMN_CACHE_CAPACITY], csv.path())
+            .unwrap();
+
+        assert_eq!(cache.len(), RAW_COLUMN_CACHE_CAPACITY);
+        let still_cached = cache.get_or_parse("rec", columns[0], csv.path()).unwrap();
+        assert!(
+            Arc::ptr_eq(&first, &still_cached),
+            "the recently used entry survives"
+        );
+    }
+
+    #[test]
+    fn deleting_a_recording_drops_its_entries_only() {
+        let csv = TempCsv::new(&[&row(1, "1.5")]);
+        let cache = RawColumnCache::default();
+        cache.get_or_parse("gone", "accel_x", csv.path()).unwrap();
+        cache.get_or_parse("gone", "gyro_x", csv.path()).unwrap();
+        cache.get_or_parse("kept", "accel_x", csv.path()).unwrap();
+
+        cache.invalidate_recording("gone");
+
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn errors_are_reported_as_before_and_are_not_cached() {
+        let cache = RawColumnCache::default();
+        let missing = cache
+            .get_or_parse("rec", "accel_x", Path::new("/nonexistent/raw.csv"))
+            .unwrap_err();
+        assert!(
+            missing.contains("failed to read raw.csv for recording 'rec'"),
+            "{missing}"
+        );
+
+        let malformed = TempCsv::new(&["1,2,3"]);
+        let error = cache
+            .get_or_parse("rec", "accel_x", malformed.path())
+            .unwrap_err();
+        assert!(error.contains("row 2 has 3 fields"), "{error}");
+        assert_eq!(cache.len(), 0);
     }
 }

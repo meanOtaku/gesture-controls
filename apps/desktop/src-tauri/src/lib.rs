@@ -12,6 +12,7 @@ mod environment;
 mod head_pose;
 mod inference;
 mod label_registry;
+mod latest_write;
 mod model_lab;
 mod model_registry;
 mod overlay;
@@ -53,6 +54,7 @@ pub fn run() {
         .manage(model_lab::ModelLabRuntime::default())
         .manage(label_registry::LabelRegistryRuntime::default())
         .manage(model_registry::ModelRegistryRuntime::default())
+        .manage(recording_bundle::RawColumnCache::default())
         .manage(inference::GesturePolicyRuntime::default())
         .manage(inference::PpgIngestRuntime::default())
         .manage(inference::PinchInferenceRuntime::default())
@@ -253,8 +255,7 @@ pub fn run() {
                                     );
                                 }
                                 WatchEvent::Orientation(sample) => {
-                                    let volume_runtime = watch_handle.state::<overlay::VolumeRuntime>();
-                                    if let Err(error) = overlay.apply_wrist_rotation(&watch_handle, sample, &volume_runtime) {
+                                    if let Err(error) = overlay.apply_wrist_rotation(&watch_handle, sample) {
                                         warn!(%error, "failed to apply wrist rotation to volume");
                                     }
                                     watch_handle

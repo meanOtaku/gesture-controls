@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use spatial_protocol::{
@@ -145,9 +146,25 @@ fn batch_rate_hz(timestamps_ns: &[u64]) -> Option<f64> {
     Some((timestamps_ns.len() as f64 - 1.0) / seconds)
 }
 
+/// The longest an orientation-driven status update may be held back. Orientation arrives at
+/// up to 200 Hz, and the frontend can render at most ~15 Hz (the telemetry publish interval),
+/// so more frequent status events only cost serialization and an IPC round trip each. The
+/// orientation itself is delivered on its own, never-throttled event, and the frontend
+/// de-duplicates the copy carried inside the status, so no sample is lost by this.
+const STATUS_COALESCE_INTERVAL: Duration = Duration::from_millis(100);
+
+/// Whether a status event should be sent now. Only `coalescible` updates (a new orientation
+/// on an already-connected watch, which changes nothing but `last_orientation`) may be held
+/// back; every other change is sent at once.
+fn status_emit_due(last_emit: Option<Instant>, now: Instant, coalescible: bool) -> bool {
+    !coalescible
+        || last_emit.is_none_or(|previous| now.duration_since(previous) >= STATUS_COALESCE_INTERVAL)
+}
+
 #[derive(Default)]
 pub struct WatchRuntime {
     state: Mutex<WatchStatus>,
+    last_status_emit: Mutex<Option<Instant>>,
 }
 
 impl WatchRuntime {
@@ -158,11 +175,12 @@ impl WatchRuntime {
             .map_err(|_| "watch status lock was poisoned".to_string())
     }
 
-    pub fn apply(&self, app: &AppHandle, event: WatchEvent) -> Result<WatchStatus, String> {
+    pub fn apply(&self, app: &AppHandle, event: WatchEvent) -> Result<(), String> {
         let mut state = self
             .state
             .lock()
             .map_err(|_| "watch status lock was poisoned")?;
+        let mut coalescible = false;
         match event {
             WatchEvent::Connected => {
                 *state = WatchStatus {
@@ -174,6 +192,9 @@ impl WatchRuntime {
                 *state = WatchStatus::default();
             }
             WatchEvent::Orientation(sample) => {
+                // Only a new orientation on an already-connected watch is coalescible; the
+                // one that first marks the watch connected must be reported at once.
+                coalescible = state.connected;
                 state.connected = true;
                 let _ = app.emit(WATCH_ORIENTATION_EVENT, &sample);
                 state.last_orientation = Some(sample);
@@ -379,13 +400,20 @@ impl WatchRuntime {
                 state.connected = true;
                 state.sensor_status.insert(sample.sensor, sample.enabled);
             }
-            WatchEvent::InvalidMessage { .. } => {
-                return Ok(state.clone());
-            }
+            WatchEvent::InvalidMessage { .. } => return Ok(()),
         }
-        let snapshot = state.clone();
-        let _ = app.emit(WATCH_STATUS_EVENT, &snapshot);
-        Ok(snapshot)
+        let now = Instant::now();
+        let mut last_emit = self
+            .last_status_emit
+            .lock()
+            .map_err(|_| "watch status emit gate was poisoned")?;
+        if status_emit_due(*last_emit, now, coalescible) {
+            // Serialized in place: cloning the whole status (two maps, nested vectors) just
+            // to serialize the copy was pure overhead on every sensor event.
+            let _ = app.emit(WATCH_STATUS_EVENT, &*state);
+            *last_emit = Some(now);
+        }
+        Ok(())
     }
 
     pub fn state(&self) -> Result<WatchStatus, String> {
@@ -516,4 +544,53 @@ pub async fn rescan_watch_ble(app: AppHandle) -> Result<(), String> {
         return Err("Bluetooth is not the selected Watch transport".to_string());
     }
     crate::settings::restart_watch_ble(&app).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const GAP: Duration = STATUS_COALESCE_INTERVAL;
+
+    #[test]
+    fn a_coalescible_update_is_held_back_until_the_interval_has_passed() {
+        let start = Instant::now();
+        assert!(
+            status_emit_due(None, start, true),
+            "the first one always goes out"
+        );
+        assert!(!status_emit_due(Some(start), start, true));
+        assert!(!status_emit_due(
+            Some(start),
+            start + GAP - Duration::from_millis(1),
+            true
+        ));
+        assert!(status_emit_due(Some(start), start + GAP, true));
+    }
+
+    #[test]
+    fn every_other_change_is_sent_immediately_whatever_was_sent_just_before() {
+        let start = Instant::now();
+        assert!(status_emit_due(Some(start), start, false));
+        assert!(status_emit_due(None, start, false));
+    }
+
+    /// 200 Hz orientation for one second reaches the frontend as about ten status events
+    /// instead of two hundred, while a non-coalescible change in the middle is never delayed.
+    #[test]
+    fn a_two_hundred_hertz_stream_yields_about_ten_status_events_a_second() {
+        let start = Instant::now();
+        let mut last_emit = None;
+        let mut emitted = 0;
+        for tick in 0..200u64 {
+            let now = start + Duration::from_millis(tick * 5);
+            // A sensor-status change at 497 ms must not wait for the window.
+            let coalescible = tick != 99;
+            if status_emit_due(last_emit, now, coalescible) {
+                emitted += 1;
+                last_emit = Some(now);
+            }
+        }
+        assert!((9..=12).contains(&emitted), "emitted {emitted}");
+    }
 }
