@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -109,3 +110,12 @@ def test_validate_metadata_rejects_feature_count_exceeding_registry(tmp_path):
     metadata["feature_contract"]["count"] = len(FEATURE_NAMES) + 1
     with pytest.raises(BundleValidationError, match="more than the canonical"):
         validate_metadata(metadata)
+
+# Shared with the desktop crate (`model_registry.rs` tests), which loads this same
+# directory through its activation gate, so the two validators cannot drift apart.
+SHARED_FIXTURE = Path(__file__).parent / "fixtures" / "valid_bundle"
+
+
+def test_shared_fixture_bundle_is_accepted_by_the_trainer_contract():
+    metadata = json.loads((SHARED_FIXTURE / "metadata.json").read_text(encoding="utf-8"))
+    validate_metadata(metadata, SHARED_FIXTURE)

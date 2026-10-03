@@ -277,14 +277,36 @@ fn registry_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(base.join(MODEL_LAB_DIR_NAME).join(REGISTRY_FILE_NAME))
 }
 
-fn load_registry(app: &AppHandle) -> RegistryIndex {
-    let Ok(path) = registry_path(app) else {
-        return RegistryIndex::default();
+/// Loads the registry. A registry file that does not exist yet is a fresh
+/// install (empty index); one that exists but cannot be read or parsed is an
+/// error, never an empty index -- otherwise the next mutating command would
+/// persist that empty index over the corrupt file and destroy every model's
+/// lifecycle state, thresholds, intent bindings and approval history while
+/// the bundle directories stay on disk.
+fn load_registry(app: &AppHandle) -> Result<RegistryIndex, String> {
+    read_registry_file(&registry_path(app)?)
+}
+
+fn read_registry_file(path: &Path) -> Result<RegistryIndex, String> {
+    let contents = match fs::read_to_string(path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(RegistryIndex::default());
+        }
+        Err(error) => {
+            return Err(format!(
+                "failed to read model registry {}: {error}",
+                path.display()
+            ));
+        }
     };
-    let Ok(contents) = fs::read_to_string(&path) else {
-        return RegistryIndex::default();
-    };
-    serde_json::from_str(&contents).unwrap_or_default()
+    serde_json::from_str(&contents).map_err(|error| {
+        format!(
+            "model registry {} is corrupt ({error}); it was left untouched. \
+             Restore it from a backup or move it aside to start with an empty registry",
+            path.display()
+        )
+    })
 }
 
 /// Atomic write, matching `settings::write_atomic` / `model_lab`'s index writes.
@@ -392,14 +414,9 @@ struct BundleMetadata {
     model: BundleModelField,
     classes: Vec<BundleClassEntry>,
     feature_contract: BundleFeatureContract,
-    // Accepted for forward-compatible parsing of the bundle schema but not
-    // yet read by any validation.
-    #[allow(dead_code)]
-    #[serde(default)]
-    preprocessing: Option<serde_json::Value>,
-    #[allow(dead_code)]
-    #[serde(default)]
-    window_semantics: Option<serde_json::Value>,
+    // The remaining inference-critical sections (preprocessing, window_config,
+    // conversion_parity, training, dtypes) are checked against the raw JSON
+    // by `validate_inference_contract`.
 }
 
 /// Validates a bundle's declared `feature_contract.ordered_names` against
@@ -465,6 +482,194 @@ fn sha256_hex(path: &Path) -> Result<String, String> {
         .collect())
 }
 
+/// The preprocessing policy the trainer (`bundle.py::PREPROCESSING_POLICY`)
+/// bakes into every bundle it writes. A bundle declaring anything else was
+/// not normalized the way this runtime feeds it, so it is rejected. Kept
+/// identical to the Python constant; the shared fixture under
+/// `tools/pinch-classifier/tests/fixtures/valid_bundle` is validated by both
+/// languages' test suites so the two cannot drift silently.
+fn supported_preprocessing_policy() -> serde_json::Value {
+    serde_json::json!({
+        "input": "the named engineered window features listed in feature_contract.ordered_names, in that order",
+        "missing_sensor_values": "carry-forward within each recording; leading missing values become 0.0",
+        "normalization": "per-feature standard score fitted on training sessions only and embedded in model.tflite",
+        "zero_variance_scale": 1.0,
+        "input_dtype": "float32",
+    })
+}
+
+fn json_object_with_exact_keys<'a>(
+    value: Option<&'a serde_json::Value>,
+    name: &str,
+    keys: &[&str],
+) -> Result<&'a serde_json::Map<String, serde_json::Value>, String> {
+    let object = value
+        .and_then(serde_json::Value::as_object)
+        .filter(|object| {
+            object.len() == keys.len() && keys.iter().all(|key| object.contains_key(*key))
+        })
+        .ok_or_else(|| format!("bundle {name} must be an object containing exactly {keys:?}"))?;
+    Ok(object)
+}
+
+fn positive_number(value: &serde_json::Value) -> bool {
+    value.as_f64().is_some_and(|number| number > 0.0)
+}
+
+fn positive_integer(value: &serde_json::Value) -> bool {
+    value.as_u64().is_some_and(|number| number > 0)
+}
+
+fn non_negative_finite(value: &serde_json::Value) -> bool {
+    value
+        .as_f64()
+        .is_some_and(|number| number.is_finite() && number >= 0.0)
+}
+
+fn non_empty_string_array(value: &serde_json::Value) -> Option<Vec<&str>> {
+    let items = value.as_array().filter(|items| !items.is_empty())?;
+    items
+        .iter()
+        .map(|item| item.as_str().filter(|text| !text.is_empty()))
+        .collect()
+}
+
+/// Mirrors the inference-critical checks of the trainer's
+/// `bundle.py::validate_metadata` that the typed [`BundleMetadata`] fields
+/// do not cover: dtypes, preprocessing policy, window configuration, the
+/// recorded source-vs-TFLite conversion parity, and training provenance. The
+/// desktop activation gate must not be weaker than the writer-side gate,
+/// because an imported bundle never passed the latter.
+fn validate_inference_contract(root: &serde_json::Value) -> Result<(), String> {
+    let model = root.get("model");
+    for field in ["input_dtype", "output_dtype"] {
+        if model.and_then(|model| model.get(field)) != Some(&serde_json::json!("float32")) {
+            return Err(format!("bundle model.{field} must be \"float32\""));
+        }
+    }
+
+    if root.get("preprocessing") != Some(&supported_preprocessing_policy()) {
+        return Err("bundle preprocessing does not match the supported deployment policy".into());
+    }
+
+    let window = json_object_with_exact_keys(
+        root.get("window_config"),
+        "window_config",
+        &[
+            "window_ms",
+            "stride_ms",
+            "max_gap_ms",
+            "min_samples_per_window",
+            "boundary_policy",
+        ],
+    )?;
+    for field in ["window_ms", "stride_ms", "max_gap_ms"] {
+        if !positive_number(&window[field]) {
+            return Err(format!("bundle window_config.{field} must be positive"));
+        }
+    }
+    if !positive_integer(&window["min_samples_per_window"]) {
+        return Err(
+            "bundle window_config.min_samples_per_window must be a positive integer".into(),
+        );
+    }
+
+    let parity = json_object_with_exact_keys(
+        root.get("conversion_parity"),
+        "conversion_parity",
+        &[
+            "passed",
+            "sample_count",
+            "absolute_tolerance",
+            "max_absolute_error",
+            "argmax_agreement",
+        ],
+    )?;
+    if parity["passed"] != serde_json::json!(true) {
+        return Err("bundle conversion_parity must record a passed source-vs-TFLite check".into());
+    }
+    if !positive_integer(&parity["sample_count"]) {
+        return Err("bundle conversion_parity.sample_count must be a positive integer".into());
+    }
+    for field in ["absolute_tolerance", "max_absolute_error"] {
+        if !non_negative_finite(&parity[field]) {
+            return Err(format!(
+                "bundle conversion_parity.{field} must be finite and non-negative"
+            ));
+        }
+    }
+    let tolerance = parity["absolute_tolerance"].as_f64().unwrap_or(f64::NAN);
+    let max_error = parity["max_absolute_error"].as_f64().unwrap_or(f64::NAN);
+    if max_error > tolerance {
+        return Err("bundle conversion parity error exceeds its absolute tolerance".into());
+    }
+    if parity["argmax_agreement"].as_f64() != Some(1.0) {
+        return Err("bundle conversion_parity.argmax_agreement must be 1.0".into());
+    }
+
+    let training = json_object_with_exact_keys(
+        root.get("training"),
+        "training",
+        &[
+            "random_seed",
+            "tensorflow_version",
+            "model_type",
+            "epochs",
+            "batch_size",
+            "learning_rate",
+            "final_training_loss",
+            "n_windows_train",
+            "n_windows_test",
+            "groups_train",
+            "groups_test",
+            "input_files",
+            "metrics",
+        ],
+    )?;
+    if !training["random_seed"].is_i64() && !training["random_seed"].is_u64() {
+        return Err("bundle training.random_seed must be an integer".into());
+    }
+    for field in ["tensorflow_version", "model_type"] {
+        if training[field].as_str().is_none_or(str::is_empty) {
+            return Err(format!(
+                "bundle training.{field} must be a non-empty string"
+            ));
+        }
+    }
+    for field in ["epochs", "batch_size", "n_windows_train", "n_windows_test"] {
+        if !positive_integer(&training[field]) {
+            return Err(format!(
+                "bundle training.{field} must be a positive integer"
+            ));
+        }
+    }
+    for field in ["learning_rate", "final_training_loss"] {
+        if !non_negative_finite(&training[field]) {
+            return Err(format!(
+                "bundle training.{field} must be a finite non-negative number"
+            ));
+        }
+    }
+    let mut string_arrays = Vec::new();
+    for field in ["groups_train", "groups_test", "input_files"] {
+        string_arrays.push(
+            non_empty_string_array(&training[field]).ok_or_else(|| {
+                format!("bundle training.{field} must be a non-empty string array")
+            })?,
+        );
+    }
+    if string_arrays[0]
+        .iter()
+        .any(|group| string_arrays[1].contains(group))
+    {
+        return Err("bundle training group split leaks a session between train and test".into());
+    }
+    if !training["metrics"].is_object() {
+        return Err("bundle training.metrics must be an object".into());
+    }
+    Ok(())
+}
+
 /// Fully revalidates a model directory's bundle contract against the desktop's
 /// fixed class contract and canonical feature registry (accepting any
 /// strict, canonically-ordered subset -- see [`validate_feature_subset`]) and
@@ -480,6 +685,9 @@ fn load_and_verify_bundle(dir: &Path) -> Result<(BundleMetadata, String, Vec<usi
     let contents = fs::read_to_string(&metadata_path)
         .map_err(|error| format!("failed to read {TFLITE_METADATA_FILE_NAME}: {error}"))?;
     let metadata: BundleMetadata = serde_json::from_str(&contents).map_err(|error| {
+        format!("{TFLITE_METADATA_FILE_NAME} is not a valid bundle contract: {error}")
+    })?;
+    let raw: serde_json::Value = serde_json::from_str(&contents).map_err(|error| {
         format!("{TFLITE_METADATA_FILE_NAME} is not a valid bundle contract: {error}")
     })?;
 
@@ -528,9 +736,15 @@ fn load_and_verify_bundle(dir: &Path) -> Result<(BundleMetadata, String, Vec<usi
         );
     }
 
-    let digest = metadata.model.sha256.to_lowercase();
-    if digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err("bundle model.sha256 is not a valid SHA-256 hex digest".to_string());
+    validate_inference_contract(&raw)?;
+
+    let digest = metadata.model.sha256.clone();
+    if digest.len() != 64
+        || !digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err("bundle model.sha256 must be a lowercase SHA-256 hex digest".to_string());
     }
     let actual_digest = sha256_hex(&dir.join(TFLITE_MODEL_FILE_NAME))?;
     if actual_digest != digest {
@@ -572,7 +786,7 @@ impl ActiveModelSnapshot {
     /// agree with the bundle's own authoritative class order. Never trusts a
     /// previous validation (e.g. at a prior activation) to still hold.
     pub(crate) fn verified(app: &AppHandle, model_id: &str) -> Result<Self, String> {
-        let index = load_registry(app);
+        let index = load_registry(app)?;
         let model = index
             .models
             .iter()
@@ -691,7 +905,15 @@ pub(crate) struct ActiveModelRuntimeConfig {
 /// so the rule that `Off` never reaches a model is stated and unit-tested in
 /// one obvious place rather than hidden behind this lookup's `None`.
 pub(crate) fn active_model_runtime_config(app: &AppHandle) -> Option<ActiveModelRuntimeConfig> {
-    let index = load_registry(app);
+    let index = match load_registry(app) {
+        Ok(index) => index,
+        Err(error) => {
+            // Fail closed: with no readable registry nothing is classified
+            // and nothing can actuate.
+            tracing::warn!(%error, "model registry unavailable; treating as no active model");
+            return None;
+        }
+    };
     let active_id = index.active_model_id.clone()?;
     index
         .models
@@ -718,7 +940,7 @@ pub(crate) fn active_model_file_path(app: &AppHandle, model_id: &str) -> Result<
 /// Resolves an approved/active bundle for side-effect-free offline replay.
 /// Draft and archived artifacts fail closed, as does any non-LiteRT bundle.
 pub(crate) fn replayable_model_dir(app: &AppHandle, model_id: &str) -> Result<PathBuf, String> {
-    let index = load_registry(app);
+    let index = load_registry(app)?;
     let model = index
         .models
         .iter()
@@ -759,7 +981,7 @@ where
         .lock
         .lock()
         .map_err(|_| "model registry lock was poisoned".to_string())?;
-    let mut index = load_registry(app);
+    let mut index = load_registry(app)?;
     mutate(&mut index)?;
     write_registry_atomic(app, &index)?;
     emit_registry(app, &index);
@@ -809,7 +1031,13 @@ pub(crate) fn register_trained_model(
     let Ok(_guard) = runtime.lock.lock() else {
         return;
     };
-    let mut index = load_registry(app);
+    let mut index = match load_registry(app) {
+        Ok(index) => index,
+        Err(error) => {
+            tracing::warn!(%error, model_id, "failed to register newly trained model");
+            return;
+        }
+    };
     if index.models.iter().any(|model| model.id == model_id) {
         return;
     }
@@ -874,7 +1102,13 @@ pub fn import_custom_tflite_bundle(
         return Err(error);
     }
 
-    let mut index = load_registry(&app);
+    let mut index = match load_registry(&app) {
+        Ok(index) => index,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&destination);
+            return Err(error);
+        }
+    };
     let mut record = ModelRecord::new(id);
     record.imported_tflite_bundle = true;
     index.models.push(record);
@@ -892,7 +1126,7 @@ pub fn get_model_registry(
         .lock
         .lock()
         .map_err(|_| "model registry lock was poisoned".to_string())?;
-    Ok(RegistryView::from(load_registry(&app)))
+    Ok(RegistryView::from(load_registry(&app)?))
 }
 
 #[tauri::command]
@@ -1276,6 +1510,40 @@ mod tests {
         assert!(validate_intent_bindings(&bindings).is_err());
     }
 
+    /// D-M3-3: a corrupt registry.json must surface as an error and stay on
+    /// disk untouched, not read as an empty index that a later write would
+    /// persist over every model's lifecycle state.
+    #[test]
+    fn corrupt_registry_is_an_error_and_is_not_overwritten() {
+        let dir = unique_bundle_dir("corrupt-registry");
+        let path = dir.join(REGISTRY_FILE_NAME);
+        fs::write(&path, "{ this is not json").unwrap();
+
+        let error = read_registry_file(&path).unwrap_err();
+        assert!(error.contains("corrupt"), "{error}");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "{ this is not json");
+    }
+
+    #[test]
+    fn missing_registry_is_an_empty_index() {
+        let dir = unique_bundle_dir("missing-registry");
+        let index = read_registry_file(&dir.join(REGISTRY_FILE_NAME)).unwrap();
+        assert!(index.models.is_empty());
+        assert!(index.active_model_id.is_none());
+    }
+
+    #[test]
+    fn valid_registry_round_trips() {
+        let dir = unique_bundle_dir("valid-registry");
+        let path = dir.join(REGISTRY_FILE_NAME);
+        let mut index = RegistryIndex::default();
+        index.models.push(ModelRecord::new("model-a".to_string()));
+        fs::write(&path, serde_json::to_string(&index).unwrap()).unwrap();
+        let loaded = read_registry_file(&path).unwrap();
+        assert_eq!(loaded.models.len(), 1);
+        assert_eq!(loaded.models[0].id, "model-a");
+    }
+
     fn unique_bundle_dir(label: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
             "model-registry-test-{label}-{}",
@@ -1289,35 +1557,23 @@ mod tests {
     /// contract, then hands back the metadata JSON as a mutable `Value` so
     /// individual tests can corrupt exactly one field before writing it.
     fn write_valid_bundle(dir: &Path) -> serde_json::Value {
-        fs::write(dir.join(TFLITE_MODEL_FILE_NAME), b"fake-tflite-bytes").unwrap();
-        let digest = sha256_hex(&dir.join(TFLITE_MODEL_FILE_NAME)).unwrap();
-        let feature_names: Vec<String> =
-            FEATURE_NAMES.iter().map(|name| name.to_string()).collect();
-        let metadata = serde_json::json!({
-            "schema_version": BUNDLE_SCHEMA_VERSION,
-            "model": {
-                "file": TFLITE_MODEL_FILE_NAME,
-                "format": BUNDLE_MODEL_FORMAT,
-                "sha256": digest,
-                "input_shape": [1, FEATURE_COUNT],
-                "output_shape": [1, CLASS_COUNT],
-            },
-            "classes": [
-                {"index": 0, "label": "negative"},
-                {"index": 1, "label": "pinch_start"},
-                {"index": 2, "label": "pinch_release"},
-            ],
-            "feature_contract": {
-                "count": FEATURE_COUNT,
-                "ordered_names": feature_names,
-            },
-        });
-        fs::write(
-            dir.join(TFLITE_METADATA_FILE_NAME),
-            serde_json::to_string_pretty(&metadata).unwrap(),
+        // The same fixture the trainer's own test suite validates with
+        // `bundle.validate_metadata` (tools/pinch-classifier/tests/test_bundle.py),
+        // so a bundle accepted here is one the writer-side contract accepts.
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../tools/pinch-classifier/tests/fixtures/valid_bundle");
+        fs::copy(
+            fixture.join(TFLITE_MODEL_FILE_NAME),
+            dir.join(TFLITE_MODEL_FILE_NAME),
         )
         .unwrap();
-        metadata
+        fs::copy(
+            fixture.join(TFLITE_METADATA_FILE_NAME),
+            dir.join(TFLITE_METADATA_FILE_NAME),
+        )
+        .unwrap();
+        serde_json::from_str(&fs::read_to_string(dir.join(TFLITE_METADATA_FILE_NAME)).unwrap())
+            .unwrap()
     }
 
     fn write_metadata(dir: &Path, metadata: &serde_json::Value) {
@@ -1332,27 +1588,12 @@ mod tests {
     /// declared feature list, for exercising [`validate_feature_subset`]
     /// through the full bundle contract.
     fn write_bundle_with_features(dir: &Path, feature_names: &[&str]) -> serde_json::Value {
-        fs::write(dir.join(TFLITE_MODEL_FILE_NAME), b"fake-tflite-bytes").unwrap();
-        let digest = sha256_hex(&dir.join(TFLITE_MODEL_FILE_NAME)).unwrap();
-        let metadata = serde_json::json!({
-            "schema_version": BUNDLE_SCHEMA_VERSION,
-            "model": {
-                "file": TFLITE_MODEL_FILE_NAME,
-                "format": BUNDLE_MODEL_FORMAT,
-                "sha256": digest,
-                "input_shape": [1, feature_names.len()],
-                "output_shape": [1, CLASS_COUNT],
-            },
-            "classes": [
-                {"index": 0, "label": "negative"},
-                {"index": 1, "label": "pinch_start"},
-                {"index": 2, "label": "pinch_release"},
-            ],
-            "feature_contract": {
-                "count": feature_names.len(),
-                "ordered_names": feature_names,
-            },
+        let mut metadata = write_valid_bundle(dir);
+        metadata["feature_contract"] = serde_json::json!({
+            "count": feature_names.len(),
+            "ordered_names": feature_names,
         });
+        metadata["model"]["input_shape"] = serde_json::json!([1, feature_names.len()]);
         write_metadata(dir, &metadata);
         metadata
     }
@@ -1439,9 +1680,7 @@ mod tests {
     fn load_and_verify_bundle_accepts_versioned_custom_canonical_subset() {
         let dir = unique_bundle_dir("custom-contract");
         let mut metadata = write_valid_bundle(&dir);
-        metadata["feature_contract"] = serde_json::json!({"version": 1, "count": 2, "ordered_names": ["ppg_green_mean", "gyro_magnitude_std"]});
-        metadata["preprocessing"] = serde_json::json!({"normalization": "bundle-defined-v1"});
-        metadata["window_semantics"] = serde_json::json!({"samples": 32, "alignment": "latest"});
+        metadata["feature_contract"] = serde_json::json!({"count": 2, "ordered_names": ["ppg_green_mean", "gyro_magnitude_std"]});
         metadata["model"]["input_shape"] = serde_json::json!([1, 2]);
         write_metadata(&dir, &metadata);
         assert!(load_and_verify_bundle(&dir).is_ok());
@@ -1456,6 +1695,88 @@ mod tests {
         write_metadata(&dir, &metadata);
         assert!(load_and_verify_bundle(&dir).is_err());
         fs::remove_dir_all(&dir).ok();
+    }
+
+    /// D-M3-6: every case below passed the desktop's activation gate while the
+    /// trainer's `validate_metadata` rejected it. An imported bundle never
+    /// went through the trainer's writer-side check, so the desktop gate must
+    /// reject each of these itself.
+    fn assert_mutation_is_rejected(label: &str, mutate: impl FnOnce(&mut serde_json::Value)) {
+        let dir = unique_bundle_dir(label);
+        let mut metadata = write_valid_bundle(&dir);
+        mutate(&mut metadata);
+        write_metadata(&dir, &metadata);
+        let result = load_and_verify_bundle(&dir);
+        fs::remove_dir_all(&dir).ok();
+        assert!(result.is_err(), "{label}: bundle must be rejected");
+    }
+
+    #[test]
+    fn load_and_verify_bundle_rejects_a_missing_or_unsupported_preprocessing_policy() {
+        assert_mutation_is_rejected("no-preprocessing", |m| {
+            m.as_object_mut().unwrap().remove("preprocessing");
+        });
+        assert_mutation_is_rejected("raw-preprocessing", |m| {
+            m["preprocessing"]["normalization"] =
+                serde_json::json!("none; raw feature values fed directly");
+        });
+    }
+
+    #[test]
+    fn load_and_verify_bundle_rejects_missing_or_failed_conversion_parity() {
+        assert_mutation_is_rejected("no-parity", |m| {
+            m.as_object_mut().unwrap().remove("conversion_parity");
+        });
+        assert_mutation_is_rejected("failed-parity", |m| {
+            m["conversion_parity"]["passed"] = serde_json::json!(false);
+        });
+        assert_mutation_is_rejected("parity-error-over-tolerance", |m| {
+            m["conversion_parity"]["max_absolute_error"] = serde_json::json!(1.0);
+        });
+        assert_mutation_is_rejected("parity-argmax-disagrees", |m| {
+            m["conversion_parity"]["argmax_agreement"] = serde_json::json!(0.9);
+        });
+    }
+
+    #[test]
+    fn load_and_verify_bundle_rejects_missing_or_leaky_training_provenance() {
+        assert_mutation_is_rejected("no-training", |m| {
+            m.as_object_mut().unwrap().remove("training");
+        });
+        assert_mutation_is_rejected("leaky-split", |m| {
+            m["training"]["groups_test"] = m["training"]["groups_train"].clone();
+        });
+        assert_mutation_is_rejected("zero-epochs", |m| {
+            m["training"]["epochs"] = serde_json::json!(0);
+        });
+    }
+
+    #[test]
+    fn load_and_verify_bundle_rejects_a_bad_window_config_or_dtype() {
+        assert_mutation_is_rejected("no-window-config", |m| {
+            m.as_object_mut().unwrap().remove("window_config");
+        });
+        assert_mutation_is_rejected("zero-window", |m| {
+            m["window_config"]["window_ms"] = serde_json::json!(0);
+        });
+        assert_mutation_is_rejected("zero-min-samples", |m| {
+            m["window_config"]["min_samples_per_window"] = serde_json::json!(0);
+        });
+        assert_mutation_is_rejected("int8-input", |m| {
+            m["model"]["input_dtype"] = serde_json::json!("int8");
+        });
+    }
+
+    #[test]
+    fn load_and_verify_bundle_rejects_an_uppercase_digest() {
+        let dir = unique_bundle_dir("uppercase-digest");
+        let mut metadata = write_valid_bundle(&dir);
+        let upper = metadata["model"]["sha256"].as_str().unwrap().to_uppercase();
+        metadata["model"]["sha256"] = serde_json::json!(upper);
+        write_metadata(&dir, &metadata);
+        let result = load_and_verify_bundle(&dir);
+        fs::remove_dir_all(&dir).ok();
+        assert!(result.is_err());
     }
 
     #[test]
