@@ -18,7 +18,6 @@ const settings: AppSettings = {
   watchSkinTemperatureAcceptanceRateHz: 200,
   watchEdaAcceptanceRateHz: 200,
   wristDeadZoneDegrees: 3,
-  wristSmoothingAlpha: 0.2,
   wristVolumePointsPerDegree: 1 / 3,
   wristMaxAngularVelocityDegreesPerSecond: 360,
   wristMaxVolumePointsPerSecond: 30,

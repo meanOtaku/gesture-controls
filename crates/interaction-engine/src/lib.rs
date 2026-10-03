@@ -395,15 +395,14 @@ impl VolumeSimulation {
 #[derive(Debug, Clone, Copy)]
 pub struct WristRotationConfig {
     pub dead_zone_degrees: f64,
-    /// Retained for config/UI compatibility and still validated; the
-    /// absolute target mapping is a stateless function of the current
-    /// sample, so no smoothing filter is applied to it.
-    pub smoothing_alpha: f64,
     pub volume_points_per_degree: f64,
     pub max_angular_velocity_degrees_per_second: f64,
-    /// Retained for config/UI compatibility and still validated; the
-    /// absolute target mapping computes each target directly rather than
-    /// ramping toward it, so no per-second volume-point cap applies.
+    /// Slew limit on the output target, in volume points per second. The
+    /// angle-derived target is still computed absolutely from the reference
+    /// pose, but the value returned from [`WristRotation::observe`] moves
+    /// toward it by at most this rate (times the elapsed time since the
+    /// previous sample), so a fast wrist roll cannot change the loudness
+    /// faster than this.
     pub max_volume_points_per_second: f64,
     /// Flips clockwise/counter-clockwise sign to correct for a Watch worn or
     /// mounted with the opposite physical handedness than this convention
@@ -416,7 +415,6 @@ impl Default for WristRotationConfig {
     fn default() -> Self {
         Self {
             dead_zone_degrees: 3.0,
-            smoothing_alpha: 0.2,
             volume_points_per_degree: 1.0 / 3.0,
             max_angular_velocity_degrees_per_second: 360.0,
             max_volume_points_per_second: 30.0,
@@ -557,7 +555,7 @@ impl WristRotation {
     }
 
     /// Raw relative roll (degrees from the reference pose) from the most
-    /// recent [`Self::observe`] call, before dead-zone/smoothing/velocity
+    /// recent [`Self::observe`] call, before dead-zone/velocity
     /// clamping. Diagnostic-only, for surfacing "is the wrist roll actually
     /// changing" independent of whether it produced a volume delta.
     pub fn last_relative_degrees(&self) -> Option<f64> {
@@ -630,14 +628,22 @@ impl WristRotation {
         }
         self.previous_raw_degrees = Some(raw_degrees);
         self.previous_raw_degrees_at_ns = Some(timestamp_ns);
+        let elapsed_since_last_sample =
+            (timestamp_ns - previous_timestamp) as f64 / 1_000_000_000.0;
         let dead_zoned = if raw_degrees.abs() <= self.config.dead_zone_degrees {
             0.0
         } else {
             raw_degrees - self.config.dead_zone_degrees.copysign(raw_degrees)
         };
-        let target = (f64::from(activation_volume_percent)
+        let desired = (f64::from(activation_volume_percent)
             + dead_zoned * self.config.volume_points_per_degree)
             .clamp(0.0, 100.0);
+        let previous_target = self
+            .last_target_volume_percent
+            .map(f64::from)
+            .unwrap_or(f64::from(activation_volume_percent));
+        let max_step = self.config.max_volume_points_per_second * elapsed_since_last_sample;
+        let target = previous_target + (desired - previous_target).clamp(-max_step, max_step);
         self.last_target_volume_percent = Some(target as f32);
         Ok(target)
     }
@@ -646,8 +652,6 @@ impl WristRotation {
 fn validate_wrist_config(config: WristRotationConfig) -> Result<(), WristRotationError> {
     if !config.dead_zone_degrees.is_finite()
         || !(0.0..90.0).contains(&config.dead_zone_degrees)
-        || !config.smoothing_alpha.is_finite()
-        || !(0.0..=1.0).contains(&config.smoothing_alpha)
         || !config.volume_points_per_degree.is_finite()
         || config.volume_points_per_degree <= 0.0
         || !config.max_angular_velocity_degrees_per_second.is_finite()

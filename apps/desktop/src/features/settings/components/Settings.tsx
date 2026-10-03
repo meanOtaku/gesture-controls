@@ -49,7 +49,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   watchSkinTemperatureAcceptanceRateHz: 200,
   watchEdaAcceptanceRateHz: 200,
   wristDeadZoneDegrees: 3,
-  wristSmoothingAlpha: 0.2,
   wristVolumePointsPerDegree: 1 / 3,
   wristMaxAngularVelocityDegreesPerSecond: 360,
   wristMaxVolumePointsPerSecond: 30,
@@ -85,7 +84,6 @@ export function Settings({
   const watchSkinTemperatureAcceptanceRateInput = useRef<HTMLInputElement>(null);
   const watchEdaAcceptanceRateInput = useRef<HTMLInputElement>(null);
   const wristDeadZoneInput = useRef<HTMLInputElement>(null);
-  const wristSmoothingInput = useRef<HTMLInputElement>(null);
   const wristSensitivityInput = useRef<HTMLInputElement>(null);
   const wristVelocityInput = useRef<HTMLInputElement>(null);
   const wristVolumeRateInput = useRef<HTMLInputElement>(null);
@@ -104,7 +102,6 @@ export function Settings({
       watchSkinTemperatureAcceptanceRateHz: clamp(watchSkinTemperatureAcceptanceRateInput.current?.value, 0.1, 200, current.watchSkinTemperatureAcceptanceRateHz),
       watchEdaAcceptanceRateHz: clamp(watchEdaAcceptanceRateInput.current?.value, 0.1, 200, current.watchEdaAcceptanceRateHz),
       wristDeadZoneDegrees: clamp(wristDeadZoneInput.current?.value, 0, 45, current.wristDeadZoneDegrees),
-      wristSmoothingAlpha: clamp(wristSmoothingInput.current?.value, 0.01, 1, current.wristSmoothingAlpha),
       wristVolumePointsPerDegree: clamp(wristSensitivityInput.current?.value, 0.01, 5, current.wristVolumePointsPerDegree),
       wristMaxAngularVelocityDegreesPerSecond: clamp(wristVelocityInput.current?.value, 1, 2000, current.wristMaxAngularVelocityDegreesPerSecond),
       wristMaxVolumePointsPerSecond: clamp(wristVolumeRateInput.current?.value, 1, 100, current.wristMaxVolumePointsPerSecond),
@@ -147,12 +144,10 @@ export function Settings({
 
       <WristRotationSettings
         deadZoneDegrees={current.wristDeadZoneDegrees}
-        smoothingAlpha={current.wristSmoothingAlpha}
         volumePointsPerDegree={current.wristVolumePointsPerDegree}
         maxAngularVelocityDegreesPerSecond={current.wristMaxAngularVelocityDegreesPerSecond}
         maxVolumePointsPerSecond={current.wristMaxVolumePointsPerSecond}
         deadZoneInputRef={wristDeadZoneInput}
-        smoothingInputRef={wristSmoothingInput}
         sensitivityInputRef={wristSensitivityInput}
         velocityInputRef={wristVelocityInput}
         volumeRateInputRef={wristVolumeRateInput}

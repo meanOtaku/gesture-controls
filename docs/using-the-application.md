@@ -251,10 +251,9 @@ Incoming Sony packets still maintain connection and calibration state; this sett
 These settings apply to the next successful volume grab (from the Watch button fallback or an approved live model gesture):
 
 - **Dead zone:** rotation ignored near the starting pose.
-- **Smoothing:** motion smoothing strength.
 - **Sensitivity:** volume points per degree.
 - **Max angular velocity:** rejects implausibly fast twist motion.
-- **Max volume rate:** caps how quickly volume can change.
+- **Max volume rate:** caps how quickly volume can change; the volume follows the wrist angle but moves no faster than this many points per second.
 
 Defaults target roughly 30 volume points for a 90° twist. Begin with defaults and adjust gradually using a test audio output.
 

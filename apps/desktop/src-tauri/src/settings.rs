@@ -27,8 +27,6 @@ pub const MIN_HEALTH_ACCEPTANCE_RATE_HZ: f64 = 0.1;
 pub const MAX_HEALTH_ACCEPTANCE_RATE_HZ: f64 = 200.0;
 pub const MIN_WRIST_DEAD_ZONE_DEGREES: f64 = 0.0;
 pub const MAX_WRIST_DEAD_ZONE_DEGREES: f64 = 45.0;
-pub const MIN_WRIST_SMOOTHING_ALPHA: f64 = 0.01;
-pub const MAX_WRIST_SMOOTHING_ALPHA: f64 = 1.0;
 pub const MIN_WRIST_VOLUME_POINTS_PER_DEGREE: f64 = 0.01;
 pub const MAX_WRIST_VOLUME_POINTS_PER_DEGREE: f64 = 5.0;
 pub const MIN_WRIST_ANGULAR_VELOCITY_DEGREES_PER_SECOND: f64 = 1.0;
@@ -64,8 +62,6 @@ pub struct AppSettings {
     pub watch_eda_acceptance_rate_hz: f64,
     #[serde(default = "default_wrist_dead_zone_degrees")]
     pub wrist_dead_zone_degrees: f64,
-    #[serde(default = "default_wrist_smoothing_alpha")]
-    pub wrist_smoothing_alpha: f64,
     #[serde(default = "default_wrist_volume_points_per_degree")]
     pub wrist_volume_points_per_degree: f64,
     #[serde(default = "default_wrist_max_angular_velocity_degrees_per_second")]
@@ -118,7 +114,6 @@ impl Default for AppSettings {
             watch_skin_temperature_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
             watch_eda_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
             wrist_dead_zone_degrees: default_wrist_dead_zone_degrees(),
-            wrist_smoothing_alpha: default_wrist_smoothing_alpha(),
             wrist_volume_points_per_degree: default_wrist_volume_points_per_degree(),
             wrist_max_angular_velocity_degrees_per_second:
                 default_wrist_max_angular_velocity_degrees_per_second(),
@@ -149,9 +144,6 @@ fn default_ppg_flush_rate_hz() -> f64 {
 fn default_wrist_dead_zone_degrees() -> f64 {
     3.0
 }
-fn default_wrist_smoothing_alpha() -> f64 {
-    0.2
-}
 fn default_wrist_volume_points_per_degree() -> f64 {
     1.0 / 3.0
 }
@@ -170,7 +162,6 @@ impl AppSettings {
     pub fn wrist_rotation_config(&self) -> interaction_engine::WristRotationConfig {
         interaction_engine::WristRotationConfig {
             dead_zone_degrees: self.wrist_dead_zone_degrees,
-            smoothing_alpha: self.wrist_smoothing_alpha,
             volume_points_per_degree: self.wrist_volume_points_per_degree,
             max_angular_velocity_degrees_per_second: self
                 .wrist_max_angular_velocity_degrees_per_second,
@@ -264,12 +255,6 @@ impl AppSettings {
                 self.wrist_dead_zone_degrees,
                 MIN_WRIST_DEAD_ZONE_DEGREES,
                 MAX_WRIST_DEAD_ZONE_DEGREES,
-            ),
-            (
-                "wristSmoothingAlpha",
-                self.wrist_smoothing_alpha,
-                MIN_WRIST_SMOOTHING_ALPHA,
-                MAX_WRIST_SMOOTHING_ALPHA,
             ),
             (
                 "wristVolumePointsPerDegree",
@@ -579,6 +564,19 @@ pub fn reset_settings(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The smoothing control was removed (it never affected the mapper); a
+    /// settings.json written before that must still load and validate.
+    #[test]
+    fn legacy_settings_with_a_wrist_smoothing_alpha_still_load() {
+        let mut json = serde_json::to_value(AppSettings::default()).unwrap();
+        json["wristSmoothingAlpha"] = serde_json::json!(0.5);
+        json["wristDeadZoneDegrees"] = serde_json::json!(4.0);
+        let settings: AppSettings =
+            serde_json::from_value(json).expect("legacy key must be ignored, not rejected");
+        assert_eq!(settings.wrist_dead_zone_degrees, 4.0);
+        settings.validate().expect("must validate");
+    }
 
     #[test]
     fn defaults_pass_validation() {

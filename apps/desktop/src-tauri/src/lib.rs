@@ -224,6 +224,9 @@ pub fn run() {
                                     }
                                 }
                                 WatchEvent::Disconnected => {
+                                    watch_handle
+                                        .state::<inference::PpgIngestRuntime>()
+                                        .clear();
                                     inference::force_release_and_hide(
                                         &watch_handle,
                                         interaction_engine::ForceReleaseReason::WatchDisconnected,

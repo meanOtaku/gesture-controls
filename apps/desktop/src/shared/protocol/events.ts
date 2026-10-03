@@ -229,7 +229,6 @@ export interface AppSettings {
   watchSkinTemperatureAcceptanceRateHz: number;
   watchEdaAcceptanceRateHz: number;
   wristDeadZoneDegrees: number;
-  wristSmoothingAlpha: number;
   wristVolumePointsPerDegree: number;
   wristMaxAngularVelocityDegreesPerSecond: number;
   wristMaxVolumePointsPerSecond: number;

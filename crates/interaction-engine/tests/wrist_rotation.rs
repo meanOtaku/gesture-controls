@@ -22,6 +22,15 @@ fn rotated_around_wrist_circumference(degrees: f64) -> [f64; 4] {
     [half.cos(), 0.0, half.sin(), 0.0]
 }
 
+// These tests assert the pure angle-to-volume mapping; the slew limit has
+// its own tests below, so they run with the rate cap effectively disabled.
+fn uncapped_rate_config() -> WristRotationConfig {
+    WristRotationConfig {
+        max_volume_points_per_second: 1.0e9,
+        ..WristRotationConfig::default()
+    }
+}
+
 // Both the Watch-button path and the desktop-model path must funnel through
 // `begin_with_config` to start a volume interaction; these tests exercise
 // that single entry point so the two callers can never diverge.
@@ -352,12 +361,7 @@ fn target_volume_is_activation_volume_plus_signed_roll_times_sensitivity() {
 fn holding_a_fixed_angle_holds_a_fixed_volume_across_many_samples() {
     let mut rotation = WristRotation::default();
     rotation
-        .begin_with_config(
-            WristRotationConfig::default(),
-            IDENTITY,
-            0,
-            ACTIVATION_VOLUME,
-        )
+        .begin_with_config(uncapped_rate_config(), IDENTITY, 0, ACTIVATION_VOLUME)
         .unwrap();
     let held = rotated_around_forearm(25.0);
 
@@ -431,7 +435,7 @@ fn returning_to_the_reference_angle_restores_the_activation_volume() {
 fn target_volume_clamps_to_the_valid_system_range() {
     let config = WristRotationConfig {
         volume_points_per_degree: 5.0,
-        ..WristRotationConfig::default()
+        ..uncapped_rate_config()
     };
 
     let mut high = WristRotation::default();
@@ -482,12 +486,7 @@ fn velocity_outlier_freezes_the_previous_target_instead_of_jumping() {
 fn positive_roll_reversing_through_zero_to_negative_lowers_volume_past_baseline() {
     let mut rotation = WristRotation::default();
     rotation
-        .begin_with_config(
-            WristRotationConfig::default(),
-            IDENTITY,
-            0,
-            ACTIVATION_VOLUME,
-        )
+        .begin_with_config(uncapped_rate_config(), IDENTITY, 0, ACTIVATION_VOLUME)
         .unwrap();
 
     let mut previous = rotation
@@ -527,12 +526,7 @@ fn positive_roll_reversing_through_zero_to_negative_lowers_volume_past_baseline(
 fn negative_roll_reversing_through_zero_to_positive_raises_volume_past_baseline() {
     let mut rotation = WristRotation::default();
     rotation
-        .begin_with_config(
-            WristRotationConfig::default(),
-            IDENTITY,
-            0,
-            ACTIVATION_VOLUME,
-        )
+        .begin_with_config(uncapped_rate_config(), IDENTITY, 0, ACTIVATION_VOLUME)
         .unwrap();
 
     let mut previous = rotation
@@ -619,12 +613,7 @@ fn a_genuine_outlier_does_not_block_the_legitimate_reversal_samples_that_follow_
     // indefinitely after any single transient glitch.
     let mut rotation = WristRotation::default();
     rotation
-        .begin_with_config(
-            WristRotationConfig::default(),
-            IDENTITY,
-            0,
-            ACTIVATION_VOLUME,
-        )
+        .begin_with_config(uncapped_rate_config(), IDENTITY, 0, ACTIVATION_VOLUME)
         .unwrap();
 
     // Ramp up at the real 5-degrees/tick pace; the first sample is itself
@@ -703,4 +692,83 @@ fn first_sample_after_begin_still_accepts_a_realistic_rotation() {
         .observe(rotated_around_forearm(5.0), 20_000_000)
         .unwrap();
     assert!(target > f64::from(ACTIVATION_VOLUME));
+}
+
+// D-M2-1: `max_volume_points_per_second` is a real slew limit on the output.
+#[test]
+fn output_target_never_moves_faster_than_the_configured_rate() {
+    let config = WristRotationConfig {
+        max_volume_points_per_second: 10.0,
+        ..WristRotationConfig::default()
+    };
+    let mut rotation = WristRotation::default();
+    rotation
+        .begin_with_config(config, IDENTITY, 0, ACTIVATION_VOLUME)
+        .unwrap();
+
+    // 5 degrees per 20ms tick (250 deg/s) asks for far more than 10 points/s.
+    let mut previous = f64::from(ACTIVATION_VOLUME);
+    for tick in 1..=10u64 {
+        let target = rotation
+            .observe(rotated_around_forearm(5.0 * tick as f64), tick * 20_000_000)
+            .unwrap();
+        assert!(
+            target - previous <= 10.0 * 0.02 + 1e-4,
+            "tick {tick} moved {} points in 20ms, over the 10 points/s cap",
+            target - previous
+        );
+        previous = target;
+    }
+    assert!(previous > f64::from(ACTIVATION_VOLUME));
+}
+
+#[test]
+fn rate_limited_target_converges_to_the_held_angle_and_stays_there() {
+    let mut rotation = WristRotation::default();
+    rotation
+        .begin_with_config(
+            WristRotationConfig::default(),
+            IDENTITY,
+            0,
+            ACTIVATION_VOLUME,
+        )
+        .unwrap();
+    let held = rotated_around_forearm(25.0);
+    // (25 - 3 dead zone) * (1/3 points per degree) above the activation volume.
+    let expected = f64::from(ACTIVATION_VOLUME) + 22.0 / 3.0;
+
+    let mut last = 0.0;
+    for tick in 1..=40u64 {
+        last = rotation.observe(held, tick * 100_000_000).unwrap();
+    }
+    assert!(
+        (last - expected).abs() < 1e-4,
+        "got {last}, want {expected}"
+    );
+    let again = rotation.observe(held, 41 * 100_000_000).unwrap();
+    assert_eq!(again, last);
+}
+
+#[test]
+fn rate_limit_also_bounds_the_return_toward_the_reference() {
+    let config = WristRotationConfig {
+        max_volume_points_per_second: 10.0,
+        ..WristRotationConfig::default()
+    };
+    let mut rotation = WristRotation::default();
+    rotation
+        .begin_with_config(config, IDENTITY, 0, ACTIVATION_VOLUME)
+        .unwrap();
+    for tick in 1..=20u64 {
+        rotation
+            .observe(rotated_around_forearm(30.0), tick * 100_000_000)
+            .unwrap();
+    }
+    let raised = rotation
+        .observe(rotated_around_forearm(30.0), 2_100_000_000)
+        .unwrap();
+    assert!(raised > f64::from(ACTIVATION_VOLUME));
+
+    let first_back = rotation.observe(IDENTITY, 2_200_000_000).unwrap();
+    assert!((raised - first_back - 1.0).abs() < 1e-4);
 }

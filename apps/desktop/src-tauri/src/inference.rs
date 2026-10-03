@@ -188,6 +188,19 @@ pub struct PpgIngestRuntime {
 }
 
 impl PpgIngestRuntime {
+    /// Forgets every device's watermark. Called when the watch link drops
+    /// (any transport, including a transport switch): the watch's envelope
+    /// clock is boot-relative, so after a reboot a fresh connection starts
+    /// from a lower timestamp than the stale watermark and every window
+    /// would otherwise be rejected (and force a release) until the desktop
+    /// process restarted. Ordering within one connection is still enforced.
+    pub(crate) fn clear(&self) {
+        match self.last_timestamp_ns.lock() {
+            Ok(mut last_seen) => last_seen.clear(),
+            Err(_) => warn!("PPG ingest watermark lock was poisoned; could not clear"),
+        }
+    }
+
     fn evaluate(
         &self,
         sample: &WatchPpgBatchSample,
@@ -1051,6 +1064,37 @@ mod ppg_window_tests {
             runtime.evaluate(&device_b, &config).unwrap(),
             PpgWindowOutcome::Accepted
         );
+    }
+
+    /// D-M2-2: a watch reboot restarts its boot-relative clock, so the first
+    /// window after reconnecting is "older" than the stale watermark. The
+    /// watermark must be cleared on disconnect so ingestion recovers.
+    #[test]
+    fn clearing_the_watermark_lets_a_rebooted_watch_resume_ingestion() {
+        let runtime = PpgIngestRuntime::default();
+        let config = QualityGateConfig::default();
+        let before_reboot = ppg_sample(1_000_000, &[(0, 0, 0), (0, 0, 0), (0, 0, 0)]);
+        let after_reboot = ppg_sample(10, &[(0, 0, 0), (0, 0, 0), (0, 0, 0)]);
+        assert_eq!(
+            runtime.evaluate(&before_reboot, &config).unwrap(),
+            PpgWindowOutcome::Accepted
+        );
+        assert!(matches!(
+            runtime.evaluate(&after_reboot, &config).unwrap(),
+            PpgWindowOutcome::RejectedStaleOrOutOfOrder { .. }
+        ));
+
+        runtime.clear();
+
+        assert_eq!(
+            runtime.evaluate(&after_reboot, &config).unwrap(),
+            PpgWindowOutcome::Accepted
+        );
+        // Ordering within the new connection is still enforced.
+        assert!(matches!(
+            runtime.evaluate(&after_reboot, &config).unwrap(),
+            PpgWindowOutcome::RejectedStaleOrOutOfOrder { .. }
+        ));
     }
 
     #[test]

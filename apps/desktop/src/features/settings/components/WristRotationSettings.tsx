@@ -6,26 +6,22 @@ import { Label } from "../../../components/ui/label";
 
 type WristRotationSettingsProps = {
   deadZoneDegrees: number;
-  smoothingAlpha: number;
   volumePointsPerDegree: number;
   maxAngularVelocityDegreesPerSecond: number;
   maxVolumePointsPerSecond: number;
   deadZoneInputRef: RefObject<HTMLInputElement | null>;
-  smoothingInputRef: RefObject<HTMLInputElement | null>;
   sensitivityInputRef: RefObject<HTMLInputElement | null>;
   velocityInputRef: RefObject<HTMLInputElement | null>;
   volumeRateInputRef: RefObject<HTMLInputElement | null>;
 };
 
-/** Wrist-rotation tuning for the volume knob gesture: sensitivity, smoothing, and rate limiting. */
+/** Wrist-rotation tuning for the volume knob gesture: sensitivity, and rate limiting. */
 export function WristRotationSettings({
   deadZoneDegrees,
-  smoothingAlpha,
   volumePointsPerDegree,
   maxAngularVelocityDegreesPerSecond,
   maxVolumePointsPerSecond,
   deadZoneInputRef,
-  smoothingInputRef,
   sensitivityInputRef,
   velocityInputRef,
   volumeRateInputRef,
@@ -38,7 +34,7 @@ export function WristRotationSettings({
           description="Volume gesture"
           help={{
             label: "About wrist rotation tuning",
-            content: "Applied on the next STEM-button grab. Dead zone ignores small unintentional turns. Sensitivity sets volume points per degree of rotation; smoothing and rate limiting keep the response steady. Defaults give 30 volume points for a 90° twist.",
+            content: "Applied on the next STEM-button grab. Dead zone ignores small unintentional turns. Sensitivity sets volume points per degree of rotation; the max volume rate caps how fast the volume can change. Defaults give 30 volume points for a 90° twist.",
           }}
         />
       </CardHeader>
@@ -47,11 +43,6 @@ export function WristRotationSettings({
           Dead zone
           <Input aria-label="Wrist rotation dead zone degrees" type="number" min="0" max="45" step="0.5" ref={deadZoneInputRef} key={`wrist-dead-zone-${deadZoneDegrees}`} defaultValue={deadZoneDegrees} />
           <small>degrees</small>
-        </Label>
-        <Label className="flex flex-col items-start gap-1">
-          Smoothing
-          <Input aria-label="Wrist rotation smoothing" type="number" min="0.01" max="1" step="0.01" ref={smoothingInputRef} key={`wrist-smoothing-${smoothingAlpha}`} defaultValue={smoothingAlpha} />
-          <small>alpha</small>
         </Label>
         <Label className="flex flex-col items-start gap-1">
           Sensitivity
