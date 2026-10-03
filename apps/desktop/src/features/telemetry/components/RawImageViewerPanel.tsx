@@ -1,10 +1,21 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent } from "react";
+import { ImageIcon } from "lucide-react";
+import { SegmentedControl } from "../../../components/app/SegmentedControl";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../../components/ui/alert-dialog";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { HelpTooltip } from "../../../components/app/HelpTooltip";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
-import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { Slider } from "../../../components/ui/slider";
@@ -109,11 +120,9 @@ export function RawImageViewerPanel() {
     }
   };
 
+  const [pendingDelete, setPendingDelete] = useState<RecordingBundleSummary | null>(null);
+
   const handleDeleteRecording = async (summary: RecordingBundleSummary) => {
-    const confirmed = window.confirm(
-      `Permanently delete recording ${summary.recordingId}? This cannot be undone.`,
-    );
-    if (!confirmed) return;
     setDeleting(true);
     setDeleteError(null);
     try {
@@ -232,6 +241,200 @@ export function RawImageViewerPanel() {
     return deriveVisibleCompactLabelRanges(labelRanges.intervals, compactWindow);
   }, [compactWindow, labelRanges]);
 
+  const recordingsLoaded = recordingList.status === "loaded" && recordingList.recordings.length > 0;
+  const selectedSummary =
+    recordingList.status === "loaded"
+      ? recordingList.recordings.find((summary) => summary.recordingId === recordingId)
+      : undefined;
+
+  /** Which recording and which channel: what is being looked at. */
+  const sourceControls = recordingList.status === "loaded" && recordingList.recordings.length > 0 ? (
+    <div className="viewer-grid">
+      <div className="field">
+        <div className="field-head">
+          <Label htmlFor="raw-viewer-recording">Recording</Label>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="text-destructive"
+            disabled={!selectedSummary || deleting}
+            aria-busy={deleting}
+            title="Permanently delete the selected recording"
+            onClick={() => selectedSummary && setPendingDelete(selectedSummary)}
+          >
+            {deleting ? "Deleting…" : "Delete recording"}
+          </Button>
+        </div>
+        <Select
+          value={recordingId ?? ""}
+          onValueChange={(value) => rawImageViewerStore.setRecording(value === "" ? null : value)}
+        >
+          <SelectTrigger id="raw-viewer-recording" aria-label="Saved recording" className="w-full">
+            <SelectValue placeholder="Select a recording…" />
+          </SelectTrigger>
+          <SelectContent>
+            {recordingList.recordings.map((summary) => (
+              <SelectItem key={summary.recordingId} value={summary.recordingId}>
+                {recordingLabel(summary)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="field">
+        <div className="field-head">
+          <Label htmlFor="raw-viewer-channel">Channel</Label>
+        </div>
+        <Select
+          value={channel ?? ""}
+          onValueChange={(value) =>
+            rawImageViewerStore.setChannel(value === "" ? null : (value as RawImageViewerChannel))
+          }
+        >
+          <SelectTrigger id="raw-viewer-channel" aria-label="Numeric channel" className="w-full">
+            <SelectValue placeholder="Select a channel…" />
+          </SelectTrigger>
+          <SelectContent>
+            {RAW_IMAGE_VIEWER_CHANNELS.map((candidate) => (
+              <SelectItem key={candidate} value={candidate}>
+                {channelLabel(candidate)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  ) : null;
+
+  /** How the chosen channel is drawn. Every control here changes the picture, never the data. */
+  const displayControls = (
+    <section className="viewer-group" aria-label="Display options">
+      <div className="viewer-group-head">
+        <h3 className="viewer-group-title">Display</h3>
+      </div>
+      <div className="viewer-grid">
+        <div className="field">
+          <div className="field-head">
+            <Label htmlFor="raw-viewer-grid-size">Grid size</Label>
+          </div>
+          <Select
+            value={String(gridSize)}
+            onValueChange={(value) => rawImageViewerStore.setGridSize(Number(value) as RawGridSize)}
+          >
+            <SelectTrigger id="raw-viewer-grid-size" aria-label="Image grid size" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {RAW_GRID_SIZES.map((size) => (
+                <SelectItem key={size} value={String(size)}>
+                  {size}×{size} ({size}-row hop)
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="field-hint">
+            {gridSize}×{gridSize} pixels; Next and Previous move {rowHop} rows.
+          </p>
+        </div>
+
+        <div className="field">
+          <div className="field-head">
+            <span className="field-label" id="raw-viewer-view-mode-label">View mode</span>
+            <HelpTooltip label="About view modes">
+              <strong>Raw rows</strong> shows exact consecutive <code>raw.csv</code> rows, including
+              missing (null) cells — the audit view. <strong>Observed samples</strong> shows only this
+              channel&apos;s own finite recorded values, compacted in timestamp order with no
+              missing-value pixels; adjacent pixels are not necessarily adjacent in time. Neither view
+              fabricates, interpolates, or resamples data.
+            </HelpTooltip>
+          </div>
+          <SegmentedControl
+            labelledBy="raw-viewer-view-mode-label"
+            value={viewMode}
+            onValueChange={(value) => {
+              if (value === "rawRows" || value === "observedSamples") rawImageViewerStore.setViewMode(value);
+            }}
+            options={[
+              { value: "observedSamples", label: "Observed samples", ariaLabel: "Observed samples (default)" },
+              { value: "rawRows", label: "Raw rows", ariaLabel: "Raw rows (audit)" },
+            ]}
+          />
+          <p className="field-hint">
+            {viewMode === "observedSamples"
+              ? "Only this channel's recorded values, packed in time order."
+              : "Every raw row exactly as saved, gaps included (the audit view)."}
+          </p>
+        </div>
+
+        <div className="field">
+          <div className="field-head">
+            <span className="field-label" id="raw-viewer-normalization-label">Normalization</span>
+          </div>
+          <SegmentedControl
+            labelledBy="raw-viewer-normalization-label"
+            value={normalizationMode}
+            onValueChange={(value) => {
+              if (value === "recording" || value === "frame") rawImageViewerStore.setNormalizationMode(value);
+            }}
+            options={[
+              { value: "recording", label: "Whole recording", ariaLabel: "Recording-scale normalization (default)" },
+              { value: "frame", label: "This frame", ariaLabel: "Frame-scale normalization" },
+            ]}
+          />
+          <p className="field-hint">
+            {normalizationMode === "recording"
+              ? "Brightness is scaled over the whole recording, so frames compare with each other."
+              : "Brightness is rescaled for each frame, so faint detail shows but frames no longer compare."}
+          </p>
+        </div>
+
+        <div className="field">
+          <div className="field-head">
+            <Label htmlFor="raw-viewer-spike-method">Spike extraction</Label>
+          </div>
+          <Select
+            value={spikeExtractionMethod}
+            onValueChange={(value) => rawImageViewerStore.setSpikeExtractionMethod(value as SpikeExtractionMethod)}
+          >
+            <SelectTrigger id="raw-viewer-spike-method" aria-label="Spike extraction method" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SPIKE_EXTRACTION_METHODS.map((candidate) => (
+                <SelectItem key={candidate} value={candidate}>
+                  {SPIKE_EXTRACTION_METHOD_INFO[candidate].label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="field-hint">How spikes are pulled out of the signal for the derivative views.</p>
+        </div>
+      </div>
+    </section>
+  );
+
+  /** Shown where the image will appear until there is something to draw, saying what is next. */
+  const emptyState = (
+    <div className="viewer-empty" role="status">
+      <ImageIcon aria-hidden="true" className="size-8 text-muted-foreground" />
+      <strong>
+        {!recordingsLoaded ? "No recording to show yet" : recordingId === null ? "Choose a recording" : "Now choose a channel"}
+      </strong>
+      <p>
+        Select a recording and a channel to inspect its raw image: the channel's samples laid out in order as a
+        {" "}{gridSize}×{gridSize} picture.
+      </p>
+      {recordingsLoaded && (
+        <div className="viewer-steps" aria-hidden="true">
+          <span data-done={recordingId !== null} data-current={recordingId === null}>1 · Recording</span>
+          <span data-done={channel !== null} data-current={recordingId !== null && channel === null}>2 · Channel</span>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <Card role="region" aria-label="Raw image viewer" className="min-w-0">
       <CardHeader>
@@ -249,8 +452,10 @@ export function RawImageViewerPanel() {
           Select a saved recording, numeric channel, and grid size to inspect its raw samples as an image.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2">
+      <CardContent className="flex flex-col gap-5">
+        <section className="viewer-group" aria-label="Source">
+        <div className="viewer-group-head">
+          <h3 className="viewer-group-title">Source</h3>
           <Input
             ref={importFileInputRef}
             type="file"
@@ -260,7 +465,7 @@ export function RawImageViewerPanel() {
               void handleImportFileChange(event);
             }}
           />
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1">
             <Button
               type="button"
               variant="outline"
@@ -278,22 +483,22 @@ export function RawImageViewerPanel() {
               annotations and is never used for training.
             </HelpTooltip>
           </div>
-          {importError && (
-            <p role="alert" className="text-sm text-destructive">
-              Could not import this file: {importError}
-            </p>
-          )}
-          {importSuccessMessage && (
-            <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
-              {importSuccessMessage}
-            </p>
-          )}
-          {deleteError && (
-            <p role="alert" className="text-sm text-destructive">
-              Could not delete this recording: {deleteError}
-            </p>
-          )}
         </div>
+        {importError && (
+          <p role="alert" className="text-sm text-destructive">
+            Could not import this file: {importError}
+          </p>
+        )}
+        {importSuccessMessage && (
+          <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+            {importSuccessMessage}
+          </p>
+        )}
+        {deleteError && (
+          <p role="alert" className="text-sm text-destructive">
+            Could not delete this recording: {deleteError}
+          </p>
+        )}
 
         {recordingList.status === "loading" && (
           <div className="flex flex-col gap-2" aria-busy="true" aria-live="polite">
@@ -317,161 +522,12 @@ export function RawImageViewerPanel() {
           <p className="hint">No saved recordings yet. Save a Timeline Capture recording bundle to inspect it here.</p>
         )}
 
+        {sourceControls}
+        </section>
+
         {recordingList.status === "loaded" && recordingList.recordings.length > 0 && (
           <>
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="flex flex-col gap-1">
-                <Label htmlFor="raw-viewer-recording">Recording</Label>
-                <div className="flex items-center gap-1">
-                  {(() => {
-                    const selectedSummary = recordingList.recordings.find((summary) => summary.recordingId === recordingId);
-                    return (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label={selectedSummary ? `Delete recording ${selectedSummary.recordingId}` : "Delete recording"}
-                        title="Permanently delete the selected recording"
-                        disabled={!selectedSummary || deleting}
-                        aria-busy={deleting}
-                        onClick={() => {
-                          if (selectedSummary) void handleDeleteRecording(selectedSummary);
-                        }}
-                      >
-                        ×
-                      </Button>
-                    );
-                  })()}
-                  <Select
-                    value={recordingId ?? ""}
-                    onValueChange={(value) => rawImageViewerStore.setRecording(value === "" ? null : value)}
-                  >
-                    <SelectTrigger id="raw-viewer-recording" aria-label="Saved recording" className="min-w-64">
-                      <SelectValue placeholder="Select a recording…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {recordingList.recordings.map((summary) => (
-                        <SelectItem key={summary.recordingId} value={summary.recordingId}>
-                          {recordingLabel(summary)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <Label htmlFor="raw-viewer-channel">Channel</Label>
-                <Select
-                  value={channel ?? ""}
-                  onValueChange={(value) =>
-                    rawImageViewerStore.setChannel(value === "" ? null : (value as RawImageViewerChannel))
-                  }
-                >
-                  <SelectTrigger id="raw-viewer-channel" aria-label="Numeric channel" className="min-w-40">
-                    <SelectValue placeholder="Select a channel…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RAW_IMAGE_VIEWER_CHANNELS.map((candidate) => (
-                      <SelectItem key={candidate} value={candidate}>
-                        {channelLabel(candidate)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <Label htmlFor="raw-viewer-grid-size">
-                  Grid size ({gridSize}×{gridSize}, {rowHop}-row hop)
-                </Label>
-                <Select
-                  value={String(gridSize)}
-                  onValueChange={(value) => rawImageViewerStore.setGridSize(Number(value) as RawGridSize)}
-                >
-                  <SelectTrigger id="raw-viewer-grid-size" aria-label="Image grid size" className="min-w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RAW_GRID_SIZES.map((size) => (
-                      <SelectItem key={size} value={String(size)}>
-                        {size}×{size} ({size}-row hop)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <fieldset className="flex flex-col gap-1">
-                <legend className="label flex items-center gap-1">
-                  View mode
-                  <HelpTooltip label="About view modes">
-                    <strong>Raw rows</strong> shows exact consecutive <code>raw.csv</code> rows, including
-                    missing (null) cells — the audit view. <strong>Observed samples</strong> shows only this
-                    channel&apos;s own finite recorded values, compacted in timestamp order with no
-                    missing-value pixels; adjacent pixels are not necessarily adjacent in time. Neither view
-                    fabricates, interpolates, or resamples data.
-                  </HelpTooltip>
-                </legend>
-                <RadioGroup
-                  className="flex flex-row gap-4"
-                  value={viewMode}
-                  onValueChange={(value) => {
-                    if (value === "rawRows" || value === "observedSamples") rawImageViewerStore.setViewMode(value);
-                  }}
-                >
-                  <label className="flex items-center gap-2 text-sm">
-                    <RadioGroupItem value="rawRows" aria-label="Raw rows (audit)" />
-                    Raw rows (audit)
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <RadioGroupItem value="observedSamples" aria-label="Observed samples (default)" />
-                    Observed samples (default)
-                  </label>
-                </RadioGroup>
-              </fieldset>
-
-              <fieldset className="flex flex-col gap-1">
-                <legend className="label">Normalization</legend>
-                <RadioGroup
-                  className="flex flex-row gap-4"
-                  value={normalizationMode}
-                  onValueChange={(value) => {
-                    if (value === "recording" || value === "frame") rawImageViewerStore.setNormalizationMode(value);
-                  }}
-                >
-                  <label className="flex items-center gap-2 text-sm">
-                    <RadioGroupItem value="recording" aria-label="Recording-scale normalization (default)" />
-                    Recording-scale (default)
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <RadioGroupItem value="frame" aria-label="Frame-scale normalization" />
-                    Frame-scale
-                  </label>
-                </RadioGroup>
-              </fieldset>
-
-              <div className="flex flex-col gap-1">
-                <Label htmlFor="raw-viewer-spike-method">Spike extraction method</Label>
-                <Select
-                  value={spikeExtractionMethod}
-                  onValueChange={(value) =>
-                    rawImageViewerStore.setSpikeExtractionMethod(value as SpikeExtractionMethod)
-                  }
-                >
-                  <SelectTrigger id="raw-viewer-spike-method" aria-label="Spike extraction method" className="min-w-56">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SPIKE_EXTRACTION_METHODS.map((candidate) => (
-                      <SelectItem key={candidate} value={candidate}>
-                        {SPIKE_EXTRACTION_METHOD_INFO[candidate].label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            {displayControls}
 
             {qualitySummary.status === "loaded" && <RecordingQualitySummaryCard summary={qualitySummary.summary} />}
             {qualitySummary.status === "error" && (
@@ -481,7 +537,7 @@ export function RawImageViewerPanel() {
             )}
 
             {recordingId === null || channel === null ? (
-              <p className="hint">Select a recording and a channel to inspect its raw image.</p>
+              emptyState
             ) : viewMode === "observedSamples" ? (
               compactWindow !== null ? (
                 // Same "keep the loaded window mounted while a reload is in
@@ -829,6 +885,30 @@ export function RawImageViewerPanel() {
           </>
         )}
       </CardContent>
+      <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => !open && setPendingDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this recording permanently?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete ? `${recordingLabel(pendingDelete)} (${pendingDelete.recordingId})` : ""} and its raw data
+              will be removed from this computer. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                const target = pendingDelete;
+                setPendingDelete(null);
+                if (target) void handleDeleteRecording(target);
+              }}
+            >
+              Delete recording
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
