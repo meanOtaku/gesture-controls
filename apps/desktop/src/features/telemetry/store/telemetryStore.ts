@@ -14,11 +14,13 @@ import type { RecordingBundlePayload, StopReason } from "../../../shared/tauri/r
 import {
   hasOverlap,
   isDegenerate,
+  reindexIntervalsAfterInsert,
   splitInterval,
   toAnnotationInterval,
   type ClosedLiveInterval,
   type LiveInterval,
 } from "../annotations/timeline";
+import { RingBuffer } from "./ringBuffer";
 
 export type SeriesPoint = { at: number; values: number[] };
 export type CsvRow = {
@@ -175,75 +177,6 @@ export const EMPTY_WATCH_STATUS: WatchStatus = {
   biaLast: null,
   sweatLossLast: null,
 };
-
-class RingBuffer<T> {
-  private readonly slots: (T | undefined)[];
-  private start = 0;
-  private count = 0;
-
-  constructor(private readonly capacity: number) {
-    this.slots = new Array(capacity);
-  }
-
-  push(item: T): void {
-    const index = (this.start + this.count) % this.capacity;
-    this.slots[index] = item;
-    if (this.count < this.capacity) this.count += 1;
-    else this.start = (this.start + 1) % this.capacity;
-  }
-
-  clear(): void {
-    this.start = 0;
-    this.count = 0;
-  }
-
-  toArray(): T[] {
-    const out = new Array<T>(this.count);
-    for (let index = 0; index < this.count; index += 1) {
-      out[index] = this.slots[(this.start + index) % this.capacity] as T;
-    }
-    return out;
-  }
-
-  get length(): number {
-    return this.count;
-  }
-
-  get(index: number): T | undefined {
-    if (index < 0 || index >= this.count) return undefined;
-    return this.slots[(this.start + index) % this.capacity] as T;
-  }
-
-  /** Upper-bound binary search: first logical index whose `key` exceeds `target`, assuming the buffer is already sorted ascending by `key`. Ties land after existing equal-key entries (stable). */
-  upperBound(key: (item: T) => number, target: number): number {
-    let lo = 0;
-    let hi = this.count;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (key(this.get(mid) as T) <= target) lo = mid + 1;
-      else hi = mid;
-    }
-    return lo;
-  }
-
-  /** Inserts `item` at logical `index`, shifting later elements right. At capacity, evicts the oldest element (index 0), same as `push`. */
-  insertAt(index: number, item: T): void {
-    if (this.count < this.capacity) {
-      for (let i = this.count; i > index; i -= 1) {
-        this.slots[(this.start + i) % this.capacity] = this.slots[(this.start + i - 1) % this.capacity];
-      }
-      this.slots[(this.start + index) % this.capacity] = item;
-      this.count += 1;
-    } else if (index > 0) {
-      for (let i = 1; i < index; i += 1) {
-        this.slots[(this.start + i - 1) % this.capacity] = this.slots[(this.start + i) % this.capacity];
-      }
-      this.slots[(this.start + index - 1) % this.capacity] = item;
-      this.start = (this.start + 1) % this.capacity;
-    }
-    // index === 0 at full capacity: item is older than everything retained, so it is dropped (same outcome as push's own eviction rule).
-  }
-}
 
 class TelemetryStore {
   private readonly listeners = new Set<() => void>();
@@ -662,13 +595,17 @@ class TelemetryStore {
     const insertIndex = Number.isFinite(timestampNs)
       ? this.datasetRows.upperBound((existing) => Number(existing.timestampNs), timestampNs)
       : previousLength;
+    // A full buffer drops its oldest row to make room (unless the new row is itself
+    // older than everything retained, in which case it is the one dropped), which
+    // moves every row one place earlier and every interval bound with it.
+    const evictedOldest = previousLength >= MAX_CSV_ROWS && insertIndex > 0;
     this.datasetRows.insertAt(insertIndex, row);
-    if (insertIndex < previousLength) {
-      this.timelineIntervals.forEach((interval) => {
-        if (interval.startRawRow >= insertIndex) interval.startRawRow += 1;
-        if (interval.endRawRow !== null && interval.endRawRow >= insertIndex) interval.endRawRow += 1;
-      });
-    }
+    this.timelineIntervals = reindexIntervalsAfterInsert(
+      this.timelineIntervals,
+      insertIndex,
+      previousLength,
+      evictedOldest,
+    );
   }
 
   /** Stops accepting new rows but keeps the buffered session so it can still be exported. Transitions to Saved state. */

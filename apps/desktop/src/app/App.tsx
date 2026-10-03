@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { lazy, memo, Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AppNav } from "./components/AppNav";
 import { OperationFeedback } from "../components/app/OperationFeedback";
 import { Skeleton } from "../components/ui/skeleton";
@@ -55,8 +55,13 @@ const emptyOverlay: OverlayState = {
  * always-visible safety/control surface and must stay eagerly bundled.
  */
 const Dashboard = lazy(() => import("../features/dashboard/components/Dashboard").then((m) => ({ default: m.Dashboard })));
-const LiveTelemetry = lazy(() => import("../features/telemetry/components/LiveTelemetry").then((m) => ({ default: m.LiveTelemetry })));
-const ModelLab = lazy(() => import("../features/model-lab/components/ModelLab").then((m) => ({ default: m.ModelLab })));
+// `MainApp` re-renders on every telemetry publish (~15 Hz while a watch streams). These two
+// tabs take no props, so `memo` lets React skip them when only the parent changed;
+// Live data still updates itself through its own store subscription, and Model Lab shows
+// nothing that the telemetry store drives. Without it the whole Model Lab tree (datasets,
+// registry, lifecycle controls) re-rendered 15 times a second while merely open.
+const LiveTelemetry = memo(lazy(() => import("../features/telemetry/components/LiveTelemetry").then((m) => ({ default: m.LiveTelemetry }))));
+const ModelLab = memo(lazy(() => import("../features/model-lab/components/ModelLab").then((m) => ({ default: m.ModelLab }))));
 const Settings = lazy(() => import("../features/settings/components/Settings").then((m) => ({ default: m.Settings })));
 
 function TabFallback() {

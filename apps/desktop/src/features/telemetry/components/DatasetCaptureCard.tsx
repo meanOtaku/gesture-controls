@@ -62,6 +62,13 @@ type DatasetCaptureCardProps = {
   onExport: () => Promise<void>;
   /** Buffered session rows/intervals, for the pre-export data-quality review gate. Empty when there is nothing buffered yet. */
   datasetRows?: DatasetRow[];
+  /**
+   * Lazy alternative to `datasetRows`: called only when Export is pressed. Prefer it for a
+   * live session, whose row buffer holds up to 200,000 rows; passing `datasetRows` makes the
+   * parent copy the whole buffer on every render (about 1.3 ms and 1.6 MB each time, at the
+   * 15 Hz publish rate) to serve a click that happens once.
+   */
+  getDatasetRows?: () => DatasetRow[];
   timelineIntervals?: LiveInterval[];
 };
 
@@ -100,6 +107,7 @@ export function DatasetCaptureCard({
   onDiscard,
   onExport,
   datasetRows = [],
+  getDatasetRows,
   timelineIntervals = [],
 }: DatasetCaptureCardProps) {
   const [customLabel, setCustomLabel] = useState("");
@@ -153,12 +161,13 @@ export function DatasetCaptureCard({
    * this never blocks or errors on a missing summary.
    */
   const handleExportPress = async () => {
-    if (datasetRows.length === 0) {
+    const reviewRows = getDatasetRows ? getDatasetRows() : datasetRows;
+    if (reviewRows.length === 0) {
       await onExport();
       return;
     }
     try {
-      setExportReviewSummary(computeLiveQualitySummary(datasetRows, timelineIntervals));
+      setExportReviewSummary(computeLiveQualitySummary(reviewRows, timelineIntervals));
       setExportReviewError(null);
     } catch {
       setExportReviewSummary(null);

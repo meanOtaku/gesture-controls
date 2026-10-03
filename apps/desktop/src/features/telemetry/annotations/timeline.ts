@@ -53,6 +53,49 @@ export function hasOverlap(candidate: LiveInterval, others: LiveInterval[]): boo
   });
 }
 
+/**
+ * Keeps interval row bounds pointing at the same logical rows after a row is
+ * inserted into the dataset buffer. Mutates `intervals` in place (their
+ * identity is held elsewhere) and returns the list without any closed interval
+ * that eviction emptied.
+ *
+ * - `insertIndex`/`previousLength` are in pre-insert coordinates. A true
+ *   out-of-order insert (`insertIndex < previousLength`) shifts every bound at
+ *   or after it by one, as it always has. An in-order append moves nothing: the
+ *   new row lies after every bound, so a closed interval never absorbs it.
+ * - `evictedOldest` means the buffer was full and dropped its row 0 to make
+ *   room, which moves every row one place earlier. Bounds follow, clamping at 0
+ *   (an interval loses the evicted row it used to own); a closed interval whose
+ *   rows were all evicted is removed. Without this, once a recording passed the
+ *   buffer's capacity every interval silently pointed one row too late per
+ *   further row recorded.
+ */
+export function reindexIntervalsAfterInsert(
+  intervals: LiveInterval[],
+  insertIndex: number,
+  previousLength: number,
+  evictedOldest: boolean,
+): LiveInterval[] {
+  const outOfOrder = insertIndex < previousLength;
+  if (!outOfOrder && !evictedOldest) return intervals;
+  return intervals.filter((interval) => {
+    const hadRows = interval.endRawRow !== null && interval.endRawRow > interval.startRawRow;
+    let start = interval.startRawRow;
+    let end = interval.endRawRow;
+    if (outOfOrder) {
+      if (start >= insertIndex) start += 1;
+      if (end !== null && end >= insertIndex) end += 1;
+    }
+    if (evictedOldest) {
+      start = Math.max(0, start - 1);
+      if (end !== null) end = Math.max(0, end - 1);
+    }
+    interval.startRawRow = start;
+    interval.endRawRow = end;
+    return !(evictedOldest && hadRows && end !== null && end <= start);
+  });
+}
+
 /** Converts a closed live interval to the immutable ADR wire shape, resolving raw-row boundaries to their source timestamps. */
 export function toAnnotationInterval(
   interval: ClosedLiveInterval,

@@ -165,6 +165,30 @@ describe("DatasetCaptureCard", () => {
   });
 
   describe("export data-quality review gate", () => {
+    it("reads buffered rows lazily: never while rendering, once per Export press", async () => {
+      const onExport = vi.fn().mockResolvedValue(undefined);
+      const getDatasetRows = vi.fn(() => cleanRows);
+      renderCard({ datasetRowCount: cleanRows.length, onExport, getDatasetRows });
+      expect(getDatasetRows).not.toHaveBeenCalled();
+
+      // A state change re-renders the card; that must not read the buffer either.
+      fireEvent.change(screen.getByLabelText("Dataset label"), { target: { value: "wrist_flick" } });
+      expect(getDatasetRows).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Export Dataset CSV" }));
+      expect(await screen.findByText("Review data quality before export")).toBeInTheDocument();
+      expect(getDatasetRows).toHaveBeenCalledTimes(1);
+    });
+
+    it("exports directly when the lazy getter returns no rows", async () => {
+      const onExport = vi.fn().mockResolvedValue(undefined);
+      const getDatasetRows = vi.fn(() => []);
+      renderCard({ datasetRowCount: 5, onExport, getDatasetRows });
+      fireEvent.click(screen.getByRole("button", { name: "Export Dataset CSV" }));
+      await waitFor(() => expect(onExport).toHaveBeenCalledTimes(1));
+      expect(screen.queryByText("Review data quality before export")).not.toBeInTheDocument();
+    });
+
     it("exports directly with no review dialog when there is no buffered summary data", async () => {
       const onExport = vi.fn().mockResolvedValue(undefined);
       renderCard({ datasetRowCount: 5, onExport, datasetRows: [] });
