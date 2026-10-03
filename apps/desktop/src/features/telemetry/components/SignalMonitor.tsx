@@ -58,7 +58,7 @@ export function SignalMonitor({
       </div>
       <div className="signal-grid">
         {signalView !== "optical" && (
-          <TimeChart title="Headphone orientation" points={headPoints} labels={["Yaw", "Pitch", "Roll"]} unit="degrees" colors={["#65e6ff", "#b88cff", "#ffb45d"]} />
+          <TimeChart title="Headphone orientation" points={headPoints} labels={["Yaw", "Pitch", "Roll"]} unit="degrees" colors={["#f2f200", "#00f2f2", "#ff9a3d"]} />
         )}
         {signalView !== "optical" && orientationEnabled && (
           <TimeChart
@@ -66,12 +66,12 @@ export function SignalMonitor({
             points={watchOrientationPoints}
             labels={["Yaw", "Pitch", "Roll"]}
             unit="degrees"
-            colors={["#65e6ff", "#b88cff", "#ffb45d"]}
+            colors={["#f2f200", "#00f2f2", "#ff9a3d"]}
             emptyHint={watchOrientationHint}
           />
         )}
         {signalView !== "motion" && (
-          <TimeChart title="Raw PPG" points={ppgPoints} labels={["Green", "Red", "IR"]} unit="raw counts" emptyHint="Enable PPG on a supported Watch to see optical signals." colors={["#4ff0b7", "#ff7da5", "#b88cff"]} />
+          <TimeChart title="Raw PPG" points={ppgPoints} labels={["Green", "Red", "IR"]} unit="raw counts" emptyHint="Enable PPG on a supported Watch to see optical signals." colors={["#00f279", "#ff9d9d", "#f2f200"]} />
         )}
       </div>
     </section>

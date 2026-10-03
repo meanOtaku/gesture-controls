@@ -72,22 +72,22 @@ export function WellnessCapturePanel({
             <p className="hint">Additional Watch sensors depend on device support and permissions. These readings are not diagnostic measurements.</p>
             <div className="signal-grid">
               {(heartRateStreaming || heartRatePoints.length > 0) && (
-                <TimeChart title="Heart rate" points={heartRatePoints} labels={["BPM"]} colors={["#ff7da5"]} />
+                <TimeChart title="Heart rate" points={heartRatePoints} labels={["BPM"]} colors={["#ff9d9d"]} />
               )}
               {(heartRateStreaming || ibiPoints.length > 0) && (
-                <TimeChart title="Heart rate IBI" points={ibiPoints} labels={["IBI ms"]} colors={["#4ff0b7"]} />
+                <TimeChart title="Heart rate IBI" points={ibiPoints} labels={["IBI ms"]} colors={["#00f279"]} />
               )}
               {(skinTemperatureStreaming || temperaturePoints.length > 0) && (
-                <TimeChart title="Skin temperature" points={temperaturePoints} labels={["Object °C", "Ambient °C"]} colors={["#ffb45d", "#65e6ff"]} />
+                <TimeChart title="Skin temperature" points={temperaturePoints} labels={["Object °C", "Ambient °C"]} colors={["#f2f200", "#00f2f2"]} />
               )}
               {(edaStreaming || edaPoints.length > 0) && (
-                <TimeChart title="Electrodermal activity" points={edaPoints} labels={["µS"]} colors={["#b88cff"]} />
+                <TimeChart title="Electrodermal activity" points={edaPoints} labels={["µS"]} colors={["#ff9a3d"]} />
               )}
-              <TimeChart title="Blood oxygen (on-demand)" points={spo2Points} labels={["SpO₂ %"]} emptyHint="Start a supported blood oxygen capture below." colors={["#4ff0b7"]} />
+              <TimeChart title="Blood oxygen (on-demand)" points={spo2Points} labels={["SpO₂ %"]} emptyHint="Start a supported blood oxygen capture below." colors={["#00f279"]} />
               {spo2Points.length > 0 && (
-                <TimeChart title="Blood oxygen heart rate" points={spo2Points.map((point) => ({ ...point, values: [point.values[1]] }))} labels={["BPM"]} colors={["#ff7da5"]} />
+                <TimeChart title="Blood oxygen heart rate" points={spo2Points.map((point) => ({ ...point, values: [point.values[1]] }))} labels={["BPM"]} colors={["#ff9d9d"]} />
               )}
-              <TimeChart title="ECG (on-demand)" points={ecgPoints} labels={["mV"]} emptyHint="Start a supported ECG capture below." colors={["#ffb45d"]} />
+              <TimeChart title="ECG (on-demand)" points={ecgPoints} labels={["mV"]} emptyHint="Start a supported ECG capture below." colors={["#f2f200"]} />
             </div>
             <Card className="min-w-0">
               <CardHeader>
