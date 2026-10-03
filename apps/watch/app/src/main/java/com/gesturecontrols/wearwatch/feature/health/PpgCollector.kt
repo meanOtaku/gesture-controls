@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import java.util.EnumSet
 import com.samsung.android.service.health.tracking.ConnectionListener
@@ -112,10 +113,21 @@ class PpgCollector(
     }
 
     /** Must only run on [mainHandler]'s thread. Rebuilds the compact counter line and tags on the triggering event. */
-    private fun updateDiagnostic(event: String) {
+    private fun updateDiagnostic(event: String, routine: Boolean = false) {
+        // The three per-flush events fire up to 30 times a second at the maximum
+        // flush rate; each used to rebuild this string, publish it, re-render the
+        // screen and send a status message. Counters keep counting; only the
+        // published text is limited to one update per second. Errors always publish.
+        if (routine) {
+            val now = SystemClock.uptimeMillis()
+            if (now - lastRoutineDiagnosticAtMs < ROUTINE_DIAGNOSTIC_INTERVAL_MS) return
+            lastRoutineDiagnosticAtMs = now
+        }
         _diagnostic.value =
             "flush=$flushRequestedCount/$flushCompletedCount cb=$callbackCount samples=$sampleCount · $event"
     }
+
+    private var lastRoutineDiagnosticAtMs = 0L
 
     fun hasBodySensorsPermission(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.BODY_SENSORS) ==
@@ -202,7 +214,7 @@ class PpgCollector(
             flushRequestedCount++
             try {
                 tracker?.flush()
-                updateDiagnostic("flush requested")
+                updateDiagnostic("flush requested", routine = true)
             } catch (error: Exception) {
                 // The SDK connection may already be gone; still surface it
                 // instead of swallowing it, since a silent flush failure
@@ -290,7 +302,7 @@ class PpgCollector(
             mainHandler.post {
                 callbackCount++
                 sampleCount += samples.size
-                updateDiagnostic("data callback")
+                updateDiagnostic("data callback", routine = true)
                 onSamples(samples)
             }
         }
@@ -298,7 +310,7 @@ class PpgCollector(
         override fun onFlushCompleted() {
             mainHandler.post {
                 flushCompletedCount++
-                updateDiagnostic("flush completed")
+                updateDiagnostic("flush completed", routine = true)
             }
         }
 
@@ -325,6 +337,7 @@ class PpgCollector(
     private companion object {
         const val CONNECTION_TIMEOUT_MS = 12_000L
         const val DEFAULT_FLUSH_INTERVAL_MS = 1_000L
+        private const val ROUTINE_DIAGNOSTIC_INTERVAL_MS = 1_000L
         const val MIN_FLUSH_RATE_HZ = 0.1
         const val MAX_FLUSH_RATE_HZ = 10.0
         const val MAX_RETRY_ATTEMPTS = 5

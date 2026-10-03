@@ -90,7 +90,12 @@ object WatchProtocol {
         return array
     }
 
-    fun orientationMessage(
+    /**
+     * Reference encoder for [orientationMessage]: the straightforward
+     * JSONObject build the fast path must stay equivalent to (see
+     * WatchProtocolOrientationTest). Not used on the sensor path.
+     */
+    internal fun orientationMessageViaJsonObject(
         deviceId: String,
         sequence: Long,
         timestampNs: Long,
@@ -103,6 +108,73 @@ object WatchProtocol {
         payload.put("accelerometer", vectorOrNull(accelerometer) ?: JSONObject.NULL)
         payload.put("gyroscope", vectorOrNull(gyroscope) ?: JSONObject.NULL)
         return envelope(TYPE_ORIENTATION, deviceId, sequence, timestampNs, payload)
+    }
+
+    /**
+     * The sensor hot path (up to 50 messages a second): writes the envelope
+     * straight into one StringBuilder instead of allocating a JSONObject, two
+     * JSONArrays and a boxed Double per component. Returns null for a reading
+     * with a non-finite component, which JSON cannot carry (the JSONObject path
+     * threw on one, from inside the sensor callback).
+     */
+    fun orientationMessage(
+        deviceId: String,
+        sequence: Long,
+        timestampNs: Long,
+        quaternion: FloatArray,
+        accelerometer: FloatArray?,
+        gyroscope: FloatArray?,
+    ): String? {
+        if (!allFinite(quaternion) || !allFinite(accelerometer) || !allFinite(gyroscope)) return null
+        val out = StringBuilder(ORIENTATION_ESTIMATED_CHARS)
+        out.append("{\"type\":\"").append(TYPE_ORIENTATION)
+            .append("\",\"version\":").append(VERSION)
+            .append(",\"deviceId\":")
+        appendJsonString(out, deviceId)
+        out.append(",\"sequence\":").append(sequence)
+            .append(",\"timestampNs\":").append(timestampNs)
+            .append(",\"payload\":{\"quaternion\":")
+        appendVector(out, quaternion)
+        out.append(",\"accelerometer\":")
+        appendVector(out, accelerometer)
+        out.append(",\"gyroscope\":")
+        appendVector(out, gyroscope)
+        out.append("}}")
+        return out.toString()
+    }
+
+    private const val ORIENTATION_ESTIMATED_CHARS = 224
+
+    private fun allFinite(values: FloatArray?): Boolean {
+        if (values == null) return true
+        for (component in values) if (!component.isFinite()) return false
+        return true
+    }
+
+    private fun appendVector(out: StringBuilder, values: FloatArray?) {
+        if (values == null) {
+            out.append("null")
+            return
+        }
+        out.append('[')
+        for (index in values.indices) {
+            if (index > 0) out.append(',')
+            out.append(values[index].toString())
+        }
+        out.append(']')
+    }
+
+    private fun appendJsonString(out: StringBuilder, value: String) {
+        out.append('"')
+        for (char in value) {
+            when {
+                char == '"' -> out.append("\\\"")
+                char == '\\' -> out.append("\\\\")
+                char < ' ' -> out.append(String.format("\\u%04x", char.code))
+                else -> out.append(char)
+            }
+        }
+        out.append('"')
     }
 
     fun heartbeatMessage(

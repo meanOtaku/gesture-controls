@@ -67,7 +67,6 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
 
     private var link: WatchTransportLink? = null
     private var heartbeatJob: Job? = null
-    private var ppgFlushJob: Job? = null
     private val ppgBuffer = mutableListOf<PpgSample>()
     @Volatile private var lastPpgStatus: String? = null
     private var medicalFlushJob: Job? = null
@@ -176,7 +175,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
             quaternion,
             accelerometer,
             gyroscope,
-        )
+        ) ?: return
         link.send(message)
         _lastOrientationSequence.value = seq
     }
@@ -186,10 +185,15 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         if (samples.isEmpty()) return
         if (_state.value != ConnectionState.CONNECTED) return
         synchronized(ppgBuffer) { ppgBuffer.addAll(samples) }
+        // The Samsung SDK already delivers samples in bursts at the configured flush
+        // rate, so sending on arrival keeps the same batches without a 25 Hz timer
+        // that woke the CPU to find an empty buffer most of the time.
+        flushPpgBuffer()
     }
 
     /** Reports [PpgState] to the desktop; independent of the PPG sample buffer. */
     fun sendPpgStatus(state: String) {
+        if (state == lastPpgStatus) return
         lastPpgStatus = state
         sendStoredPpgStatus()
     }
@@ -216,6 +220,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         if (samples.isEmpty()) return
         if (_state.value != ConnectionState.CONNECTED) return
         synchronized(heartRateBuffer) { heartRateBuffer.addAll(samples) }
+        scheduleMedicalFlush()
     }
 
     /** Buffers SKIN_TEMPERATURE_CONTINUOUS samples for the next medical flush tick; dropped if not connected. */
@@ -223,6 +228,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         if (samples.isEmpty()) return
         if (_state.value != ConnectionState.CONNECTED) return
         synchronized(skinTemperatureBuffer) { skinTemperatureBuffer.addAll(samples) }
+        scheduleMedicalFlush()
     }
 
     /** Buffers EDA_CONTINUOUS samples for the next medical flush tick; dropped if not connected. */
@@ -230,6 +236,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         if (samples.isEmpty()) return
         if (_state.value != ConnectionState.CONNECTED) return
         synchronized(edaBuffer) { edaBuffer.addAll(samples) }
+        scheduleMedicalFlush()
     }
 
     /** Sends a bounded SPO2_ON_DEMAND session's samples immediately; on-demand data is low-volume, unlike the continuous trackers. */
@@ -309,8 +316,6 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         if (state == ConnectionState.CONNECTED) {
             if (!wasConnected) {
                 startHeartbeat()
-                startPpgFlushTimer()
-                startMedicalFlushTimer()
                 sendStoredPpgStatus()
             }
         } else {
@@ -322,8 +327,6 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
     private fun resetStreamingState() {
         heartbeatJob?.cancel()
         heartbeatJob = null
-        ppgFlushJob?.cancel()
-        ppgFlushJob = null
         medicalFlushJob?.cancel()
         medicalFlushJob = null
         synchronized(ppgBuffer) { ppgBuffer.clear() }
@@ -406,16 +409,6 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         }
     }
 
-    private fun startPpgFlushTimer() {
-        ppgFlushJob?.cancel()
-        ppgFlushJob = scope.launch {
-            while (isActive) {
-                delay(PPG_DELIVERY_INTERVAL_MS)
-                flushPpgBuffer()
-            }
-        }
-    }
-
     private fun flushPpgBuffer() {
         val batch = synchronized(ppgBuffer) {
             if (ppgBuffer.isEmpty()) return
@@ -431,13 +424,12 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         }
     }
 
-    private fun startMedicalFlushTimer() {
-        medicalFlushJob?.cancel()
+    /** Sends whatever the medical trackers buffered within the next [MEDICAL_BATCH_INTERVAL_MS]; idle when nothing arrives. */
+    private fun scheduleMedicalFlush() {
+        if (medicalFlushJob?.isActive == true) return
         medicalFlushJob = scope.launch {
-            while (isActive) {
-                delay(PPG_BATCH_INTERVAL_MS)
-                flushMedicalBuffers()
-            }
+            delay(MEDICAL_BATCH_INTERVAL_MS)
+            flushMedicalBuffers()
         }
     }
 
@@ -484,8 +476,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
     companion object {
         private const val TAG = "WatchLink"
         private const val HEARTBEAT_INTERVAL_MS = 1000L
-        private const val PPG_DELIVERY_INTERVAL_MS = 40L
-        private const val PPG_BATCH_INTERVAL_MS = 100L
+        private const val MEDICAL_BATCH_INTERVAL_MS = 100L
         private const val PPG_BATCH_MAX_SAMPLES = 32
         private const val MEDICAL_BATCH_MAX_SAMPLES = 32
     }

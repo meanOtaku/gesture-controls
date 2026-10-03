@@ -286,8 +286,14 @@ class BleGattTransport(
             return
         }
         advertiser = leAdvertiser
+        // A restart must not race the advertisement the stack may have resumed on
+        // its own after the last disconnect.
+        runCatching { leAdvertiser.stopAdvertising(advertiseCallback) }
+        // Balanced (about 250 ms) instead of low-latency (about 100 ms): the desktop
+        // only needs to see the watch within a fraction of a second of scanning, and
+        // the radio spends this whole period waiting for it.
         val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
             .setConnectable(true)
             .setTimeout(0)
@@ -386,8 +392,17 @@ class BleGattTransport(
         }
     }
 
+    /** Only one desktop is served at a time, so nothing needs to find the watch while one is connected. */
+    private fun stopAdvertising() {
+        runCatching { advertiser?.stopAdvertising(advertiseCallback) }
+    }
+
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartFailure(errorCode: Int) {
+            if (errorCode == ADVERTISE_FAILED_ALREADY_STARTED) {
+                Log.i(TAG, "advertising was already running")
+                return
+            }
             report(ConnectionState.FAILED, advertiseFailureReason(errorCode))
         }
     }
@@ -414,6 +429,7 @@ class BleGattTransport(
                 central = device
                 subscribed = false
                 mtu = DEFAULT_MTU
+                stopAdvertising()
                 openConfirmationClient(device)
                 reassembler.clear()
                 synchronized(outbound) {
@@ -426,6 +442,7 @@ class BleGattTransport(
                 if (central?.address != device.address) return
                 central = null
                 closeConfirmationClient()
+                if (started && gattServer != null) startAdvertising()
                 subscribed = false
                 mtu = DEFAULT_MTU
                 _pendingTrustedCentral.value = null

@@ -28,12 +28,18 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
     /** Where the currently active/last-attempted endpoint came from, for the UI label. */
     private enum class EndpointSource { DISCOVERED, PERSISTED_FALLBACK, DESKTOP_INITIATED }
+
+    private companion object {
+        /** Fast-changing status text is redrawn at most this often. */
+        const val UI_REFRESH_INTERVAL_MS = 500L
+    }
 
     private lateinit var prefs: ConnectionPrefs
     private lateinit var transportBluetoothButton: RadioButton
@@ -203,36 +209,47 @@ class MainActivity : AppCompatActivity() {
         // upgrading from the Wi-Fi-only build) starts on Bluetooth.
         applyTransport(prefs.transport, persist = false)
 
+        // Streaming control and status reporting must not depend on the screen being
+        // on: a reconnect that lands while the display is off still has to start
+        // (or stop) the sensors. Only rendering is tied to STARTED, below.
+        lifecycleScope.launch { watchLink.state.collect { applyStreamingState(it) } }
+        lifecycleScope.launch { ppgCollector.state.collect { watchLink.sendPpgStatus(it.wireValue()) } }
+        lifecycleScope.launch {
+            medicalCollector.state.collect { statuses ->
+                statuses.forEach { (tracker, state) -> watchLink.sendMedicalStatus(tracker, state.wireValue()) }
+            }
+        }
+        lifecycleScope.launch {
+            onDemandSampler.state.collect { statuses ->
+                statuses.forEach { (tracker, state) -> watchLink.sendMedicalStatus(tracker, state.wireValue()) }
+            }
+        }
+
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { watchLink.state.collect { renderState(it) } }
                 launch { watchLink.lastFailureReason.collect { reason -> linkDiagnosticsText.text = reason.orEmpty() } }
                 launch {
+                    // Sequence changes at the sensor rate (up to 50 Hz); the screen needs two updates a second.
                     watchLink.lastOrientationSequence.collect { sequence ->
                         detailText.text = if (sequence == 0L) {
                             ""
                         } else {
                             getString(R.string.sensors_streaming) + " · seq=$sequence"
                         }
+                        delay(UI_REFRESH_INTERVAL_MS)
                     }
                 }
                 launch {
                     ppgCollector.state.collect { state -> renderPpgState(state, ppgCollector.diagnostic.value) }
                 }
                 launch {
-                    ppgCollector.diagnostic.collect { diagnostic -> renderPpgState(ppgCollector.state.value, diagnostic) }
-                }
-                launch {
-                    medicalCollector.state.collect { statuses ->
-                        statuses.forEach { (tracker, state) -> watchLink.sendMedicalStatus(tracker, state.wireValue()) }
+                    ppgCollector.diagnostic.collect { diagnostic ->
+                        renderPpgState(ppgCollector.state.value, diagnostic)
+                        delay(UI_REFRESH_INTERVAL_MS)
                     }
                 }
-                launch {
-                    onDemandSampler.state.collect { statuses ->
-                        statuses.forEach { (tracker, state) -> watchLink.sendMedicalStatus(tracker, state.wireValue()) }
-                        updateOnDemandButtons(statuses)
-                    }
-                }
+                launch { onDemandSampler.state.collect { updateOnDemandButtons(it) } }
             }
         }
     }
@@ -240,12 +257,9 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         releaseStemButtonIfPressed()
-        // Not actively capturing: drop to a low-rate, wakelock-free monitor mode instead
-        // of leaving sensors idle while backgrounded. Active capture (sensorCollector.start(),
-        // full SENSOR_DELAY_GAME rate + StreamingForegroundService's wake lock) is untouched.
-        if (!watchLink.state.value.isConnectionActive()) {
-            sensorCollector.startMonitoring()
-        }
+        // Nothing is registered while there is no desktop to send to: the former
+        // "monitor mode" kept the rotation-vector sensor running while backgrounded
+        // and disconnected, and every reading it produced was dropped unsent.
     }
 
     override fun onResume() {
@@ -437,11 +451,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun connectToDesktop(url: String) {
-        StreamingForegroundService.start(this)
-        sensorCollector.start()
-        sensorStatusText.setText(R.string.sensors_streaming)
         watchLink.connect(WebSocketTransport(url))
-        startBodySensorCollection()
     }
 
     /** Starts PPG_CONTINUOUS and the continuous medical trackers if BODY_SENSORS is already granted, else requests it first. */
@@ -497,19 +507,9 @@ class MainActivity : AppCompatActivity() {
             pairingServer.stop()
             discoveryStatusText.text = "Connected to desktop"
             discoveryHistoryText.text = ""
-            // Restarting here (idempotent, preserves each sensor's individual
-            // enable flag) covers reconnects that never go through
-            // connectToDesktop(), e.g. a CONNECTING/RECONNECTING session that
-            // was backgrounded and resumed before landing on CONNECTED, and
-            // every Bluetooth session, which only starts capturing once a
-            // trusted desktop has actually subscribed.
-            StreamingForegroundService.start(this)
-            sensorCollector.start()
             sensorStatusText.setText(R.string.sensors_streaming)
+            // May need to ask for BODY_SENSORS, which only works while visible.
             startBodySensorCollection()
-        }
-        if (state == ConnectionState.FAILED) {
-            StreamingForegroundService.stop(this)
         }
         connectionStatusText.text = when (state) {
             ConnectionState.DISCONNECTED -> getString(R.string.status_disconnected)
@@ -525,9 +525,36 @@ class MainActivity : AppCompatActivity() {
             ConnectionState.DISCONNECTED, ConnectionState.FAILED ->
                 getString(R.string.action_connect)
         }
-        if (state == ConnectionState.DISCONNECTED || state == ConnectionState.FAILED) {
-            stopSensorCollection()
+        if (state != ConnectionState.CONNECTED) {
             sensorStatusText.setText(R.string.sensors_idle)
+        }
+    }
+
+    /**
+     * What runs follows the link, not the screen: sensors, PPG and the CPU wake lock
+     * exist only while a desktop is actually receiving. While waiting to reconnect
+     * (advertising, awaiting trust, retrying) the foreground service stays so the
+     * process is not frozen, but the wake lock and every sensor are released.
+     * Idempotent: each collector ignores a start it is already in.
+     */
+    private fun applyStreamingState(state: ConnectionState) {
+        when (state) {
+            ConnectionState.CONNECTED -> {
+                StreamingForegroundService.start(this)
+                sensorCollector.start()
+                if (ppgCollector.hasBodySensorsPermission()) {
+                    ppgCollector.start()
+                    medicalCollector.start()
+                }
+            }
+            ConnectionState.DISCONNECTED, ConnectionState.FAILED -> {
+                stopSensorCollection()
+                StreamingForegroundService.stop(this)
+            }
+            else -> {
+                stopSensorCollection()
+                StreamingForegroundService.releaseWakeLock(this)
+            }
         }
     }
 
@@ -541,7 +568,6 @@ class MainActivity : AppCompatActivity() {
             PpgState.ERROR -> getString(R.string.ppg_error)
         }
         ppgStatusText.text = diagnostic?.let { "$label\n$it" } ?: label
-        watchLink.sendPpgStatus(state.wireValue())
     }
 
     /** Fires a single short vibration for a `desktop.haptic` command; [durationMs] is already bounds-checked by WatchLinkManager. */
