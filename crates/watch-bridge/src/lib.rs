@@ -941,6 +941,11 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
                 if send_envelope(link, &request).await.is_err() {
                     break;
                 }
+                // A write-with-response only completes when the watch's app answered it, so
+                // this is proof of life. Without it a slow write (a busy radio can hold one
+                // for seconds) outlasts the silence timeout while the watch's messages wait
+                // unread, and a healthy link is reported dead.
+                last_activity = Instant::now();
                 pending_time_sync_at = Some(desktop_time_ns);
             }
             command = commands.recv() => {
@@ -957,6 +962,11 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
                 if send_envelope(link, &request).await.is_err() {
                     break;
                 }
+                // A write-with-response only completes when the watch's app answered it, so
+                // this is proof of life. Without it a slow write (a busy radio can hold one
+                // for seconds) outlasts the silence timeout while the watch's messages wait
+                // unread, and a healthy link is reported dead.
+                last_activity = Instant::now();
             }
             command = sensor_commands.recv() => {
                 let (sensor, enabled) = match command {
@@ -972,6 +982,11 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
                 if send_envelope(link, &request).await.is_err() {
                     break;
                 }
+                // A write-with-response only completes when the watch's app answered it, so
+                // this is proof of life. Without it a slow write (a busy radio can hold one
+                // for seconds) outlasts the silence timeout while the watch's messages wait
+                // unread, and a healthy link is reported dead.
+                last_activity = Instant::now();
             }
             command = sensor_rate_commands.recv() => {
                 let SensorRateCommand { sensor, rate_hz } = match command {
@@ -986,6 +1001,11 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
                 if send_envelope(link, &request).await.is_err() {
                     break;
                 }
+                // A write-with-response only completes when the watch's app answered it, so
+                // this is proof of life. Without it a slow write (a busy radio can hold one
+                // for seconds) outlasts the silence timeout while the watch's messages wait
+                // unread, and a healthy link is reported dead.
+                last_activity = Instant::now();
             }
             command = haptic_commands.recv() => {
                 let HapticCommand { duration_ms } = match command {
@@ -1000,6 +1020,11 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
                 if send_envelope(link, &request).await.is_err() {
                     break;
                 }
+                // A write-with-response only completes when the watch's app answered it, so
+                // this is proof of life. Without it a slow write (a busy radio can hold one
+                // for seconds) outlasts the silence timeout while the watch's messages wait
+                // unread, and a healthy link is reported dead.
+                last_activity = Instant::now();
             }
             message = tokio::time::timeout(remaining, link.recv()) => {
                 match message {
@@ -1348,6 +1373,84 @@ mod tests {
             receiver.try_recv().unwrap(),
             WatchEvent::InvalidMessage { .. }
         ));
+    }
+
+    /// A link whose command write is slow, and whose inbound message only becomes available
+    /// once that write has started: the shape of a busy radio.
+    struct SlowWriteLink {
+        write_delay: Duration,
+        write_started: Arc<AtomicBool>,
+        inbound: Option<Vec<u8>>,
+    }
+
+    #[async_trait::async_trait]
+    impl WatchLinkTransport for SlowWriteLink {
+        async fn send_text(&mut self, _text: String) -> Result<(), ()> {
+            self.write_started.store(true, Ordering::SeqCst);
+            tokio::time::sleep(self.write_delay).await;
+            Ok(())
+        }
+
+        async fn recv(&mut self) -> Option<Vec<u8>> {
+            while !self.write_started.load(Ordering::SeqCst) {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            match self.inbound.take() {
+                Some(bytes) => Some(bytes),
+                None => std::future::pending().await,
+            }
+        }
+    }
+
+    #[test]
+    fn a_write_that_outlasts_the_silence_timeout_does_not_end_a_live_link() {
+        let (events, mut receiver) = broadcast::channel(16);
+        let (commands, _) = broadcast::channel(16);
+        let (sensor_commands, _) = broadcast::channel(16);
+        let (sensor_rate_commands, _) = broadcast::channel(16);
+        let (haptic_commands, _) = broadcast::channel(16);
+        let shared = Arc::new(SharedState {
+            events,
+            commands,
+            sensor_commands,
+            sensor_rate_commands,
+            haptic_commands,
+            active: AtomicBool::new(false),
+            heartbeat_timeout: Duration::from_millis(150),
+            ble_status: Mutex::new(BleStatus::Idle),
+        });
+        let commands_rx = shared.commands.subscribe();
+        let sensor_rx = shared.sensor_commands.subscribe();
+        let rate_rx = shared.sensor_rate_commands.subscribe();
+        let haptic_rx = shared.haptic_commands.subscribe();
+        shared
+            .haptic_commands
+            .send(HapticCommand { duration_ms: 50 })
+            .unwrap();
+        let mut link = SlowWriteLink {
+            // Longer than the 150 ms timeout, so the old code gave up when the write returned.
+            write_delay: Duration::from_millis(400),
+            write_started: Arc::new(AtomicBool::new(false)),
+            inbound: Some(orientation_envelope(1)),
+        };
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(run_connection(
+                &mut link,
+                &shared,
+                commands_rx,
+                sensor_rx,
+                rate_rx,
+                haptic_rx,
+            ));
+        match receiver.try_recv() {
+            Ok(WatchEvent::Orientation(_)) => {}
+            other => panic!(
+                "the watch's message that arrived during the slow write was never read: {other:?}"
+            ),
+        }
     }
 
     #[test]
