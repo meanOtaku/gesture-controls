@@ -1,15 +1,24 @@
-//! Live desktop-side telemetry fusion: carries the last-known watch
-//! orientation sample forward onto every PPG window, mirroring
-//! `telemetryStore.ts`'s `lastKnownOrientationSample` used by the dataset
-//! recorder. Orientation and PPG arrive as independent, differently-paced
-//! streams from the watch; this never blocks a PPG window on a fresh
-//! orientation sample, since the model was trained against exactly this
-//! carry-forward contract.
+//! Live desktop-side telemetry fusion: attaches watch orientation to every PPG
+//! window. Orientation and PPG arrive as independent, differently-paced
+//! streams from the watch, so a PPG window is never blocked on a fresh
+//! orientation sample: the last-known one is carried forward (like
+//! `telemetryStore.ts`'s `lastKnownOrientationSample`), and the orientation
+//! samples that arrived during the window's own span (desktop receive time)
+//! travel with it, so the accel/gyro/quaternion statistics reflect in-window
+//! motion as the training windows' do rather than one frozen snapshot.
+//!
+//! This approximates, and does not reproduce, the offline row model: training
+//! windows are merged rows of both streams with per-channel carry-forward,
+//! and the recorder's two watch clocks are not comparable (see the sensor
+//! timing review, D-4). Only a trained bundle measured on hardware can
+//! quantify the remaining gap.
 //!
 //! Freshness and identity are judged against the desktop's own monotonic
 //! receive-time clock, supplied by the caller as `received_at_ns` -- never
 //! against the watch's own envelope timestamps, which run on an unrelated,
 //! unsynchronized device clock. This module never reads a clock itself.
+
+use std::collections::VecDeque;
 
 use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
 
@@ -19,6 +28,12 @@ use crate::features::{FusedWindow, OrientationSnapshot};
 /// sample, a PPG window is fused with a pose that can no longer be trusted
 /// to reflect the wrist's current attitude.
 pub const ORIENTATION_STALENESS_TIMEOUT_NS: u64 = 500_000_000;
+
+/// How much receive-time history of orientation samples is kept. A PPG
+/// window only ever reaches back as far as its own batch span, so a couple of
+/// seconds is ample; the cap bounds memory regardless of the sample rate.
+const ORIENTATION_HISTORY_WINDOW_NS: u64 = 2_000_000_000;
+const ORIENTATION_HISTORY_CAPACITY: usize = 512;
 
 /// Why [`TelemetryFusion::fuse_ppg_window`] refused to produce a window.
 /// Every variant means: emit no inference and forcibly release any
@@ -49,6 +64,11 @@ pub struct TelemetryFusion {
     orientation: OrientationSnapshot,
     orientation_device_id: Option<String>,
     orientation_received_at_ns: Option<u64>,
+    /// Recent orientation samples (post carry-forward) with the desktop
+    /// receive time of each, oldest first. Lets a PPG window's accel, gyro
+    /// and quaternion statistics reflect the motion that happened during the
+    /// window, as the training windows' do, instead of one frozen snapshot.
+    history: VecDeque<(u64, OrientationSnapshot)>,
 }
 
 impl Default for TelemetryFusion {
@@ -63,6 +83,7 @@ impl Default for TelemetryFusion {
             },
             orientation_device_id: None,
             orientation_received_at_ns: None,
+            history: VecDeque::new(),
         }
     }
 }
@@ -81,8 +102,23 @@ impl TelemetryFusion {
             self.orientation.gyro = gyro;
         }
         self.orientation.quat = sample.quaternion;
+        if self.orientation_device_id.as_deref() != Some(sample.device_id.as_str()) {
+            // Another watch's samples must never be blended into this one's window.
+            self.history.clear();
+        }
         self.orientation_device_id = Some(sample.device_id.clone());
         self.orientation_received_at_ns = Some(received_at_ns);
+
+        self.history.push_back((received_at_ns, self.orientation));
+        let oldest_kept = received_at_ns.saturating_sub(ORIENTATION_HISTORY_WINDOW_NS);
+        while self.history.len() > ORIENTATION_HISTORY_CAPACITY
+            || self
+                .history
+                .front()
+                .is_some_and(|(at, _)| *at < oldest_kept)
+        {
+            self.history.pop_front();
+        }
     }
 
     /// Fuses one raw PPG batch with the current carried-forward orientation
@@ -110,12 +146,30 @@ impl TelemetryFusion {
             return Err(FusionRejection::OrientationStale { elapsed_ns });
         }
         let orientation = self.orientation;
-        let all_finite = orientation
-            .accel
+        // The orientation samples that arrived during this PPG batch's span
+        // (desktop receive time; the watch's two envelope clocks are not
+        // comparable, see the module docs).
+        let span_ns = match (sample.timestamps_ns.first(), sample.timestamps_ns.last()) {
+            (Some(&first), Some(&last)) if last > first => last - first,
+            _ => 0,
+        };
+        let window_start_ns = received_at_ns.saturating_sub(span_ns);
+        let orientation_in_window: Vec<OrientationSnapshot> = self
+            .history
             .iter()
-            .chain(orientation.gyro.iter())
-            .chain(orientation.quat.iter())
-            .all(|value| value.is_finite());
+            .filter(|(at, _)| *at >= window_start_ns && *at <= received_at_ns)
+            .map(|(_, snapshot)| *snapshot)
+            .collect();
+        let all_finite = std::iter::once(&orientation)
+            .chain(orientation_in_window.iter())
+            .all(|snapshot| {
+                snapshot
+                    .accel
+                    .iter()
+                    .chain(snapshot.gyro.iter())
+                    .chain(snapshot.quat.iter())
+                    .all(|value| value.is_finite())
+            });
         if !all_finite {
             return Err(FusionRejection::NonFiniteOrientation);
         }
@@ -132,6 +186,7 @@ impl TelemetryFusion {
             ppg_ir: sample.ir.iter().map(|&value| value as f64).collect(),
             ppg_timestamps_ns: sample.timestamps_ns.clone(),
             orientation,
+            orientation_in_window,
             contact_quality_mean,
         })
     }
@@ -225,6 +280,65 @@ mod tests {
         assert_eq!(window.orientation.accel, [1.0, 2.0, 3.0]);
         assert_eq!(window.orientation.gyro, [0.1, 0.2, 0.3]);
         assert_eq!(window.orientation.quat, [0.0, 0.0, 1.0, 0.0]);
+    }
+
+    /// R-M2-1: a PPG window carries the orientation samples that arrived
+    /// during its own span (desktop receive time), not just the latest one.
+    #[test]
+    fn fuse_ppg_window_collects_the_orientation_samples_inside_its_span() {
+        let mut fusion = TelemetryFusion::default();
+        // ppg_sample() spans 10 ms; the window is [received - 10 ms, received].
+        let received = 1_000_000_000;
+        for (offset_ms, x) in [(30u64, 1.0), (8, 2.0), (4, 3.0), (0, 4.0)] {
+            fusion.observe_orientation(
+                &orientation_sample(Some([x, 0.0, 0.0]), None, [1.0, 0.0, 0.0, 0.0]),
+                received - offset_ms * 1_000_000,
+            );
+        }
+        let window = fusion
+            .fuse_ppg_window(&ppg_sample(), 0.0, received)
+            .expect("fresh orientation must be accepted");
+        let xs: Vec<f64> = window
+            .orientation_in_window
+            .iter()
+            .map(|o| o.accel[0])
+            .collect();
+        assert_eq!(
+            xs,
+            vec![2.0, 3.0, 4.0],
+            "the 30 ms-old sample is outside the window"
+        );
+        assert_eq!(window.orientation.accel, [4.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn orientation_history_is_bounded_and_dropped_when_the_device_changes() {
+        let mut fusion = TelemetryFusion::default();
+        for index in 0..(ORIENTATION_HISTORY_CAPACITY as u64 * 2) {
+            fusion
+                .observe_orientation(&orientation_sample(None, None, [1.0, 0.0, 0.0, 0.0]), index);
+        }
+        assert_eq!(fusion.history.len(), ORIENTATION_HISTORY_CAPACITY);
+
+        let mut other = orientation_sample(None, None, [1.0, 0.0, 0.0, 0.0]);
+        other.device_id = "watch-other".to_string();
+        fusion.observe_orientation(&other, 10_000);
+        assert_eq!(
+            fusion.history.len(),
+            1,
+            "another watch's samples must not blend in"
+        );
+    }
+
+    #[test]
+    fn orientation_history_older_than_its_horizon_is_pruned() {
+        let mut fusion = TelemetryFusion::default();
+        fusion.observe_orientation(&orientation_sample(None, None, [1.0, 0.0, 0.0, 0.0]), 0);
+        fusion.observe_orientation(
+            &orientation_sample(None, None, [1.0, 0.0, 0.0, 0.0]),
+            ORIENTATION_HISTORY_WINDOW_NS + 1,
+        );
+        assert_eq!(fusion.history.len(), 1);
     }
 
     #[test]

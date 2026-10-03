@@ -90,8 +90,27 @@ pub struct FusedWindow {
     pub ppg_red: Vec<f64>,
     pub ppg_ir: Vec<f64>,
     pub ppg_timestamps_ns: Vec<u64>,
+    /// The latest carried-forward orientation: the window's only orientation
+    /// sample when nothing arrived during it.
     pub orientation: OrientationSnapshot,
+    /// Every orientation sample that arrived during this window, oldest
+    /// first. The accel/gyro/quaternion statistics are taken over these, so
+    /// they carry the in-window motion like the training windows' do; empty
+    /// means the carried snapshot stands alone and those statistics are 0.
+    pub orientation_in_window: Vec<OrientationSnapshot>,
     pub contact_quality_mean: f64,
+}
+
+impl FusedWindow {
+    /// The orientation series the statistics run over: the in-window samples,
+    /// or the single carried snapshot when there are none.
+    fn orientation_series(&self) -> Vec<OrientationSnapshot> {
+        if self.orientation_in_window.is_empty() {
+            vec![self.orientation]
+        } else {
+            self.orientation_in_window.clone()
+        }
+    }
 }
 
 /// `(mean, std, min, max)` over `values`, population variance (`ddof=0`),
@@ -113,13 +132,6 @@ fn stat_block(values: &[f64]) -> (f64, f64, f64, f64) {
     let min = values.iter().copied().fold(f64::INFINITY, f64::min);
     let max = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     (mean, variance.sqrt(), min, max)
-}
-
-/// A constant channel's stat block: mean/min/max all equal `value`, std is
-/// zero. Used for accel/gyro/quat, which are a single carried-forward
-/// snapshot rather than a per-sample series within one window.
-fn constant_stat_block(value: f64) -> (f64, f64, f64, f64) {
-    (value, 0.0, value, value)
 }
 
 /// `(values[-1] - values[0]) / duration_ms`, or `0.0` if the window spans
@@ -167,11 +179,21 @@ fn quat_delta_angle_deg(a: [f64; 4], b: [f64; 4]) -> f64 {
     2.0 * dot.acos().to_degrees()
 }
 
+/// Per-sample Euclidean norm across three equal-length channels.
+fn magnitudes(channels: &[Vec<f64>; 3]) -> Vec<f64> {
+    (0..channels[0].len())
+        .map(|index| {
+            (channels[0][index].powi(2) + channels[1][index].powi(2) + channels[2][index].powi(2))
+                .sqrt()
+        })
+        .collect()
+}
+
 /// Builds the ordered 55-value feature vector for `window`, in exactly the
-/// order of [`FEATURE_NAMES`]. Orientation has only a single carried-forward
-/// snapshot per window (see [`FusedWindow`]), so its delta angle is always
-/// zero live -- [`quat_delta_angle_deg`] is still a general, independently
-/// tested function so the field isn't just a hardcoded constant.
+/// order of [`FEATURE_NAMES`]. The orientation statistics run over the
+/// orientation samples that arrived during the window (see
+/// [`FusedWindow::orientation_in_window`]); a window with none is a single
+/// carried snapshot, whose spread and delta angle are legitimately zero.
 pub fn extract_features(window: &FusedWindow) -> [f32; FEATURE_COUNT] {
     let mut out = [0.0f32; FEATURE_COUNT];
     let mut cursor = 0usize;
@@ -199,12 +221,20 @@ pub fn extract_features(window: &FusedWindow) -> [f32; FEATURE_COUNT] {
         push(slope(channel, &window.ppg_timestamps_ns));
     }
 
-    let accel_stats: Vec<(f64, f64, f64, f64)> = window
-        .orientation
-        .accel
-        .iter()
-        .map(|&value| constant_stat_block(value))
-        .collect();
+    // Accel/gyro/quat statistics run over the orientation samples that arrived
+    // during the window (see `FusedWindow::orientation_in_window`).
+    let series = window.orientation_series();
+    let channel = |select: &dyn Fn(&OrientationSnapshot) -> f64| -> Vec<f64> {
+        series.iter().map(select).collect()
+    };
+
+    let accel_arrays = [
+        channel(&|s| s.accel[0]),
+        channel(&|s| s.accel[1]),
+        channel(&|s| s.accel[2]),
+    ];
+    let accel_stats: Vec<(f64, f64, f64, f64)> =
+        accel_arrays.iter().map(|array| stat_block(array)).collect();
     for stats in &accel_stats {
         push(stats.0);
     }
@@ -217,16 +247,18 @@ pub fn extract_features(window: &FusedWindow) -> [f32; FEATURE_COUNT] {
     for stats in &accel_stats {
         push(stats.3);
     }
-    let accel = window.orientation.accel;
-    push((accel[0] * accel[0] + accel[1] * accel[1] + accel[2] * accel[2]).sqrt());
-    push(0.0); // accel_magnitude_std: constant snapshot, always zero.
+    let accel_magnitude = magnitudes(&accel_arrays);
+    let (accel_magnitude_mean, accel_magnitude_std, _, _) = stat_block(&accel_magnitude);
+    push(accel_magnitude_mean);
+    push(accel_magnitude_std);
 
-    let gyro_stats: Vec<(f64, f64, f64, f64)> = window
-        .orientation
-        .gyro
-        .iter()
-        .map(|&value| constant_stat_block(value))
-        .collect();
+    let gyro_arrays = [
+        channel(&|s| s.gyro[0]),
+        channel(&|s| s.gyro[1]),
+        channel(&|s| s.gyro[2]),
+    ];
+    let gyro_stats: Vec<(f64, f64, f64, f64)> =
+        gyro_arrays.iter().map(|array| stat_block(array)).collect();
     for stats in &gyro_stats {
         push(stats.0);
     }
@@ -239,29 +271,37 @@ pub fn extract_features(window: &FusedWindow) -> [f32; FEATURE_COUNT] {
     for stats in &gyro_stats {
         push(stats.3);
     }
-    let gyro = window.orientation.gyro;
-    push((gyro[0] * gyro[0] + gyro[1] * gyro[1] + gyro[2] * gyro[2]).sqrt());
-    push(0.0); // gyro_magnitude_std: constant snapshot, always zero.
+    let gyro_magnitude = magnitudes(&gyro_arrays);
+    let (gyro_magnitude_mean, gyro_magnitude_std, _, _) = stat_block(&gyro_magnitude);
+    push(gyro_magnitude_mean);
+    push(gyro_magnitude_std);
 
-    let quat_stats: Vec<(f64, f64, f64, f64)> = window
-        .orientation
-        .quat
-        .iter()
-        .map(|&value| constant_stat_block(value))
-        .collect();
+    let quat_arrays = [
+        channel(&|s| s.quat[0]),
+        channel(&|s| s.quat[1]),
+        channel(&|s| s.quat[2]),
+        channel(&|s| s.quat[3]),
+    ];
+    let quat_stats: Vec<(f64, f64, f64, f64)> =
+        quat_arrays.iter().map(|array| stat_block(array)).collect();
     for stats in &quat_stats {
         push(stats.0);
     }
     for stats in &quat_stats {
         push(stats.1);
     }
-    push(quat_delta_angle_deg(
-        window.orientation.quat,
-        window.orientation.quat,
-    ));
+    // First vs last orientation in the window, like the trainer's
+    // `_quat_delta_angle_deg(quat_first, quat_last)`.
+    let (first, last) = (series.first(), series.last());
+    push(match (first, last) {
+        (Some(first), Some(last)) => quat_delta_angle_deg(first.quat, last.quat),
+        _ => 0.0,
+    });
 
     push(window.contact_quality_mean);
-    push(window.ppg_timestamps_ns.len() as f64);
+    // Rows in the window, like the trainer's `sample_count`: every PPG sample
+    // plus every orientation sample that arrived during it.
+    push((window.ppg_timestamps_ns.len() + window.orientation_in_window.len()) as f64);
     let duration_ms = match (
         window.ppg_timestamps_ns.first(),
         window.ppg_timestamps_ns.last(),
@@ -295,6 +335,7 @@ mod tests {
             ppg_red: vec![20.0, 21.0, 19.0],
             ppg_ir: vec![5.0, 5.0, 5.0],
             ppg_timestamps_ns: vec![0, 10_000_000, 20_000_000],
+            orientation_in_window: Vec::new(),
             orientation: OrientationSnapshot {
                 accel: [1.0, 0.0, 0.0],
                 gyro: [0.0, 0.1, 0.0],
@@ -387,6 +428,66 @@ mod tests {
             .position(|&name| name == "quat_delta_angle_deg")
             .unwrap();
         assert_eq!(features[index], 0.0);
+    }
+
+    fn feature(features: &[f32; FEATURE_COUNT], name: &str) -> f64 {
+        let index = FEATURE_NAMES.iter().position(|&n| n == name).unwrap();
+        f64::from(features[index])
+    }
+
+    /// R-M2-1: a window whose orientation samples moved must not report zero
+    /// spread. The expected values below were computed with the trainer's own
+    /// `features.py` (`_stat_block`, `_quat_delta_angle_deg`) over the same
+    /// per-sample series, so this pins live/offline agreement on the 13
+    /// features that used to be structurally zero live.
+    #[test]
+    fn orientation_statistics_run_over_the_samples_that_arrived_in_the_window() {
+        let c = 15f64.to_radians().cos();
+        let s = 15f64.to_radians().sin();
+        let snapshot = |accel: [f64; 3], gyro: [f64; 3], quat: [f64; 4]| OrientationSnapshot {
+            accel,
+            gyro,
+            quat,
+        };
+        let in_window = vec![
+            snapshot([1.0, 0.0, 9.8], [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
+            snapshot([2.0, 0.0, 9.8], [0.5, 0.0, 0.0], [0.99, 0.1, 0.0, 0.0]),
+            snapshot([4.0, 3.0, 9.8], [1.0, 0.0, 0.0], [c, s, 0.0, 0.0]),
+        ];
+        let mut window = sample_window();
+        window.orientation = *in_window.last().unwrap();
+        window.orientation_in_window = in_window;
+        let features = extract_features(&window);
+
+        let close = |name: &str, expected: f64| {
+            let actual = feature(&features, name);
+            assert!(
+                (actual - expected).abs() < 1e-4,
+                "{name}: got {actual}, trainer says {expected}"
+            );
+        };
+        close("accel_x_mean", 2.3333333333333335);
+        close("accel_x_std", 1.247219128924647);
+        close("accel_x_min", 1.0);
+        close("accel_x_max", 4.0);
+        close("accel_y_std", std::f64::consts::SQRT_2);
+        close("accel_magnitude_mean", 10.284902038813282);
+        close("accel_magnitude_std", 0.5106760734696764);
+        close("gyro_x_std", 0.408248290463863);
+        close("quat_w_mean", 0.9853086087630228);
+        close("quat_w_std", 0.014300797001670385);
+        close("quat_x_std", 0.10656807276470816);
+        close("quat_delta_angle_deg", 29.999999999999993);
+        // Rows in the window: 3 PPG samples + 3 orientation samples.
+        close("sample_count", 6.0);
+    }
+
+    #[test]
+    fn a_window_with_no_orientation_in_it_falls_back_to_the_carried_snapshot() {
+        let features = extract_features(&sample_window());
+        assert_eq!(feature(&features, "accel_x_std"), 0.0);
+        assert_eq!(feature(&features, "quat_delta_angle_deg"), 0.0);
+        assert_eq!(feature(&features, "sample_count"), 3.0);
     }
 
     #[test]
