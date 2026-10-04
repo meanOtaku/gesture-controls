@@ -3,6 +3,7 @@ import { Card, CardContent } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import type {
+  AutomationState,
   CalibrationState,
   CalibrationTarget,
   HeadTrackerDiagnostic,
@@ -10,6 +11,7 @@ import type {
   WatchStatus,
 } from "../../../shared/protocol/events";
 import { CalibrationPanel } from "./CalibrationPanel";
+import { RecipesCard } from "./RecipesCard";
 import { HeadphoneTelemetryPanel } from "./HeadphoneTelemetryPanel";
 import { OverviewSection } from "./OverviewSection";
 import { WatchSensorControls } from "./WatchSensorControls";
@@ -34,7 +36,8 @@ interface DashboardProps {
   onUpdateCalibration?: (activationThresholdDegrees: number, dwellMs: number) => void;
   onAddLocation?: (name: string) => void;
   onRemoveLocation?: (target: CalibrationTarget) => void;
-  onSetVolumeTarget?: (target: CalibrationTarget) => void;
+  automation?: AutomationState | null;
+  onSetRecipeEnabled?: (id: string, enabled: boolean) => void;
   onSetSensorEnabled?: (sensor: string, enabled: boolean) => void;
 }
 
@@ -43,7 +46,6 @@ const DEFAULT_CALIBRATION: CalibrationState = {
     { id: "center", name: "Screen center", calibrated: false, builtin: true },
     { id: "topRight", name: "Top right", calibrated: false, builtin: false },
   ],
-  volumeTarget: "topRight",
   requiresRecalibration: true,
   activationThresholdDegrees: 12,
   dwellMs: 400,
@@ -64,7 +66,8 @@ export function Dashboard({
   onUpdateCalibration = () => undefined,
   onAddLocation = () => undefined,
   onRemoveLocation = () => undefined,
-  onSetVolumeTarget = () => undefined,
+  automation = null,
+  onSetRecipeEnabled = () => undefined,
   onSetSensorEnabled = () => undefined,
 }: DashboardProps) {
   const connected = status?.connected === true;
@@ -139,6 +142,15 @@ export function Dashboard({
         </aside>
       )}
 
+      {view === "main" && automation && (
+        <RecipesCard
+          automation={automation}
+          calibration={calibration ?? null}
+          isPending={isPending}
+          onSetRecipeEnabled={onSetRecipeEnabled}
+        />
+      )}
+
       {view === "headphone" && <HeadphoneTelemetryPanel status={status} />}
       {view === "headphone" && (
         <CalibrationPanel
@@ -149,7 +161,6 @@ export function Dashboard({
           onUpdateCalibration={onUpdateCalibration}
           onAddLocation={onAddLocation}
           onRemoveLocation={onRemoveLocation}
-          onSetVolumeTarget={onSetVolumeTarget}
         />
       )}
 

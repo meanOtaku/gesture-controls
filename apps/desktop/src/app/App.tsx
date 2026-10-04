@@ -9,6 +9,7 @@ import { telemetryStore } from "../features/telemetry/store/telemetryStore";
 import { usePendingActions } from "../shared/hooks/usePendingActions";
 import { VolumeKnob } from "../features/overlay/components/VolumeKnob";
 import {
+  AUTOMATION_STATE_EVENT,
   CALIBRATION_STATE_EVENT,
   HEAD_POSE_EVENT,
   HEAD_TARGET_ENTERED_EVENT,
@@ -24,6 +25,7 @@ import {
   WATCH_SKIN_TEMPERATURE_BATCH_EVENT,
   WATCH_STATUS_EVENT,
   type AppSettings,
+  type AutomationState,
   type CalibrationState,
   type CalibrationTarget,
   type HeadPosePayload,
@@ -44,8 +46,6 @@ const emptyOverlay: OverlayState = {
   rotationAngle: 0,
   screenX: 0,
   screenY: 0,
-  cornerDemoPhase: null,
-  lastRelativeRollDegrees: null,
   lastNativeVolumeError: null,
 };
 
@@ -135,7 +135,6 @@ function OverlayApp() {
       <VolumeKnob
         volume={overlay.volume}
         grabbed={overlay.grabbed}
-        cornerDemoPhase={overlay.cornerDemoPhase}
         nativeVolumeError={overlay.lastNativeVolumeError}
       />
     </main>
@@ -149,6 +148,7 @@ function MainApp() {
   const headTrackerProvider = telemetryStore.getHeadTrackerProvider();
   const watchStatus = telemetryStore.getWatchStatus();
   const [calibration, setCalibration] = useState<CalibrationState | null>(null);
+  const [automation, setAutomation] = useState<AutomationState | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<OverlayState>(emptyOverlay);
   const [volumeError, setVolumeError] = useState<string | null>(null);
@@ -184,22 +184,10 @@ function MainApp() {
           if (!cancelled && volumeRequestVersion.current === requestVersion) {
             setVolumeError(`Volume overlay failed to hide: ${String(error)}`);
           }
-        });
-    };
-    const showOverlay = () => {
-      if (cancelled) return;
-      overlayDesiredVisible.current = true;
-      const requestVersion = ++volumeRequestVersion.current;
-      void invoke("show_overlay")
-        .then(() => {
-          if (!cancelled && volumeRequestVersion.current === requestVersion) setVolumeError(null);
         })
-        .catch((error) => {
-          if (!cancelled && volumeRequestVersion.current === requestVersion) {
-            overlayDesiredVisible.current = false;
-            overlayVisible.current = false;
-            setVolumeError(`Volume control failed: ${String(error)}`);
-          }
+        .finally(() => {
+          // The hide is settled, so a later overlay shown by a recipe is no longer a stale event to ignore.
+          if (!cancelled && volumeRequestVersion.current === requestVersion) overlayDesiredVisible.current = null;
         });
     };
     const listenerRegistrations = [
@@ -221,6 +209,9 @@ function MainApp() {
       listen<HeadTrackerDiagnostic | null>(HEAD_TRACKER_DIAGNOSTIC_EVENT, ({ payload }) => {
         if (!cancelled) telemetryStore.setHeadDiagnostic(payload);
       }),
+      listen<AutomationState>(AUTOMATION_STATE_EVENT, ({ payload }) => {
+        if (!cancelled) setAutomation(payload);
+      }),
       listen<CalibrationState>(CALIBRATION_STATE_EVENT, ({ payload }) => {
         if (cancelled) return;
         calibrationEventVersion.current += 1;
@@ -230,14 +221,12 @@ function MainApp() {
         if (cancelled) return;
         calibrationEventVersion.current += 1;
         setCalibration((current) => current ? { ...current, activeTarget: payload } : current);
-        if (payload === "topRight") showOverlay();
       }),
       listen<CalibrationTarget>(HEAD_TARGET_EXITED_EVENT, ({ payload }) => {
         if (cancelled) return;
         calibrationEventVersion.current += 1;
         setCalibration((current) =>
           current?.activeTarget === payload ? { ...current, activeTarget: null } : current);
-        if (payload === "topRight") hideOverlay();
       }),
     ];
     const unlisteners = Promise.allSettled(listenerRegistrations).then((results) => {
@@ -262,8 +251,14 @@ function MainApp() {
         .then((state) => {
           if (!cancelled && calibrationEventVersion.current === requestedVersion) {
             setCalibration(state);
-            if (state.activeTarget === "topRight") showOverlay();
           }
+        })
+        .catch((error) => {
+          if (!cancelled) setCalibrationError(String(error));
+        });
+      void invoke<AutomationState>("get_automation_state")
+        .then((state) => {
+          if (!cancelled) setAutomation(state);
         })
         .catch((error) => {
           if (!cancelled) setCalibrationError(String(error));
@@ -465,9 +460,17 @@ function MainApp() {
     await locationCommand(`location:remove:${target}`, "Remove location", "Location removed.", "remove_calibration_location", { target });
   };
 
-  const setVolumeTarget = async (target: CalibrationTarget) => {
+  const setRecipeEnabled = async (id: string, enabled: boolean) => {
     if (!inTauri) return;
-    await locationCommand("location:volume", "Volume knob location", "The volume knob now uses that location.", "set_volume_target", { target });
+    await run(`recipe:${id}`, async () => {
+      try {
+        setCalibrationError(null);
+        setAutomation(await invoke<AutomationState>("set_recipe_enabled", { id, enabled }));
+      } catch (error) {
+        setCalibrationError(String(error));
+        OperationFeedback.error("Change recipe", String(error));
+      }
+    });
   };
 
   const updateCalibration = async (activationThresholdDegrees: number, dwellMs: number) => {
@@ -526,6 +529,8 @@ function MainApp() {
         headDiagnostic={headDiagnostic}
         headTrackerProvider={headTrackerProvider}
         calibration={calibration}
+        automation={automation}
+        onSetRecipeEnabled={(id, enabled) => { void setRecipeEnabled(id, enabled); }}
         calibrationError={applicationError}
         watchStatus={watchStatus}
         isPending={isPending}
@@ -533,7 +538,6 @@ function MainApp() {
         onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }}
         onAddLocation={(name) => { void addLocation(name); }}
         onRemoveLocation={(target) => { void removeLocation(target); }}
-        onSetVolumeTarget={(target) => { void setVolumeTarget(target); }}
       />
     )}
     {activeTab === "headphone" && (
@@ -543,6 +547,8 @@ function MainApp() {
         headDiagnostic={headDiagnostic}
         headTrackerProvider={headTrackerProvider}
         calibration={calibration}
+        automation={automation}
+        onSetRecipeEnabled={(id, enabled) => { void setRecipeEnabled(id, enabled); }}
         calibrationError={applicationError}
         watchStatus={watchStatus}
         isPending={isPending}
@@ -550,7 +556,6 @@ function MainApp() {
         onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }}
         onAddLocation={(name) => { void addLocation(name); }}
         onRemoveLocation={(target) => { void removeLocation(target); }}
-        onSetVolumeTarget={(target) => { void setVolumeTarget(target); }}
       />
     )}
     {activeTab === "watch" && (
@@ -558,6 +563,8 @@ function MainApp() {
         view="watch"
         status={status}
         calibration={calibration}
+        automation={automation}
+        onSetRecipeEnabled={(id, enabled) => { void setRecipeEnabled(id, enabled); }}
         calibrationError={applicationError}
         watchStatus={watchStatus}
         isPending={isPending}
@@ -565,7 +572,6 @@ function MainApp() {
         onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }}
         onAddLocation={(name) => { void addLocation(name); }}
         onRemoveLocation={(target) => { void removeLocation(target); }}
-        onSetVolumeTarget={(target) => { void setVolumeTarget(target); }}
         onSetSensorEnabled={(sensor, enabled) => { void setSensorEnabled(sensor, enabled); }}
       />
     )}

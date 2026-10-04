@@ -19,8 +19,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   wristMaxAngularVelocityDegreesPerSecond: 360,
   wristMaxVolumePointsPerSecond: 30,
   watchSensorsEnabled: Object.fromEntries(CONTROLLABLE_SENSORS.map(({ id }) => [id, true])),
-  cornerWristVolumeDemoEnabled: false,
-  cornerWristVolumeInvertDirection: false,
   watchTransport: "bluetooth",
 };
 

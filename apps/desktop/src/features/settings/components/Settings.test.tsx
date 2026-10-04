@@ -22,8 +22,6 @@ const settings: AppSettings = {
   wristMaxAngularVelocityDegreesPerSecond: 360,
   wristMaxVolumePointsPerSecond: 30,
   watchSensorsEnabled: { orientation: true, acceleration: true, gyroscope: true },
-  cornerWristVolumeDemoEnabled: false,
-  cornerWristVolumeInvertDirection: false,
   watchTransport: "bluetooth",
 };
 
@@ -148,14 +146,6 @@ describe("Settings", () => {
     render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
     fireEvent.click(screen.getByRole("switch", { name: /Orientation \(rotation vector\) enabled by default/ }));
     expect(updates).toEqual([{ ...settings, watchSensorsEnabled: { ...settings.watchSensorsEnabled, orientation: false } }]);
-  });
-
-  it("defaults the corner wrist volume demo to off and toggles it via onUpdate", () => {
-    const updates: AppSettings[] = [];
-    render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
-    expect(screen.getByRole("switch", { name: "Corner wrist volume demo disabled" })).not.toBeChecked();
-    fireEvent.click(screen.getByRole("switch", { name: "Corner wrist volume demo disabled" }));
-    expect(updates).toEqual([{ ...settings, cornerWristVolumeDemoEnabled: true }]);
   });
 
   it("requires confirmation before resetting to defaults, and does nothing on cancel", () => {

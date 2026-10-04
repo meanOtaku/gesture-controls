@@ -87,9 +87,10 @@ The overlay has one `grabbed` flag, so it also records an **owner**:
 
 ### What cannot be reached from the webview
 
-- `show_overlay` is accepted only while the **backend's** calibration state shows
-  the top-right target active, so the webview cannot raise the volume
-  capability gate by itself. `adjust_system_volume` still requires a visible overlay.
+- There is no webview command that shows the overlay. Only the backend's recipe
+  engine does, when a recipe's head stage holds, so the webview cannot raise the
+  volume capability gate by itself. `adjust_system_volume` still requires a visible
+  overlay, and `hide_overlay` (Escape) also cancels the recipe that had it up.
 - There is **no command that injects a gesture transition** into the policy
   (`report_pinch_transition` was removed). Transitions enter only through
   `ingest_ppg_window`.

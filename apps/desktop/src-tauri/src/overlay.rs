@@ -4,12 +4,8 @@ use std::sync::Once;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use interaction_engine::{
-    CalibrationTarget, VolumeSimulation, WristRotation, WristRotationConfig,
-    commit_visibility_after, top_right_overlay_position,
-};
+use interaction_engine::{VolumeSimulation, commit_visibility_after, top_right_overlay_position};
 use serde::Serialize;
-use spatial_protocol::WatchOrientationSample;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow};
 use tracing::warn;
 use volume_control::{
@@ -18,7 +14,6 @@ use volume_control::{
 };
 use watch_bridge::{HapticCommand, WatchBridgeServer};
 
-use crate::calibration::CalibrationRuntime;
 use crate::latest_write::{LatestWriteSlot, PendingWrite};
 
 pub const OVERLAY_STATE_EVENT: &str = "overlay-state";
@@ -32,79 +27,19 @@ const WRIST_ROTATION_HAPTIC_MIN_INTERVAL: Duration = Duration::from_millis(125);
 /// native call (a `wpctl`/`pactl` subprocess on Linux). Targets are absolute,
 /// so a skipped sample loses nothing: the next one carries the current angle.
 const WRIST_ROTATION_VOLUME_WRITE_MIN_INTERVAL: Duration = Duration::from_millis(100);
-/// Caps how often the raw relative-roll diagnostic (below) can update and
-/// emit, independent of the Watch orientation sample rate (up to ~50Hz) --
-/// enough for a human to see the wrist roll changing during macOS bring-up
-/// without turning this diagnostic into a raw high-rate sensor stream.
-const WRIST_ROTATION_DIAGNOSTIC_MIN_INTERVAL: Duration = Duration::from_millis(200);
-
-/// Compact status for the corner-gated wrist-volume demo, surfaced on
-/// [`OverlayState`] so the operator can tell targeting from an actual
-/// adjustment, and (when neither can happen yet) exactly why: missing Watch
-/// orientation or an unsupported native volume backend. `None` whenever the
-/// demo mode is off or no corner-demo interaction is in progress -- it never
-/// appears merely because the Watch is connected or the wrist moves.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum CornerWristVolumeDemoPhase {
-    Targeting,
-    Ready,
-    Adjusting,
-    UnavailableNoOrientation,
-    UnavailableVolumeUnsupported,
-}
-
-/// Which producer started the current grab. The overlay has a single
-/// `grabbed` flag, so without an owner a model-driven release (or a Watch
-/// button-up) would tear down a grab some other producer started.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum GrabOwner {
-    WatchButton,
-    GestureModel,
-    CornerDemo,
-}
-
-/// A producer may begin a volume interaction when nothing is grabbed, or
-/// when it already owns the grab (a re-begin). It never takes over a grab
-/// another producer owns.
-fn may_begin_grab(current: Option<GrabOwner>, requester: GrabOwner) -> bool {
-    current.is_none_or(|owner| owner == requester)
-}
-
-/// `only_owner: None` is an unconditional release (Escape, force release,
-/// disconnect, target exit); `Some(owner)` is a producer ending its own
-/// grab, which must not end one it does not own.
-fn may_release_grab(current: Option<GrabOwner>, only_owner: Option<GrabOwner>) -> bool {
-    only_owner.is_none_or(|owner| current == Some(owner))
-}
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OverlayState {
     pub visible: bool,
     pub grabbed: bool,
-    #[serde(skip)]
-    grab_owner: Option<GrabOwner>,
     pub volume: f32,
     pub rotation_angle: f32,
     pub screen_x: f64,
     pub screen_y: f64,
-    pub corner_demo_phase: Option<CornerWristVolumeDemoPhase>,
-    /// Raw relative roll (degrees from the wrist-rotation reference pose),
-    /// throttled to [`WRIST_ROTATION_DIAGNOSTIC_MIN_INTERVAL`]. `None`
-    /// whenever no wrist-rotation reference is active (corner demo not
-    /// gripping, Watch-button/desktop-model grab not active either).
-    pub last_relative_roll_degrees: Option<f32>,
     /// The error string from the most recent failed native volume read or
     /// write, cleared on the next successful one of either kind. `None`
     /// means the last native volume operation (if any) succeeded.
     pub last_native_volume_error: Option<String>,
-}
-
-impl OverlayState {
-    pub(crate) fn grabbed_by(&self, owner: GrabOwner) -> bool {
-        self.grabbed && self.grab_owner == Some(owner)
-    }
 }
 
 impl Default for OverlayState {
@@ -112,13 +47,10 @@ impl Default for OverlayState {
         Self {
             visible: false,
             grabbed: false,
-            grab_owner: None,
             volume: VolumeSimulation::default().current(),
             rotation_angle: 0.0,
             screen_x: 0.0,
             screen_y: 0.0,
-            corner_demo_phase: None,
-            last_relative_roll_degrees: None,
             last_native_volume_error: None,
         }
     }
@@ -126,7 +58,8 @@ impl Default for OverlayState {
 
 pub struct OverlayRuntime {
     state: Mutex<OverlayState>,
-    wrist_rotation: Mutex<WristRotation>,
+    /// The volume a recipe-driven interaction is steering towards; see [`RecipeDrive`].
+    recipe_drive: Mutex<RecipeDrive>,
     state_generation: AtomicU64,
     refresh_in_flight: AtomicBool,
     last_wrist_rotation_haptic_at: Mutex<Option<Instant>>,
@@ -146,7 +79,39 @@ pub struct OverlayRuntime {
     /// stall every cancellation path (Escape, button-up, disconnect, model
     /// swap) for the adapter's whole timeout.
     native_write_lock: Mutex<()>,
-    last_relative_roll_diagnostic_at: Mutex<Option<Instant>>,
+}
+
+/// How far a recipe-driven interaction has asked the volume to move, in volume points (0..=100).
+///
+/// `wanted` is the base volume plus every change the device has asked for; `submitted` follows it no faster
+/// than the configured slew rate, so a fast wrist flick cannot change the loudness faster than that.
+#[derive(Debug, Default, Clone, Copy)]
+struct RecipeDrive {
+    wanted: f32,
+    submitted: f32,
+    last_at: Option<Instant>,
+}
+
+impl RecipeDrive {
+    fn begin(base_percent: f32) -> Self {
+        Self {
+            wanted: base_percent,
+            submitted: base_percent,
+            last_at: None,
+        }
+    }
+
+    /// Adds a device change and returns the slew-limited target to write.
+    fn advance(&mut self, delta_percent: f32, max_points_per_second: f32, now: Instant) -> f32 {
+        self.wanted = (self.wanted + delta_percent).clamp(0.0, 100.0);
+        let elapsed = self
+            .last_at
+            .map_or(0.0, |at| now.duration_since(at).as_secs_f32());
+        self.last_at = Some(now);
+        let max_step = max_points_per_second * elapsed.max(0.02);
+        self.submitted += (self.wanted - self.submitted).clamp(-max_step, max_step);
+        self.submitted
+    }
 }
 
 struct RefreshGuard<'a>(&'a AtomicBool);
@@ -183,7 +148,7 @@ impl Default for OverlayRuntime {
     fn default() -> Self {
         Self {
             state: Mutex::new(OverlayState::default()),
-            wrist_rotation: Mutex::new(WristRotation::default()),
+            recipe_drive: Mutex::new(RecipeDrive::default()),
             state_generation: AtomicU64::new(0),
             refresh_in_flight: AtomicBool::new(false),
             last_wrist_rotation_haptic_at: Mutex::new(None),
@@ -192,7 +157,6 @@ impl Default for OverlayRuntime {
             wrist_writer_started: Once::new(),
             interaction_epoch: AtomicU64::new(0),
             native_write_lock: Mutex::new(()),
-            last_relative_roll_diagnostic_at: Mutex::new(None),
         }
     }
 }
@@ -205,12 +169,7 @@ impl OverlayRuntime {
             .map_err(|_| "overlay state lock was poisoned".to_string())
     }
 
-    /// Shows the overlay window. `pub(crate)` (rather than only reachable via
-    /// the `show_overlay` command) so the corner-gated wrist-volume demo can
-    /// show it synchronously the instant dwell succeeds, instead of racing
-    /// the frontend's own round trip in response to the same dwell event.
-    /// Idempotent: safe to call again after the frontend's own `show_overlay`
-    /// arrives moments later.
+    /// Shows the overlay window. Idempotent, so every recipe update can ask for it without checking first.
     pub(crate) fn show(
         &self,
         app: &AppHandle,
@@ -258,12 +217,8 @@ impl OverlayRuntime {
         Ok(snapshot)
     }
 
-    /// Hides the overlay (Escape, leaving the target, tracker disconnect, or
-    /// unmount). Unconditionally drops `grabbed` and the corner-demo phase
-    /// and ends any wrist-rotation reference -- same as [`Self::release`] --
-    /// so Escape fails an active corner-demo interaction closed exactly like
-    /// every other exit path, even though `hide_overlay` is the command the
-    /// frontend actually calls for it instead of a dedicated release.
+    /// Hides the overlay (Escape, leaving the target, tracker disconnect, or unmount). Unconditionally drops
+    /// `grabbed`, the same as [`Self::release`], so Escape ends an interaction like every other exit path.
     fn hide(&self, app: &AppHandle) -> Result<OverlayState, String> {
         let window = app
             .get_webview_window(OVERLAY_WINDOW)
@@ -273,14 +228,7 @@ impl OverlayRuntime {
             .lock()
             .map_err(|_| "overlay state lock was poisoned")?;
         state.grabbed = false;
-        state.grab_owner = None;
-        state.corner_demo_phase = None;
-        state.last_relative_roll_degrees = None;
         self.end_interaction();
-        self.wrist_rotation
-            .lock()
-            .map_err(|_| "wrist rotation lock was poisoned")?
-            .end();
         commit_visibility_after(&mut state.visible, false, || {
             window.hide().map_err(|error| error.to_string())
         })?;
@@ -297,69 +245,21 @@ impl OverlayRuntime {
         self.wrist_volume_slot.clear();
     }
 
-    /// Marks the overlay grabbed by a held watch button. A no-op unless the
-    /// overlay is currently shown (dwelling on the calibrated top-right target).
-    pub(crate) fn grab(&self, app: &AppHandle, owner: GrabOwner) -> Result<OverlayState, String> {
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| "overlay state lock was poisoned")?;
-        if !state.visible || state.grabbed {
-            return Ok(state.clone());
-        }
-        state.grabbed = true;
-        state.grab_owner = Some(owner);
-        self.state_generation.fetch_add(1, Ordering::AcqRel);
-        let snapshot = state.clone();
-        let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
-        Ok(snapshot)
-    }
-
-    /// Releases the grab unconditionally and hides the overlay, so a
-    /// disconnect, Escape, target exit or forced release can never leave the
-    /// overlay stuck grabbed/visible.
+    /// Releases any grab and hides the overlay, so a disconnect, Escape, a recipe ending or a forced release
+    /// can never leave the overlay stuck grabbed or visible.
     pub(crate) fn release(&self, app: &AppHandle) -> Result<OverlayState, String> {
-        self.release_matching(app, None)
-    }
-
-    /// A producer ending its own interaction (Watch button-up, a model's
-    /// `pinch_release`). A no-op when the current grab belongs to someone
-    /// else, so one producer's normal end cannot tear down another's.
-    pub(crate) fn release_if_owner(
-        &self,
-        app: &AppHandle,
-        owner: GrabOwner,
-    ) -> Result<OverlayState, String> {
-        self.release_matching(app, Some(owner))
-    }
-
-    fn release_matching(
-        &self,
-        app: &AppHandle,
-        only_owner: Option<GrabOwner>,
-    ) -> Result<OverlayState, String> {
         let mut state = self
             .state
             .lock()
             .map_err(|_| "overlay state lock was poisoned")?;
-        if !may_release_grab(state.grab_owner, only_owner) {
-            return Ok(state.clone());
-        }
-        if !state.grabbed && !state.visible && state.corner_demo_phase.is_none() {
+        if !state.grabbed && !state.visible {
             return Ok(state.clone());
         }
         let window = app
             .get_webview_window(OVERLAY_WINDOW)
             .ok_or("overlay window is not configured")?;
         state.grabbed = false;
-        state.grab_owner = None;
-        state.corner_demo_phase = None;
-        state.last_relative_roll_degrees = None;
         self.end_interaction();
-        self.wrist_rotation
-            .lock()
-            .map_err(|_| "wrist rotation lock was poisoned")?
-            .end();
         commit_visibility_after(&mut state.visible, false, || {
             window.hide().map_err(|error| error.to_string())
         })?;
@@ -369,120 +269,99 @@ impl OverlayRuntime {
         Ok(snapshot)
     }
 
-    /// Atomically begins a wrist-rotation volume interaction: grabs the
-    /// overlay and establishes a fresh rotation reference under
-    /// `wrist_config` from `orientation`, capturing the desktop's current
-    /// volume as the activation baseline every absolute target this
-    /// interaction computes is anchored to, as one transaction. This is the
-    /// single seam both the Watch-button and the approved desktop-model
-    /// paths call, so neither can leave the overlay visually grabbed with a
-    /// stale or missing reference pose. Fails closed: a missing orientation
-    /// sample, an unreadable/unsupported native volume, or an invalid
-    /// configuration rolls the grab back via [`Self::release`] instead of
-    /// leaving a partial interaction active.
-    pub(crate) fn begin_volume_interaction(
+    /// Shows the knob without grabbing it: the user is looking at its location but has not yet started
+    /// turning. Ends a grab if one was in progress.
+    pub(crate) fn show_armed(
         &self,
         app: &AppHandle,
-        owner: GrabOwner,
-        wrist_config: WristRotationConfig,
-        orientation: Option<&WatchOrientationSample>,
         volume_runtime: &VolumeRuntime,
     ) -> Result<OverlayState, String> {
-        let grabbed = self.grab(app, owner)?;
-        if !grabbed.grabbed {
-            // Overlay was not visible/dwelling: grab() correctly no-op'd.
-            return Ok(grabbed);
+        let snapshot = self.show(app, volume_runtime)?;
+        if !snapshot.grabbed {
+            return Ok(snapshot);
         }
-        if !may_begin_grab(grabbed.grab_owner, owner) {
-            // Someone else owns the active grab; never take over its
-            // reference pose or tear it down.
-            warn!(?owner, current = ?grabbed.grab_owner, "volume interaction already owned by another producer; not starting");
-            return Ok(grabbed);
-        }
-        let Some(orientation) = orientation else {
-            warn!("volume interaction grabbed with no orientation sample available; releasing");
-            return self.release(app);
-        };
-        let activation_volume_percent = match volume_runtime.available_volume() {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "overlay state lock was poisoned")?;
+        state.grabbed = false;
+        self.end_interaction();
+        self.state_generation.fetch_add(1, Ordering::AcqRel);
+        let snapshot = state.clone();
+        let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
+        Ok(snapshot)
+    }
+
+    /// Begins a recipe-driven volume interaction: shows the knob, grabs it, and anchors every change the
+    /// device asks for to the volume as it is now. Fails closed: if the native volume cannot be read the
+    /// grab is rolled back instead of leaving the knob grabbed with nothing to steer.
+    pub(crate) fn begin_recipe_interaction(
+        &self,
+        app: &AppHandle,
+        volume_runtime: &VolumeRuntime,
+    ) -> Result<OverlayState, String> {
+        self.show(app, volume_runtime)?;
+        let base_percent = match volume_runtime.available_volume() {
             Ok(Some(volume)) => volume * 100.0,
             Ok(None) => {
                 warn!(
-                    "volume interaction grabbed with no controllable native volume backend; releasing"
+                    "recipe volume interaction has no controllable native volume backend; releasing"
                 );
                 return self.release(app);
             }
             Err(error) => {
-                warn!(%error, "failed to read activation volume for wrist rotation; releasing");
+                warn!(%error, "failed to read the starting volume for a recipe; releasing");
                 return self.release(app);
             }
         };
-        let began = self
-            .wrist_rotation
+        let mut state = self
+            .state
             .lock()
-            .map_err(|_| "wrist rotation lock was poisoned")?
-            .begin_with_config(
-                wrist_config,
-                orientation.quaternion,
-                orientation.timestamp_ns,
-                activation_volume_percent,
-            );
-        if let Err(error) = began {
-            warn!(%error, "failed to begin wrist rotation reference; releasing grab");
-            return self.release(app);
+            .map_err(|_| "overlay state lock was poisoned")?;
+        if !state.visible {
+            return Ok(state.clone());
         }
-        // A new interaction: anything still queued for the previous one is stale.
+        state.grabbed = true;
         self.end_interaction();
-        self.state()
+        *self
+            .recipe_drive
+            .lock()
+            .map_err(|_| "recipe drive lock was poisoned")? = RecipeDrive::begin(base_percent);
+        self.state_generation.fetch_add(1, Ordering::AcqRel);
+        let snapshot = state.clone();
+        let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
+        Ok(snapshot)
     }
 
-    /// Feeds one orientation sample to the wrist mapper and, if it asks for a different
-    /// volume, hands the new target to the writer thread.
+    /// Hands one device change (a fraction of the full range) to the writer thread.
     ///
-    /// This runs on the watch event loop, so it must stay cheap: every sample is still passed
-    /// through [`WristRotation::observe`] (so its monotonicity and velocity-outlier checks see
-    /// every sample, exactly as before), but the native volume call, which can take 130-190 ms,
-    /// is done by [`Self::ensure_wrist_writer`]'s thread instead. A target is skipped, not queued,
-    /// when a newer one arrives first; see [`crate::latest_write`].
-    pub(crate) fn apply_wrist_rotation(
+    /// This runs on the watch event loop, so it must stay cheap: the native volume call, which can take
+    /// 130-190 ms, is done by [`Self::ensure_wrist_writer`]'s thread instead. A target is skipped, not
+    /// queued, when a newer one arrives first; see [`crate::latest_write`].
+    pub(crate) fn apply_recipe_delta(
         &self,
         app: &AppHandle,
-        sample: &WatchOrientationSample,
-    ) -> Result<OverlayState, String> {
-        let (target_volume, relative_degrees, mapper_active) = {
-            let mut wrist_rotation = self
-                .wrist_rotation
-                .lock()
-                .map_err(|_| "wrist rotation lock was poisoned")?;
-            let target_volume = wrist_rotation
-                .observe(sample.quaternion, sample.timestamp_ns)
-                .map_err(|error| error.to_string())? as f32;
-            (
-                target_volume,
-                wrist_rotation.last_relative_degrees(),
-                wrist_rotation.is_active(),
-            )
-        };
-        self.update_relative_roll_diagnostic(app, relative_degrees.map(|degrees| degrees as f32));
-        let state = self.state()?;
-        // An inactive mapper reports a placeholder target of 0.0, which is not a volume to
-        // apply; the overlay can read as grabbed for a moment before the mapper has its
-        // reference pose.
-        if !state.grabbed || !mapper_active || (target_volume - state.volume).abs() < f32::EPSILON {
-            // Nothing to write. If the wrist came back to the applied volume, a target still
-            // waiting for the writer is now wrong and must not go out.
-            self.wrist_volume_slot.clear();
-            let next_phase = corner_demo_phase_after_sample(state.corner_demo_phase, false);
-            if next_phase != state.corner_demo_phase {
-                return self.set_corner_demo_phase(app, next_phase);
-            }
-            return Ok(state);
+        delta_fraction: f64,
+        max_points_per_second: f64,
+    ) -> Result<(), String> {
+        if !self.state()?.grabbed {
+            return Ok(());
         }
+        let target = self
+            .recipe_drive
+            .lock()
+            .map_err(|_| "recipe drive lock was poisoned")?
+            .advance(
+                (delta_fraction * 100.0) as f32,
+                max_points_per_second as f32,
+                Instant::now(),
+            );
         self.ensure_wrist_writer(app);
         self.wrist_volume_slot.submit(PendingWrite {
-            target_percent: target_volume,
+            target_percent: target,
             epoch: self.interaction_epoch.load(Ordering::Acquire),
         });
-        Ok(state)
+        Ok(())
     }
 
     /// Starts the writer thread on first use. It lives for the rest of the process, blocking
@@ -538,40 +417,9 @@ impl OverlayRuntime {
                 if (applied.volume - state.volume).abs() >= f32::EPSILON {
                     self.notify_wrist_rotation_haptic(app);
                 }
-                let next_phase = corner_demo_phase_after_sample(state.corner_demo_phase, true);
-                if next_phase != state.corner_demo_phase
-                    && let Err(error) = self.set_corner_demo_phase(app, next_phase)
-                {
-                    warn!(%error, "failed to update the corner demo phase after a wrist volume write");
-                }
             }
             Err(error) => warn!(%error, "failed to apply wrist rotation to volume"),
         }
-    }
-
-    /// Sets the corner-demo status shown on the overlay; a no-op (no emit, no
-    /// generation bump) when the phase is already what's requested. The sole
-    /// mutator of [`OverlayState::corner_demo_phase`] outside [`Self::release`],
-    /// which always clears it back to `None` -- so every path that can end a
-    /// corner-demo interaction (target exit, tracker loss, Watch disconnect,
-    /// Escape, a malformed/stale message) already fails it closed for free.
-    pub(crate) fn set_corner_demo_phase(
-        &self,
-        app: &AppHandle,
-        phase: Option<CornerWristVolumeDemoPhase>,
-    ) -> Result<OverlayState, String> {
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| "overlay state lock was poisoned")?;
-        if state.corner_demo_phase == phase {
-            return Ok(state.clone());
-        }
-        state.corner_demo_phase = phase;
-        self.state_generation.fetch_add(1, Ordering::AcqRel);
-        let snapshot = state.clone();
-        let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
-        Ok(snapshot)
     }
 
     /// Best-effort haptic pulse confirming a wrist-rotation volume adjustment
@@ -606,35 +454,6 @@ impl OverlayRuntime {
                 }
             }
         }
-    }
-
-    /// Updates the throttled raw-relative-roll diagnostic and emits it, but
-    /// only at most every [`WRIST_ROTATION_DIAGNOSTIC_MIN_INTERVAL`] and only
-    /// when the value actually changed -- so a live orientation stream (up to
-    /// ~50Hz) can never turn this into a raw high-rate sensor feed on the
-    /// wire, while still proving the wrist roll is moving during bring-up.
-    fn update_relative_roll_diagnostic(&self, app: &AppHandle, relative_degrees: Option<f32>) {
-        let Ok(mut last_emit) = self.last_relative_roll_diagnostic_at.lock() else {
-            return;
-        };
-        let now = Instant::now();
-        if last_emit.is_some_and(|previous| {
-            now.duration_since(previous) < WRIST_ROTATION_DIAGNOSTIC_MIN_INTERVAL
-        }) {
-            return;
-        }
-        let Ok(mut state) = self.state.lock() else {
-            return;
-        };
-        if state.last_relative_roll_degrees == relative_degrees {
-            return;
-        }
-        *last_emit = Some(now);
-        drop(last_emit);
-        state.last_relative_roll_degrees = relative_degrees;
-        let snapshot = state.clone();
-        drop(state);
-        let _ = app.emit(OVERLAY_STATE_EVENT, snapshot);
     }
 
     fn adjust_system_volume(
@@ -787,30 +606,6 @@ fn write_pacing_wait(last_write: Option<Instant>, now: Instant) -> Duration {
     })
 }
 
-/// Pure phase-transition rule for the corner-demo status while a sample is
-/// applied: while the demo interaction is `Ready`/`Adjusting`, reflects
-/// whether *this* sample actually produced a volume delta; every other
-/// phase (including `None`, meaning no corner-demo interaction is active)
-/// passes through untouched. Kept free of `AppHandle`/locking so it is
-/// directly unit-testable and can never resurrect a phase for the
-/// Watch-button or desktop-model paths, which never set one in the first
-/// place.
-fn corner_demo_phase_after_sample(
-    current: Option<CornerWristVolumeDemoPhase>,
-    delta_applied: bool,
-) -> Option<CornerWristVolumeDemoPhase> {
-    match current {
-        Some(CornerWristVolumeDemoPhase::Ready) | Some(CornerWristVolumeDemoPhase::Adjusting) => {
-            Some(if delta_applied {
-                CornerWristVolumeDemoPhase::Adjusting
-            } else {
-                CornerWristVolumeDemoPhase::Ready
-            })
-        }
-        other => other,
-    }
-}
-
 pub fn prepare_window(app: &AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window(OVERLAY_WINDOW)
@@ -869,45 +664,14 @@ pub fn get_overlay_state(runtime: State<'_, OverlayRuntime>) -> Result<OverlaySt
     runtime.state()
 }
 
-/// The overlay visibility is the only capability gate on the native volume
-/// commands, so it must be raised by a backend-observed fact rather than on
-/// the webview's say-so: the frontend only calls `show_overlay` in response
-/// to the head-target-entered event, and the backend's own calibration state
-/// must agree that the top-right target is currently active.
-fn overlay_show_permitted(
-    active_target: Option<&CalibrationTarget>,
-    volume_target: &CalibrationTarget,
-) -> Result<(), String> {
-    if active_target == Some(volume_target) {
-        Ok(())
-    } else {
-        Err(
-            "the volume overlay can only be shown while the volume head location is active"
-                .to_string(),
-        )
-    }
-}
-
-#[tauri::command]
-pub fn show_overlay(
-    app: AppHandle,
-    runtime: State<'_, OverlayRuntime>,
-    volume_runtime: State<'_, VolumeRuntime>,
-    calibration: State<'_, CalibrationRuntime>,
-) -> Result<OverlayState, String> {
-    let calibration = calibration.state()?;
-    overlay_show_permitted(
-        calibration.state.active_target.as_ref(),
-        &calibration.volume_target,
-    )?;
-    runtime.show(&app, &volume_runtime)
-}
-
 #[tauri::command]
 pub fn hide_overlay(
     app: AppHandle,
     runtime: State<'_, OverlayRuntime>,
+    automation: State<'_, crate::automation::AutomationRuntime>,
 ) -> Result<OverlayState, String> {
+    // Escape: end the recipe that has the knob up, or it would put it straight back.
+    automation.cancel(&app);
     runtime.hide(&app)
 }
 
@@ -967,27 +731,6 @@ mod tests {
         assert!(first_failure(&failing));
     }
 
-    /// R-M4-3: the overlay has one `grabbed` flag; ownership decides who may
-    /// start and who may end an interaction.
-    #[test]
-    fn a_producer_never_takes_over_or_ends_a_grab_it_does_not_own() {
-        use GrabOwner::*;
-        assert!(may_begin_grab(None, GestureModel));
-        assert!(may_begin_grab(Some(GestureModel), GestureModel));
-        assert!(!may_begin_grab(Some(WatchButton), GestureModel));
-        assert!(!may_begin_grab(Some(GestureModel), CornerDemo));
-
-        // A model release must not end a Watch-button grab, or vice versa.
-        assert!(!may_release_grab(Some(WatchButton), Some(GestureModel)));
-        assert!(!may_release_grab(Some(GestureModel), Some(WatchButton)));
-        assert!(!may_release_grab(None, Some(GestureModel)));
-        assert!(may_release_grab(Some(GestureModel), Some(GestureModel)));
-        // Escape / force release / disconnect end any grab.
-        assert!(may_release_grab(Some(WatchButton), None));
-        assert!(may_release_grab(Some(CornerDemo), None));
-        assert!(may_release_grab(None, None));
-    }
-
     /// D-M4-3: a native volume write used to hold the overlay state lock for
     /// the adapter's whole timeout, stalling every cancellation path. The
     /// write now serializes on its own lock, so while one is in flight (here:
@@ -1010,19 +753,6 @@ mod tests {
 
         runtime.state.lock().unwrap().visible = true;
         assert!(runtime.require_visible_for_write().is_ok());
-    }
-
-    /// D-M4-4: the webview must not be able to raise the volume capability
-    /// gate unless the backend itself sees the top-right target active.
-    #[test]
-    fn show_overlay_requires_the_volume_location_to_be_active() {
-        let volume = CalibrationTarget::top_right();
-        let other = CalibrationTarget::new("leftEdge").unwrap();
-        assert!(overlay_show_permitted(Some(&volume), &volume).is_ok());
-        assert!(overlay_show_permitted(Some(&CalibrationTarget::center()), &volume).is_err());
-        assert!(overlay_show_permitted(Some(&other), &volume).is_err());
-        assert!(overlay_show_permitted(Some(&other), &other).is_ok());
-        assert!(overlay_show_permitted(None, &volume).is_err());
     }
 
     #[test]
@@ -1050,41 +780,20 @@ mod tests {
     }
 
     #[test]
-    fn corner_demo_phase_toggles_between_ready_and_adjusting_while_active() {
-        assert_eq!(
-            corner_demo_phase_after_sample(Some(CornerWristVolumeDemoPhase::Ready), true),
-            Some(CornerWristVolumeDemoPhase::Adjusting)
-        );
-        assert_eq!(
-            corner_demo_phase_after_sample(Some(CornerWristVolumeDemoPhase::Adjusting), false),
-            Some(CornerWristVolumeDemoPhase::Ready)
-        );
-        assert_eq!(
-            corner_demo_phase_after_sample(Some(CornerWristVolumeDemoPhase::Ready), false),
-            Some(CornerWristVolumeDemoPhase::Ready)
-        );
-    }
-
-    #[test]
-    fn corner_demo_phase_leaves_inactive_or_unavailable_phases_untouched() {
-        // No corner-demo interaction active: a wrist sample must never
-        // conjure a phase out of nothing (Watch-button/desktop-model grabs
-        // never set one).
-        assert_eq!(corner_demo_phase_after_sample(None, true), None);
-        assert_eq!(corner_demo_phase_after_sample(None, false), None);
-        // An unavailable reason is a terminal display state until the next
-        // explicit `set_corner_demo_phase`/`release`/`hide` call -- a stray
-        // sample must not paper over it with `Ready`.
-        assert_eq!(
-            corner_demo_phase_after_sample(
-                Some(CornerWristVolumeDemoPhase::UnavailableNoOrientation),
-                true
-            ),
-            Some(CornerWristVolumeDemoPhase::UnavailableNoOrientation)
-        );
-        assert_eq!(
-            corner_demo_phase_after_sample(Some(CornerWristVolumeDemoPhase::Targeting), false),
-            Some(CornerWristVolumeDemoPhase::Targeting)
-        );
+    fn a_recipe_drive_follows_the_device_but_no_faster_than_the_slew_limit() {
+        let start = Instant::now();
+        let mut drive = RecipeDrive::begin(50.0);
+        // The first change has no elapsed time to measure, so it is bounded by the minimum step window.
+        let first = drive.advance(40.0, 30.0, start);
+        assert!((first - 50.6).abs() < 1e-3, "got {first}");
+        // Half a second later it may have moved 15 points further, toward the 90 the wrist asked for.
+        let later = drive.advance(0.0, 30.0, start + Duration::from_millis(500));
+        assert!((later - 65.6).abs() < 1e-3, "got {later}");
+        // The wanted volume never leaves 0..=100, however far the device is turned.
+        let mut drive = RecipeDrive::begin(95.0);
+        drive.advance(500.0, 1000.0, start);
+        assert_eq!(drive.wanted, 100.0);
+        drive.advance(-500.0, 1000.0, start);
+        assert_eq!(drive.wanted, 0.0);
     }
 }

@@ -2,11 +2,12 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
-use spatial_protocol::{BUTTON_STATE_DOWN, BUTTON_STATE_UP, STEM_PRIMARY_BUTTON_ID};
+use spatial_protocol::{BUTTON_STATE_DOWN, STEM_PRIMARY_BUTTON_ID};
 use tauri::Manager;
 use tracing::{debug, error, info, warn};
 use watch_bridge::{WatchBridgeServer, WatchEvent};
 
+mod automation;
 mod calibration;
 mod environment;
 mod head_pose;
@@ -139,6 +140,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .manage(automation::AutomationRuntime::default())
         .manage(calibration::CalibrationRuntime::default())
         .manage(overlay::OverlayRuntime::default())
         .manage(overlay::VolumeRuntime::default())
@@ -152,13 +154,13 @@ pub fn run() {
         .manage(inference::PinchInferenceRuntime::default())
         .invoke_handler(tauri::generate_handler![
             calibration::get_calibration_state,
+            automation::get_automation_state,
+            automation::set_recipe_enabled,
             calibration::capture_calibration_target,
             calibration::add_calibration_location,
             calibration::remove_calibration_location,
-            calibration::set_volume_target,
             calibration::update_calibration_config,
             overlay::get_overlay_state,
-            overlay::show_overlay,
             overlay::hide_overlay,
             overlay::adjust_system_volume,
             overlay::refresh_system_volume,
@@ -222,6 +224,7 @@ pub fn run() {
             let handle = app.handle().clone();
             app.manage(settings::SettingsRuntime::load(&handle));
             handle.state::<calibration::CalibrationRuntime>().load(&handle);
+            handle.state::<automation::AutomationRuntime>().load(&handle);
             overlay::prepare_window(&handle).map_err(std::io::Error::other)?;
             model_registry::reconcile_inference_mode_at_startup(&handle);
             head_pose::spawn(handle.clone());
@@ -298,7 +301,6 @@ pub fn run() {
                 loop {
                     match events.recv().await {
                         Ok(event) => {
-                            let overlay = watch_handle.state::<overlay::OverlayRuntime>();
                             match &event {
                                 WatchEvent::Connected => {
                                     if let (Ok(settings), Some(server)) = (
@@ -308,39 +310,10 @@ pub fn run() {
                                         settings::apply_watch_settings(&server, &settings);
                                     }
                                 }
-                                WatchEvent::Button(sample)
-                                    if sample.button == STEM_PRIMARY_BUTTON_ID
-                                        && sample.state == BUTTON_STATE_DOWN =>
-                                {
-                                    match watch_handle.state::<settings::SettingsRuntime>().get() {
-                                        Ok(settings) => {
-                                            let orientation = runtime.latest_orientation().unwrap_or_default();
-                                            let volume_runtime =
-                                                watch_handle.state::<overlay::VolumeRuntime>();
-                                            if let Err(error) = overlay.begin_volume_interaction(
-                                                &watch_handle,
-                                                overlay::GrabOwner::WatchButton,
-                                                settings.wrist_rotation_config(),
-                                                orientation.as_ref(),
-                                                &volume_runtime,
-                                            ) {
-                                                warn!(%error, "failed to begin volume interaction");
-                                            }
-                                        }
-                                        Err(error) => {
-                                            warn!(%error, "failed to read settings for volume interaction");
-                                        }
-                                    }
-                                }
-                                WatchEvent::Button(sample)
-                                    if sample.button == STEM_PRIMARY_BUTTON_ID
-                                        && sample.state == BUTTON_STATE_UP =>
-                                {
-                                    if let Err(error) = overlay
-                                        .release_if_owner(&watch_handle, overlay::GrabOwner::WatchButton)
-                                    {
-                                        warn!(%error, "failed to release volume overlay");
-                                    }
+                                WatchEvent::Button(sample) if sample.button == STEM_PRIMARY_BUTTON_ID => {
+                                    watch_handle
+                                        .state::<automation::AutomationRuntime>()
+                                        .set_stem(&watch_handle, sample.state == BUTTON_STATE_DOWN);
                                 }
                                 WatchEvent::Disconnected => {
                                     watch_handle
@@ -350,11 +323,14 @@ pub fn run() {
                                         &watch_handle,
                                         interaction_engine::ForceReleaseReason::WatchDisconnected,
                                     );
+                                    watch_handle
+                                        .state::<automation::AutomationRuntime>()
+                                        .watch_lost(&watch_handle);
                                 }
                                 WatchEvent::Orientation(sample) => {
-                                    if let Err(error) = overlay.apply_wrist_rotation(&watch_handle, sample) {
-                                        warn!(%error, "failed to apply wrist rotation to volume");
-                                    }
+                                    watch_handle
+                                        .state::<automation::AutomationRuntime>()
+                                        .observe_orientation(&watch_handle, sample);
                                     watch_handle
                                         .state::<inference::PinchInferenceRuntime>()
                                         .observe_orientation(sample);

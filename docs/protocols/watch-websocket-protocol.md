@@ -84,12 +84,12 @@ watch streams regardless and still reports its wear state.
 
 ## Volume overlay grab (STEM button)
 
-When the head tracker dwells on the calibrated top-right target, the desktop
-shows its volume overlay. Holding the watch's STEM_1 hardware key (Wear OS's
-customizable button, distinct from Back/Home/Power) while the overlay is shown
-grabs it; releasing the key releases the grab and hides the overlay. Only this
-one button is dispatched in this milestone — no pinch gesture or wrist-rotation
-volume control yet.
+Holding the watch's STEM_1 hardware key (Wear OS's customizable button, distinct
+from Back/Home/Power) is the "hold the STEM button" stage of a gesture recipe; the
+desktop reports its down and up to the recipe engine, which decides what, if anything,
+that means (by default: with the head on the calibrated top-right location, it grabs
+the volume knob, and releasing the key ends the grab). Only this one button is
+dispatched.
 
 `watch.button` reports a press or release:
 

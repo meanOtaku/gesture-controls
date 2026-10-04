@@ -11,22 +11,6 @@ describe("VolumeKnob", () => {
     expect(container.querySelector(".volume-knob__progress")).toHaveStyle({ "--volume-progress": "64" });
   });
 
-  it("shows no corner-demo status when the phase is absent", () => {
-    render(<VolumeKnob volume={50} />);
-    expect(screen.queryByText(/Ready|Targeting|Adjusting|Unavailable/)).not.toBeInTheDocument();
-  });
-
-  it.each([
-    ["targeting", "Targeting…"],
-    ["ready", "Ready — twist wrist"],
-    ["adjusting", "Adjusting"],
-    ["unavailableNoOrientation", "Unavailable — no Watch orientation"],
-    ["unavailableVolumeUnsupported", "Unavailable — volume control unsupported"],
-  ] as const)("shows the %s corner-demo status", (phase, label) => {
-    render(<VolumeKnob volume={50} cornerDemoPhase={phase} />);
-    expect(screen.getByText(label)).toBeInTheDocument();
-  });
-
   it("shows no native-error alert when there is none", () => {
     render(<VolumeKnob volume={50} />);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();

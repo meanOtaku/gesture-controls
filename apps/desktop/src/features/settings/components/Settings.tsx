@@ -3,8 +3,6 @@ import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { useNumberDrafts } from "../../../shared/forms/useNumberDrafts";
 import type { AppSettings, OverlayState, WatchStatus } from "../../../shared/protocol/events";
 import { ApplySettingsFooter } from "./ApplySettingsFooter";
-import { CornerWristVolumeDemoSection } from "./CornerWristVolumeDemoSection";
-import { CornerWristVolumeDiagnosticsSection } from "./CornerWristVolumeDiagnosticsSection";
 import { HeadphonesSettingsSection } from "./HeadphonesSettingsSection";
 import { RecordingGraphSettingsSection } from "./RecordingGraphSettingsSection";
 import { WatchHealthDeliverySettingsSection } from "./WatchHealthDeliverySettingsSection";
@@ -22,8 +20,6 @@ const EMPTY_OVERLAY_STATE: OverlayState = {
   rotationAngle: 0,
   screenX: 0,
   screenY: 0,
-  cornerDemoPhase: null,
-  lastRelativeRollDegrees: null,
   lastNativeVolumeError: null,
 };
 
@@ -63,10 +59,6 @@ export function Settings({
   };
 
   const toggleHeadphonesEnabled = () => onUpdate({ ...current, headphonesEnabled: !current.headphonesEnabled });
-  const toggleCornerWristVolumeDemoEnabled = () =>
-    onUpdate({ ...current, cornerWristVolumeDemoEnabled: !current.cornerWristVolumeDemoEnabled });
-  const toggleCornerWristVolumeInvertDirection = () =>
-    onUpdate({ ...current, cornerWristVolumeInvertDirection: !current.cornerWristVolumeInvertDirection });
   const toggleWatchSensor = (id: string) =>
     onUpdate({
       ...current,
@@ -107,21 +99,6 @@ export function Settings({
           <WatchHealthDeliverySettingsSection />
 
           <WatchSensorSwitchSection watchSensorsEnabled={current.watchSensorsEnabled} onToggle={toggleWatchSensor} />
-
-          <CornerWristVolumeDemoSection
-            enabled={current.cornerWristVolumeDemoEnabled}
-            invertDirection={current.cornerWristVolumeInvertDirection}
-            onToggleEnabled={toggleCornerWristVolumeDemoEnabled}
-            onToggleInvertDirection={toggleCornerWristVolumeInvertDirection}
-          />
-
-          {current.cornerWristVolumeDemoEnabled && (
-            <CornerWristVolumeDiagnosticsSection
-              overlay={overlay}
-              watchStatus={watchStatus}
-              invertDirection={current.cornerWristVolumeInvertDirection}
-            />
-          )}
 
           <ApplySettingsFooter
             dirtyCount={drafts.dirtyCount}

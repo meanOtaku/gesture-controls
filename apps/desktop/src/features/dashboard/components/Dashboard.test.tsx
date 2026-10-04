@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { Dashboard } from "./Dashboard";
-import type { CalibrationState, HeadTrackerStatus, WatchStatus } from "../../../shared/protocol/events";
+import type { AutomationState, CalibrationState, HeadTrackerStatus, WatchStatus } from "../../../shared/protocol/events";
 
 afterEach(cleanup);
 
@@ -25,7 +25,6 @@ function calibrationFixture(overrides: Partial<CalibrationState> & { saved?: str
       { id: "center", name: "Screen center", calibrated: saved.includes("center"), builtin: true },
       { id: "topRight", name: "Top right", calibrated: saved.includes("topRight"), builtin: false },
     ],
-    volumeTarget: "topRight",
     requiresRecalibration: false,
     activationThresholdDegrees: 12,
     dwellMs: 400,
@@ -163,7 +162,7 @@ describe("Dashboard", () => {
     expect(dashboard.getByRole("button", { name: "Capture Top right" })).not.toBeDisabled();
   });
 
-  it("adds, removes and assigns locations, and refuses a bad name", () => {
+  it("adds and removes locations, and refuses a bad name", () => {
     const calls: string[] = [];
     const calibration = calibrationFixture();
     calibration.targets.push({ id: "leftEdge", name: "Left edge", calibrated: false, builtin: false });
@@ -174,17 +173,12 @@ describe("Dashboard", () => {
         calibration={calibration}
         onAddLocation={(name) => calls.push(`add:${name}`)}
         onRemoveLocation={(id) => calls.push(`remove:${id}`)}
-        onSetVolumeTarget={(id) => calls.push(`volume:${id}`)}
       />,
     );
     const dashboard = within(container);
 
-    // Center is the reference: it cannot be removed or become the volume knob.
+    // Center is the reference: it cannot be removed.
     expect(dashboard.queryByRole("button", { name: "Remove Screen center" })).not.toBeInTheDocument();
-    // The volume location cannot be removed while it is in use.
-    expect(dashboard.getByRole("button", { name: "Remove Top right" })).toBeDisabled();
-    expect(dashboard.getByRole("button", { name: "Use Top right for the volume knob" })).toBeDisabled();
-    fireEvent.click(dashboard.getByRole("button", { name: "Use Left edge for the volume knob" }));
     fireEvent.click(dashboard.getByRole("button", { name: "Remove Left edge" }));
 
     const name = dashboard.getByLabelText("New location name");
@@ -193,8 +187,64 @@ describe("Dashboard", () => {
     expect(name).toHaveAccessibleDescription("A location with that name already exists.");
     fireEvent.change(name, { target: { value: "  Desk lamp " } });
     fireEvent.click(dashboard.getByRole("button", { name: "Add location" }));
-    expect(calls).toEqual(["volume:leftEdge", "remove:leftEdge", "add:Desk lamp"]);
+    expect(calls).toEqual(["remove:leftEdge", "add:Desk lamp"]);
     expect(name).toHaveValue("");
+  });
+
+  const automation: AutomationState = {
+    recipes: [
+      {
+        id: "lookStemVolume", name: "Look top right, hold STEM, roll", enabled: true, action: "volume",
+        stages: [
+          { kind: "headAt", location: "topRight" },
+          { kind: "hold", hold: "stemButton" },
+          { kind: "drive", axis: "roll", deadZoneDegrees: 3, invert: false },
+        ],
+        device: { kind: "rotationKnob", fractionPerDegree: 0.005 },
+      },
+      {
+        id: "lookPinchVolume", name: "Look top right, pinch, roll", enabled: true, action: "volume",
+        stages: [
+          { kind: "headAt", location: "topRight" },
+          { kind: "hold", hold: "pinch" },
+          { kind: "drive", axis: "roll", deadZoneDegrees: 3, invert: false },
+        ],
+        device: { kind: "rotationKnob", fractionPerDegree: 0.005 },
+      },
+    ],
+    blocked: ["lookStemVolume", "lookPinchVolume"],
+    conflicts: [{ resource: "volume", first: "lookStemVolume", second: "lookPinchVolume" }],
+  };
+
+  it("says which two recipes are in conflict and lets one be switched off", () => {
+    const toggles: Array<[string, boolean]> = [];
+    const { container } = render(
+      <Dashboard
+        status={null}
+        calibration={calibrationFixture()}
+        automation={automation}
+        onSetRecipeEnabled={(id, enabled) => toggles.push([id, enabled])}
+      />,
+    );
+    const recipes = within(container);
+    expect(recipes.getByText("These gestures are fighting over volume")).toBeInTheDocument();
+    expect(recipes.getByText(/“Look top right, hold STEM, roll” and “Look top right, pinch, roll” both control volume/)).toBeInTheDocument();
+    expect(recipes.getAllByText("Paused: conflict")).toHaveLength(2);
+    expect(recipes.getByText("Look at Top right → Pinch and hold → Roll wrist → rotation knob → Volume")).toBeInTheDocument();
+    fireEvent.click(recipes.getByRole("switch", { name: "Look top right, pinch, roll on" }));
+    expect(toggles).toEqual([["lookPinchVolume", false]]);
+  });
+
+  it("shows no conflict message when the recipes do not clash", () => {
+    const { container } = render(
+      <Dashboard
+        status={null}
+        calibration={calibrationFixture()}
+        automation={{ ...automation, blocked: [], conflicts: [] }}
+      />,
+    );
+    expect(within(container).queryByText(/fighting over/)).not.toBeInTheDocument();
+    expect(within(container).queryByText("Paused: conflict")).not.toBeInTheDocument();
   });
 
   const watchStatus: WatchStatus = {

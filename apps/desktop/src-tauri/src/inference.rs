@@ -45,12 +45,10 @@ use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tracing::warn;
 
+use crate::automation::AutomationRuntime;
 use crate::model_registry::{
     self, InferenceMode, ModelThresholds, QualityGateConfig, QualityGateRejection,
 };
-use crate::overlay::{GrabOwner, OverlayRuntime};
-use crate::settings::SettingsRuntime;
-use crate::watch::WatchRuntime;
 
 /// Mirrored in `src/shared/protocol/events.ts`; `event_names_match_the_frontend_protocol`
 /// fails if the two drift.
@@ -435,10 +433,7 @@ fn force_release_policy(app: &AppHandle, reason: ForceReleaseReason) {
 /// channel) where the watch's own last-reported button state can no longer
 /// be trusted either, unlike a single rejected PPG window.
 pub(crate) fn force_release_and_hide(app: &AppHandle, reason: ForceReleaseReason) {
-    let overlay = app.state::<OverlayRuntime>();
-    if let Err(error) = overlay.release(app) {
-        warn!(%error, "failed to release overlay while forcing gesture policy release");
-    }
+    app.state::<AutomationRuntime>().cancel(app);
     force_release_policy(app, reason);
 }
 
@@ -785,41 +780,14 @@ pub(crate) fn apply_decision(app: &AppHandle, decision: PolicyDecision) {
     if !decision_actuates(decision) {
         return;
     }
-    let overlay = app.state::<OverlayRuntime>();
+    let automation = app.state::<AutomationRuntime>();
     match decision.intent {
-        GestureIntent::VolumeGrab => match app.state::<SettingsRuntime>().get() {
-            Ok(settings) => {
-                let orientation = app
-                    .state::<WatchRuntime>()
-                    .latest_orientation()
-                    .unwrap_or_default();
-                let volume_runtime = app.state::<crate::overlay::VolumeRuntime>();
-                if let Err(error) = overlay.begin_volume_interaction(
-                    app,
-                    GrabOwner::GestureModel,
-                    settings.wrist_rotation_config(),
-                    orientation.as_ref(),
-                    &volume_runtime,
-                ) {
-                    warn!(%error, "failed to begin volume interaction from gesture policy decision");
-                }
-            }
-            Err(error) => {
-                warn!(%error, "failed to read settings for gesture policy volume interaction");
-            }
+        GestureIntent::VolumeGrab => automation.set_pinch(app, true),
+        GestureIntent::VolumeRelease => match decision.reason {
+            // A forced release (model failure, stale window, disconnect) also cancels what the pinch started.
+            DecisionReason::ForcedRelease(_) => automation.cancel(app),
+            _ => automation.set_pinch(app, false),
         },
-        GestureIntent::VolumeRelease => {
-            // A model's own release may only end a grab the model started;
-            // forced releases never reach here as `VolumeRelease` ownership
-            // checks -- they go through `force_release_and_hide`.
-            let result = match decision.reason {
-                DecisionReason::ForcedRelease(_) => overlay.release(app),
-                _ => overlay.release_if_owner(app, GrabOwner::GestureModel),
-            };
-            if let Err(error) = result {
-                warn!(%error, "failed to release overlay from gesture policy decision");
-            }
-        }
         GestureIntent::NoAction
         | GestureIntent::Mute
         | GestureIntent::PlayPause

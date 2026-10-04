@@ -77,18 +77,6 @@ pub struct AppSettings {
     /// is treated as "enabled" — see [`apply_watch_settings`].
     #[serde(default = "default_watch_sensors_enabled")]
     pub watch_sensors_enabled: HashMap<String, bool>,
-    /// Explicit opt-in for the corner-gated demo interaction: dwelling on the
-    /// calibrated top-right target grabs the volume overlay directly (no
-    /// STEM button needed) and wrist twists adjust volume while it holds.
-    /// Default off; the Watch-button and desktop-model grab paths are
-    /// unaffected either way. See [`Self::corner_wrist_volume_config`].
-    #[serde(default)]
-    pub corner_wrist_volume_demo_enabled: bool,
-    /// Physical direction calibration for the corner-gated demo only: flips
-    /// clockwise/counter-clockwise if this Watch's mounting reports the
-    /// opposite sign. Has no effect on the Watch-button/desktop-model paths.
-    #[serde(default)]
-    pub corner_wrist_volume_invert_direction: bool,
     /// Which link reaches the Watch. Absent from an older settings.json — every
     /// file written before GC-037 — migrates to [`WatchTransport::Bluetooth`],
     /// which is also what a fresh install gets. Only one transport is ever
@@ -119,8 +107,6 @@ impl Default for AppSettings {
                 default_wrist_max_angular_velocity_degrees_per_second(),
             wrist_max_volume_points_per_second: default_wrist_max_volume_points_per_second(),
             watch_sensors_enabled: default_watch_sensors_enabled(),
-            corner_wrist_volume_demo_enabled: false,
-            corner_wrist_volume_invert_direction: false,
             watch_transport: WatchTransport::default(),
         }
     }
@@ -155,31 +141,6 @@ fn default_wrist_max_volume_points_per_second() -> f64 {
 }
 
 impl AppSettings {
-    /// Builds the wrist-rotation configuration both the Watch-button and the
-    /// approved desktop-model grab paths hand to
-    /// `OverlayRuntime::begin_volume_interaction`, so the two callers can
-    /// never drift apart on which settings drive the interaction.
-    pub fn wrist_rotation_config(&self) -> interaction_engine::WristRotationConfig {
-        interaction_engine::WristRotationConfig {
-            dead_zone_degrees: self.wrist_dead_zone_degrees,
-            volume_points_per_degree: self.wrist_volume_points_per_degree,
-            max_angular_velocity_degrees_per_second: self
-                .wrist_max_angular_velocity_degrees_per_second,
-            max_volume_points_per_second: self.wrist_max_volume_points_per_second,
-            invert_direction: false,
-        }
-    }
-
-    /// Same tuning as [`Self::wrist_rotation_config`], with the corner-demo's
-    /// own direction calibration applied. Kept separate so inverting the
-    /// demo's direction can never flip the Watch-button/desktop-model paths.
-    pub fn corner_wrist_volume_config(&self) -> interaction_engine::WristRotationConfig {
-        interaction_engine::WristRotationConfig {
-            invert_direction: self.corner_wrist_volume_invert_direction,
-            ..self.wrist_rotation_config()
-        }
-    }
-
     pub fn validate(&self) -> Result<(), String> {
         in_range(
             "headphonesRateHz",
@@ -530,6 +491,8 @@ pub fn update_settings(
 ) -> Result<AppSettings, String> {
     let previous_transport = runtime.get().map(|current| current.watch_transport).ok();
     let applied = runtime.update(&app, settings)?;
+    app.state::<crate::automation::AutomationRuntime>()
+        .apply_settings(&app, &applied);
     if let Some(server) = app.try_state::<std::sync::Arc<WatchBridgeServer>>() {
         apply_watch_settings(&server, &applied);
     }
@@ -554,6 +517,8 @@ pub fn reset_settings(
     app: AppHandle,
 ) -> Result<AppSettings, String> {
     let applied = runtime.reset_to_defaults(&app)?;
+    app.state::<crate::automation::AutomationRuntime>()
+        .apply_settings(&app, &applied);
     if let Some(server) = app.try_state::<std::sync::Arc<WatchBridgeServer>>() {
         apply_watch_settings(&server, &applied);
     }

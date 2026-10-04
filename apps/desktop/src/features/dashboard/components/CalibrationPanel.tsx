@@ -24,7 +24,6 @@ type CalibrationPanelProps = {
   onUpdateCalibration: (activationThresholdDegrees: number, dwellMs: number) => void;
   onAddLocation: (name: string) => void;
   onRemoveLocation: (target: CalibrationTarget) => void;
-  onSetVolumeTarget: (target: CalibrationTarget) => void;
 };
 
 /** Why a new location's name cannot be used, or null. */
@@ -48,7 +47,6 @@ export function CalibrationPanel({
   onUpdateCalibration,
   onAddLocation,
   onRemoveLocation,
-  onSetVolumeTarget,
 }: CalibrationPanelProps) {
   const [newName, setNewName] = useState("");
   const [nameTouched, setNameTouched] = useState(false);
@@ -107,7 +105,7 @@ export function CalibrationPanel({
           description="Head calibration"
           help={{
             label: "About head calibration",
-            content: "Capture the screen center, then look at a location and capture it. Add as many locations as you like. The location marked as the volume knob raises the volume gesture once your head crosses the threshold angle toward it and stays there for the dwell time. A tracker reset clears every capture but keeps your locations.",
+            content: "Capture the screen center, then look at a location and capture it. Add as many locations as you like. A recipe that starts with looking at a location begins once your head crosses the threshold angle toward it and stays there for the dwell time. A tracker reset clears every capture but keeps your locations.",
           }}
           status={
             <Badge variant={activeName ? "default" : "secondary"}>
@@ -127,7 +125,6 @@ export function CalibrationPanel({
         <ul className="flex flex-col gap-2" aria-label="Locations">
           {calibration.targets.map((location) => {
             const capturing = isPending(`capture:${location.id}`);
-            const isVolume = location.id === calibration.volumeTarget;
             return (
               <li key={location.id} className="flex flex-wrap items-center gap-3" aria-label={location.name}>
                 <div className="flex min-w-32 flex-1 flex-col">
@@ -144,28 +141,15 @@ export function CalibrationPanel({
                   {capturing ? "Capturing…" : location.calibrated ? "Recapture" : "Capture"}
                 </Button>
                 {!location.builtin && (
-                  <>
-                    <Button
-                      type="button"
-                      variant={isVolume ? "default" : "outline"}
-                      aria-pressed={isVolume}
-                      aria-label={`Use ${location.name} for the volume knob`}
-                      disabled={isVolume || isPending("location:volume")}
-                      onClick={() => onSetVolumeTarget(location.id)}
-                    >
-                      {isVolume ? "Volume knob" : "Use for volume"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      aria-label={`Remove ${location.name}`}
-                      title={isVolume ? "Choose another location for the volume knob first" : undefined}
-                      disabled={isVolume || isPending(`location:remove:${location.id}`)}
-                      onClick={() => onRemoveLocation(location.id)}
-                    >
-                      Remove
-                    </Button>
-                  </>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    aria-label={`Remove ${location.name}`}
+                    disabled={isPending(`location:remove:${location.id}`)}
+                    onClick={() => onRemoveLocation(location.id)}
+                  >
+                    Remove
+                  </Button>
                 )}
               </li>
             );

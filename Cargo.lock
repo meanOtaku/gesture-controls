@@ -3713,6 +3713,7 @@ dependencies = [
 name = "spatial-gesture-desktop"
 version = "0.1.0"
 dependencies = [
+ "automation",
  "chrono",
  "head-tracking",
  "interaction-engine",

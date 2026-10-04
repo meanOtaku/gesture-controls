@@ -166,7 +166,7 @@ test("wires keyboard adjustments and live refresh to the platform volume control
       publishBody.indexOf("Ok(volume_percent)") < publishBody.indexOf("state.volume ="),
     "state.volume is only assigned on the success arm",
   );
-  for (const signature of ["fn release_matching(", "fn hide("]) {
+  for (const signature of ["fn release(", "fn hide("]) {
     const body = extractFunctionBody(overlaySource, signature);
     assert.ok(body, `${signature} exists`);
     assert.ok(

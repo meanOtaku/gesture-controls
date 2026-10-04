@@ -83,7 +83,7 @@ Use it to confirm that the system is connected before moving into calibration, r
 The **Headphones** tab is for Sony tracker status and gaze calibration.
 
 - Displays device identity, orientation, quaternion, gyroscope, packet rate, latency, and reset state.
-- Lets you capture the **center** reference and any number of named locations (**Top right** is there to start with). **Add location** creates another, **Remove** deletes one (Center cannot be removed), and **Use for volume** picks which location raises the volume overlay. Locations and the volume choice are remembered between runs; captures are not, because a head pose only means something for the tracker session it was taken in.
+- Lets you capture the **center** reference and any number of named locations (**Top right** is there to start with). **Add location** creates another and **Remove** deletes one (Center cannot be removed). Recipes refer to locations by name. Locations are remembered between runs; captures are not, because a head pose only means something for the tracker session it was taken in.
 - Lets you adjust the target acceptance threshold and dwell duration.
 - Reports when recalibration is needed after a tracker reference-frame reset.
 
@@ -92,7 +92,7 @@ The **Headphones** tab is for Sony tracker status and gaze calibration.
 1. Put on the headset and wait for a stable connection.
 2. Face your neutral forward direction and capture **Center**.
 3. Look at the place you want to use and capture that location (for example **Top right**).
-4. Hold your gaze on the location marked **Volume knob** for the configured dwell time to show the volume overlay.
+4. Hold your gaze on the location a recipe starts from, for the configured dwell time, to show the volume overlay.
 5. Leaving the location, losing headset tracking, or pressing **Escape** hides the overlay.
 
 The overlay is deliberately non-focus-stealing. Keyboard volume controls only work while a visible overlay and a supported native volume backend are available.
@@ -260,7 +260,7 @@ Incoming Sony packets still maintain connection and calibration state; this sett
 
 #### Wrist rotation tuning
 
-These settings apply to the next successful volume grab (from the Watch button fallback or an approved live model gesture):
+These settings set the feel of every volume recipe that uses a rotation knob (until recipes carry their own settings), and apply the next time a recipe starts:
 
 - **Dead zone:** rotation ignored near the starting pose.
 - **Sensitivity:** volume points per degree.
@@ -268,11 +268,6 @@ These settings apply to the next successful volume grab (from the Watch button f
 - **Max volume rate:** caps how quickly volume can change; the volume follows the wrist angle but moves no faster than this many points per second.
 
 Defaults target roughly 30 volume points for a 90° twist. Begin with defaults and adjust gradually using a test audio output.
-
-#### Corner wrist volume (demo)
-
-- **Enable demo interaction:** off by default. When on, dwelling on the calibrated volume-knob location begins the volume interaction directly, without the Watch button. See [§5 Corner wrist volume (demo)](#corner-wrist-volume-demo) for the full behavior and fail-closed guarantees.
-- **Invert twist direction:** only shown while the demo is enabled. Flips which twist direction raises vs. lowers volume, for a Watch mounted with the opposite physical handedness. Affects only this demo interaction.
 
 #### Recording, graphs, and Watch rates
 
@@ -285,31 +280,29 @@ These controls preserve raw source timestamps. For health sensors, Samsung/devic
 
 ## 5. How volume control works
 
-### Watch-button fallback
+Volume is driven by **gesture recipes**, shown on the Control center. A recipe is a chain of gestures that all have to hold, ending in a wrist rotation that turns a virtual knob:
 
-With model inference Off, the supported Watch-button interaction can begin a volume grab after the gaze target is active. The desktop establishes a fresh wrist-orientation reference, then maps safe wrist rotation to bounded volume changes. Releasing the button ends the interaction.
+> Look at *Top right* → Pinch and hold (or hold the STEM button) → Roll the wrist → rotation knob → Volume
 
-### One interaction at a time
+Three recipes come with the app, and only the first is on:
 
-Each volume interaction has an owner: the Watch button, a model gesture, or the corner demo. A second source cannot take over or reset an interaction another source owns, and a source's normal end (button release, a model's release) only ends its own interaction. Escape, a Watch disconnect, leaving the gaze target, a model swap, and every safety rejection end any interaction regardless of owner.
+- **Look top right, hold STEM, roll** (on): the knob appears when you look at the location; hold the Watch's STEM button and roll your wrist to change the volume.
+- **Look top right, pinch, roll** (off): the same, but the hold is the PPG pinch gesture. It needs a validated model in Live mode.
+- **Look top right, roll** (off): no hold at all; looking at the location is enough to start turning.
+
+### One recipe per thing you control
+
+Two enabled recipes that control the same thing (today only volume) are in **conflict**: both are paused and the Control center says which two, until you switch one off. This is deliberate. A silent "first one wins" would make it unclear which gesture is in charge.
+
+### What happens during a gesture
+
+- Looking at the location (for the configured dwell time) shows the knob. Looking away hides it.
+- When every step holds, the volume is anchored to what it is at that moment and follows the wrist from there. The orientation when the hold began is the zero point, so you never have to start from a particular wrist angle.
+- Letting go of the hold, looking away, losing the Watch, a model failure or pressing **Escape** ends it. After Escape the same gesture does nothing until you release it and start again.
 
 ### How fast volume can change
 
-The volume follows the wrist angle but moves no faster than **Max volume rate** (30 points per second by default), the first wrist reading after a grab is checked against the reference pose like every later one, and wrist-driven changes reach the operating system at most about ten times per second. The overlay only appears while the desktop's own calibration shows you on the volume-knob location.
-
-### Model-assisted gesture
-
-With a validated active TFLite model in Live mode, the desktop may begin or release only the intent explicitly bound to the model class. The model does not run on the Watch or headphones. The same desktop transaction is used for model and button initiation so a new interaction always gets a fresh rotation reference.
-
-### Corner wrist volume (demo)
-
-An explicit, default-off opt-in in Settings. While enabled, dwelling on the calibrated volume-knob location begins the volume interaction directly — no STEM button press needed — using the same desktop transaction (fresh wrist-orientation reference, dead zone, velocity-outlier rejection, volume-rate cap, and native volume call) as the Watch-button and model-assisted paths. Clockwise twist raises volume; counter-clockwise lowers it. If your Watch's physical mounting reports the opposite handedness, use the demo's own **Invert twist direction** toggle — it only affects this demo interaction, never the Watch-button or model-assisted paths.
-
-The overlay shows a compact status while the demo is enabled: *Targeting…*, *Ready — twist wrist*, *Adjusting*, or an *Unavailable* reason (no live Watch orientation, or the native volume backend on this platform is unsupported).
-
-Fails closed the same way every time: leaving the top-right target, losing head-tracker calibration, a stale/disconnected Watch, or pressing Escape immediately ends the interaction and clears the reference pose, so any later wrist twist has no effect until the target is re-entered and a new reference is established. Disabling the setting makes this path fully inert — gazing at the target and twisting the wrist changes nothing, same as before this feature existed.
-
-**Manual verification remaining:** this demo interaction has been proven with unit tests exercising sign/direction, fresh-reference-on-entry, gating, and every fail-closed exit path, but the actual clockwise/counter-clockwise walkthrough on a physical Galaxy Watch and a supported native volume backend has not been performed in this environment (no connected hardware). Before relying on this for a live demo, wear the Watch, enable the setting, and confirm real clockwise/counter-clockwise twists raise/lower volume in the expected direction — flip **Invert twist direction** if they're reversed.
+The volume follows the wrist but moves no faster than **Max volume rate** (30 points per second by default), implausibly fast twists are ignored (**Max angular velocity**), and writes reach the operating system at most about ten times per second.
 
 ### Native platform volume backends
 

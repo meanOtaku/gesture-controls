@@ -47,21 +47,35 @@ export interface CalibrationState {
   activationThresholdDegrees: number;
   dwellMs: number;
   activeTarget: CalibrationTarget | null;
-  /** The location that raises the volume overlay. */
-  volumeTarget: CalibrationTarget;
 }
 
-/**
- * Compact status for the corner-gated wrist-volume demo (`corner_demo_phase`
- * in `apps/desktop/src-tauri/src/overlay.rs`). `null` whenever the demo mode
- * is off or no corner-demo interaction is in progress.
- */
-export type CornerWristVolumeDemoPhase =
-  | "targeting"
-  | "ready"
-  | "adjusting"
-  | "unavailableNoOrientation"
-  | "unavailableVolumeUnsupported";
+/** One step of a recipe's chain. A recipe ends with a `drive` stage, which supplies the continuous value. */
+export type RecipeStage =
+  | { kind: "headAt"; location: CalibrationTarget }
+  | { kind: "hold"; hold: "pinch" | "stemButton" }
+  | { kind: "drive"; axis: "roll" | "pitch" | "yaw"; deadZoneDegrees: number; invert: boolean };
+
+export interface Recipe {
+  id: string;
+  name: string;
+  enabled: boolean;
+  stages: RecipeStage[];
+  device: { kind: "rotationKnob" | "horizontalFader" | "verticalFader" | "stepKnob" } & Record<string, number | string>;
+  action: "volume";
+}
+
+/** Two enabled recipes driving the same resource; both are held off until one is disabled. */
+export interface RecipeConflict {
+  resource: string;
+  first: string;
+  second: string;
+}
+
+export interface AutomationState {
+  recipes: Recipe[];
+  blocked: string[];
+  conflicts: RecipeConflict[];
+}
 
 export interface OverlayState {
   visible: boolean;
@@ -70,9 +84,6 @@ export interface OverlayState {
   rotationAngle: number;
   screenX: number;
   screenY: number;
-  cornerDemoPhase: CornerWristVolumeDemoPhase | null;
-  /** Raw relative roll (degrees from the wrist-rotation reference pose), throttled server-side. `null` while no reference is active. */
-  lastRelativeRollDegrees: number | null;
   /** The most recent failed native volume read/write's error text; `null` once the last native volume operation succeeded. */
   lastNativeVolumeError: string | null;
 }
@@ -170,6 +181,7 @@ export interface HeadTrackerDiagnostic {
   detail: string;
   action: string | null;
 }
+export const AUTOMATION_STATE_EVENT = "automation-state";
 export const CALIBRATION_STATE_EVENT = "head-calibration-state";
 export const HEAD_TARGET_ENTERED_EVENT = "head-target-entered";
 export const HEAD_TARGET_EXITED_EVENT = "head-target-exited";
@@ -253,10 +265,6 @@ export interface AppSettings {
   wristMaxAngularVelocityDegreesPerSecond: number;
   wristMaxVolumePointsPerSecond: number;
   watchSensorsEnabled: Record<string, boolean>;
-  /** Opt-in: dwelling on the calibrated top-right target grabs the volume overlay directly. Default off. */
-  cornerWristVolumeDemoEnabled: boolean;
-  /** Direction calibration for the corner-gated demo only; does not affect the Watch-button/desktop-model paths. */
-  cornerWristVolumeInvertDirection: boolean;
   /** Which link reaches the Watch. Defaults to Bluetooth, including for settings files written before the field existed. */
   watchTransport: WatchTransport;
 }

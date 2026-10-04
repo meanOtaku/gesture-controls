@@ -38,7 +38,6 @@ beforeEach(() => {
           { id: "center", name: "Screen center", calibrated: true, builtin: true },
           { id: "topRight", name: "Top right", calibrated: true, builtin: false },
         ],
-        volumeTarget: "topRight",
         requiresRecalibration: false,
         activationThresholdDegrees: 12,
         dwellMs: 400,
@@ -136,7 +135,6 @@ describe("App overlay integration", () => {
             { id: "center", name: "Screen center", calibrated: true, builtin: true },
             { id: "topRight", name: "Top right", calibrated: true, builtin: false },
           ],
-          volumeTarget: "topRight",
           requiresRecalibration: false,
           activationThresholdDegrees: 12,
           dwellMs: 400,
@@ -163,7 +161,6 @@ describe("App overlay integration", () => {
             { id: "center", name: "Screen center", calibrated: true, builtin: true },
             { id: "topRight", name: "Top right", calibrated: true, builtin: false },
           ],
-          volumeTarget: "topRight",
           requiresRecalibration: false,
           activationThresholdDegrees: 12,
           dwellMs: 400,
@@ -185,12 +182,11 @@ describe("App overlay integration", () => {
     expect(invoke).toHaveBeenCalledWith("adjust_system_volume", { delta: 5 });
   });
 
-  it("shows the knob for the top-right target and supports keyboard system volume control", async () => {
+  it("supports keyboard system volume control while a recipe has the knob up", async () => {
     render(<App />);
-    await waitFor(() => expect(listeners.has(HEAD_TARGET_ENTERED_EVENT)).toBe(true));
-
-    await act(async () => listeners.get(HEAD_TARGET_ENTERED_EVENT)?.({ payload: "topRight" }));
-    expect(invoke).toHaveBeenCalledWith("show_overlay");
+    await waitFor(() => expect(listeners.has(OVERLAY_STATE_EVENT)).toBe(true));
+    // The backend shows the knob when a recipe's head stage holds; the webview never asks for it.
+    expect(invoke).not.toHaveBeenCalledWith("show_overlay");
     await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: true } }));
 
     fireEvent.keyDown(window, { key: "ArrowUp" });
@@ -198,6 +194,18 @@ describe("App overlay integration", () => {
 
     await act(async () => listeners.get(HEAD_TRACKER_CONNECTION_EVENT)?.({ payload: false }));
     expect(invoke).toHaveBeenCalledWith("hide_overlay");
+  });
+
+  it("keeps working after Escape once a recipe shows the knob again", async () => {
+    render(<App />);
+    await waitFor(() => expect(listeners.has(OVERLAY_STATE_EVENT)).toBe(true));
+    await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: true } }));
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("hide_overlay"));
+    // Escape ended that interaction; a later one shows the knob again and the arrows must work.
+    await act(async () => listeners.get(OVERLAY_STATE_EVENT)?.({ payload: { visible: true } }));
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    expect(invoke).toHaveBeenCalledWith("adjust_system_volume", { delta: 5 });
   });
 
   it("limits key repeat to one native volume adjustment at a time", async () => {
@@ -210,7 +218,6 @@ describe("App overlay integration", () => {
             { id: "center", name: "Screen center", calibrated: true, builtin: true },
             { id: "topRight", name: "Top right", calibrated: true, builtin: false },
           ],
-          volumeTarget: "topRight",
           requiresRecalibration: false,
           activationThresholdDegrees: 12,
           dwellMs: 400,
@@ -247,7 +254,6 @@ describe("App overlay integration", () => {
           { id: "center", name: "Screen center", calibrated: true, builtin: true },
           { id: "topRight", name: "Top right", calibrated: true, builtin: false },
         ],
-        volumeTarget: "topRight",
         requiresRecalibration: false,
         activationThresholdDegrees: 12,
         dwellMs: 400,
@@ -274,75 +280,6 @@ describe("App overlay integration", () => {
     expect(invoke).not.toHaveBeenCalledWith("adjust_system_volume", expect.anything());
   });
 
-  it("keeps a newer volume failure when an older request succeeds later", async () => {
-    let resolveFirst: (() => void) | undefined;
-    const firstShow = new Promise<void>((resolve) => { resolveFirst = resolve; });
-    let showCalls = 0;
-    invoke.mockImplementation((command: string) => {
-      if (command === "get_calibration_state") return Promise.resolve({
-        targets: [
-          { id: "center", name: "Screen center", calibrated: true, builtin: true },
-          { id: "topRight", name: "Top right", calibrated: true, builtin: false },
-        ],
-        volumeTarget: "topRight",
-        requiresRecalibration: false,
-        activationThresholdDegrees: 12,
-        dwellMs: 400,
-        activeTarget: null,
-      });
-      if (command === "get_overlay_state") return Promise.resolve({ visible: false, volume: 50 });
-      if (command === "show_overlay") {
-        showCalls += 1;
-        return showCalls === 1 ? firstShow : Promise.reject(new Error("newer volume failure"));
-      }
-      return Promise.resolve(undefined);
-    });
-
-    render(<App />);
-    await waitFor(() => expect(listeners.has(HEAD_TARGET_ENTERED_EVENT)).toBe(true));
-    await act(async () => listeners.get(HEAD_TARGET_ENTERED_EVENT)?.({ payload: "topRight" }));
-    await act(async () => listeners.get(HEAD_TARGET_ENTERED_EVENT)?.({ payload: "topRight" }));
-    openHeadphoneTab();
-    expect(await screen.findByRole("alert")).toHaveTextContent(/newer volume failure/i);
-
-    await act(async () => resolveFirst?.());
-    expect(screen.getByRole("alert")).toHaveTextContent(/newer volume failure/i);
-  });
-
-  it("ignores an older volume failure after a newer request succeeds", async () => {
-    let rejectFirst: ((error: Error) => void) | undefined;
-    const firstShow = new Promise<void>((_resolve, reject) => { rejectFirst = reject; });
-    let showCalls = 0;
-    invoke.mockImplementation((command: string) => {
-      if (command === "get_calibration_state") return Promise.resolve({
-        targets: [
-          { id: "center", name: "Screen center", calibrated: true, builtin: true },
-          { id: "topRight", name: "Top right", calibrated: true, builtin: false },
-        ],
-        volumeTarget: "topRight",
-        requiresRecalibration: false,
-        activationThresholdDegrees: 12,
-        dwellMs: 400,
-        activeTarget: null,
-      });
-      if (command === "get_overlay_state") return Promise.resolve({ visible: false, volume: 50 });
-      if (command === "show_overlay") {
-        showCalls += 1;
-        return showCalls === 1 ? firstShow : Promise.resolve(undefined);
-      }
-      return Promise.resolve(undefined);
-    });
-
-    render(<App />);
-    await waitFor(() => expect(listeners.has(HEAD_TARGET_ENTERED_EVENT)).toBe(true));
-    await act(async () => listeners.get(HEAD_TARGET_ENTERED_EVENT)?.({ payload: "topRight" }));
-    await act(async () => listeners.get(HEAD_TARGET_ENTERED_EVENT)?.({ payload: "topRight" }));
-
-    await act(async () => rejectFirst?.(new Error("stale volume failure")));
-    openHeadphoneTab();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  });
-
   it("shows calibration and volume failures together", async () => {
     invoke.mockImplementation((command: string) => {
       if (command === "get_calibration_state") return Promise.resolve({
@@ -350,7 +287,6 @@ describe("App overlay integration", () => {
           { id: "center", name: "Screen center", calibrated: true, builtin: true },
           { id: "topRight", name: "Top right", calibrated: true, builtin: false },
         ],
-        volumeTarget: "topRight",
         requiresRecalibration: false,
         activationThresholdDegrees: 12,
         dwellMs: 400,
@@ -378,36 +314,6 @@ describe("App overlay integration", () => {
     });
   });
 
-  it("surfaces failure to read system volume when opening the overlay", async () => {
-    invoke.mockImplementation((command: string) => {
-      if (command === "get_calibration_state") {
-        return Promise.resolve({
-          targets: [
-            { id: "center", name: "Screen center", calibrated: true, builtin: true },
-            { id: "topRight", name: "Top right", calibrated: true, builtin: false },
-          ],
-          volumeTarget: "topRight",
-          requiresRecalibration: false,
-          activationThresholdDegrees: 12,
-          dwellMs: 400,
-          activeTarget: null,
-        });
-      }
-      if (command === "get_overlay_state") return Promise.resolve({ visible: false, volume: 50 });
-      if (command === "show_overlay") return Promise.reject(new Error("cannot read output volume"));
-      return Promise.resolve(undefined);
-    });
-
-    render(<App />);
-    await waitFor(() => expect(listeners.has(HEAD_TARGET_ENTERED_EVENT)).toBe(true));
-    await act(async () => listeners.get(HEAD_TARGET_ENTERED_EVENT)?.({ payload: "topRight" }));
-
-    openHeadphoneTab();
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      /volume control failed.*cannot read output volume/i,
-    );
-  });
-
   it("surfaces native volume backend failures", async () => {
     invoke.mockImplementation((command: string) => {
       if (command === "get_calibration_state") {
@@ -416,7 +322,6 @@ describe("App overlay integration", () => {
             { id: "center", name: "Screen center", calibrated: true, builtin: true },
             { id: "topRight", name: "Top right", calibrated: true, builtin: false },
           ],
-          volumeTarget: "topRight",
           requiresRecalibration: false,
           activationThresholdDegrees: 12,
           dwellMs: 400,
@@ -437,26 +342,6 @@ describe("App overlay integration", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /volume control failed.*audio device unavailable/i,
     );
-  });
-
-  it("reconciles an already-active top-right target after listeners register", async () => {
-    invoke.mockImplementation((command: string) => command === "get_calibration_state"
-      ? Promise.resolve({
-        targets: [
-          { id: "center", name: "Screen center", calibrated: true, builtin: true },
-          { id: "topRight", name: "Top right", calibrated: true, builtin: false },
-        ],
-        volumeTarget: "topRight",
-        requiresRecalibration: false,
-        activationThresholdDegrees: 12,
-        dwellMs: 400,
-        activeTarget: "topRight",
-      })
-      : Promise.resolve(undefined));
-
-    render(<App />);
-
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("show_overlay"));
   });
 
   it("does not let an older overlay snapshot overwrite a newer event", async () => {
