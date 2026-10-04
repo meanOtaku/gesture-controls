@@ -15,6 +15,7 @@ tauri-build = { version = "2", features = [] }
 chrono.workspace = true
 automation = { path = "../../../crates/automation" }
 head-tracking = { path = "../../../crates/head-tracking" }
+model-lab-core = { path = "../../../crates/model-lab-core" }
 interaction-engine = { path = "../../../crates/interaction-engine" }
 native-head-tracking = { path = "../../../crates/native-head-tracking" }
 pinch-inference = { path = "../../../crates/pinch-inference" }

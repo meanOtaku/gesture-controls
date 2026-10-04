@@ -1509,6 +1509,49 @@ pub fn set_inference_mode(
 mod tests {
     use super::*;
 
+    /// The per-label registry migrates this registry's real serialised form. If a field here is renamed or retyped,
+    /// this fails instead of the migration quietly misreading an old file.
+    #[test]
+    fn the_per_label_registry_can_migrate_what_this_registry_actually_writes() {
+        let mut older = ModelRecord::new("model-older".to_string());
+        older.push_transition(ModelLifecycleState::Evaluated);
+        older.push_transition(ModelLifecycleState::Approved);
+        older.intent_bindings = vec![ModelIntentBinding {
+            class_label: "pinch_start".to_string(),
+            intent: GestureIntent::VolumeGrab,
+        }];
+        let mut newer = ModelRecord::new("model-newer".to_string());
+        newer.imported_tflite_bundle = true;
+        let index = RegistryIndex {
+            models: vec![older, newer],
+            active_model_id: Some("model-newer".to_string()),
+            previous_active_model_id: Some("model-older".to_string()),
+            inference_mode: InferenceMode::Live,
+        };
+        let json = serde_json::to_string_pretty(&index).unwrap();
+
+        let (registry, report) = model_lab_core::migrate_legacy_registry(&json).unwrap();
+        assert_eq!((report.legacy_models, report.quarantined), (2, 2));
+        assert_eq!(registry.inference_mode, model_lab_core::InferenceMode::Live);
+        let older = registry
+            .quarantined
+            .iter()
+            .find(|q| q.id == "model-older")
+            .unwrap();
+        assert!(older.was_previous && !older.was_active);
+        assert_eq!(older.legacy.state, "approved");
+        assert_eq!(older.legacy.history.len(), 3);
+        assert_eq!(older.legacy.intent_bindings.len(), 1);
+        let newer = registry
+            .quarantined
+            .iter()
+            .find(|q| q.id == "model-newer")
+            .unwrap();
+        assert!(newer.was_active && newer.legacy.imported_tflite_bundle);
+        assert_eq!(newer.legacy.thresholds["startThreshold"], 0.8);
+        registry.validate().unwrap();
+    }
+
     /// R-M4-6: the policy and the persisted mode must not disagree.
     /// R-M3-1: a window is compatible when its duration is within tolerance
     /// of the window the bundle declares it was trained on.
