@@ -25,10 +25,6 @@ pub const MIN_GRAPH_REFRESH_RATE_HZ: f64 = 1.0;
 pub const MAX_GRAPH_REFRESH_RATE_HZ: f64 = 60.0;
 pub const MIN_HEALTH_ACCEPTANCE_RATE_HZ: f64 = 0.1;
 pub const MAX_HEALTH_ACCEPTANCE_RATE_HZ: f64 = 200.0;
-pub const MIN_WRIST_DEAD_ZONE_DEGREES: f64 = 0.0;
-pub const MAX_WRIST_DEAD_ZONE_DEGREES: f64 = 45.0;
-pub const MIN_WRIST_VOLUME_POINTS_PER_DEGREE: f64 = 0.01;
-pub const MAX_WRIST_VOLUME_POINTS_PER_DEGREE: f64 = 5.0;
 pub const MIN_WRIST_ANGULAR_VELOCITY_DEGREES_PER_SECOND: f64 = 1.0;
 pub const MAX_WRIST_ANGULAR_VELOCITY_DEGREES_PER_SECOND: f64 = 2_000.0;
 pub const MIN_WRIST_VOLUME_POINTS_PER_SECOND: f64 = 1.0;
@@ -60,10 +56,6 @@ pub struct AppSettings {
     pub watch_skin_temperature_acceptance_rate_hz: f64,
     #[serde(default = "default_health_acceptance_rate_hz")]
     pub watch_eda_acceptance_rate_hz: f64,
-    #[serde(default = "default_wrist_dead_zone_degrees")]
-    pub wrist_dead_zone_degrees: f64,
-    #[serde(default = "default_wrist_volume_points_per_degree")]
-    pub wrist_volume_points_per_degree: f64,
     #[serde(default = "default_wrist_max_angular_velocity_degrees_per_second")]
     pub wrist_max_angular_velocity_degrees_per_second: f64,
     #[serde(default = "default_wrist_max_volume_points_per_second")]
@@ -101,8 +93,6 @@ impl Default for AppSettings {
             watch_heart_rate_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
             watch_skin_temperature_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
             watch_eda_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
-            wrist_dead_zone_degrees: default_wrist_dead_zone_degrees(),
-            wrist_volume_points_per_degree: default_wrist_volume_points_per_degree(),
             wrist_max_angular_velocity_degrees_per_second:
                 default_wrist_max_angular_velocity_degrees_per_second(),
             wrist_max_volume_points_per_second: default_wrist_max_volume_points_per_second(),
@@ -127,12 +117,6 @@ fn default_ppg_flush_rate_hz() -> f64 {
     1.0
 }
 
-fn default_wrist_dead_zone_degrees() -> f64 {
-    3.0
-}
-fn default_wrist_volume_points_per_degree() -> f64 {
-    1.0 / 3.0
-}
 fn default_wrist_max_angular_velocity_degrees_per_second() -> f64 {
     360.0
 }
@@ -211,18 +195,6 @@ impl AppSettings {
             }
         }
         for (name, value, min, max) in [
-            (
-                "wristDeadZoneDegrees",
-                self.wrist_dead_zone_degrees,
-                MIN_WRIST_DEAD_ZONE_DEGREES,
-                MAX_WRIST_DEAD_ZONE_DEGREES,
-            ),
-            (
-                "wristVolumePointsPerDegree",
-                self.wrist_volume_points_per_degree,
-                MIN_WRIST_VOLUME_POINTS_PER_DEGREE,
-                MAX_WRIST_VOLUME_POINTS_PER_DEGREE,
-            ),
             (
                 "wristMaxAngularVelocityDegreesPerSecond",
                 self.wrist_max_angular_velocity_degrees_per_second,
@@ -536,10 +508,11 @@ mod tests {
     fn legacy_settings_with_a_wrist_smoothing_alpha_still_load() {
         let mut json = serde_json::to_value(AppSettings::default()).unwrap();
         json["wristSmoothingAlpha"] = serde_json::json!(0.5);
+        // Dead zone and sensitivity moved into each recipe; an old file still carrying them must load.
         json["wristDeadZoneDegrees"] = serde_json::json!(4.0);
+        json["wristVolumePointsPerDegree"] = serde_json::json!(0.5);
         let settings: AppSettings =
             serde_json::from_value(json).expect("legacy key must be ignored, not rejected");
-        assert_eq!(settings.wrist_dead_zone_degrees, 4.0);
         settings.validate().expect("must validate");
     }
 

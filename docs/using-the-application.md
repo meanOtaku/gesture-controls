@@ -260,10 +260,8 @@ Incoming Sony packets still maintain connection and calibration state; this sett
 
 #### Wrist rotation tuning
 
-These settings set the feel of every volume recipe that uses a rotation knob (until recipes carry their own settings), and apply the next time a recipe starts:
+These limits apply to every recipe and take effect the next time one starts (each recipe sets its own dead zone and sensitivity on the **Recipes** tab):
 
-- **Dead zone:** rotation ignored near the starting pose.
-- **Sensitivity:** volume points per degree.
 - **Max angular velocity:** rejects implausibly fast twist motion.
 - **Max volume rate:** caps how quickly volume can change; the volume follows the wrist angle but moves no faster than this many points per second.
 
@@ -283,6 +281,18 @@ These controls preserve raw source timestamps. For health sensors, Samsung/devic
 Volume is driven by **gesture recipes**, shown on the Control center. A recipe is a chain of gestures that all have to hold, ending in a wrist rotation that turns a virtual knob:
 
 > Look at *Top right* → Pinch and hold (or hold the STEM button) → Roll the wrist → rotation knob → Volume
+
+### Making your own: the Recipes tab
+
+The **Recipes** tab lists every recipe with an on/off switch, an Edit button and a Delete button (which asks first). **New recipe** opens the editor:
+
+1. **Name** it. The name appears on the Control center and in conflict messages.
+2. **Steps that must all hold**: add *Look at a location* steps (from the locations on the Headphones tab) and *Hold a gesture* steps (pinch, or the STEM button). The same step cannot be used twice.
+3. **Turn your wrist**: choose the axis (roll, pitch or yaw), whether to reverse the direction, and a **dead zone** — turning less than that from where you started does nothing.
+4. **Device**: a rotation knob (endless), a horizontal or vertical fader (finite travel with end stops), or a step knob (whole steps). Their numbers are in volume points: sensitivity per degree, or travel and range, or degrees and points per step.
+5. **Save**. New recipes start switched off, so they cannot surprise you by conflicting with one you already use. If the save fails the editor stays open and says why.
+
+Recipes are saved between runs. Deleting a location does not delete recipes that use it; they simply never start, and the editor flags the missing location.
 
 Three recipes come with the app, and only the first is on:
 

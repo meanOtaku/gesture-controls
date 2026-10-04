@@ -156,6 +156,8 @@ pub fn run() {
             calibration::get_calibration_state,
             automation::get_automation_state,
             automation::set_recipe_enabled,
+            automation::save_recipe,
+            automation::delete_recipe,
             calibration::capture_calibration_target,
             calibration::add_calibration_location,
             calibration::remove_calibration_location,

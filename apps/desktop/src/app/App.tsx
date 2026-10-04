@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { lazy, memo, Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AppNav, navStatuses } from "./components/AppNav";
+import { AppNav, navStatuses, type AppTab } from "./components/AppNav";
 import { OperationFeedback } from "../components/app/OperationFeedback";
 import { Skeleton } from "../components/ui/skeleton";
 import { SidebarInset, SidebarProvider } from "../components/ui/sidebar";
@@ -26,6 +26,7 @@ import {
   WATCH_STATUS_EVENT,
   type AppSettings,
   type AutomationState,
+  type Recipe,
   type CalibrationState,
   type CalibrationTarget,
   type HeadPosePayload,
@@ -62,6 +63,7 @@ const Dashboard = lazy(() => import("../features/dashboard/components/Dashboard"
 // registry, lifecycle controls) re-rendered 15 times a second while merely open.
 const LiveTelemetry = memo(lazy(() => import("../features/telemetry/components/LiveTelemetry").then((m) => ({ default: m.LiveTelemetry }))));
 const ModelLab = memo(lazy(() => import("../features/model-lab/components/ModelLab").then((m) => ({ default: m.ModelLab }))));
+const RecipesPage = lazy(() => import("../features/recipes/components/RecipesPage").then((m) => ({ default: m.RecipesPage })));
 const Settings = lazy(() => import("../features/settings/components/Settings").then((m) => ({ default: m.Settings })));
 
 function TabFallback() {
@@ -156,7 +158,7 @@ function MainApp() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<"main" | "headphone" | "watch" | "telemetry" | "modelLab" | "settings">("main");
+  const [activeTab, setActiveTab] = useState<AppTab>("main");
   const { isPending, run } = usePendingActions();
   const calibrationEventVersion = useRef(0);
   const overlayEventVersion = useRef(0);
@@ -460,6 +462,31 @@ function MainApp() {
     await locationCommand(`location:remove:${target}`, "Remove location", "Location removed.", "remove_calibration_location", { target });
   };
 
+  const saveRecipe = async (recipe: Recipe): Promise<string | null> => {
+    if (!inTauri) return "Saving recipes needs the desktop app.";
+    try {
+      setAutomation(await invoke<AutomationState>("save_recipe", { recipe }));
+      OperationFeedback.success("Save recipe", `${recipe.name} saved.`);
+      return null;
+    } catch (error) {
+      return String(error);
+    }
+  };
+
+  const deleteRecipe = async (id: string) => {
+    if (!inTauri) return;
+    await run(`recipe:${id}`, async () => {
+      try {
+        setCalibrationError(null);
+        setAutomation(await invoke<AutomationState>("delete_recipe", { id }));
+        OperationFeedback.success("Delete recipe", "Recipe deleted.");
+      } catch (error) {
+        setCalibrationError(String(error));
+        OperationFeedback.error("Delete recipe", String(error));
+      }
+    });
+  };
+
   const setRecipeEnabled = async (id: string, enabled: boolean) => {
     if (!inTauri) return;
     await run(`recipe:${id}`, async () => {
@@ -573,6 +600,17 @@ function MainApp() {
         onAddLocation={(name) => { void addLocation(name); }}
         onRemoveLocation={(target) => { void removeLocation(target); }}
         onSetSensorEnabled={(sensor, enabled) => { void setSensorEnabled(sensor, enabled); }}
+      />
+    )}
+    {activeTab === "recipes" && (
+      <RecipesPage
+        automation={automation}
+        calibration={calibration}
+        isPending={isPending}
+        error={applicationError}
+        onSetEnabled={(id, enabled) => { void setRecipeEnabled(id, enabled); }}
+        onSave={saveRecipe}
+        onDelete={(id) => { void deleteRecipe(id); }}
       />
     )}
     {activeTab === "telemetry" && (

@@ -1,9 +1,10 @@
 import { SectionHeader } from "../../../components/app/SectionHeader";
-import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Switch } from "../../../components/ui/switch";
-import type { AutomationState, CalibrationState, Recipe, RecipeStage } from "../../../shared/protocol/events";
+import type { AutomationState, CalibrationState } from "../../../shared/protocol/events";
+import { ConflictAlerts } from "../../recipes/components/ConflictAlerts";
+import { describeRecipe } from "../../recipes/recipeModel";
 
 type RecipesCardProps = {
   automation: AutomationState;
@@ -12,37 +13,8 @@ type RecipesCardProps = {
   onSetRecipeEnabled: (id: string, enabled: boolean) => void;
 };
 
-const AXIS_LABEL = { roll: "Roll", pitch: "Pitch", yaw: "Yaw" } as const;
-const DEVICE_LABEL: Record<string, string> = {
-  rotationKnob: "rotation knob",
-  horizontalFader: "horizontal fader",
-  verticalFader: "vertical fader",
-  stepKnob: "step knob",
-};
-
-function stageLabel(stage: RecipeStage, locationName: (id: string) => string): string {
-  switch (stage.kind) {
-    case "headAt":
-      return `Look at ${locationName(stage.location)}`;
-    case "hold":
-      return stage.hold === "pinch" ? "Pinch and hold" : "Hold STEM button";
-    case "drive":
-      return `${AXIS_LABEL[stage.axis]} wrist`;
-  }
-}
-
-/** "Look at Top right → Pinch and hold → Roll wrist → rotation knob → Volume" */
-export function describeRecipe(recipe: Recipe, locationName: (id: string) => string): string {
-  return [
-    ...recipe.stages.map((stage) => stageLabel(stage, locationName)),
-    DEVICE_LABEL[recipe.device.kind] ?? recipe.device.kind,
-    "Volume",
-  ].join(" → ");
-}
-
 /** The gesture recipes: what each does, whether it is on, and which ones are in conflict and so held off. */
 export function RecipesCard({ automation, calibration, isPending, onSetRecipeEnabled }: RecipesCardProps) {
-  const nameOfRecipe = (id: string) => automation.recipes.find((recipe) => recipe.id === id)?.name ?? id;
   const locationName = (id: string) => calibration?.targets.find((location) => location.id === id)?.name ?? "a removed location";
 
   return (
@@ -58,15 +30,7 @@ export function RecipesCard({ automation, calibration, isPending, onSetRecipeEna
         />
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {automation.conflicts.map((conflict) => (
-          <Alert key={`${conflict.first}:${conflict.second}`} variant="destructive">
-            <AlertTitle>These gestures are fighting over {conflict.resource}</AlertTitle>
-            <AlertDescription>
-              “{nameOfRecipe(conflict.first)}” and “{nameOfRecipe(conflict.second)}” both control {conflict.resource}, so
-              neither will work. Switch one of them off.
-            </AlertDescription>
-          </Alert>
-        ))}
+        <ConflictAlerts automation={automation} />
         <ul className="flex flex-col gap-3" aria-label="Recipes">
           {automation.recipes.map((recipe) => {
             const blocked = automation.blocked.includes(recipe.id);

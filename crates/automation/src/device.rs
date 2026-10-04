@@ -58,7 +58,7 @@ impl Device {
     pub fn default_for(kind: DeviceKind) -> Self {
         match kind {
             DeviceKind::RotationKnob => Device::RotationKnob {
-                fraction_per_degree: 0.005,
+                fraction_per_degree: 1.0 / 300.0,
             },
             DeviceKind::HorizontalFader => Device::HorizontalFader {
                 travel_degrees: 45.0,

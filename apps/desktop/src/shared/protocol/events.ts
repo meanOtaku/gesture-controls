@@ -260,8 +260,6 @@ export interface AppSettings {
   watchHeartRateAcceptanceRateHz: number;
   watchSkinTemperatureAcceptanceRateHz: number;
   watchEdaAcceptanceRateHz: number;
-  wristDeadZoneDegrees: number;
-  wristVolumePointsPerDegree: number;
   wristMaxAngularVelocityDegreesPerSecond: number;
   wristMaxVolumePointsPerSecond: number;
   watchSensorsEnabled: Record<string, boolean>;

@@ -17,8 +17,6 @@ const settings: AppSettings = {
   watchHeartRateAcceptanceRateHz: 200,
   watchSkinTemperatureAcceptanceRateHz: 200,
   watchEdaAcceptanceRateHz: 200,
-  wristDeadZoneDegrees: 3,
-  wristVolumePointsPerDegree: 1 / 3,
   wristMaxAngularVelocityDegreesPerSecond: 360,
   wristMaxVolumePointsPerSecond: 30,
   watchSensorsEnabled: { orientation: true, acceleration: true, gyroscope: true },
@@ -29,10 +27,8 @@ describe("Settings", () => {
   it("renders every numeric control with its current value, unit and allowed range", () => {
     render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
     expect(screen.getByLabelText("Headphones rate")).toHaveValue(60);
-    expect(screen.getByLabelText("Dead zone")).toHaveValue(3);
+    expect(screen.getByLabelText("Max angular velocity")).toHaveValue(360);
     expect(screen.getByLabelText("Raw PPG flush")).toHaveValue(1);
-    // A long float is shown trimmed, not as 0.3333333333333333.
-    expect(screen.getByLabelText("Sensitivity")).toHaveValue(0.3333);
     // The range and default are stated up front, not discovered by failing.
     expect(screen.getByLabelText("Headphones rate")).toHaveAccessibleDescription(/Allowed: 1–200 Hz.*default 60 Hz/);
   });
@@ -54,15 +50,15 @@ describe("Settings", () => {
     render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
 
     fireEvent.change(screen.getByLabelText("Headphones rate"), { target: { value: "90" } });
-    fireEvent.change(screen.getByLabelText("Dead zone"), { target: { value: "10" } });
+    fireEvent.change(screen.getByLabelText("Max angular velocity"), { target: { value: "500" } });
     expect(screen.getByText("2 changes not applied yet.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
 
     expect(updates).toHaveLength(1);
     expect(updates[0].headphonesRateHz).toBe(90);
-    expect(updates[0].wristDeadZoneDegrees).toBe(10);
+    expect(updates[0].wristMaxAngularVelocityDegreesPerSecond).toBe(500);
     // A field nobody touched keeps its exact saved value, not the rounded text shown for it.
-    expect(updates[0].wristVolumePointsPerDegree).toBe(1 / 3);
+    expect(updates[0].wristMaxVolumePointsPerSecond).toBe(30);
   });
 
   it("refuses an out-of-range value, says why, and applies nothing", () => {
@@ -70,7 +66,7 @@ describe("Settings", () => {
     render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
 
     fireEvent.change(screen.getByLabelText("Headphones rate"), { target: { value: "999" } });
-    fireEvent.change(screen.getByLabelText("Dead zone"), { target: { value: "10" } });
+    fireEvent.change(screen.getByLabelText("Max angular velocity"), { target: { value: "500" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
 
     expect(updates).toHaveLength(0); // the old behaviour silently applied 60 for the bad field
@@ -81,7 +77,7 @@ describe("Settings", () => {
     // What was typed is kept, so it can be corrected rather than retyped.
     expect(input).toHaveValue(999);
     // The valid edit beside it is not lost.
-    expect(screen.getByLabelText("Dead zone")).toHaveValue(10);
+    expect(screen.getByLabelText("Max angular velocity")).toHaveValue(500);
   });
 
   it("moves focus to the first invalid field when applying fails", () => {

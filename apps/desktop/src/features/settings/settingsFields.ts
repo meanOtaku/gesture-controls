@@ -14,8 +14,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   watchHeartRateAcceptanceRateHz: 200,
   watchSkinTemperatureAcceptanceRateHz: 200,
   watchEdaAcceptanceRateHz: 200,
-  wristDeadZoneDegrees: 3,
-  wristVolumePointsPerDegree: 1 / 3,
   wristMaxAngularVelocityDegreesPerSecond: 360,
   wristMaxVolumePointsPerSecond: 30,
   watchSensorsEnabled: Object.fromEntries(CONTROLLABLE_SENSORS.map(({ id }) => [id, true])),
@@ -33,8 +31,6 @@ export type NumericSettingKey =
   | "watchHeartRateAcceptanceRateHz"
   | "watchSkinTemperatureAcceptanceRateHz"
   | "watchEdaAcceptanceRateHz"
-  | "wristDeadZoneDegrees"
-  | "wristVolumePointsPerDegree"
   | "wristMaxAngularVelocityDegreesPerSecond"
   | "wristMaxVolumePointsPerSecond";
 
@@ -86,14 +82,6 @@ export const SETTINGS_FIELDS: Record<NumericSettingKey, NumberSpec> = {
   watchEdaAcceptanceRateHz: {
     label: "EDA", unit: "Hz", min: 0.1, max: 200, step: 0.1, defaultValue: d.watchEdaAcceptanceRateHz,
     description: "Most skin-conductance samples per second the desktop accepts",
-  },
-  wristDeadZoneDegrees: {
-    label: "Dead zone", unit: "°", min: 0, max: 45, step: 0.5, defaultValue: d.wristDeadZoneDegrees,
-    description: "Rotation below this is ignored, so small unintended turns do nothing",
-  },
-  wristVolumePointsPerDegree: {
-    label: "Sensitivity", unit: "pts/°", min: 0.01, max: 5, step: 0.01, defaultValue: d.wristVolumePointsPerDegree,
-    description: "Volume points per degree of wrist rotation",
   },
   wristMaxAngularVelocityDegreesPerSecond: {
     label: "Max angular velocity", unit: "°/s", min: 1, max: 2000, step: 1, integer: true, defaultValue: d.wristMaxAngularVelocityDegreesPerSecond,

@@ -24,6 +24,7 @@ use crate::settings::{AppSettings, SettingsRuntime};
 
 pub const AUTOMATION_STATE_EVENT: &str = "automation-state";
 const RECIPES_FILE_NAME: &str = "recipes.json";
+pub const MAX_RECIPES: usize = 24;
 
 /// What the UI shows: every recipe, which of them are held off by a conflict, and the conflicts themselves.
 #[derive(Debug, Clone, Serialize)]
@@ -52,11 +53,11 @@ pub struct Effects {
     pub volume_deltas: Vec<f64>,
 }
 
-/// The wrist feel that Settings still controls until recipes carry their own (the Recipes page replaces this).
+/// Wrist limits that apply to every recipe and so live in Settings: how fast a twist may be before it is
+/// treated as a glitch, and how fast the volume may move. A recipe's own feel (dead zone, sensitivity,
+/// device) is part of the recipe.
 #[derive(Debug, Clone, Copy)]
 pub struct Tuning {
-    pub dead_zone_degrees: f64,
-    pub volume_points_per_degree: f64,
     pub max_angular_velocity_degrees_per_second: f64,
     pub max_volume_points_per_second: f64,
 }
@@ -64,38 +65,16 @@ pub struct Tuning {
 impl Tuning {
     pub fn from_settings(settings: &AppSettings) -> Self {
         Self {
-            dead_zone_degrees: settings.wrist_dead_zone_degrees,
-            volume_points_per_degree: settings.wrist_volume_points_per_degree,
             max_angular_velocity_degrees_per_second: settings
                 .wrist_max_angular_velocity_degrees_per_second,
             max_volume_points_per_second: settings.wrist_max_volume_points_per_second,
         }
-    }
-
-    /// The recipe as it runs: a rotation knob takes its sensitivity and dead zone from Settings.
-    fn applied_to(&self, recipe: &Recipe) -> Recipe {
-        let mut recipe = recipe.clone();
-        if let Device::RotationKnob {
-            fraction_per_degree,
-        } = &mut recipe.device
-        {
-            *fraction_per_degree = self.volume_points_per_degree / 100.0;
-            if let Some(Stage::Drive {
-                dead_zone_degrees, ..
-            }) = recipe.stages.last_mut()
-            {
-                *dead_zone_degrees = self.dead_zone_degrees;
-            }
-        }
-        recipe
     }
 }
 
 impl Default for Tuning {
     fn default() -> Self {
         Self {
-            dead_zone_degrees: 3.0,
-            volume_points_per_degree: 1.0 / 3.0,
             max_angular_velocity_degrees_per_second: 360.0,
             max_volume_points_per_second: 30.0,
         }
@@ -193,7 +172,7 @@ impl Engine {
         self.runners = self
             .recipes
             .iter()
-            .map(|recipe| RecipeRunner::new(self.tuning.applied_to(recipe)))
+            .map(|recipe| RecipeRunner::new(recipe.clone()))
             .collect();
     }
 
@@ -461,25 +440,21 @@ impl AutomationRuntime {
         self.with_engine(app, |engine| engine.set_tuning(tuning));
     }
 
-    pub fn set_recipe_enabled(
+    fn current_recipes(&self) -> Result<Vec<Recipe>, String> {
+        Ok(self
+            .engine
+            .lock()
+            .map_err(|_| "recipe engine lock was poisoned")?
+            .recipes()
+            .to_vec())
+    }
+
+    /// Saves, applies and announces a new recipe list.
+    fn commit_recipes(
         &self,
         app: &AppHandle,
-        id: &str,
-        enabled: bool,
+        recipes: Vec<Recipe>,
     ) -> Result<AutomationState, String> {
-        let recipes = {
-            let engine = self
-                .engine
-                .lock()
-                .map_err(|_| "recipe engine lock was poisoned")?;
-            let mut recipes = engine.recipes().to_vec();
-            let recipe = recipes
-                .iter_mut()
-                .find(|recipe| recipe.id == id)
-                .ok_or("there is no such recipe")?;
-            recipe.enabled = enabled;
-            recipes
-        };
         save_recipes(app, &recipes);
         self.with_engine(app, |engine| engine.set_recipes(recipes));
         // The state event is how the UI hears about the change, even when the overlay is unaffected.
@@ -487,6 +462,73 @@ impl AutomationRuntime {
         let _ = app.emit(AUTOMATION_STATE_EVENT, &state);
         Ok(state)
     }
+
+    pub fn set_recipe_enabled(
+        &self,
+        app: &AppHandle,
+        id: &str,
+        enabled: bool,
+    ) -> Result<AutomationState, String> {
+        let mut recipes = self.current_recipes()?;
+        recipes
+            .iter_mut()
+            .find(|recipe| recipe.id == id)
+            .ok_or("there is no such recipe")?
+            .enabled = enabled;
+        self.commit_recipes(app, recipes)
+    }
+
+    /// Adds a recipe (an empty id asks for a new one) or replaces the one with that id.
+    pub fn save_recipe(
+        &self,
+        app: &AppHandle,
+        mut recipe: Recipe,
+        known_locations: &[String],
+    ) -> Result<AutomationState, String> {
+        validate_recipe(&recipe).map_err(|error| error.to_string())?;
+        check_locations(&recipe, known_locations)?;
+        let mut recipes = self.current_recipes()?;
+        if recipe.id.is_empty() {
+            recipe.id = new_recipe_id();
+        }
+        recipe.name = recipe.name.trim().to_string();
+        if let Some(position) = recipes.iter().position(|existing| existing.id == recipe.id) {
+            recipes[position] = recipe;
+        } else if recipes.len() >= MAX_RECIPES {
+            return Err(format!(
+                "the most recipes allowed ({MAX_RECIPES}) has been reached"
+            ));
+        } else {
+            recipes.push(recipe);
+        }
+        self.commit_recipes(app, recipes)
+    }
+
+    pub fn delete_recipe(&self, app: &AppHandle, id: &str) -> Result<AutomationState, String> {
+        let mut recipes = self.current_recipes()?;
+        let before = recipes.len();
+        recipes.retain(|recipe| recipe.id != id);
+        if recipes.len() == before {
+            return Err("there is no such recipe".into());
+        }
+        self.commit_recipes(app, recipes)
+    }
+}
+
+fn new_recipe_id() -> String {
+    format!("recipe{}", &uuid::Uuid::new_v4().simple().to_string()[..8])
+}
+
+/// Every head location a recipe names must exist, or it could never start.
+pub fn check_locations(recipe: &Recipe, known: &[String]) -> Result<(), String> {
+    for stage in &recipe.stages {
+        if let Stage::HeadAt { location } = stage
+            && !known.contains(location)
+        {
+            return Err(format!("the location '{location}' does not exist"));
+        }
+    }
+    Ok(())
 }
 
 /// Carries out what the engine asked for. Errors are logged, not raised: a failed volume write must never
@@ -516,6 +558,31 @@ pub fn get_automation_state(
     runtime: State<'_, AutomationRuntime>,
 ) -> Result<AutomationState, String> {
     runtime.state()
+}
+
+#[tauri::command]
+pub fn save_recipe(
+    recipe: Recipe,
+    runtime: State<'_, AutomationRuntime>,
+    calibration: State<'_, crate::calibration::CalibrationRuntime>,
+    app: AppHandle,
+) -> Result<AutomationState, String> {
+    let known: Vec<String> = calibration
+        .state()?
+        .targets
+        .into_iter()
+        .map(|target| target.id.as_str().to_string())
+        .collect();
+    runtime.save_recipe(&app, recipe, &known)
+}
+
+#[tauri::command]
+pub fn delete_recipe(
+    id: String,
+    runtime: State<'_, AutomationRuntime>,
+    app: AppHandle,
+) -> Result<AutomationState, String> {
+    runtime.delete_recipe(&app, &id)
 }
 
 #[tauri::command]
@@ -644,6 +711,21 @@ mod tests {
             engine.observe_orientation(about_x(40.0), ts(4)),
             Effects::default()
         );
+    }
+
+    #[test]
+    fn a_recipe_must_name_locations_that_exist() {
+        let recipe = &default_recipes()[0];
+        assert!(check_locations(recipe, &["center".into(), "topRight".into()]).is_ok());
+        let error = check_locations(recipe, &["center".into()]).unwrap_err();
+        assert!(error.contains("topRight"), "{error}");
+    }
+
+    #[test]
+    fn new_recipe_ids_are_valid_and_distinct() {
+        let (a, b) = (new_recipe_id(), new_recipe_id());
+        assert_ne!(a, b);
+        assert!(a.starts_with("recipe") && a.len() == 14);
     }
 
     #[test]
