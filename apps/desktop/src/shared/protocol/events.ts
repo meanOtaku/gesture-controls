@@ -49,6 +49,8 @@ export interface CalibrationState {
   activeTarget: CalibrationTarget | null;
 }
 
+export type RecipeAction = "volume" | "brightness" | "scroll";
+
 /** One step of a recipe's chain. A recipe ends with a `drive` stage, which supplies the continuous value. */
 export type RecipeStage =
   | { kind: "headAt"; location: CalibrationTarget }
@@ -61,7 +63,7 @@ export interface Recipe {
   enabled: boolean;
   stages: RecipeStage[];
   device: { kind: "rotationKnob" | "horizontalFader" | "verticalFader" | "stepKnob" } & Record<string, number | string>;
-  action: "volume";
+  action: RecipeAction;
 }
 
 /** Two enabled recipes driving the same resource; both are held off until one is disabled. */
@@ -182,6 +184,12 @@ export interface HeadTrackerDiagnostic {
   action: string | null;
 }
 export const AUTOMATION_STATE_EVENT = "automation-state";
+/** Sent when brightness or scrolling could not be carried out (a missing permission, an unsupported platform). */
+export const ACTION_ERROR_EVENT = "automation-action-error";
+export interface ActionError {
+  action: RecipeAction;
+  message: string;
+}
 export const CALIBRATION_STATE_EVENT = "head-calibration-state";
 export const HEAD_TARGET_ENTERED_EVENT = "head-target-entered";
 export const HEAD_TARGET_EXITED_EVENT = "head-target-exited";

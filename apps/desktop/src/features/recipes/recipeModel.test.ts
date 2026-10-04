@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CalibrationLocation, Recipe } from "../../shared/protocol/events";
 import {
-  blankRecipe, buildDevice, chainProblem, defaultNumbers, describeRecipe, deviceNumbers, driveStage, leadingStages, nameProblem,
+  actionInfo, blankRecipe, buildDevice, deviceSpecs, chainProblem, defaultNumbers, describeRecipe, deviceNumbers, driveStage, leadingStages, nameProblem,
 } from "./recipeModel";
 
 const locations: CalibrationLocation[] = [
@@ -21,6 +21,23 @@ describe("recipeModel", () => {
       expect(back.a).toBeCloseTo(numbers.a, 9);
       if (kind !== "rotationKnob") expect(back.b).toBeCloseTo(numbers.b, 9);
     }
+  });
+
+  it("shows device numbers in the unit of what is controlled, and stores the same fractions either way", () => {
+    expect(deviceSpecs("rotationKnob", "volume").a.unit).toBe("pts/°");
+    expect(deviceSpecs("rotationKnob", "brightness").a.unit).toBe("%/°");
+    const scroll = deviceSpecs("rotationKnob", "scroll").a;
+    expect(scroll.unit).toBe("px/°");
+    expect(scroll.defaultValue).toBeCloseTo(10 / 3, 9); // a third of a point per degree, times ten
+    expect(deviceSpecs("stepKnob", "scroll").b).toMatchObject({ unit: "px", defaultValue: 50, max: 1000 });
+    // The same on-screen default is the same stored fraction for volume and brightness (a percent of the range).
+    expect(buildDevice("stepKnob", defaultNumbers("stepKnob", "brightness"), "brightness")).toEqual(
+      buildDevice("stepKnob", defaultNumbers("stepKnob", "volume"), "volume"),
+    );
+    // And a value typed in pixels is stored as a fraction of the 1000 px range.
+    expect(buildDevice("rotationKnob", { a: 5, b: 0 }, "scroll")).toEqual({ kind: "rotationKnob", fractionPerDegree: 0.005 });
+    expect(deviceNumbers({ kind: "rotationKnob", fractionPerDegree: 0.005 }, "scroll").a).toBeCloseTo(5, 9);
+    expect(actionInfo("brightness").label).toBe("Brightness");
   });
 
   it("starts a new recipe off, looking at the first location the user added", () => {

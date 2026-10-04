@@ -289,12 +289,25 @@ The **Recipes** tab lists every recipe with an on/off switch, an Edit button and
 1. **Name** it. The name appears on the Control center and in conflict messages.
 2. **Steps that must all hold**: add *Look at a location* steps (from the locations on the Headphones tab) and *Hold a gesture* steps (pinch, or the STEM button). The same step cannot be used twice.
 3. **Turn your wrist**: choose the axis (roll, pitch or yaw), whether to reverse the direction, and a **dead zone** — turning less than that from where you started does nothing.
-4. **Device**: a rotation knob (endless), a horizontal or vertical fader (finite travel with end stops), or a step knob (whole steps). Their numbers are in volume points: sensitivity per degree, or travel and range, or degrees and points per step.
-5. **Save**. New recipes start switched off, so they cannot surprise you by conflicting with one you already use. If the save fails the editor stays open and says why.
+4. **To control**: volume, brightness or scroll (see below).
+5. **Device**: a rotation knob (endless), a horizontal or vertical fader (finite travel with end stops), or a step knob (whole steps). Their numbers are in the unit of what the recipe controls: sensitivity per degree, or travel and range, or degrees and amount per step. Changing what a recipe controls resets those numbers to the defaults for it, since 10 means something different in volume points, brightness percent and scroll pixels.
+6. **Save**. New recipes start switched off, so they cannot surprise you by conflicting with one you already use. If the save fails the editor stays open and says why.
+
+### What a recipe can control
+
+| Control | What it does | Platform support |
+| --- | --- | --- |
+| Volume | System output volume, with the knob shown on screen | macOS, Windows, Linux |
+| Brightness | Display brightness | macOS (presses the brightness keys, in sixteenth steps; needs **Accessibility** permission), Linux (`brightnessctl`), Windows (built-in displays only, through WMI) |
+| Scroll | Scrolls the window under the pointer; turn one way for down, the other for up | macOS (needs **Accessibility** permission), Linux (`xdotool`, X11 only), Windows |
+
+Different things can run at once: the same gesture can drive brightness and scroll together. Two recipes controlling the *same* thing conflict, and both pause. Brightness and scroll show no knob of their own; the system's own brightness indicator appears on a Mac. If one cannot be carried out (a missing permission, a missing tool), the Control center shows why.
+
+Scroll and brightness are relative: only the amount you turn counts, from where the hold began, and anything left over when you let go is dropped. A single burst is capped so a sensor glitch cannot fling the page or slam the screen to an extreme.
 
 ### The Virtual devices tab
 
-The **Virtual devices** tab shows the four devices a recipe can use. Drag **Wrist rotation** to see each one respond, with the volume change it would make, using its default settings. Each device also says which recipes use it, and **Make a recipe with this** opens the recipe editor with that device already chosen. Devices are configured per recipe, in the editor.
+The **Virtual devices** tab shows the four devices a recipe can use. Drag **Wrist rotation** to see each one respond, with how much it would move whatever it controls, using its default settings. Each device also says which recipes use it, and **Make a recipe with this** opens the recipe editor with that device already chosen. Devices are configured per recipe, in the editor.
 
 Recipes are saved between runs. Deleting a location does not delete recipes that use it; they simply never start, and the editor flags the missing location.
 

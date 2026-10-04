@@ -10,6 +10,7 @@ import { telemetryStore } from "../features/telemetry/store/telemetryStore";
 import { usePendingActions } from "../shared/hooks/usePendingActions";
 import { VolumeKnob } from "../features/overlay/components/VolumeKnob";
 import {
+  ACTION_ERROR_EVENT,
   AUTOMATION_STATE_EVENT,
   CALIBRATION_STATE_EVENT,
   HEAD_POSE_EVENT,
@@ -26,6 +27,7 @@ import {
   WATCH_SKIN_TEMPERATURE_BATCH_EVENT,
   WATCH_STATUS_EVENT,
   type AppSettings,
+  type ActionError,
   type AutomationState,
   type Recipe,
   type CalibrationState,
@@ -152,6 +154,7 @@ function MainApp() {
   const headTrackerProvider = telemetryStore.getHeadTrackerProvider();
   const watchStatus = telemetryStore.getWatchStatus();
   const [calibration, setCalibration] = useState<CalibrationState | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [automation, setAutomation] = useState<AutomationState | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<OverlayState>(emptyOverlay);
@@ -213,6 +216,9 @@ function MainApp() {
       }),
       listen<HeadTrackerDiagnostic | null>(HEAD_TRACKER_DIAGNOSTIC_EVENT, ({ payload }) => {
         if (!cancelled) telemetryStore.setHeadDiagnostic(payload);
+      }),
+      listen<ActionError>(ACTION_ERROR_EVENT, ({ payload }) => {
+        if (!cancelled) setActionError(`${payload.action}: ${payload.message}`);
       }),
       listen<AutomationState>(AUTOMATION_STATE_EVENT, ({ payload }) => {
         if (!cancelled) setAutomation(payload);
@@ -495,6 +501,7 @@ function MainApp() {
     await run(`recipe:${id}`, async () => {
       try {
         setCalibrationError(null);
+        setActionError(null);
         setAutomation(await invoke<AutomationState>("set_recipe_enabled", { id, enabled }));
       } catch (error) {
         setCalibrationError(String(error));
@@ -534,7 +541,7 @@ function MainApp() {
     });
   };
 
-  const applicationError = [calibrationError, volumeError, sensorControlError]
+  const applicationError = [calibrationError, volumeError, sensorControlError, actionError]
     .filter((error): error is string => error !== null)
     .join(" · ") || null;
 

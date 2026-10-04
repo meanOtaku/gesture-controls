@@ -1,5 +1,5 @@
 import type { NumberSpec } from "../../shared/forms/numberField";
-import type { CalibrationLocation, Recipe, RecipeStage } from "../../shared/protocol/events";
+import type { CalibrationLocation, Recipe, RecipeAction, RecipeStage } from "../../shared/protocol/events";
 
 export const MAX_RECIPE_NAME_CHARS = 40;
 export const MAX_STAGES = 6;
@@ -14,6 +14,17 @@ export const DEVICE_KINDS: ReadonlyArray<{ kind: DeviceKind; label: string; summ
   { kind: "verticalFader", label: "Vertical fader", summary: "A slider with end stops; suits a pitch (up-down) movement." },
   { kind: "stepKnob", label: "Step knob", summary: "Moves in whole steps, like a detented dial." },
 ];
+
+/** What a recipe can control. `scale` turns the engine's fraction of the range into the unit shown (points, percent, pixels). */
+export const ACTIONS: ReadonlyArray<{ value: RecipeAction; label: string; unit: string; scale: number; summary: string }> = [
+  { value: "volume", label: "Volume", unit: "pts", scale: 100, summary: "The system output volume. Shows the knob on screen while you use it." },
+  { value: "brightness", label: "Brightness", unit: "%", scale: 100, summary: "Display brightness. On a Mac it moves in sixteenth steps, like the keyboard keys, and needs Accessibility permission." },
+  { value: "scroll", label: "Scroll", unit: "px", scale: 1000, summary: "Scrolls the window under the pointer. Turn one way to scroll down, the other to scroll up. A Mac needs Accessibility permission." },
+];
+
+export function actionInfo(action: RecipeAction) {
+  return ACTIONS.find((candidate) => candidate.value === action) ?? ACTIONS[0];
+}
 
 export const AXES: ReadonlyArray<{ value: Axis; label: string }> = [
   { value: "roll", label: "Roll" },
@@ -32,31 +43,45 @@ export const DEAD_ZONE_SPEC: NumberSpec = {
 };
 
 /**
- * Each device has up to two numbers. They are shown in volume points rather than the engine's fractions of the
- * range (0.01 is one point), so the form speaks the same units as the knob on screen.
+ * Each device has up to two numbers. They are shown in the unit of what the recipe controls (volume points,
+ * brightness percent, scroll pixels) rather than the engine's fractions of the range, so the form speaks the same
+ * units as the thing being changed. Degrees are the same for every action.
  */
 export interface DeviceSpecs {
   a: NumberSpec;
   b: NumberSpec | null;
 }
 
-export function deviceSpecs(kind: DeviceKind): DeviceSpecs {
+function scaled(spec: NumberSpec, action: RecipeAction): NumberSpec {
+  const { unit, scale } = actionInfo(action);
+  const factor = scale / 100;
+  return {
+    ...spec,
+    unit: spec.unit?.replace("pts", unit),
+    min: spec.min * factor,
+    max: spec.max * factor,
+    step: spec.step * factor,
+    defaultValue: spec.defaultValue * factor,
+  };
+}
+
+export function deviceSpecs(kind: DeviceKind, action: RecipeAction = "volume"): DeviceSpecs {
   switch (kind) {
     case "rotationKnob":
       return {
-        a: { label: "Sensitivity", unit: "pts/°", min: 0.01, max: 5, step: 0.01, defaultValue: 1 / 3, description: "Volume points per degree you turn" },
+        a: scaled({ label: "Sensitivity", unit: "pts/°", min: 0.01, max: 5, step: 0.01, defaultValue: 1 / 3, description: "How much it changes per degree you turn" }, action),
         b: null,
       };
     case "horizontalFader":
     case "verticalFader":
       return {
         a: { label: "Travel", unit: "°", min: 1, max: 180, step: 1, defaultValue: 45, description: "How far to turn each way to reach the end of the slider" },
-        b: { label: "Range", unit: "pts", min: 1, max: 100, step: 1, defaultValue: 50, description: "Volume points from the middle to either end" },
+        b: scaled({ label: "Range", unit: "pts", min: 1, max: 100, step: 1, defaultValue: 50, description: "How much it changes from the middle to either end" }, action),
       };
     case "stepKnob":
       return {
         a: { label: "Degrees per step", unit: "°", min: 1, max: 180, step: 1, defaultValue: 15, description: "How far to turn for one step" },
-        b: { label: "Points per step", unit: "pts", min: 1, max: 100, step: 1, defaultValue: 5, description: "Volume points each step changes" },
+        b: scaled({ label: "Per step", unit: "pts", min: 1, max: 100, step: 1, defaultValue: 5, description: "How much each step changes" }, action),
       };
   }
 }
@@ -66,35 +91,37 @@ export interface DeviceNumbers {
   b: number;
 }
 
-/** The two numbers shown for a device, in volume points. A knob has only one. */
-export function deviceNumbers(device: Recipe["device"]): DeviceNumbers {
+/** The two numbers shown for a device, in the action's unit. A knob has only one. */
+export function deviceNumbers(device: Recipe["device"], action: RecipeAction = "volume"): DeviceNumbers {
   const n = (key: string) => Number(device[key]);
+  const { scale } = actionInfo(action);
   switch (device.kind) {
     case "rotationKnob":
-      return { a: n("fractionPerDegree") * 100, b: 0 };
+      return { a: n("fractionPerDegree") * scale, b: 0 };
     case "horizontalFader":
     case "verticalFader":
-      return { a: n("travelDegrees"), b: n("fractionPerTravel") * 100 };
+      return { a: n("travelDegrees"), b: n("fractionPerTravel") * scale };
     case "stepKnob":
-      return { a: n("degreesPerStep"), b: n("fractionPerStep") * 100 };
+      return { a: n("degreesPerStep"), b: n("fractionPerStep") * scale };
   }
 }
 
-export function defaultNumbers(kind: DeviceKind): DeviceNumbers {
-  const specs = deviceSpecs(kind);
+export function defaultNumbers(kind: DeviceKind, action: RecipeAction = "volume"): DeviceNumbers {
+  const specs = deviceSpecs(kind, action);
   return { a: specs.a.defaultValue, b: specs.b?.defaultValue ?? 0 };
 }
 
 /** The device as the backend stores it, from the numbers shown in the form. */
-export function buildDevice(kind: DeviceKind, { a, b }: DeviceNumbers): Recipe["device"] {
+export function buildDevice(kind: DeviceKind, { a, b }: DeviceNumbers, action: RecipeAction = "volume"): Recipe["device"] {
+  const { scale } = actionInfo(action);
   switch (kind) {
     case "rotationKnob":
-      return { kind, fractionPerDegree: a / 100 };
+      return { kind, fractionPerDegree: a / scale };
     case "horizontalFader":
     case "verticalFader":
-      return { kind, travelDegrees: a, fractionPerTravel: b / 100 };
+      return { kind, travelDegrees: a, fractionPerTravel: b / scale };
     case "stepKnob":
-      return { kind, degreesPerStep: a, fractionPerStep: b / 100 };
+      return { kind, degreesPerStep: a, fractionPerStep: b / scale };
   }
 }
 
@@ -118,7 +145,7 @@ export function describeRecipe(recipe: Recipe, locationName: (id: string) => str
   return [
     ...recipe.stages.map((stage) => stageLabel(stage, locationName)),
     deviceLabel(recipe.device.kind),
-    "Volume",
+    actionInfo(recipe.action).label,
   ].join(" → ");
 }
 

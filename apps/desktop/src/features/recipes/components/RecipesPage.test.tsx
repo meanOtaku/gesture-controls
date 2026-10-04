@@ -70,7 +70,7 @@ describe("RecipesPage", () => {
     fireEvent.change(editor.getByLabelText("Step 2 gesture"), { target: { value: "pinch" } });
     fireEvent.click(editor.getByRole("radio", { name: /Pitch/ }));
     fireEvent.change(editor.getByLabelText("Device"), { target: { value: "stepKnob" } });
-    fireEvent.change(editor.getByLabelText("Points per step"), { target: { value: "10" } });
+    fireEvent.change(editor.getByLabelText("Per step"), { target: { value: "10" } });
     fireEvent.click(editor.getByRole("switch", { name: /Reverse direction/ }));
     fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
 
@@ -89,6 +89,24 @@ describe("RecipesPage", () => {
     });
     // The editor closes once the save succeeds.
     await waitFor(() => expect(screen.queryByRole("region", { name: "Recipe editor" })).not.toBeInTheDocument());
+  });
+
+  it("lets a recipe control brightness or scroll, with the numbers in that unit", async () => {
+    const props = setup();
+    fireEvent.click(screen.getByRole("button", { name: /New recipe/ }));
+    const editor = within(screen.getByRole("region", { name: "Recipe editor" }));
+    fireEvent.change(editor.getByLabelText("Name"), { target: { value: "Scroll pages" } });
+    expect(editor.getByLabelText("Sensitivity")).toHaveValue(0.3333);
+    fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "scroll" } });
+    // Pixels, not points: the same default feel is ten times the number.
+    expect(editor.getByLabelText("Sensitivity")).toHaveValue(3.3333);
+    fireEvent.change(editor.getByLabelText("Sensitivity"), { target: { value: "5" } });
+    fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
+    await waitFor(() => expect(props.onSave).toHaveBeenCalled());
+    expect(vi.mocked(props.onSave).mock.calls[0][0]).toMatchObject({
+      action: "scroll",
+      device: { kind: "rotationKnob", fractionPerDegree: 0.005 },
+    });
   });
 
   it("edits an existing recipe in place, keeping its id and whether it is on", async () => {

@@ -19,6 +19,7 @@ use spatial_protocol::WatchOrientationSample;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tracing::warn;
 
+use crate::actuators::Actuators;
 use crate::overlay::{OverlayRuntime, VolumeRuntime};
 use crate::settings::{AppSettings, SettingsRuntime};
 
@@ -49,8 +50,10 @@ pub enum OverlayWanted {
 pub struct Effects {
     /// Set only when the overlay needs to change.
     pub overlay: Option<OverlayWanted>,
-    /// Volume changes to apply, as fractions of the full range.
-    pub volume_deltas: Vec<f64>,
+    /// Changes to apply, each an action and a fraction of its full range.
+    pub deltas: Vec<(Action, f64)>,
+    /// Actions whose interaction just ended, so anything still carried for them is dropped.
+    pub ended: Vec<Action>,
 }
 
 /// Wrist limits that apply to every recipe and so live in Settings: how fast a twist may be before it is
@@ -138,6 +141,10 @@ struct Orientation {
 pub struct Engine {
     recipes: Vec<Recipe>,
     runners: Vec<RecipeRunner>,
+    /// Each runner's phase after the previous step, to notice when one stops driving.
+    previous_phases: Vec<RunnerPhase>,
+    /// Whether any recipe is turning its device right now.
+    driving: bool,
     tuning: Tuning,
     head: Option<String>,
     pinch: bool,
@@ -154,6 +161,8 @@ impl Engine {
         let mut engine = Self {
             recipes: Vec::new(),
             runners: Vec::new(),
+            previous_phases: Vec::new(),
+            driving: false,
             tuning,
             head: None,
             pinch: false,
@@ -174,6 +183,7 @@ impl Engine {
             .iter()
             .map(|recipe| RecipeRunner::new(recipe.clone()))
             .collect();
+        self.previous_phases = vec![RunnerPhase::Idle; self.recipes.len()];
     }
 
     pub fn set_recipes(&mut self, recipes: Vec<Recipe>) -> Effects {
@@ -241,7 +251,7 @@ impl Engine {
         {
             return Effects::default();
         }
-        let driving = self.overlay == OverlayWanted::Driving;
+        let driving = self.driving;
         if driving && self.is_velocity_outlier(quaternion, timestamp_ns) {
             // A glitch freezes the knob rather than jumping it; the last good orientation stays current.
             return Effects::default();
@@ -280,20 +290,34 @@ impl Engine {
         };
         let mut wanted = OverlayWanted::Hidden;
         let mut effects = Effects::default();
-        for (recipe, runner) in self.recipes.iter().zip(&mut self.runners) {
+        let mut driving = false;
+        for (index, (recipe, runner)) in self.recipes.iter().zip(&mut self.runners).enumerate() {
             if self.blocked.contains(&recipe.id) {
                 runner.reset();
-                continue;
+            } else if let Some(output) = runner.update(&signals) {
+                effects.deltas.push((recipe.action, output.delta_fraction));
             }
-            if let Some(output) = runner.update(&signals) {
-                effects.volume_deltas.push(output.delta_fraction);
+            let phase = runner.phase();
+            driving |= phase == RunnerPhase::Driving;
+            if self.previous_phases[index] == RunnerPhase::Driving
+                && phase != RunnerPhase::Driving
+                && !effects.ended.contains(&recipe.action)
+            {
+                effects.ended.push(recipe.action);
             }
-            wanted = match (wanted, runner.phase()) {
-                (_, RunnerPhase::Driving) | (OverlayWanted::Driving, _) => OverlayWanted::Driving,
-                (_, RunnerPhase::Armed) | (OverlayWanted::Armed, _) => OverlayWanted::Armed,
-                _ => OverlayWanted::Hidden,
-            };
+            self.previous_phases[index] = phase;
+            // The volume knob on screen is only for recipes that control volume.
+            if recipe.action == Action::Volume {
+                wanted = match (wanted, phase) {
+                    (_, RunnerPhase::Driving) | (OverlayWanted::Driving, _) => {
+                        OverlayWanted::Driving
+                    }
+                    (_, RunnerPhase::Armed) | (OverlayWanted::Armed, _) => OverlayWanted::Armed,
+                    _ => OverlayWanted::Hidden,
+                };
+            }
         }
+        self.driving = driving;
         if wanted != self.overlay {
             self.overlay = wanted;
             effects.overlay = Some(wanted);
@@ -353,6 +377,7 @@ pub struct AutomationRuntime {
     /// inference threads reach the overlay in the order they were decided.
     operations: Mutex<()>,
     engine: Mutex<Engine>,
+    actuators: Actuators,
 }
 
 impl Default for AutomationRuntime {
@@ -360,6 +385,7 @@ impl Default for AutomationRuntime {
         Self {
             operations: Mutex::new(()),
             engine: Mutex::new(Engine::new(default_recipes(), Tuning::default())),
+            actuators: Actuators::default(),
         }
     }
 }
@@ -546,9 +572,20 @@ fn apply_effects(app: &AppHandle, effects: &Effects, max_points_per_second: f64)
             warn!(%error, ?wanted, "failed to update the volume overlay for a recipe");
         }
     }
-    for delta in &effects.volume_deltas {
-        if let Err(error) = overlay.apply_recipe_delta(app, *delta, max_points_per_second) {
-            warn!(%error, "failed to apply a recipe's volume change");
+    let actuators = &app.state::<AutomationRuntime>().actuators;
+    for (action, delta) in &effects.deltas {
+        match action {
+            Action::Volume => {
+                if let Err(error) = overlay.apply_recipe_delta(app, *delta, max_points_per_second) {
+                    warn!(%error, "failed to apply a recipe's volume change");
+                }
+            }
+            Action::Brightness | Action::Scroll => actuators.delta(app, *action, *delta),
+        }
+    }
+    for action in &effects.ended {
+        if *action != Action::Volume {
+            actuators.reset(app, *action);
         }
     }
 }
@@ -631,19 +668,19 @@ mod tests {
         assert!(
             engine
                 .observe_orientation(about_x(30.0), ts(2))
-                .volume_deltas
+                .deltas
                 .is_empty()
         );
 
         assert_eq!(engine.set_stem(true).overlay, Some(OverlayWanted::Driving));
         engine.observe_orientation(about_x(30.0), ts(3));
         let moved = engine.observe_orientation(about_x(60.0), ts(4));
-        assert_eq!(moved.volume_deltas.len(), 1);
+        assert_eq!(moved.deltas.len(), 1);
         // 30 degrees less the 3 degree dead zone, at one third of a point per degree.
         assert!(
-            (moved.volume_deltas[0] - 0.09).abs() < 1e-6,
+            (moved.deltas[0].1 - 0.09).abs() < 1e-6,
             "{:?}",
-            moved.volume_deltas
+            moved.deltas
         );
 
         assert_eq!(engine.set_stem(false).overlay, Some(OverlayWanted::Armed));
@@ -695,10 +732,10 @@ mod tests {
         engine.observe_orientation(about_x(0.0), ts(2));
         // 120 degrees in 200 ms is 600 deg/s, over the 360 deg/s limit.
         let glitch = engine.observe_orientation(about_x(120.0), ts(3));
-        assert!(glitch.volume_deltas.is_empty());
+        assert!(glitch.deltas.is_empty());
         // A real, moderate movement from the last good sample still counts.
         let real = engine.observe_orientation(about_x(5.0), ts(4));
-        assert_eq!(real.volume_deltas.len(), 1);
+        assert_eq!(real.deltas.len(), 1);
     }
 
     #[test]
@@ -726,6 +763,75 @@ mod tests {
         let (a, b) = (new_recipe_id(), new_recipe_id());
         assert_ne!(a, b);
         assert!(a.starts_with("recipe") && a.len() == 14);
+    }
+
+    fn driving(action: Action) -> Recipe {
+        Recipe {
+            id: format!("{action:?}"),
+            name: format!("{action:?}"),
+            enabled: true,
+            action,
+            stages: vec![
+                Stage::Hold {
+                    hold: Hold::StemButton,
+                },
+                Stage::Drive {
+                    axis: Axis::Roll,
+                    dead_zone_degrees: 0.0,
+                    invert: false,
+                },
+            ],
+            device: Device::default_for(DeviceKind::RotationKnob),
+        }
+    }
+
+    #[test]
+    fn a_scroll_recipe_sends_scroll_changes_and_never_touches_the_volume_knob() {
+        let mut engine = Engine::new(vec![driving(Action::Scroll)], Tuning::default());
+        engine.observe_orientation(about_x(0.0), ts(1));
+        let began = engine.set_stem(true);
+        assert_eq!(
+            began.overlay, None,
+            "the volume knob is only for volume recipes"
+        );
+        engine.observe_orientation(about_x(0.0), ts(2));
+        let moved = engine.observe_orientation(about_x(30.0), ts(3));
+        assert_eq!(moved.deltas.len(), 1);
+        assert_eq!(moved.deltas[0].0, Action::Scroll);
+        assert!((moved.deltas[0].1 - 0.1).abs() < 1e-6);
+        let ended = engine.set_stem(false);
+        assert_eq!(ended.ended, vec![Action::Scroll]);
+        assert_eq!(ended.overlay, None);
+    }
+
+    #[test]
+    fn brightness_and_scroll_can_run_on_the_same_gesture_at_once() {
+        let mut engine = Engine::new(
+            vec![driving(Action::Brightness), driving(Action::Scroll)],
+            Tuning::default(),
+        );
+        assert!(engine.state().conflicts.is_empty());
+        engine.observe_orientation(about_x(0.0), ts(1));
+        engine.set_stem(true);
+        engine.observe_orientation(about_x(0.0), ts(2));
+        let moved = engine.observe_orientation(about_x(30.0), ts(3));
+        let actions: Vec<Action> = moved.deltas.iter().map(|(a, _)| *a).collect();
+        assert_eq!(actions, vec![Action::Brightness, Action::Scroll]);
+    }
+
+    #[test]
+    fn two_recipes_scrolling_conflict_and_both_stay_still() {
+        let mut second = driving(Action::Scroll);
+        second.id = "other".into();
+        let mut engine = Engine::new(vec![driving(Action::Scroll), second], Tuning::default());
+        assert_eq!(engine.state().conflicts.len(), 1);
+        engine.observe_orientation(about_x(0.0), ts(1));
+        engine.set_stem(true);
+        engine.observe_orientation(about_x(0.0), ts(2));
+        assert_eq!(
+            engine.observe_orientation(about_x(30.0), ts(3)),
+            Effects::default()
+        );
     }
 
     #[test]

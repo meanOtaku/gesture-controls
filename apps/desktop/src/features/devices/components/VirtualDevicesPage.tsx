@@ -13,7 +13,7 @@ type VirtualDevicesPageProps = {
   onMakeRecipe: (kind: DeviceKind) => void;
 };
 
-const signed = (points: number) => `${points > 0 ? "+" : ""}${Number(points.toFixed(1))} pts`;
+const signed = (value: number, unit: string) => `${value > 0 ? "+" : ""}${Number(value.toFixed(1))}${unit}`;
 
 /** The virtual devices a recipe can turn the wrist into, each with a live preview you can try with a slider. */
 export function VirtualDevicesPage({ automation, onMakeRecipe }: VirtualDevicesPageProps) {
@@ -37,7 +37,7 @@ export function VirtualDevicesPage({ automation, onMakeRecipe }: VirtualDevicesP
             description="Rotation from where the hold began"
             help={{
               label: "About the preview",
-              content: "Drag the slider as if you were turning your wrist after starting a recipe. Each device shows where it would be and how many volume points it would change, using its default settings. Each recipe keeps its own settings, which you set in the recipe.",
+              content: "Drag the slider as if you were turning your wrist after starting a recipe. Each device shows where it would be and how much it would move whatever it controls, using its default settings. Each recipe keeps its own settings, which you set in the recipe.",
             }}
           />
         </CardHeader>
@@ -64,7 +64,7 @@ export function VirtualDevicesPage({ automation, onMakeRecipe }: VirtualDevicesP
       <div className="device-grid">
         {DEVICE_KINDS.map(({ kind, label, summary }) => {
           const device = buildDevice(kind, defaultNumbers(kind));
-          const points = devicePosition(device, degrees) * 100;
+          const percent = devicePosition(device, degrees) * 100;
           const specs = deviceSpecs(kind);
           const usedBy = automation?.recipes.filter((recipe) => recipe.device.kind === kind) ?? [];
           return (
@@ -75,11 +75,14 @@ export function VirtualDevicesPage({ automation, onMakeRecipe }: VirtualDevicesP
               <CardContent className="flex flex-col gap-3">
                 <DevicePreview device={device} degrees={degrees} />
                 <p className="device-readout" aria-live="polite">
-                  Volume change <strong>{signed(points)}</strong>
+                  Moves its target by <strong>{signed(percent, "% of range")}</strong>
+                </p>
+                <p className="field-hint">
+                  That is {signed(percent, " volume points")}, {signed(percent, "% brightness")} or {signed(percent * 10, " px of scroll")}.
                 </p>
                 <p className="field-hint">{summary}</p>
                 <p className="field-hint">
-                  Settings: {specs.a.label.toLowerCase()} {specs.a.defaultValue.toFixed(specs.a.step < 1 ? 2 : 0)} {specs.a.unit}
+                  Defaults for volume: {specs.a.label.toLowerCase()} {specs.a.defaultValue.toFixed(specs.a.step < 1 ? 2 : 0)} {specs.a.unit}
                   {specs.b && `, ${specs.b.label.toLowerCase()} ${specs.b.defaultValue} ${specs.b.unit}`}
                 </p>
                 <p className="field-hint">

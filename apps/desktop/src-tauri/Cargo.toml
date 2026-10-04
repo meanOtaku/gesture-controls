@@ -18,6 +18,7 @@ head-tracking = { path = "../../../crates/head-tracking" }
 interaction-engine = { path = "../../../crates/interaction-engine" }
 native-head-tracking = { path = "../../../crates/native-head-tracking" }
 pinch-inference = { path = "../../../crates/pinch-inference" }
+system-control = { path = "../../../crates/system-control" }
 volume-control = { path = "../../../crates/volume-control" }
 spatial-protocol = { path = "../../../crates/protocol" }
 watch-bridge = { path = "../../../crates/watch-bridge" }

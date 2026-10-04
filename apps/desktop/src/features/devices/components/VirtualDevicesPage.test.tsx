@@ -29,17 +29,17 @@ describe("VirtualDevicesPage", () => {
 
   it("shows what a wrist rotation would change on each device", () => {
     render(<VirtualDevicesPage automation={null} onMakeRecipe={() => {}} />);
-    const read = (name: string) => within(screen.getByRole("region", { name })).getByText(/^[+-]?[\d.]+ pts$/).textContent;
-    expect(read("Rotation knob")).toBe("0 pts");
+    const read = (name: string) => within(screen.getByRole("region", { name })).getByText(/^[+-]?[\d.]+% of range$/).textContent;
+    expect(read("Rotation knob")).toBe("0% of range");
 
     fireEvent.change(screen.getByLabelText("Wrist rotation"), { target: { value: "30" } });
-    expect(read("Rotation knob")).toBe("+10 pts"); // a third of a point per degree
-    expect(read("Horizontal fader")).toBe("+33.3 pts"); // 30 of 45 degrees of travel, across a 50 point range
-    expect(read("Step knob")).toBe("+10 pts"); // two whole 15 degree steps of 5 pts
+    expect(read("Rotation knob")).toBe("+10% of range"); // a third of a point per degree
+    expect(read("Horizontal fader")).toBe("+33.3% of range"); // 30 of 45 degrees of travel, across a 50 point range
+    expect(read("Step knob")).toBe("+10% of range"); // two whole 15 degree steps of 5 pts
 
     fireEvent.change(screen.getByLabelText("Wrist rotation"), { target: { value: "-120" } });
-    expect(read("Horizontal fader")).toBe("-50 pts"); // stops at its end
-    expect(read("Rotation knob")).toBe("-40 pts"); // no end stop
+    expect(read("Horizontal fader")).toBe("-50% of range"); // stops at its end
+    expect(read("Rotation knob")).toBe("-40% of range"); // no end stop
   });
 
   it("starts a recipe with the chosen device", () => {

@@ -11,6 +11,8 @@ pub const MAX_RECIPE_NAME_CHARS: usize = 40;
 #[serde(rename_all = "camelCase")]
 pub enum Action {
     Volume,
+    Brightness,
+    Scroll,
 }
 
 impl Action {
@@ -18,6 +20,8 @@ impl Action {
     pub fn resource(self) -> &'static str {
         match self {
             Action::Volume => "volume",
+            Action::Brightness => "brightness",
+            Action::Scroll => "scroll",
         }
     }
 }

@@ -366,3 +366,36 @@ fn looking_arms_the_recipe_and_escape_does_not_re_arm_while_still_looking() {
     runner.update(&signals(Some("topRight"), false, 0.0));
     assert_eq!(runner.phase(), RunnerPhase::Armed);
 }
+
+#[test]
+fn recipes_on_different_things_never_conflict_but_two_on_one_thing_do() {
+    let knob = Device::default_for(DeviceKind::RotationKnob);
+    let mut volume = recipe("volume", chain(), knob);
+    let mut brightness = recipe("brightness", chain(), knob);
+    brightness.action = Action::Brightness;
+    let mut scroll = recipe("scroll", chain(), knob);
+    scroll.action = Action::Scroll;
+    // The same gesture chain may drive three different things at once.
+    assert!(find_conflicts(&[volume.clone(), brightness.clone(), scroll.clone()]).is_empty());
+
+    let mut second_scroll = recipe("scroll2", chain(), knob);
+    second_scroll.action = Action::Scroll;
+    let conflicts = find_conflicts(&[volume.clone(), scroll.clone(), second_scroll]);
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(conflicts[0].resource, "scroll");
+    volume.enabled = false;
+    brightness.enabled = false;
+    assert_eq!(blocked_recipes(&[volume, brightness, scroll]).len(), 0);
+}
+
+#[test]
+fn actions_serialize_in_camel_case() {
+    assert_eq!(
+        serde_json::to_string(&Action::Brightness).unwrap(),
+        "\"brightness\""
+    );
+    assert_eq!(
+        serde_json::from_str::<Action>("\"scroll\"").unwrap(),
+        Action::Scroll
+    );
+}

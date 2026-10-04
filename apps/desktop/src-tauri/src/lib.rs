@@ -7,6 +7,7 @@ use tauri::Manager;
 use tracing::{debug, error, info, warn};
 use watch_bridge::{WatchBridgeServer, WatchEvent};
 
+mod actuators;
 mod automation;
 mod calibration;
 mod environment;

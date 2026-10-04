@@ -8,8 +8,9 @@ import { Label } from "../../../components/ui/label";
 import { Switch } from "../../../components/ui/switch";
 import type { NumberSpec } from "../../../shared/forms/numberField";
 import { useNumberDrafts } from "../../../shared/forms/useNumberDrafts";
-import type { CalibrationLocation, Recipe, RecipeStage } from "../../../shared/protocol/events";
+import type { CalibrationLocation, Recipe, RecipeAction, RecipeStage } from "../../../shared/protocol/events";
 import {
+  ACTIONS,
   AXES,
   DEAD_ZONE_SPEC,
   DEVICE_KINDS,
@@ -54,16 +55,19 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
   const [invert, setInvert] = useState(initialDrive.invert);
   const initialKind = recipe.device.kind as DeviceKind;
   const [kind, setKind] = useState<DeviceKind>(initialKind);
+  const initialAction = recipe.action;
+  const [action, setAction] = useState<RecipeAction>(initialAction);
   const [serverError, setServerError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const initialNumbers = useMemo(() => deviceNumbers(recipe.device), [recipe.device]);
+  const initialNumbers = useMemo(() => deviceNumbers(recipe.device, recipe.action), [recipe.device, recipe.action]);
   const specs = useMemo(() => {
-    const device = deviceSpecs(kind);
+    const device = deviceSpecs(kind, action);
     return { deadZone: DEAD_ZONE_SPEC, a: device.a, b: device.b ?? UNUSED_SPEC };
-  }, [kind]);
-  // Switching device resets its two numbers to that device's defaults; the dead zone is the recipe's own.
-  const numbers = kind === initialKind ? initialNumbers : defaultNumbers(kind);
+  }, [kind, action]);
+  // Switching device or what it controls resets its two numbers to the defaults for that pair, because the same
+  // number means something different in points, percent and pixels. The dead zone is the recipe's own.
+  const numbers = kind === initialKind && action === initialAction ? initialNumbers : defaultNumbers(kind, action);
   const committed = useMemo(
     () => ({ deadZone: initialDrive.deadZoneDegrees, a: numbers.a, b: numbers.b }),
     [initialDrive.deadZoneDegrees, numbers.a, numbers.b],
@@ -114,13 +118,14 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
       ...recipe,
       name: name.trim(),
       stages: [...steps, { kind: "drive", axis, deadZoneDegrees: deadZone, invert }],
-      device: buildDevice(kind, { a, b }),
+      action,
+      device: buildDevice(kind, { a, b }, action),
     });
     setSaving(false);
     if (error !== null) setServerError(error);
   };
 
-  const showSecond = deviceSpecs(kind).b !== null;
+  const showSecond = deviceSpecs(kind, action).b !== null;
 
   return (
     <form noValidate aria-label={recipe.id === "" ? "New recipe" : `Edit ${recipe.name}`} className="recipe-editor" onSubmit={submit}>
@@ -243,6 +248,24 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
       </fieldset>
 
       <fieldset className="recipe-steps">
+        <legend>To control</legend>
+        <div className="field">
+        <div className="field-head"><Label htmlFor={`${uid}-action`}>Controls</Label></div>
+        <select
+          id={`${uid}-action`}
+          className={NATIVE_SELECT}
+          value={action}
+          onChange={(event) => setAction(event.target.value as RecipeAction)}
+        >
+          {ACTIONS.map((candidate) => (
+            <option key={candidate.value} value={candidate.value}>{candidate.label}</option>
+          ))}
+        </select>
+        <p className="field-hint">{ACTIONS.find((candidate) => candidate.value === action)?.summary}</p>
+        </div>
+      </fieldset>
+
+      <fieldset className="recipe-steps">
         <legend>Which moves this virtual device</legend>
         <div className="field">
           <div className="field-head"><Label htmlFor={kindId}>Device</Label></div>
@@ -266,11 +289,6 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
           {showSecond && field("b")}
         </div>
       </fieldset>
-
-      <div className="field">
-        <div className="field-head"><span className="field-label">Controls</span></div>
-        <p className="recipe-fixed">Volume <small>(the only thing that can be controlled so far)</small></p>
-      </div>
 
       {serverError && <p className="field-error" role="alert">{serverError}</p>}
       <div className="recipe-actions">
