@@ -33,6 +33,8 @@ pub const MIN_SWIPE_PEAK_THRESHOLD: f64 = 3.0;
 pub const MAX_SWIPE_PEAK_THRESHOLD: f64 = 30.0;
 pub const MIN_TAP_PEAK_THRESHOLD: f64 = 4.0;
 pub const MAX_TAP_PEAK_THRESHOLD: f64 = 40.0;
+pub const MIN_ROTATE_ANGLE_DEGREES: f64 = 30.0;
+pub const MAX_ROTATE_ANGLE_DEGREES: f64 = 180.0;
 pub const MIN_WRIST_ANGULAR_VELOCITY_DEGREES_PER_SECOND: f64 = 1.0;
 pub const MAX_WRIST_ANGULAR_VELOCITY_DEGREES_PER_SECOND: f64 = 2_000.0;
 pub const MIN_WRIST_VOLUME_POINTS_PER_SECOND: f64 = 1.0;
@@ -77,6 +79,9 @@ pub struct AppSettings {
     /// How hard a knock on the watch must be to count as a tap, in m/s². Lower is more sensitive.
     #[serde(default = "default_tap_peak_threshold")]
     pub tap_peak_threshold: f64,
+    /// How far the wrist must twist, quickly, to count as a rotate gesture, in degrees. Smaller is more sensitive.
+    #[serde(default = "default_rotate_angle_degrees")]
+    pub rotate_angle_degrees: f64,
     /// Which wrist the watch is worn on: it decides which way along the forearm is the wearer's left.
     #[serde(default)]
     pub watch_wrist: automation::Wrist,
@@ -121,6 +126,7 @@ impl Default for AppSettings {
             shake_strokes: default_shake_strokes(),
             swipe_peak_threshold: default_swipe_peak_threshold(),
             tap_peak_threshold: default_tap_peak_threshold(),
+            rotate_angle_degrees: default_rotate_angle_degrees(),
             watch_wrist: automation::Wrist::default(),
             wrist_max_angular_velocity_degrees_per_second:
                 default_wrist_max_angular_velocity_degrees_per_second(),
@@ -148,6 +154,9 @@ fn default_ppg_flush_rate_hz() -> f64 {
 
 fn default_shake_peak_threshold() -> f64 {
     6.0
+}
+fn default_rotate_angle_degrees() -> f64 {
+    60.0
 }
 fn default_tap_peak_threshold() -> f64 {
     12.0
@@ -252,6 +261,12 @@ impl AppSettings {
             self.tap_peak_threshold,
             MIN_TAP_PEAK_THRESHOLD,
             MAX_TAP_PEAK_THRESHOLD,
+        )?;
+        in_range(
+            "rotateAngleDegrees",
+            self.rotate_angle_degrees,
+            MIN_ROTATE_ANGLE_DEGREES,
+            MAX_ROTATE_ANGLE_DEGREES,
         )?;
         if !(MIN_SHAKE_STROKES..=MAX_SHAKE_STROKES).contains(&self.shake_strokes) {
             return Err(format!(
@@ -604,6 +619,14 @@ mod tests {
                 .contains("tapPeakThreshold")
         );
         settings.tap_peak_threshold = 12.0;
+        settings.rotate_angle_degrees = 10.0;
+        assert!(
+            settings
+                .validate()
+                .unwrap_err()
+                .contains("rotateAngleDegrees")
+        );
+        settings.rotate_angle_degrees = 60.0;
         settings.swipe_peak_threshold = 40.0;
         assert!(
             settings

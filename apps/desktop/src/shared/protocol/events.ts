@@ -49,7 +49,8 @@ export interface CalibrationState {
   activeTarget: CalibrationTarget | null;
 }
 
-export type HoldGesture = "pinch" | "stemButton" | "shake" | "swipeLeft" | "swipeRight" | "swipeUp" | "swipeDown" | "tap" | "doubleTap";
+export type HoldGesture = "pinch" | "stemButton" | "shake" | "swipeLeft" | "swipeRight" | "swipeUp" | "swipeDown" | "tap" | "doubleTap" | "rotateClockwise" | "rotateCounterClockwise";
+export type RotateDirection = "clockwise" | "counterClockwise";
 export type TapKind = "single" | "double";
 export type SwipeDirection = "left" | "right" | "up" | "down";
 export type WatchWrist = "left" | "right";
@@ -196,6 +197,8 @@ export const SHAKE_DETECTED_EVENT = "automation-shake";
 export const SWIPE_DETECTED_EVENT = "automation-swipe";
 /** Sent with `single` or `double` each time a tap is recognised. */
 export const TAP_DETECTED_EVENT = "automation-tap";
+/** Sent with the direction each time a quick wrist twist is recognised. */
+export const ROTATE_DETECTED_EVENT = "automation-rotate";
 export const ACTION_ERROR_EVENT = "automation-action-error";
 export interface ActionError {
   action: RecipeAction;
@@ -287,6 +290,8 @@ export interface AppSettings {
   swipePeakThreshold: number;
   /** How hard a knock on the watch must be to count as a tap (m/s²); lower is more sensitive. */
   tapPeakThreshold: number;
+  /** How far the wrist must twist, quickly, to count as a rotate gesture (degrees); smaller is more sensitive. */
+  rotateAngleDegrees: number;
   /** Which wrist the watch is worn on: it decides which way along the forearm is left. */
   watchWrist: WatchWrist;
   wristMaxAngularVelocityDegreesPerSecond: number;

@@ -1,10 +1,11 @@
 import type { FormEvent } from "react";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { useNumberDrafts } from "../../../shared/forms/useNumberDrafts";
-import type { AppSettings, OverlayState, SwipeDirection, TapKind, WatchStatus } from "../../../shared/protocol/events";
+import type { AppSettings, OverlayState, RotateDirection, SwipeDirection, TapKind, WatchStatus } from "../../../shared/protocol/events";
 import { ApplySettingsFooter } from "./ApplySettingsFooter";
 import { HeadphonesSettingsSection } from "./HeadphonesSettingsSection";
 import { RecordingGraphSettingsSection } from "./RecordingGraphSettingsSection";
+import { RotateSettings } from "./RotateSettings";
 import { ShakeSettings } from "./ShakeSettings";
 import { SwipeSettings } from "./SwipeSettings";
 import { TapSettings } from "./TapSettings";
@@ -37,6 +38,7 @@ interface SettingsProps {
   shakeDetections?: number;
   lastSwipe?: { direction: SwipeDirection; count: number } | null;
   lastTap?: { kind: TapKind; count: number } | null;
+  lastRotate?: { direction: RotateDirection; count: number } | null;
   onUpdate: (settings: AppSettings) => void;
   onReset: () => void;
 }
@@ -50,6 +52,7 @@ export function Settings({
   shakeDetections = 0,
   lastSwipe = null,
   lastTap = null,
+  lastRotate = null,
   onUpdate,
   onReset,
 }: SettingsProps) {
@@ -98,6 +101,8 @@ export function Settings({
           <WristRotationSettings />
 
           <ShakeSettings detections={shakeDetections} />
+
+          <RotateSettings lastRotate={lastRotate} />
 
           <TapSettings lastTap={lastTap} />
 

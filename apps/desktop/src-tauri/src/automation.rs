@@ -10,9 +10,10 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use automation::{
-    Action, Axis, Conflict, Device, DeviceKind, Hold, Recipe, RecipeRunner, RunnerPhase,
-    ShakeConfig, ShakeDetector, Signals, Stage, SwipeConfig, SwipeDetector, SwipeDirection,
-    TapConfig, TapDetector, TapKind, Wrist, blocked_recipes, find_conflicts, validate_recipe,
+    Action, Axis, Conflict, Device, DeviceKind, Hold, Recipe, RecipeRunner, RotateConfig,
+    RotateDetector, RotateDirection, RunnerPhase, ShakeConfig, ShakeDetector, Signals, Stage,
+    SwipeConfig, SwipeDetector, SwipeDirection, TapConfig, TapDetector, TapKind, Wrist,
+    blocked_recipes, find_conflicts, validate_recipe,
 };
 use interaction_engine::quaternion_angular_distance;
 use serde::Serialize;
@@ -31,6 +32,8 @@ pub const SHAKE_DETECTED_EVENT: &str = "automation-shake";
 pub const SWIPE_DETECTED_EVENT: &str = "automation-swipe";
 /// Sent with `single` or `double` each time a tap is recognised.
 pub const TAP_DETECTED_EVENT: &str = "automation-tap";
+/// Sent with `clockwise` or `counterClockwise` each time a quick wrist twist is recognised.
+pub const ROTATE_DETECTED_EVENT: &str = "automation-rotate";
 /// How long a recognised shake keeps counting as "happening", so a recipe that combines it with another step (look
 /// at a location, say) has a moment in which both hold.
 /// Also how long a swipe keeps counting.
@@ -67,6 +70,8 @@ pub struct Effects {
     pub shook: bool,
     /// A swipe was recognised on this sample, for the Settings tuning aid.
     pub swiped: Option<SwipeDirection>,
+    /// A quick wrist twist was recognised on this sample, for the Settings tuning aid.
+    pub rotated: Option<RotateDirection>,
     /// A tap was recognised on this sample, for the Settings tuning aid.
     pub tapped: Option<TapKind>,
     /// Trigger recipes that fired: each a one-off press.
@@ -86,6 +91,7 @@ pub struct Tuning {
     pub shake_strokes: u32,
     pub swipe_peak_threshold: f64,
     pub tap_peak_threshold: f64,
+    pub rotate_angle_degrees: f64,
     pub wrist: Wrist,
 }
 
@@ -99,7 +105,16 @@ impl Tuning {
             shake_strokes: settings.shake_strokes,
             swipe_peak_threshold: settings.swipe_peak_threshold,
             tap_peak_threshold: settings.tap_peak_threshold,
+            rotate_angle_degrees: settings.rotate_angle_degrees,
             wrist: settings.watch_wrist,
+        }
+    }
+
+    pub fn rotate_config(&self) -> RotateConfig {
+        RotateConfig {
+            min_angle_degrees: self.rotate_angle_degrees,
+            wrist: self.wrist,
+            ..RotateConfig::default()
         }
     }
 
@@ -140,6 +155,7 @@ impl Default for Tuning {
             shake_strokes: 4,
             swipe_peak_threshold: 8.0,
             tap_peak_threshold: 12.0,
+            rotate_angle_degrees: 60.0,
             wrist: Wrist::Left,
         }
     }
@@ -220,6 +236,9 @@ pub struct Engine {
     tap: TapDetector,
     tap_kind: Option<TapKind>,
     tap_until_ns: u64,
+    rotate: RotateDetector,
+    rotate_direction: Option<RotateDirection>,
+    rotate_until_ns: u64,
     /// The last orientation accepted while driving, for the angular-velocity outlier check.
     last_accepted: Option<Orientation>,
     blocked: BTreeSet<String>,
@@ -246,6 +265,9 @@ impl Engine {
             tap: TapDetector::new(tuning.tap_config()),
             tap_kind: None,
             tap_until_ns: 0,
+            rotate: RotateDetector::new(tuning.rotate_config()),
+            rotate_direction: None,
+            rotate_until_ns: 0,
             last_accepted: None,
             blocked: BTreeSet::new(),
             overlay: OverlayWanted::Hidden,
@@ -278,6 +300,8 @@ impl Engine {
         self.swipe_until_ns = 0;
         self.tap = TapDetector::new(tuning.tap_config());
         self.tap_until_ns = 0;
+        self.rotate = RotateDetector::new(tuning.rotate_config());
+        self.rotate_until_ns = 0;
         self.rebuild();
         self.step()
     }
@@ -321,6 +345,8 @@ impl Engine {
         self.swipe_until_ns = 0;
         self.tap.reset();
         self.tap_until_ns = 0;
+        self.rotate.reset();
+        self.rotate_until_ns = 0;
         self.step()
     }
 
@@ -365,6 +391,11 @@ impl Engine {
             self.tap_kind = Some(kind);
             self.tap_until_ns = timestamp_ns + SHAKE_HOLD_NS;
         }
+        let rotated = self.rotate.observe(timestamp_ns, quaternion);
+        if let Some(direction) = rotated {
+            self.rotate_direction = Some(direction);
+            self.rotate_until_ns = timestamp_ns + SHAKE_HOLD_NS;
+        }
         let driving = self.driving;
         if driving && self.is_velocity_outlier(quaternion, timestamp_ns) {
             // A glitch freezes the knob rather than jumping it; the last good orientation stays current.
@@ -372,6 +403,7 @@ impl Engine {
                 shook,
                 swiped,
                 tapped,
+                rotated,
                 ..Effects::default()
             };
         }
@@ -388,6 +420,7 @@ impl Engine {
         effects.shook = shook;
         effects.swiped = swiped;
         effects.tapped = tapped;
+        effects.rotated = rotated;
         effects
     }
 
@@ -409,6 +442,11 @@ impl Engine {
             head_location: self.head.as_deref(),
             pinch_held: self.pinch,
             stem_button_held: self.stem,
+            rotate: self
+                .orientation
+                .as_ref()
+                .filter(|latest| latest.timestamp_ns < self.rotate_until_ns)
+                .and(self.rotate_direction),
             tap: self
                 .orientation
                 .as_ref()
@@ -567,6 +605,9 @@ impl AutomationRuntime {
         apply_effects(app, &effects, max_points);
         if effects.shook {
             let _ = app.emit(SHAKE_DETECTED_EVENT, ());
+        }
+        if let Some(direction) = effects.rotated {
+            let _ = app.emit(ROTATE_DETECTED_EVENT, direction);
         }
         if let Some(kind) = effects.tapped {
             let _ = app.emit(TAP_DETECTED_EVENT, kind);
@@ -1307,6 +1348,76 @@ mod tests {
             tap_for(&mut engine, &[1000], 10_000).0,
             vec![TapKind::Single]
         );
+    }
+
+    fn rolled(degrees: f64) -> [f64; 4] {
+        about_x(degrees)
+    }
+
+    /// Feeds 50 Hz orientation: a quick roll of `degrees` over 300 ms starting at 1 s, then still.
+    fn rotate_for(
+        engine: &mut Engine,
+        degrees: f64,
+        offset_ms: u64,
+    ) -> (Vec<RotateDirection>, Vec<Action>) {
+        let (mut rotations, mut fired) = (Vec::new(), Vec::new());
+        for ms in (0..=3000u64).step_by(20) {
+            let angle = match ms {
+                0..1000 => 0.0,
+                1000..1300 => degrees * (ms - 1000) as f64 / 300.0,
+                _ => degrees,
+            };
+            let effects =
+                engine.observe_orientation(rolled(angle), (offset_ms + ms) * 1_000_000, None);
+            rotations.extend(effects.rotated);
+            fired.extend(effects.fired);
+        }
+        (rotations, fired)
+    }
+
+    #[test]
+    fn a_quick_wrist_twist_fires_the_recipe_for_its_direction() {
+        let mut engine = Engine::new(
+            vec![
+                swipe_recipe(Hold::RotateClockwise, Action::NextTrack),
+                swipe_recipe(Hold::RotateCounterClockwise, Action::PreviousTrack),
+            ],
+            Tuning::default(),
+        );
+        assert_eq!(
+            rotate_for(&mut engine, 90.0, 0),
+            (vec![RotateDirection::Clockwise], vec![Action::NextTrack])
+        );
+        // The watch is now 90 degrees round, so a flick back is a 90 degree turn the other way.
+        let mut engine = Engine::new(
+            vec![swipe_recipe(
+                Hold::RotateCounterClockwise,
+                Action::PreviousTrack,
+            )],
+            Tuning::default(),
+        );
+        assert_eq!(
+            rotate_for(&mut engine, -90.0, 0),
+            (
+                vec![RotateDirection::CounterClockwise],
+                vec![Action::PreviousTrack]
+            )
+        );
+    }
+
+    #[test]
+    fn the_rotate_angle_setting_is_obeyed_and_a_rotate_does_not_disturb_a_dial() {
+        let strict = Tuning {
+            rotate_angle_degrees: 150.0,
+            ..Tuning::default()
+        };
+        let mut engine = Engine::new(
+            vec![swipe_recipe(Hold::RotateClockwise, Action::NextTrack)],
+            strict,
+        );
+        assert!(rotate_for(&mut engine, 90.0, 0).0.is_empty());
+        engine.set_tuning(Tuning::default());
+        assert_eq!(rotate_for(&mut engine, 90.0, 10_000).0.len(), 1);
     }
 
     #[test]

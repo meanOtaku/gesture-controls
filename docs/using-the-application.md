@@ -335,7 +335,17 @@ The **Recipes** tab lists every recipe with an on/off switch, an Edit button and
 - Tapping the watch with a finger also moves your arm a little, so a tap right after other movement may be ignored for being "not still". Pause a moment first.
 - Not yet verified on a real watch. At 50 samples a second a tap is only one or two samples, so a very light knock can fall between them; if taps are unreliable, say so.
 
-Because it is a moment, a shake, swipe or tap can only start a **button action** (play/pause, next, previous, mute); the editor does not offer them for volume, brightness or scroll, and refuses to save a recipe that has one. It needs the watch's **acceleration** sensor switched on, which is the default.
+### Rotate
+
+**Rotate wrist clockwise** and **Rotate wrist counter-clockwise** are gesture steps for one quick twist of the wrist about your forearm, like turning a key. They are momentary like the others, so they can only start a button action. Example: *Rotate wrist clockwise* → *Next track*, *Rotate wrist counter-clockwise* → *Previous track*.
+
+- A rotate is a twist of at least a set angle (default **60°**) within about **0.6 seconds**, mostly about the forearm. A slow turn takes too long to qualify (that is the *wrist rotation* step that turns a volume, brightness or scroll dial, a different thing), and swinging the whole arm does not count because the movement is not about the forearm.
+- The turn back that often follows a flick is ignored for 0.8 seconds, so a twist out and back fires once, for the way out. Pause before the next one.
+- **Clockwise** is as you would see it looking along your forearm from the elbow towards the hand. Which way the watch's axis points depends on how it sits on your wrist, so if clockwise and counter-clockwise come out backwards, switch **Watch worn on** under Swipe sensitivity.
+- **Settings → Rotate sensitivity → Rotate angle** (30° to 180°) sets how big the twist must be; the card shows the last rotate recognised and a count.
+- It uses only the watch's orientation sensor, which streams about 50 times a second. Not verified on a real watch.
+
+Because it is a moment, a shake, swipe, tap or rotate can only start a **button action** (play/pause, next, previous, mute); the editor does not offer them for volume, brightness or scroll, and refuses to save a recipe that has one. It needs the watch's **acceleration** sensor switched on, which is the default.
 
 #### Tuning the sensitivity
 

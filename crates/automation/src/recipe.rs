@@ -75,6 +75,9 @@ pub enum Hold {
     Tap,
     /// Two quick knocks.
     DoubleTap,
+    /// A quick twist of the wrist, one way or the other: the one-shot cousin of the roll that turns a dial.
+    RotateClockwise,
+    RotateCounterClockwise,
 }
 
 impl Hold {

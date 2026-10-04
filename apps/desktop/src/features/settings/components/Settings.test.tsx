@@ -21,6 +21,7 @@ const settings: AppSettings = {
   shakeStrokes: 4,
   swipePeakThreshold: 8,
   tapPeakThreshold: 12,
+  rotateAngleDegrees: 60,
   watchWrist: "left",
   wristMaxAngularVelocityDegreesPerSecond: 360,
   wristMaxVolumePointsPerSecond: 30,
@@ -192,6 +193,21 @@ describe("Settings", () => {
     expect(updates[0]).toMatchObject({ tapPeakThreshold: 9 });
     rerender(<Settings settings={settings} lastTap={{ kind: "double", count: 4 }} onUpdate={() => {}} onReset={() => {}} />);
     expect(screen.getByText(/Last tap recognised/)).toHaveTextContent("double tap (4 so far)");
+  });
+
+  it("tunes the rotate angle, refuses a fraction, and shows the last rotate", () => {
+    const updates: AppSettings[] = [];
+    const { rerender } = render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
+    expect(screen.getByLabelText("Rotate angle")).toHaveValue(60);
+    expect(screen.getByText(/No rotate recognised yet/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Rotate angle"), { target: { value: "45" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    expect(updates[0]).toMatchObject({ rotateAngleDegrees: 45 });
+    fireEvent.change(screen.getByLabelText("Rotate angle"), { target: { value: "20" } });
+    fireEvent.blur(screen.getByLabelText("Rotate angle"));
+    expect(screen.getByLabelText("Rotate angle")).toHaveAttribute("aria-invalid", "true");
+    rerender(<Settings settings={settings} lastRotate={{ direction: "counterClockwise", count: 3 }} onUpdate={() => {}} onReset={() => {}} />);
+    expect(screen.getByText(/Last rotate recognised/)).toHaveTextContent("counter-clockwise (3 so far)");
   });
 
   it("toggles a watch sensor switch immediately without a confirmation dialog", () => {

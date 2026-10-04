@@ -639,3 +639,23 @@ fn a_tap_step_and_a_double_tap_step_each_fire_only_for_their_own_kind() {
         "\"doubleTap\""
     );
 }
+
+#[test]
+fn a_rotate_step_fires_only_for_its_own_direction() {
+    let signals = |rotate| Signals {
+        rotate,
+        ..Signals::default()
+    };
+    let mut clockwise = RecipeRunner::new(trigger(vec![Stage::Hold {
+        hold: Hold::RotateClockwise,
+    }]));
+    clockwise.update(&signals(Some(RotateDirection::CounterClockwise)));
+    assert!(!clockwise.take_fired());
+    clockwise.update(&signals(None));
+    clockwise.update(&signals(Some(RotateDirection::Clockwise)));
+    assert!(clockwise.take_fired());
+    assert_eq!(
+        serde_json::to_string(&Hold::RotateCounterClockwise).unwrap(),
+        "\"rotateCounterClockwise\""
+    );
+}

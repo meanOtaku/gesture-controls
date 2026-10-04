@@ -6,7 +6,7 @@ export const MAX_STAGES = 6;
 
 export type DeviceKind = "rotationKnob" | "horizontalFader" | "verticalFader" | "stepKnob";
 export type Axis = "roll" | "pitch" | "yaw";
-export type HoldKind = "pinch" | "stemButton" | "shake" | "swipeLeft" | "swipeRight" | "swipeUp" | "swipeDown" | "tap" | "doubleTap";
+export type HoldKind = "pinch" | "stemButton" | "shake" | "swipeLeft" | "swipeRight" | "swipeUp" | "swipeDown" | "tap" | "doubleTap" | "rotateClockwise" | "rotateCounterClockwise";
 
 export const DEVICE_KINDS: ReadonlyArray<{ kind: DeviceKind; label: string; summary: string }> = [
   { kind: "rotationKnob", label: "Rotation knob", summary: "Endless: every degree you turn changes the value." },
@@ -51,14 +51,16 @@ export const HOLDS: ReadonlyArray<{ value: HoldKind; label: string }> = [
   { value: "swipeDown", label: "Swipe down" },
   { value: "tap", label: "Tap watch" },
   { value: "doubleTap", label: "Double-tap watch" },
+  { value: "rotateClockwise", label: "Rotate wrist clockwise" },
+  { value: "rotateCounterClockwise", label: "Rotate wrist counter-clockwise" },
 ];
 
-/** A shake, swipe or tap is over in a moment, unlike a pinch or a held button. */
+/** A shake, swipe, tap or rotate is over in a moment, unlike a pinch or a held button. */
 export function isMomentary(hold: HoldKind): boolean {
   return hold !== "pinch" && hold !== "stemButton";
 }
 
-/** The gestures a recipe can use: a shake, swipe or tap is over in a moment, so only a button action can use it. */
+/** The gestures a recipe can use: a shake, swipe, tap or rotate is over in a moment, so only a button action can use it. */
 export function holdsFor(trigger: boolean) {
   return trigger ? HOLDS : HOLDS.filter((hold) => !isMomentary(hold.value));
 }
@@ -207,7 +209,7 @@ const sameStage = (a: RecipeStage, b: RecipeStage) => JSON.stringify(a) === JSON
 export function chainProblem(leading: RecipeStage[], locations: CalibrationLocation[], trigger = false): string | null {
   if (trigger && leading.length === 0) return "Add at least one step: something has to start it.";
   if (!trigger && leading.some((stage) => stage.kind === "hold" && isMomentary(stage.hold))) {
-    return "A shake, swipe or tap only works for a button action (play/pause, next, previous or mute). Choose one under To control, or remove that step.";
+    return "A shake, swipe, tap or rotate only works for a button action (play/pause, next, previous or mute). Choose one under To control, or remove that step.";
   }
   const limit = trigger ? MAX_STAGES : MAX_STAGES - 1;
   if (leading.length > limit) return `A recipe can have at most ${limit} steps${trigger ? "" : " before the wrist rotation"}.`;
