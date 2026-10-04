@@ -390,7 +390,7 @@ The volume follows the wrist but moves no faster than **Max volume rate** (30 po
 - **Windows:** Core Audio default multimedia output adapter.
 - **Linux:** PipeWire (`wpctl`) first, PulseAudio (`pactl`) fallback.
 
-Use the Desktop readiness screen to check the backend. Backend errors fail closed: the app must not claim a volume change it did not perform.
+Try changing the volume from the Main tab to check the backend. Backend errors fail closed: the app must not claim a volume change it did not perform.
 
 ## 6. Troubleshooting and safe recovery
 
@@ -403,9 +403,9 @@ Use the Desktop readiness screen to check the backend. Backend errors fail close
 | An error says the model registry is corrupt | The app refused to overwrite it. Restore `registry.json` from a backup, or move it aside to start an empty registry (the model bundles on disk are untouched). |
 | A Timeline CSV is rejected on import | Create any missing label first (the error names it), then retry. Rows with no label are dropped; a file with no labeled rows at all is rejected. |
 | Overlay does not appear | Recalibrate center and top-right, verify headset packets are arriving, then wait for the configured dwell. |
-| Volume does not change | Check Desktop readiness for the platform backend; use a test audio output; ensure the overlay is visible and an interaction is actively grabbed. |
+| Volume does not change | Check the platform's audio backend works from the Main tab; use a test audio output; ensure the overlay is visible and an interaction is actively grabbed. |
 | Monitor/Live controls are disabled | Activate an Approved, validated TFLite bundle with complete safe intent bindings. LiteRT must also be included in the desktop build. |
-| Model training/replay cannot start | Open Desktop readiness, install `uv`, use a complete repository checkout, and recheck. |
+| A model will not activate | Read the red alert on the Label models card: the model's files were altered, or it does not run. Import it again. |
 | An interaction remains active unexpectedly | Stop Watch telemetry or disconnect the Watch; the desktop should force-release/hide. Also leave the gaze target or press Escape to hide the overlay. |
 
 ## 7. Before enabling Live on your own hardware
