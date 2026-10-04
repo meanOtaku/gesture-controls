@@ -78,7 +78,7 @@ the `bridge` argument to stream JSON without opening a second window.
 - Provider-neutral Rust pose types and `SonyUdpHeadPoseProvider`
 - Strict schema validation, connection timeout, and reset-counter detection
 - Live device, orientation, quaternion, gyroscope, packet-rate, and latency diagnostics
-- Guided quaternion calibration of center plus any number of named locations, calibration using `nalgebra`
+- Guided quaternion calibration of center plus any number of named locations using `nalgebra`
 - Adjustable activation threshold and dwell duration (400 ms by default)
 - `head-target-entered` / `head-target-exited` events for calibrated targets
 - Dedicated transparent, borderless, click-through, always-on-top volume overlay
