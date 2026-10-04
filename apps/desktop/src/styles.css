@@ -364,3 +364,15 @@ html.overlay-document body::before { display:none; }
 .recipe-item { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
 .recipe-item-actions { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
 .field-label { font-family:var(--font-display); text-transform:uppercase; letter-spacing:.1em; font-size:.85rem; font-weight:500; color:var(--ink); }
+
+/* Virtual devices page */
+.device-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(15rem,1fr)); gap:1rem; }
+.device-preview { width:100%; max-width:11rem; height:auto; align-self:center; }
+.device-dial { fill:var(--surface-2); stroke:var(--line); stroke-width:2; }
+.device-track { stroke:var(--line); stroke-width:4; stroke-linecap:round; }
+.device-tick { stroke:var(--ink-3); stroke-width:1.5; }
+.device-pointer { stroke:var(--yellow); stroke-width:4; stroke-linecap:round; }
+.device-handle { fill:var(--yellow); }
+.device-readout { margin:0; font-size:.9rem; }
+.device-slider { width:100%; accent-color:var(--yellow); }
+.field-unit-inline { font-family:var(--font-mono); font-size:.9rem; color:var(--ink-2); font-variant-numeric:tabular-nums; }

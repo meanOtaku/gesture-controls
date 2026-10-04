@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { lazy, memo, Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { DeviceKind } from "../features/recipes/recipeModel";
 import { AppNav, navStatuses, type AppTab } from "./components/AppNav";
 import { OperationFeedback } from "../components/app/OperationFeedback";
 import { Skeleton } from "../components/ui/skeleton";
@@ -64,6 +65,7 @@ const Dashboard = lazy(() => import("../features/dashboard/components/Dashboard"
 const LiveTelemetry = memo(lazy(() => import("../features/telemetry/components/LiveTelemetry").then((m) => ({ default: m.LiveTelemetry }))));
 const ModelLab = memo(lazy(() => import("../features/model-lab/components/ModelLab").then((m) => ({ default: m.ModelLab }))));
 const RecipesPage = lazy(() => import("../features/recipes/components/RecipesPage").then((m) => ({ default: m.RecipesPage })));
+const VirtualDevicesPage = lazy(() => import("../features/devices/components/VirtualDevicesPage").then((m) => ({ default: m.VirtualDevicesPage })));
 const Settings = lazy(() => import("../features/settings/components/Settings").then((m) => ({ default: m.Settings })));
 
 function TabFallback() {
@@ -159,6 +161,7 @@ function MainApp() {
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<AppTab>("main");
+  const [startWithDevice, setStartWithDevice] = useState<DeviceKind | null>(null);
   const { isPending, run } = usePendingActions();
   const calibrationEventVersion = useRef(0);
   const overlayEventVersion = useRef(0);
@@ -611,6 +614,17 @@ function MainApp() {
         onSetEnabled={(id, enabled) => { void setRecipeEnabled(id, enabled); }}
         onSave={saveRecipe}
         onDelete={(id) => { void deleteRecipe(id); }}
+        startWithDevice={startWithDevice}
+        onStartHandled={() => setStartWithDevice(null)}
+      />
+    )}
+    {activeTab === "devices" && (
+      <VirtualDevicesPage
+        automation={automation}
+        onMakeRecipe={(kind) => {
+          setStartWithDevice(kind);
+          setActiveTab("recipes");
+        }}
       />
     )}
     {activeTab === "telemetry" && (

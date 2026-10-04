@@ -133,7 +133,7 @@ export function driveStage(recipe: Recipe): Extract<RecipeStage, { kind: "drive"
 }
 
 /** A blank recipe to start from: look at the first location you added, then roll. Off until you switch it on. */
-export function blankRecipe(locations: CalibrationLocation[]): Recipe {
+export function blankRecipe(locations: CalibrationLocation[], kind: DeviceKind = "rotationKnob"): Recipe {
   const first = locations.find((location) => !location.builtin) ?? locations[0];
   return {
     id: "",
@@ -144,7 +144,7 @@ export function blankRecipe(locations: CalibrationLocation[]): Recipe {
       ...(first ? [{ kind: "headAt", location: first.id } as const] : []),
       { kind: "drive", axis: "roll", deadZoneDegrees: DEAD_ZONE_SPEC.defaultValue, invert: false },
     ],
-    device: buildDevice("rotationKnob", defaultNumbers("rotationKnob")),
+    device: buildDevice(kind, defaultNumbers(kind)),
   };
 }
 

@@ -133,6 +133,14 @@ describe("RecipesPage", () => {
     expect(deadZone).toHaveAttribute("aria-invalid", "true");
   });
 
+  it("opens the editor with the device chosen on the Virtual devices tab, then lets go of the request", () => {
+    const onStartHandled = vi.fn();
+    setup({ startWithDevice: "stepKnob", onStartHandled });
+    const editor = within(screen.getByRole("region", { name: "Recipe editor" }));
+    expect(editor.getByLabelText("Device")).toHaveValue("stepKnob");
+    expect(onStartHandled).toHaveBeenCalled();
+  });
+
   it("asks before deleting a recipe", () => {
     const props = setup();
     fireEvent.click(screen.getByRole("button", { name: "Delete Look top right, hold STEM, roll" }));

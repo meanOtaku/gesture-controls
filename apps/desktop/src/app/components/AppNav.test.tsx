@@ -80,7 +80,7 @@ describe("AppNav", () => {
       fireEvent.keyDown(window, { key: String(index + 1), ctrlKey: true });
       expect(onSelect).toHaveBeenLastCalledWith(tab);
     });
-    expect(NAV_ORDER).toEqual(["main", "headphone", "watch", "recipes", "telemetry", "modelLab", "settings"]);
+    expect(NAV_ORDER).toEqual(["main", "headphone", "watch", "recipes", "devices", "telemetry", "modelLab", "settings"]);
   });
 
   it("ignores a bare digit, other modifiers, and out-of-range digits", () => {
@@ -88,7 +88,7 @@ describe("AppNav", () => {
     fireEvent.keyDown(window, { key: "2" });
     fireEvent.keyDown(window, { key: "2", ctrlKey: true, shiftKey: true });
     fireEvent.keyDown(window, { key: "2", ctrlKey: true, altKey: true });
-    fireEvent.keyDown(window, { key: "8", ctrlKey: true });
+    fireEvent.keyDown(window, { key: "9", ctrlKey: true });
     fireEvent.keyDown(window, { key: "0", ctrlKey: true });
     expect(onSelect).not.toHaveBeenCalled();
   });

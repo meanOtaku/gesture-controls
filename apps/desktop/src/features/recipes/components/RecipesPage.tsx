@@ -1,5 +1,5 @@
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
@@ -7,7 +7,7 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Switch } from "../../../components/ui/switch";
 import type { AutomationState, CalibrationState, Recipe } from "../../../shared/protocol/events";
-import { blankRecipe, describeRecipe } from "../recipeModel";
+import { blankRecipe, describeRecipe, type DeviceKind } from "../recipeModel";
 import { ConflictAlerts } from "./ConflictAlerts";
 import { RecipeEditor } from "./RecipeEditor";
 
@@ -20,14 +20,23 @@ type RecipesPageProps = {
   /** Resolves to an error message, or null once saved. */
   onSave: (recipe: Recipe) => Promise<string | null>;
   onDelete: (id: string) => void;
+  /** Open the editor on a new recipe using this device (sent from the Virtual devices tab). */
+  startWithDevice?: DeviceKind | null;
+  onStartHandled?: () => void;
 };
 
 /** Where recipes are made: each one chains head, pinch/button and wrist steps into a virtual device that controls something. */
-export function RecipesPage({ automation, calibration, isPending, error, onSetEnabled, onSave, onDelete }: RecipesPageProps) {
+export function RecipesPage({ automation, calibration, isPending, error, onSetEnabled, onSave, onDelete, startWithDevice = null, onStartHandled }: RecipesPageProps) {
   const [editing, setEditing] = useState<Recipe | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const locations = calibration?.targets ?? [];
   const locationName = (id: string) => locations.find((location) => location.id === id)?.name ?? "a removed location";
+
+  useEffect(() => {
+    if (startWithDevice === null || calibration === null) return;
+    setEditing(blankRecipe(calibration.targets, startWithDevice));
+    onStartHandled?.();
+  }, [startWithDevice, calibration, onStartHandled]);
 
   const save = async (recipe: Recipe) => {
     const failure = await onSave(recipe);

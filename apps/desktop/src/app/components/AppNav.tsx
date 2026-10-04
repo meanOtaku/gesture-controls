@@ -1,4 +1,4 @@
-import { Activity, Brain, Hand, Headphones, LayoutDashboard, Settings as SettingsIcon, Watch, Workflow } from "lucide-react";
+import { Activity, Brain, Hand, Headphones, LayoutDashboard, Settings as SettingsIcon, SlidersHorizontal, Watch, Workflow } from "lucide-react";
 import { useEffect } from "react";
 import {
   Sidebar,
@@ -14,7 +14,7 @@ import {
   SidebarRail,
 } from "../../components/ui/sidebar";
 
-export type AppTab = "main" | "headphone" | "watch" | "recipes" | "telemetry" | "modelLab" | "settings";
+export type AppTab = "main" | "headphone" | "watch" | "recipes" | "devices" | "telemetry" | "modelLab" | "settings";
 
 type NavItem = { id: AppTab; label: string; icon: typeof LayoutDashboard };
 
@@ -23,7 +23,10 @@ const DEVICES: NavItem[] = [
   { id: "headphone", label: "Headphones", icon: Headphones },
   { id: "watch", label: "Watch", icon: Watch },
 ];
-const AUTOMATION: NavItem = { id: "recipes", label: "Recipes", icon: Workflow };
+const AUTOMATION: NavItem[] = [
+  { id: "recipes", label: "Recipes", icon: Workflow },
+  { id: "devices", label: "Virtual devices", icon: SlidersHorizontal },
+];
 const DATA: NavItem[] = [
   { id: "telemetry", label: "Live data", icon: Activity },
   { id: "modelLab", label: "Model Lab", icon: Brain },
@@ -31,7 +34,7 @@ const DATA: NavItem[] = [
 const SETTINGS: NavItem = { id: "settings", label: "Settings", icon: SettingsIcon };
 
 /** Display order, which is also what Cmd/Ctrl+1..6 select. */
-export const NAV_ORDER: AppTab[] = [MAIN, ...DEVICES, AUTOMATION, ...DATA, SETTINGS].map((item) => item.id);
+export const NAV_ORDER: AppTab[] = [MAIN, ...DEVICES, ...AUTOMATION, ...DATA, SETTINGS].map((item) => item.id);
 
 export type NavTone = "ok" | "warn" | "live" | "idle";
 export interface NavStatus { tone: NavTone; label: string }
@@ -70,7 +73,7 @@ type AppNavProps = {
 
 /** Primary navigation: Main, then Devices, Automation and Data, with Settings pinned at the bottom. */
 export function AppNav({ activeTab, onSelect, statuses = {} }: AppNavProps) {
-  // Cmd/Ctrl + 1..7 jumps to a tab. A modified digit is never text, so it is safe inside a field too.
+  // Cmd/Ctrl + 1..8 jumps to a tab. A modified digit is never text, so it is safe inside a field too.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
@@ -132,7 +135,7 @@ export function AppNav({ activeTab, onSelect, statuses = {} }: AppNavProps) {
         <SidebarGroup>
           <SidebarGroupLabel>Automation</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>{entry(AUTOMATION)}</SidebarMenu>
+            <SidebarMenu>{AUTOMATION.map(entry)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>

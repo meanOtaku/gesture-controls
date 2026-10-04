@@ -292,6 +292,10 @@ The **Recipes** tab lists every recipe with an on/off switch, an Edit button and
 4. **Device**: a rotation knob (endless), a horizontal or vertical fader (finite travel with end stops), or a step knob (whole steps). Their numbers are in volume points: sensitivity per degree, or travel and range, or degrees and points per step.
 5. **Save**. New recipes start switched off, so they cannot surprise you by conflicting with one you already use. If the save fails the editor stays open and says why.
 
+### The Virtual devices tab
+
+The **Virtual devices** tab shows the four devices a recipe can use. Drag **Wrist rotation** to see each one respond, with the volume change it would make, using its default settings. Each device also says which recipes use it, and **Make a recipe with this** opens the recipe editor with that device already chosen. Devices are configured per recipe, in the editor.
+
 Recipes are saved between runs. Deleting a location does not delete recipes that use it; they simply never start, and the editor flags the missing location.
 
 Three recipes come with the app, and only the first is on:
