@@ -23,7 +23,7 @@ The network is tiny (about 55 inputs, 32 and 16 hidden units, one binary output,
 
 Consequences of choosing in-process inference:
 
-- It works under `npm start` with no sidecar, because `tract` is an ordinary cargo dependency with no native library to ship or find.
+- It works under `npm start` with no sidecar, because `tract` is an ordinary cargo dependency with no runtime library to ship or find. (Its `tract-linalg` crate does run a build script that needs a C compiler and assembler on the build machine. A Tauri build already requires the platform toolchain, but this has been confirmed only on macOS arm64; see the correction below.)
 - The managed-sidecar protocol (NDJSON, readiness handshake, restart policy, orphan handling) is not built. A runtime fault becomes an in-process error handled by the existing fail-closed path.
 - One telemetry-ingestion and quality-gating path feeds all active models; there is no per-model process.
 
@@ -33,7 +33,7 @@ Consequences of choosing in-process inference:
 
 - Outputs agreed with scikit-learn's `predict_proba` to **1.2e-7** (and with ONNX Runtime to the same).
 - **6.3 µs** per inference, single-threaded, including tensor construction.
-- The crate built with a plain `cargo build`; no native runtime library was needed.
+- The crate built with a plain `cargo build` on macOS; no runtime library was needed.
 
 This is one model on one platform. Windows and Linux builds, and a model from the Keras and PyTorch exporters, are still to be checked when those adapters land.
 
@@ -67,3 +67,9 @@ The existing three-class TFLite model and the `litert-inference` feature stay as
 - **Operator coverage.** `tract` may not support an operator an exporter emits. The bundle validator loads and test-runs every model at import and training time and refuses one that fails, with the operator named.
 - **Numerical drift between exporter and runtime.** The parity report compares runtime output against the training framework on a fixed set of inputs, and a failure blocks deployment.
 - **One runtime means one point of failure.** A runtime fault clears every active label's detection state and force-releases dependent interactions, the same fail-closed rule as today.
+
+## Correction after building step 2
+
+The spike note above said `tract` needs "no native library". More precisely: nothing has to be shipped or located at run time, but `tract-linalg`'s build script invokes a C compiler to build its kernels, so a build needs the platform's usual toolchain (Xcode command line tools, MSVC build tools, gcc). The desktop app already needs these. A cross-compile check from macOS to Windows and Linux failed only because those cross toolchains are not installed on the development machine, so **Windows and Linux builds of `crates/label-inference` are unverified** and should be confirmed in CI.
+
+Another detail found against a real exporter's model: `tract` names an output after the operation that produces it, not after the ONNX tensor, so the bundle validator reads the ONNX graph's own output labels to find the output the manifest names.

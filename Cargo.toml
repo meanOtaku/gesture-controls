@@ -6,6 +6,7 @@ members = [
   "crates/automation",
   "crates/head-tracking",
   "crates/interaction-engine",
+  "crates/label-inference",
   "crates/model-lab-core",
   "crates/native-head-tracking",
   "crates/pinch-inference",

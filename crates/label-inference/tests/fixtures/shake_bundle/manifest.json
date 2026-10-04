@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "modelId": "shake-fixture",
+  "targetLabel": "shake_fixture",
+  "model": {
+    "file": "model.onnx",
+    "sha256": "ad5a8182a5a51a2498775f504ceea5b79d94ed07bdba9268433da9c6a9e80568",
+    "format": "onnx",
+    "opset": 15
+  },
+  "framework": {
+    "name": "scikit-learn",
+    "version": "1.9.1"
+  },
+  "input": {
+    "name": "X",
+    "shape": [
+      null,
+      4
+    ],
+    "dtype": "float32",
+    "features": [
+      "accel_x_std",
+      "accel_y_std",
+      "accel_z_std",
+      "accel_magnitude_std"
+    ]
+  },
+  "output": {
+    "name": "probabilities",
+    "shape": [
+      null,
+      2
+    ],
+    "dtype": "float32",
+    "positiveIndex": 1
+  },
+  "sources": [
+    "watchAcceleration"
+  ],
+  "window": {
+    "durationMs": 1000,
+    "strideMs": 200,
+    "maxGapMs": 300,
+    "minSamples": 5
+  },
+  "quality": {
+    "maxContactQuality": 0.0,
+    "minSampleCount": 3
+  },
+  "thresholds": {
+    "activation": 0.8,
+    "release": 0.5
+  },
+  "preprocessing": {
+    "kind": "none"
+  },
+  "provenance": {
+    "backend": "scikit-learn",
+    "note": "synthetic fixture, not a gesture model"
+  }
+}

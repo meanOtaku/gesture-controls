@@ -14,6 +14,7 @@ mod environment;
 mod head_pose;
 mod inference;
 mod label_registry;
+mod label_runtime;
 mod latest_write;
 mod model_lab;
 mod model_registry;
@@ -142,6 +143,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .manage(automation::AutomationRuntime::default())
+        .manage(label_runtime::LabelRuntimeHost::default())
         .manage(calibration::CalibrationRuntime::default())
         .manage(overlay::OverlayRuntime::default())
         .manage(overlay::VolumeRuntime::default())
@@ -155,6 +157,7 @@ pub fn run() {
         .manage(inference::PinchInferenceRuntime::default())
         .invoke_handler(tauri::generate_handler![
             calibration::get_calibration_state,
+            label_runtime::get_label_runtime_status,
             automation::get_automation_state,
             automation::set_recipe_enabled,
             automation::save_recipe,
@@ -228,6 +231,8 @@ pub fn run() {
             app.manage(settings::SettingsRuntime::load(&handle));
             handle.state::<calibration::CalibrationRuntime>().load(&handle);
             handle.state::<automation::AutomationRuntime>().load(&handle);
+            handle.state::<label_runtime::LabelRuntimeHost>().load(&handle);
+            label_runtime::spawn_timer(handle.clone());
             overlay::prepare_window(&handle).map_err(std::io::Error::other)?;
             model_registry::reconcile_inference_mode_at_startup(&handle);
             head_pose::spawn(handle.clone());
@@ -329,20 +334,32 @@ pub fn run() {
                                     watch_handle
                                         .state::<automation::AutomationRuntime>()
                                         .watch_lost(&watch_handle);
+                                    watch_handle
+                                        .state::<label_runtime::LabelRuntimeHost>()
+                                        .watch_lost(&watch_handle);
                                 }
                                 WatchEvent::Orientation(sample) => {
                                     watch_handle
                                         .state::<automation::AutomationRuntime>()
                                         .observe_orientation(&watch_handle, sample);
                                     watch_handle
+                                        .state::<label_runtime::LabelRuntimeHost>()
+                                        .observe_orientation(&watch_handle, sample);
+                                    watch_handle
                                         .state::<inference::PinchInferenceRuntime>()
                                         .observe_orientation(sample);
                                 }
                                 WatchEvent::Ppg(sample) => {
+                                    watch_handle
+                                        .state::<label_runtime::LabelRuntimeHost>()
+                                        .observe_ppg(&watch_handle, sample);
                                     inference::ingest_ppg_window(&watch_handle, sample);
                                 }
                                 WatchEvent::InvalidMessage { reason } => {
                                     warn!(reason = %reason, "rejecting malformed or out-of-order watch message");
+                                    watch_handle
+                                        .state::<label_runtime::LabelRuntimeHost>()
+                                        .fail(&watch_handle, "a malformed or out-of-order watch message");
                                     inference::force_release_and_hide(
                                         &watch_handle,
                                         interaction_engine::ForceReleaseReason::StaleSensorWindow,
