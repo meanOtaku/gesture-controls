@@ -212,4 +212,46 @@ pub(crate) mod tests {
             Err(ModelError::NotTheApprovedModel)
         ));
     }
+
+    /// Bundles written by the real per-label trainer (`tools/model-bundle-fixture/make_trained_fixtures.py`), one per
+    /// backend (scikit-learn logistic regression and MLP, and PyTorch): they must pass the validator and score the same windows as the model the trainer fitted.
+    #[test]
+    fn bundles_from_the_real_trainer_validate_and_score_like_the_trained_model() {
+        for name in [
+            "trained_logreg_bundle",
+            "trained_mlp_bundle",
+            "trained_torch_bundle",
+        ] {
+            let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures")
+                .join(name);
+            let bundle = validate_bundle(&dir, Some(&LabelId::new("snap").unwrap()))
+                .unwrap_or_else(|e| panic!("{name}: {e}"));
+            let version = active_version(&bundle);
+            let features = bundle.manifest.input.features.clone();
+            let model = LoadedModel::load(bundle, &version).unwrap();
+            let expected: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(dir.join("expected.json")).unwrap()).unwrap();
+            let rows = expected["inputs"].as_array().unwrap();
+            let want = expected["positive_probability"].as_array().unwrap();
+            assert!(!rows.is_empty());
+            for (row, want) in rows.iter().zip(want) {
+                // The trainer's feature order is the manifest's; the runtime reads them out of the canonical 55.
+                let mut canonical = [0.0f32; FEATURE_COUNT];
+                for (feature, value) in features.iter().zip(row.as_array().unwrap()) {
+                    let at = FEATURE_NAMES.iter().position(|n| n == feature).unwrap();
+                    canonical[at] = value.as_f64().unwrap() as f32;
+                }
+                let got = model.predict(&canonical).unwrap();
+                assert!(
+                    (got - want.as_f64().unwrap()).abs() < 1e-4,
+                    "{name}: {got} vs {want}"
+                );
+            }
+            // The negative rows come first, then the positive ones: the exported model still tells them apart.
+            let first = want.first().unwrap().as_f64().unwrap();
+            let last = want.last().unwrap().as_f64().unwrap();
+            assert!(first < last, "{name}: {first} {last}");
+        }
+    }
 }
