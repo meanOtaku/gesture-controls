@@ -186,6 +186,15 @@ This viewer is inspection-only: it has no annotation-editing or training action,
 
 The **Model Lab** tab manages datasets, model training, model safety state, replay, and desktop inference mode.
 
+#### Label models
+
+The **Label models** card at the top of Model Lab is the per-label model system: one binary model per label, several active at once, all run inside the app (nothing else to install).
+
+- **Import a model folder** picks a folder holding `manifest.json` and one ONNX model. It is checked in full and added as a **Draft**. Nothing is activated by importing.
+- Each model moves forward by your explicit choice: **Mark as evaluated → Approve → Activate**. Imported models are not evaluated by this app, so review them yourself first. Activating checks that the model's files are intact and that it runs; a model that cannot run is not activated. **Deactivate** and **Roll back** work per label.
+- **Model runtime** is **Off**, **Monitor** (models run and show a score and a "Detected" badge, nothing acts) or **Live** (a detection can start recipes that use that label, see *Model label* below). Switching to Live asks first, and a restart always comes back in Monitor.
+- A label whose active model cannot be loaded (for example its file was changed) is named in a red alert and has no running model.
+
 #### Desktop readiness
 
 This panel checks local prerequisites without reading or transmitting telemetry:

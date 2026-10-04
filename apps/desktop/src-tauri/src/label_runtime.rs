@@ -18,7 +18,9 @@ use label_inference::{
     ClearReason, Conflict, DetectionEvent, LabelRuntime, ModelLoadFailure, RuntimeMode,
     RuntimeOutput, clean_staging, load_active_models, publish_staged, stage_bundle,
 };
-use model_lab_core::{FileStore, LabelId, LifecycleState, RegistryStore, open_registry};
+use model_lab_core::{
+    FileStore, LabelId, LifecycleState, ModelVersionId, RegistryStore, open_registry,
+};
 use serde::Serialize;
 use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -256,10 +258,11 @@ impl LabelRuntimeHost {
             })
         {
             warn!(%error, "could not save the startup inference mode");
-        }
-        let (models, failures) = load_active_models(store.registry(), &dir);
-        for failure in &failures {
-            warn!(label = %failure.label, version = %failure.version, detail = %failure.detail, "an active model could not be loaded");
+            // Running in the remembered Live mode is not an option: stay off.
+            self.set_registry_error(format!(
+                "could not save the startup inference mode: {error}"
+            ));
+            return;
         }
         let quarantined: Vec<QuarantinedView> = store
             .registry()
@@ -270,7 +273,33 @@ impl LabelRuntimeHost {
                 diagnostic: q.diagnostic.clone(),
             })
             .collect();
-        let mode: RuntimeMode = startup_mode.into();
+        if let Ok(mut state) = self.state.lock() {
+            state.status = LabelRuntimeStatus {
+                quarantined,
+                ..LabelRuntimeStatus::default()
+            };
+            state.store = Some(store);
+        }
+        self.reload_models(app);
+    }
+
+    /// Loads whatever the registry now says is active into the runtime and sets its mode from the registry. A model
+    /// that is being replaced is released before the new one is used (the runtime does that); anything that fails to
+    /// load leaves that label without a model.
+    fn reload_models(&self, app: &AppHandle) {
+        let Ok(dir) = Self::model_lab_dir(app) else {
+            return;
+        };
+        let registry = match self.state.lock() {
+            Ok(state) => state.store.as_ref().map(|s| s.registry().clone()),
+            Err(_) => None,
+        };
+        let Some(registry) = registry else { return };
+        let (models, failures) = load_active_models(&registry, &dir);
+        for failure in &failures {
+            warn!(label = %failure.label, version = %failure.version, detail = %failure.detail, "an active model could not be loaded");
+        }
+        let mode: RuntimeMode = registry.inference_mode.into();
         let loaded_labels: Vec<String> = models.iter().map(|m| m.label.to_string()).collect();
         let outputs = {
             let Ok(mut runtime) = self.runtime.lock() else {
@@ -281,18 +310,99 @@ impl LabelRuntimeHost {
             [first, second]
         };
         if let Ok(mut state) = self.state.lock() {
-            state.status = LabelRuntimeStatus {
-                mode: mode_name(mode).to_string(),
-                loaded_labels,
-                load_failures: failures.iter().map(LoadFailureView::from).collect(),
-                quarantined,
-                ..LabelRuntimeStatus::default()
-            };
-            state.store = Some(store);
+            state.status.mode = mode_name(mode).to_string();
+            state.status.loaded_labels = loaded_labels;
+            state.status.load_failures = failures.iter().map(LoadFailureView::from).collect();
+            state.status.registry_error = None;
         }
         for output in outputs {
             self.dispatch(app, output);
         }
+    }
+
+    /// Applies one registry change (saved before it is adopted), then reloads the runtime and tells the UI.
+    fn change_registry<T>(
+        &self,
+        app: &AppHandle,
+        change: impl FnOnce(&mut model_lab_core::Registry) -> Result<T, model_lab_core::RegistryError>,
+    ) -> Result<T, String> {
+        let result = {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| "model state is unavailable".to_string())?;
+            let store = state
+                .store
+                .as_mut()
+                .ok_or_else(|| "the model registry is not available".to_string())?;
+            store.mutate(change).map_err(|e| e.to_string())?
+        };
+        self.reload_models(app);
+        let _ = app.emit(LABEL_MODELS_EVENT, ());
+        Ok(result)
+    }
+
+    fn version_for(&self, id: &str) -> Result<model_lab_core::ModelVersion, String> {
+        let id = ModelVersionId::new(id).map_err(|e| e.to_string())?;
+        self.state
+            .lock()
+            .map_err(|_| "model state is unavailable".to_string())?
+            .store
+            .as_ref()
+            .and_then(|s| s.registry().versions.get(&id).cloned())
+            .ok_or_else(|| "there is no such model".to_string())
+    }
+
+    /// Moves a model between Draft, Evaluated, Approved and Archived. Becoming active is only through activation.
+    pub fn set_model_state(
+        &self,
+        app: &AppHandle,
+        id: &str,
+        to: LifecycleState,
+    ) -> Result<(), String> {
+        let id = ModelVersionId::new(id).map_err(|e| e.to_string())?;
+        let now = Self::now_rfc3339();
+        self.change_registry(app, |r| r.transition(&id, to, &now))
+    }
+
+    /// Makes an approved model the label's active one. The model is loaded and checked first: a model that cannot run
+    /// is never made active, so activating cannot silently leave a label without one.
+    pub fn activate_model(&self, app: &AppHandle, id: &str) -> Result<(), String> {
+        let version = self.version_for(id)?;
+        let dir = Self::model_lab_dir(app)?;
+        // Only the files are checked here; the registry still has to agree to the move.
+        label_inference::check_loadable(&version, &dir)?;
+        let now = Self::now_rfc3339();
+        let vid = version.id.clone();
+        self.change_registry(app, |r| r.activate(&vid, &now).map(|_| ()))
+    }
+
+    pub fn deactivate_label(&self, app: &AppHandle, label: &str) -> Result<(), String> {
+        let label = LabelId::new(label).map_err(|e| e.to_string())?;
+        let now = Self::now_rfc3339();
+        self.change_registry(app, |r| r.deactivate(&label, &now).map(|_| ()))
+    }
+
+    pub fn rollback_label(&self, app: &AppHandle, label: &str) -> Result<(), String> {
+        let label = LabelId::new(label).map_err(|e| e.to_string())?;
+        let now = Self::now_rfc3339();
+        self.change_registry(app, |r| r.rollback(&label, &now).map(|_| ()))
+    }
+
+    /// Off, Monitor or Live. Monitor and Live need at least one active model to mean anything, but are allowed without.
+    pub fn set_mode(
+        &self,
+        app: &AppHandle,
+        mode: model_lab_core::InferenceMode,
+    ) -> Result<(), String> {
+        self.change_registry(app, |r| {
+            r.set_inference_mode(mode);
+            Ok(())
+        })
+    }
+
+    fn now_rfc3339() -> String {
+        Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
     }
 
     fn model_lab_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -312,7 +422,7 @@ impl LabelRuntimeHost {
         let dir = Self::model_lab_dir(app)?;
         let staged =
             stage_bundle(std::path::Path::new(source), &dir).map_err(|error| error.to_string())?;
-        let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+        let now = Self::now_rfc3339();
         let outcome = {
             let mut state = self
                 .state
@@ -522,6 +632,52 @@ pub fn import_label_model(
 #[tauri::command]
 pub fn list_label_models(host: State<'_, LabelRuntimeHost>) -> Vec<LabelModelView> {
     host.list_models()
+}
+
+#[tauri::command]
+pub fn set_label_model_state(
+    app: AppHandle,
+    host: State<'_, LabelRuntimeHost>,
+    id: String,
+    state: LifecycleState,
+) -> Result<(), String> {
+    host.set_model_state(&app, &id, state)
+}
+
+#[tauri::command]
+pub fn activate_label_model(
+    app: AppHandle,
+    host: State<'_, LabelRuntimeHost>,
+    id: String,
+) -> Result<(), String> {
+    host.activate_model(&app, &id)
+}
+
+#[tauri::command]
+pub fn deactivate_label_model(
+    app: AppHandle,
+    host: State<'_, LabelRuntimeHost>,
+    label: String,
+) -> Result<(), String> {
+    host.deactivate_label(&app, &label)
+}
+
+#[tauri::command]
+pub fn rollback_label_model(
+    app: AppHandle,
+    host: State<'_, LabelRuntimeHost>,
+    label: String,
+) -> Result<(), String> {
+    host.rollback_label(&app, &label)
+}
+
+#[tauri::command]
+pub fn set_label_runtime_mode(
+    app: AppHandle,
+    host: State<'_, LabelRuntimeHost>,
+    mode: model_lab_core::InferenceMode,
+) -> Result<(), String> {
+    host.set_mode(&app, mode)
 }
 
 #[cfg(test)]

@@ -27,7 +27,7 @@ pub use import::{
     IMPORTED_MODELS_DIR, ImportError, ImportOutcome, STAGING_DIR, StagedBundle, clean_staging,
     import_bundle, publish_staged, stage_bundle,
 };
-pub use loader::{ModelLoadFailure, load_active_models};
+pub use loader::{ModelLoadFailure, check_loadable, load_active_models, load_version};
 pub use model::{LoadedModel, ModelError};
 pub use pipeline::{LabelPipeline, LabelScore, Rejection, WindowRejection};
 pub use runtime::{LabelRuntime, RuntimeMode, RuntimeOutput};

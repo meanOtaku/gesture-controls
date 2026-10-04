@@ -72,7 +72,7 @@ Labels that cannot both be true are declared as an exclusivity group, separately
 2. **Publish.** Refused if the same model bytes were already imported for that label. The staged folder is moved to `model-lab/label-models/<label>-<hash prefix>` with one rename, then the Draft is recorded; the label's project is created (trainer "external import") if it has none, and reused if it has. If the registry cannot be saved, the moved folder is removed again, so disk and registry agree.
 3. **Startup** deletes anything left in staging. A published folder the registry does not know (a crash between the rename and the save) is never trusted or deleted: importing the same bytes again reports it and asks you to move it aside.
 
-Later moves (Draft → Evaluated → Approved → Active) are explicit and go through the registry's own rules; loading re-validates the files and checks the hash against the one recorded.
+Later moves (Draft → Evaluated → Approved → Active) are explicit and go through the registry's own rules. **Activation first loads the model** (full validation and a hash check against the one recorded) and is refused if that fails; every registry change then reloads the runtime, which releases a replaced model's detection before using the new one. Commands: `set_label_model_state`, `activate_label_model`, `deactivate_label_model`, `rollback_label_model`, `set_label_runtime_mode`.
 
 ## Recipes use detections
 
@@ -92,5 +92,5 @@ Not yet done or checked:
 - Windows and Linux builds of the crate (see the decision record's correction).
 - Any model from Keras or PyTorch exporters; any model trained on real recordings; behaviour on a real watch's streams.
 - Head-pose input, standardisation preprocessing, and quantised variants.
-- Training and the Model Lab UI (choosing a folder to import, moving a Draft to Approved and Active). Until then importing and the registry commands are only reachable through the app's commands.
+- Training (step 5b). Import, review, approval, activation, rollback and the Off/Monitor/Live switch are in the Model Lab's **Label models** card.
 - Importing on a real machine with a bundle from a real exporter other than the scikit-learn fixture.

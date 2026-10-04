@@ -543,4 +543,19 @@ mod tests {
         let dir = &store.registry().versions[&outcome.version_id].artifact_dir;
         assert!(lab.path().join(dir).join("model.onnx").is_file());
     }
+
+    #[test]
+    fn a_draft_can_be_checked_before_it_is_activated_and_an_altered_one_cannot() {
+        let source = copy_fixture();
+        let lab = tempfile::tempdir().unwrap();
+        let mut store = store();
+        let outcome = import_bundle(source.path(), lab.path(), &mut store, NOW).unwrap();
+        let version = store.registry().versions[&outcome.version_id].clone();
+        assert_eq!(crate::check_loadable(&version, lab.path()), Ok(()));
+        let model = lab.path().join(&version.artifact_dir).join("model.onnx");
+        let mut bytes = fs::read(&model).unwrap();
+        bytes[0] ^= 0xff;
+        fs::write(&model, bytes).unwrap();
+        assert!(crate::check_loadable(&version, lab.path()).is_err());
+    }
 }

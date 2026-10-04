@@ -6,7 +6,7 @@
 
 use std::path::{Component, Path, PathBuf};
 
-use model_lab_core::{LabelId, ModelVersionId, Registry};
+use model_lab_core::{LabelId, LifecycleState, ModelVersion, ModelVersionId, Registry};
 
 use crate::bundle::validate_bundle;
 use crate::model::LoadedModel;
@@ -28,6 +28,26 @@ fn contained(root: &Path, dir: &str) -> Option<PathBuf> {
     plain.then(|| root.join(relative))
 }
 
+/// Loads one version's model through the full bundle validation. The version must be Active and deployable (it is
+/// what [`LoadedModel::load`] requires), so a caller probing a candidate passes a copy marked Active.
+pub fn load_version(version: &ModelVersion, model_lab_dir: &Path) -> Result<LoadedModel, String> {
+    let dir = contained(model_lab_dir, &version.artifact_dir).ok_or_else(|| {
+        format!(
+            "the model directory '{}' is not a safe relative path",
+            version.artifact_dir
+        )
+    })?;
+    let bundle = validate_bundle(&dir, Some(&version.label)).map_err(|e| e.to_string())?;
+    LoadedModel::load(bundle, version).map_err(|e| e.to_string())
+}
+
+/// Whether this version's files are intact and its model runs, without keeping the loaded model.
+pub fn check_loadable(version: &ModelVersion, model_lab_dir: &Path) -> Result<(), String> {
+    let mut probe = version.clone();
+    probe.state = LifecycleState::Active;
+    load_version(&probe, model_lab_dir).map(|_| ())
+}
+
 pub fn load_active_models(
     registry: &Registry,
     model_lab_dir: &Path,
@@ -46,17 +66,7 @@ pub fn load_active_models(
             ));
             continue;
         };
-        let Some(dir) = contained(model_lab_dir, &version.artifact_dir) else {
-            failures.push(fail(format!(
-                "the model directory '{}' is not a safe relative path",
-                version.artifact_dir
-            )));
-            continue;
-        };
-        let result = validate_bundle(&dir, Some(label))
-            .map_err(|e| e.to_string())
-            .and_then(|bundle| LoadedModel::load(bundle, version).map_err(|e| e.to_string()));
-        match result {
+        match load_version(version, model_lab_dir) {
             Ok(model) => loaded.push(model),
             Err(detail) => failures.push(fail(detail)),
         }

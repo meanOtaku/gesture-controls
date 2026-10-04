@@ -37,6 +37,7 @@ import {
   type TrainingStatus,
 } from "../types";
 import { DatasetManager } from "./DatasetManager";
+import { LabelModelsPanel } from "./LabelModelsPanel";
 import { LabelMappingEditor } from "./LabelMappingEditor";
 import { ModelLifecycleControls } from "./ModelLifecycleControls";
 import { ModelRegistryTable } from "./ModelRegistryTable";
@@ -489,6 +490,8 @@ export function ModelLab() {
         </Alert>
       )}
       <fieldset className="lab-workspace card-stack" disabled={!desktopAvailable} aria-label="Desktop model tools">
+        <LabelModelsPanel desktopAvailable={desktopAvailable} />
+
         <ReadinessPanel
           desktopAvailable={desktopAvailable}
           diagnostics={environmentDiagnostics}
