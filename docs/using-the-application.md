@@ -310,6 +310,14 @@ The **Recipes** tab lists every recipe with an on/off switch, an Edit button and
 | Play / pause, next, previous | System media keys (posted through a short script) | `playerctl` (needs a player running) | Media virtual keys |
 | Mute | Toggles the system mute | Toggles the system mute | Toggles the system mute |
 
+### Shake
+
+**Shake wrist** is a gesture step, like the pinch or the STEM button, but it is a *moment* rather than something held. It is recognised from the watch's acceleration: a quick back-and-forth of at least four strokes within about a second. A single jolt, a steady swing, or knocks all the same way (walking, typing) do not count. After a shake is recognised it counts as happening for about half a second, so you can combine it with another step, such as *Look at Top right* then *Shake wrist* → *Next track*. It then ignores further shaking for a second, so one shake fires once.
+
+Because it is a moment, a shake can only start a **button action** (play/pause, next, previous, mute); the editor does not offer it for volume, brightness or scroll, and refuses to save one that has it. It needs the watch's **acceleration** sensor switched on, which is the default.
+
+The sensitivity is fixed (peaks of about 6 m/s² above the resting signal). It has been tested only against simulated strokes, so if it fires too easily or too rarely on a real wrist, say so and the thresholds can be tuned, or exposed in Settings.
+
 Each media key can have its own recipe, and they can share a gesture, but two recipes on the *same* key conflict and both pause.
 
 Different things can run at once: the same gesture can drive brightness and scroll together. Two recipes controlling the *same* thing conflict, and both pause. Brightness and scroll show no knob of their own; the system's own brightness indicator appears on a Mac. If one cannot be carried out (a missing permission, a missing tool), the Control center shows why.

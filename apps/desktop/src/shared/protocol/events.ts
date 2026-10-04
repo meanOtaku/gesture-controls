@@ -54,7 +54,7 @@ export type RecipeAction = "volume" | "brightness" | "scroll" | "playPause" | "n
 /** One step of a recipe's chain. A recipe ends with a `drive` stage, which supplies the continuous value. */
 export type RecipeStage =
   | { kind: "headAt"; location: CalibrationTarget }
-  | { kind: "hold"; hold: "pinch" | "stemButton" }
+  | { kind: "hold"; hold: "pinch" | "stemButton" | "shake" }
   | { kind: "drive"; axis: "roll" | "pitch" | "yaw"; deadZoneDegrees: number; invert: boolean };
 
 export interface Recipe {

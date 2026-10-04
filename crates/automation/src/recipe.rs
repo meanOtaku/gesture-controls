@@ -63,6 +63,9 @@ pub enum Hold {
     Pinch,
     /// The watch STEM button held down.
     StemButton,
+    /// A quick shake of the wrist. It is a moment, not something held, so it counts as "holding" for a short
+    /// while after it is recognised, and only a button-style action can use it.
+    Shake,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -113,6 +116,8 @@ pub enum RecipeError {
     RepeatedStage,
     #[error("an action that fires once cannot have a wrist rotation: remove it")]
     TriggerHasDrive,
+    #[error("a shake can only start a button action (play/pause, next, previous or mute)")]
+    ShakeNeedsButtonAction,
     #[error("the dead zone must be from 0 to under 90 degrees")]
     InvalidDeadZone,
     #[error("the device settings are out of range")]
@@ -153,6 +158,14 @@ pub fn validate_recipe(recipe: &Recipe) -> Result<(), RecipeError> {
     }
     if !matches!(last, Stage::Drive { .. }) {
         return Err(RecipeError::MustEndWithDrive);
+    }
+    // A shake is over in a moment, so it could not keep a dial turning.
+    if recipe
+        .stages
+        .iter()
+        .any(|stage| matches!(stage, Stage::Hold { hold: Hold::Shake }))
+    {
+        return Err(RecipeError::ShakeNeedsButtonAction);
     }
     if rest
         .iter()

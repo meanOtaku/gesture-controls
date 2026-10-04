@@ -66,7 +66,7 @@ describe("RecipesPage", () => {
 
     fireEvent.change(editor.getByLabelText("Name"), { target: { value: "Pinch scroll" } });
     fireEvent.change(editor.getByLabelText("Step 1 location"), { target: { value: "leftEdge" } });
-    fireEvent.click(editor.getByRole("button", { name: /Hold a gesture/ }));
+    fireEvent.click(editor.getByRole("button", { name: /Add a gesture/ }));
     fireEvent.change(editor.getByLabelText("Step 2 gesture"), { target: { value: "pinch" } });
     fireEvent.click(editor.getByRole("radio", { name: /Pitch/ }));
     fireEvent.change(editor.getByLabelText("Device"), { target: { value: "stepKnob" } });
@@ -127,13 +127,41 @@ describe("RecipesPage", () => {
     fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
     expect(props.onSave).not.toHaveBeenCalled();
 
-    fireEvent.click(editor.getByRole("button", { name: /Hold a gesture/ }));
+    fireEvent.click(editor.getByRole("button", { name: /Add a gesture/ }));
     fireEvent.change(editor.getByLabelText("Step 1 gesture"), { target: { value: "pinch" } });
     fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
     await waitFor(() => expect(props.onSave).toHaveBeenCalled());
     const saved = vi.mocked(props.onSave).mock.calls[0][0];
     expect(saved.action).toBe("playPause");
     expect(saved.stages).toEqual([{ kind: "hold", hold: "pinch" }]);
+  });
+
+  it("offers a shake only for button actions and explains why it is refused otherwise", async () => {
+    const props = setup();
+    fireEvent.click(screen.getByRole("button", { name: /New recipe/ }));
+    const editor = within(screen.getByRole("region", { name: "Recipe editor" }));
+    fireEvent.change(editor.getByLabelText("Name"), { target: { value: "Shake for next" } });
+    fireEvent.click(editor.getByRole("button", { name: /Add a gesture/ }));
+    // A volume dial is turned over time; a shake is a moment, so it is not offered.
+    expect(within(editor.getByLabelText("Step 2 gesture")).queryByRole("option", { name: "Shake wrist" })).not.toBeInTheDocument();
+
+    fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "nextTrack" } });
+    fireEvent.change(editor.getByLabelText("Step 2 gesture"), { target: { value: "shake" } });
+    expect(editor.getByText(/needs the watch's acceleration sensor/)).toBeInTheDocument();
+
+    // Switching back to a dial keeps the shake step but refuses to save it, in words.
+    fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "volume" } });
+    expect(editor.getByRole("alert")).toHaveTextContent("A shake only works for a button action");
+    fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
+    expect(props.onSave).not.toHaveBeenCalled();
+
+    fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "nextTrack" } });
+    fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
+    await waitFor(() => expect(props.onSave).toHaveBeenCalled());
+    expect(vi.mocked(props.onSave).mock.calls[0][0]).toMatchObject({
+      action: "nextTrack",
+      stages: [{ kind: "headAt", location: "topRight" }, { kind: "hold", hold: "shake" }],
+    });
   });
 
   it("describes a media recipe without a device", () => {
@@ -169,7 +197,7 @@ describe("RecipesPage", () => {
     const props = setup();
     fireEvent.click(screen.getByRole("button", { name: "Edit Look top right, hold STEM, roll" }));
     const editor = within(screen.getByRole("region", { name: "Recipe editor" }));
-    fireEvent.click(editor.getByRole("button", { name: /Hold a gesture/ }));
+    fireEvent.click(editor.getByRole("button", { name: /Add a gesture/ }));
     fireEvent.change(editor.getByLabelText("Step 3 gesture"), { target: { value: "stemButton" } });
     expect(editor.getByRole("alert")).toHaveTextContent("The same step is used twice");
     fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));

@@ -513,3 +513,53 @@ fn media_actions_are_triggers_with_their_own_resources() {
     let play = trigger(vec![Stage::Hold { hold: Hold::Pinch }]);
     assert!(find_conflicts(&[play, next]).is_empty());
 }
+
+#[test]
+fn a_shake_starts_a_button_action_and_cannot_drive_a_dial() {
+    let shake = || {
+        vec![
+            Stage::HeadAt {
+                location: "topRight".into(),
+            },
+            Stage::Hold { hold: Hold::Shake },
+        ]
+    };
+    let mut runner = RecipeRunner::new(trigger(shake()));
+    let looking = |shake| Signals {
+        head_location: Some("topRight"),
+        shake,
+        ..Signals::default()
+    };
+    runner.update(&looking(false));
+    assert!(!runner.take_fired());
+    runner.update(&looking(true));
+    assert!(runner.take_fired());
+    runner.update(&looking(true)); // still inside the shake's window
+    assert!(!runner.take_fired());
+    runner.update(&looking(false));
+    runner.update(&looking(true));
+    assert!(runner.take_fired());
+
+    let mut dial = recipe(
+        "dial",
+        vec![
+            Stage::Hold { hold: Hold::Shake },
+            Stage::Drive {
+                axis: Axis::Roll,
+                dead_zone_degrees: 0.0,
+                invert: false,
+            },
+        ],
+        Device::default_for(DeviceKind::RotationKnob),
+    );
+    assert_eq!(
+        validate_recipe(&dial),
+        Err(RecipeError::ShakeNeedsButtonAction)
+    );
+    dial.action = Action::Scroll;
+    assert_eq!(
+        validate_recipe(&dial),
+        Err(RecipeError::ShakeNeedsButtonAction)
+    );
+    assert_eq!(serde_json::to_string(&Hold::Shake).unwrap(), "\"shake\"");
+}

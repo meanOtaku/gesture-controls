@@ -10,6 +10,8 @@ pub struct Signals<'a> {
     pub head_location: Option<&'a str>,
     pub pinch_held: bool,
     pub stem_button_held: bool,
+    /// A shake was recognised a moment ago and is still counted as happening.
+    pub shake: bool,
     /// The watch's orientation as a quaternion `[w, i, j, k]`; `None` while it has no valid orientation.
     pub orientation: Option<[f64; 4]>,
 }
@@ -95,6 +97,7 @@ impl RecipeRunner {
             Stage::Hold {
                 hold: Hold::StemButton,
             } => signals.stem_button_held,
+            Stage::Hold { hold: Hold::Shake } => signals.shake,
             Stage::Drive { .. } => true,
         }
     }

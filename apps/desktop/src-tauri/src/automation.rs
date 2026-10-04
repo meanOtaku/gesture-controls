@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use automation::{
-    Action, Axis, Conflict, Device, DeviceKind, Hold, Recipe, RecipeRunner, RunnerPhase, Signals,
-    Stage, blocked_recipes, find_conflicts, validate_recipe,
+    Action, Axis, Conflict, Device, DeviceKind, Hold, Recipe, RecipeRunner, RunnerPhase,
+    ShakeDetector, Signals, Stage, blocked_recipes, find_conflicts, validate_recipe,
 };
 use interaction_engine::quaternion_angular_distance;
 use serde::Serialize;
@@ -24,6 +24,9 @@ use crate::overlay::{OverlayRuntime, VolumeRuntime};
 use crate::settings::{AppSettings, SettingsRuntime};
 
 pub const AUTOMATION_STATE_EVENT: &str = "automation-state";
+/// How long a recognised shake keeps counting as "happening", so a recipe that combines it with another step (look
+/// at a location, say) has a moment in which both hold.
+const SHAKE_HOLD_NS: u64 = 600_000_000;
 const RECIPES_FILE_NAME: &str = "recipes.json";
 pub const MAX_RECIPES: usize = 24;
 
@@ -152,6 +155,9 @@ pub struct Engine {
     pinch: bool,
     stem: bool,
     orientation: Option<Orientation>,
+    shake: ShakeDetector,
+    /// A recognised shake counts as happening until this watch-clock time, so a recipe's chain can see it.
+    shake_until_ns: u64,
     /// The last orientation accepted while driving, for the angular-velocity outlier check.
     last_accepted: Option<Orientation>,
     blocked: BTreeSet<String>,
@@ -170,6 +176,8 @@ impl Engine {
             pinch: false,
             stem: false,
             orientation: None,
+            shake: ShakeDetector::default(),
+            shake_until_ns: 0,
             last_accepted: None,
             blocked: BTreeSet::new(),
             overlay: OverlayWanted::Hidden,
@@ -233,6 +241,8 @@ impl Engine {
         self.stem = false;
         self.orientation = None;
         self.last_accepted = None;
+        self.shake.reset();
+        self.shake_until_ns = 0;
         self.step()
     }
 
@@ -245,13 +255,25 @@ impl Engine {
         self.step()
     }
 
-    pub fn observe_orientation(&mut self, quaternion: [f64; 4], timestamp_ns: u64) -> Effects {
+    pub fn observe_orientation(
+        &mut self,
+        quaternion: [f64; 4],
+        timestamp_ns: u64,
+        acceleration: Option<[f64; 3]>,
+    ) -> Effects {
         if self
             .orientation
             .as_ref()
             .is_some_and(|previous| timestamp_ns <= previous.timestamp_ns)
         {
             return Effects::default();
+        }
+        // A shake is judged on every sample, even one the glitch filter below discards: a shake is exactly the sort
+        // of fast movement that filter exists for.
+        if let Some(acceleration) = acceleration
+            && self.shake.observe(timestamp_ns, acceleration)
+        {
+            self.shake_until_ns = timestamp_ns + SHAKE_HOLD_NS;
         }
         let driving = self.driving;
         if driving && self.is_velocity_outlier(quaternion, timestamp_ns) {
@@ -288,6 +310,10 @@ impl Engine {
             head_location: self.head.as_deref(),
             pinch_held: self.pinch,
             stem_button_held: self.stem,
+            shake: self
+                .orientation
+                .as_ref()
+                .is_some_and(|latest| latest.timestamp_ns < self.shake_until_ns),
             orientation: self.orientation.as_ref().map(|o| o.quaternion),
         };
         let mut wanted = OverlayWanted::Hidden;
@@ -465,7 +491,7 @@ impl AutomationRuntime {
 
     pub fn observe_orientation(&self, app: &AppHandle, sample: &WatchOrientationSample) {
         self.with_engine(app, |engine| {
-            engine.observe_orientation(sample.quaternion, sample.timestamp_ns)
+            engine.observe_orientation(sample.quaternion, sample.timestamp_ns, sample.accelerometer)
         });
     }
 
@@ -672,7 +698,7 @@ mod tests {
     #[test]
     fn looking_shows_the_knob_then_stem_and_roll_move_the_volume() {
         let mut engine = Engine::new(only("lookStemVolume"), Tuning::default());
-        engine.observe_orientation(about_x(0.0), ts(1));
+        engine.observe_orientation(about_x(0.0), ts(1), None);
         assert_eq!(
             engine.set_head(Some("topRight".into())).overlay,
             Some(OverlayWanted::Armed)
@@ -680,14 +706,14 @@ mod tests {
         // Rolling without the button does nothing.
         assert!(
             engine
-                .observe_orientation(about_x(30.0), ts(2))
+                .observe_orientation(about_x(30.0), ts(2), None)
                 .deltas
                 .is_empty()
         );
 
         assert_eq!(engine.set_stem(true).overlay, Some(OverlayWanted::Driving));
-        engine.observe_orientation(about_x(30.0), ts(3));
-        let moved = engine.observe_orientation(about_x(60.0), ts(4));
+        engine.observe_orientation(about_x(30.0), ts(3), None);
+        let moved = engine.observe_orientation(about_x(60.0), ts(4), None);
         assert_eq!(moved.deltas.len(), 1);
         // 30 degrees less the 3 degree dead zone, at one third of a point per degree.
         assert!(
@@ -710,7 +736,7 @@ mod tests {
         assert!(state.blocked.contains(&"lookStemVolume".to_string()));
         assert!(state.blocked.contains(&"lookPinchVolume".to_string()));
         // Even with the whole chain of one of them satisfied, the held-off recipes never touch the overlay.
-        engine.observe_orientation(about_x(0.0), ts(1));
+        engine.observe_orientation(about_x(0.0), ts(1), None);
         engine.set_head(Some("topRight".into()));
         let effects = engine.set_stem(true);
         assert_eq!(effects, Effects::default());
@@ -719,7 +745,7 @@ mod tests {
     #[test]
     fn the_pinch_recipe_runs_when_it_alone_is_enabled() {
         let mut engine = Engine::new(only("lookPinchVolume"), Tuning::default());
-        engine.observe_orientation(about_x(0.0), ts(1));
+        engine.observe_orientation(about_x(0.0), ts(1), None);
         engine.set_head(Some("topRight".into()));
         assert_eq!(engine.set_pinch(true).overlay, Some(OverlayWanted::Driving));
         // A forced release ends it and it stays ended while the head is still on the corner.
@@ -730,7 +756,7 @@ mod tests {
     #[test]
     fn losing_the_watch_ends_the_interaction() {
         let mut engine = Engine::new(only("lookStemVolume"), Tuning::default());
-        engine.observe_orientation(about_x(0.0), ts(1));
+        engine.observe_orientation(about_x(0.0), ts(1), None);
         engine.set_head(Some("topRight".into()));
         engine.set_stem(true);
         assert_eq!(engine.watch_lost().overlay, Some(OverlayWanted::Armed));
@@ -739,26 +765,26 @@ mod tests {
     #[test]
     fn an_impossibly_fast_sample_while_driving_is_ignored() {
         let mut engine = Engine::new(only("lookStemVolume"), Tuning::default());
-        engine.observe_orientation(about_x(0.0), ts(1));
+        engine.observe_orientation(about_x(0.0), ts(1), None);
         engine.set_head(Some("topRight".into()));
         engine.set_stem(true);
-        engine.observe_orientation(about_x(0.0), ts(2));
+        engine.observe_orientation(about_x(0.0), ts(2), None);
         // 120 degrees in 200 ms is 600 deg/s, over the 360 deg/s limit.
-        let glitch = engine.observe_orientation(about_x(120.0), ts(3));
+        let glitch = engine.observe_orientation(about_x(120.0), ts(3), None);
         assert!(glitch.deltas.is_empty());
         // A real, moderate movement from the last good sample still counts.
-        let real = engine.observe_orientation(about_x(5.0), ts(4));
+        let real = engine.observe_orientation(about_x(5.0), ts(4), None);
         assert_eq!(real.deltas.len(), 1);
     }
 
     #[test]
     fn out_of_order_samples_are_dropped() {
         let mut engine = Engine::new(only("lookStemVolume"), Tuning::default());
-        engine.observe_orientation(about_x(0.0), ts(5));
+        engine.observe_orientation(about_x(0.0), ts(5), None);
         engine.set_head(Some("topRight".into()));
         engine.set_stem(true);
         assert_eq!(
-            engine.observe_orientation(about_x(40.0), ts(4)),
+            engine.observe_orientation(about_x(40.0), ts(4), None),
             Effects::default()
         );
     }
@@ -801,14 +827,14 @@ mod tests {
     #[test]
     fn a_scroll_recipe_sends_scroll_changes_and_never_touches_the_volume_knob() {
         let mut engine = Engine::new(vec![driving(Action::Scroll)], Tuning::default());
-        engine.observe_orientation(about_x(0.0), ts(1));
+        engine.observe_orientation(about_x(0.0), ts(1), None);
         let began = engine.set_stem(true);
         assert_eq!(
             began.overlay, None,
             "the volume knob is only for volume recipes"
         );
-        engine.observe_orientation(about_x(0.0), ts(2));
-        let moved = engine.observe_orientation(about_x(30.0), ts(3));
+        engine.observe_orientation(about_x(0.0), ts(2), None);
+        let moved = engine.observe_orientation(about_x(30.0), ts(3), None);
         assert_eq!(moved.deltas.len(), 1);
         assert_eq!(moved.deltas[0].0, Action::Scroll);
         assert!((moved.deltas[0].1 - 0.1).abs() < 1e-6);
@@ -824,10 +850,10 @@ mod tests {
             Tuning::default(),
         );
         assert!(engine.state().conflicts.is_empty());
-        engine.observe_orientation(about_x(0.0), ts(1));
+        engine.observe_orientation(about_x(0.0), ts(1), None);
         engine.set_stem(true);
-        engine.observe_orientation(about_x(0.0), ts(2));
-        let moved = engine.observe_orientation(about_x(30.0), ts(3));
+        engine.observe_orientation(about_x(0.0), ts(2), None);
+        let moved = engine.observe_orientation(about_x(30.0), ts(3), None);
         let actions: Vec<Action> = moved.deltas.iter().map(|(a, _)| *a).collect();
         assert_eq!(actions, vec![Action::Brightness, Action::Scroll]);
     }
@@ -838,11 +864,11 @@ mod tests {
         second.id = "other".into();
         let mut engine = Engine::new(vec![driving(Action::Scroll), second], Tuning::default());
         assert_eq!(engine.state().conflicts.len(), 1);
-        engine.observe_orientation(about_x(0.0), ts(1));
+        engine.observe_orientation(about_x(0.0), ts(1), None);
         engine.set_stem(true);
-        engine.observe_orientation(about_x(0.0), ts(2));
+        engine.observe_orientation(about_x(0.0), ts(2), None);
         assert_eq!(
-            engine.observe_orientation(about_x(30.0), ts(3)),
+            engine.observe_orientation(about_x(30.0), ts(3), None),
             Effects::default()
         );
     }
@@ -870,13 +896,13 @@ mod tests {
         // Holding on, or the watch streaming orientation, does not fire it again.
         assert!(
             engine
-                .observe_orientation(about_x(0.0), ts(1))
+                .observe_orientation(about_x(0.0), ts(1), None)
                 .fired
                 .is_empty()
         );
         assert!(
             engine
-                .observe_orientation(about_x(5.0), ts(2))
+                .observe_orientation(about_x(5.0), ts(2), None)
                 .fired
                 .is_empty()
         );
@@ -893,8 +919,8 @@ mod tests {
             Tuning::default(),
         );
         engine.set_pinch(true);
-        engine.observe_orientation(about_x(0.0), ts(1));
-        let _ = engine.observe_orientation(about_x(120.0), ts(2));
+        engine.observe_orientation(about_x(0.0), ts(1), None);
+        let _ = engine.observe_orientation(about_x(120.0), ts(2), None);
         assert_eq!(engine.orientation.as_ref().unwrap().timestamp_ns, ts(2));
     }
 
@@ -916,6 +942,70 @@ mod tests {
             Tuning::default(),
         );
         assert!(engine.state().conflicts.is_empty());
+    }
+
+    /// Feeds 50 Hz orientation samples carrying acceleration: `strokes` alternating 14 m/s² pushes, 160 ms apart,
+    /// starting at 1 s. Returns how many times each action fired.
+    fn shake_for(engine: &mut Engine, strokes: u64, offset_ms: u64) -> Vec<Action> {
+        let mut fired = Vec::new();
+        for ms in (0..=(1000 + strokes * 160 + 800)).step_by(20) {
+            let mut a = [0.0, 0.0, 9.81];
+            for i in 0..strokes {
+                let start = 1000 + i * 160;
+                if ms >= start && ms < start + 60 {
+                    a[0] += if i % 2 == 0 { 14.0 } else { -14.0 };
+                }
+            }
+            let t = (offset_ms + ms) * 1_000_000;
+            fired.extend(engine.observe_orientation(about_x(0.0), t, Some(a)).fired);
+        }
+        fired
+    }
+
+    #[test]
+    fn shaking_the_wrist_fires_a_shake_recipe_once() {
+        let mut engine = Engine::new(
+            vec![Recipe {
+                id: "shakeNext".into(),
+                name: "Shake for next".into(),
+                enabled: true,
+                action: Action::NextTrack,
+                stages: vec![Stage::Hold { hold: Hold::Shake }],
+                device: Device::default_for(DeviceKind::RotationKnob),
+            }],
+            Tuning::default(),
+        );
+        assert_eq!(shake_for(&mut engine, 4, 0), vec![Action::NextTrack]);
+        // Sitting still, or a lone knock, does nothing.
+        assert!(shake_for(&mut engine, 0, 10_000).is_empty());
+        assert!(shake_for(&mut engine, 1, 20_000).is_empty());
+        // And a second shake later fires again.
+        assert_eq!(shake_for(&mut engine, 4, 30_000), vec![Action::NextTrack]);
+    }
+
+    #[test]
+    fn a_shake_while_not_looking_does_nothing_for_a_look_and_shake_recipe() {
+        let recipe = Recipe {
+            id: "lookShake".into(),
+            name: "Look and shake".into(),
+            enabled: true,
+            action: Action::PlayPause,
+            stages: vec![
+                Stage::HeadAt {
+                    location: "topRight".into(),
+                },
+                Stage::Hold { hold: Hold::Shake },
+            ],
+            device: Device::default_for(DeviceKind::RotationKnob),
+        };
+        let mut engine = Engine::new(vec![recipe.clone()], Tuning::default());
+        assert!(
+            shake_for(&mut engine, 4, 0).is_empty(),
+            "shaken without looking"
+        );
+        let mut engine = Engine::new(vec![recipe], Tuning::default());
+        engine.set_head(Some("topRight".into()));
+        assert_eq!(shake_for(&mut engine, 4, 0), vec![Action::PlayPause]);
     }
 
     #[test]

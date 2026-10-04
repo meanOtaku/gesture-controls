@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CalibrationLocation, Recipe } from "../../shared/protocol/events";
 import {
-  actionInfo, isTrigger, blankRecipe, buildDevice, deviceSpecs, chainProblem, defaultNumbers, describeRecipe, deviceNumbers, driveStage, leadingStages, nameProblem,
+  actionInfo, holdsFor, isTrigger, blankRecipe, buildDevice, deviceSpecs, chainProblem, defaultNumbers, describeRecipe, deviceNumbers, driveStage, leadingStages, nameProblem,
 } from "./recipeModel";
 
 const locations: CalibrationLocation[] = [
@@ -84,6 +84,14 @@ describe("recipeModel", () => {
     // With no wrist rotation a trigger may use all six steps.
     const six = Array.from({ length: 6 }, (_, i) => ({ kind: "headAt", location: ["center", "topRight", "leftEdge"][i % 3] }) as const);
     expect(chainProblem(six.slice(0, 3), locations, true)).toBeNull();
+  });
+
+  it("allows a shake step only for button actions", () => {
+    const shake = [{ kind: "hold", hold: "shake" }] as const;
+    expect(chainProblem([...shake], locations, true)).toBeNull();
+    expect(chainProblem([...shake], locations, false)).toMatch(/only works for a button action/);
+    expect(holdsFor(true).map((hold) => hold.value)).toContain("shake");
+    expect(holdsFor(false).map((hold) => hold.value)).not.toContain("shake");
   });
 
   it("validates the name", () => {

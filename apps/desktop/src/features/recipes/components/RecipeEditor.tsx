@@ -23,6 +23,7 @@ import {
   deviceNumbers,
   deviceSpecs,
   driveStage,
+  holdsFor,
   isTrigger,
   leadingStages,
   nameProblem,
@@ -83,7 +84,7 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
   const kindId = `${uid}-device`;
 
   const locationOptions = locations.map((location) => ({ value: location.id, label: location.name }));
-  const firstUnusedHold = (): HoldKind => HOLDS.find((hold) => !steps.some((s) => s.kind === "hold" && s.hold === hold.value))?.value ?? "pinch";
+  const firstUnusedHold = (): HoldKind => holdsFor(trigger).find((hold) => !steps.some((s) => s.kind === "hold" && s.hold === hold.value))?.value ?? "pinch";
 
   const setStep = (index: number, next: LeadingStage) => setSteps((current) => current.map((s, i) => (i === index ? next : s)));
   const removeStep = (index: number) => setSteps((current) => current.filter((_, i) => i !== index));
@@ -172,7 +173,7 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
                   }
                 >
                   <option value="headAt">Look at</option>
-                  <option value="hold">Hold</option>
+                  <option value="hold">Gesture</option>
                 </select>
                 {step.kind === "headAt" ? (
                   <select
@@ -195,7 +196,7 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
                     value={step.hold}
                     onChange={(event) => setStep(index, { kind: "hold", hold: event.target.value as HoldKind })}
                   >
-                    {HOLDS.map((hold) => (
+                    {HOLDS.filter((hold) => holdsFor(trigger).includes(hold) || hold.value === step.hold).map((hold) => (
                       <option key={hold.value} value={hold.value}>{hold.label}</option>
                     ))}
                   </select>
@@ -223,9 +224,12 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
             disabled={steps.length + (trigger ? 0 : 1) >= MAX_STAGES}
             onClick={() => setSteps((current) => [...current, { kind: "hold", hold: firstUnusedHold() }])}
           >
-            <PlusIcon aria-hidden="true" /> Hold a gesture
+            <PlusIcon aria-hidden="true" /> Add a gesture
           </Button>
         </div>
+        {steps.some((step) => step.kind === "hold" && step.hold === "shake") && (
+          <p className="field-hint">A shake needs the watch's acceleration sensor switched on. It counts as happening for about half a second after it is recognised.</p>
+        )}
         {problem && <p className="field-error" role="alert">{problem}</p>}
       </fieldset>
 
