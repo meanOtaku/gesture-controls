@@ -49,12 +49,16 @@ export interface CalibrationState {
   activeTarget: CalibrationTarget | null;
 }
 
+export type HoldGesture = "pinch" | "stemButton" | "shake" | "swipeLeft" | "swipeRight" | "swipeUp" | "swipeDown";
+export type SwipeDirection = "left" | "right" | "up" | "down";
+export type WatchWrist = "left" | "right";
+
 export type RecipeAction = "volume" | "brightness" | "scroll" | "playPause" | "nextTrack" | "previousTrack" | "mute";
 
 /** One step of a recipe's chain. A recipe ends with a `drive` stage, which supplies the continuous value. */
 export type RecipeStage =
   | { kind: "headAt"; location: CalibrationTarget }
-  | { kind: "hold"; hold: "pinch" | "stemButton" | "shake" }
+  | { kind: "hold"; hold: HoldGesture }
   | { kind: "drive"; axis: "roll" | "pitch" | "yaw"; deadZoneDegrees: number; invert: boolean };
 
 export interface Recipe {
@@ -187,6 +191,8 @@ export const AUTOMATION_STATE_EVENT = "automation-state";
 /** Sent when brightness or scrolling could not be carried out (a missing permission, an unsupported platform). */
 /** Sent each time a shake is recognised, whether or not a recipe uses it. */
 export const SHAKE_DETECTED_EVENT = "automation-shake";
+/** Sent with the direction each time a swipe is recognised. */
+export const SWIPE_DETECTED_EVENT = "automation-swipe";
 export const ACTION_ERROR_EVENT = "automation-action-error";
 export interface ActionError {
   action: RecipeAction;
@@ -274,6 +280,10 @@ export interface AppSettings {
   shakePeakThreshold: number;
   /** How many quick strokes back and forth make a shake; fewer is more sensitive. */
   shakeStrokes: number;
+  /** How hard a push must be to count as a swipe (m/s²); lower is more sensitive. */
+  swipePeakThreshold: number;
+  /** Which wrist the watch is worn on: it decides which way along the forearm is left. */
+  watchWrist: WatchWrist;
   wristMaxAngularVelocityDegreesPerSecond: number;
   wristMaxVolumePointsPerSecond: number;
   watchSensorsEnabled: Record<string, boolean>;

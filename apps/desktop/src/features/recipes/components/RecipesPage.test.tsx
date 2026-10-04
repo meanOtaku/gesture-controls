@@ -151,7 +151,7 @@ describe("RecipesPage", () => {
 
     // Switching back to a dial keeps the shake step but refuses to save it, in words.
     fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "volume" } });
-    expect(editor.getByRole("alert")).toHaveTextContent("A shake only works for a button action");
+    expect(editor.getByRole("alert")).toHaveTextContent("A shake or swipe only works for a button action");
     fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
     expect(props.onSave).not.toHaveBeenCalled();
 
@@ -161,6 +161,33 @@ describe("RecipesPage", () => {
     expect(vi.mocked(props.onSave).mock.calls[0][0]).toMatchObject({
       action: "nextTrack",
       stages: [{ kind: "headAt", location: "topRight" }, { kind: "hold", hold: "shake" }],
+    });
+  });
+
+  it("builds a swipe recipe for a media key and refuses a swipe on a dial", async () => {
+    const props = setup();
+    fireEvent.click(screen.getByRole("button", { name: /New recipe/ }));
+    const editor = within(screen.getByRole("region", { name: "Recipe editor" }));
+    fireEvent.change(editor.getByLabelText("Name"), { target: { value: "Swipe for next" } });
+    fireEvent.click(editor.getByRole("button", { name: "Remove step 1" }));
+    fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "nextTrack" } });
+    fireEvent.click(editor.getByRole("button", { name: /Add a gesture/ }));
+    const options = within(editor.getByLabelText("Step 1 gesture")).getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual(["Pinch and hold", "Hold STEM button", "Shake wrist", "Swipe left", "Swipe right", "Swipe up", "Swipe down"]);
+    fireEvent.change(editor.getByLabelText("Step 1 gesture"), { target: { value: "swipeRight" } });
+    expect(editor.getByText(/Swipes are read from the watch's acceleration/)).toBeInTheDocument();
+
+    fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "scroll" } });
+    expect(editor.getByRole("alert")).toHaveTextContent("A shake or swipe only works for a button action");
+    fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
+    expect(props.onSave).not.toHaveBeenCalled();
+
+    fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "nextTrack" } });
+    fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
+    await waitFor(() => expect(props.onSave).toHaveBeenCalled());
+    expect(vi.mocked(props.onSave).mock.calls[0][0]).toMatchObject({
+      action: "nextTrack",
+      stages: [{ kind: "hold", hold: "swipeRight" }],
     });
   });
 

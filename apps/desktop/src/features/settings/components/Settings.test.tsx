@@ -19,6 +19,8 @@ const settings: AppSettings = {
   watchEdaAcceptanceRateHz: 200,
   shakePeakThreshold: 6,
   shakeStrokes: 4,
+  swipePeakThreshold: 8,
+  watchWrist: "left",
   wristMaxAngularVelocityDegreesPerSecond: 360,
   wristMaxVolumePointsPerSecond: 30,
   watchSensorsEnabled: { orientation: true, acceleration: true, gyroscope: true },
@@ -159,6 +161,24 @@ describe("Settings", () => {
     expect(screen.getByText(/Shakes recognised since you opened the app/)).toHaveTextContent("0");
     rerender(<Settings settings={settings} shakeDetections={3} onUpdate={() => {}} onReset={() => {}} />);
     expect(screen.getByText(/Shakes recognised since you opened the app/)).toHaveTextContent(": 3");
+  });
+
+  it("sets which wrist the watch is on, tunes swipe strength, and shows the last swipe", () => {
+    const updates: AppSettings[] = [];
+    const { rerender } = render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
+    expect(screen.getByLabelText("Swipe strength")).toHaveValue(8);
+    expect(screen.getByText(/No swipe recognised yet/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: /Right wrist/ }));
+    expect(updates).toEqual([{ ...settings, watchWrist: "right" }]);
+
+    fireEvent.change(screen.getByLabelText("Swipe strength"), { target: { value: "5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    expect(updates[1]).toMatchObject({ swipePeakThreshold: 5 });
+
+    rerender(<Settings settings={settings} lastSwipe={{ direction: "left", count: 2 }} onUpdate={() => {}} onReset={() => {}} />);
+    expect(screen.getByText(/Last swipe recognised/)).toHaveTextContent("left");
+    expect(screen.getByText(/Last swipe recognised/)).toHaveTextContent("2 so far");
   });
 
   it("toggles a watch sensor switch immediately without a confirmation dialog", () => {

@@ -1,11 +1,12 @@
 import type { FormEvent } from "react";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { useNumberDrafts } from "../../../shared/forms/useNumberDrafts";
-import type { AppSettings, OverlayState, WatchStatus } from "../../../shared/protocol/events";
+import type { AppSettings, OverlayState, SwipeDirection, WatchStatus } from "../../../shared/protocol/events";
 import { ApplySettingsFooter } from "./ApplySettingsFooter";
 import { HeadphonesSettingsSection } from "./HeadphonesSettingsSection";
 import { RecordingGraphSettingsSection } from "./RecordingGraphSettingsSection";
 import { ShakeSettings } from "./ShakeSettings";
+import { SwipeSettings } from "./SwipeSettings";
 import { WatchHealthDeliverySettingsSection } from "./WatchHealthDeliverySettingsSection";
 import { WatchRateSettingsSection } from "./WatchRateSettingsSection";
 import { WatchSensorSwitchSection } from "./WatchSensorSwitchSection";
@@ -33,6 +34,7 @@ interface SettingsProps {
   watchStatus?: WatchStatus | null;
   /** How many shakes have been recognised since the app opened, to show beside the sensitivity. */
   shakeDetections?: number;
+  lastSwipe?: { direction: SwipeDirection; count: number } | null;
   onUpdate: (settings: AppSettings) => void;
   onReset: () => void;
 }
@@ -44,6 +46,7 @@ export function Settings({
   overlay = EMPTY_OVERLAY_STATE,
   watchStatus = null,
   shakeDetections = 0,
+  lastSwipe = null,
   onUpdate,
   onReset,
 }: SettingsProps) {
@@ -92,6 +95,12 @@ export function Settings({
           <WristRotationSettings />
 
           <ShakeSettings detections={shakeDetections} />
+
+          <SwipeSettings
+            wrist={current.watchWrist}
+            onWristChange={(watchWrist) => onUpdate({ ...current, watchWrist })}
+            lastSwipe={lastSwipe}
+          />
 
           <RecordingGraphSettingsSection />
 

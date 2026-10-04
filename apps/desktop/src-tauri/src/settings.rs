@@ -29,6 +29,8 @@ pub const MIN_SHAKE_PEAK_THRESHOLD: f64 = 2.0;
 pub const MAX_SHAKE_PEAK_THRESHOLD: f64 = 30.0;
 pub const MIN_SHAKE_STROKES: u32 = 3;
 pub const MAX_SHAKE_STROKES: u32 = 10;
+pub const MIN_SWIPE_PEAK_THRESHOLD: f64 = 3.0;
+pub const MAX_SWIPE_PEAK_THRESHOLD: f64 = 30.0;
 pub const MIN_WRIST_ANGULAR_VELOCITY_DEGREES_PER_SECOND: f64 = 1.0;
 pub const MAX_WRIST_ANGULAR_VELOCITY_DEGREES_PER_SECOND: f64 = 2_000.0;
 pub const MIN_WRIST_VOLUME_POINTS_PER_SECOND: f64 = 1.0;
@@ -67,6 +69,12 @@ pub struct AppSettings {
     /// How many quick strokes back and forth make a shake. Fewer is more sensitive.
     #[serde(default = "default_shake_strokes")]
     pub shake_strokes: u32,
+    /// How hard a push must be to count as a swipe, in m/s². Lower is more sensitive.
+    #[serde(default = "default_swipe_peak_threshold")]
+    pub swipe_peak_threshold: f64,
+    /// Which wrist the watch is worn on: it decides which way along the forearm is the wearer's left.
+    #[serde(default)]
+    pub watch_wrist: automation::Wrist,
     #[serde(default = "default_wrist_max_angular_velocity_degrees_per_second")]
     pub wrist_max_angular_velocity_degrees_per_second: f64,
     #[serde(default = "default_wrist_max_volume_points_per_second")]
@@ -106,6 +114,8 @@ impl Default for AppSettings {
             watch_eda_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
             shake_peak_threshold: default_shake_peak_threshold(),
             shake_strokes: default_shake_strokes(),
+            swipe_peak_threshold: default_swipe_peak_threshold(),
+            watch_wrist: automation::Wrist::default(),
             wrist_max_angular_velocity_degrees_per_second:
                 default_wrist_max_angular_velocity_degrees_per_second(),
             wrist_max_volume_points_per_second: default_wrist_max_volume_points_per_second(),
@@ -132,6 +142,9 @@ fn default_ppg_flush_rate_hz() -> f64 {
 
 fn default_shake_peak_threshold() -> f64 {
     6.0
+}
+fn default_swipe_peak_threshold() -> f64 {
+    8.0
 }
 fn default_shake_strokes() -> u32 {
     4
@@ -218,6 +231,12 @@ impl AppSettings {
             self.shake_peak_threshold,
             MIN_SHAKE_PEAK_THRESHOLD,
             MAX_SHAKE_PEAK_THRESHOLD,
+        )?;
+        in_range(
+            "swipePeakThreshold",
+            self.swipe_peak_threshold,
+            MIN_SWIPE_PEAK_THRESHOLD,
+            MAX_SWIPE_PEAK_THRESHOLD,
         )?;
         if !(MIN_SHAKE_STROKES..=MAX_SHAKE_STROKES).contains(&self.shake_strokes) {
             return Err(format!(
@@ -561,6 +580,14 @@ mod tests {
         assert!(settings.validate().unwrap_err().contains("shakeStrokes"));
         settings.shake_strokes = 11;
         assert!(settings.validate().is_err());
+        settings.shake_strokes = 4;
+        settings.swipe_peak_threshold = 40.0;
+        assert!(
+            settings
+                .validate()
+                .unwrap_err()
+                .contains("swipePeakThreshold")
+        );
         // A settings.json from before these existed still loads, with the defaults.
         let mut json = serde_json::to_value(AppSettings::default()).unwrap();
         json.as_object_mut().unwrap().remove("shakePeakThreshold");

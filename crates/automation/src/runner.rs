@@ -2,6 +2,7 @@ use serde::Serialize;
 
 use crate::device::Output;
 use crate::recipe::{Axis, Hold, Recipe, Stage};
+use crate::swipe::SwipeDirection;
 
 /// Everything a recipe can look at, sampled together.
 #[derive(Debug, Clone, Copy, Default)]
@@ -12,6 +13,8 @@ pub struct Signals<'a> {
     pub stem_button_held: bool,
     /// A shake was recognised a moment ago and is still counted as happening.
     pub shake: bool,
+    /// A swipe was recognised a moment ago in this direction and still counts as happening.
+    pub swipe: Option<SwipeDirection>,
     /// The watch's orientation as a quaternion `[w, i, j, k]`; `None` while it has no valid orientation.
     pub orientation: Option<[f64; 4]>,
 }
@@ -98,6 +101,18 @@ impl RecipeRunner {
                 hold: Hold::StemButton,
             } => signals.stem_button_held,
             Stage::Hold { hold: Hold::Shake } => signals.shake,
+            Stage::Hold {
+                hold: Hold::SwipeLeft,
+            } => signals.swipe == Some(SwipeDirection::Left),
+            Stage::Hold {
+                hold: Hold::SwipeRight,
+            } => signals.swipe == Some(SwipeDirection::Right),
+            Stage::Hold {
+                hold: Hold::SwipeUp,
+            } => signals.swipe == Some(SwipeDirection::Up),
+            Stage::Hold {
+                hold: Hold::SwipeDown,
+            } => signals.swipe == Some(SwipeDirection::Down),
             Stage::Drive { .. } => true,
         }
     }

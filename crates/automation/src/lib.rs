@@ -11,9 +11,11 @@ mod device;
 mod recipe;
 mod runner;
 mod shake;
+mod swipe;
 
 pub use conflicts::{Conflict, blocked_recipes, find_conflicts};
 pub use device::{Device, DeviceKind, Output};
 pub use recipe::{Action, Axis, Hold, MAX_STAGES, Recipe, RecipeError, Stage, validate_recipe};
 pub use runner::{RecipeRunner, RunnerPhase, Signals};
 pub use shake::{ShakeConfig, ShakeDetector};
+pub use swipe::{SwipeConfig, SwipeDetector, SwipeDirection, Wrist};

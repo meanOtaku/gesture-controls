@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CalibrationLocation, Recipe } from "../../shared/protocol/events";
 import {
-  actionInfo, holdsFor, isTrigger, blankRecipe, buildDevice, deviceSpecs, chainProblem, defaultNumbers, describeRecipe, deviceNumbers, driveStage, leadingStages, nameProblem,
+  actionInfo, holdsFor, isMomentary, isTrigger, blankRecipe, buildDevice, deviceSpecs, chainProblem, defaultNumbers, describeRecipe, deviceNumbers, driveStage, leadingStages, nameProblem,
 } from "./recipeModel";
 
 const locations: CalibrationLocation[] = [
@@ -92,6 +92,13 @@ describe("recipeModel", () => {
     expect(chainProblem([...shake], locations, false)).toMatch(/only works for a button action/);
     expect(holdsFor(true).map((hold) => hold.value)).toContain("shake");
     expect(holdsFor(false).map((hold) => hold.value)).not.toContain("shake");
+    for (const swipe of ["swipeLeft", "swipeRight", "swipeUp", "swipeDown"] as const) {
+      expect(isMomentary(swipe)).toBe(true);
+      expect(chainProblem([{ kind: "hold", hold: swipe }], locations, false)).toMatch(/shake or swipe only works/);
+      expect(chainProblem([{ kind: "hold", hold: swipe }], locations, true)).toBeNull();
+    }
+    expect(isMomentary("pinch")).toBe(false);
+    expect(holdsFor(false).map((hold) => hold.value)).toEqual(["pinch", "stemButton"]);
   });
 
   it("validates the name", () => {

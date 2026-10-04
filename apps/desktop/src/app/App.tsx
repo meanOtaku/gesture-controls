@@ -12,6 +12,7 @@ import { VolumeKnob } from "../features/overlay/components/VolumeKnob";
 import {
   ACTION_ERROR_EVENT,
   SHAKE_DETECTED_EVENT,
+  SWIPE_DETECTED_EVENT,
   AUTOMATION_STATE_EVENT,
   CALIBRATION_STATE_EVENT,
   HEAD_POSE_EVENT,
@@ -29,6 +30,7 @@ import {
   WATCH_STATUS_EVENT,
   type AppSettings,
   type ActionError,
+  type SwipeDirection,
   type AutomationState,
   type Recipe,
   type CalibrationState,
@@ -156,6 +158,7 @@ function MainApp() {
   const watchStatus = telemetryStore.getWatchStatus();
   const [calibration, setCalibration] = useState<CalibrationState | null>(null);
   const [shakeDetections, setShakeDetections] = useState(0);
+  const [lastSwipe, setLastSwipe] = useState<{ direction: SwipeDirection; count: number } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [automation, setAutomation] = useState<AutomationState | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
@@ -221,6 +224,9 @@ function MainApp() {
       }),
       listen<null>(SHAKE_DETECTED_EVENT, () => {
         if (!cancelled) setShakeDetections((count) => count + 1);
+      }),
+      listen<SwipeDirection>(SWIPE_DETECTED_EVENT, ({ payload }) => {
+        if (!cancelled) setLastSwipe((previous) => ({ direction: payload, count: (previous?.count ?? 0) + 1 }));
       }),
       listen<ActionError>(ACTION_ERROR_EVENT, ({ payload }) => {
         if (!cancelled) setActionError(`${payload.action}: ${payload.message}`);
@@ -653,6 +659,7 @@ function MainApp() {
         overlay={overlay}
         watchStatus={watchStatus}
         shakeDetections={shakeDetections}
+        lastSwipe={lastSwipe}
         onUpdate={(next) => { void updateSettings(next); }}
         onReset={() => { void resetSettings(); }}
       />

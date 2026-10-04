@@ -66,6 +66,19 @@ pub enum Hold {
     /// A quick shake of the wrist. It is a moment, not something held, so it counts as "holding" for a short
     /// while after it is recognised, and only a button-style action can use it.
     Shake,
+    /// A quick swipe of the hand, read from the watch's acceleration. A moment, like a shake.
+    SwipeLeft,
+    SwipeRight,
+    SwipeUp,
+    SwipeDown,
+}
+
+impl Hold {
+    /// A shake or swipe is over in a moment: it counts as "holding" for a short while after it is recognised, and
+    /// so can only start a button action, never keep a dial turning.
+    pub fn is_momentary(self) -> bool {
+        !matches!(self, Hold::Pinch | Hold::StemButton)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -116,8 +129,8 @@ pub enum RecipeError {
     RepeatedStage,
     #[error("an action that fires once cannot have a wrist rotation: remove it")]
     TriggerHasDrive,
-    #[error("a shake can only start a button action (play/pause, next, previous or mute)")]
-    ShakeNeedsButtonAction,
+    #[error("a shake or swipe can only start a button action (play/pause, next, previous or mute)")]
+    MomentaryNeedsButtonAction,
     #[error("the dead zone must be from 0 to under 90 degrees")]
     InvalidDeadZone,
     #[error("the device settings are out of range")]
@@ -163,9 +176,9 @@ pub fn validate_recipe(recipe: &Recipe) -> Result<(), RecipeError> {
     if recipe
         .stages
         .iter()
-        .any(|stage| matches!(stage, Stage::Hold { hold: Hold::Shake }))
+        .any(|stage| matches!(stage, Stage::Hold { hold } if hold.is_momentary()))
     {
-        return Err(RecipeError::ShakeNeedsButtonAction);
+        return Err(RecipeError::MomentaryNeedsButtonAction);
     }
     if rest
         .iter()

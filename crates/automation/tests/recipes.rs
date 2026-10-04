@@ -554,12 +554,61 @@ fn a_shake_starts_a_button_action_and_cannot_drive_a_dial() {
     );
     assert_eq!(
         validate_recipe(&dial),
-        Err(RecipeError::ShakeNeedsButtonAction)
+        Err(RecipeError::MomentaryNeedsButtonAction)
     );
     dial.action = Action::Scroll;
     assert_eq!(
         validate_recipe(&dial),
-        Err(RecipeError::ShakeNeedsButtonAction)
+        Err(RecipeError::MomentaryNeedsButtonAction)
     );
     assert_eq!(serde_json::to_string(&Hold::Shake).unwrap(), "\"shake\"");
+}
+
+#[test]
+fn a_swipe_step_fires_only_for_its_own_direction_and_only_button_actions_may_use_it() {
+    let mut runner = RecipeRunner::new(trigger(vec![Stage::Hold {
+        hold: Hold::SwipeRight,
+    }]));
+    let swiped = |direction| Signals {
+        swipe: direction,
+        ..Signals::default()
+    };
+    runner.update(&swiped(Some(SwipeDirection::Left)));
+    assert!(!runner.take_fired(), "the wrong way");
+    runner.update(&swiped(None));
+    runner.update(&swiped(Some(SwipeDirection::Right)));
+    assert!(runner.take_fired());
+    runner.update(&swiped(Some(SwipeDirection::Right)));
+    assert!(!runner.take_fired(), "once per swipe");
+
+    for hold in [
+        Hold::SwipeLeft,
+        Hold::SwipeRight,
+        Hold::SwipeUp,
+        Hold::SwipeDown,
+        Hold::Shake,
+    ] {
+        assert!(hold.is_momentary());
+        let dial = recipe(
+            "dial",
+            vec![
+                Stage::Hold { hold },
+                Stage::Drive {
+                    axis: Axis::Roll,
+                    dead_zone_degrees: 0.0,
+                    invert: false,
+                },
+            ],
+            Device::default_for(DeviceKind::RotationKnob),
+        );
+        assert_eq!(
+            validate_recipe(&dial),
+            Err(RecipeError::MomentaryNeedsButtonAction)
+        );
+    }
+    assert!(!Hold::Pinch.is_momentary() && !Hold::StemButton.is_momentary());
+    assert_eq!(
+        serde_json::to_string(&Hold::SwipeUp).unwrap(),
+        "\"swipeUp\""
+    );
 }

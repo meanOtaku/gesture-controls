@@ -227,6 +227,9 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
             <PlusIcon aria-hidden="true" /> Add a gesture
           </Button>
         </div>
+        {steps.some((step) => step.kind === "hold" && step.hold.startsWith("swipe")) && (
+          <p className="field-hint">Swipes are read from the watch's acceleration and orientation. Left and right run along your forearm, so set which wrist the watch is on in Settings; up and down follow gravity.</p>
+        )}
         {steps.some((step) => step.kind === "hold" && step.hold === "shake") && (
           <p className="field-hint">A shake needs the watch's acceleration sensor switched on. It counts as happening for about half a second after it is recognised.</p>
         )}

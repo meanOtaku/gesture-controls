@@ -11,7 +11,8 @@ use std::sync::Mutex;
 
 use automation::{
     Action, Axis, Conflict, Device, DeviceKind, Hold, Recipe, RecipeRunner, RunnerPhase,
-    ShakeConfig, ShakeDetector, Signals, Stage, blocked_recipes, find_conflicts, validate_recipe,
+    ShakeConfig, ShakeDetector, Signals, Stage, SwipeConfig, SwipeDetector, SwipeDirection, Wrist,
+    blocked_recipes, find_conflicts, validate_recipe,
 };
 use interaction_engine::quaternion_angular_distance;
 use serde::Serialize;
@@ -26,8 +27,11 @@ use crate::settings::{AppSettings, SettingsRuntime};
 pub const AUTOMATION_STATE_EVENT: &str = "automation-state";
 /// Sent each time a shake is recognised, so Settings can show the user what their sensitivity is catching.
 pub const SHAKE_DETECTED_EVENT: &str = "automation-shake";
+/// Sent with the direction each time a swipe is recognised.
+pub const SWIPE_DETECTED_EVENT: &str = "automation-swipe";
 /// How long a recognised shake keeps counting as "happening", so a recipe that combines it with another step (look
 /// at a location, say) has a moment in which both hold.
+/// Also how long a swipe keeps counting.
 const SHAKE_HOLD_NS: u64 = 600_000_000;
 const RECIPES_FILE_NAME: &str = "recipes.json";
 pub const MAX_RECIPES: usize = 24;
@@ -59,6 +63,8 @@ pub struct Effects {
     pub deltas: Vec<(Action, f64)>,
     /// A shake was recognised on this sample (whether or not any recipe uses it), for the Settings tuning aid.
     pub shook: bool,
+    /// A swipe was recognised on this sample, for the Settings tuning aid.
+    pub swiped: Option<SwipeDirection>,
     /// Trigger recipes that fired: each a one-off press.
     pub fired: Vec<Action>,
     /// Actions whose interaction just ended, so anything still carried for them is dropped.
@@ -74,6 +80,8 @@ pub struct Tuning {
     pub max_volume_points_per_second: f64,
     pub shake_peak_threshold: f64,
     pub shake_strokes: u32,
+    pub swipe_peak_threshold: f64,
+    pub wrist: Wrist,
 }
 
 impl Tuning {
@@ -84,6 +92,16 @@ impl Tuning {
             max_volume_points_per_second: settings.wrist_max_volume_points_per_second,
             shake_peak_threshold: settings.shake_peak_threshold,
             shake_strokes: settings.shake_strokes,
+            swipe_peak_threshold: settings.swipe_peak_threshold,
+            wrist: settings.watch_wrist,
+        }
+    }
+
+    pub fn swipe_config(&self) -> SwipeConfig {
+        SwipeConfig {
+            peak_threshold: self.swipe_peak_threshold,
+            wrist: self.wrist,
+            ..SwipeConfig::default()
         }
     }
 
@@ -107,6 +125,8 @@ impl Default for Tuning {
             max_volume_points_per_second: 30.0,
             shake_peak_threshold: 6.0,
             shake_strokes: 4,
+            swipe_peak_threshold: 8.0,
+            wrist: Wrist::Left,
         }
     }
 }
@@ -180,6 +200,9 @@ pub struct Engine {
     shake: ShakeDetector,
     /// A recognised shake counts as happening until this watch-clock time, so a recipe's chain can see it.
     shake_until_ns: u64,
+    swipe: SwipeDetector,
+    swipe_direction: Option<SwipeDirection>,
+    swipe_until_ns: u64,
     /// The last orientation accepted while driving, for the angular-velocity outlier check.
     last_accepted: Option<Orientation>,
     blocked: BTreeSet<String>,
@@ -200,6 +223,9 @@ impl Engine {
             orientation: None,
             shake: ShakeDetector::new(tuning.shake_config()),
             shake_until_ns: 0,
+            swipe: SwipeDetector::new(tuning.swipe_config()),
+            swipe_direction: None,
+            swipe_until_ns: 0,
             last_accepted: None,
             blocked: BTreeSet::new(),
             overlay: OverlayWanted::Hidden,
@@ -228,6 +254,8 @@ impl Engine {
         self.tuning = tuning;
         self.shake = ShakeDetector::new(tuning.shake_config());
         self.shake_until_ns = 0;
+        self.swipe = SwipeDetector::new(tuning.swipe_config());
+        self.swipe_until_ns = 0;
         self.rebuild();
         self.step()
     }
@@ -267,6 +295,8 @@ impl Engine {
         self.last_accepted = None;
         self.shake.reset();
         self.shake_until_ns = 0;
+        self.swipe.reset();
+        self.swipe_until_ns = 0;
         self.step()
     }
 
@@ -299,11 +329,18 @@ impl Engine {
         if shook {
             self.shake_until_ns = timestamp_ns + SHAKE_HOLD_NS;
         }
+        let swiped = acceleration
+            .and_then(|acceleration| self.swipe.observe(timestamp_ns, acceleration, quaternion));
+        if let Some(direction) = swiped {
+            self.swipe_direction = Some(direction);
+            self.swipe_until_ns = timestamp_ns + SHAKE_HOLD_NS;
+        }
         let driving = self.driving;
         if driving && self.is_velocity_outlier(quaternion, timestamp_ns) {
             // A glitch freezes the knob rather than jumping it; the last good orientation stays current.
             return Effects {
                 shook,
+                swiped,
                 ..Effects::default()
             };
         }
@@ -318,6 +355,7 @@ impl Engine {
         self.orientation = Some(sample);
         let mut effects = self.step();
         effects.shook = shook;
+        effects.swiped = swiped;
         effects
     }
 
@@ -339,6 +377,11 @@ impl Engine {
             head_location: self.head.as_deref(),
             pinch_held: self.pinch,
             stem_button_held: self.stem,
+            swipe: self
+                .orientation
+                .as_ref()
+                .filter(|latest| latest.timestamp_ns < self.swipe_until_ns)
+                .and(self.swipe_direction),
             shake: self
                 .orientation
                 .as_ref()
@@ -487,6 +530,9 @@ impl AutomationRuntime {
         apply_effects(app, &effects, max_points);
         if effects.shook {
             let _ = app.emit(SHAKE_DETECTED_EVENT, ());
+        }
+        if let Some(direction) = effects.swiped {
+            let _ = app.emit(SWIPE_DETECTED_EVENT, direction);
         }
         if effects.overlay.is_some() {
             let _ = app.emit(AUTOMATION_STATE_EVENT, &state);
@@ -1091,6 +1137,83 @@ mod tests {
             }
         }
         assert_eq!(shook, 1);
+    }
+
+    /// Feeds 50 Hz samples with a swipe (a strong push, then a weaker stop) along the watch's x axis (towards the hand
+    /// when positive), starting at 1 s, and returns what was recognised and what fired.
+    fn swipe_for(
+        engine: &mut Engine,
+        push: f64,
+        offset_ms: u64,
+    ) -> (Vec<SwipeDirection>, Vec<Action>) {
+        let (mut swipes, mut fired) = (Vec::new(), Vec::new());
+        for ms in (0..=3000u64).step_by(20) {
+            let mut a = [0.0, 0.0, 9.81];
+            if (1000..1060).contains(&ms) {
+                a[0] += push;
+            }
+            if (1120..1180).contains(&ms) {
+                a[0] -= push * 0.4;
+            }
+            let effects =
+                engine.observe_orientation(about_x(0.0), (offset_ms + ms) * 1_000_000, Some(a));
+            swipes.extend(effects.swiped);
+            fired.extend(effects.fired);
+        }
+        (swipes, fired)
+    }
+
+    fn swipe_recipe(hold: Hold, action: Action) -> Recipe {
+        Recipe {
+            id: format!("{hold:?}"),
+            name: format!("{hold:?}"),
+            enabled: true,
+            action,
+            stages: vec![Stage::Hold { hold }],
+            device: Device::default_for(DeviceKind::RotationKnob),
+        }
+    }
+
+    #[test]
+    fn a_swipe_fires_only_the_recipe_for_its_direction() {
+        let mut engine = Engine::new(
+            vec![
+                swipe_recipe(Hold::SwipeRight, Action::NextTrack),
+                swipe_recipe(Hold::SwipeLeft, Action::PreviousTrack),
+            ],
+            Tuning::default(),
+        );
+        // Towards the hand on a left wrist is the wearer's right.
+        let (swipes, fired) = swipe_for(&mut engine, 14.0, 0);
+        assert_eq!(swipes, vec![SwipeDirection::Right]);
+        assert_eq!(fired, vec![Action::NextTrack]);
+        let (swipes, fired) = swipe_for(&mut engine, -14.0, 10_000);
+        assert_eq!(swipes, vec![SwipeDirection::Left]);
+        assert_eq!(fired, vec![Action::PreviousTrack]);
+    }
+
+    #[test]
+    fn the_wrist_setting_swaps_left_and_right_and_the_strength_setting_is_obeyed() {
+        let on_right_wrist = Tuning {
+            wrist: Wrist::Right,
+            ..Tuning::default()
+        };
+        let mut engine = Engine::new(
+            vec![swipe_recipe(Hold::SwipeLeft, Action::PreviousTrack)],
+            on_right_wrist,
+        );
+        let (swipes, fired) = swipe_for(&mut engine, 14.0, 0);
+        assert_eq!(
+            (swipes, fired),
+            (vec![SwipeDirection::Left], vec![Action::PreviousTrack])
+        );
+
+        let strict = Tuning {
+            swipe_peak_threshold: 20.0,
+            ..Tuning::default()
+        };
+        engine.set_tuning(strict);
+        assert!(swipe_for(&mut engine, 14.0, 20_000).0.is_empty());
     }
 
     #[test]

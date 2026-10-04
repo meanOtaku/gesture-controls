@@ -314,7 +314,18 @@ The **Recipes** tab lists every recipe with an on/off switch, an Edit button and
 
 **Shake wrist** is a gesture step, like the pinch or the STEM button, but it is a *moment* rather than something held. It is recognised from the watch's acceleration: a quick back-and-forth of at least four strokes within about a second. A single jolt, a steady swing, or knocks all the same way (walking, typing) do not count. After a shake is recognised it counts as happening for about half a second, so you can combine it with another step, such as *Look at Top right* then *Shake wrist* → *Next track*. It then ignores further shaking for a second, so one shake fires once.
 
-Because it is a moment, a shake can only start a **button action** (play/pause, next, previous, mute); the editor does not offer it for volume, brightness or scroll, and refuses to save one that has it. It needs the watch's **acceleration** sensor switched on, which is the default.
+### Swipe
+
+**Swipe left**, **Swipe right**, **Swipe up** and **Swipe down** are gesture steps for one quick push of the hand, like flicking through pages in the air. They are read from the watch's acceleration and orientation, are momentary like a shake, and so can also only start a button action. Example: *Swipe right* → *Next track*, and *Swipe left* → *Previous track* as a second recipe (they do not conflict: different keys).
+
+- **Left and right** run along your forearm, which stays pointing along the arm however your elbow is bent. Which way along it is "left" depends on which wrist the watch is on, so set **Settings → Swipe sensitivity → Watch worn on**. If left and right come out backwards, switch it.
+- **Up and down** follow gravity, whatever way the watch is turned.
+- A swipe is one strong push in one clear direction. A sloppy diagonal is ignored rather than guessed, and a shake (a run of pushes back and forth) is not read as swipes: a push is held for a quarter of a second, and a similarly strong one the other way cancels it. The hand stopping afterwards (a weaker push the other way) is expected and does not count.
+- After a swipe the detector rests for about 0.7 seconds, so one swipe fires once.
+
+**Swipe strength** (default 8 m/s², range 3 to 30) sets how hard the push must be; lower it if your swipes are missed. The card shows the last swipe recognised and how many there have been, so you can try a setting before building a recipe. Not yet verified on a real watch: in particular the world-frame direction for up/down assumes the watch's orientation sensor reports the standard device-to-world rotation, so if up and down are reversed, tell me.
+
+Because it is a moment, a shake or swipe can only start a **button action** (play/pause, next, previous, mute); the editor does not offer them for volume, brightness or scroll, and refuses to save a recipe that has one. It needs the watch's **acceleration** sensor switched on, which is the default.
 
 #### Tuning the sensitivity
 

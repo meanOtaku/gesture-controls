@@ -16,6 +16,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   watchEdaAcceptanceRateHz: 200,
   shakePeakThreshold: 6,
   shakeStrokes: 4,
+  swipePeakThreshold: 8,
+  watchWrist: "left",
   wristMaxAngularVelocityDegreesPerSecond: 360,
   wristMaxVolumePointsPerSecond: 30,
   watchSensorsEnabled: Object.fromEntries(CONTROLLABLE_SENSORS.map(({ id }) => [id, true])),
@@ -35,6 +37,7 @@ export type NumericSettingKey =
   | "watchEdaAcceptanceRateHz"
   | "shakePeakThreshold"
   | "shakeStrokes"
+  | "swipePeakThreshold"
   | "wristMaxAngularVelocityDegreesPerSecond"
   | "wristMaxVolumePointsPerSecond";
 
@@ -94,6 +97,10 @@ export const SETTINGS_FIELDS: Record<NumericSettingKey, NumberSpec> = {
   shakeStrokes: {
     label: "Shake strokes", min: 3, max: 10, step: 1, integer: true, defaultValue: d.shakeStrokes,
     description: "How many quick strokes back and forth make a shake. Fewer is more sensitive",
+  },
+  swipePeakThreshold: {
+    label: "Swipe strength", unit: "m/s²", min: 3, max: 30, step: 0.5, defaultValue: d.swipePeakThreshold,
+    description: "How hard the push of a swipe must be. Lower catches gentler swipes (and more accidents)",
   },
   wristMaxAngularVelocityDegreesPerSecond: {
     label: "Max angular velocity", unit: "°/s", min: 1, max: 2000, step: 1, integer: true, defaultValue: d.wristMaxAngularVelocityDegreesPerSecond,
