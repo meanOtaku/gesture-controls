@@ -1,7 +1,13 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LabelModel, LabelRuntimeStatus } from "../labelModels";
+import { useLabelModels } from "../hooks/useLabelModels";
 import { LabelModelsPanel } from "./LabelModelsPanel";
+
+function Harness({ desktopAvailable = true }: { desktopAvailable?: boolean }) {
+  const { models, status, error, refresh } = useLabelModels(desktopAvailable);
+  return <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={error} refresh={refresh} />;
+}
 
 const invokeMock = vi.fn();
 const openMock = vi.fn();
@@ -23,7 +29,7 @@ function setup(models: LabelModel[], status: Partial<LabelRuntimeStatus> = {}) {
     if (command === "get_label_runtime_status") return { ...baseStatus, ...status };
     return undefined;
   });
-  render(<LabelModelsPanel desktopAvailable />);
+  render(<Harness />);
   return { set: (next: LabelModel[]) => { current = next; } };
 }
 
@@ -35,7 +41,7 @@ describe("LabelModelsPanel", () => {
 
   it("says so when there are no models and does nothing outside the desktop app", () => {
     cleanup();
-    render(<LabelModelsPanel desktopAvailable={false} />);
+    render(<Harness desktopAvailable={false} />);
     expect(invokeMock).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Import a model folder" })).toBeDisabled();
   });

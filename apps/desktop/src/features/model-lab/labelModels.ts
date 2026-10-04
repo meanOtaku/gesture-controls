@@ -75,3 +75,72 @@ export function groupByLabel(models: LabelModel[]): { label: string; models: Lab
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([label, list]) => ({ label, models: list.sort((a, b) => b.createdAt.localeCompare(a.createdAt)) }));
 }
+
+export const LABEL_DETECTIONS_EVENT = "label-detections";
+
+/** Mirrors `DetectionReport` in `label_runtime.rs`. */
+export type DetectionEvent =
+  | { kind: "rising" | "active"; label: string; confidence: number; timestampNs: number }
+  | { kind: "falling"; label: string; timestampNs: number; reason: string };
+
+export interface DetectionReport {
+  events: DetectionEvent[];
+  conflicts: string[][];
+  rejections: string[];
+}
+
+export type ActivityTone = "detected" | "released" | "warning";
+
+export interface ActivityEntry {
+  id: number;
+  tone: ActivityTone;
+  text: string;
+  /** How many identical entries in a row this stands for. */
+  count: number;
+}
+
+export const MAX_ACTIVITY = 30;
+
+/** Plain words for why a detection ended. */
+export function describeReason(reason: string): string {
+  if (reason === "scoreBelowRelease") return "ended normally";
+  if (reason === "conflict") return "held off: it was detected together with a label it cannot coexist with";
+  if (reason === "modelChanged") return "its model was changed";
+  return reason.replace(/^(rejected|runtime): /, "stopped: ");
+}
+
+/** The lines worth showing for one report. Ongoing detections are left out: they repeat with every score. */
+export function describeReport(report: DetectionReport): Omit<ActivityEntry, "id" | "count">[] {
+  const lines: Omit<ActivityEntry, "id" | "count">[] = [];
+  for (const event of report.events) {
+    if (event.kind === "rising") {
+      lines.push({ tone: "detected", text: `${event.label} detected (${Math.round(event.confidence * 100)}%)` });
+    } else if (event.kind === "falling") {
+      lines.push({ tone: event.reason === "scoreBelowRelease" ? "released" : "warning", text: `${event.label} released: ${describeReason(event.reason)}` });
+    }
+  }
+  for (const labels of report.conflicts) {
+    lines.push({ tone: "warning", text: `${labels.join(" and ")} were detected together, so both were held off` });
+  }
+  for (const rejection of report.rejections) lines.push({ tone: "warning", text: `Skipped a window for ${rejection}` });
+  return lines;
+}
+
+/** Newest first, capped; an identical line repeating is counted rather than listed again. */
+export function appendActivity(previous: ActivityEntry[], lines: Omit<ActivityEntry, "id" | "count">[], nextId: () => number): ActivityEntry[] {
+  let list = previous;
+  for (const line of lines) {
+    const top = list[0];
+    list = top && top.text === line.text && top.tone === line.tone
+      ? [{ ...top, count: top.count + 1 }, ...list.slice(1)]
+      : [{ ...line, id: nextId(), count: 1 }, ...list];
+  }
+  return list.slice(0, MAX_ACTIVITY);
+}
+
+const STATE_RANK: LabelModelState[] = ["active", "approved", "evaluated", "draft", "archived"];
+
+/** The furthest-along model a label has, or null if it has none. */
+export function bestState(models: Pick<LabelModel, "state">[]): LabelModelState | null {
+  return STATE_RANK.find((state) => models.some((model) => model.state === state)) ?? null;
+}

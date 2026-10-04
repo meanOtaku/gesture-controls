@@ -1,6 +1,4 @@
-import { ChevronDownIcon } from "lucide-react";
 import { useRef, type ChangeEvent } from "react";
-import { HelpTooltip } from "../../../components/app/HelpTooltip";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import {
   AlertDialog,
@@ -14,13 +12,10 @@ import {
   AlertDialogTrigger,
 } from "../../../components/ui/alert-dialog";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
-import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
-import { Checkbox } from "../../../components/ui/checkbox";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../../components/ui/collapsible";
 import { Input } from "../../../components/ui/input";
-import { LEGACY_COMPATIBILITY_LABEL_MAPPING, type DatasetLabel, type DatasetSummary } from "../types";
+import type { DatasetSummary } from "../types";
 
 function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -34,202 +29,81 @@ function readFileAsText(file: File): Promise<string> {
 type DatasetManagerProps = {
   desktopAvailable: boolean;
   datasets: DatasetSummary[];
-  labels: DatasetLabel[];
   loading: boolean;
   importing: boolean;
   error: string | null;
-  selectedDatasetIds: Set<string>;
   pendingDeleteIds: Set<string>;
-  coverageByLabel: Map<string, number>;
   onImport: (args: { filename: string; csvContent: string }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
-  onToggleSelected: (id: string) => void;
 };
 
-/** Imports and manages recorded session CSVs, and shows how many sessions cover each label. */
-export function DatasetManager({
-  desktopAvailable,
-  datasets,
-  labels,
-  loading,
-  importing,
-  error,
-  selectedDatasetIds,
-  pendingDeleteIds,
-  coverageByLabel,
-  onImport,
-  onDelete,
-  onToggleSelected,
-}: DatasetManagerProps) {
+/** Imports and manages recorded session CSVs. */
+export function DatasetManager({ desktopAvailable, datasets, loading, importing, error, pendingDeleteIds, onImport, onDelete }: DatasetManagerProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    const csvContent = await readFileAsText(file);
-    await onImport({ filename: file.name, csvContent });
+    await onImport({ filename: file.name, csvContent: await readFileAsText(file) });
   };
 
   return (
-    <>
-      <Card id="lab-dataset" role="region" aria-label="Dataset" className="min-w-0">
-        <CardHeader>
-          <SectionHeader
-            title="Dataset"
-            description={
-              <>
-                Use the Live data tab&apos;s labeled dataset recorder to capture one CSV per session: pick a label,
-                start recording, perform the gesture (or the background activity), stop, then Export Dataset CSV.
-                Each exported file is one recording session: a Quick Capture session is labeled uniformly, while a Timeline Capture session keeps the label of each interval (rows outside any interval are dropped on import). Check the
-                sessions you want to train on below.
-              </>
-            }
-            help={{
-              label: "About importing datasets",
-              content: "Only CSVs exported from the Live data tab's labeled dataset recorder are supported (Quick Capture or Timeline Capture); each file becomes one managed, selectable training session. A Timeline Capture file's interval labels are all checked against the label catalogue and each needs a training role. This is a legacy-compatible import path: it never reads or modifies any Timeline Capture recording bundle, and it only shares the label catalogue with that newer format. An import either fully succeeds or writes nothing — a failure (unknown label, malformed file, size limit) is reported with its exact cause so you can fix it and retry.",
-            }}
-          />
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <Input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            hidden
-            onChange={(event) => {
-              void handleFileChange(event);
-            }}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={!desktopAvailable || importing}
-              aria-busy={importing}
-            >
-              {importing ? "Importing…" : "Import dataset CSV"}
-            </Button>
-          </div>
-          {error && (
-            <Alert variant="destructive" role="alert">
-              <AlertDescription>
-                {error} Nothing was imported or changed on disk — fix the issue and try the import again.
-              </AlertDescription>
-            </Alert>
-          )}
-          {loading ? (
-            <p className="hint">Loading imported sessions&hellip;</p>
-          ) : datasets.length === 0 ? (
-            <p className="hint">No dataset sessions imported yet. Export a CSV from the Live data tab, then import it here.</p>
-          ) : (
-            <div className="vectors model-lab-datasets">
-              {datasets.map((dataset) => (
-                <div className="vector-row model-lab-label-row" key={dataset.id}>
-                  <div className="model-lab-dataset-select">
-                    <Checkbox
-                      checked={selectedDatasetIds.has(dataset.id)}
-                      onCheckedChange={() => onToggleSelected(dataset.id)}
-                      aria-label={`Select ${dataset.originalFilename}`}
-                    />
-                    <span className="label" onClick={() => onToggleSelected(dataset.id)}>
-                      {dataset.originalFilename} &mdash; {dataset.label.replaceAll("_", " ")} ({dataset.rowCount} rows)
-                    </span>
-                  </div>
-                  <AlertDialog>
-                    <AlertDialogTrigger
-                      render={<Button type="button" variant="outline" disabled={pendingDeleteIds.has(dataset.id)}>Delete</Button>}
-                    />
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete this dataset session?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This permanently deletes {dataset.originalFilename} ({dataset.rowCount} rows) from the
-                          desktop app. This cannot be undone.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Keep session</AlertDialogCancel>
-                        <AlertDialogAction variant="destructive" onClick={() => void onDelete(dataset.id)}>
-                          Delete
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+    <Card id="lab-dataset" role="region" aria-label="Recordings" className="min-w-0">
+      <CardHeader>
+        <SectionHeader
+          title="Recordings"
+          description="Labelled sessions to train from. Record them on the Live data tab, export the CSV, then import it here."
+          help={{
+            label: "About importing recordings",
+            content: "Only CSVs exported from the Live data tab's labelled dataset recorder are supported. A Quick Capture session has one label; a Timeline Capture session keeps the label of each interval and drops rows outside any interval. An import either fully succeeds or writes nothing, and a failure says exactly why so you can fix it and retry.",
+          }}
+        />
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <Input ref={fileInputRef} type="file" accept=".csv" hidden onChange={(event) => void handleFileChange(event)} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" onClick={() => fileInputRef.current?.click()} disabled={!desktopAvailable || importing} aria-busy={importing}>
+            {importing ? "Importing…" : "Import a recording (CSV)"}
+          </Button>
+        </div>
+        {error && (
+          <Alert variant="destructive" role="alert">
+            <AlertDescription>{error} Nothing was imported or changed on disk. Fix the issue and try again.</AlertDescription>
+          </Alert>
+        )}
+        {loading ? (
+          <p className="hint">Loading recordings&hellip;</p>
+        ) : datasets.length === 0 ? (
+          <p className="hint">No recordings imported yet.</p>
+        ) : (
+          <ul className="flex flex-col gap-2" aria-label="Imported recordings">
+            {datasets.map((dataset) => (
+              <li key={dataset.id} className="recipe-item">
+                <div className="flex min-w-0 flex-col gap-1">
+                  <span className="text-sm">{dataset.originalFilename}</span>
+                  <small className="text-xs text-muted-foreground">{dataset.label.replaceAll("_", " ")} · {dataset.rowCount} rows</small>
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card id="lab-coverage" role="region" aria-label="Label coverage" className="min-w-0">
-        <CardHeader>
-          <SectionHeader
-            title="Label coverage"
-            description="Labels are persisted by the desktop with stable IDs. Archived labels stay visible and remain usable so historical sessions and newly imported recordings keep the same meaning."
-          />
-        </CardHeader>
-        <CardContent>
-          <Collapsible>
-            <div className="flex w-full items-center justify-between gap-2">
-              <CollapsibleTrigger
-                render={<Button type="button" variant="ghost" className="justify-between px-0 hover:bg-transparent" />}
-              >
-                <span>View label coverage &middot; {coverageByLabel.size} labels recorded</span>
-                <ChevronDownIcon aria-hidden="true" />
-              </CollapsibleTrigger>
-              <HelpTooltip label="About label coverage">
-                Aim for at least 2 separate session files per label you plan to train on, since evaluation holds out
-                whole sessions.
-              </HelpTooltip>
-            </div>
-            <CollapsibleContent>
-              <div className="vectors model-lab-labels">
-                {Array.from(new Set([
-                  ...Object.keys(LEGACY_COMPATIBILITY_LABEL_MAPPING.entries),
-                  ...coverageByLabel.keys(),
-                  ...labels.map((label) => label.id),
-                ]))
-                  .sort()
-                  .map((labelId) => {
-                    const label = labels.find((l) => l.id === labelId);
-                    const count = coverageByLabel.get(labelId) ?? 0;
-                    const hasTrainingRole = labelId in LEGACY_COMPATIBILITY_LABEL_MAPPING.entries;
-                    const displayText = label?.displayName ?? labelId.replaceAll("_", " ");
-                    return (
-                      <div className="vector-row model-lab-label-row" key={labelId}>
-                        <span className="label">
-                          {displayText}
-                          {displayText !== labelId && (
-                            <>
-                              {" "}
-                              <code>{labelId}</code>
-                            </>
-                          )}
-                        </span>
-                        <span className="model-lab-coverage-count">{count} session{count === 1 ? "" : "s"}</span>
-                        <Badge variant={hasTrainingRole ? "outline" : "destructive"}>
-                          {hasTrainingRole ? "Legacy training role" : "Needs training role mapping"}
-                        </Badge>
-                        {label?.archivedAt && <span className="hint">Archived</span>}
-                      </div>
-                    );
-                  })}
-              </div>
-              <p className="hint">
-                Record at least 2 separate session files per label you plan to train on: evaluation is a grouped
-                holdout by session (<code>GroupShuffleSplit</code> on <code>session_id</code>), so a label with only
-                one session has nothing to hold out. Aim for more sessions on <code>pinch_start</code> /{" "}
-                <code>pinch_release</code> and on whichever everyday-activity labels are most likely to trigger false
-                activations for you. A label is a collection label only, not a training target — its
-                &quot;Legacy training role&quot; badge means it is covered by the built-in compatibility mapping;
-                other labels need an explicit target/negative/exclude mapping assigned before they can be trained on.
-              </p>
-            </CollapsibleContent>
-          </Collapsible>
-        </CardContent>
-      </Card>
-    </>
+                <AlertDialog>
+                  <AlertDialogTrigger render={<Button type="button" variant="outline" disabled={pendingDeleteIds.has(dataset.id)}>Delete</Button>} />
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete this recording?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This permanently deletes {dataset.originalFilename} ({dataset.rowCount} rows) from the desktop app. This cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Keep it</AlertDialogCancel>
+                      <AlertDialogAction variant="destructive" onClick={() => void onDelete(dataset.id)}>Delete</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   );
 }

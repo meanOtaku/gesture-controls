@@ -1,86 +1,33 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useState } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
-import { SectionHeader } from "../../../components/app/SectionHeader";
-import { Alert, AlertDescription } from "../../../components/ui/alert";
-import { Badge } from "../../../components/ui/badge";
-import { Button } from "../../../components/ui/button";
-import { Card, CardContent, CardHeader } from "../../../components/ui/card";
-import { GESTURE_POLICY_EVENT } from "../../../shared/protocol/events";
-import { usePendingActions } from "../hooks/usePendingActions";
-import {
-  DEPLOYABLE_CLASS_LABELS,
-  LEGACY_COMPATIBILITY_LABEL_MAPPING,
-  appendRuntimeEvent,
-  datasetLabels,
-  describeDiagnosticValue,
-  describeWindow,
-  missingLabelMappings,
-  type DatasetLabel,
-  type DatasetSummary,
-  type EnvironmentDiagnostic,
-  type GestureIntent,
-  type GesturePolicyDecision,
-  type InferenceMode,
-  type LabelMapping,
-  type ModelIntentBinding,
-  type ModelLifecycleState,
-  type ModelRegistryView,
-  type PpgWindowObservation,
-  type ReplayReport,
-  type RuntimeEvent,
-  type TrainedModelSummary,
-  type TrainingBackend,
-  type TrainingEventPayload,
-  type TrainingStatus,
-} from "../types";
+import { Card, CardContent } from "../../../components/ui/card";
+import { useLabelModels } from "../hooks/useLabelModels";
+import { datasetLabels, type DatasetLabel, type DatasetSummary } from "../types";
 import { DatasetManager } from "./DatasetManager";
+import { DetectionActivity } from "./DetectionActivity";
+import { LabelCoverage } from "./LabelCoverage";
 import { LabelModelsPanel } from "./LabelModelsPanel";
-import { LabelMappingEditor } from "./LabelMappingEditor";
-import { ModelLifecycleControls } from "./ModelLifecycleControls";
-import { ModelRegistryTable } from "./ModelRegistryTable";
-import { ReadinessPanel } from "./ReadinessPanel";
-import { ReplayPanel } from "./ReplayPanel";
-import { TrainingPanel } from "./TrainingPanel";
 
-/** Mirrors `model_lab::TRAINING_EVENT` in src-tauri/src/model_lab.rs. */
-const TRAINING_EVENT = "model-lab-training-event";
-const MODEL_REGISTRY_EVENT = "model-registry-updated";
-const PPG_WINDOW_OBSERVED_EVENT = "gesture-ppg-window-observed";
-
+/**
+ * Model Lab: teach the app a gesture one label at a time. Models are listed and switched on first, because that is
+ * what you come back to; recordings and label coverage follow.
+ */
 export function ModelLab() {
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [labels, setLabels] = useState<DatasetLabel[]>([]);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [importingBundle, setImportingBundle] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedDatasetIds, setSelectedDatasetIds] = useState<Set<string>>(new Set());
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
-  const [trainingBackend, setTrainingBackend] = useState<TrainingBackend>("tflite");
-  const [status, setStatus] = useState<TrainingStatus>({ phase: "idle" });
-  const [logs, setLogs] = useState<string[]>([]);
-  const [trainedModels, setTrainedModels] = useState<TrainedModelSummary[]>([]);
-  const [trainingError, setTrainingError] = useState<string | null>(null);
-  const [registry, setRegistry] = useState<ModelRegistryView | null>(null);
-  const [runtimeEvents, setRuntimeEvents] = useState<RuntimeEvent[]>([]);
-  const [runtimeError, setRuntimeError] = useState<string | null>(null);
-  const [environmentDiagnostics, setEnvironmentDiagnostics] = useState<EnvironmentDiagnostic[]>([]);
-  const [environmentError, setEnvironmentError] = useState<string | null>(null);
-  const [bindingDrafts, setBindingDrafts] = useState<Record<string, Record<string, GestureIntent>>>({});
-  const [bindingError, setBindingError] = useState<string | null>(null);
-  const [labelMapping, setLabelMapping] = useState<LabelMapping>(LEGACY_COMPATIBILITY_LABEL_MAPPING);
-  const { isPending, run } = usePendingActions();
+  const { models, status, error: modelsError, refresh } = useLabelModels(desktopAvailable);
 
   const refreshDatasets = useCallback(async () => {
     if (!desktopAvailable) return;
     setLoading(true);
     try {
-      const result = await invoke<DatasetSummary[]>("list_model_datasets");
-      setDatasets(result);
+      setDatasets(await invoke<DatasetSummary[]>("list_model_datasets"));
       setError(null);
     } catch (err) {
       setError(String(err));
@@ -89,160 +36,21 @@ export function ModelLab() {
     }
   }, [desktopAvailable]);
 
-  const refreshLabels = useCallback(async () => {
-    if (!desktopAvailable) return;
-    try {
-      const result = await invoke<DatasetLabel[]>("list_model_labels");
-      setLabels(Array.isArray(result) ? result : []);
-    } catch (err) {
-      setError(String(err));
-    }
-  }, [desktopAvailable]);
-
-  const refreshTrainingStatus = useCallback(async () => {
-    if (!desktopAvailable) return;
-    try {
-      const result = await invoke<TrainingStatus>("get_training_status");
-      setStatus(result);
-    } catch (err) {
-      setTrainingError(String(err));
-    }
-  }, [desktopAvailable]);
-
-  const refreshTrainedModels = useCallback(async () => {
-    if (!desktopAvailable) return;
-    try {
-      const result = await invoke<TrainedModelSummary[]>("list_trained_models");
-      setTrainedModels(result);
-    } catch (err) {
-      setTrainingError(String(err));
-    }
-  }, [desktopAvailable]);
-
-  const refreshRegistry = useCallback(async () => {
-    if (!desktopAvailable) return;
-    try {
-      setRegistry(await invoke<ModelRegistryView>("get_model_registry"));
-      setRuntimeError(null);
-    } catch (err) {
-      setRuntimeError(String(err));
-    }
-  }, [desktopAvailable]);
-
-  const refreshEnvironmentDiagnostics = useCallback(async () => {
-    if (!desktopAvailable) return;
-    try {
-      const result = await invoke<EnvironmentDiagnostic[]>("get_environment_diagnostics");
-      setEnvironmentDiagnostics(Array.isArray(result) ? result : []);
-      setEnvironmentError(null);
-    } catch (err) {
-      setEnvironmentError(String(err));
-    }
-  }, [desktopAvailable]);
-
   useEffect(() => {
     void refreshDatasets();
   }, [refreshDatasets]);
 
   useEffect(() => {
-    void refreshLabels();
-  }, [refreshLabels]);
-
-  useEffect(() => {
-    void refreshTrainingStatus();
-    void refreshTrainedModels();
-  }, [refreshTrainingStatus, refreshTrainedModels]);
-
-  useEffect(() => {
-    void refreshRegistry();
-  }, [refreshRegistry]);
-
-  useEffect(() => {
-    void refreshEnvironmentDiagnostics();
-  }, [refreshEnvironmentDiagnostics]);
-
-  useEffect(() => {
     if (!desktopAvailable) return;
-    let cancelled = false;
-    const unlistens: (() => void)[] = [];
-    const addListener = <T,>(event: string, handler: (payload: T) => void) => {
-      void listen<T>(event, ({ payload }) => { if (!cancelled) handler(payload); }).then((unlisten) => {
-        if (cancelled) unlisten();
-        else unlistens.push(unlisten);
-      }).catch((err) => {
-        if (!cancelled) setRuntimeError(`Could not subscribe to inference updates: ${String(err)}`);
-      });
-    };
-    addListener<ModelRegistryView>(MODEL_REGISTRY_EVENT, setRegistry);
-    addListener<PpgWindowObservation>(PPG_WINDOW_OBSERVED_EVENT, (observation) => {
-      setRuntimeEvents((previous) => appendRuntimeEvent(previous, { kind: "window", observation }));
-    });
-    addListener<GesturePolicyDecision>(GESTURE_POLICY_EVENT, (decision) => {
-      setRuntimeEvents((previous) => appendRuntimeEvent(previous, { kind: "decision", decision }));
-    });
-    return () => {
-      cancelled = true;
-      unlistens.forEach((unlisten) => unlisten());
-    };
+    void (async () => {
+      try {
+        const result = await invoke<DatasetLabel[]>("list_model_labels");
+        setLabels(Array.isArray(result) ? result : []);
+      } catch (err) {
+        setError(String(err));
+      }
+    })();
   }, [desktopAvailable]);
-
-  useEffect(() => {
-    if (!desktopAvailable) return;
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void listen<TrainingEventPayload>(TRAINING_EVENT, ({ payload }) => {
-      if (cancelled) return;
-      switch (payload.kind) {
-        case "started":
-          setStatus({
-            phase: "running",
-            jobId: payload.jobId,
-            datasetIds: payload.datasetIds,
-            backend: payload.backend,
-            startedAt: new Date().toISOString(),
-          });
-          setLogs([]);
-          setTrainingError(null);
-          break;
-        case "log":
-          setLogs((prev) => [...prev, payload.message].slice(-500));
-          break;
-        case "completed":
-          setStatus({
-            phase: "completed",
-            jobId: payload.jobId,
-            modelId: payload.modelId,
-            backend: payload.backend,
-            modelCard: payload.modelCard,
-          });
-          OperationFeedback.success("Training", `Trained model ${payload.modelId}.`);
-          void refreshTrainedModels();
-          void refreshRegistry();
-          break;
-        case "failed":
-          setStatus({ phase: "failed", jobId: payload.jobId, message: payload.message });
-          OperationFeedback.error("Training", payload.message);
-          break;
-        case "cancelled":
-          setLogs((prev) => [...prev, "Training cancelled."]);
-          setStatus({ phase: "idle" });
-          OperationFeedback.info("Training", "Training cancelled.");
-          break;
-      }
-    }).then((fn) => {
-      if (cancelled) {
-        fn();
-        return;
-      }
-      unlisten = fn;
-    }).catch((err) => {
-      if (!cancelled) setTrainingError(`Could not subscribe to training updates: ${String(err)}`);
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, [desktopAvailable, refreshRegistry, refreshTrainedModels]);
 
   const handleImport = useCallback(
     async ({ filename, csvContent }: { filename: string; csvContent: string }) => {
@@ -251,10 +59,10 @@ export function ModelLab() {
         await invoke("import_model_dataset", { filename, csvContent });
         setError(null);
         await refreshDatasets();
-        OperationFeedback.success("Import dataset", `Imported ${filename}.`);
+        OperationFeedback.success("Import recording", `Imported ${filename}.`);
       } catch (err) {
         setError(String(err));
-        OperationFeedback.error("Import dataset", String(err));
+        OperationFeedback.error("Import recording", String(err));
       } finally {
         setImporting(false);
       }
@@ -269,16 +77,10 @@ export function ModelLab() {
         await invoke("delete_model_dataset", { id });
         setError(null);
         await refreshDatasets();
-        setSelectedDatasetIds((prev) => {
-          if (!prev.has(id)) return prev;
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-        OperationFeedback.success("Delete dataset", "Dataset session deleted.");
+        OperationFeedback.success("Delete recording", "Recording deleted.");
       } catch (err) {
         setError(String(err));
-        OperationFeedback.error("Delete dataset", String(err));
+        OperationFeedback.error("Delete recording", String(err));
       } finally {
         setPendingDeleteIds((prev) => {
           const next = new Set(prev);
@@ -290,169 +92,12 @@ export function ModelLab() {
     [refreshDatasets],
   );
 
-  const handleImportCustomBundle = useCallback(async () => {
-    if (!desktopAvailable) return;
-    const selected = await open({
-      title: "Select custom LiteRT bundle metadata.json",
-      multiple: false,
-      filters: [{ name: "TFLite bundle metadata", extensions: ["json"] }],
-    });
-    if (!selected || Array.isArray(selected)) return;
-    setImportingBundle(true);
-    try {
-      setRegistry(await invoke<ModelRegistryView>("import_custom_tflite_bundle", { metadataPath: selected }));
-      setRuntimeError(null);
-      OperationFeedback.success("Import custom bundle", "Bundle validated and registered as Draft. Review, evaluate, approve, and add safe bindings before activation.");
-    } catch (err) {
-      const message = String(err);
-      setRuntimeError(`Custom bundle was not imported: ${message}`);
-      OperationFeedback.error("Import custom bundle", message);
-    } finally {
-      setImportingBundle(false);
-    }
-  }, [desktopAvailable]);
-
-  const toggleDatasetSelected = useCallback((id: string) => {
-    setSelectedDatasetIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
-
-  const handleStartTraining = useCallback(async () => {
-    const datasetIds = Array.from(selectedDatasetIds);
-    if (datasetIds.length === 0 || status.phase === "running") return;
-    setTrainingError(null);
-    const selectedLabelIds = new Set(
-      datasets.filter((dataset) => selectedDatasetIds.has(dataset.id)).flatMap(datasetLabels),
-    );
-    const unmapped = missingLabelMappings(labelMapping, selectedLabelIds);
-    if (unmapped.length > 0) {
-      const message = `These labels have no training role mapping yet, so they cannot be trained on: ${unmapped.join(", ")}.`;
-      setTrainingError(message);
-      OperationFeedback.error("Start training", message);
-      return;
-    }
-    try {
-      await invoke<string>("start_training_job", {
-        datasetIds,
-        backend: trainingBackend,
-        labelMapping,
-      });
-    } catch (err) {
-      setTrainingError(String(err));
-      OperationFeedback.error("Start training", String(err));
-    }
-  }, [datasets, selectedDatasetIds, status.phase, trainingBackend, labelMapping]);
-
-  const handleCancelTraining = useCallback(async () => {
-    if (status.phase !== "running") return;
-    try {
-      await invoke("cancel_training_job", { jobId: status.jobId });
-    } catch (err) {
-      setTrainingError(String(err));
-      OperationFeedback.error("Cancel training", String(err));
-    }
-  }, [status]);
-
-  const handleInferenceMode = useCallback(async (mode: InferenceMode) => {
-    try {
-      setRegistry(await invoke<ModelRegistryView>("set_inference_mode", { mode }));
-      setRuntimeError(null);
-      OperationFeedback.success("Inference mode", `Set to ${mode}.`);
-    } catch (err) {
-      setRuntimeError(String(err));
-      OperationFeedback.error("Inference mode", String(err));
-    }
-  }, []);
-
-  const handleLifecycleTransition = useCallback(async (id: string, to: ModelLifecycleState) => {
-    try {
-      setRegistry(await invoke<ModelRegistryView>("transition_model_state", { id, to }));
-      setRuntimeError(null);
-      OperationFeedback.success("Model lifecycle", `${id} moved to ${to}.`);
-    } catch (err) {
-      setRuntimeError(String(err));
-      OperationFeedback.error("Model lifecycle", String(err));
-    }
-  }, []);
-
-  const handleActivate = useCallback(async (id: string) => {
-    try {
-      setRegistry(await invoke<ModelRegistryView>("activate_model", { id }));
-      setRuntimeError(null);
-      OperationFeedback.success("Activate model", `${id} is now active.`);
-    } catch (err) {
-      setRuntimeError(String(err));
-      OperationFeedback.error("Activate model", String(err));
-    }
-  }, []);
-
-  const handleRollback = useCallback(async () => {
-    try {
-      setRegistry(await invoke<ModelRegistryView>("rollback_active_model"));
-      setRuntimeError(null);
-      OperationFeedback.success("Rollback", "Restored the previous active model.");
-    } catch (err) {
-      setRuntimeError(String(err));
-      OperationFeedback.error("Rollback", String(err));
-    }
-  }, []);
-
-  const handleDraftChange = useCallback((modelId: string, classLabel: string, intent: GestureIntent) => {
-    setBindingDrafts((previous) => ({
-      ...previous,
-      [modelId]: { ...previous[modelId], [classLabel]: intent },
-    }));
-  }, []);
-
-  const handleSaveBindings = useCallback(
-    async (modelId: string) => {
-      const model = registry?.models.find((entry) => entry.id === modelId);
-      if (!model) return;
-      const draft = bindingDrafts[modelId] ?? {};
-      const bindings: ModelIntentBinding[] = DEPLOYABLE_CLASS_LABELS.map((classLabel) => {
-        const existing = model.intentBindings.find((entry) => entry.classLabel === classLabel);
-        const intent: GestureIntent = draft[classLabel] ?? existing?.intent ?? "noAction";
-        return { classLabel, intent };
-      });
-      setBindingError(null);
-      try {
-        setRegistry(await invoke<ModelRegistryView>("set_model_intent_bindings", { id: modelId, bindings }));
-        OperationFeedback.success("Save bindings", `Safe intent bindings saved for ${modelId}.`);
-      } catch (err) {
-        setBindingError(String(err));
-        OperationFeedback.error("Save bindings", String(err));
-      }
-    },
-    [registry, bindingDrafts],
-  );
-
-  const handleReplay = useCallback(
-    async ({ modelId, datasetIds, maxOutcomes }: { modelId: string; datasetIds: string[]; maxOutcomes: number }) =>
-      invoke<ReplayReport>("replay_model_dataset", { modelId, datasetIds, maxOutcomes }),
-    [],
-  );
-
   const coverageByLabel = new Map<string, number>();
   for (const dataset of datasets) {
-    for (const label of datasetLabels(dataset)) {
-      coverageByLabel.set(label, (coverageByLabel.get(label) ?? 0) + 1);
-    }
+    for (const label of datasetLabels(dataset)) coverageByLabel.set(label, (coverageByLabel.get(label) ?? 0) + 1);
   }
-
-  const isRunning = status.phase === "running";
-  const trainedModelById = new Map(trainedModels.map((model) => [model.id, model]));
-  const deployableModelIds = (registry?.models ?? [])
-    .filter((model) =>
-      (model.state === "approved" || model.state === "active")
-      && (trainedModelById.get(model.id)?.backend === "tflite" || model.importedTfliteBundle))
-    .map((model) => model.id);
+  const activeCount = models.filter((model) => model.state === "active").length;
+  const mode = status?.mode ?? "off";
 
   return (
     <main className="shell model-lab-shell">
@@ -461,180 +106,45 @@ export function ModelLab() {
           <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Model Lab</h1>
           <p className="subtitle">
-            Build a gesture model from your recordings. Import sessions, train a candidate, then review it before enabling desktop control.
+            Teach the app a gesture one label at a time. Each label has its own model; switch on the ones you want, and use them as steps in a recipe.
           </p>
-        </div>
-        <div className={`connection ${trainedModels.length > 0 ? "online" : "offline"}`}>
-          <span className="pulse" />
-          {!desktopAvailable ? "Browser preview" : trainedModels.length > 0
-            ? `${trainedModels.length} trained model${trainedModels.length === 1 ? "" : "s"}`
-            : "No trained model"}
         </div>
       </header>
 
-      {!desktopAvailable && <aside className="preview-notice" role="status">
-        <span className="preview-icon" aria-hidden="true">i</span>
-        <div><strong>You’re viewing the browser preview</strong><p>Import, training, and inference need the desktop app. Open it with <code>npm start</code> from the project folder. Your saved datasets and models are available there.</p></div>
-      </aside>}
-      <section className="overview-grid" aria-label="Model Lab overview">
-        <Card><CardContent><span className="label">Imported sessions</span><strong className="text-numeric">{desktopAvailable ? datasets.length : "—"}</strong><small>{desktopAvailable ? `${selectedDatasetIds.size} selected for training` : "Available in the desktop app"}</small></CardContent></Card>
-        <Card><CardContent><span className="label">Trained models</span><strong className="text-numeric">{desktopAvailable ? trainedModels.length : "—"}</strong><small>{desktopAvailable ? isRunning ? "Training in progress" : "Ready for your next experiment" : "Available in the desktop app"}</small></CardContent></Card>
-        <Card><CardContent><span className="label">Desktop control</span><strong className="text-numeric">{desktopAvailable ? registry?.inferenceMode ?? "Checking" : "Preview"}</strong><small>{registry?.activeModelId ? "A model is active" : "No active model"}</small></CardContent></Card>
-      </section>
-      <nav className="lab-workflow" aria-label="Model workflow">
-        <a href="#lab-dataset">01 · Import</a><a href="#lab-coverage">02 · Labels</a><a href="#lab-training">03 · Train</a><a href="#lab-evaluation">04 · Review</a><a href="#lab-replay">05 · Replay</a><a href="#lab-deployment">06 · Activate</a>
-      </nav>
-      {runtimeError && (
-        <Alert variant="destructive" role="alert">
-          <AlertDescription>{runtimeError}</AlertDescription>
-        </Alert>
+      {!desktopAvailable && (
+        <aside className="preview-notice" role="status">
+          <span className="preview-icon" aria-hidden="true">i</span>
+          <div>
+            <strong>You’re viewing the browser preview</strong>
+            <p>Models, recordings and detection need the desktop app. Open it with <code>npm start</code> from the project folder.</p>
+          </div>
+        </aside>
       )}
+
+      <section className="overview-grid" aria-label="Model Lab overview">
+        <Card><CardContent><span className="label">Runtime</span><strong className="text-numeric">{desktopAvailable ? mode : "Preview"}</strong><small>{mode === "live" ? "Detections can start recipes" : mode === "monitor" ? "Watching only; nothing acts" : "No model runs"}</small></CardContent></Card>
+        <Card><CardContent><span className="label">Active models</span><strong className="text-numeric">{desktopAvailable ? activeCount : "—"}</strong><small>{desktopAvailable ? `${models.length} registered` : "Available in the desktop app"}</small></CardContent></Card>
+        <Card><CardContent><span className="label">Recordings</span><strong className="text-numeric">{desktopAvailable ? datasets.length : "—"}</strong><small>{desktopAvailable ? `${coverageByLabel.size} label${coverageByLabel.size === 1 ? "" : "s"} covered` : "Available in the desktop app"}</small></CardContent></Card>
+      </section>
+
+      <nav className="lab-workflow" aria-label="Model Lab sections">
+        <a href="#lab-labels">Models</a><a href="#lab-activity">Activity</a><a href="#lab-coverage">Labels</a><a href="#lab-dataset">Recordings</a>
+      </nav>
+
       <fieldset className="lab-workspace card-stack" disabled={!desktopAvailable} aria-label="Desktop model tools">
-        <LabelModelsPanel desktopAvailable={desktopAvailable} />
-
-        <ReadinessPanel
-          desktopAvailable={desktopAvailable}
-          diagnostics={environmentDiagnostics}
-          error={environmentError}
-          onRecheck={refreshEnvironmentDiagnostics}
-        />
-
+        <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} />
+        <DetectionActivity desktopAvailable={desktopAvailable} />
+        <LabelCoverage labels={labels} models={models} coverageByLabel={coverageByLabel} />
         <DatasetManager
           desktopAvailable={desktopAvailable}
           datasets={datasets}
-          labels={labels}
           loading={loading}
           importing={importing}
           error={error}
-          selectedDatasetIds={selectedDatasetIds}
           pendingDeleteIds={pendingDeleteIds}
-          coverageByLabel={coverageByLabel}
           onImport={handleImport}
           onDelete={handleDelete}
-          onToggleSelected={toggleDatasetSelected}
         />
-
-        {selectedDatasetIds.size > 0 && (
-          <Card role="region" aria-label="Label training role mapping" className="min-w-0">
-            <CardHeader>
-              <SectionHeader
-                title="Label training roles"
-                description="Each selected dataset's label must be assigned an explicit training role: as a training target class, as negative examples, or excluded from this training run."
-              />
-            </CardHeader>
-            <CardContent>
-              <LabelMappingEditor
-                selectedDatasetLabels={new Set(
-                  datasets.filter((dataset) => selectedDatasetIds.has(dataset.id)).flatMap(datasetLabels),
-                )}
-                labels={labels}
-                mapping={labelMapping}
-                onMappingChange={setLabelMapping}
-              />
-            </CardContent>
-          </Card>
-        )}
-
-        <Card role="region" aria-label="Import custom LiteRT bundle" className="min-w-0">
-          <CardHeader>
-            <SectionHeader
-              title="Import custom LiteRT bundle"
-              description="Choose the bundle’s metadata.json. Model Lab checks its versioned feature contract, preprocessing, window semantics, class/tensor shapes, and SHA-256 before copying it into private storage. Imported models begin as Draft and cannot activate until lifecycle approval and safe bindings are complete."
-            />
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <Alert role="note">
-              <AlertDescription>Only validated TFLite bundles are accepted. Do not select model.tflite directly; choose its adjacent metadata.json.</AlertDescription>
-            </Alert>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" disabled={importingBundle} onClick={() => void handleImportCustomBundle()}>
-                {importingBundle ? "Validating bundle…" : "Select metadata.json"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <TrainingPanel
-          trainingBackend={trainingBackend}
-          onBackendChange={setTrainingBackend}
-          status={status}
-          logs={logs}
-          trainingError={trainingError}
-          selectedCount={selectedDatasetIds.size}
-          onStart={() => void handleStartTraining()}
-          onCancel={() => void handleCancelTraining()}
-        />
-
-        <ModelRegistryTable trainedModels={trainedModels} />
-
-        <ReplayPanel deployableModelIds={deployableModelIds} datasets={datasets} onReplay={handleReplay} />
-
-        <ModelLifecycleControls
-          registry={registry}
-          trainedModelById={trainedModelById}
-          bindingDrafts={bindingDrafts}
-          bindingError={bindingError}
-          isPending={isPending}
-          run={run}
-          onDraftChange={handleDraftChange}
-          onSaveBindings={handleSaveBindings}
-          onTransition={handleLifecycleTransition}
-          onActivate={handleActivate}
-          onRollback={handleRollback}
-        />
-
-        <Card role="region" aria-label="Live inference diagnostics" className="min-w-0">
-          <CardHeader>
-            <SectionHeader
-              title="Live inference diagnostics"
-              description={
-                registry?.activeModelId
-                  ? `Active model: ${registry.activeModelId}. Monitor records decisions without desktop actions; Live permits bound safe intents.`
-                  : "Inference is fail-closed: activate a validated LiteRT bundle with complete safe-intent bindings before Monitor or Live can run."
-              }
-              help={{
-                label: "About inference modes",
-                content: "Off runs no inference. Monitor evaluates windows and logs decisions without ever touching desktop controls. Live is the only mode that may act on bound safe intents.",
-              }}
-              status={
-                <Badge variant={registry && registry.inferenceMode !== "off" ? "default" : "secondary"}>
-                  {registry ? registry.inferenceMode : desktopAvailable ? "Checking" : "Desktop only"}
-                </Badge>
-              }
-            />
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Inference mode">
-              {(["off", "monitor", "live"] as const).map((mode) => (
-                <Button
-                  key={mode}
-                  type="button"
-                  variant={registry?.inferenceMode === mode ? "default" : "outline"}
-                  aria-pressed={registry?.inferenceMode === mode}
-                  disabled={!registry || isPending("inferenceMode") || (mode !== "off" && !registry.activeModelId)}
-                  onClick={() => void run("inferenceMode", () => handleInferenceMode(mode))}
-                >
-                  {isPending("inferenceMode") ? "Updating…" : mode[0].toUpperCase() + mode.slice(1)}
-                </Button>
-              ))}
-            </div>
-            {runtimeEvents.length === 0 ? (
-              <p className="hint">No desktop inference windows observed in this session.</p>
-            ) : (
-              <div className="vectors model-lab-models" aria-label="Recent inference events">
-                {runtimeEvents.map((event, index) => (
-                  <div className="vector-row model-lab-label-row" key={`${event.kind}-${index}`}>
-                    {event.kind === "window" ? (
-                      <span className="label">Window #{event.observation.sequence}: {describeWindow(event.observation)}</span>
-                    ) : (
-                      <span className="label">{event.decision.live ? "Live" : "Monitor"} {event.decision.intent}: {describeDiagnosticValue(event.decision.reason)}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </fieldset>
     </main>
   );

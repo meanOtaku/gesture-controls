@@ -2,7 +2,7 @@
 
 This guide explains how to set up and use the desktop application, what every tab does, and the safe workflow for moving from raw sensor telemetry to a desktop-controlled volume gesture.
 
-> **Safety first:** Watch and headphones are sensor sources only. Model training, LiteRT inference, policy decisions, and actions run on the desktop. Keep inference **Off** until you have recorded data, trained a reviewed model, verified it in **Monitor** mode, and completed the applicable checks in [release readiness](release-readiness.md).
+> **Safety first:** Watch and headphones are sensor sources only. Models, policy decisions, and actions run on the desktop. Keep inference **Off** until you have a reviewed model and have verified it in **Monitor** mode, and completed the applicable checks in [release readiness](release-readiness.md).
 
 ## 1. Before you start
 
@@ -11,7 +11,7 @@ This guide explains how to set up and use the desktop application, what every ta
 - A supported desktop host. The packaged application is intended for macOS, Windows, and Linux; actual install/package validation is still a release gate.
 - Sony headset tracking when you want gaze calibration and the overlay. On macOS and Windows, `npm start` builds the tracking support directly into the desktop app (no separate process); on macOS grant it Input Monitoring on first launch, on Windows follow Sony Head Tracker's Repair Tracker instructions yourself if the sensor node is missing. Linux development can use the sample sender because the upstream tracker has no Linux hardware backend.
 - A Galaxy Watch for Watch IMU/PPG telemetry and gesture recording. The Watch connects over **Bluetooth LE by default** (the desktop needs a Bluetooth adapter, and you approve the desktop once on the Watch with **Trust this computer**), or over Wi-Fi, in which case both devices must be on the same non-isolated local network. Pick the transport in Settings; see the [Bluetooth transport](protocols/watch-ble-transport.md).
-- `uv` and a repository checkout only when using the current development-only training or replay workflow in Model Lab. The app's **Desktop readiness** panel will report missing requirements.
+- Training a model from your own recordings (arriving in the next Model Lab step) will need extra tools on your machine; using an imported model does not.
 
 ### Start a development checkout
 
@@ -33,8 +33,8 @@ For host prerequisites and tracker troubleshooting, see [Running the project](de
 
 ### First launch checklist
 
-1. Open **Model Lab** and review **Desktop readiness**. Use **Recheck** after installing a missing prerequisite.
-2. Confirm the required system-volume backend is reported as available before testing volume control.
+1. Confirm the system-volume backend works before testing volume control (move the volume from the Main tab).
+2. Open **Model Lab** to see which models are registered and the runtime mode. It starts **Off** until you choose otherwise.
 3. Connect the headset and, if used, the Watch. Keep inference **Off** until the model workflow below is complete. The inference mode is remembered between launches, but a remembered **Live** is always reduced to **Monitor** at startup: select Live again, deliberately, each session.
 4. Do not use Live mode with an unreviewed model or a production audio device.
 
@@ -184,7 +184,13 @@ This viewer is inspection-only: it has no annotation-editing or training action,
 
 ### Model Lab
 
-The **Model Lab** tab manages datasets, model training, model safety state, replay, and desktop inference mode.
+Model Lab is organised around **one model per label**: a label is a gesture or activity ("snap_fingers", "pinch_start"), and each label has its own model. Models run inside the app; nothing else needs to be installed to use one. The page shows, top to bottom:
+
+1. an overview (runtime mode, active models, recordings);
+2. **Label models**: your models, and the Off / Monitor / Live switch;
+3. **Activity**: detections and releases this session;
+4. **Labels**: recordings per label and how far along each label's model is;
+5. **Recordings**: the labelled sessions you have imported.
 
 #### Label models
 
@@ -195,72 +201,19 @@ The **Label models** card at the top of Model Lab is the per-label model system:
 - **Model runtime** is **Off**, **Monitor** (models run and show a score and a "Detected" badge, nothing acts) or **Live** (a detection can start recipes that use that label, see *Model label* below). Switching to Live asks first, and a restart always comes back in Monitor.
 - A label whose active model cannot be loaded (for example its file was changed) is named in a red alert and has no running model.
 
-#### Desktop readiness
+#### Activity
 
-This panel checks local prerequisites without reading or transmitting telemetry:
+A list of what the active models have done this session, newest first: **Detected** (with the model's confidence), **Released**, and **Attention** for a skipped window, a model that was swapped out, or two labels that cannot coexist being detected together (both are then held off). An identical line repeating is shown once with a count. In Monitor this is what the models would have done; in Live the same detections can start recipes. A release always shows, in every mode.
 
-- availability of the `uv` runner;
-- availability of the bundled classifier project;
-- whether this desktop build includes LiteRT inference;
-- availability of the current platform's system-volume backend.
+#### Labels
 
-Training and replay are currently development workflows: they use `uv` and the repository's `tools/pinch-classifier` project. LiteRT must be present in the desktop build for real model inference; otherwise the app remains fail-closed.
+Each label with a recording or a model, with its number of recordings and its model's furthest state (No model, or Model: draft / evaluated / approved / active). A label with a single recording is flagged: a model is tested on whole recordings it never saw, so it needs at least two. Labels with neither are hidden until you choose **Show unused labels**.
 
-#### Live inference diagnostics
+#### Recordings
 
-This panel displays the active model, current inference mode, and a bounded recent-event feed.
+Record a labelled session on the **Live data** tab (Quick Capture is one label; Timeline Capture keeps the label of each interval), export the CSV, then **Import a recording (CSV)** here. The import is all-or-nothing: the file is checked in full (size limit, exact header, consistent labels, every label already in the catalogue) before anything is written, a failure says exactly why, and nothing is changed on disk. It is a compatibility path independent of the newer recording-bundle format and never touches those bundles. Labels keep stable ids; archiving one hides it from new selection but never changes old recordings.
 
-- **Off:** no model decisions are processed for control.
-- **Monitor:** decisions and quality outcomes are visible, but desktop actions are not permitted.
-- **Live:** only a validated active model with complete safe bindings may issue approved safe intents.
-
-Use **Monitor** before **Live**. Each window's diagnostics line also says whether the live PPG window matches the window the model was trained on. A mismatch reads `window mismatch: live 960 ms vs trained 500 ms (Live is blocked)`. Monitor still classifies such a window so you can inspect it, but **Live refuses to start** (and refuses each mismatched window) until the two agree: set the Watch PPG flush rate so windows span about the trained length (roughly 2 Hz for a 500 ms model), or retrain with a matching `--window-ms`. A model's declared minimum samples per window is also enforced live.
-
-A Live selection is only accepted while the live window matches, and a remembered Live is reduced to Monitor when the app starts. A stale input, quality rejection, malformed/out-of-order telemetry, runtime error, model swap, mode downgrade, or Watch disconnect force-releases and hides an active interaction.
-
-#### Dataset and label coverage
-
-1. Import exported dataset CSV files (Quick Capture or Timeline Capture).
-2. Select the sessions to include in training.
-3. Review per-label coverage and the label catalogue, and give every label on the selected sessions a training role (target, negative, or exclude). A Timeline session contributes every label on its rows, so each of them needs a role.
-
-Labels have stable IDs, display metadata, roles, and archive state. Archiving is non-destructive: historical recordings and models retain their label meaning. Do not train a deployable gesture model until relevant positive and negative/background labels have useful coverage.
-
-##### CSV import and migration state
-
-The **Dataset** panel's importer accepts the CSV exported by the labeled dataset recorder above, in either of its two shapes: a single-label session (with a `# label:` line, where every row must carry exactly that label) or a Timeline Capture export (empty `# label:` line, a label on each annotated row, blank labels between intervals, which are dropped on import). This importer is a compatibility path, not a converter: it is intentionally kept independent of the newer recording-bundle format (`raw.csv` / `recording.json` / `annotations.json`) used by Timeline Capture, and importing a CSV never reads, writes, or otherwise touches any recording bundle on disk. The two pipelines share only the label catalogue, so a label created in either place is recognized by the other.
-
-Import is all-or-nothing and recoverable: a CSV is written to the app's dataset store, and the session index is updated, only after the file has been fully validated (byte-size limit, the exact header, consistent labels between the `# label:` line and the rows, and every label on the rows already existing in the catalogue). If any check fails, or if updating the index fails, nothing is left on disk — the failure is reported as the specific error (for example, "unknown label; create it in Model Lab before importing recordings") in the panel rather than a generic failure, so you can create the missing label or fix the file and simply retry the same import. A failed import never partially writes a session and never modifies any existing dataset, recording, or raw sensor file.
-
-Labels themselves migrate forward automatically and non-destructively: previously used label IDs and their display metadata keep working after an app update, and archiving a label only hides it from new selection — it never deletes or renumbers historical sessions that reference it.
-
-#### Training and evaluation
-
-Choose a backend:
-
-- **TFLite:** the deployable desktop model path.
-- **scikit-learn baseline:** useful for comparison, but it cannot be activated for desktop Live inference.
-
-Start training and monitor the in-app progress/log output. After training, inspect the evaluation data and false-activation behavior before promotion.
-
-#### Model lifecycle, bindings, activation, and rollback
-
-Models move through the lifecycle:
-
-```text
-Draft → Evaluated → Approved → Active → Archived
-```
-
-- Use lifecycle controls to promote a reviewed model; only an **Approved** model can become active.
-- Configure every deployable class with one of the offered **safe intents**. Arbitrary shell or desktop commands are never available.
-- A TFLite model with complete bindings is required for activation.
-- The active model bundle, contract, digest, and binding snapshot are revalidated and immutable while active. A bundle, whether trained here or imported from elsewhere, is held to the trainer's full contract: tensor shapes and dtypes, the exact preprocessing policy, window configuration, a passed conversion-parity record, training provenance with no session shared between train and test, and a SHA-256 of `model.tflite` recomputed from disk. An imported bundle missing any of these is rejected.
-- If the model registry file on disk is unreadable or corrupt, the app reports the error and **leaves the file untouched** rather than starting an empty registry; restore it from a backup or move it aside deliberately.
-- Use rollback to return to a previously approved model. Model swaps release an active interaction before the swap completes.
-
-#### Offline replay
-
-Replay runs a managed dataset against an approved or active validated TFLite bundle without operating gestures or volume. It resolves labels through the same label mapping the model was trained with, so a label trained as a target is scored as that target. A bundle without a recorded mapping (for example an imported one) uses the legacy vocabulary and rejects labels it does not cover instead of scoring them as negative. It produces bounded per-window outcomes and a summary. Use it to compare expected labels with predicted decisions before enabling Live mode.
+Training a model from recordings is the next step of this feature. The older three-class training, LiteRT readiness, intent-binding, replay and legacy inference panels were removed from this page; a model from the old system that could not be converted is kept aside and counted on the Label models card.
 
 ### Settings
 

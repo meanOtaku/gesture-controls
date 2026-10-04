@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { SegmentedControl } from "../../../components/app/SegmentedControl";
@@ -11,7 +10,6 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { usePendingActions } from "../hooks/usePendingActions";
 import {
-  LABEL_MODELS_EVENT,
   MODE_OPTIONS,
   actionsFor,
   groupByLabel,
@@ -22,8 +20,6 @@ import {
   type LabelRuntimeStatus,
   type ModelAction,
 } from "../labelModels";
-
-const POLL_MS = 1000;
 
 const STATE_LABEL: Record<LabelModelState, string> = {
   draft: "Draft",
@@ -38,46 +34,25 @@ const STATE_LABEL: Record<LabelModelState, string> = {
  * models only watch (Monitor) or can drive recipes (Live). Every step is a person's choice; importing never
  * activates anything.
  */
-export function LabelModelsPanel({ desktopAvailable }: { desktopAvailable: boolean }) {
+export function LabelModelsPanel({
+  desktopAvailable,
+  models,
+  status,
+  loadError,
+  refresh,
+}: {
+  desktopAvailable: boolean;
+  models: LabelModel[];
+  status: LabelRuntimeStatus | null;
+  loadError: string | null;
+  refresh: () => Promise<void>;
+}) {
   const modeId = useId();
-  const [models, setModels] = useState<LabelModel[]>([]);
-  const [status, setStatus] = useState<LabelRuntimeStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const error = actionError ?? loadError;
+  const setError = setActionError;
   const [confirmLive, setConfirmLive] = useState(false);
   const { isPending, run } = usePendingActions();
-
-  const refresh = useCallback(async () => {
-    if (!desktopAvailable) return;
-    try {
-      const [list, current] = await Promise.all([
-        invoke<LabelModel[]>("list_label_models"),
-        invoke<LabelRuntimeStatus>("get_label_runtime_status"),
-      ]);
-      setModels(Array.isArray(list) ? list : []);
-      setStatus(current ?? null);
-    } catch (err) {
-      setError(String(err));
-    }
-  }, [desktopAvailable]);
-
-  useEffect(() => {
-    void refresh();
-    if (!desktopAvailable) return;
-    const timer = window.setInterval(() => void refresh(), POLL_MS);
-    let unlisten: (() => void) | undefined;
-    let disposed = false;
-    void Promise.resolve(listen(LABEL_MODELS_EVENT, () => void refresh()))
-      .then((fn) => {
-        if (disposed) fn?.();
-        else unlisten = fn;
-      })
-      .catch(() => undefined);
-    return () => {
-      disposed = true;
-      window.clearInterval(timer);
-      unlisten?.();
-    };
-  }, [desktopAvailable, refresh]);
 
   const attempt = (key: string, title: string, work: () => Promise<unknown>, success?: string) =>
     run(key, async () => {
@@ -191,7 +166,7 @@ export function LabelModelsPanel({ desktopAvailable }: { desktopAvailable: boole
         )}
 
         {groups.length === 0 ? (
-          <p className="hint">No label models yet. Import a model folder to start.</p>
+          <p className="hint">No label models yet. Import a model folder to start; training one from your recordings is coming next.</p>
         ) : (
           <ul className="flex flex-col gap-4" aria-label="Label models by label">
             {groups.map((group) => {

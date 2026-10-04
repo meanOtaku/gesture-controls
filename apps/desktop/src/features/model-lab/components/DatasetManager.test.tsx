@@ -1,113 +1,49 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DatasetManager } from "./DatasetManager";
-import { TooltipProvider } from "../../../components/ui/tooltip";
 import type { DatasetSummary } from "../types";
+import { DatasetManager } from "./DatasetManager";
 
-afterEach(() => cleanup());
+afterEach(cleanup);
 
-const DATASET_A: DatasetSummary = {
-  id: "dataset-a",
-  originalFilename: "session-1.csv",
-  importedAt: "2026-08-31T00:00:00Z",
-  label: "pinch_start",
-  rowCount: 42,
-};
+const dataset: DatasetSummary = { id: "d1", originalFilename: "session-1.csv", importedAt: "2026-10-01", label: "pinch_start", rowCount: 42 };
 
-function renderManager(overrides: Partial<React.ComponentProps<typeof DatasetManager>> = {}) {
+function setup(over: Partial<React.ComponentProps<typeof DatasetManager>> = {}) {
   const props: React.ComponentProps<typeof DatasetManager> = {
-    desktopAvailable: true,
-    datasets: [],
-    labels: [],
-    loading: false,
-    importing: false,
-    error: null,
-    selectedDatasetIds: new Set(),
-    pendingDeleteIds: new Set(),
-    coverageByLabel: new Map(),
-    onImport: vi.fn().mockResolvedValue(undefined),
-    onDelete: vi.fn().mockResolvedValue(undefined),
-    onToggleSelected: vi.fn(),
-    ...overrides,
+    desktopAvailable: true, datasets: [dataset], loading: false, importing: false, error: null, pendingDeleteIds: new Set(),
+    onImport: vi.fn().mockResolvedValue(undefined), onDelete: vi.fn().mockResolvedValue(undefined), ...over,
   };
-  render(<TooltipProvider><DatasetManager {...props} /></TooltipProvider>);
+  render(<DatasetManager {...props} />);
   return props;
 }
 
 describe("DatasetManager", () => {
-  it("exposes Dataset and Label coverage as separate accessible regions", () => {
-    renderManager();
-    expect(screen.getByRole("region", { name: "Dataset" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Label coverage" })).toBeInTheDocument();
+  it("lists recordings plainly, with no training-role or selection leftovers", () => {
+    setup();
+    expect(screen.getByText("session-1.csv")).toBeInTheDocument();
+    expect(screen.getByText("pinch start · 42 rows")).toBeInTheDocument();
+    expect(screen.queryByText(/training role/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
 
-  it("disables import outside the desktop app", () => {
-    renderManager({ desktopAvailable: false });
-    expect(screen.getByRole("button", { name: "Import dataset CSV" })).toBeDisabled();
+  it("imports a chosen CSV", async () => {
+    const props = setup({ datasets: [] });
+    expect(screen.getByText("No recordings imported yet.")).toBeInTheDocument();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(["a,b\n1,2"], "new.csv", { type: "text/csv" });
+    fireEvent.change(input, { target: { files: [file] } });
+    await vi.waitFor(() => expect(props.onImport).toHaveBeenCalledWith({ filename: "new.csv", csvContent: "a,b\n1,2" }));
   });
 
-  it("imports a selected CSV file via the hidden file input", async () => {
-    const onImport = vi.fn().mockResolvedValue(undefined);
-    renderManager({ onImport });
-
-    const file = new File(["# label: pinch_start\ncsv,content"], "session-1.csv", { type: "text/csv" });
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    fireEvent.change(fileInput, { target: { files: [file] } });
-
-    await waitFor(() =>
-      expect(onImport).toHaveBeenCalledWith({ filename: "session-1.csv", csvContent: "# label: pinch_start\ncsv,content" }),
-    );
-  });
-
-  it("shows an inline error and the empty state when there are no datasets", () => {
-    renderManager({ error: "disk unavailable" });
-    expect(screen.getByRole("alert")).toHaveTextContent(/disk unavailable/i);
-    expect(screen.getByText(/no dataset sessions imported yet/i)).toBeInTheDocument();
-  });
-
-  it("lists a dataset with its label and row count, and toggles selection", () => {
-    const onToggleSelected = vi.fn();
-    renderManager({ datasets: [DATASET_A], onToggleSelected });
-    expect(screen.getByText(/session-1\.csv.*pinch start.*42 rows/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select session-1.csv" }));
-    expect(onToggleSelected).toHaveBeenCalledWith("dataset-a");
-  });
-
-  it("requires confirmation before deleting a dataset, and does not delete on cancel", () => {
-    const onDelete = vi.fn();
-    renderManager({ datasets: [DATASET_A], onDelete });
+  it("asks before deleting, and shows an import failure with its cause", async () => {
+    const props = setup({ error: "unknown label 'x'" });
+    expect(screen.getByRole("alert")).toHaveTextContent("unknown label 'x' Nothing was imported");
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-    expect(screen.getByText("Delete this dataset session?")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Keep session" }));
-    expect(onDelete).not.toHaveBeenCalled();
-  });
-
-  it("deletes the dataset once confirmed", async () => {
-    const onDelete = vi.fn().mockResolvedValue(undefined);
-    renderManager({ datasets: [DATASET_A], onDelete });
+    expect(props.onDelete).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "Keep it" }));
+    expect(props.onDelete).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-    const confirmButtons = await screen.findAllByRole("button", { name: "Delete" });
-    fireEvent.click(confirmButtons[confirmButtons.length - 1]);
-    await waitFor(() => expect(onDelete).toHaveBeenCalledWith("dataset-a"));
-  });
-
-  it("derives label coverage counts and flags labels without a training role mapping", () => {
-    const coverageByLabel = new Map([["pinch_start", 1]]);
-    renderManager({
-      coverageByLabel,
-      labels: [
-        { id: "pinch_start", displayName: "Pinch start", description: "", color: "#65e6ff", role: "positiveGesture", archivedAt: null },
-        { id: "idle", displayName: "Idle", description: "", color: "#65e6ff", role: "negativeBackground", archivedAt: null },
-        { id: "wrist_flick", displayName: "Wrist flick", description: "", color: "#fff", role: "positiveGesture", archivedAt: null },
-      ],
-    });
-    fireEvent.click(screen.getByRole("button", { name: /view label coverage/i }));
-    const pinchStartRow = screen.getByText("Pinch start").closest(".model-lab-label-row");
-    expect(pinchStartRow).toHaveTextContent("1 session");
-    expect(pinchStartRow).toHaveTextContent("Legacy training role");
-    const idleRow = screen.getByText("Idle").closest(".model-lab-label-row");
-    expect(idleRow).toHaveTextContent("0 sessions");
-    const wristFlickRow = screen.getByText("Wrist flick").closest(".model-lab-label-row");
-    expect(wristFlickRow).toHaveTextContent("Needs training role mapping");
+    const buttons = await screen.findAllByRole("button", { name: "Delete" });
+    fireEvent.click(buttons[buttons.length - 1]);
+    expect(props.onDelete).toHaveBeenCalledWith("d1");
   });
 });
