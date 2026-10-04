@@ -185,6 +185,8 @@ export interface HeadTrackerDiagnostic {
 }
 export const AUTOMATION_STATE_EVENT = "automation-state";
 /** Sent when brightness or scrolling could not be carried out (a missing permission, an unsupported platform). */
+/** Sent each time a shake is recognised, whether or not a recipe uses it. */
+export const SHAKE_DETECTED_EVENT = "automation-shake";
 export const ACTION_ERROR_EVENT = "automation-action-error";
 export interface ActionError {
   action: RecipeAction;
@@ -268,6 +270,10 @@ export interface AppSettings {
   watchHeartRateAcceptanceRateHz: number;
   watchSkinTemperatureAcceptanceRateHz: number;
   watchEdaAcceptanceRateHz: number;
+  /** How far above the resting signal an acceleration peak must reach to count towards a shake (m/s²); lower is more sensitive. */
+  shakePeakThreshold: number;
+  /** How many quick strokes back and forth make a shake; fewer is more sensitive. */
+  shakeStrokes: number;
   wristMaxAngularVelocityDegreesPerSecond: number;
   wristMaxVolumePointsPerSecond: number;
   watchSensorsEnabled: Record<string, boolean>;

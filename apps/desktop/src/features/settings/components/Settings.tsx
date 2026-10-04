@@ -5,6 +5,7 @@ import type { AppSettings, OverlayState, WatchStatus } from "../../../shared/pro
 import { ApplySettingsFooter } from "./ApplySettingsFooter";
 import { HeadphonesSettingsSection } from "./HeadphonesSettingsSection";
 import { RecordingGraphSettingsSection } from "./RecordingGraphSettingsSection";
+import { ShakeSettings } from "./ShakeSettings";
 import { WatchHealthDeliverySettingsSection } from "./WatchHealthDeliverySettingsSection";
 import { WatchRateSettingsSection } from "./WatchRateSettingsSection";
 import { WatchSensorSwitchSection } from "./WatchSensorSwitchSection";
@@ -30,6 +31,8 @@ interface SettingsProps {
   isPending?: (key: string) => boolean;
   overlay?: OverlayState;
   watchStatus?: WatchStatus | null;
+  /** How many shakes have been recognised since the app opened, to show beside the sensitivity. */
+  shakeDetections?: number;
   onUpdate: (settings: AppSettings) => void;
   onReset: () => void;
 }
@@ -40,6 +43,7 @@ export function Settings({
   isPending = () => false,
   overlay = EMPTY_OVERLAY_STATE,
   watchStatus = null,
+  shakeDetections = 0,
   onUpdate,
   onReset,
 }: SettingsProps) {
@@ -86,6 +90,8 @@ export function Settings({
           <HeadphonesSettingsSection enabled={current.headphonesEnabled} onToggleEnabled={toggleHeadphonesEnabled} />
 
           <WristRotationSettings />
+
+          <ShakeSettings detections={shakeDetections} />
 
           <RecordingGraphSettingsSection />
 

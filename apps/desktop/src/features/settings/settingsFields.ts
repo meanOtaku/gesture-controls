@@ -14,6 +14,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   watchHeartRateAcceptanceRateHz: 200,
   watchSkinTemperatureAcceptanceRateHz: 200,
   watchEdaAcceptanceRateHz: 200,
+  shakePeakThreshold: 6,
+  shakeStrokes: 4,
   wristMaxAngularVelocityDegreesPerSecond: 360,
   wristMaxVolumePointsPerSecond: 30,
   watchSensorsEnabled: Object.fromEntries(CONTROLLABLE_SENSORS.map(({ id }) => [id, true])),
@@ -31,6 +33,8 @@ export type NumericSettingKey =
   | "watchHeartRateAcceptanceRateHz"
   | "watchSkinTemperatureAcceptanceRateHz"
   | "watchEdaAcceptanceRateHz"
+  | "shakePeakThreshold"
+  | "shakeStrokes"
   | "wristMaxAngularVelocityDegreesPerSecond"
   | "wristMaxVolumePointsPerSecond";
 
@@ -82,6 +86,14 @@ export const SETTINGS_FIELDS: Record<NumericSettingKey, NumberSpec> = {
   watchEdaAcceptanceRateHz: {
     label: "EDA", unit: "Hz", min: 0.1, max: 200, step: 0.1, defaultValue: d.watchEdaAcceptanceRateHz,
     description: "Most skin-conductance samples per second the desktop accepts",
+  },
+  shakePeakThreshold: {
+    label: "Shake strength", unit: "m/s²", min: 2, max: 30, step: 0.5, defaultValue: d.shakePeakThreshold,
+    description: "How hard each stroke must be. Lower catches gentler shakes (and more accidents)",
+  },
+  shakeStrokes: {
+    label: "Shake strokes", min: 3, max: 10, step: 1, integer: true, defaultValue: d.shakeStrokes,
+    description: "How many quick strokes back and forth make a shake. Fewer is more sensitive",
   },
   wristMaxAngularVelocityDegreesPerSecond: {
     label: "Max angular velocity", unit: "°/s", min: 1, max: 2000, step: 1, integer: true, defaultValue: d.wristMaxAngularVelocityDegreesPerSecond,

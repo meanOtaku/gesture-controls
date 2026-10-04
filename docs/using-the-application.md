@@ -316,7 +316,14 @@ The **Recipes** tab lists every recipe with an on/off switch, an Edit button and
 
 Because it is a moment, a shake can only start a **button action** (play/pause, next, previous, mute); the editor does not offer it for volume, brightness or scroll, and refuses to save one that has it. It needs the watch's **acceleration** sensor switched on, which is the default.
 
-The sensitivity is fixed (peaks of about 6 m/s² above the resting signal). It has been tested only against simulated strokes, so if it fires too easily or too rarely on a real wrist, say so and the thresholds can be tuned, or exposed in Settings.
+#### Tuning the sensitivity
+
+In **Settings → Shake sensitivity**:
+
+- **Shake strength** (default 6 m/s², range 2 to 30): how hard each stroke must be. Lower it if your shakes are missed; raise it if ordinary movement sets it off.
+- **Shake strokes** (default 4, range 3 to 10): how many quick strokes back and forth make a shake. Fewer is more sensitive.
+
+Apply the change, then shake: the counter beneath the fields goes up each time a shake is recognised, whether or not a recipe uses it, so you can find a setting that suits you without building a recipe first. Defaults have been tested only against simulated strokes.
 
 Each media key can have its own recipe, and they can share a gesture, but two recipes on the *same* key conflict and both pause.
 

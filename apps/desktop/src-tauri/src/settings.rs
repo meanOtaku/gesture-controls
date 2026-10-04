@@ -25,6 +25,10 @@ pub const MIN_GRAPH_REFRESH_RATE_HZ: f64 = 1.0;
 pub const MAX_GRAPH_REFRESH_RATE_HZ: f64 = 60.0;
 pub const MIN_HEALTH_ACCEPTANCE_RATE_HZ: f64 = 0.1;
 pub const MAX_HEALTH_ACCEPTANCE_RATE_HZ: f64 = 200.0;
+pub const MIN_SHAKE_PEAK_THRESHOLD: f64 = 2.0;
+pub const MAX_SHAKE_PEAK_THRESHOLD: f64 = 30.0;
+pub const MIN_SHAKE_STROKES: u32 = 3;
+pub const MAX_SHAKE_STROKES: u32 = 10;
 pub const MIN_WRIST_ANGULAR_VELOCITY_DEGREES_PER_SECOND: f64 = 1.0;
 pub const MAX_WRIST_ANGULAR_VELOCITY_DEGREES_PER_SECOND: f64 = 2_000.0;
 pub const MIN_WRIST_VOLUME_POINTS_PER_SECOND: f64 = 1.0;
@@ -56,6 +60,13 @@ pub struct AppSettings {
     pub watch_skin_temperature_acceptance_rate_hz: f64,
     #[serde(default = "default_health_acceptance_rate_hz")]
     pub watch_eda_acceptance_rate_hz: f64,
+    /// How far above the resting signal an acceleration peak must reach to count as part of a shake, in m/s².
+    /// Lower is more sensitive.
+    #[serde(default = "default_shake_peak_threshold")]
+    pub shake_peak_threshold: f64,
+    /// How many quick strokes back and forth make a shake. Fewer is more sensitive.
+    #[serde(default = "default_shake_strokes")]
+    pub shake_strokes: u32,
     #[serde(default = "default_wrist_max_angular_velocity_degrees_per_second")]
     pub wrist_max_angular_velocity_degrees_per_second: f64,
     #[serde(default = "default_wrist_max_volume_points_per_second")]
@@ -93,6 +104,8 @@ impl Default for AppSettings {
             watch_heart_rate_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
             watch_skin_temperature_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
             watch_eda_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
+            shake_peak_threshold: default_shake_peak_threshold(),
+            shake_strokes: default_shake_strokes(),
             wrist_max_angular_velocity_degrees_per_second:
                 default_wrist_max_angular_velocity_degrees_per_second(),
             wrist_max_volume_points_per_second: default_wrist_max_volume_points_per_second(),
@@ -117,6 +130,12 @@ fn default_ppg_flush_rate_hz() -> f64 {
     1.0
 }
 
+fn default_shake_peak_threshold() -> f64 {
+    6.0
+}
+fn default_shake_strokes() -> u32 {
+    4
+}
 fn default_wrist_max_angular_velocity_degrees_per_second() -> f64 {
     360.0
 }
@@ -193,6 +212,18 @@ impl AppSettings {
             if !CONTROLLABLE_SENSOR_IDS.contains(&sensor.as_str()) {
                 return Err(format!("'{sensor}' is not a controllable sensor id"));
             }
+        }
+        in_range(
+            "shakePeakThreshold",
+            self.shake_peak_threshold,
+            MIN_SHAKE_PEAK_THRESHOLD,
+            MAX_SHAKE_PEAK_THRESHOLD,
+        )?;
+        if !(MIN_SHAKE_STROKES..=MAX_SHAKE_STROKES).contains(&self.shake_strokes) {
+            return Err(format!(
+                "shakeStrokes must be between {MIN_SHAKE_STROKES} and {MAX_SHAKE_STROKES} (got {})",
+                self.shake_strokes
+            ));
         }
         for (name, value, min, max) in [
             (
@@ -514,6 +545,31 @@ mod tests {
         let settings: AppSettings =
             serde_json::from_value(json).expect("legacy key must be ignored, not rejected");
         settings.validate().expect("must validate");
+    }
+
+    #[test]
+    fn shake_settings_are_range_checked_and_an_old_file_gets_the_defaults() {
+        let mut settings = AppSettings::default();
+        assert_eq!(
+            (settings.shake_peak_threshold, settings.shake_strokes),
+            (6.0, 4)
+        );
+        settings.shake_peak_threshold = 1.0;
+        assert!(settings.validate().is_err());
+        settings.shake_peak_threshold = 6.0;
+        settings.shake_strokes = 2;
+        assert!(settings.validate().unwrap_err().contains("shakeStrokes"));
+        settings.shake_strokes = 11;
+        assert!(settings.validate().is_err());
+        // A settings.json from before these existed still loads, with the defaults.
+        let mut json = serde_json::to_value(AppSettings::default()).unwrap();
+        json.as_object_mut().unwrap().remove("shakePeakThreshold");
+        json.as_object_mut().unwrap().remove("shakeStrokes");
+        let loaded: AppSettings = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            (loaded.shake_peak_threshold, loaded.shake_strokes),
+            (6.0, 4)
+        );
     }
 
     #[test]

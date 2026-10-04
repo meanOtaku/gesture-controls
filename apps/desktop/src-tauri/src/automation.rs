@@ -11,7 +11,7 @@ use std::sync::Mutex;
 
 use automation::{
     Action, Axis, Conflict, Device, DeviceKind, Hold, Recipe, RecipeRunner, RunnerPhase,
-    ShakeDetector, Signals, Stage, blocked_recipes, find_conflicts, validate_recipe,
+    ShakeConfig, ShakeDetector, Signals, Stage, blocked_recipes, find_conflicts, validate_recipe,
 };
 use interaction_engine::quaternion_angular_distance;
 use serde::Serialize;
@@ -24,6 +24,8 @@ use crate::overlay::{OverlayRuntime, VolumeRuntime};
 use crate::settings::{AppSettings, SettingsRuntime};
 
 pub const AUTOMATION_STATE_EVENT: &str = "automation-state";
+/// Sent each time a shake is recognised, so Settings can show the user what their sensitivity is catching.
+pub const SHAKE_DETECTED_EVENT: &str = "automation-shake";
 /// How long a recognised shake keeps counting as "happening", so a recipe that combines it with another step (look
 /// at a location, say) has a moment in which both hold.
 const SHAKE_HOLD_NS: u64 = 600_000_000;
@@ -55,6 +57,8 @@ pub struct Effects {
     pub overlay: Option<OverlayWanted>,
     /// Changes to apply, each an action and a fraction of its full range.
     pub deltas: Vec<(Action, f64)>,
+    /// A shake was recognised on this sample (whether or not any recipe uses it), for the Settings tuning aid.
+    pub shook: bool,
     /// Trigger recipes that fired: each a one-off press.
     pub fired: Vec<Action>,
     /// Actions whose interaction just ended, so anything still carried for them is dropped.
@@ -68,6 +72,8 @@ pub struct Effects {
 pub struct Tuning {
     pub max_angular_velocity_degrees_per_second: f64,
     pub max_volume_points_per_second: f64,
+    pub shake_peak_threshold: f64,
+    pub shake_strokes: u32,
 }
 
 impl Tuning {
@@ -76,6 +82,20 @@ impl Tuning {
             max_angular_velocity_degrees_per_second: settings
                 .wrist_max_angular_velocity_degrees_per_second,
             max_volume_points_per_second: settings.wrist_max_volume_points_per_second,
+            shake_peak_threshold: settings.shake_peak_threshold,
+            shake_strokes: settings.shake_strokes,
+        }
+    }
+
+    /// The shake detector's settings: `strokes` quick strokes are `strokes - 1` changes of direction, and a longer
+    /// run needs a longer window to fit in.
+    pub fn shake_config(&self) -> ShakeConfig {
+        let reversals = self.shake_strokes.saturating_sub(1).max(1) as usize;
+        ShakeConfig {
+            peak_threshold: self.shake_peak_threshold,
+            reversals,
+            window_ns: (reversals as u64 * 400_000_000).max(1_200_000_000),
+            ..ShakeConfig::default()
         }
     }
 }
@@ -85,6 +105,8 @@ impl Default for Tuning {
         Self {
             max_angular_velocity_degrees_per_second: 360.0,
             max_volume_points_per_second: 30.0,
+            shake_peak_threshold: 6.0,
+            shake_strokes: 4,
         }
     }
 }
@@ -176,7 +198,7 @@ impl Engine {
             pinch: false,
             stem: false,
             orientation: None,
-            shake: ShakeDetector::default(),
+            shake: ShakeDetector::new(tuning.shake_config()),
             shake_until_ns: 0,
             last_accepted: None,
             blocked: BTreeSet::new(),
@@ -204,6 +226,8 @@ impl Engine {
 
     pub fn set_tuning(&mut self, tuning: Tuning) -> Effects {
         self.tuning = tuning;
+        self.shake = ShakeDetector::new(tuning.shake_config());
+        self.shake_until_ns = 0;
         self.rebuild();
         self.step()
     }
@@ -270,15 +294,18 @@ impl Engine {
         }
         // A shake is judged on every sample, even one the glitch filter below discards: a shake is exactly the sort
         // of fast movement that filter exists for.
-        if let Some(acceleration) = acceleration
-            && self.shake.observe(timestamp_ns, acceleration)
-        {
+        let shook =
+            acceleration.is_some_and(|acceleration| self.shake.observe(timestamp_ns, acceleration));
+        if shook {
             self.shake_until_ns = timestamp_ns + SHAKE_HOLD_NS;
         }
         let driving = self.driving;
         if driving && self.is_velocity_outlier(quaternion, timestamp_ns) {
             // A glitch freezes the knob rather than jumping it; the last good orientation stays current.
-            return Effects::default();
+            return Effects {
+                shook,
+                ..Effects::default()
+            };
         }
         let sample = Orientation {
             quaternion,
@@ -289,7 +316,9 @@ impl Engine {
             timestamp_ns,
         });
         self.orientation = Some(sample);
-        self.step()
+        let mut effects = self.step();
+        effects.shook = shook;
+        effects
     }
 
     fn is_velocity_outlier(&self, quaternion: [f64; 4], timestamp_ns: u64) -> bool {
@@ -456,6 +485,9 @@ impl AutomationRuntime {
             )
         };
         apply_effects(app, &effects, max_points);
+        if effects.shook {
+            let _ = app.emit(SHAKE_DETECTED_EVENT, ());
+        }
         if effects.overlay.is_some() {
             let _ = app.emit(AUTOMATION_STATE_EVENT, &state);
         }
@@ -1006,6 +1038,59 @@ mod tests {
         let mut engine = Engine::new(vec![recipe], Tuning::default());
         engine.set_head(Some("topRight".into()));
         assert_eq!(shake_for(&mut engine, 4, 0), vec![Action::PlayPause]);
+    }
+
+    #[test]
+    fn a_less_sensitive_setting_ignores_a_shake_the_default_catches_and_more_strokes_are_asked_for()
+    {
+        let recipe = || Recipe {
+            id: "shakeNext".into(),
+            name: "Shake for next".into(),
+            enabled: true,
+            action: Action::NextTrack,
+            stages: vec![Stage::Hold { hold: Hold::Shake }],
+            device: Device::default_for(DeviceKind::RotationKnob),
+        };
+        // The simulated strokes are 14 m/s². A threshold above that sees nothing.
+        let hard = Tuning {
+            shake_peak_threshold: 20.0,
+            ..Tuning::default()
+        };
+        let mut engine = Engine::new(vec![recipe()], hard);
+        assert!(shake_for(&mut engine, 8, 0).is_empty());
+        // Changing the setting takes effect without restarting.
+        engine.set_tuning(Tuning::default());
+        assert_eq!(shake_for(&mut engine, 4, 20_000), vec![Action::NextTrack]);
+        // Asking for six strokes ignores a four-stroke shake and accepts a six-stroke one.
+        let demanding = Tuning {
+            shake_strokes: 6,
+            ..Tuning::default()
+        };
+        let mut engine = Engine::new(vec![recipe()], demanding);
+        assert!(shake_for(&mut engine, 4, 0).is_empty());
+        assert_eq!(shake_for(&mut engine, 6, 30_000), vec![Action::NextTrack]);
+    }
+
+    #[test]
+    fn a_recognised_shake_is_reported_even_when_no_recipe_uses_it() {
+        let mut engine = Engine::new(Vec::new(), Tuning::default());
+        let mut shook = 0;
+        for ms in (0..=3000u64).step_by(20) {
+            let mut a = [0.0, 0.0, 9.81];
+            for i in 0..4u64 {
+                let start = 1000 + i * 160;
+                if ms >= start && ms < start + 60 {
+                    a[0] += if i % 2 == 0 { 14.0 } else { -14.0 };
+                }
+            }
+            if engine
+                .observe_orientation(about_x(0.0), ms * 1_000_000, Some(a))
+                .shook
+            {
+                shook += 1;
+            }
+        }
+        assert_eq!(shook, 1);
     }
 
     #[test]

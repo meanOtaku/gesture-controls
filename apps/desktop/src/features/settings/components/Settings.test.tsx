@@ -17,6 +17,8 @@ const settings: AppSettings = {
   watchHeartRateAcceptanceRateHz: 200,
   watchSkinTemperatureAcceptanceRateHz: 200,
   watchEdaAcceptanceRateHz: 200,
+  shakePeakThreshold: 6,
+  shakeStrokes: 4,
   wristMaxAngularVelocityDegreesPerSecond: 360,
   wristMaxVolumePointsPerSecond: 30,
   watchSensorsEnabled: { orientation: true, acceleration: true, gyroscope: true },
@@ -135,6 +137,28 @@ describe("Settings", () => {
       />,
     );
     expect(screen.getByLabelText("Headphones rate")).toHaveValue(75);
+  });
+
+  it("shows the shake sensitivity with its range, applies a change, and counts recognised shakes", () => {
+    const updates: AppSettings[] = [];
+    const { rerender } = render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
+    expect(screen.getByLabelText("Shake strength")).toHaveValue(6);
+    expect(screen.getByLabelText("Shake strokes")).toHaveValue(4);
+    expect(screen.getByLabelText("Shake strength")).toHaveAccessibleDescription(/Allowed: 2–30 m\/s²/);
+
+    fireEvent.change(screen.getByLabelText("Shake strength"), { target: { value: "4" } });
+    fireEvent.change(screen.getByLabelText("Shake strokes"), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    expect(updates[0]).toMatchObject({ shakePeakThreshold: 4, shakeStrokes: 3 });
+
+    // Strokes are whole numbers within 3 to 10; the box says so instead of repairing the value.
+    fireEvent.change(screen.getByLabelText("Shake strokes"), { target: { value: "2" } });
+    fireEvent.blur(screen.getByLabelText("Shake strokes"));
+    expect(screen.getByLabelText("Shake strokes")).toHaveAttribute("aria-invalid", "true");
+
+    expect(screen.getByText(/Shakes recognised since you opened the app/)).toHaveTextContent("0");
+    rerender(<Settings settings={settings} shakeDetections={3} onUpdate={() => {}} onReset={() => {}} />);
+    expect(screen.getByText(/Shakes recognised since you opened the app/)).toHaveTextContent(": 3");
   });
 
   it("toggles a watch sensor switch immediately without a confirmation dialog", () => {
