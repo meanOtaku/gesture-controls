@@ -54,6 +54,8 @@ export type RotateDirection = "clockwise" | "counterClockwise";
 export type TapKind = "single" | "double";
 export type SwipeDirection = "left" | "right" | "up" | "down";
 export type WatchWrist = "left" | "right";
+/** Which side of the watch face the crown is on, as you read it. */
+export type CrownSide = "right" | "left";
 
 export type RecipeAction = "volume" | "brightness" | "scroll" | "playPause" | "nextTrack" | "previousTrack" | "mute";
 
@@ -292,8 +294,10 @@ export interface AppSettings {
   tapPeakThreshold: number;
   /** How far the wrist must twist, quickly, to count as a rotate gesture (degrees); smaller is more sensitive. */
   rotateAngleDegrees: number;
-  /** Which wrist the watch is worn on: it decides which way along the forearm is left. */
+  /** Which wrist the watch is worn on. Only the rotate gesture needs it. */
   watchWrist: WatchWrist;
+  /** Which side of the watch face the crown is on as you read it: decides which way is left for a swipe. */
+  crownSide: CrownSide;
   wristMaxAngularVelocityDegreesPerSecond: number;
   wristMaxVolumePointsPerSecond: number;
   watchSensorsEnabled: Record<string, boolean>;

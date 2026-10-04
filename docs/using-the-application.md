@@ -87,6 +87,15 @@ The **Headphones** tab is for Sony tracker status and gaze calibration.
 - Lets you adjust the target acceptance threshold and dwell duration.
 - Reports when recalibration is needed after a tracker reference-frame reset.
 
+#### Watch orientation (Settings)
+
+The watch senses movement in its own frame, so for swipes and rotates the app needs to know how it sits on you:
+
+- **Crown side** (default: crown on the right): which side of the watch face the crown is on as you read it. It decides which way a swipe along your arm is left or right, and (with the wrist) which way a rotate is clockwise.
+- **Watch worn on** (default: left wrist): which wrist. Only the rotate gesture uses it.
+
+Earlier versions had a single "Watch worn on" setting that also swapped swipe left and right. That was wrong for someone wearing the watch normally on the right wrist; the crown side is what actually matters for swipes. A saved wrist setting is kept, and the crown side starts at "right".
+
 #### Gaze overlay workflow
 
 1. Put on the headset and wait for a stable connection.
@@ -318,7 +327,7 @@ The **Recipes** tab lists every recipe with an on/off switch, an Edit button and
 
 **Swipe left**, **Swipe right**, **Swipe up** and **Swipe down** are gesture steps for one quick push of the hand, like flicking through pages in the air. They are read from the watch's acceleration and orientation, are momentary like a shake, and so can also only start a button action. Example: *Swipe right* → *Next track*, and *Swipe left* → *Previous track* as a second recipe (they do not conflict: different keys).
 
-- **Left and right** run along your forearm, which stays pointing along the arm however your elbow is bent. Which way along it is "left" depends on which wrist the watch is on, so set **Settings → Swipe sensitivity → Watch worn on**. If left and right come out backwards, switch it.
+- **Left and right** run along the watch's 9-3 axis, which lies along your forearm however your elbow is bent. Read the watch face as you normally do: with the **crown on the right** (the usual way, on either wrist) a push toward 3 o'clock is a swipe right. If you wear it the other way round, set **Settings → Watch orientation → Crown side** to the left. If left and right come out backwards, switch it.
 - **Up and down** follow gravity, whatever way the watch is turned.
 - A swipe is one strong push in one clear direction. A sloppy diagonal is ignored rather than guessed, and a shake (a run of pushes back and forth) is not read as swipes: a push is held for a quarter of a second, and a similarly strong one the other way cancels it. The hand stopping afterwards (a weaker push the other way) is expected and does not count.
 - After a swipe the detector rests for about 0.7 seconds, so one swipe fires once.
@@ -341,7 +350,7 @@ The **Recipes** tab lists every recipe with an on/off switch, an Edit button and
 
 - A rotate is a twist of at least a set angle (default **60°**) within about **0.6 seconds**, mostly about the forearm. A slow turn takes too long to qualify (that is the *wrist rotation* step that turns a volume, brightness or scroll dial, a different thing), and swinging the whole arm does not count because the movement is not about the forearm.
 - The turn back that often follows a flick is ignored for 0.8 seconds, so a twist out and back fires once, for the way out. Pause before the next one.
-- **Clockwise** is as you would see it looking along your forearm from the elbow towards the hand. Which way the watch's axis points depends on how it sits on your wrist, so if clockwise and counter-clockwise come out backwards, switch **Watch worn on** under Swipe sensitivity.
+- **Clockwise** is the way you turn a screwdriver, looking along your forearm from the elbow towards the hand. The same physical turn is clockwise on one wrist and counter-clockwise on the other, so this uses both settings under **Settings → Watch orientation**: **Watch worn on** (left or right wrist) and **Crown side**. If clockwise and counter-clockwise come out backwards, switch either one.
 - **Settings → Rotate sensitivity → Rotate angle** (30° to 180°) sets how big the twist must be; the card shows the last rotate recognised and a count.
 - It uses only the watch's orientation sensor, which streams about 50 times a second. Not verified on a real watch.
 

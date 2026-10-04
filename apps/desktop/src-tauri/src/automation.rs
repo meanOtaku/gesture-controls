@@ -10,10 +10,10 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use automation::{
-    Action, Axis, Conflict, Device, DeviceKind, Hold, Recipe, RecipeRunner, RotateConfig,
-    RotateDetector, RotateDirection, RunnerPhase, ShakeConfig, ShakeDetector, Signals, Stage,
-    SwipeConfig, SwipeDetector, SwipeDirection, TapConfig, TapDetector, TapKind, Wrist,
-    blocked_recipes, find_conflicts, validate_recipe,
+    Action, Axis, Conflict, CrownSide, Device, DeviceKind, Hold, Recipe, RecipeRunner,
+    RotateConfig, RotateDetector, RotateDirection, RunnerPhase, ShakeConfig, ShakeDetector,
+    Signals, Stage, SwipeConfig, SwipeDetector, SwipeDirection, TapConfig, TapDetector, TapKind,
+    Wrist, blocked_recipes, find_conflicts, validate_recipe,
 };
 use interaction_engine::quaternion_angular_distance;
 use serde::Serialize;
@@ -93,6 +93,7 @@ pub struct Tuning {
     pub tap_peak_threshold: f64,
     pub rotate_angle_degrees: f64,
     pub wrist: Wrist,
+    pub crown: CrownSide,
 }
 
 impl Tuning {
@@ -107,6 +108,7 @@ impl Tuning {
             tap_peak_threshold: settings.tap_peak_threshold,
             rotate_angle_degrees: settings.rotate_angle_degrees,
             wrist: settings.watch_wrist,
+            crown: settings.crown_side,
         }
     }
 
@@ -114,6 +116,7 @@ impl Tuning {
         RotateConfig {
             min_angle_degrees: self.rotate_angle_degrees,
             wrist: self.wrist,
+            crown: self.crown,
             ..RotateConfig::default()
         }
     }
@@ -128,7 +131,7 @@ impl Tuning {
     pub fn swipe_config(&self) -> SwipeConfig {
         SwipeConfig {
             peak_threshold: self.swipe_peak_threshold,
-            wrist: self.wrist,
+            crown: self.crown,
             ..SwipeConfig::default()
         }
     }
@@ -157,6 +160,7 @@ impl Default for Tuning {
             tap_peak_threshold: 12.0,
             rotate_angle_degrees: 60.0,
             wrist: Wrist::Left,
+            crown: CrownSide::Right,
         }
     }
 }
@@ -1274,9 +1278,9 @@ mod tests {
     }
 
     #[test]
-    fn the_wrist_setting_swaps_left_and_right_and_the_strength_setting_is_obeyed() {
+    fn the_crown_setting_swaps_left_and_right_and_the_strength_setting_is_obeyed() {
         let on_right_wrist = Tuning {
-            wrist: Wrist::Right,
+            crown: CrownSide::Left,
             ..Tuning::default()
         };
         let mut engine = Engine::new(
@@ -1402,6 +1406,49 @@ mod tests {
                 vec![RotateDirection::CounterClockwise],
                 vec![Action::PreviousTrack]
             )
+        );
+    }
+
+    #[test]
+    fn the_wrist_and_crown_settings_decide_which_way_clockwise_is() {
+        let direction = |wrist, crown| {
+            let tuning = Tuning {
+                wrist,
+                crown,
+                ..Tuning::default()
+            };
+            let mut engine = Engine::new(Vec::new(), tuning);
+            let mut found = Vec::new();
+            for ms in (0..=3000u64).step_by(20) {
+                let angle = match ms {
+                    0..1000 => 0.0,
+                    1000..1300 => 90.0 * (ms - 1000) as f64 / 300.0,
+                    _ => 90.0,
+                };
+                found.extend(
+                    engine
+                        .observe_orientation(rolled(angle), ms * 1_000_000, None)
+                        .rotated,
+                );
+            }
+            found
+        };
+        use CrownSide::{Left as CrownLeft, Right as CrownRight};
+        assert_eq!(
+            direction(Wrist::Left, CrownRight),
+            vec![RotateDirection::Clockwise]
+        );
+        assert_eq!(
+            direction(Wrist::Right, CrownRight),
+            vec![RotateDirection::CounterClockwise]
+        );
+        assert_eq!(
+            direction(Wrist::Left, CrownLeft),
+            vec![RotateDirection::CounterClockwise]
+        );
+        assert_eq!(
+            direction(Wrist::Right, CrownLeft),
+            vec![RotateDirection::Clockwise]
         );
     }
 

@@ -12,6 +12,7 @@ import { TapSettings } from "./TapSettings";
 import { WatchHealthDeliverySettingsSection } from "./WatchHealthDeliverySettingsSection";
 import { WatchRateSettingsSection } from "./WatchRateSettingsSection";
 import { WatchSensorSwitchSection } from "./WatchSensorSwitchSection";
+import { WatchOrientationSettings } from "./WatchOrientationSettings";
 import { WatchTransportSection } from "./WatchTransportSection";
 import { WristRotationSettings } from "./WristRotationSettings";
 import { DEFAULT_SETTINGS, SETTINGS_FIELDS, numericValues } from "../settingsFields";
@@ -106,11 +107,14 @@ export function Settings({
 
           <TapSettings lastTap={lastTap} />
 
-          <SwipeSettings
+          <WatchOrientationSettings
+            crownSide={current.crownSide}
             wrist={current.watchWrist}
+            onCrownSideChange={(crownSide) => onUpdate({ ...current, crownSide })}
             onWristChange={(watchWrist) => onUpdate({ ...current, watchWrist })}
-            lastSwipe={lastSwipe}
           />
+
+          <SwipeSettings lastSwipe={lastSwipe} />
 
           <RecordingGraphSettingsSection />
 

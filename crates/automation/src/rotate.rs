@@ -6,13 +6,14 @@
 //! follows a flick is ignored for a moment so one flick fires once.
 //!
 //! Which way is "clockwise" is as the wearer would see it looking along their forearm from the elbow towards the
-//! hand; that depends on how the watch sits on the wrist, so the same wrist setting as for swipes flips it.
+//! hand, the way you turn a screwdriver. The watch's 3 o'clock axis points towards the hand on a left wrist with the
+//! crown on the right, and the other way if either the wrist or the crown side is the other, so both are settings.
 
 use std::collections::VecDeque;
 
 use serde::{Deserialize, Serialize};
 
-use crate::swipe::Wrist;
+use crate::swipe::{CrownSide, Wrist};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,6 +34,7 @@ pub struct RotateConfig {
     /// After a flick, ignore further turning for this long (the turn back, mostly), in nanoseconds.
     pub lockout_ns: u64,
     pub wrist: Wrist,
+    pub crown: CrownSide,
 }
 
 impl Default for RotateConfig {
@@ -43,6 +45,7 @@ impl Default for RotateConfig {
             max_off_axis_ratio: 0.5,
             lockout_ns: 800_000_000,
             wrist: Wrist::Left,
+            crown: CrownSide::Right,
         }
     }
 }
@@ -147,8 +150,12 @@ impl RotateDetector {
             self.history.clear();
             self.history.push_back((at_ns, self.twist, self.off_axis));
             self.locked_until_ns = at_ns + self.config.lockout_ns;
-            // Positive twist about the forearm is clockwise as the wearer looks along it, on the default wrist.
-            let clockwise = (net > 0.0) == (self.config.wrist == Wrist::Left);
+            // Positive twist about the watch's 3 o'clock axis is clockwise as the wearer looks along their forearm
+            // when that axis points towards the hand, which is so for a left wrist with the crown on the right, and
+            // for a right wrist with the crown on the left.
+            let axis_toward_hand =
+                (self.config.wrist == Wrist::Left) == (self.config.crown == CrownSide::Right);
+            let clockwise = (net > 0.0) == axis_toward_hand;
             return Some(if clockwise {
                 RotateDirection::Clockwise
             } else {
@@ -223,15 +230,25 @@ mod tests {
             ccw.iter().map(|(_, d)| *d).collect::<Vec<_>>(),
             vec![RotateDirection::CounterClockwise]
         );
-        // On the other wrist the same physical twist reads the other way round.
-        let flipped = RotateConfig {
+        // The same physical twist reads the other way round on the other wrist, or with the crown on the other
+        // side, and the same again if both are the other way.
+        let other_wrist = RotateConfig {
             wrist: Wrist::Right,
             ..config
         };
-        assert_eq!(
-            run(flipped, 4000, flick(90.0, false))[0].1,
-            RotateDirection::CounterClockwise
-        );
+        let other_crown = RotateConfig {
+            crown: CrownSide::Left,
+            ..config
+        };
+        let both = RotateConfig {
+            wrist: Wrist::Right,
+            crown: CrownSide::Left,
+            ..config
+        };
+        let first = |c| run(c, 4000, flick(90.0, false))[0].1;
+        assert_eq!(first(other_wrist), RotateDirection::CounterClockwise);
+        assert_eq!(first(other_crown), RotateDirection::CounterClockwise);
+        assert_eq!(first(both), RotateDirection::Clockwise);
     }
 
     #[test]

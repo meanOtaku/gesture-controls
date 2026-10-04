@@ -21,5 +21,5 @@ pub use recipe::{Action, Axis, Hold, MAX_STAGES, Recipe, RecipeError, Stage, val
 pub use rotate::{RotateConfig, RotateDetector, RotateDirection};
 pub use runner::{RecipeRunner, RunnerPhase, Signals};
 pub use shake::{ShakeConfig, ShakeDetector};
-pub use swipe::{SwipeConfig, SwipeDetector, SwipeDirection, Wrist};
+pub use swipe::{CrownSide, SwipeConfig, SwipeDetector, SwipeDirection, Wrist};
 pub use tap::{TapConfig, TapDetector, TapKind};

@@ -1,10 +1,11 @@
 //! Spots a swipe of the hand in a stream of acceleration and orientation samples: one quick push in a direction,
 //! like flicking through pages in the air.
 //!
-//! *Left* and *right* are along the forearm (the watch case's 9-3 axis), which stays pointing along the arm
-//! however the elbow is bent; *up* and *down* are along gravity, found by turning the acceleration into the world
-//! frame with the watch's orientation. Which way along the forearm is "right" depends on which wrist the watch is
-//! on, so that is a setting.
+//! *Left* and *right* are along the watch case's 9-3 axis. That is along the forearm, which stays pointing along the
+//! arm however the elbow is bent, and when the watch is read normally its 3 o'clock side is the wearer's right. A
+//! watch worn the other way round (the crown on the left as it is read) has it the other way, so which side the
+//! crown is on is a setting. *Up* and *down* are along gravity, found by turning the acceleration into the world
+//! frame with the watch's orientation.
 //!
 //! A swipe is one strong lobe of acceleration. A shake, a run of lobes back and forth, must not read as swipes, so a
 //! lobe is held for a moment: if a similarly strong lobe the other way follows, it was a shake and nothing is
@@ -23,13 +24,24 @@ pub enum SwipeDirection {
     Down,
 }
 
-/// Which wrist the watch is worn on. It decides which way along the forearm is the wearer's left.
+/// Which wrist the watch is worn on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Wrist {
     #[default]
     Left,
     Right,
+}
+
+/// Which side of the watch face the crown is on, as the wearer reads the face. Most people wear it with the crown on
+/// the right; the watch can be set up (and worn) the other way round. The watch's own 3 o'clock axis points to the
+/// wearer's right when the crown is on the right, and to their left otherwise.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CrownSide {
+    #[default]
+    Right,
+    Left,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -42,7 +54,7 @@ pub struct SwipeConfig {
     pub confirm_ns: u64,
     /// After a swipe or a shake, ignore further movement for this long, in nanoseconds.
     pub lockout_ns: u64,
-    pub wrist: Wrist,
+    pub crown: CrownSide,
 }
 
 impl Default for SwipeConfig {
@@ -52,7 +64,7 @@ impl Default for SwipeConfig {
             dominance: 1.5,
             confirm_ns: 250_000_000,
             lockout_ns: 700_000_000,
-            wrist: Wrist::Left,
+            crown: CrownSide::Right,
         }
     }
 }
@@ -134,10 +146,9 @@ impl SwipeDetector {
             return None;
         }
         Some(if along >= vertical {
-            // Positive along the forearm is towards the hand: the wearer's right on a left wrist.
-            let toward_hand = lobe.along > 0.0;
-            match (toward_hand, self.config.wrist) {
-                (true, Wrist::Left) | (false, Wrist::Right) => SwipeDirection::Right,
+            // Positive along the watch's 3 o'clock axis is the wearer's right with the crown on the right.
+            match (lobe.along > 0.0, self.config.crown) {
+                (true, CrownSide::Right) | (false, CrownSide::Left) => SwipeDirection::Right,
                 _ => SwipeDirection::Left,
             }
         } else if lobe.vertical > 0.0 {
@@ -277,24 +288,24 @@ mod tests {
     }
 
     #[test]
-    fn a_push_along_the_forearm_is_a_left_or_right_swipe_depending_on_the_wrist() {
-        let towards_hand = [14.0, 0.0, 0.0];
+    fn a_push_along_the_forearm_is_a_left_or_right_swipe_depending_on_the_crown_side() {
+        let toward_the_crown = [14.0, 0.0, 0.0];
         let left = SwipeConfig::default();
         let right = SwipeConfig {
-            wrist: Wrist::Right,
+            crown: CrownSide::Left,
             ..left
         };
         assert_eq!(
-            run(left, IDENTITY, &swipe(towards_hand), 3000),
+            run(left, IDENTITY, &swipe(toward_the_crown), 3000),
             vec![SwipeDirection::Right]
         );
         assert_eq!(
-            run(right, IDENTITY, &swipe(towards_hand), 3000),
+            run(right, IDENTITY, &swipe(toward_the_crown), 3000),
             vec![SwipeDirection::Left]
         );
-        let towards_elbow = [-14.0, 0.0, 0.0];
+        let away_from_the_crown = [-14.0, 0.0, 0.0];
         assert_eq!(
-            run(left, IDENTITY, &swipe(towards_elbow), 3000),
+            run(left, IDENTITY, &swipe(away_from_the_crown), 3000),
             vec![SwipeDirection::Left]
         );
     }

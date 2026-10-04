@@ -228,7 +228,7 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
           </Button>
         </div>
         {steps.some((step) => step.kind === "hold" && step.hold.startsWith("swipe")) && (
-          <p className="field-hint">Swipes are read from the watch's acceleration and orientation. Left and right run along your forearm, so set which wrist the watch is on in Settings; up and down follow gravity.</p>
+          <p className="field-hint">Swipes are read from the watch's acceleration and orientation. Left and right run along your forearm, so set which side the watch's crown is on under Settings → Watch orientation; up and down follow gravity.</p>
         )}
         {steps.some((step) => step.kind === "hold" && step.hold.startsWith("rotate")) && (
           <p className="field-hint">A rotate is one quick twist of the wrist about your forearm, like turning a key. It is not the slow roll that turns a dial: that is the wrist rotation step of a volume, brightness or scroll recipe.</p>

@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   tapPeakThreshold: 12,
   rotateAngleDegrees: 60,
   watchWrist: "left",
+  crownSide: "right",
   wristMaxAngularVelocityDegreesPerSecond: 360,
   wristMaxVolumePointsPerSecond: 30,
   watchSensorsEnabled: Object.fromEntries(CONTROLLABLE_SENSORS.map(({ id }) => [id, true])),

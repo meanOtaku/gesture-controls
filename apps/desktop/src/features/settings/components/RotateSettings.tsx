@@ -18,7 +18,7 @@ export function RotateSettings({ lastRotate = null }: RotateSettingsProps) {
           description="Wrist rotate gesture"
           help={{
             label: "About rotate",
-            content: "A rotate is one quick twist of the wrist about your forearm, like turning a key: a set angle within about half a second, mostly about the forearm. A slow turn is the dial gesture instead, and swinging the whole arm does not count. The turn back after a flick is ignored for a moment so one flick fires once. Clockwise is as you see it looking along your forearm from the elbow towards the hand; if the two come out backwards, switch the wrist under Swipe sensitivity.",
+            content: "A rotate is one quick twist of the wrist about your forearm, like turning a key: a set angle within about half a second, mostly about the forearm. A slow turn is the dial gesture instead, and swinging the whole arm does not count. The turn back after a flick is ignored for a moment so one flick fires once. Clockwise is as you see it looking along your forearm from the elbow towards the hand; if the two come out backwards, check Watch orientation.",
           }}
         />
       </CardHeader>

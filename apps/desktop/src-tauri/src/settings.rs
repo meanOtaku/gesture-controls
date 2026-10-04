@@ -82,9 +82,13 @@ pub struct AppSettings {
     /// How far the wrist must twist, quickly, to count as a rotate gesture, in degrees. Smaller is more sensitive.
     #[serde(default = "default_rotate_angle_degrees")]
     pub rotate_angle_degrees: f64,
-    /// Which wrist the watch is worn on: it decides which way along the forearm is the wearer's left.
+    /// Which wrist the watch is worn on. Only the rotate gesture needs it: clockwise is the way you turn a screwdriver.
     #[serde(default)]
     pub watch_wrist: automation::Wrist,
+    /// Which side of the watch face the crown is on, as you read it. Decides which way along the forearm is left for a
+    /// swipe, and (with the wrist) which way is clockwise for a rotate.
+    #[serde(default)]
+    pub crown_side: automation::CrownSide,
     #[serde(default = "default_wrist_max_angular_velocity_degrees_per_second")]
     pub wrist_max_angular_velocity_degrees_per_second: f64,
     #[serde(default = "default_wrist_max_volume_points_per_second")]
@@ -128,6 +132,7 @@ impl Default for AppSettings {
             tap_peak_threshold: default_tap_peak_threshold(),
             rotate_angle_degrees: default_rotate_angle_degrees(),
             watch_wrist: automation::Wrist::default(),
+            crown_side: automation::CrownSide::default(),
             wrist_max_angular_velocity_degrees_per_second:
                 default_wrist_max_angular_velocity_degrees_per_second(),
             wrist_max_volume_points_per_second: default_wrist_max_volume_points_per_second(),
@@ -638,11 +643,13 @@ mod tests {
         let mut json = serde_json::to_value(AppSettings::default()).unwrap();
         json.as_object_mut().unwrap().remove("shakePeakThreshold");
         json.as_object_mut().unwrap().remove("shakeStrokes");
+        json.as_object_mut().unwrap().remove("crownSide");
         let loaded: AppSettings = serde_json::from_value(json).unwrap();
         assert_eq!(
             (loaded.shake_peak_threshold, loaded.shake_strokes),
             (6.0, 4)
         );
+        assert_eq!(loaded.crown_side, automation::CrownSide::Right);
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { Settings } from "./Settings";
 import type { AppSettings } from "../../../shared/protocol/events";
@@ -23,6 +23,7 @@ const settings: AppSettings = {
   tapPeakThreshold: 12,
   rotateAngleDegrees: 60,
   watchWrist: "left",
+  crownSide: "right",
   wristMaxAngularVelocityDegreesPerSecond: 360,
   wristMaxVolumePointsPerSecond: 30,
   watchSensorsEnabled: { orientation: true, acceleration: true, gyroscope: true },
@@ -165,18 +166,22 @@ describe("Settings", () => {
     expect(screen.getByText(/Shakes recognised since you opened the app/)).toHaveTextContent(": 3");
   });
 
-  it("sets which wrist the watch is on, tunes swipe strength, and shows the last swipe", () => {
+  it("sets the crown side and the wrist, tunes swipe strength, and shows the last swipe", () => {
     const updates: AppSettings[] = [];
     const { rerender } = render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
     expect(screen.getByLabelText("Swipe strength")).toHaveValue(8);
     expect(screen.getByText(/No swipe recognised yet/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("radio", { name: /Right wrist/ }));
-    expect(updates).toEqual([{ ...settings, watchWrist: "right" }]);
+    const orientation = within(screen.getByRole("region", { name: "Watch orientation" }));
+    expect(orientation.getByRole("radio", { name: /Crown on the right/ })).toBeChecked();
+    fireEvent.click(orientation.getByRole("radio", { name: /Crown on the left/ }));
+    expect(updates).toEqual([{ ...settings, crownSide: "left" }]);
+    fireEvent.click(orientation.getByRole("radio", { name: /Right wrist/ }));
+    expect(updates[1]).toEqual({ ...settings, watchWrist: "right" });
 
     fireEvent.change(screen.getByLabelText("Swipe strength"), { target: { value: "5" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
-    expect(updates[1]).toMatchObject({ swipePeakThreshold: 5 });
+    expect(updates[2]).toMatchObject({ swipePeakThreshold: 5 });
 
     rerender(<Settings settings={settings} lastSwipe={{ direction: "left", count: 2 }} onUpdate={() => {}} onReset={() => {}} />);
     expect(screen.getByText(/Last swipe recognised/)).toHaveTextContent("left");
