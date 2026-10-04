@@ -186,12 +186,33 @@ fn short(hash: &str) -> &str {
     &hash[..12.min(hash.len())]
 }
 
-/// Records the staged bundle as a Draft model and moves its files into place.
+/// Records the staged bundle as an imported Draft model and moves its files into place.
 pub fn publish_staged<P: Persist>(
+    staged: StagedBundle,
+    model_lab_dir: &Path,
+    store: &mut RegistryStore<P>,
+    now: &str,
+) -> Result<ImportOutcome, ImportError> {
+    publish_staged_with(
+        staged,
+        model_lab_dir,
+        store,
+        now,
+        ModelOrigin::Imported,
+        |_| Ok(()),
+    )
+}
+
+/// As [`publish_staged`], for a model that came from somewhere else: `origin` says where, and `with_version` makes any
+/// further registry change in the same saved step as the new Draft (a training run being marked finished, say), so the
+/// run and the model it produced are recorded together or not at all.
+pub fn publish_staged_with<P: Persist>(
     mut staged: StagedBundle,
     model_lab_dir: &Path,
     store: &mut RegistryStore<P>,
     now: &str,
+    origin: ModelOrigin,
+    with_version: impl FnOnce(&mut model_lab_core::Registry) -> Result<(), RegistryError>,
 ) -> Result<ImportOutcome, ImportError> {
     let label = staged.manifest.target_label.clone();
     let sha = staged.model_sha256.clone();
@@ -227,7 +248,7 @@ pub fn publish_staged<P: Persist>(
         version_id.clone(),
         ProjectId::new(format!("import-{label}"))?,
         label.clone(),
-        ModelOrigin::Imported,
+        origin,
         true,
         Some(sha.clone()),
         relative,
@@ -278,6 +299,7 @@ pub fn publish_staged<P: Persist>(
                 updated_at: now.to_string(),
             })?;
         }
+        with_version(registry)?;
         registry.register_version(version.clone())
     });
     if let Err(error) = saved {

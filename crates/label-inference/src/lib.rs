@@ -18,6 +18,7 @@ mod loader;
 mod model;
 mod pipeline;
 mod runtime;
+mod training;
 
 pub use bundle::{BundleError, Manifest, ValidatedBundle, validate_bundle};
 pub use detection::{
@@ -25,9 +26,13 @@ pub use detection::{
 };
 pub use import::{
     IMPORTED_MODELS_DIR, ImportError, ImportOutcome, STAGING_DIR, StagedBundle, clean_staging,
-    import_bundle, publish_staged, stage_bundle,
+    import_bundle, publish_staged, publish_staged_with, stage_bundle,
 };
 pub use loader::{ModelLoadFailure, check_loadable, load_active_models, load_version};
 pub use model::{LoadedModel, ModelError};
 pub use pipeline::{LabelPipeline, LabelScore, Rejection, WindowRejection};
 pub use runtime::{LabelRuntime, RuntimeMode, RuntimeOutput};
+pub use training::{
+    BegunRun, RecordingInfo, RunPlan, TrainingError, begin_run, canonical_features_for,
+    complete_run, fail_run, plan_split, trainer_backend,
+};
