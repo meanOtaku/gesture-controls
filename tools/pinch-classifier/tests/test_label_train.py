@@ -195,3 +195,91 @@ def test_the_dense_export_folds_scaling_in_so_it_needs_no_preprocessing(tmp_path
     ops = {node.op_type for node in onnx.load(str(path)).graph.node}
     assert ops <= {op for _, op in lt.RUNNABLE_OPERATORS} and "Scaler" not in ops
     assert np.allclose(lt.onnx_probabilities(path, x_eval)[:, 1], model.predict_proba(x_eval)[:, 1], atol=1e-4)
+
+
+MOVEMENT_FEATURES = {
+    ("watchAcceleration", "watchGyroscope"): [
+        "accel_x_std", "accel_y_std", "accel_z_std", "accel_magnitude_std",
+        "gyro_x_std", "gyro_y_std", "gyro_z_std", "gyro_magnitude_std",
+    ],
+    ("watchOrientation",): ["quat_w_std", "quat_x_std", "quat_y_std", "quat_z_std", "quat_delta_angle_deg"],
+    ("watchPpg",): ["ppg_green_std", "ppg_red_std", "ppg_ir_std", "ppg_green_slope", "ppg_red_slope", "ppg_ir_slope"],
+}
+
+
+@pytest.mark.parametrize("sources", list(MOVEMENT_FEATURES))
+def test_movement_only_keeps_how_things_change_and_drops_absolute_levels(sources: tuple[str, ...]) -> None:
+    # The desktop applies the same rule (label_inference::canonical_features_for); this list is repeated there.
+    assert lt.features_for(list(sources), movement_only=True) == MOVEMENT_FEATURES[sources]
+    assert set(MOVEMENT_FEATURES[sources]) < set(lt.features_for(list(sources)))
+
+
+def test_a_threshold_is_fitted_so_a_model_whose_scores_are_all_low_is_still_usable() -> None:
+    rng = np.random.default_rng(0)
+    y = np.array([0] * 100 + [1] * 100)
+    # Perfectly ranked, but every score is well under the default 0.8: what a session-to-session shift does.
+    probability = np.concatenate([rng.uniform(0.0, 0.15, 100), rng.uniform(0.25, 0.4, 100)])
+    metrics = lt.evaluate(probability, y)
+    assert metrics["rocAuc"] == 1.0
+    assert 0.15 < metrics["activationThreshold"] <= 0.25
+    assert metrics["f1"] == 1.0 and metrics["falseActivationRate"] == 0.0
+    # At the default the same model would have found nothing: that is reported too.
+    assert metrics["atDefaultThreshold"]["recall"] == 0.0
+    assert metrics["thresholdChosenOnEvaluationRecordings"] is True
+    assert lt.verdict(metrics) is None
+
+
+@pytest.mark.parametrize("auc_scores, text", [(0.2, "lower"), (0.6, "barely")])
+def test_a_model_that_cannot_tell_the_gesture_apart_is_not_kept(auc_scores: float, text: str) -> None:
+    y = np.array([0] * 50 + [1] * 50)
+    rng = np.random.default_rng(1)
+    probability = np.clip(rng.normal(0.5, 0.2, 100) + (y * (auc_scores - 0.5) * 1.2), 0, 1)
+    metrics = lt.evaluate(probability, y)
+    assert text in (lt.verdict(metrics) or "")
+
+
+def test_a_model_that_memorised_a_posture_is_refused_with_the_reason(tmp_path: Path) -> None:
+    """Trained where the target has a high average and tested where it has a low one, on a feature that is only posture."""
+    rng = np.random.default_rng(2)
+
+    def recording(rid: str, label: str, level: float) -> Path:
+        lines = ["# gesture-dataset-export: 1", f"# label: {label}", ",".join(HEADER_COLUMNS)]
+        for row in range(400):
+            accel = rng.normal(level, 0.2, 3)
+            fields = [str(row * INTERVAL_NS), str(row), "1000", "900", "800", *(f"{v:.4f}" for v in accel), "0", "0", "0", "1", "0", "0", "0", "3", label]
+            lines.append(",".join(fields))
+        path = tmp_path / f"{rid}.csv"
+        path.write_text("\n".join(lines) + "\n")
+        return path
+
+    plan = {"s1": ("snap", 3.0), "s2": ("snap", 3.0), "i1": ("idle", 0.0), "i2": ("idle", 0.0), "s3": ("snap", -3.0), "i3": ("idle", 0.0)}
+    spec = {
+        "version": 1, "target": "snap", "negatives": ["idle"], "excludes": [],
+        "recordings": {rid: str(recording(rid, label, level)) for rid, (label, level) in plan.items()},
+        "train": ["s1", "s2", "i1", "i2"], "evaluation": ["s3", "i3"],
+        "sources": ["watchAcceleration"], "features": ["accel_x_mean"],
+        "window": {"windowMs": 500, "strideMs": 150, "maxGapMs": 250, "minSamples": 3}, "backend": "logreg", "seed": 7,
+    }
+    out = tmp_path / "run"
+    result = lt.run(spec, out)
+    assert result["outcome"] == "evaluationOnly"
+    assert "memorised" in result["message"] and result["metrics"]["rocAuc"] < 0.5
+    assert not (out / "bundle").exists()
+    assert json.loads((out / "result.json").read_text())["outcome"] == "evaluationOnly"
+
+
+def test_the_manifest_carries_the_fitted_thresholds_and_says_where_they_came_from(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    result = lt.run(spec_for(tmp_path), out)
+    manifest = json.loads((out / "bundle" / "manifest.json").read_text())
+    act, rel = manifest["thresholds"]["activation"], manifest["thresholds"]["release"]
+    assert act == result["metrics"]["activationThreshold"] and 0 < rel <= act
+    assert manifest["provenance"]["thresholdChosenOnEvaluationRecordings"] is True
+    assert manifest["provenance"]["movementOnly"] is False
+
+
+def test_movement_only_models_use_only_those_features(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    result = lt.run(spec_for(tmp_path, movementOnly=True), out)
+    assert result["outcome"] == "deployable", result["message"]
+    assert result["features"] == MOVEMENT_FEATURES[("watchAcceleration", "watchGyroscope")]

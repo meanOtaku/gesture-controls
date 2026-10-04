@@ -17,8 +17,8 @@ use std::sync::Mutex;
 
 use chrono::{SecondsFormat, Utc};
 use label_inference::{
-    RecordingInfo, RunPlan, begin_run, canonical_features_for, complete_run, fail_run, plan_split,
-    stage_bundle, trainer_backend,
+    RecordingInfo, RunPlan, begin_run, canonical_features_for, complete_run, evaluation_only_run,
+    fail_run, plan_split, stage_bundle, trainer_backend,
 };
 use model_lab_core::{
     ArtifactRef, ExampleRole, InputContract, LabelId, LabelMapping, QualityRules, RecordingId,
@@ -69,6 +69,9 @@ pub struct TrainRequest {
     pub min_samples: u32,
     #[serde(default)]
     pub seed: Option<u32>,
+    /// Only features about how things change, not their absolute levels (see `is_movement_feature`).
+    #[serde(default)]
+    pub movement_only: bool,
 }
 
 fn default_window_ms() -> u32 {
@@ -93,6 +96,7 @@ struct Checked {
     recordings: Vec<RecordingInfo>,
     backend: String,
     seed: u32,
+    movement_only: bool,
 }
 
 fn label_id(raw: &str) -> Result<LabelId, String> {
@@ -165,7 +169,7 @@ fn check_request(
     if sources.is_empty() {
         return Err("choose at least one data stream for the model to read".into());
     }
-    let features = canonical_features_for(&sources);
+    let features = canonical_features_for(&sources, request.movement_only);
     if features.is_empty() {
         return Err("none of the chosen data streams can feed a model (head pose is not available to trained models)".into());
     }
@@ -185,6 +189,7 @@ fn check_request(
         recordings,
         backend: request.backend.clone(),
         seed: request.seed.unwrap_or(7),
+        movement_only: request.movement_only,
     })
 }
 
@@ -221,6 +226,7 @@ fn build_spec(
         },
         "backend": checked.backend,
         "seed": checked.seed,
+        "movementOnly": checked.movement_only,
     })
 }
 
@@ -255,7 +261,7 @@ enum TrainingEvent {
     Finished {
         run_id: String,
         label: String,
-        /// `deployable`, `failed` or `cancelled`.
+        /// `deployable`, `evaluationOnly` (trained, but not worth keeping), `failed` or `cancelled`.
         outcome: String,
         message: String,
         version_id: Option<String>,
@@ -595,6 +601,40 @@ fn finish(
             );
         }
     };
+    if result["outcome"] == "evaluationOnly" {
+        let message = result["message"]
+            .as_str()
+            .unwrap_or("the model was not good enough to keep")
+            .to_string();
+        let run_dir = format!("{RUNS_DIR}/{run_id}");
+        let artifacts: Vec<ArtifactRef> = [("evaluation", "evaluation.json")]
+            .iter()
+            .filter_map(|(kind, file)| {
+                sha256_of_file(&out.join(file))
+                    .ok()
+                    .map(|sha256| ArtifactRef {
+                        kind: (*kind).into(),
+                        path: format!("{run_dir}/{file}"),
+                        sha256,
+                    })
+            })
+            .collect();
+        let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+        let host = app.state::<LabelRuntimeHost>();
+        if let Err(error) = host.with_store(|store| {
+            evaluation_only_run(store, run_id, &message, artifacts, &now).map_err(|e| e.to_string())
+        }) {
+            return failed("failed", error);
+        }
+        return TrainingEvent::Finished {
+            run_id: id,
+            label,
+            outcome: "evaluationOnly".into(),
+            message,
+            version_id: None,
+            metrics: Some(result["metrics"].clone()),
+        };
+    }
     if result["outcome"] != "deployable" {
         let message = result["message"]
             .as_str()
@@ -713,6 +753,7 @@ mod tests {
             max_gap_ms: 250,
             min_samples: 3,
             seed: None,
+            movement_only: false,
         }
     }
 
@@ -782,6 +823,15 @@ mod tests {
     }
 
     #[test]
+    fn movement_only_narrows_the_features_the_contract_lists() {
+        let mut r = request();
+        r.movement_only = true;
+        let checked = check_request(&r, &datasets(), &sha).unwrap();
+        assert!(checked.input.features.iter().all(|f| f.ends_with("_std")));
+        assert_eq!(checked.input.features.len(), 8);
+    }
+
+    #[test]
     fn a_recording_listed_twice_counts_once() {
         let mut r = request();
         r.dataset_ids.push("s1".into());
@@ -819,6 +869,7 @@ mod tests {
         );
         assert_eq!(spec["window"]["windowMs"], 500);
         assert_eq!(spec["backend"], "logreg");
+        assert_eq!(spec["movementOnly"], false);
         let listed = |key: &str| spec[key].as_array().unwrap().len();
         assert_eq!(listed("train") + listed("evaluation"), 6);
         assert_eq!(spec["recordings"].as_object().unwrap().len(), 6);

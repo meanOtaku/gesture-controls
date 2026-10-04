@@ -46,7 +46,6 @@ PARITY_TOLERANCE = 1e-3
 MIN_POSITIVE_TRAIN_WINDOWS = 10
 MIN_WINDOWS_PER_CLASS_EVAL = 3
 ACTIVATION = 0.8
-RELEASE = 0.5
 
 
 class TrainingRefused(Exception):
@@ -59,12 +58,22 @@ def source_of(feature: str) -> str:
     return {"accel": "watchAcceleration", "gyro": "watchGyroscope", "quat": "watchOrientation"}.get(prefix, "watchPpg")
 
 
-def features_for(sources: list[str]) -> list[str]:
+def is_movement_feature(name: str) -> bool:
+    """A feature about how a signal changes, not its absolute level.
+
+    Absolute levels (means, minimums, maximums) carry how the watch happened to be held, or how well it touched the skin,
+    in that session. A model can memorise those and then fail on any other session. Spread, change over the window and the
+    PPG slope do not depend on that. (The desktop applies the same rule: keep the two in step.)
+    """
+    return name.endswith("_std") or name == "quat_delta_angle_deg" or (name.startswith("ppg_") and name.endswith("_slope"))
+
+
+def features_for(sources: list[str], movement_only: bool = False) -> list[str]:
     """Every canonical feature whose stream is in `sources`, in canonical order."""
     unknown = sorted(set(sources) - set(SOURCES))
     if unknown:
         raise TrainingRefused(f"unknown stream(s) {unknown}; choose from {list(SOURCES)}")
-    chosen = [name for name in FEATURE_NAMES if source_of(name) in sources]
+    chosen = [name for name in FEATURE_NAMES if source_of(name) in sources and (not movement_only or is_movement_feature(name))]
     if not chosen:
         raise TrainingRefused("no features are available from the chosen streams")
     return chosen
@@ -80,6 +89,7 @@ class Spec:
     evaluation: list[str]
     sources: list[str]
     features: list[str]
+    movement_only: bool
     window: WindowConfig
     backend: str
     seed: int
@@ -93,7 +103,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
     if backend not in BACKENDS:
         raise TrainingRefused(f"unknown backend {backend!r}; choose from {list(BACKENDS)}")
     sources = list(raw.get("sources", []))
-    available = features_for(sources)
+    available = features_for(sources, bool(raw.get("movementOnly", False)))
     requested = raw.get("features")
     if requested:
         extra = [name for name in requested if name not in available]
@@ -121,6 +131,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         evaluation=evaluation,
         sources=sources,
         features=features,
+        movement_only=bool(raw.get("movementOnly", False)),
         window=WindowConfig(
             window_ms=float(window.get("windowMs", 500)),
             stride_ms=float(window.get("strideMs", 150)),
@@ -251,10 +262,8 @@ def fit(spec: Spec, x_train: np.ndarray, y_train: np.ndarray):
     return make_model(spec.backend, x_train.shape[1], spec.seed, spec.params).fit(x_train, y_train)
 
 
-def evaluate(probability: np.ndarray, y: np.ndarray) -> dict[str, Any]:
-    from sklearn.metrics import roc_auc_score
-
-    predicted = probability >= ACTIVATION
+def _rates(probability: np.ndarray, y: np.ndarray, threshold: float) -> dict[str, Any]:
+    predicted = probability >= threshold
     tp = int(((predicted == 1) & (y == 1)).sum())
     fp = int(((predicted == 1) & (y == 0)).sum())
     fn = int(((predicted == 0) & (y == 1)).sum())
@@ -263,19 +272,68 @@ def evaluate(probability: np.ndarray, y: np.ndarray) -> dict[str, Any]:
     recall = tp / (tp + fn) if tp + fn else 0.0
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
     return {
-        "windows": int(y.shape[0]),
-        "positiveWindows": int(y.sum()),
-        "negativeWindows": int((y == 0).sum()),
-        "activationThreshold": ACTIVATION,
+        "threshold": threshold,
         "precision": precision,
         "recall": recall,
         "f1": f1,
         "accuracy": (tp + tn) / max(y.shape[0], 1),
         # How often a window of something else is wrongly called the target: the number that decides whether it is annoying.
         "falseActivationRate": fp / max(fp + tn, 1),
-        "rocAuc": float(roc_auc_score(y, probability)),
         "confusion": {"truePositive": tp, "falsePositive": fp, "falseNegative": fn, "trueNegative": tn},
     }
+
+
+def choose_threshold(probability: np.ndarray, y: np.ndarray) -> float:
+    """The activation threshold with the best F1 on these windows (ties go to fewer false alarms, then the higher one).
+
+    A model's scores shift from one recording session to the next, so a fixed 0.8 can sit above every score of a model
+    that ranks the windows perfectly. The threshold is therefore fitted, but it is fitted on the held-out recordings, so
+    the rates reported at it are a little optimistic. `evaluation.json` says so, and also reports the default.
+    """
+    best = (-1.0, 0.0, 0.0)
+    for threshold in np.round(np.arange(0.05, 0.96, 0.01), 2):
+        rates = _rates(probability, y, float(threshold))
+        key = (rates["f1"], -rates["falseActivationRate"], float(threshold))
+        if key > best:
+            best = key
+    return best[2]
+
+
+def evaluate(probability: np.ndarray, y: np.ndarray) -> dict[str, Any]:
+    from sklearn.metrics import roc_auc_score
+
+    threshold = choose_threshold(probability, y)
+    chosen = _rates(probability, y, threshold)
+    return {
+        "windows": int(y.shape[0]),
+        "positiveWindows": int(y.sum()),
+        "negativeWindows": int((y == 0).sum()),
+        # Does the model rank the gesture's windows above the rest at all? 0.5 is chance; under 0.5 it is backwards.
+        "rocAuc": float(roc_auc_score(y, probability)),
+        "activationThreshold": threshold,
+        "thresholdChosenOnEvaluationRecordings": True,
+        **{k: v for k, v in chosen.items() if k != "threshold"},
+        "atDefaultThreshold": _rates(probability, y, ACTIVATION),
+    }
+
+
+MIN_AUC = 0.7
+MIN_F1 = 0.5
+
+
+def verdict(metrics: dict[str, Any]) -> str | None:
+    """Why a model is not worth keeping, in words; None when it is good enough to review."""
+    auc, f1 = metrics["rocAuc"], metrics["f1"]
+    if auc < 0.5:
+        return (
+            f"It scored the gesture's windows *lower* than the others on recordings it had not seen (AUC {auc:.2f}; 0.5 is chance). "
+            "It memorised the training recordings rather than the gesture"
+        )
+    if auc < MIN_AUC:
+        return f"It could barely tell the gesture from the rest on recordings it had not seen (AUC {auc:.2f}; at least {MIN_AUC} is needed)"
+    if f1 < MIN_F1:
+        return f"Even with the best cut-off it only reached an F1 of {f1:.2f} on recordings it had not seen (at least {MIN_F1} is needed)"
+    return None
 
 
 # The operators the desktop's runtime (tract) can run. An exported file using anything else is refused here, where the
@@ -415,7 +473,7 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
             "minSamples": spec.window.min_samples_per_window,
         },
         "quality": {"maxContactQuality": 0.0, "minSampleCount": 3},
-        "thresholds": {"activation": ACTIVATION, "release": RELEASE},
+        "thresholds": {"activation": metrics["activationThreshold"], "release": round(max(0.05, metrics["activationThreshold"] - 0.15), 2)},
         "preprocessing": {"kind": "none"},
         "provenance": {
             "backend": spec.backend,
@@ -424,6 +482,9 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
             "seed": spec.seed,
             "evaluationF1": metrics["f1"],
             "evaluationFalseActivationRate": metrics["falseActivationRate"],
+            "evaluationRocAuc": metrics["rocAuc"],
+            "thresholdChosenOnEvaluationRecordings": True,
+            "movementOnly": spec.movement_only,
         },
     }
     (bundle / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -442,6 +503,19 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
         probability = model.predict_proba(x_eval)[:, 1]
         metrics = evaluate(probability, y_eval)
         (out / "evaluation.json").write_text(json.dumps(metrics, indent=2) + "\n")
+        poor = verdict(metrics)
+        if poor is not None:
+            result = {
+                "outcome": "evaluationOnly",
+                "message": poor + ". Record more sessions of the gesture (at least three, in different positions), or change what the model may read",
+                "backend": spec.backend,
+                "features": spec.features,
+                "trainWindows": int(y_train.shape[0]),
+                "evaluationWindows": int(y_eval.shape[0]),
+                "metrics": metrics,
+            }
+            (out / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+            return result
 
         scratch = out / "model.onnx"
         opset = export_onnx(spec, model, x_train, scratch)

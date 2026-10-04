@@ -16,9 +16,11 @@ import {
   STREAMS,
   appendLog,
   buildRequest,
+  THRESHOLD_CAVEAT,
   describeMetrics,
   hasLabel,
   otherLabels,
+  recordingsWithLabel,
   type DataStream,
   type OtherRole,
   type TrainMethod,
@@ -49,6 +51,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
   const [roles, setRoles] = useState<Record<string, OtherRole>>({});
   const [method, setMethod] = useState<TrainMethod>("logreg");
   const [sources, setSources] = useState<DataStream[]>(DEFAULT_STREAMS);
+  const [movementOnly, setMovementOnly] = useState(false);
   const [plan, setPlan] = useState<TrainPlan | null>(null);
   const [environment, setEnvironment] = useState<TrainerEnvironment | null>(null);
   const [running, setRunning] = useState<string | null>(null);
@@ -59,7 +62,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
   const usable = labels.filter((label) => label.archivedAt === null);
   const candidates = datasets.filter((dataset) => datasetLabels(dataset).length > 0);
   const others = otherLabels(datasets, selected, target);
-  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, method, sources });
+  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, method, sources, movementOnly });
   const requestKey = JSON.stringify(request);
 
   useEffect(() => {
@@ -254,7 +257,11 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
                   </li>
                 ))}
               </ul>
-              <p className="field-hint">The model only works while the watch sends everything it read. Pick as little as the gesture needs.</p>
+              <p className="field-hint">The model only works while the watch sends everything it read. Pick what the gesture actually changes: a finger pinch barely moves the watch, so it shows in the pulse sensor, not in acceleration. A wrist twist or a shake shows in acceleration, gyroscope and orientation.</p>
+              <div className="flex items-start gap-2 text-sm">
+                <Checkbox checked={movementOnly} disabled={running !== null} onCheckedChange={() => setMovementOnly((value) => !value)} aria-label="Only how things change" />
+                <span><strong>Only how things change</strong> <small className="text-muted-foreground">Ignore absolute levels such as how the watch is held. This stops a model from memorising a session&apos;s posture; try it for movement gestures.</small></span>
+              </div>
             </fieldset>
 
             {plan && (
@@ -262,9 +269,18 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
                 {plan.problem ? (
                   <Alert variant="destructive"><AlertDescription>{plan.problem}</AlertDescription></Alert>
                 ) : (
-                  <p className="field-hint">
-                    It will train on {plan.train.length} recording{plan.train.length === 1 ? "" : "s"} ({plan.train.map(name).join(", ")}) and test on {plan.evaluation.length} it never trains on ({plan.evaluation.map(name).join(", ")}).
-                  </p>
+                  <>
+                    <p className="field-hint">
+                      It will train on {plan.train.length} recording{plan.train.length === 1 ? "" : "s"} ({plan.train.map(name).join(", ")}) and test on {plan.evaluation.length} it never trains on ({plan.evaluation.map(name).join(", ")}).
+                    </p>
+                    {recordingsWithLabel(datasets, plan.train, target) < 2 && (
+                      <Alert role="note">
+                        <AlertDescription>
+                          Only {recordingsWithLabel(datasets, plan.train, target)} recording with {target} to train on. A model trained on a single session usually memorises it and fails on the next. Three or more recordings, in different positions, work much better.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -283,13 +299,26 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
         {result && (
           <Alert variant={result.outcome === "deployable" ? "default" : "destructive"} role="status" aria-label="Training result">
             <AlertTitle>
-              {result.outcome === "deployable" ? `A model for ${result.label} was added as a draft` : result.outcome === "cancelled" ? "Training was cancelled" : "Training did not produce a model"}
+              {result.outcome === "deployable"
+                ? `A model for ${result.label} was added as a draft`
+                : result.outcome === "evaluationOnly"
+                  ? "A model was trained but it is not good enough to keep"
+                  : result.outcome === "cancelled"
+                    ? "Training was cancelled"
+                    : "Training did not produce a model"}
             </AlertTitle>
             <AlertDescription>
               {result.outcome === "deployable" && result.metrics ? (
                 <>
                   <p>{describeMetrics(result.metrics)}</p>
+                  <p>{THRESHOLD_CAVEAT}</p>
                   <p>Review it under Label models: mark it evaluated, approve it, then activate it. Check it in Monitor before Live.</p>
+                </>
+              ) : result.outcome === "evaluationOnly" ? (
+                <>
+                  <p>{result.message}.</p>
+                  {result.metrics && <p>Its test score (AUC) was {result.metrics.rocAuc.toFixed(2)}, where 0.5 is chance. Nothing was added to your models.</p>}
+                  <p>Things to try: pick the data the gesture really changes (the pulse sensor for finger gestures), tick “Only how things change”, or record more sessions of the gesture.</p>
                 </>
               ) : (
                 <p>{result.message}</p>

@@ -55,7 +55,7 @@ describe("TrainPanel", () => {
     expect(screen.getByLabelText("Role of walking")).toBeInTheDocument();
     expect(await screen.findByText(/train on 2 recordings \(s1.csv, i1.csv\) and test on 2/)).toBeInTheDocument();
     expect(calls("plan_label_training").at(-1)?.[1]).toEqual({
-      request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["idle", "walking"], excludes: [], backend: "logreg", sources: ["watchAcceleration", "watchGyroscope"] },
+      request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["idle", "walking"], excludes: [], backend: "logreg", sources: ["watchAcceleration", "watchGyroscope"], movementOnly: false },
     });
   });
 
@@ -65,6 +65,7 @@ describe("TrainPanel", () => {
     await screen.findByText(/It will train on/);
     fireEvent.change(screen.getByLabelText("Role of walking"), { target: { value: "exclude" } });
     fireEvent.change(screen.getByLabelText("Method"), { target: { value: "mlp" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Only how things change" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Orientation" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Gyroscope" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Use i2.csv" }));
@@ -72,7 +73,7 @@ describe("TrainPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Train model" }));
     await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
     expect(calls("start_label_training")[0][1]).toEqual({
-      request: { label: "snap", datasetIds: ["s1", "s2", "i1"], negatives: ["idle"], excludes: ["walking"], backend: "mlp", sources: ["watchAcceleration", "watchOrientation"] },
+      request: { label: "snap", datasetIds: ["s1", "s2", "i1"], negatives: ["idle"], excludes: ["walking"], backend: "mlp", sources: ["watchAcceleration", "watchOrientation"], movementOnly: true },
     });
   });
 
@@ -111,12 +112,35 @@ describe("TrainPanel", () => {
     expect(await screen.findByLabelText("Training log")).toHaveTextContent("downloading scikit-learn");
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(calls("cancel_label_training")).toHaveLength(1));
-    send({ kind: "finished", runId: "run-1", label: "snap", outcome: "deployable", message: "", versionId: "snap-abc", metrics: { windows: 50, positiveWindows: 20, negativeWindows: 30, precision: 0.9, recall: 0.8, f1: 0.85, falseActivationRate: 0.04, rocAuc: 0.95 } });
+    send({ kind: "finished", runId: "run-1", label: "snap", outcome: "deployable", message: "", versionId: "snap-abc", metrics: { windows: 50, positiveWindows: 20, negativeWindows: 30, precision: 0.9, recall: 0.8, f1: 0.85, falseActivationRate: 0.04, rocAuc: 0.95, activationThreshold: 0.6 } });
     const result = await screen.findByRole("status", { name: "Training result" });
     expect(result).toHaveTextContent("A model for snap was added as a draft");
     expect(result).toHaveTextContent("80% of the 20 windows");
+    expect(result).toHaveTextContent("chosen using those same test recordings");
     expect(result).toHaveTextContent("Review it under Label models");
     expect(screen.getByRole("button", { name: "Train model" })).toBeInTheDocument();
+  });
+
+  it("says a model that was trained but is not good enough was not kept, and what to try", async () => {
+    setup();
+    await vi.waitFor(() => expect(handlers.has("label-training-event")).toBe(true));
+    act(() => handlers.get("label-training-event")?.({ payload: { kind: "finished", runId: "r", label: "snap", outcome: "evaluationOnly", message: "It scored the gesture's windows lower than the others (AUC 0.05)", versionId: null, metrics: { windows: 300, positiveWindows: 135, negativeWindows: 165, precision: 0.4, recall: 1, f1: 0.6, falseActivationRate: 0.99, rocAuc: 0.05, activationThreshold: 0.05 } } }));
+    const result = await screen.findByRole("status", { name: "Training result" });
+    expect(result).toHaveTextContent("not good enough to keep");
+    expect(result).toHaveTextContent("AUC) was 0.05");
+    expect(result).toHaveTextContent("Nothing was added to your models");
+    expect(result).toHaveTextContent("pulse sensor for finger gestures");
+  });
+
+  it("warns when only one recording of the gesture would be trained on", async () => {
+    setup({ plan: { train: ["s1", "i1"], evaluation: ["s2", "i2"], problem: null } });
+    choose("snap");
+    expect(await screen.findByText(/Only 1 recording with snap to train on/)).toBeInTheDocument();
+    cleanup();
+    setup({ plan: { train: ["s1", "s2", "i1"], evaluation: ["i2"], problem: null } });
+    choose("snap");
+    await screen.findByText(/It will train on 3/);
+    expect(screen.queryByText(/Only .* recording with snap/)).not.toBeInTheDocument();
   });
 
   it("shows why a run failed or was cancelled", async () => {

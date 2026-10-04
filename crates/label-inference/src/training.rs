@@ -56,12 +56,23 @@ pub struct RecordingInfo {
     pub labels: BTreeSet<LabelId>,
 }
 
-/// Every canonical feature computed from the given streams, in canonical order. A window-level value (sample count,
-/// duration, contact quality) comes with the PPG stream.
-pub fn canonical_features_for(sources: &[StreamSource]) -> Vec<String> {
+/// A feature about how a signal changes rather than its absolute level: spread, change over the window, and the PPG
+/// slope. Absolute levels carry how the watch was held or how well it touched the skin in one session, which a model can
+/// memorise. The trainer applies the same rule (`is_movement_feature` in `label_train.py`); both are tested against the
+/// same list.
+pub fn is_movement_feature(name: &str) -> bool {
+    name.ends_with("_std")
+        || name == "quat_delta_angle_deg"
+        || (name.starts_with("ppg_") && name.ends_with("_slope"))
+}
+
+/// Every canonical feature computed from the given streams, in canonical order, optionally only the movement ones. A
+/// window-level value (sample count, duration, contact quality) comes with the PPG stream.
+pub fn canonical_features_for(sources: &[StreamSource], movement_only: bool) -> Vec<String> {
     FEATURE_NAMES
         .iter()
         .filter(|name| source_of_feature(name).is_some_and(|s| sources.contains(&s)))
+        .filter(|name| !movement_only || is_movement_feature(name))
         .map(ToString::to_string)
         .collect()
 }
@@ -282,6 +293,28 @@ pub fn fail_run<P: Persist>(
         .map_err(registry_error)
 }
 
+/// Records that the run trained and scored a model that is not worth keeping, so there is nothing to review or approve.
+/// The run is finished (and immutable) with the reason and the evaluation it produced.
+pub fn evaluation_only_run<P: Persist>(
+    store: &mut RegistryStore<P>,
+    run_id: &RunId,
+    message: &str,
+    artifacts: Vec<ArtifactRef>,
+    now: &str,
+) -> Result<(), TrainingError> {
+    store
+        .mutate(|registry| {
+            registry.finish_run(
+                run_id,
+                RunOutcome::EvaluationOnly,
+                Some(message.to_string()),
+                artifacts,
+                now,
+            )
+        })
+        .map_err(registry_error)
+}
+
 /// Publishes the model a run produced as a Draft and marks the run finished, in one saved registry change. If the
 /// bundle is refused or the registry cannot be saved, neither happens and the caller should [`fail_run`].
 pub fn complete_run<P: Persist>(
@@ -378,10 +411,13 @@ mod tests {
                 StreamSource::WatchAcceleration,
                 StreamSource::WatchGyroscope,
             ],
-            features: canonical_features_for(&[
-                StreamSource::WatchAcceleration,
-                StreamSource::WatchGyroscope,
-            ]),
+            features: canonical_features_for(
+                &[
+                    StreamSource::WatchAcceleration,
+                    StreamSource::WatchGyroscope,
+                ],
+                false,
+            ),
             window_ms: 500,
             stride_ms: 150,
             max_gap_ms: 250,
@@ -474,16 +510,19 @@ mod tests {
 
     #[test]
     fn the_features_follow_the_streams() {
-        let motion = canonical_features_for(&[StreamSource::WatchAcceleration]);
+        let motion = canonical_features_for(&[StreamSource::WatchAcceleration], false);
         assert!(!motion.is_empty() && motion.iter().all(|f| f.starts_with("accel_")));
-        let all = canonical_features_for(&[
-            StreamSource::WatchOrientation,
-            StreamSource::WatchAcceleration,
-            StreamSource::WatchGyroscope,
-            StreamSource::WatchPpg,
-        ]);
+        let all = canonical_features_for(
+            &[
+                StreamSource::WatchOrientation,
+                StreamSource::WatchAcceleration,
+                StreamSource::WatchGyroscope,
+                StreamSource::WatchPpg,
+            ],
+            false,
+        );
         assert_eq!(all.len(), FEATURE_NAMES.len());
-        assert!(canonical_features_for(&[StreamSource::HeadPose]).is_empty());
+        assert!(canonical_features_for(&[StreamSource::HeadPose], false).is_empty());
     }
 
     #[test]
@@ -630,6 +669,81 @@ mod tests {
         assert!(
             fs::read_dir(lab.path().join(crate::IMPORTED_MODELS_DIR))
                 .map_or(true, |mut d| d.next().is_none())
+        );
+    }
+
+    #[test]
+    fn a_run_whose_model_was_not_worth_keeping_is_finished_without_a_model() {
+        let mut store = store();
+        let begun = begin_run(&mut store, &plan(sessions()), &known(), NOW).unwrap();
+        evaluation_only_run(
+            &mut store,
+            &begun.run_id,
+            "it memorised the training recordings",
+            Vec::new(),
+            NOW,
+        )
+        .unwrap();
+        let run = &store.registry().runs[&begun.run_id];
+        assert_eq!(run.outcome, Some(RunOutcome::EvaluationOnly));
+        assert_eq!(
+            run.failure.as_deref(),
+            Some("it memorised the training recordings")
+        );
+        assert!(store.registry().versions.is_empty());
+        assert!(evaluation_only_run(&mut store, &begun.run_id, "again", Vec::new(), NOW).is_err());
+    }
+
+    /// The same lists are in `tools/pinch-classifier/tests/test_label_train.py`: the two sides must choose the same features.
+    #[test]
+    fn movement_only_keeps_how_things_change_and_matches_the_trainer() {
+        use StreamSource::*;
+        let strs = |v: Vec<String>| {
+            v.iter()
+                .map(String::as_str)
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            strs(canonical_features_for(
+                &[WatchAcceleration, WatchGyroscope],
+                true
+            )),
+            [
+                "accel_x_std",
+                "accel_y_std",
+                "accel_z_std",
+                "accel_magnitude_std",
+                "gyro_x_std",
+                "gyro_y_std",
+                "gyro_z_std",
+                "gyro_magnitude_std"
+            ]
+        );
+        assert_eq!(
+            strs(canonical_features_for(&[WatchOrientation], true)),
+            [
+                "quat_w_std",
+                "quat_x_std",
+                "quat_y_std",
+                "quat_z_std",
+                "quat_delta_angle_deg"
+            ]
+        );
+        assert_eq!(
+            strs(canonical_features_for(&[WatchPpg], true)),
+            [
+                "ppg_green_std",
+                "ppg_red_std",
+                "ppg_ir_std",
+                "ppg_green_slope",
+                "ppg_red_slope",
+                "ppg_ir_slope"
+            ]
+        );
+        assert!(
+            canonical_features_for(&[WatchAcceleration], true).len()
+                < canonical_features_for(&[WatchAcceleration], false).len()
         );
     }
 

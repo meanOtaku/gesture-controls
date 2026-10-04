@@ -74,8 +74,8 @@
     "minSampleCount": 3
   },
   "thresholds": {
-    "activation": 0.8,
-    "release": 0.5
+    "activation": 0.63,
+    "release": 0.48
   },
   "preprocessing": {
     "kind": "none"
@@ -93,7 +93,10 @@
       "s3"
     ],
     "seed": 7,
-    "evaluationF1": 0.9473684210526316,
-    "evaluationFalseActivationRate": 0.0
+    "evaluationF1": 1.0,
+    "evaluationFalseActivationRate": 0.0,
+    "evaluationRocAuc": 1.0,
+    "thresholdChosenOnEvaluationRecordings": true,
+    "movementOnly": false
   }
 }
