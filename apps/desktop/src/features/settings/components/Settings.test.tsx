@@ -22,6 +22,7 @@ const settings: AppSettings = {
   swipePeakThreshold: 8,
   tapPeakThreshold: 12,
   rotateAngleDegrees: 60,
+  pitchAngleDegrees: 40,
   watchWrist: "left",
   crownSide: "right",
   wristMaxAngularVelocityDegreesPerSecond: 360,
@@ -186,6 +187,21 @@ describe("Settings", () => {
     rerender(<Settings settings={settings} lastSwipe={{ direction: "left", count: 2 }} onUpdate={() => {}} onReset={() => {}} />);
     expect(screen.getByText(/Last swipe recognised/)).toHaveTextContent("left");
     expect(screen.getByText(/Last swipe recognised/)).toHaveTextContent("2 so far");
+  });
+
+  it("tunes the pitch angle and shows the last pitch", () => {
+    const updates: AppSettings[] = [];
+    const { rerender } = render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
+    expect(screen.getByLabelText("Pitch angle")).toHaveValue(40);
+    expect(screen.getByText(/No pitch recognised yet/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Pitch angle"), { target: { value: "30" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    expect(updates[0]).toMatchObject({ pitchAngleDegrees: 30 });
+    fireEvent.change(screen.getByLabelText("Pitch angle"), { target: { value: "10" } });
+    fireEvent.blur(screen.getByLabelText("Pitch angle"));
+    expect(screen.getByLabelText("Pitch angle")).toHaveAttribute("aria-invalid", "true");
+    rerender(<Settings settings={settings} lastPitch={{ direction: "up", count: 5 }} onUpdate={() => {}} onReset={() => {}} />);
+    expect(screen.getByText(/Last pitch recognised/)).toHaveTextContent("up (5 so far)");
   });
 
   it("tunes tap strength and shows the last tap", () => {

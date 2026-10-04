@@ -659,3 +659,23 @@ fn a_rotate_step_fires_only_for_its_own_direction() {
         "\"rotateCounterClockwise\""
     );
 }
+
+#[test]
+fn a_pitch_step_fires_only_for_its_own_direction() {
+    let signals = |pitch| Signals {
+        pitch,
+        ..Signals::default()
+    };
+    let mut up = RecipeRunner::new(trigger(vec![Stage::Hold {
+        hold: Hold::PitchUp,
+    }]));
+    up.update(&signals(Some(PitchDirection::Down)));
+    assert!(!up.take_fired());
+    up.update(&signals(None));
+    up.update(&signals(Some(PitchDirection::Up)));
+    assert!(up.take_fired());
+    assert_eq!(
+        serde_json::to_string(&Hold::PitchDown).unwrap(),
+        "\"pitchDown\""
+    );
+}

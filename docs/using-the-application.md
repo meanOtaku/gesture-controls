@@ -354,7 +354,17 @@ The **Recipes** tab lists every recipe with an on/off switch, an Edit button and
 - **Settings → Rotate sensitivity → Rotate angle** (30° to 180°) sets how big the twist must be; the card shows the last rotate recognised and a count.
 - It uses only the watch's orientation sensor, which streams about 50 times a second. Not verified on a real watch.
 
-Because it is a moment, a shake, swipe, tap or rotate can only start a **button action** (play/pause, next, previous, mute); the editor does not offer them for volume, brightness or scroll, and refuses to save a recipe that has one. It needs the watch's **acceleration** sensor switched on, which is the default.
+### Pitch
+
+**Pitch hand up** and **Pitch hand down** are gesture steps for one quick nod of the hand at the wrist, like a stop sign or a wave. They are momentary like the others, so they can only start a button action. Example: *Pitch hand up* → *Play / pause*, *Pitch hand down* → *Mute*.
+
+- A pitch is a tilt of at least a set angle (default **40°**) within about **0.6 seconds**, mostly about the axis across your wrist (the watch's 12-6 axis). The wrist bends less than it twists, so the default is smaller than a rotate's. A slow tilt takes too long (that is the *Pitch* wrist rotation of a volume, brightness or scroll dial, a different thing). A twist about the forearm is a rotate, and swinging the whole arm is neither.
+- The nod back is ignored for 0.8 seconds, so up-and-back fires once, for the way up. Pause before the next one.
+- **Up** means the hand rising. Which way the watch turns for that depends on how it sits on you, so it uses both **Watch orientation** settings (**Watch worn on** and **Crown side**). If up and down come out backwards, switch either one.
+- **Settings → Pitch sensitivity → Pitch angle** (20° to 120°) sets how big the nod must be; the card shows the last pitch recognised and a count.
+- It uses only the orientation sensor. Not verified on a real watch.
+
+Because it is a moment, a shake, swipe, tap, rotate or pitch can only start a **button action** (play/pause, next, previous, mute); the editor does not offer them for volume, brightness or scroll, and refuses to save a recipe that has one. It needs the watch's **acceleration** sensor switched on, which is the default.
 
 #### Tuning the sensitivity
 

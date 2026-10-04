@@ -8,6 +8,8 @@
 
 mod conflicts;
 mod device;
+mod flick;
+mod pitch;
 mod recipe;
 mod rotate;
 mod runner;
@@ -17,6 +19,7 @@ mod tap;
 
 pub use conflicts::{Conflict, blocked_recipes, find_conflicts};
 pub use device::{Device, DeviceKind, Output};
+pub use pitch::{PitchConfig, PitchDetector, PitchDirection};
 pub use recipe::{Action, Axis, Hold, MAX_STAGES, Recipe, RecipeError, Stage, validate_recipe};
 pub use rotate::{RotateConfig, RotateDetector, RotateDirection};
 pub use runner::{RecipeRunner, RunnerPhase, Signals};

@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   swipePeakThreshold: 8,
   tapPeakThreshold: 12,
   rotateAngleDegrees: 60,
+  pitchAngleDegrees: 40,
   watchWrist: "left",
   crownSide: "right",
   wristMaxAngularVelocityDegreesPerSecond: 360,
@@ -43,6 +44,7 @@ export type NumericSettingKey =
   | "swipePeakThreshold"
   | "tapPeakThreshold"
   | "rotateAngleDegrees"
+  | "pitchAngleDegrees"
   | "wristMaxAngularVelocityDegreesPerSecond"
   | "wristMaxVolumePointsPerSecond";
 
@@ -114,6 +116,10 @@ export const SETTINGS_FIELDS: Record<NumericSettingKey, NumberSpec> = {
   rotateAngleDegrees: {
     label: "Rotate angle", unit: "°", min: 30, max: 180, step: 5, integer: true, defaultValue: d.rotateAngleDegrees,
     description: "How far the wrist must twist, quickly, to count as a rotate. Smaller catches smaller twists (and more accidents)",
+  },
+  pitchAngleDegrees: {
+    label: "Pitch angle", unit: "°", min: 20, max: 120, step: 5, integer: true, defaultValue: d.pitchAngleDegrees,
+    description: "How far the hand must tilt at the wrist, quickly, to count as a pitch. Smaller catches smaller nods (and more accidents)",
   },
   wristMaxAngularVelocityDegreesPerSecond: {
     label: "Max angular velocity", unit: "°/s", min: 1, max: 2000, step: 1, integer: true, defaultValue: d.wristMaxAngularVelocityDegreesPerSecond,

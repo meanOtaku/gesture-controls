@@ -230,6 +230,9 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
         {steps.some((step) => step.kind === "hold" && step.hold.startsWith("swipe")) && (
           <p className="field-hint">Swipes are read from the watch's acceleration and orientation. Left and right run along your forearm, so set which side the watch's crown is on under Settings → Watch orientation; up and down follow gravity.</p>
         )}
+        {steps.some((step) => step.kind === "hold" && step.hold.startsWith("pitch")) && (
+          <p className="field-hint">A pitch is one quick nod of the hand at the wrist, up or down, like a stop sign or a wave. It is not the slow tilt that turns a dial. Which way is up depends on Settings → Watch orientation.</p>
+        )}
         {steps.some((step) => step.kind === "hold" && step.hold.startsWith("rotate")) && (
           <p className="field-hint">A rotate is one quick twist of the wrist about your forearm, like turning a key. It is not the slow roll that turns a dial: that is the wrist rotation step of a volume, brightness or scroll recipe.</p>
         )}

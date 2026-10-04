@@ -35,6 +35,8 @@ pub const MIN_TAP_PEAK_THRESHOLD: f64 = 4.0;
 pub const MAX_TAP_PEAK_THRESHOLD: f64 = 40.0;
 pub const MIN_ROTATE_ANGLE_DEGREES: f64 = 30.0;
 pub const MAX_ROTATE_ANGLE_DEGREES: f64 = 180.0;
+pub const MIN_PITCH_ANGLE_DEGREES: f64 = 20.0;
+pub const MAX_PITCH_ANGLE_DEGREES: f64 = 120.0;
 pub const MIN_WRIST_ANGULAR_VELOCITY_DEGREES_PER_SECOND: f64 = 1.0;
 pub const MAX_WRIST_ANGULAR_VELOCITY_DEGREES_PER_SECOND: f64 = 2_000.0;
 pub const MIN_WRIST_VOLUME_POINTS_PER_SECOND: f64 = 1.0;
@@ -82,6 +84,9 @@ pub struct AppSettings {
     /// How far the wrist must twist, quickly, to count as a rotate gesture, in degrees. Smaller is more sensitive.
     #[serde(default = "default_rotate_angle_degrees")]
     pub rotate_angle_degrees: f64,
+    /// How far the hand must tilt up or down at the wrist, quickly, to count as a pitch gesture, in degrees.
+    #[serde(default = "default_pitch_angle_degrees")]
+    pub pitch_angle_degrees: f64,
     /// Which wrist the watch is worn on. Only the rotate gesture needs it: clockwise is the way you turn a screwdriver.
     #[serde(default)]
     pub watch_wrist: automation::Wrist,
@@ -131,6 +136,7 @@ impl Default for AppSettings {
             swipe_peak_threshold: default_swipe_peak_threshold(),
             tap_peak_threshold: default_tap_peak_threshold(),
             rotate_angle_degrees: default_rotate_angle_degrees(),
+            pitch_angle_degrees: default_pitch_angle_degrees(),
             watch_wrist: automation::Wrist::default(),
             crown_side: automation::CrownSide::default(),
             wrist_max_angular_velocity_degrees_per_second:
@@ -159,6 +165,9 @@ fn default_ppg_flush_rate_hz() -> f64 {
 
 fn default_shake_peak_threshold() -> f64 {
     6.0
+}
+fn default_pitch_angle_degrees() -> f64 {
+    40.0
 }
 fn default_rotate_angle_degrees() -> f64 {
     60.0
@@ -272,6 +281,12 @@ impl AppSettings {
             self.rotate_angle_degrees,
             MIN_ROTATE_ANGLE_DEGREES,
             MAX_ROTATE_ANGLE_DEGREES,
+        )?;
+        in_range(
+            "pitchAngleDegrees",
+            self.pitch_angle_degrees,
+            MIN_PITCH_ANGLE_DEGREES,
+            MAX_PITCH_ANGLE_DEGREES,
         )?;
         if !(MIN_SHAKE_STROKES..=MAX_SHAKE_STROKES).contains(&self.shake_strokes) {
             return Err(format!(
@@ -632,6 +647,14 @@ mod tests {
                 .contains("rotateAngleDegrees")
         );
         settings.rotate_angle_degrees = 60.0;
+        settings.pitch_angle_degrees = 5.0;
+        assert!(
+            settings
+                .validate()
+                .unwrap_err()
+                .contains("pitchAngleDegrees")
+        );
+        settings.pitch_angle_degrees = 40.0;
         settings.swipe_peak_threshold = 40.0;
         assert!(
             settings

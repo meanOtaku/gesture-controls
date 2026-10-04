@@ -11,6 +11,7 @@ import { usePendingActions } from "../shared/hooks/usePendingActions";
 import { VolumeKnob } from "../features/overlay/components/VolumeKnob";
 import {
   ACTION_ERROR_EVENT,
+  PITCH_DETECTED_EVENT,
   ROTATE_DETECTED_EVENT,
   SHAKE_DETECTED_EVENT,
   SWIPE_DETECTED_EVENT,
@@ -32,6 +33,7 @@ import {
   WATCH_STATUS_EVENT,
   type AppSettings,
   type ActionError,
+  type PitchDirection,
   type RotateDirection,
   type SwipeDirection,
   type TapKind,
@@ -162,6 +164,7 @@ function MainApp() {
   const watchStatus = telemetryStore.getWatchStatus();
   const [calibration, setCalibration] = useState<CalibrationState | null>(null);
   const [shakeDetections, setShakeDetections] = useState(0);
+  const [lastPitch, setLastPitch] = useState<{ direction: PitchDirection; count: number } | null>(null);
   const [lastRotate, setLastRotate] = useState<{ direction: RotateDirection; count: number } | null>(null);
   const [lastTap, setLastTap] = useState<{ kind: TapKind; count: number } | null>(null);
   const [lastSwipe, setLastSwipe] = useState<{ direction: SwipeDirection; count: number } | null>(null);
@@ -230,6 +233,9 @@ function MainApp() {
       }),
       listen<null>(SHAKE_DETECTED_EVENT, () => {
         if (!cancelled) setShakeDetections((count) => count + 1);
+      }),
+      listen<PitchDirection>(PITCH_DETECTED_EVENT, ({ payload }) => {
+        if (!cancelled) setLastPitch((previous) => ({ direction: payload, count: (previous?.count ?? 0) + 1 }));
       }),
       listen<RotateDirection>(ROTATE_DETECTED_EVENT, ({ payload }) => {
         if (!cancelled) setLastRotate((previous) => ({ direction: payload, count: (previous?.count ?? 0) + 1 }));
@@ -674,6 +680,7 @@ function MainApp() {
         lastSwipe={lastSwipe}
         lastTap={lastTap}
         lastRotate={lastRotate}
+        lastPitch={lastPitch}
         onUpdate={(next) => { void updateSettings(next); }}
         onReset={() => { void resetSettings(); }}
       />

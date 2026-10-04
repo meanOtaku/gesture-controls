@@ -9,10 +9,10 @@
 //! hand, the way you turn a screwdriver. The watch's 3 o'clock axis points towards the hand on a left wrist with the
 //! crown on the right, and the other way if either the wrist or the crown side is the other, so both are settings.
 
-use std::collections::VecDeque;
-
 use serde::{Deserialize, Serialize};
 
+use crate::flick::{FlickConfig, FlickDetector};
+use crate::recipe::Axis;
 use crate::swipe::{CrownSide, Wrist};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -50,31 +50,10 @@ impl Default for RotateConfig {
     }
 }
 
-/// One step's rotation: its part about the forearm (x) and the rest, in degrees.
-fn step(previous: [f64; 4], current: [f64; 4]) -> (f64, f64) {
-    // relative = conjugate(previous) * current
-    let [pw, pi, pj, pk] = previous;
-    let [cw, ci, cj, ck] = current;
-    let w = pw * cw + pi * ci + pj * cj + pk * ck;
-    let i = pw * ci - pi * cw - pj * ck + pk * cj;
-    let j = pw * cj + pi * ck - pj * cw - pk * ci;
-    let k = pw * ck - pi * cj + pj * ci - pk * cw;
-    let wrap = |degrees: f64| (degrees + 540.0).rem_euclid(360.0) - 180.0;
-    let twist = wrap(2.0 * i.atan2(w).to_degrees());
-    let total = wrap(2.0 * (j * j + k * k + i * i).sqrt().atan2(w.abs()).to_degrees()).abs();
-    let off_axis = (total * total - twist * twist).max(0.0).sqrt();
-    (twist, off_axis)
-}
-
 #[derive(Debug)]
 pub struct RotateDetector {
     config: RotateConfig,
-    previous: Option<(u64, [f64; 4])>,
-    /// `(time, cumulative twist, cumulative off-axis movement)` over the recent window.
-    history: VecDeque<(u64, f64, f64)>,
-    twist: f64,
-    off_axis: f64,
-    locked_until_ns: u64,
+    flick: FlickDetector,
 }
 
 impl Default for RotateDetector {
@@ -87,82 +66,33 @@ impl RotateDetector {
     pub fn new(config: RotateConfig) -> Self {
         Self {
             config,
-            previous: None,
-            history: VecDeque::new(),
-            twist: 0.0,
-            off_axis: 0.0,
-            locked_until_ns: 0,
+            flick: FlickDetector::new(FlickConfig {
+                axis: Axis::Roll,
+                min_angle_degrees: config.min_angle_degrees,
+                window_ns: config.window_ns,
+                max_off_axis_ratio: config.max_off_axis_ratio,
+                lockout_ns: config.lockout_ns,
+            }),
         }
     }
 
     pub fn reset(&mut self) {
-        *self = Self::new(self.config);
+        self.flick.reset();
     }
 
     /// Feeds one orientation `[w, x, y, z]`. Returns the direction once, when a flick is recognised.
     pub fn observe(&mut self, at_ns: u64, orientation: [f64; 4]) -> Option<RotateDirection> {
-        let norm = orientation.iter().map(|c| c * c).sum::<f64>().sqrt();
-        if !orientation.iter().all(|c| c.is_finite()) || norm < 1e-9 {
-            return None;
-        }
-        let unit = orientation.map(|c| c / norm);
-        let Some((previous_ns, previous)) = self.previous else {
-            self.previous = Some((at_ns, unit));
-            self.history.push_back((at_ns, 0.0, 0.0));
-            return None;
-        };
-        if at_ns <= previous_ns {
-            return None;
-        }
-        let (twist, off_axis) = step(previous, unit);
-        self.previous = Some((at_ns, unit));
-        self.twist += twist;
-        self.off_axis += off_axis;
-        self.history.push_back((at_ns, self.twist, self.off_axis));
-        while self
-            .history
-            .front()
-            .is_some_and(|(then, ..)| at_ns.saturating_sub(*then) > self.config.window_ns)
-        {
-            self.history.pop_front();
-        }
-        if at_ns < self.locked_until_ns {
-            // Turning while locked out (the hand coming back) must not be counted once the lockout ends.
-            self.history.clear();
-            self.history.push_back((at_ns, self.twist, self.off_axis));
-            return None;
-        }
-        // The biggest net turn from any moment in the window to now.
-        let (start_twist, start_off_axis) =
-            self.history
-                .iter()
-                .map(|&(_, t, o)| (t, o))
-                .max_by(|a, b| {
-                    (self.twist - a.0)
-                        .abs()
-                        .total_cmp(&(self.twist - b.0).abs())
-                })?;
-        let net = self.twist - start_twist;
-        let off = self.off_axis - start_off_axis;
-        if net.abs() >= self.config.min_angle_degrees
-            && off <= self.config.max_off_axis_ratio * net.abs()
-        {
-            self.history.clear();
-            self.history.push_back((at_ns, self.twist, self.off_axis));
-            self.locked_until_ns = at_ns + self.config.lockout_ns;
-            // Positive twist about the watch's 3 o'clock axis is clockwise as the wearer looks along their forearm
-            // when that axis points towards the hand, which is so for a left wrist with the crown on the right, and
-            // for a right wrist with the crown on the left.
-            let axis_toward_hand =
-                (self.config.wrist == Wrist::Left) == (self.config.crown == CrownSide::Right);
-            let clockwise = (net > 0.0) == axis_toward_hand;
-            return Some(if clockwise {
-                RotateDirection::Clockwise
-            } else {
-                RotateDirection::CounterClockwise
-            });
-        }
-        None
+        let net = self.flick.observe(at_ns, orientation)?;
+        // Positive twist about the watch's 3 o'clock axis is clockwise as the wearer looks along their forearm
+        // when that axis points towards the hand, which is so for a left wrist with the crown on the right, and
+        // for a right wrist with the crown on the left.
+        let axis_toward_hand =
+            (self.config.wrist == Wrist::Left) == (self.config.crown == CrownSide::Right);
+        Some(if (net > 0.0) == axis_toward_hand {
+            RotateDirection::Clockwise
+        } else {
+            RotateDirection::CounterClockwise
+        })
     }
 }
 
