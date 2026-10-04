@@ -399,3 +399,117 @@ fn actions_serialize_in_camel_case() {
         Action::Scroll
     );
 }
+
+fn trigger(stages: Vec<Stage>) -> Recipe {
+    let mut recipe = recipe(
+        "playPause",
+        stages,
+        Device::default_for(DeviceKind::RotationKnob),
+    );
+    recipe.action = Action::PlayPause;
+    recipe
+}
+
+#[test]
+fn a_trigger_recipe_fires_once_as_its_chain_completes() {
+    let stages = vec![
+        Stage::HeadAt {
+            location: "topRight".into(),
+        },
+        Stage::Hold { hold: Hold::Pinch },
+    ];
+    let mut runner = RecipeRunner::new(trigger(stages));
+    // Looking alone arms it but does not fire.
+    runner.update(&signals(Some("topRight"), false, 0.0));
+    assert_eq!(runner.phase(), RunnerPhase::Armed);
+    assert!(!runner.take_fired());
+    // The pinch completes the chain: one firing, and holding on does not repeat it.
+    runner.update(&signals(Some("topRight"), true, 0.0));
+    assert!(runner.take_fired());
+    runner.update(&signals(Some("topRight"), true, 5.0));
+    runner.update(&signals(Some("topRight"), true, 9.0));
+    assert!(!runner.take_fired());
+    // Let go and do it again: it fires again.
+    runner.update(&signals(Some("topRight"), false, 0.0));
+    runner.update(&signals(Some("topRight"), true, 0.0));
+    assert!(runner.take_fired());
+}
+
+#[test]
+fn a_cancelled_or_disabled_trigger_does_not_fire() {
+    let stages = vec![Stage::Hold {
+        hold: Hold::StemButton,
+    }];
+    let mut runner = RecipeRunner::new(trigger(stages.clone()));
+    let pressed = Signals {
+        stem_button_held: true,
+        ..Signals::default()
+    };
+    runner.update(&pressed);
+    assert!(runner.take_fired());
+    runner.cancel();
+    runner.update(&pressed);
+    assert!(!runner.take_fired(), "held through a cancel");
+
+    let mut off = trigger(stages);
+    off.enabled = false;
+    let mut runner = RecipeRunner::new(off);
+    runner.update(&pressed);
+    assert!(!runner.take_fired());
+}
+
+#[test]
+fn trigger_recipes_are_validated_differently() {
+    let step = vec![Stage::Hold { hold: Hold::Pinch }];
+    assert!(validate_recipe(&trigger(step.clone())).is_ok());
+    assert_eq!(
+        validate_recipe(&trigger(vec![])),
+        Err(RecipeError::NoStages)
+    );
+    let with_drive = vec![
+        step[0].clone(),
+        Stage::Drive {
+            axis: Axis::Roll,
+            dead_zone_degrees: 0.0,
+            invert: false,
+        },
+    ];
+    assert_eq!(
+        validate_recipe(&trigger(with_drive)),
+        Err(RecipeError::TriggerHasDrive)
+    );
+    let repeated = vec![step[0].clone(), step[0].clone()];
+    assert_eq!(
+        validate_recipe(&trigger(repeated)),
+        Err(RecipeError::RepeatedStage)
+    );
+    // And a continuous action still needs its wrist rotation.
+    let mut volume = trigger(step);
+    volume.action = Action::Volume;
+    assert_eq!(validate_recipe(&volume), Err(RecipeError::MustEndWithDrive));
+}
+
+#[test]
+fn media_actions_are_triggers_with_their_own_resources() {
+    assert!(Action::PlayPause.is_trigger() && Action::Mute.is_trigger());
+    assert!(!Action::Volume.is_trigger() && !Action::Scroll.is_trigger());
+    let resources: Vec<_> = [
+        Action::PlayPause,
+        Action::NextTrack,
+        Action::PreviousTrack,
+        Action::Mute,
+    ]
+    .iter()
+    .map(|a| a.resource())
+    .collect();
+    assert_eq!(
+        resources,
+        ["playPause", "nextTrack", "previousTrack", "mute"]
+    );
+    // Play/pause and next-track may share a gesture without conflicting.
+    let mut next = trigger(vec![Stage::Hold { hold: Hold::Pinch }]);
+    next.id = "next".into();
+    next.action = Action::NextTrack;
+    let play = trigger(vec![Stage::Hold { hold: Hold::Pinch }]);
+    assert!(find_conflicts(&[play, next]).is_empty());
+}

@@ -4,17 +4,19 @@
 //! than the OS can be driven are added together (never dropped) and applied in one go. The native calls can be
 //! slow (brightness presses keys through a subprocess), so they run on one worker thread, never on the watch loop.
 
+use std::collections::HashMap;
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use automation::Action;
 use serde::Serialize;
 use system_control::{
-    Accumulator, BrightnessController, ControlError, MAX_PIXELS_PER_CALL, ScrollController,
-    platform_brightness_controller, platform_scroll_controller,
+    Accumulator, BrightnessController, ControlError, MAX_PIXELS_PER_CALL, MediaController,
+    MediaKey, ScrollController, platform_brightness_controller, platform_media_controller,
+    platform_scroll_controller,
 };
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tracing::warn;
 
 pub const ACTION_ERROR_EVENT: &str = "automation-action-error";
@@ -23,6 +25,8 @@ pub const ACTION_ERROR_EVENT: &str = "automation-action-error";
 pub const SCROLL_PIXELS_PER_FULL_RANGE: f64 = 1000.0;
 /// The most brightness steps one call presses, so a glitch cannot slam the screen to an extreme.
 const MAX_BRIGHTNESS_STEPS_PER_CALL: i32 = 8;
+/// A key-like action ignores a second firing this soon after the first, so a flickering pinch cannot skip tracks.
+const KEY_COOLDOWN: Duration = Duration::from_millis(500);
 /// Pause after a scroll call so a fast stream becomes smooth, evenly spaced events.
 const SCROLL_PACING: Duration = Duration::from_millis(8);
 
@@ -37,27 +41,59 @@ pub struct ActionError {
 enum Command {
     Delta(Action, f64),
     Reset(Action),
+    /// A trigger recipe fired.
+    Press(Action),
 }
 
 /// The part with the logic, independent of threads and of the real machine, so it can be tested.
 pub struct Core {
     brightness: Box<dyn BrightnessController>,
     scroll: Box<dyn ScrollController>,
+    media: Box<dyn MediaController>,
     brightness_acc: Accumulator,
     scroll_acc: Accumulator,
+    last_pressed: HashMap<Action, Instant>,
 }
 
 impl Core {
     pub fn new(
         brightness: Box<dyn BrightnessController>,
         scroll: Box<dyn ScrollController>,
+        media: Box<dyn MediaController>,
     ) -> Self {
         Self {
             brightness,
             scroll,
+            media,
             brightness_acc: Accumulator::default(),
             scroll_acc: Accumulator::default(),
+            last_pressed: HashMap::new(),
         }
+    }
+
+    /// Whether a press of `action` at `now` is allowed, recording it if so.
+    pub fn allow_press(&mut self, action: Action, now: Instant) -> bool {
+        if self
+            .last_pressed
+            .get(&action)
+            .is_some_and(|previous| now.saturating_duration_since(*previous) < KEY_COOLDOWN)
+        {
+            return false;
+        }
+        self.last_pressed.insert(action, now);
+        true
+    }
+
+    /// Presses the media key for a trigger action. Mute is not a media key here: the caller toggles it through the
+    /// volume controller, which knows the current state.
+    pub fn press_media(&mut self, action: Action) -> Option<Result<(), ControlError>> {
+        let key = match action {
+            Action::PlayPause => MediaKey::PlayPause,
+            Action::NextTrack => MediaKey::NextTrack,
+            Action::PreviousTrack => MediaKey::PreviousTrack,
+            _ => return None,
+        };
+        Some(self.media.press(key))
     }
 
     /// Applies a change of `fraction` of the full range to `action`. Volume is handled by the overlay, not here.
@@ -86,7 +122,7 @@ impl Core {
                 }
                 self.scroll.scroll_pixels(pixels)
             }
-            Action::Volume => Ok(()),
+            _ => Ok(()),
         }
     }
 
@@ -95,7 +131,7 @@ impl Core {
         match action {
             Action::Brightness => self.brightness_acc.clear(),
             Action::Scroll => self.scroll_acc.clear(),
-            Action::Volume => {}
+            _ => {}
         }
     }
 }
@@ -130,18 +166,53 @@ impl Actuators {
     pub fn reset(&self, app: &AppHandle, action: Action) {
         self.send(app, Command::Reset(action));
     }
+
+    pub fn press(&self, app: &AppHandle, action: Action) {
+        self.send(app, Command::Press(action));
+    }
+}
+
+/// Tells the UI once when an action starts failing, and quietly notes when it recovers.
+fn report(
+    app: &AppHandle,
+    failing: &mut Option<Action>,
+    action: Action,
+    result: Result<(), ControlError>,
+) {
+    match result {
+        Ok(()) => {
+            if *failing == Some(action) {
+                *failing = None;
+            }
+        }
+        Err(error) => {
+            if *failing != Some(action) {
+                *failing = Some(action);
+                warn!(%error, ?action, "failed to carry out a recipe's action");
+                let _ = app.emit(
+                    ACTION_ERROR_EVENT,
+                    ActionError {
+                        action,
+                        message: error.to_string(),
+                    },
+                );
+            }
+        }
+    }
 }
 
 fn run_worker(app: AppHandle, rx: std::sync::mpsc::Receiver<Command>) {
     let mut core = Core::new(
         platform_brightness_controller(),
         platform_scroll_controller(),
+        platform_media_controller(),
     );
     let mut failing: Option<Action> = None;
     while let Ok(first) = rx.recv() {
         // Everything already waiting is folded into one change per action, so a backlog never replays.
         let mut pending: Vec<(Action, f64)> = Vec::new();
-        let handle =
+        let mut presses: Vec<Action> = Vec::new();
+        let mut handle =
             |command: Command, core: &mut Core, pending: &mut Vec<(Action, f64)>| match command {
                 Command::Delta(action, fraction) => {
                     match pending.iter_mut().find(|(a, _)| *a == action) {
@@ -153,32 +224,28 @@ fn run_worker(app: AppHandle, rx: std::sync::mpsc::Receiver<Command>) {
                     pending.retain(|(a, _)| *a != action);
                     core.reset(action);
                 }
+                Command::Press(action) => presses.push(action),
             };
         handle(first, &mut core, &mut pending);
         while let Ok(next) = rx.try_recv() {
             handle(next, &mut core, &mut pending);
         }
-        for (action, fraction) in pending {
-            match core.deliver(action, fraction) {
-                Ok(()) => {
-                    if failing == Some(action) {
-                        failing = None;
-                    }
-                }
-                Err(error) => {
-                    if failing != Some(action) {
-                        failing = Some(action);
-                        warn!(%error, ?action, "failed to carry out a recipe's action");
-                        let _ = app.emit(
-                            ACTION_ERROR_EVENT,
-                            ActionError {
-                                action,
-                                message: error.to_string(),
-                            },
-                        );
-                    }
-                }
+        for action in presses {
+            if !core.allow_press(action, Instant::now()) {
+                continue;
             }
+            let result = match core.press_media(action) {
+                Some(result) => result,
+                None => app
+                    .state::<crate::overlay::VolumeRuntime>()
+                    .toggle_mute()
+                    .map(|_| ())
+                    .map_err(ControlError::Backend),
+            };
+            report(&app, &mut failing, action, result);
+        }
+        for (action, fraction) in pending {
+            report(&app, &mut failing, action, core.deliver(action, fraction));
             if action == Action::Scroll {
                 std::thread::sleep(SCROLL_PACING);
             }
@@ -196,10 +263,19 @@ mod tests {
     struct Log {
         brightness: Vec<i32>,
         scroll: Vec<i32>,
+        keys: Vec<MediaKey>,
     }
 
     struct FakeBrightness(Arc<Mutex<Log>>, f64);
     struct FakeScroll(Arc<Mutex<Log>>);
+    struct FakeMedia(Arc<Mutex<Log>>);
+
+    impl MediaController for FakeMedia {
+        fn press(&self, key: MediaKey) -> Result<(), ControlError> {
+            self.0.lock().unwrap().keys.push(key);
+            Ok(())
+        }
+    }
 
     impl BrightnessController for FakeBrightness {
         fn step_percent(&self) -> f64 {
@@ -224,6 +300,7 @@ mod tests {
             Core::new(
                 Box::new(FakeBrightness(log.clone(), step_percent)),
                 Box::new(FakeScroll(log.clone())),
+                Box::new(FakeMedia(log.clone())),
             ),
             log,
         )
@@ -272,6 +349,21 @@ mod tests {
             1,
             "the carried 0.9 px must not leak into the next gesture"
         );
+    }
+
+    #[test]
+    fn media_triggers_press_their_key_and_a_quick_repeat_is_ignored() {
+        let (mut core, log) = core(1.0);
+        let start = Instant::now();
+        assert!(core.allow_press(Action::NextTrack, start));
+        assert!(core.press_media(Action::NextTrack).unwrap().is_ok());
+        // A flickering gesture firing again straight away is dropped, but only for that action.
+        assert!(!core.allow_press(Action::NextTrack, start + Duration::from_millis(100)));
+        assert!(core.allow_press(Action::PlayPause, start + Duration::from_millis(100)));
+        assert!(core.allow_press(Action::NextTrack, start + Duration::from_millis(600)));
+        assert_eq!(log.lock().unwrap().keys, vec![MediaKey::NextTrack]);
+        // Mute is toggled by the caller through the volume controller, not as a key.
+        assert!(core.press_media(Action::Mute).is_none());
     }
 
     #[test]

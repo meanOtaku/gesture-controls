@@ -109,6 +109,39 @@ describe("RecipesPage", () => {
     });
   });
 
+  it("builds a button-style recipe for a media key: no wrist rotation or device, only steps", async () => {
+    const props = setup();
+    fireEvent.click(screen.getByRole("button", { name: /New recipe/ }));
+    const editor = within(screen.getByRole("region", { name: "Recipe editor" }));
+    fireEvent.change(editor.getByLabelText("Name"), { target: { value: "Pinch to play" } });
+    expect(editor.getByLabelText("Device")).toBeInTheDocument();
+    fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "playPause" } });
+    // A button has no dial to turn.
+    expect(editor.queryByLabelText("Device")).not.toBeInTheDocument();
+    expect(editor.queryByLabelText("Dead zone")).not.toBeInTheDocument();
+    expect(editor.getByText(/Presses the play\/pause media key once/)).toBeInTheDocument();
+
+    // Remove the pre-filled look-at step: a trigger needs something to start it.
+    fireEvent.click(editor.getByRole("button", { name: "Remove step 1" }));
+    expect(editor.getByRole("alert")).toHaveTextContent("Add at least one step");
+    fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
+    expect(props.onSave).not.toHaveBeenCalled();
+
+    fireEvent.click(editor.getByRole("button", { name: /Hold a gesture/ }));
+    fireEvent.change(editor.getByLabelText("Step 1 gesture"), { target: { value: "pinch" } });
+    fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
+    await waitFor(() => expect(props.onSave).toHaveBeenCalled());
+    const saved = vi.mocked(props.onSave).mock.calls[0][0];
+    expect(saved.action).toBe("playPause");
+    expect(saved.stages).toEqual([{ kind: "hold", hold: "pinch" }]);
+  });
+
+  it("describes a media recipe without a device", () => {
+    const play: Recipe = { ...stem, id: "play", name: "Pinch to play", action: "playPause", stages: [{ kind: "hold", hold: "pinch" }] };
+    setup({ automation: automation([play]) });
+    expect(screen.getByText("Pinch and hold → Play / pause")).toBeInTheDocument();
+  });
+
   it("edits an existing recipe in place, keeping its id and whether it is on", async () => {
     const props = setup();
     fireEvent.click(screen.getByRole("button", { name: "Edit Look top right, hold STEM, roll" }));

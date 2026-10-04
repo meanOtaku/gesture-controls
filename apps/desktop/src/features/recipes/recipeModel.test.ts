@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CalibrationLocation, Recipe } from "../../shared/protocol/events";
 import {
-  actionInfo, blankRecipe, buildDevice, deviceSpecs, chainProblem, defaultNumbers, describeRecipe, deviceNumbers, driveStage, leadingStages, nameProblem,
+  actionInfo, isTrigger, blankRecipe, buildDevice, deviceSpecs, chainProblem, defaultNumbers, describeRecipe, deviceNumbers, driveStage, leadingStages, nameProblem,
 } from "./recipeModel";
 
 const locations: CalibrationLocation[] = [
@@ -73,6 +73,17 @@ describe("recipeModel", () => {
     ] as const;
     expect(chainProblem([...many], locations)).toBeNull();
     expect(chainProblem([...many, { kind: "headAt", location: "other" }], locations)).toMatch(/at most 5/);
+  });
+
+  it("treats media actions as buttons that need at least one step", () => {
+    expect(isTrigger("playPause")).toBe(true);
+    expect(isTrigger("mute")).toBe(true);
+    expect(isTrigger("scroll")).toBe(false);
+    expect(chainProblem([], locations, true)).toMatch(/at least one step/);
+    expect(chainProblem([], locations, false)).toBeNull();
+    // With no wrist rotation a trigger may use all six steps.
+    const six = Array.from({ length: 6 }, (_, i) => ({ kind: "headAt", location: ["center", "topRight", "leftEdge"][i % 3] }) as const);
+    expect(chainProblem(six.slice(0, 3), locations, true)).toBeNull();
   });
 
   it("validates the name", () => {

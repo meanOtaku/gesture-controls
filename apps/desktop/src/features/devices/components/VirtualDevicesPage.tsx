@@ -3,7 +3,7 @@ import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import type { AutomationState } from "../../../shared/protocol/events";
-import { DEVICE_KINDS, buildDevice, defaultNumbers, deviceSpecs, type DeviceKind } from "../../recipes/recipeModel";
+import { DEVICE_KINDS, buildDevice, isTrigger, defaultNumbers, deviceSpecs, type DeviceKind } from "../../recipes/recipeModel";
 import { devicePosition } from "../deviceMath";
 import { DevicePreview } from "./DevicePreview";
 
@@ -66,7 +66,7 @@ export function VirtualDevicesPage({ automation, onMakeRecipe }: VirtualDevicesP
           const device = buildDevice(kind, defaultNumbers(kind));
           const percent = devicePosition(device, degrees) * 100;
           const specs = deviceSpecs(kind);
-          const usedBy = automation?.recipes.filter((recipe) => recipe.device.kind === kind) ?? [];
+          const usedBy = automation?.recipes.filter((recipe) => !isTrigger(recipe.action) && recipe.device.kind === kind) ?? [];
           return (
             <Card key={kind} role="region" aria-label={label}>
               <CardHeader>

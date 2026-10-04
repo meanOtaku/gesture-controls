@@ -23,6 +23,7 @@ import {
   deviceNumbers,
   deviceSpecs,
   driveStage,
+  isTrigger,
   leadingStages,
   nameProblem,
   type Axis,
@@ -75,7 +76,8 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
   const drafts = useNumberDrafts(specs, committed);
 
   const nameError = nameTouched ? nameProblem(name) : null;
-  const problem = chainProblem(steps, locations);
+  const trigger = isTrigger(action);
+  const problem = chainProblem(steps, locations, trigger);
   const nameId = `${uid}-name`;
   const axisLabelId = `${uid}-axis`;
   const kindId = `${uid}-device`;
@@ -106,20 +108,21 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
       return;
     }
     if (problem !== null) return;
-    const result = drafts.submit();
-    if (result.values === null) {
+    // A trigger has no wrist rotation or device, so there is nothing numeric to check.
+    const result = trigger ? null : drafts.submit();
+    if (result && result.values === null) {
       document.getElementById(`${uid}-${result.firstInvalid}`)?.focus();
       return;
     }
-    const { deadZone, a, b } = result.values;
+    const { deadZone, a, b } = result?.values ?? { deadZone: DEAD_ZONE_SPEC.defaultValue, ...defaultNumbers("rotationKnob") };
     setSaving(true);
     setServerError(null);
     const error = await onSave({
       ...recipe,
       name: name.trim(),
-      stages: [...steps, { kind: "drive", axis, deadZoneDegrees: deadZone, invert }],
+      stages: trigger ? steps : [...steps, { kind: "drive", axis, deadZoneDegrees: deadZone, invert }],
       action,
-      device: buildDevice(kind, { a, b }, action),
+      device: trigger ? buildDevice("rotationKnob", defaultNumbers("rotationKnob")) : buildDevice(kind, { a, b }, action),
     });
     setSaving(false);
     if (error !== null) setServerError(error);
@@ -149,7 +152,7 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
       </div>
 
       <fieldset className="recipe-steps">
-        <legend>When all of these hold</legend>
+        <legend>{trigger ? "Fire when all of these hold" : "When all of these hold"}</legend>
         <ol aria-label="Steps">
           {steps.map((step, index) => {
             const label = `Step ${index + 1}`;
@@ -204,12 +207,12 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
             );
           })}
         </ol>
-        {steps.length === 0 && <p className="field-hint">No steps: the wrist rotation below starts the moment the watch has an orientation. Add a step to gate it.</p>}
+        {steps.length === 0 && !trigger && <p className="field-hint">No steps: the wrist rotation below starts the moment the watch has an orientation. Add a step to gate it.</p>}
         <div className="recipe-step-add">
           <Button
             type="button"
             variant="outline"
-            disabled={steps.length + 1 >= MAX_STAGES || locationOptions.length === 0}
+            disabled={steps.length + (trigger ? 0 : 1) >= MAX_STAGES || locationOptions.length === 0}
             onClick={() => setSteps((current) => [...current, { kind: "headAt", location: locationOptions[0].value }])}
           >
             <PlusIcon aria-hidden="true" /> Look at a location
@@ -217,7 +220,7 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
           <Button
             type="button"
             variant="outline"
-            disabled={steps.length + 1 >= MAX_STAGES}
+            disabled={steps.length + (trigger ? 0 : 1) >= MAX_STAGES}
             onClick={() => setSteps((current) => [...current, { kind: "hold", hold: firstUnusedHold() }])}
           >
             <PlusIcon aria-hidden="true" /> Hold a gesture
@@ -226,6 +229,26 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
         {problem && <p className="field-error" role="alert">{problem}</p>}
       </fieldset>
 
+      <fieldset className="recipe-steps">
+        <legend>To control</legend>
+        <div className="field">
+        <div className="field-head"><Label htmlFor={`${uid}-action`}>Controls</Label></div>
+        <select
+          id={`${uid}-action`}
+          className={NATIVE_SELECT}
+          value={action}
+          onChange={(event) => setAction(event.target.value as RecipeAction)}
+        >
+          {ACTIONS.map((candidate) => (
+            <option key={candidate.value} value={candidate.value}>{candidate.label}</option>
+          ))}
+        </select>
+        <p className="field-hint">{ACTIONS.find((candidate) => candidate.value === action)?.summary}</p>
+        </div>
+      </fieldset>
+
+      {!trigger && (
+        <>
       <fieldset className="recipe-steps">
         <legend>Then turn your wrist</legend>
         <div className="field">
@@ -244,24 +267,6 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
             <Switch checked={invert} onCheckedChange={setInvert} />
             <span>Reverse direction</span>
           </label>
-        </div>
-      </fieldset>
-
-      <fieldset className="recipe-steps">
-        <legend>To control</legend>
-        <div className="field">
-        <div className="field-head"><Label htmlFor={`${uid}-action`}>Controls</Label></div>
-        <select
-          id={`${uid}-action`}
-          className={NATIVE_SELECT}
-          value={action}
-          onChange={(event) => setAction(event.target.value as RecipeAction)}
-        >
-          {ACTIONS.map((candidate) => (
-            <option key={candidate.value} value={candidate.value}>{candidate.label}</option>
-          ))}
-        </select>
-        <p className="field-hint">{ACTIONS.find((candidate) => candidate.value === action)?.summary}</p>
         </div>
       </fieldset>
 
@@ -289,6 +294,9 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
           {showSecond && field("b")}
         </div>
       </fieldset>
+
+        </>
+      )}
 
       {serverError && <p className="field-error" role="alert">{serverError}</p>}
       <div className="recipe-actions">

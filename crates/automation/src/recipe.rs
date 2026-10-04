@@ -13,15 +13,34 @@ pub enum Action {
     Volume,
     Brightness,
     Scroll,
+    /// Play or pause the current media. A trigger: it fires once, it is not turned.
+    PlayPause,
+    NextTrack,
+    PreviousTrack,
+    /// Toggle the system mute.
+    Mute,
 }
 
 impl Action {
+    /// A trigger fires once when its chain completes, instead of following the wrist. Its recipe has no wrist
+    /// rotation stage and its device is unused.
+    pub fn is_trigger(self) -> bool {
+        matches!(
+            self,
+            Action::PlayPause | Action::NextTrack | Action::PreviousTrack | Action::Mute
+        )
+    }
+
     /// Two recipes conflict when they drive the same resource.
     pub fn resource(self) -> &'static str {
         match self {
             Action::Volume => "volume",
             Action::Brightness => "brightness",
             Action::Scroll => "scroll",
+            Action::PlayPause => "playPause",
+            Action::NextTrack => "nextTrack",
+            Action::PreviousTrack => "previousTrack",
+            Action::Mute => "mute",
         }
     }
 }
@@ -92,6 +111,8 @@ pub enum RecipeError {
     DriveNotLast,
     #[error("a head location is used twice")]
     RepeatedStage,
+    #[error("an action that fires once cannot have a wrist rotation: remove it")]
+    TriggerHasDrive,
     #[error("the dead zone must be from 0 to under 90 degrees")]
     InvalidDeadZone,
     #[error("the device settings are out of range")]
@@ -110,6 +131,25 @@ pub fn validate_recipe(recipe: &Recipe) -> Result<(), RecipeError> {
     let (last, rest) = recipe.stages.split_last().ok_or(RecipeError::NoStages)?;
     if recipe.stages.len() > MAX_STAGES {
         return Err(RecipeError::TooManyStages);
+    }
+    if recipe.action.is_trigger() {
+        if recipe
+            .stages
+            .iter()
+            .any(|stage| matches!(stage, Stage::Drive { .. }))
+        {
+            return Err(RecipeError::TriggerHasDrive);
+        }
+        for (index, stage) in recipe.stages.iter().enumerate() {
+            if recipe.stages[..index].contains(stage) {
+                return Err(RecipeError::RepeatedStage);
+            }
+        }
+        // The device is unused, but it is stored, so it must still be well formed.
+        return recipe
+            .device
+            .validate()
+            .map_err(|_| RecipeError::InvalidDevice);
     }
     if !matches!(last, Stage::Drive { .. }) {
         return Err(RecipeError::MustEndWithDrive);

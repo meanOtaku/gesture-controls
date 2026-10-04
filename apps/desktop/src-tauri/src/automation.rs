@@ -52,6 +52,8 @@ pub struct Effects {
     pub overlay: Option<OverlayWanted>,
     /// Changes to apply, each an action and a fraction of its full range.
     pub deltas: Vec<(Action, f64)>,
+    /// Trigger recipes that fired: each a one-off press.
+    pub fired: Vec<Action>,
     /// Actions whose interaction just ended, so anything still carried for them is dropped.
     pub ended: Vec<Action>,
 }
@@ -297,9 +299,16 @@ impl Engine {
             } else if let Some(output) = runner.update(&signals) {
                 effects.deltas.push((recipe.action, output.delta_fraction));
             }
+            if runner.take_fired() {
+                effects.fired.push(recipe.action);
+            }
             let phase = runner.phase();
-            driving |= phase == RunnerPhase::Driving;
-            if self.previous_phases[index] == RunnerPhase::Driving
+            // A trigger is "driving" only while its chain is held; it moves nothing, so it must not engage the
+            // glitch filter or have anything to wind down.
+            let continuous = !recipe.action.is_trigger();
+            driving |= continuous && phase == RunnerPhase::Driving;
+            if continuous
+                && self.previous_phases[index] == RunnerPhase::Driving
                 && phase != RunnerPhase::Driving
                 && !effects.ended.contains(&recipe.action)
             {
@@ -581,7 +590,11 @@ fn apply_effects(app: &AppHandle, effects: &Effects, max_points_per_second: f64)
                 }
             }
             Action::Brightness | Action::Scroll => actuators.delta(app, *action, *delta),
+            _ => {}
         }
+    }
+    for action in &effects.fired {
+        actuators.press(app, *action);
     }
     for action in &effects.ended {
         if *action != Action::Volume {
@@ -832,6 +845,77 @@ mod tests {
             engine.observe_orientation(about_x(30.0), ts(3)),
             Effects::default()
         );
+    }
+
+    fn trigger_recipe(action: Action, hold: Hold) -> Recipe {
+        Recipe {
+            id: format!("{action:?}"),
+            name: format!("{action:?}"),
+            enabled: true,
+            action,
+            stages: vec![Stage::Hold { hold }],
+            device: Device::default_for(DeviceKind::RotationKnob),
+        }
+    }
+
+    #[test]
+    fn a_media_trigger_fires_once_on_the_pinch_and_shows_no_volume_knob() {
+        let mut engine = Engine::new(
+            vec![trigger_recipe(Action::PlayPause, Hold::Pinch)],
+            Tuning::default(),
+        );
+        let pinched = engine.set_pinch(true);
+        assert_eq!(pinched.fired, vec![Action::PlayPause]);
+        assert_eq!(pinched.overlay, None);
+        // Holding on, or the watch streaming orientation, does not fire it again.
+        assert!(
+            engine
+                .observe_orientation(about_x(0.0), ts(1))
+                .fired
+                .is_empty()
+        );
+        assert!(
+            engine
+                .observe_orientation(about_x(5.0), ts(2))
+                .fired
+                .is_empty()
+        );
+        assert!(engine.set_pinch(false).fired.is_empty());
+        assert_eq!(engine.set_pinch(true).fired, vec![Action::PlayPause]);
+    }
+
+    #[test]
+    fn a_held_trigger_does_not_trip_the_glitch_filter_that_guards_a_turning_device() {
+        // The pinch is held (the trigger is "driving") while a STEM scroll recipe turns: a fast sample must still
+        // be judged by the scroll recipe's own state, and a trigger alone must never freeze orientation.
+        let mut engine = Engine::new(
+            vec![trigger_recipe(Action::NextTrack, Hold::Pinch)],
+            Tuning::default(),
+        );
+        engine.set_pinch(true);
+        engine.observe_orientation(about_x(0.0), ts(1));
+        let _ = engine.observe_orientation(about_x(120.0), ts(2));
+        assert_eq!(engine.orientation.as_ref().unwrap().timestamp_ns, ts(2));
+    }
+
+    #[test]
+    fn two_recipes_on_the_same_media_key_conflict_but_different_keys_do_not() {
+        let mut other = trigger_recipe(Action::PlayPause, Hold::StemButton);
+        other.id = "other".into();
+        let engine = Engine::new(
+            vec![trigger_recipe(Action::PlayPause, Hold::Pinch), other],
+            Tuning::default(),
+        );
+        assert_eq!(engine.state().conflicts.len(), 1);
+        assert_eq!(engine.state().conflicts[0].resource, "playPause");
+        let engine = Engine::new(
+            vec![
+                trigger_recipe(Action::PlayPause, Hold::Pinch),
+                trigger_recipe(Action::NextTrack, Hold::Pinch),
+            ],
+            Tuning::default(),
+        );
+        assert!(engine.state().conflicts.is_empty());
     }
 
     #[test]

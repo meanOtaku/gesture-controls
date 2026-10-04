@@ -301,6 +301,17 @@ The **Recipes** tab lists every recipe with an on/off switch, an Edit button and
 | Brightness | Display brightness | macOS (presses the brightness keys, in sixteenth steps; needs **Accessibility** permission), Linux (`brightnessctl`), Windows (built-in displays only, through WMI) |
 | Scroll | Scrolls the window under the pointer; turn one way for down, the other for up | macOS (needs **Accessibility** permission), Linux (`xdotool`, X11 only), Windows |
 
+### Button actions: media keys and mute
+
+**Play / pause**, **Next track**, **Previous track** and **Mute** are *buttons*, not dials. A recipe for one has only steps (for example *Hold a pinch*, or *Look at Top right* then *Hold STEM button*) and no wrist rotation or device. It fires **once**, the moment all its steps hold, and cannot fire again until you let go and repeat the gesture. A second firing within half a second is ignored, so a flickering pinch cannot skip tracks. A button recipe must have at least one step.
+
+| Action | macOS | Linux | Windows |
+| --- | --- | --- | --- |
+| Play / pause, next, previous | System media keys (posted through a short script) | `playerctl` (needs a player running) | Media virtual keys |
+| Mute | Toggles the system mute | Toggles the system mute | Toggles the system mute |
+
+Each media key can have its own recipe, and they can share a gesture, but two recipes on the *same* key conflict and both pause.
+
 Different things can run at once: the same gesture can drive brightness and scroll together. Two recipes controlling the *same* thing conflict, and both pause. Brightness and scroll show no knob of their own; the system's own brightness indicator appears on a Mac. If one cannot be carried out (a missing permission, a missing tool), the Control center shows why.
 
 Scroll and brightness are relative: only the amount you turn counts, from where the hold began, and anything left over when you let go is dropped. A single burst is capped so a sensor glitch cannot fling the page or slam the screen to an extreme.

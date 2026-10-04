@@ -4,10 +4,12 @@
 
 mod accumulator;
 mod brightness;
+mod media;
 mod scroll;
 
 pub use accumulator::Accumulator;
 pub use brightness::{BrightnessController, platform_brightness_controller};
+pub use media::{MediaController, MediaKey, platform_media_controller};
 pub use scroll::{MAX_PIXELS_PER_CALL, ScrollController, platform_scroll_controller};
 
 use thiserror::Error;

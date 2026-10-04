@@ -16,11 +16,20 @@ export const DEVICE_KINDS: ReadonlyArray<{ kind: DeviceKind; label: string; summ
 ];
 
 /** What a recipe can control. `scale` turns the engine's fraction of the range into the unit shown (points, percent, pixels). */
-export const ACTIONS: ReadonlyArray<{ value: RecipeAction; label: string; unit: string; scale: number; summary: string }> = [
-  { value: "volume", label: "Volume", unit: "pts", scale: 100, summary: "The system output volume. Shows the knob on screen while you use it." },
-  { value: "brightness", label: "Brightness", unit: "%", scale: 100, summary: "Display brightness. On a Mac it moves in sixteenth steps, like the keyboard keys, and needs Accessibility permission." },
-  { value: "scroll", label: "Scroll", unit: "px", scale: 1000, summary: "Scrolls the window under the pointer. Turn one way to scroll down, the other to scroll up. A Mac needs Accessibility permission." },
+export const ACTIONS: ReadonlyArray<{ value: RecipeAction; label: string; unit: string; scale: number; trigger: boolean; summary: string }> = [
+  { value: "volume", label: "Volume", unit: "pts", scale: 100, trigger: false, summary: "The system output volume. Shows the knob on screen while you use it." },
+  { value: "brightness", label: "Brightness", unit: "%", scale: 100, trigger: false, summary: "Display brightness. On a Mac it moves in sixteenth steps, like the keyboard keys, and needs Accessibility permission." },
+  { value: "scroll", label: "Scroll", unit: "px", scale: 1000, trigger: false, summary: "Scrolls the window under the pointer. Turn one way to scroll down, the other to scroll up. A Mac needs Accessibility permission." },
+  { value: "playPause", label: "Play / pause", unit: "", scale: 1, trigger: true, summary: "Presses the play/pause media key once each time your steps all hold. There is no wrist rotation: it is a button, not a dial." },
+  { value: "nextTrack", label: "Next track", unit: "", scale: 1, trigger: true, summary: "Presses the next-track media key once each time your steps all hold." },
+  { value: "previousTrack", label: "Previous track", unit: "", scale: 1, trigger: true, summary: "Presses the previous-track media key once each time your steps all hold." },
+  { value: "mute", label: "Mute", unit: "", scale: 1, trigger: true, summary: "Toggles the system mute each time your steps all hold." },
 ];
+
+/** A trigger fires once when its steps all hold, instead of following your wrist. It has no wrist rotation or device. */
+export function isTrigger(action: RecipeAction): boolean {
+  return actionInfo(action).trigger;
+}
 
 export function actionInfo(action: RecipeAction) {
   return ACTIONS.find((candidate) => candidate.value === action) ?? ACTIONS[0];
@@ -144,7 +153,7 @@ function stageLabel(stage: RecipeStage, locationName: (id: string) => string): s
 export function describeRecipe(recipe: Recipe, locationName: (id: string) => string): string {
   return [
     ...recipe.stages.map((stage) => stageLabel(stage, locationName)),
-    deviceLabel(recipe.device.kind),
+    ...(isTrigger(recipe.action) ? [] : [deviceLabel(recipe.device.kind)]),
     actionInfo(recipe.action).label,
   ].join(" → ");
 }
@@ -178,8 +187,10 @@ export function blankRecipe(locations: CalibrationLocation[], kind: DeviceKind =
 const sameStage = (a: RecipeStage, b: RecipeStage) => JSON.stringify(a) === JSON.stringify(b);
 
 /** Why this chain of steps cannot be saved, or null. The backend checks the same things. */
-export function chainProblem(leading: RecipeStage[], locations: CalibrationLocation[]): string | null {
-  if (leading.length + 1 > MAX_STAGES) return `A recipe can have at most ${MAX_STAGES - 1} steps before the wrist rotation.`;
+export function chainProblem(leading: RecipeStage[], locations: CalibrationLocation[], trigger = false): string | null {
+  if (trigger && leading.length === 0) return "Add at least one step: something has to start it.";
+  const limit = trigger ? MAX_STAGES : MAX_STAGES - 1;
+  if (leading.length > limit) return `A recipe can have at most ${limit} steps${trigger ? "" : " before the wrist rotation"}.`;
   for (const [index, stage] of leading.entries()) {
     if (leading.slice(0, index).some((earlier) => sameStage(earlier, stage))) {
       return "The same step is used twice. Remove one of them.";

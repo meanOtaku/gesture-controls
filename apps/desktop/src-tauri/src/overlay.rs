@@ -135,6 +135,18 @@ impl VolumeRuntime {
         self.0.as_ref()
     }
 
+    /// Flips the system mute and returns whether it is now muted.
+    pub(crate) fn toggle_mute(&self) -> Result<bool, String> {
+        let muted = self
+            .controller()
+            .get_muted()
+            .map_err(|error| error.to_string())?;
+        self.controller()
+            .set_muted(!muted)
+            .map_err(|error| error.to_string())?;
+        Ok(!muted)
+    }
+
     pub(crate) fn available_volume(&self) -> Result<Option<f32>, String> {
         match self.controller().get_volume() {
             Ok(volume) => Ok(Some(volume)),

@@ -49,7 +49,7 @@ export interface CalibrationState {
   activeTarget: CalibrationTarget | null;
 }
 
-export type RecipeAction = "volume" | "brightness" | "scroll";
+export type RecipeAction = "volume" | "brightness" | "scroll" | "playPause" | "nextTrack" | "previousTrack" | "mute";
 
 /** One step of a recipe's chain. A recipe ends with a `drive` stage, which supplies the continuous value. */
 export type RecipeStage =

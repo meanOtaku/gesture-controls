@@ -34,6 +34,8 @@ pub struct RecipeRunner {
     /// Set by [`Self::cancel`]: stay idle until the chain has been broken once, so an interaction the user
     /// cancelled (Escape) does not restart while they are still holding the same gesture.
     latched: bool,
+    /// A trigger recipe's chain completed since [`Self::take_fired`] last looked.
+    fired: bool,
     /// The orientation when the chain completed; rotation is measured from here.
     start: [f64; 4],
     /// The previous wrist angle, so each step is measured the short way round.
@@ -54,6 +56,7 @@ impl RecipeRunner {
             recipe,
             phase: RunnerPhase::Idle,
             latched: false,
+            fired: false,
             start: [1.0, 0.0, 0.0, 0.0],
             last_angle: 0.0,
             rotation: 0.0,
@@ -67,6 +70,11 @@ impl RecipeRunner {
 
     pub fn phase(&self) -> RunnerPhase {
         self.phase
+    }
+
+    /// Whether a trigger recipe (one with no wrist rotation) completed its chain since the last call.
+    pub fn take_fired(&mut self) -> bool {
+        std::mem::take(&mut self.fired)
     }
 
     /// Ends the interaction and keeps it ended until the user lets go of the chain and starts it again.
@@ -117,15 +125,16 @@ impl RecipeRunner {
 
     /// Returns the output for this reading, if the device moved.
     pub fn update(&mut self, signals: &Signals<'_>) -> Option<Output> {
-        let Some(&Stage::Drive {
-            axis,
-            dead_zone_degrees,
-            invert,
-        }) = self.recipe.stages.last()
-        else {
-            return None;
+        let drive = match self.recipe.stages.last() {
+            Some(&Stage::Drive {
+                axis,
+                dead_zone_degrees,
+                invert,
+            }) => Some((axis, dead_zone_degrees, invert)),
+            _ => None,
         };
         let chain_holds = self.recipe.enabled
+            && !self.recipe.stages.is_empty()
             && self
                 .recipe
                 .stages
@@ -150,6 +159,23 @@ impl RecipeRunner {
             self.phase = RunnerPhase::Idle;
             return None;
         }
+        let Some((axis, dead_zone_degrees, invert)) = drive else {
+            // A trigger recipe has no wrist rotation: it fires once as its chain completes, and is "driving"
+            // for as long as the chain keeps holding so it cannot fire again until it has been let go.
+            if chain_holds {
+                if self.phase != RunnerPhase::Driving {
+                    self.phase = RunnerPhase::Driving;
+                    self.fired = true;
+                }
+            } else {
+                self.phase = if gates_hold {
+                    RunnerPhase::Armed
+                } else {
+                    RunnerPhase::Idle
+                };
+            }
+            return None;
+        };
         let (true, Some(orientation)) = (chain_holds, orientation) else {
             self.phase = if gates_hold {
                 RunnerPhase::Armed
