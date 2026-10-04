@@ -1,5 +1,5 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DetectionActivity } from "./DetectionActivity";
 
 let handler: ((event: { payload: unknown }) => void) | undefined;
@@ -11,6 +11,7 @@ vi.mock("@tauri-apps/api/event", () => ({
   },
 }));
 
+beforeEach(() => { window.localStorage.clear(); });
 afterEach(() => { cleanup(); handler = undefined; unlisten.mockClear(); });
 
 describe("DetectionActivity", () => {
@@ -42,5 +43,38 @@ describe("DetectionActivity", () => {
     await vi.waitFor(() => expect(unlisten).not.toHaveBeenCalled());
     unmount();
     expect(unlisten).toHaveBeenCalled();
+  });
+
+  it("collapses out of the way, counts what is inside, and is remembered", async () => {
+    const { unmount } = render(<DetectionActivity desktopAvailable />);
+    await vi.waitFor(() => expect(handler).toBeDefined());
+    act(() => handler?.({ payload: { events: [{ kind: "rising", label: "snap", confidence: 0.9, timestampNs: 1 }], conflicts: [], rejections: [] } }));
+    const toggle = screen.getByRole("button", { name: "Collapse" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText("Recent detections")).toBeVisible();
+
+    fireEvent.click(toggle);
+    expect(screen.getByRole("button", { name: "Expand (1)" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByLabelText("Recent detections")).not.toBeVisible();
+    // New activity still arrives while it is closed, and shows in the count.
+    act(() => handler?.({ payload: { events: [{ kind: "falling", label: "snap", timestampNs: 2, reason: "scoreBelowRelease" }], conflicts: [], rejections: [] } }));
+    expect(screen.getByRole("button", { name: "Expand (2)" })).toBeInTheDocument();
+
+    // Coming back to the page finds it as it was left.
+    unmount();
+    render(<DetectionActivity desktopAvailable />);
+    expect(screen.getByRole("button", { name: "Expand" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Expand" }));
+    expect(screen.getByRole("button", { name: "Collapse" })).toBeInTheDocument();
+  });
+
+  it("still works when the browser will not remember", () => {
+    const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked"); });
+    const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
+    render(<DetectionActivity desktopAvailable />);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
+    expect(screen.getByRole("button", { name: "Expand" })).toBeInTheDocument();
+    get.mockRestore();
+    set.mockRestore();
   });
 });

@@ -580,4 +580,61 @@ mod tests {
         fs::write(&model, bytes).unwrap();
         assert!(crate::check_loadable(&version, lab.path()).is_err());
     }
+
+    #[test]
+    fn a_deleted_model_frees_its_files_and_the_same_bytes_can_be_imported_again() {
+        let lab = tempfile::tempdir().unwrap();
+        let mut store = store();
+        let source = copy_fixture();
+        let first = import_bundle(source.path(), lab.path(), &mut store, NOW).unwrap();
+        let id = first.version_id.clone();
+        let version = store.registry().versions[&id].clone();
+        let dir = crate::removable_model_dir(lab.path(), &version)
+            .expect("an imported model is removable");
+        assert!(dir.join("model.onnx").is_file());
+        // Not until it is archived.
+        assert!(store.mutate(|r| r.remove_version(&id).map(|_| ())).is_err());
+        store
+            .mutate(|r| {
+                r.transition(&id, LifecycleState::Evaluated, NOW)?;
+                r.transition(&id, LifecycleState::Archived, NOW)
+            })
+            .unwrap();
+        store.mutate(|r| r.remove_version(&id).map(|_| ())).unwrap();
+        fs::remove_dir_all(&dir).unwrap();
+        assert!(store.registry().versions.is_empty());
+        let again = import_bundle(source.path(), lab.path(), &mut store, NOW).unwrap();
+        assert_eq!(again.version_id, id);
+    }
+
+    #[test]
+    fn only_a_folder_this_app_made_is_ever_offered_for_deletion() {
+        let lab = std::path::Path::new("/lab");
+        let version = |dir: &str| {
+            let mut v = crate::model::tests::active_version(
+                &crate::validate_bundle(&crate::bundle::tests::fixture_dir(), None).unwrap(),
+            );
+            v.artifact_dir = dir.into();
+            v
+        };
+        assert_eq!(
+            crate::removable_model_dir(lab, &version("label-models/snap-abc")),
+            Some(lab.join("label-models/snap-abc"))
+        );
+        for bad in [
+            "models/snap-abc",
+            "label-models",
+            "label-models/a/b",
+            "label-models/../x",
+            "../label-models/x",
+            "/label-models/x",
+            "",
+        ] {
+            assert_eq!(
+                crate::removable_model_dir(lab, &version(bad)),
+                None,
+                "{bad}"
+            );
+        }
+    }
 }

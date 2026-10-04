@@ -28,6 +28,18 @@ fn contained(root: &Path, dir: &str) -> Option<PathBuf> {
     plain.then(|| root.join(relative))
 }
 
+/// The directory holding an imported or trained model's files, when it is one this app made and is safe to delete: a
+/// plain `label-models/<name>` folder under the model-lab directory. Anything else (a legacy location, a path that is not
+/// plain) is `None`, and its files are never touched.
+pub fn removable_model_dir(model_lab_dir: &Path, version: &ModelVersion) -> Option<PathBuf> {
+    let parts: Vec<_> = Path::new(&version.artifact_dir).components().collect();
+    let owned = parts.len() == 2
+        && matches!(parts[0], Component::Normal(p) if p == crate::IMPORTED_MODELS_DIR);
+    owned
+        .then(|| contained(model_lab_dir, &version.artifact_dir))
+        .flatten()
+}
+
 /// Loads one version's model through the full bundle validation. The version must be Active and deployable (it is
 /// what [`LoadedModel::load`] requires), so a caller probing a candidate passes a copy marked Active.
 pub fn load_version(version: &ModelVersion, model_lab_dir: &Path) -> Result<LoadedModel, String> {

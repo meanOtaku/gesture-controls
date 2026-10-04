@@ -52,6 +52,7 @@ export function LabelModelsPanel({
   const error = actionError ?? loadError;
   const setError = setActionError;
   const [confirmLive, setConfirmLive] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const { isPending, run } = usePendingActions();
 
   const attempt = (key: string, title: string, work: () => Promise<unknown>, success?: string) =>
@@ -205,6 +206,27 @@ export function LabelModelsPanel({
                               {action.label}
                             </Button>
                           ))}
+                          {model.state === "archived" &&
+                            (confirmingDelete === model.id ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  disabled={isPending(`${model.id}:delete`)}
+                                  onClick={() => {
+                                    setConfirmingDelete(null);
+                                    void attempt(`${model.id}:delete`, "Delete model", () => invoke("delete_label_model", { id: model.id }), `${model.id} was deleted.`);
+                                  }}
+                                >
+                                  Delete {model.id} for good
+                                </Button>
+                                <Button type="button" variant="outline" onClick={() => setConfirmingDelete(null)}>Keep</Button>
+                              </>
+                            ) : (
+                              <Button type="button" variant="ghost" aria-label={`Delete ${model.id}`} onClick={() => setConfirmingDelete(model.id)}>
+                                Delete
+                              </Button>
+                            ))}
                           {model.state === "active" && (
                             <Button type="button" variant="ghost" aria-label={`Roll back ${model.label}`} disabled={isPending(`${model.label}:rollback`)}
                               onClick={() => void attempt(`${model.label}:rollback`, "Roll back", () => invoke("rollback_label_model", { label: model.label }))}>

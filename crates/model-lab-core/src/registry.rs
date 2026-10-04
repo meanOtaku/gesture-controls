@@ -43,6 +43,13 @@ pub enum RegistryError {
     },
     #[error("'{0}' is already the active model for its label")]
     AlreadyActive(ModelVersionId),
+    #[error(
+        "only an archived model can be deleted, and '{id}' is {state:?}. Archive it first (a model that is active must be deactivated before that)"
+    )]
+    NotArchived {
+        id: ModelVersionId,
+        state: LifecycleState,
+    },
     #[error("the label '{0}' has no active model")]
     NothingActive(LabelId),
     #[error("the label '{0}' has no previous model to roll back to")]
@@ -293,6 +300,28 @@ impl Registry {
             self.previous_by_label.remove(&label);
         }
         Ok(())
+    }
+
+    /// Removes an archived model from the registry and returns it, so the caller can delete its files. Only an archived
+    /// model can go: anything else may be in use or still under review. The training run that made it stays, as the
+    /// record of what was tried.
+    pub fn remove_version(&mut self, id: &ModelVersionId) -> Result<ModelVersion, RegistryError> {
+        let state = self
+            .versions
+            .get(id)
+            .ok_or_else(|| RegistryError::NoVersion(id.clone()))?
+            .state;
+        if state != LifecycleState::Archived {
+            return Err(RegistryError::NotArchived {
+                id: id.clone(),
+                state,
+            });
+        }
+        self.previous_by_label.retain(|_, previous| previous != id);
+        self.active_by_label.retain(|_, active| active != id);
+        self.versions
+            .remove(id)
+            .ok_or_else(|| RegistryError::NoVersion(id.clone()))
     }
 
     /// Makes an approved model the active one for its label. Whatever was active for *that label* is demoted to
@@ -855,5 +884,35 @@ pub(crate) mod tests {
             r.update_project(changed),
             Err(RegistryError::WrongProject(_))
         ));
+    }
+
+    #[test]
+    fn only_an_archived_model_can_be_removed_and_nothing_else_changes() {
+        let id = |v: &str| ModelVersionId::new(v).unwrap();
+        let mut r = two_label_registry();
+        r.activate(&id("a1"), "t").unwrap();
+        // Approved, active: both refused, and nothing is lost.
+        for target in ["a1", "a2"] {
+            assert!(matches!(
+                r.remove_version(&id(target)),
+                Err(RegistryError::NotArchived { .. })
+            ));
+        }
+        assert_eq!(r.versions.len(), 3);
+        // Archive the approved one, then it can go. Another label's model and the active one are untouched.
+        r.transition(&id("a2"), LifecycleState::Evaluated, "t")
+            .unwrap();
+        r.transition(&id("a2"), LifecycleState::Archived, "t")
+            .unwrap();
+        let removed = r.remove_version(&id("a2")).unwrap();
+        assert_eq!(removed.id, id("a2"));
+        assert!(!r.versions.contains_key(&id("a2")));
+        assert!(r.versions.contains_key(&id("a1")) && r.versions.contains_key(&id("b1")));
+        assert_eq!(r.active_by_label[&label("pinch_start")], id("a1"));
+        r.validate().unwrap();
+        assert_eq!(
+            r.remove_version(&id("a2")),
+            Err(RegistryError::NoVersion(id("a2")))
+        );
     }
 }

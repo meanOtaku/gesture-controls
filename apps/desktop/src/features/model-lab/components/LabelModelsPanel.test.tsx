@@ -114,4 +114,29 @@ describe("LabelModelsPanel", () => {
     expect(screen.getByText("The model registry could not be opened")).toBeInTheDocument();
     expect(within(screen.getByRole("radiogroup")).getByRole("radio", { name: /Live/ })).toHaveAttribute("aria-disabled", "true");
   });
+
+  it("offers delete only for an archived model, and asks before deleting for good", async () => {
+    setup([{ ...draft, id: "snap-old", state: "archived" }, { ...draft, id: "snap-new", state: "approved" }]);
+    expect(await screen.findByText("snap-old")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete snap-new" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Delete snap-old" }));
+    expect(calls("delete_label_model")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Keep" }));
+    expect(calls("delete_label_model")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Delete snap-old" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete snap-old for good" }));
+    await waitFor(() => expect(calls("delete_label_model")).toEqual([["delete_label_model", { id: "snap-old" }]]));
+  });
+
+  it("shows why a delete was refused", async () => {
+    setup([{ ...draft, id: "snap-old", state: "archived" }]);
+    await screen.findByText("snap-old");
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "delete_label_model") throw "The model was removed, but its files could not be deleted";
+      return command === "list_label_models" ? [{ ...draft, id: "snap-old", state: "archived" }] : baseStatus;
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Delete snap-old" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete snap-old for good" }));
+    expect(await screen.findByText(/files could not be deleted/)).toBeInTheDocument();
+  });
 });

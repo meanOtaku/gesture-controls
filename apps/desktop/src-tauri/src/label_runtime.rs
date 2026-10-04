@@ -451,6 +451,25 @@ impl LabelRuntimeHost {
         self.change_registry(app, |r| r.activate(&vid, &now).map(|_| ()))
     }
 
+    /// Deletes an archived model: removed from the registry first (which is what counts), then its files. Only a folder
+    /// this app made is ever deleted. If the files cannot be removed the model is already gone and the error says so.
+    pub fn delete_model(&self, app: &AppHandle, id: &str) -> Result<(), String> {
+        let version = self.version_for(id)?;
+        let removed = self.change_registry(app, |r| r.remove_version(&version.id))?;
+        let dir = Self::model_lab_dir(app)?;
+        if let Some(files) = label_inference::removable_model_dir(&dir, &removed)
+            && files.exists()
+            && let Err(error) = std::fs::remove_dir_all(&files)
+        {
+            warn!(%error, path = %files.display(), "deleted a model but could not remove its files");
+            return Err(format!(
+                "The model was removed, but its files could not be deleted ({}): {error}",
+                files.display()
+            ));
+        }
+        Ok(())
+    }
+
     pub fn deactivate_label(&self, app: &AppHandle, label: &str) -> Result<(), String> {
         let label = LabelId::new(label).map_err(|e| e.to_string())?;
         let now = Self::now_rfc3339();
@@ -734,6 +753,16 @@ pub fn activate_label_model(
     id: String,
 ) -> Result<(), String> {
     host.activate_model(&app, &id)
+}
+
+/// Permanently deletes an archived model and its files.
+#[tauri::command]
+pub fn delete_label_model(
+    app: AppHandle,
+    host: State<'_, LabelRuntimeHost>,
+    id: String,
+) -> Result<(), String> {
+    host.delete_model(&app, &id)
 }
 
 #[tauri::command]
