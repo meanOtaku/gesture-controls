@@ -17,15 +17,25 @@ fn chain() -> Vec<Stage> {
             location: "topRight".into(),
         },
         Stage::Hold { hold: Hold::Pinch },
-        Stage::Drive { axis: Axis::Roll },
+        Stage::Drive {
+            axis: Axis::Roll,
+            dead_zone_degrees: 0.0,
+            invert: false,
+        },
     ]
+}
+
+/// The orientation of a watch rolled `degrees` about the forearm.
+fn about_x(degrees: f64) -> [f64; 4] {
+    let half = degrees.to_radians() / 2.0;
+    [half.cos(), half.sin(), 0.0, 0.0]
 }
 
 fn signals(head: Option<&'static str>, pinch: bool, roll: f64) -> Signals<'static> {
     Signals {
         head_location: head,
         pinch_held: pinch,
-        roll: Some(roll),
+        orientation: Some(about_x(roll)),
         ..Signals::default()
     }
 }
@@ -41,7 +51,7 @@ fn the_chain_only_drives_while_every_stage_holds() {
     ));
     // Looking and rolling without the pinch does nothing.
     assert_eq!(runner.update(&signals(Some("topRight"), false, 10.0)), None);
-    assert_eq!(runner.phase(), RunnerPhase::Idle);
+    assert_eq!(runner.phase(), RunnerPhase::Armed);
     // Pinching somewhere else does nothing either.
     assert_eq!(runner.update(&signals(None, true, 10.0)), None);
     // Everything holds: the first reading only sets the starting angle.
@@ -145,7 +155,8 @@ fn a_disabled_recipe_and_a_missing_orientation_do_nothing() {
         ..Signals::default()
     };
     assert_eq!(runner.update(&no_orientation), None);
-    assert_eq!(runner.phase(), RunnerPhase::Idle);
+    // Looking at the location still arms it, but without an orientation the device cannot be driven.
+    assert_eq!(runner.phase(), RunnerPhase::Armed);
 }
 
 #[test]
@@ -164,8 +175,16 @@ fn recipes_must_be_well_formed() {
         validate_recipe(&recipe(
             "a",
             vec![
-                Stage::Drive { axis: Axis::Roll },
-                Stage::Drive { axis: Axis::Pitch }
+                Stage::Drive {
+                    axis: Axis::Roll,
+                    dead_zone_degrees: 0.0,
+                    invert: false
+                },
+                Stage::Drive {
+                    axis: Axis::Pitch,
+                    dead_zone_degrees: 0.0,
+                    invert: false
+                }
             ],
             knob
         )),
@@ -174,7 +193,11 @@ fn recipes_must_be_well_formed() {
     let repeated = vec![
         Stage::Hold { hold: Hold::Pinch },
         Stage::Hold { hold: Hold::Pinch },
-        Stage::Drive { axis: Axis::Roll },
+        Stage::Drive {
+            axis: Axis::Roll,
+            dead_zone_degrees: 0.0,
+            invert: false,
+        },
     ];
     assert_eq!(
         validate_recipe(&recipe("a", repeated, knob)),
@@ -202,7 +225,11 @@ fn two_enabled_recipes_on_one_resource_conflict_and_are_both_blocked() {
             Stage::Hold {
                 hold: Hold::StemButton,
             },
-            Stage::Drive { axis: Axis::Roll },
+            Stage::Drive {
+                axis: Axis::Roll,
+                dead_zone_degrees: 0.0,
+                invert: false,
+            },
         ],
         knob,
     );
@@ -236,4 +263,106 @@ fn recipes_round_trip_through_json_in_camel_case() {
     let json = serde_json::to_string(&original).unwrap();
     assert!(json.contains("\"kind\":\"headAt\"") && json.contains("\"degreesPerStep\""));
     assert_eq!(serde_json::from_str::<Recipe>(&json).unwrap(), original);
+}
+
+fn drive_recipe(dead_zone_degrees: f64, invert: bool) -> Recipe {
+    recipe(
+        "vol",
+        vec![
+            Stage::Hold {
+                hold: Hold::StemButton,
+            },
+            Stage::Drive {
+                axis: Axis::Roll,
+                dead_zone_degrees,
+                invert,
+            },
+        ],
+        Device::RotationKnob {
+            fraction_per_degree: 0.01,
+        },
+    )
+}
+
+fn held(orientation: [f64; 4]) -> Signals<'static> {
+    Signals {
+        stem_button_held: true,
+        orientation: Some(orientation),
+        ..Signals::default()
+    }
+}
+
+#[test]
+fn the_dead_zone_ignores_small_movement_and_only_counts_the_excess() {
+    let mut runner = RecipeRunner::new(drive_recipe(3.0, false));
+    runner.update(&held(about_x(0.0)));
+    assert_eq!(runner.update(&held(about_x(2.0))), None);
+    let moved = runner.update(&held(about_x(13.0))).unwrap();
+    assert!(
+        (moved.delta_fraction - 0.10).abs() < 1e-9,
+        "13 degrees less a 3 degree dead zone, got {moved:?}"
+    );
+}
+
+#[test]
+fn inverting_flips_the_direction() {
+    let mut runner = RecipeRunner::new(drive_recipe(0.0, true));
+    runner.update(&held(about_x(0.0)));
+    let moved = runner.update(&held(about_x(10.0))).unwrap();
+    assert!((moved.delta_fraction + 0.10).abs() < 1e-9);
+}
+
+#[test]
+fn rotation_is_measured_from_the_orientation_when_the_hold_began() {
+    // Starting from an arbitrary orientation, rolling a further 10 degrees about the same axis moves by 10.
+    let mut runner = RecipeRunner::new(drive_recipe(0.0, false));
+    runner.update(&held(about_x(100.0)));
+    let moved = runner.update(&held(about_x(110.0))).unwrap();
+    assert!((moved.delta_fraction - 0.10).abs() < 1e-9);
+    // A zero-length quaternion is not an orientation: the interaction ends rather than guessing.
+    assert_eq!(runner.update(&held([0.0; 4])), None);
+    assert_eq!(runner.phase(), RunnerPhase::Idle);
+}
+
+#[test]
+fn a_bad_dead_zone_is_rejected() {
+    let mut bad = drive_recipe(0.0, false);
+    bad.stages[1] = Stage::Drive {
+        axis: Axis::Roll,
+        dead_zone_degrees: 120.0,
+        invert: false,
+    };
+    assert_eq!(validate_recipe(&bad), Err(RecipeError::InvalidDeadZone));
+}
+
+#[test]
+fn a_cancelled_interaction_restarts_only_after_the_chain_was_released() {
+    let mut runner = RecipeRunner::new(drive_recipe(0.0, false));
+    runner.update(&held(about_x(0.0)));
+    assert_eq!(runner.phase(), RunnerPhase::Driving);
+    runner.cancel();
+    // Still holding the same gesture: nothing happens.
+    assert_eq!(runner.update(&held(about_x(20.0))), None);
+    assert_eq!(runner.phase(), RunnerPhase::Idle);
+    // Let go, then hold again: a fresh interaction begins.
+    runner.update(&Signals::default());
+    runner.update(&held(about_x(20.0)));
+    assert_eq!(runner.phase(), RunnerPhase::Driving);
+}
+
+#[test]
+fn looking_arms_the_recipe_and_escape_does_not_re_arm_while_still_looking() {
+    let mut runner = RecipeRunner::new(recipe(
+        "vol",
+        chain(),
+        Device::default_for(DeviceKind::RotationKnob),
+    ));
+    runner.update(&signals(Some("topRight"), false, 0.0));
+    assert_eq!(runner.phase(), RunnerPhase::Armed);
+    runner.cancel();
+    runner.update(&signals(Some("topRight"), false, 0.0));
+    assert_eq!(runner.phase(), RunnerPhase::Idle);
+    runner.update(&signals(None, false, 0.0));
+    runner.update(&signals(Some("topRight"), false, 0.0));
+    assert_eq!(runner.phase(), RunnerPhase::Armed);
 }

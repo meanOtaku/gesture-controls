@@ -22,7 +22,8 @@ impl Action {
     }
 }
 
-/// A wrist rotation axis.
+/// A wrist rotation axis of the watch body: roll is about the forearm (the case's 9-3 direction), the other
+/// two are the case's 12-6 and its face normal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Axis {
@@ -41,7 +42,7 @@ pub enum Hold {
     StemButton,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -52,8 +53,14 @@ pub enum Stage {
     HeadAt { location: String },
     /// A gesture held down.
     Hold { hold: Hold },
-    /// The wrist rotating about an axis. Always the last stage; it supplies the continuous value.
-    Drive { axis: Axis },
+    /// The wrist rotating about an axis, measured from where the hold began. Always the last stage; it
+    /// supplies the continuous value. Movement inside `dead_zone_degrees` of the start is ignored, and
+    /// `invert` flips the direction for a watch worn the other way round.
+    Drive {
+        axis: Axis,
+        dead_zone_degrees: f64,
+        invert: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -81,6 +88,8 @@ pub enum RecipeError {
     DriveNotLast,
     #[error("a head location is used twice")]
     RepeatedStage,
+    #[error("the dead zone must be from 0 to under 90 degrees")]
+    InvalidDeadZone,
     #[error("the device settings are out of range")]
     InvalidDevice,
 }
@@ -111,6 +120,13 @@ pub fn validate_recipe(recipe: &Recipe) -> Result<(), RecipeError> {
         if rest[..index].contains(stage) {
             return Err(RecipeError::RepeatedStage);
         }
+    }
+    if let Stage::Drive {
+        dead_zone_degrees, ..
+    } = last
+        && !(dead_zone_degrees.is_finite() && (0.0..90.0).contains(dead_zone_degrees))
+    {
+        return Err(RecipeError::InvalidDeadZone);
     }
     recipe
         .device

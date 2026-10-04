@@ -10,17 +10,18 @@ pub struct Signals<'a> {
     pub head_location: Option<&'a str>,
     pub pinch_held: bool,
     pub stem_button_held: bool,
-    /// Wrist rotation in degrees about each axis; `None` while the watch has no valid orientation.
-    pub roll: Option<f64>,
-    pub pitch: Option<f64>,
-    pub yaw: Option<f64>,
+    /// The watch's orientation as a quaternion `[w, i, j, k]`; `None` while it has no valid orientation.
+    pub orientation: Option<[f64; 4]>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum RunnerPhase {
-    /// Waiting for the earlier stages to all hold.
+    /// Nothing of the chain holds.
     Idle,
+    /// Every head-location stage holds but a later one (a pinch, say) does not yet: the host shows the knob
+    /// so the user can see the gesture is recognised, but the device does not move.
+    Armed,
     /// Every stage holds and the device is following the wrist.
     Driving,
 }
@@ -30,6 +31,11 @@ pub enum RunnerPhase {
 pub struct RecipeRunner {
     recipe: Recipe,
     phase: RunnerPhase,
+    /// Set by [`Self::cancel`]: stay idle until the chain has been broken once, so an interaction the user
+    /// cancelled (Escape) does not restart while they are still holding the same gesture.
+    latched: bool,
+    /// The orientation when the chain completed; rotation is measured from here.
+    start: [f64; 4],
     /// The previous wrist angle, so each step is measured the short way round.
     last_angle: f64,
     /// Total rotation since the chain completed, unwrapped so an endless knob can turn past 180 degrees.
@@ -47,6 +53,8 @@ impl RecipeRunner {
         Self {
             recipe,
             phase: RunnerPhase::Idle,
+            latched: false,
+            start: [1.0, 0.0, 0.0, 0.0],
             last_angle: 0.0,
             rotation: 0.0,
             last_position: 0.0,
@@ -59,6 +67,12 @@ impl RecipeRunner {
 
     pub fn phase(&self) -> RunnerPhase {
         self.phase
+    }
+
+    /// Ends the interaction and keeps it ended until the user lets go of the chain and starts it again.
+    pub fn cancel(&mut self) {
+        self.phase = RunnerPhase::Idle;
+        self.latched = true;
     }
 
     /// Ends any interaction (the recipe was disabled or is blocked by a conflict, or the link dropped).
@@ -77,44 +91,92 @@ impl RecipeRunner {
         }
     }
 
-    fn angle(axis: Axis, signals: &Signals<'_>) -> Option<f64> {
-        match axis {
-            Axis::Roll => signals.roll,
-            Axis::Pitch => signals.pitch,
-            Axis::Yaw => signals.yaw,
-        }
-        .filter(|angle| angle.is_finite())
+    /// A unit quaternion, or `None` for anything that is not a usable orientation.
+    fn unit(q: [f64; 4]) -> Option<[f64; 4]> {
+        let norm = q.iter().map(|c| c * c).sum::<f64>().sqrt();
+        (q.iter().all(|c| c.is_finite()) && norm > 1e-9).then(|| q.map(|c| c / norm))
+    }
+
+    /// Rotation about `axis` of the body, in degrees in (-180, 180], from `start` to `current`.
+    fn twist(start: [f64; 4], current: [f64; 4], axis: Axis) -> f64 {
+        // relative = conjugate(start) * current
+        let [sw, si, sj, sk] = start;
+        let [cw, ci, cj, ck] = current;
+        let w = sw * cw + si * ci + sj * cj + sk * ck;
+        let i = sw * ci - si * cw - sj * ck + sk * cj;
+        let j = sw * cj + si * ck - sj * cw - sk * ci;
+        let k = sw * ck - si * cj + sj * ci - sk * cw;
+        let component = match axis {
+            Axis::Roll => i,
+            Axis::Pitch => j,
+            Axis::Yaw => k,
+        };
+        let degrees = (2.0 * component.atan2(w)).to_degrees();
+        (degrees + 540.0).rem_euclid(360.0) - 180.0
     }
 
     /// Returns the output for this reading, if the device moved.
     pub fn update(&mut self, signals: &Signals<'_>) -> Option<Output> {
-        let Some(Stage::Drive { axis }) = self.recipe.stages.last() else {
+        let Some(&Stage::Drive {
+            axis,
+            dead_zone_degrees,
+            invert,
+        }) = self.recipe.stages.last()
+        else {
             return None;
         };
-        let axis = *axis;
         let chain_holds = self.recipe.enabled
             && self
                 .recipe
                 .stages
                 .iter()
                 .all(|stage| Self::stage_holds(stage, signals));
-        let angle = Self::angle(axis, signals);
+        let orientation = signals.orientation.and_then(Self::unit);
 
-        let (true, Some(angle)) = (chain_holds, angle) else {
+        let mut gates = self
+            .recipe
+            .stages
+            .iter()
+            .filter(|stage| matches!(stage, Stage::HeadAt { .. }))
+            .peekable();
+        let has_gates = gates.peek().is_some();
+        let gates_hold = self.recipe.enabled
+            && has_gates
+            && gates.all(|stage| Self::stage_holds(stage, signals));
+        if self.latched {
+            if !chain_holds && !gates_hold {
+                self.latched = false;
+            }
             self.phase = RunnerPhase::Idle;
             return None;
+        }
+        let (true, Some(orientation)) = (chain_holds, orientation) else {
+            self.phase = if gates_hold {
+                RunnerPhase::Armed
+            } else {
+                RunnerPhase::Idle
+            };
+            return None;
         };
-        if self.phase == RunnerPhase::Idle {
+        if self.phase != RunnerPhase::Driving {
             self.phase = RunnerPhase::Driving;
-            self.last_angle = angle;
+            self.start = orientation;
+            self.last_angle = 0.0;
             self.rotation = 0.0;
             self.last_position = 0.0;
             return None;
         }
         // Follow the shortest step each time so the +/-180 seam never causes a jump.
+        let angle = Self::twist(self.start, orientation, axis);
         self.rotation += shortest_delta(self.last_angle, angle);
         self.last_angle = angle;
-        let position = self.recipe.device.position(self.rotation);
+        let signed = if invert {
+            -self.rotation
+        } else {
+            self.rotation
+        };
+        let outside_dead_zone = signed.signum() * (signed.abs() - dead_zone_degrees).max(0.0);
+        let position = self.recipe.device.position(outside_dead_zone);
         let delta = position - self.last_position;
         self.last_position = position;
         (delta != 0.0).then_some(Output {
