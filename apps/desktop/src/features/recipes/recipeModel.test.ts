@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CalibrationLocation, Recipe } from "../../shared/protocol/events";
 import {
-  actionInfo, heuristicOf, offGesturesUsed, holdsFor, isMomentary, isTrigger, blankRecipe, buildDevice, deviceSpecs, chainProblem, defaultNumbers, describeRecipe, deviceNumbers, driveStage, leadingStages, nameProblem,
+  actionInfo, isMomentaryStage, isValidLabel, heuristicOf, offGesturesUsed, holdsFor, isMomentary, isTrigger, blankRecipe, buildDevice, deviceSpecs, chainProblem, defaultNumbers, describeRecipe, deviceNumbers, driveStage, leadingStages, nameProblem,
 } from "./recipeModel";
 
 const locations: CalibrationLocation[] = [
@@ -94,7 +94,7 @@ describe("recipeModel", () => {
     expect(holdsFor(false).map((hold) => hold.value)).not.toContain("shake");
     for (const swipe of ["swipeLeft", "swipeRight", "swipeUp", "swipeDown"] as const) {
       expect(isMomentary(swipe)).toBe(true);
-      expect(chainProblem([{ kind: "hold", hold: swipe }], locations, false)).toMatch(/shake, swipe, tap, roll or pitch only works/);
+      expect(chainProblem([{ kind: "hold", hold: swipe }], locations, false)).toMatch(/shake, swipe, tap, roll, pitch or one-shot model label only works/);
       expect(chainProblem([{ kind: "hold", hold: swipe }], locations, true)).toBeNull();
     }
     expect(isMomentary("pinch")).toBe(false);
@@ -122,5 +122,24 @@ describe("recipeModel", () => {
     expect(nameProblem("  ")).toBe("Give the recipe a name.");
     expect(nameProblem("x".repeat(41))).toMatch(/Too long/);
     expect(nameProblem("Pinch volume")).toBeNull();
+  });
+});
+
+describe("model steps", () => {
+  it("accepts only lowercase slug labels", () => {
+    for (const ok of ["snap", "snap_fingers", "a1"]) expect(isValidLabel(ok)).toBe(true);
+    for (const bad of ["", "Snap", "1a", "a-b", "a b", "a".repeat(49)]) expect(isValidLabel(bad)).toBe(false);
+  });
+
+  it("treats a one-shot as momentary and a held label as not", () => {
+    expect(isMomentaryStage({ kind: "model", label: "snap", hold: "oneShot" })).toBe(true);
+    expect(isMomentaryStage({ kind: "model", label: "snap", hold: "held" })).toBe(false);
+    expect(isMomentaryStage({ kind: "hold", hold: "shake" })).toBe(true);
+  });
+
+  it("rejects a one-shot model step for a dial and a bad label anywhere", () => {
+    expect(chainProblem([{ kind: "model", label: "snap", hold: "oneShot" }], [], false)).toMatch(/button action/);
+    expect(chainProblem([{ kind: "model", label: "snap", hold: "held" }], [], false)).toBeNull();
+    expect(chainProblem([{ kind: "model", label: "Bad Label", hold: "held" }], [], true)).toMatch(/needs a label/);
   });
 });

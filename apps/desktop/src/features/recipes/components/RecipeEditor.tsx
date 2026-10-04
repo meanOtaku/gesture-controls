@@ -8,7 +8,7 @@ import { Label } from "../../../components/ui/label";
 import { Switch } from "../../../components/ui/switch";
 import type { NumberSpec } from "../../../shared/forms/numberField";
 import { useNumberDrafts } from "../../../shared/forms/useNumberDrafts";
-import type { CalibrationLocation, Recipe, RecipeAction, RecipeStage } from "../../../shared/protocol/events";
+import type { CalibrationLocation, ModelHold, Recipe, RecipeAction, RecipeStage } from "../../../shared/protocol/events";
 import {
   ACTIONS,
   AXES,
@@ -37,6 +37,8 @@ type LeadingStage = Exclude<RecipeStage, { kind: "drive" }>;
 type RecipeEditorProps = {
   recipe: Recipe;
   locations: CalibrationLocation[];
+  /** Labels of the models that are loaded, offered when adding a model step. */
+  modelLabels?: string[];
   /** Resolves to an error message from the backend, or null once saved. */
   onSave: (recipe: Recipe) => Promise<string | null>;
   onCancel: () => void;
@@ -47,7 +49,7 @@ const NATIVE_SELECT = "recipe-select";
 const UNUSED_SPEC: NumberSpec = { label: "Unused", min: 0, max: 0, step: 1, defaultValue: 0 };
 
 /** Builds or edits one recipe: the steps that must hold, the wrist rotation that follows, and the device it turns. */
-export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEditorProps) {
+export function RecipeEditor({ recipe, locations, modelLabels = [], onSave, onCancel }: RecipeEditorProps) {
   const uid = useId();
   const [name, setName] = useState(recipe.name);
   const [nameTouched, setNameTouched] = useState(false);
@@ -168,12 +170,15 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
                       index,
                       event.target.value === "headAt"
                         ? { kind: "headAt", location: locationOptions[0]?.value ?? "" }
-                        : { kind: "hold", hold: firstUnusedHold() },
+                        : event.target.value === "model"
+                          ? { kind: "model", label: modelLabels[0] ?? "", hold: "held" }
+                          : { kind: "hold", hold: firstUnusedHold() },
                     )
                   }
                 >
                   <option value="headAt">Look at</option>
                   <option value="hold">Gesture</option>
+                  <option value="model">Model label</option>
                 </select>
                 {step.kind === "headAt" ? (
                   <select
@@ -189,6 +194,27 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>
+                ) : step.kind === "model" ? (
+                  <>
+                    <input
+                      className={NATIVE_SELECT}
+                      aria-label={`${label} model label`}
+                      list={`${uid}-labels`}
+                      value={step.label}
+                      placeholder="label, e.g. snap_fingers"
+                      spellCheck={false}
+                      onChange={(event) => setStep(index, { ...step, label: event.target.value.trim().toLowerCase() })}
+                    />
+                    <select
+                      className={NATIVE_SELECT}
+                      aria-label={`${label} model timing`}
+                      value={step.hold}
+                      onChange={(event) => setStep(index, { ...step, hold: event.target.value as ModelHold })}
+                    >
+                      <option value="held">While detected</option>
+                      {(trigger || step.hold === "oneShot") && <option value="oneShot">Once, when detected</option>}
+                    </select>
+                  </>
                 ) : (
                   <select
                     className={NATIVE_SELECT}
@@ -226,6 +252,17 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
           >
             <PlusIcon aria-hidden="true" /> Add a gesture
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={steps.length + (trigger ? 0 : 1) >= MAX_STAGES}
+            onClick={() => setSteps((current) => [...current, { kind: "model", label: modelLabels[0] ?? "", hold: "held" }])}
+          >
+            <PlusIcon aria-hidden="true" /> Add a model label
+          </Button>
+          <datalist id={`${uid}-labels`}>
+            {modelLabels.map((label) => <option key={label} value={label} />)}
+          </datalist>
         </div>
         {steps.some((step) => step.kind === "hold" && step.hold.startsWith("swipe")) && (
           <p className="field-hint">Swipes are read from the watch's acceleration and orientation. Left and right run along your forearm, so set which side the watch's crown is on under Settings → Watch orientation; up and down follow gravity.</p>
@@ -241,6 +278,13 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
         )}
         {steps.some((step) => step.kind === "hold" && step.hold === "shake") && (
           <p className="field-hint">A shake needs the watch's acceleration sensor switched on. It counts as happening for about half a second after it is recognised.</p>
+        )}
+        {steps.some((step) => step.kind === "model") && (
+          <p className="field-hint">
+            A model label is detected by a model you trained and activated.
+            {modelLabels.length === 0 ? " None is loaded yet, so a recipe using one will not run until you load one." : ` Loaded now: ${modelLabels.join(", ")}.`}{" "}
+            “While detected” works like a pinch and can keep a dial turning; “Once, when detected” is a moment, like a shake, and only starts a button action. Detections only act when the model runtime is in Live mode.
+          </p>
         )}
         {problem && <p className="field-error" role="alert">{problem}</p>}
       </fieldset>

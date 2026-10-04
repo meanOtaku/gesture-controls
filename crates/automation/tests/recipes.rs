@@ -692,3 +692,109 @@ fn recipes_saved_with_the_old_rotate_names_still_load() {
         "\"rollClockwise\""
     );
 }
+
+fn model_recipe(action: Action, label: &str, hold: ModelHold, stages: Vec<Stage>) -> Recipe {
+    let mut stages = stages;
+    stages.insert(
+        0,
+        Stage::Model {
+            label: label.into(),
+            hold,
+        },
+    );
+    Recipe {
+        action,
+        ..recipe("m", stages, Device::default_for(DeviceKind::RotationKnob))
+    }
+}
+
+#[test]
+fn model_steps_validate_their_label_and_only_one_shots_are_limited_to_buttons() {
+    let trigger = |label: &str, hold| model_recipe(Action::PlayPause, label, hold, vec![]);
+    assert_eq!(
+        validate_recipe(&trigger("snap", ModelHold::OneShot)),
+        Ok(())
+    );
+    assert_eq!(validate_recipe(&trigger("snap", ModelHold::Held)), Ok(()));
+    for bad in ["", "Snap", "1snap", "a-b", "a b", &"a".repeat(49)] {
+        assert_eq!(
+            validate_recipe(&trigger(bad, ModelHold::Held)),
+            Err(RecipeError::InvalidLabel),
+            "{bad:?}"
+        );
+    }
+    let drive = vec![Stage::Drive {
+        axis: Axis::Roll,
+        dead_zone_degrees: 0.0,
+        invert: false,
+    }];
+    assert_eq!(
+        validate_recipe(&model_recipe(
+            Action::Volume,
+            "fist",
+            ModelHold::Held,
+            drive.clone()
+        )),
+        Ok(())
+    );
+    assert_eq!(
+        validate_recipe(&model_recipe(
+            Action::Volume,
+            "fist",
+            ModelHold::OneShot,
+            drive
+        )),
+        Err(RecipeError::MomentaryNeedsButtonAction)
+    );
+    let twice = vec![Stage::Model {
+        label: "snap".into(),
+        hold: ModelHold::OneShot,
+    }];
+    assert_eq!(
+        validate_recipe(&model_recipe(
+            Action::PlayPause,
+            "snap",
+            ModelHold::OneShot,
+            twice
+        )),
+        Err(RecipeError::RepeatedStage)
+    );
+}
+
+#[test]
+fn a_model_step_reads_the_held_or_pulsed_sets_the_host_supplies() {
+    use std::collections::BTreeSet;
+    let held: BTreeSet<String> = ["fist".to_string()].into();
+    let none = BTreeSet::new();
+    let mut held_runner = RecipeRunner::new(model_recipe(
+        Action::PlayPause,
+        "fist",
+        ModelHold::Held,
+        vec![],
+    ));
+    let mut shot_runner = RecipeRunner::new(model_recipe(
+        Action::PlayPause,
+        "fist",
+        ModelHold::OneShot,
+        vec![],
+    ));
+    let signals = Signals {
+        models_held: Some(&held),
+        models_pulsed: Some(&none),
+        ..Signals::default()
+    };
+    held_runner.update(&signals);
+    shot_runner.update(&signals);
+    assert!(held_runner.take_fired());
+    // A label that is merely held is not a one-shot: it needs a fresh rising edge.
+    assert!(!shot_runner.take_fired());
+    // Absent sets (a host that has no models) hold nothing.
+    let mut empty = RecipeRunner::new(model_recipe(
+        Action::PlayPause,
+        "fist",
+        ModelHold::Held,
+        vec![],
+    ));
+    empty.update(&Signals::default());
+    assert!(!empty.take_fired());
+}

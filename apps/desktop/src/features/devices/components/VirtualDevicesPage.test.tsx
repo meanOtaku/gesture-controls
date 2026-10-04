@@ -15,6 +15,8 @@ const automation: AutomationState = {
   ],
   blocked: [],
   conflicts: [],
+  unavailable: [],
+  loadedLabels: [],
 };
 
 describe("VirtualDevicesPage", () => {

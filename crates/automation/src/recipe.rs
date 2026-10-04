@@ -93,6 +93,26 @@ impl Hold {
     }
 }
 
+/// How a recipe uses a model's detection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ModelHold {
+    /// The label counts while it stays detected, like a pinch. Can keep a dial turning.
+    Held,
+    /// The label counts for a short moment after it is first detected, like a shake. Button actions only.
+    OneShot,
+}
+
+pub const MAX_LABEL_CHARS: usize = 48;
+
+/// The same shape a model label has everywhere: a lowercase slug.
+pub fn is_valid_label(label: &str) -> bool {
+    let mut chars = label.chars();
+    label.len() <= MAX_LABEL_CHARS
+        && chars.next().is_some_and(|c| c.is_ascii_lowercase())
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(
     tag = "kind",
@@ -104,6 +124,8 @@ pub enum Stage {
     HeadAt { location: String },
     /// A gesture held down.
     Hold { hold: Hold },
+    /// A trained model's label, detected by the label runtime.
+    Model { label: String, hold: ModelHold },
     /// The wrist rotating about an axis, measured from where the hold began. Always the last stage; it
     /// supplies the continuous value. Movement inside `dead_zone_degrees` of the start is ignored, and
     /// `invert` flips the direction for a watch worn the other way round.
@@ -141,8 +163,12 @@ pub enum RecipeError {
     RepeatedStage,
     #[error("an action that fires once cannot have a wrist rotation: remove it")]
     TriggerHasDrive,
-    #[error("a shake or swipe can only start a button action (play/pause, next, previous or mute)")]
+    #[error(
+        "a shake, swipe, tap, flick or one-shot model label can only start a button action (play/pause, next, previous or mute)"
+    )]
     MomentaryNeedsButtonAction,
+    #[error("a model step needs a label made of lowercase letters, digits and underscores")]
+    InvalidLabel,
     #[error("the dead zone must be from 0 to under 90 degrees")]
     InvalidDeadZone,
     #[error("the device settings are out of range")]
@@ -159,6 +185,13 @@ pub fn validate_recipe(recipe: &Recipe) -> Result<(), RecipeError> {
         return Err(RecipeError::InvalidName);
     }
     let (last, rest) = recipe.stages.split_last().ok_or(RecipeError::NoStages)?;
+    if recipe
+        .stages
+        .iter()
+        .any(|stage| matches!(stage, Stage::Model { label, .. } if !is_valid_label(label)))
+    {
+        return Err(RecipeError::InvalidLabel);
+    }
     if recipe.stages.len() > MAX_STAGES {
         return Err(RecipeError::TooManyStages);
     }
@@ -185,11 +218,11 @@ pub fn validate_recipe(recipe: &Recipe) -> Result<(), RecipeError> {
         return Err(RecipeError::MustEndWithDrive);
     }
     // A shake is over in a moment, so it could not keep a dial turning.
-    if recipe
-        .stages
-        .iter()
-        .any(|stage| matches!(stage, Stage::Hold { hold } if hold.is_momentary()))
-    {
+    if recipe.stages.iter().any(|stage| match stage {
+        Stage::Hold { hold } => hold.is_momentary(),
+        Stage::Model { hold, .. } => *hold == ModelHold::OneShot,
+        _ => false,
+    }) {
         return Err(RecipeError::MomentaryNeedsButtonAction);
     }
     if rest

@@ -214,6 +214,8 @@ describe("Dashboard", () => {
     ],
     blocked: ["lookStemVolume", "lookPinchVolume"],
     conflicts: [{ resource: "volume", first: "lookStemVolume", second: "lookPinchVolume" }],
+    unavailable: [],
+    loadedLabels: [],
   };
 
   it("says which two recipes are in conflict and lets one be switched off", () => {

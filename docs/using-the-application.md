@@ -370,7 +370,16 @@ The **Recipes** tab lists every recipe with an on/off switch, an Edit button and
 - **Settings → Pitch sensitivity → Pitch angle** (20° to 120°) sets how big the nod must be; the card shows the last pitch recognised and a count.
 - It uses only the orientation sensor. Not verified on a real watch.
 
-Because it is a moment, a shake, swipe, tap, roll or pitch can only start a **button action** (play/pause, next, previous, mute); the editor does not offer them for volume, brightness or scroll, and refuses to save a recipe that has one. It needs the watch's **acceleration** sensor switched on, which is the default.
+Because it is a moment, a shake, swipe, tap, roll or pitch (and a one-shot model label, below) can only start a **button action** (play/pause, next, previous, mute); the editor does not offer them for volume, brightness or scroll, and refuses to save a recipe that has one. It needs the watch's **acceleration** sensor switched on, which is the default.
+
+### Model label
+
+A **Model label** step uses a gesture detected by a model you trained and activated (see the Model Lab). Type its label or pick one of the loaded labels.
+
+- **While detected** works like a pinch: it counts for as long as the model keeps detecting the label, so it can be chained into a dial (for example *Model "fist" → Roll wrist → Volume*) and the dial lets go when the detection ends.
+- **Once, when detected** works like a shake: it counts for about 0.6 seconds after the label is first detected, and only starts a button action.
+- A model step only acts while the model runtime is in **Live** mode. A recipe naming a label that is not loaded shows **Waiting for model** and does not run. Importing and training models arrive in later steps, so for now no model is loaded.
+- A fault, a model swap or a rejected window cancels a pending one-shot.
 
 #### Tuning the sensitivity
 

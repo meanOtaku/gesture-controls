@@ -1,8 +1,10 @@
+use std::collections::BTreeSet;
+
 use serde::Serialize;
 
 use crate::device::Output;
 use crate::pitch::PitchDirection;
-use crate::recipe::{Axis, Hold, Recipe, Stage};
+use crate::recipe::{Axis, Hold, ModelHold, Recipe, Stage};
 use crate::roll::RollDirection;
 use crate::swipe::SwipeDirection;
 use crate::tap::TapKind;
@@ -26,6 +28,10 @@ pub struct Signals<'a> {
     pub pitch: Option<PitchDirection>,
     /// The watch's orientation as a quaternion `[w, i, j, k]`; `None` while it has no valid orientation.
     pub orientation: Option<[f64; 4]>,
+    /// Model labels detected right now and cleared to act.
+    pub models_held: Option<&'a BTreeSet<String>>,
+    /// Model labels first detected a moment ago, which still count as happening.
+    pub models_pulsed: Option<&'a BTreeSet<String>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -138,6 +144,11 @@ impl RecipeRunner {
             Stage::Hold {
                 hold: Hold::PitchDown,
             } => signals.pitch == Some(PitchDirection::Down),
+            Stage::Model { label, hold } => match hold {
+                ModelHold::Held => signals.models_held,
+                ModelHold::OneShot => signals.models_pulsed,
+            }
+            .is_some_and(|labels| labels.contains(label)),
             Stage::Drive { .. } => true,
         }
     }

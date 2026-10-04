@@ -23,6 +23,7 @@ use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tracing::{info, warn};
 
+use crate::automation::AutomationRuntime;
 use crate::model_lab::MODEL_LAB_DIR_NAME;
 
 pub const LABEL_DETECTIONS_EVENT: &str = "label-detections";
@@ -177,8 +178,7 @@ impl LabelRuntimeHost {
             .min(u128::from(u64::MAX)) as u64
     }
 
-    /// The labels with a detection that is active and cleared to be acted on. This is what the recipe engine will read
-    /// (the next step wires it in); until then only the status command shows it.
+    /// The labels with a detection that is active and cleared to be acted on.
     #[allow(dead_code)]
     pub fn active_detections(&self) -> BTreeSet<LabelId> {
         self.state
@@ -313,9 +313,30 @@ impl LabelRuntimeHost {
         let changed = !output.events.is_empty()
             || !output.conflicts.is_empty()
             || !output.rejections.is_empty();
-        if let Ok(mut state) = self.state.lock() {
-            record(&mut state, &output);
-        }
+        let (loaded, held) = match self.state.lock() {
+            Ok(mut state) => {
+                record(&mut state, &output);
+                (
+                    state.status.loaded_labels.iter().cloned().collect(),
+                    state
+                        .actionable_active
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect(),
+                )
+            }
+            Err(_) => (BTreeSet::new(), BTreeSet::new()),
+        };
+        // Recipes see this on every update, and on every 100 ms tick, which is also what expires a one-shot.
+        let (risen, dropped) = recipe_edges(&output);
+        app.state::<AutomationRuntime>().set_models(
+            app,
+            loaded,
+            held,
+            &risen,
+            &dropped,
+            self.now_ns(),
+        );
         if changed {
             let report = DetectionReport {
                 events: output.events.iter().map(DetectionEventView::from).collect(),
@@ -356,6 +377,25 @@ fn record(state: &mut HostState, output: &RuntimeOutput) {
         .iter()
         .map(ToString::to_string)
         .collect();
+}
+
+/// The labels that just started (a one-shot recipe step fires on these) and those whose detection was cut short
+/// rather than ending normally (a one-shot waiting on them must not fire).
+fn recipe_edges(output: &RuntimeOutput) -> (Vec<String>, Vec<String>) {
+    let mut risen = Vec::new();
+    let mut dropped = Vec::new();
+    for event in &output.actionable {
+        match event {
+            DetectionEvent::Rising { label, .. } => risen.push(label.to_string()),
+            DetectionEvent::Falling { label, reason, .. }
+                if *reason != ClearReason::ScoreBelowRelease =>
+            {
+                dropped.push(label.to_string());
+            }
+            _ => {}
+        }
+    }
+    (risen, dropped)
 }
 
 fn conflict_labels(conflict: &Conflict) -> Vec<String> {
@@ -476,5 +516,33 @@ mod tests {
             Some("registry is corrupt")
         );
         assert!(status.loaded_labels.is_empty());
+    }
+
+    #[test]
+    fn recipes_hear_rising_edges_and_abnormal_ends_but_not_ordinary_releases() {
+        let label = |name: &str| LabelId::new(name).unwrap();
+        let output = RuntimeOutput {
+            actionable: vec![
+                DetectionEvent::Rising {
+                    label: label("a"),
+                    confidence: 0.9,
+                    timestamp_ns: 1,
+                },
+                DetectionEvent::Falling {
+                    label: label("b"),
+                    timestamp_ns: 2,
+                    reason: ClearReason::ScoreBelowRelease,
+                },
+                DetectionEvent::Falling {
+                    label: label("c"),
+                    timestamp_ns: 3,
+                    reason: ClearReason::Rejected("stale".into()),
+                },
+            ],
+            ..RuntimeOutput::default()
+        };
+        let (risen, dropped) = recipe_edges(&output);
+        assert_eq!(risen, ["a"]);
+        assert_eq!(dropped, ["c"]);
     }
 }

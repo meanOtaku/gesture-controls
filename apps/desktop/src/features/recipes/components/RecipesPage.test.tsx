@@ -30,7 +30,7 @@ const stem: Recipe = {
   device: { kind: "rotationKnob", fractionPerDegree: 1 / 300 },
 };
 
-const automation = (recipes: Recipe[] = [stem]): AutomationState => ({ recipes, blocked: [], conflicts: [] });
+const automation = (recipes: Recipe[] = [stem]): AutomationState => ({ recipes, blocked: [], conflicts: [], unavailable: [], loadedLabels: [] });
 
 function setup(overrides: Partial<React.ComponentProps<typeof RecipesPage>> = {}) {
   const props: React.ComponentProps<typeof RecipesPage> = {
@@ -151,7 +151,7 @@ describe("RecipesPage", () => {
 
     // Switching back to a dial keeps the shake step but refuses to save it, in words.
     fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "volume" } });
-    expect(editor.getByRole("alert")).toHaveTextContent("A shake, swipe, tap, roll or pitch only works for a button action");
+    expect(editor.getByRole("alert")).toHaveTextContent("A shake, swipe, tap, roll, pitch or one-shot model label only works for a button action");
     fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
     expect(props.onSave).not.toHaveBeenCalled();
 
@@ -178,7 +178,7 @@ describe("RecipesPage", () => {
     expect(editor.getByText(/Swipes are read from the watch's acceleration/)).toBeInTheDocument();
 
     fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "scroll" } });
-    expect(editor.getByRole("alert")).toHaveTextContent("A shake, swipe, tap, roll or pitch only works for a button action");
+    expect(editor.getByRole("alert")).toHaveTextContent("A shake, swipe, tap, roll, pitch or one-shot model label only works for a button action");
     fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
     expect(props.onSave).not.toHaveBeenCalled();
 
@@ -255,6 +255,46 @@ describe("RecipesPage", () => {
     expect(screen.getByText("Pinch and hold → Play / pause")).toBeInTheDocument();
   });
 
+  it("builds a button recipe from a model label, offering the loaded labels and the once option", async () => {
+    const props = setup({ automation: { ...automation(), loadedLabels: ["snap_fingers"] } });
+    fireEvent.click(screen.getByRole("button", { name: /New recipe/ }));
+    const editor = within(screen.getByRole("region", { name: "Recipe editor" }));
+    fireEvent.change(editor.getByLabelText("Name"), { target: { value: "Snap to play" } });
+    fireEvent.click(editor.getByRole("button", { name: /Add a model label/ }));
+    expect(editor.getByLabelText("Step 2 model label")).toHaveValue("snap_fingers");
+    expect(editor.getByText(/Loaded now: snap_fingers/)).toBeInTheDocument();
+    // A dial cannot use a one-shot, so the option is not offered until the action is a button.
+    expect(editor.queryByRole("option", { name: "Once, when detected" })).not.toBeInTheDocument();
+    fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "playPause" } });
+    fireEvent.change(editor.getByLabelText("Step 2 model timing"), { target: { value: "oneShot" } });
+    fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
+    await waitFor(() => expect(props.onSave).toHaveBeenCalled());
+    expect(vi.mocked(props.onSave).mock.calls[0][0]).toMatchObject({
+      action: "playPause",
+      stages: [{ kind: "headAt", location: "topRight" }, { kind: "model", label: "snap_fingers", hold: "oneShot" }],
+    });
+  });
+
+  it("will not save a model step without a valid label, nor a one-shot on a dial", () => {
+    const props = setup();
+    fireEvent.click(screen.getByRole("button", { name: /New recipe/ }));
+    const editor = within(screen.getByRole("region", { name: "Recipe editor" }));
+    fireEvent.change(editor.getByLabelText("Name"), { target: { value: "x" } });
+    fireEvent.click(editor.getByRole("button", { name: /Add a model label/ }));
+    expect(editor.getByRole("alert")).toHaveTextContent("needs a label");
+    fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
+    expect(props.onSave).not.toHaveBeenCalled();
+    fireEvent.change(editor.getByLabelText("Step 2 model label"), { target: { value: "snap" } });
+    expect(editor.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("describes a model step and says when its model is not loaded", () => {
+    const shot: Recipe = { ...stem, id: "snap", name: "Snap", action: "playPause", stages: [{ kind: "model", label: "snap", hold: "oneShot" }] };
+    setup({ automation: { ...automation([shot]), unavailable: [{ recipe: "snap", label: "snap" }] } });
+    expect(screen.getByText("Model “snap” (once) → Play / pause")).toBeInTheDocument();
+    expect(screen.getByText("Waiting for model: snap")).toBeInTheDocument();
+  });
+
   it("edits an existing recipe in place, keeping its id and whether it is on", async () => {
     const props = setup();
     fireEvent.click(screen.getByRole("button", { name: "Edit Look top right, hold STEM, roll" }));
@@ -322,6 +362,8 @@ describe("RecipesPage", () => {
         recipes: [stem, pinch],
         blocked: ["lookStemVolume", "pinch"],
         conflicts: [{ resource: "volume", first: "lookStemVolume", second: "pinch" }],
+        unavailable: [],
+        loadedLabels: [],
       },
     });
     expect(screen.getByText("These gestures are fighting over volume")).toBeInTheDocument();

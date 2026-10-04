@@ -4,7 +4,7 @@
 //! The decisions live in [`Engine`], which knows nothing about Tauri and is unit-tested; the runtime around
 //! it only feeds it signals and carries out the [`Effects`] it returns.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -41,6 +41,8 @@ pub const PITCH_DETECTED_EVENT: &str = "automation-pitch";
 /// at a location, say) has a moment in which both hold.
 /// Also how long a swipe keeps counting.
 const SHAKE_HOLD_NS: u64 = 600_000_000;
+/// A model label's first detection counts as happening for this long, like the wrist gestures' moment.
+const MODEL_PULSE_NS: u64 = 600_000_000;
 const RECIPES_FILE_NAME: &str = "recipes.json";
 pub const MAX_RECIPES: usize = 24;
 
@@ -51,6 +53,18 @@ pub struct AutomationState {
     pub recipes: Vec<Recipe>,
     pub blocked: Vec<String>,
     pub conflicts: Vec<Conflict>,
+    /// Enabled recipes that name a model label which is not loaded, so they cannot start. Empty until the label
+    /// runtime has said what it loaded.
+    pub unavailable: Vec<UnavailableLabel>,
+    /// The model labels the label runtime has loaded, which a recipe can name.
+    pub loaded_labels: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnavailableLabel {
+    pub recipe: String,
+    pub label: String,
 }
 
 /// How the volume overlay should look for the current recipes.
@@ -270,6 +284,13 @@ pub struct Engine {
     last_accepted: Option<Orientation>,
     blocked: BTreeSet<String>,
     overlay: OverlayWanted,
+    /// Model labels detected now and cleared to act.
+    models_held: BTreeSet<String>,
+    /// Model labels first detected recently, mapped to when that stops counting (the label runtime's clock).
+    model_pulses: BTreeMap<String, u64>,
+    model_now_ns: u64,
+    /// The labels the label runtime has loaded; `None` until it has said.
+    models_loaded: Option<BTreeSet<String>>,
 }
 
 impl Engine {
@@ -301,6 +322,10 @@ impl Engine {
             last_accepted: None,
             blocked: BTreeSet::new(),
             overlay: OverlayWanted::Hidden,
+            models_held: BTreeSet::new(),
+            model_pulses: BTreeMap::new(),
+            model_now_ns: 0,
+            models_loaded: None,
         };
         engine.set_recipes(recipes);
         engine
@@ -347,7 +372,56 @@ impl Engine {
             recipes: self.recipes.clone(),
             blocked: self.blocked.iter().cloned().collect(),
             conflicts: find_conflicts(&self.recipes),
+            unavailable: self.unavailable_labels(),
+            loaded_labels: self.models_loaded.iter().flatten().cloned().collect(),
         }
+    }
+
+    fn unavailable_labels(&self) -> Vec<UnavailableLabel> {
+        let Some(loaded) = &self.models_loaded else {
+            return Vec::new();
+        };
+        self.recipes
+            .iter()
+            .filter(|recipe| recipe.enabled)
+            .flat_map(|recipe| {
+                recipe.stages.iter().filter_map(|stage| match stage {
+                    Stage::Model { label, .. } if !loaded.contains(label) => {
+                        Some(UnavailableLabel {
+                            recipe: recipe.id.clone(),
+                            label: label.clone(),
+                        })
+                    }
+                    _ => None,
+                })
+            })
+            .collect()
+    }
+
+    /// The label runtime's latest word. `held` is everything detected and cleared to act right now; `risen` the
+    /// labels that started a moment ago; `dropped` those whose detection was cut short (a fault, a model change),
+    /// whose pending one-shot must not fire. `now_ns` is the label runtime's clock, which also expires old pulses.
+    pub fn set_models(
+        &mut self,
+        loaded: BTreeSet<String>,
+        held: BTreeSet<String>,
+        risen: &[String],
+        dropped: &[String],
+        now_ns: u64,
+    ) -> Effects {
+        self.model_now_ns = now_ns;
+        for label in risen {
+            self.model_pulses
+                .insert(label.clone(), now_ns + MODEL_PULSE_NS);
+        }
+        // Dropped wins over risen in the same update: when unsure, fail closed.
+        for label in dropped {
+            self.model_pulses.remove(label);
+        }
+        self.model_pulses.retain(|_, until| *until > now_ns);
+        self.models_held = held;
+        self.models_loaded = Some(loaded);
+        self.step()
     }
 
     pub fn set_head(&mut self, location: Option<String>) -> Effects {
@@ -367,6 +441,8 @@ impl Engine {
 
     /// The watch went away: nothing it contributed can still hold.
     pub fn watch_lost(&mut self) -> Effects {
+        self.models_held.clear();
+        self.model_pulses.clear();
         self.pinch = false;
         self.stem = false;
         self.orientation = None;
@@ -490,7 +566,16 @@ impl Engine {
 
     /// Steps every recipe that is not held off by a conflict and works out what the overlay needs.
     fn step(&mut self) -> Effects {
+        let now = self.model_now_ns;
+        let pulsed: BTreeSet<String> = self
+            .model_pulses
+            .iter()
+            .filter(|(_, until)| **until > now)
+            .map(|(label, _)| label.clone())
+            .collect();
         let signals = Signals {
+            models_held: Some(&self.models_held),
+            models_pulsed: Some(&pulsed),
             head_location: self.head.as_deref(),
             pinch_held: self.pinch,
             stem_button_held: self.stem,
@@ -617,6 +702,8 @@ pub struct AutomationRuntime {
     operations: Mutex<()>,
     engine: Mutex<Engine>,
     actuators: Actuators,
+    /// The model-label part of the last state sent to the UI, so a change in what is loaded is announced.
+    announced_labels: Mutex<(Vec<UnavailableLabel>, Vec<String>)>,
 }
 
 impl Default for AutomationRuntime {
@@ -625,6 +712,7 @@ impl Default for AutomationRuntime {
             operations: Mutex::new(()),
             engine: Mutex::new(Engine::new(default_recipes(), Tuning::default())),
             actuators: Actuators::default(),
+            announced_labels: Mutex::new((Vec::new(), Vec::new())),
         }
     }
 }
@@ -675,7 +763,13 @@ impl AutomationRuntime {
         if let Some(direction) = effects.swiped {
             let _ = app.emit(SWIPE_DETECTED_EVENT, direction);
         }
-        if effects.overlay.is_some() {
+        let labels_changed = self.announced_labels.lock().is_ok_and(|mut announced| {
+            let now = (state.unavailable.clone(), state.loaded_labels.clone());
+            let changed = *announced != now;
+            *announced = now;
+            changed
+        });
+        if effects.overlay.is_some() || labels_changed {
             let _ = app.emit(AUTOMATION_STATE_EVENT, &state);
         }
     }
@@ -698,6 +792,21 @@ impl AutomationRuntime {
 
     pub fn set_stem(&self, app: &AppHandle, held: bool) {
         self.with_engine(app, |engine| engine.set_stem(held));
+    }
+
+    /// The label runtime's latest detections; see [`Engine::set_models`].
+    pub fn set_models(
+        &self,
+        app: &AppHandle,
+        loaded: BTreeSet<String>,
+        held: BTreeSet<String>,
+        risen: &[String],
+        dropped: &[String],
+        now_ns: u64,
+    ) {
+        self.with_engine(app, |engine| {
+            engine.set_models(loaded, held, risen, dropped, now_ns)
+        });
     }
 
     pub fn watch_lost(&self, app: &AppHandle) {
@@ -893,6 +1002,7 @@ pub fn set_recipe_enabled(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use automation::ModelHold;
 
     fn about_x(degrees: f64) -> [f64; 4] {
         let half = degrees.to_radians() / 2.0;
@@ -1633,6 +1743,152 @@ mod tests {
             off(|h| h.shake = false),
         );
         assert!(shake_for(&mut engine, 4, 0).is_empty());
+    }
+
+    fn model_recipe(label: &str, hold: ModelHold, action: Action) -> Recipe {
+        let mut recipe = swipe_recipe(Hold::Tap, action);
+        recipe.id = format!("{label}{hold:?}");
+        recipe.stages = vec![Stage::Model {
+            label: label.into(),
+            hold,
+        }];
+        recipe
+    }
+
+    fn set(labels: &[&str]) -> BTreeSet<String> {
+        labels.iter().map(ToString::to_string).collect()
+    }
+
+    const MS: u64 = 1_000_000;
+
+    #[test]
+    fn a_one_shot_model_label_fires_once_when_it_rises_and_not_again_while_it_stays() {
+        let mut engine = Engine::new(
+            vec![model_recipe("snap", ModelHold::OneShot, Action::PlayPause)],
+            Tuning::default(),
+        );
+        let loaded = set(&["snap"]);
+        let rise = engine.set_models(
+            loaded.clone(),
+            set(&["snap"]),
+            &["snap".to_string()],
+            &[],
+            100 * MS,
+        );
+        assert_eq!(rise.fired, vec![Action::PlayPause]);
+        // Still detected on the next updates: the chain keeps holding, so it must not fire again.
+        let again = engine.set_models(loaded.clone(), set(&["snap"]), &[], &[], 200 * MS);
+        assert!(again.fired.is_empty());
+        let later = engine.set_models(loaded, set(&["snap"]), &[], &[], 900 * MS);
+        assert!(later.fired.is_empty());
+    }
+
+    #[test]
+    fn a_one_shot_that_ended_abnormally_does_not_fire_and_one_that_ended_normally_still_counts() {
+        let mut engine = Engine::new(
+            vec![
+                model_recipe("snap", ModelHold::OneShot, Action::PlayPause),
+                model_recipe("flick", ModelHold::OneShot, Action::Mute),
+            ],
+            Tuning::default(),
+        );
+        let loaded = set(&["snap", "flick"]);
+        // Rising and a fault in the same update: the recipe waiting on it must not fire.
+        let faulted = engine.set_models(
+            loaded.clone(),
+            set(&[]),
+            &["snap".to_string()],
+            &["snap".to_string()],
+            100 * MS,
+        );
+        assert!(faulted.fired.is_empty());
+        // A normal release before the moment is over does not undo the gesture.
+        let rose = engine.set_models(
+            loaded.clone(),
+            set(&["flick"]),
+            &["flick".to_string()],
+            &[],
+            200 * MS,
+        );
+        assert_eq!(rose.fired, vec![Action::Mute]);
+    }
+
+    #[test]
+    fn a_held_model_label_can_drive_a_dial_and_lets_go_when_it_falls() {
+        let mut recipe = driving(Action::Brightness);
+        recipe.stages[0] = Stage::Model {
+            label: "fist".into(),
+            hold: ModelHold::Held,
+        };
+        assert_eq!(validate_recipe(&recipe), Ok(()));
+        let mut engine = Engine::new(vec![recipe], Tuning::default());
+        let loaded = set(&["fist"]);
+        engine.observe_orientation(about_x(0.0), ts(1), None);
+        engine.set_models(
+            loaded.clone(),
+            set(&["fist"]),
+            &["fist".to_string()],
+            &[],
+            MS,
+        );
+        engine.observe_orientation(about_x(0.0), ts(2), None);
+        let moved = engine.observe_orientation(about_x(30.0), ts(3), None);
+        assert_eq!(moved.deltas.len(), 1);
+        let released = engine.set_models(loaded, set(&[]), &[], &[], 2 * MS);
+        assert_eq!(released.ended, vec![Action::Brightness]);
+        assert!(
+            engine
+                .observe_orientation(about_x(60.0), ts(4), None)
+                .deltas
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_recipe_naming_a_label_that_is_not_loaded_is_reported_and_never_runs() {
+        let mut engine = Engine::new(
+            vec![model_recipe("snap", ModelHold::OneShot, Action::PlayPause)],
+            Tuning::default(),
+        );
+        // Until the label runtime has said what it loaded, nothing is reported.
+        assert!(engine.state().unavailable.is_empty());
+        engine.set_models(set(&["other"]), set(&[]), &[], &[], MS);
+        let state = engine.state();
+        assert_eq!(
+            state.unavailable,
+            vec![UnavailableLabel {
+                recipe: "snapOneShot".into(),
+                label: "snap".into()
+            }]
+        );
+        // A label the runtime reports but that is not loaded cannot fire a recipe.
+        let effects = engine.set_models(set(&["other"]), set(&["snap"]), &[], &[], 2 * MS);
+        assert!(effects.fired.is_empty());
+        engine.set_models(set(&["snap"]), set(&[]), &[], &[], 3 * MS);
+        assert!(engine.state().unavailable.is_empty());
+    }
+
+    #[test]
+    fn losing_the_watch_drops_model_detections() {
+        let mut engine = Engine::new(
+            vec![model_recipe("fist", ModelHold::Held, Action::PlayPause)],
+            Tuning::default(),
+        );
+        engine.set_models(set(&["fist"]), set(&["fist"]), &[], &[], MS);
+        engine.watch_lost();
+        assert!(engine.models_held.is_empty() && engine.model_pulses.is_empty());
+    }
+
+    #[test]
+    fn two_recipes_on_the_same_action_with_different_model_labels_conflict() {
+        let engine = Engine::new(
+            vec![
+                model_recipe("a", ModelHold::OneShot, Action::PlayPause),
+                model_recipe("b", ModelHold::OneShot, Action::PlayPause),
+            ],
+            Tuning::default(),
+        );
+        assert_eq!(engine.state().conflicts.len(), 1);
     }
 
     #[test]

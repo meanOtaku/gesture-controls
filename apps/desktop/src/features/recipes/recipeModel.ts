@@ -82,6 +82,19 @@ export function isMomentary(hold: HoldKind): boolean {
   return hold !== "pinch" && hold !== "stemButton";
 }
 
+/** A step that is over in a moment, so it can only start a button action. */
+export function isMomentaryStage(stage: RecipeStage): boolean {
+  return (stage.kind === "hold" && isMomentary(stage.hold)) || (stage.kind === "model" && stage.hold === "oneShot");
+}
+
+export const MAX_LABEL_CHARS = 48;
+const LABEL_PATTERN = /^[a-z][a-z0-9_]*$/;
+
+/** The same shape a model label has everywhere: a lowercase slug. */
+export function isValidLabel(label: string): boolean {
+  return label.length <= MAX_LABEL_CHARS && LABEL_PATTERN.test(label);
+}
+
 /** The gestures a recipe can use: a shake, swipe, tap, roll or pitch is over in a moment, so only a button action can use it. */
 export function holdsFor(trigger: boolean) {
   return trigger ? HOLDS : HOLDS.filter((hold) => !isMomentary(hold.value));
@@ -185,6 +198,8 @@ function stageLabel(stage: RecipeStage, locationName: (id: string) => string): s
       return `Look at ${locationName(stage.location)}`;
     case "hold":
       return HOLDS.find((hold) => hold.value === stage.hold)?.label ?? stage.hold;
+    case "model":
+      return `Model “${stage.label}”${stage.hold === "oneShot" ? " (once)" : ""}`;
     case "drive":
       return `${AXES.find((axis) => axis.value === stage.axis)?.label ?? stage.axis} wrist`;
   }
@@ -230,8 +245,11 @@ const sameStage = (a: RecipeStage, b: RecipeStage) => JSON.stringify(a) === JSON
 /** Why this chain of steps cannot be saved, or null. The backend checks the same things. */
 export function chainProblem(leading: RecipeStage[], locations: CalibrationLocation[], trigger = false): string | null {
   if (trigger && leading.length === 0) return "Add at least one step: something has to start it.";
-  if (!trigger && leading.some((stage) => stage.kind === "hold" && isMomentary(stage.hold))) {
-    return "A shake, swipe, tap, roll or pitch only works for a button action (play/pause, next, previous or mute). Choose one under To control, or remove that step.";
+  if (leading.some((stage) => stage.kind === "model" && !isValidLabel(stage.label))) {
+    return "A model step needs a label: lowercase letters, digits and underscores, starting with a letter.";
+  }
+  if (!trigger && leading.some(isMomentaryStage)) {
+    return "A shake, swipe, tap, roll, pitch or one-shot model label only works for a button action (play/pause, next, previous or mute). Choose one under To control, or remove that step.";
   }
   const limit = trigger ? MAX_STAGES : MAX_STAGES - 1;
   if (leading.length > limit) return `A recipe can have at most ${limit} steps${trigger ? "" : " before the wrist rotation"}.`;

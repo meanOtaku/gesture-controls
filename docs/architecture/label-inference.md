@@ -62,7 +62,16 @@ Labels that cannot both be true are declared as an exclusivity group, separately
 
 ## The host
 
-`label_runtime.rs` opens the per-label registry (migrating the old one once, see [the domain model](model-lab-domain.md)), loads the active models, feeds watch orientation and PPG events in, runs a 100 ms timer so a stream that stops is noticed, emits `label-detections` events (rising, active, falling, conflicts, rejections) and answers `get_label_runtime_status`. It holds the detections that are cleared to act in `active_detections()` for the recipe engine, and **performs no action itself**.
+`label_runtime.rs` opens the per-label registry (migrating the old one once, see [the domain model](model-lab-domain.md)), loads the active models, feeds watch orientation and PPG events in, runs a 100 ms timer so a stream that stops is noticed, emits `label-detections` events (rising, active, falling, conflicts, rejections) and answers `get_label_runtime_status`. On every runtime update and every tick it hands the recipe engine the loaded labels, the detections cleared to act, the labels that just started and those cut short (see below). It **performs no action itself**; actions come only from recipes.
+
+## Recipes use detections
+
+A recipe step `{ "kind": "model", "label": "snap_fingers", "hold": "held" | "oneShot" }` reads the runtime:
+
+- **held** counts while the label stays detected and cleared to act (Live only), like a pinch. It can keep a dial turning, and when the detection falls the dial lets go.
+- **oneShot** counts for 0.6 s after the label first rises, like a shake, so it can be chained with a head location. Button actions only; the recipe validator refuses it for a dial. A fault, a model change or a rejected window cancels a pending one-shot, and when a rise and a cancel arrive together the cancel wins.
+- Resource conflicts work as before: two enabled recipes on the same action are both paused, whatever labels they use. Labels declared mutually exclusive are already both held off inside the runtime.
+- A recipe naming a label that is not loaded cannot start; the Recipes tab shows "Waiting for model" once the runtime has said what it loaded. Nothing is reported before that, and the label name is validated as a slug either way, so a recipe can be written ahead of the model.
 
 ## Tests, and what has not been checked
 
@@ -73,4 +82,4 @@ Not yet done or checked:
 - Windows and Linux builds of the crate (see the decision record's correction).
 - Any model from Keras or PyTorch exporters; any model trained on real recordings; behaviour on a real watch's streams.
 - Head-pose input, standardisation preprocessing, and quantised variants.
-- Importing a bundle into the registry, the recipe step that consumes detections, training, and the Model Lab UI.
+- Importing a bundle into the registry, training, and the Model Lab UI.

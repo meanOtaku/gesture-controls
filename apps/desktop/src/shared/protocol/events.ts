@@ -68,7 +68,11 @@ export type RecipeAction = "volume" | "brightness" | "scroll" | "playPause" | "n
 export type RecipeStage =
   | { kind: "headAt"; location: CalibrationTarget }
   | { kind: "hold"; hold: HoldGesture }
+  | { kind: "model"; label: string; hold: ModelHold }
   | { kind: "drive"; axis: "roll" | "pitch" | "yaw"; deadZoneDegrees: number; invert: boolean };
+
+/** `held` counts while the label stays detected; `oneShot` for a moment after it is first detected (buttons only). */
+export type ModelHold = "held" | "oneShot";
 
 export interface Recipe {
   id: string;
@@ -90,6 +94,10 @@ export interface AutomationState {
   recipes: Recipe[];
   blocked: string[];
   conflicts: RecipeConflict[];
+  /** Enabled recipes naming a model label that is not loaded, so they cannot start. */
+  unavailable: { recipe: string; label: string }[];
+  /** The model labels that are loaded, which a model step can name. */
+  loadedLabels: string[];
 }
 
 export interface OverlayState {

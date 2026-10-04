@@ -75,7 +75,7 @@ export function RecipesPage({ automation, calibration, isPending, error, onSetEn
             />
           </CardHeader>
           <CardContent>
-            <RecipeEditor recipe={editing} locations={locations} onSave={save} onCancel={() => setEditing(null)} />
+            <RecipeEditor recipe={editing} locations={locations} modelLabels={automation?.loadedLabels ?? []} onSave={save} onCancel={() => setEditing(null)} />
           </CardContent>
         </Card>
       )}
@@ -106,6 +106,11 @@ export function RecipesPage({ automation, calibration, isPending, error, onSetEn
                     <span className="text-sm">
                       {recipe.name}{" "}
                       {blocked && <Badge variant="destructive">Paused: conflict</Badge>}
+                      {automation.unavailable.some((entry) => entry.recipe === recipe.id) && (
+                        <Badge variant="secondary">
+                          Waiting for model: {[...new Set(automation.unavailable.filter((entry) => entry.recipe === recipe.id).map((entry) => entry.label))].join(", ")}
+                        </Badge>
+                      )}
                       {builtInGestures && offGesturesUsed(recipe, builtInGestures).length > 0 && (
                         <Badge variant="secondary">
                           Never fires: {offGesturesUsed(recipe, builtInGestures).join(", ")} gesture off in Settings
