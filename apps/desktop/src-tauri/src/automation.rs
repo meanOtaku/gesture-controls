@@ -42,7 +42,7 @@ pub const PITCH_DETECTED_EVENT: &str = "automation-pitch";
 /// Also how long a swipe keeps counting.
 const SHAKE_HOLD_NS: u64 = 600_000_000;
 /// A model label's first detection counts as happening for this long, like the wrist gestures' moment.
-const MODEL_PULSE_NS: u64 = 600_000_000;
+pub(crate) const MODEL_PULSE_NS: u64 = 600_000_000;
 const RECIPES_FILE_NAME: &str = "recipes.json";
 pub const MAX_RECIPES: usize = 24;
 
@@ -291,6 +291,8 @@ pub struct Engine {
     model_now_ns: u64,
     /// The labels the label runtime has loaded; `None` until it has said.
     models_loaded: Option<BTreeSet<String>>,
+    /// Recipes or the loaded labels changed since the host last looked, so what the UI shows about them may be stale.
+    labels_dirty: bool,
 }
 
 impl Engine {
@@ -326,12 +328,19 @@ impl Engine {
             model_pulses: BTreeMap::new(),
             model_now_ns: 0,
             models_loaded: None,
+            labels_dirty: true,
         };
         engine.set_recipes(recipes);
         engine
     }
 
+    /// Whether the labels part of [`Self::state`] may have changed since this was last called.
+    pub fn take_labels_dirty(&mut self) -> bool {
+        std::mem::take(&mut self.labels_dirty)
+    }
+
     fn rebuild(&mut self) {
+        self.labels_dirty = true;
         self.blocked = blocked_recipes(&self.recipes);
         self.runners = self
             .recipes
@@ -420,6 +429,9 @@ impl Engine {
         }
         self.model_pulses.retain(|_, until| *until > now_ns);
         self.models_held = held;
+        if self.models_loaded.as_ref() != Some(&loaded) {
+            self.labels_dirty = true;
+        }
         self.models_loaded = Some(loaded);
         self.step()
     }
@@ -741,11 +753,10 @@ impl AutomationRuntime {
                 return;
             };
             let effects = step(&mut engine);
-            (
-                effects,
-                engine.state(),
-                engine.max_volume_points_per_second(),
-            )
+            // The state is a copy of every recipe, so it is only built when something is going to be told about it.
+            let dirty = engine.take_labels_dirty();
+            let state = (effects.overlay.is_some() || dirty).then(|| engine.state());
+            (effects, state, engine.max_volume_points_per_second())
         };
         apply_effects(app, &effects, max_points);
         if effects.shook {
@@ -763,6 +774,7 @@ impl AutomationRuntime {
         if let Some(direction) = effects.swiped {
             let _ = app.emit(SWIPE_DETECTED_EVENT, direction);
         }
+        let Some(state) = state else { return };
         let labels_changed = self.announced_labels.lock().is_ok_and(|mut announced| {
             let now = (state.unavailable.clone(), state.loaded_labels.clone());
             let changed = *announced != now;

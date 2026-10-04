@@ -14,7 +14,8 @@ import { RecipeEditor } from "./RecipeEditor";
 type RecipesPageProps = {
   automation: AutomationState | null;
   calibration: CalibrationState | null;
-  isPending: (key: string) => boolean;
+  /** Ids of recipes with a change in flight. */
+  pendingRecipeIds: readonly string[];
   error?: string | null;
   onSetEnabled: (id: string, enabled: boolean) => void;
   /** Resolves to an error message, or null once saved. */
@@ -28,7 +29,7 @@ type RecipesPageProps = {
 };
 
 /** Where recipes are made: each one chains head, pinch/button and wrist steps into a virtual device that controls something. */
-export function RecipesPage({ automation, calibration, isPending, error, onSetEnabled, onSave, onDelete, startWithDevice = null, onStartHandled, builtInGestures }: RecipesPageProps) {
+export function RecipesPage({ automation, calibration, pendingRecipeIds, error, onSetEnabled, onSave, onDelete, startWithDevice = null, onStartHandled, builtInGestures }: RecipesPageProps) {
   const [editing, setEditing] = useState<Recipe | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const locations = calibration?.targets ?? [];
@@ -123,7 +124,7 @@ export function RecipesPage({ automation, calibration, isPending, error, onSetEn
                     <Switch
                       aria-label={`${recipe.name} ${recipe.enabled ? "on" : "off"}`}
                       checked={recipe.enabled}
-                      disabled={isPending(`recipe:${recipe.id}`)}
+                      disabled={pendingRecipeIds.includes(recipe.id)}
                       onCheckedChange={(checked) => onSetEnabled(recipe.id, checked)}
                     />
                     <Button type="button" variant="ghost" size="icon-sm" aria-label={`Edit ${recipe.name}`} disabled={editing !== null} onClick={() => setEditing(recipe)}>

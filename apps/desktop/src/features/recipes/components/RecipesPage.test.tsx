@@ -36,7 +36,7 @@ function setup(overrides: Partial<React.ComponentProps<typeof RecipesPage>> = {}
   const props: React.ComponentProps<typeof RecipesPage> = {
     automation: automation(),
     calibration,
-    isPending: () => false,
+    pendingRecipeIds: [],
     onSetEnabled: vi.fn(),
     onSave: vi.fn().mockResolvedValue(null),
     onDelete: vi.fn(),

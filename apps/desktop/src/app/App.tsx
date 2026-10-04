@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { lazy, memo, Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { DeviceKind } from "../features/recipes/recipeModel";
 import { AppNav, navStatuses, type AppTab } from "./components/AppNav";
 import { OperationFeedback } from "../components/app/OperationFeedback";
@@ -8,6 +8,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import { SidebarInset, SidebarProvider } from "../components/ui/sidebar";
 import { telemetryStore } from "../features/telemetry/store/telemetryStore";
 import { usePendingActions } from "../shared/hooks/usePendingActions";
+import { useStableCallback } from "../shared/hooks/useStableCallback";
 import { VolumeKnob } from "../features/overlay/components/VolumeKnob";
 import {
   ACTION_ERROR_EVENT,
@@ -68,6 +69,8 @@ const emptyOverlay: OverlayState = {
  * always-visible safety/control surface and must stay eagerly bundled.
  */
 const Dashboard = lazy(() => import("../features/dashboard/components/Dashboard").then((m) => ({ default: m.Dashboard })));
+// Recipes, Gestures and Virtual devices are memoised the same way, so everything passed to them must keep its identity
+// between publishes (state, or `useStableCallback`), or the memo does nothing.
 // `MainApp` re-renders on every telemetry publish (~15 Hz while a watch streams). These two
 // tabs take no props, so `memo` lets React skip them when only the parent changed;
 // Live data still updates itself through its own store subscription, and Model Lab shows
@@ -75,9 +78,9 @@ const Dashboard = lazy(() => import("../features/dashboard/components/Dashboard"
 // registry, lifecycle controls) re-rendered 15 times a second while merely open.
 const LiveTelemetry = memo(lazy(() => import("../features/telemetry/components/LiveTelemetry").then((m) => ({ default: m.LiveTelemetry }))));
 const ModelLab = memo(lazy(() => import("../features/model-lab/components/ModelLab").then((m) => ({ default: m.ModelLab }))));
-const RecipesPage = lazy(() => import("../features/recipes/components/RecipesPage").then((m) => ({ default: m.RecipesPage })));
-const GesturesPage = lazy(() => import("../features/gestures/components/GesturesPage").then((m) => ({ default: m.GesturesPage })));
-const VirtualDevicesPage = lazy(() => import("../features/devices/components/VirtualDevicesPage").then((m) => ({ default: m.VirtualDevicesPage })));
+const RecipesPage = memo(lazy(() => import("../features/recipes/components/RecipesPage").then((m) => ({ default: m.RecipesPage }))));
+const GesturesPage = memo(lazy(() => import("../features/gestures/components/GesturesPage").then((m) => ({ default: m.GesturesPage }))));
+const VirtualDevicesPage = memo(lazy(() => import("../features/devices/components/VirtualDevicesPage").then((m) => ({ default: m.VirtualDevicesPage }))));
 const Settings = lazy(() => import("../features/settings/components/Settings").then((m) => ({ default: m.Settings })));
 
 function TabFallback() {
@@ -571,6 +574,21 @@ function MainApp() {
     });
   };
 
+  const stableSetRecipeEnabled = useStableCallback((id: string, enabled: boolean) => { void setRecipeEnabled(id, enabled); });
+  const stableSaveRecipe = useStableCallback(saveRecipe);
+  const stableDeleteRecipe = useStableCallback((id: string) => { void deleteRecipe(id); });
+  const clearStartWithDevice = useCallback(() => setStartWithDevice(null), []);
+  const openModelLab = useCallback(() => setActiveTab("modelLab"), []);
+  const openSettings = useCallback(() => setActiveTab("settings"), []);
+  const makeRecipeFromDevice = useCallback((kind: DeviceKind) => {
+    setStartWithDevice(kind);
+    setActiveTab("recipes");
+  }, []);
+  // Which recipes have a change in flight. The pending set lives in a ref, so a memoised Recipes page is told about it
+  // through this value instead of reading the ref itself.
+  const pendingRecipeKey = (automation?.recipes ?? []).filter((recipe) => isPending(`recipe:${recipe.id}`)).map((recipe) => recipe.id).join(",");
+  const pendingRecipeIds = useMemo(() => (pendingRecipeKey === "" ? [] : pendingRecipeKey.split(",")), [pendingRecipeKey]);
+
   const applicationError = [calibrationError, volumeError, sensorControlError, actionError]
     .filter((error): error is string => error !== null)
     .join(" · ") || null;
@@ -646,23 +664,20 @@ function MainApp() {
       <RecipesPage
         automation={automation}
         calibration={calibration}
-        isPending={isPending}
+        pendingRecipeIds={pendingRecipeIds}
         error={applicationError}
-        onSetEnabled={(id, enabled) => { void setRecipeEnabled(id, enabled); }}
-        onSave={saveRecipe}
-        onDelete={(id) => { void deleteRecipe(id); }}
+        onSetEnabled={stableSetRecipeEnabled}
+        onSave={stableSaveRecipe}
+        onDelete={stableDeleteRecipe}
         startWithDevice={startWithDevice}
         builtInGestures={settings?.heuristicGestures}
-        onStartHandled={() => setStartWithDevice(null)}
+        onStartHandled={clearStartWithDevice}
       />
     )}
     {activeTab === "devices" && (
       <VirtualDevicesPage
         automation={automation}
-        onMakeRecipe={(kind) => {
-          setStartWithDevice(kind);
-          setActiveTab("recipes");
-        }}
+        onMakeRecipe={makeRecipeFromDevice}
       />
     )}
     {activeTab === "gestures" && (
@@ -677,8 +692,8 @@ function MainApp() {
         lastPitch={lastPitch}
         calibration={calibration}
         automation={automation}
-        onOpenModelLab={() => setActiveTab("modelLab")}
-        onOpenSettings={() => setActiveTab("settings")}
+        onOpenModelLab={openModelLab}
+        onOpenSettings={openSettings}
       />
     )}
     {activeTab === "telemetry" && (

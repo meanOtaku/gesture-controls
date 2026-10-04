@@ -167,6 +167,44 @@ pub struct LabelRuntimeStatus {
     pub last_scores: BTreeMap<String, f64>,
 }
 
+/// Decides when the recipe engine needs to hear from the label runtime. The runtime reports on every watch sample (tens of
+/// times a second), but recipes only care when what they can see changes: what is loaded, what is detected, a one-shot
+/// starting or being cut short, and a one-shot's moment ending. Telling the engine about every sample made every sample
+/// cost an extra engine step.
+#[derive(Default)]
+struct PushGate {
+    last: Option<(BTreeSet<String>, BTreeSet<String>)>,
+    /// When a one-shot that started recently stops counting, so the engine is told once more to forget it.
+    pulse_expires_ns: Option<u64>,
+}
+
+impl PushGate {
+    fn needed(
+        &mut self,
+        loaded: &BTreeSet<String>,
+        held: &BTreeSet<String>,
+        edges: bool,
+        now_ns: u64,
+    ) -> bool {
+        let changed = self
+            .last
+            .as_ref()
+            .is_none_or(|(l, h)| l != loaded || h != held);
+        if changed {
+            self.last = Some((loaded.clone(), held.clone()));
+        }
+        let expired = self.pulse_expires_ns.is_some_and(|at| now_ns >= at);
+        if expired {
+            self.pulse_expires_ns = None;
+        }
+        if edges {
+            // A little past the engine's own window, so the push that clears it lands after the pulse is over.
+            self.pulse_expires_ns = Some(now_ns + crate::automation::MODEL_PULSE_NS + 1_000_000);
+        }
+        changed || edges || expired
+    }
+}
+
 #[derive(Default)]
 struct HostState {
     status: LabelRuntimeStatus,
@@ -176,6 +214,7 @@ struct HostState {
 }
 
 pub struct LabelRuntimeHost {
+    push_gate: Mutex<PushGate>,
     runtime: Mutex<LabelRuntime>,
     state: Mutex<HostState>,
     started_at: Instant,
@@ -184,6 +223,7 @@ pub struct LabelRuntimeHost {
 impl Default for LabelRuntimeHost {
     fn default() -> Self {
         Self {
+            push_gate: Mutex::new(PushGate::default()),
             runtime: Mutex::new(LabelRuntime::default()),
             state: Mutex::new(HostState::default()),
             started_at: Instant::now(),
@@ -541,16 +581,25 @@ impl LabelRuntimeHost {
             }
             Err(_) => (BTreeSet::new(), BTreeSet::new()),
         };
-        // Recipes see this on every update, and on every 100 ms tick, which is also what expires a one-shot.
+        // Recipes are told when something they can see changes, and by the 100 ms tick when a one-shot's moment is over.
         let (risen, dropped) = recipe_edges(&output);
-        app.state::<AutomationRuntime>().set_models(
-            app,
-            loaded,
-            held,
-            &risen,
-            &dropped,
-            self.now_ns(),
-        );
+        let now = self.now_ns();
+        let push = self
+            .push_gate
+            .lock()
+            .map(|mut gate| {
+                gate.needed(
+                    &loaded,
+                    &held,
+                    !risen.is_empty() || !dropped.is_empty(),
+                    now,
+                )
+            })
+            .unwrap_or(true);
+        if push {
+            app.state::<AutomationRuntime>()
+                .set_models(app, loaded, held, &risen, &dropped, now);
+        }
         if changed {
             let report = DetectionReport {
                 events: output.events.iter().map(DetectionEventView::from).collect(),
@@ -819,5 +868,42 @@ mod tests {
         let (risen, dropped) = recipe_edges(&output);
         assert_eq!(risen, ["a"]);
         assert_eq!(dropped, ["c"]);
+    }
+
+    fn set(labels: &[&str]) -> BTreeSet<String> {
+        labels.iter().map(ToString::to_string).collect()
+    }
+
+    #[test]
+    fn recipes_are_told_only_when_something_they_can_see_changes() {
+        let mut gate = PushGate::default();
+        let (loaded, none) = (set(&["snap"]), set(&[]));
+        // The first word always goes, so the engine learns what is loaded.
+        assert!(gate.needed(&loaded, &none, false, 1));
+        // Thousands of identical samples after that are not worth an engine step.
+        for n in 2..5000 {
+            assert!(!gate.needed(&loaded, &none, false, n * 1_000_000), "{n}");
+        }
+        assert!(gate.needed(&loaded, &set(&["snap"]), false, 6_000_000_000));
+        assert!(!gate.needed(&loaded, &set(&["snap"]), false, 6_001_000_000));
+        assert!(gate.needed(
+            &set(&["snap", "wave"]),
+            &set(&["snap"]),
+            false,
+            6_002_000_000
+        ));
+    }
+
+    #[test]
+    fn a_one_shot_is_pushed_when_it_starts_and_once_more_when_its_moment_is_over() {
+        let mut gate = PushGate::default();
+        let (loaded, none) = (set(&["snap"]), set(&[]));
+        gate.needed(&loaded, &none, false, 0);
+        let start = 10_000_000_000;
+        assert!(gate.needed(&loaded, &none, true, start));
+        assert!(!gate.needed(&loaded, &none, false, start + 300_000_000));
+        // Past the engine's window the engine is told once so it can forget the pulse, and then never again.
+        assert!(gate.needed(&loaded, &none, false, start + 800_000_000));
+        assert!(!gate.needed(&loaded, &none, false, start + 900_000_000));
     }
 }

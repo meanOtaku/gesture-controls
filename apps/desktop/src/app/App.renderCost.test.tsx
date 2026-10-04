@@ -6,7 +6,7 @@ import { telemetryStore, EMPTY_WATCH_STATUS } from "../features/telemetry/store/
 const { invoke, listen, renders } = vi.hoisted(() => ({
   invoke: vi.fn(),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
-  renders: { modelLab: 0, liveTelemetry: 0 },
+  renders: { modelLab: 0, liveTelemetry: 0, recipes: 0, devices: 0, gestures: 0 },
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
@@ -26,11 +26,33 @@ vi.mock("../features/telemetry/components/LiveTelemetry", () => ({
   },
 }));
 
+vi.mock("../features/recipes/components/RecipesPage", () => ({
+  RecipesPage: () => {
+    renders.recipes += 1;
+    return <div>recipes body</div>;
+  },
+}));
+vi.mock("../features/devices/components/VirtualDevicesPage", () => ({
+  VirtualDevicesPage: () => {
+    renders.devices += 1;
+    return <div>devices body</div>;
+  },
+}));
+vi.mock("../features/gestures/components/GesturesPage", () => ({
+  GesturesPage: () => {
+    renders.gestures += 1;
+    return <div>gestures body</div>;
+  },
+}));
+
 beforeEach(() => {
   telemetryStore.reset();
   Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
   renders.modelLab = 0;
   renders.liveTelemetry = 0;
+  renders.recipes = 0;
+  renders.devices = 0;
+  renders.gestures = 0;
   invoke.mockReset();
   invoke.mockResolvedValue(undefined);
 });
@@ -74,5 +96,24 @@ describe("idle tabs are not re-rendered by telemetry publishes", () => {
     await publish(5);
 
     expect(renders.liveTelemetry).toBe(afterMount);
+  });
+
+  // These three take props from the parent, so they are only skipped while every prop keeps its identity: a new inline
+  // function per render would make the memo useless and put them back at ~15 renders a second.
+  it.each([
+    ["Recipes", "recipes body", "recipes"],
+    ["Virtual devices", "devices body", "devices"],
+    ["Gestures", "gestures body", "gestures"],
+  ] as const)("%s is not re-rendered by telemetry publishes", async (tab, body, counter) => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: tab }));
+    await waitFor(() => expect(screen.getByText(body)).toBeInTheDocument());
+    // Let the first renders (settings, calibration and automation arriving) settle before counting.
+    await publish(2);
+    const afterMount = renders[counter];
+
+    await publish(5);
+
+    expect(renders[counter]).toBe(afterMount);
   });
 });
