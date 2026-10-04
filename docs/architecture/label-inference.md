@@ -64,6 +64,16 @@ Labels that cannot both be true are declared as an exclusivity group, separately
 
 `label_runtime.rs` opens the per-label registry (migrating the old one once, see [the domain model](model-lab-domain.md)), loads the active models, feeds watch orientation and PPG events in, runs a 100 ms timer so a stream that stops is noticed, emits `label-detections` events (rising, active, falling, conflicts, rejections) and answers `get_label_runtime_status`. On every runtime update and every tick it hands the recipe engine the loaded labels, the detections cleared to act, the labels that just started and those cut short (see below). It **performs no action itself**; actions come only from recipes.
 
+## Importing a bundle
+
+`import_label_model(path)` takes a folder holding `manifest.json` and the one model file it names, and adds the model as a **Draft**. It never approves or activates anything.
+
+1. **Stage.** Only those two files are copied, into a private `model-lab/staging/<unique>` folder; every other file in the folder is ignored. A link (symlink) as the folder or either file is refused, as is a model name with a path in it, a manifest over 256 KB or a model over 16 MB. The full bundle validation then runs **on the staged copy**, so what was checked is exactly what is stored. This happens without holding the registry, so detection is not stalled.
+2. **Publish.** Refused if the same model bytes were already imported for that label. The staged folder is moved to `model-lab/label-models/<label>-<hash prefix>` with one rename, then the Draft is recorded; the label's project is created (trainer "external import") if it has none, and reused if it has. If the registry cannot be saved, the moved folder is removed again, so disk and registry agree.
+3. **Startup** deletes anything left in staging. A published folder the registry does not know (a crash between the rename and the save) is never trusted or deleted: importing the same bytes again reports it and asks you to move it aside.
+
+Later moves (Draft → Evaluated → Approved → Active) are explicit and go through the registry's own rules; loading re-validates the files and checks the hash against the one recorded.
+
 ## Recipes use detections
 
 A recipe step `{ "kind": "model", "label": "snap_fingers", "hold": "held" | "oneShot" }` reads the runtime:
@@ -82,4 +92,5 @@ Not yet done or checked:
 - Windows and Linux builds of the crate (see the decision record's correction).
 - Any model from Keras or PyTorch exporters; any model trained on real recordings; behaviour on a real watch's streams.
 - Head-pose input, standardisation preprocessing, and quantised variants.
-- Importing a bundle into the registry, training, and the Model Lab UI.
+- Training and the Model Lab UI (choosing a folder to import, moving a Draft to Approved and Active). Until then importing and the registry commands are only reachable through the app's commands.
+- Importing on a real machine with a bundle from a real exporter other than the scikit-learn fixture.

@@ -13,11 +13,12 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use chrono::{SecondsFormat, Utc};
 use label_inference::{
     ClearReason, Conflict, DetectionEvent, LabelRuntime, ModelLoadFailure, RuntimeMode,
-    RuntimeOutput, load_active_models,
+    RuntimeOutput, clean_staging, load_active_models, publish_staged, stage_bundle,
 };
-use model_lab_core::{FileStore, LabelId, RegistryStore, open_registry};
+use model_lab_core::{FileStore, LabelId, LifecycleState, RegistryStore, open_registry};
 use serde::Serialize;
 use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -27,6 +28,8 @@ use crate::automation::AutomationRuntime;
 use crate::model_lab::MODEL_LAB_DIR_NAME;
 
 pub const LABEL_DETECTIONS_EVENT: &str = "label-detections";
+/// Sent when the set of registered models changes (an import).
+pub const LABEL_MODELS_EVENT: &str = "label-models-changed";
 const TICK_INTERVAL: Duration = Duration::from_millis(100);
 
 /// What the UI and the recipe engine are told when detections change.
@@ -123,6 +126,30 @@ impl From<&ModelLoadFailure> for LoadFailureView {
     }
 }
 
+/// One registered model, for the UI.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LabelModelView {
+    pub id: String,
+    pub label: String,
+    pub state: LifecycleState,
+    pub deployable: bool,
+    pub imported: bool,
+    pub model_sha256: Option<String>,
+    pub created_at: String,
+    /// This model is the label's active one.
+    pub active: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportedModelView {
+    pub id: String,
+    pub label: String,
+    pub model_sha256: String,
+    pub project_created: bool,
+}
+
 /// A snapshot of the runtime for the UI.
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -202,6 +229,8 @@ impl LabelRuntimeHost {
             return;
         };
         let dir: PathBuf = base.join(MODEL_LAB_DIR_NAME);
+        // Whatever an interrupted import left behind is not trusted.
+        clean_staging(&dir);
         let legacy = dir.join("registry.json");
         let (mut store, report) = match open_registry(&dir, Some(&legacy)) {
             Ok(opened) => opened,
@@ -264,6 +293,68 @@ impl LabelRuntimeHost {
         for output in outputs {
             self.dispatch(app, output);
         }
+    }
+
+    fn model_lab_dir(app: &AppHandle) -> Result<PathBuf, String> {
+        app.path()
+            .app_data_dir()
+            .map(|base| base.join(MODEL_LAB_DIR_NAME))
+            .map_err(|error| error.to_string())
+    }
+
+    /// Imports an external model bundle from a folder as a Draft. The copy and the validation happen without holding
+    /// the registry, so detection is never held up by a slow import. Nothing is approved or activated.
+    pub fn import_bundle(
+        &self,
+        app: &AppHandle,
+        source: &str,
+    ) -> Result<ImportedModelView, String> {
+        let dir = Self::model_lab_dir(app)?;
+        let staged =
+            stage_bundle(std::path::Path::new(source), &dir).map_err(|error| error.to_string())?;
+        let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+        let outcome = {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| "model state is unavailable")?;
+            let store = state.store.as_mut().ok_or_else(|| {
+                "the model registry is not available, so nothing can be imported".to_string()
+            })?;
+            publish_staged(staged, &dir, store, &now).map_err(|error| error.to_string())?
+        };
+        info!(label = %outcome.label, version = %outcome.version_id, "imported a model as a draft");
+        let _ = app.emit(LABEL_MODELS_EVENT, ());
+        Ok(ImportedModelView {
+            id: outcome.version_id.to_string(),
+            label: outcome.label.to_string(),
+            model_sha256: outcome.model_sha256,
+            project_created: outcome.project_created,
+        })
+    }
+
+    pub fn list_models(&self) -> Vec<LabelModelView> {
+        let Ok(state) = self.state.lock() else {
+            return Vec::new();
+        };
+        let Some(store) = &state.store else {
+            return Vec::new();
+        };
+        let registry = store.registry();
+        registry
+            .versions
+            .values()
+            .map(|v| LabelModelView {
+                id: v.id.to_string(),
+                label: v.label.to_string(),
+                state: v.state,
+                deployable: v.deployable,
+                imported: matches!(v.origin, model_lab_core::ModelOrigin::Imported),
+                model_sha256: v.model_sha256.clone(),
+                created_at: v.created_at.clone(),
+                active: registry.active_by_label.get(&v.label) == Some(&v.id),
+            })
+            .collect()
     }
 
     fn set_registry_error(&self, error: String) {
@@ -416,6 +507,21 @@ pub fn spawn_timer(app: AppHandle) {
 #[tauri::command]
 pub fn get_label_runtime_status(host: State<'_, LabelRuntimeHost>) -> LabelRuntimeStatus {
     host.status()
+}
+
+/// Imports a model bundle (a folder with `manifest.json` and one ONNX model). It is added as a Draft.
+#[tauri::command]
+pub fn import_label_model(
+    app: AppHandle,
+    host: State<'_, LabelRuntimeHost>,
+    path: String,
+) -> Result<ImportedModelView, String> {
+    host.import_bundle(&app, &path)
+}
+
+#[tauri::command]
+pub fn list_label_models(host: State<'_, LabelRuntimeHost>) -> Vec<LabelModelView> {
+    host.list_models()
 }
 
 #[cfg(test)]

@@ -26,8 +26,8 @@ use tract_onnx::tract_core::framework::Framework as _;
 
 pub const MANIFEST_FILE: &str = "manifest.json";
 pub const SUPPORTED_SCHEMA_VERSION: u32 = 1;
-const MAX_MANIFEST_BYTES: u64 = 256 * 1024;
-const MAX_MODEL_BYTES: u64 = 16 * 1024 * 1024;
+pub(crate) const MAX_MANIFEST_BYTES: u64 = 256 * 1024;
+pub(crate) const MAX_MODEL_BYTES: u64 = 16 * 1024 * 1024;
 /// The runtime is checked against this ONNX opset range; tract reports anything it cannot run.
 const MIN_OPSET: u32 = 9;
 const MAX_OPSET: u32 = 21;

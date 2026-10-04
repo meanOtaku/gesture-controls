@@ -13,6 +13,7 @@
 
 mod bundle;
 mod detection;
+mod import;
 mod loader;
 mod model;
 mod pipeline;
@@ -21,6 +22,10 @@ mod runtime;
 pub use bundle::{BundleError, Manifest, ValidatedBundle, validate_bundle};
 pub use detection::{
     ClearReason, Conflict, DetectionEvent, DetectionHub, ExclusivityGroup, TemporalDetector,
+};
+pub use import::{
+    IMPORTED_MODELS_DIR, ImportError, ImportOutcome, STAGING_DIR, StagedBundle, clean_staging,
+    import_bundle, publish_staged, stage_bundle,
 };
 pub use loader::{ModelLoadFailure, load_active_models};
 pub use model::{LoadedModel, ModelError};

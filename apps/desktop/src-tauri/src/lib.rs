@@ -158,6 +158,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             calibration::get_calibration_state,
             label_runtime::get_label_runtime_status,
+            label_runtime::import_label_model,
+            label_runtime::list_label_models,
             automation::get_automation_state,
             automation::set_recipe_enabled,
             automation::save_recipe,
