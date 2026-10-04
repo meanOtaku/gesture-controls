@@ -6,8 +6,8 @@ import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Switch } from "../../../components/ui/switch";
-import type { AutomationState, CalibrationState, Recipe } from "../../../shared/protocol/events";
-import { blankRecipe, describeRecipe, type DeviceKind } from "../recipeModel";
+import type { AutomationState, CalibrationState, HeuristicGestures, Recipe } from "../../../shared/protocol/events";
+import { blankRecipe, describeRecipe, offGesturesUsed, type DeviceKind } from "../recipeModel";
 import { ConflictAlerts } from "./ConflictAlerts";
 import { RecipeEditor } from "./RecipeEditor";
 
@@ -20,13 +20,15 @@ type RecipesPageProps = {
   /** Resolves to an error message, or null once saved. */
   onSave: (recipe: Recipe) => Promise<string | null>;
   onDelete: (id: string) => void;
+  /** Which built-in gestures are switched on in Settings; a recipe using an off one never fires. */
+  builtInGestures?: HeuristicGestures;
   /** Open the editor on a new recipe using this device (sent from the Virtual devices tab). */
   startWithDevice?: DeviceKind | null;
   onStartHandled?: () => void;
 };
 
 /** Where recipes are made: each one chains head, pinch/button and wrist steps into a virtual device that controls something. */
-export function RecipesPage({ automation, calibration, isPending, error, onSetEnabled, onSave, onDelete, startWithDevice = null, onStartHandled }: RecipesPageProps) {
+export function RecipesPage({ automation, calibration, isPending, error, onSetEnabled, onSave, onDelete, startWithDevice = null, onStartHandled, builtInGestures }: RecipesPageProps) {
   const [editing, setEditing] = useState<Recipe | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const locations = calibration?.targets ?? [];
@@ -104,6 +106,11 @@ export function RecipesPage({ automation, calibration, isPending, error, onSetEn
                     <span className="text-sm">
                       {recipe.name}{" "}
                       {blocked && <Badge variant="destructive">Paused: conflict</Badge>}
+                      {builtInGestures && offGesturesUsed(recipe, builtInGestures).length > 0 && (
+                        <Badge variant="secondary">
+                          Never fires: {offGesturesUsed(recipe, builtInGestures).join(", ")} gesture off in Settings
+                        </Badge>
+                      )}
                     </span>
                     <small className="text-xs text-muted-foreground">{describeRecipe(recipe, locationName)}</small>
                   </div>

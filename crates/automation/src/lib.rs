@@ -9,6 +9,7 @@
 mod conflicts;
 mod device;
 mod flick;
+mod heuristics;
 mod pitch;
 mod recipe;
 mod roll;
@@ -19,6 +20,7 @@ mod tap;
 
 pub use conflicts::{Conflict, blocked_recipes, find_conflicts};
 pub use device::{Device, DeviceKind, Output};
+pub use heuristics::HeuristicGestures;
 pub use pitch::{PitchConfig, PitchDetector, PitchDirection};
 pub use recipe::{Action, Axis, Hold, MAX_STAGES, Recipe, RecipeError, Stage, validate_recipe};
 pub use roll::{RollConfig, RollDetector, RollDirection};

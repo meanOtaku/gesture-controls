@@ -50,6 +50,10 @@ export interface CalibrationState {
 }
 
 export type HoldGesture = "pinch" | "stemButton" | "shake" | "swipeLeft" | "swipeRight" | "swipeUp" | "swipeDown" | "tap" | "doubleTap" | "rollClockwise" | "rollCounterClockwise" | "pitchUp" | "pitchDown";
+/** The built-in, rule-based wrist gestures that can be switched off (for example when a trained model handles one). */
+export type HeuristicGesture = "shake" | "swipe" | "tap" | "roll" | "pitch";
+export type HeuristicGestures = Record<HeuristicGesture, boolean>;
+
 export type PitchDirection = "up" | "down";
 export type RollDirection = "clockwise" | "counterClockwise";
 export type TapKind = "single" | "double";
@@ -301,6 +305,8 @@ export interface AppSettings {
   pitchAngleDegrees: number;
   /** Which wrist the watch is worn on. Only the roll gesture needs it. */
   watchWrist: WatchWrist;
+  /** Which built-in wrist gestures are recognised; an off gesture never fires and a recipe using it never runs. */
+  heuristicGestures: HeuristicGestures;
   /** Which side of the watch face the crown is on as you read it: decides which way is left for a swipe. */
   crownSide: CrownSide;
   wristMaxAngularVelocityDegreesPerSecond: number;

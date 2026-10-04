@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CalibrationLocation, Recipe } from "../../shared/protocol/events";
 import {
-  actionInfo, holdsFor, isMomentary, isTrigger, blankRecipe, buildDevice, deviceSpecs, chainProblem, defaultNumbers, describeRecipe, deviceNumbers, driveStage, leadingStages, nameProblem,
+  actionInfo, heuristicOf, offGesturesUsed, holdsFor, isMomentary, isTrigger, blankRecipe, buildDevice, deviceSpecs, chainProblem, defaultNumbers, describeRecipe, deviceNumbers, driveStage, leadingStages, nameProblem,
 } from "./recipeModel";
 
 const locations: CalibrationLocation[] = [
@@ -99,6 +99,23 @@ describe("recipeModel", () => {
     }
     expect(isMomentary("pinch")).toBe(false);
     expect(holdsFor(false).map((hold) => hold.value)).toEqual(["pinch", "stemButton"]);
+  });
+
+  it("knows which built-in gesture switch each step depends on", () => {
+    expect(heuristicOf("pinch")).toBeNull();
+    expect(heuristicOf("stemButton")).toBeNull();
+    expect(heuristicOf("swipeDown")).toBe("swipe");
+    expect(heuristicOf("doubleTap")).toBe("tap");
+    expect(heuristicOf("rollCounterClockwise")).toBe("roll");
+    expect(heuristicOf("pitchUp")).toBe("pitch");
+    expect(heuristicOf("shake")).toBe("shake");
+    const recipe: Recipe = {
+      ...blankRecipe(locations),
+      action: "nextTrack",
+      stages: [{ kind: "hold", hold: "tap" }, { kind: "hold", hold: "doubleTap" }, { kind: "hold", hold: "pinch" }],
+    };
+    expect(offGesturesUsed(recipe, { shake: true, swipe: true, tap: false, roll: true, pitch: true })).toEqual(["tap"]);
+    expect(offGesturesUsed(recipe, { shake: true, swipe: true, tap: true, roll: true, pitch: true })).toEqual([]);
   });
 
   it("validates the name", () => {

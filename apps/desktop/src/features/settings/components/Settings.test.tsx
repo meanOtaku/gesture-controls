@@ -24,6 +24,7 @@ const settings: AppSettings = {
   rollAngleDegrees: 60,
   pitchAngleDegrees: 40,
   watchWrist: "left",
+  heuristicGestures: { shake: true, swipe: true, tap: true, roll: true, pitch: true },
   crownSide: "right",
   wristMaxAngularVelocityDegreesPerSecond: 360,
   wristMaxVolumePointsPerSecond: 30,
@@ -202,6 +203,17 @@ describe("Settings", () => {
     expect(screen.getByLabelText("Pitch angle")).toHaveAttribute("aria-invalid", "true");
     rerender(<Settings settings={settings} lastPitch={{ direction: "up", count: 5 }} onUpdate={() => {}} onReset={() => {}} />);
     expect(screen.getByText(/Last pitch recognised/)).toHaveTextContent("up (5 so far)");
+  });
+
+  it("switches a built-in gesture off and on without touching the others", () => {
+    const updates: AppSettings[] = [];
+    render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
+    const section = within(screen.getByRole("region", { name: "Built-in gestures" }));
+    for (const name of ["Shake", "Swipe", "Tap", "Roll", "Pitch"]) {
+      expect(section.getByRole("switch", { name: `${name} gesture on` })).toBeChecked();
+    }
+    fireEvent.click(section.getByRole("switch", { name: "Swipe gesture on" }));
+    expect(updates).toEqual([{ ...settings, heuristicGestures: { ...settings.heuristicGestures, swipe: false } }]);
   });
 
   it("tunes tap strength and shows the last tap", () => {

@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   rollAngleDegrees: 60,
   pitchAngleDegrees: 40,
   watchWrist: "left",
+  heuristicGestures: { shake: true, swipe: true, tap: true, roll: true, pitch: true },
   crownSide: "right",
   wristMaxAngularVelocityDegreesPerSecond: 360,
   wristMaxVolumePointsPerSecond: 30,

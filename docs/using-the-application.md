@@ -87,6 +87,10 @@ The **Headphones** tab is for Sony tracker status and gaze calibration.
 - Lets you adjust the target acceptance threshold and dwell duration.
 - Reports when recalibration is needed after a tracker reference-frame reset.
 
+#### Built-in gestures (Settings)
+
+**Settings → Built-in gestures** has an on/off switch for each rule-based wrist gesture: **Shake**, **Swipe**, **Tap**, **Roll** and **Pitch**. They are all on by default. An off gesture is not recognised at all, so its live readout stops and any recipe that uses it never fires; the Recipes tab marks such a recipe "Never fires: … gesture off in Settings". The recipe stays saved and starts working again when the switch is turned back on. A pinch and the STEM button are not on this list. The reason for the switches is that a model you train for the same gesture can take over without the rule-based one also firing.
+
 #### Watch orientation (Settings)
 
 The watch senses movement in its own frame, so for swipes and rolls the app needs to know how it sits on you:

@@ -10,10 +10,11 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use automation::{
-    Action, Axis, Conflict, CrownSide, Device, DeviceKind, Hold, PitchConfig, PitchDetector,
-    PitchDirection, Recipe, RecipeRunner, RollConfig, RollDetector, RollDirection, RunnerPhase,
-    ShakeConfig, ShakeDetector, Signals, Stage, SwipeConfig, SwipeDetector, SwipeDirection,
-    TapConfig, TapDetector, TapKind, Wrist, blocked_recipes, find_conflicts, validate_recipe,
+    Action, Axis, Conflict, CrownSide, Device, DeviceKind, HeuristicGestures, Hold, PitchConfig,
+    PitchDetector, PitchDirection, Recipe, RecipeRunner, RollConfig, RollDetector, RollDirection,
+    RunnerPhase, ShakeConfig, ShakeDetector, Signals, Stage, SwipeConfig, SwipeDetector,
+    SwipeDirection, TapConfig, TapDetector, TapKind, Wrist, blocked_recipes, find_conflicts,
+    validate_recipe,
 };
 use interaction_engine::quaternion_angular_distance;
 use serde::Serialize;
@@ -75,7 +76,7 @@ pub struct Effects {
     /// A quick tilt of the hand was recognised on this sample, for the Settings tuning aid.
     pub pitched: Option<PitchDirection>,
     /// A quick wrist twist was recognised on this sample, for the Settings tuning aid.
-    pub rolld: Option<RollDirection>,
+    pub rolled: Option<RollDirection>,
     /// A tap was recognised on this sample, for the Settings tuning aid.
     pub tapped: Option<TapKind>,
     /// Trigger recipes that fired: each a one-off press.
@@ -97,6 +98,7 @@ pub struct Tuning {
     pub tap_peak_threshold: f64,
     pub roll_angle_degrees: f64,
     pub pitch_angle_degrees: f64,
+    pub heuristics: HeuristicGestures,
     pub wrist: Wrist,
     pub crown: CrownSide,
 }
@@ -113,6 +115,7 @@ impl Tuning {
             tap_peak_threshold: settings.tap_peak_threshold,
             roll_angle_degrees: settings.roll_angle_degrees,
             pitch_angle_degrees: settings.pitch_angle_degrees,
+            heuristics: settings.heuristic_gestures,
             wrist: settings.watch_wrist,
             crown: settings.crown_side,
         }
@@ -175,6 +178,7 @@ impl Default for Tuning {
             tap_peak_threshold: 12.0,
             roll_angle_degrees: 60.0,
             pitch_angle_degrees: 40.0,
+            heuristics: HeuristicGestures::default(),
             wrist: Wrist::Left,
             crown: CrownSide::Right,
         }
@@ -404,29 +408,40 @@ impl Engine {
         }
         // A shake is judged on every sample, even one the glitch filter below discards: a shake is exactly the sort
         // of fast movement that filter exists for.
-        let shook =
-            acceleration.is_some_and(|acceleration| self.shake.observe(timestamp_ns, acceleration));
+        // A gesture switched off in Settings is not fed at all, so it can never be recognised or reported.
+        let on = self.tuning.heuristics;
+        let shook = on.shake
+            && acceleration
+                .is_some_and(|acceleration| self.shake.observe(timestamp_ns, acceleration));
         if shook {
             self.shake_until_ns = timestamp_ns + SHAKE_HOLD_NS;
         }
         let swiped = acceleration
+            .filter(|_| on.swipe)
             .and_then(|acceleration| self.swipe.observe(timestamp_ns, acceleration, quaternion));
         if let Some(direction) = swiped {
             self.swipe_direction = Some(direction);
             self.swipe_until_ns = timestamp_ns + SHAKE_HOLD_NS;
         }
-        let tapped =
-            acceleration.and_then(|acceleration| self.tap.observe(timestamp_ns, acceleration));
+        let tapped = acceleration
+            .filter(|_| on.tap)
+            .and_then(|acceleration| self.tap.observe(timestamp_ns, acceleration));
         if let Some(kind) = tapped {
             self.tap_kind = Some(kind);
             self.tap_until_ns = timestamp_ns + SHAKE_HOLD_NS;
         }
-        let rolld = self.roll.observe(timestamp_ns, quaternion);
-        if let Some(direction) = rolld {
+        let rolled = on
+            .roll
+            .then(|| self.roll.observe(timestamp_ns, quaternion))
+            .flatten();
+        if let Some(direction) = rolled {
             self.roll_direction = Some(direction);
             self.roll_until_ns = timestamp_ns + SHAKE_HOLD_NS;
         }
-        let pitched = self.pitch.observe(timestamp_ns, quaternion);
+        let pitched = on
+            .pitch
+            .then(|| self.pitch.observe(timestamp_ns, quaternion))
+            .flatten();
         if let Some(direction) = pitched {
             self.pitch_direction = Some(direction);
             self.pitch_until_ns = timestamp_ns + SHAKE_HOLD_NS;
@@ -438,7 +453,7 @@ impl Engine {
                 shook,
                 swiped,
                 tapped,
-                rolld,
+                rolled,
                 pitched,
                 ..Effects::default()
             };
@@ -456,7 +471,7 @@ impl Engine {
         effects.shook = shook;
         effects.swiped = swiped;
         effects.tapped = tapped;
-        effects.rolld = rolld;
+        effects.rolled = rolled;
         effects.pitched = pitched;
         effects
     }
@@ -651,7 +666,7 @@ impl AutomationRuntime {
         if let Some(direction) = effects.pitched {
             let _ = app.emit(PITCH_DETECTED_EVENT, direction);
         }
-        if let Some(direction) = effects.rolld {
+        if let Some(direction) = effects.rolled {
             let _ = app.emit(ROLL_DETECTED_EVENT, direction);
         }
         if let Some(kind) = effects.tapped {
@@ -1414,7 +1429,7 @@ mod tests {
             };
             let effects =
                 engine.observe_orientation(roll_pose(angle), (offset_ms + ms) * 1_000_000, None);
-            rotations.extend(effects.rolld);
+            rotations.extend(effects.rolled);
             fired.extend(effects.fired);
         }
         (rotations, fired)
@@ -1469,7 +1484,7 @@ mod tests {
                 found.extend(
                     engine
                         .observe_orientation(roll_pose(angle), ms * 1_000_000, None)
-                        .rolld,
+                        .rolled,
                 );
             }
             found
@@ -1562,6 +1577,62 @@ mod tests {
         assert!(roll_for(&mut engine, 90.0, 0).0.is_empty());
         engine.set_tuning(Tuning::default());
         assert_eq!(roll_for(&mut engine, 90.0, 10_000).0.len(), 1);
+    }
+
+    #[test]
+    fn a_gesture_switched_off_is_never_recognised_or_reported_and_the_others_still_are() {
+        let off = |f: fn(&mut HeuristicGestures)| {
+            let mut heuristics = HeuristicGestures::default();
+            f(&mut heuristics);
+            Tuning {
+                heuristics,
+                ..Tuning::default()
+            }
+        };
+        // Taps off: a knock that would be a tap does nothing, and neither does its recipe.
+        let mut engine = Engine::new(
+            vec![swipe_recipe(Hold::Tap, Action::PlayPause)],
+            off(|h| h.tap = false),
+        );
+        assert_eq!(tap_for(&mut engine, &[1000], 0), (vec![], vec![]));
+        // Back on (as the Settings switch does by rebuilding the tuning), the same knock is recognised.
+        engine.set_tuning(Tuning::default());
+        assert_eq!(
+            tap_for(&mut engine, &[1000], 10_000).0,
+            vec![TapKind::Single]
+        );
+
+        // Swipes off, taps still on.
+        let mut engine = Engine::new(
+            vec![
+                swipe_recipe(Hold::SwipeRight, Action::NextTrack),
+                swipe_recipe(Hold::Tap, Action::PlayPause),
+            ],
+            off(|h| h.swipe = false),
+        );
+        assert!(swipe_for(&mut engine, 14.0, 0).0.is_empty());
+        assert_eq!(
+            tap_for(&mut engine, &[1000], 10_000).0,
+            vec![TapKind::Single]
+        );
+
+        // Roll and pitch off: a flick that would count is ignored.
+        let mut engine = Engine::new(
+            vec![swipe_recipe(Hold::RollClockwise, Action::NextTrack)],
+            off(|h| h.roll = false),
+        );
+        assert!(roll_for(&mut engine, 90.0, 0).0.is_empty());
+        let mut engine = Engine::new(
+            vec![swipe_recipe(Hold::PitchUp, Action::PlayPause)],
+            off(|h| h.pitch = false),
+        );
+        assert!(pitch_for(&mut engine, -60.0, 0).0.is_empty());
+        // Shake off.
+        let mut engine = Engine::new(
+            vec![swipe_recipe(Hold::Shake, Action::NextTrack)],
+            off(|h| h.shake = false),
+        );
+        assert!(shake_for(&mut engine, 4, 0).is_empty());
     }
 
     #[test]

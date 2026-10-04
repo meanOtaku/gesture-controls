@@ -1,5 +1,5 @@
 import type { NumberSpec } from "../../shared/forms/numberField";
-import type { CalibrationLocation, Recipe, RecipeAction, RecipeStage } from "../../shared/protocol/events";
+import type { CalibrationLocation, HeuristicGesture, Recipe, RecipeAction, RecipeStage } from "../../shared/protocol/events";
 
 export const MAX_RECIPE_NAME_CHARS = 40;
 export const MAX_STAGES = 6;
@@ -56,6 +56,26 @@ export const HOLDS: ReadonlyArray<{ value: HoldKind; label: string }> = [
   { value: "pitchUp", label: "Pitch hand up" },
   { value: "pitchDown", label: "Pitch hand down" },
 ];
+
+/** The built-in gesture switch a hold step depends on, or null for a pinch or the STEM button (which have none). */
+export function heuristicOf(hold: HoldKind): HeuristicGesture | null {
+  if (hold === "pinch" || hold === "stemButton") return null;
+  if (hold === "shake") return "shake";
+  if (hold.startsWith("swipe")) return "swipe";
+  if (hold === "tap" || hold === "doubleTap") return "tap";
+  if (hold.startsWith("roll")) return "roll";
+  return "pitch";
+}
+
+/** The built-in gestures a recipe uses that are switched off, so it can never fire. */
+export function offGesturesUsed(recipe: Recipe, enabled: Record<HeuristicGesture, boolean>): HeuristicGesture[] {
+  const used = recipe.stages.flatMap((stage) => {
+    if (stage.kind !== "hold") return [];
+    const gesture = heuristicOf(stage.hold);
+    return gesture !== null && enabled[gesture] === false ? [gesture] : [];
+  });
+  return [...new Set(used)];
+}
 
 /** A shake, swipe, tap, roll or pitch is over in a moment, unlike a pinch or a held button. */
 export function isMomentary(hold: HoldKind): boolean {

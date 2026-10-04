@@ -236,6 +236,19 @@ describe("RecipesPage", () => {
     expect(vi.mocked(props.onSave).mock.calls[0][0]).toMatchObject({ action: "playPause", stages: [{ kind: "hold", hold: "pitchUp" }] });
   });
 
+  it("flags a recipe whose built-in gesture is switched off in Settings", () => {
+    const swipe: Recipe = { ...stem, id: "swipe", name: "Swipe for next", action: "nextTrack", stages: [{ kind: "hold", hold: "swipeRight" }] };
+    setup({
+      automation: automation([stem, swipe]),
+      builtInGestures: { shake: true, swipe: false, tap: true, roll: true, pitch: true },
+    });
+    // Only the recipe that uses the off gesture is flagged; the STEM recipe is untouched.
+    const flags = screen.getAllByText(/Never fires/);
+    expect(flags).toHaveLength(1);
+    expect(flags[0]).toHaveTextContent("swipe gesture off in Settings");
+    expect(screen.getByText("Swipe for next").closest("li")).toContainElement(flags[0]);
+  });
+
   it("describes a media recipe without a device", () => {
     const play: Recipe = { ...stem, id: "play", name: "Pinch to play", action: "playPause", stages: [{ kind: "hold", hold: "pinch" }] };
     setup({ automation: automation([play]) });

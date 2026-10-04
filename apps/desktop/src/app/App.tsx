@@ -651,6 +651,7 @@ function MainApp() {
         onSave={saveRecipe}
         onDelete={(id) => { void deleteRecipe(id); }}
         startWithDevice={startWithDevice}
+        builtInGestures={settings?.heuristicGestures}
         onStartHandled={() => setStartWithDevice(null)}
       />
     )}

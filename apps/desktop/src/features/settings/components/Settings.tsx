@@ -1,8 +1,9 @@
 import type { FormEvent } from "react";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { useNumberDrafts } from "../../../shared/forms/useNumberDrafts";
-import type { AppSettings, OverlayState, PitchDirection, RollDirection, SwipeDirection, TapKind, WatchStatus } from "../../../shared/protocol/events";
+import type { AppSettings, HeuristicGesture, OverlayState, PitchDirection, RollDirection, SwipeDirection, TapKind, WatchStatus } from "../../../shared/protocol/events";
 import { ApplySettingsFooter } from "./ApplySettingsFooter";
+import { BuiltInGesturesSection } from "./BuiltInGesturesSection";
 import { HeadphonesSettingsSection } from "./HeadphonesSettingsSection";
 import { RecordingGraphSettingsSection } from "./RecordingGraphSettingsSection";
 import { PitchSettings } from "./PitchSettings";
@@ -76,6 +77,11 @@ export function Settings({
   };
 
   const toggleHeadphonesEnabled = () => onUpdate({ ...current, headphonesEnabled: !current.headphonesEnabled });
+  const toggleBuiltInGesture = (gesture: HeuristicGesture) =>
+    onUpdate({
+      ...current,
+      heuristicGestures: { ...current.heuristicGestures, [gesture]: !(current.heuristicGestures[gesture] ?? true) },
+    });
   const toggleWatchSensor = (id: string) =>
     onUpdate({
       ...current,
@@ -111,6 +117,8 @@ export function Settings({
           <RollSettings lastRoll={lastRoll} />
 
           <TapSettings lastTap={lastTap} />
+
+          <BuiltInGesturesSection gestures={current.heuristicGestures} onToggle={toggleBuiltInGesture} />
 
           <WatchOrientationSettings
             crownSide={current.crownSide}

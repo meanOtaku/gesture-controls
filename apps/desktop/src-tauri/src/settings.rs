@@ -87,6 +87,9 @@ pub struct AppSettings {
     /// How far the hand must tilt up or down at the wrist, quickly, to count as a pitch gesture, in degrees.
     #[serde(default = "default_pitch_angle_degrees")]
     pub pitch_angle_degrees: f64,
+    /// Which built-in wrist gestures are recognised. Turn one off to leave that gesture to a trained model.
+    #[serde(default)]
+    pub heuristic_gestures: automation::HeuristicGestures,
     /// Which wrist the watch is worn on. Only the roll gesture needs it: clockwise is the way you turn a screwdriver.
     #[serde(default)]
     pub watch_wrist: automation::Wrist,
@@ -137,6 +140,7 @@ impl Default for AppSettings {
             tap_peak_threshold: default_tap_peak_threshold(),
             roll_angle_degrees: default_roll_angle_degrees(),
             pitch_angle_degrees: default_pitch_angle_degrees(),
+            heuristic_gestures: automation::HeuristicGestures::default(),
             watch_wrist: automation::Wrist::default(),
             crown_side: automation::CrownSide::default(),
             wrist_max_angular_velocity_degrees_per_second:
@@ -682,6 +686,22 @@ mod tests {
         json["rotateAngleDegrees"] = serde_json::json!(75.0);
         let loaded: AppSettings = serde_json::from_value(json).unwrap();
         assert_eq!(loaded.roll_angle_degrees, 75.0);
+    }
+
+    #[test]
+    fn built_in_gestures_default_on_and_an_old_file_without_the_setting_keeps_them_on() {
+        assert_eq!(
+            AppSettings::default().heuristic_gestures,
+            automation::HeuristicGestures::default()
+        );
+        let mut json = serde_json::to_value(AppSettings::default()).unwrap();
+        json.as_object_mut().unwrap().remove("heuristicGestures");
+        let loaded: AppSettings = serde_json::from_value(json).unwrap();
+        assert!(loaded.heuristic_gestures.shake && loaded.heuristic_gestures.pitch);
+        let mut json = serde_json::to_value(AppSettings::default()).unwrap();
+        json["heuristicGestures"] = serde_json::json!({ "swipe": false });
+        let loaded: AppSettings = serde_json::from_value(json).unwrap();
+        assert!(!loaded.heuristic_gestures.swipe && loaded.heuristic_gestures.tap);
     }
 
     #[test]
