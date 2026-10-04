@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { lazy, memo, Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AppNav } from "./components/AppNav";
+import { AppNav, navStatuses } from "./components/AppNav";
 import { OperationFeedback } from "../components/app/OperationFeedback";
 import { Skeleton } from "../components/ui/skeleton";
 import { SidebarInset, SidebarProvider } from "../components/ui/sidebar";
@@ -479,7 +479,16 @@ function MainApp() {
     .join(" · ") || null;
 
   return <SidebarProvider>
-    <AppNav activeTab={activeTab} onSelect={setActiveTab} />
+    <AppNav
+      activeTab={activeTab}
+      onSelect={setActiveTab}
+      statuses={navStatuses({
+        headphonesConnected: status?.connected === true,
+        watchConnected: watchStatus?.connected === true,
+        watchWorn: watchStatus?.worn ?? null,
+        recordingState: telemetryStore.getDatasetRecordingState(),
+      })}
+    />
     <SidebarInset>
     <Suspense fallback={<TabFallback />}>
     {activeTab === "main" && (

@@ -336,3 +336,16 @@ html.overlay-document body::before { display:none; }
 .viewer-steps [data-current="true"] { color:var(--yellow); }
 
 .viewer-grid [data-slot="select-trigger"] { height:var(--control-h); }
+
+/* Sidebar: brand, group labels, and a square status marker that stays visible when collapsed. */
+.nav-brand { display:flex; align-items:center; gap:.65rem; padding:.35rem .5rem; color:var(--ink); }
+.nav-brand-name { display:flex; flex-direction:column; line-height:1; font-family:var(--font-display); text-transform:uppercase; letter-spacing:.1em; font-size:1.2rem; font-weight:500; }
+.nav-brand-name small { margin-top:.2rem; font-size:.75rem; letter-spacing:.3em; color:var(--ink-3); }
+[data-sidebar="group-label"] { font-family:var(--font-display); text-transform:uppercase; letter-spacing:.16em; font-size:.75rem; color:var(--ink-3); }
+.nav-dot { margin-left:auto; flex:0 0 auto; width:.55rem; height:.55rem; border:1px solid var(--ink-3); background:transparent; }
+.nav-dot[data-tone="ok"] { background:var(--green); border-color:var(--green); }
+.nav-dot[data-tone="warn"] { background:var(--yellow); border-color:var(--yellow); }
+.nav-dot[data-tone="live"] { background:var(--red); border-color:var(--red); animation:nav-pulse 1.2s steps(2,jump-none) infinite; }
+@keyframes nav-pulse { 50% { opacity:.25; } }
+[data-slot="sidebar-menu-button"][data-active] .nav-dot[data-tone="idle"] { border-color:var(--blue); }
+[data-collapsible="icon"] .nav-dot { position:absolute; top:.3rem; right:.3rem; margin:0; }
