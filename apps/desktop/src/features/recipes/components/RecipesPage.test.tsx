@@ -151,7 +151,7 @@ describe("RecipesPage", () => {
 
     // Switching back to a dial keeps the shake step but refuses to save it, in words.
     fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "volume" } });
-    expect(editor.getByRole("alert")).toHaveTextContent("A shake, swipe, tap, rotate or pitch only works for a button action");
+    expect(editor.getByRole("alert")).toHaveTextContent("A shake, swipe, tap, roll or pitch only works for a button action");
     fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
     expect(props.onSave).not.toHaveBeenCalled();
 
@@ -173,12 +173,12 @@ describe("RecipesPage", () => {
     fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "nextTrack" } });
     fireEvent.click(editor.getByRole("button", { name: /Add a gesture/ }));
     const options = within(editor.getByLabelText("Step 1 gesture")).getAllByRole("option").map((o) => o.textContent);
-    expect(options).toEqual(["Pinch and hold", "Hold STEM button", "Shake wrist", "Swipe left", "Swipe right", "Swipe up", "Swipe down", "Tap watch", "Double-tap watch", "Rotate wrist clockwise", "Rotate wrist counter-clockwise", "Pitch hand up", "Pitch hand down"]);
+    expect(options).toEqual(["Pinch and hold", "Hold STEM button", "Shake wrist", "Swipe left", "Swipe right", "Swipe up", "Swipe down", "Tap watch", "Double-tap watch", "Roll wrist clockwise", "Roll wrist counter-clockwise", "Pitch hand up", "Pitch hand down"]);
     fireEvent.change(editor.getByLabelText("Step 1 gesture"), { target: { value: "swipeRight" } });
     expect(editor.getByText(/Swipes are read from the watch's acceleration/)).toBeInTheDocument();
 
     fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "scroll" } });
-    expect(editor.getByRole("alert")).toHaveTextContent("A shake, swipe, tap, rotate or pitch only works for a button action");
+    expect(editor.getByRole("alert")).toHaveTextContent("A shake, swipe, tap, roll or pitch only works for a button action");
     fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
     expect(props.onSave).not.toHaveBeenCalled();
 
@@ -206,7 +206,7 @@ describe("RecipesPage", () => {
     expect(vi.mocked(props.onSave).mock.calls[0][0]).toMatchObject({ action: "mute", stages: [{ kind: "hold", hold: "doubleTap" }] });
   });
 
-  it("builds a rotate recipe and says how it differs from the dial's slow roll", async () => {
+  it("builds a roll recipe and says how it differs from the dial's slow roll", async () => {
     const props = setup();
     fireEvent.click(screen.getByRole("button", { name: /New recipe/ }));
     const editor = within(screen.getByRole("region", { name: "Recipe editor" }));
@@ -214,11 +214,11 @@ describe("RecipesPage", () => {
     fireEvent.click(editor.getByRole("button", { name: "Remove step 1" }));
     fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "nextTrack" } });
     fireEvent.click(editor.getByRole("button", { name: /Add a gesture/ }));
-    fireEvent.change(editor.getByLabelText("Step 1 gesture"), { target: { value: "rotateClockwise" } });
+    fireEvent.change(editor.getByLabelText("Step 1 gesture"), { target: { value: "rollClockwise" } });
     expect(editor.getByText(/not the slow roll that turns a dial/)).toBeInTheDocument();
     fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
     await waitFor(() => expect(props.onSave).toHaveBeenCalled());
-    expect(vi.mocked(props.onSave).mock.calls[0][0]).toMatchObject({ action: "nextTrack", stages: [{ kind: "hold", hold: "rotateClockwise" }] });
+    expect(vi.mocked(props.onSave).mock.calls[0][0]).toMatchObject({ action: "nextTrack", stages: [{ kind: "hold", hold: "rollClockwise" }] });
   });
 
   it("builds a pitch recipe and says how it differs from the dial's slow tilt", async () => {

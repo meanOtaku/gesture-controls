@@ -641,22 +641,22 @@ fn a_tap_step_and_a_double_tap_step_each_fire_only_for_their_own_kind() {
 }
 
 #[test]
-fn a_rotate_step_fires_only_for_its_own_direction() {
-    let signals = |rotate| Signals {
-        rotate,
+fn a_roll_step_fires_only_for_its_own_direction() {
+    let signals = |roll| Signals {
+        roll,
         ..Signals::default()
     };
     let mut clockwise = RecipeRunner::new(trigger(vec![Stage::Hold {
-        hold: Hold::RotateClockwise,
+        hold: Hold::RollClockwise,
     }]));
-    clockwise.update(&signals(Some(RotateDirection::CounterClockwise)));
+    clockwise.update(&signals(Some(RollDirection::CounterClockwise)));
     assert!(!clockwise.take_fired());
     clockwise.update(&signals(None));
-    clockwise.update(&signals(Some(RotateDirection::Clockwise)));
+    clockwise.update(&signals(Some(RollDirection::Clockwise)));
     assert!(clockwise.take_fired());
     assert_eq!(
-        serde_json::to_string(&Hold::RotateCounterClockwise).unwrap(),
-        "\"rotateCounterClockwise\""
+        serde_json::to_string(&Hold::RollCounterClockwise).unwrap(),
+        "\"rollCounterClockwise\""
     );
 }
 
@@ -677,5 +677,18 @@ fn a_pitch_step_fires_only_for_its_own_direction() {
     assert_eq!(
         serde_json::to_string(&Hold::PitchDown).unwrap(),
         "\"pitchDown\""
+    );
+}
+
+#[test]
+fn recipes_saved_with_the_old_rotate_names_still_load() {
+    let old: Hold = serde_json::from_str("\"rotateClockwise\"").unwrap();
+    assert_eq!(old, Hold::RollClockwise);
+    let old: Hold = serde_json::from_str("\"rotateCounterClockwise\"").unwrap();
+    assert_eq!(old, Hold::RollCounterClockwise);
+    // And it is written back under the new name.
+    assert_eq!(
+        serde_json::to_string(&Hold::RollClockwise).unwrap(),
+        "\"rollClockwise\""
     );
 }

@@ -33,8 +33,8 @@ pub const MIN_SWIPE_PEAK_THRESHOLD: f64 = 3.0;
 pub const MAX_SWIPE_PEAK_THRESHOLD: f64 = 30.0;
 pub const MIN_TAP_PEAK_THRESHOLD: f64 = 4.0;
 pub const MAX_TAP_PEAK_THRESHOLD: f64 = 40.0;
-pub const MIN_ROTATE_ANGLE_DEGREES: f64 = 30.0;
-pub const MAX_ROTATE_ANGLE_DEGREES: f64 = 180.0;
+pub const MIN_ROLL_ANGLE_DEGREES: f64 = 30.0;
+pub const MAX_ROLL_ANGLE_DEGREES: f64 = 180.0;
 pub const MIN_PITCH_ANGLE_DEGREES: f64 = 20.0;
 pub const MAX_PITCH_ANGLE_DEGREES: f64 = 120.0;
 pub const MIN_WRIST_ANGULAR_VELOCITY_DEGREES_PER_SECOND: f64 = 1.0;
@@ -81,17 +81,17 @@ pub struct AppSettings {
     /// How hard a knock on the watch must be to count as a tap, in m/s². Lower is more sensitive.
     #[serde(default = "default_tap_peak_threshold")]
     pub tap_peak_threshold: f64,
-    /// How far the wrist must twist, quickly, to count as a rotate gesture, in degrees. Smaller is more sensitive.
-    #[serde(default = "default_rotate_angle_degrees")]
-    pub rotate_angle_degrees: f64,
+    /// How far the wrist must twist, quickly, to count as a roll gesture, in degrees. Smaller is more sensitive.
+    #[serde(default = "default_roll_angle_degrees", alias = "rotateAngleDegrees")]
+    pub roll_angle_degrees: f64,
     /// How far the hand must tilt up or down at the wrist, quickly, to count as a pitch gesture, in degrees.
     #[serde(default = "default_pitch_angle_degrees")]
     pub pitch_angle_degrees: f64,
-    /// Which wrist the watch is worn on. Only the rotate gesture needs it: clockwise is the way you turn a screwdriver.
+    /// Which wrist the watch is worn on. Only the roll gesture needs it: clockwise is the way you turn a screwdriver.
     #[serde(default)]
     pub watch_wrist: automation::Wrist,
     /// Which side of the watch face the crown is on, as you read it. Decides which way along the forearm is left for a
-    /// swipe, and (with the wrist) which way is clockwise for a rotate.
+    /// swipe, and (with the wrist) which way is clockwise for a roll.
     #[serde(default)]
     pub crown_side: automation::CrownSide,
     #[serde(default = "default_wrist_max_angular_velocity_degrees_per_second")]
@@ -135,7 +135,7 @@ impl Default for AppSettings {
             shake_strokes: default_shake_strokes(),
             swipe_peak_threshold: default_swipe_peak_threshold(),
             tap_peak_threshold: default_tap_peak_threshold(),
-            rotate_angle_degrees: default_rotate_angle_degrees(),
+            roll_angle_degrees: default_roll_angle_degrees(),
             pitch_angle_degrees: default_pitch_angle_degrees(),
             watch_wrist: automation::Wrist::default(),
             crown_side: automation::CrownSide::default(),
@@ -169,7 +169,7 @@ fn default_shake_peak_threshold() -> f64 {
 fn default_pitch_angle_degrees() -> f64 {
     40.0
 }
-fn default_rotate_angle_degrees() -> f64 {
+fn default_roll_angle_degrees() -> f64 {
     60.0
 }
 fn default_tap_peak_threshold() -> f64 {
@@ -277,10 +277,10 @@ impl AppSettings {
             MAX_TAP_PEAK_THRESHOLD,
         )?;
         in_range(
-            "rotateAngleDegrees",
-            self.rotate_angle_degrees,
-            MIN_ROTATE_ANGLE_DEGREES,
-            MAX_ROTATE_ANGLE_DEGREES,
+            "rollAngleDegrees",
+            self.roll_angle_degrees,
+            MIN_ROLL_ANGLE_DEGREES,
+            MAX_ROLL_ANGLE_DEGREES,
         )?;
         in_range(
             "pitchAngleDegrees",
@@ -639,14 +639,14 @@ mod tests {
                 .contains("tapPeakThreshold")
         );
         settings.tap_peak_threshold = 12.0;
-        settings.rotate_angle_degrees = 10.0;
+        settings.roll_angle_degrees = 10.0;
         assert!(
             settings
                 .validate()
                 .unwrap_err()
-                .contains("rotateAngleDegrees")
+                .contains("rollAngleDegrees")
         );
-        settings.rotate_angle_degrees = 60.0;
+        settings.roll_angle_degrees = 60.0;
         settings.pitch_angle_degrees = 5.0;
         assert!(
             settings
@@ -673,6 +673,15 @@ mod tests {
             (6.0, 4)
         );
         assert_eq!(loaded.crown_side, automation::CrownSide::Right);
+    }
+
+    #[test]
+    fn a_settings_file_using_the_old_rotate_name_still_loads_its_angle() {
+        let mut json = serde_json::to_value(AppSettings::default()).unwrap();
+        json.as_object_mut().unwrap().remove("rollAngleDegrees");
+        json["rotateAngleDegrees"] = serde_json::json!(75.0);
+        let loaded: AppSettings = serde_json::from_value(json).unwrap();
+        assert_eq!(loaded.roll_angle_degrees, 75.0);
     }
 
     #[test]

@@ -1,9 +1,10 @@
 //! Spots a quick twist of the wrist about the forearm: turning a key, or flicking the hand over.
 //!
-//! This is the one-shot cousin of the continuous *roll* that drives a dial. It is recognised from the watch's
-//! orientation alone: a twist of at least a set angle within a short window, mostly about the forearm and not a
-//! general swing of the arm. A slow turn (the dial gesture) takes too long to qualify, and the turn back that often
-//! follows a flick is ignored for a moment so one flick fires once.
+//! This is the one-shot cousin of the continuous *roll* that drives a dial: the same movement about the same axis,
+//! but quick and done once instead of followed. It is recognised from the watch's orientation alone: a twist of at
+//! least a set angle within a short window, mostly about the forearm and not a general swing of the arm. A slow turn
+//! (the dial gesture) takes too long to qualify, and the turn back that often follows a flick is ignored for a moment
+//! so one flick fires once.
 //!
 //! Which way is "clockwise" is as the wearer would see it looking along their forearm from the elbow towards the
 //! hand, the way you turn a screwdriver. The watch's 3 o'clock axis points towards the hand on a left wrist with the
@@ -17,13 +18,13 @@ use crate::swipe::{CrownSide, Wrist};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum RotateDirection {
+pub enum RollDirection {
     Clockwise,
     CounterClockwise,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct RotateConfig {
+pub struct RollConfig {
     /// How far the wrist must turn, in degrees.
     pub min_angle_degrees: f64,
     /// ...within this long, in nanoseconds.
@@ -37,7 +38,7 @@ pub struct RotateConfig {
     pub crown: CrownSide,
 }
 
-impl Default for RotateConfig {
+impl Default for RollConfig {
     fn default() -> Self {
         Self {
             min_angle_degrees: 60.0,
@@ -51,19 +52,19 @@ impl Default for RotateConfig {
 }
 
 #[derive(Debug)]
-pub struct RotateDetector {
-    config: RotateConfig,
+pub struct RollDetector {
+    config: RollConfig,
     flick: FlickDetector,
 }
 
-impl Default for RotateDetector {
+impl Default for RollDetector {
     fn default() -> Self {
-        Self::new(RotateConfig::default())
+        Self::new(RollConfig::default())
     }
 }
 
-impl RotateDetector {
-    pub fn new(config: RotateConfig) -> Self {
+impl RollDetector {
+    pub fn new(config: RollConfig) -> Self {
         Self {
             config,
             flick: FlickDetector::new(FlickConfig {
@@ -81,7 +82,7 @@ impl RotateDetector {
     }
 
     /// Feeds one orientation `[w, x, y, z]`. Returns the direction once, when a flick is recognised.
-    pub fn observe(&mut self, at_ns: u64, orientation: [f64; 4]) -> Option<RotateDirection> {
+    pub fn observe(&mut self, at_ns: u64, orientation: [f64; 4]) -> Option<RollDirection> {
         let net = self.flick.observe(at_ns, orientation)?;
         // Positive twist about the watch's 3 o'clock axis is clockwise as the wearer looks along their forearm
         // when that axis points towards the hand, which is so for a left wrist with the crown on the right, and
@@ -89,9 +90,9 @@ impl RotateDetector {
         let axis_toward_hand =
             (self.config.wrist == Wrist::Left) == (self.config.crown == CrownSide::Right);
         Some(if (net > 0.0) == axis_toward_hand {
-            RotateDirection::Clockwise
+            RollDirection::Clockwise
         } else {
-            RotateDirection::CounterClockwise
+            RollDirection::CounterClockwise
         })
     }
 }
@@ -114,11 +115,11 @@ mod tests {
 
     /// 50 Hz stream where `angle_at(ms)` gives the roll in degrees; returns what was recognised and when.
     fn run(
-        config: RotateConfig,
+        config: RollConfig,
         total_ms: u64,
         pose: impl Fn(u64) -> [f64; 4],
-    ) -> Vec<(u64, RotateDirection)> {
-        let mut detector = RotateDetector::new(config);
+    ) -> Vec<(u64, RollDirection)> {
+        let mut detector = RollDetector::new(config);
         let mut found = Vec::new();
         for ms in (0..=total_ms).step_by(20) {
             if let Some(direction) = detector.observe(ms * MS, pose(ms)) {
@@ -151,46 +152,46 @@ mod tests {
 
     #[test]
     fn a_quick_twist_one_way_is_a_clockwise_or_counter_clockwise_flick() {
-        let config = RotateConfig::default();
+        let config = RollConfig::default();
         let cw = run(config, 4000, flick(90.0, false));
         assert_eq!(cw.len(), 1, "{cw:?}");
-        assert_eq!(cw[0].1, RotateDirection::Clockwise);
+        assert_eq!(cw[0].1, RollDirection::Clockwise);
         let ccw = run(config, 4000, flick(-90.0, false));
         assert_eq!(
             ccw.iter().map(|(_, d)| *d).collect::<Vec<_>>(),
-            vec![RotateDirection::CounterClockwise]
+            vec![RollDirection::CounterClockwise]
         );
         // The same physical twist reads the other way round on the other wrist, or with the crown on the other
         // side, and the same again if both are the other way.
-        let other_wrist = RotateConfig {
+        let other_wrist = RollConfig {
             wrist: Wrist::Right,
             ..config
         };
-        let other_crown = RotateConfig {
+        let other_crown = RollConfig {
             crown: CrownSide::Left,
             ..config
         };
-        let both = RotateConfig {
+        let both = RollConfig {
             wrist: Wrist::Right,
             crown: CrownSide::Left,
             ..config
         };
         let first = |c| run(c, 4000, flick(90.0, false))[0].1;
-        assert_eq!(first(other_wrist), RotateDirection::CounterClockwise);
-        assert_eq!(first(other_crown), RotateDirection::CounterClockwise);
-        assert_eq!(first(both), RotateDirection::Clockwise);
+        assert_eq!(first(other_wrist), RollDirection::CounterClockwise);
+        assert_eq!(first(other_crown), RollDirection::CounterClockwise);
+        assert_eq!(first(both), RollDirection::Clockwise);
     }
 
     #[test]
     fn the_turn_back_after_a_flick_does_not_count_as_a_second_flick() {
-        let found = run(RotateConfig::default(), 4000, flick(90.0, true));
+        let found = run(RollConfig::default(), 4000, flick(90.0, true));
         assert_eq!(found.len(), 1, "{found:?}");
-        assert_eq!(found[0].1, RotateDirection::Clockwise);
+        assert_eq!(found[0].1, RollDirection::Clockwise);
     }
 
     #[test]
     fn a_small_or_slow_turn_is_not_a_flick() {
-        let config = RotateConfig::default();
+        let config = RollConfig::default();
         assert!(
             run(config, 4000, flick(40.0, false)).is_empty(),
             "too small"
@@ -204,7 +205,7 @@ mod tests {
     fn swinging_the_arm_is_not_a_twist_of_the_wrist() {
         // The same 90 degrees, but about the y axis: the arm swinging, not the forearm turning.
         let swing = |ms: u64| about_y(90.0 * ((ms.clamp(1000, 1300) - 1000) as f64) / 300.0);
-        assert!(run(RotateConfig::default(), 4000, swing).is_empty());
+        assert!(run(RollConfig::default(), 4000, swing).is_empty());
     }
 
     #[test]
@@ -218,17 +219,17 @@ mod tests {
                 _ => 180.0,
             })
         };
-        assert_eq!(run(RotateConfig::default(), 5000, two).len(), 2);
-        let gentle = RotateConfig {
+        assert_eq!(run(RollConfig::default(), 5000, two).len(), 2);
+        let gentle = RollConfig {
             min_angle_degrees: 30.0,
-            ..RotateConfig::default()
+            ..RollConfig::default()
         };
         assert_eq!(run(gentle, 4000, flick(40.0, false)).len(), 1);
     }
 
     #[test]
     fn garbage_and_out_of_order_samples_are_ignored() {
-        let mut detector = RotateDetector::default();
+        let mut detector = RollDetector::default();
         assert_eq!(detector.observe(0, [f64::NAN, 0.0, 0.0, 0.0]), None);
         assert_eq!(detector.observe(1, [0.0; 4]), None);
         assert_eq!(detector.observe(2 * MS, about_x(0.0)), None);

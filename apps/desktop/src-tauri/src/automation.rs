@@ -11,10 +11,9 @@ use std::sync::Mutex;
 
 use automation::{
     Action, Axis, Conflict, CrownSide, Device, DeviceKind, Hold, PitchConfig, PitchDetector,
-    PitchDirection, Recipe, RecipeRunner, RotateConfig, RotateDetector, RotateDirection,
-    RunnerPhase, ShakeConfig, ShakeDetector, Signals, Stage, SwipeConfig, SwipeDetector,
-    SwipeDirection, TapConfig, TapDetector, TapKind, Wrist, blocked_recipes, find_conflicts,
-    validate_recipe,
+    PitchDirection, Recipe, RecipeRunner, RollConfig, RollDetector, RollDirection, RunnerPhase,
+    ShakeConfig, ShakeDetector, Signals, Stage, SwipeConfig, SwipeDetector, SwipeDirection,
+    TapConfig, TapDetector, TapKind, Wrist, blocked_recipes, find_conflicts, validate_recipe,
 };
 use interaction_engine::quaternion_angular_distance;
 use serde::Serialize;
@@ -34,7 +33,7 @@ pub const SWIPE_DETECTED_EVENT: &str = "automation-swipe";
 /// Sent with `single` or `double` each time a tap is recognised.
 pub const TAP_DETECTED_EVENT: &str = "automation-tap";
 /// Sent with `clockwise` or `counterClockwise` each time a quick wrist twist is recognised.
-pub const ROTATE_DETECTED_EVENT: &str = "automation-rotate";
+pub const ROLL_DETECTED_EVENT: &str = "automation-roll";
 /// Sent with `up` or `down` each time a quick tilt of the hand is recognised.
 pub const PITCH_DETECTED_EVENT: &str = "automation-pitch";
 /// How long a recognised shake keeps counting as "happening", so a recipe that combines it with another step (look
@@ -76,7 +75,7 @@ pub struct Effects {
     /// A quick tilt of the hand was recognised on this sample, for the Settings tuning aid.
     pub pitched: Option<PitchDirection>,
     /// A quick wrist twist was recognised on this sample, for the Settings tuning aid.
-    pub rotated: Option<RotateDirection>,
+    pub rolld: Option<RollDirection>,
     /// A tap was recognised on this sample, for the Settings tuning aid.
     pub tapped: Option<TapKind>,
     /// Trigger recipes that fired: each a one-off press.
@@ -96,7 +95,7 @@ pub struct Tuning {
     pub shake_strokes: u32,
     pub swipe_peak_threshold: f64,
     pub tap_peak_threshold: f64,
-    pub rotate_angle_degrees: f64,
+    pub roll_angle_degrees: f64,
     pub pitch_angle_degrees: f64,
     pub wrist: Wrist,
     pub crown: CrownSide,
@@ -112,7 +111,7 @@ impl Tuning {
             shake_strokes: settings.shake_strokes,
             swipe_peak_threshold: settings.swipe_peak_threshold,
             tap_peak_threshold: settings.tap_peak_threshold,
-            rotate_angle_degrees: settings.rotate_angle_degrees,
+            roll_angle_degrees: settings.roll_angle_degrees,
             pitch_angle_degrees: settings.pitch_angle_degrees,
             wrist: settings.watch_wrist,
             crown: settings.crown_side,
@@ -128,12 +127,12 @@ impl Tuning {
         }
     }
 
-    pub fn rotate_config(&self) -> RotateConfig {
-        RotateConfig {
-            min_angle_degrees: self.rotate_angle_degrees,
+    pub fn roll_config(&self) -> RollConfig {
+        RollConfig {
+            min_angle_degrees: self.roll_angle_degrees,
             wrist: self.wrist,
             crown: self.crown,
-            ..RotateConfig::default()
+            ..RollConfig::default()
         }
     }
 
@@ -174,7 +173,7 @@ impl Default for Tuning {
             shake_strokes: 4,
             swipe_peak_threshold: 8.0,
             tap_peak_threshold: 12.0,
-            rotate_angle_degrees: 60.0,
+            roll_angle_degrees: 60.0,
             pitch_angle_degrees: 40.0,
             wrist: Wrist::Left,
             crown: CrownSide::Right,
@@ -257,9 +256,9 @@ pub struct Engine {
     tap: TapDetector,
     tap_kind: Option<TapKind>,
     tap_until_ns: u64,
-    rotate: RotateDetector,
-    rotate_direction: Option<RotateDirection>,
-    rotate_until_ns: u64,
+    roll: RollDetector,
+    roll_direction: Option<RollDirection>,
+    roll_until_ns: u64,
     pitch: PitchDetector,
     pitch_direction: Option<PitchDirection>,
     pitch_until_ns: u64,
@@ -289,9 +288,9 @@ impl Engine {
             tap: TapDetector::new(tuning.tap_config()),
             tap_kind: None,
             tap_until_ns: 0,
-            rotate: RotateDetector::new(tuning.rotate_config()),
-            rotate_direction: None,
-            rotate_until_ns: 0,
+            roll: RollDetector::new(tuning.roll_config()),
+            roll_direction: None,
+            roll_until_ns: 0,
             pitch: PitchDetector::new(tuning.pitch_config()),
             pitch_direction: None,
             pitch_until_ns: 0,
@@ -327,8 +326,8 @@ impl Engine {
         self.swipe_until_ns = 0;
         self.tap = TapDetector::new(tuning.tap_config());
         self.tap_until_ns = 0;
-        self.rotate = RotateDetector::new(tuning.rotate_config());
-        self.rotate_until_ns = 0;
+        self.roll = RollDetector::new(tuning.roll_config());
+        self.roll_until_ns = 0;
         self.pitch = PitchDetector::new(tuning.pitch_config());
         self.pitch_until_ns = 0;
         self.rebuild();
@@ -374,8 +373,8 @@ impl Engine {
         self.swipe_until_ns = 0;
         self.tap.reset();
         self.tap_until_ns = 0;
-        self.rotate.reset();
-        self.rotate_until_ns = 0;
+        self.roll.reset();
+        self.roll_until_ns = 0;
         self.pitch.reset();
         self.pitch_until_ns = 0;
         self.step()
@@ -422,10 +421,10 @@ impl Engine {
             self.tap_kind = Some(kind);
             self.tap_until_ns = timestamp_ns + SHAKE_HOLD_NS;
         }
-        let rotated = self.rotate.observe(timestamp_ns, quaternion);
-        if let Some(direction) = rotated {
-            self.rotate_direction = Some(direction);
-            self.rotate_until_ns = timestamp_ns + SHAKE_HOLD_NS;
+        let rolld = self.roll.observe(timestamp_ns, quaternion);
+        if let Some(direction) = rolld {
+            self.roll_direction = Some(direction);
+            self.roll_until_ns = timestamp_ns + SHAKE_HOLD_NS;
         }
         let pitched = self.pitch.observe(timestamp_ns, quaternion);
         if let Some(direction) = pitched {
@@ -439,7 +438,7 @@ impl Engine {
                 shook,
                 swiped,
                 tapped,
-                rotated,
+                rolld,
                 pitched,
                 ..Effects::default()
             };
@@ -457,7 +456,7 @@ impl Engine {
         effects.shook = shook;
         effects.swiped = swiped;
         effects.tapped = tapped;
-        effects.rotated = rotated;
+        effects.rolld = rolld;
         effects.pitched = pitched;
         effects
     }
@@ -485,11 +484,11 @@ impl Engine {
                 .as_ref()
                 .filter(|latest| latest.timestamp_ns < self.pitch_until_ns)
                 .and(self.pitch_direction),
-            rotate: self
+            roll: self
                 .orientation
                 .as_ref()
-                .filter(|latest| latest.timestamp_ns < self.rotate_until_ns)
-                .and(self.rotate_direction),
+                .filter(|latest| latest.timestamp_ns < self.roll_until_ns)
+                .and(self.roll_direction),
             tap: self
                 .orientation
                 .as_ref()
@@ -652,8 +651,8 @@ impl AutomationRuntime {
         if let Some(direction) = effects.pitched {
             let _ = app.emit(PITCH_DETECTED_EVENT, direction);
         }
-        if let Some(direction) = effects.rotated {
-            let _ = app.emit(ROTATE_DETECTED_EVENT, direction);
+        if let Some(direction) = effects.rolld {
+            let _ = app.emit(ROLL_DETECTED_EVENT, direction);
         }
         if let Some(kind) = effects.tapped {
             let _ = app.emit(TAP_DETECTED_EVENT, kind);
@@ -1396,16 +1395,16 @@ mod tests {
         );
     }
 
-    fn rolled(degrees: f64) -> [f64; 4] {
+    fn roll_pose(degrees: f64) -> [f64; 4] {
         about_x(degrees)
     }
 
     /// Feeds 50 Hz orientation: a quick roll of `degrees` over 300 ms starting at 1 s, then still.
-    fn rotate_for(
+    fn roll_for(
         engine: &mut Engine,
         degrees: f64,
         offset_ms: u64,
-    ) -> (Vec<RotateDirection>, Vec<Action>) {
+    ) -> (Vec<RollDirection>, Vec<Action>) {
         let (mut rotations, mut fired) = (Vec::new(), Vec::new());
         for ms in (0..=3000u64).step_by(20) {
             let angle = match ms {
@@ -1414,8 +1413,8 @@ mod tests {
                 _ => degrees,
             };
             let effects =
-                engine.observe_orientation(rolled(angle), (offset_ms + ms) * 1_000_000, None);
-            rotations.extend(effects.rotated);
+                engine.observe_orientation(roll_pose(angle), (offset_ms + ms) * 1_000_000, None);
+            rotations.extend(effects.rolld);
             fired.extend(effects.fired);
         }
         (rotations, fired)
@@ -1425,27 +1424,27 @@ mod tests {
     fn a_quick_wrist_twist_fires_the_recipe_for_its_direction() {
         let mut engine = Engine::new(
             vec![
-                swipe_recipe(Hold::RotateClockwise, Action::NextTrack),
-                swipe_recipe(Hold::RotateCounterClockwise, Action::PreviousTrack),
+                swipe_recipe(Hold::RollClockwise, Action::NextTrack),
+                swipe_recipe(Hold::RollCounterClockwise, Action::PreviousTrack),
             ],
             Tuning::default(),
         );
         assert_eq!(
-            rotate_for(&mut engine, 90.0, 0),
-            (vec![RotateDirection::Clockwise], vec![Action::NextTrack])
+            roll_for(&mut engine, 90.0, 0),
+            (vec![RollDirection::Clockwise], vec![Action::NextTrack])
         );
         // The watch is now 90 degrees round, so a flick back is a 90 degree turn the other way.
         let mut engine = Engine::new(
             vec![swipe_recipe(
-                Hold::RotateCounterClockwise,
+                Hold::RollCounterClockwise,
                 Action::PreviousTrack,
             )],
             Tuning::default(),
         );
         assert_eq!(
-            rotate_for(&mut engine, -90.0, 0),
+            roll_for(&mut engine, -90.0, 0),
             (
-                vec![RotateDirection::CounterClockwise],
+                vec![RollDirection::CounterClockwise],
                 vec![Action::PreviousTrack]
             )
         );
@@ -1469,8 +1468,8 @@ mod tests {
                 };
                 found.extend(
                     engine
-                        .observe_orientation(rolled(angle), ms * 1_000_000, None)
-                        .rotated,
+                        .observe_orientation(roll_pose(angle), ms * 1_000_000, None)
+                        .rolld,
                 );
             }
             found
@@ -1478,19 +1477,19 @@ mod tests {
         use CrownSide::{Left as CrownLeft, Right as CrownRight};
         assert_eq!(
             direction(Wrist::Left, CrownRight),
-            vec![RotateDirection::Clockwise]
+            vec![RollDirection::Clockwise]
         );
         assert_eq!(
             direction(Wrist::Right, CrownRight),
-            vec![RotateDirection::CounterClockwise]
+            vec![RollDirection::CounterClockwise]
         );
         assert_eq!(
             direction(Wrist::Left, CrownLeft),
-            vec![RotateDirection::CounterClockwise]
+            vec![RollDirection::CounterClockwise]
         );
         assert_eq!(
             direction(Wrist::Right, CrownLeft),
-            vec![RotateDirection::Clockwise]
+            vec![RollDirection::Clockwise]
         );
     }
 
@@ -1551,18 +1550,18 @@ mod tests {
     }
 
     #[test]
-    fn the_rotate_angle_setting_is_obeyed_and_a_rotate_does_not_disturb_a_dial() {
+    fn the_roll_angle_setting_is_obeyed_and_a_roll_does_not_disturb_a_dial() {
         let strict = Tuning {
-            rotate_angle_degrees: 150.0,
+            roll_angle_degrees: 150.0,
             ..Tuning::default()
         };
         let mut engine = Engine::new(
-            vec![swipe_recipe(Hold::RotateClockwise, Action::NextTrack)],
+            vec![swipe_recipe(Hold::RollClockwise, Action::NextTrack)],
             strict,
         );
-        assert!(rotate_for(&mut engine, 90.0, 0).0.is_empty());
+        assert!(roll_for(&mut engine, 90.0, 0).0.is_empty());
         engine.set_tuning(Tuning::default());
-        assert_eq!(rotate_for(&mut engine, 90.0, 10_000).0.len(), 1);
+        assert_eq!(roll_for(&mut engine, 90.0, 10_000).0.len(), 1);
     }
 
     #[test]

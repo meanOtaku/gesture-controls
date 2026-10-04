@@ -49,9 +49,9 @@ export interface CalibrationState {
   activeTarget: CalibrationTarget | null;
 }
 
-export type HoldGesture = "pinch" | "stemButton" | "shake" | "swipeLeft" | "swipeRight" | "swipeUp" | "swipeDown" | "tap" | "doubleTap" | "rotateClockwise" | "rotateCounterClockwise" | "pitchUp" | "pitchDown";
+export type HoldGesture = "pinch" | "stemButton" | "shake" | "swipeLeft" | "swipeRight" | "swipeUp" | "swipeDown" | "tap" | "doubleTap" | "rollClockwise" | "rollCounterClockwise" | "pitchUp" | "pitchDown";
 export type PitchDirection = "up" | "down";
-export type RotateDirection = "clockwise" | "counterClockwise";
+export type RollDirection = "clockwise" | "counterClockwise";
 export type TapKind = "single" | "double";
 export type SwipeDirection = "left" | "right" | "up" | "down";
 export type WatchWrist = "left" | "right";
@@ -201,7 +201,7 @@ export const SWIPE_DETECTED_EVENT = "automation-swipe";
 /** Sent with `single` or `double` each time a tap is recognised. */
 export const TAP_DETECTED_EVENT = "automation-tap";
 /** Sent with the direction each time a quick wrist twist is recognised. */
-export const ROTATE_DETECTED_EVENT = "automation-rotate";
+export const ROLL_DETECTED_EVENT = "automation-roll";
 /** Sent with `up` or `down` each time a quick tilt of the hand is recognised. */
 export const PITCH_DETECTED_EVENT = "automation-pitch";
 export const ACTION_ERROR_EVENT = "automation-action-error";
@@ -295,11 +295,11 @@ export interface AppSettings {
   swipePeakThreshold: number;
   /** How hard a knock on the watch must be to count as a tap (m/s²); lower is more sensitive. */
   tapPeakThreshold: number;
-  /** How far the wrist must twist, quickly, to count as a rotate gesture (degrees); smaller is more sensitive. */
-  rotateAngleDegrees: number;
+  /** How far the wrist must twist, quickly, to count as a roll gesture (degrees); smaller is more sensitive. */
+  rollAngleDegrees: number;
   /** How far the hand must tilt up or down at the wrist, quickly, to count as a pitch gesture (degrees); smaller is more sensitive. */
   pitchAngleDegrees: number;
-  /** Which wrist the watch is worn on. Only the rotate gesture needs it. */
+  /** Which wrist the watch is worn on. Only the roll gesture needs it. */
   watchWrist: WatchWrist;
   /** Which side of the watch face the crown is on as you read it: decides which way is left for a swipe. */
   crownSide: CrownSide;

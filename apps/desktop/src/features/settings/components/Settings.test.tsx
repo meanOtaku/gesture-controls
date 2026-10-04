@@ -21,7 +21,7 @@ const settings: AppSettings = {
   shakeStrokes: 4,
   swipePeakThreshold: 8,
   tapPeakThreshold: 12,
-  rotateAngleDegrees: 60,
+  rollAngleDegrees: 60,
   pitchAngleDegrees: 40,
   watchWrist: "left",
   crownSide: "right",
@@ -216,19 +216,19 @@ describe("Settings", () => {
     expect(screen.getByText(/Last tap recognised/)).toHaveTextContent("double tap (4 so far)");
   });
 
-  it("tunes the rotate angle, refuses a fraction, and shows the last rotate", () => {
+  it("tunes the roll angle, refuses a fraction, and shows the last roll", () => {
     const updates: AppSettings[] = [];
     const { rerender } = render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
-    expect(screen.getByLabelText("Rotate angle")).toHaveValue(60);
-    expect(screen.getByText(/No rotate recognised yet/)).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Rotate angle"), { target: { value: "45" } });
+    expect(screen.getByLabelText("Roll angle")).toHaveValue(60);
+    expect(screen.getByText(/No roll recognised yet/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Roll angle"), { target: { value: "45" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
-    expect(updates[0]).toMatchObject({ rotateAngleDegrees: 45 });
-    fireEvent.change(screen.getByLabelText("Rotate angle"), { target: { value: "20" } });
-    fireEvent.blur(screen.getByLabelText("Rotate angle"));
-    expect(screen.getByLabelText("Rotate angle")).toHaveAttribute("aria-invalid", "true");
-    rerender(<Settings settings={settings} lastRotate={{ direction: "counterClockwise", count: 3 }} onUpdate={() => {}} onReset={() => {}} />);
-    expect(screen.getByText(/Last rotate recognised/)).toHaveTextContent("counter-clockwise (3 so far)");
+    expect(updates[0]).toMatchObject({ rollAngleDegrees: 45 });
+    fireEvent.change(screen.getByLabelText("Roll angle"), { target: { value: "20" } });
+    fireEvent.blur(screen.getByLabelText("Roll angle"));
+    expect(screen.getByLabelText("Roll angle")).toHaveAttribute("aria-invalid", "true");
+    rerender(<Settings settings={settings} lastRoll={{ direction: "counterClockwise", count: 3 }} onUpdate={() => {}} onReset={() => {}} />);
+    expect(screen.getByText(/Last roll recognised/)).toHaveTextContent("counter-clockwise (3 so far)");
   });
 
   it("toggles a watch sensor switch immediately without a confirmation dialog", () => {

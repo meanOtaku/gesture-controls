@@ -1,4 +1,4 @@
-//! The shared core of the one-shot wrist movements (rotate and pitch): a quick turn of at least a set angle about one
+//! The shared core of the one-shot wrist movements (roll and pitch): a quick turn of at least a set angle about one
 //! axis of the watch, within a short window, with little movement about the others.
 
 use std::collections::VecDeque;

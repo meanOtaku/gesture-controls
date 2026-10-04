@@ -85,7 +85,7 @@ fn norm(v: [f64; 3]) -> f64 {
 }
 
 /// Turns `v` from the watch's frame into the world frame with the orientation `q = [w, x, y, z]`.
-fn rotate(q: [f64; 4], v: [f64; 3]) -> [f64; 3] {
+fn roll(q: [f64; 4], v: [f64; 3]) -> [f64; 3] {
     let [w, x, y, z] = q;
     // v' = v + 2w(u x v) + 2 u x (u x v), with u = (x, y, z) for a unit quaternion.
     let t = [
@@ -204,7 +204,7 @@ impl SwipeDetector {
         let threshold = self.config.peak_threshold;
         let here = |finished_ns| Lobe {
             along: moving[0],
-            vertical: rotate(unit, moving)[2],
+            vertical: roll(unit, moving)[2],
             strength,
             finished_ns,
         };
@@ -406,12 +406,12 @@ mod tests {
     fn rotating_into_the_world_frame_matches_a_hand_calculation() {
         // 90 degrees about x takes the watch's y axis to world z and its z axis to world -y.
         let half = std::f64::consts::FRAC_PI_4;
-        let r = rotate([half.cos(), half.sin(), 0.0, 0.0], [0.0, 1.0, 0.0]);
+        let r = roll([half.cos(), half.sin(), 0.0, 0.0], [0.0, 1.0, 0.0]);
         assert!(
             (r[0]).abs() < 1e-9 && (r[1]).abs() < 1e-9 && (r[2] - 1.0).abs() < 1e-9,
             "{r:?}"
         );
-        let r = rotate(IDENTITY, [1.0, 2.0, 3.0]);
+        let r = roll(IDENTITY, [1.0, 2.0, 3.0]);
         assert_eq!(r, [1.0, 2.0, 3.0]);
     }
 }

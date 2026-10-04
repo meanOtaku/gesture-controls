@@ -89,10 +89,10 @@ The **Headphones** tab is for Sony tracker status and gaze calibration.
 
 #### Watch orientation (Settings)
 
-The watch senses movement in its own frame, so for swipes and rotates the app needs to know how it sits on you:
+The watch senses movement in its own frame, so for swipes and rolls the app needs to know how it sits on you:
 
-- **Crown side** (default: crown on the right): which side of the watch face the crown is on as you read it. It decides which way a swipe along your arm is left or right, and (with the wrist) which way a rotate is clockwise.
-- **Watch worn on** (default: left wrist): which wrist. Only the rotate gesture uses it.
+- **Crown side** (default: crown on the right): which side of the watch face the crown is on as you read it. It decides which way a swipe along your arm is left or right, and (with the wrist) which way a roll is clockwise.
+- **Watch worn on** (default: left wrist): which wrist. Only the roll gesture uses it.
 
 Earlier versions had a single "Watch worn on" setting that also swapped swipe left and right. That was wrong for someone wearing the watch normally on the right wrist; the crown side is what actually matters for swipes. A saved wrist setting is kept, and the crown side starts at "right".
 
@@ -344,27 +344,29 @@ The **Recipes** tab lists every recipe with an on/off switch, an Edit button and
 - Tapping the watch with a finger also moves your arm a little, so a tap right after other movement may be ignored for being "not still". Pause a moment first.
 - Not yet verified on a real watch. At 50 samples a second a tap is only one or two samples, so a very light knock can fall between them; if taps are unreliable, say so.
 
-### Rotate
+### Roll
 
-**Rotate wrist clockwise** and **Rotate wrist counter-clockwise** are gesture steps for one quick twist of the wrist about your forearm, like turning a key. They are momentary like the others, so they can only start a button action. Example: *Rotate wrist clockwise* → *Next track*, *Rotate wrist counter-clockwise* → *Previous track*.
+*(This gesture was called **Rotate** in earlier versions. Recipes and settings saved under that name still load, and now show as Roll.)*
 
-- A rotate is a twist of at least a set angle (default **60°**) within about **0.6 seconds**, mostly about the forearm. A slow turn takes too long to qualify (that is the *wrist rotation* step that turns a volume, brightness or scroll dial, a different thing), and swinging the whole arm does not count because the movement is not about the forearm.
+**Roll wrist clockwise** and **Roll wrist counter-clockwise** are gesture steps for one quick twist of the wrist about your forearm, like turning a key. They are momentary like the others, so they can only start a button action. Example: *Roll wrist clockwise* → *Next track*, *Roll wrist counter-clockwise* → *Previous track*.
+
+- A roll is a twist of at least a set angle (default **60°**) within about **0.6 seconds**, mostly about the forearm. A slow turn takes too long to qualify (that is the *Roll* axis of the wrist rotation step that turns a volume, brightness or scroll dial: the same movement, but followed continuously instead of fired once), and swinging the whole arm does not count because the movement is not about the forearm.
 - The turn back that often follows a flick is ignored for 0.8 seconds, so a twist out and back fires once, for the way out. Pause before the next one.
 - **Clockwise** is the way you turn a screwdriver, looking along your forearm from the elbow towards the hand. The same physical turn is clockwise on one wrist and counter-clockwise on the other, so this uses both settings under **Settings → Watch orientation**: **Watch worn on** (left or right wrist) and **Crown side**. If clockwise and counter-clockwise come out backwards, switch either one.
-- **Settings → Rotate sensitivity → Rotate angle** (30° to 180°) sets how big the twist must be; the card shows the last rotate recognised and a count.
+- **Settings → Roll sensitivity → Roll angle** (30° to 180°) sets how big the twist must be; the card shows the last roll recognised and a count.
 - It uses only the watch's orientation sensor, which streams about 50 times a second. Not verified on a real watch.
 
 ### Pitch
 
 **Pitch hand up** and **Pitch hand down** are gesture steps for one quick nod of the hand at the wrist, like a stop sign or a wave. They are momentary like the others, so they can only start a button action. Example: *Pitch hand up* → *Play / pause*, *Pitch hand down* → *Mute*.
 
-- A pitch is a tilt of at least a set angle (default **40°**) within about **0.6 seconds**, mostly about the axis across your wrist (the watch's 12-6 axis). The wrist bends less than it twists, so the default is smaller than a rotate's. A slow tilt takes too long (that is the *Pitch* wrist rotation of a volume, brightness or scroll dial, a different thing). A twist about the forearm is a rotate, and swinging the whole arm is neither.
+- A pitch is a tilt of at least a set angle (default **40°**) within about **0.6 seconds**, mostly about the axis across your wrist (the watch's 12-6 axis). The wrist bends less than it twists, so the default is smaller than a roll's. A slow tilt takes too long (that is the *Pitch* wrist rotation of a volume, brightness or scroll dial, a different thing). A twist about the forearm is a roll, and swinging the whole arm is neither.
 - The nod back is ignored for 0.8 seconds, so up-and-back fires once, for the way up. Pause before the next one.
 - **Up** means the hand rising. Which way the watch turns for that depends on how it sits on you, so it uses both **Watch orientation** settings (**Watch worn on** and **Crown side**). If up and down come out backwards, switch either one.
 - **Settings → Pitch sensitivity → Pitch angle** (20° to 120°) sets how big the nod must be; the card shows the last pitch recognised and a count.
 - It uses only the orientation sensor. Not verified on a real watch.
 
-Because it is a moment, a shake, swipe, tap, rotate or pitch can only start a **button action** (play/pause, next, previous, mute); the editor does not offer them for volume, brightness or scroll, and refuses to save a recipe that has one. It needs the watch's **acceleration** sensor switched on, which is the default.
+Because it is a moment, a shake, swipe, tap, roll or pitch can only start a **button action** (play/pause, next, previous, mute); the editor does not offer them for volume, brightness or scroll, and refuses to save a recipe that has one. It needs the watch's **acceleration** sensor switched on, which is the default.
 
 #### Tuning the sensitivity
 

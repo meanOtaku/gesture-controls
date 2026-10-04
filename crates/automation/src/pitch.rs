@@ -1,6 +1,6 @@
 //! Spots a quick tilt of the hand up or down at the wrist: a nod of the hand, like a "stop" sign or a wave.
 //!
-//! It is the same kind of one-shot movement as a rotate, but about the watch's 12-6 axis, which runs across the wrist,
+//! It is the same kind of one-shot movement as a roll, but about the watch's 12-6 axis, which runs across the wrist,
 //! so it is read from the orientation alone and rejects slow tilts (the dial gesture) and swings of the whole arm.
 //!
 //! Which way is "up" is the hand rising, and which way the watch's axis turns for that depends on whether its 3
@@ -21,7 +21,7 @@ pub enum PitchDirection {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PitchConfig {
-    /// How far the hand must tilt, in degrees. Smaller than a rotate: the wrist bends less than it twists.
+    /// How far the hand must tilt, in degrees. Smaller than a roll: the wrist bends less than it twists.
     pub min_angle_degrees: f64,
     pub window_ns: u64,
     pub max_off_axis_ratio: f64,
@@ -171,7 +171,7 @@ mod tests {
         assert_eq!(run(config, Axis::Pitch, 60.0, true).len(), 1);
         assert!(
             run(config, Axis::Roll, 90.0, false).is_empty(),
-            "a twist about the forearm is a rotate"
+            "a twist about the forearm is a roll"
         );
         assert!(
             run(config, Axis::Yaw, 90.0, false).is_empty(),

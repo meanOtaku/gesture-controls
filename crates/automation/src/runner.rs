@@ -3,7 +3,7 @@ use serde::Serialize;
 use crate::device::Output;
 use crate::pitch::PitchDirection;
 use crate::recipe::{Axis, Hold, Recipe, Stage};
-use crate::rotate::RotateDirection;
+use crate::roll::RollDirection;
 use crate::swipe::SwipeDirection;
 use crate::tap::TapKind;
 
@@ -21,7 +21,7 @@ pub struct Signals<'a> {
     /// A tap was recognised a moment ago and still counts as happening.
     pub tap: Option<TapKind>,
     /// A quick wrist twist was recognised a moment ago in this direction and still counts as happening.
-    pub rotate: Option<RotateDirection>,
+    pub roll: Option<RollDirection>,
     /// A quick tilt of the hand was recognised a moment ago in this direction and still counts as happening.
     pub pitch: Option<PitchDirection>,
     /// The watch's orientation as a quaternion `[w, i, j, k]`; `None` while it has no valid orientation.
@@ -127,11 +127,11 @@ impl RecipeRunner {
                 hold: Hold::DoubleTap,
             } => signals.tap == Some(TapKind::Double),
             Stage::Hold {
-                hold: Hold::RotateClockwise,
-            } => signals.rotate == Some(RotateDirection::Clockwise),
+                hold: Hold::RollClockwise,
+            } => signals.roll == Some(RollDirection::Clockwise),
             Stage::Hold {
-                hold: Hold::RotateCounterClockwise,
-            } => signals.rotate == Some(RotateDirection::CounterClockwise),
+                hold: Hold::RollCounterClockwise,
+            } => signals.roll == Some(RollDirection::CounterClockwise),
             Stage::Hold {
                 hold: Hold::PitchUp,
             } => signals.pitch == Some(PitchDirection::Up),

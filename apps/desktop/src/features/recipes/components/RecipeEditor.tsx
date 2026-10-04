@@ -233,8 +233,8 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
         {steps.some((step) => step.kind === "hold" && step.hold.startsWith("pitch")) && (
           <p className="field-hint">A pitch is one quick nod of the hand at the wrist, up or down, like a stop sign or a wave. It is not the slow tilt that turns a dial. Which way is up depends on Settings → Watch orientation.</p>
         )}
-        {steps.some((step) => step.kind === "hold" && step.hold.startsWith("rotate")) && (
-          <p className="field-hint">A rotate is one quick twist of the wrist about your forearm, like turning a key. It is not the slow roll that turns a dial: that is the wrist rotation step of a volume, brightness or scroll recipe.</p>
+        {steps.some((step) => step.kind === "hold" && step.hold.startsWith("roll")) && (
+          <p className="field-hint">A roll is one quick twist of the wrist about your forearm, like turning a key. It is not the slow roll that turns a dial: that is the wrist rotation step of a volume, brightness or scroll recipe.</p>
         )}
         {steps.some((step) => step.kind === "hold" && (step.hold === "tap" || step.hold === "doubleTap")) && (
           <p className="field-hint">A tap is a knock of a finger on the watch, felt as one sharp jolt while your arm is still. A single tap fires about 0.4 seconds after the knock, once it is clear no second one is coming. Tune it in Settings.</p>

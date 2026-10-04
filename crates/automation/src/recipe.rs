@@ -76,8 +76,10 @@ pub enum Hold {
     /// Two quick knocks.
     DoubleTap,
     /// A quick twist of the wrist, one way or the other: the one-shot cousin of the roll that turns a dial.
-    RotateClockwise,
-    RotateCounterClockwise,
+    #[serde(alias = "rotateClockwise")]
+    RollClockwise,
+    #[serde(alias = "rotateCounterClockwise")]
+    RollCounterClockwise,
     /// A quick tilt of the hand up or down at the wrist, like a nod of the hand.
     PitchUp,
     PitchDown,

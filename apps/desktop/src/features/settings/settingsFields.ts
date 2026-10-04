@@ -18,7 +18,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   shakeStrokes: 4,
   swipePeakThreshold: 8,
   tapPeakThreshold: 12,
-  rotateAngleDegrees: 60,
+  rollAngleDegrees: 60,
   pitchAngleDegrees: 40,
   watchWrist: "left",
   crownSide: "right",
@@ -43,7 +43,7 @@ export type NumericSettingKey =
   | "shakeStrokes"
   | "swipePeakThreshold"
   | "tapPeakThreshold"
-  | "rotateAngleDegrees"
+  | "rollAngleDegrees"
   | "pitchAngleDegrees"
   | "wristMaxAngularVelocityDegreesPerSecond"
   | "wristMaxVolumePointsPerSecond";
@@ -113,9 +113,9 @@ export const SETTINGS_FIELDS: Record<NumericSettingKey, NumberSpec> = {
     label: "Tap strength", unit: "m/s²", min: 4, max: 40, step: 0.5, defaultValue: d.tapPeakThreshold,
     description: "How hard a knock on the watch must be. Lower catches lighter taps (and more accidental bumps)",
   },
-  rotateAngleDegrees: {
-    label: "Rotate angle", unit: "°", min: 30, max: 180, step: 5, integer: true, defaultValue: d.rotateAngleDegrees,
-    description: "How far the wrist must twist, quickly, to count as a rotate. Smaller catches smaller twists (and more accidents)",
+  rollAngleDegrees: {
+    label: "Roll angle", unit: "°", min: 30, max: 180, step: 5, integer: true, defaultValue: d.rollAngleDegrees,
+    description: "How far the wrist must twist, quickly, to count as a roll. Smaller catches smaller twists (and more accidents)",
   },
   pitchAngleDegrees: {
     label: "Pitch angle", unit: "°", min: 20, max: 120, step: 5, integer: true, defaultValue: d.pitchAngleDegrees,
