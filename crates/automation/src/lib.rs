@@ -1,0 +1,17 @@
+//! Gesture recipes: chains of gesture stages that drive a virtual device, which drives one action.
+//!
+//! A recipe such as "look at top right -> pinch to hold -> roll the wrist" is `[Gate, Hold, Drive]` feeding a
+//! [`Device`] feeding an [`Action`]. Every stage before the drive must hold for the drive to do anything;
+//! releasing any of them ends the interaction. Nothing here touches hardware, windows or the OS: it consumes
+//! plain [`Signals`] and produces plain [`Output`]s, so the same engine can run in the foreground app today and
+//! in a background host later.
+
+mod conflicts;
+mod device;
+mod recipe;
+mod runner;
+
+pub use conflicts::{Conflict, blocked_recipes, find_conflicts};
+pub use device::{Device, DeviceKind, Output};
+pub use recipe::{Action, Axis, Hold, MAX_STAGES, Recipe, RecipeError, Stage, validate_recipe};
+pub use runner::{RecipeRunner, RunnerPhase, Signals};

@@ -2,6 +2,7 @@
 members = [
   "apps/desktop/src-tauri",
   "crates/protocol",
+  "crates/automation",
   "crates/head-tracking",
   "crates/interaction-engine",
   "crates/native-head-tracking",
