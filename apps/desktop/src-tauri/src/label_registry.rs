@@ -281,6 +281,11 @@ pub fn prune_legacy_builtins(app: &AppHandle) {
     }
 }
 
+/// Every label in the catalogue, archived ones included (they still describe old recordings).
+pub(crate) fn catalogue_ids(app: &AppHandle) -> BTreeSet<String> {
+    load_index(app).labels.into_iter().map(|l| l.id).collect()
+}
+
 /// Used by Model Lab import validation. Archived labels remain valid because
 /// they describe historical data; only unknown ids are rejected.
 pub(crate) fn contains_label(app: &AppHandle, id: &str) -> bool {

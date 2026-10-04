@@ -74,6 +74,20 @@ Labels that cannot both be true are declared as an exclusivity group, separately
 
 Later moves (Draft → Evaluated → Approved → Active) are explicit and go through the registry's own rules. **Activation first loads the model** (full validation and a hash check against the one recorded) and is refused if that fails; every registry change then reloads the runtime, which releases a replaced model's detection before using the new one. Commands: `set_label_model_state`, `activate_label_model`, `deactivate_label_model`, `rollback_label_model`, `set_label_runtime_mode`.
 
+## Training
+
+Training lives in two places with a clean line between them (`apps/desktop/src-tauri/src/label_training.rs`, `crates/label-inference/src/training.rs`, `tools/pinch-classifier/src/pinch_classifier/label_train.py`).
+
+**The desktop decides and records; the trainer only trains.** Before anything runs, `begin_run` fixes and seals, in one saved registry change: the label's project (created if there is none), a **dataset snapshot** (the recordings by content hash, the label roles, the streams and window, and the train/evaluation split) and a started **run**. It refuses, recording nothing, if a label has no role, the target is not marked as the target, a recording is not what it was, or the data cannot be split fairly. The split is deterministic (ordered by the hash of the recording id), holds out about 30%, never shares a recording, and leaves both the target and "something else" on both sides.
+
+The trainer gets a `spec.json` (target, negatives, excludes, recordings, train, evaluation, streams, window, method, seed) and runs `uv run --project tools/pinch-classifier --extra onnx [--extra torch] label-classifier-train`. It computes the same 55 canonical features the runtime computes, restricted to the streams the model may read; trains; scores the held-out recordings; exports ONNX; checks the file reproduces the trained model (within 1e-3) and uses only operators the runtime can run; and writes `bundle/` (manifest and model), `evaluation.json`, `parity.json` and `result.json`.
+
+**Finishing is one saved change too.** The bundle is staged and fully validated like an import, and its features must be exactly those planned. `complete_run` then marks the run finished (with the hashes of its artifacts) and records the model as a Draft whose origin is that run, together or not at all. `fail_run` records why a run produced nothing. A finished run is immutable. Nothing is approved or activated by training.
+
+**What the runtime can run constrains the exporters.** tract has no scikit-learn `Scaler` or `LinearClassifier`, and could not load the `TreeEnsembleClassifier` that scikit-learn's converter writes. So logistic regression and the scikit-learn MLP are written as plain ONNX by hand (`MatMul`, `Add`, `Relu`, `Sigmoid`, `Sub`, `Concat`), with the feature scaling folded into the first layer so the manifest's preprocessing is always "none"; the PyTorch network bakes its normalisation in and exports with the legacy exporter. Tree models are not offered. Real bundles from all three methods are checked into `crates/label-inference/tests/fixtures/trained_*_bundle` (regenerate with `tools/model-bundle-fixture/make_trained_fixtures.py`) and a Rust test validates and scores them against the trainer's own predictions. Writing that test found two real incompatibilities, both fixed.
+
+Known limits: training windows are cut from a recording's own sample timestamps, while the runtime cuts windows on the desktop's receive clock, so a model can behave differently live than on its held-out recordings (this is true of the older pinch path too); the runtime's PPG and orientation fusion is shared with it, not re-derived. Nothing here has been run against recordings from a real watch, so the scores are only as meaningful as your recordings.
+
 ## Recipes use detections
 
 A recipe step `{ "kind": "model", "label": "snap_fingers", "hold": "held" | "oneShot" }` reads the runtime:
@@ -92,5 +106,5 @@ Not yet done or checked:
 - Windows and Linux builds of the crate (see the decision record's correction).
 - Any model from Keras or PyTorch exporters; any model trained on real recordings; behaviour on a real watch's streams.
 - Head-pose input, standardisation preprocessing, and quantised variants.
-- Training (step 5b). Import, review, approval, activation, rollback and the Off/Monitor/Live switch are in the Model Lab's **Label models** card.
+- Training on real watch recordings (only synthetic data has been run). Import, review, approval, activation, rollback and the Off/Monitor/Live switch are in the Model Lab's **Label models** card.
 - Importing on a real machine with a bundle from a real exporter other than the scikit-learn fixture.

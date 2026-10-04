@@ -166,7 +166,7 @@ export function LabelModelsPanel({
         )}
 
         {groups.length === 0 ? (
-          <p className="hint">No label models yet. Import a model folder to start; training one from your recordings is coming next.</p>
+          <p className="hint">No label models yet. Import a model folder, or train one from your recordings below.</p>
         ) : (
           <ul className="flex flex-col gap-4" aria-label="Label models by label">
             {groups.map((group) => {

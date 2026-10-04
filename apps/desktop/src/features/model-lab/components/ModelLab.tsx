@@ -8,6 +8,7 @@ import { DatasetManager } from "./DatasetManager";
 import { DetectionActivity } from "./DetectionActivity";
 import { LabelCoverage, type NewLabel } from "./LabelCoverage";
 import { LabelModelsPanel } from "./LabelModelsPanel";
+import { TrainPanel } from "./TrainPanel";
 
 const LABEL_COLOR = "#65e6ff";
 
@@ -157,11 +158,12 @@ export function ModelLab() {
       </section>
 
       <nav className="lab-workflow" aria-label="Model Lab sections">
-        <a href="#lab-labels">Models</a><a href="#lab-activity">Activity</a><a href="#lab-coverage">Labels</a><a href="#lab-dataset">Recordings</a>
+        <a href="#lab-labels">Models</a><a href="#lab-train">Train</a><a href="#lab-activity">Activity</a><a href="#lab-coverage">Labels</a><a href="#lab-dataset">Recordings</a>
       </nav>
 
       <fieldset className="lab-workspace card-stack" disabled={!desktopAvailable} aria-label="Desktop model tools">
         <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} />
+        <TrainPanel desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} />
         <DetectionActivity desktopAvailable={desktopAvailable} />
         <LabelCoverage labels={labels} models={models} coverageByLabel={coverageByLabel} onCreate={createLabel} onSetArchived={setLabelArchived} onDelete={deleteLabel} />
         <DatasetManager

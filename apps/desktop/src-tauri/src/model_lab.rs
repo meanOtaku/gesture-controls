@@ -91,8 +91,8 @@ impl DatasetSummary {
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DatasetIndex {
-    datasets: Vec<DatasetSummary>,
+pub(crate) struct DatasetIndex {
+    pub(crate) datasets: Vec<DatasetSummary>,
 }
 
 /// Which trainer console script a job runs. `Sklearn` produces
@@ -383,7 +383,7 @@ fn parse_csv(content: &str) -> Result<ParsedDataset, String> {
     })
 }
 
-fn datasets_dir(app: &AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn datasets_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let base = app
         .path()
         .app_data_dir()
@@ -391,7 +391,7 @@ fn datasets_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(base.join(MODEL_LAB_DIR_NAME).join(DATASETS_DIR_NAME))
 }
 
-fn dataset_csv_path(dir: &std::path::Path, id: &str) -> PathBuf {
+pub(crate) fn dataset_csv_path(dir: &std::path::Path, id: &str) -> PathBuf {
     dir.join(format!("{id}.csv"))
 }
 
@@ -399,7 +399,7 @@ fn index_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(datasets_dir(app)?.join(INDEX_FILE_NAME))
 }
 
-fn load_index(app: &AppHandle) -> DatasetIndex {
+pub(crate) fn load_index(app: &AppHandle) -> DatasetIndex {
     let path = match index_path(app) {
         Ok(path) => path,
         Err(error) => {

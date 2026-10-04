@@ -15,6 +15,7 @@ mod head_pose;
 mod inference;
 mod label_registry;
 mod label_runtime;
+mod label_training;
 mod latest_write;
 mod model_lab;
 mod model_registry;
@@ -144,6 +145,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .manage(automation::AutomationRuntime::default())
         .manage(label_runtime::LabelRuntimeHost::default())
+        .manage(label_training::LabelTrainingRuntime::default())
         .manage(calibration::CalibrationRuntime::default())
         .manage(overlay::OverlayRuntime::default())
         .manage(overlay::VolumeRuntime::default())
@@ -165,6 +167,11 @@ pub fn run() {
             label_runtime::deactivate_label_model,
             label_runtime::rollback_label_model,
             label_runtime::set_label_runtime_mode,
+            label_training::plan_label_training,
+            label_training::check_label_trainer,
+            label_training::start_label_training,
+            label_training::cancel_label_training,
+            label_training::get_label_training_status,
             automation::get_automation_state,
             automation::set_recipe_enabled,
             automation::save_recipe,

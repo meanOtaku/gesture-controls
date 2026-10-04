@@ -269,6 +269,27 @@ impl LabelRuntimeHost {
         Some(labels)
     }
 
+    /// Runs `change` on the model registry, which saves it before adopting it. For work that runs outside this module.
+    pub fn with_store<T>(
+        &self,
+        change: impl FnOnce(&mut RegistryStore<FileStore>) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "model state is unavailable".to_string())?;
+        let store = state
+            .store
+            .as_mut()
+            .ok_or_else(|| "the model registry is not available".to_string())?;
+        change(store)
+    }
+
+    /// Tells the UI the set of registered models changed.
+    pub fn announce_models_changed(app: &AppHandle) {
+        let _ = app.emit(LABEL_MODELS_EVENT, ());
+    }
+
     pub fn status(&self) -> LabelRuntimeStatus {
         self.state
             .lock()

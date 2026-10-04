@@ -201,6 +201,21 @@ The **Label models** card at the top of Model Lab is the per-label model system:
 - **Model runtime** is **Off**, **Monitor** (models run and show a score and a "Detected" badge, nothing acts) or **Live** (a detection can start recipes that use that label, see *Model label* below). Switching to Live asks first, and a restart always comes back in Monitor.
 - A label whose active model cannot be loaded (for example its file was changed) is named in a red alert and has no running model.
 
+#### Train a model
+
+The **Train a model** card teaches the app one label from your recordings.
+
+1. Choose the **label to teach**. Every recording starts selected; untick any you do not want.
+2. Give every other label in those recordings a role: **Something else** (it teaches the model what is *not* the gesture) or **Leave out**. Nothing is assumed.
+3. Choose a **method**: logistic regression (fast, simple; a good first try), a small neural network in scikit-learn, or a small neural network in PyTorch (the first run downloads PyTorch, which is large).
+4. Choose **what the model may read**: acceleration, gyroscope, orientation and/or the pulse (PPG) sensor. The model can only use those streams, and only runs while the watch sends them all. Pick as little as the gesture needs.
+
+Before anything runs, the card shows which recordings it will **train on** and which it will **test on**. The app decides this, deterministically, and a recording is never in both, so the score is about recordings the model has not seen. It refuses, and says why, if there are not at least two recordings with the label and two with something else (a recording with both kinds counts for each) so one of each can train and one of each can test.
+
+When training finishes you see, in words, how much of the gesture it found, how much of what it flagged was right, and how often it wrongly flagged something else. The model is added as a **Draft** under Label models: review it, mark it evaluated, approve it, then activate it. Check it in Monitor on the Gestures tab before Live. A failed or cancelled run is recorded with its reason and produces no model.
+
+Training runs on this computer and needs **uv** on the PATH and this repository checkout (`tools/pinch-classifier`); the card says so if it is missing. The first run downloads the Python packages. Running a model needs none of this.
+
 #### Activity
 
 A list of what the active models have done this session, newest first: **Detected** (with the model's confidence), **Released**, and **Attention** for a skipped window, a model that was swapped out, or two labels that cannot coexist being detected together (both are then held off). An identical line repeating is shown once with a count. In Monitor this is what the models would have done; in Live the same detections can start recipes. A release always shows, in every mode.
@@ -217,7 +232,7 @@ Labels an older version shipped (idle, walking, typing and so on) are removed on
 
 Record a labelled session on the **Live data** tab (Quick Capture is one label; Timeline Capture keeps the label of each interval), export the CSV, then **Import a recording (CSV)** here. The import is all-or-nothing: the file is checked in full (size limit, exact header, consistent labels, every label already in the catalogue) before anything is written, a failure says exactly why, and nothing is changed on disk. It is a compatibility path independent of the newer recording-bundle format and never touches those bundles. Labels keep stable ids; archiving one hides it from new selection but never changes old recordings.
 
-Training a model from recordings is the next step of this feature. The older three-class training, LiteRT readiness, intent-binding, replay and legacy inference panels were removed from this page; a model from the old system that could not be converted is kept aside and counted on the Label models card.
+The older three-class training, LiteRT readiness, intent-binding, replay and legacy inference panels were removed from this page; a model from the old system that could not be converted is kept aside and counted on the Label models card.
 
 ### Gestures
 
