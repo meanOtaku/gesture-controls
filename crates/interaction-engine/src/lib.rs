@@ -18,6 +18,20 @@ pub enum CalibrationError {
     InvalidQuaternion,
     #[error("activation threshold must be within (0, 180] degrees and dwell must be positive")]
     InvalidConfiguration,
+    #[error(
+        "a location id starts with a letter and has only letters, digits or underscores (at most 32)"
+    )]
+    InvalidTargetId,
+    #[error("a location name must be 1 to 32 characters with no control characters")]
+    InvalidLocationName,
+    #[error("there is no such location")]
+    UnknownTarget,
+    #[error("a location with that id already exists")]
+    DuplicateTarget,
+    #[error("the most locations allowed has been reached")]
+    TooManyLocations,
+    #[error("Center is the reference every other location is judged against and cannot be removed")]
+    CannotRemoveCenter,
 }
 
 fn normalized_quaternion(value: [f64; 4]) -> Result<Quaternion<f64>, CalibrationError> {
@@ -42,14 +56,71 @@ pub fn quaternion_angular_distance(
     Ok(2.0 * dot.acos())
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum CalibrationTarget {
-    Center,
-    TopRight,
+/// Most locations a calibration may hold, Center included.
+pub const MAX_LOCATIONS: usize = 12;
+/// Longest display name of a location, in characters.
+pub const MAX_LOCATION_NAME_CHARS: usize = 32;
+
+/// A place the head can point at. An id is a short slug (`center`, `topRight`, `leftEdge`): stable, safe to
+/// store and to send to the UI, and never shown to the user (the location's name is).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct CalibrationTarget(String);
+
+impl CalibrationTarget {
+    pub const CENTER_ID: &'static str = "center";
+    pub const TOP_RIGHT_ID: &'static str = "topRight";
+
+    /// Letters, digits and underscores, starting with a letter, at most 32 characters.
+    pub fn new(id: impl Into<String>) -> Result<Self, CalibrationError> {
+        let id = id.into();
+        let mut chars = id.chars();
+        let valid = chars
+            .next()
+            .is_some_and(|first| first.is_ascii_alphabetic())
+            && id.len() <= 32
+            && chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if valid {
+            Ok(Self(id))
+        } else {
+            Err(CalibrationError::InvalidTargetId)
+        }
+    }
+
+    /// The neutral reference every other location is told apart from. Always present.
+    pub fn center() -> Self {
+        Self(Self::CENTER_ID.to_string())
+    }
+
+    /// The built-in location the volume gesture has always used.
+    pub fn top_right() -> Self {
+        Self(Self::TOP_RIGHT_ID.to_string())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn is_center(&self) -> bool {
+        self.0 == Self::CENTER_ID
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+impl TryFrom<String> for CalibrationTarget {
+    type Error = CalibrationError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl From<CalibrationTarget> for String {
+    fn from(target: CalibrationTarget) -> Self {
+        target.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum CalibrationEvent {
     TargetEntered(CalibrationTarget),
     TargetExited(CalibrationTarget),
@@ -70,22 +141,49 @@ impl Default for CalibrationConfig {
     }
 }
 
+/// One location as the UI sees it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetState {
+    pub id: CalibrationTarget,
+    pub name: String,
+    pub calibrated: bool,
+    /// Center: it cannot be removed.
+    pub builtin: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CalibrationState {
-    pub center_calibrated: bool,
-    pub top_right_calibrated: bool,
+    pub targets: Vec<TargetState>,
     pub requires_recalibration: bool,
     pub activation_threshold_degrees: f64,
     pub dwell_ms: u64,
     pub active_target: Option<CalibrationTarget>,
 }
 
+impl CalibrationState {
+    /// Whether the location with this id exists and has been captured.
+    pub fn is_calibrated(&self, id: &str) -> bool {
+        self.targets
+            .iter()
+            .any(|target| target.id.as_str() == id && target.calibrated)
+    }
+}
+
+#[derive(Debug)]
+struct Location {
+    target: CalibrationTarget,
+    name: String,
+    /// The captured pose; `None` until the user captures it.
+    pose: Option<[f64; 4]>,
+}
+
 #[derive(Debug)]
 pub struct HeadCalibration {
     config: CalibrationConfig,
-    center: Option<[f64; 4]>,
-    top_right: Option<[f64; 4]>,
+    /// Center first, then the others in the order they were added.
+    locations: Vec<Location>,
     candidate: Option<(CalibrationTarget, Duration)>,
     active: Option<CalibrationTarget>,
     /// First instant the currently active target stopped being confirmed by
@@ -108,13 +206,35 @@ impl Default for HeadCalibration {
     }
 }
 
+fn validated_name(name: &str) -> Result<String, CalibrationError> {
+    let name = name.trim();
+    if name.is_empty()
+        || name.chars().count() > MAX_LOCATION_NAME_CHARS
+        || name.chars().any(char::is_control)
+    {
+        return Err(CalibrationError::InvalidLocationName);
+    }
+    Ok(name.to_string())
+}
+
 impl HeadCalibration {
+    /// Starts with Center and Top right, the two locations the volume gesture has always used.
     pub fn new(config: CalibrationConfig) -> Result<Self, CalibrationError> {
         validate_config(config)?;
         Ok(Self {
             config,
-            center: None,
-            top_right: None,
+            locations: vec![
+                Location {
+                    target: CalibrationTarget::center(),
+                    name: "Screen center".into(),
+                    pose: None,
+                },
+                Location {
+                    target: CalibrationTarget::top_right(),
+                    name: "Top right".into(),
+                    pose: None,
+                },
+            ],
             candidate: None,
             active: None,
             exit_candidate: None,
@@ -122,20 +242,83 @@ impl HeadCalibration {
         })
     }
 
-    pub fn capture(
+    fn position(&self, target: &CalibrationTarget) -> Option<usize> {
+        self.locations
+            .iter()
+            .position(|location| &location.target == target)
+    }
+
+    /// Adds a location to point at. It starts uncaptured; capture it with [`Self::capture`].
+    pub fn add_location(
         &mut self,
         target: CalibrationTarget,
+        name: &str,
+    ) -> Result<(), CalibrationError> {
+        let name = validated_name(name)?;
+        if self.position(&target).is_some() {
+            return Err(CalibrationError::DuplicateTarget);
+        }
+        if self.locations.len() >= MAX_LOCATIONS {
+            return Err(CalibrationError::TooManyLocations);
+        }
+        self.locations.push(Location {
+            target,
+            name,
+            pose: None,
+        });
+        Ok(())
+    }
+
+    /// Removes a location (never Center). If it was the active one, that ends first and says so.
+    pub fn remove_location(
+        &mut self,
+        target: &CalibrationTarget,
+    ) -> Result<Vec<CalibrationEvent>, CalibrationError> {
+        if target.is_center() {
+            return Err(CalibrationError::CannotRemoveCenter);
+        }
+        let index = self
+            .position(target)
+            .ok_or(CalibrationError::UnknownTarget)?;
+        let events = if self.active.as_ref() == Some(target) {
+            self.deactivate()
+        } else {
+            Vec::new()
+        };
+        self.locations.remove(index);
+        self.candidate = None;
+        self.exit_candidate = None;
+        self.refresh_requirement();
+        Ok(events)
+    }
+
+    /// Ready once Center and at least one other location are captured: with fewer there is nothing to tell apart.
+    fn refresh_requirement(&mut self) {
+        let center = self
+            .locations
+            .iter()
+            .any(|l| l.target.is_center() && l.pose.is_some());
+        let other = self
+            .locations
+            .iter()
+            .any(|l| !l.target.is_center() && l.pose.is_some());
+        self.requires_recalibration = !(center && other);
+    }
+
+    pub fn capture(
+        &mut self,
+        target: &CalibrationTarget,
         quaternion: [f64; 4],
     ) -> Result<Vec<CalibrationEvent>, CalibrationError> {
+        let index = self
+            .position(target)
+            .ok_or(CalibrationError::UnknownTarget)?;
         let quaternion = normalized_quaternion(quaternion)?;
         let value = [quaternion.w, quaternion.i, quaternion.j, quaternion.k];
         let events = self.deactivate();
-        match target {
-            CalibrationTarget::Center => self.center = Some(value),
-            CalibrationTarget::TopRight => self.top_right = Some(value),
-        }
+        self.locations[index].pose = Some(value);
         self.candidate = None;
-        self.requires_recalibration = !(self.center.is_some() && self.top_right.is_some());
+        self.refresh_requirement();
         Ok(events)
     }
 
@@ -160,14 +343,14 @@ impl HeadCalibration {
         quaternion: [f64; 4],
         now: Duration,
     ) -> Result<Vec<CalibrationEvent>, CalibrationError> {
-        let Some(nearest) = self.nearest_target(quaternion)? else {
+        let Some((nearest, distance)) = self.nearest_target(quaternion)? else {
             return Ok(Vec::new());
         };
         let mut events = Vec::new();
-        let confirms_active = self.active == Some(nearest.0)
-            && nearest.1.to_degrees() <= self.config.activation_threshold_degrees;
+        let within = distance.to_degrees() <= self.config.activation_threshold_degrees;
+        let confirms_active = self.active.as_ref() == Some(&nearest) && within;
 
-        if let Some(active) = self.active {
+        if let Some(active) = self.active.clone() {
             if confirms_active {
                 self.exit_candidate = None;
                 self.candidate = None;
@@ -187,22 +370,22 @@ impl HeadCalibration {
             events.push(CalibrationEvent::TargetExited(active));
         }
 
-        if nearest.1.to_degrees() > self.config.activation_threshold_degrees {
+        if !within {
             self.candidate = None;
             return Ok(events);
         }
 
-        let started = match self.candidate {
-            Some((target, started)) if target == nearest.0 => started,
+        let started = match &self.candidate {
+            Some((target, started)) if *target == nearest => *started,
             _ => {
-                self.candidate = Some((nearest.0, now));
+                self.candidate = Some((nearest, now));
                 return Ok(events);
             }
         };
         if now.saturating_sub(started) >= self.config.dwell {
             self.candidate = None;
-            self.active = Some(nearest.0);
-            events.push(CalibrationEvent::TargetEntered(nearest.0));
+            self.active = Some(nearest.clone());
+            events.push(CalibrationEvent::TargetEntered(nearest));
         }
         Ok(events)
     }
@@ -217,10 +400,12 @@ impl HeadCalibration {
             .collect()
     }
 
+    /// Forgets every captured pose (a tracker reset invalidates them) but keeps the locations themselves.
     pub fn invalidate(&mut self) -> Vec<CalibrationEvent> {
         let events = self.deactivate();
-        self.center = None;
-        self.top_right = None;
+        for location in &mut self.locations {
+            location.pose = None;
+        }
         self.candidate = None;
         self.exit_candidate = None;
         self.requires_recalibration = true;
@@ -229,12 +414,20 @@ impl HeadCalibration {
 
     pub fn state(&self) -> CalibrationState {
         CalibrationState {
-            center_calibrated: self.center.is_some(),
-            top_right_calibrated: self.top_right.is_some(),
+            targets: self
+                .locations
+                .iter()
+                .map(|location| TargetState {
+                    id: location.target.clone(),
+                    name: location.name.clone(),
+                    calibrated: location.pose.is_some(),
+                    builtin: location.target.is_center(),
+                })
+                .collect(),
             requires_recalibration: self.requires_recalibration,
             activation_threshold_degrees: self.config.activation_threshold_degrees,
             dwell_ms: self.config.dwell.as_millis().min(u64::MAX as u128) as u64,
-            active_target: self.active,
+            active_target: self.active.clone(),
         }
     }
 
@@ -247,22 +440,15 @@ impl HeadCalibration {
         }
         let current = normalized_quaternion(quaternion)?;
         let current = [current.w, current.i, current.j, current.k];
-        let mut targets = Vec::with_capacity(2);
-        if let Some(center) = self.center {
-            targets.push((
-                CalibrationTarget::Center,
-                quaternion_angular_distance(current, center)?,
-            ));
+        let mut nearest: Option<(&CalibrationTarget, f64)> = None;
+        for location in &self.locations {
+            let Some(pose) = location.pose else { continue };
+            let distance = quaternion_angular_distance(current, pose)?;
+            if nearest.is_none_or(|(_, best)| distance.total_cmp(&best).is_lt()) {
+                nearest = Some((&location.target, distance));
+            }
         }
-        if let Some(top_right) = self.top_right {
-            targets.push((
-                CalibrationTarget::TopRight,
-                quaternion_angular_distance(current, top_right)?,
-            ));
-        }
-        Ok(targets
-            .into_iter()
-            .min_by(|left, right| left.1.total_cmp(&right.1)))
+        Ok(nearest.map(|(target, distance)| (target.clone(), distance)))
     }
 }
 

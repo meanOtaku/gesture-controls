@@ -434,13 +434,40 @@ function MainApp() {
         await invoke<CalibrationState>("capture_calibration_target", { target });
         OperationFeedback.success(
           "Capture calibration target",
-          target === "center" ? "Center position saved." : "Top-right position saved.",
+          `${calibration?.targets.find((location) => location.id === target)?.name ?? "Location"} position saved.`,
         );
       } catch (error) {
         setCalibrationError(String(error));
         OperationFeedback.error("Capture calibration target", String(error));
       }
     });
+  };
+
+  const locationCommand = (key: string, title: string, success: string, command: string, args: Record<string, unknown>) =>
+    run(key, async () => {
+      try {
+        setCalibrationError(null);
+        await invoke<CalibrationState>(command, args);
+        OperationFeedback.success(title, success);
+      } catch (error) {
+        setCalibrationError(String(error));
+        OperationFeedback.error(title, String(error));
+      }
+    });
+
+  const addLocation = async (name: string) => {
+    if (!inTauri) return;
+    await locationCommand("location:add", "Add location", `${name} added. Capture it to finish.`, "add_calibration_location", { name });
+  };
+
+  const removeLocation = async (target: CalibrationTarget) => {
+    if (!inTauri) return;
+    await locationCommand(`location:remove:${target}`, "Remove location", "Location removed.", "remove_calibration_location", { target });
+  };
+
+  const setVolumeTarget = async (target: CalibrationTarget) => {
+    if (!inTauri) return;
+    await locationCommand("location:volume", "Volume knob location", "The volume knob now uses that location.", "set_volume_target", { target });
   };
 
   const updateCalibration = async (activationThresholdDegrees: number, dwellMs: number) => {
@@ -504,6 +531,9 @@ function MainApp() {
         isPending={isPending}
         onCaptureTarget={(target) => { void captureTarget(target); }}
         onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }}
+        onAddLocation={(name) => { void addLocation(name); }}
+        onRemoveLocation={(target) => { void removeLocation(target); }}
+        onSetVolumeTarget={(target) => { void setVolumeTarget(target); }}
       />
     )}
     {activeTab === "headphone" && (
@@ -518,6 +548,9 @@ function MainApp() {
         isPending={isPending}
         onCaptureTarget={(target) => { void captureTarget(target); }}
         onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }}
+        onAddLocation={(name) => { void addLocation(name); }}
+        onRemoveLocation={(target) => { void removeLocation(target); }}
+        onSetVolumeTarget={(target) => { void setVolumeTarget(target); }}
       />
     )}
     {activeTab === "watch" && (
@@ -530,6 +563,9 @@ function MainApp() {
         isPending={isPending}
         onCaptureTarget={(target) => { void captureTarget(target); }}
         onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }}
+        onAddLocation={(name) => { void addLocation(name); }}
+        onRemoveLocation={(target) => { void removeLocation(target); }}
+        onSetVolumeTarget={(target) => { void setVolumeTarget(target); }}
         onSetSensorEnabled={(sensor, enabled) => { void setSensorEnabled(sensor, enabled); }}
       />
     )}

@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { HelpTooltip } from "../../../components/app/HelpTooltip";
 import { NumberField } from "../../../components/app/NumberField";
 import { SectionHeader } from "../../../components/app/SectionHeader";
@@ -7,7 +7,8 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import type { NumberSpec } from "../../../shared/forms/numberField";
 import { useNumberDrafts } from "../../../shared/forms/useNumberDrafts";
-import type { CalibrationState, CalibrationTarget } from "../../../shared/protocol/events";
+import { Input } from "../../../components/ui/input";
+import { MAX_LOCATIONS, MAX_LOCATION_NAME_CHARS, type CalibrationState, type CalibrationTarget } from "../../../shared/protocol/events";
 
 /** The ranges `update_calibration_config` accepts; the defaults are `CalibrationConfig::default()` in the interaction engine. */
 const CALIBRATION_FIELDS: Record<"threshold" | "dwell", NumberSpec> = {
@@ -21,10 +22,47 @@ type CalibrationPanelProps = {
   isPending: (key: string) => boolean;
   onCaptureTarget: (target: CalibrationTarget) => void;
   onUpdateCalibration: (activationThresholdDegrees: number, dwellMs: number) => void;
+  onAddLocation: (name: string) => void;
+  onRemoveLocation: (target: CalibrationTarget) => void;
+  onSetVolumeTarget: (target: CalibrationTarget) => void;
 };
 
-/** Sony head-tracker calibration: two-point capture plus activation threshold/dwell tuning for the volume gesture. */
-export function CalibrationPanel({ connected, calibration, isPending, onCaptureTarget, onUpdateCalibration }: CalibrationPanelProps) {
+/** Why a new location's name cannot be used, or null. */
+function locationNameProblem(name: string, calibration: CalibrationState): string | null {
+  const trimmed = name.trim();
+  if (trimmed === "") return "Give the location a name.";
+  if (trimmed.length > MAX_LOCATION_NAME_CHARS) return `Too long: the maximum is ${MAX_LOCATION_NAME_CHARS} characters.`;
+  if (calibration.targets.some((location) => location.name.toLowerCase() === trimmed.toLowerCase())) {
+    return "A location with that name already exists.";
+  }
+  if (calibration.targets.length >= MAX_LOCATIONS) return `The most locations allowed (${MAX_LOCATIONS}) has been reached.`;
+  return null;
+}
+
+/** Sony head-tracker calibration: capture any number of named locations plus activation threshold/dwell tuning for the volume gesture. */
+export function CalibrationPanel({
+  connected,
+  calibration,
+  isPending,
+  onCaptureTarget,
+  onUpdateCalibration,
+  onAddLocation,
+  onRemoveLocation,
+  onSetVolumeTarget,
+}: CalibrationPanelProps) {
+  const [newName, setNewName] = useState("");
+  const [nameTouched, setNameTouched] = useState(false);
+  const nameProblem = locationNameProblem(newName, calibration);
+  const showNameProblem = nameTouched && nameProblem !== null;
+  const addLocation = (event: FormEvent) => {
+    event.preventDefault();
+    setNameTouched(true);
+    if (nameProblem !== null) return;
+    onAddLocation(newName.trim());
+    setNewName("");
+    setNameTouched(false);
+  };
+  const activeName = calibration.targets.find((location) => location.id === calibration.activeTarget)?.name;
   const updatePending = isPending("calibration:update");
   const drafts = useNumberDrafts(CALIBRATION_FIELDS, {
     threshold: calibration.activationThresholdDegrees,
@@ -69,15 +107,11 @@ export function CalibrationPanel({ connected, calibration, isPending, onCaptureT
           description="Head calibration"
           help={{
             label: "About head calibration",
-            content: "Capture the screen center, then look at the top-right corner and capture again. The volume gesture activates once your head crosses the threshold angle toward the top-right target and stays there for the dwell time. A tracker reset clears both captures.",
+            content: "Capture the screen center, then look at a location and capture it. Add as many locations as you like. The location marked as the volume knob raises the volume gesture once your head crosses the threshold angle toward it and stays there for the dwell time. A tracker reset clears every capture but keeps your locations.",
           }}
           status={
-            <Badge variant={calibration.activeTarget ? "default" : "secondary"}>
-              {calibration.activeTarget === "topRight"
-                ? "Top-right active"
-                : calibration.activeTarget === "center"
-                  ? "Center active"
-                  : "No active target"}
+            <Badge variant={activeName ? "default" : "secondary"}>
+              {activeName ? `${activeName} active` : "No active target"}
             </Badge>
           }
         />
@@ -85,37 +119,84 @@ export function CalibrationPanel({ connected, calibration, isPending, onCaptureT
       <CardContent className="flex flex-col gap-3">
         {calibration.requiresRecalibration && (
           <p className="calibration-warning">
-            Face the screen center, capture it, then look at the top-right corner and capture again.
-            A tracker reset clears both targets.
+            Face the screen center and capture it, then look at a location and capture that too.
+            A tracker reset clears every capture.
           </p>
         )}
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex flex-col items-start gap-1">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!connected || isPending("capture:center")}
-              onClick={() => onCaptureTarget("center")}
-            >
-              {isPending("capture:center") ? "Capturing…" : "Capture center"}
+        <ul className="flex flex-col gap-2" aria-label="Locations">
+          {calibration.targets.map((location) => {
+            const capturing = isPending(`capture:${location.id}`);
+            const isVolume = location.id === calibration.volumeTarget;
+            return (
+              <li key={location.id} className="flex flex-wrap items-center gap-3" aria-label={location.name}>
+                <div className="flex min-w-32 flex-1 flex-col">
+                  <span className="text-sm">{location.name}</span>
+                  <small className="text-xs text-muted-foreground">{location.calibrated ? "Saved" : "Not saved"}</small>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-label={`Capture ${location.name}`}
+                  disabled={!connected || capturing}
+                  onClick={() => onCaptureTarget(location.id)}
+                >
+                  {capturing ? "Capturing…" : location.calibrated ? "Recapture" : "Capture"}
+                </Button>
+                {!location.builtin && (
+                  <>
+                    <Button
+                      type="button"
+                      variant={isVolume ? "default" : "outline"}
+                      aria-pressed={isVolume}
+                      aria-label={`Use ${location.name} for the volume knob`}
+                      disabled={isVolume || isPending("location:volume")}
+                      onClick={() => onSetVolumeTarget(location.id)}
+                    >
+                      {isVolume ? "Volume knob" : "Use for volume"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      aria-label={`Remove ${location.name}`}
+                      title={isVolume ? "Choose another location for the volume knob first" : undefined}
+                      disabled={isVolume || isPending(`location:remove:${location.id}`)}
+                      onClick={() => onRemoveLocation(location.id)}
+                    >
+                      Remove
+                    </Button>
+                  </>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+
+        <form noValidate aria-label="Add location" className="field" onSubmit={addLocation}>
+          <div className="flex items-start gap-2">
+            <div className="flex flex-1 flex-col gap-1">
+              <Input
+                id="calibration-new-location"
+                aria-label="New location name"
+                placeholder="New location, e.g. Left edge"
+                value={newName}
+                maxLength={MAX_LOCATION_NAME_CHARS + 8}
+                aria-invalid={showNameProblem}
+                aria-describedby="calibration-new-location-hint"
+                onChange={(event) => setNewName(event.target.value)}
+                onBlur={() => setNameTouched(newName !== "")}
+              />
+              <p id="calibration-new-location-hint" className={showNameProblem ? "field-error" : "field-hint"}>
+                {showNameProblem ? nameProblem : "Add a place to look at, then capture it."}
+              </p>
+            </div>
+            <Button type="submit" variant="outline" disabled={isPending("location:add")}>
+              Add location
             </Button>
-            <small className="text-xs text-muted-foreground">{calibration.centerCalibrated ? "Saved" : "Not saved"}</small>
           </div>
-          <div className="flex flex-col items-start gap-1">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!connected || isPending("capture:topRight")}
-              onClick={() => onCaptureTarget("topRight")}
-            >
-              {isPending("capture:topRight") ? "Capturing…" : "Capture top-right"}
-            </Button>
-            <small className="text-xs text-muted-foreground">{calibration.topRightCalibrated ? "Saved" : "Not saved"}</small>
-          </div>
-        </div>
+        </form>
         <form noValidate aria-label="Activation settings" className="grid grid-cols-1 gap-4 sm:grid-cols-2" aria-busy={updatePending} onSubmit={onSubmit}>
-          {field("threshold", "How far your head must turn toward the top-right target, in degrees, before the volume gesture can activate.")}
+          {field("threshold", "How far your head must turn toward a location, in degrees, before the volume gesture can activate.")}
           {field("dwell", "How long your head must hold past the threshold, in milliseconds, before the volume gesture activates.")}
           <p className="hint sm:col-span-2" role="status">
             {updatePending ? "Applying…" : "Changes apply when you leave a field or press Enter."}

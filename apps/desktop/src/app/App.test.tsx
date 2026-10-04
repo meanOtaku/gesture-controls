@@ -34,8 +34,11 @@ beforeEach(() => {
   invoke.mockImplementation((command: string) => {
     if (command === "get_calibration_state") {
       return Promise.resolve({
-        centerCalibrated: true,
-        topRightCalibrated: true,
+        targets: [
+          { id: "center", name: "Screen center", calibrated: true, builtin: true },
+          { id: "topRight", name: "Top right", calibrated: true, builtin: false },
+        ],
+        volumeTarget: "topRight",
         requiresRecalibration: false,
         activationThresholdDegrees: 12,
         dwellMs: 400,
@@ -129,8 +132,11 @@ describe("App overlay integration", () => {
     invoke.mockImplementation((command: string) => {
       if (command === "get_calibration_state") {
         return Promise.resolve({
-          centerCalibrated: true,
-          topRightCalibrated: true,
+          targets: [
+            { id: "center", name: "Screen center", calibrated: true, builtin: true },
+            { id: "topRight", name: "Top right", calibrated: true, builtin: false },
+          ],
+          volumeTarget: "topRight",
           requiresRecalibration: false,
           activationThresholdDegrees: 12,
           dwellMs: 400,
@@ -153,8 +159,11 @@ describe("App overlay integration", () => {
     invoke.mockImplementation((command: string) => {
       if (command === "get_calibration_state") {
         return Promise.resolve({
-          centerCalibrated: true,
-          topRightCalibrated: true,
+          targets: [
+            { id: "center", name: "Screen center", calibrated: true, builtin: true },
+            { id: "topRight", name: "Top right", calibrated: true, builtin: false },
+          ],
+          volumeTarget: "topRight",
           requiresRecalibration: false,
           activationThresholdDegrees: 12,
           dwellMs: 400,
@@ -197,8 +206,11 @@ describe("App overlay integration", () => {
     invoke.mockImplementation((command: string) => {
       if (command === "get_calibration_state") {
         return Promise.resolve({
-          centerCalibrated: true,
-          topRightCalibrated: true,
+          targets: [
+            { id: "center", name: "Screen center", calibrated: true, builtin: true },
+            { id: "topRight", name: "Top right", calibrated: true, builtin: false },
+          ],
+          volumeTarget: "topRight",
           requiresRecalibration: false,
           activationThresholdDegrees: 12,
           dwellMs: 400,
@@ -231,8 +243,11 @@ describe("App overlay integration", () => {
     const hideRequest = new Promise<void>((_resolve, reject) => { rejectHide = reject; });
     invoke.mockImplementation((command: string) => {
       if (command === "get_calibration_state") return Promise.resolve({
-        centerCalibrated: true,
-        topRightCalibrated: true,
+        targets: [
+          { id: "center", name: "Screen center", calibrated: true, builtin: true },
+          { id: "topRight", name: "Top right", calibrated: true, builtin: false },
+        ],
+        volumeTarget: "topRight",
         requiresRecalibration: false,
         activationThresholdDegrees: 12,
         dwellMs: 400,
@@ -265,8 +280,11 @@ describe("App overlay integration", () => {
     let showCalls = 0;
     invoke.mockImplementation((command: string) => {
       if (command === "get_calibration_state") return Promise.resolve({
-        centerCalibrated: true,
-        topRightCalibrated: true,
+        targets: [
+          { id: "center", name: "Screen center", calibrated: true, builtin: true },
+          { id: "topRight", name: "Top right", calibrated: true, builtin: false },
+        ],
+        volumeTarget: "topRight",
         requiresRecalibration: false,
         activationThresholdDegrees: 12,
         dwellMs: 400,
@@ -297,8 +315,11 @@ describe("App overlay integration", () => {
     let showCalls = 0;
     invoke.mockImplementation((command: string) => {
       if (command === "get_calibration_state") return Promise.resolve({
-        centerCalibrated: true,
-        topRightCalibrated: true,
+        targets: [
+          { id: "center", name: "Screen center", calibrated: true, builtin: true },
+          { id: "topRight", name: "Top right", calibrated: true, builtin: false },
+        ],
+        volumeTarget: "topRight",
         requiresRecalibration: false,
         activationThresholdDegrees: 12,
         dwellMs: 400,
@@ -325,8 +346,11 @@ describe("App overlay integration", () => {
   it("shows calibration and volume failures together", async () => {
     invoke.mockImplementation((command: string) => {
       if (command === "get_calibration_state") return Promise.resolve({
-        centerCalibrated: true,
-        topRightCalibrated: true,
+        targets: [
+          { id: "center", name: "Screen center", calibrated: true, builtin: true },
+          { id: "topRight", name: "Top right", calibrated: true, builtin: false },
+        ],
+        volumeTarget: "topRight",
         requiresRecalibration: false,
         activationThresholdDegrees: 12,
         dwellMs: 400,
@@ -346,7 +370,7 @@ describe("App overlay integration", () => {
     openHeadphoneTab();
     expect(await screen.findByRole("alert")).toHaveTextContent(/volume unavailable/i);
 
-    fireEvent.click(screen.getByRole("button", { name: /capture center/i }));
+    fireEvent.click(screen.getByRole("button", { name: /capture screen center/i }));
     await waitFor(() => {
       const alert = screen.getByRole("alert");
       expect(alert).toHaveTextContent(/volume unavailable/i);
@@ -358,8 +382,11 @@ describe("App overlay integration", () => {
     invoke.mockImplementation((command: string) => {
       if (command === "get_calibration_state") {
         return Promise.resolve({
-          centerCalibrated: true,
-          topRightCalibrated: true,
+          targets: [
+            { id: "center", name: "Screen center", calibrated: true, builtin: true },
+            { id: "topRight", name: "Top right", calibrated: true, builtin: false },
+          ],
+          volumeTarget: "topRight",
           requiresRecalibration: false,
           activationThresholdDegrees: 12,
           dwellMs: 400,
@@ -385,8 +412,11 @@ describe("App overlay integration", () => {
     invoke.mockImplementation((command: string) => {
       if (command === "get_calibration_state") {
         return Promise.resolve({
-          centerCalibrated: true,
-          topRightCalibrated: true,
+          targets: [
+            { id: "center", name: "Screen center", calibrated: true, builtin: true },
+            { id: "topRight", name: "Top right", calibrated: true, builtin: false },
+          ],
+          volumeTarget: "topRight",
           requiresRecalibration: false,
           activationThresholdDegrees: 12,
           dwellMs: 400,
@@ -412,8 +442,11 @@ describe("App overlay integration", () => {
   it("reconciles an already-active top-right target after listeners register", async () => {
     invoke.mockImplementation((command: string) => command === "get_calibration_state"
       ? Promise.resolve({
-        centerCalibrated: true,
-        topRightCalibrated: true,
+        targets: [
+          { id: "center", name: "Screen center", calibrated: true, builtin: true },
+          { id: "topRight", name: "Top right", calibrated: true, builtin: false },
+        ],
+        volumeTarget: "topRight",
         requiresRecalibration: false,
         activationThresholdDegrees: 12,
         dwellMs: 400,

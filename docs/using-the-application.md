@@ -83,7 +83,7 @@ Use it to confirm that the system is connected before moving into calibration, r
 The **Headphones** tab is for Sony tracker status and gaze calibration.
 
 - Displays device identity, orientation, quaternion, gyroscope, packet rate, latency, and reset state.
-- Lets you capture the **center** reference and the **top-right** activation target.
+- Lets you capture the **center** reference and any number of named locations (**Top right** is there to start with). **Add location** creates another, **Remove** deletes one (Center cannot be removed), and **Use for volume** picks which location raises the volume overlay. Locations and the volume choice are remembered between runs; captures are not, because a head pose only means something for the tracker session it was taken in.
 - Lets you adjust the target acceptance threshold and dwell duration.
 - Reports when recalibration is needed after a tracker reference-frame reset.
 
@@ -91,9 +91,9 @@ The **Headphones** tab is for Sony tracker status and gaze calibration.
 
 1. Put on the headset and wait for a stable connection.
 2. Face your neutral forward direction and capture **Center**.
-3. Look at the desired upper-right position and capture **Top-right**.
-4. Hold your gaze on the top-right target for the configured dwell time to show the volume overlay.
-5. Leaving the target, losing headset tracking, or pressing **Escape** hides the overlay.
+3. Look at the place you want to use and capture that location (for example **Top right**).
+4. Hold your gaze on the location marked **Volume knob** for the configured dwell time to show the volume overlay.
+5. Leaving the location, losing headset tracking, or pressing **Escape** hides the overlay.
 
 The overlay is deliberately non-focus-stealing. Keyboard volume controls only work while a visible overlay and a supported native volume backend are available.
 
@@ -271,7 +271,7 @@ Defaults target roughly 30 volume points for a 90° twist. Begin with defaults a
 
 #### Corner wrist volume (demo)
 
-- **Enable demo interaction:** off by default. When on, dwelling on the calibrated top-right target begins the volume interaction directly, without the Watch button. See [§5 Corner wrist volume (demo)](#corner-wrist-volume-demo) for the full behavior and fail-closed guarantees.
+- **Enable demo interaction:** off by default. When on, dwelling on the calibrated volume-knob location begins the volume interaction directly, without the Watch button. See [§5 Corner wrist volume (demo)](#corner-wrist-volume-demo) for the full behavior and fail-closed guarantees.
 - **Invert twist direction:** only shown while the demo is enabled. Flips which twist direction raises vs. lowers volume, for a Watch mounted with the opposite physical handedness. Affects only this demo interaction.
 
 #### Recording, graphs, and Watch rates
@@ -295,7 +295,7 @@ Each volume interaction has an owner: the Watch button, a model gesture, or the 
 
 ### How fast volume can change
 
-The volume follows the wrist angle but moves no faster than **Max volume rate** (30 points per second by default), the first wrist reading after a grab is checked against the reference pose like every later one, and wrist-driven changes reach the operating system at most about ten times per second. The overlay only appears while the desktop's own calibration shows you on the top-right target.
+The volume follows the wrist angle but moves no faster than **Max volume rate** (30 points per second by default), the first wrist reading after a grab is checked against the reference pose like every later one, and wrist-driven changes reach the operating system at most about ten times per second. The overlay only appears while the desktop's own calibration shows you on the volume-knob location.
 
 ### Model-assisted gesture
 
@@ -303,7 +303,7 @@ With a validated active TFLite model in Live mode, the desktop may begin or rele
 
 ### Corner wrist volume (demo)
 
-An explicit, default-off opt-in in Settings. While enabled, dwelling on the calibrated top-right target begins the volume interaction directly — no STEM button press needed — using the same desktop transaction (fresh wrist-orientation reference, dead zone, velocity-outlier rejection, volume-rate cap, and native volume call) as the Watch-button and model-assisted paths. Clockwise twist raises volume; counter-clockwise lowers it. If your Watch's physical mounting reports the opposite handedness, use the demo's own **Invert twist direction** toggle — it only affects this demo interaction, never the Watch-button or model-assisted paths.
+An explicit, default-off opt-in in Settings. While enabled, dwelling on the calibrated volume-knob location begins the volume interaction directly — no STEM button press needed — using the same desktop transaction (fresh wrist-orientation reference, dead zone, velocity-outlier rejection, volume-rate cap, and native volume call) as the Watch-button and model-assisted paths. Clockwise twist raises volume; counter-clockwise lowers it. If your Watch's physical mounting reports the opposite handedness, use the demo's own **Invert twist direction** toggle — it only affects this demo interaction, never the Watch-button or model-assisted paths.
 
 The overlay shows a compact status while the demo is enabled: *Targeting…*, *Ready — twist wrist*, *Adjusting*, or an *Unavailable* reason (no live Watch orientation, or the native volume backend on this platform is unsupported).
 

@@ -50,7 +50,7 @@ npm start
 4. Stops every process it started when the application exits or the launcher
    receives Ctrl+C.
 
-After center and top-right calibration, hold your gaze on the top-right target for the configured dwell time. The dedicated volume overlay appears without taking focus. On macOS, use the arrow keys or `+`/`-` in the main window to change the real system output volume; leaving the target, losing Sony tracking, or pressing Escape hides it. Windows uses Core Audio; Linux uses PipeWire or PulseAudio command adapters. Each platform still requires device validation.
+After center calibration and at least one other location (top right by default; you can add more and choose which one drives volume), hold your gaze on the volume-knob location for the configured dwell time. The dedicated volume overlay appears without taking focus. On macOS, use the arrow keys or `+`/`-` in the main window to change the real system output volume; leaving the target, losing Sony tracking, or pressing Escape hides it. Windows uses Core Audio; Linux uses PipeWire or PulseAudio command adapters. Each platform still requires device validation.
 
 On Linux the external CLI tracker is deliberately not compiled into, bundled with, or owned by the Tauri binary; the launcher is an operator convenience around two independent processes. On macOS and Windows the native provider is linked directly into the Tauri binary instead, so `npm start` there is a single process unless `SONY_HEAD_TRACKER_PROVIDER=external` is set.
 
@@ -78,11 +78,11 @@ the `bridge` argument to stream JSON without opening a second window.
 - Provider-neutral Rust pose types and `SonyUdpHeadPoseProvider`
 - Strict schema validation, connection timeout, and reset-counter detection
 - Live device, orientation, quaternion, gyroscope, packet-rate, and latency diagnostics
-- Guided center/top-right quaternion calibration using `nalgebra`
+- Guided quaternion calibration of center plus any number of named locations, calibration using `nalgebra`
 - Adjustable activation threshold and dwell duration (400 ms by default)
 - `head-target-entered` / `head-target-exited` events for calibrated targets
 - Dedicated transparent, borderless, click-through, always-on-top volume overlay
-- Automatic knob display when the calibrated top-right target activates
+- Automatic knob display when the calibrated volume-knob location activates
 - Keyboard control of real macOS system output volume with arrow or +/- keys, clamped from 0–100%
 - Automatic recalibration prompt after Sony reference-frame resets
 - Galaxy Watch telemetry (IMU orientation, raw PPG, health sensors, stem button) over **Bluetooth LE by default**, or over a local-network WebSocket; haptic confirmation back to the watch

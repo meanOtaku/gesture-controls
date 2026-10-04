@@ -1,7 +1,10 @@
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Instant;
 
 use interaction_engine::{CalibrationEvent, CalibrationState, CalibrationTarget, HeadCalibration};
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tracing::warn;
 
@@ -13,9 +16,44 @@ pub const CALIBRATION_STATE_EVENT: &str = "head-calibration-state";
 pub const TARGET_ENTERED_EVENT: &str = "head-target-entered";
 pub const TARGET_EXITED_EVENT: &str = "head-target-exited";
 
+const LOCATIONS_FILE_NAME: &str = "calibration-locations.json";
+
+/// What the UI receives: the engine's state plus which location drives the volume knob.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalibrationSnapshot {
+    #[serde(flatten)]
+    pub state: CalibrationState,
+    pub volume_target: CalibrationTarget,
+}
+
+/// The locations worth keeping between runs. Captured poses are not: a head pose only means something
+/// for the tracker session it was captured in.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SavedLocations {
+    volume_target: CalibrationTarget,
+    locations: Vec<SavedLocation>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SavedLocation {
+    id: CalibrationTarget,
+    name: String,
+}
+
+fn locations_path(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_config_dir()
+        .map(|dir| dir.join(LOCATIONS_FILE_NAME))
+        .map_err(|error| error.to_string())
+}
+
 pub struct CalibrationRuntime {
     operations: Mutex<()>,
     engine: Mutex<HeadCalibration>,
+    /// Which location raises the volume overlay. Lock order: operations, latest pose, engine, this.
+    volume_target: Mutex<CalibrationTarget>,
     latest_quaternion: Mutex<Option<[f64; 4]>>,
     started_at: Instant,
 }
@@ -25,6 +63,7 @@ impl Default for CalibrationRuntime {
         Self {
             operations: Mutex::new(()),
             engine: Mutex::new(HeadCalibration::default()),
+            volume_target: Mutex::new(CalibrationTarget::top_right()),
             latest_quaternion: Mutex::new(None),
             started_at: Instant::now(),
         }
@@ -32,6 +71,195 @@ impl Default for CalibrationRuntime {
 }
 
 impl CalibrationRuntime {
+    /// Restores the locations saved last time. A missing or unreadable file keeps the defaults.
+    pub fn load(&self, app: &AppHandle) {
+        let saved = locations_path(app)
+            .and_then(|path| fs::read_to_string(path).map_err(|error| error.to_string()))
+            .and_then(|text| {
+                serde_json::from_str::<SavedLocations>(&text).map_err(|e| e.to_string())
+            });
+        let Ok(saved) = saved else { return };
+        let (Ok(mut engine), Ok(mut volume)) = (self.engine.lock(), self.volume_target.lock())
+        else {
+            return;
+        };
+        if !saved
+            .locations
+            .iter()
+            .any(|l| l.id == CalibrationTarget::top_right())
+        {
+            let _ = engine.remove_location(&CalibrationTarget::top_right());
+        }
+        for location in saved.locations {
+            if let Err(error) = engine.add_location(location.id, &location.name) {
+                // The built-ins are already there, so "already exists" is expected.
+                tracing::debug!(%error, "skipped a saved calibration location");
+            }
+        }
+        if engine
+            .state()
+            .targets
+            .iter()
+            .any(|t| t.id == saved.volume_target && !t.builtin)
+        {
+            *volume = saved.volume_target;
+        } else if let Some(first) = engine.state().targets.iter().find(|t| !t.builtin) {
+            *volume = first.id.clone();
+        }
+    }
+
+    fn save(&self, app: &AppHandle, engine: &HeadCalibration, volume: &CalibrationTarget) {
+        let saved = SavedLocations {
+            volume_target: volume.clone(),
+            locations: engine
+                .state()
+                .targets
+                .into_iter()
+                .filter(|target| !target.builtin)
+                .map(|target| SavedLocation {
+                    id: target.id,
+                    name: target.name,
+                })
+                .collect(),
+        };
+        let result = locations_path(app).and_then(|path| {
+            if let Some(dir) = path.parent() {
+                fs::create_dir_all(dir).map_err(|error| error.to_string())?;
+            }
+            let json = serde_json::to_string_pretty(&saved).map_err(|error| error.to_string())?;
+            let tmp = path.with_extension("json.tmp");
+            fs::write(&tmp, json).map_err(|error| error.to_string())?;
+            fs::rename(&tmp, &path).map_err(|error| error.to_string())
+        });
+        if let Err(error) = result {
+            warn!(%error, "failed to save the calibration locations");
+        }
+    }
+
+    fn snapshot(&self, engine: &HeadCalibration) -> Result<CalibrationSnapshot, String> {
+        let volume_target = self
+            .volume_target
+            .lock()
+            .map_err(|_| "volume target lock was poisoned")?
+            .clone();
+        Ok(CalibrationSnapshot {
+            state: engine.state(),
+            volume_target,
+        })
+    }
+
+    /// The location that raises the volume overlay. Takes only its own lock, so it is safe to call while
+    /// handling events from an operation that already holds the operation lock.
+    pub fn volume_target(&self) -> CalibrationTarget {
+        self.volume_target
+            .lock()
+            .map(|target| target.clone())
+            .unwrap_or_else(|_| CalibrationTarget::top_right())
+    }
+
+    pub fn add_location(
+        &self,
+        app: &AppHandle,
+        name: String,
+    ) -> Result<CalibrationSnapshot, String> {
+        let _operation = self
+            .operations
+            .lock()
+            .map_err(|_| "calibration operation lock was poisoned")?;
+        let snapshot = {
+            let mut engine = self
+                .engine
+                .lock()
+                .map_err(|_| "calibration state lock was poisoned")?;
+            let id = unused_id(&engine, &name);
+            engine
+                .add_location(
+                    CalibrationTarget::new(id).map_err(|e| e.to_string())?,
+                    &name,
+                )
+                .map_err(|error| error.to_string())?;
+            let snapshot = self.snapshot(&engine)?;
+            self.save(app, &engine, &snapshot.volume_target);
+            snapshot
+        };
+        let _ = app.emit(CALIBRATION_STATE_EVENT, &snapshot);
+        Ok(snapshot)
+    }
+
+    pub fn remove_location(
+        &self,
+        app: &AppHandle,
+        target: CalibrationTarget,
+    ) -> Result<CalibrationSnapshot, String> {
+        let _operation = self
+            .operations
+            .lock()
+            .map_err(|_| "calibration operation lock was poisoned")?;
+        let (events, snapshot) = {
+            let mut engine = self
+                .engine
+                .lock()
+                .map_err(|_| "calibration state lock was poisoned")?;
+            if target == self.volume_target() {
+                return Err(
+                    "this location drives the volume knob; choose another location for it first"
+                        .into(),
+                );
+            }
+            let events = engine
+                .remove_location(&target)
+                .map_err(|error| error.to_string())?;
+            let snapshot = self.snapshot(&engine)?;
+            self.save(app, &engine, &snapshot.volume_target);
+            (events, snapshot)
+        };
+        handle_calibration_events(app, events);
+        let _ = app.emit(CALIBRATION_STATE_EVENT, &snapshot);
+        Ok(snapshot)
+    }
+
+    pub fn set_volume_target(
+        &self,
+        app: &AppHandle,
+        target: CalibrationTarget,
+    ) -> Result<CalibrationSnapshot, String> {
+        let _operation = self
+            .operations
+            .lock()
+            .map_err(|_| "calibration operation lock was poisoned")?;
+        let (events, snapshot) = {
+            let mut engine = self
+                .engine
+                .lock()
+                .map_err(|_| "calibration state lock was poisoned")?;
+            let known = engine
+                .state()
+                .targets
+                .iter()
+                .any(|t| t.id == target && !t.builtin);
+            if !known {
+                return Err("choose a location other than Center".into());
+            }
+            // Moving the knob to another location ends any volume interaction the old one started.
+            let was_active = engine.state().active_target.as_ref() == Some(&self.volume_target());
+            let events = if was_active {
+                engine.deactivate()
+            } else {
+                Vec::new()
+            };
+            *self
+                .volume_target
+                .lock()
+                .map_err(|_| "volume target lock was poisoned")? = target;
+            let snapshot = self.snapshot(&engine)?;
+            self.save(app, &engine, &snapshot.volume_target);
+            (events, snapshot)
+        };
+        handle_calibration_events(app, events);
+        let _ = app.emit(CALIBRATION_STATE_EVENT, &snapshot);
+        Ok(snapshot)
+    }
+
     pub fn observe(&self, app: &AppHandle, quaternion: [f64; 4]) -> Result<(), String> {
         let _operation = self
             .operations
@@ -76,7 +304,7 @@ impl CalibrationRuntime {
         Ok(())
     }
 
-    pub fn invalidate(&self, app: &AppHandle) -> Result<CalibrationState, String> {
+    pub fn invalidate(&self, app: &AppHandle) -> Result<CalibrationSnapshot, String> {
         let _operation = self
             .operations
             .lock()
@@ -92,7 +320,7 @@ impl CalibrationRuntime {
                 .map_err(|_| "calibration state lock was poisoned")?;
             *latest = None;
             let events = engine.invalidate();
-            (events, engine.state())
+            (events, self.snapshot(&engine)?)
         };
         handle_calibration_events(app, events);
         let _ = app.emit(CALIBRATION_STATE_EVENT, &state);
@@ -103,7 +331,7 @@ impl CalibrationRuntime {
         &self,
         app: &AppHandle,
         target: CalibrationTarget,
-    ) -> Result<CalibrationState, String> {
+    ) -> Result<CalibrationSnapshot, String> {
         let _operation = self
             .operations
             .lock()
@@ -120,9 +348,9 @@ impl CalibrationRuntime {
                 .lock()
                 .map_err(|_| "calibration state lock was poisoned")?;
             let events = engine
-                .capture(target, quaternion)
+                .capture(&target, quaternion)
                 .map_err(|error| error.to_string())?;
-            (events, engine.state())
+            (events, self.snapshot(&engine)?)
         };
         handle_calibration_events(app, events);
         let _ = app.emit(CALIBRATION_STATE_EVENT, &state);
@@ -134,7 +362,7 @@ impl CalibrationRuntime {
         app: &AppHandle,
         activation_threshold_degrees: f64,
         dwell_ms: u64,
-    ) -> Result<CalibrationState, String> {
+    ) -> Result<CalibrationSnapshot, String> {
         let _operation = self
             .operations
             .lock()
@@ -147,29 +375,29 @@ impl CalibrationRuntime {
             engine
                 .update_config(activation_threshold_degrees, dwell_ms)
                 .map_err(|error| error.to_string())?;
-            engine.state()
+            self.snapshot(&engine)?
         };
         let _ = app.emit(CALIBRATION_STATE_EVENT, &state);
         Ok(state)
     }
 
-    pub fn state(&self) -> Result<CalibrationState, String> {
+    pub fn state(&self) -> Result<CalibrationSnapshot, String> {
         let _operation = self
             .operations
             .lock()
             .map_err(|_| "calibration operation lock was poisoned")?;
-        Ok(self
+        let engine = self
             .engine
             .lock()
-            .map_err(|_| "calibration state lock was poisoned")?
-            .state())
+            .map_err(|_| "calibration state lock was poisoned")?;
+        self.snapshot(&engine)
     }
 }
 
 #[tauri::command]
 pub fn get_calibration_state(
     runtime: State<'_, CalibrationRuntime>,
-) -> Result<CalibrationState, String> {
+) -> Result<CalibrationSnapshot, String> {
     runtime.state()
 }
 
@@ -178,8 +406,68 @@ pub fn capture_calibration_target(
     target: CalibrationTarget,
     runtime: State<'_, CalibrationRuntime>,
     app: AppHandle,
-) -> Result<CalibrationState, String> {
+) -> Result<CalibrationSnapshot, String> {
     runtime.capture(&app, target)
+}
+
+#[tauri::command]
+pub fn add_calibration_location(
+    name: String,
+    runtime: State<'_, CalibrationRuntime>,
+    app: AppHandle,
+) -> Result<CalibrationSnapshot, String> {
+    runtime.add_location(&app, name)
+}
+
+#[tauri::command]
+pub fn remove_calibration_location(
+    target: CalibrationTarget,
+    runtime: State<'_, CalibrationRuntime>,
+    app: AppHandle,
+) -> Result<CalibrationSnapshot, String> {
+    runtime.remove_location(&app, target)
+}
+
+#[tauri::command]
+pub fn set_volume_target(
+    target: CalibrationTarget,
+    runtime: State<'_, CalibrationRuntime>,
+    app: AppHandle,
+) -> Result<CalibrationSnapshot, String> {
+    runtime.set_volume_target(&app, target)
+}
+
+/// A slug from the display name that no existing location uses: "Left edge" -> `leftEdge`, then `leftEdge2`.
+fn unused_id(engine: &HeadCalibration, name: &str) -> String {
+    let mut base = String::new();
+    let mut upper = false;
+    for c in name
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || c.is_whitespace())
+    {
+        if c.is_whitespace() {
+            upper = !base.is_empty();
+        } else if base.is_empty() {
+            base.extend(c.to_lowercase());
+        } else if upper {
+            base.extend(c.to_uppercase());
+            upper = false;
+        } else {
+            base.push(c);
+        }
+    }
+    if !base.chars().next().is_some_and(|c| c.is_ascii_alphabetic()) {
+        base = format!("location{base}");
+    }
+    base.truncate(28);
+    let taken = |id: &str| engine.state().targets.iter().any(|t| t.id.as_str() == id);
+    let mut id = base.clone();
+    let mut n = 2;
+    while taken(&id) {
+        id = format!("{base}{n}");
+        n += 1;
+    }
+    id
 }
 
 #[tauri::command]
@@ -188,24 +476,25 @@ pub fn update_calibration_config(
     dwell_ms: u64,
     runtime: State<'_, CalibrationRuntime>,
     app: AppHandle,
-) -> Result<CalibrationState, String> {
+) -> Result<CalibrationSnapshot, String> {
     runtime.update_config(&app, activation_threshold_degrees, dwell_ms)
 }
 
 /// Emits calibration transitions to the frontend and, for the top-right
-/// target specifically, drives the opt-in corner-gated wrist-volume demo
+/// volume-knob location, drives the opt-in corner-gated wrist-volume demo
 /// through the same `OverlayRuntime` seam the Watch-button and desktop-model
 /// paths use. Both `TargetEntered`/`TargetExited(TopRight)` route through
 /// here regardless of which `CalibrationRuntime` method produced them, so
 /// dwell success, tracker disconnect, and recalibration invalidation can
 /// never diverge on when the demo interaction starts or ends.
 fn handle_calibration_events(app: &AppHandle, events: Vec<CalibrationEvent>) {
+    let volume_target = app.state::<CalibrationRuntime>().volume_target();
     for event in &events {
         match event {
-            CalibrationEvent::TargetEntered(CalibrationTarget::TopRight) => {
+            CalibrationEvent::TargetEntered(target) if *target == volume_target => {
                 start_corner_wrist_volume_demo(app);
             }
-            CalibrationEvent::TargetExited(CalibrationTarget::TopRight) => {
+            CalibrationEvent::TargetExited(target) if *target == volume_target => {
                 // Always safe: `OverlayRuntime::release` is a no-op unless a
                 // corner-demo interaction (or another grab) is actually
                 // active, so this can never disturb an unrelated STEM-button
@@ -394,5 +683,23 @@ mod corner_demo_gating_tests {
             decide_corner_demo_start(true, Ok(Some(0.5)), true),
             CornerDemoStart::Ready
         );
+    }
+}
+
+#[cfg(test)]
+mod location_id_tests {
+    use super::*;
+
+    #[test]
+    fn ids_are_camel_case_slugs_that_never_collide() {
+        let mut engine = HeadCalibration::default();
+        assert_eq!(unused_id(&engine, "Left edge"), "leftEdge");
+        assert_eq!(unused_id(&engine, "Top right"), "topRight2");
+        assert_eq!(unused_id(&engine, "3rd monitor!"), "location3rdMonitor");
+        engine
+            .add_location(CalibrationTarget::new("leftEdge").unwrap(), "Left edge")
+            .unwrap();
+        assert_eq!(unused_id(&engine, "left  edge"), "leftEdge2");
+        assert!(CalibrationTarget::new(unused_id(&engine, "日本")).is_ok());
     }
 }

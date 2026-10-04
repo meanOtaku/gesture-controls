@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { Dashboard } from "./Dashboard";
-import type { HeadTrackerStatus, WatchStatus } from "../../../shared/protocol/events";
+import type { CalibrationState, HeadTrackerStatus, WatchStatus } from "../../../shared/protocol/events";
 
 afterEach(cleanup);
 
@@ -18,12 +18,25 @@ const connected: HeadTrackerStatus = {
   resetCounter: 7,
 };
 
+function calibrationFixture(overrides: Partial<CalibrationState> & { saved?: string[] } = {}): CalibrationState {
+  const { saved = ["center", "topRight"], ...rest } = overrides;
+  return {
+    targets: [
+      { id: "center", name: "Screen center", calibrated: saved.includes("center"), builtin: true },
+      { id: "topRight", name: "Top right", calibrated: saved.includes("topRight"), builtin: false },
+    ],
+    volumeTarget: "topRight",
+    requiresRecalibration: false,
+    activationThresholdDegrees: 12,
+    dwellMs: 400,
+    activeTarget: null,
+    ...rest,
+  };
+}
+
 describe("Dashboard", () => {
   it("does not report a ready gesture when calibrated headphones are disconnected", () => {
-    render(<Dashboard status={{ ...connected, connected: false }} calibration={{
-      centerCalibrated: true, topRightCalibrated: true, requiresRecalibration: false,
-      activationThresholdDegrees: 12, dwellMs: 400, activeTarget: null,
-    }} />);
+    render(<Dashboard status={{ ...connected, connected: false }} calibration={calibrationFixture()} />);
     expect(screen.queryByText("Ready")).not.toBeInTheDocument();
     expect(screen.getByText("Connect headphones to begin")).toBeInTheDocument();
   });
@@ -46,21 +59,14 @@ describe("Dashboard", () => {
     }
   });
 
-  it("guides center and top-right calibration and reports an active target", () => {
+  it("guides calibration of each location and reports an active target", () => {
     const captures: string[] = [];
     const settings: Array<[number, number]> = [];
     const { container } = render(
       <Dashboard
         view="headphone"
         status={connected}
-        calibration={{
-          centerCalibrated: true,
-          topRightCalibrated: false,
-          requiresRecalibration: true,
-          activationThresholdDegrees: 12,
-          dwellMs: 400,
-          activeTarget: "topRight",
-        }}
+        calibration={calibrationFixture({ saved: ["center"], requiresRecalibration: true, activeTarget: "topRight" })}
         onCaptureTarget={(target) => captures.push(target)}
         onUpdateCalibration={(threshold, dwell) => settings.push([threshold, dwell])}
       />,
@@ -68,9 +74,9 @@ describe("Dashboard", () => {
 
     const dashboard = within(container);
     expect(dashboard.getByText("Calibration required")).toBeInTheDocument();
-    expect(dashboard.getByText("Top-right active")).toBeInTheDocument();
-    fireEvent.click(dashboard.getByRole("button", { name: /Capture center/ }));
-    fireEvent.click(dashboard.getByRole("button", { name: /Capture top-right/ }));
+    expect(dashboard.getByText("Top right active")).toBeInTheDocument();
+    fireEvent.click(dashboard.getByRole("button", { name: "Capture Screen center" }));
+    fireEvent.click(dashboard.getByRole("button", { name: "Capture Top right" }));
     expect(captures).toEqual(["center", "topRight"]);
 
     const threshold = dashboard.getByLabelText("Activation threshold");
@@ -89,14 +95,7 @@ describe("Dashboard", () => {
       <Dashboard
         view="headphone"
         status={null}
-        calibration={{
-          centerCalibrated: true,
-          topRightCalibrated: true,
-          requiresRecalibration: false,
-          activationThresholdDegrees: 12,
-          dwellMs: 400,
-          activeTarget: null,
-        }}
+        calibration={calibrationFixture()}
         onUpdateCalibration={(threshold, dwell) => settings.push([threshold, dwell])}
       />,
     );
@@ -156,11 +155,46 @@ describe("Dashboard", () => {
       />,
     );
     const dashboard = within(container);
-    const centerButton = dashboard.getByRole("button", { name: /Capturing…/ });
+    const centerButton = dashboard.getByRole("button", { name: "Capture Screen center" });
+    expect(centerButton).toHaveTextContent("Capturing…");
     expect(centerButton).toBeDisabled();
     fireEvent.click(centerButton);
     expect(captures).toEqual([]);
-    expect(dashboard.getByRole("button", { name: /Capture top-right/ })).not.toBeDisabled();
+    expect(dashboard.getByRole("button", { name: "Capture Top right" })).not.toBeDisabled();
+  });
+
+  it("adds, removes and assigns locations, and refuses a bad name", () => {
+    const calls: string[] = [];
+    const calibration = calibrationFixture();
+    calibration.targets.push({ id: "leftEdge", name: "Left edge", calibrated: false, builtin: false });
+    const { container } = render(
+      <Dashboard
+        view="headphone"
+        status={connected}
+        calibration={calibration}
+        onAddLocation={(name) => calls.push(`add:${name}`)}
+        onRemoveLocation={(id) => calls.push(`remove:${id}`)}
+        onSetVolumeTarget={(id) => calls.push(`volume:${id}`)}
+      />,
+    );
+    const dashboard = within(container);
+
+    // Center is the reference: it cannot be removed or become the volume knob.
+    expect(dashboard.queryByRole("button", { name: "Remove Screen center" })).not.toBeInTheDocument();
+    // The volume location cannot be removed while it is in use.
+    expect(dashboard.getByRole("button", { name: "Remove Top right" })).toBeDisabled();
+    expect(dashboard.getByRole("button", { name: "Use Top right for the volume knob" })).toBeDisabled();
+    fireEvent.click(dashboard.getByRole("button", { name: "Use Left edge for the volume knob" }));
+    fireEvent.click(dashboard.getByRole("button", { name: "Remove Left edge" }));
+
+    const name = dashboard.getByLabelText("New location name");
+    fireEvent.change(name, { target: { value: "top RIGHT" } });
+    fireEvent.click(dashboard.getByRole("button", { name: "Add location" }));
+    expect(name).toHaveAccessibleDescription("A location with that name already exists.");
+    fireEvent.change(name, { target: { value: "  Desk lamp " } });
+    fireEvent.click(dashboard.getByRole("button", { name: "Add location" }));
+    expect(calls).toEqual(["volume:leftEdge", "remove:leftEdge", "add:Desk lamp"]);
+    expect(name).toHaveValue("");
   });
 
   const watchStatus: WatchStatus = {

@@ -153,6 +153,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             calibration::get_calibration_state,
             calibration::capture_calibration_target,
+            calibration::add_calibration_location,
+            calibration::remove_calibration_location,
+            calibration::set_volume_target,
             calibration::update_calibration_config,
             overlay::get_overlay_state,
             overlay::show_overlay,
@@ -218,6 +221,7 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             app.manage(settings::SettingsRuntime::load(&handle));
+            handle.state::<calibration::CalibrationRuntime>().load(&handle);
             overlay::prepare_window(&handle).map_err(std::io::Error::other)?;
             model_registry::reconcile_inference_mode_at_startup(&handle);
             head_pose::spawn(handle.clone());

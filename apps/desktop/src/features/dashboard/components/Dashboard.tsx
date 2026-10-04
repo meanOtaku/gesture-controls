@@ -32,12 +32,18 @@ interface DashboardProps {
   onNavigate?: (view: "headphone" | "watch") => void;
   onCaptureTarget?: (target: CalibrationTarget) => void;
   onUpdateCalibration?: (activationThresholdDegrees: number, dwellMs: number) => void;
+  onAddLocation?: (name: string) => void;
+  onRemoveLocation?: (target: CalibrationTarget) => void;
+  onSetVolumeTarget?: (target: CalibrationTarget) => void;
   onSetSensorEnabled?: (sensor: string, enabled: boolean) => void;
 }
 
 const DEFAULT_CALIBRATION: CalibrationState = {
-  centerCalibrated: false,
-  topRightCalibrated: false,
+  targets: [
+    { id: "center", name: "Screen center", calibrated: false, builtin: true },
+    { id: "topRight", name: "Top right", calibrated: false, builtin: false },
+  ],
+  volumeTarget: "topRight",
   requiresRecalibration: true,
   activationThresholdDegrees: 12,
   dwellMs: 400,
@@ -56,11 +62,14 @@ export function Dashboard({
   onNavigate,
   onCaptureTarget = () => undefined,
   onUpdateCalibration = () => undefined,
+  onAddLocation = () => undefined,
+  onRemoveLocation = () => undefined,
+  onSetVolumeTarget = () => undefined,
   onSetSensorEnabled = () => undefined,
 }: DashboardProps) {
   const connected = status?.connected === true;
   const calibrationState = calibration ?? DEFAULT_CALIBRATION;
-  const calibrated = calibrationState.centerCalibrated && calibrationState.topRightCalibrated && !calibrationState.requiresRecalibration;
+  const calibrated = !calibrationState.requiresRecalibration;
   const watchConnected = watchStatus?.connected === true;
   const gestureReady = connected && calibrated && watchConnected;
 
@@ -138,6 +147,9 @@ export function Dashboard({
           isPending={isPending}
           onCaptureTarget={onCaptureTarget}
           onUpdateCalibration={onUpdateCalibration}
+          onAddLocation={onAddLocation}
+          onRemoveLocation={onRemoveLocation}
+          onSetVolumeTarget={onSetVolumeTarget}
         />
       )}
 

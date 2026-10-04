@@ -26,15 +26,29 @@ export interface HeadTrackerStatus extends HeadPosePayload {
   connected: boolean;
 }
 
-export type CalibrationTarget = "center" | "topRight";
+/** A location id: a short slug such as "center", "topRight" or "leftEdge". Center always exists. */
+export type CalibrationTarget = string;
+
+export const CENTER_TARGET: CalibrationTarget = "center";
+export const MAX_LOCATION_NAME_CHARS = 32;
+export const MAX_LOCATIONS = 12;
+
+export interface CalibrationLocation {
+  id: CalibrationTarget;
+  name: string;
+  calibrated: boolean;
+  /** Center: the reference every other location is judged against; it cannot be removed. */
+  builtin: boolean;
+}
 
 export interface CalibrationState {
-  centerCalibrated: boolean;
-  topRightCalibrated: boolean;
+  targets: CalibrationLocation[];
   requiresRecalibration: boolean;
   activationThresholdDegrees: number;
   dwellMs: number;
   activeTarget: CalibrationTarget | null;
+  /** The location that raises the volume overlay. */
+  volumeTarget: CalibrationTarget;
 }
 
 /**

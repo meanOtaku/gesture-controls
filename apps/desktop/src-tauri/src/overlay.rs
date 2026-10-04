@@ -874,12 +874,15 @@ pub fn get_overlay_state(runtime: State<'_, OverlayRuntime>) -> Result<OverlaySt
 /// the webview's say-so: the frontend only calls `show_overlay` in response
 /// to the head-target-entered event, and the backend's own calibration state
 /// must agree that the top-right target is currently active.
-fn overlay_show_permitted(active_target: Option<CalibrationTarget>) -> Result<(), String> {
-    if active_target == Some(CalibrationTarget::TopRight) {
+fn overlay_show_permitted(
+    active_target: Option<&CalibrationTarget>,
+    volume_target: &CalibrationTarget,
+) -> Result<(), String> {
+    if active_target == Some(volume_target) {
         Ok(())
     } else {
         Err(
-            "the volume overlay can only be shown while the top-right head target is active"
+            "the volume overlay can only be shown while the volume head location is active"
                 .to_string(),
         )
     }
@@ -892,7 +895,11 @@ pub fn show_overlay(
     volume_runtime: State<'_, VolumeRuntime>,
     calibration: State<'_, CalibrationRuntime>,
 ) -> Result<OverlayState, String> {
-    overlay_show_permitted(calibration.state()?.active_target)?;
+    let calibration = calibration.state()?;
+    overlay_show_permitted(
+        calibration.state.active_target.as_ref(),
+        &calibration.volume_target,
+    )?;
     runtime.show(&app, &volume_runtime)
 }
 
@@ -1008,10 +1015,14 @@ mod tests {
     /// D-M4-4: the webview must not be able to raise the volume capability
     /// gate unless the backend itself sees the top-right target active.
     #[test]
-    fn show_overlay_requires_the_top_right_target_to_be_active() {
-        assert!(overlay_show_permitted(Some(CalibrationTarget::TopRight)).is_ok());
-        assert!(overlay_show_permitted(Some(CalibrationTarget::Center)).is_err());
-        assert!(overlay_show_permitted(None).is_err());
+    fn show_overlay_requires_the_volume_location_to_be_active() {
+        let volume = CalibrationTarget::top_right();
+        let other = CalibrationTarget::new("leftEdge").unwrap();
+        assert!(overlay_show_permitted(Some(&volume), &volume).is_ok());
+        assert!(overlay_show_permitted(Some(&CalibrationTarget::center()), &volume).is_err());
+        assert!(overlay_show_permitted(Some(&other), &volume).is_err());
+        assert!(overlay_show_permitted(Some(&other), &other).is_ok());
+        assert!(overlay_show_permitted(None, &volume).is_err());
     }
 
     #[test]
