@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_ACTIVITY, actionsFor, appendActivity, bestState, describeReport, groupByLabel, type DetectionReport, type LabelModel } from "./labelModels";
+import { MAX_ACTIVITY, actionsFor, labelIdFromName, appendActivity, bestState, describeReport, groupByLabel, type DetectionReport, type LabelModel } from "./labelModels";
 
 const model = (over: Partial<LabelModel>): LabelModel => ({
   id: "m", label: "snap", state: "draft", deployable: true, imported: true, modelSha256: null, createdAt: "2026-10-01T00:00:00Z", active: false, ...over,
@@ -79,5 +79,20 @@ describe("bestState", () => {
     expect(bestState([])).toBeNull();
     expect(bestState([{ state: "draft" }, { state: "approved" }, { state: "archived" }])).toBe("approved");
     expect(bestState([{ state: "approved" }, { state: "active" }])).toBe("active");
+  });
+});
+
+describe("labelIdFromName", () => {
+  it("makes a lower-case id from what you type", () => {
+    expect(labelIdFromName("Snap fingers")).toBe("snap_fingers");
+    expect(labelIdFromName("  Wrist-flick!! ")).toBe("wrist_flick");
+  });
+
+  it("starts with a letter, stays within the limit, and gives null when nothing is left", () => {
+    expect(labelIdFromName("3 taps")).toBe("l_3_taps");
+    expect(labelIdFromName("a".repeat(80))).toHaveLength(48);
+    expect(labelIdFromName("l".repeat(47) + "9")).toMatch(/^l+9$/);
+    expect(labelIdFromName("!!!")).toBeNull();
+    expect(labelIdFromName("")).toBeNull();
   });
 });

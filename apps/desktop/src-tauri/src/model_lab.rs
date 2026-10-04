@@ -496,6 +496,15 @@ pub fn import_model_dataset(
     Ok(summary)
 }
 
+/// Every label on any imported recording.
+pub(crate) fn dataset_labels_in_use(app: &AppHandle) -> std::collections::BTreeSet<String> {
+    load_index(app)
+        .datasets
+        .iter()
+        .flat_map(DatasetSummary::effective_labels)
+        .collect()
+}
+
 #[tauri::command]
 pub fn list_model_datasets(
     app: AppHandle,

@@ -3,6 +3,7 @@
 //! Labels are immutable ids with editable presentation metadata. Archiving never
 //! deletes an entry, so an imported historical recording remains interpretable.
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -13,38 +14,6 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 const LABELS_FILE_NAME: &str = "labels.json";
 pub const LABEL_REGISTRY_EVENT: &str = "model-lab-labels-changed";
-const BUILTIN_LABELS: &[(&str, &str, LabelRole)] = &[
-    ("idle", "Idle", LabelRole::NegativeBackground),
-    ("pinch_start", "Pinch start", LabelRole::PositiveGesture),
-    ("pinch_hold", "Pinch hold", LabelRole::PositiveGesture),
-    ("pinch_release", "Pinch release", LabelRole::PositiveGesture),
-    ("walking", "Walking", LabelRole::NegativeBackground),
-    ("typing", "Typing", LabelRole::NegativeBackground),
-    ("using_mouse", "Using mouse", LabelRole::NegativeBackground),
-    (
-        "touching_face",
-        "Touching face",
-        LabelRole::NegativeBackground,
-    ),
-    (
-        "adjusting_headphones",
-        "Adjusting headphones",
-        LabelRole::NegativeBackground,
-    ),
-    (
-        "picking_up_cup",
-        "Picking up cup",
-        LabelRole::NegativeBackground,
-    ),
-    ("scratching", "Scratching", LabelRole::NegativeBackground),
-    (
-        "normal_wrist_rotation",
-        "Normal wrist rotation",
-        LabelRole::NegativeBackground,
-    ),
-    ("standing", "Standing", LabelRole::NegativeBackground),
-    ("sitting", "Sitting", LabelRole::NegativeBackground),
-];
 
 /// Presentation-only classification of a collection label, chosen at creation time to help someone browsing
 /// Model Lab understand what a label is *for* (e.g. showing a coverage badge). This is never authoritative
@@ -67,7 +36,9 @@ pub struct LabelRecord {
     pub description: String,
     pub color: String,
     pub role: LabelRole,
-    pub built_in: bool,
+    /// Only read from files written when labels were shipped with the app; never written. See [`prune_legacy_builtins`].
+    #[serde(default, skip_serializing)]
+    built_in: bool,
     pub archived_at: Option<String>,
 }
 
@@ -101,50 +72,32 @@ fn labels_path(app: &AppHandle) -> Result<PathBuf, String> {
         .join(LABELS_FILE_NAME))
 }
 
-fn default_index() -> LabelIndex {
-    LabelIndex {
-        labels: BUILTIN_LABELS
-            .iter()
-            .map(|(id, display_name, role)| LabelRecord {
-                id: (*id).to_string(),
-                display_name: (*display_name).to_string(),
-                description: String::new(),
-                color: "#65e6ff".to_string(),
-                role: *role,
-                built_in: true,
-                archived_at: None,
-            })
-            .collect(),
-    }
-}
-
+/// The saved labels. A missing or unreadable file is an empty catalogue: labels are the user's own.
 fn load_index(app: &AppHandle) -> LabelIndex {
     let Ok(path) = labels_path(app) else {
-        return default_index();
+        return LabelIndex::default();
     };
     let Ok(contents) = fs::read_to_string(path) else {
-        return default_index();
+        return LabelIndex::default();
     };
     let Ok(mut index) = serde_json::from_str::<LabelIndex>(&contents) else {
-        return default_index();
+        return LabelIndex::default();
     };
-    // Forward-compatible migration: built-ins added by a later app version
-    // appear without mutating or replacing a user's existing metadata.
-    for (id, display_name, role) in BUILTIN_LABELS {
-        if !index.labels.iter().any(|label| label.id == *id) {
-            index.labels.push(LabelRecord {
-                id: (*id).to_string(),
-                display_name: (*display_name).to_string(),
-                description: String::new(),
-                color: "#65e6ff".to_string(),
-                role: *role,
-                built_in: true,
-                archived_at: None,
-            });
-        }
-    }
     index.labels.sort_by(|a, b| a.id.cmp(&b.id));
     index
+}
+
+/// Labels this app used to ship with are not special any more. Drops the ones nothing refers to and keeps (as
+/// ordinary labels) the ones a recording or model still uses. Returns how many were dropped.
+fn prune_builtins(index: &mut LabelIndex, in_use: &BTreeSet<String>) -> usize {
+    let before = index.labels.len();
+    index
+        .labels
+        .retain(|label| !label.built_in || in_use.contains(&label.id));
+    for label in &mut index.labels {
+        label.built_in = false;
+    }
+    before - index.labels.len()
 }
 
 fn write_index_atomic(app: &AppHandle, index: &LabelIndex) -> Result<(), String> {
@@ -164,13 +117,13 @@ fn write_index_atomic(app: &AppHandle, index: &LabelIndex) -> Result<(), String>
 
 fn validate_input(input: &CreateLabelInput) -> Result<(), String> {
     if !matches!(input.id.as_bytes().first(), Some(b'a'..=b'z'))
-        || input.id.len() > 64
+        || input.id.len() > 48
         || !input
             .id
             .bytes()
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
     {
-        return Err("label id must be 1-64 lowercase letters, digits, or underscores and begin with a letter".to_string());
+        return Err("label id must be 1-48 lowercase letters, digits, or underscores and begin with a letter".to_string());
     }
     if input.display_name.trim().is_empty() || input.display_name.chars().count() > 80 {
         return Err("display name must be 1-80 characters".to_string());
@@ -252,16 +205,80 @@ pub fn set_model_label_archived(
         .iter_mut()
         .find(|label| label.id == id)
         .ok_or_else(|| format!("no label with id '{id}'"))?;
-    if label.built_in {
-        return Err(
-            "built-in labels cannot be archived; keep their historical meanings available"
-                .to_string(),
-        );
-    }
     label.archived_at = archived.then(|| Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true));
     write_index_atomic(&app, &index)?;
     emit(&app, &index);
     Ok(index.labels)
+}
+
+/// Removes a label nothing uses. A label that a recording, a project or a model refers to cannot be removed (archive
+/// it instead): deleting it would leave those without a meaning.
+#[tauri::command]
+pub fn delete_model_label(
+    id: String,
+    app: AppHandle,
+    runtime: State<'_, LabelRegistryRuntime>,
+    labels: State<'_, crate::label_runtime::LabelRuntimeHost>,
+) -> Result<Vec<LabelRecord>, String> {
+    let _guard = runtime
+        .lock
+        .lock()
+        .map_err(|_| "label registry lock was poisoned".to_string())?;
+    let mut index = load_index(&app);
+    if !index.labels.iter().any(|label| label.id == id) {
+        return Err(format!("no label with id '{id}'"));
+    }
+    let in_use = labels_in_use(&app, &labels).ok_or(
+        "the model registry is not available, so it cannot be checked whether this label is used",
+    )?;
+    if in_use.contains(&id) {
+        return Err(format!(
+            "'{id}' is used by a recording or a model. Archive it instead; deleting it would leave them without a meaning"
+        ));
+    }
+    index.labels.retain(|label| label.id != id);
+    write_index_atomic(&app, &index)?;
+    emit(&app, &index);
+    Ok(index.labels)
+}
+
+/// Every label a recording, a project or a model refers to; `None` when the model registry cannot be read.
+fn labels_in_use(
+    app: &AppHandle,
+    models: &crate::label_runtime::LabelRuntimeHost,
+) -> Option<BTreeSet<String>> {
+    let mut used = crate::model_lab::dataset_labels_in_use(app);
+    used.extend(models.labels_in_registry()?);
+    Some(used)
+}
+
+/// Run once at startup, after the model registry is open. See [`prune_builtins`].
+pub fn prune_legacy_builtins(app: &AppHandle) {
+    let models = app.state::<crate::label_runtime::LabelRuntimeHost>();
+    let Some(in_use) = labels_in_use(app, &models) else {
+        return;
+    };
+    let runtime = app.state::<LabelRegistryRuntime>();
+    let Ok(_guard) = runtime.lock.lock() else {
+        return;
+    };
+    let Ok(path) = labels_path(app) else { return };
+    let Ok(contents) = fs::read_to_string(path) else {
+        return;
+    };
+    let Ok(mut index) = serde_json::from_str::<LabelIndex>(&contents) else {
+        return;
+    };
+    if !index.labels.iter().any(|label| label.built_in) {
+        return;
+    }
+    let removed = prune_builtins(&mut index, &in_use);
+    if write_index_atomic(app, &index).is_ok() {
+        tracing::info!(
+            removed,
+            "removed labels this app used to ship with that nothing uses"
+        );
+    }
 }
 
 /// Used by Model Lab import validation. Archived labels remain valid because
@@ -296,6 +313,60 @@ mod tests {
         assert!(validate_input(&input).is_err());
         input.id = "safe".to_string();
         input.color = "red".to_string();
+        assert!(validate_input(&input).is_err());
+    }
+
+    fn record(id: &str, built_in: bool) -> LabelRecord {
+        LabelRecord {
+            id: id.into(),
+            display_name: id.into(),
+            description: String::new(),
+            color: "#65e6ff".into(),
+            role: LabelRole::PositiveGesture,
+            built_in,
+            archived_at: None,
+        }
+    }
+
+    #[test]
+    fn old_shipped_labels_are_dropped_unless_something_uses_them_and_nobody_elses_are() {
+        let mut index = LabelIndex {
+            labels: vec![
+                record("idle", true),
+                record("walking", true),
+                record("mine", false),
+                record("snap", false),
+            ],
+        };
+        let in_use: BTreeSet<String> = ["walking".to_string()].into();
+        assert_eq!(prune_builtins(&mut index, &in_use), 1);
+        let ids: Vec<&str> = index.labels.iter().map(|l| l.id.as_str()).collect();
+        assert_eq!(ids, ["walking", "mine", "snap"]);
+        // What is kept becomes an ordinary label, so a second run changes nothing.
+        assert!(index.labels.iter().all(|l| !l.built_in));
+        assert_eq!(prune_builtins(&mut index, &BTreeSet::new()), 0);
+    }
+
+    #[test]
+    fn the_old_flag_is_read_from_a_saved_file_but_never_written() {
+        let old = r##"{"labels":[{"id":"idle","displayName":"Idle","description":"","color":"#65e6ff","role":"negativeBackground","builtIn":true,"archivedAt":null}]}"##;
+        let index: LabelIndex = serde_json::from_str(old).unwrap();
+        assert!(index.labels[0].built_in);
+        let written = serde_json::to_string(&index).unwrap();
+        assert!(!written.contains("builtIn"), "{written}");
+    }
+
+    #[test]
+    fn a_label_id_is_no_longer_than_a_model_label_may_be() {
+        let mut input = CreateLabelInput {
+            id: "a".repeat(48),
+            display_name: "x".into(),
+            description: String::new(),
+            color: "#000000".into(),
+            role: LabelRole::PositiveGesture,
+        };
+        assert!(validate_input(&input).is_ok());
+        input.id = "a".repeat(49);
         assert!(validate_input(&input).is_err());
     }
 }

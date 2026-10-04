@@ -6,8 +6,10 @@ import { useLabelModels } from "../hooks/useLabelModels";
 import { datasetLabels, type DatasetLabel, type DatasetSummary } from "../types";
 import { DatasetManager } from "./DatasetManager";
 import { DetectionActivity } from "./DetectionActivity";
-import { LabelCoverage } from "./LabelCoverage";
+import { LabelCoverage, type NewLabel } from "./LabelCoverage";
 import { LabelModelsPanel } from "./LabelModelsPanel";
+
+const LABEL_COLOR = "#65e6ff";
 
 /**
  * Model Lab: teach the app a gesture one label at a time. Models are listed and switched on first, because that is
@@ -51,6 +53,33 @@ export function ModelLab() {
       }
     })();
   }, [desktopAvailable]);
+
+  const createLabel = useCallback(async (label: NewLabel): Promise<string | null> => {
+    try {
+      setLabels(await invoke<DatasetLabel[]>("create_model_label", { input: { ...label, color: LABEL_COLOR } }));
+      OperationFeedback.success("Add label", `Added ${label.displayName}.`);
+      return null;
+    } catch (err) {
+      return String(err);
+    }
+  }, []);
+
+  const setLabelArchived = useCallback(async (id: string, archived: boolean) => {
+    try {
+      setLabels(await invoke<DatasetLabel[]>("set_model_label_archived", { id, archived }));
+    } catch (err) {
+      OperationFeedback.error(archived ? "Archive label" : "Restore label", String(err));
+    }
+  }, []);
+
+  const deleteLabel = useCallback(async (id: string): Promise<string | null> => {
+    try {
+      setLabels(await invoke<DatasetLabel[]>("delete_model_label", { id }));
+      return null;
+    } catch (err) {
+      return String(err);
+    }
+  }, []);
 
   const handleImport = useCallback(
     async ({ filename, csvContent }: { filename: string; csvContent: string }) => {
@@ -134,7 +163,7 @@ export function ModelLab() {
       <fieldset className="lab-workspace card-stack" disabled={!desktopAvailable} aria-label="Desktop model tools">
         <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} />
         <DetectionActivity desktopAvailable={desktopAvailable} />
-        <LabelCoverage labels={labels} models={models} coverageByLabel={coverageByLabel} />
+        <LabelCoverage labels={labels} models={models} coverageByLabel={coverageByLabel} onCreate={createLabel} onSetArchived={setLabelArchived} onDelete={deleteLabel} />
         <DatasetManager
           desktopAvailable={desktopAvailable}
           datasets={datasets}

@@ -376,3 +376,13 @@ html.overlay-document body::before { display:none; }
 .device-readout { margin:0; font-size:.9rem; }
 .device-slider { width:100%; accent-color:var(--yellow); }
 .field-unit-inline { font-family:var(--font-mono); font-size:.9rem; color:var(--ink-2); font-variant-numeric:tabular-nums; }
+.gesture-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:var(--space-card,16px); list-style:none; margin:0; padding:0; }
+.gesture-card { display:flex; flex-direction:column; gap:10px; padding:16px; border:1px solid var(--electric-blue,var(--line)); border-radius:12px; transition:background .2s,border-color .2s; }
+.gesture-card--lit { background:color-mix(in srgb,var(--green) 18%,transparent); border-color:var(--green); }
+.gesture-card .field-hint { margin:0; }
+.gesture-chips { display:flex; flex-wrap:wrap; gap:8px; }
+.gesture-chip { padding:6px 12px; border:1px solid var(--line); border-radius:999px; font-size:.78rem; transition:background .2s,color .2s; }
+.gesture-chip--lit { background:var(--green); color:var(--blue); border-color:var(--green); font-weight:700; }
+.gesture-meter { height:8px; border-radius:4px; background:var(--surface-2,rgba(255,255,255,.08)); overflow:hidden; }
+.gesture-meter-fill { height:100%; background:var(--green); transition:width .15s; }
+@media (prefers-reduced-motion:reduce) { .gesture-card,.gesture-chip,.gesture-meter-fill { transition:none; } }

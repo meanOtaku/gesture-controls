@@ -76,6 +76,7 @@ const Dashboard = lazy(() => import("../features/dashboard/components/Dashboard"
 const LiveTelemetry = memo(lazy(() => import("../features/telemetry/components/LiveTelemetry").then((m) => ({ default: m.LiveTelemetry }))));
 const ModelLab = memo(lazy(() => import("../features/model-lab/components/ModelLab").then((m) => ({ default: m.ModelLab }))));
 const RecipesPage = lazy(() => import("../features/recipes/components/RecipesPage").then((m) => ({ default: m.RecipesPage })));
+const GesturesPage = lazy(() => import("../features/gestures/components/GesturesPage").then((m) => ({ default: m.GesturesPage })));
 const VirtualDevicesPage = lazy(() => import("../features/devices/components/VirtualDevicesPage").then((m) => ({ default: m.VirtualDevicesPage })));
 const Settings = lazy(() => import("../features/settings/components/Settings").then((m) => ({ default: m.Settings })));
 
@@ -662,6 +663,22 @@ function MainApp() {
           setStartWithDevice(kind);
           setActiveTab("recipes");
         }}
+      />
+    )}
+    {activeTab === "gestures" && (
+      <GesturesPage
+        heuristics={settings?.heuristicGestures}
+        watchConnected={watchStatus?.connected === true}
+        stemDown={watchStatus?.lastButtonState === "down"}
+        shakeCount={shakeDetections}
+        lastSwipe={lastSwipe}
+        lastTap={lastTap}
+        lastRoll={lastRoll}
+        lastPitch={lastPitch}
+        calibration={calibration}
+        automation={automation}
+        onOpenModelLab={() => setActiveTab("modelLab")}
+        onOpenSettings={() => setActiveTab("settings")}
       />
     )}
     {activeTab === "telemetry" && (

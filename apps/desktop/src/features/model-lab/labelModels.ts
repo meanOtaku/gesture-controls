@@ -144,3 +144,12 @@ const STATE_RANK: LabelModelState[] = ["active", "approved", "evaluated", "draft
 export function bestState(models: Pick<LabelModel, "state">[]): LabelModelState | null {
   return STATE_RANK.find((state) => models.some((model) => model.state === state)) ?? null;
 }
+
+export const MAX_LABEL_CHARS = 48;
+
+/** The id a label name turns into: lower case, anything else becomes `_`. Null when nothing usable is left. */
+export function labelIdFromName(name: string): string | null {
+  const slug = name.trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, "_").replaceAll(/^_+|_+$/g, "").slice(0, MAX_LABEL_CHARS).replaceAll(/_+$/g, "");
+  if (slug === "") return null;
+  return /^[a-z]/.test(slug) ? slug : `l_${slug}`.slice(0, MAX_LABEL_CHARS);
+}

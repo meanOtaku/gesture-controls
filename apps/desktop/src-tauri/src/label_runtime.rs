@@ -216,6 +216,19 @@ impl LabelRuntimeHost {
             .unwrap_or_default()
     }
 
+    /// Every label a project, mapping or model in the registry refers to; `None` when there is no registry to ask.
+    pub fn labels_in_registry(&self) -> Option<BTreeSet<String>> {
+        let state = self.state.lock().ok()?;
+        let registry = state.store.as_ref()?.registry();
+        let mut labels = BTreeSet::new();
+        for project in registry.projects.values() {
+            labels.insert(project.target.to_string());
+            labels.extend(project.mapping.entries.keys().map(ToString::to_string));
+        }
+        labels.extend(registry.versions.values().map(|v| v.label.to_string()));
+        Some(labels)
+    }
+
     pub fn status(&self) -> LabelRuntimeStatus {
         self.state
             .lock()

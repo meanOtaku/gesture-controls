@@ -211,6 +211,7 @@ pub fn run() {
             label_registry::list_model_labels,
             label_registry::create_model_label,
             label_registry::set_model_label_archived,
+            label_registry::delete_model_label,
             model_registry::get_model_registry,
             model_registry::import_custom_tflite_bundle,
             model_registry::transition_model_state,
@@ -239,6 +240,7 @@ pub fn run() {
             handle.state::<calibration::CalibrationRuntime>().load(&handle);
             handle.state::<automation::AutomationRuntime>().load(&handle);
             handle.state::<label_runtime::LabelRuntimeHost>().load(&handle);
+            label_registry::prune_legacy_builtins(&handle);
             label_runtime::spawn_timer(handle.clone());
             overlay::prepare_window(&handle).map_err(std::io::Error::other)?;
             model_registry::reconcile_inference_mode_at_startup(&handle);

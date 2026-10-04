@@ -207,13 +207,27 @@ A list of what the active models have done this session, newest first: **Detecte
 
 #### Labels
 
-Each label with a recording or a model, with its number of recordings and its model's furthest state (No model, or Model: draft / evaluated / approved / active). A label with a single recording is flagged: a model is tested on whole recordings it never saw, so it needs at least two. Labels with neither are hidden until you choose **Show unused labels**.
+Labels are yours: the app ships none. **Add a label** with a name (it becomes an id, shown before you create it: "Snap fingers" is `snap_fingers`), say whether it is a gesture to detect or an everyday activity a model should not mistake for one, and optionally add notes. Record it on the Live data tab under that same id, then import the recording.
+
+Each label shows its recordings and its model's furthest state (No model, or Model: draft / evaluated / approved / active). A label with a single recording is flagged: a model is tested on whole recordings it never saw, so it needs at least two. **Archive** hides a label from new use without touching old recordings (**Show archived labels** brings it back, **Restore** undoes it). **Delete** is offered only for a label nothing uses, and the app refuses it for one a recording, project or model refers to.
+
+Labels an older version shipped (idle, walking, typing and so on) are removed on the first start of this version unless a recording or model still uses them; those that are used stay as ordinary labels you can archive.
 
 #### Recordings
 
 Record a labelled session on the **Live data** tab (Quick Capture is one label; Timeline Capture keeps the label of each interval), export the CSV, then **Import a recording (CSV)** here. The import is all-or-nothing: the file is checked in full (size limit, exact header, consistent labels, every label already in the catalogue) before anything is written, a failure says exactly why, and nothing is changed on disk. It is a compatibility path independent of the newer recording-bundle format and never touches those bundles. Labels keep stable ids; archiving one hides it from new selection but never changes old recordings.
 
 Training a model from recordings is the next step of this feature. The older three-class training, LiteRT readiness, intent-binding, replay and legacy inference panels were removed from this page; a model from the old system that could not be converted is kept aside and counted on the Label models card.
+
+### Gestures
+
+The **Gestures** tab (under Automation) is where you try what is working before building a recipe. Nothing on it controls your computer.
+
+- **Watch gestures:** the STEM button (lit while held) and the built-in shake, swipe, tap, roll and pitch. Each card says how to perform it, whether it is switched on in Settings, how many times it has been recognised this session, and which of your enabled recipes use it. The variant just recognised (for example *Left* for a swipe) lights for about a second and a half.
+- **Head locations:** every calibrated location, with the one you are looking at lit.
+- **Model gestures:** every loaded model with a live score bar and a **Detected** badge, which works in **Monitor** as well as Live. If the runtime is Off it tells you to set Monitor in Model Lab; if no model is loaded it points to Model Lab.
+
+The pinch gesture is not shown: it needs a model trained for it, which will appear under Model gestures once you have one.
 
 ### Settings
 
