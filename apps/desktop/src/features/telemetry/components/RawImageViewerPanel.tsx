@@ -357,7 +357,7 @@ export function RawImageViewerPanel() {
               if (value === "rawRows" || value === "observedSamples") rawImageViewerStore.setViewMode(value);
             }}
             options={[
-              { value: "observedSamples", label: "Observed samples", ariaLabel: "Observed samples (default)" },
+              { value: "observedSamples", label: "Observed", ariaLabel: "Observed samples (default)" },
               { value: "rawRows", label: "Raw rows", ariaLabel: "Raw rows (audit)" },
             ]}
           />

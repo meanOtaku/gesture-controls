@@ -308,7 +308,7 @@ html.overlay-document body::before { display:none; }
 
 /* Segmented control: equal-width joined options filling the control, the chosen one filled; the whole segment is the target. */
 .segmented[data-slot="radio-group"] { display:flex; width:100%; gap:0; border:1px solid var(--line); background:var(--surface-2); }
-.segment { position:relative; flex:1 1 0; min-width:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:.5rem .85rem; cursor:pointer; font-family:var(--font-display); text-transform:uppercase; letter-spacing:.08em; font-size:.85rem; font-weight:500; color:var(--ink-2); background:transparent; user-select:none; }
+.segment { position:relative; flex:1 1 0; min-width:0; white-space:nowrap; display:flex; align-items:center; justify-content:center; text-align:center; padding:.5rem .85rem; cursor:pointer; font-family:var(--font-display); text-transform:uppercase; letter-spacing:.08em; font-size:.85rem; font-weight:500; color:var(--ink-2); background:transparent; user-select:none; }
 .segment + .segment { border-left:1px solid var(--line); }
 .segment:hover { background:var(--wash); color:var(--ink); }
 .segment-input[data-slot="radio-group-item"] { position:absolute; inset:0; width:100%; height:100%; aspect-ratio:auto; border:0; border-radius:0; background:transparent; opacity:0; cursor:pointer; }
@@ -324,6 +324,7 @@ html.overlay-document body::before { display:none; }
 .viewer-group-head { display:flex; align-items:center; justify-content:space-between; gap:.75rem; flex-wrap:wrap; }
 .viewer-group-title { margin:0; font-family:var(--font-display); text-transform:uppercase; letter-spacing:.14em; font-size:.85rem; font-weight:500; color:var(--ink-2); }
 .viewer-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(15rem,1fr)); gap:1rem 1.25rem; align-items:start; }
+.viewer-grid .field-head { min-height:1.75rem; }
 .viewer-grid .field-head label, .viewer-grid .field-label { font-family:var(--font-display); text-transform:uppercase; letter-spacing:.1em; font-size:.85rem; font-weight:500; color:var(--ink); }
 .viewer-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.4rem; min-height:12rem; padding:2rem 1rem; text-align:center; border:1px dashed var(--line); background:var(--surface); }
 .viewer-empty strong { font-family:var(--font-display); text-transform:uppercase; letter-spacing:.06em; font-size:1.25rem; font-weight:500; }
