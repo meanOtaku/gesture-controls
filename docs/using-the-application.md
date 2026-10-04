@@ -325,7 +325,17 @@ The **Recipes** tab lists every recipe with an on/off switch, an Edit button and
 
 **Swipe strength** (default 8 m/s², range 3 to 30) sets how hard the push must be; lower it if your swipes are missed. The card shows the last swipe recognised and how many there have been, so you can try a setting before building a recipe. Not yet verified on a real watch: in particular the world-frame direction for up/down assumes the watch's orientation sensor reports the standard device-to-world rotation, so if up and down are reversed, tell me.
 
-Because it is a moment, a shake or swipe can only start a **button action** (play/pause, next, previous, mute); the editor does not offer them for volume, brightness or scroll, and refuses to save a recipe that has one. It needs the watch's **acceleration** sensor switched on, which is the default.
+### Tap
+
+**Tap watch** and **Double-tap watch** are gesture steps for knocking a finger on the watch's screen or case. They are momentary like a shake or swipe, and so can only start a button action. Example: *Double-tap watch* → *Mute*, *Tap watch* → *Play / pause*.
+
+- A tap is recognised by its **shape**: one brief, sharp jolt (a sample or two at the watch's 50 samples a second) *into the screen*, arriving while your arm is otherwise still. A longer push is a swipe, a jolt along the screen is the arm bumping something, and a jolt in the middle of other movement is just that movement; none of them count.
+- A double tap is two such knocks within 0.4 seconds. A **single tap is reported about 0.4 seconds after the knock**, once it is clear no second tap is coming. That delay is the price of telling the two apart, and it applies even if you only use single taps.
+- **Settings → Tap sensitivity → Tap strength** (default 12 m/s², range 4 to 40) sets how hard a knock must be; lower it if your taps are missed. The card shows the last tap recognised (tap or double tap) and a count, so you can try it before building a recipe.
+- Tapping the watch with a finger also moves your arm a little, so a tap right after other movement may be ignored for being "not still". Pause a moment first.
+- Not yet verified on a real watch. At 50 samples a second a tap is only one or two samples, so a very light knock can fall between them; if taps are unreliable, say so.
+
+Because it is a moment, a shake, swipe or tap can only start a **button action** (play/pause, next, previous, mute); the editor does not offer them for volume, brightness or scroll, and refuses to save a recipe that has one. It needs the watch's **acceleration** sensor switched on, which is the default.
 
 #### Tuning the sensitivity
 

@@ -49,7 +49,8 @@ export interface CalibrationState {
   activeTarget: CalibrationTarget | null;
 }
 
-export type HoldGesture = "pinch" | "stemButton" | "shake" | "swipeLeft" | "swipeRight" | "swipeUp" | "swipeDown";
+export type HoldGesture = "pinch" | "stemButton" | "shake" | "swipeLeft" | "swipeRight" | "swipeUp" | "swipeDown" | "tap" | "doubleTap";
+export type TapKind = "single" | "double";
 export type SwipeDirection = "left" | "right" | "up" | "down";
 export type WatchWrist = "left" | "right";
 
@@ -193,6 +194,8 @@ export const AUTOMATION_STATE_EVENT = "automation-state";
 export const SHAKE_DETECTED_EVENT = "automation-shake";
 /** Sent with the direction each time a swipe is recognised. */
 export const SWIPE_DETECTED_EVENT = "automation-swipe";
+/** Sent with `single` or `double` each time a tap is recognised. */
+export const TAP_DETECTED_EVENT = "automation-tap";
 export const ACTION_ERROR_EVENT = "automation-action-error";
 export interface ActionError {
   action: RecipeAction;
@@ -282,6 +285,8 @@ export interface AppSettings {
   shakeStrokes: number;
   /** How hard a push must be to count as a swipe (m/s²); lower is more sensitive. */
   swipePeakThreshold: number;
+  /** How hard a knock on the watch must be to count as a tap (m/s²); lower is more sensitive. */
+  tapPeakThreshold: number;
   /** Which wrist the watch is worn on: it decides which way along the forearm is left. */
   watchWrist: WatchWrist;
   wristMaxAngularVelocityDegreesPerSecond: number;

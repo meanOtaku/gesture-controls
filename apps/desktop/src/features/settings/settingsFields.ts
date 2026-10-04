@@ -17,6 +17,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   shakePeakThreshold: 6,
   shakeStrokes: 4,
   swipePeakThreshold: 8,
+  tapPeakThreshold: 12,
   watchWrist: "left",
   wristMaxAngularVelocityDegreesPerSecond: 360,
   wristMaxVolumePointsPerSecond: 30,
@@ -38,6 +39,7 @@ export type NumericSettingKey =
   | "shakePeakThreshold"
   | "shakeStrokes"
   | "swipePeakThreshold"
+  | "tapPeakThreshold"
   | "wristMaxAngularVelocityDegreesPerSecond"
   | "wristMaxVolumePointsPerSecond";
 
@@ -101,6 +103,10 @@ export const SETTINGS_FIELDS: Record<NumericSettingKey, NumberSpec> = {
   swipePeakThreshold: {
     label: "Swipe strength", unit: "m/s²", min: 3, max: 30, step: 0.5, defaultValue: d.swipePeakThreshold,
     description: "How hard the push of a swipe must be. Lower catches gentler swipes (and more accidents)",
+  },
+  tapPeakThreshold: {
+    label: "Tap strength", unit: "m/s²", min: 4, max: 40, step: 0.5, defaultValue: d.tapPeakThreshold,
+    description: "How hard a knock on the watch must be. Lower catches lighter taps (and more accidental bumps)",
   },
   wristMaxAngularVelocityDegreesPerSecond: {
     label: "Max angular velocity", unit: "°/s", min: 1, max: 2000, step: 1, integer: true, defaultValue: d.wristMaxAngularVelocityDegreesPerSecond,

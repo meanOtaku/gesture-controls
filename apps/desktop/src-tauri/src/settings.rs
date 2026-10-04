@@ -31,6 +31,8 @@ pub const MIN_SHAKE_STROKES: u32 = 3;
 pub const MAX_SHAKE_STROKES: u32 = 10;
 pub const MIN_SWIPE_PEAK_THRESHOLD: f64 = 3.0;
 pub const MAX_SWIPE_PEAK_THRESHOLD: f64 = 30.0;
+pub const MIN_TAP_PEAK_THRESHOLD: f64 = 4.0;
+pub const MAX_TAP_PEAK_THRESHOLD: f64 = 40.0;
 pub const MIN_WRIST_ANGULAR_VELOCITY_DEGREES_PER_SECOND: f64 = 1.0;
 pub const MAX_WRIST_ANGULAR_VELOCITY_DEGREES_PER_SECOND: f64 = 2_000.0;
 pub const MIN_WRIST_VOLUME_POINTS_PER_SECOND: f64 = 1.0;
@@ -72,6 +74,9 @@ pub struct AppSettings {
     /// How hard a push must be to count as a swipe, in m/s². Lower is more sensitive.
     #[serde(default = "default_swipe_peak_threshold")]
     pub swipe_peak_threshold: f64,
+    /// How hard a knock on the watch must be to count as a tap, in m/s². Lower is more sensitive.
+    #[serde(default = "default_tap_peak_threshold")]
+    pub tap_peak_threshold: f64,
     /// Which wrist the watch is worn on: it decides which way along the forearm is the wearer's left.
     #[serde(default)]
     pub watch_wrist: automation::Wrist,
@@ -115,6 +120,7 @@ impl Default for AppSettings {
             shake_peak_threshold: default_shake_peak_threshold(),
             shake_strokes: default_shake_strokes(),
             swipe_peak_threshold: default_swipe_peak_threshold(),
+            tap_peak_threshold: default_tap_peak_threshold(),
             watch_wrist: automation::Wrist::default(),
             wrist_max_angular_velocity_degrees_per_second:
                 default_wrist_max_angular_velocity_degrees_per_second(),
@@ -142,6 +148,9 @@ fn default_ppg_flush_rate_hz() -> f64 {
 
 fn default_shake_peak_threshold() -> f64 {
     6.0
+}
+fn default_tap_peak_threshold() -> f64 {
+    12.0
 }
 fn default_swipe_peak_threshold() -> f64 {
     8.0
@@ -237,6 +246,12 @@ impl AppSettings {
             self.swipe_peak_threshold,
             MIN_SWIPE_PEAK_THRESHOLD,
             MAX_SWIPE_PEAK_THRESHOLD,
+        )?;
+        in_range(
+            "tapPeakThreshold",
+            self.tap_peak_threshold,
+            MIN_TAP_PEAK_THRESHOLD,
+            MAX_TAP_PEAK_THRESHOLD,
         )?;
         if !(MIN_SHAKE_STROKES..=MAX_SHAKE_STROKES).contains(&self.shake_strokes) {
             return Err(format!(
@@ -581,6 +596,14 @@ mod tests {
         settings.shake_strokes = 11;
         assert!(settings.validate().is_err());
         settings.shake_strokes = 4;
+        settings.tap_peak_threshold = 1.0;
+        assert!(
+            settings
+                .validate()
+                .unwrap_err()
+                .contains("tapPeakThreshold")
+        );
+        settings.tap_peak_threshold = 12.0;
         settings.swipe_peak_threshold = 40.0;
         assert!(
             settings

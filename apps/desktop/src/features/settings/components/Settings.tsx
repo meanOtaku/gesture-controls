@@ -1,12 +1,13 @@
 import type { FormEvent } from "react";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { useNumberDrafts } from "../../../shared/forms/useNumberDrafts";
-import type { AppSettings, OverlayState, SwipeDirection, WatchStatus } from "../../../shared/protocol/events";
+import type { AppSettings, OverlayState, SwipeDirection, TapKind, WatchStatus } from "../../../shared/protocol/events";
 import { ApplySettingsFooter } from "./ApplySettingsFooter";
 import { HeadphonesSettingsSection } from "./HeadphonesSettingsSection";
 import { RecordingGraphSettingsSection } from "./RecordingGraphSettingsSection";
 import { ShakeSettings } from "./ShakeSettings";
 import { SwipeSettings } from "./SwipeSettings";
+import { TapSettings } from "./TapSettings";
 import { WatchHealthDeliverySettingsSection } from "./WatchHealthDeliverySettingsSection";
 import { WatchRateSettingsSection } from "./WatchRateSettingsSection";
 import { WatchSensorSwitchSection } from "./WatchSensorSwitchSection";
@@ -35,6 +36,7 @@ interface SettingsProps {
   /** How many shakes have been recognised since the app opened, to show beside the sensitivity. */
   shakeDetections?: number;
   lastSwipe?: { direction: SwipeDirection; count: number } | null;
+  lastTap?: { kind: TapKind; count: number } | null;
   onUpdate: (settings: AppSettings) => void;
   onReset: () => void;
 }
@@ -47,6 +49,7 @@ export function Settings({
   watchStatus = null,
   shakeDetections = 0,
   lastSwipe = null,
+  lastTap = null,
   onUpdate,
   onReset,
 }: SettingsProps) {
@@ -95,6 +98,8 @@ export function Settings({
           <WristRotationSettings />
 
           <ShakeSettings detections={shakeDetections} />
+
+          <TapSettings lastTap={lastTap} />
 
           <SwipeSettings
             wrist={current.watchWrist}

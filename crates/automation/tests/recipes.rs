@@ -612,3 +612,30 @@ fn a_swipe_step_fires_only_for_its_own_direction_and_only_button_actions_may_use
         "\"swipeUp\""
     );
 }
+
+#[test]
+fn a_tap_step_and_a_double_tap_step_each_fire_only_for_their_own_kind() {
+    let signals = |tap| Signals {
+        tap,
+        ..Signals::default()
+    };
+    let mut single = RecipeRunner::new(trigger(vec![Stage::Hold { hold: Hold::Tap }]));
+    let mut double = RecipeRunner::new(trigger(vec![Stage::Hold {
+        hold: Hold::DoubleTap,
+    }]));
+    for runner in [&mut single, &mut double] {
+        runner.update(&signals(Some(TapKind::Single)));
+    }
+    assert!(single.take_fired());
+    assert!(!double.take_fired());
+    for runner in [&mut single, &mut double] {
+        runner.update(&signals(None));
+        runner.update(&signals(Some(TapKind::Double)));
+    }
+    assert!(!single.take_fired());
+    assert!(double.take_fired());
+    assert_eq!(
+        serde_json::to_string(&Hold::DoubleTap).unwrap(),
+        "\"doubleTap\""
+    );
+}

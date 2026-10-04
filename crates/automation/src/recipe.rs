@@ -71,6 +71,10 @@ pub enum Hold {
     SwipeRight,
     SwipeUp,
     SwipeDown,
+    /// One knock of a finger on the watch.
+    Tap,
+    /// Two quick knocks.
+    DoubleTap,
 }
 
 impl Hold {

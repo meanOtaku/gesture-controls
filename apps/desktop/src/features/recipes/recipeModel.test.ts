@@ -94,7 +94,7 @@ describe("recipeModel", () => {
     expect(holdsFor(false).map((hold) => hold.value)).not.toContain("shake");
     for (const swipe of ["swipeLeft", "swipeRight", "swipeUp", "swipeDown"] as const) {
       expect(isMomentary(swipe)).toBe(true);
-      expect(chainProblem([{ kind: "hold", hold: swipe }], locations, false)).toMatch(/shake or swipe only works/);
+      expect(chainProblem([{ kind: "hold", hold: swipe }], locations, false)).toMatch(/shake, swipe or tap only works/);
       expect(chainProblem([{ kind: "hold", hold: swipe }], locations, true)).toBeNull();
     }
     expect(isMomentary("pinch")).toBe(false);

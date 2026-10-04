@@ -11,8 +11,8 @@ use std::sync::Mutex;
 
 use automation::{
     Action, Axis, Conflict, Device, DeviceKind, Hold, Recipe, RecipeRunner, RunnerPhase,
-    ShakeConfig, ShakeDetector, Signals, Stage, SwipeConfig, SwipeDetector, SwipeDirection, Wrist,
-    blocked_recipes, find_conflicts, validate_recipe,
+    ShakeConfig, ShakeDetector, Signals, Stage, SwipeConfig, SwipeDetector, SwipeDirection,
+    TapConfig, TapDetector, TapKind, Wrist, blocked_recipes, find_conflicts, validate_recipe,
 };
 use interaction_engine::quaternion_angular_distance;
 use serde::Serialize;
@@ -29,6 +29,8 @@ pub const AUTOMATION_STATE_EVENT: &str = "automation-state";
 pub const SHAKE_DETECTED_EVENT: &str = "automation-shake";
 /// Sent with the direction each time a swipe is recognised.
 pub const SWIPE_DETECTED_EVENT: &str = "automation-swipe";
+/// Sent with `single` or `double` each time a tap is recognised.
+pub const TAP_DETECTED_EVENT: &str = "automation-tap";
 /// How long a recognised shake keeps counting as "happening", so a recipe that combines it with another step (look
 /// at a location, say) has a moment in which both hold.
 /// Also how long a swipe keeps counting.
@@ -65,6 +67,8 @@ pub struct Effects {
     pub shook: bool,
     /// A swipe was recognised on this sample, for the Settings tuning aid.
     pub swiped: Option<SwipeDirection>,
+    /// A tap was recognised on this sample, for the Settings tuning aid.
+    pub tapped: Option<TapKind>,
     /// Trigger recipes that fired: each a one-off press.
     pub fired: Vec<Action>,
     /// Actions whose interaction just ended, so anything still carried for them is dropped.
@@ -81,6 +85,7 @@ pub struct Tuning {
     pub shake_peak_threshold: f64,
     pub shake_strokes: u32,
     pub swipe_peak_threshold: f64,
+    pub tap_peak_threshold: f64,
     pub wrist: Wrist,
 }
 
@@ -93,7 +98,15 @@ impl Tuning {
             shake_peak_threshold: settings.shake_peak_threshold,
             shake_strokes: settings.shake_strokes,
             swipe_peak_threshold: settings.swipe_peak_threshold,
+            tap_peak_threshold: settings.tap_peak_threshold,
             wrist: settings.watch_wrist,
+        }
+    }
+
+    pub fn tap_config(&self) -> TapConfig {
+        TapConfig {
+            peak_threshold: self.tap_peak_threshold,
+            ..TapConfig::default()
         }
     }
 
@@ -126,6 +139,7 @@ impl Default for Tuning {
             shake_peak_threshold: 6.0,
             shake_strokes: 4,
             swipe_peak_threshold: 8.0,
+            tap_peak_threshold: 12.0,
             wrist: Wrist::Left,
         }
     }
@@ -203,6 +217,9 @@ pub struct Engine {
     swipe: SwipeDetector,
     swipe_direction: Option<SwipeDirection>,
     swipe_until_ns: u64,
+    tap: TapDetector,
+    tap_kind: Option<TapKind>,
+    tap_until_ns: u64,
     /// The last orientation accepted while driving, for the angular-velocity outlier check.
     last_accepted: Option<Orientation>,
     blocked: BTreeSet<String>,
@@ -226,6 +243,9 @@ impl Engine {
             swipe: SwipeDetector::new(tuning.swipe_config()),
             swipe_direction: None,
             swipe_until_ns: 0,
+            tap: TapDetector::new(tuning.tap_config()),
+            tap_kind: None,
+            tap_until_ns: 0,
             last_accepted: None,
             blocked: BTreeSet::new(),
             overlay: OverlayWanted::Hidden,
@@ -256,6 +276,8 @@ impl Engine {
         self.shake_until_ns = 0;
         self.swipe = SwipeDetector::new(tuning.swipe_config());
         self.swipe_until_ns = 0;
+        self.tap = TapDetector::new(tuning.tap_config());
+        self.tap_until_ns = 0;
         self.rebuild();
         self.step()
     }
@@ -297,6 +319,8 @@ impl Engine {
         self.shake_until_ns = 0;
         self.swipe.reset();
         self.swipe_until_ns = 0;
+        self.tap.reset();
+        self.tap_until_ns = 0;
         self.step()
     }
 
@@ -335,12 +359,19 @@ impl Engine {
             self.swipe_direction = Some(direction);
             self.swipe_until_ns = timestamp_ns + SHAKE_HOLD_NS;
         }
+        let tapped =
+            acceleration.and_then(|acceleration| self.tap.observe(timestamp_ns, acceleration));
+        if let Some(kind) = tapped {
+            self.tap_kind = Some(kind);
+            self.tap_until_ns = timestamp_ns + SHAKE_HOLD_NS;
+        }
         let driving = self.driving;
         if driving && self.is_velocity_outlier(quaternion, timestamp_ns) {
             // A glitch freezes the knob rather than jumping it; the last good orientation stays current.
             return Effects {
                 shook,
                 swiped,
+                tapped,
                 ..Effects::default()
             };
         }
@@ -356,6 +387,7 @@ impl Engine {
         let mut effects = self.step();
         effects.shook = shook;
         effects.swiped = swiped;
+        effects.tapped = tapped;
         effects
     }
 
@@ -377,6 +409,11 @@ impl Engine {
             head_location: self.head.as_deref(),
             pinch_held: self.pinch,
             stem_button_held: self.stem,
+            tap: self
+                .orientation
+                .as_ref()
+                .filter(|latest| latest.timestamp_ns < self.tap_until_ns)
+                .and(self.tap_kind),
             swipe: self
                 .orientation
                 .as_ref()
@@ -530,6 +567,9 @@ impl AutomationRuntime {
         apply_effects(app, &effects, max_points);
         if effects.shook {
             let _ = app.emit(SHAKE_DETECTED_EVENT, ());
+        }
+        if let Some(kind) = effects.tapped {
+            let _ = app.emit(TAP_DETECTED_EVENT, kind);
         }
         if let Some(direction) = effects.swiped {
             let _ = app.emit(SWIPE_DETECTED_EVENT, direction);
@@ -1214,6 +1254,59 @@ mod tests {
         };
         engine.set_tuning(strict);
         assert!(swipe_for(&mut engine, 14.0, 20_000).0.is_empty());
+    }
+
+    /// Feeds 50 Hz samples with knocks on the screen (20 ms jolts along z) at the given times, from a still start.
+    fn tap_for(
+        engine: &mut Engine,
+        knocks_ms: &[u64],
+        offset_ms: u64,
+    ) -> (Vec<TapKind>, Vec<Action>) {
+        let (mut taps, mut fired) = (Vec::new(), Vec::new());
+        for ms in (0..=3000u64).step_by(20) {
+            let mut a = [0.0, 0.0, 9.81];
+            if knocks_ms.contains(&ms) {
+                a[2] += 20.0;
+            }
+            let effects =
+                engine.observe_orientation(about_x(0.0), (offset_ms + ms) * 1_000_000, Some(a));
+            taps.extend(effects.tapped);
+            fired.extend(effects.fired);
+        }
+        (taps, fired)
+    }
+
+    #[test]
+    fn a_tap_and_a_double_tap_fire_their_own_recipes() {
+        let mut engine = Engine::new(
+            vec![
+                swipe_recipe(Hold::Tap, Action::PlayPause),
+                swipe_recipe(Hold::DoubleTap, Action::Mute),
+            ],
+            Tuning::default(),
+        );
+        let (taps, fired) = tap_for(&mut engine, &[1000], 0);
+        assert_eq!(
+            (taps, fired),
+            (vec![TapKind::Single], vec![Action::PlayPause])
+        );
+        let (taps, fired) = tap_for(&mut engine, &[1000, 1240], 10_000);
+        assert_eq!((taps, fired), (vec![TapKind::Double], vec![Action::Mute]));
+    }
+
+    #[test]
+    fn the_tap_setting_is_obeyed() {
+        let strict = Tuning {
+            tap_peak_threshold: 30.0,
+            ..Tuning::default()
+        };
+        let mut engine = Engine::new(vec![swipe_recipe(Hold::Tap, Action::PlayPause)], strict);
+        assert!(tap_for(&mut engine, &[1000], 0).0.is_empty());
+        engine.set_tuning(Tuning::default());
+        assert_eq!(
+            tap_for(&mut engine, &[1000], 10_000).0,
+            vec![TapKind::Single]
+        );
     }
 
     #[test]

@@ -230,6 +230,9 @@ export function RecipeEditor({ recipe, locations, onSave, onCancel }: RecipeEdit
         {steps.some((step) => step.kind === "hold" && step.hold.startsWith("swipe")) && (
           <p className="field-hint">Swipes are read from the watch's acceleration and orientation. Left and right run along your forearm, so set which wrist the watch is on in Settings; up and down follow gravity.</p>
         )}
+        {steps.some((step) => step.kind === "hold" && (step.hold === "tap" || step.hold === "doubleTap")) && (
+          <p className="field-hint">A tap is a knock of a finger on the watch, felt as one sharp jolt while your arm is still. A single tap fires about 0.4 seconds after the knock, once it is clear no second one is coming. Tune it in Settings.</p>
+        )}
         {steps.some((step) => step.kind === "hold" && step.hold === "shake") && (
           <p className="field-hint">A shake needs the watch's acceleration sensor switched on. It counts as happening for about half a second after it is recognised.</p>
         )}

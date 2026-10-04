@@ -20,6 +20,7 @@ const settings: AppSettings = {
   shakePeakThreshold: 6,
   shakeStrokes: 4,
   swipePeakThreshold: 8,
+  tapPeakThreshold: 12,
   watchWrist: "left",
   wristMaxAngularVelocityDegreesPerSecond: 360,
   wristMaxVolumePointsPerSecond: 30,
@@ -179,6 +180,18 @@ describe("Settings", () => {
     rerender(<Settings settings={settings} lastSwipe={{ direction: "left", count: 2 }} onUpdate={() => {}} onReset={() => {}} />);
     expect(screen.getByText(/Last swipe recognised/)).toHaveTextContent("left");
     expect(screen.getByText(/Last swipe recognised/)).toHaveTextContent("2 so far");
+  });
+
+  it("tunes tap strength and shows the last tap", () => {
+    const updates: AppSettings[] = [];
+    const { rerender } = render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
+    expect(screen.getByLabelText("Tap strength")).toHaveValue(12);
+    expect(screen.getByText(/No tap recognised yet/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Tap strength"), { target: { value: "9" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    expect(updates[0]).toMatchObject({ tapPeakThreshold: 9 });
+    rerender(<Settings settings={settings} lastTap={{ kind: "double", count: 4 }} onUpdate={() => {}} onReset={() => {}} />);
+    expect(screen.getByText(/Last tap recognised/)).toHaveTextContent("double tap (4 so far)");
   });
 
   it("toggles a watch sensor switch immediately without a confirmation dialog", () => {
