@@ -202,7 +202,10 @@ html[data-theme="neo"] [data-slot="badge"][data-variant="outline"] { background:
 
 /* Segmented control: joined blocks, the chosen one yellow. */
 html[data-theme="neo"] .segmented[data-slot="radio-group"] { border: 2.5px solid var(--ink); border-radius: 10px; background: var(--surface); box-shadow: var(--neo-shadow-sm); overflow: hidden; }
-html[data-theme="neo"] .segment { line-height: 1; font-weight: 700; text-transform: none; letter-spacing: 0; color: var(--ink); }
+/* The bold type is wider, so a long option wraps instead of running into its neighbour or the edge, and the control grows to fit. */
+html[data-theme="neo"] .segmented[data-slot="radio-group"] { height: auto; min-height: var(--control-h); align-items: stretch; }
+html[data-theme="neo"] .segment { white-space: normal; padding: 0.3rem 0.6rem; line-height: 1.15; align-self: stretch; }
+html[data-theme="neo"] .segment { font-weight: 700; text-transform: none; letter-spacing: 0; color: var(--ink); }
 html[data-theme="neo"] .segment + .segment { border-left: 2.5px solid var(--ink); }
 html[data-theme="neo"] .segment:hover { background: #fff0b8; }
 html[data-theme="neo"] .segment:has([data-checked]),
@@ -275,6 +278,23 @@ html[data-theme="neo"] .telemetry-legend i[style*="cyan"] { background: #7a56ff 
 html[data-theme="neo"] .telemetry-legend i[style*="rgb(255, 154, 61)"] { background: #e8590c !important; }
 html[data-theme="neo"] .telemetry-legend i[style*="rgb(0, 242, 121)"] { background: #0f9d7f !important; }
 html[data-theme="neo"] .telemetry-legend i[style*="rgb(255, 157, 157)"] { background: #d62b52 !important; }
+
+/* Dialogs, toasts, tabs, progress and sliders. */
+html[data-theme="neo"] [data-slot="alert-dialog-content"],
+html[data-theme="neo"] [data-slot="sheet-content"] { background: var(--surface); color: var(--ink); border: var(--neo-border); border-radius: var(--radius); box-shadow: var(--neo-shadow); }
+html[data-theme="neo"] [data-slot="alert-dialog-title"],
+html[data-theme="neo"] [data-slot="sheet-title"] { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.01em; }
+html[data-theme="neo"] [data-sonner-toast] { border: var(--neo-border); border-radius: 12px; box-shadow: var(--neo-shadow-sm); background: var(--surface); color: var(--ink); font-weight: 600; }
+html[data-theme="neo"] [data-slot="tabs-list"] { background: var(--surface); border: 2.5px solid var(--ink); border-radius: 12px; box-shadow: var(--neo-shadow-sm); padding: 3px; }
+html[data-theme="neo"] [data-slot="tabs-trigger"] { font-weight: 700; color: var(--ink); border: 2px solid transparent; border-radius: 9px; }
+html[data-theme="neo"] [data-slot="tabs-trigger"][data-active],
+html[data-theme="neo"] [data-slot="tabs-trigger"][data-selected],
+html[data-theme="neo"] [data-slot="tabs-trigger"][aria-selected="true"] { background: var(--lavender); border-color: var(--ink); color: var(--ink); box-shadow: 2px 2px 0 var(--ink); }
+html[data-theme="neo"] [data-slot="progress-track"] { background: #ffffff; border: 2px solid var(--ink); border-radius: 999px; height: 12px; }
+html[data-theme="neo"] [data-slot="progress-indicator"] { background: var(--pink); }
+html[data-theme="neo"] [data-slot="slider-track"] { background: #ffffff; border: 2px solid var(--ink); }
+html[data-theme="neo"] [data-slot="slider-range"] { background: var(--pink); }
+html[data-theme="neo"] [data-slot="slider-thumb"] { background: var(--yellow); border: 2.5px solid var(--ink); box-shadow: 2px 2px 0 var(--ink); }
 
 /* Devices and the sticky settings bar. */
 html[data-theme="neo"] .device-dial { fill: #ffffff; stroke: var(--ink); stroke-width: 3; }
