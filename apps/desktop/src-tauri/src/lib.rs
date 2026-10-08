@@ -11,6 +11,7 @@ mod actuators;
 mod automation;
 mod calibration;
 mod environment;
+mod gesture_library;
 mod head_pose;
 mod inference;
 mod label_registry;
@@ -152,6 +153,7 @@ pub fn run() {
         .manage(watch::WatchRuntime::default())
         .manage(model_lab::ModelLabRuntime::default())
         .manage(label_registry::LabelRegistryRuntime::default())
+        .manage(gesture_library::GestureLibraryRuntime::default())
         .manage(model_registry::ModelRegistryRuntime::default())
         .manage(recording_bundle::RawColumnCache::default())
         .manage(inference::GesturePolicyRuntime::default())
@@ -216,6 +218,9 @@ pub fn run() {
             recording_bundle::get_compact_observation_window,
             recording_bundle::get_recording_quality_summary,
             recording_bundle::set_interval_curation_status,
+            gesture_library::list_gesture_definitions,
+            gesture_library::save_gesture_definition,
+            gesture_library::delete_gesture_definition,
             label_registry::list_model_labels,
             label_registry::create_model_label,
             label_registry::set_model_label_archived,

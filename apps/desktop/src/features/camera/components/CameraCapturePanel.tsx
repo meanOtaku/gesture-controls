@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useSyncExternalStore } from "react";
+import { useId, useSyncExternalStore } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
@@ -9,9 +9,9 @@ import { Label } from "../../../components/ui/label";
 import { telemetryStore } from "../../telemetry/store/telemetryStore";
 import { clockSync } from "../clockSync";
 import { getCameraController } from "../cameraService";
-import { drawHands } from "../drawHands";
 import { physicalHand } from "../handTypes";
 import { measureHand } from "../landmarkMath";
+import { CameraPreview } from "./CameraPreview";
 
 const NATIVE_SELECT = "recipe-select";
 
@@ -25,31 +25,6 @@ export function CameraCapturePanel() {
   const state = useSyncExternalStore(camera.subscribe, camera.getSnapshot, camera.getSnapshot);
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
   const deviceId = useId();
-  const stage = useRef<HTMLDivElement | null>(null);
-  const overlay = useRef<HTMLCanvasElement | null>(null);
-
-  // The camera's own video element is shown here while the page is open, and handed back when it closes.
-  useEffect(() => {
-    const host = stage.current;
-    if (!host) return;
-    camera.video.className = "camera-video";
-    host.prepend(camera.video);
-    return () => {
-      camera.video.remove();
-    };
-  }, [camera]);
-
-  useEffect(() => {
-    const canvas = overlay.current;
-    const context = canvas?.getContext("2d");
-    if (!canvas || !context) return;
-    const width = camera.video.videoWidth || 640;
-    const height = camera.video.videoHeight || 360;
-    if (canvas.width !== width) canvas.width = width;
-    if (canvas.height !== height) canvas.height = height;
-    drawHands(context, state.frame?.hands ?? [], width, height);
-  }, [camera, state.frame]);
-
   const on = state.status === "on";
   const starting = state.status === "starting";
   const sync = clockSync.estimate();
@@ -80,9 +55,7 @@ export function CameraCapturePanel() {
             <AlertDescription>{state.error}</AlertDescription>
           </Alert>
         )}
-        <div className="camera-stage" ref={stage} hidden={!on} style={{ aspectRatio: `${camera.video.videoWidth || 16} / ${camera.video.videoHeight || 9}` }}>
-          <canvas ref={overlay} className="camera-overlay" aria-label="Hand landmarks" />
-        </div>
+        <CameraPreview camera={camera} state={state} hidden={!on} />
         {starting && <p className="hint" role="status">Starting the camera and the hand model. If your computer asks for camera permission, allow it.</p>}
         {!on && !starting && !state.error && <p className="hint">The camera is off. Turn it on to see your hand tracked, and to save landmarks with recordings.</p>}
         {on && state.devices.length > 1 && (

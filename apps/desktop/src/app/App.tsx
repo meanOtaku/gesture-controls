@@ -85,6 +85,7 @@ const ModelLab = memo(lazy(() => import("../features/model-lab/components/ModelL
 const RecipesPage = memo(lazy(() => import("../features/recipes/components/RecipesPage").then((m) => ({ default: m.RecipesPage }))));
 const GesturesPage = memo(lazy(() => import("../features/gestures/components/GesturesPage").then((m) => ({ default: m.GesturesPage }))));
 const VirtualDevicesPage = memo(lazy(() => import("../features/devices/components/VirtualDevicesPage").then((m) => ({ default: m.VirtualDevicesPage }))));
+const GestureLibraryPage = memo(lazy(() => import("../features/gestureLibrary/GestureLibraryPage").then((m) => ({ default: m.GestureLibraryPage }))));
 const Settings = lazy(() => import("../features/settings/components/Settings").then((m) => ({ default: m.Settings })));
 
 function TabFallback() {
@@ -707,6 +708,7 @@ function MainApp() {
     {activeTab === "signals" && <LiveSignalsPage />}
     {activeTab === "recorder" && <RecorderPage />}
     {activeTab === "recordings" && <RecordingsPage />}
+    {activeTab === "gestureLibrary" && <GestureLibraryPage />}
     {activeTab === "modelLab" && (
       <ModelLab />
     )}

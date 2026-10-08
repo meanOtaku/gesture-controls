@@ -1,4 +1,4 @@
-import { Activity, Brain, CircleDot, FolderOpen, Hand, Headphones, Radar, LayoutDashboard, Settings as SettingsIcon, SlidersHorizontal, Watch, Workflow } from "lucide-react";
+import { Activity, Brain, CircleDot, FolderOpen, Hand, Headphones, Shapes, Radar, LayoutDashboard, Settings as SettingsIcon, SlidersHorizontal, Watch, Workflow } from "lucide-react";
 import { useEffect } from "react";
 import {
   Sidebar,
@@ -14,7 +14,7 @@ import {
   SidebarRail,
 } from "../../components/ui/sidebar";
 
-export type AppTab = "main" | "headphone" | "watch" | "recipes" | "devices" | "gestures" | "signals" | "recorder" | "recordings" | "modelLab" | "settings";
+export type AppTab = "main" | "headphone" | "watch" | "recipes" | "devices" | "gestures" | "signals" | "recorder" | "recordings" | "gestureLibrary" | "modelLab" | "settings";
 
 type NavItem = { id: AppTab; label: string; icon: typeof LayoutDashboard };
 
@@ -33,11 +33,12 @@ const CAPTURE: NavItem[] = [
   { id: "recorder", label: "Recorder", icon: CircleDot },
   { id: "recordings", label: "Recordings", icon: FolderOpen },
 ];
+const LABELS: NavItem[] = [{ id: "gestureLibrary", label: "Gesture library", icon: Shapes }];
 const MODELS: NavItem[] = [{ id: "modelLab", label: "Model Lab", icon: Brain }];
 const SETTINGS: NavItem = { id: "settings", label: "Settings", icon: SettingsIcon };
 
 /** Display order. Cmd/Ctrl+1..9 select the first nine; Settings is also Cmd/Ctrl+, (the usual place for it). */
-export const NAV_ORDER: AppTab[] = [MAIN, ...DEVICES, ...AUTOMATION, ...CAPTURE, ...MODELS, SETTINGS].map((item) => item.id);
+export const NAV_ORDER: AppTab[] = [MAIN, ...DEVICES, ...AUTOMATION, ...CAPTURE, ...LABELS, ...MODELS, SETTINGS].map((item) => item.id);
 
 export type NavTone = "ok" | "warn" | "live" | "idle";
 export interface NavStatus { tone: NavTone; label: string }
@@ -79,7 +80,7 @@ type AppNavProps = {
   statuses?: Partial<Record<AppTab, NavStatus>>;
 };
 
-/** Primary navigation: Main, then Devices, Automation, Capture and Models, with Settings pinned at the bottom. */
+/** Primary navigation: Main, then Devices, Automation, Capture, Labels and Models, with Settings pinned at the bottom. */
 export function AppNav({ activeTab, onSelect, statuses = {} }: AppNavProps) {
   // Cmd/Ctrl + 1..9 jumps to a tab, and Cmd/Ctrl + , to Settings. A modified key is never text, so it is safe inside a field too.
   useEffect(() => {
@@ -155,6 +156,12 @@ export function AppNav({ activeTab, onSelect, statuses = {} }: AppNavProps) {
           <SidebarGroupLabel>Capture</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>{CAPTURE.map(entry)}</SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Labels</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>{LABELS.map(entry)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>

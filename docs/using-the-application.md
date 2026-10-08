@@ -196,6 +196,17 @@ The same selected window renders as two images side by side (stacked on narrow l
 
 This viewer is inspection-only: it has no annotation-editing or training action, and nothing it renders or computes feeds Model Lab, dataset export, or inference.
 
+### Gesture library
+
+The **Gesture library** tab (under Labels) defines gestures the camera recognises from your hand's shape. It needs the camera but not the watch.
+
+1. Choose **New gesture**, name it, pick the label it will be recorded as (from the Model Lab label list) and which hand it applies to.
+2. Turn the camera on and choose **Record gesture and background**. Hold the gesture for four seconds, moving the hand a little, then do anything else for seven. Nothing but hand landmarks is used, and nothing is saved from this step except the rule.
+3. The measurements that tell the two apart become the rule (for example "thumb to index tip below 0.3 hand sizes"), with a start threshold and a looser end threshold so it does not flicker. You can edit every number and add or remove conditions; the percentage shows how well the rule separates the frames you recorded. Calibration quality is on those frames only, so test the gesture live afterwards.
+4. **Hold before it counts** ignores brief accidental poses; **Forgive losing it for** stops a flickering hand ending it early.
+
+Saved gestures show **Detected** live while the camera is on. They are kept in `gesture-library.json` in the app's config folder.
+
 ### Model Lab
 
 Model Lab is organised around **one model per label**: a label is a gesture or activity ("snap_fingers", "pinch_start"), and each label has its own model. Models run inside the app; nothing else needs to be installed to use one. The page shows, top to bottom:
