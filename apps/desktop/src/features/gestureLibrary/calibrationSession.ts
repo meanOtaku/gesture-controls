@@ -1,4 +1,4 @@
-import type { HandFrame } from "../camera/handTypes";
+import { physicalHand, type HandFrame } from "../camera/handTypes";
 import type { MeasureSample } from "./calibration";
 import type { HandChoice } from "./definition";
 import { sampleFrame } from "./sampling";
@@ -17,6 +17,17 @@ export interface SessionSnapshot {
   negative: MeasureSample[];
   /** Frames in the current recording with no matching hand in view (not kept). */
   missedFrames: number;
+  /** Why frames were not kept, over the whole run. */
+  skipped: SkipReasons;
+}
+
+export interface SkipReasons {
+  /** The camera found no hand at all. */
+  noHand: number;
+  /** A hand was found, but not the one chosen for this gesture. */
+  otherHand: number;
+  /** A hand was found but its shape could not be measured. */
+  unmeasurable: number;
 }
 
 /**
@@ -29,6 +40,7 @@ export class CalibrationSession {
   private positive: MeasureSample[] = [];
   private negative: MeasureSample[] = [];
   private missed = 0;
+  private skipped: SkipReasons = { noHand: 0, otherHand: 0, unmeasurable: 0 };
   private lastFrameIndex = -1;
 
   constructor(private readonly hand: HandChoice) {}
@@ -37,6 +49,7 @@ export class CalibrationSession {
     this.positive = [];
     this.negative = [];
     this.missed = 0;
+    this.skipped = { noHand: 0, otherHand: 0, unmeasurable: 0 };
     this.enter("getReady", nowMs);
   }
 
@@ -76,6 +89,9 @@ export class CalibrationSession {
     const sample = sampleFrame(frame, this.hand);
     if (!sample) {
       this.missed += 1;
+      if (frame.hands.length === 0) this.skipped.noHand += 1;
+      else if (this.hand !== "either" && !frame.hands.some((h) => physicalHand(h).toLowerCase() === this.hand)) this.skipped.otherHand += 1;
+      else this.skipped.unmeasurable += 1;
       return;
     }
     (this.step === "positive" ? this.positive : this.negative).push(sample);
@@ -89,6 +105,7 @@ export class CalibrationSession {
       positive: this.positive,
       negative: this.negative,
       missedFrames: this.missed,
+      skipped: { ...this.skipped },
     };
   }
 }

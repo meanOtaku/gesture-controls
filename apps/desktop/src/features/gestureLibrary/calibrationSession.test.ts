@@ -54,3 +54,17 @@ describe("CalibrationSession", () => {
     expect(session.snapshot(1).step).toBe("ready");
   });
 });
+
+describe("CalibrationSession skipped frames", () => {
+  it("says why frames were skipped: no hand, the other hand, or unmeasurable", () => {
+    const session = new CalibrationSession("left");
+    session.start(0);
+    session.tick(COUNTDOWN_MS);
+    session.onFrame(frame(1, []));
+    session.onFrame(frame(2, [makeHand({ pinch: 0.1, modelHandedness: "Left" })])); // physical right
+    const flat = makeHand({ pinch: 0.1, modelHandedness: "Right" });
+    flat.world = flat.world.map(() => ({ x: 0, y: 0, z: 0 }));
+    session.onFrame(frame(3, [flat]));
+    expect(session.snapshot(COUNTDOWN_MS).skipped).toEqual({ noHand: 1, otherHand: 1, unmeasurable: 1 });
+  });
+});

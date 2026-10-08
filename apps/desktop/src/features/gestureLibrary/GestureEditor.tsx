@@ -26,6 +26,15 @@ const STEP_TEXT: Record<SessionSnapshot["step"], string> = {
   done: "",
 };
 
+/** Why recorded frames were thrown away, in words, so a failed recording says what to change. */
+function skippedWhy(skipped: SessionSnapshot["skipped"], hand: HandChoice): string {
+  const parts: string[] = [];
+  if (skipped.noHand > 0) parts.push(`${skipped.noHand} frames had no hand in view (keep your hand inside the picture and well lit)`);
+  if (skipped.otherHand > 0) parts.push(`${skipped.otherHand} showed the other hand (this gesture is set to ${hand} hand only; the camera's left and right are as you see your own hands)`);
+  if (skipped.unmeasurable > 0) parts.push(`${skipped.unmeasurable} showed a hand that could not be measured`);
+  return parts.length === 0 ? " The camera delivered no frames while recording." : ` Frames skipped: ${parts.join("; ")}.`;
+}
+
 type EditorProps = {
   initial: GestureDefinition;
   labels: DatasetLabel[];
@@ -46,7 +55,7 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
   const [saving, setSaving] = useState(false);
   const session = useRef(new CalibrationSession(initial.hand));
   const [snapshot, setSnapshot] = useState<SessionSnapshot>(() => session.current.snapshot(0));
-  const [recorded, setRecorded] = useState<{ positive: SessionSnapshot["positive"]; negative: SessionSnapshot["negative"] } | null>(null);
+  const [recorded, setRecorded] = useState<{ positive: SessionSnapshot["positive"]; negative: SessionSnapshot["negative"]; skipped: SessionSnapshot["skipped"] } | null>(null);
   const ids = { name: useId(), label: useId(), hand: useId(), hold: useId(), release: useId() };
 
   useEffect(() => {
@@ -66,7 +75,7 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
       session.current.tick(now);
       const next = session.current.snapshot(now);
       setSnapshot(next);
-      if (next.step === "done") setRecorded({ positive: next.positive, negative: next.negative });
+      if (next.step === "done") setRecorded({ positive: next.positive, negative: next.negative, skipped: next.skipped });
     }, 100);
     return () => window.clearInterval(timer);
   }, [running]);
@@ -157,7 +166,7 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
               </Button>
               {running && <Button type="button" variant="outline" onClick={() => { session.current.reset(); setSnapshot(session.current.snapshot(0)); }}>Cancel</Button>}
               <span className="hint" role="status">
-                {running ? `${STEP_TEXT[snapshot.step]} ${counting ? `${seconds}` : `${seconds}s left · ${framesNow} frames`}` : cam.frame?.hands.length === 0 ? "Put your hand in view to begin." : "About 15 seconds: three to start, four holding the gesture, then seven of everything else."}
+                {running ? `${STEP_TEXT[snapshot.step]} ${counting ? `${seconds}` : `${seconds}s left · ${framesNow} frames kept${snapshot.missedFrames > 0 ? `, ${snapshot.missedFrames} skipped` : ""}`}` : cam.frame?.hands.length === 0 ? "Put your hand in view to begin." : "About 15 seconds: three to start, four holding the gesture, then seven of everything else."}
               </span>
             </div>
             {running && snapshot.missedFrames > 5 && <p className="field-error" role="alert">Your hand keeps leaving view; those frames are not counted.</p>}
@@ -168,6 +177,7 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
             <AlertDescription>
               <strong>{analysis.verdict === "needsMoreFrames" ? `Not enough frames (need ${MIN_FRAMES} of each)` : `${percent(analysis.balancedAccuracy)} of recorded frames told apart correctly (${analysis.verdict})`}.</strong>{" "}
               {analysis.positiveFrames} gesture frames and {analysis.negativeFrames} other frames. {analysis.advice ?? ""}
+              {recorded && analysis.verdict === "needsMoreFrames" && skippedWhy(recorded.skipped, draft.hand)}
               {analysis.conditions.length > 0 && <> Proposed rule: {describeRule({ conditions: analysis.conditions, hand: draft.hand })}.</>}
               {analysis.conditions.length > 0 && <div className="mt-2"><Button type="button" size="sm" onClick={useAnalysis}>Use this rule</Button></div>}
             </AlertDescription>
