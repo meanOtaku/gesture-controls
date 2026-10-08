@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import { SectionHeader } from "../../components/app/SectionHeader";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
@@ -7,6 +7,9 @@ import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { getCameraController } from "../camera/cameraService";
 import { CameraPreview } from "../camera/components/CameraPreview";
 import { OperationFeedback } from "../../components/app/OperationFeedback";
+import { useLabelModels } from "../model-lab/hooks/useLabelModels";
+import { AgreementTracker } from "./agreement";
+import { AgreementPanel } from "./AgreementPanel";
 import { blankDefinition, describeRule, type GestureDefinition } from "./definition";
 import { GestureEditor } from "./GestureEditor";
 import { useGestureLibrary } from "./useGestureLibrary";
@@ -23,7 +26,9 @@ export function GestureLibraryPage() {
   const { definitions, labels, error, loaded, save, remove } = useGestureLibrary();
   const camera = getCameraController();
   const cam = useSyncExternalStore(camera.subscribe, camera.getSnapshot, camera.getSnapshot);
-  const states = useLiveGestures(definitions, cam);
+  const tracker = useRef(new AgreementTracker()).current;
+  const states = useLiveGestures(definitions, cam, tracker);
+  const { status } = useLabelModels("__TAURI_INTERNALS__" in window);
   const [editing, setEditing] = useState<GestureDefinition | null>(null);
   const labelName = (id: string | null) => (id ? labels.find((l) => l.id === id)?.displayName ?? id : "no label");
 
@@ -108,6 +113,7 @@ export function GestureLibraryPage() {
           </ul>
         </CardContent>
       </Card>
+      <AgreementPanel tracker={tracker} definitions={definitions} status={status} cameraOn={on} />
     </div>
   );
 }

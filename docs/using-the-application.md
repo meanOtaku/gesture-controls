@@ -213,7 +213,9 @@ The **Gesture library** tab (under Labels) defines gestures the camera recognise
 3. The measurements that tell the two apart become the rule (for example "thumb to index tip below 0.3 hand sizes"), with a start threshold and a looser end threshold so it does not flicker. You can edit every number and add or remove conditions; the percentage shows how well the rule separates the frames you recorded. Calibration quality is on those frames only, so test the gesture live afterwards.
 4. **Hold before it counts** ignores brief accidental poses; **Forgive losing it for** stops a flickering hand ending it early.
 
-Saved gestures show **Detected** live while the camera is on. They are kept in `gesture-library.json` in the app's config folder.
+Saved gestures show **Detected** live while the camera is on.
+
+**Model against camera** (below the list) checks a deployed watch model against the camera while you perform. A gesture linked to a label with an active model, a camera that is on and the model runtime in Monitor or Live are all needed. For each gesture it counts the holds the camera saw, how many the model found within about two seconds and its typical delay, how many it missed, and how many times the model fired while your hand was in view and you were not doing the gesture. Detections with your hand out of view cannot be judged and are counted apart. The camera is taken as the truth, so wear the watch on the hand it sees. The counts are not saved and restart when you press **Start over** or reopen the page. They are kept in `gesture-library.json` in the app's config folder.
 
 ### Model Lab
 

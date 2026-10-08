@@ -396,3 +396,6 @@ html.overlay-document body::before { display:none; }
 .camera-video,.camera-overlay { position:absolute; inset:0; width:100%; height:100%; object-fit:fill; }
 .camera-overlay { pointer-events:none; }
 .camera-measure { display:grid; grid-template-columns:8rem 1fr 9rem; align-items:center; gap:.75rem; font-size:.85rem; max-width:560px; }
+.agreement-table { width:100%; border-collapse:collapse; font-size:.85rem; }
+.agreement-table th, .agreement-table td { padding:.35rem .5rem; text-align:right; border-bottom:1px solid var(--line); }
+.agreement-table th:first-child { text-align:left; }
