@@ -3,6 +3,7 @@ import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { useNumberDrafts } from "../../../shared/forms/useNumberDrafts";
 import type { AppSettings, HeuristicGesture, OverlayState, PitchDirection, RollDirection, SwipeDirection, TapKind, WatchStatus } from "../../../shared/protocol/events";
 import { ApplySettingsFooter } from "./ApplySettingsFooter";
+import { AppearanceSection } from "./AppearanceSection";
 import { BuiltInGesturesSection } from "./BuiltInGesturesSection";
 import { HeadphonesSettingsSection } from "./HeadphonesSettingsSection";
 import { RecordingGraphSettingsSection } from "./RecordingGraphSettingsSection";
@@ -103,6 +104,8 @@ export function Settings({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
+      <AppearanceSection />
 
       <SettingsFormProvider value={drafts}>
         <form noValidate aria-label="Settings" className="flex flex-col gap-8" onSubmit={submit}>

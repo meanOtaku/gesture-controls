@@ -249,6 +249,10 @@ The pinch gesture is not shown: it needs a model trained for it, which will appe
 
 ### Settings
 
+#### Appearance
+
+**Settings → Appearance → Theme** switches the look of the app. **Electric** is the original deep-blue theme. **Neo-brutalism** is cream paper with thick black outlines, hard offset shadows (no blur), vibrant yellow, teal, pink and lavender fills, and bold rounded type. It applies at once and is remembered on this computer (it is not part of the settings you apply, and not shared with another computer). The floating volume knob keeps its own look in both. The theme only changes colours and outlines; nothing about how the app works changes.
+
 The **Settings** tab controls desktop acceptance/recording rates and Watch delivery settings.
 
 - Every number states its unit, allowed range and default under the field. A field you have changed is marked **Edited**, and a small reset button puts it back to its default (you still apply the change).

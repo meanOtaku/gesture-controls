@@ -1,0 +1,295 @@
+/*
+ * Neo-brutalism theme. Applies only while <html data-theme="neo"> (chosen in Settings → Appearance); without it nothing
+ * here matches and the original look is untouched. It re-points the colour tokens the rest of the app already uses and
+ * then restyles the surfaces that are drawn with literal borders: thick black outlines, hard offset shadows with no
+ * blur, a cream page, and vibrant fills. The floating volume knob is never themed (see shared/theme/theme.ts).
+ *
+ * Text colour rules: body text is near-black on cream or white (well above 4.5:1). The bright fills (pink, yellow,
+ * teal, lavender) always carry near-black text. The bright colours are never used for text on cream; where the
+ * original theme coloured text yellow or green, this theme uses a deep amber or deep teal.
+ */
+
+html[data-theme="neo"] {
+  color-scheme: light;
+
+  --blue: #fbf3e4; /* the page */
+  --ink: #17130e;
+  --yellow: #ffd23f;
+  --green: #2fc9a8; /* teal */
+  --cyan: #8b67ff; /* purple, used for focus and accents */
+  --orange: #ff8b4d;
+  --red: #d62b52;
+  --pink: #ff6f91;
+  --lavender: #cdbcff;
+  --surface: #fffdf8;
+  --surface-2: #f3e8d3;
+  --frame: #17130e;
+  --ink-2: rgba(23, 19, 14, 0.86);
+  --ink-3: rgba(23, 19, 14, 0.68);
+  --line: #17130e;
+  --line-soft: rgba(23, 19, 14, 0.28);
+  --wash: rgba(23, 19, 14, 0.09);
+
+  --primary: var(--pink);
+  --primary-foreground: var(--ink);
+  --secondary: var(--lavender);
+  --secondary-foreground: var(--ink);
+  --accent: var(--yellow);
+  --accent-foreground: var(--ink);
+  --destructive: var(--red);
+  --destructive-foreground: var(--ink);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--ink-3);
+  --popover: var(--surface);
+  --ring: var(--cyan);
+  --sidebar: #ffe58f;
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--pink);
+  --sidebar-primary-foreground: var(--ink);
+  --sidebar-accent: var(--wash);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--ink);
+  --sidebar-ring: var(--cyan);
+  --chart-1: #e6a100;
+  --chart-2: #7a56ff;
+  --chart-3: #e8590c;
+  --chart-4: #0f9d7f;
+  --chart-5: var(--ink);
+
+  --radius: 0.85rem;
+  --control-h: 2.6rem; /* room for the thick outlines */
+  --neo-border: 2.5px solid var(--ink);
+  --neo-shadow: 5px 5px 0 var(--ink);
+  --neo-shadow-sm: 3px 3px 0 var(--ink);
+  --font-display: "Space Grotesk", "Avenir Next", "Trebuchet MS", "Helvetica Neue", Helvetica, "Segoe UI", system-ui, sans-serif;
+}
+
+/* The page: cream paper with a faint dot grid. */
+html[data-theme="neo"] body {
+  background-color: var(--blue);
+  background-image: radial-gradient(rgba(23, 19, 14, 0.13) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+html[data-theme="neo"] ::selection { background: var(--yellow); color: var(--ink); }
+html[data-theme="neo"] a { color: var(--ink); text-decoration-thickness: 2px; }
+html[data-theme="neo"] :focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; }
+
+/* Type: bold, geometric, not condensed or shouting. */
+html[data-theme="neo"] h1,
+html[data-theme="neo"] h2 { font-family: var(--font-display); text-transform: none; font-weight: 800; letter-spacing: -0.02em; }
+html[data-theme="neo"] h1 { line-height: 1.02; }
+html[data-theme="neo"] .eyebrow,
+html[data-theme="neo"] .label,
+html[data-theme="neo"] .field-head label,
+html[data-theme="neo"] .field-label { font-weight: 700; letter-spacing: 0.06em; color: var(--ink); }
+html[data-theme="neo"] .subtitle,
+html[data-theme="neo"] .hero .subtitle { color: var(--ink-2); }
+html[data-theme="neo"] .hint,
+html[data-theme="neo"] .field-hint { color: var(--ink-3); }
+html[data-theme="neo"] .field-error { color: var(--red); font-weight: 600; }
+
+/* Surfaces: thick outline, hard shadow, rounded corners. */
+html[data-theme="neo"] [data-slot="card"],
+html[data-theme="neo"] .telemetry-chart,
+html[data-theme="neo"] .metric,
+html[data-theme="neo"] .signal-grid .telemetry-chart,
+html[data-theme="neo"] .preview-notice,
+html[data-theme="neo"] .gesture-card,
+html[data-theme="neo"] [data-slot="alert"] {
+  background: var(--surface);
+  border: var(--neo-border);
+  border-radius: var(--radius);
+  box-shadow: var(--neo-shadow);
+}
+html[data-theme="neo"] [data-slot="card"] { --tw-ring-shadow: 0 0 #0000; }
+html[data-theme="neo"] .vector-row,
+html[data-theme="neo"] .model-lab-log,
+html[data-theme="neo"] .interaction-guide,
+html[data-theme="neo"] .recipe-steps,
+html[data-theme="neo"] .model-lab-backend-select > label {
+  background: var(--surface);
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+html[data-theme="neo"] .gesture-card { box-shadow: var(--neo-shadow-sm); transition: transform 0.12s, background-color 0.12s; }
+html[data-theme="neo"] .gesture-card--lit { background: #a8ecd9; transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
+html[data-theme="neo"] .recipe-steps legend { font-weight: 700; color: var(--ink); background: var(--yellow); border: 2px solid var(--ink); border-radius: 8px; padding: 0 0.5rem; }
+html[data-theme="neo"] .calibration-warning { background: #fff0b8; color: var(--ink); border: 2px solid var(--ink); border-radius: 12px; }
+html[data-theme="neo"] [data-slot="alert"][data-variant="destructive"],
+html[data-theme="neo"] [data-slot="alert"][class*="destructive"] { background: #ffd9e1; color: var(--ink); }
+html[data-theme="neo"] [data-slot="alert"] [data-slot="alert-description"] { color: var(--ink-2); }
+
+/* The overview cards take turns being yellow, teal and pink. */
+html[data-theme="neo"] .overview-grid > :nth-child(3n + 1) { background: var(--yellow); }
+html[data-theme="neo"] .overview-grid > :nth-child(3n + 2) { background: #8fe3cf; }
+html[data-theme="neo"] .overview-grid > :nth-child(3n + 3) { background: #ffb3c3; }
+html[data-theme="neo"] .overview-grid [data-slot="card-content"] > small,
+html[data-theme="neo"] .overview-grid [data-slot="card-content"] > .label { color: var(--ink); }
+html[data-theme="neo"] .overview-grid [data-slot="card-content"] > strong { font-weight: 800; text-transform: none; }
+
+/* Buttons: a coloured block with a black edge that presses into its shadow. */
+html[data-theme="neo"] [data-slot="button"],
+html[data-theme="neo"] .lab-workflow a,
+html[data-theme="neo"] .setup-steps button {
+  font-family: var(--font-display);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 700;
+  color: var(--ink);
+  border: 2.5px solid var(--ink);
+  border-radius: 10px;
+  box-shadow: var(--neo-shadow-sm);
+  transition: transform 0.1s, box-shadow 0.1s, background-color 0.1s;
+}
+html[data-theme="neo"] [data-slot="button"][data-variant="default"] { background: var(--pink); color: var(--ink); }
+html[data-theme="neo"] [data-slot="button"][data-variant="default"]:hover { background: #ff85a2; }
+html[data-theme="neo"] [data-slot="button"][data-variant="outline"],
+html[data-theme="neo"] .lab-workflow a,
+html[data-theme="neo"] .setup-steps button { background: var(--surface); }
+html[data-theme="neo"] [data-slot="button"][data-variant="outline"]:hover,
+html[data-theme="neo"] .lab-workflow a:hover,
+html[data-theme="neo"] .setup-steps button:hover { background: var(--yellow); color: var(--ink); border-color: var(--ink); }
+html[data-theme="neo"] [data-slot="button"][data-variant="secondary"] { background: var(--lavender); }
+html[data-theme="neo"] [data-slot="button"][data-variant="secondary"]:hover { background: #dccfff; }
+html[data-theme="neo"] [data-slot="button"][data-variant="destructive"] { background: #ff7088; color: var(--ink); border-color: var(--ink); }
+html[data-theme="neo"] [data-slot="button"][data-variant="destructive"]:hover { background: #ff8aa0; }
+html[data-theme="neo"] [data-slot="button"][data-variant="ghost"],
+html[data-theme="neo"] [data-slot="button"][data-variant="link"] { background: transparent; border-color: transparent; box-shadow: none; }
+html[data-theme="neo"] [data-slot="button"][data-variant="ghost"]:hover { background: var(--wash); }
+html[data-theme="neo"] [data-slot="button"][data-variant="link"] { text-decoration: underline; text-decoration-thickness: 2px; }
+html[data-theme="neo"] [data-slot="button"]:not([data-variant="ghost"]):not([data-variant="link"]):hover:not(:disabled) { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); }
+html[data-theme="neo"] [data-slot="button"]:not([data-variant="ghost"]):not([data-variant="link"]):active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+html[data-theme="neo"] [data-slot="button"]:disabled,
+html[data-theme="neo"] [data-slot="button"][aria-disabled="true"] { opacity: 0.55; box-shadow: none; transform: none; }
+
+/* Fields. */
+html[data-theme="neo"] [data-slot="input"],
+html[data-theme="neo"] [data-slot="select-trigger"],
+html[data-theme="neo"] [data-slot="textarea"],
+html[data-theme="neo"] select,
+html[data-theme="neo"] input[type="text"],
+html[data-theme="neo"] input[type="number"],
+html[data-theme="neo"] .recipe-select {
+  background: #ffffff;
+  color: var(--ink);
+  border: 2.5px solid var(--ink);
+  border-radius: 10px;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+html[data-theme="neo"] [data-slot="input"]:focus-visible,
+html[data-theme="neo"] [data-slot="select-trigger"]:focus-visible,
+html[data-theme="neo"] .recipe-select:focus-visible,
+html[data-theme="neo"] .field-control [data-slot="input"]:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; border-color: var(--ink); }
+html[data-theme="neo"] .field-edited { background: var(--yellow); color: var(--ink); border: 2px solid var(--ink); border-radius: 6px; font-weight: 700; }
+html[data-theme="neo"] .field[data-invalid] [data-slot="input"] { border-color: var(--red); }
+html[data-theme="neo"] .field[data-dirty]:not([data-invalid]) [data-slot="input"] { background: #fff6cf; }
+html[data-theme="neo"] [data-slot="select-content"],
+html[data-theme="neo"] [data-slot="popover-content"],
+html[data-theme="neo"] [data-slot="tooltip-content"] { background: var(--surface); color: var(--ink); border: var(--neo-border); border-radius: 12px; box-shadow: var(--neo-shadow-sm); }
+
+/* Switches, checkboxes, badges. */
+html[data-theme="neo"] [data-slot="switch"] { background: #ffffff; border: 2.5px solid var(--ink); }
+html[data-theme="neo"] [data-slot="switch"][data-checked] { background: var(--green); }
+html[data-theme="neo"] [data-slot="switch-thumb"] { background: var(--ink); }
+html[data-theme="neo"] [data-slot="checkbox"] { background: #ffffff; border: 2.5px solid var(--ink); border-radius: 6px; }
+html[data-theme="neo"] [data-slot="checkbox"][data-checked] { background: var(--yellow); color: var(--ink); }
+html[data-theme="neo"] [data-slot="badge"] { border: 2px solid var(--ink); border-radius: 999px; font-weight: 700; color: var(--ink); height: 1.4rem; }
+html[data-theme="neo"] [data-slot="badge"][data-variant="default"] { background: var(--yellow); }
+html[data-theme="neo"] [data-slot="badge"][data-variant="secondary"] { background: var(--lavender); }
+html[data-theme="neo"] [data-slot="badge"][data-variant="destructive"] { background: #ffb3c3; }
+html[data-theme="neo"] [data-slot="badge"][data-variant="outline"] { background: var(--surface); }
+
+/* Segmented control: joined blocks, the chosen one yellow. */
+html[data-theme="neo"] .segmented[data-slot="radio-group"] { border: 2.5px solid var(--ink); border-radius: 10px; background: var(--surface); box-shadow: var(--neo-shadow-sm); overflow: hidden; }
+html[data-theme="neo"] .segment { line-height: 1; font-weight: 700; text-transform: none; letter-spacing: 0; color: var(--ink); }
+html[data-theme="neo"] .segment + .segment { border-left: 2.5px solid var(--ink); }
+html[data-theme="neo"] .segment:hover { background: #fff0b8; }
+html[data-theme="neo"] .segment:has([data-checked]),
+html[data-theme="neo"] .segment:has([data-checked]):hover { background: var(--yellow); color: var(--ink); }
+
+/* Sidebar: yellow, with a thick edge, and the current page a pink block. */
+html[data-theme="neo"] [data-slot="sidebar-inner"],
+html[data-theme="neo"] [data-sidebar="sidebar"] { background: var(--sidebar); }
+html[data-theme="neo"] [data-slot="sidebar-container"] { border-right: 3px solid var(--ink); }
+html[data-theme="neo"] [data-sidebar="menu-button"],
+html[data-theme="neo"] [data-slot="sidebar-menu-button"] { font-weight: 700; text-transform: none; letter-spacing: 0; font-size: 0.95rem; border-radius: 10px; border: 2px solid transparent; }
+html[data-theme="neo"] [data-sidebar="menu-button"][data-active]:not([data-active="false"]) { background: var(--pink); color: var(--ink); border-color: var(--ink); box-shadow: var(--neo-shadow-sm); }
+html[data-theme="neo"] [data-sidebar="menu-button"]:hover:not([data-active]):not([data-active="false"]) { background: rgba(255, 255, 255, 0.6); border-color: var(--ink); }
+html[data-theme="neo"] [data-sidebar="header"],
+html[data-theme="neo"] .nav-brand-name { font-family: var(--font-display); text-transform: uppercase; font-weight: 800; letter-spacing: 0.04em; }
+html[data-theme="neo"] .nav-brand-name small { color: var(--ink-2); font-weight: 700; }
+html[data-theme="neo"] [data-sidebar="group-label"] { font-weight: 800; color: var(--ink); letter-spacing: 0.1em; }
+html[data-theme="neo"] .nav-dot { border: 2px solid var(--ink); border-radius: 50%; }
+html[data-theme="neo"] .nav-dot[data-tone="ok"] { background: var(--green); border-color: var(--ink); }
+html[data-theme="neo"] .nav-dot[data-tone="warn"] { background: var(--yellow); border-color: var(--ink); }
+html[data-theme="neo"] .nav-dot[data-tone="live"] { background: var(--pink); border-color: var(--ink); }
+html[data-theme="neo"] [data-slot="sidebar-menu-button"][data-active] .nav-dot[data-tone="idle"] { border-color: var(--ink); }
+
+/* Status pill, steps, chips. */
+html[data-theme="neo"] .connection { background: var(--surface); border: var(--neo-border); border-radius: 999px; box-shadow: var(--neo-shadow-sm); text-transform: none; font-weight: 700; letter-spacing: 0; }
+html[data-theme="neo"] .pulse { background: var(--yellow); border: 2px solid var(--ink); border-radius: 50%; }
+html[data-theme="neo"] .online .pulse { background: var(--green); }
+html[data-theme="neo"] .step-number { border: 2px solid var(--ink); border-radius: 50%; background: var(--surface); font-weight: 700; }
+html[data-theme="neo"] .setup-steps li[data-complete="true"] .step-number { background: var(--green); color: var(--ink); border-color: var(--ink); }
+html[data-theme="neo"] .setup-steps li { border-top: 2px dashed var(--line-soft); }
+html[data-theme="neo"] .model-lab-chip { border: 2px solid var(--ink); border-radius: 999px; font-weight: 700; text-transform: none; letter-spacing: 0; color: var(--ink); background: var(--surface); }
+html[data-theme="neo"] .model-lab-chip--positive,
+html[data-theme="neo"] .model-lab-chip--ready { background: var(--green); border-color: var(--ink); color: var(--ink); }
+html[data-theme="neo"] .model-lab-chip--hold,
+html[data-theme="neo"] .model-lab-chip--attention { background: var(--yellow); border-color: var(--ink); color: var(--ink); }
+html[data-theme="neo"] .gesture-chip { border: 2px solid var(--ink); background: #ffffff; font-weight: 600; }
+html[data-theme="neo"] .gesture-chip--lit { background: var(--yellow); border-color: var(--ink); color: var(--ink); }
+html[data-theme="neo"] .gesture-meter { height: 12px; border: 2px solid var(--ink); border-radius: 999px; background: #ffffff; }
+html[data-theme="neo"] .gesture-meter-fill { background: var(--pink); }
+
+/* Text the original theme coloured yellow, green or red on dark: deep tones on cream. */
+html[data-theme="neo"] .model-lab-log li[data-level="warn"],
+html[data-theme="neo"] .model-lab-diagnostic-action,
+html[data-theme="neo"] .viewer-steps [data-current="true"] { color: #8a5a00; font-weight: 600; }
+html[data-theme="neo"] .model-lab-log li[data-level="error"] { color: var(--red); }
+html[data-theme="neo"] .viewer-steps [data-done="true"] { color: #0b7d68; }
+html[data-theme="neo"] .model-lab-log { background: #fffaf0; color: var(--ink); }
+html[data-theme="neo"] .model-lab-log li > span { color: var(--ink-3); }
+
+/* Charts: white plot, dark grid, and series colours that read on white. */
+html[data-theme="neo"] .telemetry-chart svg,
+html[data-theme="neo"] .chart-plot svg {
+  background: repeating-linear-gradient(0deg, transparent 0, transparent 41px, rgba(23, 19, 14, 0.12) 42px), #ffffff;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+}
+html[data-theme="neo"] .telemetry-chart svg .telemetry-grid-line { stroke: rgba(23, 19, 14, 0.28); }
+html[data-theme="neo"] .chart-empty { background: rgba(255, 253, 248, 0.88); }
+html[data-theme="neo"] .chart-empty > span { color: var(--ink-3); }
+html[data-theme="neo"] .telemetry-chart path[stroke="#f2f200"] { stroke: #e6a100; }
+html[data-theme="neo"] .telemetry-chart path[stroke="#00f2f2"],
+html[data-theme="neo"] .telemetry-chart path[stroke="cyan"] { stroke: #7a56ff; }
+html[data-theme="neo"] .telemetry-chart path[stroke="#ff9a3d"] { stroke: #e8590c; }
+html[data-theme="neo"] .telemetry-chart path[stroke="#00f279"] { stroke: #0f9d7f; }
+html[data-theme="neo"] .telemetry-chart path[stroke="#ff9d9d"] { stroke: #d62b52; }
+html[data-theme="neo"] .telemetry-legend i { border: 2px solid var(--ink); border-radius: 50%; width: 11px; height: 11px; }
+html[data-theme="neo"] .telemetry-legend i[style*="rgb(242, 242, 0)"] { background: #e6a100 !important; }
+html[data-theme="neo"] .telemetry-legend i[style*="rgb(0, 242, 242)"],
+html[data-theme="neo"] .telemetry-legend i[style*="cyan"] { background: #7a56ff !important; }
+html[data-theme="neo"] .telemetry-legend i[style*="rgb(255, 154, 61)"] { background: #e8590c !important; }
+html[data-theme="neo"] .telemetry-legend i[style*="rgb(0, 242, 121)"] { background: #0f9d7f !important; }
+html[data-theme="neo"] .telemetry-legend i[style*="rgb(255, 157, 157)"] { background: #d62b52 !important; }
+
+/* Devices and the sticky settings bar. */
+html[data-theme="neo"] .device-dial { fill: #ffffff; stroke: var(--ink); stroke-width: 3; }
+html[data-theme="neo"] .device-track { stroke: var(--ink); }
+html[data-theme="neo"] .device-tick { stroke: var(--ink-3); }
+html[data-theme="neo"] .device-pointer { stroke: var(--pink); }
+html[data-theme="neo"] .device-handle { fill: var(--pink); stroke: var(--ink); stroke-width: 2; }
+html[data-theme="neo"] .device-slider { accent-color: var(--pink); }
+html[data-theme="neo"] .settings-footer { background: var(--yellow); border: var(--neo-border); border-radius: 12px; box-shadow: var(--neo-shadow); }
+html[data-theme="neo"] .viewer-group { border-top: 2px dashed var(--line-soft); }
+html[data-theme="neo"] .viewer-empty { border: 2px dashed var(--ink); border-radius: 12px; background: var(--surface); }
+html[data-theme="neo"] .model-lab-shell input[type="radio"],
+html[data-theme="neo"] .model-lab-shell input[type="checkbox"] { accent-color: var(--pink); }
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="neo"] [data-slot="button"],
+  html[data-theme="neo"] .gesture-card { transition: none; }
+}
