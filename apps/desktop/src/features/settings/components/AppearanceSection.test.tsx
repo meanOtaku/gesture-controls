@@ -13,22 +13,22 @@ afterEach(() => {
 });
 
 describe("AppearanceSection", () => {
-  it("starts on the original theme and switches to neo-brutalism at once, remembering it", () => {
+  it("starts on neo-brutalism, and switches to the original theme at once, remembering it", () => {
     render(<AppearanceSection />);
     const group = within(screen.getByRole("radiogroup"));
-    expect(group.getByRole("radio", { name: /Electric/ })).toHaveAttribute("aria-checked", "true");
-    fireEvent.click(group.getByRole("radio", { name: /Neo-brutalism/ }));
-    expect(document.documentElement.getAttribute("data-theme")).toBe("neo");
-    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("neo");
-    expect(screen.getByText(/Cream paper, thick black outlines/)).toBeInTheDocument();
+    expect(group.getByRole("radio", { name: /Neo-brutalism/ })).toHaveAttribute("aria-checked", "true");
     fireEvent.click(group.getByRole("radio", { name: /Electric/ }));
     expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("electric");
+    expect(screen.getByText(/Deep blue, flat and square/)).toBeInTheDocument();
+    fireEvent.click(group.getByRole("radio", { name: /Neo-brutalism/ }));
+    expect(document.documentElement.getAttribute("data-theme")).toBe("neo");
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("neo");
   });
 
   it("shows the saved theme when it opens", () => {
-    window.localStorage.setItem(THEME_STORAGE_KEY, "neo");
+    window.localStorage.setItem(THEME_STORAGE_KEY, "electric");
     render(<AppearanceSection />);
-    expect(within(screen.getByRole("radiogroup")).getByRole("radio", { name: /Neo-brutalism/ })).toHaveAttribute("aria-checked", "true");
+    expect(within(screen.getByRole("radiogroup")).getByRole("radio", { name: /Electric/ })).toHaveAttribute("aria-checked", "true");
   });
 });

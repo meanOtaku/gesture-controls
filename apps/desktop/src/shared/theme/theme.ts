@@ -1,13 +1,13 @@
-/** The app's look. "electric" is the original deep-blue theme; "neo" is neo-brutalism: cream, thick black outlines, hard shadows. */
+/** The app's look. "neo" is neo-brutalism (cream, thick black outlines, hard shadows) and the default; "electric" is the original deep-blue theme. */
 export type AppTheme = "electric" | "neo";
 
 export const THEMES: ReadonlyArray<{ value: AppTheme; label: string; summary: string }> = [
-  { value: "electric", label: "Electric", summary: "Deep blue, flat and square, with bright accents." },
   { value: "neo", label: "Neo-brutalism", summary: "Cream paper, thick black outlines, hard offset shadows and vibrant colours." },
+  { value: "electric", label: "Electric", summary: "Deep blue, flat and square, with bright accents." },
 ];
 
 export const THEME_STORAGE_KEY = "appTheme";
-export const DEFAULT_THEME: AppTheme = "electric";
+export const DEFAULT_THEME: AppTheme = "neo";
 
 export function isTheme(value: unknown): value is AppTheme {
   return value === "electric" || value === "neo";
@@ -30,10 +30,14 @@ const BROWSER_BAR_COLOUR: Record<AppTheme, string> = { electric: "#000066", neo:
  * Returns whether it was applied.
  */
 export function applyTheme(theme: AppTheme): boolean {
-  if (new URLSearchParams(window.location.search).get("window") === "overlay") return false;
   const root = document.documentElement;
-  if (theme === DEFAULT_THEME) root.removeAttribute("data-theme");
-  else root.setAttribute("data-theme", theme);
+  if (new URLSearchParams(window.location.search).get("window") === "overlay") {
+    root.removeAttribute("data-theme");
+    return false;
+  }
+  // "electric" is the page's own styling; only the neo theme is a mark on top of it.
+  if (theme === "neo") root.setAttribute("data-theme", "neo");
+  else root.removeAttribute("data-theme");
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", BROWSER_BAR_COLOUR[theme]);
   return true;
 }
