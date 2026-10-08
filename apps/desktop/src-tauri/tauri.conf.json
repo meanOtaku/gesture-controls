@@ -37,7 +37,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data:; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data: blob:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'"
     }
   },
   "bundle": {
@@ -51,6 +51,9 @@
       "icons/icon.ico"
     ],
     "category": "Utility",
+    "macOS": {
+      "entitlements": "Entitlements.plist"
+    },
     "shortDescription": "Control spatial interactions with Sony head tracking and wearable gestures."
   }
 }

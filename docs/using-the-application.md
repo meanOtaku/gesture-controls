@@ -148,6 +148,14 @@ Chart visibility follows the enabled/streaming state of the corresponding sensor
 
 Use **Start recording** / **Stop recording** for a general telemetry capture, then choose **Save CSV**. This exports buffered incoming rows with source timestamps and sequences. The tab shows buffer usage; when the cap is reached, the oldest ordinary-capture rows are dropped.
 
+#### Camera hand tracking (Recorder)
+
+Under the recorder, **Camera hand tracking** finds the landmarks of your hand with the camera, on this computer. **Turn camera on** (macOS asks for permission the first time; allow it), and you see a mirror view with the 21 points drawn on each hand, how many hands are in view, the frame rate, which hand it is, and the distance between thumb and index finger in hand sizes (about 0 is a firm pinch). Keep the hand that wears the watch in view.
+
+With **Save hand landmarks with recordings** ticked (the default), each recording also saves `hand_landmarks.csv` (the landmarks of every camera frame, and when it was taken) and `clock_sync.csv` (how to line the camera up with the watch). **Only landmarks are saved, never the picture, and nothing leaves your computer.** The camera stays on while you switch to other tabs, so a recording keeps its pictures. A timed capture is now also saved as a recording (with its landmarks), as a manual stop already was. The panel shows the clock alignment with the watch once the watch is streaming, and how many frames a running recording has kept (about 17 minutes is the limit).
+
+This step only captures. Turning landmarks into gesture labels is not built yet. Details: `docs/architecture/camera-landmarks.md`.
+
 #### Labeled dataset recorder (Recorder)
 
 Use this for model training data. It records a separate, labeled session distinct from the ordinary CSV capture above, and it never includes data you were already looking at before you pressed Start.

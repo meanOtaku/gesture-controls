@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { chooseExportFolder, exportCsvToFolder, isTauriDesktop, type ExportCsvResult } from "../../../shared/tauri/exportCsv";
-import { saveRecordingBundle, type SaveRecordingBundleResult } from "../../../shared/tauri/recordingBundle";
+import { saveRecordingBundle, type SaveRecordingBundleResult, type StopReason } from "../../../shared/tauri/recordingBundle";
 import { exportFolderStore } from "../store/exportFolderStore";
 import { telemetryStore } from "../store/telemetryStore";
 
@@ -69,8 +69,8 @@ export function useTelemetryExport() {
    * has no bundle to write and is silently skipped rather than reported as a
    * failure.
    */
-  const saveDatasetRecording = async () => {
-    const payload = telemetryStore.buildRecordingBundlePayload("manual_stop");
+  const saveDatasetRecording = async (stopReason: StopReason = "manual_stop") => {
+    const payload = telemetryStore.buildRecordingBundlePayload(stopReason);
     if (!payload) return;
     const result = await saveRecordingBundle(payload);
     reportRecordingBundleOutcome(result);

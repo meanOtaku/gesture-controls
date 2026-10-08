@@ -52,7 +52,12 @@ export type RecordingBundlePayload = {
   rawCsv: string;
   recording: RecordingMetadataPayload;
   annotations: AnnotationsFilePayload;
+  /** Optional evidence saved with the bundle (`hand_landmarks.csv`, `clock_sync.csv`); the desktop checks each one. */
+  extraFiles?: Record<string, string>;
 };
+
+/** Optional evidence another part of the app (the camera) adds to a bundle, with the source it declares. */
+export type RecordingEvidence = { files: Record<string, string>; source: RecordingSource };
 
 export type SaveRecordingBundleResult =
   | { status: "saved"; recordingId: string; rowCount: number; intervalCount: number }
@@ -396,7 +401,7 @@ export async function saveRecordingBundle(payload: RecordingBundlePayload): Prom
   try {
     const summary = await invoke<{ recordingId: string; rawRowCount: number; intervalCount: number }>(
       "save_recording_bundle",
-      { rawCsv: payload.rawCsv, recording: payload.recording, annotations: payload.annotations },
+      { rawCsv: payload.rawCsv, recording: payload.recording, annotations: payload.annotations, extraFiles: payload.extraFiles ?? null },
     );
     return {
       status: "saved",

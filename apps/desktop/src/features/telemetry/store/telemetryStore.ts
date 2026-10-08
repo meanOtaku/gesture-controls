@@ -10,7 +10,8 @@ import type {
   WatchSkinTemperatureBatch,
   WatchStatus,
 } from "../../../shared/protocol/events";
-import type { RecordingBundlePayload, StopReason } from "../../../shared/tauri/recordingBundle";
+import type { RecordingBundlePayload, RecordingEvidence, StopReason } from "../../../shared/tauri/recordingBundle";
+import { clockSync } from "../../camera/clockSync";
 import {
   hasOverlap,
   isDegenerate,
@@ -239,6 +240,8 @@ class TelemetryStore {
   private datasetRequestedStartAtIso: string | null = null;
   private datasetActualStartAtIso: string | null = null;
   private datasetActualStartMonotonicMs: number | null = null;
+  /** Adds optional evidence (such as camera landmarks) to a recording bundle; null when there is none. */
+  private evidenceProvider: ((startMs: number, endMs: number) => RecordingEvidence | null) | null = null;
   private readonly datasetRows = new RingBuffer<DatasetRow>(MAX_CSV_ROWS);
 
   // Timeline Capture: live/edited intervals for the current session. Cleared
@@ -684,6 +687,15 @@ class TelemetryStore {
    * produce a persisted `raw.csv` (`cancelled_before_first_sample`), matching
    * the state-machine contract.
    */
+  setEvidenceProvider(provider: ((startMs: number, endMs: number) => RecordingEvidence | null) | null): void {
+    this.evidenceProvider = provider;
+  }
+
+  /** When the first sample of the current recording was accepted, on the browser's monotonic clock (ms). */
+  getDatasetActualStartMonotonicMs(): number | null {
+    return this.datasetActualStartMonotonicMs;
+  }
+
   buildRecordingBundlePayload(stopReason: StopReason = "manual_stop"): RecordingBundlePayload | null {
     const session = this.datasetSession;
     const rows = this.datasetRows.toArray();
@@ -695,6 +707,8 @@ class TelemetryStore {
     const actualStartMonotonicNs = Math.round((this.datasetActualStartMonotonicMs ?? performance.now()) * 1_000_000);
     const actualEndMonotonicNs = Math.round(performance.now() * 1_000_000);
     const actualDurationMs = this.datasetRecordingStartedAtMs !== null ? Date.now() - this.datasetRecordingStartedAtMs : 0;
+
+    const evidence = this.evidenceProvider?.(actualStartMonotonicNs / 1_000_000, actualEndMonotonicNs / 1_000_000) ?? null;
 
     const rawCsv = [
       RAW_RECORDING_CSV_COLUMNS.join(","),
@@ -720,6 +734,7 @@ class TelemetryStore {
 
     return {
       rawCsv,
+      ...(evidence ? { extraFiles: evidence.files } : {}),
       recording: {
         format_version: RECORDING_BUNDLE_FORMAT_VERSION,
         recording_id: recordingId,
@@ -729,7 +744,8 @@ class TelemetryStore {
         requested_duration_ms: null,
         actual_duration_ms: actualDurationMs,
         stop_reason: stopReason,
-        sources: [{ source_id: "watch", configuration: {} }],
+        // The camera is a source of its own evidence file, not of raw rows, so it is not in `raw_source_row_counts`.
+        sources: [{ source_id: "watch", configuration: {} }, ...(evidence ? [evidence.source] : [])],
         raw_row_count: rows.length,
         raw_source_row_counts: { watch: rows.length },
       },
@@ -838,6 +854,8 @@ class TelemetryStore {
     if (orientation.sequence === this.lastWatchOrientationSequence) return;
     this.lastWatchOrientationSequence = orientation.sequence;
     this.noteWatchSample();
+    // Lines the watch's clock up with the browser's, which camera frames are stamped with.
+    clockSync.observe(orientation.timestampNs, performance.now());
     const at = Date.now();
     const euler = quaternionToEulerDegrees(orientation.quaternion);
     this.series.get("watchOrientation")?.push({ at, values: euler });

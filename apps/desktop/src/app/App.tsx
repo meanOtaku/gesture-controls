@@ -6,6 +6,7 @@ import { AppNav, navStatuses, type AppTab } from "./components/AppNav";
 import { OperationFeedback } from "../components/app/OperationFeedback";
 import { Skeleton } from "../components/ui/skeleton";
 import { SidebarInset, SidebarProvider } from "../components/ui/sidebar";
+import { bindCameraToRecording } from "../features/camera/cameraService";
 import { RecordingTimer } from "../features/telemetry/recording/RecordingTimer";
 import { telemetryStore } from "../features/telemetry/store/telemetryStore";
 import { usePendingActions } from "../shared/hooks/usePendingActions";
@@ -576,6 +577,9 @@ function MainApp() {
       }
     });
   };
+
+  // The camera follows the recording and adds its landmarks to each bundle, whichever tab is showing.
+  useEffect(() => bindCameraToRecording(), []);
 
   const stableSetRecipeEnabled = useStableCallback((id: string, enabled: boolean) => { void setRecipeEnabled(id, enabled); });
   const stableSaveRecipe = useStableCallback(saveRecipe);

@@ -15,13 +15,15 @@ import { timedCapture } from "./timedCapture";
  */
 export function RecordingTimer() {
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
-  const { exportDatasetCsv } = useTelemetryExport();
+  const { exportDatasetCsv, saveDatasetRecording } = useTelemetryExport();
   const state = telemetryStore.getDatasetRecordingState();
   const mode = telemetryStore.getDatasetCaptureMode();
 
   // A ref, so the effect below does not re-run (and cancel its timer) each time the export closure is new.
   const exportRef = useRef(exportDatasetCsv);
   exportRef.current = exportDatasetCsv;
+  const saveRef = useRef(saveDatasetRecording);
+  saveRef.current = saveDatasetRecording;
 
   useEffect(() => {
     if (mode !== "timeline" || state !== "recording") return;
@@ -29,6 +31,8 @@ export function RecordingTimer() {
     if (seconds === null) return;
     const timer = setTimeout(() => {
       telemetryStore.stopDatasetRecording();
+      // As with a manual stop, the session is also kept as a recording bundle (with the camera's landmarks, if any).
+      void saveRef.current("timer_elapsed");
       if (telemetryStore.getDatasetRowCount() > 0) void exportRef.current();
       else OperationFeedback.error("Export dataset CSV", "No samples were captured — nothing to export.");
     }, seconds * 1000);

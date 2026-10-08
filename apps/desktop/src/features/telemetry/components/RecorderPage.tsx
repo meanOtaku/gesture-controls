@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { CameraCapturePanel } from "../../camera/components/CameraCapturePanel";
 import { DatasetCaptureCard } from "./DatasetCaptureCard";
 import { StreamStatus } from "./StreamStatus";
 import { useTelemetryExport } from "../hooks/useTelemetryExport";
@@ -63,6 +64,7 @@ export function RecorderPage() {
         getDatasetRows={() => telemetryStore.getDatasetRows()}
         timelineIntervals={telemetryStore.getTimelineIntervals()}
       />
+      <CameraCapturePanel />
     </div>
   </main>;
 }

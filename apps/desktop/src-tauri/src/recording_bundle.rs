@@ -7,7 +7,10 @@
 //!   raw.csv           # immutable; never rewritten
 //!   recording.json    # capture/session metadata
 //!   annotations.json  # label intervals + curation state; may change later
+//!   hand_landmarks.csv  # optional camera evidence: MediaPipe hand landmarks per frame (never video)
+//!   clock_sync.csv      # optional: watch-clock vs browser-clock pairs, to line the camera up with the watch
 //! ```
+//! The two optional files are evidence like `raw.csv`: written once with the bundle, never rewritten.
 //! This module never touches the legacy single-label dataset CSV pipeline in
 //! `model_lab.rs` (`import_model_dataset`/`DATASET_CSV_HEADER`), which stays the
 //! compatibility path for existing exports and training. `import_recording_from_raw_csv`
@@ -33,6 +36,12 @@ pub(crate) const RECORDING_BUNDLES_DIR_NAME: &str = "recording";
 const RAW_CSV_FILE_NAME: &str = "raw.csv";
 const RECORDING_METADATA_FILE_NAME: &str = "recording.json";
 const ANNOTATIONS_FILE_NAME: &str = "annotations.json";
+pub(crate) const HAND_LANDMARKS_FILE_NAME: &str = "hand_landmarks.csv";
+pub(crate) const CLOCK_SYNC_FILE_NAME: &str = "clock_sync.csv";
+/// The optional evidence files a webview may add to a bundle, and nothing else.
+const EXTRA_FILE_NAMES: [&str; 2] = [HAND_LANDMARKS_FILE_NAME, CLOCK_SYNC_FILE_NAME];
+const MAX_EXTRA_FILE_BYTES: usize = 64 * 1024 * 1024;
+const LANDMARKS_PER_HAND: usize = 21;
 /// Matches `model_lab::MAX_DATASET_CSV_BYTES`; kept as its own constant since
 /// the two csv contracts (legacy fused dataset vs. new immutable raw capture)
 /// are intentionally independent.
@@ -289,6 +298,71 @@ fn recording_bundles_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(base.join(RECORDING_BUNDLES_DIR_NAME))
 }
 
+/// The exact `hand_landmarks.csv` header: one row per hand per camera frame (a frame with no hand gets one row with
+/// the hand fields empty, so "no hand seen" is recorded, not silently missing). The webview writes the same string
+/// (`handLandmarkCsv.ts`); a test on each side pins it.
+pub(crate) fn hand_landmarks_header() -> String {
+    let mut columns: Vec<String> = [
+        "frame_index",
+        "capture_ms",
+        "hand_index",
+        "hand_count",
+        "model_handedness",
+        "score",
+    ]
+    .iter()
+    .map(ToString::to_string)
+    .collect();
+    for prefix in ["i", "w"] {
+        for index in 0..LANDMARKS_PER_HAND {
+            for axis in ["x", "y", "z"] {
+                columns.push(format!("{prefix}{axis}{index}"));
+            }
+        }
+    }
+    columns.join(",")
+}
+
+pub(crate) const CLOCK_SYNC_HEADER: &str = "watch_timestamp_ns,browser_arrival_ms";
+
+/// Checks one optional evidence file: a known name, a size within the limit, the exact header, and every row with the
+/// header's number of fields. It cannot check the camera data is true, only that it is well formed.
+fn validate_extra_file(name: &str, content: &str) -> Result<(), String> {
+    if !EXTRA_FILE_NAMES.contains(&name) {
+        return Err(format!(
+            "'{name}' is not a file a recording bundle may contain"
+        ));
+    }
+    if content.len() > MAX_EXTRA_FILE_BYTES {
+        return Err(format!(
+            "{name} exceeds the {MAX_EXTRA_FILE_BYTES}-byte limit (got {} bytes)",
+            content.len()
+        ));
+    }
+    let expected = if name == HAND_LANDMARKS_FILE_NAME {
+        hand_landmarks_header()
+    } else {
+        CLOCK_SYNC_HEADER.to_string()
+    };
+    let mut lines = content.lines();
+    let header = lines.next().ok_or_else(|| format!("{name} is empty"))?;
+    if header != expected {
+        return Err(format!(
+            "malformed {name}: the header is not the expected one"
+        ));
+    }
+    let fields = expected.matches(',').count();
+    for (index, line) in lines.enumerate() {
+        if line.matches(',').count() != fields {
+            return Err(format!(
+                "malformed {name}: row {} has the wrong number of fields",
+                index + 1
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Checks everything in a webview-supplied save request that can be verified
 /// against the `raw.csv` it ships with, so the persisted "immutable evidence"
 /// bundle is never internally inconsistent: the CSV must satisfy the same
@@ -386,8 +460,13 @@ pub fn save_recording_bundle(
     raw_csv: String,
     recording: RecordingMetadata,
     annotations: AnnotationsFile,
+    extra_files: Option<BTreeMap<String, String>>,
     app: AppHandle,
 ) -> Result<RecordingBundleSummary, String> {
+    let extra_files = extra_files.unwrap_or_default();
+    for (name, content) in &extra_files {
+        validate_extra_file(name, content)?;
+    }
     validate_recording_id(&recording.recording_id)?;
     if recording.recording_id != annotations.recording_id {
         return Err("recording.recording_id and annotations.recording_id must match".to_string());
@@ -418,7 +497,8 @@ pub fn save_recording_bundle(
     if tmp_dir.exists() {
         fs::remove_dir_all(&tmp_dir).map_err(|error| error.to_string())?;
     }
-    let write_result = write_bundle_files(&tmp_dir, &raw_csv, &recording, &annotations);
+    let write_result =
+        write_bundle_with_evidence(&tmp_dir, &raw_csv, &recording, &annotations, &extra_files);
     if let Err(error) = write_result {
         let _ = fs::remove_dir_all(&tmp_dir);
         return Err(error);
@@ -2496,6 +2576,16 @@ fn write_bundle_files(
     recording: &RecordingMetadata,
     annotations: &AnnotationsFile,
 ) -> Result<(), String> {
+    write_bundle_with_evidence(tmp_dir, raw_csv, recording, annotations, &BTreeMap::new())
+}
+
+fn write_bundle_with_evidence(
+    tmp_dir: &std::path::Path,
+    raw_csv: &str,
+    recording: &RecordingMetadata,
+    annotations: &AnnotationsFile,
+    extra_files: &BTreeMap<String, String>,
+) -> Result<(), String> {
     fs::create_dir_all(tmp_dir).map_err(|error| error.to_string())?;
     fs::write(tmp_dir.join(RAW_CSV_FILE_NAME), raw_csv).map_err(|error| error.to_string())?;
     let recording_json =
@@ -2506,6 +2596,10 @@ fn write_bundle_files(
         serde_json::to_string_pretty(annotations).map_err(|error| error.to_string())?;
     fs::write(tmp_dir.join(ANNOTATIONS_FILE_NAME), annotations_json)
         .map_err(|error| error.to_string())?;
+    for (name, content) in extra_files {
+        // The names were validated against a fixed list, so none can name a path.
+        fs::write(tmp_dir.join(name), content).map_err(|error| error.to_string())?;
+    }
     Ok(())
 }
 
@@ -4211,6 +4305,111 @@ mod tests {
         ] {
             assert_eq!(method.units(), "value_units");
         }
+    }
+
+    fn landmark_row(fields: usize) -> String {
+        vec!["0"; fields + 1].join(",")
+    }
+
+    #[test]
+    fn the_landmark_header_is_pinned_so_the_webview_and_this_side_cannot_drift() {
+        let header = hand_landmarks_header();
+        assert_eq!(header.matches(',').count() + 1, 6 + 2 * 21 * 3);
+        assert!(header.starts_with(
+            "frame_index,capture_ms,hand_index,hand_count,model_handedness,score,ix0,iy0,iz0,ix1,"
+        ));
+        assert!(header.ends_with(",wx20,wy20,wz20"));
+        assert_eq!(&header[header.find("wx0").unwrap()..][..11], "wx0,wy0,wz0");
+    }
+
+    #[test]
+    fn optional_evidence_files_must_be_known_well_formed_and_not_oversized() {
+        let header = hand_landmarks_header();
+        let fields = header.matches(',').count();
+        let good = format!(
+            "{header}\n{}\n{}\n",
+            landmark_row(fields),
+            landmark_row(fields)
+        );
+        assert_eq!(validate_extra_file(HAND_LANDMARKS_FILE_NAME, &good), Ok(()));
+        assert_eq!(
+            validate_extra_file(
+                CLOCK_SYNC_FILE_NAME,
+                "watch_timestamp_ns,browser_arrival_ms\n1,2\n3,4\n"
+            ),
+            Ok(())
+        );
+
+        // Not a name a bundle may hold: a path, a script, raw.csv itself.
+        for bad in [
+            "../evil.csv",
+            "raw.csv",
+            "video.mp4",
+            "hand_landmarks.csv/../x",
+            "",
+        ] {
+            assert!(
+                validate_extra_file(bad, &good)
+                    .unwrap_err()
+                    .contains("not a file"),
+                "{bad}"
+            );
+        }
+        assert!(
+            validate_extra_file(HAND_LANDMARKS_FILE_NAME, "")
+                .unwrap_err()
+                .contains("empty")
+        );
+        assert!(
+            validate_extra_file(HAND_LANDMARKS_FILE_NAME, "frame,time\n1,2\n")
+                .unwrap_err()
+                .contains("header")
+        );
+        let short = format!("{header}\n1,2,3\n");
+        assert!(
+            validate_extra_file(HAND_LANDMARKS_FILE_NAME, &short)
+                .unwrap_err()
+                .contains("row 1")
+        );
+        assert!(
+            validate_extra_file(
+                CLOCK_SYNC_FILE_NAME,
+                "watch_timestamp_ns,browser_arrival_ms\n1,2,3\n"
+            )
+            .unwrap_err()
+            .contains("row 1")
+        );
+        let huge = format!(
+            "{CLOCK_SYNC_HEADER}\n{}",
+            "1,2\n".repeat(MAX_EXTRA_FILE_BYTES / 4 + 1)
+        );
+        assert!(
+            validate_extra_file(CLOCK_SYNC_FILE_NAME, &huge)
+                .unwrap_err()
+                .contains("limit")
+        );
+    }
+
+    #[test]
+    fn evidence_files_are_written_with_the_bundle_and_nothing_else_is() {
+        let id = Uuid::new_v4().to_string();
+        let tmp_dir = std::env::temp_dir().join(format!("recording-bundle-extra-{id}"));
+        let extras: BTreeMap<String, String> = [(
+            CLOCK_SYNC_FILE_NAME.to_string(),
+            format!("{CLOCK_SYNC_HEADER}\n1,2\n"),
+        )]
+        .into();
+        write_bundle_with_evidence(
+            &tmp_dir,
+            "timestamp_ns\n1\n",
+            &sample_metadata(&id),
+            &sample_annotations(&id),
+            &extras,
+        )
+        .unwrap();
+        assert!(tmp_dir.join(CLOCK_SYNC_FILE_NAME).exists());
+        assert!(!tmp_dir.join(HAND_LANDMARKS_FILE_NAME).exists());
+        fs::remove_dir_all(&tmp_dir).ok();
     }
 }
 
