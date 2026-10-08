@@ -34,6 +34,14 @@ export function GestureLibraryPage() {
 
   if (editing) {
     return (
+      <main className="shell">
+      <header className="hero">
+        <div>
+          <p className="eyebrow">Spatial Gesture Control</p>
+          <h1>Gesture library</h1>
+          <p className="subtitle">Define gestures from your hand's shape, calibrate them by showing them to the camera, and see them recognised live.</p>
+        </div>
+      </header>
       <Card role="region" aria-label="Edit gesture">
         <CardHeader><SectionHeader title={editing.id ? `Edit “${editing.name}”` : "New gesture"} description="Record it, check the rule, save." /></CardHeader>
         <CardContent>
@@ -52,12 +60,20 @@ export function GestureLibraryPage() {
           />
         </CardContent>
       </Card>
+      </main>
     );
   }
 
   const on = cam.status === "on";
   return (
-    <div className="flex flex-col gap-4">
+    <main className="shell">
+      <header className="hero">
+        <div>
+          <p className="eyebrow">Spatial Gesture Control</p>
+          <h1>Gesture library</h1>
+          <p className="subtitle">Define gestures from your hand's shape, calibrate them by showing them to the camera, and see them recognised live.</p>
+        </div>
+      </header>
       <Card role="region" aria-label="Gesture library">
         <CardHeader>
           <SectionHeader
@@ -114,6 +130,6 @@ export function GestureLibraryPage() {
         </CardContent>
       </Card>
       <AgreementPanel tracker={tracker} definitions={definitions} status={status} cameraOn={on} />
-    </div>
+    </main>
   );
 }
