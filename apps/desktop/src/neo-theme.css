@@ -201,10 +201,17 @@ html[data-theme="neo"] [data-slot="badge"][data-variant="destructive"] { backgro
 html[data-theme="neo"] [data-slot="badge"][data-variant="outline"] { background: var(--surface); }
 
 /* Segmented control: joined blocks, the chosen one yellow. */
-html[data-theme="neo"] .segmented[data-slot="radio-group"] { border: 2.5px solid var(--ink); border-radius: 10px; background: var(--surface); box-shadow: var(--neo-shadow-sm); overflow: hidden; }
-/* The bold type is wider, so a long option wraps instead of running into its neighbour or the edge, and the control grows to fit. */
-html[data-theme="neo"] .segmented[data-slot="radio-group"] { height: auto; min-height: var(--control-h); align-items: stretch; }
-html[data-theme="neo"] .segment { white-space: normal; padding: 0.3rem 0.6rem; line-height: 1.15; align-self: stretch; }
+html[data-theme="neo"] .segmented[data-slot="radio-group"] { border: 2.5px solid var(--ink); border-radius: 10px; background: var(--surface); box-shadow: var(--neo-shadow-sm); }
+/* Not overflow:hidden. Focusing the (absolutely positioned) radio inside a hidden-overflow box scrolls the box in WebKit, which slid the options up and left a gap below them. The end options round their own outer corners instead. */
+html[data-theme="neo"] .segment:first-child { border-radius: 7px 0 0 7px; }
+html[data-theme="neo"] .segment:last-child { border-radius: 0 7px 7px 0; }
+/*
+ * Equal columns in a grid, each option at least as tall as the control, so the coloured block always fills it edge to
+ * edge and the text sits in its middle whatever the engine does with stretching. The bold type is wider than the
+ * original, so a long option wraps (even inside a word if it must) instead of running out of its box.
+ */
+html[data-theme="neo"] .segmented[data-slot="radio-group"] { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); align-items: stretch; height: auto; }
+html[data-theme="neo"] .segment { min-height: calc(var(--control-h) - 5px); min-width: 0; padding: 0.35rem 0.6rem; line-height: 1.15; white-space: normal; overflow-wrap: anywhere; text-wrap: balance; }
 html[data-theme="neo"] .segment { font-weight: 700; text-transform: none; letter-spacing: 0; color: var(--ink); }
 html[data-theme="neo"] .segment + .segment { border-left: 2.5px solid var(--ink); }
 html[data-theme="neo"] .segment:hover { background: #fff0b8; }
