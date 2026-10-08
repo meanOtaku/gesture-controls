@@ -24,7 +24,7 @@ export type RecordingMetadataPayload = {
 };
 
 export type ResolvedBoundary = { raw_row: number; source_timestamp_ns: number };
-export type CreationMechanism = "quick_capture" | "hotkey_hold" | "hotkey_toggle" | "timeline_edit";
+export type CreationMechanism = "quick_capture" | "hotkey_hold" | "hotkey_toggle" | "timeline_edit" | "camera_proposal";
 export type CurationStatus = "unreviewed" | "approved" | "excluded";
 
 /** Mirrors `recording_bundle::AnnotationInterval` and the ADR's `annotations.json` fixture. */
@@ -615,4 +615,26 @@ export async function getRecordingQualitySummary(
     return { status: "error", message: "Recording bundle persistence requires the desktop app" };
   }
   return toResult(invoke<RecordingQualitySummary>("get_recording_quality_summary", { recordingId }));
+}
+
+/** Mirrors `recording_bundle::CameraEvidence`: the camera files of a recording, and its raw rows' watch timestamps. */
+export type CameraEvidenceFiles = { handLandmarks: string; clockSync: string; rawTimestampsNs: number[] };
+
+/** The saved camera evidence of a recording, or null when it was recorded without the camera. */
+export async function getRecordingCameraEvidence(recordingId: string): Promise<RecordingBundleResult<CameraEvidenceFiles | null>> {
+  if (!isTauriDesktop()) {
+    return { status: "error", message: "Recording bundle persistence requires the desktop app" };
+  }
+  return toResult(invoke<CameraEvidenceFiles | null>("get_recording_camera_evidence", { recordingId }));
+}
+
+/** Adds camera-proposed intervals (unreviewed) to a saved recording; the desktop refuses overlaps and out-of-range rows. */
+export async function addCameraProposedIntervals(
+  recordingId: string,
+  intervals: AnnotationInterval[],
+): Promise<RecordingBundleResult<AnnotationInterval[]>> {
+  if (!isTauriDesktop()) {
+    return { status: "error", message: "Recording bundle persistence requires the desktop app" };
+  }
+  return toResult(invoke<AnnotationInterval[]>("add_camera_proposed_intervals", { recordingId, intervals }));
 }

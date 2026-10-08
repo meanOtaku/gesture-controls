@@ -1,4 +1,4 @@
-import { LANDMARK_COUNT, type HandFrame } from "./handTypes";
+import { LANDMARK_COUNT, type HandFrame, type Point3 } from "./handTypes";
 import type { SyncPair } from "./clockSync";
 
 /**
@@ -47,4 +47,53 @@ export function frameToCsvRows(frame: HandFrame): string[] {
 
 export function clockSyncCsv(pairs: SyncPair[]): string {
   return [CLOCK_SYNC_HEADER, ...pairs.map((pair) => `${Math.round(pair.watchTimestampNs)},${pair.browserArrivalMs.toFixed(3)}`)].join("\n");
+}
+
+/** Reads `hand_landmarks.csv` back into frames. Rows that do not parse are skipped, so a damaged line costs one hand, not the file. */
+export function parseHandLandmarks(text: string): HandFrame[] {
+  const frames = new Map<number, HandFrame>();
+  const lines = text.split("\n");
+  for (let i = 1; i < lines.length; i += 1) {
+    const f = lines[i].trim().split(",");
+    if (f.length !== FIELD_COUNT) continue;
+    const frameIndex = Number(f[0]);
+    const captureMs = Number(f[1]);
+    if (!Number.isFinite(frameIndex) || !Number.isFinite(captureMs)) continue;
+    let frame = frames.get(frameIndex);
+    if (!frame) {
+      frame = { frameIndex, captureMs, hands: [] };
+      frames.set(frameIndex, frame);
+    }
+    if (f[2] === "") continue; // a frame with no hand
+    const handedness = f[4];
+    if (handedness !== "Left" && handedness !== "Right") continue;
+    const read = (offset: number): Point3[] | null => {
+      const points: Point3[] = [];
+      for (let k = 0; k < LANDMARK_COUNT; k += 1) {
+        const x = Number(f[offset + k * 3]);
+        const y = Number(f[offset + k * 3 + 1]);
+        const z = Number(f[offset + k * 3 + 2]);
+        if (![x, y, z].every(Number.isFinite) || f[offset + k * 3] === "") return null;
+        points.push({ x, y, z });
+      }
+      return points;
+    };
+    const image = read(6);
+    const world = read(6 + LANDMARK_COUNT * 3);
+    const score = Number(f[5]);
+    if (image && world && Number.isFinite(score)) frame.hands.push({ modelHandedness: handedness, score, image, world });
+  }
+  return [...frames.values()].sort((a, b) => a.captureMs - b.captureMs);
+}
+
+/** Reads `clock_sync.csv`; unreadable lines are skipped. */
+export function parseClockSync(text: string): SyncPair[] {
+  const pairs: SyncPair[] = [];
+  for (const line of text.split("\n").slice(1)) {
+    const [watch, arrival] = line.trim().split(",");
+    const watchTimestampNs = Number(watch);
+    const browserArrivalMs = Number(arrival);
+    if (watch && arrival && Number.isFinite(watchTimestampNs) && Number.isFinite(browserArrivalMs)) pairs.push({ watchTimestampNs, browserArrivalMs });
+  }
+  return pairs;
 }

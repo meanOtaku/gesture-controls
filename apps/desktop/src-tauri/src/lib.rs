@@ -218,6 +218,8 @@ pub fn run() {
             recording_bundle::get_compact_observation_window,
             recording_bundle::get_recording_quality_summary,
             recording_bundle::set_interval_curation_status,
+            recording_bundle::get_recording_camera_evidence,
+            recording_bundle::add_camera_proposed_intervals,
             gesture_library::list_gesture_definitions,
             gesture_library::save_gesture_definition,
             gesture_library::delete_gesture_definition,

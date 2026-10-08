@@ -166,6 +166,8 @@ pub enum CreationMechanism {
     HotkeyHold,
     HotkeyToggle,
     TimelineEdit,
+    /// Found by running a calibrated camera gesture over the saved hand landmarks; awaits review like any other.
+    CameraProposal,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -2570,6 +2572,123 @@ pub fn set_interval_curation_status(
     Ok(updated)
 }
 
+/// What the camera saw during a recording, and the watch clock's raw timestamps to line it up with.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CameraEvidence {
+    pub hand_landmarks: String,
+    pub clock_sync: String,
+    /// `timestamp_ns` of every raw row, in order.
+    pub raw_timestamps_ns: Vec<i64>,
+}
+
+fn raw_timestamps(raw_csv: &str) -> Result<Vec<i64>, String> {
+    raw_csv
+        .lines()
+        .skip(1)
+        .filter(|line| !line.is_empty())
+        .map(|line| {
+            line.split(',')
+                .next()
+                .and_then(|field| field.parse::<i64>().ok())
+                .ok_or_else(|| "raw.csv has a row without a numeric timestamp".to_string())
+        })
+        .collect()
+}
+
+/// The saved camera evidence of one recording, or `None` when it was recorded without the camera.
+#[tauri::command]
+pub fn get_recording_camera_evidence(
+    recording_id: String,
+    app: AppHandle,
+) -> Result<Option<CameraEvidence>, String> {
+    validate_recording_id(&recording_id)?;
+    let dir = recording_bundles_dir(&app)?.join(&recording_id);
+    let Ok(hand_landmarks) = fs::read_to_string(dir.join(HAND_LANDMARKS_FILE_NAME)) else {
+        return Ok(None);
+    };
+    let clock_sync = fs::read_to_string(dir.join(CLOCK_SYNC_FILE_NAME)).unwrap_or_default();
+    let raw = fs::read_to_string(dir.join(RAW_CSV_FILE_NAME)).map_err(|error| error.to_string())?;
+    Ok(Some(CameraEvidence {
+        hand_landmarks,
+        clock_sync,
+        raw_timestamps_ns: raw_timestamps(&raw)?,
+    }))
+}
+
+/// Checks camera-proposed intervals against what the recording already holds, and returns the combined list.
+/// Each must be a fresh, unreviewed `camera_proposal`, lie inside the raw rows, and overlap neither an existing
+/// interval nor another proposal (the ADR's no-overlap rule); one bad interval refuses the whole batch.
+fn merge_proposed_intervals(
+    existing: &[AnnotationInterval],
+    proposed: &[AnnotationInterval],
+    row_count: usize,
+) -> Result<Vec<AnnotationInterval>, String> {
+    let mut all: Vec<AnnotationInterval> = existing.to_vec();
+    for interval in proposed {
+        if interval.creation_mechanism != CreationMechanism::CameraProposal
+            || interval.curation_status != CurationStatus::Unreviewed
+            || interval.revision != 1
+        {
+            return Err("only new, unreviewed camera proposals can be added this way".into());
+        }
+        if interval.interval_id.is_empty()
+            || all.iter().any(|a| a.interval_id == interval.interval_id)
+        {
+            return Err("interval ids must be non-empty and unique".into());
+        }
+        if interval.label_id.trim().is_empty() {
+            return Err("a proposed interval needs a label".into());
+        }
+        let (start, end) = (
+            interval.resolved_start.raw_row,
+            interval.resolved_end.raw_row,
+        );
+        if start > end || end >= row_count {
+            return Err(format!(
+                "a proposed interval ({start}..={end}) lies outside the {row_count} rows"
+            ));
+        }
+        if interval.requested_start_monotonic_ns > interval.requested_end_monotonic_ns {
+            return Err("a proposed interval ends before it starts".into());
+        }
+        if all
+            .iter()
+            .any(|a| start <= a.resolved_end.raw_row && a.resolved_start.raw_row <= end)
+        {
+            return Err(format!(
+                "a proposed interval (rows {start}..={end}) overlaps one already there"
+            ));
+        }
+        all.push(interval.clone());
+    }
+    Ok(all)
+}
+
+/// Adds camera-proposed intervals to a saved recording (they start unreviewed). `raw.csv` is never touched; only
+/// `annotations.json` is rewritten, atomically.
+#[tauri::command]
+pub fn add_camera_proposed_intervals(
+    recording_id: String,
+    intervals: Vec<AnnotationInterval>,
+    app: AppHandle,
+) -> Result<Vec<AnnotationInterval>, String> {
+    validate_recording_id(&recording_id)?;
+    let dir = recording_bundles_dir(&app)?.join(&recording_id);
+    let (recording, annotations) = load_bundle_pair(&dir)?;
+    let merged =
+        merge_proposed_intervals(&annotations.intervals, &intervals, recording.raw_row_count)?;
+    let updated = AnnotationsFile {
+        intervals: merged.clone(),
+        ..annotations
+    };
+    let json = serde_json::to_string_pretty(&updated).map_err(|error| error.to_string())?;
+    let tmp_path = dir.join(format!("{ANNOTATIONS_FILE_NAME}.tmp"));
+    fs::write(&tmp_path, json).map_err(|error| error.to_string())?;
+    fs::rename(&tmp_path, dir.join(ANNOTATIONS_FILE_NAME)).map_err(|error| error.to_string())?;
+    Ok(merged)
+}
+
 fn write_bundle_files(
     tmp_dir: &std::path::Path,
     raw_csv: &str,
@@ -2777,6 +2896,79 @@ mod tests {
         assert_eq!(parsed.recording_id, id);
         assert_eq!(parsed.stop_reason, StopReason::ManualStop);
         fs::remove_dir_all(&tmp_dir).ok();
+    }
+
+    fn proposal(id: &str, start: usize, end: usize) -> AnnotationInterval {
+        AnnotationInterval {
+            interval_id: id.to_string(),
+            label_id: "pinch".to_string(),
+            requested_start_monotonic_ns: start as i64 * 1000,
+            requested_end_monotonic_ns: end as i64 * 1000,
+            resolved_start: ResolvedBoundary {
+                raw_row: start,
+                source_timestamp_ns: start as i64 * 1000,
+            },
+            resolved_end: ResolvedBoundary {
+                raw_row: end,
+                source_timestamp_ns: end as i64 * 1000,
+            },
+            resolution_rule_version: 1,
+            creation_mechanism: CreationMechanism::CameraProposal,
+            curation_status: CurationStatus::Unreviewed,
+            created_at: "2026-10-09T10:00:00Z".to_string(),
+            revision: 1,
+        }
+    }
+
+    #[test]
+    fn camera_proposals_are_merged_only_when_valid_and_not_overlapping() {
+        let existing = vec![proposal("a", 10, 20)];
+        let merged = merge_proposed_intervals(
+            &existing,
+            &[proposal("b", 21, 30), proposal("c", 40, 50)],
+            100,
+        )
+        .unwrap();
+        assert_eq!(merged.len(), 3);
+        // Touching an existing interval's last row overlaps it.
+        assert!(
+            merge_proposed_intervals(&existing, &[proposal("b", 20, 30)], 100)
+                .unwrap_err()
+                .contains("overlaps")
+        );
+        // Two proposals may not overlap each other either.
+        assert!(
+            merge_proposed_intervals(&[], &[proposal("b", 1, 5), proposal("c", 5, 9)], 100)
+                .is_err()
+        );
+        assert!(
+            merge_proposed_intervals(&existing, &[proposal("b", 90, 100)], 100)
+                .unwrap_err()
+                .contains("outside")
+        );
+        assert!(
+            merge_proposed_intervals(&existing, &[proposal("a", 40, 50)], 100)
+                .unwrap_err()
+                .contains("unique")
+        );
+        let mut approved = proposal("b", 40, 50);
+        approved.curation_status = CurationStatus::Approved;
+        assert!(merge_proposed_intervals(&existing, &[approved], 100).is_err());
+        let mut manual = proposal("b", 40, 50);
+        manual.creation_mechanism = CreationMechanism::TimelineEdit;
+        assert!(merge_proposed_intervals(&existing, &[manual], 100).is_err());
+        let mut unlabeled = proposal("b", 40, 50);
+        unlabeled.label_id = " ".into();
+        assert!(merge_proposed_intervals(&existing, &[unlabeled], 100).is_err());
+    }
+
+    #[test]
+    fn raw_timestamps_are_read_from_the_first_column() {
+        assert_eq!(
+            raw_timestamps("timestamp_ns,sequence\n100,1\n250,2\n").unwrap(),
+            vec![100, 250]
+        );
+        assert!(raw_timestamps("timestamp_ns\nabc,1\n").is_err());
     }
 
     #[test]

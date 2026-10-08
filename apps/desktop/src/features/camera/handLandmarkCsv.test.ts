@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clockSyncCsv, frameToCsvRows, handLandmarksHeader } from "./handLandmarkCsv";
+import { clockSyncCsv, frameToCsvRows, handLandmarksHeader, parseClockSync, parseHandLandmarks } from "./handLandmarkCsv";
 import type { HandFrame, Point3, TrackedHand } from "./handTypes";
 
 const points = (base: number): Point3[] => Array.from({ length: 21 }, (_, i) => ({ x: base + i / 1000, y: base + i / 100, z: -i / 10000 }));
@@ -45,5 +45,27 @@ describe("hand landmark CSV", () => {
   it("writes the clock pairs", () => {
     expect(clockSyncCsv([{ watchTimestampNs: 1500.4, browserArrivalMs: 20.12345 }])).toBe("watch_timestamp_ns,browser_arrival_ms\n1500,20.123");
     expect(clockSyncCsv([])).toBe("watch_timestamp_ns,browser_arrival_ms");
+  });
+
+  it("reads back what it wrote, including a frame with no hand, and skips a damaged line", () => {
+    const frames: HandFrame[] = [
+      { frameIndex: 0, captureMs: 100, hands: [hand("Left")] },
+      { frameIndex: 1, captureMs: 133.333, hands: [] },
+      { frameIndex: 2, captureMs: 166.667, hands: [hand("Right"), hand("Left")] },
+    ];
+    const text = [handLandmarksHeader(), ...frames.flatMap(frameToCsvRows), "garbage,line"].join("\n");
+    const back = parseHandLandmarks(text);
+    expect(back.map((f) => [f.frameIndex, f.hands.length])).toEqual([[0, 1], [1, 0], [2, 2]]);
+    expect(back[0].hands[0].modelHandedness).toBe("Left");
+    expect(back[0].hands[0].score).toBeCloseTo(0.9123, 4);
+    expect(back[0].hands[0].image[3].x).toBeCloseTo(0.503, 4);
+    expect(back[2].hands[1].world[20].z).toBeCloseTo(-0.002, 4);
+    expect(back[1].captureMs).toBeCloseTo(133.333, 3);
+  });
+
+  it("reads clock pairs back", () => {
+    const pairs = [{ watchTimestampNs: 5_000_000_000, browserArrivalMs: 1234.5 }, { watchTimestampNs: 5_200_000_000, browserArrivalMs: 1434.5 }];
+    expect(parseClockSync(clockSyncCsv(pairs))).toEqual(pairs);
+    expect(parseClockSync("watch_timestamp_ns,browser_arrival_ms\nx,y\n")).toEqual([]);
   });
 });

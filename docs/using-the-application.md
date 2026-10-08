@@ -188,6 +188,14 @@ Two capture modes share this same Arming/timer behavior and the same immutable-r
 5. Capture more than one session (separate Start/Stop recordings) rather than one very long one — training holds out whole sessions, so one session can't cover evaluation by itself.
 6. Before exporting, check the quality summary and timeline intervals — fix mislabeled or too-short intervals, then export.
 
+#### Label from the camera (Recordings)
+
+At the top of **Recordings**, **Label from the camera** runs your Gesture library over a recording's saved hand landmarks. Pick a recording made with the camera on, choose **Find gestures**, tick the holds you want and add them. Each becomes a label interval on the watch data, using the label the gesture is linked to, and starts **unreviewed** like any other interval.
+
+- The camera and the watch have separate clocks. They are lined up from clock samples saved with the recording, and the panel shows how closely (the link's jitter). The labelled rows are never more exact than that.
+- A gesture with no label, a recording with no camera data or too few clock samples, and a proposal that overlaps an interval already in the recording are each skipped or refused, with the reason shown.
+- Quick-capture recordings carry one label over the whole recording, so a proposal there overlaps it and cannot be added. Camera proposals are for timeline recordings or ones with room between intervals.
+
 #### Raw image viewer (Recordings)
 
 The **Recordings** tab gives a read-only visual inspection of one numeric raw-data column from a saved recording's `raw.csv`. Choose a square grid size — any multiple of 4 from 4×4 through 64×64 (default 64×64) — and each frame reshapes exactly `N × N` chronological raw rows into an `N × N` image (pixel left-to-right, then top-to-bottom, in raw-row order); the slider and prev/next controls move in `N`-row hops, and the far end of a recording is always reachable even if it isn't hop-aligned. Changing the grid size realigns the current position to the new hop and reloads the frame. A missing raw field renders in a distinct color from "beyond the end of this recording," and neither is ever filled in with replacement data. Recording-scale normalization (the default) and an explicitly labeled per-frame-scale alternative are pure rendering choices over the already-loaded frame. Hover or use arrow keys to inspect a pixel's raw row, timestamp, value, and null state.
