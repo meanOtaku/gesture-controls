@@ -6,7 +6,7 @@ import { telemetryStore, EMPTY_WATCH_STATUS } from "../features/telemetry/store/
 const { invoke, listen, renders } = vi.hoisted(() => ({
   invoke: vi.fn(),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
-  renders: { modelLab: 0, liveTelemetry: 0, recipes: 0, devices: 0, gestures: 0 },
+  renders: { modelLab: 0, signals: 0, recorder: 0, recordings: 0, recipes: 0, devices: 0, gestures: 0 },
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
@@ -19,10 +19,22 @@ vi.mock("../features/model-lab/components/ModelLab", () => ({
     return <div>model lab body</div>;
   },
 }));
-vi.mock("../features/telemetry/components/LiveTelemetry", () => ({
-  LiveTelemetry: () => {
-    renders.liveTelemetry += 1;
-    return <div>live telemetry body</div>;
+vi.mock("../features/telemetry/components/LiveSignalsPage", () => ({
+  LiveSignalsPage: () => {
+    renders.signals += 1;
+    return <div>signals body</div>;
+  },
+}));
+vi.mock("../features/telemetry/components/RecorderPage", () => ({
+  RecorderPage: () => {
+    renders.recorder += 1;
+    return <div>recorder body</div>;
+  },
+}));
+vi.mock("../features/telemetry/components/RecordingsPage", () => ({
+  RecordingsPage: () => {
+    renders.recordings += 1;
+    return <div>recordings body</div>;
   },
 }));
 
@@ -49,7 +61,9 @@ beforeEach(() => {
   telemetryStore.reset();
   Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
   renders.modelLab = 0;
-  renders.liveTelemetry = 0;
+  renders.signals = 0;
+  renders.recorder = 0;
+  renders.recordings = 0;
   renders.recipes = 0;
   renders.devices = 0;
   renders.gestures = 0;
@@ -87,18 +101,22 @@ describe("idle tabs are not re-rendered by telemetry publishes", () => {
     expect(renders.modelLab).toBe(afterMount);
   });
 
-  it("Live data renders once from the parent's side too (it subscribes to the store itself)", async () => {
+  it.each([
+    ["Live signals", "signals body", "signals"],
+    ["Recorder", "recorder body", "recorder"],
+    ["Recordings", "recordings body", "recordings"],
+  ] as const)("%s renders once from the parent's side (it subscribes to the store itself)", async (tab, body, counter) => {
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: "Live data" }));
-    await waitFor(() => expect(screen.getByText("live telemetry body")).toBeInTheDocument());
-    const afterMount = renders.liveTelemetry;
+    fireEvent.click(screen.getByRole("button", { name: tab }));
+    await waitFor(() => expect(screen.getByText(body)).toBeInTheDocument());
+    const afterMount = renders[counter];
 
     await publish(5);
 
-    expect(renders.liveTelemetry).toBe(afterMount);
+    expect(renders[counter]).toBe(afterMount);
   });
 
-  // These three take props from the parent, so they are only skipped while every prop keeps its identity: a new inline
+  // These take props from the parent, so they are only skipped while every prop keeps its identity: a new inline
   // function per render would make the memo useless and put them back at ~15 renders a second.
   it.each([
     ["Recipes", "recipes body", "recipes"],

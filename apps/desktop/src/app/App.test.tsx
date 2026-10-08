@@ -90,7 +90,7 @@ describe("App overlay integration", () => {
         irStatus: [0, 0],
       },
     }));
-    fireEvent.click(screen.getByRole("button", { name: "Live data" }));
+    fireEvent.click(screen.getByRole("button", { name: "Live signals" }));
     await waitFor(
       () => expect(screen.getAllByText("2 samples").length).toBeGreaterThan(0),
       { timeout: 5000 },
@@ -110,7 +110,7 @@ describe("App overlay integration", () => {
         irStatus: [0],
       },
     }));
-    fireEvent.click(screen.getByRole("button", { name: "Live data" }));
+    fireEvent.click(screen.getByRole("button", { name: "Live signals" }));
     await waitFor(
       () => expect(screen.getAllByText("3 samples").length).toBeGreaterThan(0),
       { timeout: 5000 },

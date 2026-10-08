@@ -6,6 +6,7 @@ import { AppNav, navStatuses, type AppTab } from "./components/AppNav";
 import { OperationFeedback } from "../components/app/OperationFeedback";
 import { Skeleton } from "../components/ui/skeleton";
 import { SidebarInset, SidebarProvider } from "../components/ui/sidebar";
+import { RecordingTimer } from "../features/telemetry/recording/RecordingTimer";
 import { telemetryStore } from "../features/telemetry/store/telemetryStore";
 import { usePendingActions } from "../shared/hooks/usePendingActions";
 import { useStableCallback } from "../shared/hooks/useStableCallback";
@@ -73,10 +74,12 @@ const Dashboard = lazy(() => import("../features/dashboard/components/Dashboard"
 // between publishes (state, or `useStableCallback`), or the memo does nothing.
 // `MainApp` re-renders on every telemetry publish (~15 Hz while a watch streams). These two
 // tabs take no props, so `memo` lets React skip them when only the parent changed;
-// Live data still updates itself through its own store subscription, and Model Lab shows
+// The capture pages still update themselves through their own store subscription, and Model Lab shows
 // nothing that the telemetry store drives. Without it the whole Model Lab tree (datasets,
 // registry, lifecycle controls) re-rendered 15 times a second while merely open.
-const LiveTelemetry = memo(lazy(() => import("../features/telemetry/components/LiveTelemetry").then((m) => ({ default: m.LiveTelemetry }))));
+const LiveSignalsPage = memo(lazy(() => import("../features/telemetry/components/LiveSignalsPage").then((m) => ({ default: m.LiveSignalsPage }))));
+const RecorderPage = memo(lazy(() => import("../features/telemetry/components/RecorderPage").then((m) => ({ default: m.RecorderPage }))));
+const RecordingsPage = memo(lazy(() => import("../features/telemetry/components/RecordingsPage").then((m) => ({ default: m.RecordingsPage }))));
 const ModelLab = memo(lazy(() => import("../features/model-lab/components/ModelLab").then((m) => ({ default: m.ModelLab }))));
 const RecipesPage = memo(lazy(() => import("../features/recipes/components/RecipesPage").then((m) => ({ default: m.RecipesPage }))));
 const GesturesPage = memo(lazy(() => import("../features/gestures/components/GesturesPage").then((m) => ({ default: m.GesturesPage }))));
@@ -594,6 +597,7 @@ function MainApp() {
     .join(" · ") || null;
 
   return <SidebarProvider>
+    <RecordingTimer />
     <AppNav
       activeTab={activeTab}
       onSelect={setActiveTab}
@@ -696,9 +700,9 @@ function MainApp() {
         onOpenSettings={openSettings}
       />
     )}
-    {activeTab === "telemetry" && (
-      <LiveTelemetry />
-    )}
+    {activeTab === "signals" && <LiveSignalsPage />}
+    {activeTab === "recorder" && <RecorderPage />}
+    {activeTab === "recordings" && <RecordingsPage />}
     {activeTab === "modelLab" && (
       <ModelLab />
     )}

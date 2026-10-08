@@ -1,4 +1,4 @@
-import { Activity, Brain, Hand, Headphones, Radar, LayoutDashboard, Settings as SettingsIcon, SlidersHorizontal, Watch, Workflow } from "lucide-react";
+import { Activity, Brain, CircleDot, FolderOpen, Hand, Headphones, Radar, LayoutDashboard, Settings as SettingsIcon, SlidersHorizontal, Watch, Workflow } from "lucide-react";
 import { useEffect } from "react";
 import {
   Sidebar,
@@ -14,7 +14,7 @@ import {
   SidebarRail,
 } from "../../components/ui/sidebar";
 
-export type AppTab = "main" | "headphone" | "watch" | "recipes" | "devices" | "gestures" | "telemetry" | "modelLab" | "settings";
+export type AppTab = "main" | "headphone" | "watch" | "recipes" | "devices" | "gestures" | "signals" | "recorder" | "recordings" | "modelLab" | "settings";
 
 type NavItem = { id: AppTab; label: string; icon: typeof LayoutDashboard };
 
@@ -28,14 +28,16 @@ const AUTOMATION: NavItem[] = [
   { id: "devices", label: "Virtual devices", icon: SlidersHorizontal },
   { id: "gestures", label: "Gestures", icon: Radar },
 ];
-const DATA: NavItem[] = [
-  { id: "telemetry", label: "Live data", icon: Activity },
-  { id: "modelLab", label: "Model Lab", icon: Brain },
+const CAPTURE: NavItem[] = [
+  { id: "signals", label: "Live signals", icon: Activity },
+  { id: "recorder", label: "Recorder", icon: CircleDot },
+  { id: "recordings", label: "Recordings", icon: FolderOpen },
 ];
+const MODELS: NavItem[] = [{ id: "modelLab", label: "Model Lab", icon: Brain }];
 const SETTINGS: NavItem = { id: "settings", label: "Settings", icon: SettingsIcon };
 
-/** Display order, which is also what Cmd/Ctrl+1..9 select. */
-export const NAV_ORDER: AppTab[] = [MAIN, ...DEVICES, ...AUTOMATION, ...DATA, SETTINGS].map((item) => item.id);
+/** Display order. Cmd/Ctrl+1..9 select the first nine; Settings is also Cmd/Ctrl+, (the usual place for it). */
+export const NAV_ORDER: AppTab[] = [MAIN, ...DEVICES, ...AUTOMATION, ...CAPTURE, ...MODELS, SETTINGS].map((item) => item.id);
 
 export type NavTone = "ok" | "warn" | "live" | "idle";
 export interface NavStatus { tone: NavTone; label: string }
@@ -59,12 +61,17 @@ export function navStatuses(input: NavStatusInput): Partial<Record<AppTab, NavSt
   return {
     headphone: input.headphonesConnected ? { tone: "ok", label: "connected" } : { tone: "idle", label: "not connected" },
     watch,
-    ...(recording ? { telemetry: { tone: "live", label: "recording" } as NavStatus } : {}),
+    ...(recording ? { recorder: { tone: "live", label: "recording" } as NavStatus } : {}),
   };
 }
 
 const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
-const shortcutHint = (index: number) => `${isMac() ? "⌘" : "Ctrl+"}${index + 1}`;
+const SHORTCUT_COUNT = 9;
+/** The shortcut for a tab, or null when it has none (only the first nine are numbered; Settings has its own). */
+export function shortcutFor(tab: AppTab): string | null {
+  const key = tab === "settings" ? "," : NAV_ORDER.indexOf(tab) < SHORTCUT_COUNT ? String(NAV_ORDER.indexOf(tab) + 1) : null;
+  return key === null ? null : `${isMac() ? "⌘" : "Ctrl+"}${key}`;
+}
 
 type AppNavProps = {
   activeTab: AppTab;
@@ -72,14 +79,19 @@ type AppNavProps = {
   statuses?: Partial<Record<AppTab, NavStatus>>;
 };
 
-/** Primary navigation: Main, then Devices, Automation and Data, with Settings pinned at the bottom. */
+/** Primary navigation: Main, then Devices, Automation, Capture and Models, with Settings pinned at the bottom. */
 export function AppNav({ activeTab, onSelect, statuses = {} }: AppNavProps) {
-  // Cmd/Ctrl + 1..9 jumps to a tab. A modified digit is never text, so it is safe inside a field too.
+  // Cmd/Ctrl + 1..9 jumps to a tab, and Cmd/Ctrl + , to Settings. A modified key is never text, so it is safe inside a field too.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      if (event.key === ",") {
+        event.preventDefault();
+        onSelect("settings");
+        return;
+      }
       const index = Number(event.key) - 1;
-      if (Number.isInteger(index) && index >= 0 && index < NAV_ORDER.length) {
+      if (Number.isInteger(index) && index >= 0 && index < Math.min(SHORTCUT_COUNT, NAV_ORDER.length)) {
         event.preventDefault();
         onSelect(NAV_ORDER[index]);
       }
@@ -97,7 +109,7 @@ export function AppNav({ activeTab, onSelect, statuses = {} }: AppNavProps) {
           isActive={activeTab === id}
           aria-current={activeTab === id ? "page" : undefined}
           aria-describedby={status ? `nav-status-${id}` : undefined}
-          tooltip={`${label} (${shortcutHint(NAV_ORDER.indexOf(id))})`}
+          tooltip={shortcutFor(id) ? `${label} (${shortcutFor(id)})` : label}
           onClick={() => onSelect(id)}
         >
           <Icon />
@@ -140,9 +152,15 @@ export function AppNav({ activeTab, onSelect, statuses = {} }: AppNavProps) {
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
-          <SidebarGroupLabel>Data</SidebarGroupLabel>
+          <SidebarGroupLabel>Capture</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>{DATA.map(entry)}</SidebarMenu>
+            <SidebarMenu>{CAPTURE.map(entry)}</SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Models</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>{MODELS.map(entry)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

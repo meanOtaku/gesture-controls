@@ -2,6 +2,7 @@ import { renderHook } from "@testing-library/react";
 import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useTelemetryExport } from "./useTelemetryExport";
+import { exportFolderStore } from "../store/exportFolderStore";
 import { telemetryStore } from "../store/telemetryStore";
 import { resetFeedbackForTests } from "../../../components/app/OperationFeedback";
 
@@ -14,6 +15,7 @@ vi.mock("../../../shared/tauri/exportCsv", () => ({ exportCsvToFolder, chooseExp
 
 beforeEach(() => {
   telemetryStore.reset();
+  exportFolderStore.reset();
   exportCsvToFolder.mockReset();
   chooseExportFolder.mockReset();
   isTauriDesktop.mockReturnValue(false);
@@ -55,5 +57,15 @@ describe("useTelemetryExport", () => {
 
     await act(() => result.current.exportDatasetCsv());
     expect(exportCsvToFolder).toHaveBeenCalledWith(expect.objectContaining({ folder: "/Users/test/datasets" }));
+  });
+
+  it("keeps the chosen export folder when the page that chose it goes away, and shares it with other users of the hook", async () => {
+    chooseExportFolder.mockResolvedValue("/exports");
+    const first = renderHook(() => useTelemetryExport());
+    await act(() => first.result.current.chooseDatasetExportFolder());
+    expect(first.result.current.datasetExportFolder).toBe("/exports");
+    first.unmount();
+    const second = renderHook(() => useTelemetryExport());
+    expect(second.result.current.datasetExportFolder).toBe("/exports");
   });
 });

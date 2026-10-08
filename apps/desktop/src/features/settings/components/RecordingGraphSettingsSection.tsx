@@ -9,7 +9,7 @@ export function RecordingGraphSettingsSection() {
       <CardHeader>
         <SectionHeader
           title="Recording & graph"
-          description="Live data"
+          description="Live signals and the recorder"
           help={{
             label: "About recording and graph rates",
             content: "Recording rate controls how many samples per second land in the CSV capture buffer, per channel. Graph refresh rate only controls how often the live charts redraw and does not affect what gets saved.",

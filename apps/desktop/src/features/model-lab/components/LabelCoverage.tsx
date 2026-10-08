@@ -88,7 +88,7 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
           }
           help={{
             label: "About labels",
-            content: "A label names one thing a model should recognise, such as snap_fingers. Create it here, then record it on the Live data tab using the same name, and import the recording. A model is tested on whole recordings it never saw, so each label needs at least two. A label that recordings or models use can be archived but not deleted.",
+            content: "A label names one thing a model should recognise, such as snap_fingers. Create it here, then record it on the Recorder tab using the same name, and import the recording. A model is tested on whole recordings it never saw, so each label needs at least two. A label that recordings or models use can be archived but not deleted.",
           }}
         />
       </CardHeader>
@@ -99,7 +99,7 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
               <div className="field-head"><Label htmlFor={`${uid}-name`}>Name</Label></div>
               <Input id={`${uid}-name`} value={name} maxLength={80} placeholder="e.g. Snap fingers" autoFocus onChange={(event) => setName(event.target.value)} />
               <p className={problem ? "field-error" : "field-hint"} role={problem ? "alert" : undefined}>
-                {problem ?? (id ? `Its id will be ${id}. Record it on the Live data tab under that id.` : "A short name for the gesture or activity.")}
+                {problem ?? (id ? `Its id will be ${id}. Record it on the Recorder tab under that id.` : "A short name for the gesture or activity.")}
               </p>
             </div>
             <div className="field">

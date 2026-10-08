@@ -44,8 +44,8 @@ Follow this order rather than enabling every feature at once:
 
 1. **Headphones:** connect Sony tracking and capture the center and top-right calibration targets.
 2. **Watch:** confirm connection, raw orientation, and any enabled health-sensor state.
-3. **Live data:** make a short ordinary CSV capture to verify incoming telemetry.
-4. **Live data:** record several labeled sessions for each intended gesture and non-gesture/background activity; export one dataset CSV per session.
+3. **Live signals:** check that the watch's streams are arriving.
+4. **Recorder:** record several labeled sessions for each intended gesture and non-gesture/background activity; export one dataset CSV per session.
 5. **Model Lab:** import sessions, check label coverage, train a TFLite model, inspect evaluation, and configure safe class bindings.
 6. **Model Lab:** promote the model through the lifecycle, activate it, and run offline replay.
 7. **Model Lab:** use **Monitor** mode with live telemetry. It records decisions but cannot operate desktop controls.
@@ -122,13 +122,19 @@ The **Watch** tab is the Watch connection and sensor-control dashboard.
 
 If a sensor is unavailable, treat that as a device capability or permission state—not a successful inference input. Low-quality, stale, malformed, or disconnected sensor data fails closed and releases any active interaction.
 
-### Live data
+### Capture: Live signals, Recorder and Recordings
 
-The **Live data** tab is the telemetry viewer and recorder.
+The capture tools are three tabs in the **Capture** group of the sidebar, in the order you use them:
+
+- **Live signals** shows what the sensors are sending right now (the charts below). Use it to check a stream, not to record one.
+- **Recorder** records a session from the watch and exports it. A timed capture still stops and exports by itself if you switch to another tab while it runs, and the export folder you chose stays chosen when you leave the page.
+- **Recordings** looks inside saved sessions (currently the raw image viewer).
+
+The sidebar marks **Recorder** while a recording is running. Cmd/Ctrl+1 to 9 open the first nine tabs, and Cmd/Ctrl+comma opens Settings.
 
 #### Live charts
 
-It visualizes available raw streams, including:
+**Live signals** visualizes available raw streams, including:
 
 - Headphone yaw, pitch, and roll.
 - Watch orientation (from the watch's rotation-vector sensor).
@@ -138,11 +144,11 @@ It visualizes available raw streams, including:
 
 Chart visibility follows the enabled/streaming state of the corresponding sensor.
 
-#### Ordinary CSV capture
+#### Ordinary CSV capture (Recorder)
 
 Use **Start recording** / **Stop recording** for a general telemetry capture, then choose **Save CSV**. This exports buffered incoming rows with source timestamps and sequences. The tab shows buffer usage; when the cap is reached, the oldest ordinary-capture rows are dropped.
 
-#### Labeled dataset recorder
+#### Labeled dataset recorder (Recorder)
 
 Use this for model training data. It records a separate, labeled session distinct from the ordinary CSV capture above, and it never includes data you were already looking at before you pressed Start.
 
@@ -174,9 +180,9 @@ Two capture modes share this same Arming/timer behavior and the same immutable-r
 5. Capture more than one session (separate Start/Stop recordings) rather than one very long one — training holds out whole sessions, so one session can't cover evaluation by itself.
 6. Before exporting, check the quality summary and timeline intervals — fix mislabeled or too-short intervals, then export.
 
-#### Raw image viewer
+#### Raw image viewer (Recordings)
 
-This tab gives a read-only visual inspection of one numeric raw-data column from a saved recording's `raw.csv`. Choose a square grid size — any multiple of 4 from 4×4 through 64×64 (default 64×64) — and each frame reshapes exactly `N × N` chronological raw rows into an `N × N` image (pixel left-to-right, then top-to-bottom, in raw-row order); the slider and prev/next controls move in `N`-row hops, and the far end of a recording is always reachable even if it isn't hop-aligned. Changing the grid size realigns the current position to the new hop and reloads the frame. A missing raw field renders in a distinct color from "beyond the end of this recording," and neither is ever filled in with replacement data. Recording-scale normalization (the default) and an explicitly labeled per-frame-scale alternative are pure rendering choices over the already-loaded frame. Hover or use arrow keys to inspect a pixel's raw row, timestamp, value, and null state.
+The **Recordings** tab gives a read-only visual inspection of one numeric raw-data column from a saved recording's `raw.csv`. Choose a square grid size — any multiple of 4 from 4×4 through 64×64 (default 64×64) — and each frame reshapes exactly `N × N` chronological raw rows into an `N × N` image (pixel left-to-right, then top-to-bottom, in raw-row order); the slider and prev/next controls move in `N`-row hops, and the far end of a recording is always reachable even if it isn't hop-aligned. Changing the grid size realigns the current position to the new hop and reloads the frame. A missing raw field renders in a distinct color from "beyond the end of this recording," and neither is ever filled in with replacement data. Recording-scale normalization (the default) and an explicitly labeled per-frame-scale alternative are pure rendering choices over the already-loaded frame. Hover or use arrow keys to inspect a pixel's raw row, timestamp, value, and null state.
 
 The same selected window renders as two images side by side (stacked on narrow layouts): a grayscale image (black = low, white = high) and a rainbow false-colour image (red = low through the spectrum to violet = high). Both share the same grid, navigation position, and normalization mode; the color mode is a second pure rendering choice, like normalization, and is not a channel-mapping or multi-sensor composite. Missing-value and beyond-recording fills and the constant-value gray are the same in both images, and each has its own title, aria-label, and legend describing its palette and endpoints.
 
@@ -225,7 +231,7 @@ A list of what the active models have done this session, newest first: **Detecte
 
 #### Labels
 
-Labels are yours: the app ships none. **Add a label** with a name (it becomes an id, shown before you create it: "Snap fingers" is `snap_fingers`), say whether it is a gesture to detect or an everyday activity a model should not mistake for one, and optionally add notes. Record it on the Live data tab under that same id, then import the recording.
+Labels are yours: the app ships none. **Add a label** with a name (it becomes an id, shown before you create it: "Snap fingers" is `snap_fingers`), say whether it is a gesture to detect or an everyday activity a model should not mistake for one, and optionally add notes. Record it on the Recorder tab under that same id, then import the recording.
 
 Each label shows its recordings and its model's furthest state (No model, or Model: draft / evaluated / approved / active). A label with a single recording is flagged: a model is tested on whole recordings it never saw, so it needs at least two. **Archive** hides a label from new use without touching old recordings (**Show archived labels** brings it back, **Restore** undoes it). **Delete** is offered only for a label nothing uses, and the app refuses it for one a recording, project or model refers to.
 
@@ -233,7 +239,7 @@ Labels an older version shipped (idle, walking, typing and so on) are removed on
 
 #### Recordings
 
-Record a labelled session on the **Live data** tab (Quick Capture is one label; Timeline Capture keeps the label of each interval), export the CSV, then **Import a recording (CSV)** here. The import is all-or-nothing: the file is checked in full (size limit, exact header, consistent labels, every label already in the catalogue) before anything is written, a failure says exactly why, and nothing is changed on disk. It is a compatibility path independent of the newer recording-bundle format and never touches those bundles. Labels keep stable ids; archiving one hides it from new selection but never changes old recordings.
+Record a labelled session on the **Recorder** tab (Quick Capture is one label; Timeline Capture keeps the label of each interval), export the CSV, then **Import a recording (CSV)** here. The import is all-or-nothing: the file is checked in full (size limit, exact header, consistent labels, every label already in the catalogue) before anything is written, a failure says exactly why, and nothing is changed on disk. It is a compatibility path independent of the newer recording-bundle format and never touches those bundles. Labels keep stable ids; archiving one hides it from new selection but never changes old recordings.
 
 The older three-class training, LiteRT readiness, intent-binding, replay and legacy inference panels were removed from this page; a model from the old system that could not be converted is kept aside and counted on the Label models card.
 

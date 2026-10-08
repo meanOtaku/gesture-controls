@@ -1,6 +1,9 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LiveTelemetry } from "./LiveTelemetry";
+import { RecorderPage } from "./RecorderPage";
+import { RecordingTimer } from "../recording/RecordingTimer";
+import { timedCapture } from "../recording/timedCapture";
+import { exportFolderStore } from "../store/exportFolderStore";
 import { telemetryStore } from "../store/telemetryStore";
 import { Toaster } from "../../../components/ui/sonner";
 import { resetFeedbackForTests } from "../../../components/app/OperationFeedback";
@@ -40,6 +43,8 @@ async function ingestOneSample() {
 
 beforeEach(() => {
   telemetryStore.reset();
+  timedCapture.reset();
+  exportFolderStore.reset();
   invoke.mockReset();
   exportCsvToFolder.mockReset();
   exportCsvToFolder.mockResolvedValue({ status: "saved", path: "/tmp/gesture-dataset.csv" });
@@ -56,7 +61,7 @@ afterEach(() => {
 
 describe("Timeline Capture timed recording", () => {
   it("does not start the timer while merely arming, only once the first sample lands", async () => {
-    render(<LiveTelemetry />);
+    render(<><RecordingTimer /><RecorderPage /></>);
     startTimelineCapture(5);
 
     await vi.advanceTimersByTimeAsync(10_000);
@@ -65,7 +70,7 @@ describe("Timeline Capture timed recording", () => {
   });
 
   it("stops once and auto-exports once the chosen duration elapses after recording begins", async () => {
-    render(<><Toaster /><LiveTelemetry /></>);
+    render(<><Toaster /><RecordingTimer /><RecorderPage /></>);
     startTimelineCapture(5);
     await ingestOneSample();
     expect(telemetryStore.getDatasetRecordingState()).toBe("recording");
@@ -87,7 +92,7 @@ describe("Timeline Capture timed recording", () => {
   });
 
   it("cancels the pending timer on manual stop, so no auto-export ever fires", async () => {
-    render(<LiveTelemetry />);
+    render(<><RecordingTimer /><RecorderPage /></>);
     startTimelineCapture(10);
     await ingestOneSample();
     expect(telemetryStore.getDatasetRecordingState()).toBe("recording");
@@ -100,7 +105,7 @@ describe("Timeline Capture timed recording", () => {
   });
 
   it("does not auto-export when the session is discarded before the timer elapses", async () => {
-    render(<LiveTelemetry />);
+    render(<><RecordingTimer /><RecorderPage /></>);
     startTimelineCapture(5);
     await ingestOneSample();
 
@@ -110,5 +115,21 @@ describe("Timeline Capture timed recording", () => {
 
     await vi.advanceTimersByTimeAsync(10_000);
     expect(exportCsvToFolder).not.toHaveBeenCalled();
+  });
+
+  it("still stops and exports when the recorder page has been left, because the timer is not part of the page", async () => {
+    render(<RecordingTimer />);
+    const page = render(<RecorderPage />);
+    startTimelineCapture(5);
+    await ingestOneSample();
+    expect(telemetryStore.getDatasetRecordingState()).toBe("recording");
+
+    // Look at the live charts instead: the recorder page goes away, the capture carries on.
+    page.unmount();
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(telemetryStore.getDatasetRecordingState()).toBe("recording");
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(telemetryStore.getDatasetRecordingState()).toBe("saved");
+    expect(exportCsvToFolder).toHaveBeenCalledTimes(1);
   });
 });

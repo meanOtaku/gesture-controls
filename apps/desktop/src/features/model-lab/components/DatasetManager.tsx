@@ -53,10 +53,10 @@ export function DatasetManager({ desktopAvailable, datasets, loading, importing,
       <CardHeader>
         <SectionHeader
           title="Recordings"
-          description="Labelled sessions to train from. Record them on the Live data tab, export the CSV, then import it here."
+          description="Labelled sessions to train from. Record them on the Recorder tab, export the CSV, then import it here."
           help={{
             label: "About importing recordings",
-            content: "Only CSVs exported from the Live data tab's labelled dataset recorder are supported. A Quick Capture session has one label; a Timeline Capture session keeps the label of each interval and drops rows outside any interval. An import either fully succeeds or writes nothing, and a failure says exactly why so you can fix it and retry.",
+            content: "Only CSVs exported from the Recorder tab's labelled dataset recorder are supported. A Quick Capture session has one label; a Timeline Capture session keeps the label of each interval and drops rows outside any interval. An import either fully succeeds or writes nothing, and a failure says exactly why so you can fix it and retry.",
           }}
         />
       </CardHeader>

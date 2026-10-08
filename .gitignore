@@ -30,3 +30,6 @@ apps/watch/local.properties
 
 # Regenerable local code graph shared by coding agents
 graphify-out/
+
+# Downloaded third-party datasets: never committed (their licences differ from this project's)
+data/external/

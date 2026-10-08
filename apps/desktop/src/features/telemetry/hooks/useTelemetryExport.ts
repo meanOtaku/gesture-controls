@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useSyncExternalStore } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { chooseExportFolder, exportCsvToFolder, isTauriDesktop, type ExportCsvResult } from "../../../shared/tauri/exportCsv";
 import { saveRecordingBundle, type SaveRecordingBundleResult } from "../../../shared/tauri/recordingBundle";
+import { exportFolderStore } from "../store/exportFolderStore";
 import { telemetryStore } from "../store/telemetryStore";
 
 function basename(path: string): string {
@@ -33,15 +34,12 @@ function reportRecordingBundleOutcome(result: SaveRecordingBundleResult): void {
  * trigger these actions.
  */
 export function useTelemetryExport() {
-  // Session-only: no established lightweight local-setting store exists yet
-  // to persist this across app restarts (see settings.rs's heavier
-  // validated-settings-blob pattern, which this single path isn't worth
-  // wiring into) — the user re-picks the export folder each session.
-  const [datasetExportFolder, setDatasetExportFolder] = useState<string | null>(null);
+  // Session-only (the user re-picks it each launch), but shared, so it is the same wherever it is read.
+  const datasetExportFolder = useSyncExternalStore(exportFolderStore.subscribe, exportFolderStore.get, exportFolderStore.get);
 
   const chooseDatasetExportFolder = async () => {
     const folder = await chooseExportFolder("Choose dataset export folder");
-    if (folder) setDatasetExportFolder(folder);
+    if (folder) exportFolderStore.set(folder);
     return folder;
   };
 
