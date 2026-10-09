@@ -40,6 +40,9 @@
   --space-page:2rem; --space-section:1rem; --space-card:1rem; --space-card-internal:1rem; --space-control-row:.75rem; --space-inline-control:.5rem;
   font-family:var(--font-sans); font-synthesis:none;
 }
+/* No rubber-band bounce at the end of a page: it moves the whole window, sidebar included, and feels jumpy. */
+html, body { overscroll-behavior: none; }
+[data-slot="sidebar-content"] { overscroll-behavior: contain; }
 * { box-sizing:border-box; } body { margin:0; min-width:320px; min-height:100vh; background:var(--blue); }
 /* The site's thin lighter-blue frame around the whole viewport. */
 body::before { content:""; position:fixed; inset:0; z-index:60; pointer-events:none; border:3px solid var(--frame); }
