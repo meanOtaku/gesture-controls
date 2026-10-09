@@ -283,7 +283,16 @@ pub fn delete_gesture_definition(
     id: String,
     app: AppHandle,
     runtime: State<'_, GestureLibraryRuntime>,
+    automation: State<'_, crate::automation::AutomationRuntime>,
 ) -> Result<Vec<GestureDefinition>, String> {
+    let users = crate::automation::recipes_using_gesture(&automation.state()?.recipes, &id);
+    if !users.is_empty() {
+        return Err(format!(
+            "this gesture is used by the recipe{} {}. Remove it from the recipe first",
+            if users.len() == 1 { "" } else { "s" },
+            users.join(", ")
+        ));
+    }
     let _guard = runtime
         .lock
         .lock()

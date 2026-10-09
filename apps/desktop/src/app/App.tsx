@@ -6,6 +6,7 @@ import { AppNav, navStatuses, type AppTab } from "./components/AppNav";
 import { OperationFeedback } from "../components/app/OperationFeedback";
 import { Skeleton } from "../components/ui/skeleton";
 import { SidebarInset, SidebarProvider } from "../components/ui/sidebar";
+import { CameraGestureBridge } from "../features/gestureLibrary/CameraGestureBridge";
 import { bindCameraToRecording } from "../features/camera/cameraService";
 import { RecordingTimer } from "../features/telemetry/recording/RecordingTimer";
 import { telemetryStore } from "../features/telemetry/store/telemetryStore";
@@ -605,6 +606,7 @@ function MainApp() {
 
   return <SidebarProvider>
     <RecordingTimer />
+    <CameraGestureBridge />
     <AppNav
       activeTab={activeTab}
       onSelect={setActiveTab}

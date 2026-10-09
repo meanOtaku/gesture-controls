@@ -39,6 +39,8 @@ type RecipeEditorProps = {
   locations: CalibrationLocation[];
   /** Labels of the models that are loaded, offered when adding a model step. */
   modelLabels?: string[];
+  /** Gesture library gestures, offered when adding a camera step. */
+  cameraGestures?: { id: string; name: string }[];
   /** Resolves to an error message from the backend, or null once saved. */
   onSave: (recipe: Recipe) => Promise<string | null>;
   onCancel: () => void;
@@ -49,7 +51,7 @@ const NATIVE_SELECT = "recipe-select";
 const UNUSED_SPEC: NumberSpec = { label: "Unused", min: 0, max: 0, step: 1, defaultValue: 0 };
 
 /** Builds or edits one recipe: the steps that must hold, the wrist rotation that follows, and the device it turns. */
-export function RecipeEditor({ recipe, locations, modelLabels = [], onSave, onCancel }: RecipeEditorProps) {
+export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestures = [], onSave, onCancel }: RecipeEditorProps) {
   const uid = useId();
   const [name, setName] = useState(recipe.name);
   const [nameTouched, setNameTouched] = useState(false);
@@ -172,13 +174,16 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], onSave, onCa
                         ? { kind: "headAt", location: locationOptions[0]?.value ?? "" }
                         : event.target.value === "model"
                           ? { kind: "model", label: modelLabels[0] ?? "", hold: "held" }
-                          : { kind: "hold", hold: firstUnusedHold() },
+                          : event.target.value === "camera"
+                            ? { kind: "camera", gesture: cameraGestures[0]?.id ?? "", hold: "held" }
+                            : { kind: "hold", hold: firstUnusedHold() },
                     )
                   }
                 >
                   <option value="headAt">Look at</option>
                   <option value="hold">Gesture</option>
                   <option value="model">Model label</option>
+                  <option value="camera">Camera gesture</option>
                 </select>
                 {step.kind === "headAt" ? (
                   <select
@@ -194,6 +199,27 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], onSave, onCa
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>
+                ) : step.kind === "camera" ? (
+                  <>
+                    <select
+                      className={NATIVE_SELECT}
+                      aria-label={`${label} camera gesture`}
+                      value={step.gesture}
+                      onChange={(event) => setStep(index, { ...step, gesture: event.target.value })}
+                    >
+                      {!cameraGestures.some((gesture) => gesture.id === step.gesture) && <option value={step.gesture}>{step.gesture === "" ? "Choose a gesture…" : "(removed gesture)"}</option>}
+                      {cameraGestures.map((gesture) => <option key={gesture.id} value={gesture.id}>{gesture.name}</option>)}
+                    </select>
+                    <select
+                      className={NATIVE_SELECT}
+                      aria-label={`${label} camera timing`}
+                      value={step.hold}
+                      onChange={(event) => setStep(index, { ...step, hold: event.target.value as ModelHold })}
+                    >
+                      <option value="held">While seen</option>
+                      {(trigger || step.hold === "oneShot") && <option value="oneShot">Once, when seen</option>}
+                    </select>
+                  </>
                 ) : step.kind === "model" ? (
                   <>
                     <input
@@ -260,6 +286,15 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], onSave, onCa
           >
             <PlusIcon aria-hidden="true" /> Add a model label
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={steps.length + (trigger ? 0 : 1) >= MAX_STAGES || cameraGestures.length === 0}
+            title={cameraGestures.length === 0 ? "Make a gesture in the Gesture library first" : undefined}
+            onClick={() => setSteps((current) => [...current, { kind: "camera", gesture: cameraGestures[0].id, hold: "held" }])}
+          >
+            <PlusIcon aria-hidden="true" /> Add a camera gesture
+          </Button>
           <datalist id={`${uid}-labels`}>
             {modelLabels.map((label) => <option key={label} value={label} />)}
           </datalist>
@@ -284,6 +319,12 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], onSave, onCa
             A model label is detected by a model you trained and activated.
             {modelLabels.length === 0 ? " None is loaded yet, so a recipe using one will not run until you load one." : ` Loaded now: ${modelLabels.join(", ")}.`}{" "}
             “While detected” works like a pinch and can keep a dial turning; “Once, when detected” is a moment, like a shake, and only starts a button action. Detections only act when the model runtime is in Live mode.
+          </p>
+        )}
+        {steps.some((step) => step.kind === "camera") && (
+          <p className="field-hint">
+            A camera gesture is one from your Gesture library, seen through this computer's camera. It only works while this app is open with its camera on (turn it on in the Gesture library or Recorder), and it stops the moment the camera or the app stops reporting. It acts about as soon as its “hold before it counts” time passes.
+            “While seen” works like a pinch and can keep a dial turning; “Once, when seen” only starts a button action.
           </p>
         )}
         {problem && <p className="field-error" role="alert">{problem}</p>}

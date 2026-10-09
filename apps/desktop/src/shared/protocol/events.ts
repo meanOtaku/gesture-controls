@@ -69,6 +69,8 @@ export type RecipeStage =
   | { kind: "headAt"; location: CalibrationTarget }
   | { kind: "hold"; hold: HoldGesture }
   | { kind: "model"; label: string; hold: ModelHold }
+  /** A Gesture library gesture (by id) seen by the camera. Only works while the app is open with its camera on. */
+  | { kind: "camera"; gesture: string; hold: ModelHold }
   | { kind: "drive"; axis: "roll" | "pitch" | "yaw"; deadZoneDegrees: number; invert: boolean };
 
 /** `held` counts while the label stays detected; `oneShot` for a moment after it is first detected (buttons only). */
@@ -98,6 +100,8 @@ export interface AutomationState {
   unavailable: { recipe: string; label: string }[];
   /** The model labels that are loaded, which a model step can name. */
   loadedLabels: string[];
+  /** Enabled recipes with a camera gesture the camera is not running now (camera off, or the gesture is gone). */
+  unavailableCameras?: { recipe: string; gesture: string }[];
 }
 
 export interface OverlayState {

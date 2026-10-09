@@ -431,6 +431,16 @@ The **Recipes** tab lists every recipe with an on/off switch, an Edit button and
 
 Because it is a moment, a shake, swipe, tap, roll or pitch (and a one-shot model label, below) can only start a **button action** (play/pause, next, previous, mute); the editor does not offer them for volume, brightness or scroll, and refuses to save a recipe that has one. It needs the watch's **acceleration** sensor switched on, which is the default.
 
+### Camera gesture
+
+A recipe step can also be a gesture from your **Gesture library**, seen through this computer's camera: choose **Camera gesture** in the recipe editor, pick the gesture, and choose **While seen** (like a pinch, it can keep a dial turning) or **Once, when seen** (a moment, like a shake; button actions only).
+
+- It works only while this app is open and its camera is on (turn it on in the Gesture library or the Recorder). With the camera off, or if the gesture is deleted, the recipe shows **Waiting for camera** and cannot start.
+- The app window reports what the camera sees to the part of the app that runs recipes, several times a second. If those reports stop for about a second (the camera turned off, the window frozen or hidden), every camera gesture is released at once, so one cannot be left stuck on.
+- It acts after the gesture's own **Hold before it counts** time (100 ms by default), so a camera gesture is a little slower than a built-in wrist gesture.
+- Unlike a model label, a camera gesture is not gated by the model runtime's mode: an enabled recipe acts as soon as the camera sees the gesture. Switch the recipe off when you do not want that.
+- A gesture a recipe uses cannot be deleted from the Gesture library until the recipe stops using it.
+
 ### Model label
 
 A **Model label** step uses a gesture detected by a model you trained and activated (see the Model Lab). Type its label or pick one of the loaded labels.

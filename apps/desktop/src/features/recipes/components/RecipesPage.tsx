@@ -7,6 +7,7 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Switch } from "../../../components/ui/switch";
 import type { AutomationState, CalibrationState, HeuristicGestures, Recipe } from "../../../shared/protocol/events";
+import { listGestureDefinitions } from "../../gestureLibrary/gestureLibraryApi";
 import { blankRecipe, describeRecipe, offGesturesUsed, type DeviceKind } from "../recipeModel";
 import { ConflictAlerts } from "./ConflictAlerts";
 import { RecipeEditor } from "./RecipeEditor";
@@ -33,6 +34,13 @@ export function RecipesPage({ automation, calibration, pendingRecipeIds, error, 
   const [editing, setEditing] = useState<Recipe | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const locations = calibration?.targets ?? [];
+  // The Gesture library's gestures, which a recipe step can use. Read once when the page opens.
+  const [gestures, setGestures] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    void listGestureDefinitions().then((all) => setGestures(all.map(({ id, name }) => ({ id, name })))).catch(() => setGestures([]));
+  }, []);
+  const gestureName = (id: string) => gestures.find((gesture) => gesture.id === id)?.name ?? "a removed gesture";
   const locationName = (id: string) => locations.find((location) => location.id === id)?.name ?? "a removed location";
 
   useEffect(() => {
@@ -76,7 +84,7 @@ export function RecipesPage({ automation, calibration, pendingRecipeIds, error, 
             />
           </CardHeader>
           <CardContent>
-            <RecipeEditor recipe={editing} locations={locations} modelLabels={automation?.loadedLabels ?? []} onSave={save} onCancel={() => setEditing(null)} />
+            <RecipeEditor recipe={editing} locations={locations} modelLabels={automation?.loadedLabels ?? []} cameraGestures={gestures} onSave={save} onCancel={() => setEditing(null)} />
           </CardContent>
         </Card>
       )}
@@ -112,13 +120,18 @@ export function RecipesPage({ automation, calibration, pendingRecipeIds, error, 
                           Waiting for model: {[...new Set(automation.unavailable.filter((entry) => entry.recipe === recipe.id).map((entry) => entry.label))].join(", ")}
                         </Badge>
                       )}
+                      {(automation.unavailableCameras ?? []).some((entry) => entry.recipe === recipe.id) && (
+                        <Badge variant="secondary">
+                          Waiting for camera: {[...new Set((automation.unavailableCameras ?? []).filter((entry) => entry.recipe === recipe.id).map((entry) => gestureName(entry.gesture)))].join(", ")}
+                        </Badge>
+                      )}
                       {builtInGestures && offGesturesUsed(recipe, builtInGestures).length > 0 && (
                         <Badge variant="secondary">
                           Never fires: {offGesturesUsed(recipe, builtInGestures).join(", ")} gesture off in Settings
                         </Badge>
                       )}
                     </span>
-                    <small className="text-xs text-muted-foreground">{describeRecipe(recipe, locationName)}</small>
+                    <small className="text-xs text-muted-foreground">{describeRecipe(recipe, locationName, gestureName)}</small>
                   </div>
                   <div className="recipe-item-actions">
                     <Switch

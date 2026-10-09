@@ -32,6 +32,10 @@ pub struct Signals<'a> {
     pub models_held: Option<&'a BTreeSet<String>>,
     /// Model labels first detected a moment ago, which still count as happening.
     pub models_pulsed: Option<&'a BTreeSet<String>>,
+    /// Gesture library gestures the camera sees right now.
+    pub cameras_held: Option<&'a BTreeSet<String>>,
+    /// Gesture library gestures the camera first saw a moment ago, which still count as happening.
+    pub cameras_pulsed: Option<&'a BTreeSet<String>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -149,6 +153,11 @@ impl RecipeRunner {
                 ModelHold::OneShot => signals.models_pulsed,
             }
             .is_some_and(|labels| labels.contains(label)),
+            Stage::Camera { gesture, hold } => match hold {
+                ModelHold::Held => signals.cameras_held,
+                ModelHold::OneShot => signals.cameras_pulsed,
+            }
+            .is_some_and(|gestures| gestures.contains(gesture)),
             Stage::Drive { .. } => true,
         }
     }

@@ -84,7 +84,7 @@ export function isMomentary(hold: HoldKind): boolean {
 
 /** A step that is over in a moment, so it can only start a button action. */
 export function isMomentaryStage(stage: RecipeStage): boolean {
-  return (stage.kind === "hold" && isMomentary(stage.hold)) || (stage.kind === "model" && stage.hold === "oneShot");
+  return (stage.kind === "hold" && isMomentary(stage.hold)) || ((stage.kind === "model" || stage.kind === "camera") && stage.hold === "oneShot");
 }
 
 export const MAX_LABEL_CHARS = 48;
@@ -192,7 +192,7 @@ export function deviceLabel(kind: string): string {
   return DEVICE_KINDS.find((device) => device.kind === kind)?.label.toLowerCase() ?? kind;
 }
 
-function stageLabel(stage: RecipeStage, locationName: (id: string) => string): string {
+function stageLabel(stage: RecipeStage, locationName: (id: string) => string, gestureName: (id: string) => string): string {
   switch (stage.kind) {
     case "headAt":
       return `Look at ${locationName(stage.location)}`;
@@ -200,15 +200,17 @@ function stageLabel(stage: RecipeStage, locationName: (id: string) => string): s
       return HOLDS.find((hold) => hold.value === stage.hold)?.label ?? stage.hold;
     case "model":
       return `Model “${stage.label}”${stage.hold === "oneShot" ? " (once)" : ""}`;
+    case "camera":
+      return `Camera “${gestureName(stage.gesture)}”${stage.hold === "oneShot" ? " (once)" : ""}`;
     case "drive":
       return `${AXES.find((axis) => axis.value === stage.axis)?.label ?? stage.axis} wrist`;
   }
 }
 
 /** "Look at Top right → Pinch and hold → Roll wrist → rotation knob → Volume" */
-export function describeRecipe(recipe: Recipe, locationName: (id: string) => string): string {
+export function describeRecipe(recipe: Recipe, locationName: (id: string) => string, gestureName: (id: string) => string = (id) => id): string {
   return [
-    ...recipe.stages.map((stage) => stageLabel(stage, locationName)),
+    ...recipe.stages.map((stage) => stageLabel(stage, locationName, gestureName)),
     ...(isTrigger(recipe.action) ? [] : [deviceLabel(recipe.device.kind)]),
     actionInfo(recipe.action).label,
   ].join(" → ");
@@ -248,8 +250,11 @@ export function chainProblem(leading: RecipeStage[], locations: CalibrationLocat
   if (leading.some((stage) => stage.kind === "model" && !isValidLabel(stage.label))) {
     return "A model step needs a label: lowercase letters, digits and underscores, starting with a letter.";
   }
+  if (leading.some((stage) => stage.kind === "camera" && stage.gesture.trim() === "")) {
+    return "A camera step needs a gesture from the Gesture library.";
+  }
   if (!trigger && leading.some(isMomentaryStage)) {
-    return "A shake, swipe, tap, roll, pitch or one-shot model label only works for a button action (play/pause, next, previous or mute). Choose one under To control, or remove that step.";
+    return "A shake, swipe, tap, roll, pitch or one-shot model label or camera gesture only works for a button action (play/pause, next, previous or mute). Choose one under To control, or remove that step.";
   }
   const limit = trigger ? MAX_STAGES : MAX_STAGES - 1;
   if (leading.length > limit) return `A recipe can have at most ${limit} steps${trigger ? "" : " before the wrist rotation"}.`;

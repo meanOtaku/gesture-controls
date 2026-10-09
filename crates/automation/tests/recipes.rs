@@ -798,3 +798,109 @@ fn a_model_step_reads_the_held_or_pulsed_sets_the_host_supplies() {
     empty.update(&Signals::default());
     assert!(!empty.take_fired());
 }
+
+fn camera_recipe(action: Action, gesture: &str, hold: ModelHold) -> Recipe {
+    Recipe {
+        action,
+        ..recipe(
+            "c",
+            vec![Stage::Camera {
+                gesture: gesture.into(),
+                hold,
+            }],
+            Device::default_for(DeviceKind::RotationKnob),
+        )
+    }
+}
+
+#[test]
+fn camera_steps_validate_their_gesture_id_and_only_one_shots_are_limited_to_buttons() {
+    assert_eq!(
+        validate_recipe(&camera_recipe(
+            Action::PlayPause,
+            "gesture-1a2b3c4d",
+            ModelHold::OneShot
+        )),
+        Ok(())
+    );
+    for bad in ["", "has space", "../x", &"a".repeat(65)] {
+        assert_eq!(
+            validate_recipe(&camera_recipe(Action::PlayPause, bad, ModelHold::Held)),
+            Err(RecipeError::InvalidCameraGesture),
+            "{bad:?}"
+        );
+    }
+    // A held camera gesture can keep a dial turning (with a wrist rotation last); a one-shot cannot.
+    let with_drive = |hold| {
+        let mut r = camera_recipe(Action::Volume, "gesture-1", hold);
+        r.stages.push(Stage::Drive {
+            axis: Axis::Roll,
+            dead_zone_degrees: 0.0,
+            invert: false,
+        });
+        r
+    };
+    assert_eq!(validate_recipe(&with_drive(ModelHold::Held)), Ok(()));
+    assert_eq!(
+        validate_recipe(&with_drive(ModelHold::OneShot)),
+        Err(RecipeError::MomentaryNeedsButtonAction)
+    );
+}
+
+#[test]
+fn a_camera_step_reads_the_held_or_pulsed_sets_the_host_supplies_and_ignores_model_sets() {
+    use std::collections::BTreeSet;
+    let held: BTreeSet<String> = ["gesture-1".to_string()].into();
+    let none = BTreeSet::new();
+    let mut held_runner = RecipeRunner::new(camera_recipe(
+        Action::PlayPause,
+        "gesture-1",
+        ModelHold::Held,
+    ));
+    let mut shot_runner = RecipeRunner::new(camera_recipe(
+        Action::PlayPause,
+        "gesture-1",
+        ModelHold::OneShot,
+    ));
+    let signals = Signals {
+        cameras_held: Some(&held),
+        cameras_pulsed: Some(&none),
+        ..Signals::default()
+    };
+    held_runner.update(&signals);
+    shot_runner.update(&signals);
+    assert!(held_runner.take_fired());
+    assert!(!shot_runner.take_fired());
+    // A model label with the same name does not stand in for a camera gesture.
+    let mut other = RecipeRunner::new(camera_recipe(
+        Action::PlayPause,
+        "gesture-1",
+        ModelHold::Held,
+    ));
+    other.update(&Signals {
+        models_held: Some(&held),
+        ..Signals::default()
+    });
+    assert!(!other.take_fired());
+    let mut empty = RecipeRunner::new(camera_recipe(
+        Action::PlayPause,
+        "gesture-1",
+        ModelHold::Held,
+    ));
+    empty.update(&Signals::default());
+    assert!(!empty.take_fired());
+}
+
+#[test]
+fn a_camera_step_round_trips_through_json_in_camel_case() {
+    let stage = Stage::Camera {
+        gesture: "gesture-1".into(),
+        hold: ModelHold::OneShot,
+    };
+    let json = serde_json::to_string(&stage).unwrap();
+    assert_eq!(
+        json,
+        r#"{"kind":"camera","gesture":"gesture-1","hold":"oneShot"}"#
+    );
+    assert_eq!(serde_json::from_str::<Stage>(&json).unwrap(), stage);
+}

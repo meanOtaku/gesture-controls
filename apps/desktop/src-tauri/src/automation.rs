@@ -7,7 +7,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use automation::{
     Action, Axis, Conflict, CrownSide, Device, DeviceKind, HeuristicGestures, Hold, PitchConfig,
@@ -45,6 +47,17 @@ const SHAKE_HOLD_NS: u64 = 600_000_000;
 pub(crate) const MODEL_PULSE_NS: u64 = 600_000_000;
 const RECIPES_FILE_NAME: &str = "recipes.json";
 pub const MAX_RECIPES: usize = 24;
+/// The camera is taken to have stopped when the app window has not reported for this long.
+const CAMERA_STALE: Duration = Duration::from_millis(900);
+const CAMERA_WATCHDOG_TICK: Duration = Duration::from_millis(250);
+/// The most gestures a camera report may name, so a bad report cannot be large.
+const MAX_CAMERA_REPORT: usize = 200;
+
+/// Nanoseconds since the app first asked: this app's own clock for camera timing.
+fn process_clock_ns() -> u64 {
+    static START: OnceLock<Instant> = OnceLock::new();
+    START.get_or_init(Instant::now).elapsed().as_nanos() as u64
+}
 
 /// What the UI shows: every recipe, which of them are held off by a conflict, and the conflicts themselves.
 #[derive(Debug, Clone, Serialize)]
@@ -58,6 +71,16 @@ pub struct AutomationState {
     pub unavailable: Vec<UnavailableLabel>,
     /// The model labels the label runtime has loaded, which a recipe can name.
     pub loaded_labels: Vec<String>,
+    /// Enabled recipes with a camera gesture step whose gesture the camera is not running right now: the camera is
+    /// off, the app window is not reporting, or the gesture no longer exists.
+    pub unavailable_cameras: Vec<UnavailableCamera>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnavailableCamera {
+    pub recipe: String,
+    pub gesture: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -291,6 +314,13 @@ pub struct Engine {
     model_now_ns: u64,
     /// The labels the label runtime has loaded; `None` until it has said.
     models_loaded: Option<BTreeSet<String>>,
+    /// Gesture library gestures the camera sees right now (and so are cleared to act).
+    cameras_held: BTreeSet<String>,
+    /// Camera gestures first seen recently, mapped to when that stops counting (the camera clock, see `set_cameras`).
+    camera_pulses: BTreeMap<String, u64>,
+    camera_now_ns: u64,
+    /// The gestures the camera is running right now; empty while the camera is off or silent.
+    cameras_known: BTreeSet<String>,
     /// Recipes or the loaded labels changed since the host last looked, so what the UI shows about them may be stale.
     labels_dirty: bool,
 }
@@ -328,6 +358,10 @@ impl Engine {
             model_pulses: BTreeMap::new(),
             model_now_ns: 0,
             models_loaded: None,
+            cameras_held: BTreeSet::new(),
+            camera_pulses: BTreeMap::new(),
+            camera_now_ns: 0,
+            cameras_known: BTreeSet::new(),
             labels_dirty: true,
         };
         engine.set_recipes(recipes);
@@ -383,7 +417,60 @@ impl Engine {
             conflicts: find_conflicts(&self.recipes),
             unavailable: self.unavailable_labels(),
             loaded_labels: self.models_loaded.iter().flatten().cloned().collect(),
+            unavailable_cameras: self.unavailable_cameras(),
         }
+    }
+
+    fn unavailable_cameras(&self) -> Vec<UnavailableCamera> {
+        self.recipes
+            .iter()
+            .filter(|recipe| recipe.enabled)
+            .flat_map(|recipe| {
+                recipe.stages.iter().filter_map(|stage| match stage {
+                    Stage::Camera { gesture, .. } if !self.cameras_known.contains(gesture) => {
+                        Some(UnavailableCamera {
+                            recipe: recipe.id.clone(),
+                            gesture: gesture.clone(),
+                        })
+                    }
+                    _ => None,
+                })
+            })
+            .collect()
+    }
+
+    /// The app window's camera report. `known` is every gesture the camera is running now (empty with the camera
+    /// off), `held` those it sees right now, `risen` those it began to see a moment ago. Only a known gesture can be
+    /// held or pulsed, so a gesture that was deleted or whose camera stopped cannot keep a recipe going.
+    /// `now_ns` is this app's own clock; the camera and the watch share none.
+    pub fn set_cameras(
+        &mut self,
+        known: BTreeSet<String>,
+        held: BTreeSet<String>,
+        risen: &[String],
+        now_ns: u64,
+    ) -> Effects {
+        self.camera_now_ns = now_ns;
+        for gesture in risen {
+            if known.contains(gesture) {
+                self.camera_pulses
+                    .insert(gesture.clone(), now_ns + MODEL_PULSE_NS);
+            }
+        }
+        self.camera_pulses
+            .retain(|gesture, until| *until > now_ns && known.contains(gesture));
+        self.cameras_held = held.into_iter().filter(|g| known.contains(g)).collect();
+        if self.cameras_known != known {
+            self.labels_dirty = true;
+        }
+        self.cameras_known = known;
+        self.step()
+    }
+
+    /// The camera went quiet (turned off, window closed or stalled): nothing it saw can still hold.
+    pub fn camera_lost(&mut self) -> Effects {
+        let now = self.camera_now_ns;
+        self.set_cameras(BTreeSet::new(), BTreeSet::new(), &[], now)
     }
 
     fn unavailable_labels(&self) -> Vec<UnavailableLabel> {
@@ -585,9 +672,17 @@ impl Engine {
             .filter(|(_, until)| **until > now)
             .map(|(label, _)| label.clone())
             .collect();
+        let camera_pulsed: BTreeSet<String> = self
+            .camera_pulses
+            .iter()
+            .filter(|(_, until)| **until > self.camera_now_ns)
+            .map(|(gesture, _)| gesture.clone())
+            .collect();
         let signals = Signals {
             models_held: Some(&self.models_held),
             models_pulsed: Some(&pulsed),
+            cameras_held: Some(&self.cameras_held),
+            cameras_pulsed: Some(&camera_pulsed),
             head_location: self.head.as_deref(),
             pinch_held: self.pinch,
             stem_button_held: self.stem,
@@ -715,7 +810,10 @@ pub struct AutomationRuntime {
     engine: Mutex<Engine>,
     actuators: Actuators,
     /// The model-label part of the last state sent to the UI, so a change in what is loaded is announced.
-    announced_labels: Mutex<(Vec<UnavailableLabel>, Vec<String>)>,
+    announced_labels: Mutex<(Vec<UnavailableLabel>, Vec<String>, Vec<UnavailableCamera>)>,
+    /// When the app window last reported its camera while it had gestures running; `None` while it has not.
+    camera_last: Mutex<Option<Instant>>,
+    camera_watchdog_started: AtomicBool,
 }
 
 impl Default for AutomationRuntime {
@@ -724,7 +822,9 @@ impl Default for AutomationRuntime {
             operations: Mutex::new(()),
             engine: Mutex::new(Engine::new(default_recipes(), Tuning::default())),
             actuators: Actuators::default(),
-            announced_labels: Mutex::new((Vec::new(), Vec::new())),
+            announced_labels: Mutex::new((Vec::new(), Vec::new(), Vec::new())),
+            camera_last: Mutex::new(None),
+            camera_watchdog_started: AtomicBool::new(false),
         }
     }
 }
@@ -776,7 +876,11 @@ impl AutomationRuntime {
         }
         let Some(state) = state else { return };
         let labels_changed = self.announced_labels.lock().is_ok_and(|mut announced| {
-            let now = (state.unavailable.clone(), state.loaded_labels.clone());
+            let now = (
+                state.unavailable.clone(),
+                state.loaded_labels.clone(),
+                state.unavailable_cameras.clone(),
+            );
             let changed = *announced != now;
             *announced = now;
             changed
@@ -818,6 +922,48 @@ impl AutomationRuntime {
     ) {
         self.with_engine(app, |engine| {
             engine.set_models(loaded, held, risen, dropped, now_ns)
+        });
+    }
+
+    /// The app window's camera report; see [`Engine::set_cameras`]. While the camera has gestures running the window
+    /// must keep reporting (a heartbeat); a silence longer than [`CAMERA_STALE`] releases every camera gesture, so a
+    /// frozen or hidden window cannot leave one held.
+    pub fn set_cameras(
+        &self,
+        app: &AppHandle,
+        known: BTreeSet<String>,
+        held: BTreeSet<String>,
+        risen: &[String],
+    ) {
+        if let Ok(mut last) = self.camera_last.lock() {
+            *last = (!known.is_empty()).then(Instant::now);
+        }
+        let now_ns = process_clock_ns();
+        self.with_engine(app, |engine| engine.set_cameras(known, held, risen, now_ns));
+        self.start_camera_watchdog(app);
+    }
+
+    fn start_camera_watchdog(&self, app: &AppHandle) {
+        if self.camera_watchdog_started.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let app = app.clone();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(CAMERA_WATCHDOG_TICK);
+                let runtime = app.state::<AutomationRuntime>();
+                let stale = runtime.camera_last.lock().is_ok_and(|mut last| {
+                    let stale = last.is_some_and(|at| at.elapsed() > CAMERA_STALE);
+                    if stale {
+                        *last = None;
+                    }
+                    stale
+                });
+                if stale {
+                    warn!("the camera stopped reporting; releasing its gestures");
+                    runtime.with_engine(&app, Engine::camera_lost);
+                }
+            }
         });
     }
 
@@ -974,6 +1120,45 @@ pub fn get_automation_state(
     runtime: State<'_, AutomationRuntime>,
 ) -> Result<AutomationState, String> {
     runtime.state()
+}
+
+/// Names of the recipes that use a Gesture library gesture, so it is not deleted from under them.
+pub fn recipes_using_gesture(recipes: &[Recipe], gesture_id: &str) -> Vec<String> {
+    recipes
+        .iter()
+        .filter(|recipe| {
+            recipe.stages.iter().any(
+                |stage| matches!(stage, Stage::Camera { gesture, .. } if gesture == gesture_id),
+            )
+        })
+        .map(|recipe| recipe.name.clone())
+        .collect()
+}
+
+/// The app window's camera report: which library gestures the camera is running, which it sees now, and which it
+/// began to see. Ids that are not valid gesture ids are dropped.
+#[tauri::command]
+pub fn report_camera_gestures(
+    known: Vec<String>,
+    held: Vec<String>,
+    risen: Vec<String>,
+    runtime: State<'_, AutomationRuntime>,
+    app: AppHandle,
+) -> Result<(), String> {
+    if known.len() > MAX_CAMERA_REPORT
+        || held.len() > MAX_CAMERA_REPORT
+        || risen.len() > MAX_CAMERA_REPORT
+    {
+        return Err("the camera report is too large".to_string());
+    }
+    let valid = |ids: Vec<String>| -> BTreeSet<String> {
+        ids.into_iter()
+            .filter(|id| automation::is_valid_gesture_id(id))
+            .collect()
+    };
+    let risen: Vec<String> = valid(risen).into_iter().collect();
+    runtime.set_cameras(&app, valid(known), valid(held), &risen);
+    Ok(())
 }
 
 #[tauri::command]
@@ -1878,6 +2063,134 @@ mod tests {
         assert!(effects.fired.is_empty());
         engine.set_models(set(&["snap"]), set(&[]), &[], &[], 3 * MS);
         assert!(engine.state().unavailable.is_empty());
+    }
+
+    fn camera_recipe(gesture: &str, hold: ModelHold, action: Action) -> Recipe {
+        let mut recipe = swipe_recipe(Hold::Tap, action);
+        recipe.id = format!("{gesture}{hold:?}");
+        recipe.stages = vec![Stage::Camera {
+            gesture: gesture.into(),
+            hold,
+        }];
+        recipe
+    }
+
+    #[test]
+    fn a_one_shot_camera_gesture_fires_once_when_it_rises_and_not_again_while_it_stays() {
+        let mut engine = Engine::new(
+            vec![camera_recipe(
+                "gesture-1",
+                ModelHold::OneShot,
+                Action::PlayPause,
+            )],
+            Tuning::default(),
+        );
+        let known = set(&["gesture-1"]);
+        let rise = engine.set_cameras(
+            known.clone(),
+            set(&["gesture-1"]),
+            &["gesture-1".to_string()],
+            100 * MS,
+        );
+        assert_eq!(rise.fired, vec![Action::PlayPause]);
+        assert!(
+            engine
+                .set_cameras(known.clone(), set(&["gesture-1"]), &[], 200 * MS)
+                .fired
+                .is_empty()
+        );
+        assert!(
+            engine
+                .set_cameras(known, set(&["gesture-1"]), &[], 900 * MS)
+                .fired
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_camera_gesture_the_camera_is_not_running_never_acts_and_is_reported_unavailable() {
+        let mut engine = Engine::new(
+            vec![camera_recipe(
+                "gesture-1",
+                ModelHold::OneShot,
+                Action::PlayPause,
+            )],
+            Tuning::default(),
+        );
+        // Before any report, and with the camera off (nothing known), the recipe cannot start and says why.
+        assert_eq!(
+            engine.state().unavailable_cameras,
+            vec![UnavailableCamera {
+                recipe: "gesture-1OneShot".into(),
+                gesture: "gesture-1".into()
+            }]
+        );
+        // A held or risen gesture the camera does not know (deleted, or from before it was turned off) is ignored.
+        let effects = engine.set_cameras(
+            set(&["other"]),
+            set(&["gesture-1"]),
+            &["gesture-1".to_string()],
+            MS,
+        );
+        assert!(effects.fired.is_empty());
+        assert!(engine.cameras_held.is_empty() && engine.camera_pulses.is_empty());
+        engine.set_cameras(set(&["gesture-1"]), set(&[]), &[], 2 * MS);
+        assert!(engine.state().unavailable_cameras.is_empty());
+        engine.set_recipes(
+            vec![camera_recipe(
+                "gesture-1",
+                ModelHold::OneShot,
+                Action::PlayPause,
+            )]
+            .into_iter()
+            .map(|mut r| {
+                r.enabled = false;
+                r
+            })
+            .collect(),
+        );
+        assert!(engine.state().unavailable_cameras.is_empty());
+    }
+
+    #[test]
+    fn a_held_camera_gesture_lets_go_when_the_camera_goes_quiet_and_a_pulse_expires() {
+        let mut engine = Engine::new(
+            vec![
+                camera_recipe("gesture-1", ModelHold::Held, Action::PlayPause),
+                camera_recipe("gesture-2", ModelHold::OneShot, Action::Mute),
+            ],
+            Tuning::default(),
+        );
+        let known = set(&["gesture-1", "gesture-2"]);
+        engine.set_cameras(
+            known.clone(),
+            set(&["gesture-1"]),
+            &["gesture-2".to_string()],
+            10 * MS,
+        );
+        assert!(engine.cameras_held.contains("gesture-1"));
+        assert!(engine.camera_pulses.contains_key("gesture-2"));
+        // The pulse is over after its moment even while the gesture stays held.
+        engine.set_cameras(
+            known,
+            set(&["gesture-1", "gesture-2"]),
+            &[],
+            10 * MS + MODEL_PULSE_NS + MS,
+        );
+        assert!(engine.camera_pulses.is_empty());
+        engine.camera_lost();
+        assert!(engine.cameras_held.is_empty() && engine.cameras_known.is_empty());
+    }
+
+    #[test]
+    fn recipes_using_a_gesture_are_found_by_name() {
+        let recipes = vec![
+            camera_recipe("gesture-1", ModelHold::Held, Action::PlayPause),
+            camera_recipe("gesture-2", ModelHold::Held, Action::Mute),
+            model_recipe("gesture-1", ModelHold::Held, Action::NextTrack),
+        ];
+        assert_eq!(recipes_using_gesture(&recipes, "gesture-1").len(), 1);
+        assert!(recipes_using_gesture(&recipes, "gesture-9").is_empty());
     }
 
     #[test]

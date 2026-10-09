@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { DatasetLabel } from "../model-lab/types";
 import type { GestureDefinition } from "./definition";
-import { deleteGestureDefinition, listGestureDefinitions, saveGestureDefinition } from "./gestureLibraryApi";
+import { GESTURE_LIBRARY_CHANGED, deleteGestureDefinition, listGestureDefinitions, saveGestureDefinition } from "./gestureLibraryApi";
 
 /** The saved gestures and the label catalogue they can be linked to. Saving and deleting return the new list. */
 export function useGestureLibrary() {
@@ -36,6 +36,7 @@ export function useGestureLibrary() {
       const next = await saveGestureDefinition(definition);
       setDefinitions(next);
       setError(null);
+      window.dispatchEvent(new Event(GESTURE_LIBRARY_CHANGED));
       return null;
     } catch (err) {
       return String(err);
@@ -45,6 +46,7 @@ export function useGestureLibrary() {
   const remove = useCallback(async (id: string): Promise<string | null> => {
     try {
       setDefinitions(await deleteGestureDefinition(id));
+      window.dispatchEvent(new Event(GESTURE_LIBRARY_CHANGED));
       return null;
     } catch (err) {
       return String(err);

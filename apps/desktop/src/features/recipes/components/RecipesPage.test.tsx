@@ -151,7 +151,7 @@ describe("RecipesPage", () => {
 
     // Switching back to a dial keeps the shake step but refuses to save it, in words.
     fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "volume" } });
-    expect(editor.getByRole("alert")).toHaveTextContent("A shake, swipe, tap, roll, pitch or one-shot model label only works for a button action");
+    expect(editor.getByRole("alert")).toHaveTextContent("A shake, swipe, tap, roll, pitch or one-shot model label or camera gesture only works for a button action");
     fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
     expect(props.onSave).not.toHaveBeenCalled();
 
@@ -178,7 +178,7 @@ describe("RecipesPage", () => {
     expect(editor.getByText(/Swipes are read from the watch's acceleration/)).toBeInTheDocument();
 
     fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "scroll" } });
-    expect(editor.getByRole("alert")).toHaveTextContent("A shake, swipe, tap, roll, pitch or one-shot model label only works for a button action");
+    expect(editor.getByRole("alert")).toHaveTextContent("A shake, swipe, tap, roll, pitch or one-shot model label or camera gesture only works for a button action");
     fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
     expect(props.onSave).not.toHaveBeenCalled();
 

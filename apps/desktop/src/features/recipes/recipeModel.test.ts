@@ -94,7 +94,7 @@ describe("recipeModel", () => {
     expect(holdsFor(false).map((hold) => hold.value)).not.toContain("shake");
     for (const swipe of ["swipeLeft", "swipeRight", "swipeUp", "swipeDown"] as const) {
       expect(isMomentary(swipe)).toBe(true);
-      expect(chainProblem([{ kind: "hold", hold: swipe }], locations, false)).toMatch(/shake, swipe, tap, roll, pitch or one-shot model label only works/);
+      expect(chainProblem([{ kind: "hold", hold: swipe }], locations, false)).toMatch(/shake, swipe, tap, roll, pitch or one-shot model label or camera gesture only works/);
       expect(chainProblem([{ kind: "hold", hold: swipe }], locations, true)).toBeNull();
     }
     expect(isMomentary("pinch")).toBe(false);
@@ -141,5 +141,19 @@ describe("model steps", () => {
     expect(chainProblem([{ kind: "model", label: "snap", hold: "oneShot" }], [], false)).toMatch(/button action/);
     expect(chainProblem([{ kind: "model", label: "snap", hold: "held" }], [], false)).toBeNull();
     expect(chainProblem([{ kind: "model", label: "Bad Label", hold: "held" }], [], true)).toMatch(/needs a label/);
+  });
+});
+
+describe("camera steps", () => {
+  const camera = (hold: "held" | "oneShot" = "held", gesture = "gesture-1") => ({ kind: "camera" as const, gesture, hold });
+  it("describes a camera step by the gesture's name, and says once for a one-shot", () => {
+    const recipe = { ...blankRecipe([], "rotationKnob"), stages: [camera("oneShot"), { kind: "drive" as const, axis: "roll" as const, deadZoneDegrees: 0, invert: false }] };
+    expect(describeRecipe(recipe, () => "x", () => "Pinch")).toContain("Camera “Pinch” (once)");
+  });
+  it("needs a gesture, and a one-shot camera gesture only works for a button action", () => {
+    expect(chainProblem([camera("held", " ")], [], true)).toMatch(/needs a gesture from the Gesture library/);
+    expect(chainProblem([camera("oneShot")], [], false)).toMatch(/camera gesture only works/);
+    expect(chainProblem([camera("oneShot")], [], true)).toBeNull();
+    expect(chainProblem([camera("held")], [], false)).toBeNull();
   });
 });

@@ -105,6 +105,17 @@ pub enum ModelHold {
 
 pub const MAX_LABEL_CHARS: usize = 48;
 
+pub const MAX_GESTURE_ID_CHARS: usize = 64;
+
+/// A Gesture library id: letters, digits, hyphens and underscores.
+pub fn is_valid_gesture_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= MAX_GESTURE_ID_CHARS
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
 /// The same shape a model label has everywhere: a lowercase slug.
 pub fn is_valid_label(label: &str) -> bool {
     let mut chars = label.chars();
@@ -126,6 +137,9 @@ pub enum Stage {
     Hold { hold: Hold },
     /// A trained model's label, detected by the label runtime.
     Model { label: String, hold: ModelHold },
+    /// A gesture from the Gesture library (by id), seen by the camera. Only works while the app is open and its
+    /// camera is on; see `report_camera_gestures` in the desktop.
+    Camera { gesture: String, hold: ModelHold },
     /// The wrist rotating about an axis, measured from where the hold began. Always the last stage; it
     /// supplies the continuous value. Movement inside `dead_zone_degrees` of the start is ignored, and
     /// `invert` flips the direction for a watch worn the other way round.
@@ -164,11 +178,13 @@ pub enum RecipeError {
     #[error("an action that fires once cannot have a wrist rotation: remove it")]
     TriggerHasDrive,
     #[error(
-        "a shake, swipe, tap, flick or one-shot model label can only start a button action (play/pause, next, previous or mute)"
+        "a shake, swipe, tap, flick or one-shot model or camera gesture can only start a button action (play/pause, next, previous or mute)"
     )]
     MomentaryNeedsButtonAction,
     #[error("a model step needs a label made of lowercase letters, digits and underscores")]
     InvalidLabel,
+    #[error("a camera gesture step needs a Gesture library gesture")]
+    InvalidCameraGesture,
     #[error("the dead zone must be from 0 to under 90 degrees")]
     InvalidDeadZone,
     #[error("the device settings are out of range")]
@@ -191,6 +207,11 @@ pub fn validate_recipe(recipe: &Recipe) -> Result<(), RecipeError> {
         .any(|stage| matches!(stage, Stage::Model { label, .. } if !is_valid_label(label)))
     {
         return Err(RecipeError::InvalidLabel);
+    }
+    if recipe.stages.iter().any(
+        |stage| matches!(stage, Stage::Camera { gesture, .. } if !is_valid_gesture_id(gesture)),
+    ) {
+        return Err(RecipeError::InvalidCameraGesture);
     }
     if recipe.stages.len() > MAX_STAGES {
         return Err(RecipeError::TooManyStages);
@@ -220,7 +241,7 @@ pub fn validate_recipe(recipe: &Recipe) -> Result<(), RecipeError> {
     // A shake is over in a moment, so it could not keep a dial turning.
     if recipe.stages.iter().any(|stage| match stage {
         Stage::Hold { hold } => hold.is_momentary(),
-        Stage::Model { hold, .. } => *hold == ModelHold::OneShot,
+        Stage::Model { hold, .. } | Stage::Camera { hold, .. } => *hold == ModelHold::OneShot,
         _ => false,
     }) {
         return Err(RecipeError::MomentaryNeedsButtonAction);

@@ -176,6 +176,7 @@ pub fn run() {
             label_training::cancel_label_training,
             label_training::get_label_training_status,
             automation::get_automation_state,
+            automation::report_camera_gestures,
             automation::set_recipe_enabled,
             automation::save_recipe,
             automation::delete_recipe,

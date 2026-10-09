@@ -23,8 +23,8 @@ pub use device::{Device, DeviceKind, Output};
 pub use heuristics::HeuristicGestures;
 pub use pitch::{PitchConfig, PitchDetector, PitchDirection};
 pub use recipe::{
-    Action, Axis, Hold, MAX_STAGES, ModelHold, Recipe, RecipeError, Stage, is_valid_label,
-    validate_recipe,
+    Action, Axis, Hold, MAX_STAGES, ModelHold, Recipe, RecipeError, Stage, is_valid_gesture_id,
+    is_valid_label, validate_recipe,
 };
 pub use roll::{RollConfig, RollDetector, RollDirection};
 pub use runner::{RecipeRunner, RunnerPhase, Signals};
