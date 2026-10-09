@@ -19,7 +19,7 @@ Two optional files in the recording bundle, written once with the bundle and nev
 - `hand_landmarks.csv`: one row per hand per camera frame: `frame_index, capture_ms, hand_index, hand_count, model_handedness, score`, then `ix0..iz20` (image x, y, z for the 21 landmarks) and `wx0..wz20` (world). A frame with no hand is one row with the hand fields empty, so "the camera saw nothing" is recorded, not a gap. `capture_ms` is the browser's monotonic clock (`performance.now()`), the same clock `recording.json` uses.
 - `clock_sync.csv`: pairs of a watch timestamp and the browser time it arrived, about every 200 ms, from which the camera is lined up with the watch.
 
-`model_handedness` is MediaPipe's label, which assumes a mirrored picture; a webcam's raw picture is not mirrored, so the physical hand is the opposite. `physicalHand()` does the swap, and `recording.json` records the convention.
+`model_handedness` is MediaPipe's label as reported for the raw picture, and is saved as reported. The first version assumed it was the opposite of the physical hand and swapped it; on a real MacBook camera that mislabelled a left hand, so `physicalHand()` now takes the label as the physical hand. Because cameras and the model may differ, the Gesture library shows which hand the app sees and has a "Left and right are swapped" switch (stored per computer) that `physicalHand()` honours. Saved landmarks are never altered by it.
 
 ## Lining the camera up with the watch
 

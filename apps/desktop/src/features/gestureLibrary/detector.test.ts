@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GestureDetector, handMatches } from "./detector";
 import { blankDefinition, type GestureDefinition } from "./definition";
+import { setHandsSwapped } from "../camera/handTypes";
 import { makeHand } from "./testHands";
 
 const pinch = (over: Partial<GestureDefinition> = {}): GestureDefinition => ({
@@ -24,11 +25,18 @@ describe("handMatches", () => {
     expect(handMatches(pinch(), open, "exit")).toBe(false);
   });
 
-  it("applies the hand choice to the physical hand, not MediaPipe's mirrored label", () => {
-    const rawLeftLabel = makeHand({ pinch: 0.1, modelHandedness: "Left" }); // a physical right hand
-    expect(handMatches(pinch({ hand: "right" }), rawLeftLabel, "enter")).toBe(true);
-    expect(handMatches(pinch({ hand: "left" }), rawLeftLabel, "enter")).toBe(false);
-    expect(handMatches(pinch({ hand: "either" }), rawLeftLabel, "enter")).toBe(true);
+  it("applies the hand choice to the hand the camera reports, and to the other one when left and right are swapped", () => {
+    const leftLabel = makeHand({ pinch: 0.1, modelHandedness: "Left" });
+    expect(handMatches(pinch({ hand: "left" }), leftLabel, "enter")).toBe(true);
+    expect(handMatches(pinch({ hand: "right" }), leftLabel, "enter")).toBe(false);
+    expect(handMatches(pinch({ hand: "either" }), leftLabel, "enter")).toBe(true);
+    setHandsSwapped(true);
+    try {
+      expect(handMatches(pinch({ hand: "right" }), leftLabel, "enter")).toBe(true);
+      expect(handMatches(pinch({ hand: "left" }), leftLabel, "enter")).toBe(false);
+    } finally {
+      setHandsSwapped(false);
+    }
   });
 
   it("never matches without a rule, or when a measure cannot be read", () => {

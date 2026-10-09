@@ -41,7 +41,6 @@ describe("CalibrationSession", () => {
     const session = new CalibrationSession("left");
     session.start(0);
     session.tick(COUNTDOWN_MS);
-    // makeHand's model label "Right" means the physical left hand.
     session.onFrame(frame(1, [makeHand({ pinch: 0.1, modelHandedness: "Right" })]));
     session.onFrame(frame(2, [makeHand({ pinch: 0.1, modelHandedness: "Left" })]));
     expect(session.snapshot(COUNTDOWN_MS).positive).toHaveLength(1);
@@ -61,8 +60,8 @@ describe("CalibrationSession skipped frames", () => {
     session.start(0);
     session.tick(COUNTDOWN_MS);
     session.onFrame(frame(1, []));
-    session.onFrame(frame(2, [makeHand({ pinch: 0.1, modelHandedness: "Left" })])); // physical right
-    const flat = makeHand({ pinch: 0.1, modelHandedness: "Right" });
+    session.onFrame(frame(2, [makeHand({ pinch: 0.1, modelHandedness: "Right" })])); // the other hand
+    const flat = makeHand({ pinch: 0.1, modelHandedness: "Left" });
     flat.world = flat.world.map(() => ({ x: 0, y: 0, z: 0 }));
     session.onFrame(frame(3, [flat]));
     expect(session.snapshot(COUNTDOWN_MS).skipped).toEqual({ noHand: 1, otherHand: 1, unmeasurable: 1 });

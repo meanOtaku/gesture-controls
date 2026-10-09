@@ -9,8 +9,8 @@ export interface Point3 {
 
 export interface TrackedHand {
   /**
-   * MediaPipe's own label. It assumes a mirrored (selfie) picture, and a webcam's raw picture is not mirrored, so this is
-   * the *opposite* of the physical hand for raw camera frames. Use `physicalHand`.
+   * MediaPipe's own label, as reported for the raw camera picture. Use `physicalHand`, which can swap it if a camera
+   * turns out to report left and right the other way round.
    */
   modelHandedness: "Left" | "Right";
   /** How sure the model is of the handedness, 0 to 1. */
@@ -29,8 +29,35 @@ export interface HandFrame {
   hands: TrackedHand[];
 }
 
-/** The physical hand (as seen from the person wearing the watch) for a hand found in a raw, unmirrored camera picture. */
+const SWAP_KEY = "cameraHandsSwapped";
+let swapped = (() => {
+  try {
+    return localStorage.getItem(SWAP_KEY) === "1";
+  } catch {
+    return false;
+  }
+})();
+const swapListeners = new Set<() => void>();
+
+/** Whether left and right are swapped for this camera. Off by default: the model's label is taken as the physical hand. */
+export const handsSwapped = (): boolean => swapped;
+export function setHandsSwapped(value: boolean): void {
+  swapped = value;
+  try {
+    localStorage.setItem(SWAP_KEY, value ? "1" : "0");
+  } catch {
+    // The choice still holds for this session.
+  }
+  swapListeners.forEach((listener) => listener());
+}
+export const subscribeHandsSwapped = (listener: () => void): (() => void) => {
+  swapListeners.add(listener);
+  return () => swapListeners.delete(listener);
+};
+
+/** The physical hand (as seen from the person wearing the watch): the model's label, swapped if the person says their camera reports it the other way. */
 export function physicalHand(hand: Pick<TrackedHand, "modelHandedness">): "Left" | "Right" {
+  if (!swapped) return hand.modelHandedness;
   return hand.modelHandedness === "Left" ? "Right" : "Left";
 }
 

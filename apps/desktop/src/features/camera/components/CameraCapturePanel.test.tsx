@@ -94,9 +94,8 @@ describe("CameraCapturePanel", () => {
     hands = [hand()];
     act(() => next?.());
     expect(region().getByText("1 hand")).toBeInTheDocument();
-    // MediaPipe's "Left" is the physical right hand in a raw, unmirrored camera picture.
-    expect(region().getByText("Right hand · 93%")).toBeInTheDocument();
-    expect(region().getByRole("meter", { name: "Thumb to index distance, Right hand" })).toBeInTheDocument();
+    expect(region().getByText("Left hand · 93%")).toBeInTheDocument();
+    expect(region().getByRole("meter", { name: "Thumb to index distance, Left hand" })).toBeInTheDocument();
     expect(region().getByText("0.56 hand sizes")).toBeInTheDocument();
   });
 

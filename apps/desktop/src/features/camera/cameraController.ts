@@ -286,7 +286,7 @@ export class CameraController {
           picture: this.picture,
           capture_time_from_camera_frames: this.captureTimeSource.captureTime,
           capture_time_from_callback: this.captureTimeSource.callback,
-          // MediaPipe labels hands as if the picture were a mirror; a webcam's raw picture is not one.
+          // The model's own label, saved as reported; whether it matches the physical hand is a setting, not assumed here.
           handedness_convention: "model_label_assumes_mirrored_picture",
           clock: "browser performance.now(); line up with the watch using clock_sync.csv",
         },

@@ -8,6 +8,7 @@ import { getCameraController } from "../camera/cameraService";
 import { CameraPreview } from "../camera/components/CameraPreview";
 import type { DatasetLabel } from "../model-lab/types";
 import { analyse, scoreRule, MIN_FRAMES } from "./calibration";
+import { HandSideCheck } from "./HandSideCheck";
 import { CalibrationSession, type SessionSnapshot } from "./calibrationSession";
 import {
   type Condition, type GestureDefinition, type HandChoice, type MeasureName,
@@ -30,7 +31,7 @@ const STEP_TEXT: Record<SessionSnapshot["step"], string> = {
 function skippedWhy(skipped: SessionSnapshot["skipped"], hand: HandChoice): string {
   const parts: string[] = [];
   if (skipped.noHand > 0) parts.push(`${skipped.noHand} frames had no hand in view (keep your hand inside the picture and well lit)`);
-  if (skipped.otherHand > 0) parts.push(`${skipped.otherHand} showed the other hand (this gesture is set to ${hand} hand only; the camera's left and right are as you see your own hands)`);
+  if (skipped.otherHand > 0) parts.push(`${skipped.otherHand} showed the other hand (this gesture is set to ${hand} hand only; if the line above the record button names the wrong hand when you raise your left, tick "Left and right are swapped")`);
   if (skipped.unmeasurable > 0) parts.push(`${skipped.unmeasurable} showed a hand that could not be measured`);
   return parts.length === 0 ? " The camera delivered no frames while recording." : ` Frames skipped: ${parts.join("; ")}.`;
 }
@@ -160,6 +161,7 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
         ) : (
           <>
             <CameraPreview camera={camera} state={cam} hidden={false} />
+            <HandSideCheck camera={cam} />
             <div className="flex flex-wrap items-center gap-3">
               <Button type="button" onClick={start} disabled={running || cam.frame?.hands.length === 0}>
                 {recorded ? "Record again" : "Record gesture and background"}

@@ -11,6 +11,7 @@ import { useLabelModels } from "../model-lab/hooks/useLabelModels";
 import { AgreementTracker } from "./agreement";
 import { AgreementPanel } from "./AgreementPanel";
 import { blankDefinition, describeRule, type GestureDefinition } from "./definition";
+import { HandSideCheck } from "./HandSideCheck";
 import { GestureEditor } from "./GestureEditor";
 import { useGestureLibrary } from "./useGestureLibrary";
 import { useLiveGestures } from "./useLiveGestures";
@@ -97,6 +98,7 @@ export function GestureLibraryPage() {
             {!on && <span className="hint">Turn the camera on to see your gestures recognised live.</span>}
           </div>
           <CameraPreview camera={camera} state={cam} hidden={!on} />
+          {on && <HandSideCheck camera={cam} />}
           {loaded && definitions.length === 0 && <p className="hint">No gestures yet. Make one with “New gesture”.</p>}
           <ul className="flex flex-col gap-3" aria-label="Gestures">
             {definitions.map((definition) => {
