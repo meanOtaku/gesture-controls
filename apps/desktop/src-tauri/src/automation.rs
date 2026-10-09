@@ -74,6 +74,9 @@ pub struct AutomationState {
     /// Enabled recipes with a camera gesture step whose gesture the camera is not running right now: the camera is
     /// off, the app window is not reporting, or the gesture no longer exists.
     pub unavailable_cameras: Vec<UnavailableCamera>,
+    /// Whether camera gestures may act. Off at every start, and off again whenever the camera stops, so a recipe
+    /// never acts on the camera without it being switched on in this run.
+    pub camera_armed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -321,6 +324,8 @@ pub struct Engine {
     camera_now_ns: u64,
     /// The gestures the camera is running right now; empty while the camera is off or silent.
     cameras_known: BTreeSet<String>,
+    /// Camera gestures act only while this is on; see [`AutomationState::camera_armed`].
+    cameras_armed: bool,
     /// Recipes or the loaded labels changed since the host last looked, so what the UI shows about them may be stale.
     labels_dirty: bool,
 }
@@ -362,6 +367,7 @@ impl Engine {
             camera_pulses: BTreeMap::new(),
             camera_now_ns: 0,
             cameras_known: BTreeSet::new(),
+            cameras_armed: false,
             labels_dirty: true,
         };
         engine.set_recipes(recipes);
@@ -418,6 +424,7 @@ impl Engine {
             unavailable: self.unavailable_labels(),
             loaded_labels: self.models_loaded.iter().flatten().cloned().collect(),
             unavailable_cameras: self.unavailable_cameras(),
+            camera_armed: self.cameras_armed,
         }
     }
 
@@ -463,8 +470,30 @@ impl Engine {
         if self.cameras_known != known {
             self.labels_dirty = true;
         }
+        // With no camera running, arming is over: turning the camera back on must not start acting by itself.
+        if known.is_empty() && self.cameras_armed {
+            self.cameras_armed = false;
+            self.camera_pulses.clear();
+            self.labels_dirty = true;
+        }
         self.cameras_known = known;
         self.step()
+    }
+
+    /// Switches camera gestures on or off. Arming needs a running camera, and starts from a clean slate: a gesture
+    /// seen a moment before does not count, so only what happens after arming can act (a gesture already held does).
+    pub fn set_cameras_armed(&mut self, armed: bool) -> Result<Effects, &'static str> {
+        if armed && self.cameras_known.is_empty() {
+            return Err(
+                "turn the camera on first, with at least one gesture in the Gesture library",
+            );
+        }
+        if self.cameras_armed != armed {
+            self.cameras_armed = armed;
+            self.camera_pulses.clear();
+            self.labels_dirty = true;
+        }
+        Ok(self.step())
     }
 
     /// The camera went quiet (turned off, window closed or stalled): nothing it saw can still hold.
@@ -681,8 +710,8 @@ impl Engine {
         let signals = Signals {
             models_held: Some(&self.models_held),
             models_pulsed: Some(&pulsed),
-            cameras_held: Some(&self.cameras_held),
-            cameras_pulsed: Some(&camera_pulsed),
+            cameras_held: self.cameras_armed.then_some(&self.cameras_held),
+            cameras_pulsed: self.cameras_armed.then_some(&camera_pulsed),
             head_location: self.head.as_deref(),
             pinch_held: self.pinch,
             stem_button_held: self.stem,
@@ -803,6 +832,15 @@ fn save_recipes(app: &AppHandle, recipes: &[Recipe]) {
     }
 }
 
+/// What the last state sent to the UI said about models and cameras: unavailable labels, loaded labels, unavailable
+/// camera gestures, and whether camera gestures were armed.
+type AnnouncedLabels = (
+    Vec<UnavailableLabel>,
+    Vec<String>,
+    Vec<UnavailableCamera>,
+    bool,
+);
+
 pub struct AutomationRuntime {
     /// Serializes "step the engine, then apply what it asked for", so effects from the head, watch and
     /// inference threads reach the overlay in the order they were decided.
@@ -810,7 +848,7 @@ pub struct AutomationRuntime {
     engine: Mutex<Engine>,
     actuators: Actuators,
     /// The model-label part of the last state sent to the UI, so a change in what is loaded is announced.
-    announced_labels: Mutex<(Vec<UnavailableLabel>, Vec<String>, Vec<UnavailableCamera>)>,
+    announced_labels: Mutex<AnnouncedLabels>,
     /// When the app window last reported its camera while it had gestures running; `None` while it has not.
     camera_last: Mutex<Option<Instant>>,
     camera_watchdog_started: AtomicBool,
@@ -822,7 +860,7 @@ impl Default for AutomationRuntime {
             operations: Mutex::new(()),
             engine: Mutex::new(Engine::new(default_recipes(), Tuning::default())),
             actuators: Actuators::default(),
-            announced_labels: Mutex::new((Vec::new(), Vec::new(), Vec::new())),
+            announced_labels: Mutex::new((Vec::new(), Vec::new(), Vec::new(), false)),
             camera_last: Mutex::new(None),
             camera_watchdog_started: AtomicBool::new(false),
         }
@@ -880,6 +918,7 @@ impl AutomationRuntime {
                 state.unavailable.clone(),
                 state.loaded_labels.clone(),
                 state.unavailable_cameras.clone(),
+                state.camera_armed,
             );
             let changed = *announced != now;
             *announced = now;
@@ -941,6 +980,19 @@ impl AutomationRuntime {
         let now_ns = process_clock_ns();
         self.with_engine(app, |engine| engine.set_cameras(known, held, risen, now_ns));
         self.start_camera_watchdog(app);
+    }
+
+    /// Arms or disarms camera gestures; see [`Engine::set_cameras_armed`].
+    pub fn set_cameras_armed(&self, app: &AppHandle, armed: bool) -> Result<(), String> {
+        let mut result = Ok(());
+        self.with_engine(app, |engine| match engine.set_cameras_armed(armed) {
+            Ok(effects) => effects,
+            Err(reason) => {
+                result = Err(reason.to_string());
+                Effects::default()
+            }
+        });
+        result
     }
 
     fn start_camera_watchdog(&self, app: &AppHandle) {
@@ -1159,6 +1211,17 @@ pub fn report_camera_gestures(
     let risen: Vec<String> = valid(risen).into_iter().collect();
     runtime.set_cameras(&app, valid(known), valid(held), &risen);
     Ok(())
+}
+
+/// Switches camera gestures on or off for recipes. Refused when arming without a running camera.
+#[tauri::command]
+pub fn set_camera_armed(
+    armed: bool,
+    runtime: State<'_, AutomationRuntime>,
+    app: AppHandle,
+) -> Result<AutomationState, String> {
+    runtime.set_cameras_armed(&app, armed)?;
+    runtime.state()
 }
 
 #[tauri::command]
@@ -2086,6 +2149,8 @@ mod tests {
             Tuning::default(),
         );
         let known = set(&["gesture-1"]);
+        engine.set_cameras(known.clone(), set(&[]), &[], 50 * MS);
+        engine.set_cameras_armed(true).unwrap();
         let rise = engine.set_cameras(
             known.clone(),
             set(&["gesture-1"]),
@@ -2162,6 +2227,8 @@ mod tests {
             Tuning::default(),
         );
         let known = set(&["gesture-1", "gesture-2"]);
+        engine.set_cameras(known.clone(), set(&[]), &[], MS);
+        engine.set_cameras_armed(true).unwrap();
         engine.set_cameras(
             known.clone(),
             set(&["gesture-1"]),
@@ -2180,6 +2247,64 @@ mod tests {
         assert!(engine.camera_pulses.is_empty());
         engine.camera_lost();
         assert!(engine.cameras_held.is_empty() && engine.cameras_known.is_empty());
+    }
+
+    #[test]
+    fn camera_gestures_do_nothing_until_armed_and_arming_needs_a_running_camera() {
+        let mut engine = Engine::new(
+            vec![
+                camera_recipe("gesture-1", ModelHold::OneShot, Action::PlayPause),
+                camera_recipe("gesture-1", ModelHold::Held, Action::Mute),
+            ],
+            Tuning::default(),
+        );
+        assert!(!engine.state().camera_armed);
+        assert!(engine.set_cameras_armed(true).is_err(), "no camera running");
+        assert!(!engine.state().camera_armed);
+        let known = set(&["gesture-1"]);
+        // Seen while disarmed: nothing fires, and the pulse does not wait around for arming.
+        let seen = engine.set_cameras(
+            known.clone(),
+            set(&["gesture-1"]),
+            &["gesture-1".to_string()],
+            100 * MS,
+        );
+        assert!(seen.fired.is_empty());
+        let armed = engine.set_cameras_armed(true).unwrap();
+        assert!(
+            !armed.fired.contains(&Action::PlayPause),
+            "a pulse from before arming must not fire"
+        );
+        // Already held at arming: a held gesture counts (it is what the person is doing now).
+        assert!(armed.fired.contains(&Action::Mute));
+        assert!(engine.state().camera_armed);
+        // Disarming releases at once.
+        engine.set_cameras_armed(false).unwrap();
+        assert!(!engine.state().camera_armed);
+    }
+
+    #[test]
+    fn the_camera_stopping_disarms_so_turning_it_back_on_does_not_act_by_itself() {
+        let mut engine = Engine::new(
+            vec![camera_recipe(
+                "gesture-1",
+                ModelHold::OneShot,
+                Action::PlayPause,
+            )],
+            Tuning::default(),
+        );
+        let known = set(&["gesture-1"]);
+        engine.set_cameras(known.clone(), set(&[]), &[], MS);
+        engine.set_cameras_armed(true).unwrap();
+        engine.camera_lost();
+        assert!(!engine.state().camera_armed);
+        let back = engine.set_cameras(
+            known,
+            set(&["gesture-1"]),
+            &["gesture-1".to_string()],
+            5 * MS,
+        );
+        assert!(back.fired.is_empty());
     }
 
     #[test]

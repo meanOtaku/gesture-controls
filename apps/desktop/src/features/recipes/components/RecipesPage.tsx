@@ -7,6 +7,7 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Switch } from "../../../components/ui/switch";
 import type { AutomationState, CalibrationState, HeuristicGestures, Recipe } from "../../../shared/protocol/events";
+import { CameraArmSwitch } from "../../gestureLibrary/CameraArmSwitch";
 import { listGestureDefinitions } from "../../gestureLibrary/gestureLibraryApi";
 import { blankRecipe, describeRecipe, offGesturesUsed, type DeviceKind } from "../recipeModel";
 import { ConflictAlerts } from "./ConflictAlerts";
@@ -103,6 +104,7 @@ export function RecipesPage({ automation, calibration, pendingRecipeIds, error, 
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {automation && <ConflictAlerts automation={automation} />}
+          {automation?.recipes.some((recipe) => recipe.stages.some((stage) => stage.kind === "camera")) && <CameraArmSwitch armed={automation.cameraArmed === true} />}
           {automation && automation.recipes.length === 0 && (
             <p className="field-hint">No recipes yet. Create one to start controlling the volume with gestures.</p>
           )}

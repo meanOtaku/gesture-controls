@@ -438,7 +438,7 @@ A recipe step can also be a gesture from your **Gesture library**, seen through 
 - It works only while this app is open and its camera is on (turn it on in the Gesture library or the Recorder). With the camera off, or if the gesture is deleted, the recipe shows **Waiting for camera** and cannot start.
 - The app window reports what the camera sees to the part of the app that runs recipes, several times a second. If those reports stop for about a second (the camera turned off, the window frozen or hidden), every camera gesture is released at once, so one cannot be left stuck on.
 - It acts after the gesture's own **Hold before it counts** time (100 ms by default), so a camera gesture is a little slower than a built-in wrist gesture.
-- Unlike a model label, a camera gesture is not gated by the model runtime's mode: an enabled recipe acts as soon as the camera sees the gesture. Switch the recipe off when you do not want that.
+- Camera gestures have their own master switch, **Camera gestures armed**, at the top of your recipes whenever one uses a camera step. It is off every time the app starts, you can only turn it on while the camera is running, and it turns itself off again whenever the camera stops, so a recipe never acts on the camera unless you armed it in this run. While it is off, camera steps never hold. Arming starts clean: a gesture seen just before does not fire a once-only step, but one you are already holding counts. (Model labels are gated by the model runtime's mode instead.)
 - A gesture a recipe uses cannot be deleted from the Gesture library until the recipe stops using it.
 
 ### Model label

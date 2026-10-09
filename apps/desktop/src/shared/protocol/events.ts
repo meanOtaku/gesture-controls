@@ -102,6 +102,8 @@ export interface AutomationState {
   loadedLabels: string[];
   /** Enabled recipes with a camera gesture the camera is not running now (camera off, or the gesture is gone). */
   unavailableCameras?: { recipe: string; gesture: string }[];
+  /** Whether camera gestures may act: off at every start, and off again whenever the camera stops. */
+  cameraArmed?: boolean;
 }
 
 export interface OverlayState {
