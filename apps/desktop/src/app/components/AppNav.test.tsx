@@ -80,7 +80,7 @@ describe("AppNav", () => {
       fireEvent.keyDown(window, { key: String(index + 1), ctrlKey: true });
       expect(onSelect).toHaveBeenLastCalledWith(tab);
     });
-    expect(NAV_ORDER).toEqual(["main", "headphone", "watch", "recipes", "devices", "gestures", "signals", "recorder", "recordings", "labels", "gestureLibrary", "modelLab", "settings"]);
+    expect(NAV_ORDER).toEqual(["main", "headphone", "watch", "labels", "gestureLibrary", "signals", "recorder", "recordings", "modelLab", "gestures", "recipes", "devices", "settings"]);
   });
 
   it("opens Settings with Ctrl+comma, since the tenth and later tabs have no number", () => {
@@ -95,8 +95,8 @@ describe("AppNav", () => {
     const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
     const prefix = isMac ? "⌘" : "Ctrl+";
     expect(shortcutFor("main")).toBe(`${prefix}1`);
-    expect(shortcutFor("recordings")).toBe(`${prefix}9`);
-    expect(shortcutFor("modelLab")).toBeNull();
+    expect(shortcutFor("modelLab")).toBe(`${prefix}9`);
+    expect(shortcutFor("recipes")).toBeNull();
     expect(shortcutFor("settings")).toBe(`${prefix},`);
   });
 

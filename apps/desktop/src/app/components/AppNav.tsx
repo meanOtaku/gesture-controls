@@ -24,9 +24,9 @@ const DEVICES: NavItem[] = [
   { id: "watch", label: "Watch", icon: Watch },
 ];
 const AUTOMATION: NavItem[] = [
+  { id: "gestures", label: "Gestures", icon: Radar },
   { id: "recipes", label: "Recipes", icon: Workflow },
   { id: "devices", label: "Virtual devices", icon: SlidersHorizontal },
-  { id: "gestures", label: "Gestures", icon: Radar },
 ];
 const CAPTURE: NavItem[] = [
   { id: "signals", label: "Live signals", icon: Activity },
@@ -38,7 +38,7 @@ const MODELS: NavItem[] = [{ id: "modelLab", label: "Model Lab", icon: Brain }];
 const SETTINGS: NavItem = { id: "settings", label: "Settings", icon: SettingsIcon };
 
 /** Display order. Cmd/Ctrl+1..9 select the first nine; Settings is also Cmd/Ctrl+, (the usual place for it). */
-export const NAV_ORDER: AppTab[] = [MAIN, ...DEVICES, ...AUTOMATION, ...CAPTURE, ...LABELS, ...MODELS, SETTINGS].map((item) => item.id);
+export const NAV_ORDER: AppTab[] = [MAIN, ...DEVICES, ...LABELS, ...CAPTURE, ...MODELS, ...AUTOMATION, SETTINGS].map((item) => item.id);
 
 export type NavTone = "ok" | "warn" | "live" | "idle";
 export interface NavStatus { tone: NavTone; label: string }
@@ -80,7 +80,7 @@ type AppNavProps = {
   statuses?: Partial<Record<AppTab, NavStatus>>;
 };
 
-/** Primary navigation: Main, then Devices, Automation, Capture, Labels and Models, with Settings pinned at the bottom. */
+/** Primary navigation in the order the app is used: connect devices, define labels, capture, train, then automate, with Settings pinned at the bottom. */
 export function AppNav({ activeTab, onSelect, statuses = {} }: AppNavProps) {
   // Cmd/Ctrl + 1..9 jumps to a tab, and Cmd/Ctrl + , to Settings. A modified key is never text, so it is safe inside a field too.
   useEffect(() => {
@@ -147,9 +147,9 @@ export function AppNav({ activeTab, onSelect, statuses = {} }: AppNavProps) {
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
-          <SidebarGroupLabel>Automation</SidebarGroupLabel>
+          <SidebarGroupLabel>Labels</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>{AUTOMATION.map(entry)}</SidebarMenu>
+            <SidebarMenu>{LABELS.map(entry)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
@@ -159,15 +159,15 @@ export function AppNav({ activeTab, onSelect, statuses = {} }: AppNavProps) {
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
-          <SidebarGroupLabel>Labels</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>{LABELS.map(entry)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
           <SidebarGroupLabel>Models</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>{MODELS.map(entry)}</SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Automation</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>{AUTOMATION.map(entry)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

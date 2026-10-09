@@ -40,16 +40,18 @@ For host prerequisites and tracker troubleshooting, see [Running the project](de
 
 ## 2. Recommended first-use workflow
 
-Follow this order rather than enabling every feature at once:
+The sidebar is laid out in the order you use it. Work down it:
 
-1. **Headphones:** connect Sony tracking and capture the center and top-right calibration targets.
-2. **Watch:** confirm connection, raw orientation, and any enabled health-sensor state.
-3. **Live signals:** check that the watch's streams are arriving.
-4. **Recorder:** record several labeled sessions for each intended gesture and non-gesture/background activity; export one dataset CSV per session.
-5. **Model Lab:** import sessions, check label coverage, train a TFLite model, inspect evaluation, and configure safe class bindings.
-6. **Model Lab:** promote the model through the lifecycle, activate it, and run offline replay.
-7. **Model Lab:** use **Monitor** mode with live telemetry. It records decisions but cannot operate desktop controls.
-8. Only after reviewing Monitor results and validating the target platform, use **Live** mode with an isolated test audio output.
+1. **Headphones** and **Watch** (Devices): connect them; capture the head calibration targets; confirm the watch's orientation and any health sensors you want.
+2. **Labels**: name each gesture you want, plus an everyday activity or two to tell them apart from.
+3. **Gesture library**: define each gesture from your hand's shape with the camera, by showing it and then showing everything else.
+4. **Live signals** (Capture): check the watch's streams are arriving.
+5. **Recorder**: turn the camera on, pick a label, tick **Let the camera mark the gesture**, and record several sessions of each gesture with the watch on the hand the camera sees. They save automatically.
+6. **Recordings**: review the intervals the camera marked (approve or exclude them), and check them against the raw data.
+7. **Model Lab** (Models): add the recordings to the training data, train a model for each label, then approve and activate it. Use **Monitor** mode first: it scores and shows detections but cannot act.
+8. **Gestures** (Automation): see each gesture light up as it is recognised, including how well each model agrees with the camera.
+9. **Recipes**: chain gestures (head location, wrist, model labels, camera gestures) into something that controls your computer. **Virtual devices** shows and tunes the controls recipes drive.
+10. Only after reviewing Monitor results and checking the target platform, use **Live** mode with an isolated test audio output. Camera gestures have their own **armed** switch.
 
 ## 3. In-app feedback, help, and file saves
 
@@ -130,7 +132,7 @@ The capture tools are three tabs in the **Capture** group of the sidebar, in the
 - **Recorder** records a session from the watch and exports it. A timed capture still stops and exports by itself if you switch to another tab while it runs, and the export folder you chose stays chosen when you leave the page.
 - **Recordings** looks inside saved sessions (currently the raw image viewer).
 
-The sidebar marks **Recorder** while a recording is running. Cmd/Ctrl+1 to 9 open the first nine tabs, and Cmd/Ctrl+comma opens Settings.
+The sidebar marks **Recorder** while a recording is running. Cmd/Ctrl+1 to 9 open the first nine tabs (Main to Model Lab, in sidebar order), and Cmd/Ctrl+comma opens Settings.
 
 #### Live charts
 
