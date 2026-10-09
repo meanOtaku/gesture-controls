@@ -17,6 +17,7 @@ beforeEach(() => {
       case "list_model_labels": return [label("pinch", "Pinch"), label("fist", "Fist")];
       case "list_model_datasets": return [{ id: "d1", originalFilename: "a.csv", importedAt: "", label: "pinch", rowCount: 5 }];
       case "list_gesture_definitions": return [{ id: "g1", name: "Pinch", labelId: "pinch" }];
+      case "list_recording_bundles": return [{ recordingId: "r1", labelIds: ["pinch"], rawRowCount: 1, intervalCount: 1, actualDurationMs: 1, stopReason: "manual_stop", unreviewedCount: 1, approvedCount: 0, excludedCount: 0, isImported: false }];
       case "list_label_models": return [];
       case "get_label_runtime_status": return { mode: "off", loadedLabels: [], loadFailures: [], quarantined: [], registryError: null, activeDetections: [], lastScores: {} };
       default: throw new Error(`unexpected ${command}`);
@@ -30,7 +31,7 @@ describe("LabelsPage", () => {
     render(<LabelsPage />);
     await waitFor(() => expect(screen.getAllByRole("listitem")).toHaveLength(2));
     const [pinch, fist] = screen.getAllByRole("listitem").map((li) => li.textContent ?? "");
-    expect(fist).toContain("0 recordings · 0 gestures");
-    expect(pinch).toContain("1 recording · 1 gesture");
+    expect(fist).toContain("0 in Recorder recordings · 0 in the training data · 0 gestures");
+    expect(pinch).toContain("1 in Recorder recordings · 1 in the training data · 1 gesture");
   });
 });

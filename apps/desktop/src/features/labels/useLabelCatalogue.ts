@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { OperationFeedback } from "../../components/app/OperationFeedback";
+import { listRecordingBundles } from "../../shared/tauri/recordingBundle";
 import { listGestureDefinitions } from "../gestureLibrary/gestureLibraryApi";
 import type { NewLabel } from "../model-lab/components/LabelCoverage";
 import { useLabelModels } from "../model-lab/hooks/useLabelModels";
@@ -17,6 +18,7 @@ export function useLabelCatalogue() {
   const [labels, setLabels] = useState<DatasetLabel[]>([]);
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [gestureLabels, setGestureLabels] = useState<(string | null)[]>([]);
+  const [recorderLabels, setRecorderLabels] = useState<string[][]>([]);
   const [error, setError] = useState<string | null>(null);
   const { models } = useLabelModels(desktopAvailable);
 
@@ -25,15 +27,17 @@ export function useLabelCatalogue() {
     let live = true;
     void (async () => {
       try {
-        const [catalogue, sets, gestures] = await Promise.all([
+        const [catalogue, sets, gestures, bundles] = await Promise.all([
           invoke<DatasetLabel[]>("list_model_labels"),
           invoke<DatasetSummary[]>("list_model_datasets"),
           listGestureDefinitions(),
+          listRecordingBundles(),
         ]);
         if (!live) return;
         setLabels(Array.isArray(catalogue) ? catalogue : []);
         setDatasets(Array.isArray(sets) ? sets : []);
         setGestureLabels(gestures.map((gesture) => gesture.labelId));
+        setRecorderLabels(bundles.status === "ok" && Array.isArray(bundles.value) ? bundles.value.map((bundle) => bundle.labelIds) : []);
       } catch (err) {
         if (live) setError(String(err));
       }
@@ -53,6 +57,12 @@ export function useLabelCatalogue() {
     for (const label of gestureLabels) if (label) counts.set(label, (counts.get(label) ?? 0) + 1);
     return counts;
   }, [gestureLabels]);
+
+  const recorderCountByLabel = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const labelIds of recorderLabels) for (const label of new Set(labelIds)) counts.set(label, (counts.get(label) ?? 0) + 1);
+    return counts;
+  }, [recorderLabels]);
 
   const create = useCallback(async (label: NewLabel): Promise<string | null> => {
     try {
@@ -91,5 +101,5 @@ export function useLabelCatalogue() {
     }
   }, []);
 
-  return { desktopAvailable, labels, models, coverageByLabel, gestureCountByLabel, error, create, update, setArchived, remove };
+  return { desktopAvailable, labels, models, coverageByLabel, gestureCountByLabel, recorderCountByLabel, error, create, update, setArchived, remove };
 }

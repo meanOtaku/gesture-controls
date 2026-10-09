@@ -15,7 +15,7 @@ export function LabelsPage() {
         <div>
           <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Labels</h1>
-          <p className="subtitle">The names of the gestures and activities the app knows. Make them here once and use them in recordings, the Gesture library, Model Lab and recipes.</p>
+          <p className="subtitle">The names of the gestures and activities the app knows. Make them here once and use them in recordings, the Gesture library, Model Lab and recipes. Recording and training happen in their own tabs.</p>
         </div>
       </header>
       {!catalogue.desktopAvailable && (
@@ -27,6 +27,7 @@ export function LabelsPage() {
         models={catalogue.models}
         coverageByLabel={catalogue.coverageByLabel}
         gestureCountByLabel={catalogue.gestureCountByLabel}
+        recorderCountByLabel={catalogue.recorderCountByLabel}
         onCreate={catalogue.create}
         onUpdate={catalogue.update}
         onSetArchived={catalogue.setArchived}

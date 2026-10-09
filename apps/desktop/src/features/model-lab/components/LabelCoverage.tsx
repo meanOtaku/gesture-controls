@@ -7,7 +7,7 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
-import { bestState, labelIdFromName, type LabelModel } from "../labelModels";
+import { labelIdFromName, type LabelModel } from "../labelModels";
 import type { DatasetLabel } from "../types";
 
 export interface NewLabel {
@@ -29,12 +29,14 @@ type LabelCoverageProps = {
   onUpdate?: (label: NewLabel) => Promise<string | null>;
   /** Saved gestures linked to each label id. */
   gestureCountByLabel?: Map<string, number>;
+  /** Saved Recorder recordings that have an interval with each label id. */
+  recorderCountByLabel?: Map<string, number>;
   /** Resolves to an error message, or null once deleted. */
   onDelete: (id: string) => Promise<string | null>;
 };
 
 /** Your labels: what each is called, how many recordings cover it, and how far along its model is. */
-export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSetArchived, onUpdate, gestureCountByLabel, onDelete }: LabelCoverageProps) {
+export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSetArchived, onUpdate, gestureCountByLabel, recorderCountByLabel, onDelete }: LabelCoverageProps) {
   const uid = useId();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
@@ -97,7 +99,7 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
       <CardHeader>
         <SectionHeader
           title="Labels"
-          description="Name the gestures and activities you want to teach, then see their recordings and models."
+          description="Name the gestures and activities the app should know, and see where each is used."
           status={
             <Button type="button" variant="outline" disabled={adding} onClick={() => setAdding(true)}>
               <PlusIcon aria-hidden="true" /> Add a label
@@ -105,7 +107,7 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
           }
           help={{
             label: "About labels",
-            content: "A label names one thing a model should recognise, such as snap_fingers. Create it here, then record it on the Recorder tab using the same name, and import the recording. A model is tested on whole recordings it never saw, so each label needs at least two. A label that recordings or models use can be archived but not deleted.",
+            content: "A label names one thing the app should recognise, such as snap_fingers. Make it here, then define its gesture in the Gesture library, record it in the Recorder, and train it in Model Lab. Each label shows how many recordings, gestures and models use it. A label something still uses can be archived but not deleted.",
           }}
         />
       </CardHeader>
@@ -177,7 +179,7 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
             {rows.map((row) => {
               const sessions = coverageByLabel.get(row.id) ?? 0;
               const labelModels = models.filter((model) => model.label === row.id);
-              const state = bestState(labelModels);
+              const recorderRecordings = recorderCountByLabel?.get(row.id) ?? 0;
               const gestures = gestureCountByLabel?.get(row.id) ?? 0;
               const inUse = sessions > 0 || labelModels.length > 0 || gestures > 0;
               const full = labels.find((label) => label.id === row.id);
@@ -189,14 +191,14 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
                       {row.archived && <Badge variant="outline">Archived</Badge>}
                     </span>
                     <small className="text-xs text-muted-foreground">
-                      {sessions} recording{sessions === 1 ? "" : "s"}
+                      {recorderCountByLabel ? `${recorderRecordings} in Recorder recordings · ` : ""}
+                      {sessions} in the training data
                       {gestureCountByLabel ? ` · ${gestures} gesture${gestures === 1 ? "" : "s"}` : ""}
-                      {sessions === 1 ? ": record at least one more so a model can be tested on a session it did not see" : ""}
+                      {labelModels.length > 0 ? ` · ${labelModels.length} model${labelModels.length === 1 ? "" : "s"}` : ""}
                       {row.description ? ` · ${row.description}` : ""}
                     </small>
                   </div>
                   <div className="recipe-item-actions">
-                    <Badge variant={state === "active" ? "default" : "secondary"}>{state === null ? "No model" : `Model: ${state}`}</Badge>
                     {row.managed && onUpdate && full && (
                       <Button type="button" variant="ghost" aria-label={`Edit ${row.id}`} onClick={() => { setEditError(null); setEditing({ id: full.id, displayName: full.displayName, description: full.description, role: full.role }); }}>Edit</Button>
                     )}

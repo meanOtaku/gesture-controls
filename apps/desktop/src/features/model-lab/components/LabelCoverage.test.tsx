@@ -27,13 +27,14 @@ describe("LabelCoverage", () => {
     expect(screen.queryByText("Idle")).not.toBeInTheDocument();
   });
 
-  it("shows each label's recordings and model state, flagging a single recording", () => {
+  it("shows where each label is used: recordings in the training data and models, with no training advice", () => {
     setup({ labels: [label("idle", "Idle"), label("snap", "Snap")], models: [model("snap", "active")], coverageByLabel: new Map([["idle", 3], ["snap", 1]]) });
     const rows = screen.getAllByRole("listitem").map((li) => li.textContent ?? "");
-    expect(rows[0]).toContain("3 recordings");
-    expect(rows[0]).toContain("No model");
-    expect(rows[1]).toContain("record at least one more");
-    expect(rows[1]).toContain("Model: active");
+    expect(rows[0]).toContain("3 in the training data");
+    expect(rows[0]).not.toContain("model");
+    expect(rows[1]).toContain("1 in the training data");
+    expect(rows[1]).toContain("1 model");
+    expect(rows[1]).not.toContain("record at least one more");
   });
 
   it("adds a label from a typed name, showing the id it will get", async () => {
