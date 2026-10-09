@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { chooseExportFolder, exportCsvToFolder, isTauriDesktop, type ExportCsvResult } from "../../../shared/tauri/exportCsv";
 import { saveRecordingBundle, type SaveRecordingBundleResult, type StopReason } from "../../../shared/tauri/recordingBundle";
+import { cameraAssist } from "../../gestureLibrary/cameraAssist";
 import { exportFolderStore } from "../store/exportFolderStore";
 import { telemetryStore } from "../store/telemetryStore";
 
@@ -71,9 +72,11 @@ export function useTelemetryExport() {
    */
   const saveDatasetRecording = async (stopReason: StopReason = "manual_stop") => {
     const payload = telemetryStore.buildRecordingBundlePayload(stopReason);
-    if (!payload) return;
+    if (!payload) return cameraAssist.disarm();
     const result = await saveRecordingBundle(payload);
     reportRecordingBundleOutcome(result);
+    if (result.status === "saved") void cameraAssist.finish(result.recordingId);
+    else cameraAssist.disarm();
   };
 
   return { exportDatasetCsv, saveDatasetRecording, datasetExportFolder, chooseDatasetExportFolder };

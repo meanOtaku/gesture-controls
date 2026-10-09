@@ -6,23 +6,12 @@ import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Label } from "../../components/ui/label";
-import { parseClockSync, parseHandLandmarks } from "../camera/handLandmarkCsv";
-import {
-  addCameraProposedIntervals, getRecordingCameraEvidence, listRecordingBundles, loadRecordingBundle,
-  type RecordingBundleSummary,
-} from "../../shared/tauri/recordingBundle";
+import { listRecordingBundles, type RecordingBundleSummary } from "../../shared/tauri/recordingBundle";
 import type { GestureDefinition } from "./definition";
 import { listGestureDefinitions } from "./gestureLibraryApi";
-import { alignClocks, proposeIntervals, toAnnotationInterval, type ClockAlignment, type ProposedInterval } from "./proposals";
+import { addProposals, findProposals, type Found } from "./recordingProposals";
 
-type Found = {
-  recordingId: string;
-  proposals: ProposedInterval[];
-  rawTimestampsNs: number[];
-  alignment: ClockAlignment;
-  frames: number;
-  skipped: string[];
-};
+type Shown = Found & { skipped: string[] };
 
 const seconds = (ns: number, originNs: number) => ((ns - originNs) / 1e9).toFixed(1);
 
@@ -36,7 +25,7 @@ export function CameraProposalsPanel() {
   const [recordingId, setRecordingId] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [found, setFound] = useState<Found | null>(null);
+  const [found, setFound] = useState<Shown | null>(null);
   const [chosen, setChosen] = useState<Set<number>>(new Set());
 
   useEffect(() => {
@@ -50,29 +39,11 @@ export function CameraProposalsPanel() {
     setFound(null);
     setMessage(null);
     try {
-      const [evidence, detail, definitions] = await Promise.all([
-        getRecordingCameraEvidence(recordingId),
-        loadRecordingBundle(recordingId),
-        listGestureDefinitions().catch(() => [] as GestureDefinition[]),
-      ]);
-      if (evidence.status === "error") return setMessage(evidence.message);
-      if (detail.status === "error") return setMessage(detail.message);
-      if (!evidence.value) return setMessage("This recording has no camera data. Turn the camera on in the Recorder before recording to get it.");
-      const usable = definitions.filter((definition) => definition.labelId);
-      if (usable.length === 0) return setMessage("No gesture in the library is linked to a label yet. Link one in the Gesture library first.");
-      const alignment = alignClocks(parseClockSync(evidence.value.clockSync));
-      if (!alignment) return setMessage("The camera and watch clocks could not be lined up: this recording has too few clock samples (the watch must be streaming while recording).");
-      const frames = parseHandLandmarks(evidence.value.handLandmarks);
-      const proposals = proposeIntervals({
-        definitions: usable,
-        frames,
-        alignment,
-        rawTimestampsNs: evidence.value.rawTimestampsNs,
-        existing: detail.value.annotations.intervals.map((interval) => ({ startRow: interval.resolved_start.raw_row, endRow: interval.resolved_end.raw_row })),
-      });
-      const skipped = definitions.filter((definition) => !definition.labelId).map((definition) => definition.name);
-      setFound({ recordingId, proposals, rawTimestampsNs: evidence.value.rawTimestampsNs, alignment, frames: frames.length, skipped });
-      setChosen(new Set(proposals.flatMap((proposal, index) => (proposal.overlaps ? [] : [index]))));
+      const definitions = await listGestureDefinitions().catch(() => [] as GestureDefinition[]);
+      const result = await findProposals(recordingId, definitions);
+      if (!result.ok) return setMessage(result.message);
+      setFound({ ...result.found, skipped: definitions.filter((definition) => !definition.labelId).map((definition) => definition.name) });
+      setChosen(new Set(result.found.proposals.flatMap((proposal, index) => (proposal.overlaps ? [] : [index]))));
     } catch (error) {
       setMessage(String(error));
     } finally {
@@ -83,14 +54,13 @@ export function CameraProposalsPanel() {
   const add = async () => {
     if (!found) return;
     setBusy(true);
-    const nowIso = new Date().toISOString();
-    const intervals = found.proposals.filter((_, index) => chosen.has(index)).map((p) => toAnnotationInterval(p, found.rawTimestampsNs, nowIso));
-    const result = await addCameraProposedIntervals(found.recordingId, intervals);
+    const picked = found.proposals.filter((_, index) => chosen.has(index));
+    const problem = await addProposals(found, picked);
     setBusy(false);
-    if (result.status === "error") return setMessage(result.message);
-    OperationFeedback.success("Add intervals", `Added ${intervals.length} unreviewed interval${intervals.length === 1 ? "" : "s"}.`);
+    if (problem) return setMessage(problem);
+    OperationFeedback.success("Add intervals", `Added ${picked.length} unreviewed interval${picked.length === 1 ? "" : "s"}.`);
     setFound(null);
-    setMessage(`Added ${intervals.length}. Reselect the recording in the viewer below to see them.`);
+    setMessage(`Added ${picked.length}. Reselect the recording in the viewer below to see them.`);
   };
 
   const origin = found?.rawTimestampsNs[0] ?? 0;

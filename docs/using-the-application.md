@@ -188,6 +188,10 @@ Two capture modes share this same Arming/timer behavior and the same immutable-r
 5. Capture more than one session (separate Start/Stop recordings) rather than one very long one — training holds out whole sessions, so one session can't cover evaluation by itself.
 6. Before exporting, check the quality summary and timeline intervals — fix mislabeled or too-short intervals, then export.
 
+#### Let the camera mark it (Recorder)
+
+Under the recorder, **Let the camera mark it** labels a recording for you. Choose a label (it must have a gesture in the Gesture library), turn the camera on, and tick **Let the camera mark the gesture**. A badge shows live whether the camera sees the gesture, so you can check it before you start. Record as usual with the watch on the hand the camera sees. The recording is made as a timeline with no manual marks; when you stop and it saves, the camera's holds of that gesture are added as **unreviewed** intervals, so the PPG and motion rows carry that label. A message says how many were marked, or that the camera never saw the gesture (the recording is kept either way). Review the intervals in Recordings like any others.
+
 #### Label from the camera (Recordings)
 
 At the top of **Recordings**, **Label from the camera** runs your Gesture library over a recording's saved hand landmarks. Pick a recording made with the camera on, choose **Find gestures**, tick the holds you want and add them. Each becomes a label interval on the watch data, using the label the gesture is linked to, and starts **unreviewed** like any other interval.

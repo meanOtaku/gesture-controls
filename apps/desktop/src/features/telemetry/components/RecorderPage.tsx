@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { CameraCapturePanel } from "../../camera/components/CameraCapturePanel";
+import { CameraAssistCard } from "../../gestureLibrary/CameraAssistCard";
+import { cameraAssist } from "../../gestureLibrary/cameraAssist";
 import { DatasetCaptureCard } from "./DatasetCaptureCard";
 import { StreamStatus } from "./StreamStatus";
 import { useTelemetryExport } from "../hooks/useTelemetryExport";
@@ -52,18 +54,22 @@ export function RecorderPage() {
         }}
         onMarkEnd={() => telemetryStore.setTimelineLabel(null)}
         onStart={(timelineDurationSeconds) => {
+          // With camera marking on, the recording is a timeline with no manual marks; the camera adds them on stop.
+          const assisted = cameraAssist.isEnabled() && selectedLabel !== null;
+          if (assisted) telemetryStore.setDatasetCaptureMode("timeline");
           timedCapture.request(timelineDurationSeconds);
-          telemetryStore.startDatasetRecording();
+          if (telemetryStore.startDatasetRecording() && assisted) cameraAssist.arm(selectedLabel);
         }}
         onStop={() => {
           telemetryStore.stopDatasetRecording();
           void saveDatasetRecording();
         }}
-        onDiscard={() => telemetryStore.discardDatasetRecording()}
+        onDiscard={() => { cameraAssist.disarm(); telemetryStore.discardDatasetRecording(); }}
         onExport={exportDatasetCsv}
         getDatasetRows={() => telemetryStore.getDatasetRows()}
         timelineIntervals={telemetryStore.getTimelineIntervals()}
       />
+      <CameraAssistCard selectedLabel={selectedLabel} recording={datasetRecording} desktopAvailable={desktopAvailable} />
       <CameraCapturePanel />
     </div>
   </main>;
