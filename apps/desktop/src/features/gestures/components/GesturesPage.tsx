@@ -5,6 +5,7 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import type { AutomationState, CalibrationState, HeuristicGestures, PitchDirection, RollDirection, SwipeDirection, TapKind } from "../../../shared/protocol/events";
 import { useLabelModels } from "../../model-lab/hooks/useLabelModels";
+import { ModelAgreementSection } from "../../gestureLibrary/ModelAgreementSection";
 import { WRIST_GESTURES, recipesUsingGesture, recipesUsingLabel, recipesUsingStem, type WristGesture } from "../gestureCatalog";
 import { useFlash } from "../useFlash";
 import { useLabelDetections } from "../useLabelDetections";
@@ -188,6 +189,8 @@ export function GesturesPage({ heuristics, watchConnected, stemDown, shakeCount,
           )}
         </CardContent>
       </Card>
+
+      {desktopAvailable && loaded.length > 0 && <ModelAgreementSection status={status} />}
     </main>
   );
 }

@@ -4,11 +4,11 @@ import type { AutomationState, CalibrationState, Recipe } from "../../../shared/
 import { GesturesPage } from "./GesturesPage";
 
 const invokeMock = vi.fn();
-const handlers = new Map<string, (event: { payload: unknown }) => void>();
+const handlers = new Map<string, ((event: { payload: unknown }) => void)[]>();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invokeMock(...args) }));
 vi.mock("@tauri-apps/api/event", () => ({
   listen: (name: string, fn: (event: { payload: unknown }) => void) => {
-    handlers.set(name, fn);
+    handlers.set(name, [...(handlers.get(name) ?? []), fn]);
     return Promise.resolve(() => undefined);
   },
 }));
@@ -92,16 +92,26 @@ describe("GesturesPage", () => {
     expect(locations.queryByText("Left edge")).not.toBeInTheDocument();
   });
 
+  it("offers the model-against-camera check under the models, asking for the camera and a linked gesture", async () => {
+    setup();
+    const section = await screen.findByRole("region", { name: "Model against camera" });
+    expect(within(section).getByRole("status").textContent).toMatch(/Turn the camera on\./);
+    expect(within(section).getByRole("button", { name: "Turn camera on" })).toBeInTheDocument();
+    cleanup();
+    setup({}, status({ loadedLabels: [] }));
+    expect(screen.queryByRole("region", { name: "Model against camera" })).not.toBeInTheDocument();
+  });
+
   it("shows a loaded model's score and lights it when it is detected, in Monitor too", async () => {
     setup();
     const model = await screen.findByRole("listitem", { name: "snap" });
     expect(within(model).getByText("Not detected")).toBeInTheDocument();
     expect(within(model).getByText(/Score 42%/)).toBeInTheDocument();
     await vi.waitFor(() => expect(handlers.has("label-detections")).toBe(true));
-    act(() => handlers.get("label-detections")?.({ payload: { events: [{ kind: "rising", label: "snap", confidence: 0.9, timestampNs: 1 }], conflicts: [], rejections: [] } }));
+    act(() => handlers.get("label-detections")?.forEach((handle) => handle({ payload: { events: [{ kind: "rising", label: "snap", confidence: 0.9, timestampNs: 1 }], conflicts: [], rejections: [] } })));
     expect(within(model).getByText("Detected")).toBeInTheDocument();
     expect(within(model).getByText(/Detected 1 time this session/)).toBeInTheDocument();
-    act(() => handlers.get("label-detections")?.({ payload: { events: [{ kind: "falling", label: "snap", timestampNs: 2, reason: "scoreBelowRelease" }], conflicts: [], rejections: [] } }));
+    act(() => handlers.get("label-detections")?.forEach((handle) => handle({ payload: { events: [{ kind: "falling", label: "snap", timestampNs: 2, reason: "scoreBelowRelease" }], conflicts: [], rejections: [] } })));
     expect(within(model).getByText("Not detected")).toBeInTheDocument();
   });
 

@@ -306,6 +306,8 @@ The **Gestures** tab (under Automation) is where you try what is working before 
 
 The pinch gesture is not shown: it needs a model trained for it, which will appear under Model gestures once you have one.
 
+
+Under the model gestures, **Model against camera** checks each loaded model against the camera, the same check as on the Gesture library page: turn the camera on, perform the gesture, and it counts how often the model noticed it, missed it or fired when you were not doing it. It needs a Gesture library gesture linked to the model's label.
 ### Settings
 
 #### Appearance
