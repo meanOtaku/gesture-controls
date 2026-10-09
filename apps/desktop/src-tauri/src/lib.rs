@@ -225,6 +225,7 @@ pub fn run() {
             gesture_library::delete_gesture_definition,
             label_registry::list_model_labels,
             label_registry::create_model_label,
+            label_registry::update_model_label,
             label_registry::set_model_label_archived,
             label_registry::delete_model_label,
             model_registry::get_model_registry,

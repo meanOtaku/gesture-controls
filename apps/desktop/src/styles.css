@@ -399,3 +399,6 @@ html.overlay-document body::before { display:none; }
 .agreement-table { width:100%; border-collapse:collapse; font-size:.85rem; }
 .agreement-table th, .agreement-table td { padding:.35rem .5rem; text-align:right; border-bottom:1px solid var(--line); }
 .agreement-table th:first-child { text-align:left; }
+[data-slot="label"][data-required]::after { content:"*"; margin-left:-.3rem; color:var(--destructive,#c0392b); font-weight:700; }
+.required-mark { color:var(--destructive,#c0392b); font-weight:700; }
+.required-note { margin:0; font-size:.78rem; color:var(--ink-3); }

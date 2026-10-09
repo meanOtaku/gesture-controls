@@ -1,4 +1,4 @@
-import { Activity, Brain, CircleDot, FolderOpen, Hand, Headphones, Shapes, Radar, LayoutDashboard, Settings as SettingsIcon, SlidersHorizontal, Watch, Workflow } from "lucide-react";
+import { Activity, Brain, CircleDot, FolderOpen, Hand, Headphones, Shapes, Tags, Radar, LayoutDashboard, Settings as SettingsIcon, SlidersHorizontal, Watch, Workflow } from "lucide-react";
 import { useEffect } from "react";
 import {
   Sidebar,
@@ -14,7 +14,7 @@ import {
   SidebarRail,
 } from "../../components/ui/sidebar";
 
-export type AppTab = "main" | "headphone" | "watch" | "recipes" | "devices" | "gestures" | "signals" | "recorder" | "recordings" | "gestureLibrary" | "modelLab" | "settings";
+export type AppTab = "main" | "headphone" | "watch" | "recipes" | "devices" | "gestures" | "signals" | "recorder" | "recordings" | "labels" | "gestureLibrary" | "modelLab" | "settings";
 
 type NavItem = { id: AppTab; label: string; icon: typeof LayoutDashboard };
 
@@ -33,7 +33,7 @@ const CAPTURE: NavItem[] = [
   { id: "recorder", label: "Recorder", icon: CircleDot },
   { id: "recordings", label: "Recordings", icon: FolderOpen },
 ];
-const LABELS: NavItem[] = [{ id: "gestureLibrary", label: "Gesture library", icon: Shapes }];
+const LABELS: NavItem[] = [{ id: "labels", label: "Labels", icon: Tags }, { id: "gestureLibrary", label: "Gesture library", icon: Shapes }];
 const MODELS: NavItem[] = [{ id: "modelLab", label: "Model Lab", icon: Brain }];
 const SETTINGS: NavItem = { id: "settings", label: "Settings", icon: SettingsIcon };
 

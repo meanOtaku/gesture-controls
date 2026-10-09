@@ -108,7 +108,7 @@ export function CameraProposalsPanel() {
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="field">
-          <div className="field-head"><Label htmlFor={selectId}>Recording</Label></div>
+          <div className="field-head"><Label htmlFor={selectId} required>Recording</Label></div>
           <select id={selectId} className="recipe-select" value={recordingId} onChange={(e) => { setRecordingId(e.target.value); setFound(null); setMessage(null); }}>
             <option value="">Choose a recording…</option>
             {recordings.map((r) => <option key={r.recordingId} value={r.recordingId}>{r.recordingId.slice(0, 8)} · {(r.actualDurationMs / 1000).toFixed(0)} s · {r.intervalCount} interval{r.intervalCount === 1 ? "" : "s"}</option>)}

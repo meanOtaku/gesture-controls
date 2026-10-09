@@ -137,7 +137,7 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], onSave, onCa
     <form noValidate aria-label={recipe.id === "" ? "New recipe" : `Edit ${recipe.name}`} className="recipe-editor" onSubmit={submit}>
       <div className="field" data-invalid={nameError !== null || undefined}>
         <div className="field-head">
-          <Label htmlFor={nameId}>Name</Label>
+          <Label htmlFor={nameId} required>Name</Label>
         </div>
         <Input
           id={nameId}

@@ -93,4 +93,24 @@ describe("LabelCoverage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete spare" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("it is used");
   });
+
+  it("marks the required fields, and edits a label's name, notes and role without touching its id", async () => {
+    const onUpdate = vi.fn().mockResolvedValue(null);
+    setup({ labels: [label("pinch", "Pinch")], onUpdate, gestureCountByLabel: new Map([["pinch", 2]]) });
+    expect(screen.getByRole("listitem").textContent).toContain("2 gestures");
+    fireEvent.click(screen.getByRole("button", { name: "Edit pinch" }));
+    const form = within(screen.getByRole("form", { name: "Edit pinch" }));
+    expect(form.getByText("Name")).toHaveAttribute("data-required", "true");
+    expect(form.getByText("Notes (optional)")).not.toHaveAttribute("data-required");
+    fireEvent.change(form.getByLabelText("Name"), { target: { value: "Index pinch" } });
+    fireEvent.change(form.getByLabelText("Notes (optional)"), { target: { value: "thumb to index" } });
+    fireEvent.click(form.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledWith({ id: "pinch", displayName: "Index pinch", description: "thumb to index", role: "positiveGesture" }));
+  });
+
+  it("will not delete a label a gesture still uses, and does not offer to", () => {
+    setup({ labels: [label("pinch", "Pinch")], gestureCountByLabel: new Map([["pinch", 1]]) });
+    expect(screen.queryByRole("button", { name: "Delete pinch" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Archive pinch" })).toBeInTheDocument();
+  });
 });

@@ -52,6 +52,15 @@ pub struct CreateLabelInput {
     pub role: LabelRole,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateLabelInput {
+    pub id: String,
+    pub display_name: String,
+    pub description: String,
+    pub role: LabelRole,
+}
+
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LabelIndex {
@@ -142,6 +151,27 @@ fn validate_input(input: &CreateLabelInput) -> Result<(), String> {
     Ok(())
 }
 
+/// Changes what a label is called, its notes and its role. The id never changes: recordings, models, recipes and
+/// gestures refer to it.
+fn apply_update(index: &mut LabelIndex, input: &UpdateLabelInput) -> Result<(), String> {
+    validate_input(&CreateLabelInput {
+        id: "placeholder".to_string(),
+        display_name: input.display_name.clone(),
+        description: input.description.clone(),
+        color: "#000000".to_string(),
+        role: input.role,
+    })?;
+    let label = index
+        .labels
+        .iter_mut()
+        .find(|label| label.id == input.id)
+        .ok_or_else(|| format!("no label with id '{}'", input.id))?;
+    label.display_name = input.display_name.trim().to_string();
+    label.description = input.description.trim().to_string();
+    label.role = input.role;
+    Ok(())
+}
+
 fn emit(app: &AppHandle, index: &LabelIndex) {
     let _ = app.emit(LABEL_REGISTRY_EVENT, &index.labels);
 }
@@ -189,6 +219,23 @@ pub fn create_model_label(
 }
 
 #[tauri::command]
+pub fn update_model_label(
+    input: UpdateLabelInput,
+    app: AppHandle,
+    runtime: State<'_, LabelRegistryRuntime>,
+) -> Result<Vec<LabelRecord>, String> {
+    let _guard = runtime
+        .lock
+        .lock()
+        .map_err(|_| "label registry lock was poisoned".to_string())?;
+    let mut index = load_index(&app);
+    apply_update(&mut index, &input)?;
+    write_index_atomic(&app, &index)?;
+    emit(&app, &index);
+    Ok(index.labels)
+}
+
+#[tauri::command]
 pub fn set_model_label_archived(
     id: String,
     archived: bool,
@@ -211,7 +258,7 @@ pub fn set_model_label_archived(
     Ok(index.labels)
 }
 
-/// Removes a label nothing uses. A label that a recording, a project or a model refers to cannot be removed (archive
+/// Removes a label nothing uses. A label that a recording, a project, a model or a gesture refers to cannot be removed (archive
 /// it instead): deleting it would leave those without a meaning.
 #[tauri::command]
 pub fn delete_model_label(
@@ -233,7 +280,7 @@ pub fn delete_model_label(
     )?;
     if in_use.contains(&id) {
         return Err(format!(
-            "'{id}' is used by a recording or a model. Archive it instead; deleting it would leave them without a meaning"
+            "'{id}' is used by a recording, a model or a gesture. Archive it instead; deleting it would leave them without a meaning"
         ));
     }
     index.labels.retain(|label| label.id != id);
@@ -249,6 +296,7 @@ fn labels_in_use(
 ) -> Option<BTreeSet<String>> {
     let mut used = crate::model_lab::dataset_labels_in_use(app);
     used.extend(models.labels_in_registry()?);
+    used.extend(crate::gesture_library::labels_in_use(app));
     Some(used)
 }
 
@@ -295,6 +343,60 @@ pub(crate) fn contains_label(app: &AppHandle, id: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn plain_record(id: &str) -> LabelRecord {
+        LabelRecord {
+            id: id.to_string(),
+            display_name: "Old name".to_string(),
+            description: String::new(),
+            color: "#65e6ff".to_string(),
+            role: LabelRole::PositiveGesture,
+            built_in: false,
+            archived_at: None,
+        }
+    }
+
+    #[test]
+    fn an_update_changes_the_name_notes_and_role_but_never_the_id_or_colour() {
+        let mut index = LabelIndex {
+            labels: vec![plain_record("pinch"), plain_record("fist")],
+        };
+        let update = UpdateLabelInput {
+            id: "pinch".to_string(),
+            display_name: "  Index pinch ".to_string(),
+            description: " thumb to index ".to_string(),
+            role: LabelRole::NegativeBackground,
+        };
+        apply_update(&mut index, &update).unwrap();
+        let changed = &index.labels[0];
+        assert_eq!(
+            (
+                changed.id.as_str(),
+                changed.display_name.as_str(),
+                changed.description.as_str()
+            ),
+            ("pinch", "Index pinch", "thumb to index")
+        );
+        assert_eq!(
+            (changed.role, changed.color.as_str()),
+            (LabelRole::NegativeBackground, "#65e6ff")
+        );
+        assert_eq!(index.labels[1].display_name, "Old name");
+        let bad = UpdateLabelInput {
+            display_name: "  ".to_string(),
+            ..update.clone()
+        };
+        assert!(apply_update(&mut index, &bad).is_err());
+        let missing = UpdateLabelInput {
+            id: "nope".to_string(),
+            ..update
+        };
+        assert!(
+            apply_update(&mut index, &missing)
+                .unwrap_err()
+                .contains("no label")
+        );
+    }
     #[test]
     fn validates_stable_custom_metadata() {
         let input = CreateLabelInput {

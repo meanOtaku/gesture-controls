@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { CatalogueLabelPicker } from "../../labels/CatalogueLabelPicker";
 import { AsyncActionButton } from "../../../components/app/AsyncActionButton";
 import { HelpTooltip } from "../../../components/app/HelpTooltip";
 import {
@@ -249,7 +250,7 @@ export function DatasetCaptureCard({
         <div className="flex flex-col gap-3">
           <form className="field" noValidate onSubmit={applyCustomLabel} data-invalid={(labelTouched || customLabel !== "") && labelProblem ? true : undefined}>
             <div className="field-head">
-              <Label htmlFor="dataset-custom-label">Dataset label</Label>
+              <Label htmlFor="dataset-custom-label" required>Dataset label</Label>
               <HelpTooltip label="About labels">
                 A label names what you are about to record. It is saved in lower case with underscores in place of anything else, so
                 "Wrist Flick" becomes wrist_flick. It must start with a letter and be at most 64 characters.
@@ -285,6 +286,7 @@ export function DatasetCaptureCard({
                   : "Name what you are about to record, then press Enter.")}
             </p>
           </form>
+          {desktopAvailable && <CatalogueLabelPicker selectedLabel={selectedLabel} onSelect={onSelectLabel} disabled={datasetRecording} />}
           {sessionLabels.length > 0 && (
             <div className="flex flex-wrap gap-2">
               <Label className="text-xs text-muted-foreground w-full">Previously used labels</Label>

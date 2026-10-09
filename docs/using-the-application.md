@@ -204,6 +204,16 @@ The same selected window renders as two images side by side (stacked on narrow l
 
 This viewer is inspection-only: it has no annotation-editing or training action, and nothing it renders or computes feeds Model Lab, dataset export, or inference.
 
+### Labels
+
+The **Labels** tab (first under Labels) is the one place labels are made and managed. A label is a short name for a gesture or an everyday activity the app can learn or recognise. Each label has an id (letters, digits and underscores, made from the name), a display name, optional notes and a role.
+
+- **Add a label** with a name; the id is shown before you create it and never changes afterwards. **Edit** changes the name, notes and role, and everything that refers to the label (recordings, models, recipes, gestures) keeps pointing at it.
+- Each label shows how many recordings and gestures use it and the state of its model. A label something still uses can be **archived** but not deleted, so nothing is left without a meaning. Archived labels are hidden from pickers and can be restored.
+- Everywhere else reads this list: the **Gesture library** and **Model Lab** choose from it, and the **Recorder** offers it as buttons. A label typed by hand in the Recorder that is not in the list says so and has **Add to Labels**.
+
+In forms, a field marked with a red `*` is required; the others can be left empty or already have a sensible default.
+
 ### Gesture library
 
 The **Gesture library** tab (under Labels) defines gestures the camera recognises from your hand's shape. It needs the camera but not the watch.

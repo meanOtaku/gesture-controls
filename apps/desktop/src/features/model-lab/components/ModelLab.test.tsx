@@ -39,7 +39,7 @@ describe("ModelLab", () => {
     await waitFor(() => expect(overview.getByText("monitor")).toBeInTheDocument());
     expect(overview.getByText("1 registered")).toBeInTheDocument();
     expect(overview.getByText("1 label covered")).toBeInTheDocument();
-    for (const name of ["Label models", "Train a model", "Detection activity", "Label coverage", "Recordings"]) {
+    for (const name of ["Label models", "Train a model", "Detection activity", "Labels", "Recordings"]) {
       expect(screen.getByRole("region", { name })).toBeInTheDocument();
     }
     for (const gone of [/LiteRT/i, /training role/i, /safe intent/i, /Start training/i]) {

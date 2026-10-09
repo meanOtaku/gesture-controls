@@ -85,6 +85,7 @@ const ModelLab = memo(lazy(() => import("../features/model-lab/components/ModelL
 const RecipesPage = memo(lazy(() => import("../features/recipes/components/RecipesPage").then((m) => ({ default: m.RecipesPage }))));
 const GesturesPage = memo(lazy(() => import("../features/gestures/components/GesturesPage").then((m) => ({ default: m.GesturesPage }))));
 const VirtualDevicesPage = memo(lazy(() => import("../features/devices/components/VirtualDevicesPage").then((m) => ({ default: m.VirtualDevicesPage }))));
+const LabelsPage = memo(lazy(() => import("../features/labels/LabelsPage").then((m) => ({ default: m.LabelsPage }))));
 const GestureLibraryPage = memo(lazy(() => import("../features/gestureLibrary/GestureLibraryPage").then((m) => ({ default: m.GestureLibraryPage }))));
 const Settings = lazy(() => import("../features/settings/components/Settings").then((m) => ({ default: m.Settings })));
 
@@ -587,6 +588,7 @@ function MainApp() {
   const stableDeleteRecipe = useStableCallback((id: string) => { void deleteRecipe(id); });
   const clearStartWithDevice = useCallback(() => setStartWithDevice(null), []);
   const openModelLab = useCallback(() => setActiveTab("modelLab"), []);
+  const openLabels = useCallback(() => setActiveTab("labels"), []);
   const openSettings = useCallback(() => setActiveTab("settings"), []);
   const makeRecipeFromDevice = useCallback((kind: DeviceKind) => {
     setStartWithDevice(kind);
@@ -708,9 +710,10 @@ function MainApp() {
     {activeTab === "signals" && <LiveSignalsPage />}
     {activeTab === "recorder" && <RecorderPage />}
     {activeTab === "recordings" && <RecordingsPage />}
+    {activeTab === "labels" && <LabelsPage />}
     {activeTab === "gestureLibrary" && <GestureLibraryPage />}
     {activeTab === "modelLab" && (
-      <ModelLab />
+      <ModelLab onOpenLabels={openLabels} />
     )}
     {activeTab === "settings" && (
       <Settings

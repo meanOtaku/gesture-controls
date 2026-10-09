@@ -131,8 +131,8 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
     <div className="gesture-editor flex flex-col gap-4" role="form" aria-label={initial.id ? `Edit ${initial.name}` : "New gesture"}>
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="field">
-          <div className="field-head"><Label htmlFor={ids.name}>Name</Label></div>
-          <Input id={ids.name} value={draft.name} maxLength={MAX_NAME_CHARS} placeholder="e.g. Pinch" onChange={(e) => patch({ name: e.target.value })} />
+          <div className="field-head"><Label htmlFor={ids.name} required>Name</Label></div>
+          <Input id={ids.name} required aria-required="true" value={draft.name} maxLength={MAX_NAME_CHARS} placeholder="e.g. Pinch" onChange={(e) => patch({ name: e.target.value })} />
         </div>
         <div className="field">
           <div className="field-head"><Label htmlFor={ids.label}>Recorded as label</Label></div>
@@ -140,6 +140,7 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
             <option value="">No label yet</option>
             {labels.filter((l) => !l.archivedAt).map((l) => <option key={l.id} value={l.id}>{l.displayName}</option>)}
           </select>
+          <p className="field-hint">From the Labels tab, where you can add more.</p>
         </div>
         <div className="field">
           <div className="field-head"><Label htmlFor={ids.hand}>Hand</Label></div>
@@ -188,7 +189,7 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
       </section>
 
       <section className="flex flex-col gap-3" aria-label="Rule">
-        <h3 className="text-sm font-semibold">2. The rule</h3>
+        <h3 className="text-sm font-semibold">2. The rule <span className="required-mark" aria-hidden="true">*</span></h3>
         {draft.conditions.length === 0 && <p className="hint">No rule yet. Record the gesture above, or add a condition yourself.</p>}
         {draft.conditions.map((condition, index) => (
           <div key={condition.measure} className="grid items-end gap-2 sm:grid-cols-[1.4fr_.8fr_.7fr_.7fr_auto]" role="group" aria-label={`Condition ${index + 1}`}>
@@ -238,6 +239,7 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
         </div>
       </section>
 
+      <p className="required-note"><span aria-hidden="true">*</span> Required. A gesture needs a name and at least one condition.</p>
       {(error || (problem && draft.name !== "")) && <p className="field-error" role="alert">{error ?? problem}</p>}
       <div className="flex gap-2">
         <Button type="button" onClick={() => void save()} disabled={saving || problem !== null}>{saving ? "Saving…" : "Save gesture"}</Button>

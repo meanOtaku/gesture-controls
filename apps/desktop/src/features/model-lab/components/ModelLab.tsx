@@ -1,22 +1,20 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
+import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
 import { useLabelModels } from "../hooks/useLabelModels";
 import { datasetLabels, type DatasetLabel, type DatasetSummary } from "../types";
 import { DatasetManager } from "./DatasetManager";
 import { DetectionActivity } from "./DetectionActivity";
-import { LabelCoverage, type NewLabel } from "./LabelCoverage";
 import { LabelModelsPanel } from "./LabelModelsPanel";
 import { TrainPanel } from "./TrainPanel";
-
-const LABEL_COLOR = "#65e6ff";
 
 /**
  * Model Lab: teach the app a gesture one label at a time. Models are listed and switched on first, because that is
  * what you come back to; recordings and label coverage follow.
  */
-export function ModelLab() {
+export function ModelLab({ onOpenLabels }: { onOpenLabels?: () => void }) {
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [labels, setLabels] = useState<DatasetLabel[]>([]);
@@ -54,33 +52,6 @@ export function ModelLab() {
       }
     })();
   }, [desktopAvailable]);
-
-  const createLabel = useCallback(async (label: NewLabel): Promise<string | null> => {
-    try {
-      setLabels(await invoke<DatasetLabel[]>("create_model_label", { input: { ...label, color: LABEL_COLOR } }));
-      OperationFeedback.success("Add label", `Added ${label.displayName}.`);
-      return null;
-    } catch (err) {
-      return String(err);
-    }
-  }, []);
-
-  const setLabelArchived = useCallback(async (id: string, archived: boolean) => {
-    try {
-      setLabels(await invoke<DatasetLabel[]>("set_model_label_archived", { id, archived }));
-    } catch (err) {
-      OperationFeedback.error(archived ? "Archive label" : "Restore label", String(err));
-    }
-  }, []);
-
-  const deleteLabel = useCallback(async (id: string): Promise<string | null> => {
-    try {
-      setLabels(await invoke<DatasetLabel[]>("delete_model_label", { id }));
-      return null;
-    } catch (err) {
-      return String(err);
-    }
-  }, []);
 
   const handleImport = useCallback(
     async ({ filename, csvContent }: { filename: string; csvContent: string }) => {
@@ -165,7 +136,12 @@ export function ModelLab() {
         <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} />
         <TrainPanel desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} />
         <DetectionActivity desktopAvailable={desktopAvailable} />
-        <LabelCoverage labels={labels} models={models} coverageByLabel={coverageByLabel} onCreate={createLabel} onSetArchived={setLabelArchived} onDelete={deleteLabel} />
+        <Card id="lab-coverage" role="region" aria-label="Labels">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3">
+            <span><strong>Labels</strong> <small className="text-muted-foreground">Add, rename and archive labels on the Labels tab. {labels.filter((label) => label.archivedAt === null).length} in use here.</small></span>
+            {onOpenLabels && <Button type="button" variant="outline" onClick={onOpenLabels}>Open Labels</Button>}
+          </CardContent>
+        </Card>
         <DatasetManager
           desktopAvailable={desktopAvailable}
           datasets={datasets}

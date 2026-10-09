@@ -193,7 +193,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
         )}
 
         <div className="field">
-          <div className="field-head"><Label htmlFor={`${uid}-label`}>Label to teach</Label></div>
+          <div className="field-head"><Label htmlFor={`${uid}-label`} required>Label to teach</Label></div>
           <select id={`${uid}-label`} className={NATIVE_SELECT} value={target} disabled={running !== null} onChange={(event) => chooseTarget(event.target.value)}>
             <option value="">Choose a label…</option>
             {usable.map((label) => <option key={label.id} value={label.id}>{label.displayName}</option>)}

@@ -224,6 +224,18 @@ pub fn upsert(
     Ok(next)
 }
 
+/// Every label a saved gesture is linked to, so the label catalogue can refuse to delete one a gesture still uses.
+pub fn labels_in_use(app: &AppHandle) -> std::collections::BTreeSet<String> {
+    library_path(app)
+        .map(|path| {
+            read_definitions(&path)
+                .into_iter()
+                .filter_map(|d| d.label_id)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 #[derive(Default)]
 pub struct GestureLibraryRuntime {
     lock: Mutex<()>,

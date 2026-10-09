@@ -25,12 +25,16 @@ type LabelCoverageProps = {
   /** Resolves to an error message, or null once the label is created. */
   onCreate: (label: NewLabel) => Promise<string | null>;
   onSetArchived: (id: string, archived: boolean) => Promise<void>;
+  /** Changes a label's name, notes and role (never its id). Resolves to an error message, or null once saved. */
+  onUpdate?: (label: NewLabel) => Promise<string | null>;
+  /** Saved gestures linked to each label id. */
+  gestureCountByLabel?: Map<string, number>;
   /** Resolves to an error message, or null once deleted. */
   onDelete: (id: string) => Promise<string | null>;
 };
 
 /** Your labels: what each is called, how many recordings cover it, and how far along its model is. */
-export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSetArchived, onDelete }: LabelCoverageProps) {
+export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSetArchived, onUpdate, gestureCountByLabel, onDelete }: LabelCoverageProps) {
   const uid = useId();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
@@ -41,6 +45,19 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
   const [listError, setListError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const [editing, setEditing] = useState<NewLabel | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const saveEdit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editing || !onUpdate || editing.displayName.trim() === "") return;
+    setSaving(true);
+    const failure = await onUpdate({ ...editing, displayName: editing.displayName.trim(), description: editing.description.trim() });
+    setSaving(false);
+    if (failure !== null) return setEditError(failure);
+    setEditing(null);
+    setEditError(null);
+  };
 
   const id = labelIdFromName(name);
   const duplicate = id !== null && labels.some((label) => label.id === id);
@@ -96,14 +113,14 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
         {adding && (
           <form className="flex flex-col gap-3" aria-label="New label" onSubmit={(event) => void submit(event)}>
             <div className="field">
-              <div className="field-head"><Label htmlFor={`${uid}-name`}>Name</Label></div>
-              <Input id={`${uid}-name`} value={name} maxLength={80} placeholder="e.g. Snap fingers" autoFocus onChange={(event) => setName(event.target.value)} />
+              <div className="field-head"><Label htmlFor={`${uid}-name`} required>Name</Label></div>
+              <Input id={`${uid}-name`} required aria-required="true" value={name} maxLength={80} placeholder="e.g. Snap fingers" autoFocus onChange={(event) => setName(event.target.value)} />
               <p className={problem ? "field-error" : "field-hint"} role={problem ? "alert" : undefined}>
                 {problem ?? (id ? `Its id will be ${id}. Record it on the Recorder tab under that id.` : "A short name for the gesture or activity.")}
               </p>
             </div>
             <div className="field">
-              <div className="field-head"><Label htmlFor={`${uid}-kind`}>What is it?</Label></div>
+              <div className="field-head"><Label htmlFor={`${uid}-kind`} required>What is it?</Label></div>
               <select id={`${uid}-kind`} className="recipe-select" value={role} onChange={(event) => setRole(event.target.value as DatasetLabel["role"])}>
                 <option value="positiveGesture">A gesture to detect</option>
                 <option value="negativeBackground">Everyday activity (something it should not mistake for a gesture)</option>
@@ -113,6 +130,7 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
               <div className="field-head"><Label htmlFor={`${uid}-description`}>Notes (optional)</Label></div>
               <Input id={`${uid}-description`} value={description} maxLength={500} placeholder="How you perform it" onChange={(event) => setDescription(event.target.value)} />
             </div>
+            <p className="required-note"><span aria-hidden="true">*</span> Required</p>
             {formError && <p className="field-error" role="alert">{formError}</p>}
             <div className="flex gap-2">
               <Button type="submit" disabled={saving || id === null || problem !== null}>Create label</Button>
@@ -125,6 +143,33 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
             <AlertDescription>{listError}</AlertDescription>
           </Alert>
         )}
+        {editing && (
+          <form className="flex flex-col gap-3" aria-label={`Edit ${editing.id}`} onSubmit={(event) => void saveEdit(event)}>
+            <div className="field">
+              <div className="field-head"><Label htmlFor={`${uid}-edit-name`} required>Name</Label></div>
+              <Input id={`${uid}-edit-name`} required aria-required="true" value={editing.displayName} maxLength={80} autoFocus onChange={(event) => setEditing({ ...editing, displayName: event.target.value })} />
+              <p className="field-hint">Its id, <code>{editing.id}</code>, stays the same, so recordings, models, recipes and gestures keep pointing at it.</p>
+            </div>
+            <div className="field">
+              <div className="field-head"><Label htmlFor={`${uid}-edit-kind`} required>What is it?</Label></div>
+              <select id={`${uid}-edit-kind`} className="recipe-select" value={editing.role} onChange={(event) => setEditing({ ...editing, role: event.target.value as DatasetLabel["role"] })}>
+                <option value="positiveGesture">A gesture to detect</option>
+                <option value="negativeBackground">Everyday activity (something it should not mistake for a gesture)</option>
+                {editing.role === "calibrationOnly" && <option value="calibrationOnly">Calibration only</option>}
+              </select>
+            </div>
+            <div className="field">
+              <div className="field-head"><Label htmlFor={`${uid}-edit-notes`}>Notes (optional)</Label></div>
+              <Input id={`${uid}-edit-notes`} value={editing.description} maxLength={500} onChange={(event) => setEditing({ ...editing, description: event.target.value })} />
+            </div>
+            <p className="required-note"><span aria-hidden="true">*</span> Required</p>
+            {editError && <p className="field-error" role="alert">{editError}</p>}
+            <div className="flex gap-2">
+              <Button type="submit" disabled={saving || editing.displayName.trim() === ""}>Save changes</Button>
+              <Button type="button" variant="outline" onClick={() => { setEditing(null); setEditError(null); }}>Cancel</Button>
+            </div>
+          </form>
+        )}
         {rows.length === 0 ? (
           <p className="hint">No labels yet. Add one to get started: a label is a name for a gesture or activity you want the app to learn, like snap_fingers.</p>
         ) : (
@@ -133,7 +178,9 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
               const sessions = coverageByLabel.get(row.id) ?? 0;
               const labelModels = models.filter((model) => model.label === row.id);
               const state = bestState(labelModels);
-              const inUse = sessions > 0 || labelModels.length > 0;
+              const gestures = gestureCountByLabel?.get(row.id) ?? 0;
+              const inUse = sessions > 0 || labelModels.length > 0 || gestures > 0;
+              const full = labels.find((label) => label.id === row.id);
               return (
                 <li key={row.id} className="recipe-item">
                   <div className="flex min-w-0 flex-col gap-1">
@@ -143,12 +190,16 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
                     </span>
                     <small className="text-xs text-muted-foreground">
                       {sessions} recording{sessions === 1 ? "" : "s"}
+                      {gestureCountByLabel ? ` · ${gestures} gesture${gestures === 1 ? "" : "s"}` : ""}
                       {sessions === 1 ? ": record at least one more so a model can be tested on a session it did not see" : ""}
                       {row.description ? ` · ${row.description}` : ""}
                     </small>
                   </div>
                   <div className="recipe-item-actions">
                     <Badge variant={state === "active" ? "default" : "secondary"}>{state === null ? "No model" : `Model: ${state}`}</Badge>
+                    {row.managed && onUpdate && full && (
+                      <Button type="button" variant="ghost" aria-label={`Edit ${row.id}`} onClick={() => { setEditError(null); setEditing({ id: full.id, displayName: full.displayName, description: full.description, role: full.role }); }}>Edit</Button>
+                    )}
                     {row.managed && (
                       <Button type="button" variant="ghost" aria-label={`${row.archived ? "Restore" : "Archive"} ${row.id}`} onClick={() => void act(() => onSetArchived(row.id, !row.archived))}>
                         {row.archived ? "Restore" : "Archive"}
