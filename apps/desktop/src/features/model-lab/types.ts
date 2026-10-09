@@ -10,6 +10,8 @@ export interface DatasetSummary {
   /** Every distinct label on the dataset's rows. Empty or absent for a dataset imported before multi-label support. */
   labels?: string[];
   rowCount: number;
+  /** The Recorder recording this was added from, if it was added directly. */
+  sourceRecordingId?: string;
 }
 
 /** The labels a dataset trains on: what coverage and training-role checks apply to. */

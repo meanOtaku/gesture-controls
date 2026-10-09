@@ -2689,6 +2689,96 @@ pub fn add_camera_proposed_intervals(
     Ok(merged)
 }
 
+/// Which of a recording's intervals become labelled rows when it is added to the training data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum IntervalFilter {
+    /// Only intervals you approved.
+    ApprovedOnly,
+    /// Every interval except the ones you excluded (approved and not yet reviewed).
+    NotExcluded,
+}
+
+/// A Model Lab dataset CSV made from a saved recording: each raw row gets the label of the interval that covers it, and
+/// rows no kept interval covers are left unlabelled (Model Lab drops them) or, with `rest_label`, given that label (the
+/// background label for "everything else"). Returns the CSV, how many rows carry a label
+/// and how many kept intervals there were.
+fn dataset_csv_from_bundle(
+    raw_csv: &str,
+    annotations: &AnnotationsFile,
+    filter: IntervalFilter,
+    rest_label: Option<&str>,
+) -> Result<(String, usize, usize), String> {
+    let mut lines = raw_csv.lines().filter(|line| !line.is_empty());
+    lines.next().ok_or("raw.csv is empty")?;
+    let rows: Vec<&str> = lines.collect();
+    let mut labels: Vec<Option<&str>> = vec![None; rows.len()];
+    let mut kept = 0;
+    for interval in &annotations.intervals {
+        let keep = match filter {
+            IntervalFilter::ApprovedOnly => interval.curation_status == CurationStatus::Approved,
+            IntervalFilter::NotExcluded => interval.curation_status != CurationStatus::Excluded,
+        };
+        if !keep {
+            continue;
+        }
+        let (start, end) = (
+            interval.resolved_start.raw_row,
+            interval.resolved_end.raw_row,
+        );
+        if end >= rows.len() || start > end {
+            return Err(format!(
+                "interval '{}' points outside the recording's rows",
+                interval.interval_id
+            ));
+        }
+        kept += 1;
+        for slot in &mut labels[start..=end] {
+            *slot = Some(interval.label_id.as_str());
+        }
+    }
+    let labelled = labels.iter().flatten().count();
+    if labelled == 0 {
+        return Err(match filter {
+            IntervalFilter::ApprovedOnly => "no approved intervals in this recording; approve some in Recordings first, or include the unreviewed ones".to_string(),
+            IntervalFilter::NotExcluded => "this recording has no labelled intervals to train on".to_string(),
+        });
+    }
+    let mut csv = DATASET_CSV_HEADER.join(",");
+    for (row, label) in rows.iter().zip(&labels) {
+        csv.push('\n');
+        csv.push_str(row);
+        csv.push(',');
+        csv.push_str(label.or(rest_label).unwrap_or(""));
+    }
+    csv.push('\n');
+    Ok((csv, labelled, kept))
+}
+
+/// Adds a saved recording to Model Lab's training data, labelled from its intervals, so training reads what the
+/// Recorder saved without exporting and importing a file.
+#[tauri::command]
+pub fn add_recording_to_training_data(
+    recording_id: String,
+    filter: IntervalFilter,
+    rest_label: Option<String>,
+    app: AppHandle,
+    runtime: tauri::State<'_, crate::model_lab::ModelLabRuntime>,
+) -> Result<crate::model_lab::DatasetSummary, String> {
+    validate_recording_id(&recording_id)?;
+    let dir = recording_bundles_dir(&app)?.join(&recording_id);
+    let (_, annotations) = load_bundle_pair(&dir)?;
+    let raw = fs::read_to_string(dir.join(RAW_CSV_FILE_NAME)).map_err(|error| error.to_string())?;
+    let (csv, _, intervals) =
+        dataset_csv_from_bundle(&raw, &annotations, filter, rest_label.as_deref())?;
+    let filename = format!(
+        "recorder-{}-{}-intervals.csv",
+        &recording_id[..recording_id.len().min(8)],
+        intervals
+    );
+    crate::model_lab::ingest_dataset(&app, &runtime, filename, csv, Some(recording_id))
+}
+
 fn write_bundle_files(
     tmp_dir: &std::path::Path,
     raw_csv: &str,
@@ -2960,6 +3050,88 @@ mod tests {
         let mut unlabeled = proposal("b", 40, 50);
         unlabeled.label_id = " ".into();
         assert!(merge_proposed_intervals(&existing, &[unlabeled], 100).is_err());
+    }
+
+    #[test]
+    fn a_recording_becomes_a_dataset_labelled_from_its_intervals() {
+        let raw = format!(
+            "{}\n{}",
+            RAW_CSV_HEADER.join(","),
+            (0..6)
+                .map(|i| format!("{}{}", i * 10, ",0".repeat(15)))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+        let mut approved = proposal("a", 1, 2);
+        approved.curation_status = CurationStatus::Approved;
+        approved.label_id = "pinch".into();
+        let unreviewed = proposal("b", 4, 4);
+        let mut excluded = proposal("c", 5, 5);
+        excluded.curation_status = CurationStatus::Excluded;
+        let annotations = AnnotationsFile {
+            format_version: 1,
+            recording_id: "r".into(),
+            intervals: vec![approved, unreviewed, excluded],
+        };
+
+        let (csv, labelled, kept) =
+            dataset_csv_from_bundle(&raw, &annotations, IntervalFilter::NotExcluded, None).unwrap();
+        assert_eq!((labelled, kept), (3, 2));
+        let lines: Vec<&str> = csv.lines().collect();
+        assert_eq!(lines[0], DATASET_CSV_HEADER.join(","));
+        assert_eq!(lines.len(), 7);
+        assert!(
+            lines[1].ends_with(",") && lines[2].ends_with(",pinch") && lines[3].ends_with(",pinch")
+        );
+        assert!(lines[4].ends_with(",") && lines[5].ends_with(",pinch") && lines[6].ends_with(","));
+        assert!(
+            lines
+                .iter()
+                .skip(1)
+                .all(|line| line.split(',').count() == DATASET_CSV_HEADER.len())
+        );
+
+        let (_, labelled, kept) =
+            dataset_csv_from_bundle(&raw, &annotations, IntervalFilter::ApprovedOnly, None)
+                .unwrap();
+        assert_eq!((labelled, kept), (2, 1));
+        let (with_rest, ..) = dataset_csv_from_bundle(
+            &raw,
+            &annotations,
+            IntervalFilter::ApprovedOnly,
+            Some("idle"),
+        )
+        .unwrap();
+        let rest: Vec<&str> = with_rest
+            .lines()
+            .skip(1)
+            .map(|l| l.rsplit(',').next().unwrap())
+            .collect();
+        assert_eq!(rest, ["idle", "pinch", "pinch", "idle", "idle", "idle"]);
+        let none = AnnotationsFile {
+            intervals: vec![],
+            ..annotations
+        };
+        assert!(
+            dataset_csv_from_bundle(&raw, &none, IntervalFilter::ApprovedOnly, Some("idle"))
+                .unwrap_err()
+                .contains("no approved")
+        );
+    }
+
+    #[test]
+    fn an_interval_past_the_rows_is_refused() {
+        let raw = format!("{}\n{}", RAW_CSV_HEADER.join(","), "0,0");
+        let annotations = AnnotationsFile {
+            format_version: 1,
+            recording_id: "r".into(),
+            intervals: vec![proposal("a", 0, 5)],
+        };
+        assert!(
+            dataset_csv_from_bundle(&raw, &annotations, IntervalFilter::NotExcluded, None)
+                .unwrap_err()
+                .contains("outside")
+        );
     }
 
     #[test]

@@ -280,6 +280,16 @@ Each label shows its recordings and its model's furthest state (No model, or Mod
 
 Labels an older version shipped (idle, walking, typing and so on) are removed on the first start of this version unless a recording or model still uses them; those that are used stay as ordinary labels you can archive.
 
+#### From the Recorder (Model Lab)
+
+Recordings you make in the Recorder are saved automatically and can go straight into the training data, with no export and import. In Model Lab, **From the Recorder** lists them with how many intervals are approved, unreviewed and excluded.
+
+- **Intervals to use** chooses whether intervals you have not reviewed yet count ("Approved and not yet reviewed") or only the ones you approved. Excluded intervals never count.
+- **Label everything else as** optionally gives the rows between intervals a background label (a label that is an everyday activity). That teaches the model what is not the gesture, which a recording that only holds the gesture cannot. Use it only if the gesture did not happen in those stretches; camera-marked recordings can miss one, so review them first.
+- **Add to training data** makes a recording from the labelled rows. Adding the same, unchanged recording twice is refused; after you change its intervals, adding it again makes a new recording alongside the old one, which you can delete under Recordings.
+
+Importing a CSV file still works for recordings made elsewhere.
+
 #### Recordings
 
 Record a labelled session on the **Recorder** tab (Quick Capture is one label; Timeline Capture keeps the label of each interval), export the CSV, then **Import a recording (CSV)** here. The import is all-or-nothing: the file is checked in full (size limit, exact header, consistent labels, every label already in the catalogue) before anything is written, a failure says exactly why, and nothing is changed on disk. It is a compatibility path independent of the newer recording-bundle format and never touches those bundles. Labels keep stable ids; archiving one hides it from new selection but never changes old recordings.

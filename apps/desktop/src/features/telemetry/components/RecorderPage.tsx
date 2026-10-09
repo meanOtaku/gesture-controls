@@ -28,7 +28,7 @@ export function RecorderPage() {
 
   return <main className="shell telemetry-shell">
     <header className="hero">
-      <div><p className="eyebrow">Spatial Gesture Control</p><h1>Recorder</h1><p className="subtitle">Record a labelled session from the watch, then export it or import it into Model Lab.</p></div>
+      <div><p className="eyebrow">Spatial Gesture Control</p><h1>Recorder</h1><p className="subtitle">Record a labelled session from the watch. It is saved automatically; add it to the training data from Model Lab.</p></div>
       <div className={`connection ${datasetRecording ? "online" : "offline"}`}><span className="pulse" />{datasetRecording ? "Recording" : "Not recording"}</div>
     </header>
     <StreamStatus />

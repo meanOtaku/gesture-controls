@@ -732,6 +732,7 @@ mod tests {
             label: labels.join(", "),
             labels: labels.iter().map(ToString::to_string).collect(),
             row_count: 100,
+            source_recording_id: None,
         }
     }
 

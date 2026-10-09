@@ -75,6 +75,9 @@ pub struct DatasetSummary {
     #[serde(default)]
     pub labels: Vec<String>,
     pub row_count: usize,
+    /// The saved Recorder recording this was made from, when it was added straight from one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_recording_id: Option<String>,
 }
 
 impl DatasetSummary {
@@ -441,6 +444,18 @@ pub fn import_model_dataset(
     app: AppHandle,
     runtime: State<'_, ModelLabRuntime>,
 ) -> Result<DatasetSummary, String> {
+    ingest_dataset(&app, &runtime, filename, csv_content, None)
+}
+
+/// Validates a dataset CSV and stores it as a new recording in Model Lab. When it comes from a saved Recorder
+/// recording (`source_recording_id`), adding the same, unchanged recording twice is refused rather than duplicated.
+pub(crate) fn ingest_dataset(
+    app: &AppHandle,
+    runtime: &ModelLabRuntime,
+    filename: String,
+    csv_content: String,
+    source_recording_id: Option<String>,
+) -> Result<DatasetSummary, String> {
     validate_filename(&filename)?;
     if csv_content.len() > MAX_DATASET_CSV_BYTES {
         return Err(format!(
@@ -450,9 +465,9 @@ pub fn import_model_dataset(
     }
     let parsed = parse_csv(&csv_content)?;
     for label in &parsed.labels {
-        if !crate::label_registry::contains_label(&app, label) {
+        if !crate::label_registry::contains_label(app, label) {
             return Err(format!(
-                "unknown label '{label}'; create it in Model Lab before importing recordings"
+                "unknown label '{label}'; create it on the Labels tab before adding recordings"
             ));
         }
     }
@@ -462,8 +477,21 @@ pub fn import_model_dataset(
         .lock()
         .map_err(|_| "model lab lock was poisoned".to_string())?;
 
-    let dir = datasets_dir(&app)?;
+    let dir = datasets_dir(app)?;
     fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+    let mut index = load_index(app);
+    if let Some(source) = &source_recording_id
+        && index.datasets.iter().any(|existing| {
+            existing.source_recording_id.as_ref() == Some(source)
+                && fs::read_to_string(dataset_csv_path(&dir, &existing.id))
+                    .is_ok_and(|saved| saved == parsed.csv)
+        })
+    {
+        return Err(
+            "this recording was already added with the same labelled rows, so nothing changed"
+                .to_string(),
+        );
+    }
 
     let id = loop {
         let candidate = Uuid::new_v4().to_string();
@@ -484,11 +512,11 @@ pub fn import_model_dataset(
         label: parsed.labels.join(", "),
         labels: parsed.labels,
         row_count: parsed.row_count,
+        source_recording_id,
     };
 
-    let mut index = load_index(&app);
     index.datasets.push(summary.clone());
-    if let Err(error) = write_index_atomic(&app, &index) {
+    if let Err(error) = write_index_atomic(app, &index) {
         let _ = fs::remove_file(&csv_path);
         return Err(error);
     }
@@ -1107,6 +1135,7 @@ mod tests {
             label: "idle, pinch_start".into(),
             labels: vec!["idle".into(), "pinch_start".into()],
             row_count: 3,
+            source_recording_id: None,
         };
         assert_eq!(dataset.effective_labels(), vec!["idle", "pinch_start"]);
         // An index written before multi-label datasets existed has no `labels`.
@@ -1195,6 +1224,7 @@ mod tests {
                     label: "pinch_start".to_string(),
                     labels: vec!["pinch_start".to_string()],
                     row_count: 10,
+                    source_recording_id: None,
                 },
                 DatasetSummary {
                     id: "bbbbbbbb-0000-0000-0000-000000000002".to_string(),
@@ -1203,6 +1233,7 @@ mod tests {
                     label: "idle".to_string(),
                     labels: vec!["idle".to_string()],
                     row_count: 20,
+                    source_recording_id: None,
                 },
             ],
         }
