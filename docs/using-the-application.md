@@ -216,6 +216,7 @@ The **Labels** tab (first under Labels) is the one place labels are made and man
 
 - **Add a label** with a name; the id is shown before you create it and never changes afterwards. **Edit** changes the name, notes and role, and everything that refers to the label (recordings, models, recipes, gestures) keeps pointing at it.
 - Each label shows where it is used: in how many Recorder recordings, how many recordings in the training data, how many gestures and how many models. Recording and training happen in their own tabs, not here. A label something still uses can be **archived** but not deleted, so nothing is left without a meaning. Archived labels are hidden from pickers and can be restored.
+- Open **Where it is used** under a label to see every gesture, Recorder recording, training recording, model and recipe that uses it, each with a button that opens that tab.
 - Everywhere else reads this list: the **Gesture library** and **Model Lab** choose from it, and the **Recorder** offers it as buttons. A label typed by hand in the Recorder that is not in the list says so and has **Add to Labels**.
 
 In forms, a field marked with a red `*` is required; the others can be left empty or already have a sensible default.

@@ -712,7 +712,7 @@ function MainApp() {
     {activeTab === "signals" && <LiveSignalsPage />}
     {activeTab === "recorder" && <RecorderPage />}
     {activeTab === "recordings" && <RecordingsPage />}
-    {activeTab === "labels" && <LabelsPage />}
+    {activeTab === "labels" && <LabelsPage onOpen={setActiveTab} />}
     {activeTab === "gestureLibrary" && <GestureLibraryPage />}
     {activeTab === "modelLab" && (
       <ModelLab onOpenLabels={openLabels} />

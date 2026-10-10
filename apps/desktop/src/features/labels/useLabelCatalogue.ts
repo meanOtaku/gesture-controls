@@ -6,6 +6,7 @@ import { listGestureDefinitions } from "../gestureLibrary/gestureLibraryApi";
 import type { NewLabel } from "../model-lab/components/LabelCoverage";
 import { useLabelModels } from "../model-lab/hooks/useLabelModels";
 import { datasetLabels, type DatasetLabel, type DatasetSummary } from "../model-lab/types";
+import { usageOf, type UsageSources } from "./labelUsage";
 
 const LABEL_COLOR = "#65e6ff";
 
@@ -17,8 +18,9 @@ export function useLabelCatalogue() {
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
   const [labels, setLabels] = useState<DatasetLabel[]>([]);
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
-  const [gestureLabels, setGestureLabels] = useState<(string | null)[]>([]);
-  const [recorderLabels, setRecorderLabels] = useState<string[][]>([]);
+  const [gestures, setGestures] = useState<{ id: string; name: string; labelId: string | null }[]>([]);
+  const [bundles, setBundles] = useState<{ recordingId: string; labelIds: string[] }[]>([]);
+  const [recipes, setRecipes] = useState<UsageSources["recipes"]>([]);
   const [error, setError] = useState<string | null>(null);
   const { models } = useLabelModels(desktopAvailable);
 
@@ -27,17 +29,19 @@ export function useLabelCatalogue() {
     let live = true;
     void (async () => {
       try {
-        const [catalogue, sets, gestures, bundles] = await Promise.all([
+        const [catalogue, sets, gestureList, bundleList, automation] = await Promise.all([
           invoke<DatasetLabel[]>("list_model_labels"),
           invoke<DatasetSummary[]>("list_model_datasets"),
           listGestureDefinitions(),
           listRecordingBundles(),
+          invoke<{ recipes: UsageSources["recipes"] }>("get_automation_state").catch(() => ({ recipes: [] })),
         ]);
         if (!live) return;
         setLabels(Array.isArray(catalogue) ? catalogue : []);
         setDatasets(Array.isArray(sets) ? sets : []);
-        setGestureLabels(gestures.map((gesture) => gesture.labelId));
-        setRecorderLabels(bundles.status === "ok" && Array.isArray(bundles.value) ? bundles.value.map((bundle) => bundle.labelIds) : []);
+        setGestures(gestureList.map(({ id, name, labelId }) => ({ id, name, labelId })));
+        setBundles(bundleList.status === "ok" && Array.isArray(bundleList.value) ? bundleList.value.map(({ recordingId, labelIds }) => ({ recordingId, labelIds })) : []);
+        setRecipes(Array.isArray(automation?.recipes) ? automation.recipes : []);
       } catch (err) {
         if (live) setError(String(err));
       }
@@ -54,15 +58,16 @@ export function useLabelCatalogue() {
   }, [datasets]);
   const gestureCountByLabel = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const label of gestureLabels) if (label) counts.set(label, (counts.get(label) ?? 0) + 1);
+    for (const gesture of gestures) if (gesture.labelId) counts.set(gesture.labelId, (counts.get(gesture.labelId) ?? 0) + 1);
     return counts;
-  }, [gestureLabels]);
+  }, [gestures]);
 
   const recorderCountByLabel = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const labelIds of recorderLabels) for (const label of new Set(labelIds)) counts.set(label, (counts.get(label) ?? 0) + 1);
+    for (const bundle of bundles) for (const label of new Set(bundle.labelIds)) counts.set(label, (counts.get(label) ?? 0) + 1);
     return counts;
-  }, [recorderLabels]);
+  }, [bundles]);
+  const usageFor = useCallback((id: string) => usageOf(id, { bundles, datasets, gestures, models, recipes }), [bundles, datasets, gestures, models, recipes]);
 
   const create = useCallback(async (label: NewLabel): Promise<string | null> => {
     try {
@@ -101,5 +106,5 @@ export function useLabelCatalogue() {
     }
   }, []);
 
-  return { desktopAvailable, labels, models, coverageByLabel, gestureCountByLabel, recorderCountByLabel, error, create, update, setArchived, remove };
+  return { desktopAvailable, labels, models, coverageByLabel, gestureCountByLabel, recorderCountByLabel, usageFor, error, create, update, setArchived, remove };
 }

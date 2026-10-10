@@ -7,8 +7,12 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
+import { usageCount, type LabelUsage } from "../../labels/labelUsage";
 import { labelIdFromName, type LabelModel } from "../labelModels";
 import type { DatasetLabel } from "../types";
+
+/** The tabs a label's uses live in. */
+export type UsageTab = "recordings" | "gestureLibrary" | "modelLab" | "recipes";
 
 export interface NewLabel {
   id: string;
@@ -31,12 +35,16 @@ type LabelCoverageProps = {
   gestureCountByLabel?: Map<string, number>;
   /** Saved Recorder recordings that have an interval with each label id. */
   recorderCountByLabel?: Map<string, number>;
+  /** Everything that uses a label, for the "Where it is used" list. */
+  usageFor?: (id: string) => LabelUsage;
+  /** Jumps to the tab where an item of that kind lives. */
+  onOpenTab?: (tab: UsageTab) => void;
   /** Resolves to an error message, or null once deleted. */
   onDelete: (id: string) => Promise<string | null>;
 };
 
 /** Your labels: what each is called, how many recordings cover it, and how far along its model is. */
-export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSetArchived, onUpdate, gestureCountByLabel, recorderCountByLabel, onDelete }: LabelCoverageProps) {
+export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSetArchived, onUpdate, gestureCountByLabel, recorderCountByLabel, usageFor, onOpenTab, onDelete }: LabelCoverageProps) {
   const uid = useId();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
@@ -197,6 +205,7 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
                       {labelModels.length > 0 ? ` · ${labelModels.length} model${labelModels.length === 1 ? "" : "s"}` : ""}
                       {row.description ? ` · ${row.description}` : ""}
                     </small>
+                    {usageFor && usageCount(usageFor(row.id)) > 0 && <UsageList usage={usageFor(row.id)} onOpenTab={onOpenTab} label={row.id} />}
                   </div>
                   <div className="recipe-item-actions">
                     {row.managed && onUpdate && full && (
@@ -228,5 +237,34 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
         )}
       </CardContent>
     </Card>
+  );
+}
+
+const GROUPS: { key: keyof LabelUsage; title: string; tab: UsageTab; open: string }[] = [
+  { key: "gestures", title: "Gesture library", tab: "gestureLibrary", open: "Open Gesture library" },
+  { key: "recordings", title: "Recorder recordings", tab: "recordings", open: "Open Recordings" },
+  { key: "trainingRecordings", title: "Training data", tab: "modelLab", open: "Open Model Lab" },
+  { key: "models", title: "Models", tab: "modelLab", open: "Open Model Lab" },
+  { key: "recipes", title: "Recipes", tab: "recipes", open: "Open Recipes" },
+];
+
+/** Every place one label is used, by tab, each with a way to go there. */
+function UsageList({ usage, label, onOpenTab }: { usage: LabelUsage; label: string; onOpenTab?: (tab: UsageTab) => void }) {
+  const itemName = (item: unknown): string => {
+    const entry = item as { name?: string; state?: string; id: string };
+    return entry.name ?? (entry.state ? `${entry.id.slice(0, 8)} (${entry.state})` : entry.id.slice(0, 8));
+  };
+  return (
+    <details className="text-xs">
+      <summary className="cursor-pointer">Where {label} is used</summary>
+      <ul className="mt-1 flex flex-col gap-1" aria-label={`Where ${label} is used`}>
+        {GROUPS.filter((group) => usage[group.key].length > 0).map((group) => (
+          <li key={group.key} className="flex flex-wrap items-center gap-2">
+            <span><strong>{group.title}:</strong> {usage[group.key].map(itemName).join(", ")}</span>
+            {onOpenTab && <Button type="button" variant="ghost" size="sm" onClick={() => onOpenTab(group.tab)}>{group.open}</Button>}
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }

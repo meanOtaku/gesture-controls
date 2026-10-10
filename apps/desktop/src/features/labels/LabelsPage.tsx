@@ -1,4 +1,5 @@
 import { Alert, AlertDescription } from "../../components/ui/alert";
+import type { UsageTab } from "../model-lab/components/LabelCoverage";
 import { LabelCoverage } from "../model-lab/components/LabelCoverage";
 import { useLabelCatalogue } from "./useLabelCatalogue";
 
@@ -7,7 +8,7 @@ import { useLabelCatalogue } from "./useLabelCatalogue";
  * activity to tell it apart from). Recordings, the Gesture library, Model Lab and recipes all read this list, so a label
  * made here is available everywhere and renaming it here renames it everywhere.
  */
-export function LabelsPage() {
+export function LabelsPage({ onOpen }: { onOpen?: (tab: UsageTab) => void }) {
   const catalogue = useLabelCatalogue();
   return (
     <main className="shell">
@@ -28,6 +29,8 @@ export function LabelsPage() {
         coverageByLabel={catalogue.coverageByLabel}
         gestureCountByLabel={catalogue.gestureCountByLabel}
         recorderCountByLabel={catalogue.recorderCountByLabel}
+        usageFor={catalogue.usageFor}
+        onOpenTab={onOpen}
         onCreate={catalogue.create}
         onUpdate={catalogue.update}
         onSetArchived={catalogue.setArchived}
