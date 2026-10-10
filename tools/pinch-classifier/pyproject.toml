@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pinch-classifier"
 version = "0.1.0"
-description = "Offline baseline and TFLite/LiteRT training tools for the three-class pinch gesture classifier."
+description = "Offline training of one per-label gesture model, written as an ONNX bundle the desktop app imports."
 requires-python = ">=3.11"
 dependencies = [
     "numpy>=1.26",
@@ -14,16 +14,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
-tensorflow = ["tensorflow>=2.16,<2.22"]
 onnx = ["onnx>=1.16", "onnxruntime>=1.18"]
 torch = ["torch>=2.3", "onnx>=1.16", "onnxruntime>=1.18", "onnxscript>=0.1"]
 
 [project.scripts]
-pinch-classifier-train = "pinch_classifier.train:main"
-pinch-classifier-train-tflite = "pinch_classifier.train_tflite:main"
 label-classifier-train = "pinch_classifier.label_train:cli"
-pinch-classifier-replay = "pinch_classifier.replay:main"
-pinch-classifier-experiment = "pinch_classifier.experiment:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

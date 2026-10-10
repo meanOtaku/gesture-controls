@@ -13,8 +13,7 @@ original design intent see the [project brief](project-brief.md).
 | **Desktop application** | `apps/desktop` (React/TS frontend) + `apps/desktop/src-tauri` (Rust backend) | macOS 14+, Windows 11 x64, Linux (development) | Tauri 2, Vite, Cargo | A Tauri bundle per OS (`npm run tauri -- build`) |
 | **Galaxy Watch app** | `apps/watch` | Wear OS 3+ (API 30+), Galaxy Watch 4 or later for PPG | Gradle 9.5 / Kotlin, AGP 9.3 | An APK (sideloaded over adb) |
 | **Sony head-tracker provider** | `crates/native-head-tracking` (in-process) or `tools/sony-head-tracker` (external CLI) | Same host as the desktop app | Cargo (native) / committed upstream prebuilds (external) | Linked into the desktop binary on macOS and Windows; separate process on Linux or with `SONY_HEAD_TRACKER_PROVIDER=external` |
-| **Training / replay tooling** | `tools/pinch-classifier` | A developer checkout with `uv` | Python 3.11+, optional TensorFlow | **Not shipped.** Invoked by the desktop through `uv run`; requires a full repository checkout |
-| **LiteRT runtime** | `crates/pinch-inference` (`litert` feature) | Desktop host | Cargo feature `litert-inference`, packaged by `npm run package:litert` | An opt-in release package; absent from the default build, which fails inference closed |
+| **Per-label trainer** | `tools/pinch-classifier` | A developer checkout with `uv` | Python 3.11+, optional PyTorch | **Not shipped.** Invoked by the desktop through `uv run`; requires a full repository checkout |
 
 The watch and the headphones are **sensor sources only**. Training, inference,
 policy decisions and every action run on the desktop.
@@ -146,9 +145,8 @@ closed.
 | **Trainer / replay (Python)** | `cd tools/pinch-classifier && uv run --with pytest pytest tests -q` | **Not in CI** |
 | **Watch JVM unit tests** | `cd apps/watch && ./gradlew :app:testDebugUnitTest` | **Not in CI** |
 
-The two suites marked *not in CI* are run by hand today. Two tests are
-environment-sensitive: the TensorFlow conversion tests skip when the optional
-`tensorflow` extra is absent, and `native-head-tracking`'s `ffi_macos` smoke test
+The two suites marked *not in CI* are run by hand today. One test is
+environment-sensitive: `native-head-tracking`'s `ffi_macos` smoke test
 touches the macOS Bluetooth stack and can abort on a developer machine; it is
 covered by the dedicated `macos-14` job instead.
 

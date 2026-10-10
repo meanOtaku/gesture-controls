@@ -306,11 +306,11 @@ Sony tracker compatibility tests (Python):
 
   uv run --directory tools/sony-head-tracker --with pytest pytest -q
 
-Pinch trainer and replay tests (Python; the TensorFlow conversion tests skip
-unless the optional `tensorflow` extra is installed):
+Per-label trainer tests (Python; the PyTorch backend test runs with the
+`torch` extra):
 
   cd tools/pinch-classifier
-  uv run --with pytest pytest tests -q
+  uv run --extra dev --extra onnx pytest -q
 
 Galaxy Watch (Kotlin) JVM unit tests. These need the Android SDK path in
 `apps/watch/local.properties` and the committed Gradle wrapper; the first run
