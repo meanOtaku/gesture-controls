@@ -12,15 +12,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Emitter, Manager, State};
-use uuid::Uuid;
+use tauri::{AppHandle, Emitter, Manager};
 
-use crate::inference::{GesturePolicyRuntime, PinchInferenceRuntime};
 use crate::model_lab::{self, MODEL_LAB_DIR_NAME};
-use interaction_engine::{ForceReleaseReason, GestureIntent};
+use interaction_engine::GestureIntent;
 #[cfg(test)]
 use pinch_inference::FEATURE_COUNT;
 use pinch_inference::{CLASS_COUNT, FEATURE_NAMES};
@@ -46,24 +43,6 @@ pub enum ModelLifecycleState {
     Approved,
     Active,
     Archived,
-}
-
-/// `true` iff a model may move directly from `from` to `to` via
-/// [`transition_model_state`]. Activation/rollback are their own dedicated
-/// operations ([`activate_model`]/[`rollback_active_model`]) rather than
-/// generic transitions, since they also have to move the *other* model
-/// that's currently Active.
-fn legal_transition(from: ModelLifecycleState, to: ModelLifecycleState) -> bool {
-    use ModelLifecycleState::*;
-    matches!(
-        (from, to),
-        (Draft, Evaluated)
-            | (Evaluated, Approved)
-            | (Evaluated, Archived)
-            | (Approved, Archived)
-            | (Approved, Evaluated)
-            | (Archived, Draft)
-    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -201,34 +180,7 @@ pub struct ModelIntentBinding {
     pub intent: GestureIntent,
 }
 
-impl ModelRecord {
-    fn new(id: String) -> Self {
-        let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
-        Self {
-            id,
-            state: ModelLifecycleState::Draft,
-            thresholds: ModelThresholds::default(),
-            quality_gate: QualityGateConfig::default(),
-            created_at: now.clone(),
-            history: vec![StateTransitionRecord {
-                from: None,
-                to: ModelLifecycleState::Draft,
-                at: now,
-            }],
-            intent_bindings: Vec::new(),
-            imported_tflite_bundle: false,
-        }
-    }
-
-    fn push_transition(&mut self, to: ModelLifecycleState) {
-        self.history.push(StateTransitionRecord {
-            from: Some(self.state),
-            to,
-            at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
-        });
-        self.state = to;
-    }
-}
+impl ModelRecord {}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -953,26 +905,6 @@ impl ActiveModelSnapshot {
     }
 }
 
-/// Forces any in-progress grab to release and clears the loaded model
-/// backend's internal pinch state before ever swapping which model is
-/// active. Without this, a grab classified under the outgoing model's
-/// bindings could survive into the incoming model's lifetime, which has no
-/// reason to share its meaning -- see the acceptance criterion that
-/// switching model state can never preserve a grab.
-fn force_release_before_swap(
-    app: &AppHandle,
-    gesture_policy: &GesturePolicyRuntime,
-    pinch_inference: &PinchInferenceRuntime,
-) {
-    pinch_inference.reset();
-    match gesture_policy.force_release(ForceReleaseReason::ModelSwapped) {
-        Ok(decision) => crate::inference::apply_decision(app, decision),
-        Err(error) => {
-            tracing::warn!(%error, "failed to force-release gesture policy before model swap")
-        }
-    }
-}
-
 /// Everything the live inference path needs to decide what to do with one
 /// raw sensor window: which model is active, what mode the registry is in,
 /// and that model's own thresholds and sensor-quality gate.
@@ -1026,25 +958,6 @@ pub(crate) fn active_model_file_path(app: &AppHandle, model_id: &str) -> Result<
         .join(TFLITE_MODEL_FILE_NAME))
 }
 
-/// Resolves an approved/active bundle for side-effect-free offline replay.
-/// Draft and archived artifacts fail closed, as does any non-LiteRT bundle.
-pub(crate) fn replayable_model_dir(app: &AppHandle, model_id: &str) -> Result<PathBuf, String> {
-    let index = load_registry(app)?;
-    let model = index
-        .models
-        .iter()
-        .find(|model| model.id == model_id)
-        .ok_or_else(|| format!("no registered model with id '{model_id}'"))?;
-    if !matches!(
-        model.state,
-        ModelLifecycleState::Approved | ModelLifecycleState::Active
-    ) {
-        return Err("offline replay requires an approved or active model".to_string());
-    }
-    model_is_activatable(app, model_id)?;
-    Ok(model_lab::models_dir(app)?.join(model_id))
-}
-
 fn emit_registry(app: &AppHandle, index: &RegistryIndex) {
     if let Err(error) = app.emit(MODEL_REGISTRY_EVENT, RegistryView::from(index.clone())) {
         tracing::warn!(%error, "failed to emit model registry event");
@@ -1075,303 +988,6 @@ where
     write_registry_atomic(app, &index)?;
     emit_registry(app, &index);
     Ok(RegistryView::from(index))
-}
-
-/// A model directory is a validated, activatable TFLite bundle iff it holds
-/// both `metadata.json` and `model.tflite`. `metadata.json` is only ever
-/// written by `write_and_validate_metadata` in bundle.py, which validates the
-/// full contract (feature order, class order, conversion parity, sha256)
-/// before writing — so file presence here is sufficient, no need to
-/// re-parse/re-validate the contract on the Rust side.
-fn model_is_activatable(app: &AppHandle, model_id: &str) -> Result<(), String> {
-    let dir = model_lab::models_dir(app)?.join(model_id);
-    if !dir.join(TFLITE_METADATA_FILE_NAME).is_file() || !dir.join(TFLITE_MODEL_FILE_NAME).is_file()
-    {
-        return Err(format!(
-            "model '{model_id}' is not a validated TFLite bundle ({TFLITE_METADATA_FILE_NAME} + \
-             {TFLITE_MODEL_FILE_NAME} required). Desktop inference only runs validated TFLite \
-             bundles produced by the 'tflite' training backend; a sklearn baseline model cannot \
-             be activated."
-        ));
-    }
-    Ok(())
-}
-
-fn find_model_mut<'a>(
-    index: &'a mut RegistryIndex,
-    id: &str,
-) -> Result<&'a mut ModelRecord, String> {
-    index
-        .models
-        .iter_mut()
-        .find(|model| model.id == id)
-        .ok_or_else(|| format!("no registered model with id '{id}'"))
-}
-
-/// Registers a freshly trained model as `Draft` if it isn't already
-/// registered. Called from `model_lab::run_training_job` on completion, for
-/// both backends (a Draft record is harmless bookkeeping even for a sklearn
-/// model that can never be activated).
-pub(crate) fn register_trained_model(
-    app: &AppHandle,
-    runtime: &ModelRegistryRuntime,
-    model_id: &str,
-) {
-    let Ok(_guard) = runtime.lock.lock() else {
-        return;
-    };
-    let mut index = match load_registry(app) {
-        Ok(index) => index,
-        Err(error) => {
-            tracing::warn!(%error, model_id, "failed to register newly trained model");
-            return;
-        }
-    };
-    if index.models.iter().any(|model| model.id == model_id) {
-        return;
-    }
-    index.models.push(ModelRecord::new(model_id.to_string()));
-    if let Err(error) = write_registry_atomic(app, &index) {
-        tracing::warn!(%error, model_id, "failed to persist newly registered model");
-        return;
-    }
-    emit_registry(app, &index);
-}
-
-/// Imports a user-selected TFLite bundle into Model Lab. The selected path must
-/// be `metadata.json`; its parent is treated as the bundle root. The source is
-/// validated before copy and the private destination is validated again before
-/// a Draft lifecycle record is persisted. Thus a copied/corrupt/swapped file can
-/// never become registered, approved, or active merely because it has a familiar
-/// filename.
-#[tauri::command]
-pub fn import_custom_tflite_bundle(
-    metadata_path: String,
-    app: AppHandle,
-    runtime: State<'_, ModelRegistryRuntime>,
-) -> Result<RegistryView, String> {
-    let source_metadata = PathBuf::from(&metadata_path);
-    if source_metadata.file_name().and_then(|name| name.to_str()) != Some(TFLITE_METADATA_FILE_NAME)
-    {
-        return Err(format!(
-            "select the bundle's {TFLITE_METADATA_FILE_NAME}, not an arbitrary file"
-        ));
-    }
-    let source_dir = source_metadata
-        .parent()
-        .ok_or_else(|| format!("{TFLITE_METADATA_FILE_NAME} has no containing bundle directory"))?;
-    load_and_verify_bundle(source_dir)
-        .map_err(|error| format!("custom bundle rejected before import: {error}"))?;
-
-    let _guard = runtime
-        .lock
-        .lock()
-        .map_err(|_| "model registry lock was poisoned".to_string())?;
-    let id = format!("imported-{}", Uuid::new_v4());
-    let destination = model_lab::models_dir(&app)?.join(&id);
-    fs::create_dir_all(&destination)
-        .map_err(|error| format!("failed to create private bundle storage: {error}"))?;
-    let copy_result = (|| -> Result<(), String> {
-        fs::copy(
-            source_dir.join(TFLITE_METADATA_FILE_NAME),
-            destination.join(TFLITE_METADATA_FILE_NAME),
-        )
-        .map_err(|error| format!("failed to copy {TFLITE_METADATA_FILE_NAME}: {error}"))?;
-        fs::copy(
-            source_dir.join(TFLITE_MODEL_FILE_NAME),
-            destination.join(TFLITE_MODEL_FILE_NAME),
-        )
-        .map_err(|error| format!("failed to copy {TFLITE_MODEL_FILE_NAME}: {error}"))?;
-        load_and_verify_bundle(&destination)
-            .map_err(|error| format!("custom bundle rejected after copy: {error}"))?;
-        Ok(())
-    })();
-    if let Err(error) = copy_result {
-        let _ = fs::remove_dir_all(&destination);
-        return Err(error);
-    }
-
-    let mut index = match load_registry(&app) {
-        Ok(index) => index,
-        Err(error) => {
-            let _ = fs::remove_dir_all(&destination);
-            return Err(error);
-        }
-    };
-    let mut record = ModelRecord::new(id);
-    record.imported_tflite_bundle = true;
-    index.models.push(record);
-    write_registry_atomic(&app, &index)?;
-    emit_registry(&app, &index);
-    Ok(RegistryView::from(index))
-}
-
-#[tauri::command]
-pub fn get_model_registry(
-    app: AppHandle,
-    runtime: State<'_, ModelRegistryRuntime>,
-) -> Result<RegistryView, String> {
-    let _guard = runtime
-        .lock
-        .lock()
-        .map_err(|_| "model registry lock was poisoned".to_string())?;
-    Ok(RegistryView::from(load_registry(&app)?))
-}
-
-#[tauri::command]
-pub fn transition_model_state(
-    id: String,
-    to: ModelLifecycleState,
-    app: AppHandle,
-    runtime: State<'_, ModelRegistryRuntime>,
-) -> Result<RegistryView, String> {
-    with_registry_mutation(&app, &runtime, |index| {
-        if index.active_model_id.as_deref() == Some(id.as_str()) {
-            return Err("cannot transition the active model directly; use rollback_active_model or activate a different model first".to_string());
-        }
-        let model = find_model_mut(index, &id)?;
-        if !legal_transition(model.state, to) {
-            return Err(format!("illegal transition {:?} -> {:?}", model.state, to));
-        }
-        model.push_transition(to);
-        Ok(())
-    })
-}
-
-#[tauri::command]
-pub fn update_model_thresholds(
-    id: String,
-    thresholds: ModelThresholds,
-    app: AppHandle,
-    runtime: State<'_, ModelRegistryRuntime>,
-) -> Result<RegistryView, String> {
-    thresholds.validate()?;
-    with_registry_mutation(&app, &runtime, |index| {
-        find_model_mut(index, &id)?.thresholds = thresholds;
-        Ok(())
-    })
-}
-
-#[tauri::command]
-pub fn update_model_quality_gate(
-    id: String,
-    quality_gate: QualityGateConfig,
-    app: AppHandle,
-    runtime: State<'_, ModelRegistryRuntime>,
-) -> Result<RegistryView, String> {
-    quality_gate.validate()?;
-    with_registry_mutation(&app, &runtime, |index| {
-        find_model_mut(index, &id)?.quality_gate = quality_gate;
-        Ok(())
-    })
-}
-
-/// Replaces the complete, closed-set intent mapping for one trained model.
-/// The caller cannot supply a shell command or executable path: intent is the
-/// `GestureIntent` enum shared with the desktop policy. Activation additionally
-/// requires a complete mapping, so an omitted class fails closed.
-#[tauri::command]
-pub fn set_model_intent_bindings(
-    id: String,
-    bindings: Vec<ModelIntentBinding>,
-    app: AppHandle,
-    runtime: State<'_, ModelRegistryRuntime>,
-) -> Result<RegistryView, String> {
-    validate_intent_bindings(&bindings)?;
-    with_registry_mutation(&app, &runtime, |index| {
-        let model = find_model_mut(index, &id)?;
-        if matches!(
-            model.state,
-            ModelLifecycleState::Approved | ModelLifecycleState::Active
-        ) {
-            return Err(
-                "cannot change bindings of an approved or active model; move it back to Evaluated first"
-                    .to_string(),
-            );
-        }
-        model.intent_bindings = bindings;
-        Ok(())
-    })
-}
-
-/// Activates `id`: requires it be `Approved` and a validated TFLite bundle.
-/// Any currently Active model is demoted back to `Approved` and remembered
-/// as `previous_active_model_id` so [`rollback_active_model`] can restore it.
-#[tauri::command]
-pub fn activate_model(
-    id: String,
-    app: AppHandle,
-    runtime: State<'_, ModelRegistryRuntime>,
-    gesture_policy: State<'_, GesturePolicyRuntime>,
-    pinch_inference: State<'_, PinchInferenceRuntime>,
-) -> Result<RegistryView, String> {
-    with_registry_mutation(&app, &runtime, |index| {
-        {
-            let model = find_model_mut(index, &id)?;
-            if model.state != ModelLifecycleState::Approved {
-                return Err(format!(
-                    "model '{id}' must be Approved before activation (currently {:?})",
-                    model.state
-                ));
-            }
-        }
-        // Reject a non-TFLite (e.g. sklearn baseline) bundle with a clear,
-        // deployability-specific error before the generic contract revalidation
-        // below, which would otherwise surface as an opaque "failed to read
-        // metadata.json" I/O error.
-        model_is_activatable(&app, &id)?;
-        // Revalidate the full bundle contract, digest, and bindings under the
-        // same lock as the state check above -- a stale `Approved` state on disk
-        // must never be trusted alone, and nothing may mutate the record between
-        // this validation and the swap below (see `ActiveModelSnapshot::verified`).
-        ActiveModelSnapshot::verified(&app, &id)?;
-
-        force_release_before_swap(&app, &gesture_policy, &pinch_inference);
-
-        let previous_active = index.active_model_id.clone();
-        if let Some(previous_id) = &previous_active
-            && previous_id != &id
-            && let Ok(previous) = find_model_mut(index, previous_id)
-        {
-            previous.push_transition(ModelLifecycleState::Approved);
-        }
-        find_model_mut(index, &id)?.push_transition(ModelLifecycleState::Active);
-        index.previous_active_model_id = previous_active.filter(|previous_id| previous_id != &id);
-        index.active_model_id = Some(id);
-        Ok(())
-    })
-}
-
-/// Swaps the active model back to whichever model was active immediately
-/// before the last [`activate_model`] call.
-#[tauri::command]
-pub fn rollback_active_model(
-    app: AppHandle,
-    runtime: State<'_, ModelRegistryRuntime>,
-    gesture_policy: State<'_, GesturePolicyRuntime>,
-    pinch_inference: State<'_, PinchInferenceRuntime>,
-) -> Result<RegistryView, String> {
-    with_registry_mutation(&app, &runtime, |index| {
-        let Some(previous_id) = index.previous_active_model_id.clone() else {
-            return Err("no previous active model to roll back to".to_string());
-        };
-        // The model being restored may have been demoted since it was last
-        // active; revalidate its bundle contract, digest, and bindings exactly
-        // as activation would rather than trusting its earlier validation still
-        // holds.
-        ActiveModelSnapshot::verified(&app, &previous_id)?;
-        let current_active = index.active_model_id.clone();
-
-        force_release_before_swap(&app, &gesture_policy, &pinch_inference);
-
-        if let Some(current_id) = &current_active {
-            find_model_mut(index, current_id)?.push_transition(ModelLifecycleState::Approved);
-        }
-        find_model_mut(index, &previous_id)?.push_transition(ModelLifecycleState::Active);
-        index.active_model_id = Some(previous_id);
-        index.previous_active_model_id = current_active;
-        Ok(())
-    })
 }
 
 /// Also drives [`crate::inference::GesturePolicyRuntime`], which is the
@@ -1426,131 +1042,9 @@ pub(crate) fn reconcile_inference_mode_at_startup(app: &AppHandle) {
     }
 }
 
-/// Why `Live` cannot be selected while the active model's training window and
-/// the live PPG window disagree (R-M3-1). `Monitor` still runs, so the
-/// mismatch can be inspected there.
-fn live_refusal_message(check: &WindowCheck) -> String {
-    format!(
-        "Live is unavailable: {}. Align the Watch PPG flush rate with the model's window or \
-         retrain with a matching --window-ms; Monitor still classifies so you can inspect it.",
-        check.describe()
-    )
-}
-
-/// Changes the inference mode with the policy and the persisted copy kept in
-/// agreement: `apply` (the policy) runs first and `persist` second, so a
-/// failure to apply leaves the persisted mode untouched, and a failure to
-/// persist puts the policy back on `previous`. The reverse order let a
-/// persisted `Off` sit beside a policy still running `Live`.
-fn change_inference_mode<T>(
-    previous: InferenceMode,
-    next: InferenceMode,
-    mut apply: impl FnMut(InferenceMode) -> Result<(), String>,
-    persist: impl FnOnce() -> Result<T, String>,
-) -> Result<T, String> {
-    apply(next)?;
-    match persist() {
-        Ok(value) => Ok(value),
-        Err(error) => {
-            if let Err(revert_error) = apply(previous) {
-                tracing::warn!(%revert_error, "failed to restore the previous inference mode after a persist failure");
-            }
-            Err(error)
-        }
-    }
-}
-
-/// Also drives [`crate::inference::GesturePolicyRuntime`], which is the
-/// component that actually gates whether pinch-transition decisions execute
-/// against the overlay -- see the non-negotiable rule that all gesture
-/// decisions run on the desktop, in `docs/architecture/project-brief.md`
-/// Milestone 11.
-#[tauri::command]
-pub fn set_inference_mode(
-    mode: InferenceMode,
-    app: AppHandle,
-    runtime: State<'_, ModelRegistryRuntime>,
-    gesture_policy: State<'_, crate::inference::GesturePolicyRuntime>,
-    ppg_ingest: State<'_, crate::inference::PpgIngestRuntime>,
-) -> Result<RegistryView, String> {
-    let (previous, active_model_id) = {
-        let _guard = runtime
-            .lock
-            .lock()
-            .map_err(|_| "model registry lock was poisoned".to_string())?;
-        let index = load_registry(&app)?;
-        (index.inference_mode, index.active_model_id)
-    };
-    if mode == InferenceMode::Live
-        && let Some(model_id) = &active_model_id
-        && let Some(check) = ppg_ingest.live_blocking_window_mismatch(model_id)
-    {
-        return Err(live_refusal_message(&check));
-    }
-    change_inference_mode(
-        previous,
-        mode,
-        |target| {
-            if let Some(decision) = gesture_policy.set_mode(target)? {
-                crate::inference::apply_decision(&app, decision);
-            }
-            Ok(())
-        },
-        || {
-            with_registry_mutation(&app, &runtime, |index| {
-                index.inference_mode = mode;
-                Ok(())
-            })
-        },
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The per-label registry migrates this registry's real serialised form. If a field here is renamed or retyped,
-    /// this fails instead of the migration quietly misreading an old file.
-    #[test]
-    fn the_per_label_registry_can_migrate_what_this_registry_actually_writes() {
-        let mut older = ModelRecord::new("model-older".to_string());
-        older.push_transition(ModelLifecycleState::Evaluated);
-        older.push_transition(ModelLifecycleState::Approved);
-        older.intent_bindings = vec![ModelIntentBinding {
-            class_label: "pinch_start".to_string(),
-            intent: GestureIntent::VolumeGrab,
-        }];
-        let mut newer = ModelRecord::new("model-newer".to_string());
-        newer.imported_tflite_bundle = true;
-        let index = RegistryIndex {
-            models: vec![older, newer],
-            active_model_id: Some("model-newer".to_string()),
-            previous_active_model_id: Some("model-older".to_string()),
-            inference_mode: InferenceMode::Live,
-        };
-        let json = serde_json::to_string_pretty(&index).unwrap();
-
-        let (registry, report) = model_lab_core::migrate_legacy_registry(&json).unwrap();
-        assert_eq!((report.legacy_models, report.quarantined), (2, 2));
-        assert_eq!(registry.inference_mode, model_lab_core::InferenceMode::Live);
-        let older = registry
-            .quarantined
-            .iter()
-            .find(|q| q.id == "model-older")
-            .unwrap();
-        assert!(older.was_previous && !older.was_active);
-        assert_eq!(older.legacy.state, "approved");
-        assert_eq!(older.legacy.history.len(), 3);
-        assert_eq!(older.legacy.intent_bindings.len(), 1);
-        let newer = registry
-            .quarantined
-            .iter()
-            .find(|q| q.id == "model-newer")
-            .unwrap();
-        assert!(newer.was_active && newer.legacy.imported_tflite_bundle);
-        assert_eq!(newer.legacy.thresholds["startThreshold"], 0.8);
-        registry.validate().unwrap();
-    }
 
     /// R-M4-6: the policy and the persisted mode must not disagree.
     /// R-M3-1: a window is compatible when its duration is within tolerance
@@ -1579,19 +1073,6 @@ mod tests {
         assert_eq!(observed_window_ms(&[5]), None);
         assert_eq!(observed_window_ms(&[]), None);
         assert_eq!(observed_window_ms(&[10, 10]), None);
-    }
-
-    #[test]
-    fn the_live_refusal_names_the_mismatch_and_how_to_fix_it() {
-        let declared = DeclaredWindow {
-            window_ms: 500.0,
-            min_samples_per_window: 3,
-        };
-        let message = live_refusal_message(&check_window(declared, Some(960.0)));
-        assert!(message.contains("960"), "{message}");
-        assert!(message.contains("500"), "{message}");
-        assert!(message.contains("flush rate"), "{message}");
-        assert!(message.contains("Monitor"), "{message}");
     }
 
     #[test]
@@ -1625,57 +1106,6 @@ mod tests {
             startup_inference_mode(InferenceMode::Off),
             InferenceMode::Off
         );
-    }
-
-    #[test]
-    fn mode_change_applies_to_the_policy_before_persisting() {
-        let mut order = Vec::new();
-        let result = change_inference_mode(
-            InferenceMode::Off,
-            InferenceMode::Live,
-            |mode| {
-                order.push(format!("apply {mode:?}"));
-                Ok(())
-            },
-            || {
-                // persist runs after the first apply
-                Ok::<_, String>("persisted")
-            },
-        );
-        assert_eq!(result, Ok("persisted"));
-        assert_eq!(order, vec!["apply Live".to_string()]);
-    }
-
-    #[test]
-    fn a_failed_apply_never_reaches_persist() {
-        let mut persisted = false;
-        let result = change_inference_mode(
-            InferenceMode::Off,
-            InferenceMode::Live,
-            |_| Err("policy lock poisoned".to_string()),
-            || {
-                persisted = true;
-                Ok::<_, String>(())
-            },
-        );
-        assert!(result.is_err());
-        assert!(!persisted, "the persisted mode must stay untouched");
-    }
-
-    #[test]
-    fn a_failed_persist_restores_the_previous_policy_mode() {
-        let mut applied = Vec::new();
-        let result: Result<(), String> = change_inference_mode(
-            InferenceMode::Monitor,
-            InferenceMode::Live,
-            |mode| {
-                applied.push(mode);
-                Ok(())
-            },
-            || Err("disk full".to_string()),
-        );
-        assert_eq!(result, Err("disk full".to_string()));
-        assert_eq!(applied, vec![InferenceMode::Live, InferenceMode::Monitor]);
     }
 
     #[test]
@@ -1750,57 +1180,8 @@ mod tests {
     }
 
     #[test]
-    fn legal_transition_allows_draft_evaluated_approved_and_denies_skips() {
-        use ModelLifecycleState::*;
-        assert!(legal_transition(Draft, Evaluated));
-        assert!(legal_transition(Evaluated, Approved));
-        assert!(!legal_transition(Draft, Approved));
-        assert!(!legal_transition(Draft, Active));
-        assert!(!legal_transition(Active, Draft));
-    }
-
-    #[test]
-    fn legal_transition_allows_archive_and_restore() {
-        use ModelLifecycleState::*;
-        assert!(legal_transition(Evaluated, Archived));
-        assert!(legal_transition(Approved, Archived));
-        assert!(legal_transition(Archived, Draft));
-        assert!(!legal_transition(Archived, Active));
-    }
-
-    #[test]
-    fn model_record_new_starts_draft_with_one_history_entry() {
-        let record = ModelRecord::new("model-1".to_string());
-        assert_eq!(record.state, ModelLifecycleState::Draft);
-        assert_eq!(record.history.len(), 1);
-        assert_eq!(record.history[0].from, None);
-        assert_eq!(record.history[0].to, ModelLifecycleState::Draft);
-    }
-
-    #[test]
-    fn model_record_push_transition_appends_history_and_updates_state() {
-        let mut record = ModelRecord::new("model-1".to_string());
-        record.push_transition(ModelLifecycleState::Evaluated);
-        assert_eq!(record.state, ModelLifecycleState::Evaluated);
-        assert_eq!(record.history.len(), 2);
-        assert_eq!(record.history[1].from, Some(ModelLifecycleState::Draft));
-        assert_eq!(record.history[1].to, ModelLifecycleState::Evaluated);
-    }
-
-    #[test]
     fn inference_mode_defaults_off() {
         assert_eq!(InferenceMode::default(), InferenceMode::Off);
-    }
-
-    #[test]
-    fn registry_index_round_trips_through_json() {
-        let mut index = RegistryIndex::default();
-        index.models.push(ModelRecord::new("model-1".to_string()));
-        index.inference_mode = InferenceMode::Monitor;
-        let json = serde_json::to_string(&index).expect("must serialize");
-        let restored: RegistryIndex = serde_json::from_str(&json).expect("must deserialize");
-        assert_eq!(restored.models.len(), 1);
-        assert_eq!(restored.inference_mode, InferenceMode::Monitor);
     }
 
     #[test]
@@ -1897,18 +1278,6 @@ mod tests {
         let index = read_registry_file(&dir.join(REGISTRY_FILE_NAME)).unwrap();
         assert!(index.models.is_empty());
         assert!(index.active_model_id.is_none());
-    }
-
-    #[test]
-    fn valid_registry_round_trips() {
-        let dir = unique_bundle_dir("valid-registry");
-        let path = dir.join(REGISTRY_FILE_NAME);
-        let mut index = RegistryIndex::default();
-        index.models.push(ModelRecord::new("model-a".to_string()));
-        fs::write(&path, serde_json::to_string(&index).unwrap()).unwrap();
-        let loaded = read_registry_file(&path).unwrap();
-        assert_eq!(loaded.models.len(), 1);
-        assert_eq!(loaded.models[0].id, "model-a");
     }
 
     fn unique_bundle_dir(label: &str) -> PathBuf {

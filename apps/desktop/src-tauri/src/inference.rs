@@ -42,7 +42,7 @@ use interaction_engine::{
 use pinch_inference::{DesktopPinchRuntime, FusionRejection, PinchModel, TelemetryFusion};
 use serde::{Deserialize, Serialize};
 use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager};
 use tracing::warn;
 
 use crate::automation::AutomationRuntime;
@@ -215,21 +215,6 @@ impl PpgIngestRuntime {
     fn record_window_check(&self, model_id: &str, check: Option<model_registry::WindowCheck>) {
         if let Ok(mut last) = self.last_window_check.lock() {
             *last = check.map(|check| (model_id.to_string(), check));
-        }
-    }
-
-    /// The mismatch that must keep `model_id` out of `Live`: its most recent
-    /// observed window did not match the window it was trained on. `None`
-    /// when compatible or when no window has been observed yet (the per-window
-    /// enforcement in [`ingest_ppg_window`] still applies in `Live`).
-    pub(crate) fn live_blocking_window_mismatch(
-        &self,
-        model_id: &str,
-    ) -> Option<model_registry::WindowCheck> {
-        let last = self.last_window_check.lock().ok()?;
-        match last.as_ref() {
-            Some((id, check)) if id == model_id && !check.compatible => Some(*check),
-            _ => None,
         }
     }
 
@@ -796,18 +781,6 @@ pub(crate) fn apply_decision(app: &AppHandle, decision: PolicyDecision) {
     }
 }
 
-/// Reports that desktop inference itself failed (crashed, threw, produced an
-/// unparseable result, etc.) and forces an immediate, safe release.
-#[tauri::command]
-pub fn report_model_runtime_failure(
-    app: AppHandle,
-    runtime: State<'_, GesturePolicyRuntime>,
-) -> Result<PolicyDecision, String> {
-    let decision = runtime.force_release(ForceReleaseReason::ModelRuntimeFailure)?;
-    apply_decision(&app, decision);
-    Ok(decision)
-}
-
 /// Covers the Off/Monitor/Live gating this module owns, end to end over a
 /// real [`GesturePolicy`], without needing a Tauri `AppHandle`: the two pure
 /// seams [`mode_classifies`] (does a window reach the model at all?) and
@@ -1159,36 +1132,6 @@ mod ppg_window_tests {
         assert!(window_mismatch_blocks(InferenceMode::Live));
         assert!(!window_mismatch_blocks(InferenceMode::Monitor));
         assert!(!window_mismatch_blocks(InferenceMode::Off));
-    }
-
-    #[test]
-    fn a_mismatched_window_keeps_its_model_out_of_live_until_a_compatible_one_arrives() {
-        let runtime = PpgIngestRuntime::default();
-        let declared = model_registry::DeclaredWindow {
-            window_ms: 500.0,
-            min_samples_per_window: 3,
-        };
-        let mismatched = model_registry::check_window(declared, Some(960.0));
-        let compatible = model_registry::check_window(declared, Some(480.0));
-
-        // Nothing observed yet: nothing to refuse on.
-        assert!(runtime.live_blocking_window_mismatch("m1").is_none());
-
-        runtime.record_window_check("m1", Some(mismatched));
-        assert_eq!(
-            runtime.live_blocking_window_mismatch("m1"),
-            Some(mismatched)
-        );
-        // The verdict belongs to the model it was made against.
-        assert!(runtime.live_blocking_window_mismatch("m2").is_none());
-
-        runtime.record_window_check("m1", Some(compatible));
-        assert!(runtime.live_blocking_window_mismatch("m1").is_none());
-
-        // A disconnect forgets the verdict.
-        runtime.record_window_check("m1", Some(mismatched));
-        runtime.clear();
-        assert!(runtime.live_blocking_window_mismatch("m1").is_none());
     }
 
     #[test]

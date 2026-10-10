@@ -23,7 +23,6 @@ mod model_registry;
 mod overlay;
 mod recording_bundle;
 mod settings;
-mod training_label_mapping;
 mod watch;
 
 const WATCH_WEBSOCKET_ADDRESS: SocketAddr =
@@ -205,11 +204,6 @@ pub fn run() {
             model_lab::import_model_dataset,
             model_lab::list_model_datasets,
             model_lab::delete_model_dataset,
-            model_lab::start_training_job,
-            model_lab::cancel_training_job,
-            model_lab::get_training_status,
-            model_lab::list_trained_models,
-            model_lab::replay_model_dataset,
             recording_bundle::save_recording_bundle,
             recording_bundle::import_recording_from_raw_csv,
             recording_bundle::list_recording_bundles,
@@ -233,16 +227,6 @@ pub fn run() {
             label_registry::set_model_label_archived,
             label_registry::save_label_archive_log,
             label_registry::delete_model_label,
-            model_registry::get_model_registry,
-            model_registry::import_custom_tflite_bundle,
-            model_registry::transition_model_state,
-            model_registry::update_model_thresholds,
-            model_registry::update_model_quality_gate,
-            model_registry::set_model_intent_bindings,
-            model_registry::activate_model,
-            model_registry::rollback_active_model,
-            model_registry::set_inference_mode,
-            inference::report_model_runtime_failure,
             watch::get_watch_transport_status,
             watch::set_watch_transport,
             watch::rescan_watch_ble,
