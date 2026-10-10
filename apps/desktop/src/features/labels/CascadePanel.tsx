@@ -26,7 +26,7 @@ export function CascadePanel({ plan, onCancel, onOpenLabel, onRun }: Props) {
   const [failure, setFailure] = useState<string | null>(null);
   const running = progress !== null && failure === null;
   const needsTyping = plan.mode === "delete" && plan.steps.length > 1;
-  const blocked = plan.blockers.length > 0 || (needsTyping && typed.trim() !== plan.label);
+  const blocked = plan.blockers.length > 0 || (needsTyping && typed.trim().toLowerCase() !== plan.label.toLowerCase());
   const title = `${TITLES[plan.mode]} “${plan.label}”`;
 
   const confirm = async () => {
@@ -61,6 +61,7 @@ export function CascadePanel({ plan, onCancel, onOpenLabel, onRun }: Props) {
         <div className="field">
           <div className="field-head"><Label htmlFor={`${uid}-confirm`}>Type <code>{plan.label}</code> to confirm</Label></div>
           <Input id={`${uid}-confirm`} value={typed} autoComplete="off" spellCheck={false} onChange={(event) => setTyped(event.target.value)} />
+          <p className="field-hint">Capital letters do not matter.</p>
         </div>
       )}
       {progress && !failure && <p className="hint" role="status">Working: {progress.done} of {progress.total} steps…</p>}

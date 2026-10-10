@@ -20,7 +20,7 @@ describe("CascadePanel", () => {
     expect(go).toBeDisabled();
     fireEvent.change(screen.getByLabelText(/Type/), { target: { value: "pinc" } });
     expect(go).toBeDisabled();
-    fireEvent.change(screen.getByLabelText(/Type/), { target: { value: "pinch" } });
+    fireEvent.change(screen.getByLabelText(/Type/), { target: { value: " PINCH " } }); // capitals and spaces do not matter
     expect(go).toBeEnabled();
     fireEvent.click(go);
     await waitFor(() => expect(onRun).toHaveBeenCalledTimes(1));
