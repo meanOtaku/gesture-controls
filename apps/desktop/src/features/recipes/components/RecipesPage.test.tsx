@@ -67,7 +67,7 @@ describe("RecipesPage", () => {
     fireEvent.change(editor.getByLabelText("Name"), { target: { value: "Pinch scroll" } });
     fireEvent.change(editor.getByLabelText("Step 1 location"), { target: { value: "leftEdge" } });
     fireEvent.click(editor.getByRole("button", { name: /Add a gesture/ }));
-    fireEvent.change(editor.getByLabelText("Step 2 gesture"), { target: { value: "pinch" } });
+    fireEvent.change(editor.getByLabelText("Step 2 gesture"), { target: { value: "stemButton" } });
     fireEvent.click(editor.getByRole("radio", { name: /Pitch/ }));
     fireEvent.change(editor.getByLabelText("Device"), { target: { value: "stepKnob" } });
     fireEvent.change(editor.getByLabelText("Per step"), { target: { value: "10" } });
@@ -82,7 +82,7 @@ describe("RecipesPage", () => {
       action: "volume",
       stages: [
         { kind: "headAt", location: "leftEdge" },
-        { kind: "hold", hold: "pinch" },
+        { kind: "hold", hold: "stemButton" },
         { kind: "drive", axis: "pitch", deadZoneDegrees: 3, invert: true },
       ],
       device: { kind: "stepKnob", degreesPerStep: 15, fractionPerStep: 0.1 },
@@ -128,12 +128,12 @@ describe("RecipesPage", () => {
     expect(props.onSave).not.toHaveBeenCalled();
 
     fireEvent.click(editor.getByRole("button", { name: /Add a gesture/ }));
-    fireEvent.change(editor.getByLabelText("Step 1 gesture"), { target: { value: "pinch" } });
+    fireEvent.change(editor.getByLabelText("Step 1 gesture"), { target: { value: "stemButton" } });
     fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
     await waitFor(() => expect(props.onSave).toHaveBeenCalled());
     const saved = vi.mocked(props.onSave).mock.calls[0][0];
     expect(saved.action).toBe("playPause");
-    expect(saved.stages).toEqual([{ kind: "hold", hold: "pinch" }]);
+    expect(saved.stages).toEqual([{ kind: "hold", hold: "stemButton" }]);
   });
 
   it("offers a shake only for button actions and explains why it is refused otherwise", async () => {
@@ -173,7 +173,7 @@ describe("RecipesPage", () => {
     fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "nextTrack" } });
     fireEvent.click(editor.getByRole("button", { name: /Add a gesture/ }));
     const options = within(editor.getByLabelText("Step 1 gesture")).getAllByRole("option").map((o) => o.textContent);
-    expect(options).toEqual(["Pinch and hold", "Hold STEM button", "Shake wrist", "Swipe left", "Swipe right", "Swipe up", "Swipe down", "Tap watch", "Double-tap watch", "Roll wrist clockwise", "Roll wrist counter-clockwise", "Pitch hand up", "Pitch hand down"]);
+    expect(options).toEqual(["Hold STEM button", "Shake wrist", "Swipe left", "Swipe right", "Swipe up", "Swipe down", "Tap watch", "Double-tap watch", "Roll wrist clockwise", "Roll wrist counter-clockwise", "Pitch hand up", "Pitch hand down"]);
     fireEvent.change(editor.getByLabelText("Step 1 gesture"), { target: { value: "swipeRight" } });
     expect(editor.getByText(/Swipes are read from the watch's acceleration/)).toBeInTheDocument();
 
@@ -250,9 +250,9 @@ describe("RecipesPage", () => {
   });
 
   it("describes a media recipe without a device", () => {
-    const play: Recipe = { ...stem, id: "play", name: "Pinch to play", action: "playPause", stages: [{ kind: "hold", hold: "pinch" }] };
+    const play: Recipe = { ...stem, id: "play", name: "Pinch to play", action: "playPause", stages: [{ kind: "model", label: "pinch", hold: "held" }] };
     setup({ automation: automation([play]) });
-    expect(screen.getByText("Pinch and hold → Play / pause")).toBeInTheDocument();
+    expect(screen.getByText("Model “pinch” → Play / pause")).toBeInTheDocument();
   });
 
   it("builds a button recipe from a model label, offering the loaded labels and the once option", async () => {
@@ -356,7 +356,7 @@ describe("RecipesPage", () => {
   });
 
   it("names the two recipes in conflict", () => {
-    const pinch: Recipe = { ...stem, id: "pinch", name: "Pinch volume", stages: [{ kind: "hold", hold: "pinch" }, stem.stages[2]] };
+    const pinch: Recipe = { ...stem, id: "pinch", name: "Pinch volume", stages: [{ kind: "model", label: "pinch", hold: "held" }, stem.stages[2]] };
     setup({
       automation: {
         recipes: [stem, pinch],

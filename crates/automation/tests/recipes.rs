@@ -16,7 +16,9 @@ fn chain() -> Vec<Stage> {
         Stage::HeadAt {
             location: "topRight".into(),
         },
-        Stage::Hold { hold: Hold::Pinch },
+        Stage::Hold {
+            hold: Hold::StemButton,
+        },
         Stage::Drive {
             axis: Axis::Roll,
             dead_zone_degrees: 0.0,
@@ -34,7 +36,7 @@ fn about_x(degrees: f64) -> [f64; 4] {
 fn signals(head: Option<&'static str>, pinch: bool, roll: f64) -> Signals<'static> {
     Signals {
         head_location: head,
-        pinch_held: pinch,
+        stem_button_held: pinch,
         orientation: Some(about_x(roll)),
         ..Signals::default()
     }
@@ -151,7 +153,7 @@ fn a_disabled_recipe_and_a_missing_orientation_do_nothing() {
     ));
     let no_orientation = Signals {
         head_location: Some("topRight"),
-        pinch_held: true,
+        stem_button_held: true,
         ..Signals::default()
     };
     assert_eq!(runner.update(&no_orientation), None);
@@ -168,7 +170,13 @@ fn recipes_must_be_well_formed() {
         Err(RecipeError::NoStages)
     );
     assert_eq!(
-        validate_recipe(&recipe("a", vec![Stage::Hold { hold: Hold::Pinch }], knob)),
+        validate_recipe(&recipe(
+            "a",
+            vec![Stage::Hold {
+                hold: Hold::StemButton
+            }],
+            knob
+        )),
         Err(RecipeError::MustEndWithDrive)
     );
     assert_eq!(
@@ -191,8 +199,12 @@ fn recipes_must_be_well_formed() {
         Err(RecipeError::DriveNotLast)
     );
     let repeated = vec![
-        Stage::Hold { hold: Hold::Pinch },
-        Stage::Hold { hold: Hold::Pinch },
+        Stage::Hold {
+            hold: Hold::StemButton,
+        },
+        Stage::Hold {
+            hold: Hold::StemButton,
+        },
         Stage::Drive {
             axis: Axis::Roll,
             dead_zone_degrees: 0.0,
@@ -416,7 +428,9 @@ fn a_trigger_recipe_fires_once_as_its_chain_completes() {
         Stage::HeadAt {
             location: "topRight".into(),
         },
-        Stage::Hold { hold: Hold::Pinch },
+        Stage::Hold {
+            hold: Hold::StemButton,
+        },
     ];
     let mut runner = RecipeRunner::new(trigger(stages));
     // Looking alone arms it but does not fire.
@@ -460,7 +474,9 @@ fn a_cancelled_or_disabled_trigger_does_not_fire() {
 
 #[test]
 fn trigger_recipes_are_validated_differently() {
-    let step = vec![Stage::Hold { hold: Hold::Pinch }];
+    let step = vec![Stage::Hold {
+        hold: Hold::StemButton,
+    }];
     assert!(validate_recipe(&trigger(step.clone())).is_ok());
     assert_eq!(
         validate_recipe(&trigger(vec![])),
@@ -507,10 +523,14 @@ fn media_actions_are_triggers_with_their_own_resources() {
         ["playPause", "nextTrack", "previousTrack", "mute"]
     );
     // Play/pause and next-track may share a gesture without conflicting.
-    let mut next = trigger(vec![Stage::Hold { hold: Hold::Pinch }]);
+    let mut next = trigger(vec![Stage::Hold {
+        hold: Hold::StemButton,
+    }]);
     next.id = "next".into();
     next.action = Action::NextTrack;
-    let play = trigger(vec![Stage::Hold { hold: Hold::Pinch }]);
+    let play = trigger(vec![Stage::Hold {
+        hold: Hold::StemButton,
+    }]);
     assert!(find_conflicts(&[play, next]).is_empty());
 }
 
@@ -606,7 +626,7 @@ fn a_swipe_step_fires_only_for_its_own_direction_and_only_button_actions_may_use
             Err(RecipeError::MomentaryNeedsButtonAction)
         );
     }
-    assert!(!Hold::Pinch.is_momentary() && !Hold::StemButton.is_momentary());
+    assert!(!Hold::StemButton.is_momentary() && !Hold::StemButton.is_momentary());
     assert_eq!(
         serde_json::to_string(&Hold::SwipeUp).unwrap(),
         "\"swipeUp\""

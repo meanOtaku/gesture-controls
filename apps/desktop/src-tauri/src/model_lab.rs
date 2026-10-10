@@ -9,7 +9,6 @@ use tracing::warn;
 use uuid::Uuid;
 
 const DATASETS_DIR_NAME: &str = "datasets";
-const MODELS_DIR_NAME: &str = "models";
 pub(crate) const MODEL_LAB_DIR_NAME: &str = "model-lab";
 const INDEX_FILE_NAME: &str = "index.json";
 const MAX_DATASET_CSV_BYTES: usize = 20 * 1024 * 1024;
@@ -455,14 +454,6 @@ pub fn delete_model_dataset(
         fs::remove_file(&csv_path).map_err(|error| error.to_string())?;
     }
     Ok(())
-}
-
-pub(crate) fn models_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let base = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("failed to resolve app data directory: {error}"))?;
-    Ok(base.join(MODEL_LAB_DIR_NAME).join(MODELS_DIR_NAME))
 }
 
 #[cfg(test)]

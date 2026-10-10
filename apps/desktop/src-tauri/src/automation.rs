@@ -12,11 +12,11 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use automation::{
-    Action, Axis, Conflict, CrownSide, Device, DeviceKind, HeuristicGestures, Hold, PitchConfig,
-    PitchDetector, PitchDirection, Recipe, RecipeRunner, RollConfig, RollDetector, RollDirection,
-    RunnerPhase, ShakeConfig, ShakeDetector, Signals, Stage, SwipeConfig, SwipeDetector,
-    SwipeDirection, TapConfig, TapDetector, TapKind, Wrist, blocked_recipes, find_conflicts,
-    validate_recipe,
+    Action, Axis, Conflict, CrownSide, Device, DeviceKind, HeuristicGestures, Hold, ModelHold,
+    PitchConfig, PitchDetector, PitchDirection, Recipe, RecipeRunner, RollConfig, RollDetector,
+    RollDirection, RunnerPhase, ShakeConfig, ShakeDetector, Signals, Stage, SwipeConfig,
+    SwipeDetector, SwipeDirection, TapConfig, TapDetector, TapKind, Wrist, blocked_recipes,
+    find_conflicts, validate_recipe,
 };
 use interaction_engine::quaternion_angular_distance;
 use serde::Serialize;
@@ -263,7 +263,14 @@ pub fn default_recipes() -> Vec<Recipe> {
             "lookPinchVolume",
             "Look top right, pinch, roll",
             false,
-            vec![look(), Stage::Hold { hold: Hold::Pinch }, roll()],
+            vec![
+                look(),
+                Stage::Model {
+                    label: "pinch".into(),
+                    hold: ModelHold::Held,
+                },
+                roll(),
+            ],
         ),
         recipe(
             "lookVolume",
@@ -288,7 +295,6 @@ pub struct Engine {
     driving: bool,
     tuning: Tuning,
     head: Option<String>,
-    pinch: bool,
     stem: bool,
     orientation: Option<Orientation>,
     shake: ShakeDetector,
@@ -339,7 +345,6 @@ impl Engine {
             driving: false,
             tuning,
             head: None,
-            pinch: false,
             stem: false,
             orientation: None,
             shake: ShakeDetector::new(tuning.shake_config()),
@@ -557,11 +562,6 @@ impl Engine {
         self.step()
     }
 
-    pub fn set_pinch(&mut self, held: bool) -> Effects {
-        self.pinch = held;
-        self.step()
-    }
-
     pub fn set_stem(&mut self, held: bool) -> Effects {
         self.stem = held;
         self.step()
@@ -571,7 +571,6 @@ impl Engine {
     pub fn watch_lost(&mut self) -> Effects {
         self.models_held.clear();
         self.model_pulses.clear();
-        self.pinch = false;
         self.stem = false;
         self.orientation = None;
         self.last_accepted = None;
@@ -593,7 +592,6 @@ impl Engine {
         for runner in &mut self.runners {
             runner.cancel();
         }
-        self.pinch = false;
         self.step()
     }
 
@@ -713,7 +711,6 @@ impl Engine {
             cameras_held: self.cameras_armed.then_some(&self.cameras_held),
             cameras_pulsed: self.cameras_armed.then_some(&camera_pulsed),
             head_location: self.head.as_deref(),
-            pinch_held: self.pinch,
             stem_button_held: self.stem,
             pitch: self
                 .orientation
@@ -798,10 +795,45 @@ fn recipes_path(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 /// Recipes from disk, keeping only well-formed ones; the defaults when there is no usable file.
+/// Recipes saved before the pinch step moved to a model have `{"kind":"hold","hold":"pinch"}`. That step now reads the
+/// model for the label `pinch`, held, so it is rewritten to `{"kind":"model","label":"pinch","hold":"held"}`. Returns how
+/// many steps were rewritten.
+fn migrate_pinch_steps(recipes: &mut serde_json::Value) -> usize {
+    let mut changed = 0;
+    let Some(list) = recipes.as_array_mut() else {
+        return 0;
+    };
+    for recipe in list {
+        let Some(stages) = recipe
+            .get_mut("stages")
+            .and_then(|stages| stages.as_array_mut())
+        else {
+            continue;
+        };
+        for stage in stages {
+            if stage.get("kind").and_then(|kind| kind.as_str()) == Some("hold")
+                && stage.get("hold").and_then(|hold| hold.as_str()) == Some("pinch")
+            {
+                *stage = serde_json::json!({ "kind": "model", "label": "pinch", "hold": "held" });
+                changed += 1;
+            }
+        }
+    }
+    changed
+}
+
 fn load_recipes(app: &AppHandle) -> Vec<Recipe> {
     let loaded = recipes_path(app)
         .and_then(|path| fs::read_to_string(path).map_err(|error| error.to_string()))
-        .and_then(|text| serde_json::from_str::<Vec<Recipe>>(&text).map_err(|e| e.to_string()));
+        .and_then(|text| {
+            let mut value: serde_json::Value =
+                serde_json::from_str(&text).map_err(|e| e.to_string())?;
+            let changed = migrate_pinch_steps(&mut value);
+            if changed > 0 {
+                warn!(changed, "rewrote saved pinch steps to use the pinch model");
+            }
+            serde_json::from_value::<Vec<Recipe>>(value).map_err(|e| e.to_string())
+        });
     match loaded {
         Ok(recipes) => recipes
             .into_iter()
@@ -939,10 +971,6 @@ impl AutomationRuntime {
 
     pub fn set_head(&self, app: &AppHandle, location: Option<String>) {
         self.with_engine(app, |engine| engine.set_head(location));
-    }
-
-    pub fn set_pinch(&self, app: &AppHandle, held: bool) {
-        self.with_engine(app, |engine| engine.set_pinch(held));
     }
 
     pub fn set_stem(&self, app: &AppHandle, held: bool) {
@@ -1318,7 +1346,7 @@ mod tests {
     #[test]
     fn two_enabled_volume_recipes_conflict_and_neither_runs() {
         let mut recipes = default_recipes();
-        recipes[1].enabled = true; // pinch alongside the STEM recipe
+        recipes[1].enabled = true; // the pinch model alongside the STEM recipe
         let mut engine = Engine::new(recipes, Tuning::default());
         let state = engine.state();
         assert_eq!(state.conflicts.len(), 1);
@@ -1332,14 +1360,52 @@ mod tests {
     }
 
     #[test]
-    fn the_pinch_recipe_runs_when_it_alone_is_enabled() {
+    fn a_saved_pinch_step_becomes_a_step_that_reads_the_pinch_model() {
+        let mut saved = serde_json::json!([
+            { "id": "a", "name": "Old pinch", "enabled": true, "action": "volume",
+              "stages": [
+                { "kind": "headAt", "location": "topRight" },
+                { "kind": "hold", "hold": "pinch" },
+                { "kind": "drive", "axis": "roll", "deadZoneDegrees": 3.0, "invert": false }
+              ],
+              "device": { "kind": "rotationKnob", "fractionPerDegree": 0.003 } },
+            { "id": "b", "name": "Stem", "enabled": false, "action": "playPause",
+              "stages": [ { "kind": "hold", "hold": "stemButton" } ],
+              "device": { "kind": "rotationKnob", "fractionPerDegree": 0.003 } }
+        ]);
+        assert_eq!(migrate_pinch_steps(&mut saved), 1);
+        let recipes: Vec<Recipe> = serde_json::from_value(saved.clone()).unwrap();
+        assert_eq!(
+            recipes[0].stages[1],
+            Stage::Model {
+                label: "pinch".into(),
+                hold: ModelHold::Held
+            }
+        );
+        assert!(validate_recipe(&recipes[0]).is_ok());
+        assert_eq!(
+            recipes[1].stages[0],
+            Stage::Hold {
+                hold: Hold::StemButton
+            }
+        );
+        // Nothing left to rewrite the second time.
+        assert_eq!(migrate_pinch_steps(&mut saved), 0);
+    }
+
+    #[test]
+    fn the_pinch_model_recipe_runs_when_it_alone_is_enabled() {
         let mut engine = Engine::new(only("lookPinchVolume"), Tuning::default());
         engine.observe_orientation(about_x(0.0), ts(1), None);
         engine.set_head(Some("topRight".into()));
-        assert_eq!(engine.set_pinch(true).overlay, Some(OverlayWanted::Driving));
+        let loaded = set(&["pinch"]);
+        let held = |engine: &mut Engine, now| {
+            engine.set_models(loaded.clone(), set(&["pinch"]), &[], &[], now)
+        };
+        assert_eq!(held(&mut engine, MS).overlay, Some(OverlayWanted::Driving));
         // A forced release ends it and it stays ended while the head is still on the corner.
         assert_eq!(engine.cancel().overlay, Some(OverlayWanted::Hidden));
-        assert_eq!(engine.set_pinch(true), Effects::default());
+        assert_eq!(held(&mut engine, 2 * MS), Effects::default());
     }
 
     #[test]
@@ -1474,12 +1540,12 @@ mod tests {
     }
 
     #[test]
-    fn a_media_trigger_fires_once_on_the_pinch_and_shows_no_volume_knob() {
+    fn a_media_trigger_fires_once_on_the_button_and_shows_no_volume_knob() {
         let mut engine = Engine::new(
-            vec![trigger_recipe(Action::PlayPause, Hold::Pinch)],
+            vec![trigger_recipe(Action::PlayPause, Hold::StemButton)],
             Tuning::default(),
         );
-        let pinched = engine.set_pinch(true);
+        let pinched = engine.set_stem(true);
         assert_eq!(pinched.fired, vec![Action::PlayPause]);
         assert_eq!(pinched.overlay, None);
         // Holding on, or the watch streaming orientation, does not fire it again.
@@ -1495,19 +1561,19 @@ mod tests {
                 .fired
                 .is_empty()
         );
-        assert!(engine.set_pinch(false).fired.is_empty());
-        assert_eq!(engine.set_pinch(true).fired, vec![Action::PlayPause]);
+        assert!(engine.set_stem(false).fired.is_empty());
+        assert_eq!(engine.set_stem(true).fired, vec![Action::PlayPause]);
     }
 
     #[test]
     fn a_held_trigger_does_not_trip_the_glitch_filter_that_guards_a_turning_device() {
-        // The pinch is held (the trigger is "driving") while a STEM scroll recipe turns: a fast sample must still
+        // The button is held (the trigger is "driving") while a STEM scroll recipe turns: a fast sample must still
         // be judged by the scroll recipe's own state, and a trigger alone must never freeze orientation.
         let mut engine = Engine::new(
-            vec![trigger_recipe(Action::NextTrack, Hold::Pinch)],
+            vec![trigger_recipe(Action::NextTrack, Hold::SwipeLeft)],
             Tuning::default(),
         );
-        engine.set_pinch(true);
+        engine.set_stem(true);
         engine.observe_orientation(about_x(0.0), ts(1), None);
         let _ = engine.observe_orientation(about_x(120.0), ts(2), None);
         assert_eq!(engine.orientation.as_ref().unwrap().timestamp_ns, ts(2));
@@ -1518,15 +1584,15 @@ mod tests {
         let mut other = trigger_recipe(Action::PlayPause, Hold::StemButton);
         other.id = "other".into();
         let engine = Engine::new(
-            vec![trigger_recipe(Action::PlayPause, Hold::Pinch), other],
+            vec![trigger_recipe(Action::PlayPause, Hold::Shake), other],
             Tuning::default(),
         );
         assert_eq!(engine.state().conflicts.len(), 1);
         assert_eq!(engine.state().conflicts[0].resource, "playPause");
         let engine = Engine::new(
             vec![
-                trigger_recipe(Action::PlayPause, Hold::Pinch),
-                trigger_recipe(Action::NextTrack, Hold::Pinch),
+                trigger_recipe(Action::PlayPause, Hold::StemButton),
+                trigger_recipe(Action::NextTrack, Hold::SwipeLeft),
             ],
             Tuning::default(),
         );

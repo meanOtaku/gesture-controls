@@ -13,13 +13,11 @@ mod calibration;
 mod environment;
 mod gesture_library;
 mod head_pose;
-mod inference;
 mod label_registry;
 mod label_runtime;
 mod label_training;
 mod latest_write;
 mod model_lab;
-mod model_registry;
 mod overlay;
 mod recording_bundle;
 mod settings;
@@ -153,11 +151,7 @@ pub fn run() {
         .manage(model_lab::ModelLabRuntime::default())
         .manage(label_registry::LabelRegistryRuntime::default())
         .manage(gesture_library::GestureLibraryRuntime::default())
-        .manage(model_registry::ModelRegistryRuntime::default())
         .manage(recording_bundle::RawColumnCache::default())
-        .manage(inference::GesturePolicyRuntime::default())
-        .manage(inference::PpgIngestRuntime::default())
-        .manage(inference::PinchInferenceRuntime::default())
         .invoke_handler(tauri::generate_handler![
             calibration::get_calibration_state,
             label_runtime::get_label_runtime_status,
@@ -248,22 +242,7 @@ pub fn run() {
             label_registry::prune_legacy_builtins(&handle);
             label_runtime::spawn_timer(handle.clone());
             overlay::prepare_window(&handle).map_err(std::io::Error::other)?;
-            model_registry::reconcile_inference_mode_at_startup(&handle);
             head_pose::spawn(handle.clone());
-
-            let policy_watchdog_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                let mut interval = tokio::time::interval(inference::STALENESS_WATCHDOG_INTERVAL);
-                loop {
-                    interval.tick().await;
-                    let runtime = policy_watchdog_handle.state::<inference::GesturePolicyRuntime>();
-                    match runtime.tick() {
-                        Ok(Some(decision)) => inference::apply_decision(&policy_watchdog_handle, decision),
-                        Ok(None) => {}
-                        Err(error) => warn!(%error, "gesture policy staleness watchdog failed"),
-                    }
-                }
-            });
 
             // `npm start` asks where to send its "please quit" first, so it can wait for the
             // watch to be disconnected before tearing the rest of the process tree down.
@@ -339,13 +318,6 @@ pub fn run() {
                                 }
                                 WatchEvent::Disconnected => {
                                     watch_handle
-                                        .state::<inference::PpgIngestRuntime>()
-                                        .clear();
-                                    inference::force_release_and_hide(
-                                        &watch_handle,
-                                        interaction_engine::ForceReleaseReason::WatchDisconnected,
-                                    );
-                                    watch_handle
                                         .state::<automation::AutomationRuntime>()
                                         .watch_lost(&watch_handle);
                                     watch_handle
@@ -359,25 +331,18 @@ pub fn run() {
                                     watch_handle
                                         .state::<label_runtime::LabelRuntimeHost>()
                                         .observe_orientation(&watch_handle, sample);
-                                    watch_handle
-                                        .state::<inference::PinchInferenceRuntime>()
-                                        .observe_orientation(sample);
                                 }
                                 WatchEvent::Ppg(sample) => {
                                     watch_handle
                                         .state::<label_runtime::LabelRuntimeHost>()
                                         .observe_ppg(&watch_handle, sample);
-                                    inference::ingest_ppg_window(&watch_handle, sample);
                                 }
                                 WatchEvent::InvalidMessage { reason } => {
                                     warn!(reason = %reason, "rejecting malformed or out-of-order watch message");
                                     watch_handle
                                         .state::<label_runtime::LabelRuntimeHost>()
                                         .fail(&watch_handle, "a malformed or out-of-order watch message");
-                                    inference::force_release_and_hide(
-                                        &watch_handle,
-                                        interaction_engine::ForceReleaseReason::StaleSensorWindow,
-                                    );
+                                    watch_handle.state::<automation::AutomationRuntime>().cancel(&watch_handle);
                                 }
                                 WatchEvent::WearStateUpdated(sample) if sample.worn => {
                                     debug!("watch wear state: worn");
@@ -386,19 +351,13 @@ pub fn run() {
                                     // Off the wrist the watch stops streaming on purpose; a held
                                     // grab must not outlive the data that was driving it.
                                     info!("watch taken off the wrist; releasing any interaction");
-                                    inference::force_release_and_hide(
-                                        &watch_handle,
-                                        interaction_engine::ForceReleaseReason::StaleSensorWindow,
-                                    );
+                                    watch_handle.state::<automation::AutomationRuntime>().cancel(&watch_handle);
                                 }
                                 WatchEvent::PpgStatusUpdated(sample)
                                     if sample.state == "unavailable" || sample.state == "error" =>
                                 {
                                     warn!(state = %sample.state, "watch PPG sensor became unavailable; forcing release");
-                                    inference::force_release_and_hide(
-                                        &watch_handle,
-                                        interaction_engine::ForceReleaseReason::StaleSensorWindow,
-                                    );
+                                    watch_handle.state::<automation::AutomationRuntime>().cancel(&watch_handle);
                                 }
                                 _ => {}
                             }
@@ -408,10 +367,7 @@ pub fn run() {
                         }
                         Err(error) => {
                             warn!(%error, "watch event receiver lagged or closed; failing closed");
-                            inference::force_release_and_hide(
-                                &watch_handle,
-                                interaction_engine::ForceReleaseReason::StaleSensorWindow,
-                            );
+                            watch_handle.state::<automation::AutomationRuntime>().cancel(&watch_handle);
                             // `Lagged` is recoverable (events were dropped, the
                             // stream continues); `Closed` is permanent, and
                             // looping on it would spin force-releasing forever.

@@ -1,6 +1,6 @@
 # Spatial Gesture Control
 
-A cross-platform Tauri 2 desktop coordinator for spatial controls using Sony headset orientation and Samsung Galaxy Watch input (wrist rotation, stem button, and a trainable pinch model).
+A cross-platform Tauri 2 desktop coordinator for spatial controls using Sony headset orientation and Samsung Galaxy Watch input (wrist rotation, stem button, and trainable per-label gesture models).
 
 The repository includes the desktop foundation, Sony JSON UDP input, head calibration, volume overlay, Galaxy Watch telemetry and wrist controls, dataset recording, and Model Lab training and deployment workflows. Platform volume adapters exist for macOS, Windows, and Linux; physical-device and release acceptance remain separate validation steps. On macOS and Windows, `npm start` runs the Sony head tracker in-process (see [`crates/native-head-tracking`](crates/native-head-tracking)); Linux still uses the background Sony Head Tracker CLI bridge, since upstream has no Linux hardware backend. The Tauri dashboard is the only tracker window on every platform.
 
@@ -15,8 +15,7 @@ npm ci
 ### Model Lab first-run requirements
 
 Open **Model Lab** after launching the desktop app to see local readiness checks for
-the system-volume backend, optional desktop LiteRT inference, and the offline
-training/replay runner. The checks do not send telemetry or inspect user data.
+the system-volume backend and the offline training runner. The checks do not send telemetry or inspect user data.
 
 Training and replay deliberately remain development workflows, not bundled desktop
 features. They require a complete repository checkout and
@@ -25,9 +24,7 @@ environment from `tools/pinch-classifier/pyproject.toml` when a job starts. TFLi
 training also installs the package's TensorFlow optional dependency. The setup screen
 will identify a missing runner and provides the exact remediation.
 
-Desktop inference stays fail-closed unless the app is built with the
-`litert-inference` Cargo feature, a validated TFLite bundle is active, and every
-deployable class has a safe intent binding. It never runs on the Watch or headphones.
+Models run only on the desktop, one per label, and only when the model runtime is switched on. They never run on the Watch or headphones.
 
 Then use one command on macOS 14+ or Windows 11 x64:
 
@@ -118,7 +115,7 @@ The Galaxy Watch and the model pipeline join at the desktop backend:
 Galaxy Watch ──BLE (default) or Wi-Fi WebSocket──► watch-bridge
     │ orientation · PPG · button                      │ decode, sequence, device identity
     ▼                                                 ▼
-                          pinch-inference: fuse ► features ► model (LiteRT)
+                          label-inference: fuse ► features ► per-label models
                                                       │ transition
                                                       ▼
                           interaction-engine gesture policy (Off / Monitor / Live)
@@ -144,11 +141,11 @@ apps/watch/                Wear OS (Galaxy Watch) client: Kotlin, standalone Gra
 crates/protocol/           Sony wire types, watch message types, and generic pose domain types
 crates/head-tracking/      Provider abstraction and strict UDP listener
 crates/interaction-engine/ Quaternion calibration, target dwell, wrist-rotation mapper, gesture policy
-crates/pinch-inference/    Telemetry fusion, feature extraction, model trait, and LiteRT inference
+crates/pinch-inference/    Telemetry fusion and feature extraction for the PPG and motion windows
 crates/volume-control/     Normalized controller trait; macOS, Windows, and Linux adapters
 crates/watch-bridge/       Galaxy Watch transports: Bluetooth LE central and Wi-Fi WebSocket server
 crates/native-head-tracking/ In-process macOS/Windows Sony provider (IOKit/IOBluetooth or HID/SetupAPI FFI + conversion)
-scripts/                   run-system.mjs launcher, LiteRT packaging, config checks
+scripts/                   run-system.mjs launcher, config checks
 tools/pinch-classifier/    Python training, export, and offline replay (development workflow, not shipped)
 tools/sony-head-tracker/   compatibility tests, sample sender, committed upstream prebuilds
 third_party/               vendored Sony head-tracker engine sources and notices

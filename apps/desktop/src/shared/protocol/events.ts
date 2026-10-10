@@ -49,7 +49,7 @@ export interface CalibrationState {
   activeTarget: CalibrationTarget | null;
 }
 
-export type HoldGesture = "pinch" | "stemButton" | "shake" | "swipeLeft" | "swipeRight" | "swipeUp" | "swipeDown" | "tap" | "doubleTap" | "rollClockwise" | "rollCounterClockwise" | "pitchUp" | "pitchDown";
+export type HoldGesture = "stemButton" | "shake" | "swipeLeft" | "swipeRight" | "swipeUp" | "swipeDown" | "tap" | "doubleTap" | "rollClockwise" | "rollCounterClockwise" | "pitchUp" | "pitchDown";
 /** The built-in, rule-based wrist gestures that can be switched off (for example when a trained model handles one). */
 export type HeuristicGesture = "shake" | "swipe" | "tap" | "roll" | "pitch";
 export type HeuristicGestures = Record<HeuristicGesture, boolean>;

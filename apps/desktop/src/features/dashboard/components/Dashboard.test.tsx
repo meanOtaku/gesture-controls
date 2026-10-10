@@ -206,7 +206,7 @@ describe("Dashboard", () => {
         id: "lookPinchVolume", name: "Look top right, pinch, roll", enabled: true, action: "volume",
         stages: [
           { kind: "headAt", location: "topRight" },
-          { kind: "hold", hold: "pinch" },
+          { kind: "model", label: "pinch", hold: "held" },
           { kind: "drive", axis: "roll", deadZoneDegrees: 3, invert: false },
         ],
         device: { kind: "rotationKnob", fractionPerDegree: 0.005 },
@@ -232,7 +232,7 @@ describe("Dashboard", () => {
     expect(recipes.getByText("These gestures are fighting over volume")).toBeInTheDocument();
     expect(recipes.getByText(/“Look top right, hold STEM, roll” and “Look top right, pinch, roll” both control volume/)).toBeInTheDocument();
     expect(recipes.getAllByText("Paused: conflict")).toHaveLength(2);
-    expect(recipes.getByText("Look at Top right → Pinch and hold → Roll wrist → rotation knob → Volume")).toBeInTheDocument();
+    expect(recipes.getByText("Look at Top right → Model “pinch” → Roll wrist → rotation knob → Volume")).toBeInTheDocument();
     fireEvent.click(recipes.getByRole("switch", { name: "Look top right, pinch, roll on" }));
     expect(toggles).toEqual([["lookPinchVolume", false]]);
   });

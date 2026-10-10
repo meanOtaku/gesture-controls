@@ -359,7 +359,9 @@ These controls preserve raw source timestamps. For health sensors, Samsung/devic
 
 Volume is driven by **gesture recipes**, shown on the Control center. A recipe is a chain of gestures that all have to hold, ending in a wrist rotation that turns a virtual knob:
 
-> Look at *Top right* → Pinch and hold (or hold the STEM button) → Roll the wrist → rotation knob → Volume
+> Look at *Top right* → the *pinch* model (or hold the STEM button) → Roll the wrist → rotation knob → Volume
+
+The pinch step is a model you train for a label named `pinch` (see Labels and Model Lab). Until that model is active the recipe shows **Waiting for model: pinch** and does not run. Recipes saved with the older built-in "Pinch and hold" step were converted to this automatically.
 
 ### Making your own: the Recipes tab
 
@@ -518,7 +520,7 @@ Try changing the volume from the Main tab to check the backend. Backend errors f
 | A Timeline CSV is rejected on import | Create any missing label first (the error names it), then retry. Rows with no label are dropped; a file with no labeled rows at all is rejected. |
 | Overlay does not appear | Recalibrate center and top-right, verify headset packets are arriving, then wait for the configured dwell. |
 | Volume does not change | Check the platform's audio backend works from the Main tab; use a test audio output; ensure the overlay is visible and an interaction is actively grabbed. |
-| Monitor/Live controls are disabled | Activate an Approved, validated TFLite bundle with complete safe intent bindings. LiteRT must also be included in the desktop build. |
+| Monitor/Live controls are disabled | Activate an approved model for a label in Model Lab first. |
 | A model will not activate | Read the red alert on the Label models card: the model's files were altered, or it does not run. Import it again. |
 | An interaction remains active unexpectedly | Stop Watch telemetry or disconnect the Watch; the desktop should force-release/hide. Also leave the gaze target or press Escape to hide the overlay. |
 

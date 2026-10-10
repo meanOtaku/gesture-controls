@@ -88,7 +88,7 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
   const kindId = `${uid}-device`;
 
   const locationOptions = locations.map((location) => ({ value: location.id, label: location.name }));
-  const firstUnusedHold = (): HoldKind => holdsFor(trigger).find((hold) => !steps.some((s) => s.kind === "hold" && s.hold === hold.value))?.value ?? "pinch";
+  const firstUnusedHold = (): HoldKind => holdsFor(trigger).find((hold) => !steps.some((s) => s.kind === "hold" && s.hold === hold.value))?.value ?? "stemButton";
 
   const setStep = (index: number, next: LeadingStage) => setSteps((current) => current.map((s, i) => (i === index ? next : s)));
   const removeStep = (index: number) => setSteps((current) => current.filter((_, i) => i !== index));

@@ -9,7 +9,7 @@ const automation: AutomationState = {
   recipes: [
     {
       id: "a", name: "Pinch volume", enabled: true, action: "volume",
-      stages: [{ kind: "hold", hold: "pinch" }, { kind: "drive", axis: "roll", deadZoneDegrees: 3, invert: false }],
+      stages: [{ kind: "model", label: "pinch", hold: "held" }, { kind: "drive", axis: "roll", deadZoneDegrees: 3, invert: false }],
       device: { kind: "stepKnob", degreesPerStep: 15, fractionPerStep: 0.05 },
     },
   ],

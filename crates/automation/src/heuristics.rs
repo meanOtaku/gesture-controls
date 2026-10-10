@@ -27,11 +27,11 @@ impl Default for HeuristicGestures {
 }
 
 impl HeuristicGestures {
-    /// Whether a recipe step using `hold` can ever be recognised. A pinch and the STEM button are not heuristic
-    /// wrist gestures, so they are never switched off here.
+    /// Whether a recipe step using `hold` can ever be recognised. The STEM button is not a heuristic
+    /// wrist gesture, so it is never switched off here.
     pub fn allows(&self, hold: Hold) -> bool {
         match hold {
-            Hold::Pinch | Hold::StemButton => true,
+            Hold::StemButton => true,
             Hold::Shake => self.shake,
             Hold::SwipeLeft | Hold::SwipeRight | Hold::SwipeUp | Hold::SwipeDown => self.swipe,
             Hold::Tap | Hold::DoubleTap => self.tap,
@@ -76,7 +76,7 @@ mod tests {
                 && !none.allows(Hold::PitchUp)
         );
         // A pinch and the STEM button are not wrist heuristics.
-        assert!(none.allows(Hold::Pinch) && none.allows(Hold::StemButton));
+        assert!(none.allows(Hold::StemButton));
     }
 
     #[test]

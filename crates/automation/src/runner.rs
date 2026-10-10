@@ -14,7 +14,6 @@ use crate::tap::TapKind;
 pub struct Signals<'a> {
     /// The head location currently being dwelled on, if any.
     pub head_location: Option<&'a str>,
-    pub pinch_held: bool,
     pub stem_button_held: bool,
     /// A shake was recognised a moment ago and is still counted as happening.
     pub shake: bool,
@@ -115,7 +114,6 @@ impl RecipeRunner {
     fn stage_holds(stage: &Stage, signals: &Signals<'_>) -> bool {
         match stage {
             Stage::HeadAt { location } => signals.head_location == Some(location.as_str()),
-            Stage::Hold { hold: Hold::Pinch } => signals.pinch_held,
             Stage::Hold {
                 hold: Hold::StemButton,
             } => signals.stem_button_held,

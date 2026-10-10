@@ -52,23 +52,23 @@ describe("recipeModel", () => {
       ...blankRecipe(locations),
       stages: [
         { kind: "headAt", location: "topRight" },
-        { kind: "hold", hold: "pinch" },
+        { kind: "model", label: "pinch", hold: "held" },
         { kind: "drive", axis: "pitch", deadZoneDegrees: 3, invert: false },
       ],
       device: buildDevice("stepKnob", defaultNumbers("stepKnob")),
     };
     expect(describeRecipe(recipe, (id) => locations.find((l) => l.id === id)?.name ?? "?")).toBe(
-      "Look at Top right → Pinch and hold → Pitch wrist → step knob → Volume",
+      "Look at Top right → Model “pinch” → Pitch wrist → step knob → Volume",
     );
   });
 
   it("refuses a repeated step, an unknown location and too many steps", () => {
-    expect(chainProblem([{ kind: "hold", hold: "pinch" }], locations)).toBeNull();
-    expect(chainProblem([{ kind: "hold", hold: "pinch" }, { kind: "hold", hold: "pinch" }], locations)).toMatch(/twice/);
+    expect(chainProblem([{ kind: "model", label: "pinch", hold: "held" }], locations)).toBeNull();
+    expect(chainProblem([{ kind: "model", label: "pinch", hold: "held" }, { kind: "model", label: "pinch", hold: "held" }], locations)).toMatch(/twice/);
     expect(chainProblem([{ kind: "headAt", location: "gone" }], locations)).toMatch(/no longer exists/);
     const many = [
       { kind: "headAt", location: "topRight" }, { kind: "headAt", location: "leftEdge" },
-      { kind: "hold", hold: "pinch" }, { kind: "hold", hold: "stemButton" },
+      { kind: "model", label: "pinch", hold: "held" }, { kind: "hold", hold: "stemButton" },
       { kind: "headAt", location: "center" } ,
     ] as const;
     expect(chainProblem([...many], locations)).toBeNull();
@@ -97,12 +97,11 @@ describe("recipeModel", () => {
       expect(chainProblem([{ kind: "hold", hold: swipe }], locations, false)).toMatch(/shake, swipe, tap, roll, pitch or one-shot model label or camera gesture only works/);
       expect(chainProblem([{ kind: "hold", hold: swipe }], locations, true)).toBeNull();
     }
-    expect(isMomentary("pinch")).toBe(false);
-    expect(holdsFor(false).map((hold) => hold.value)).toEqual(["pinch", "stemButton"]);
+    expect(isMomentary("stemButton")).toBe(false);
+    expect(holdsFor(false).map((hold) => hold.value)).toEqual(["stemButton"]);
   });
 
   it("knows which built-in gesture switch each step depends on", () => {
-    expect(heuristicOf("pinch")).toBeNull();
     expect(heuristicOf("stemButton")).toBeNull();
     expect(heuristicOf("swipeDown")).toBe("swipe");
     expect(heuristicOf("doubleTap")).toBe("tap");
@@ -112,7 +111,7 @@ describe("recipeModel", () => {
     const recipe: Recipe = {
       ...blankRecipe(locations),
       action: "nextTrack",
-      stages: [{ kind: "hold", hold: "tap" }, { kind: "hold", hold: "doubleTap" }, { kind: "hold", hold: "pinch" }],
+      stages: [{ kind: "hold", hold: "tap" }, { kind: "hold", hold: "doubleTap" }, { kind: "model", label: "pinch", hold: "held" }],
     };
     expect(offGesturesUsed(recipe, { shake: true, swipe: true, tap: false, roll: true, pitch: true })).toEqual(["tap"]);
     expect(offGesturesUsed(recipe, { shake: true, swipe: true, tap: true, roll: true, pitch: true })).toEqual([]);

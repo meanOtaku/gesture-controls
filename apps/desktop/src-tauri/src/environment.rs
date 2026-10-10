@@ -54,11 +54,7 @@ impl EnvironmentDiagnostic {
 
 #[tauri::command]
 pub fn get_environment_diagnostics() -> Vec<EnvironmentDiagnostic> {
-    vec![
-        training_runner_diagnostic(),
-        litert_diagnostic(),
-        volume_diagnostic(),
-    ]
+    vec![training_runner_diagnostic(), volume_diagnostic()]
 }
 
 fn training_runner_diagnostic() -> EnvironmentDiagnostic {
@@ -84,23 +80,6 @@ fn training_runner_diagnostic() -> EnvironmentDiagnostic {
             "Training and replay runner",
             "uv was not found on PATH. This development runner is not bundled into desktop packages.",
             "Install uv from https://docs.astral.sh/uv/ and restart the app.",
-        )
-    }
-}
-
-fn litert_diagnostic() -> EnvironmentDiagnostic {
-    if cfg!(feature = "litert-inference") {
-        EnvironmentDiagnostic::ready(
-            "litert-runtime",
-            "Desktop LiteRT inference",
-            "This desktop build includes the LiteRT backend and its package-time native runtime requirement. A validated active TFLite model and complete safe-intent bindings are still required before Monitor or Live can run.",
-        )
-    } else {
-        EnvironmentDiagnostic::attention(
-            "litert-runtime",
-            "Desktop LiteRT inference",
-            "This desktop build omits the optional LiteRT backend, so model windows fail closed.",
-            "Use the explicit LiteRT packaging entrypoint before using Monitor or Live; ordinary desktop builds intentionally omit the native backend.",
         )
     }
 }
@@ -135,16 +114,11 @@ mod tests {
     #[test]
     fn diagnostics_are_safe_to_query_without_a_training_runner() {
         let diagnostics = get_environment_diagnostics();
-        assert_eq!(diagnostics.len(), 3);
+        assert_eq!(diagnostics.len(), 2);
         assert!(
             diagnostics
                 .iter()
                 .any(|diagnostic| diagnostic.id == "training-runner")
-        );
-        assert!(
-            diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic.id == "litert-runtime")
         );
         assert!(
             diagnostics

@@ -59,8 +59,6 @@ pub enum Axis {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Hold {
-    /// The PPG pinch gesture, after the gesture policy has allowed it.
-    Pinch,
     /// The watch STEM button held down.
     StemButton,
     /// A quick shake of the wrist. It is a moment, not something held, so it counts as "holding" for a short
@@ -89,7 +87,7 @@ impl Hold {
     /// A shake or swipe is over in a moment: it counts as "holding" for a short while after it is recognised, and
     /// so can only start a button action, never keep a dial turning.
     pub fn is_momentary(self) -> bool {
-        !matches!(self, Hold::Pinch | Hold::StemButton)
+        !matches!(self, Hold::StemButton)
     }
 }
 

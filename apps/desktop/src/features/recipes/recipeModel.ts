@@ -6,7 +6,7 @@ export const MAX_STAGES = 6;
 
 export type DeviceKind = "rotationKnob" | "horizontalFader" | "verticalFader" | "stepKnob";
 export type Axis = "roll" | "pitch" | "yaw";
-export type HoldKind = "pinch" | "stemButton" | "shake" | "swipeLeft" | "swipeRight" | "swipeUp" | "swipeDown" | "tap" | "doubleTap" | "rollClockwise" | "rollCounterClockwise" | "pitchUp" | "pitchDown";
+export type HoldKind = "stemButton" | "shake" | "swipeLeft" | "swipeRight" | "swipeUp" | "swipeDown" | "tap" | "doubleTap" | "rollClockwise" | "rollCounterClockwise" | "pitchUp" | "pitchDown";
 
 export const DEVICE_KINDS: ReadonlyArray<{ kind: DeviceKind; label: string; summary: string }> = [
   { kind: "rotationKnob", label: "Rotation knob", summary: "Endless: every degree you turn changes the value." },
@@ -42,7 +42,6 @@ export const AXES: ReadonlyArray<{ value: Axis; label: string }> = [
 ];
 
 export const HOLDS: ReadonlyArray<{ value: HoldKind; label: string }> = [
-  { value: "pinch", label: "Pinch and hold" },
   { value: "stemButton", label: "Hold STEM button" },
   { value: "shake", label: "Shake wrist" },
   { value: "swipeLeft", label: "Swipe left" },
@@ -57,9 +56,9 @@ export const HOLDS: ReadonlyArray<{ value: HoldKind; label: string }> = [
   { value: "pitchDown", label: "Pitch hand down" },
 ];
 
-/** The built-in gesture switch a hold step depends on, or null for a pinch or the STEM button (which have none). */
+/** The built-in gesture switch a hold step depends on, or null for the STEM button (which has none). */
 export function heuristicOf(hold: HoldKind): HeuristicGesture | null {
-  if (hold === "pinch" || hold === "stemButton") return null;
+  if (hold === "stemButton") return null;
   if (hold === "shake") return "shake";
   if (hold.startsWith("swipe")) return "swipe";
   if (hold === "tap" || hold === "doubleTap") return "tap";
@@ -77,9 +76,9 @@ export function offGesturesUsed(recipe: Recipe, enabled: Record<HeuristicGesture
   return [...new Set(used)];
 }
 
-/** A shake, swipe, tap, roll or pitch is over in a moment, unlike a pinch or a held button. */
+/** A shake, swipe, tap, roll or pitch is over in a moment, unlike a held button. */
 export function isMomentary(hold: HoldKind): boolean {
-  return hold !== "pinch" && hold !== "stemButton";
+  return hold !== "stemButton";
 }
 
 /** A step that is over in a moment, so it can only start a button action. */

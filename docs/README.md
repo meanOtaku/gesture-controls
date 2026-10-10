@@ -32,7 +32,6 @@
 ## Release
 
 - [Release-readiness acceptance checklist](release-readiness.md): the real-device gate
-- [LiteRT desktop runtime packaging](release/litert-runtime-packaging.md)
 
 ## Records
 
