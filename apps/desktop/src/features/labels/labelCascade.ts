@@ -33,6 +33,8 @@ export interface CascadePlan {
   lines: string[];
   /** What kept the plan from being possible; nothing can run while any exist. */
   blockers: string[];
+  /** Other labels that have to be dealt with first for the blockers to clear. */
+  blockedBy?: string[];
 }
 
 export interface CascadeSources extends UsageSources {
@@ -60,6 +62,7 @@ export function planCascade(mode: CascadeMode, labelId: string, sources: Cascade
   const steps: CascadeStep[] = [];
   const lines: string[] = [];
   const blockers: string[] = [];
+  const blockedBy: string[] = [];
   const models = sources.models.filter((model) => model.label === labelId);
   const live = models.filter((model) => model.state !== "archived");
 
@@ -106,6 +109,7 @@ export function planCascade(mode: CascadeMode, labelId: string, sources: Cascade
   }
   const history = sources.registry?.[labelId];
   if (history && history.mappedIn.length > 0) {
+    blockedBy.push(...history.mappedIn);
     blockers.push(`“${labelId}” is used as another label in the training history of ${history.mappedIn.map((other) => `“${other}”`).join(", ")}. That history is sealed: delete the label ${history.mappedIn.length === 1 ? "it belongs to" : "they belong to"} first, or archive “${labelId}” instead.`);
   }
   if (history && history.projects > 0) steps.push({ kind: "deleteTrainingHistory", label: labelId });
@@ -126,7 +130,7 @@ export function planCascade(mode: CascadeMode, labelId: string, sources: Cascade
   if (datasets.length > 0 && blockers.length === 0) lines.push(`Delete ${plural(datasets.length, "recording")} from the training data: ${names(datasets.map((d) => ({ name: d.originalFilename })))}.`);
   if (bundles.length > 0) lines.push(`Remove this label's marks from ${plural(bundles.length, "Recorder recording")}. The recordings and their raw data stay.`);
   lines.push("Delete the label itself. This cannot be undone.");
-  return { mode, label: labelId, steps, lines, blockers };
+  return { mode, label: labelId, steps, lines, blockers, blockedBy };
 }
 
 export type Run = (command: string, args?: Record<string, unknown>) => Promise<unknown>;

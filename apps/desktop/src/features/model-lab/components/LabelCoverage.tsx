@@ -160,7 +160,7 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
             <AlertDescription>{listError}</AlertDescription>
           </Alert>
         )}
-        {cascade && onRunPlan && <CascadePanel key={`${cascade.mode}-${cascade.label}`} plan={cascade} onCancel={() => setCascade(null)} onRun={onRunPlan} />}
+        {cascade && onRunPlan && <CascadePanel key={`${cascade.mode}-${cascade.label}`} plan={cascade} onCancel={() => setCascade(null)} onOpenLabel={(other) => openCascade("delete", other)} onRun={onRunPlan} />}
         {editing && (
           <form className="flex flex-col gap-3" aria-label={`Edit ${editing.id}`} onSubmit={(event) => void saveEdit(event)}>
             <div className="field">

@@ -8,6 +8,8 @@ import type { CascadePlan, CascadeResult } from "./labelCascade";
 type Props = {
   plan: CascadePlan;
   onCancel: () => void;
+  /** Opens the removal of another label, for a plan that is waiting on it. */
+  onOpenLabel?: (label: string) => void;
   onRun: (plan: CascadePlan, onProgress: (done: number, total: number) => void) => Promise<CascadeResult>;
 };
 
@@ -17,7 +19,7 @@ const TITLES = { archive: "Archive", delete: "Delete", restore: "Restore" } as c
  * The preview before archiving, deleting or restoring a label together with what uses it. Says exactly what will happen,
  * runs nothing until confirmed, and for a delete asks for the label's id to be typed.
  */
-export function CascadePanel({ plan, onCancel, onRun }: Props) {
+export function CascadePanel({ plan, onCancel, onOpenLabel, onRun }: Props) {
   const uid = useId();
   const [typed, setTyped] = useState("");
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
@@ -47,6 +49,11 @@ export function CascadePanel({ plan, onCancel, onRun }: Props) {
           <AlertDescription>
             <strong>It cannot go ahead yet.</strong>
             <ul className="list-disc pl-5">{plan.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>
+            {onOpenLabel && (plan.blockedBy ?? []).length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(plan.blockedBy ?? []).map((other) => <Button key={other} type="button" variant="outline" size="sm" onClick={() => onOpenLabel(other)}>Delete “{other}” first…</Button>)}
+              </div>
+            )}
           </AlertDescription>
         </Alert>
       )}

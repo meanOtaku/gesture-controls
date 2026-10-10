@@ -43,4 +43,11 @@ describe("CascadePanel", () => {
     expect(screen.getByRole("button", { name: "Delete everything above" })).toBeDisabled();
     expect(screen.queryByLabelText(/Type/)).toBeNull();
   });
+
+  it("offers to open the removal of the label that is in the way", () => {
+    const onOpenLabel = vi.fn();
+    render(<CascadePanel plan={plan({ blockers: ["“fist” is used in the training history of “pinch”."], blockedBy: ["pinch"] })} onCancel={vi.fn()} onOpenLabel={onOpenLabel} onRun={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete “pinch” first…" }));
+    expect(onOpenLabel).toHaveBeenCalledWith("pinch");
+  });
 });

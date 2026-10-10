@@ -125,6 +125,7 @@ describe("training history", () => {
     const plan = planCascade("delete", "fist", sources({ datasets: [], registry: history }));
     expect(plan.blockers.join(" ")).toMatch(/“fist” is used as another label in the training history of “pinch”/);
     expect(plan.steps.some((step) => step.kind === "deleteTrainingHistory")).toBe(false);
+    expect(plan.blockedBy).toEqual(["pinch"]);
   });
 
   it("runs the history deletion through the desktop command", async () => {
