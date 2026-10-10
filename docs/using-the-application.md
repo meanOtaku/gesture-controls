@@ -128,7 +128,7 @@ If a sensor is unavailable, treat that as a device capability or permission stat
 
 The capture tools are three tabs in the **Capture** group of the sidebar, in the order you use them:
 
-- **Live signals** shows what the sensors are sending right now (the charts below). Use it to check a stream, not to record one.
+- **Live signals** shows what the sensors are sending right now (the charts below). Use it to check a stream, not to record one. The head and watch orientation graphs draw yaw, pitch and roll as continuous lines: an angle turning through the back of the circle (+180° to -180°) carries on past 180° instead of jumping, so a slow turn is not drawn as a spike. This is for the graphs only; recorded values keep the raw angles.
 - **Recorder** records a session from the watch and exports it. A timed capture still stops and exports by itself if you switch to another tab while it runs, and the export folder you chose stays chosen when you leave the page.
 - **Recordings** looks inside saved sessions (currently the raw image viewer).
 

@@ -1,4 +1,5 @@
 import { quaternionToEulerDegrees } from "../../../shared/protocol/events";
+import { AngleUnwrapper } from "./angleUnwrap";
 import type {
   HeadPosePayload,
   HeadTrackerDiagnostic,
@@ -190,6 +191,9 @@ class TelemetryStore {
     (["head", "watchOrientation", "watchAcceleration", "ppg", "heartRate", "ibi", "temperature", "eda", "spo2", "ecg"] as const)
       .map((name) => [name, new RingBuffer<SeriesPoint>(MAX_VISIBLE_SAMPLES)]),
   );
+  // The charts plot the head and watch angles unwrapped, so a slow turn through ±180° is not drawn as a spike.
+  private readonly headUnwrap = new AngleUnwrapper();
+  private readonly watchUnwrap = new AngleUnwrapper();
   private readonly rows = new RingBuffer<CsvRow>(MAX_CSV_ROWS);
   private version = 0;
   private publishTimer: ReturnType<typeof setTimeout> | null = null;
@@ -804,7 +808,7 @@ class TelemetryStore {
     const status = { ...payload, connected: true };
     this.headStatus = status;
     const at = Date.now();
-    this.series.get("head")?.push({ at, values: [status.yawDeg, status.pitchDeg, status.rollDeg] });
+    this.series.get("head")?.push({ at, values: this.headUnwrap.next([status.yawDeg, status.pitchDeg, status.rollDeg]) });
     if (this.canRecord("head", at)) this.rows.push({
       recordedAt: new Date(at).toISOString(),
       source: "headphone",
@@ -858,7 +862,7 @@ class TelemetryStore {
     clockSync.observe(orientation.timestampNs, performance.now());
     const at = Date.now();
     const euler = quaternionToEulerDegrees(orientation.quaternion);
-    this.series.get("watchOrientation")?.push({ at, values: euler });
+    this.series.get("watchOrientation")?.push({ at, values: this.watchUnwrap.next(euler) });
     // Acceleration rides on each orientation sample and is absent when the watch's
     // acceleration sensor is off or its reading was stale; a missing reading is a gap in
     // the chart, never a plotted zero.
@@ -1003,6 +1007,8 @@ class TelemetryStore {
     if (this.publishTimer !== null) clearTimeout(this.publishTimer);
     this.publishTimer = null;
     this.series.forEach((buffer) => buffer.clear());
+    this.headUnwrap.reset();
+    this.watchUnwrap.reset();
     this.rows.clear();
     this.headStatus = null;
     this.headDiagnostic = null;
@@ -1155,6 +1161,7 @@ class TelemetryStore {
       }
       this.watchPaused = true;
       this.series.get("watchOrientation")?.clear();
+      this.watchUnwrap.reset();
       this.series.get("watchAcceleration")?.clear();
       this.series.get("ppg")?.clear();
       this.schedulePublish();
