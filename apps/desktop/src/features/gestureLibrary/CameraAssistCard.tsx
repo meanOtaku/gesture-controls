@@ -18,7 +18,7 @@ import { useLiveGestures } from "./useLiveGestures";
 export function CameraAssistCard({ selectedLabel, recording, desktopAvailable }: { selectedLabel: string | null; recording: boolean; desktopAvailable: boolean }) {
   const camera = getCameraController();
   const cam = useSyncExternalStore(camera.subscribe, camera.getSnapshot, camera.getSnapshot);
-  const { enabled } = useSyncExternalStore(cameraAssist.subscribe, cameraAssist.getSnapshot, cameraAssist.getSnapshot);
+  const { enabled, marking } = useSyncExternalStore(cameraAssist.subscribe, cameraAssist.getSnapshot, cameraAssist.getSnapshot);
   const [definitions, setDefinitions] = useState<GestureDefinition[]>([]);
 
   useEffect(() => {
@@ -32,7 +32,7 @@ export function CameraAssistCard({ selectedLabel, recording, desktopAvailable }:
   const cam2 = useSyncExternalStore(camera2.subscribe, camera2.getSnapshot, camera2.getSnapshot);
   const states = useLiveGestures(mine, cam, undefined, cam2);
   const seen = mine.some((definition) => states.get(definition.id)?.held);
-  const camOn = cam.status === "on";
+  const camOn = cam.status === "on" || cam2.status === "on";
 
   const blocker = !desktopAvailable
     ? "Needs the desktop app."
@@ -42,7 +42,15 @@ export function CameraAssistCard({ selectedLabel, recording, desktopAvailable }:
         ? `No gesture in the Gesture library uses “${selectedLabel.replaceAll("_", " ")}”. Make one there first.`
         : !camOn
           ? "Turn the camera on (below) so it can see your hand."
-          : null;
+          : !cam.recordLandmarks
+            ? "Saving hand landmarks is switched off in Camera hand tracking (below)."
+            : null;
+
+  // Tells the Recorder whether a recording started now will be marked, so it only changes how it records when it can work.
+  useEffect(() => {
+    cameraAssist.setReady(blocker === null ? selectedLabel : null);
+    return () => cameraAssist.setReady(null);
+  }, [blocker, selectedLabel]);
 
   return (
     <Card role="region" aria-label="Camera marking" className="min-w-0">
@@ -59,9 +67,10 @@ export function CameraAssistCard({ selectedLabel, recording, desktopAvailable }:
       <CardContent className="flex flex-col gap-3">
         <div className="flex items-start gap-2 text-sm">
           <Checkbox checked={enabled} disabled={recording} onCheckedChange={(on) => cameraAssist.setEnabled(on === true)} aria-label="Let the camera mark the gesture" />
-          <span><strong>Let the camera mark the gesture</strong> <small className="text-muted-foreground">Records as a timeline with no manual marks; the camera adds them when you stop.</small></span>
+          <span><strong>Let the camera mark the gesture</strong> <small className="text-muted-foreground">On by default. When the camera is on and the label has a gesture, the recording is a timeline with no manual marks, and the camera adds them when you stop.</small></span>
         </div>
-        {enabled && blocker && <p className="hint" role="status">{blocker} Without it, this recording will be a timeline with no marks.</p>}
+        {enabled && blocker && <p className="hint" role="status">{blocker} Until then, recordings are made as usual with no camera marks.</p>}
+        {marking && <p className="hint" role="status">Marking the recording you just stopped… The export is ready when this finishes.</p>}
         {enabled && !blocker && (
           <div className="flex flex-wrap items-center gap-3" role="status">
             <Badge variant={seen ? "default" : "secondary"}>{seen ? "Camera sees it" : "Camera does not see it"}</Badge>

@@ -10,6 +10,7 @@ vi.mock("./gestureLibraryApi", () => library);
 const feedback = vi.hoisted(() => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() }));
 vi.mock("../../components/app/OperationFeedback", () => ({ OperationFeedback: feedback }));
 
+import { telemetryStore } from "../telemetry/store/telemetryStore";
 import { cameraAssist } from "./cameraAssist";
 
 const pinch: GestureDefinition = { ...blankDefinition(), id: "g1", name: "Pinch", labelId: "pinch", conditions: [{ measure: "pinch.index", direction: "below", enter: 0.3, exit: 0.5 }] };
@@ -77,5 +78,46 @@ describe("cameraAssist", () => {
     cameraAssist.disarm();
     await cameraAssist.finish("rec-1");
     expect(api.getRecordingCameraEvidence).not.toHaveBeenCalled();
+  });
+
+  it("hands the marks to the session, so its CSV export carries them", async () => {
+    const spy = vi.spyOn(telemetryStore, "addCameraMarkedIntervals").mockReturnValue(1);
+    api.getRecordingCameraEvidence.mockResolvedValue({ status: "ok", value: evidence(true) });
+    cameraAssist.arm("pinch");
+    await cameraAssist.finish("rec-1");
+    expect(spy).toHaveBeenCalledTimes(1);
+    const [intervals, rows] = spy.mock.calls[0];
+    expect(intervals).toHaveLength(1);
+    expect(rows).toBe(200); // the recording's raw row count
+    spy.mockRestore();
+  });
+
+  it("says it is marking while it works, so the export can wait for it", async () => {
+    api.getRecordingCameraEvidence.mockResolvedValue({ status: "ok", value: evidence(true) });
+    const seen: boolean[] = [];
+    const stop = cameraAssist.subscribe(() => seen.push(cameraAssist.getSnapshot().marking));
+    cameraAssist.arm("pinch");
+    await cameraAssist.finish("rec-1");
+    stop();
+    expect(seen).toEqual([true, false]);
+  });
+});
+
+describe("cameraAssist defaults", () => {
+  it("is on unless switched off, remembers the choice, and only takes effect when the card has checked it can work", () => {
+    localStorage.removeItem("cameraMarkingOn");
+    cameraAssist.setEnabled(true);
+    expect(cameraAssist.isEnabled()).toBe(true);
+    expect(cameraAssist.willMark("pinch")).toBe(false); // nothing has said it can work yet
+    cameraAssist.setReady("pinch");
+    expect(cameraAssist.willMark("pinch")).toBe(true);
+    expect(cameraAssist.willMark("fist")).toBe(false); // a different label than the one checked
+    expect(cameraAssist.willMark(null)).toBe(false);
+    cameraAssist.setEnabled(false);
+    expect(cameraAssist.willMark("pinch")).toBe(false);
+    expect(localStorage.getItem("cameraMarkingOn")).toBe("0");
+    cameraAssist.setEnabled(true);
+    expect(localStorage.getItem("cameraMarkingOn")).toBe("1");
+    cameraAssist.setReady(null);
   });
 });

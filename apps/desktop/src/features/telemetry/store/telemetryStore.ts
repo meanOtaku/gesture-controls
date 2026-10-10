@@ -11,7 +11,7 @@ import type {
   WatchSkinTemperatureBatch,
   WatchStatus,
 } from "../../../shared/protocol/events";
-import type { RecordingBundlePayload, RecordingEvidence, StopReason } from "../../../shared/tauri/recordingBundle";
+import type { AnnotationInterval, RecordingBundlePayload, RecordingEvidence, StopReason } from "../../../shared/tauri/recordingBundle";
 import { clockSync } from "../../camera/clockSync";
 import {
   hasOverlap,
@@ -588,6 +588,36 @@ class TelemetryStore {
     return true;
   }
 
+  /**
+   * Adds the intervals the camera found in the recording just saved, so the session (and its CSV export) carries them.
+   * Only while the session is the one that was saved: the rows must be the same ones the intervals were found in.
+   * An interval that overlaps one already there is skipped. Returns how many were added.
+   */
+  addCameraMarkedIntervals(intervals: AnnotationInterval[], rawRowCount: number): number {
+    if (this.datasetRecordingState !== "saved" || this.datasetRows.length !== rawRowCount) return 0;
+    let added = 0;
+    for (const interval of intervals) {
+      const candidate: LiveInterval = {
+        intervalId: interval.interval_id,
+        labelId: interval.label_id,
+        startMonotonicNs: interval.requested_start_monotonic_ns,
+        endMonotonicNs: interval.requested_end_monotonic_ns,
+        startRawRow: interval.resolved_start.raw_row,
+        endRawRow: interval.resolved_end.raw_row + 1,
+        creationMechanism: interval.creation_mechanism,
+        curationStatus: interval.curation_status,
+        createdAt: interval.created_at,
+        revision: interval.revision,
+      };
+      if (interval.resolved_end.raw_row + 1 > this.datasetRows.length || hasOverlap(candidate, this.timelineIntervals)) continue;
+      this.sessionLabels.add(candidate.labelId);
+      this.timelineIntervals.push(candidate);
+      added += 1;
+    }
+    if (added > 0) this.publishNow();
+    return added;
+  }
+
   /** Post-capture editing: removes an interval entirely, returning its rows to `unannotated`. Raw data is untouched. */
   deleteTimelineInterval(intervalId: string): boolean {
     if (this.datasetRecordingState !== "saved") return false;
@@ -661,7 +691,14 @@ class TelemetryStore {
       `# started_at: ${session?.startedAtIso ?? ""}`,
       `# row_count: ${rows.length}`,
     ];
-    const dataLines = rows.map((row) => [
+    // A row's label is the interval that covers it, so intervals edited or added after the recording (by hand, or by the
+    // camera) are in the export; a row no interval covers keeps the label it was recorded with.
+    const intervalLabels: (string | null)[] = new Array(rows.length).fill(null);
+    for (const interval of this.timelineIntervals) {
+      if (interval.endRawRow === null) continue;
+      for (let index = Math.max(0, interval.startRawRow); index < Math.min(rows.length, interval.endRawRow); index += 1) intervalLabels[index] = interval.labelId;
+    }
+    const dataLines = rows.map((row, rowIndex) => [
       row.timestampNs,
       row.sequence,
       datasetCsvValue(row.ppgGreen),
@@ -678,7 +715,7 @@ class TelemetryStore {
       datasetCsvValue(row.quatY),
       datasetCsvValue(row.quatZ),
       datasetCsvValue(row.contactQuality),
-      row.label,
+      intervalLabels[rowIndex] ?? row.label,
     ].join(","));
     return [...metadataLines, DATASET_CSV_COLUMNS.join(","), ...dataLines].join("\n");
   }

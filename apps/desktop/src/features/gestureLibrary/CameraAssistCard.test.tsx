@@ -54,3 +54,23 @@ describe("CameraAssistCard", () => {
     expect(screen.getByRole("checkbox", { name: "Let the camera mark the gesture" })).toHaveAttribute("aria-disabled", "true");
   });
 });
+
+describe("CameraAssistCard readiness", () => {
+  it("tells the Recorder a recording will be marked only when the camera is on and the label has a gesture", async () => {
+    cameraAssist.setEnabled(true);
+    const { rerender } = render(<CameraAssistCard selectedLabel="pinch" recording={false} desktopAvailable />);
+    expect(await screen.findByText(/Turn the camera on \(below\)/)).toBeInTheDocument();
+    expect(cameraAssist.willMark("pinch")).toBe(false); // camera off
+    expect(screen.getByText(/Until then, recordings are made as usual with no camera marks/)).toBeInTheDocument();
+
+    hands = [makeHand({ pinch: 0.1 })];
+    fireEvent.click(screen.getByRole("button", { name: "Turn camera on" }));
+    await vi.waitFor(() => expect(next).not.toBeNull());
+    await act(async () => { next?.(); });
+    await vi.waitFor(() => expect(cameraAssist.willMark("pinch")).toBe(true));
+
+    rerender(<CameraAssistCard selectedLabel="other" recording={false} desktopAvailable />); // no gesture for this label
+    await vi.waitFor(() => expect(cameraAssist.willMark("other")).toBe(false));
+    expect(cameraAssist.willMark("pinch")).toBe(false);
+  });
+});

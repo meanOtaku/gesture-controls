@@ -17,6 +17,7 @@ export function RecorderPage() {
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
   const { exportDatasetCsv, saveDatasetRecording, datasetExportFolder, chooseDatasetExportFolder } = useTelemetryExport();
 
+  const { marking } = useSyncExternalStore(cameraAssist.subscribe, cameraAssist.getSnapshot, cameraAssist.getSnapshot);
   const selectedLabel = telemetryStore.getSelectedLabel();
   const sessionLabels = telemetryStore.getSessionLabels();
   const datasetRecording = telemetryStore.getDatasetRecording();
@@ -55,10 +56,10 @@ export function RecorderPage() {
         onMarkEnd={() => telemetryStore.setTimelineLabel(null)}
         onStart={(timelineDurationSeconds) => {
           // With camera marking on, the recording is a timeline with no manual marks; the camera adds them on stop.
-          const assisted = cameraAssist.isEnabled() && selectedLabel !== null;
+          const assisted = cameraAssist.willMark(selectedLabel);
           if (assisted) telemetryStore.setDatasetCaptureMode("timeline");
           timedCapture.request(timelineDurationSeconds);
-          if (telemetryStore.startDatasetRecording() && assisted) cameraAssist.arm(selectedLabel);
+          if (telemetryStore.startDatasetRecording() && assisted && selectedLabel) cameraAssist.arm(selectedLabel);
         }}
         onStop={() => {
           telemetryStore.stopDatasetRecording();
@@ -66,6 +67,7 @@ export function RecorderPage() {
         }}
         onDiscard={() => { cameraAssist.disarm(); telemetryStore.discardDatasetRecording(); }}
         onExport={exportDatasetCsv}
+        exportBusy={marking}
         getDatasetRows={() => telemetryStore.getDatasetRows()}
         timelineIntervals={telemetryStore.getTimelineIntervals()}
       />

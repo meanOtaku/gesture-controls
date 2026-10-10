@@ -1,4 +1,5 @@
 import { parseClockSync, parseHandLandmarks } from "../camera/handLandmarkCsv";
+import type { AnnotationInterval } from "../../shared/tauri/recordingBundle";
 import {
   addCameraProposedIntervals, getRecordingCameraEvidence, loadRecordingBundle,
 } from "../../shared/tauri/recordingBundle";
@@ -41,14 +42,18 @@ export async function findProposals(recordingId: string, definitions: GestureDef
 }
 
 /** Adds the chosen proposals to the recording as unreviewed intervals. Null when added, else the problem. */
-export async function addProposals(found: Found, chosen: ProposedInterval[]): Promise<string | null> {
-  const nowIso = new Date().toISOString();
-  const result = await addCameraProposedIntervals(found.recordingId, chosen.map((p) => toAnnotationInterval(p, found.rawTimestampsNs, nowIso)));
+export async function addIntervals(recordingId: string, intervals: AnnotationInterval[]): Promise<string | null> {
+  const result = await addCameraProposedIntervals(recordingId, intervals);
   return result.status === "error" ? result.message : null;
 }
 
+export async function addProposals(found: Found, chosen: ProposedInterval[]): Promise<string | null> {
+  const nowIso = new Date().toISOString();
+  return addIntervals(found.recordingId, chosen.map((p) => toAnnotationInterval(p, found.rawTimestampsNs, nowIso)));
+}
+
 export type AutoMarkOutcome =
-  | { kind: "added"; count: number; jitterMs: number }
+  | { kind: "added"; count: number; jitterMs: number; intervals: AnnotationInterval[]; rawRowCount: number }
   | { kind: "none"; frames: number }
   | { kind: "skipped"; reason: string };
 
@@ -61,7 +66,9 @@ export async function autoMarkRecording(recordingId: string, definitions: Gestur
   if (!result.ok) return { kind: "skipped", reason: result.message };
   const usable = result.found.proposals.filter((proposal) => !proposal.overlaps);
   if (usable.length === 0) return { kind: "none", frames: result.found.frames };
-  const problem = await addProposals(result.found, usable);
+  const nowIso = new Date().toISOString();
+  const intervals = usable.map((proposal) => toAnnotationInterval(proposal, result.found.rawTimestampsNs, nowIso));
+  const problem = await addIntervals(recordingId, intervals);
   if (problem) return { kind: "skipped", reason: problem };
-  return { kind: "added", count: usable.length, jitterMs: result.found.alignment.jitterMs };
+  return { kind: "added", count: usable.length, jitterMs: result.found.alignment.jitterMs, intervals, rawRowCount: result.found.rawTimestampsNs.length };
 }

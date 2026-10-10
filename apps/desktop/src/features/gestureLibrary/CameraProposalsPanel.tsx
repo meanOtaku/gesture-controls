@@ -82,11 +82,11 @@ export function CameraProposalsPanel() {
     <Card role="region" aria-label="Camera label proposals" className="min-w-0">
       <CardHeader>
         <SectionHeader
-          title="Label from the camera"
-          description="Find your library gestures in a recording's hand landmarks and add them as label intervals."
+          title="Mark an older recording"
+          description="Run camera marking on a recording that was saved without it, or again after improving a gesture."
           help={{
             label: "About camera label proposals",
-            content: "Recordings made with the camera on keep the hand landmarks. This runs your Gesture library over them and, using the clock samples saved alongside, finds which watch rows each gesture covers. The lining-up is only as exact as the link was steady, shown below. Proposals you add start unreviewed, so you still approve them like any other label. Gestures with no label, and proposals that overlap an existing interval, are skipped.",
+            content: "Camera marking normally happens by itself when you stop a recording in the Recorder. Use this for a recording that was saved without it (the camera was off, or the gesture did not exist yet), or to run it again after improving a gesture. Recordings made with the camera on keep the hand landmarks. This runs your Gesture library over them and, using the clock samples saved alongside, finds which watch rows each gesture covers. The lining-up is only as exact as the link was steady, shown below. Proposals you add start unreviewed, so you still approve them like any other label. Gestures with no label, and proposals that overlap an existing interval, are skipped.",
           }}
         />
       </CardHeader>
