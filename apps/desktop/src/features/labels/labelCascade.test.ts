@@ -134,3 +134,16 @@ describe("training history", () => {
     expect(run).toHaveBeenCalledWith("delete_label_history", { label: "pinch" });
   });
 });
+
+describe("a label used for a gesture's closing or opening stretch", () => {
+  const gestures = [{ id: "g1", name: "Pinch", labelId: "pinch", closePhase: { labelId: "pinch_close" }, openPhase: { labelId: "pinch_open" } }];
+  it("blocks a delete, naming the gesture and the role, and does not delete the gesture itself", () => {
+    const plan = planCascade("delete", "pinch_close", sources({ gestures, datasets: [], bundles: [], models: [], recipes: [] }));
+    expect(plan.blockers.join(" ")).toMatch(/“pinch_close” is the closing label of the gesture “Pinch”/);
+    expect(plan.steps.some((step) => step.kind === "deleteGesture")).toBe(false);
+  });
+  it("can be archived without touching the gesture", () => {
+    const plan = planCascade("archive", "pinch_open", sources({ gestures, datasets: [], bundles: [], models: [], recipes: [] }));
+    expect(plan.blockers).toEqual([]);
+  });
+});

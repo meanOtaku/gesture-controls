@@ -37,3 +37,17 @@ describe("gesture definitions", () => {
     expect(bad({ releaseGraceMs: 5000 })).toMatch(/release time/);
   });
 });
+
+describe("closing and opening stretches", () => {
+  const base = { ...blankDefinition(), name: "Pinch", labelId: "pinch", conditions: [{ measure: "pinch.index" as const, direction: "below" as const, enter: 0.3, exit: 0.5 }] };
+  it("accepts none, or valid ones with their own labels", () => {
+    expect(definitionProblem(base)).toBeNull();
+    expect(definitionProblem({ ...base, closePhase: { labelId: "pinch_close", ms: 500 }, openPhase: { labelId: "pinch_open", ms: 500 } })).toBeNull();
+  });
+  it("refuses a missing label, a silly length, or a label the gesture already uses", () => {
+    expect(definitionProblem({ ...base, closePhase: { labelId: "", ms: 500 } })).toMatch(/Choose a label for the closing stretch/);
+    expect(definitionProblem({ ...base, openPhase: { labelId: "pinch_open", ms: 50 } })).toMatch(/opening stretch must be 200 to 2000/);
+    expect(definitionProblem({ ...base, closePhase: { labelId: "pinch", ms: 500 } })).toMatch(/closing label must differ/);
+    expect(definitionProblem({ ...base, closePhase: { labelId: "x", ms: 500 }, openPhase: { labelId: "x", ms: 500 } })).toMatch(/opening label must differ/);
+  });
+});

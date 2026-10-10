@@ -101,12 +101,13 @@ export function CameraProposalsPanel() {
                     <Checkbox
                       checked={chosen.has(index)}
                       disabled={p.overlaps}
-                      aria-label={`${p.gestureName} at ${seconds(p.startNs, origin)} s`}
+                      aria-label={`${p.gestureName}${p.phase === "close" ? " closing" : p.phase === "open" ? " opening" : ""} at ${seconds(p.startNs, origin)} s`}
                       onCheckedChange={(on) => setChosen((prev) => { const next = new Set(prev); if (on === true) next.add(index); else next.delete(index); return next; })}
                     />
                     <span>
-                      <strong>{p.gestureName}</strong> → {p.labelId}, {seconds(p.startNs, origin)}–{seconds(p.endNs, origin)} s of the recording ({p.endRow - p.startRow + 1} rows)
+                      <strong>{p.gestureName}{p.phase === "close" ? " (closing)" : p.phase === "open" ? " (opening)" : ""}</strong> → {p.labelId}, {seconds(p.startNs, origin)}–{seconds(p.endNs, origin)} s of the recording ({p.endRow - p.startRow + 1} rows)
                       {p.overlaps && <small className="text-muted-foreground"> Overlaps an interval already there, so it cannot be added.</small>}
+                      {p.clipped && <small className="text-muted-foreground"> Shortened so it does not overlap its neighbour.</small>}
                     </span>
                   </li>
                 ))}

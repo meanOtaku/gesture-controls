@@ -1,6 +1,6 @@
 import { datasetLabels } from "../model-lab/types";
 import type { UsageSources } from "./labelUsage";
-import { recipesUsing } from "./labelUsage";
+import { gestureUsesLabel, recipesUsing } from "./labelUsage";
 
 /**
  * Archiving or deleting a label together with everything that uses it. A plan is the list of steps, worked out from
@@ -102,6 +102,10 @@ export function planCascade(mode: CascadeMode, labelId: string, sources: Cascade
   const recipes = recipesUsing(labelId, sources);
   for (const recipe of recipes) steps.push({ kind: "deleteRecipe", id: recipe.id, name: recipe.name });
   const gestures = sources.gestures.filter((gesture) => gesture.labelId === labelId);
+  for (const gesture of sources.gestures.filter((g) => g.labelId !== labelId && gestureUsesLabel(g, labelId))) {
+    const role = gesture.closePhase?.labelId === labelId ? "closing" : "opening";
+    blockers.push(`“${labelId}” is the ${role} label of the gesture “${gesture.name}”. Change that gesture in the Gesture library first.`);
+  }
   for (const gesture of gestures) steps.push({ kind: "deleteGesture", id: gesture.id, name: gesture.name });
   for (const model of models) {
     steps.push(...archivePath(model));

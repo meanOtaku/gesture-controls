@@ -60,3 +60,52 @@ describe("proposeIntervals", () => {
     expect(interval.resolved_start).toEqual({ raw_row: p.startRow, source_timestamp_ns: raw[p.startRow] });
   });
 });
+
+describe("closing and opening stretches", () => {
+  const withPhases: GestureDefinition = { ...pinch, closePhase: { labelId: "pinch_close", ms: 500 }, openPhase: { labelId: "pinch_open", ms: 500 } };
+  const propose = (over: Partial<Parameters<typeof proposeIntervals>[0]> = {}) =>
+    proposeIntervals({ definitions: [withPhases], frames, alignment, rawTimestampsNs: raw, existing: [], ...over });
+
+  it("adds the closing stretch just before the hold and the opening stretch just after it, under their own labels", () => {
+    const all = propose();
+    const hold = all.find((p) => p.phase === "hold")!;
+    const close = all.find((p) => p.phase === "close")!;
+    const open = all.find((p) => p.phase === "open")!;
+    expect([close.labelId, hold.labelId, open.labelId]).toEqual(["pinch_close", "pinch", "pinch_open"]);
+    expect(close.endRow).toBe(hold.startRow - 1);
+    expect(open.startRow).toBe(hold.endRow + 1);
+    // 500 ms of rows 20 ms apart is 25 rows.
+    expect(close.endRow - close.startRow + 1).toBeGreaterThanOrEqual(24);
+    expect(open.endRow - open.startRow + 1).toBeGreaterThanOrEqual(24);
+    expect(all.map((p) => p.phase)).toEqual(["close", "hold", "open"]); // in time order
+    expect(all.every((p) => !p.overlaps && !p.clipped)).toBe(true);
+    // None of the three share a row.
+    expect(close.endRow).toBeLessThan(hold.startRow);
+    expect(open.startRow).toBeGreaterThan(hold.endRow);
+  });
+
+  it("proposes no stretch for a gesture that did not ask for them", () => {
+    expect(proposeIntervals({ definitions: [pinch], frames, alignment, rawTimestampsNs: raw, existing: [] }).map((p) => p.phase)).toEqual(["hold"]);
+  });
+
+  it("shortens a stretch that would run into another interval, and drops one with too little left", () => {
+    const hold = propose().find((p) => p.phase === "hold")!;
+    // Something already owns rows up to 13 rows before the hold: the closing stretch keeps only the part next to the hold.
+    const clipped = propose({ existing: [{ startRow: 0, endRow: hold.startRow - 13 }] }).find((p) => p.phase === "close")!;
+    expect(clipped.clipped).toBe(true);
+    expect(clipped.startRow).toBe(hold.startRow - 12);
+    // 4 rows is under 200 ms: not worth a label.
+    expect(propose({ existing: [{ startRow: 0, endRow: hold.startRow - 5 }] }).some((p) => p.phase === "close")).toBe(false);
+    // The opening stretch is shortened from its far end.
+    const openClipped = propose({ existing: [{ startRow: hold.endRow + 14, endRow: 199 }] }).find((p) => p.phase === "open")!;
+    expect(openClipped.endRow).toBe(hold.endRow + 13);
+  });
+
+  it("never lets two intervals share a row, even when holds follow each other closely", () => {
+    const twice = Array.from({ length: 120 }, (_, i) => ({ frameIndex: i, captureMs: 10_000 + i * 33.333, hands: [makeHand({ pinch: (i >= 30 && i < 50) || (i >= 62 && i < 85) ? 0.1 : 1.2 })] }));
+    const all = proposeIntervals({ definitions: [withPhases], frames: twice, alignment, rawTimestampsNs: raw, existing: [] });
+    expect(all.filter((p) => p.phase === "hold").length).toBeGreaterThanOrEqual(1);
+    const sorted = [...all].sort((a, b) => a.startRow - b.startRow);
+    for (let i = 1; i < sorted.length; i++) expect(sorted[i].startRow).toBeGreaterThan(sorted[i - 1].endRow);
+  });
+});

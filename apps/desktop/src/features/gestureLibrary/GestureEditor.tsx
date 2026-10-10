@@ -7,6 +7,7 @@ import { Label } from "../../components/ui/label";
 import { getCameraController } from "../camera/cameraService";
 import type { DatasetLabel } from "../model-lab/types";
 import { analyse, scoreRule, MIN_FRAMES } from "./calibration";
+import { PhaseRow } from "./PhaseRow";
 import { CameraPair } from "./CameraPair";
 import { SecondCameraControls } from "./SecondCameraControls";
 import { HandSideCheck } from "./HandSideCheck";
@@ -54,6 +55,8 @@ type EditorProps = {
   initial: GestureDefinition;
   labels: DatasetLabel[];
   onSave: (definition: GestureDefinition) => Promise<string | null>;
+  /** Makes a label in the catalogue, for a closing or opening stretch. */
+  onCreateLabel?: (id: string, displayName: string) => Promise<string | null>;
   onCancel: () => void;
 };
 
@@ -62,7 +65,7 @@ type EditorProps = {
  * that tell the two apart become the rule. The thresholds can then be adjusted by hand, with their effect on the
  * recorded frames shown as they change.
  */
-export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps) {
+export function GestureEditor({ initial, labels, onSave, onCreateLabel, onCancel }: EditorProps) {
   const camera = getCameraController();
   const cam = useSyncExternalStore(camera.subscribe, camera.getSnapshot, camera.getSnapshot);
   const camera2 = getCameraController("secondary");
@@ -151,6 +154,9 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
     if (result) setError(result);
   };
 
+  // The names suggested for the closing and opening labels come from the gesture's own label, or its name.
+  const phaseBase = draft.labelId ?? (draft.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").replace(/^[0-9_]+/, "") || "gesture");
+  const phaseName = draft.name.trim() || phaseBase.replaceAll("_", " ");
   const camOn = cam.status === "on";
   const counting = snapshot.step === "getReady" || snapshot.step === "getReadyNegative";
   const seconds = Math.ceil(snapshot.remainingMs / 1000);
@@ -180,6 +186,21 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
           </select>
         </div>
       </div>
+
+      <section className="flex flex-col gap-3" aria-label="Closing and opening">
+        <h3 className="text-sm font-semibold">Closing and opening (optional)</h3>
+        <p className="hint">Also mark the motion into the gesture and out of it, so the dataset says when you are doing it and when you are undoing it.</p>
+        <PhaseRow
+          what="closing" spec={draft.closePhase ?? null} onChange={(spec) => patch({ closePhase: spec })} labels={labels}
+          taken={[draft.labelId, draft.openPhase?.labelId].filter((l): l is string => !!l)}
+          suggestedId={`${phaseBase}_close`} suggestedName={`${phaseName} closing`} onCreate={onCreateLabel}
+        />
+        <PhaseRow
+          what="opening" spec={draft.openPhase ?? null} onChange={(spec) => patch({ openPhase: spec })} labels={labels}
+          taken={[draft.labelId, draft.closePhase?.labelId].filter((l): l is string => !!l)}
+          suggestedId={`${phaseBase}_open`} suggestedName={`${phaseName} opening`} onCreate={onCreateLabel}
+        />
+      </section>
 
       <section className="flex flex-col gap-3" aria-label="Calibration">
         <h3 className="text-sm font-semibold">1. Show it to the camera</h3>

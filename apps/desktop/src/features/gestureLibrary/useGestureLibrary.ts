@@ -43,6 +43,16 @@ export function useGestureLibrary() {
     }
   }, []);
 
+  /** Makes a label in the catalogue (a closing or opening stretch needs one). Returns the problem in words, or null. */
+  const createLabel = useCallback(async (id: string, displayName: string): Promise<string | null> => {
+    try {
+      setLabels(await invoke<DatasetLabel[]>("create_model_label", { input: { id: id.slice(0, 48), displayName: displayName.slice(0, 80), description: "", color: "#65e6ff", role: "positiveGesture" } }));
+      return null;
+    } catch (err) {
+      return String(err);
+    }
+  }, []);
+
   const remove = useCallback(async (id: string): Promise<string | null> => {
     try {
       setDefinitions(await deleteGestureDefinition(id));
@@ -53,5 +63,5 @@ export function useGestureLibrary() {
     }
   }, []);
 
-  return { definitions, labels, error, loaded, save, remove };
+  return { definitions, labels, error, loaded, save, remove, createLabel };
 }
