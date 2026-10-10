@@ -216,6 +216,10 @@ The **Labels** tab (first under Labels) is the one place labels are made and man
 
 - **Add a label** with a name; the id is shown before you create it and never changes afterwards. **Edit** changes the name, notes and role, and everything that refers to the label (recordings, models, recipes, gestures) keeps pointing at it.
 - Each label shows where it is used: in how many Recorder recordings, how many recordings in the training data, how many gestures and how many models. Recording and training happen in their own tabs, not here. A label something still uses can be **archived** but not deleted, so nothing is left without a meaning. Archived labels are hidden from pickers and can be restored.
+- **Archive…** and **Delete…** on a label that something uses open a preview that says exactly what will happen, and nothing runs until you confirm.
+  - **Archive** switches off the recipes that use the label's model, archives its models (an active one stops first) and archives the label. Gestures and recordings are kept. It remembers what it switched off, so **Restore** switches those recipes back on and returns the models to Draft (approve and activate them again).
+  - **Delete** removes the label together with: the recipes that use it (its model, or one of its gestures), its gestures, its models and their files, the training recordings that hold only this label, and this label's marks on Recorder recordings. The Recorder recordings and their raw data stay. If a training recording also holds other labels, delete cannot go ahead until you remove that recording in Model Lab. You must type the label's id to confirm.
+  - If a step fails, it stops there and says how many steps were done.
 - Open **Where it is used** under a label to see every gesture, Recorder recording, training recording, model and recipe that uses it, each with a button that opens that tab.
 - Everywhere else reads this list: the **Gesture library** and **Model Lab** choose from it, and the **Recorder** offers it as buttons. A label typed by hand in the Recorder that is not in the list says so and has **Add to Labels**.
 

@@ -28,6 +28,16 @@ pub enum LabelRole {
     CalibrationOnly,
 }
 
+/// What archiving a label everywhere switched off, so restoring it can switch the same things back.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArchiveLog {
+    /// Recipes that were switched off because they used the label.
+    pub disabled_recipes: Vec<String>,
+    /// Models that were archived with the label.
+    pub archived_models: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LabelRecord {
@@ -40,6 +50,9 @@ pub struct LabelRecord {
     #[serde(default, skip_serializing)]
     built_in: bool,
     pub archived_at: Option<String>,
+    /// Set when the label was archived together with what uses it; cleared when it is restored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archive_log: Option<ArchiveLog>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -211,6 +224,7 @@ pub fn create_model_label(
         role: input.role,
         built_in: false,
         archived_at: None,
+        archive_log: None,
     });
     index.labels.sort_by(|a, b| a.id.cmp(&b.id));
     write_index_atomic(&app, &index)?;
@@ -235,6 +249,30 @@ pub fn update_model_label(
     Ok(index.labels)
 }
 
+/// Remembers what archiving a label everywhere switched off, so restoring it can switch it back on.
+#[tauri::command]
+pub fn save_label_archive_log(
+    id: String,
+    log: ArchiveLog,
+    app: AppHandle,
+    runtime: State<'_, LabelRegistryRuntime>,
+) -> Result<Vec<LabelRecord>, String> {
+    let _guard = runtime
+        .lock
+        .lock()
+        .map_err(|_| "label registry lock was poisoned".to_string())?;
+    let mut index = load_index(&app);
+    let label = index
+        .labels
+        .iter_mut()
+        .find(|label| label.id == id)
+        .ok_or_else(|| format!("no label with id '{id}'"))?;
+    label.archive_log = Some(log);
+    write_index_atomic(&app, &index)?;
+    emit(&app, &index);
+    Ok(index.labels)
+}
+
 #[tauri::command]
 pub fn set_model_label_archived(
     id: String,
@@ -253,6 +291,9 @@ pub fn set_model_label_archived(
         .find(|label| label.id == id)
         .ok_or_else(|| format!("no label with id '{id}'"))?;
     label.archived_at = archived.then(|| Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true));
+    if !archived {
+        label.archive_log = None;
+    }
     write_index_atomic(&app, &index)?;
     emit(&app, &index);
     Ok(index.labels)
@@ -353,6 +394,7 @@ mod tests {
             role: LabelRole::PositiveGesture,
             built_in: false,
             archived_at: None,
+            archive_log: None,
         }
     }
 
@@ -432,6 +474,7 @@ mod tests {
             role: LabelRole::PositiveGesture,
             built_in,
             archived_at: None,
+            archive_log: None,
         }
     }
 

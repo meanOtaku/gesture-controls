@@ -20,7 +20,15 @@ export interface UsageSources {
   datasets: DatasetSummary[];
   gestures: { id: string; name: string; labelId: string | null }[];
   models: Pick<LabelModel, "id" | "label" | "state">[];
-  recipes: { id: string; name: string; stages: { kind: string; label?: string }[] }[];
+  recipes: { id: string; name: string; enabled?: boolean; stages: { kind: string; label?: string; gesture?: string }[] }[];
+}
+
+/** Recipes with a model step for the label, or a camera step for one of the label's gestures. */
+export function recipesUsing(labelId: string, sources: Pick<UsageSources, "gestures" | "recipes">) {
+  const gestureIds = new Set(sources.gestures.filter((gesture) => gesture.labelId === labelId).map((gesture) => gesture.id));
+  return sources.recipes.filter((recipe) =>
+    recipe.stages.some((stage) => (stage.kind === "model" && stage.label === labelId) || (stage.kind === "camera" && stage.gesture !== undefined && gestureIds.has(stage.gesture))),
+  );
 }
 
 export function usageOf(labelId: string, sources: UsageSources): LabelUsage {
@@ -29,7 +37,7 @@ export function usageOf(labelId: string, sources: UsageSources): LabelUsage {
     trainingRecordings: sources.datasets.filter((dataset) => datasetLabels(dataset).includes(labelId)).map((dataset) => ({ id: dataset.id, name: dataset.originalFilename })),
     gestures: sources.gestures.filter((gesture) => gesture.labelId === labelId).map(({ id, name }) => ({ id, name })),
     models: sources.models.filter((model) => model.label === labelId).map(({ id, state }) => ({ id, state })),
-    recipes: sources.recipes.filter((recipe) => recipe.stages.some((stage) => stage.kind === "model" && stage.label === labelId)).map(({ id, name }) => ({ id, name })),
+    recipes: recipesUsing(labelId, sources).map(({ id, name }) => ({ id, name })),
   };
 }
 

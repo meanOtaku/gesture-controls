@@ -6,6 +6,7 @@ import { listGestureDefinitions } from "../gestureLibrary/gestureLibraryApi";
 import type { NewLabel } from "../model-lab/components/LabelCoverage";
 import { useLabelModels } from "../model-lab/hooks/useLabelModels";
 import { datasetLabels, type DatasetLabel, type DatasetSummary } from "../model-lab/types";
+import { executePlan, planCascade, type CascadeMode, type CascadePlan, type CascadeResult } from "./labelCascade";
 import { usageOf, type UsageSources } from "./labelUsage";
 
 const LABEL_COLOR = "#65e6ff";
@@ -21,6 +22,7 @@ export function useLabelCatalogue() {
   const [gestures, setGestures] = useState<{ id: string; name: string; labelId: string | null }[]>([]);
   const [bundles, setBundles] = useState<{ recordingId: string; labelIds: string[] }[]>([]);
   const [recipes, setRecipes] = useState<UsageSources["recipes"]>([]);
+  const [loadVersion, setLoadVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const { models } = useLabelModels(desktopAvailable);
 
@@ -49,7 +51,7 @@ export function useLabelCatalogue() {
     return () => {
       live = false;
     };
-  }, [desktopAvailable]);
+  }, [desktopAvailable, loadVersion]);
 
   const coverageByLabel = useMemo(() => {
     const counts = new Map<string, number>();
@@ -68,6 +70,20 @@ export function useLabelCatalogue() {
     return counts;
   }, [bundles]);
   const usageFor = useCallback((id: string) => usageOf(id, { bundles, datasets, gestures, models, recipes }), [bundles, datasets, gestures, models, recipes]);
+
+  const planFor = useCallback(
+    (mode: CascadeMode, id: string) =>
+      planCascade(mode, id, { bundles, datasets, gestures, models, recipes, archiveLog: labels.find((label) => label.id === id)?.archiveLog ?? null }),
+    [bundles, datasets, gestures, models, recipes, labels],
+  );
+
+  /** Runs a plan through the desktop, then reads everything again, since many tabs' data changed. */
+  const execute = useCallback(async (plan: CascadePlan, onProgress: (done: number, total: number) => void): Promise<CascadeResult> => {
+    const result = await executePlan(plan, (command, args) => invoke(command, args), onProgress);
+    if (result.ok) OperationFeedback.success(`${plan.mode === "delete" ? "Delete" : plan.mode === "archive" ? "Archive" : "Restore"} label`, `Done: ${result.done} steps.`);
+    setLoadVersion((version) => version + 1);
+    return result;
+  }, []);
 
   const create = useCallback(async (label: NewLabel): Promise<string | null> => {
     try {
@@ -106,5 +122,5 @@ export function useLabelCatalogue() {
     }
   }, []);
 
-  return { desktopAvailable, labels, models, coverageByLabel, gestureCountByLabel, recorderCountByLabel, usageFor, error, create, update, setArchived, remove };
+  return { desktopAvailable, labels, models, coverageByLabel, gestureCountByLabel, recorderCountByLabel, usageFor, planFor, execute, error, create, update, setArchived, remove };
 }

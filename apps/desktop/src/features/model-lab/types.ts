@@ -27,4 +27,6 @@ export interface DatasetLabel {
   color: string;
   role: "positiveGesture" | "negativeBackground" | "calibrationOnly";
   archivedAt: string | null;
+  /** What archiving this label everywhere switched off, for restoring it. */
+  archiveLog?: { disabledRecipes: string[]; archivedModels: string[] } | null;
 }

@@ -7,6 +7,8 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
+import { CascadePanel } from "../../labels/CascadePanel";
+import type { CascadeMode, CascadePlan, CascadeResult } from "../../labels/labelCascade";
 import { usageCount, type LabelUsage } from "../../labels/labelUsage";
 import { labelIdFromName, type LabelModel } from "../labelModels";
 import type { DatasetLabel } from "../types";
@@ -37,6 +39,9 @@ type LabelCoverageProps = {
   recorderCountByLabel?: Map<string, number>;
   /** Everything that uses a label, for the "Where it is used" list. */
   usageFor?: (id: string) => LabelUsage;
+  /** Works out what archiving, deleting or restoring a label, with everything that uses it, would do. */
+  planFor?: (mode: CascadeMode, id: string) => CascadePlan;
+  onRunPlan?: (plan: CascadePlan, onProgress: (done: number, total: number) => void) => Promise<CascadeResult>;
   /** Jumps to the tab where an item of that kind lives. */
   onOpenTab?: (tab: UsageTab) => void;
   /** Resolves to an error message, or null once deleted. */
@@ -44,7 +49,7 @@ type LabelCoverageProps = {
 };
 
 /** Your labels: what each is called, how many recordings cover it, and how far along its model is. */
-export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSetArchived, onUpdate, gestureCountByLabel, recorderCountByLabel, usageFor, onOpenTab, onDelete }: LabelCoverageProps) {
+export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSetArchived, onUpdate, gestureCountByLabel, recorderCountByLabel, usageFor, planFor, onRunPlan, onOpenTab, onDelete }: LabelCoverageProps) {
   const uid = useId();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
@@ -57,6 +62,8 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [editing, setEditing] = useState<NewLabel | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
+  const [cascade, setCascade] = useState<CascadePlan | null>(null);
+  const openCascade = (mode: CascadeMode, id: string) => planFor && setCascade(planFor(mode, id));
 
   const saveEdit = async (event: FormEvent) => {
     event.preventDefault();
@@ -153,6 +160,7 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
             <AlertDescription>{listError}</AlertDescription>
           </Alert>
         )}
+        {cascade && onRunPlan && <CascadePanel key={`${cascade.mode}-${cascade.label}`} plan={cascade} onCancel={() => setCascade(null)} onRun={onRunPlan} />}
         {editing && (
           <form className="flex flex-col gap-3" aria-label={`Edit ${editing.id}`} onSubmit={(event) => void saveEdit(event)}>
             <div className="field">
@@ -212,11 +220,25 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
                       <Button type="button" variant="ghost" aria-label={`Edit ${row.id}`} onClick={() => { setEditError(null); setEditing({ id: full.id, displayName: full.displayName, description: full.description, role: full.role }); }}>Edit</Button>
                     )}
                     {row.managed && (
-                      <Button type="button" variant="ghost" aria-label={`${row.archived ? "Restore" : "Archive"} ${row.id}`} onClick={() => void act(() => onSetArchived(row.id, !row.archived))}>
-                        {row.archived ? "Restore" : "Archive"}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        aria-label={`${row.archived ? "Restore" : "Archive"} ${row.id}`}
+                        onClick={() => {
+                          const log = full?.archiveLog;
+                          const logged = log && (log.disabledRecipes.length > 0 || log.archivedModels.length > 0);
+                          if (planFor && onRunPlan && !row.archived && inUse) return openCascade("archive", row.id);
+                          if (planFor && onRunPlan && row.archived && logged) return openCascade("restore", row.id);
+                          void act(() => onSetArchived(row.id, !row.archived));
+                        }}
+                      >
+                        {row.archived ? "Restore" : "Archive"}{planFor && onRunPlan && !row.archived && inUse ? "…" : ""}
                       </Button>
                     )}
-                    {row.managed && !inUse && (confirmingDelete === row.id ? (
+                    {row.managed && planFor && onRunPlan && (
+                      <Button type="button" variant="ghost" aria-label={`Delete ${row.id}`} onClick={() => openCascade("delete", row.id)}>Delete…</Button>
+                    )}
+                    {row.managed && !(planFor && onRunPlan) && !inUse && (confirmingDelete === row.id ? (
                       <>
                         <Button type="button" variant="destructive" onClick={() => { setConfirmingDelete(null); void act(() => onDelete(row.id)); }}>Delete {row.id}</Button>
                         <Button type="button" variant="outline" onClick={() => setConfirmingDelete(null)}>Keep</Button>

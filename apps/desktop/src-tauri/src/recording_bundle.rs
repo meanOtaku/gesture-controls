@@ -2779,6 +2779,46 @@ pub fn add_recording_to_training_data(
     crate::model_lab::ingest_dataset(&app, &runtime, filename, csv, Some(recording_id))
 }
 
+/// The annotations without any interval of `label_id`, and how many that removed.
+fn without_label(annotations: &AnnotationsFile, label_id: &str) -> (AnnotationsFile, usize) {
+    let kept: Vec<AnnotationInterval> = annotations
+        .intervals
+        .iter()
+        .filter(|interval| interval.label_id != label_id)
+        .cloned()
+        .collect();
+    let removed = annotations.intervals.len() - kept.len();
+    (
+        AnnotationsFile {
+            intervals: kept,
+            ..annotations.clone()
+        },
+        removed,
+    )
+}
+
+/// Removes every interval of a label from a saved recording. Only the marks go: `raw.csv` is never touched, and the
+/// rest of `annotations.json` is rewritten atomically. Returns how many intervals were removed.
+#[tauri::command]
+pub fn remove_label_from_recording(
+    recording_id: String,
+    label_id: String,
+    app: AppHandle,
+) -> Result<usize, String> {
+    validate_recording_id(&recording_id)?;
+    let dir = recording_bundles_dir(&app)?.join(&recording_id);
+    let (_, annotations) = load_bundle_pair(&dir)?;
+    let (updated, removed) = without_label(&annotations, &label_id);
+    if removed == 0 {
+        return Ok(0);
+    }
+    let json = serde_json::to_string_pretty(&updated).map_err(|error| error.to_string())?;
+    let tmp_path = dir.join(format!("{ANNOTATIONS_FILE_NAME}.tmp"));
+    fs::write(&tmp_path, json).map_err(|error| error.to_string())?;
+    fs::rename(&tmp_path, dir.join(ANNOTATIONS_FILE_NAME)).map_err(|error| error.to_string())?;
+    Ok(removed)
+}
+
 fn write_bundle_files(
     tmp_dir: &std::path::Path,
     raw_csv: &str,
@@ -3132,6 +3172,22 @@ mod tests {
                 .unwrap_err()
                 .contains("outside")
         );
+    }
+
+    #[test]
+    fn removing_a_label_drops_only_its_intervals() {
+        let mut keep = proposal("keep", 20, 30);
+        keep.label_id = "fist".into();
+        let annotations = AnnotationsFile {
+            format_version: 1,
+            recording_id: "r".into(),
+            intervals: vec![proposal("a", 1, 5), keep, proposal("b", 40, 50)],
+        };
+        let (updated, removed) = without_label(&annotations, "pinch");
+        assert_eq!(removed, 2);
+        assert_eq!(updated.intervals.len(), 1);
+        assert_eq!(updated.intervals[0].label_id, "fist");
+        assert_eq!(without_label(&annotations, "nothing").1, 0);
     }
 
     #[test]

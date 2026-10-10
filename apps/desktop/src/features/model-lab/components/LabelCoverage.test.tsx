@@ -114,4 +114,29 @@ describe("LabelCoverage", () => {
     expect(screen.queryByRole("button", { name: "Delete pinch" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Archive pinch" })).toBeInTheDocument();
   });
+
+  it("opens a preview before archiving or deleting a label that is in use, and restores through one when archiving switched things off", async () => {
+    const { planCascade } = await import("../../labels/labelCascade");
+    const sources = {
+      bundles: [], datasets: [], gestures: [{ id: "g1", name: "Pinch", labelId: "pinch" }],
+      models: [{ id: "m1", label: "pinch", state: "approved" as const }],
+      recipes: [{ id: "x", name: "Pause", enabled: true, stages: [{ kind: "model", label: "pinch" }] }],
+    };
+    const onRunPlan = vi.fn().mockResolvedValue({ ok: true, done: 1 });
+    setup({
+      labels: [label("pinch", "Pinch"), { ...label("old", "Old", "2026-01-01"), archiveLog: { disabledRecipes: ["x"], archivedModels: [] } }],
+      models: [model("pinch", "approved")], coverageByLabel: new Map(), gestureCountByLabel: new Map([["pinch", 1]]),
+      planFor: (mode, id) => planCascade(mode, id, { ...sources, archiveLog: id === "old" ? { disabledRecipes: ["x"], archivedModels: [] } : null }),
+      onRunPlan, usageFor: () => ({ recordings: [], trainingRecordings: [], gestures: [], models: [], recipes: [] }),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Archive pinch" }));
+    expect(screen.getByRole("alertdialog", { name: "Archive “pinch”" })).toBeInTheDocument();
+    expect(screen.getByText(/Switch off 1 recipe that use its model/)).toBeInTheDocument();
+    expect(onRunPlan).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete pinch" }));
+    expect(screen.getByRole("alertdialog", { name: "Delete “pinch”" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete everything above" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  });
 });
