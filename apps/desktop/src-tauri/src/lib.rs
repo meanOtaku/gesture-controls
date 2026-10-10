@@ -10,7 +10,6 @@ use watch_bridge::{WatchBridgeServer, WatchEvent};
 mod actuators;
 mod automation;
 mod calibration;
-mod environment;
 mod gesture_library;
 mod head_pose;
 mod label_registry;
@@ -187,16 +186,12 @@ pub fn run() {
             overlay::refresh_system_volume,
             watch::get_watch_status,
             watch::get_watch_link_diagnostics,
-            watch::get_medical_tracker_ids,
             watch::start_measurement,
             watch::stop_measurement,
-            watch::get_controllable_sensor_ids,
             watch::set_sensor_enabled,
-            watch::set_sensor_rate,
             settings::get_settings,
             settings::update_settings,
             settings::reset_settings,
-            environment::get_environment_diagnostics,
             head_pose::get_head_tracker_provider,
             model_lab::import_model_dataset,
             model_lab::list_model_datasets,

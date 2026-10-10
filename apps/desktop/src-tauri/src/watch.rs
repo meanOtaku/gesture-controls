@@ -3,14 +3,11 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use spatial_protocol::{
-    CONTROLLABLE_SENSOR_IDS, MEDICAL_TRACKER_IDS, WatchBiaResultSample, WatchHeartbeatSample,
-    WatchOrientationSample,
-};
+use spatial_protocol::{WatchBiaResultSample, WatchHeartbeatSample, WatchOrientationSample};
 use tauri::{AppHandle, Emitter, Manager, State};
 use watch_bridge::{
     ClockOffsetEstimate, LinkDiagnostics, MeasurementCommand, SensorControlCommand,
-    SensorRateCommand, WatchBridgeServer, WatchEvent, WatchTransport, ble::BleStatus,
+    WatchBridgeServer, WatchEvent, WatchTransport, ble::BleStatus,
 };
 
 pub const WATCH_STATUS_EVENT: &str = "watch-status";
@@ -454,14 +451,6 @@ pub fn get_watch_status(runtime: State<'_, WatchRuntime>) -> Result<WatchStatus,
     runtime.state()
 }
 
-/// Every tracker id the protocol knows about (`spatial_protocol::MEDICAL_TRACKER_IDS`),
-/// so the frontend can render a row — supported or not — for each one
-/// without duplicating the id list.
-#[tauri::command]
-pub fn get_medical_tracker_ids() -> Vec<&'static str> {
-    MEDICAL_TRACKER_IDS.to_vec()
-}
-
 /// Starts a bounded on-demand medical measurement session on the watch.
 /// Rejects continuous trackers and unknown ids; see `MeasurementCommand`.
 #[tauri::command]
@@ -485,14 +474,6 @@ pub fn stop_measurement(
         .map_err(|error| error.to_string())
 }
 
-/// Every sensor id controllable via [`set_sensor_enabled`]
-/// (`spatial_protocol::CONTROLLABLE_SENSOR_IDS`): the IMU inputs plus the
-/// continuous medical trackers.
-#[tauri::command]
-pub fn get_controllable_sensor_ids() -> Vec<&'static str> {
-    CONTROLLABLE_SENSOR_IDS.to_vec()
-}
-
 /// Enables or disables an IMU input or continuous medical tracker in place.
 /// Rejects on-demand trackers and unknown ids; see `SensorControlCommand`.
 #[tauri::command]
@@ -508,19 +489,6 @@ pub fn set_sensor_enabled(
     };
     server
         .send_sensor_control_command(command)
-        .map_err(|error| error.to_string())
-}
-
-/// Requests a new sampling rate for one IMU sensor (`spatial_protocol::IMU_SENSOR_IDS`).
-/// Rejects medical trackers and out-of-range rates; see `SensorRateCommand`.
-#[tauri::command]
-pub fn set_sensor_rate(
-    server: State<'_, std::sync::Arc<WatchBridgeServer>>,
-    sensor: String,
-    rate_hz: f64,
-) -> Result<(), String> {
-    server
-        .send_sensor_rate_command(SensorRateCommand { sensor, rate_hz })
         .map_err(|error| error.to_string())
 }
 
