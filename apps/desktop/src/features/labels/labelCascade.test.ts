@@ -108,3 +108,28 @@ describe("executePlan", () => {
     expect(run).toHaveBeenLastCalledWith("delete_model_label", { id: "pinch" });
   });
 });
+
+describe("training history", () => {
+  const history = { pinch: { projects: 1, runs: 2, snapshots: 2, mappedIn: [] }, fist: { projects: 0, runs: 0, snapshots: 0, mappedIn: ["pinch"] } };
+
+  it("deletes a label's training history after its models and before the label, and says so in the preview", () => {
+    const plan = planCascade("delete", "pinch", sources({ datasets: [], registry: history }));
+    const kinds = plan.steps.map((step) => step.kind);
+    expect(kinds.indexOf("deleteTrainingHistory")).toBeGreaterThan(kinds.lastIndexOf("deleteModel"));
+    expect(kinds.indexOf("deleteTrainingHistory")).toBeLessThan(kinds.indexOf("deleteLabel"));
+    expect(plan.lines.join(" ")).toMatch(/training history: 1 project, 2 runs and 2 sealed snapshots/);
+    expect(plan.blockers).toEqual([]);
+  });
+
+  it("blocks deleting a label another label's sealed training history mentions, and names that label", () => {
+    const plan = planCascade("delete", "fist", sources({ datasets: [], registry: history }));
+    expect(plan.blockers.join(" ")).toMatch(/“fist” is used as another label in the training history of “pinch”/);
+    expect(plan.steps.some((step) => step.kind === "deleteTrainingHistory")).toBe(false);
+  });
+
+  it("runs the history deletion through the desktop command", async () => {
+    const run = vi.fn().mockResolvedValue(undefined);
+    await executePlan(planCascade("delete", "pinch", sources({ datasets: [], registry: history })), run);
+    expect(run).toHaveBeenCalledWith("delete_label_history", { label: "pinch" });
+  });
+});

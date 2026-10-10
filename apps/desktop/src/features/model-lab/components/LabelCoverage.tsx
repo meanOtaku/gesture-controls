@@ -197,7 +197,7 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
               const labelModels = models.filter((model) => model.label === row.id);
               const recorderRecordings = recorderCountByLabel?.get(row.id) ?? 0;
               const gestures = gestureCountByLabel?.get(row.id) ?? 0;
-              const inUse = sessions > 0 || labelModels.length > 0 || gestures > 0;
+              const inUse = sessions > 0 || labelModels.length > 0 || gestures > 0 || (usageFor ? usageCount(usageFor(row.id)) > 0 : false);
               const full = labels.find((label) => label.id === row.id);
               return (
                 <li key={row.id} className="recipe-item">
@@ -262,13 +262,22 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
   );
 }
 
-const GROUPS: { key: keyof LabelUsage; title: string; tab: UsageTab; open: string }[] = [
+const GROUPS: { key: "recordings" | "trainingRecordings" | "gestures" | "models" | "recipes"; title: string; tab: UsageTab; open: string }[] = [
   { key: "gestures", title: "Gesture library", tab: "gestureLibrary", open: "Open Gesture library" },
   { key: "recordings", title: "Recorder recordings", tab: "recordings", open: "Open Recordings" },
   { key: "trainingRecordings", title: "Training data", tab: "modelLab", open: "Open Model Lab" },
   { key: "models", title: "Models", tab: "modelLab", open: "Open Model Lab" },
   { key: "recipes", title: "Recipes", tab: "recipes", open: "Open Recipes" },
 ];
+
+/** A line about the training history the model registry keeps for a label, which no tab lists on its own. */
+function historyText(usage: LabelUsage): string[] {
+  const parts: string[] = [];
+  const { projects, runs } = usage.trainingHistory;
+  if (projects > 0) parts.push(`Training history: ${projects} project${projects === 1 ? "" : "s"}, ${runs} run${runs === 1 ? "" : "s"} (kept after a model is deleted)`);
+  if (usage.mentionedInTrainingOf.length > 0) parts.push(`Mentioned in the training history of: ${usage.mentionedInTrainingOf.join(", ")}`);
+  return parts;
+}
 
 /** Every place one label is used, by tab, each with a way to go there. */
 function UsageList({ usage, label, onOpenTab }: { usage: LabelUsage; label: string; onOpenTab?: (tab: UsageTab) => void }) {
@@ -280,7 +289,8 @@ function UsageList({ usage, label, onOpenTab }: { usage: LabelUsage; label: stri
     <details className="text-xs">
       <summary className="cursor-pointer">Where {label} is used</summary>
       <ul className="mt-1 flex flex-col gap-1" aria-label={`Where ${label} is used`}>
-        {GROUPS.filter((group) => usage[group.key].length > 0).map((group) => (
+        {historyText(usage).map((line) => <li key={line}>{line}</li>)}
+        {GROUPS.filter((group) => (usage[group.key] as unknown[]).length > 0).map((group) => (
           <li key={group.key} className="flex flex-wrap items-center gap-2">
             <span><strong>{group.title}:</strong> {usage[group.key].map(itemName).join(", ")}</span>
             {onOpenTab && <Button type="button" variant="ghost" size="sm" onClick={() => onOpenTab(group.tab)}>{group.open}</Button>}

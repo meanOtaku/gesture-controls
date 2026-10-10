@@ -269,6 +269,66 @@ impl LabelRuntimeHost {
         Some(labels)
     }
 
+    /// What the model registry's training history says about each label, for the Labels tab.
+    pub fn registry_usage(&self) -> BTreeMap<String, LabelRegistryUsage> {
+        let Ok(state) = self.state.lock() else {
+            return BTreeMap::new();
+        };
+        state
+            .store
+            .as_ref()
+            .map(|store| registry_usage_of(store.registry()))
+            .unwrap_or_default()
+    }
+
+    /// Deletes the training history of one label: its project, that project's runs and their sealed snapshots. Refused
+    /// while a model of the label exists, or while another label's training history refers to it (its snapshots are
+    /// sealed and cannot be edited).
+    pub fn delete_label_history(&self, app: &AppHandle, label: &str) -> Result<usize, String> {
+        let usage = self.registry_usage();
+        if let Some(found) = usage.get(label)
+            && !found.mapped_in.is_empty()
+        {
+            return Err(format!(
+                "'{label}' is used as another label in the training history of {}. That history is sealed: delete the history of {} first, or archive '{label}' instead",
+                found
+                    .mapped_in
+                    .iter()
+                    .map(|l| format!("'{l}'"))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                if found.mapped_in.len() == 1 {
+                    "that label"
+                } else {
+                    "those labels"
+                },
+            ));
+        }
+        let label_id = LabelId::new(label).map_err(|e| e.to_string())?;
+        let project = self
+            .state
+            .lock()
+            .map_err(|_| "model state is unavailable".to_string())?
+            .store
+            .as_ref()
+            .and_then(|store| {
+                store
+                    .registry()
+                    .projects
+                    .values()
+                    .find(|project| project.target == label_id)
+                    .map(|project| project.id.clone())
+            });
+        let Some(project) = project else {
+            return Ok(0);
+        };
+        self.change_registry(app, |registry| {
+            registry
+                .remove_project_history(&project)
+                .map(|(runs, snapshots)| 1 + runs + snapshots)
+        })
+    }
+
     /// Runs `change` on the model registry, which saves it before adopting it. For work that runs outside this module.
     pub fn with_store<T>(
         &self,
@@ -714,6 +774,71 @@ pub fn spawn_timer(app: AppHandle) {
             app.state::<LabelRuntimeHost>().tick(&app);
         }
     });
+}
+
+/// What a label has in the model registry's training history.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LabelRegistryUsage {
+    /// Training projects for this label.
+    pub projects: usize,
+    pub runs: usize,
+    pub snapshots: usize,
+    /// Labels whose training history refers to this one as "not the gesture" or similar.
+    pub mapped_in: Vec<String>,
+}
+
+/// Counts, per label, the training projects, runs and snapshots that are about it, and which other labels' projects
+/// mention it. Models are listed separately, so they are not counted here.
+pub(crate) fn registry_usage_of(
+    registry: &model_lab_core::Registry,
+) -> BTreeMap<String, LabelRegistryUsage> {
+    let mut usage: BTreeMap<String, LabelRegistryUsage> = BTreeMap::new();
+    for project in registry.projects.values() {
+        let target = project.target.to_string();
+        let entry = usage.entry(target.clone()).or_default();
+        entry.projects += 1;
+        entry.runs += registry
+            .runs
+            .values()
+            .filter(|run| run.project_id == project.id)
+            .count();
+        entry.snapshots += registry
+            .snapshots
+            .values()
+            .filter(|snapshot| snapshot.project_id == project.id)
+            .count();
+        for mapped in project
+            .mapping
+            .entries
+            .keys()
+            .map(ToString::to_string)
+            .filter(|mapped| *mapped != target)
+        {
+            let other = usage.entry(mapped).or_default();
+            if !other.mapped_in.contains(&target) {
+                other.mapped_in.push(target.clone());
+            }
+        }
+    }
+    usage
+}
+
+#[tauri::command]
+pub fn get_label_registry_usage(
+    host: State<'_, LabelRuntimeHost>,
+) -> BTreeMap<String, LabelRegistryUsage> {
+    host.registry_usage()
+}
+
+/// Deletes a label's training history (project, runs, snapshots). See [`LabelRuntimeHost::delete_label_history`].
+#[tauri::command]
+pub fn delete_label_history(
+    app: AppHandle,
+    host: State<'_, LabelRuntimeHost>,
+    label: String,
+) -> Result<usize, String> {
+    host.delete_label_history(&app, &label)
 }
 
 #[tauri::command]

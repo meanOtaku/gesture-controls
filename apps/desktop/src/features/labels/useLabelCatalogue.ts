@@ -7,7 +7,7 @@ import type { NewLabel } from "../model-lab/components/LabelCoverage";
 import { useLabelModels } from "../model-lab/hooks/useLabelModels";
 import { datasetLabels, type DatasetLabel, type DatasetSummary } from "../model-lab/types";
 import { executePlan, planCascade, type CascadeMode, type CascadePlan, type CascadeResult } from "./labelCascade";
-import { usageOf, type UsageSources } from "./labelUsage";
+import { usageOf, type RegistryUsage, type UsageSources } from "./labelUsage";
 
 const LABEL_COLOR = "#65e6ff";
 
@@ -22,6 +22,7 @@ export function useLabelCatalogue() {
   const [gestures, setGestures] = useState<{ id: string; name: string; labelId: string | null }[]>([]);
   const [bundles, setBundles] = useState<{ recordingId: string; labelIds: string[] }[]>([]);
   const [recipes, setRecipes] = useState<UsageSources["recipes"]>([]);
+  const [registry, setRegistry] = useState<Record<string, RegistryUsage>>({});
   const [loadVersion, setLoadVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const { models } = useLabelModels(desktopAvailable);
@@ -31,12 +32,13 @@ export function useLabelCatalogue() {
     let live = true;
     void (async () => {
       try {
-        const [catalogue, sets, gestureList, bundleList, automation] = await Promise.all([
+        const [catalogue, sets, gestureList, bundleList, automation, registryUsage] = await Promise.all([
           invoke<DatasetLabel[]>("list_model_labels"),
           invoke<DatasetSummary[]>("list_model_datasets"),
           listGestureDefinitions(),
           listRecordingBundles(),
           invoke<{ recipes: UsageSources["recipes"] }>("get_automation_state").catch(() => ({ recipes: [] })),
+          invoke<Record<string, RegistryUsage>>("get_label_registry_usage").catch(() => ({})),
         ]);
         if (!live) return;
         setLabels(Array.isArray(catalogue) ? catalogue : []);
@@ -44,6 +46,7 @@ export function useLabelCatalogue() {
         setGestures(gestureList.map(({ id, name, labelId }) => ({ id, name, labelId })));
         setBundles(bundleList.status === "ok" && Array.isArray(bundleList.value) ? bundleList.value.map(({ recordingId, labelIds }) => ({ recordingId, labelIds })) : []);
         setRecipes(Array.isArray(automation?.recipes) ? automation.recipes : []);
+        setRegistry(registryUsage && typeof registryUsage === "object" ? (registryUsage as Record<string, RegistryUsage>) : {});
       } catch (err) {
         if (live) setError(String(err));
       }
@@ -69,12 +72,12 @@ export function useLabelCatalogue() {
     for (const bundle of bundles) for (const label of new Set(bundle.labelIds)) counts.set(label, (counts.get(label) ?? 0) + 1);
     return counts;
   }, [bundles]);
-  const usageFor = useCallback((id: string) => usageOf(id, { bundles, datasets, gestures, models, recipes }), [bundles, datasets, gestures, models, recipes]);
+  const usageFor = useCallback((id: string) => usageOf(id, { bundles, datasets, gestures, models, recipes, registry }), [bundles, datasets, gestures, models, recipes, registry]);
 
   const planFor = useCallback(
     (mode: CascadeMode, id: string) =>
-      planCascade(mode, id, { bundles, datasets, gestures, models, recipes, archiveLog: labels.find((label) => label.id === id)?.archiveLog ?? null }),
-    [bundles, datasets, gestures, models, recipes, labels],
+      planCascade(mode, id, { bundles, datasets, gestures, models, recipes, registry, archiveLog: labels.find((label) => label.id === id)?.archiveLog ?? null }),
+    [bundles, datasets, gestures, models, recipes, registry, labels],
   );
 
   /** Runs a plan through the desktop, then reads everything again, since many tabs' data changed. */

@@ -13,6 +13,17 @@ export interface LabelUsage {
   models: { id: string; state: string }[];
   /** Recipes with a model step for it. */
   recipes: { id: string; name: string }[];
+  /** The model registry's training history for it: projects, runs and sealed snapshots, which outlive a deleted model. */
+  trainingHistory: { projects: number; runs: number; snapshots: number };
+  /** Other labels whose training history refers to this one (as "not the gesture", say). */
+  mentionedInTrainingOf: string[];
+}
+
+export interface RegistryUsage {
+  projects: number;
+  runs: number;
+  snapshots: number;
+  mappedIn: string[];
 }
 
 export interface UsageSources {
@@ -20,6 +31,8 @@ export interface UsageSources {
   datasets: DatasetSummary[];
   gestures: { id: string; name: string; labelId: string | null }[];
   models: Pick<LabelModel, "id" | "label" | "state">[];
+  /** What the model registry holds about each label, from the desktop. */
+  registry?: Record<string, RegistryUsage>;
   recipes: { id: string; name: string; enabled?: boolean; stages: { kind: string; label?: string; gesture?: string }[] }[];
 }
 
@@ -38,8 +51,10 @@ export function usageOf(labelId: string, sources: UsageSources): LabelUsage {
     gestures: sources.gestures.filter((gesture) => gesture.labelId === labelId).map(({ id, name }) => ({ id, name })),
     models: sources.models.filter((model) => model.label === labelId).map(({ id, state }) => ({ id, state })),
     recipes: recipesUsing(labelId, sources).map(({ id, name }) => ({ id, name })),
+    trainingHistory: { projects: sources.registry?.[labelId]?.projects ?? 0, runs: sources.registry?.[labelId]?.runs ?? 0, snapshots: sources.registry?.[labelId]?.snapshots ?? 0 },
+    mentionedInTrainingOf: sources.registry?.[labelId]?.mappedIn ?? [],
   };
 }
 
 export const usageCount = (usage: LabelUsage): number =>
-  usage.recordings.length + usage.trainingRecordings.length + usage.gestures.length + usage.models.length + usage.recipes.length;
+  usage.recordings.length + usage.trainingRecordings.length + usage.gestures.length + usage.models.length + usage.recipes.length + usage.trainingHistory.projects + usage.mentionedInTrainingOf.length;

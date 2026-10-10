@@ -18,6 +18,7 @@ export type CascadeStep =
   | { kind: "deactivateModel"; label: string }
   | { kind: "setModelState"; id: string; to: "evaluated" | "archived" | "draft" }
   | { kind: "deleteModel"; id: string }
+  | { kind: "deleteTrainingHistory"; label: string }
   | { kind: "deleteDataset"; id: string; name: string }
   | { kind: "removeIntervals"; recordingId: string }
   | { kind: "archiveLabel"; log: { disabledRecipes: string[]; archivedModels: string[] } }
@@ -103,6 +104,11 @@ export function planCascade(mode: CascadeMode, labelId: string, sources: Cascade
     steps.push(...archivePath(model));
     steps.push({ kind: "deleteModel", id: model.id });
   }
+  const history = sources.registry?.[labelId];
+  if (history && history.mappedIn.length > 0) {
+    blockers.push(`“${labelId}” is used as another label in the training history of ${history.mappedIn.map((other) => `“${other}”`).join(", ")}. That history is sealed: delete the label ${history.mappedIn.length === 1 ? "it belongs to" : "they belong to"} first, or archive “${labelId}” instead.`);
+  }
+  if (history && history.projects > 0) steps.push({ kind: "deleteTrainingHistory", label: labelId });
   const datasets = sources.datasets.filter((dataset) => datasetLabels(dataset).includes(labelId));
   for (const dataset of datasets) {
     const others = datasetLabels(dataset).filter((other) => other !== labelId);
@@ -116,6 +122,7 @@ export function planCascade(mode: CascadeMode, labelId: string, sources: Cascade
   if (recipes.length > 0) lines.push(`Delete ${plural(recipes.length, "recipe")}: ${names(recipes)}.`);
   if (gestures.length > 0) lines.push(`Delete ${plural(gestures.length, "gesture")} from the Gesture library: ${names(gestures)}.`);
   if (models.length > 0) lines.push(`Delete ${plural(models.length, "model")}, with their files.`);
+  if (history && history.projects > 0) lines.push(`Delete its training history: ${plural(history.projects, "project")}, ${plural(history.runs, "run")} and ${plural(history.snapshots, "sealed snapshot")}.`);
   if (datasets.length > 0 && blockers.length === 0) lines.push(`Delete ${plural(datasets.length, "recording")} from the training data: ${names(datasets.map((d) => ({ name: d.originalFilename })))}.`);
   if (bundles.length > 0) lines.push(`Remove this label's marks from ${plural(bundles.length, "Recorder recording")}. The recordings and their raw data stay.`);
   lines.push("Delete the label itself. This cannot be undone.");
@@ -135,6 +142,7 @@ const describe = (step: CascadeStep): string => {
     case "deactivateModel": return "deactivating the model";
     case "setModelState": return `moving a model to ${step.to}`;
     case "deleteModel": return "deleting a model";
+    case "deleteTrainingHistory": return "deleting its training history";
     case "deleteDataset": return `deleting “${step.name}” from the training data`;
     case "removeIntervals": return "removing marks from a recording";
     case "archiveLabel": return "archiving the label";
@@ -152,6 +160,7 @@ async function runStep(step: CascadeStep, labelId: string, run: Run): Promise<vo
     case "deactivateModel": await run("deactivate_label_model", { label: step.label }); return;
     case "setModelState": await run("set_label_model_state", { id: step.id, state: step.to }); return;
     case "deleteModel": await run("delete_label_model", { id: step.id }); return;
+    case "deleteTrainingHistory": await run("delete_label_history", { label: step.label }); return;
     case "deleteDataset": await run("delete_model_dataset", { id: step.id }); return;
     case "removeIntervals": await run("remove_label_from_recording", { recordingId: step.recordingId, labelId }); return;
     case "archiveLabel":

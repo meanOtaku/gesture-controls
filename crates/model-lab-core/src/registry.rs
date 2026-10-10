@@ -32,6 +32,8 @@ pub enum RegistryError {
     NoVersion(ModelVersionId),
     #[error("a model version '{0}' already exists")]
     DuplicateVersion(ModelVersionId),
+    #[error("the project '{0}' still has models; delete them first")]
+    ProjectHasModels(ProjectId),
     #[error("{0} belongs to a different project")]
     WrongProject(String),
     #[error(
@@ -164,6 +166,35 @@ impl Registry {
         }
         self.projects.insert(project.id.clone(), project);
         Ok(())
+    }
+
+    /// Removes a project together with its training runs and the snapshots sealed for it: the history of what was tried
+    /// for one label. Refused while any model version still belongs to the project, because a model's record points at its
+    /// project; delete those models first. Returns how many runs and snapshots went with it.
+    pub fn remove_project_history(
+        &mut self,
+        id: &ProjectId,
+    ) -> Result<(usize, usize), RegistryError> {
+        if !self.projects.contains_key(id) {
+            return Err(RegistryError::NoProject(id.clone()));
+        }
+        if self
+            .versions
+            .values()
+            .any(|version| &version.project_id == id)
+        {
+            return Err(RegistryError::ProjectHasModels(id.clone()));
+        }
+        let runs_before = self.runs.len();
+        self.runs.retain(|_, run| &run.project_id != id);
+        let snapshots_before = self.snapshots.len();
+        self.snapshots
+            .retain(|_, snapshot| &snapshot.project_id != id);
+        self.projects.remove(id);
+        Ok((
+            runs_before - self.runs.len(),
+            snapshots_before - self.snapshots.len(),
+        ))
     }
 
     pub fn add_snapshot(&mut self, snapshot: DatasetSnapshot) -> Result<(), RegistryError> {
@@ -615,6 +646,38 @@ pub(crate) mod tests {
             approve(&mut r, id);
         }
         r
+    }
+
+    #[test]
+    fn a_projects_history_goes_with_it_but_only_once_its_models_are_gone() {
+        let mut r = two_label_registry();
+        let pa = ProjectId::new("pa").unwrap();
+        assert!(matches!(
+            r.remove_project_history(&pa),
+            Err(RegistryError::ProjectHasModels(_))
+        ));
+        assert!(
+            r.projects.contains_key(&pa),
+            "a refused removal changes nothing"
+        );
+
+        for id in ["a1", "a2"] {
+            r.transition(&mid(id), LifecycleState::Archived, T).unwrap();
+            r.remove_version(&mid(id)).unwrap();
+        }
+        let runs_before = r.runs.len();
+        let (runs, snapshots) = r.remove_project_history(&pa).unwrap();
+        assert_eq!((runs, snapshots), (1, 1));
+        assert_eq!(r.runs.len(), runs_before - 1);
+        assert!(!r.projects.contains_key(&pa));
+        assert!(
+            r.projects.contains_key(&ProjectId::new("pb").unwrap()),
+            "another label's project is untouched"
+        );
+        assert!(matches!(
+            r.remove_project_history(&pa),
+            Err(RegistryError::NoProject(_))
+        ));
     }
 
     #[test]

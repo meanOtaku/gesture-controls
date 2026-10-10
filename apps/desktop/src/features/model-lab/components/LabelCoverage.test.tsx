@@ -127,7 +127,7 @@ describe("LabelCoverage", () => {
       labels: [label("pinch", "Pinch"), { ...label("old", "Old", "2026-01-01"), archiveLog: { disabledRecipes: ["x"], archivedModels: [] } }],
       models: [model("pinch", "approved")], coverageByLabel: new Map(), gestureCountByLabel: new Map([["pinch", 1]]),
       planFor: (mode, id) => planCascade(mode, id, { ...sources, archiveLog: id === "old" ? { disabledRecipes: ["x"], archivedModels: [] } : null }),
-      onRunPlan, usageFor: () => ({ recordings: [], trainingRecordings: [], gestures: [], models: [], recipes: [] }),
+      onRunPlan, usageFor: () => ({ recordings: [], trainingRecordings: [], gestures: [], models: [], recipes: [], trainingHistory: { projects: 0, runs: 0, snapshots: 0 }, mentionedInTrainingOf: [] }),
     });
     fireEvent.click(screen.getByRole("button", { name: "Archive pinch" }));
     expect(screen.getByRole("alertdialog", { name: "Archive “pinch”" })).toBeInTheDocument();
