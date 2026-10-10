@@ -64,6 +64,21 @@ describe("CameraController", () => {
     expect(camera.getSnapshot().fps).toBeLessThan(35);
   });
 
+  it("uses the camera chosen while it is off the next time it is turned on, and switches at once while it is on", async () => {
+    const { camera, deps } = setup();
+    const constraintsOf = (call: number) => (deps.getUserMedia as ReturnType<typeof vi.fn>).mock.calls[call][0].video;
+    await camera.refreshDevices();
+    camera.selectDevice("cam-2"); // off: only remembered
+    expect(camera.getSnapshot().status).toBe("off");
+    expect(camera.getSnapshot().deviceId).toBe("cam-2");
+    expect(deps.getUserMedia).not.toHaveBeenCalled();
+    await camera.enable();
+    expect(constraintsOf(0).deviceId).toEqual({ exact: "cam-2" });
+    camera.selectDevice("cam-1"); // on: switches now
+    await vi.waitFor(() => expect(deps.getUserMedia).toHaveBeenCalledTimes(2));
+    expect(constraintsOf(1).deviceId).toEqual({ exact: "cam-1" });
+  });
+
   it("stamps a frame with the camera's own capture time when it has one, and the callback time when it does not", async () => {
     const { camera, frame } = setup();
     await camera.enable();

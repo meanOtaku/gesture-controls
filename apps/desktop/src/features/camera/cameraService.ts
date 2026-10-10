@@ -35,6 +35,15 @@ export function getCameraController(): CameraController {
   return controller;
 }
 
+/** Keeps the controller's list of cameras current when one is plugged in or removed. */
+export function watchCameraDevices(): () => void {
+  const devices = typeof navigator !== "undefined" ? navigator.mediaDevices : undefined;
+  if (!devices?.addEventListener) return () => undefined;
+  const refresh = () => void getCameraController().refreshDevices();
+  devices.addEventListener("devicechange", refresh);
+  return () => devices.removeEventListener("devicechange", refresh);
+}
+
 /** Connects the camera to the recorder: it follows the recording's state, and its evidence is saved with each bundle. */
 export function bindCameraToRecording(): () => void {
   const camera = getCameraController();

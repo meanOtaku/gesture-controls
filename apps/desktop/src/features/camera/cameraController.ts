@@ -112,6 +112,12 @@ export class CameraController {
     }
   }
 
+  /** Chooses a camera: switches to it now when the camera is on, otherwise remembers it for the next time it is turned on. */
+  selectDevice(deviceId: string): void {
+    if (this.snapshot.status === "on" || this.snapshot.status === "starting") void this.enable(deviceId);
+    else this.set({ deviceId });
+  }
+
   setRecordLandmarks(record: boolean): void {
     this.set({ recordLandmarks: record });
   }

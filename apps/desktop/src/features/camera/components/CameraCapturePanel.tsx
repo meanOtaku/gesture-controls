@@ -1,19 +1,17 @@
-import { useId, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Checkbox } from "../../../components/ui/checkbox";
-import { Label } from "../../../components/ui/label";
 import { telemetryStore } from "../../telemetry/store/telemetryStore";
 import { clockSync } from "../clockSync";
 import { getCameraController } from "../cameraService";
 import { physicalHand } from "../handTypes";
 import { measureHand } from "../landmarkMath";
+import { CameraPicker } from "./CameraPicker";
 import { CameraPreview } from "./CameraPreview";
-
-const NATIVE_SELECT = "recipe-select";
 
 /**
  * The camera: a mirror-view preview with the hand landmarks drawn on it, and the switch that saves the landmarks with
@@ -24,7 +22,6 @@ export function CameraCapturePanel() {
   const camera = getCameraController();
   const state = useSyncExternalStore(camera.subscribe, camera.getSnapshot, camera.getSnapshot);
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
-  const deviceId = useId();
   const on = state.status === "on";
   const starting = state.status === "starting";
   const sync = clockSync.estimate();
@@ -58,14 +55,7 @@ export function CameraCapturePanel() {
         <CameraPreview camera={camera} state={state} hidden={!on} />
         {starting && <p className="hint" role="status">Starting the camera and the hand model. If your computer asks for camera permission, allow it.</p>}
         {!on && !starting && !state.error && <p className="hint">The camera is off. Turn it on to see your hand tracked, and to save landmarks with recordings.</p>}
-        {on && state.devices.length > 1 && (
-          <div className="field">
-            <div className="field-head"><Label htmlFor={deviceId}>Camera</Label></div>
-            <select id={deviceId} className={NATIVE_SELECT} value={state.deviceId ?? ""} onChange={(event) => void camera.enable(event.target.value)}>
-              {state.devices.map((device) => <option key={device.deviceId} value={device.deviceId}>{device.label}</option>)}
-            </select>
-          </div>
-        )}
+        <CameraPicker camera={camera} state={state} />
         {on && (
           <>
             <ul className="flex flex-wrap items-center gap-2" aria-label="Tracking status">

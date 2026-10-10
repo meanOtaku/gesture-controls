@@ -5,6 +5,7 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { getCameraController } from "../camera/cameraService";
+import { CameraPicker } from "../camera/components/CameraPicker";
 import { CameraPreview } from "../camera/components/CameraPreview";
 import { OperationFeedback } from "../../components/app/OperationFeedback";
 import { useLabelModels } from "../model-lab/hooks/useLabelModels";
@@ -97,6 +98,7 @@ export function GestureLibraryPage() {
             {on && <Badge variant="outline">{cam.fps > 0 ? `${cam.fps.toFixed(0)} frames/s` : "waiting for frames"}</Badge>}
             {!on && <span className="hint">Turn the camera on to see your gestures recognised live.</span>}
           </div>
+          <CameraPicker camera={camera} state={cam} />
           <CameraPreview camera={camera} state={cam} hidden={!on} />
           {on && <HandSideCheck camera={cam} />}
           {loaded && definitions.length === 0 && <p className="hint">No gestures yet. Make one with “New gesture”.</p>}
