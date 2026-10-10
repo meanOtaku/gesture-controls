@@ -3,6 +3,7 @@ import {
   addCameraProposedIntervals, getRecordingCameraEvidence, loadRecordingBundle,
 } from "../../shared/tauri/recordingBundle";
 import type { GestureDefinition } from "./definition";
+import { dualCameraMode } from "./dualCamera";
 import { alignClocks, proposeIntervals, toAnnotationInterval, type ClockAlignment, type ProposedInterval } from "./proposals";
 
 export type Found = {
@@ -11,6 +12,8 @@ export type Found = {
   rawTimestampsNs: number[];
   alignment: ClockAlignment;
   frames: number;
+  /** How many cameras the recording had. */
+  cameras: number;
 };
 
 export type FindResult = { ok: true; found: Found } | { ok: false; message: string };
@@ -26,14 +29,17 @@ export async function findProposals(recordingId: string, definitions: GestureDef
   const alignment = alignClocks(parseClockSync(evidence.value.clockSync));
   if (!alignment) return { ok: false, message: "The camera and watch clocks could not be lined up: this recording has too few clock samples (the watch must be streaming while recording)." };
   const frames = parseHandLandmarks(evidence.value.handLandmarks);
+  const secondFrames = evidence.value.handLandmarksSecond ? parseHandLandmarks(evidence.value.handLandmarksSecond) : [];
   const proposals = proposeIntervals({
     definitions: usable,
     frames,
+    secondFrames,
+    mode: dualCameraMode(),
     alignment,
     rawTimestampsNs: evidence.value.rawTimestampsNs,
     existing: detail.value.annotations.intervals.map((interval) => ({ startRow: interval.resolved_start.raw_row, endRow: interval.resolved_end.raw_row })),
   });
-  return { ok: true, found: { recordingId, proposals, rawTimestampsNs: evidence.value.rawTimestampsNs, alignment, frames: frames.length } };
+  return { ok: true, found: { recordingId, proposals, rawTimestampsNs: evidence.value.rawTimestampsNs, alignment, frames: frames.length + secondFrames.length, cameras: secondFrames.length > 0 ? 2 : 1 } };
 }
 
 /** Adds the chosen proposals to the recording as unreviewed intervals. Null when added, else the problem. */

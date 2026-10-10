@@ -26,7 +26,7 @@ describe("camera evidence in a recording bundle", () => {
   it("carries the camera's files and declares its source, without counting it among the raw rows", () => {
     const provider = vi.fn((_start: number, _end: number) => ({
       files: { "hand_landmarks.csv": "h\n1", "clock_sync.csv": "c\n1" },
-      source: { source_id: "camera_hand_landmarks", configuration: { frames: 1 } },
+      sources: [{ source_id: "camera_hand_landmarks", configuration: { frames: 1 } }],
     }));
     telemetryStore.setEvidenceProvider(provider);
     const payload = record()!;
@@ -38,6 +38,17 @@ describe("camera evidence in a recording bundle", () => {
     expect(start).toBeCloseTo(payload.recording.actual_start.monotonic_ns / 1e6, 3);
     expect(end).toBeCloseTo(payload.recording.actual_end.monotonic_ns / 1e6, 3);
     expect(end).toBeGreaterThanOrEqual(start);
+  });
+
+  it("declares every camera that contributed, each with its own file", () => {
+    telemetryStore.setEvidenceProvider(() => ({
+      files: { "hand_landmarks.csv": "h\n1", "hand_landmarks_2.csv": "h\n2", "clock_sync.csv": "c\n1" },
+      sources: [{ source_id: "camera_hand_landmarks", configuration: {} }, { source_id: "camera_hand_landmarks_2", configuration: {} }],
+    }));
+    const payload = record()!;
+    expect(Object.keys(payload.extraFiles!).sort()).toEqual(["clock_sync.csv", "hand_landmarks.csv", "hand_landmarks_2.csv"]);
+    expect(payload.recording.sources.map((s) => s.source_id)).toEqual(["watch", "camera_hand_landmarks", "camera_hand_landmarks_2"]);
+    expect(Object.keys(payload.recording.raw_source_row_counts)).toEqual(["watch"]);
   });
 
   it("is a plain watch recording when the provider has nothing", () => {

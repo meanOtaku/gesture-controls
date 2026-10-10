@@ -37,9 +37,15 @@ const RAW_CSV_FILE_NAME: &str = "raw.csv";
 const RECORDING_METADATA_FILE_NAME: &str = "recording.json";
 const ANNOTATIONS_FILE_NAME: &str = "annotations.json";
 pub(crate) const HAND_LANDMARKS_FILE_NAME: &str = "hand_landmarks.csv";
+/// The second camera's landmarks, when a recording used two cameras. Same format as the first's.
+pub(crate) const HAND_LANDMARKS_SECOND_FILE_NAME: &str = "hand_landmarks_2.csv";
 pub(crate) const CLOCK_SYNC_FILE_NAME: &str = "clock_sync.csv";
 /// The optional evidence files a webview may add to a bundle, and nothing else.
-const EXTRA_FILE_NAMES: [&str; 2] = [HAND_LANDMARKS_FILE_NAME, CLOCK_SYNC_FILE_NAME];
+const EXTRA_FILE_NAMES: [&str; 3] = [
+    HAND_LANDMARKS_FILE_NAME,
+    HAND_LANDMARKS_SECOND_FILE_NAME,
+    CLOCK_SYNC_FILE_NAME,
+];
 const MAX_EXTRA_FILE_BYTES: usize = 64 * 1024 * 1024;
 const LANDMARKS_PER_HAND: usize = 21;
 /// Matches `model_lab::MAX_DATASET_CSV_BYTES`; kept as its own constant since
@@ -341,7 +347,7 @@ fn validate_extra_file(name: &str, content: &str) -> Result<(), String> {
             content.len()
         ));
     }
-    let expected = if name == HAND_LANDMARKS_FILE_NAME {
+    let expected = if name == HAND_LANDMARKS_FILE_NAME || name == HAND_LANDMARKS_SECOND_FILE_NAME {
         hand_landmarks_header()
     } else {
         CLOCK_SYNC_HEADER.to_string()
@@ -2577,6 +2583,8 @@ pub fn set_interval_curation_status(
 #[serde(rename_all = "camelCase")]
 pub struct CameraEvidence {
     pub hand_landmarks: String,
+    /// The second camera's landmarks, when the recording used two cameras.
+    pub hand_landmarks_second: Option<String>,
     pub clock_sync: String,
     /// `timestamp_ns` of every raw row, in order.
     pub raw_timestamps_ns: Vec<i64>,
@@ -2607,10 +2615,12 @@ pub fn get_recording_camera_evidence(
     let Ok(hand_landmarks) = fs::read_to_string(dir.join(HAND_LANDMARKS_FILE_NAME)) else {
         return Ok(None);
     };
+    let hand_landmarks_second = fs::read_to_string(dir.join(HAND_LANDMARKS_SECOND_FILE_NAME)).ok();
     let clock_sync = fs::read_to_string(dir.join(CLOCK_SYNC_FILE_NAME)).unwrap_or_default();
     let raw = fs::read_to_string(dir.join(RAW_CSV_FILE_NAME)).map_err(|error| error.to_string())?;
     Ok(Some(CameraEvidence {
         hand_landmarks,
+        hand_landmarks_second,
         clock_sync,
         raw_timestamps_ns: raw_timestamps(&raw)?,
     }))
@@ -4752,6 +4762,13 @@ mod tests {
             landmark_row(fields)
         );
         assert_eq!(validate_extra_file(HAND_LANDMARKS_FILE_NAME, &good), Ok(()));
+        // The second camera's file has the same format, and is held to it just as strictly.
+        assert_eq!(
+            validate_extra_file(HAND_LANDMARKS_SECOND_FILE_NAME, &good),
+            Ok(())
+        );
+        assert!(validate_extra_file(HAND_LANDMARKS_SECOND_FILE_NAME, "frame,time\n1,2\n").is_err());
+        assert!(validate_extra_file("hand_landmarks_3.csv", &good).is_err());
         assert_eq!(
             validate_extra_file(
                 CLOCK_SYNC_FILE_NAME,

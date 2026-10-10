@@ -188,6 +188,23 @@ describe("CameraController evidence", () => {
     expect(rows[0].split(",").slice(2, 4)).toEqual(["", "0"]);
   });
 
+  it("saves the second camera's landmarks in a file and source of its own", async () => {
+    const { camera } = setup({ slot: "secondary" });
+    await camera.enable();
+    camera.syncRecording("recording");
+    const evidence = camera.evidence(0, 900);
+    expect(evidence).toBeNull(); // no frames yet
+    const { camera: second, frame } = setup({ slot: "secondary" });
+    await second.enable();
+    second.syncRecording("recording");
+    frame(100);
+    frame(133);
+    const found = second.evidence(0, 900)!;
+    expect(Object.keys(found.files).sort()).toEqual(["clock_sync.csv", "hand_landmarks_2.csv"]);
+    expect(found.source.source_id).toBe("camera_hand_landmarks_2");
+    expect(found.source.configuration).toMatchObject({ camera: "second" });
+  });
+
   it("has no evidence when the camera was off, landmarks are switched off, or nothing fell in the window", async () => {
     const off = setup();
     expect(off.camera.evidence(0, 1000)).toBeNull();

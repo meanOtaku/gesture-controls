@@ -5,8 +5,8 @@ import { CameraController, type CameraDeps } from "../cameraController";
 import { clockSync } from "../clockSync";
 import type { HandDetector, Point3, TrackedHand } from "../handTypes";
 
-const holder = vi.hoisted(() => ({ controller: null as unknown }));
-vi.mock("../cameraService", () => ({ getCameraController: () => holder.controller }));
+const holder = vi.hoisted(() => ({ controller: null as unknown, second: null as unknown }));
+vi.mock("../cameraService", () => ({ getCameraController: (slot?: string) => (slot === "secondary" ? holder.second : holder.controller) }));
 vi.mock("../drawHands", () => ({ drawHands: vi.fn() }));
 
 import { CameraCapturePanel } from "./CameraCapturePanel";
@@ -29,7 +29,7 @@ function makeController(over: Partial<CameraDeps> = {}) {
   Object.defineProperty(video, "play", { value: vi.fn(async () => undefined) });
   Object.defineProperty(video, "requestVideoFrameCallback", { value: (cb: (now: number, m?: { captureTime?: number }) => void) => { next = () => cb(1000, { captureTime: 1000 }); return 1; } });
   const detector: HandDetector = { detect: () => hands, close: () => undefined };
-  const controller = new CameraController({
+  const deps = {
     getUserMedia: vi.fn(async () => ({ getTracks: () => [], getVideoTracks: () => [{ getSettings: () => ({ width: 640, height: 480, deviceId: "a" }) }] }) as unknown as MediaStream),
     enumerateDevices: vi.fn(async () => devices as MediaDeviceInfo[]),
     createDetector: vi.fn(async () => detector),
@@ -37,8 +37,11 @@ function makeController(over: Partial<CameraDeps> = {}) {
     now: () => 0,
     syncPairs: () => [],
     ...over,
-  });
+  };
+  const controller = new CameraController(deps);
   holder.controller = controller;
+  // The second camera is its own, separate camera: off unless a test turns it on.
+  holder.second = new CameraController({ ...deps, slot: "secondary", createVideo: () => document.createElement("video") });
   return controller;
 }
 

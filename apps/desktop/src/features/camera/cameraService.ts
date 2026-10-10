@@ -11,7 +11,7 @@ import { telemetryStore } from "../telemetry/store/telemetryStore";
  */
 const controllers: Partial<Record<CameraSlot, CameraController>> = {};
 
-function createController(): CameraController {
+function createController(slot: CameraSlot): CameraController {
   return new CameraController({
     getUserMedia: (constraints) => navigator.mediaDevices.getUserMedia(constraints),
     enumerateDevices: () => navigator.mediaDevices.enumerateDevices(),
@@ -31,11 +31,12 @@ function createController(): CameraController {
     },
     now: () => performance.now(),
     syncPairs: (from, to) => clockSync.pairsBetween(from, to),
+    slot,
   });
 }
 
 export function getCameraController(slot: CameraSlot = "primary"): CameraController {
-  return (controllers[slot] ??= createController());
+  return (controllers[slot] ??= createController(slot));
 }
 
 /** Keeps each camera's list of devices current when one is plugged in or removed. */
@@ -47,11 +48,18 @@ export function watchCameraDevices(): () => void {
   return () => devices.removeEventListener("devicechange", refresh);
 }
 
-/** Connects the camera to the recorder: it follows the recording's state, and its evidence is saved with each bundle. */
+/**
+ * Connects the cameras to the recorder: they follow the recording's state, and their evidence is saved with each bundle,
+ * the first camera's landmarks in `hand_landmarks.csv` and the second's (if it was on) in `hand_landmarks_2.csv`.
+ */
 export function bindCameraToRecording(): () => void {
-  const camera = getCameraController();
-  telemetryStore.setEvidenceProvider((startMs, endMs) => camera.evidence(startMs, endMs));
-  const follow = () => camera.syncRecording(telemetryStore.getDatasetRecordingState() as RecordingPhase);
+  const cameras = [getCameraController("primary"), getCameraController("secondary")];
+  telemetryStore.setEvidenceProvider((startMs, endMs) => {
+    const found = cameras.map((camera) => camera.evidence(startMs, endMs)).filter((evidence) => evidence !== null);
+    if (found.length === 0) return null;
+    return { files: Object.assign({}, ...found.map((evidence) => evidence.files)), sources: found.map((evidence) => evidence.source) };
+  });
+  const follow = () => cameras.forEach((camera) => camera.syncRecording(telemetryStore.getDatasetRecordingState() as RecordingPhase));
   const unsubscribe = telemetryStore.subscribe(follow);
   follow();
   return () => {

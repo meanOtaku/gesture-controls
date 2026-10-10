@@ -1,7 +1,7 @@
 import type { RecordingSource } from "../../shared/tauri/recordingBundle";
 import { type SyncPair } from "./clockSync";
-import { CLOCK_SYNC_FILE, HAND_LANDMARKS_FILE, clockSyncCsv, frameToCsvRows, handLandmarksHeader } from "./handLandmarkCsv";
-import { type HandDetector, type HandFrame } from "./handTypes";
+import { CLOCK_SYNC_FILE, HAND_LANDMARKS_FILE, HAND_LANDMARKS_FILE_2, clockSyncCsv, frameToCsvRows, handLandmarksHeader } from "./handLandmarkCsv";
+import { type CameraSlot, type HandDetector, type HandFrame } from "./handTypes";
 
 /** Frames kept from before a recording starts, so the first moments of the recording have a picture. */
 export const PREROLL_MS = 3000;
@@ -41,6 +41,8 @@ export interface CameraDeps {
   createVideo(): HTMLVideoElement;
   /** `performance.now()`. */
   now(): number;
+  /** Which camera this is. The second camera saves its landmarks in a file of its own. Default: the primary. */
+  slot?: CameraSlot;
   /** The watch/browser clock pairs, for the evidence file. */
   syncPairs(fromMs: number, toMs: number): SyncPair[];
 }
@@ -264,6 +266,7 @@ export class CameraController {
    * or null if there is none (the camera was off, landmarks were switched off, or no frame fell in the window).
    */
   evidence(startMs: number, endMs: number): CameraEvidence | null {
+    const second = this.deps.slot === "secondary";
     if (!this.snapshot.recordLandmarks && this.session.length === 0) return null;
     const from = startMs - EVIDENCE_MARGIN_MS;
     const to = endMs + EVIDENCE_MARGIN_MS;
@@ -275,12 +278,13 @@ export class CameraController {
     const lastMs = frames[frames.length - 1].captureMs;
     return {
       files: {
-        [HAND_LANDMARKS_FILE]: [handLandmarksHeader(), ...rows].join("\n"),
+        [second ? HAND_LANDMARKS_FILE_2 : HAND_LANDMARKS_FILE]: [handLandmarksHeader(), ...rows].join("\n"),
         [CLOCK_SYNC_FILE]: clockSyncCsv(this.deps.syncPairs(from, to)),
       },
       source: {
-        source_id: "camera_hand_landmarks",
+        source_id: second ? "camera_hand_landmarks_2" : "camera_hand_landmarks",
         configuration: {
+          camera: second ? "second" : "first",
           model: MODEL_NAME,
           runtime: "@mediapipe/tasks-vision",
           frames: frames.length,

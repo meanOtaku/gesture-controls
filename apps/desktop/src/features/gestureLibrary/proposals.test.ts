@@ -109,3 +109,33 @@ describe("closing and opening stretches", () => {
     for (let i = 1; i < sorted.length; i++) expect(sorted[i].startRow).toBeGreaterThan(sorted[i - 1].endRow);
   });
 });
+
+describe("two cameras", () => {
+  const open = frames.map((f) => ({ ...f, hands: [makeHand({ pinch: 1.2 })] }));
+  // The second camera's frames are 10 ms offset from the first's, with its own frame numbers.
+  const second = frames.map((f, i) => ({ frameIndex: i, captureMs: f.captureMs + 10, hands: f.hands }));
+  const run = (over: Partial<Parameters<typeof proposeIntervals>[0]>) =>
+    proposeIntervals({ definitions: [pinch], frames, alignment, rawTimestampsNs: raw, existing: [], ...over });
+
+  it("finds a gesture only the second camera saw, when either camera may see it", () => {
+    const [p] = run({ frames: open, secondFrames: second, mode: "either" });
+    expect(p.phase).toBe("hold");
+    expect(p.startRow).toBeGreaterThanOrEqual(49);
+    expect(p.startRow).toBeLessThanOrEqual(51);
+  });
+
+  it("finds nothing the second camera alone saw when both cameras must agree", () => {
+    expect(run({ frames: open, secondFrames: second, mode: "both" })).toEqual([]);
+  });
+
+  it("finds a gesture both saw in either mode, and one hold, not two", () => {
+    expect(run({ frames, secondFrames: second, mode: "either" }).filter((p) => p.phase === "hold")).toHaveLength(1);
+    expect(run({ frames, secondFrames: second, mode: "both" }).filter((p) => p.phase === "hold")).toHaveLength(1);
+  });
+
+  it("behaves as before with one camera, and works when only the second camera has frames", () => {
+    expect(run({}).filter((p) => p.phase === "hold")).toHaveLength(1);
+    expect(run({ frames: [], secondFrames: second }).filter((p) => p.phase === "hold")).toHaveLength(1);
+    expect(run({ frames: [], secondFrames: [] })).toEqual([]);
+  });
+});

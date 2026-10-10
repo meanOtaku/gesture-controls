@@ -745,7 +745,7 @@ class TelemetryStore {
         actual_duration_ms: actualDurationMs,
         stop_reason: stopReason,
         // The camera is a source of its own evidence file, not of raw rows, so it is not in `raw_source_row_counts`.
-        sources: [{ source_id: "watch", configuration: {} }, ...(evidence ? [evidence.source] : [])],
+        sources: [{ source_id: "watch", configuration: {} }, ...(evidence ? evidence.sources : [])],
         raw_row_count: rows.length,
         raw_source_row_counts: { watch: rows.length },
       },

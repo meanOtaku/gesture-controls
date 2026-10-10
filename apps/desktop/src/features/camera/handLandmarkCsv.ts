@@ -21,6 +21,7 @@ export function handLandmarksHeader(): string {
 
 export const CLOCK_SYNC_HEADER = "watch_timestamp_ns,browser_arrival_ms";
 export const HAND_LANDMARKS_FILE = "hand_landmarks.csv";
+export const HAND_LANDMARKS_FILE_2 = "hand_landmarks_2.csv";
 export const CLOCK_SYNC_FILE = "clock_sync.csv";
 
 const FIELD_COUNT = 6 + 2 * LANDMARK_COUNT * 3;

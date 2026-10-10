@@ -2,7 +2,7 @@ import type { SyncPair } from "../camera/clockSync";
 import type { HandFrame } from "../camera/handTypes";
 import type { AnnotationInterval } from "../../shared/tauri/recordingBundle";
 import { PHASE_MS_RANGE, type GestureDefinition } from "./definition";
-import { GestureDetector } from "./detector";
+import { CombinedGestureDetector, type CameraSlot, type CombineMode } from "./combinedDetector";
 
 /** How the camera's clock lines up with the watch's, from the pairs saved with a recording. */
 export interface ClockAlignment {
@@ -57,7 +57,12 @@ function lowerBound(values: number[], target: number): number {
 
 export interface ProposeInput {
   definitions: GestureDefinition[];
+  /** The first camera's frames. */
   frames: HandFrame[];
+  /** The second camera's frames, when the recording used two. */
+  secondFrames?: HandFrame[];
+  /** How the two cameras' decisions combine; "either" when not given. */
+  mode?: CombineMode;
   alignment: ClockAlignment;
   /** The watch timestamp of every raw row, ascending. */
   rawTimestampsNs: number[];
@@ -69,23 +74,35 @@ export interface ProposeInput {
  * Runs the library's gestures over the recording's camera frames and turns each hold into a stretch of raw rows. Only
  * gestures with a label can propose anything. A hold still going when the camera stopped ends at its last frame.
  */
-export function proposeIntervals({ definitions, frames, alignment, rawTimestampsNs, existing }: ProposeInput): ProposedInterval[] {
+export function proposeIntervals({ definitions, frames, secondFrames = [], mode = "either", alignment, rawTimestampsNs, existing }: ProposeInput): ProposedInterval[] {
   const labelled = definitions.filter((definition) => definition.labelId);
-  if (labelled.length === 0 || frames.length === 0 || rawTimestampsNs.length === 0) return [];
-  const detector = new GestureDetector(labelled);
+  if (labelled.length === 0 || (frames.length === 0 && secondFrames.length === 0) || rawTimestampsNs.length === 0) return [];
+  const detector = new CombinedGestureDetector(labelled, mode);
   const byId = new Map(labelled.map((definition) => [definition.id, definition]));
   const open = new Map<string, number>();
   const holds: { gestureId: string; startMs: number; endMs: number }[] = [];
-  for (const frame of frames) {
-    for (const event of detector.update(frame.captureMs, frame.hands)) {
+  const take = (events: ReturnType<CombinedGestureDetector["update"]>) => {
+    for (const event of events) {
       if (event.kind === "onset") open.set(event.gestureId, event.atMs);
       else {
         holds.push({ gestureId: event.gestureId, startMs: open.get(event.gestureId) ?? event.atMs, endMs: event.atMs });
         open.delete(event.gestureId);
       }
     }
+  };
+  // Both cameras' frames in the order they were taken, each camera checked on its own and only the decisions merged.
+  const timeline = [
+    ...frames.map((frame) => ({ slot: "primary" as CameraSlot, frame, last: frame === frames[frames.length - 1] })),
+    ...secondFrames.map((frame) => ({ slot: "secondary" as CameraSlot, frame, last: frame === secondFrames[secondFrames.length - 1] })),
+  ].sort((a, b) => a.frame.captureMs - b.frame.captureMs);
+  take(detector.setSlotRunning("primary", frames.length > 0, timeline[0].frame.captureMs));
+  take(detector.setSlotRunning("secondary", secondFrames.length > 0, timeline[0].frame.captureMs));
+  for (const { slot, frame, last } of timeline) {
+    take(detector.update(slot, frame.captureMs, frame.hands));
+    // A camera whose recording ended is no longer running, so "both" does not wait for it.
+    if (last) take(detector.setSlotRunning(slot, false, frame.captureMs));
   }
-  const lastMs = frames[frames.length - 1].captureMs;
+  const lastMs = timeline[timeline.length - 1].frame.captureMs;
   for (const [gestureId, startMs] of open) holds.push({ gestureId, startMs, endMs: lastMs });
   holds.sort((a, b) => a.startMs - b.startMs);
 

@@ -28,7 +28,9 @@ export function CameraAssistCard({ selectedLabel, recording, desktopAvailable }:
 
   // Stable between renders, or the live detector would restart on every frame.
   const mine = useMemo(() => definitions.filter((definition) => selectedLabel !== null && definition.labelId === selectedLabel), [definitions, selectedLabel]);
-  const states = useLiveGestures(mine, cam);
+  const camera2 = getCameraController("secondary");
+  const cam2 = useSyncExternalStore(camera2.subscribe, camera2.getSnapshot, camera2.getSnapshot);
+  const states = useLiveGestures(mine, cam, undefined, cam2);
   const seen = mine.some((definition) => states.get(definition.id)?.held);
   const camOn = cam.status === "on";
 

@@ -10,8 +10,8 @@ import { clockSync } from "../clockSync";
 import { getCameraController } from "../cameraService";
 import { physicalHand } from "../handTypes";
 import { measureHand } from "../landmarkMath";
-import { CameraPicker } from "./CameraPicker";
-import { CameraPreview } from "./CameraPreview";
+import { CameraPair } from "../../gestureLibrary/CameraPair";
+import { SecondCameraControls } from "../../gestureLibrary/SecondCameraControls";
 
 /**
  * The camera: a mirror-view preview with the hand landmarks drawn on it, and the switch that saves the landmarks with
@@ -21,6 +21,8 @@ import { CameraPreview } from "./CameraPreview";
 export function CameraCapturePanel() {
   const camera = getCameraController();
   const state = useSyncExternalStore(camera.subscribe, camera.getSnapshot, camera.getSnapshot);
+  const camera2 = getCameraController("secondary");
+  const state2 = useSyncExternalStore(camera2.subscribe, camera2.getSnapshot, camera2.getSnapshot);
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
   const on = state.status === "on";
   const starting = state.status === "starting";
@@ -52,10 +54,9 @@ export function CameraCapturePanel() {
             <AlertDescription>{state.error}</AlertDescription>
           </Alert>
         )}
-        <CameraPreview camera={camera} state={state} hidden={!on} />
+        <CameraPair primary={camera} primaryState={state} secondary={camera2} secondaryState={state2} />
         {starting && <p className="hint" role="status">Starting the camera and the hand model. If your computer asks for camera permission, allow it.</p>}
         {!on && !starting && !state.error && <p className="hint">The camera is off. Turn it on to see your hand tracked, and to save landmarks with recordings.</p>}
-        <CameraPicker camera={camera} state={state} />
         {on && (
           <>
             <ul className="flex flex-wrap items-center gap-2" aria-label="Tracking status">
@@ -74,13 +75,14 @@ export function CameraCapturePanel() {
             ))}
           </>
         )}
+        {on && <SecondCameraControls primary={camera} primaryState={state} secondary={camera2} secondaryState={state2} />}
         <div className="flex items-start gap-2 text-sm">
-          <Checkbox checked={state.recordLandmarks} onCheckedChange={(checked) => camera.setRecordLandmarks(checked === true)} aria-label="Save hand landmarks with recordings" />
+          <Checkbox checked={state.recordLandmarks} onCheckedChange={(checked) => { camera.setRecordLandmarks(checked === true); camera2.setRecordLandmarks(checked === true); }} aria-label="Save hand landmarks with recordings" />
           <span><strong>Save hand landmarks with recordings</strong> <small className="text-muted-foreground">Only the 21 points per hand and when they were seen, never the picture.</small></span>
         </div>
         <p className="field-hint" role="status">
           {state.collecting
-            ? `Recording the camera: ${state.collectedFrames} frames kept${state.truncated ? " (the limit was reached, so the end of this recording has no camera data)" : ""}.`
+            ? `Recording the camera${state2.collecting ? "s" : ""}: ${state.collectedFrames} frames kept${state2.collecting ? ` (second camera: ${state2.collectedFrames})` : ""}${state.truncated ? " (the limit was reached, so the end of this recording has no camera data)" : ""}.`
             : !watchStreaming
               ? "Clock alignment with the watch starts once the watch is streaming."
               : sync
