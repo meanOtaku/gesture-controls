@@ -156,6 +156,9 @@ html[data-theme="neo"] [data-slot="button"][data-variant="destructive"] { backgr
 html[data-theme="neo"] [data-slot="button"][data-variant="destructive"]:hover { background: #ff8aa0; }
 html[data-theme="neo"] [data-slot="button"][data-variant="ghost"],
 html[data-theme="neo"] [data-slot="button"][data-variant="link"] { background: transparent; border-color: transparent; box-shadow: none; }
+/* A ghost button still has to look like a button: a faint outline, darker on hover. */
+html[data-theme="neo"] [data-slot="button"][data-variant="ghost"] { border-width: 2px; border-color: color-mix(in srgb, var(--ink) 30%, transparent); }
+html[data-theme="neo"] [data-slot="button"][data-variant="ghost"]:hover:not(:disabled) { border-color: var(--ink); }
 html[data-theme="neo"] [data-slot="button"][data-variant="ghost"]:hover { background: var(--wash); }
 html[data-theme="neo"] [data-slot="button"][data-variant="link"] { text-decoration: underline; text-decoration-thickness: 2px; }
 html[data-theme="neo"] [data-slot="button"]:not([data-variant="ghost"]):not([data-variant="link"]):hover:not(:disabled) { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); }

@@ -255,8 +255,8 @@ export function RawImageViewerPanel() {
           <Label htmlFor="raw-viewer-recording">Recording</Label>
           <Button
             type="button"
-            variant="ghost"
-            size="xs"
+            variant="outline"
+            size="sm"
             className="text-destructive"
             disabled={!selectedSummary || deleting}
             aria-busy={deleting}
