@@ -192,7 +192,7 @@ Two capture modes share this same Arming/timer behavior and the same immutable-r
 
 #### Let the camera mark it (Recorder)
 
-Under the recorder, **Let the camera mark it** labels a recording for you. Choose a label (it must have a gesture in the Gesture library), turn the camera on, and tick **Let the camera mark the gesture**. A badge shows live whether the camera sees the gesture, so you can check it before you start. Record as usual with the watch on the hand the camera sees. The recording is made as a timeline with no manual marks; when you stop and it saves, the camera's holds of that gesture are added as **unreviewed** intervals, so the PPG and motion rows carry that label. A message says how many were marked, or that the camera never saw the gesture (the recording is kept either way). Review the intervals in Recordings like any others.
+Under the recorder, **Let the camera mark it** labels a recording for you. Choose a label (it must be the label of a gesture in the Gesture library, or that gesture's closing or opening label; either way the whole gesture is marked, closing, hold and opening each under its own label), turn the camera on, and tick **Let the camera mark the gesture**. A badge shows live whether the camera sees the gesture, so you can check it before you start. Record as usual with the watch on the hand the camera sees. The recording is made as a timeline with no manual marks; when you stop and it saves, the camera's holds of that gesture are added as **unreviewed** intervals, so the PPG and motion rows carry that label. A message says how many were marked, or that the camera never saw the gesture (the recording is kept either way). Review the intervals in Recordings like any others.
 
 #### Label from the camera (Recordings)
 

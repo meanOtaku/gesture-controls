@@ -1,4 +1,5 @@
 import { OperationFeedback } from "../../components/app/OperationFeedback";
+import { definitionsForLabel } from "./definition";
 import { listGestureDefinitions } from "./gestureLibraryApi";
 import { autoMarkRecording } from "./recordingProposals";
 
@@ -43,7 +44,7 @@ class CameraAssist {
     if (!label) return;
     const operation = "Camera marking";
     try {
-      const definitions = (await listGestureDefinitions()).filter((definition) => definition.labelId === label);
+      const definitions = definitionsForLabel(await listGestureDefinitions(), label);
       const outcome = await autoMarkRecording(recordingId, definitions);
       if (outcome.kind === "added") {
         OperationFeedback.success(operation, `Marked ${outcome.holds} ${label} hold${outcome.holds === 1 ? "" : "s"}${outcome.closing + outcome.opening > 0 ? ` with ${outcome.closing} closing and ${outcome.opening} opening stretch${outcome.closing + outcome.opening === 1 ? "" : "es"}` : ""} (unreviewed; the camera and watch line up to about ${Math.max(1, Math.round(outcome.jitterMs))} ms). Review them in Recordings.`);

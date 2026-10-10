@@ -74,6 +74,15 @@ export interface GestureDefinition {
   openPhase?: PhaseSpec | null;
 }
 
+/**
+ * The gestures a recording of `label` is about: those with that label as their own, or as their closing or opening stretch.
+ * Choosing the opening label of a pinch means the pinch, since its stretches are marked together with it.
+ */
+export function definitionsForLabel(definitions: GestureDefinition[], label: string | null): GestureDefinition[] {
+  if (label === null) return [];
+  return definitions.filter((d) => d.labelId === label || d.closePhase?.labelId === label || d.openPhase?.labelId === label);
+}
+
 export const MAX_CONDITIONS = 4;
 export const MAX_NAME_CHARS = 40;
 export const MIN_HOLD_RANGE = [0, 2000] as const;

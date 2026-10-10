@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
 import type { CameraController, CameraSnapshot } from "../cameraController";
 import { drawHands } from "../drawHands";
+import { parkVideo, resumeVideo } from "../videoHolder";
 
 /**
  * The camera's picture in a mirror view with the hand landmarks drawn on it. The video element belongs to the camera,
- * not to this component: it is shown here while the page is open and handed back when it closes.
+ * not to this component: it is shown here while the page is open and parked out of sight when it closes, never removed from the document (a removed video is paused, and the hand detector would stop).
  */
 export function CameraPreview({ camera, state, hidden }: { camera: CameraController; state: CameraSnapshot; hidden: boolean }) {
   const stage = useRef<HTMLDivElement | null>(null);
@@ -15,8 +16,9 @@ export function CameraPreview({ camera, state, hidden }: { camera: CameraControl
     if (!host) return;
     camera.video.className = "camera-video";
     host.prepend(camera.video);
+    resumeVideo(camera.video);
     return () => {
-      camera.video.remove();
+      parkVideo(camera.video);
     };
   }, [camera]);
 

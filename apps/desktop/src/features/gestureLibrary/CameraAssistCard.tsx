@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { getCameraController } from "../camera/cameraService";
 import { cameraAssist } from "./cameraAssist";
-import type { GestureDefinition } from "./definition";
+import { definitionsForLabel, type GestureDefinition } from "./definition";
 import { listGestureDefinitions } from "./gestureLibraryApi";
 import { useLiveGestures } from "./useLiveGestures";
 
@@ -27,7 +27,7 @@ export function CameraAssistCard({ selectedLabel, recording, desktopAvailable }:
   }, [desktopAvailable]);
 
   // Stable between renders, or the live detector would restart on every frame.
-  const mine = useMemo(() => definitions.filter((definition) => selectedLabel !== null && definition.labelId === selectedLabel), [definitions, selectedLabel]);
+  const mine = useMemo(() => definitionsForLabel(definitions, selectedLabel), [definitions, selectedLabel]);
   const camera2 = getCameraController("secondary");
   const cam2 = useSyncExternalStore(camera2.subscribe, camera2.getSnapshot, camera2.getSnapshot);
   const states = useLiveGestures(mine, cam, undefined, cam2);
@@ -62,6 +62,9 @@ export function CameraAssistCard({ selectedLabel, recording, desktopAvailable }:
           <span><strong>Let the camera mark the gesture</strong> <small className="text-muted-foreground">Records as a timeline with no manual marks; the camera adds them when you stop.</small></span>
         </div>
         {enabled && blocker && <p className="hint" role="status">{blocker} Without it, this recording will be a timeline with no marks.</p>}
+        {enabled && mine.some((d) => d.labelId !== selectedLabel) && (
+          <p className="hint">“{selectedLabel?.replaceAll("_", " ")}” is a closing or opening stretch of {mine.map((d) => `“${d.name}”`).join(", ")}. The whole gesture is marked: its closing, hold and opening, each under its own label.</p>
+        )}
         {enabled && !blocker && (
           <div className="flex flex-wrap items-center gap-3" role="status">
             <Badge variant={seen ? "default" : "secondary"}>{seen ? "Camera sees it" : "Camera does not see it"}</Badge>

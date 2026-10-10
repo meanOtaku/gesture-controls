@@ -54,3 +54,13 @@ describe("CameraAssistCard", () => {
     expect(screen.getByRole("checkbox", { name: "Let the camera mark the gesture" })).toHaveAttribute("aria-disabled", "true");
   });
 });
+
+describe("CameraAssistCard with a closing or opening label", () => {
+  it("accepts the opening label of a gesture and says the whole gesture is marked", async () => {
+    library.listGestureDefinitions.mockResolvedValue([{ ...pinch, openPhase: { labelId: "pinch_open", ms: 500 } }]);
+    cameraAssist.setEnabled(true);
+    render(<CameraAssistCard selectedLabel="pinch_open" recording={false} desktopAvailable />);
+    expect(await screen.findByText(/closing or opening stretch of “Pinch”/)).toBeInTheDocument();
+    expect(screen.queryByText(/No gesture in the Gesture library uses/)).toBeNull();
+  });
+});
