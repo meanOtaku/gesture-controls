@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect } from "react";
 import { getCameraController } from "../camera/cameraService";
 import { CameraGestureReporter } from "./cameraGestureReporter";
-import { dualCameraMode, subscribeDualCameraMode } from "./dualCamera";
 import { GESTURE_LIBRARY_CHANGED, listGestureDefinitions } from "./gestureLibraryApi";
 
 /**
@@ -44,12 +43,9 @@ export function CameraGestureBridge() {
     };
     const unsubscribeSecond = second.subscribe(followSecond);
     followSecond();
-    reporter.setMode(dualCameraMode());
-    const unsubscribeMode = subscribeDualCameraMode(() => reporter.setMode(dualCameraMode()));
     return () => {
       unsubscribe();
       unsubscribeSecond();
-      unsubscribeMode();
       window.removeEventListener(GESTURE_LIBRARY_CHANGED, reload);
       reporter.setCameraOn(false);
       reporter.setCameraOn(false, "secondary");

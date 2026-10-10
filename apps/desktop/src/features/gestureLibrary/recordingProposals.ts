@@ -3,7 +3,6 @@ import {
   addCameraProposedIntervals, getRecordingCameraEvidence, loadRecordingBundle,
 } from "../../shared/tauri/recordingBundle";
 import type { GestureDefinition } from "./definition";
-import { dualCameraMode } from "./dualCamera";
 import { alignClocks, proposeIntervals, toAnnotationInterval, type ClockAlignment, type ProposedInterval } from "./proposals";
 
 export type Found = {
@@ -34,7 +33,6 @@ export async function findProposals(recordingId: string, definitions: GestureDef
     definitions: usable,
     frames,
     secondFrames,
-    mode: dualCameraMode(),
     alignment,
     rawTimestampsNs: evidence.value.rawTimestampsNs,
     existing: detail.value.annotations.intervals.map((interval) => ({ startRow: interval.resolved_start.raw_row, endRow: interval.resolved_end.raw_row })),

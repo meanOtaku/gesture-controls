@@ -1,6 +1,6 @@
 import type { CameraSlot, HandFrame } from "../camera/handTypes";
 import type { GestureDefinition } from "./definition";
-import { CombinedGestureDetector, type CombineMode } from "./combinedDetector";
+import { CombinedGestureDetector } from "./combinedDetector";
 
 export interface CameraReport {
   /** Every gesture the camera is running now; empty with the camera off. */
@@ -34,12 +34,6 @@ export class CameraGestureReporter {
     const usable = definitions.filter((definition) => definition.conditions.length > 0);
     this.detector.setDefinitions(usable);
     this.known = usable.map((definition) => definition.id);
-    if (this.on) this.flush([], this.currentHeld());
-  }
-
-  /** How two cameras' decisions are merged: any camera sees a gesture, or all running cameras do. */
-  setMode(mode: CombineMode): void {
-    this.detector.setMode(mode);
     if (this.on) this.flush([], this.currentHeld());
   }
 

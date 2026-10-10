@@ -15,7 +15,7 @@ function feed(d: CombinedGestureDetector, slot: "primary" | "secondary", start: 
 }
 
 describe("CombinedGestureDetector", () => {
-  it("in either mode starts when the first camera confirms it, and does not start again when the second one agrees", () => {
+  it("starts when the first camera confirms it, and does not start again when the second one agrees", () => {
     const d = new CombinedGestureDetector([pinch]);
     d.setSlotRunning("secondary", true, 0);
     const first = feed(d, "primary", 1000, 8);
@@ -40,19 +40,6 @@ describe("CombinedGestureDetector", () => {
     expect(d.states().get("g1")?.held).toBe(false);
   });
 
-  it("in both mode needs every running camera, and ignores a camera that is not running", () => {
-    const d = new CombinedGestureDetector([pinch], "both");
-    // Only the primary is running, so it alone decides.
-    expect(feed(d, "primary", 1000, 8).map((e) => e.kind)).toEqual(["onset"]);
-    d.reset();
-    d.setSlotRunning("secondary", true, 2000);
-    expect(feed(d, "primary", 2000, 8)).toEqual([]); // the second camera does not see it yet
-    expect(d.states().get("g1")?.held).toBe(false);
-    const both = feed(d, "secondary", 2100, 8);
-    expect(both.map((e) => e.kind)).toEqual(["onset"]);
-    expect(both[0].atMs).toBe(2100); // when the last of them began
-  });
-
   it("lets go of what a camera held when that camera stops, which can end the merged gesture", () => {
     const d = new CombinedGestureDetector([pinch]);
     d.setSlotRunning("secondary", true, 0);
@@ -61,15 +48,6 @@ describe("CombinedGestureDetector", () => {
     const events = d.setSlotRunning("secondary", false, 1400);
     expect(events.map((e) => e.kind)).toEqual(["release"]);
     expect(d.states().get("g1")?.held).toBe(false);
-  });
-
-  it("changing the mode re-merges what is held now", () => {
-    const d = new CombinedGestureDetector([pinch]);
-    d.setSlotRunning("secondary", true, 0);
-    feed(d, "primary", 1000, 8);
-    expect(d.states().get("g1")?.held).toBe(true);
-    const events = d.setMode("both"); // the second camera does not see it
-    expect(events.map((e) => e.kind)).toEqual(["release"]);
   });
 
   it("drops a deleted gesture and keeps counts per gesture", () => {

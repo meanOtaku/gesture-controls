@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CameraSnapshot } from "../camera/cameraController";
 import type { CameraSlot } from "../camera/handTypes";
 import type { GestureDefinition } from "./definition";
 import type { AgreementTracker } from "./agreement";
 import { CombinedGestureDetector } from "./combinedDetector";
-import { dualCameraMode, subscribeDualCameraMode } from "./dualCamera";
 import type { GestureEvent, GestureState } from "./detector";
 
 /**
@@ -18,8 +17,7 @@ export function useLiveGestures(
   tracker?: AgreementTracker,
   secondary?: CameraSnapshot,
 ): Map<string, GestureState> {
-  const mode = useSyncExternalStore(subscribeDualCameraMode, dualCameraMode, dualCameraMode);
-  const detector = useRef(new CombinedGestureDetector(definitions, mode));
+  const detector = useRef(new CombinedGestureDetector(definitions));
   const [states, setStates] = useState<Map<string, GestureState>>(() => detector.current.states());
   const lastFrame = useRef<Record<CameraSlot, number>>({ primary: -1, secondary: -1 });
   const seesHand = useRef<Record<CameraSlot, boolean>>({ primary: false, secondary: false });
@@ -55,11 +53,6 @@ export function useLiveGestures(
     detector.current.setDefinitions(definitions);
     publish();
   }, [definitions, publish]);
-
-  useEffect(() => {
-    report(detector.current.setMode(mode));
-    publish();
-  }, [mode, report, publish]);
 
   const status: Record<CameraSlot, boolean> = { primary: camera.status === "on", secondary: secondary?.status === "on" };
   useEffect(() => {

@@ -1,11 +1,7 @@
-import { useSyncExternalStore } from "react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
-import { Label } from "../../components/ui/label";
 import type { CameraController, CameraSnapshot } from "../camera/cameraController";
-import { dualCameraMode, setDualCameraMode, subscribeDualCameraMode } from "./dualCamera";
-import type { CombineMode } from "./combinedDetector";
 
 type Props = {
   primary: CameraController;
@@ -20,7 +16,6 @@ type Props = {
  * picture and camera choice are in `CameraPair`, beside the first camera's.
  */
 export function SecondCameraControls({ primary, primaryState, secondary, secondaryState }: Props) {
-  const mode = useSyncExternalStore(subscribeDualCameraMode, dualCameraMode, dualCameraMode);
   const on = secondaryState.status === "on";
   const starting = secondaryState.status === "starting";
   const others = primaryState.devices.filter((device) => device.deviceId !== primaryState.deviceId);
@@ -57,16 +52,7 @@ export function SecondCameraControls({ primary, primaryState, secondary, seconda
             <li><Badge variant="outline">{secondaryState.fps > 0 ? `${secondaryState.fps.toFixed(0)} frames/s` : "waiting for frames"}</Badge></li>
             <li><Badge variant="outline">First camera: {primaryState.fps > 0 ? `${primaryState.fps.toFixed(0)} frames/s` : "waiting"}</Badge></li>
           </ul>
-          <div className="field">
-            <div className="field-head"><Label htmlFor="dual-mode">A gesture counts when</Label></div>
-            <select id="dual-mode" className="recipe-select" value={mode} onChange={(event) => setDualCameraMode(event.target.value as CombineMode)}>
-              <option value="either">either camera sees it</option>
-              <option value="both">both cameras see it</option>
-            </select>
-            <p className="field-hint">
-              “Either” misses fewer holds but can be fooled by one bad angle. “Both” is stricter. If the frame rates above fall well below 25, two cameras are too much for this computer.
-            </p>
-          </div>
+          <p className="field-hint">A gesture is marked when either camera sees it. If both do, the earlier start is used. If the frame rates above fall well below 25, two cameras are too much for this computer.</p>
         </>
       )}
     </div>

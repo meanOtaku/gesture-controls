@@ -117,20 +117,18 @@ describe("two cameras", () => {
   const run = (over: Partial<Parameters<typeof proposeIntervals>[0]>) =>
     proposeIntervals({ definitions: [pinch], frames, alignment, rawTimestampsNs: raw, existing: [], ...over });
 
-  it("finds a gesture only the second camera saw, when either camera may see it", () => {
-    const [p] = run({ frames: open, secondFrames: second, mode: "either" });
+  it("finds a gesture only the second camera saw", () => {
+    const [p] = run({ frames: open, secondFrames: second });
     expect(p.phase).toBe("hold");
     expect(p.startRow).toBeGreaterThanOrEqual(49);
     expect(p.startRow).toBeLessThanOrEqual(51);
   });
 
-  it("finds nothing the second camera alone saw when both cameras must agree", () => {
-    expect(run({ frames: open, secondFrames: second, mode: "both" })).toEqual([]);
-  });
-
-  it("finds a gesture both saw in either mode, and one hold, not two", () => {
-    expect(run({ frames, secondFrames: second, mode: "either" }).filter((p) => p.phase === "hold")).toHaveLength(1);
-    expect(run({ frames, secondFrames: second, mode: "both" }).filter((p) => p.phase === "hold")).toHaveLength(1);
+  it("finds a gesture both saw as one hold, not two, starting at the earlier camera's start", () => {
+    const both = run({ frames, secondFrames: second }).filter((p) => p.phase === "hold");
+    expect(both).toHaveLength(1);
+    const firstOnly = run({}).filter((p) => p.phase === "hold");
+    expect(both[0].startRow).toBeLessThanOrEqual(firstOnly[0].startRow);
   });
 
   it("behaves as before with one camera, and works when only the second camera has frames", () => {

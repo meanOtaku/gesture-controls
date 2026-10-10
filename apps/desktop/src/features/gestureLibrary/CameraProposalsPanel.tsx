@@ -9,7 +9,6 @@ import { Label } from "../../components/ui/label";
 import { listRecordingBundles, type RecordingBundleSummary } from "../../shared/tauri/recordingBundle";
 import type { GestureDefinition } from "./definition";
 import { listGestureDefinitions } from "./gestureLibraryApi";
-import { dualCameraMode } from "./dualCamera";
 import { addProposals, findProposals, type Found } from "./recordingProposals";
 
 type Shown = Found & { skipped: string[] };
@@ -90,7 +89,7 @@ export function CameraProposalsPanel() {
         {found && (
           <>
             <p className="hint" role="status">
-              Checked {found.frames} camera frames{found.cameras > 1 ? ` from ${found.cameras} cameras (${dualCameraMode() === "both" ? "both must see a gesture" : "either may see it"})` : ""}. Camera and watch lined up to within about {Math.max(1, Math.round(found.alignment.jitterMs))} ms ({found.alignment.samples} clock samples).
+              Checked {found.frames} camera frames{found.cameras > 1 ? ` from ${found.cameras} cameras` : ""}. Camera and watch lined up to within about {Math.max(1, Math.round(found.alignment.jitterMs))} ms ({found.alignment.samples} clock samples).
               {found.skipped.length > 0 ? ` Skipped, with no label: ${found.skipped.join(", ")}.` : ""}
             </p>
             {found.proposals.length === 0 ? (
