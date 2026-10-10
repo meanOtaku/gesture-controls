@@ -253,6 +253,17 @@ export function RawImageViewerPanel() {
       <div className="field">
         <div className="field-head">
           <Label htmlFor="raw-viewer-recording">Recording</Label>
+          <span className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={recordingId === null}
+            title="Stop viewing this recording"
+            onClick={() => rawImageViewerStore.setRecording(null)}
+          >
+            Clear
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -265,6 +276,7 @@ export function RawImageViewerPanel() {
           >
             {deleting ? "Deleting…" : "Delete recording"}
           </Button>
+          </span>
         </div>
         <Select
           value={recordingId ?? ""}
@@ -286,6 +298,9 @@ export function RawImageViewerPanel() {
       <div className="field">
         <div className="field-head">
           <Label htmlFor="raw-viewer-channel">Channel</Label>
+          <Button type="button" variant="outline" size="sm" disabled={channel === null} title="Stop viewing this channel" onClick={() => rawImageViewerStore.setChannel(null)}>
+            Clear
+          </Button>
         </div>
         <Select
           value={channel ?? ""}

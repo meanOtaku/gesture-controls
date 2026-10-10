@@ -207,6 +207,29 @@ afterEach(() => {
   Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
 });
 
+describe("RawImageViewerPanel clearing the choice", () => {
+  it("lets go of the chosen recording and channel with Clear, and the buttons are off when nothing is chosen", async () => {
+    mockInvoke({
+      recordings: [summary("rec-a")],
+      detailByRecording: { "rec-a": () => Promise.resolve({ recording: {}, annotations: { format_version: 1, recording_id: "rec-a", intervals: [] } }) },
+    });
+    renderPanel();
+    await screen.findByRole("combobox", { name: "Saved recording" });
+    const [clearRecording, clearChannel] = screen.getAllByRole("button", { name: "Clear" });
+    expect(clearRecording).toBeDisabled();
+    expect(clearChannel).toBeDisabled();
+
+    act(() => rawImageViewerStore.setRecording("rec-a"));
+    act(() => rawImageViewerStore.setChannel("ppg_green"));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Clear" })[0]).toBeEnabled());
+    fireEvent.click(screen.getAllByRole("button", { name: "Clear" })[1]);
+    expect(rawImageViewerStore.getChannel()).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: "Clear" })[0]);
+    expect(rawImageViewerStore.getRecordingId()).toBeNull();
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Clear" })[0]).toBeDisabled());
+  });
+});
+
 describe("RawImageViewerPanel quality summary", () => {
   it("loads and renders the recording quality summary for the selected recording", async () => {
     mockInvoke({
