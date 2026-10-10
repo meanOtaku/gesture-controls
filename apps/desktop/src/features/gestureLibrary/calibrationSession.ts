@@ -9,6 +9,15 @@ export const COUNTDOWN_MS = 3000;
 export const POSITIVE_MS = 4000;
 export const NEGATIVE_MS = 7000;
 
+/** How long each recording lasts, in seconds, for the choices offered in the editor. */
+export const GESTURE_SECONDS = [4, 8, 15, 30] as const;
+export const REST_SECONDS = [7, 15, 30, 60] as const;
+
+export interface RecordLengths {
+  positiveMs: number;
+  negativeMs: number;
+}
+
 export interface SessionSnapshot {
   step: CalibrationStep;
   /** Seconds left in the current countdown or recording. */
@@ -43,7 +52,7 @@ export class CalibrationSession {
   private skipped: SkipReasons = { noHand: 0, otherHand: 0, unmeasurable: 0 };
   private lastFrameIndex = -1;
 
-  constructor(private readonly hand: HandChoice) {}
+  constructor(private readonly hand: HandChoice, private readonly lengths: RecordLengths = { positiveMs: POSITIVE_MS, negativeMs: NEGATIVE_MS }) {}
 
   start(nowMs: number): void {
     this.positive = [];
@@ -69,8 +78,8 @@ export class CalibrationSession {
   private duration(): number {
     switch (this.step) {
       case "getReady": case "getReadyNegative": return COUNTDOWN_MS;
-      case "positive": return POSITIVE_MS;
-      case "negative": return NEGATIVE_MS;
+      case "positive": return this.lengths.positiveMs;
+      case "negative": return this.lengths.negativeMs;
       default: return 0;
     }
   }

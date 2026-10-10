@@ -9,13 +9,26 @@ import { CameraPreview } from "../camera/components/CameraPreview";
 import type { DatasetLabel } from "../model-lab/types";
 import { analyse, scoreRule, MIN_FRAMES } from "./calibration";
 import { HandSideCheck } from "./HandSideCheck";
-import { CalibrationSession, type SessionSnapshot } from "./calibrationSession";
+import { CalibrationSession, GESTURE_SECONDS, NEGATIVE_MS, POSITIVE_MS, REST_SECONDS, type RecordLengths, type SessionSnapshot } from "./calibrationSession";
 import {
   type Condition, type GestureDefinition, type HandChoice, type MeasureName,
   MAX_CONDITIONS, MAX_NAME_CHARS, MEASURES, definitionProblem, describeRule, measureInfo,
 } from "./definition";
 
 const SELECT = "recipe-select";
+const LENGTHS_KEY = "gestureRecordLengths";
+
+/** The recording lengths last chosen (remembered between sessions), or the defaults. */
+function readLengths(): RecordLengths {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LENGTHS_KEY) ?? "null") as Partial<RecordLengths> | null;
+    const ok = (ms: unknown, options: readonly number[]) => typeof ms === "number" && options.includes(ms / 1000);
+    if (saved && ok(saved.positiveMs, GESTURE_SECONDS) && ok(saved.negativeMs, REST_SECONDS)) return saved as RecordLengths;
+  } catch {
+    // Fall through to the defaults.
+  }
+  return { positiveMs: POSITIVE_MS, negativeMs: NEGATIVE_MS };
+}
 const percent = (value: number) => `${Math.round(value * 100)}%`;
 
 const STEP_TEXT: Record<SessionSnapshot["step"], string> = {
@@ -54,15 +67,16 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
   const [draft, setDraft] = useState<GestureDefinition>(initial);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const session = useRef(new CalibrationSession(initial.hand));
+  const [lengths, setLengths] = useState<RecordLengths>(readLengths);
+  const session = useRef(new CalibrationSession(initial.hand, lengths));
   const [snapshot, setSnapshot] = useState<SessionSnapshot>(() => session.current.snapshot(0));
   const [recorded, setRecorded] = useState<{ positive: SessionSnapshot["positive"]; negative: SessionSnapshot["negative"]; skipped: SessionSnapshot["skipped"] } | null>(null);
-  const ids = { name: useId(), label: useId(), hand: useId(), hold: useId(), release: useId() };
+  const ids = { name: useId(), label: useId(), hand: useId(), hold: useId(), release: useId(), positive: useId(), rest: useId() };
 
   useEffect(() => {
-    session.current = new CalibrationSession(draft.hand);
+    session.current = new CalibrationSession(draft.hand, lengths);
     setSnapshot(session.current.snapshot(0));
-  }, [draft.hand]);
+  }, [draft.hand, lengths]);
 
   useEffect(() => {
     if (cam.frame) session.current.onFrame(cam.frame);
@@ -93,6 +107,15 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
   const accuracy = recorded && draft.conditions.length > 0 ? scoreRule(draft.conditions, recorded.positive, recorded.negative) : null;
   const problem = definitionProblem(draft);
 
+  const changeLengths = (change: Partial<RecordLengths>) => {
+    const next = { ...lengths, ...change };
+    setLengths(next);
+    try {
+      localStorage.setItem(LENGTHS_KEY, JSON.stringify(next));
+    } catch {
+      // The choice still holds for this session.
+    }
+  };
   const patch = (change: Partial<GestureDefinition>) => setDraft((d) => ({ ...d, ...change }));
   const patchCondition = (index: number, change: Partial<Condition>) =>
     setDraft((d) => ({ ...d, conditions: d.conditions.map((c, i) => (i === index ? { ...c, ...change } : c)) }));
@@ -163,13 +186,28 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
           <>
             <CameraPreview camera={camera} state={cam} hidden={false} />
             <HandSideCheck camera={cam} />
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="field">
+                <div className="field-head"><Label htmlFor={ids.positive}>Hold the gesture for</Label></div>
+                <select id={ids.positive} className={SELECT} disabled={running} value={lengths.positiveMs / 1000} onChange={(e) => changeLengths({ positiveMs: Number(e.target.value) * 1000 })}>
+                  {GESTURE_SECONDS.map((s) => <option key={s} value={s}>{s} seconds</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <div className="field-head"><Label htmlFor={ids.rest}>Then everything else for</Label></div>
+                <select id={ids.rest} className={SELECT} disabled={running} value={lengths.negativeMs / 1000} onChange={(e) => changeLengths({ negativeMs: Number(e.target.value) * 1000 })}>
+                  {REST_SECONDS.map((s) => <option key={s} value={s}>{s} seconds</option>)}
+                </select>
+              </div>
+            </div>
+            <p className="field-hint">Longer recordings give the rule more to learn from. Move your hand about during both parts: closer, further, turned, in different light.</p>
             <div className="flex flex-wrap items-center gap-3">
               <Button type="button" onClick={start} disabled={running || cam.frame?.hands.length === 0}>
                 {recorded ? "Record again" : "Record gesture and background"}
               </Button>
               {running && <Button type="button" variant="outline" onClick={() => { session.current.reset(); setSnapshot(session.current.snapshot(0)); }}>Cancel</Button>}
               <span className="hint" role="status">
-                {running ? `${STEP_TEXT[snapshot.step]} ${counting ? `${seconds}` : `${seconds}s left · ${framesNow} frames kept${snapshot.missedFrames > 0 ? `, ${snapshot.missedFrames} skipped` : ""}`}` : cam.frame?.hands.length === 0 ? "Put your hand in view to begin." : "About 15 seconds: three to start, four holding the gesture, then seven of everything else."}
+                {running ? `${STEP_TEXT[snapshot.step]} ${counting ? `${seconds}` : `${seconds}s left · ${framesNow} frames kept${snapshot.missedFrames > 0 ? `, ${snapshot.missedFrames} skipped` : ""}`}` : cam.frame?.hands.length === 0 ? "Put your hand in view to begin." : `About ${Math.round((3 + 3) + (lengths.positiveMs + lengths.negativeMs) / 1000)} seconds: a three-second countdown each time, ${lengths.positiveMs / 1000} holding the gesture, then ${lengths.negativeMs / 1000} of everything else.`}
               </span>
             </div>
             {running && snapshot.missedFrames > 5 && <p className="field-error" role="alert">Your hand keeps leaving view; those frames are not counted.</p>}

@@ -67,3 +67,23 @@ describe("CalibrationSession skipped frames", () => {
     expect(session.snapshot(COUNTDOWN_MS).skipped).toEqual({ noHand: 1, otherHand: 1, unmeasurable: 1 });
   });
 });
+
+describe("CalibrationSession with longer recordings", () => {
+  it("records for the lengths chosen, not the defaults", () => {
+    const session = new CalibrationSession("either", { positiveMs: 15_000, negativeMs: 30_000 });
+    session.start(0);
+    session.tick(COUNTDOWN_MS);
+    expect(session.snapshot(COUNTDOWN_MS).step).toBe("positive");
+    session.tick(COUNTDOWN_MS + POSITIVE_MS); // the default length is not enough
+    expect(session.snapshot(COUNTDOWN_MS + POSITIVE_MS).step).toBe("positive");
+    expect(session.snapshot(COUNTDOWN_MS + POSITIVE_MS).remainingMs).toBe(11_000);
+    session.tick(COUNTDOWN_MS + 15_000);
+    expect(session.snapshot(COUNTDOWN_MS + 15_000).step).toBe("getReadyNegative");
+    const start = 2 * COUNTDOWN_MS + 15_000;
+    session.tick(start);
+    session.tick(start + NEGATIVE_MS);
+    expect(session.snapshot(start + NEGATIVE_MS).step).toBe("negative");
+    session.tick(start + 30_000);
+    expect(session.snapshot(start + 30_000).step).toBe("done");
+  });
+});
