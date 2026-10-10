@@ -288,6 +288,12 @@ Each label shows its recordings and its model's furthest state (No model, or Mod
 
 Labels an older version shipped (idle, walking, typing and so on) are removed on the first start of this version unless a recording or model still uses them; those that are used stay as ordinary labels you can archive.
 
+#### Training history (Model Lab)
+
+**Training history** lists, for each label you have trained, what the model registry remembers: the project, every run and how it ended (ready to use, scored only, or failed), the sealed snapshots of exactly which recordings were used, and how many models exist now. It also shows which labels a project was trained against (for example "not the gesture") and which other labels' history mentions this one.
+
+A deleted model leaves this record behind. **Delete history** removes it (after a confirmation) and never touches a recording. It is disabled, with the reason, while the label still has models (delete them under Label models first) or while another label's history mentions it (that history is sealed; delete it first). This is also what has to be cleared before a label can be deleted from the Labels tab.
+
 #### From the Recorder (Model Lab)
 
 Recordings you make in the Recorder are saved automatically and can go straight into the training data, with no export and import. In Model Lab, **From the Recorder** lists them with how many intervals are approved, unreviewed and excluded.

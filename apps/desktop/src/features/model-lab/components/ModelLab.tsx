@@ -9,6 +9,7 @@ import { DatasetManager } from "./DatasetManager";
 import { DetectionActivity } from "./DetectionActivity";
 import { LabelModelsPanel } from "./LabelModelsPanel";
 import { RecorderRecordings } from "./RecorderRecordings";
+import { TrainingHistory } from "./TrainingHistory";
 import { TrainPanel } from "./TrainPanel";
 
 /**
@@ -130,7 +131,7 @@ export function ModelLab({ onOpenLabels }: { onOpenLabels?: () => void }) {
       </section>
 
       <nav className="lab-workflow" aria-label="Model Lab sections">
-        <a href="#lab-labels">Models</a><a href="#lab-train">Train</a><a href="#lab-activity">Activity</a><a href="#lab-coverage">Labels</a><a href="#lab-recorder">From the Recorder</a><a href="#lab-dataset">Recordings</a>
+        <a href="#lab-labels">Models</a><a href="#lab-train">Train</a><a href="#lab-activity">Activity</a><a href="#lab-coverage">Labels</a><a href="#lab-history">History</a><a href="#lab-recorder">From the Recorder</a><a href="#lab-dataset">Recordings</a>
       </nav>
 
       <fieldset className="lab-workspace card-stack" disabled={!desktopAvailable} aria-label="Desktop model tools">
@@ -143,6 +144,7 @@ export function ModelLab({ onOpenLabels }: { onOpenLabels?: () => void }) {
             {onOpenLabels && <Button type="button" variant="outline" onClick={onOpenLabels}>Open Labels</Button>}
           </CardContent>
         </Card>
+        <TrainingHistory desktopAvailable={desktopAvailable} labels={labels} refreshKey={models.map((model) => `${model.id}:${model.state}`).join(",")} />
         <RecorderRecordings desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} onAdded={() => void refreshDatasets()} />
         <DatasetManager
           desktopAvailable={desktopAvailable}

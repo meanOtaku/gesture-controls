@@ -281,6 +281,17 @@ impl LabelRuntimeHost {
             .unwrap_or_default()
     }
 
+    pub fn training_history(&self) -> Vec<TrainingHistoryProject> {
+        let Ok(state) = self.state.lock() else {
+            return Vec::new();
+        };
+        state
+            .store
+            .as_ref()
+            .map(|store| training_history_of(store.registry()))
+            .unwrap_or_default()
+    }
+
     /// Deletes the training history of one label: its project, that project's runs and their sealed snapshots. Refused
     /// while a model of the label exists, or while another label's training history refers to it (its snapshots are
     /// sealed and cannot be edited).
@@ -822,6 +833,118 @@ pub(crate) fn registry_usage_of(
         }
     }
     usage
+}
+
+/// One training run in a project's history.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrainingHistoryRun {
+    pub id: String,
+    /// `queued`, `running` or `finished`.
+    pub status: String,
+    /// `deployable`, `evaluationOnly` or `failed`, once finished.
+    pub outcome: Option<String>,
+    pub queued_at: String,
+    pub finished_at: Option<String>,
+    pub failure: Option<String>,
+}
+
+/// What the registry keeps for one label's training project, for the Model Lab history list.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrainingHistoryProject {
+    pub id: String,
+    pub label: String,
+    pub name: String,
+    pub created_at: String,
+    /// Newest first.
+    pub runs: Vec<TrainingHistoryRun>,
+    pub snapshots: usize,
+    /// Models of this label that exist now.
+    pub models: usize,
+    /// Other labels this project's training treated as something else (for example "not the gesture").
+    pub mentions: Vec<String>,
+    /// Labels whose projects mention this project's label.
+    pub mentioned_by: Vec<String>,
+}
+
+fn text_of<T: Serialize>(value: &T) -> Option<String> {
+    serde_json::to_value(value)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_string))
+}
+
+/// Every training project in the registry, by label, with its runs, snapshots and cross-references.
+pub(crate) fn training_history_of(
+    registry: &model_lab_core::Registry,
+) -> Vec<TrainingHistoryProject> {
+    let mut projects: Vec<TrainingHistoryProject> = registry
+        .projects
+        .values()
+        .map(|project| {
+            let label = project.target.to_string();
+            let mut runs: Vec<TrainingHistoryRun> = registry
+                .runs
+                .values()
+                .filter(|run| run.project_id == project.id)
+                .map(|run| TrainingHistoryRun {
+                    id: run.id.to_string(),
+                    status: text_of(&run.status).unwrap_or_default(),
+                    outcome: run.outcome.as_ref().and_then(text_of),
+                    queued_at: run.queued_at.clone(),
+                    finished_at: run.finished_at.clone(),
+                    failure: run.failure.clone(),
+                })
+                .collect();
+            runs.sort_by(|a, b| b.queued_at.cmp(&a.queued_at));
+            let mentions = project
+                .mapping
+                .entries
+                .keys()
+                .map(ToString::to_string)
+                .filter(|other| *other != label)
+                .collect();
+            TrainingHistoryProject {
+                id: project.id.to_string(),
+                label: label.clone(),
+                name: project.name.clone(),
+                created_at: project.created_at.clone(),
+                runs,
+                snapshots: registry
+                    .snapshots
+                    .values()
+                    .filter(|s| s.project_id == project.id)
+                    .count(),
+                models: registry
+                    .versions
+                    .values()
+                    .filter(|v| v.label.to_string() == label)
+                    .count(),
+                mentions,
+                mentioned_by: Vec::new(),
+            }
+        })
+        .collect();
+    let mentions: Vec<(String, Vec<String>)> = projects
+        .iter()
+        .map(|p| (p.label.clone(), p.mentions.clone()))
+        .collect();
+    for project in &mut projects {
+        project.mentioned_by = mentions
+            .iter()
+            .filter(|(owner, mentioned)| {
+                *owner != project.label && mentioned.contains(&project.label)
+            })
+            .map(|(owner, _)| owner.clone())
+            .collect();
+    }
+    projects.sort_by(|a, b| a.label.cmp(&b.label));
+    projects
+}
+
+#[tauri::command]
+pub fn list_training_history(host: State<'_, LabelRuntimeHost>) -> Vec<TrainingHistoryProject> {
+    host.training_history()
 }
 
 #[tauri::command]

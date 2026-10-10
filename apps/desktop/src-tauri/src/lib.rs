@@ -156,6 +156,7 @@ pub fn run() {
             calibration::get_calibration_state,
             label_runtime::get_label_runtime_status,
             label_runtime::get_label_registry_usage,
+            label_runtime::list_training_history,
             label_runtime::delete_label_history,
             label_runtime::import_label_model,
             label_runtime::list_label_models,
