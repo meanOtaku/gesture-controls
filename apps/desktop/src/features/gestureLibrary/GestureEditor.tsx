@@ -5,11 +5,10 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { getCameraController } from "../camera/cameraService";
-import { CameraPicker } from "../camera/components/CameraPicker";
-import { CameraPreview } from "../camera/components/CameraPreview";
 import type { DatasetLabel } from "../model-lab/types";
 import { analyse, scoreRule, MIN_FRAMES } from "./calibration";
-import { SecondCameraPanel } from "./SecondCameraPanel";
+import { CameraPair } from "./CameraPair";
+import { SecondCameraControls } from "./SecondCameraControls";
 import { HandSideCheck } from "./HandSideCheck";
 import { CalibrationSession, GESTURE_SECONDS, NEGATIVE_MS, POSITIVE_MS, REST_SECONDS, type RecordLengths, type SessionSnapshot } from "./calibrationSession";
 import {
@@ -184,7 +183,7 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
 
       <section className="flex flex-col gap-3" aria-label="Calibration">
         <h3 className="text-sm font-semibold">1. Show it to the camera</h3>
-        <CameraPicker camera={camera} state={cam} />
+        <CameraPair primary={camera} primaryState={cam} secondary={camera2} secondaryState={cam2} />
         {!camOn ? (
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" onClick={() => void camera.enable()} disabled={cam.status === "starting"}>{cam.status === "starting" ? "Starting…" : "Turn camera on"}</Button>
@@ -192,9 +191,8 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
           </div>
         ) : (
           <>
-            <CameraPreview camera={camera} state={cam} hidden={false} />
             <HandSideCheck camera={cam} secondary={cam2} />
-            <SecondCameraPanel primary={camera} primaryState={cam} secondary={camera2} secondaryState={cam2} />
+            <SecondCameraControls primary={camera} primaryState={cam} secondary={camera2} secondaryState={cam2} />
             <div className="flex flex-wrap items-end gap-3">
               <div className="field">
                 <div className="field-head"><Label htmlFor={ids.positive}>Hold the gesture for</Label></div>

@@ -4,8 +4,6 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Label } from "../../components/ui/label";
 import type { CameraController, CameraSnapshot } from "../camera/cameraController";
-import { CameraPicker } from "../camera/components/CameraPicker";
-import { CameraPreview } from "../camera/components/CameraPreview";
 import { dualCameraMode, setDualCameraMode, subscribeDualCameraMode } from "./dualCamera";
 import type { CombineMode } from "./combinedDetector";
 
@@ -17,10 +15,11 @@ type Props = {
 };
 
 /**
- * An optional second camera, treated as a separate source: it has its own picture and hand detector, and a gesture counts
- * as seen when either camera sees it (or only when both do). Nothing is lined up between the two.
+ * The controls for an optional second camera, treated as a separate source: it has its own picture and hand detector, and
+ * a gesture counts as seen when either camera sees it (or only when both do). Nothing is lined up between the two. Its
+ * picture and camera choice are in `CameraPair`, beside the first camera's.
  */
-export function SecondCameraPanel({ primary, primaryState, secondary, secondaryState }: Props) {
+export function SecondCameraControls({ primary, primaryState, secondary, secondaryState }: Props) {
   const mode = useSyncExternalStore(subscribeDualCameraMode, dualCameraMode, dualCameraMode);
   const on = secondaryState.status === "on";
   const starting = secondaryState.status === "starting";
@@ -51,8 +50,6 @@ export function SecondCameraPanel({ primary, primaryState, secondary, secondaryS
         </Button>
       </div>
       {secondaryState.error && <Alert variant="destructive" role="alert"><AlertDescription>{secondaryState.error}</AlertDescription></Alert>}
-      {primaryState.status === "on" && <CameraPicker camera={secondary} state={secondaryState} label="Second camera" exclude={primaryState.deviceId} minimum={1} />}
-      <CameraPreview camera={secondary} state={secondaryState} hidden={!on} />
       {on && (
         <>
           <ul className="flex flex-wrap items-center gap-2" aria-label="Second camera status">

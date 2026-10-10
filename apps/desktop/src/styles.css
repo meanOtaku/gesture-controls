@@ -405,3 +405,7 @@ html.overlay-document body::before { display:none; }
 [data-slot="label"][data-required]::after { content:"*"; margin-left:-.3rem; color:var(--destructive,#c0392b); font-weight:700; }
 .required-mark { color:var(--destructive,#c0392b); font-weight:700; }
 .required-note { margin:0; font-size:.78rem; color:var(--ink-3); }
+/* Two cameras side by side; on a narrow window they stack. */
+.camera-pair { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:1rem; align-items:start; }
+.camera-pair-item { display:flex; flex-direction:column; gap:.5rem; min-width:0; }
+.camera-pair-item .camera-stage { max-width:none; }

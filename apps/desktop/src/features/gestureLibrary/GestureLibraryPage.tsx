@@ -5,14 +5,13 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { getCameraController } from "../camera/cameraService";
-import { CameraPicker } from "../camera/components/CameraPicker";
-import { CameraPreview } from "../camera/components/CameraPreview";
 import { OperationFeedback } from "../../components/app/OperationFeedback";
 import { useLabelModels } from "../model-lab/hooks/useLabelModels";
 import { AgreementTracker } from "./agreement";
 import { AgreementPanel } from "./AgreementPanel";
 import { blankDefinition, describeRule, type GestureDefinition } from "./definition";
-import { SecondCameraPanel } from "./SecondCameraPanel";
+import { CameraPair } from "./CameraPair";
+import { SecondCameraControls } from "./SecondCameraControls";
 import { HandSideCheck } from "./HandSideCheck";
 import { GestureEditor } from "./GestureEditor";
 import { useGestureLibrary } from "./useGestureLibrary";
@@ -101,10 +100,9 @@ export function GestureLibraryPage() {
             {on && <Badge variant="outline">{cam.fps > 0 ? `${cam.fps.toFixed(0)} frames/s` : "waiting for frames"}</Badge>}
             {!on && <span className="hint">Turn the camera on to see your gestures recognised live.</span>}
           </div>
-          <CameraPicker camera={camera} state={cam} />
-          <CameraPreview camera={camera} state={cam} hidden={!on} />
+          <CameraPair primary={camera} primaryState={cam} secondary={camera2} secondaryState={cam2} />
           {on && <HandSideCheck camera={cam} secondary={cam2} />}
-          {on && <SecondCameraPanel primary={camera} primaryState={cam} secondary={camera2} secondaryState={cam2} />}
+          {on && <SecondCameraControls primary={camera} primaryState={cam} secondary={camera2} secondaryState={cam2} />}
           {loaded && definitions.length === 0 && <p className="hint">No gestures yet. Make one with “New gesture”.</p>}
           <ul className="flex flex-col gap-3" aria-label="Gestures">
             {definitions.map((definition) => {
