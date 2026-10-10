@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from pinch_classifier.csv_io import CsvFormatError, load_recording
+from label_trainer.csv_io import CsvFormatError, load_recording
 
 from .conftest import make_dataset_csv
 
@@ -47,7 +47,7 @@ def test_rejects_out_of_order_timestamps(tmp_path):
 def test_accepts_non_legacy_custom_label(tmp_path):
     # M1-B: collection labels are user-defined, so csv_io only validates structure.
     # Whether a label is trainable is decided later by an explicit LabelMapping
-    # (see pinch_classifier.labels / test_dataset.py), not by a fixed vocabulary here.
+    # (see label_trainer.labels / test_dataset.py), not by a fixed vocabulary here.
     path = make_dataset_csv(tmp_path, "session_d.csv", "idle", row_count=3)
     text = path.read_text(encoding="utf-8").replace(",idle", ",my_custom_label")
     path.write_text(text, encoding="utf-8")

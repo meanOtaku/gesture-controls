@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from pinch_classifier.labels import LabelMapping, LabelMappingEntry, validate_mapping_targets
+from label_trainer.labels import LabelMapping, LabelMappingEntry, validate_mapping_targets
 
 
 def _mapping(entries: dict[str, LabelMappingEntry]) -> LabelMapping:

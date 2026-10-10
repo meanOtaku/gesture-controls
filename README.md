@@ -19,7 +19,7 @@ the system-volume backend and the offline training runner. The checks do not sen
 
 Training deliberately remains a development workflow, not a bundled desktop feature. It requires a complete repository
 checkout and [uv](https://docs.astral.sh/uv/) on `PATH`; `uv` provisions the Python 3.11+ training environment from
-`tools/pinch-classifier/pyproject.toml` when a job starts. If `uv` is missing, Model Lab says so when you start training.
+`tools/label-trainer/pyproject.toml` when a job starts. If `uv` is missing, Model Lab says so when you start training.
 
 Models run only on the desktop, one per label, and only when the model runtime is switched on. They never run on the Watch or headphones.
 
@@ -143,7 +143,7 @@ crates/volume-control/     Normalized controller trait; macOS, Windows, and Linu
 crates/watch-bridge/       Galaxy Watch transports: Bluetooth LE central and Wi-Fi WebSocket server
 crates/native-head-tracking/ In-process macOS/Windows Sony provider (IOKit/IOBluetooth or HID/SetupAPI FFI + conversion)
 scripts/                   run-system.mjs launcher, config checks
-tools/pinch-classifier/    Python training, export, and offline replay (development workflow, not shipped)
+tools/label-trainer/    Python training, export, and offline replay (development workflow, not shipped)
 tools/sony-head-tracker/   compatibility tests, sample sender, committed upstream prebuilds
 third_party/               vendored Sony head-tracker engine sources and notices
 vendor/                    vendored Samsung Health Sensor SDK (watch app)
@@ -228,7 +228,7 @@ npm run build
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-(cd tools/pinch-classifier && uv run --with pytest pytest tests -q)
+(cd tools/label-trainer && uv run --with pytest pytest tests -q)
 (cd apps/watch && ./gradlew :app:testDebugUnitTest)
 ```
 

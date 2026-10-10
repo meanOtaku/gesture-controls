@@ -94,7 +94,7 @@ Performance changes themselves are listed in [the performance review](performanc
 | F-5 | README called `volume-control` macOS-only | **Fixed** | this change |
 | F-6 | Stale trees in both `ARCHITECTURE.md` files and `docs/README.md` | **Fixed** | this change |
 | F-1, F-2 | Duplicate `usePendingActions` hook; dead `lib/utils.ts` | **Open** | — |
-| G-1 | CI covers neither `apps/watch` nor `tools/pinch-classifier` | **Open**: documented honestly in the docs, not fixed | — |
+| G-1 | CI covers neither `apps/watch` nor `tools/label-trainer` | **Open**: documented honestly in the docs, not fixed | — |
 | R-1…R-4 | Untracked build artifacts, overlapping CI workflows, hand-maintained cross-language contracts | **Open** (event-name and bundle-contract drift now have guards; the rest do not) | — |
 
 ## Suggested next work

@@ -123,7 +123,7 @@ The overlay has one `grabbed` flag, so it also records an **owner**:
   window), a passed and in-tolerance conversion parity record, training provenance
   with no train/test session leak, and the lowercase SHA-256 of `model.tflite`
   recomputed from disk. A shared fixture under
-  `tools/pinch-classifier/tests/fixtures/valid_bundle` is validated by both the
+  `tools/label-trainer/tests/fixtures/valid_bundle` is validated by both the
   Python and Rust suites so the two validators cannot drift.
 - **Intent bindings** are a closed, per-model mapping; `negative` can never bind
   to an actuating intent, and activation revalidates everything under one lock.

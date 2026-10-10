@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pinch_classifier.csv_io import load_recording
-from pinch_classifier.windowing import WindowConfig, build_windows
+from label_trainer.csv_io import load_recording
+from label_trainer.windowing import WindowConfig, build_windows
 
 from .conftest import SAMPLE_INTERVAL_NS, make_dataset_csv
 

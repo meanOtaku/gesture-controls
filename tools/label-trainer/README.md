@@ -1,4 +1,4 @@
-# pinch-classifier
+# label-trainer
 
 Offline training of **one model for one label**. The desktop app runs it when you train a model in Model Lab, and imports the
 ONNX bundle it writes. The folder keeps its original name; it no longer contains any three-class pinch tooling.
@@ -19,11 +19,11 @@ out), the streams the model may read, and the window. It hands them to this trai
 
 ## Running it
 
-The desktop starts it for you (`uv run --project tools/pinch-classifier --extra onnx label-classifier-train`, plus
+The desktop starts it for you (`uv run --project tools/label-trainer --extra onnx label-classifier-train`, plus
 `--extra torch` for the PyTorch backend). By hand:
 
 ```bash
-cd tools/pinch-classifier
+cd tools/label-trainer
 uv run --extra onnx label-classifier-train --spec spec.json --out run-dir
 ```
 

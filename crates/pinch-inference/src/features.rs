@@ -1,5 +1,5 @@
 //! Deterministic statistical feature extraction, mirroring
-//! `tools/pinch-classifier/src/pinch_classifier/features.py`'s
+//! `tools/label-trainer/src/label_trainer/features.py`'s
 //! `FEATURE_NAMES`/`extract_features` exactly (same order, same 55 values) so
 //! a model trained offline sees the identical feature contract live on the
 //! desktop. See `crate::fusion` for how a raw watch telemetry window becomes

@@ -2,7 +2,7 @@
 //!
 //! Everything that has to be recorded and cannot change afterwards is decided here, in Rust, and sealed in the model
 //! registry before anything runs (see `label_inference::begin_run`): which recordings train and which test, what each
-//! label means, which streams the model may read, and the window. The trainer (`tools/pinch-classifier`, run with `uv`)
+//! label means, which streams the model may read, and the window. The trainer (`tools/label-trainer`, run with `uv`)
 //! is only told what to do, trains, tests on the recordings held out for it, and writes a bundle. The bundle then goes
 //! through the same validation as an imported one and is recorded as a Draft that came from this run. Nothing is
 //! approved or activated by training.
@@ -38,10 +38,8 @@ use crate::model_lab::{
 
 pub const LABEL_TRAINING_EVENT: &str = "label-training-event";
 const RUNS_DIR: &str = "training-runs";
-const TRAINER_PROJECT_DIR: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../../tools/pinch-classifier"
-);
+const TRAINER_PROJECT_DIR: &str =
+    concat!(env!("CARGO_MANIFEST_DIR"), "/../../../tools/label-trainer");
 const SPEC_VERSION: u32 = 1;
 
 /// The backends offered, which extra packages the trainer needs for each.
@@ -361,7 +359,7 @@ pub async fn check_label_trainer() -> TrainerEnvironment {
     {
         return TrainerEnvironment {
             available: false,
-            detail: "The trainer project is missing from this checkout (tools/pinch-classifier)."
+            detail: "The trainer project is missing from this checkout (tools/label-trainer)."
                 .into(),
         };
     }

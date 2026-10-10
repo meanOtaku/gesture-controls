@@ -171,13 +171,13 @@ benefit.
 cargo test --release -p spatial-gesture-desktop --lib perf_probes -- --ignored --nocapture
 
 # Python dataset build (100,000 rows)
-cd tools/pinch-classifier && uv run python - <<'PY'
+cd tools/label-trainer && uv run python - <<'PY'
 import sys, time, tempfile, pathlib
 sys.path.insert(0, "tests")
 from tests.conftest import make_dataset_csv
-from pinch_classifier.dataset import build_dataset
-from pinch_classifier.windowing import WindowConfig
-from pinch_classifier.labels import legacy_compatibility_mapping
+from label_trainer.dataset import build_dataset
+from label_trainer.windowing import WindowConfig
+from label_trainer.labels import legacy_compatibility_mapping
 tmp = pathlib.Path(tempfile.mkdtemp())
 paths = [make_dataset_csv(tmp, f"s{i}.csv", l, 25_000, start_ns=i * 10**12)
          for i, l in enumerate(["idle", "pinch_start", "pinch_release", "idle"])]

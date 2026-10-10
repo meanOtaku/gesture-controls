@@ -800,7 +800,7 @@ wheels = [
 ]
 
 [[package]]
-name = "pinch-classifier"
+name = "label-trainer"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

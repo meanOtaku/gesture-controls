@@ -11,9 +11,9 @@ from pathlib import Path
 
 import numpy as np
 
-from pinch_classifier.csv_io import CsvFormatError, Recording, _strip_leading_comments
-from pinch_classifier.features import FEATURE_NAMES
-from pinch_classifier.schema import (
+from label_trainer.csv_io import CsvFormatError, Recording, _strip_leading_comments
+from label_trainer.features import FEATURE_NAMES
+from label_trainer.schema import (
     ACCEL_COLUMNS,
     CONTACT_QUALITY_COLUMN,
     GYRO_COLUMNS,
@@ -24,7 +24,7 @@ from pinch_classifier.schema import (
     QUAT_COLUMNS,
     TIMESTAMP_COLUMN,
 )
-from pinch_classifier.windowing import MS_TO_NS, Window, WindowConfig
+from label_trainer.windowing import MS_TO_NS, Window, WindowConfig
 
 
 def _stat_block(values: np.ndarray) -> tuple[float, float, float, float]:

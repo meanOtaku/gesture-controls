@@ -11,7 +11,7 @@ OS/architecture, device model/firmware, and outcome for every applicable row.
 - [ ] `npm test`, `npm run typecheck`, `npm run build`, `cargo fmt --all -- --check`,
   `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace`
   pass. Also run the two suites CI does not: the trainer
-  (`cd tools/pinch-classifier && uv run --with pytest pytest tests -q`) and the
+  (`cd tools/label-trainer && uv run --with pytest pytest tests -q`) and the
   watch (`cd apps/watch && ./gradlew :app:testDebugUnitTest`). If
   `native-head-tracking`'s `ffi_macos` smoke test aborts locally, confirm the
   `macos-14` CI job passes it instead.

@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-from pinch_classifier.schema import HEADER_COLUMNS
+from label_trainer.schema import HEADER_COLUMNS
 
 SAMPLE_INTERVAL_NS = 20_000_000  # 20 ms => 50 Hz, matching watch orientation cadence
 

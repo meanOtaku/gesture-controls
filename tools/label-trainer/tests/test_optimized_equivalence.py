@@ -13,10 +13,10 @@ import random
 import numpy as np
 import pytest
 
-from pinch_classifier.csv_io import CsvFormatError, _carry_forward, load_recording
-from pinch_classifier.features import extract_features
-from pinch_classifier.schema import HEADER_COLUMNS, NUMERIC_COLUMNS
-from pinch_classifier.windowing import WindowConfig, build_windows
+from label_trainer.csv_io import CsvFormatError, _carry_forward, load_recording
+from label_trainer.features import extract_features
+from label_trainer.schema import HEADER_COLUMNS, NUMERIC_COLUMNS
+from label_trainer.windowing import WindowConfig, build_windows
 
 from .reference_impl import (
     reference_build_windows,
@@ -157,7 +157,7 @@ class TestWindowsAndFeatures:
         recording = load_recording(_write_csv(tmp_path, "flat.csv", rows))
         window = reference_build_windows(recording, WindowConfig(window_ms=100, stride_ms=100, min_samples_per_window=2))
         # All six rows share one timestamp, so there is no span to place a window on; build one directly.
-        from pinch_classifier.windowing import Window
+        from label_trainer.windowing import Window
 
         manual = Window("flat", "idle", base, base, np.arange(6))
         assert window == []

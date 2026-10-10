@@ -13,7 +13,7 @@
 - [Safety and fail-closed behavior](architecture/safety-and-fail-closed-behavior.md): the invariants that bound what the desktop can do, and what is not guaranteed
 - [Project brief](architecture/project-brief.md): the original design specification and milestone plan (see its status note for where the implementation differs)
 - Per-app structure: [desktop](../apps/desktop/ARCHITECTURE.md), [watch](../apps/watch/ARCHITECTURE.md), [Sony tracker](../tools/sony-head-tracker/ARCHITECTURE.md)
-- Training tooling: [pinch-classifier](../tools/pinch-classifier/README.md)
+- Training tooling: [label-trainer](../tools/label-trainer/README.md)
 
 ## Protocols
 

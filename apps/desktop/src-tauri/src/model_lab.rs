@@ -17,7 +17,7 @@ const METADATA_COMMENT_PREFIX: char = '#';
 
 /// Exact column order the Milestone 9 dataset recorder writes. Mirrors
 /// `DATASET_CSV_COLUMNS` in telemetryStore.ts and `HEADER_COLUMNS` in
-/// tools/pinch-classifier/src/pinch_classifier/schema.py. A dataset whose
+/// tools/label-trainer/src/label_trainer/schema.py. A dataset whose
 /// header does not match this exactly is rejected on import.
 pub(crate) const DATASET_CSV_HEADER: [&str; 17] = [
     "timestamp_ns",

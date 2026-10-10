@@ -274,7 +274,7 @@ The card warns if only one recording of the gesture would be trained on: a model
 
 When training finishes you see, in words, how much of the gesture it found, how much of what it flagged was right, and how often it wrongly flagged something else, all measured on the recordings it never trained on. **The cut-off for "detected" is fitted on those same test recordings** (a model's scores shift from one session to the next, so a fixed cut-off can sit above everything), so the numbers are a little optimistic; the card says so. **A model that cannot tell the gesture apart is not kept**: if its test score (AUC) is under 0.7, or its best F1 under 0.5, the run is recorded as *trained but not good enough*, nothing is added to your models, and the card says why. An AUC under 0.5 means it scored the gesture *lower* than other things on new recordings, which is what memorising a session looks like. Otherwise the model is added as a **Draft** under Label models: review it, mark it evaluated, approve it, then activate it. Check it in Monitor on the Gestures tab before Live. A failed or cancelled run is recorded with its reason and produces no model.
 
-Training runs on this computer and needs **uv** on the PATH and this repository checkout (`tools/pinch-classifier`); the card says so if it is missing. The first run downloads the Python packages. Running a model needs none of this.
+Training runs on this computer and needs **uv** on the PATH and this repository checkout (`tools/label-trainer`); the card says so if it is missing. The first run downloads the Python packages. Running a model needs none of this.
 
 #### Activity
 

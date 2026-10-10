@@ -3,7 +3,7 @@
 It proves the trainer's output is accepted by the desktop's bundle validator and scores like the trained model does.
 The recordings are synthetic (a vigorous-acceleration "snap" against quiet "idle"); these are not gesture models.
 
-    cd tools/pinch-classifier
+    cd tools/label-trainer
     uv run --extra onnx --extra torch python ../model-bundle-fixture/make_trained_fixtures.py <crates/label-inference/tests/fixtures>
 """
 import json
@@ -13,8 +13,8 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pinch-classifier" / "tests"))
-from pinch_classifier import label_train as lt  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "label-trainer" / "tests"))
+from label_trainer import label_train as lt  # noqa: E402
 from test_label_train import spec_for  # noqa: E402
 
 

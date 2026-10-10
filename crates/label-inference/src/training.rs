@@ -694,7 +694,7 @@ mod tests {
         assert!(evaluation_only_run(&mut store, &begun.run_id, "again", Vec::new(), NOW).is_err());
     }
 
-    /// The same lists are in `tools/pinch-classifier/tests/test_label_train.py`: the two sides must choose the same features.
+    /// The same lists are in `tools/label-trainer/tests/test_label_train.py`: the two sides must choose the same features.
     #[test]
     fn movement_only_keeps_how_things_change_and_matches_the_trainer() {
         use StreamSource::*;

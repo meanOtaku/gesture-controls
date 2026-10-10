@@ -11,8 +11,8 @@ import pytest
 
 pytest.importorskip("onnxruntime")
 
-from pinch_classifier import label_train as lt  # noqa: E402
-from pinch_classifier.schema import HEADER_COLUMNS  # noqa: E402
+from label_trainer import label_train as lt  # noqa: E402
+from label_trainer.schema import HEADER_COLUMNS  # noqa: E402
 
 INTERVAL_NS = 20_000_000
 

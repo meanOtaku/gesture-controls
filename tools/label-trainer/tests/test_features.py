@@ -4,9 +4,9 @@ import numpy as np
 
 import pytest
 
-from pinch_classifier.csv_io import load_recording
-from pinch_classifier.features import FEATURE_NAMES, extract_features, resolve_feature_subset
-from pinch_classifier.windowing import WindowConfig, build_windows
+from label_trainer.csv_io import load_recording
+from label_trainer.features import FEATURE_NAMES, extract_features, resolve_feature_subset
+from label_trainer.windowing import WindowConfig, build_windows
 
 from .conftest import make_dataset_csv
 

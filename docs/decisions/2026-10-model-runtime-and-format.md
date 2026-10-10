@@ -1,7 +1,7 @@
 # Model format and inference runtime for per-label binary models
 
 **Status:** Accepted, as the basis for the Model Lab refactor (step 0). Nothing here changes runtime behaviour yet; later steps implement it.
-**Scope:** `crates/pinch-inference`, `apps/desktop/src-tauri` (inference, model registry), `tools/pinch-classifier`.
+**Scope:** `crates/pinch-inference`, `apps/desktop/src-tauri` (inference, model registry), `tools/label-trainer`.
 
 ## Context
 

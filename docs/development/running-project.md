@@ -309,7 +309,7 @@ Sony tracker compatibility tests (Python):
 Per-label trainer tests (Python; the PyTorch backend test runs with the
 `torch` extra):
 
-  cd tools/pinch-classifier
+  cd tools/label-trainer
   uv run --extra dev --extra onnx pytest -q
 
 Galaxy Watch (Kotlin) JVM unit tests. These need the Android SDK path in
@@ -330,7 +330,7 @@ typecheck, frontend build, `cargo fmt`, workspace `clippy`, and the Rust tests
 (including `watch-bridge` and the desktop crate) on Ubuntu, macOS 14, and Windows
 2022; a LiteRT-feature test job for `pinch-inference`; and a package build per OS.
 `CI` (`.github/workflows/ci.yml`) is described next. **Neither workflow runs the
-pinch-classifier tests or the watch's Gradle unit tests**; run them locally before
+label-trainer tests or the watch's Gradle unit tests**; run them locally before
 changing the bundle contract, the BLE framing, or the watch's clock/identity code.
 
 The `CI` workflow runs the JavaScript tests, typecheck, frontend build, Rust
