@@ -4,7 +4,7 @@ import { clockSyncCsv, frameToCsvRows, handLandmarksHeader } from "../camera/han
 import { blankDefinition, type GestureDefinition } from "./definition";
 import { makeHand } from "./testHands";
 
-const api = vi.hoisted(() => ({
+const api = vi.hoisted(() => ({ onRecordingsChanged: vi.fn(),
   listRecordingBundles: vi.fn(), loadRecordingBundle: vi.fn(), getRecordingCameraEvidence: vi.fn(), addCameraProposedIntervals: vi.fn(),
 }));
 vi.mock("../../shared/tauri/recordingBundle", () => api);
@@ -27,6 +27,7 @@ const bundle = { recordingId: "rec-1", rawRowCount: 200, intervalCount: 0, actua
 
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn.mockReset());
+  api.onRecordingsChanged.mockReturnValue(() => undefined);
   library.listGestureDefinitions.mockResolvedValue([pinch]);
   api.listRecordingBundles.mockResolvedValue({ status: "ok", value: [bundle] });
   api.loadRecordingBundle.mockResolvedValue({ status: "ok", value: { recording: {}, annotations: { intervals: [] } } });
@@ -79,5 +80,25 @@ describe("CameraProposalsPanel", () => {
     const box = await screen.findByRole("checkbox", { name: /Pinch at/ });
     expect(box.getAttribute("aria-disabled") === "true" || box.hasAttribute("disabled") || box.getAttribute("data-disabled") !== null).toBe(true);
     expect(screen.getByText(/Overlaps an interval already there/)).toBeTruthy();
+  });
+
+  it("refreshes its list when recordings change elsewhere, and lets go of a recording that was deleted", async () => {
+    let changed: () => void = () => undefined;
+    api.onRecordingsChanged.mockImplementation((listener: () => void) => { changed = listener; return () => undefined; });
+    render(<CameraProposalsPanel />);
+    await screen.findByRole("option", { name: /rec-1/ });
+    fireEvent.change(screen.getByLabelText("Recording"), { target: { value: "rec-1" } });
+    api.listRecordingBundles.mockResolvedValue({ status: "ok", value: [] }); // it was deleted in the viewer below
+    changed();
+    await waitFor(() => expect(screen.queryByRole("option", { name: /rec-1/ })).toBeNull());
+    expect((screen.getByLabelText("Recording") as HTMLSelectElement).value).toBe("");
+  });
+
+  it("says a recording is no longer there, in words, instead of showing the file error", async () => {
+    api.getRecordingCameraEvidence.mockResolvedValue({ status: "error", message: "No such file or directory (os error 2)" });
+    render(<CameraProposalsPanel />);
+    await choose();
+    expect(await screen.findByText(/no longer there/)).toBeInTheDocument();
+    expect(screen.queryByText(/os error 2/)).toBeNull();
   });
 });

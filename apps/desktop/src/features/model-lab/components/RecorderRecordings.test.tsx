@@ -4,7 +4,7 @@ import type { DatasetLabel, DatasetSummary } from "../types";
 
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
-const api = vi.hoisted(() => ({ listRecordingBundles: vi.fn() }));
+const api = vi.hoisted(() => ({ onRecordingsChanged: vi.fn(), listRecordingBundles: vi.fn() }));
 vi.mock("../../../shared/tauri/recordingBundle", () => api);
 
 import { RecorderRecordings, eligibleIntervals } from "./RecorderRecordings";
@@ -17,6 +17,7 @@ const label = (id: string, role: DatasetLabel["role"]): DatasetLabel => ({ id, d
 
 beforeEach(() => {
   invoke.mockReset();
+  api.onRecordingsChanged.mockReturnValue(() => undefined);
   invoke.mockResolvedValue({ id: "d1", rowCount: 40, labels: ["idle", "pinch"] });
   api.listRecordingBundles.mockResolvedValue({ status: "ok", value: [bundle("aaaaaaaa-1", 0, 2), bundle("bbbbbbbb-2", 0, 0)] });
 });

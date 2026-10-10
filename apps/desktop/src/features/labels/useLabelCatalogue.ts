@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { OperationFeedback } from "../../components/app/OperationFeedback";
-import { listRecordingBundles } from "../../shared/tauri/recordingBundle";
+import { listRecordingBundles, onRecordingsChanged } from "../../shared/tauri/recordingBundle";
 import { listGestureDefinitions } from "../gestureLibrary/gestureLibraryApi";
 import type { NewLabel } from "../model-lab/components/LabelCoverage";
 import { useLabelModels } from "../model-lab/hooks/useLabelModels";
@@ -55,6 +55,9 @@ export function useLabelCatalogue() {
       live = false;
     };
   }, [desktopAvailable, loadVersion]);
+
+  // Recordings saved, imported or deleted elsewhere change the counts here.
+  useEffect(() => onRecordingsChanged(() => setLoadVersion((version) => version + 1)), []);
 
   const coverageByLabel = useMemo(() => {
     const counts = new Map<string, number>();

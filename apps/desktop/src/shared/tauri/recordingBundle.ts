@@ -394,6 +394,20 @@ function isTauriDesktop(): boolean {
  * data directory to write a bundle into, so this reports an error instead of
  * silently pretending to have saved.
  */
+/** Sent whenever the set of saved recordings (or their intervals) changes, so every list of them can refresh. */
+export const RECORDINGS_CHANGED = "recordings-changed";
+
+function announceRecordingsChanged(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(RECORDINGS_CHANGED));
+}
+
+/** Calls `listener` whenever recordings are saved, imported, deleted or gain intervals. Returns the way to stop. */
+export function onRecordingsChanged(listener: () => void): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  window.addEventListener(RECORDINGS_CHANGED, listener);
+  return () => window.removeEventListener(RECORDINGS_CHANGED, listener);
+}
+
 export async function saveRecordingBundle(payload: RecordingBundlePayload): Promise<SaveRecordingBundleResult> {
   if (!isTauriDesktop()) {
     return { status: "error", message: "Recording bundle persistence requires the desktop app" };
@@ -403,6 +417,7 @@ export async function saveRecordingBundle(payload: RecordingBundlePayload): Prom
       "save_recording_bundle",
       { rawCsv: payload.rawCsv, recording: payload.recording, annotations: payload.annotations, extraFiles: payload.extraFiles ?? null },
     );
+    announceRecordingsChanged();
     return {
       status: "saved",
       recordingId: summary.recordingId,
@@ -435,6 +450,7 @@ export async function importRecordingFromRawCsv(csvText: string): Promise<Import
       "import_recording_from_raw_csv",
       { csvText },
     );
+    announceRecordingsChanged();
     return { status: "imported", recordingId: summary.recordingId, rowCount: summary.rawRowCount };
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : String(error) };
@@ -469,7 +485,9 @@ export async function deleteRecordingBundle(recordingId: string): Promise<Record
   if (!isTauriDesktop()) {
     return { status: "error", message: "Recording bundle persistence requires the desktop app" };
   }
-  return toResult(invoke<void>("delete_recording_bundle", { recordingId }));
+  const result = await toResult(invoke<void>("delete_recording_bundle", { recordingId }));
+  if (result.status === "ok") announceRecordingsChanged();
+  return result;
 }
 
 /**
@@ -636,5 +654,7 @@ export async function addCameraProposedIntervals(
   if (!isTauriDesktop()) {
     return { status: "error", message: "Recording bundle persistence requires the desktop app" };
   }
-  return toResult(invoke<AnnotationInterval[]>("add_camera_proposed_intervals", { recordingId, intervals }));
+  const result = await toResult(invoke<AnnotationInterval[]>("add_camera_proposed_intervals", { recordingId, intervals }));
+  if (result.status === "ok") announceRecordingsChanged();
+  return result;
 }

@@ -7,7 +7,7 @@ import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Label } from "../../../components/ui/label";
-import { listRecordingBundles, type RecordingBundleSummary } from "../../../shared/tauri/recordingBundle";
+import { listRecordingBundles, onRecordingsChanged, type RecordingBundleSummary } from "../../../shared/tauri/recordingBundle";
 import type { DatasetLabel, DatasetSummary } from "../types";
 
 export type IntervalFilter = "notExcluded" | "approvedOnly";
@@ -46,6 +46,7 @@ export function RecorderRecordings({ desktopAvailable, labels, datasets, onAdded
   }, [desktopAvailable]);
   useEffect(() => {
     void load();
+    return onRecordingsChanged(() => void load());
   }, [load]);
 
   const backgrounds = labels.filter((label) => label.archivedAt === null && label.role === "negativeBackground");

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { SectionHeader } from "../../components/app/SectionHeader";
 import { OperationFeedback } from "../../components/app/OperationFeedback";
 import { Alert, AlertDescription } from "../../components/ui/alert";
@@ -6,7 +6,7 @@ import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Label } from "../../components/ui/label";
-import { listRecordingBundles, type RecordingBundleSummary } from "../../shared/tauri/recordingBundle";
+import { listRecordingBundles, onRecordingsChanged, type RecordingBundleSummary } from "../../shared/tauri/recordingBundle";
 import type { GestureDefinition } from "./definition";
 import { listGestureDefinitions } from "./gestureLibraryApi";
 import { addProposals, findProposals, type Found } from "./recordingProposals";
@@ -28,11 +28,18 @@ export function CameraProposalsPanel() {
   const [found, setFound] = useState<Shown | null>(null);
   const [chosen, setChosen] = useState<Set<number>>(new Set());
 
-  useEffect(() => {
-    void listRecordingBundles().then((result) => {
-      if (result.status === "ok") setRecordings(result.value);
-    });
+  // The list is read when the page opens and again whenever recordings are saved, imported or deleted anywhere, so it never
+  // offers a recording that has gone. A recording that disappeared while chosen is let go of.
+  const reload = useCallback(async () => {
+    const result = await listRecordingBundles();
+    if (result.status !== "ok") return;
+    setRecordings(result.value);
+    setRecordingId((current) => (current !== "" && !result.value.some((r) => r.recordingId === current) ? "" : current));
   }, []);
+  useEffect(() => {
+    void reload();
+    return onRecordingsChanged(() => void reload());
+  }, [reload]);
 
   const find = async () => {
     setBusy(true);
@@ -41,7 +48,14 @@ export function CameraProposalsPanel() {
     try {
       const definitions = await listGestureDefinitions().catch(() => [] as GestureDefinition[]);
       const result = await findProposals(recordingId, definitions);
-      if (!result.ok) return setMessage(result.message);
+      if (!result.ok) {
+        if (/no such file|not found|os error 2/i.test(result.message)) {
+          setMessage("That recording is no longer there (it may have been deleted), so the list was refreshed. Choose another.");
+          void reload();
+          return;
+        }
+        return setMessage(result.message);
+      }
       setFound({ ...result.found, skipped: definitions.filter((definition) => !definition.labelId).map((definition) => definition.name) });
       setChosen(new Set(result.found.proposals.flatMap((proposal, index) => (proposal.overlaps ? [] : [index]))));
     } catch (error) {
