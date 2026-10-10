@@ -38,17 +38,7 @@ describe("cameraAssist", () => {
     expect(id).toBe("rec-1");
     expect(intervals).toHaveLength(1);
     expect(intervals[0]).toMatchObject({ label_id: "pinch", creation_mechanism: "camera_proposal", curation_status: "unreviewed" });
-    expect(feedback.success).toHaveBeenCalledWith("Camera marking", expect.stringContaining("Marked 1 pinch hold"));
-  });
-
-  it("also marks the closing and opening stretches when the gesture asks for them, under their own labels", async () => {
-    library.listGestureDefinitions.mockResolvedValue([{ ...pinch, closePhase: { labelId: "pinch_close", ms: 500 }, openPhase: { labelId: "pinch_open", ms: 500 } }, other]);
-    api.getRecordingCameraEvidence.mockResolvedValue({ status: "ok", value: evidence(true) });
-    cameraAssist.arm("pinch");
-    await cameraAssist.finish("rec-1");
-    const intervals = api.addCameraProposedIntervals.mock.calls[0][1] as { label_id: string }[];
-    expect(intervals.map((i) => i.label_id)).toEqual(["pinch_close", "pinch", "pinch_open"]);
-    expect(feedback.success).toHaveBeenCalledWith("Camera marking", expect.stringContaining("Marked 1 pinch hold with 1 closing and 1 opening stretch"));
+    expect(feedback.success).toHaveBeenCalledWith("Camera marking", expect.stringContaining("Marked 1 pinch interval"));
   });
 
   it("marks a gesture only the second camera saw, using the file the recording kept for it", async () => {
@@ -60,16 +50,7 @@ describe("cameraAssist", () => {
     await cameraAssist.finish("rec-1");
     const intervals = api.addCameraProposedIntervals.mock.calls[0][1] as { label_id: string }[];
     expect(intervals.map((i) => i.label_id)).toEqual(["pinch"]);
-    expect(feedback.success).toHaveBeenCalledWith("Camera marking", expect.stringContaining("Marked 1 pinch hold"));
-  });
-
-  it("treats a gesture's closing or opening label as that gesture, so choosing it still marks the whole gesture", async () => {
-    library.listGestureDefinitions.mockResolvedValue([{ ...pinch, closePhase: { labelId: "pinch_close", ms: 500 }, openPhase: { labelId: "pinch_open", ms: 500 } }, other]);
-    api.getRecordingCameraEvidence.mockResolvedValue({ status: "ok", value: evidence(true) });
-    cameraAssist.arm("pinch_open");
-    await cameraAssist.finish("rec-1");
-    const intervals = api.addCameraProposedIntervals.mock.calls[0][1] as { label_id: string }[];
-    expect(intervals.map((i) => i.label_id)).toEqual(["pinch_close", "pinch", "pinch_open"]);
+    expect(feedback.success).toHaveBeenCalledWith("Camera marking", expect.stringContaining("Marked 1 pinch interval"));
   });
 
   it("keeps the recording and says so when the camera never saw the gesture", async () => {

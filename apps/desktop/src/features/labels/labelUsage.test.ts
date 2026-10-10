@@ -28,11 +28,3 @@ describe("usageOf", () => {
   });
   it("counts nothing for an unused label", () => expect(usageCount(usageOf("unused", sources))).toBe(0));
 });
-
-describe("usage through a gesture's closing and opening labels", () => {
-  it("counts the gesture as using its closing and opening labels as well as its own", () => {
-    const gestures = [{ id: "g1", name: "Pinch", labelId: "pinch", closePhase: { labelId: "pinch_close" }, openPhase: { labelId: "pinch_open" } }];
-    for (const id of ["pinch", "pinch_close", "pinch_open"]) expect(usageOf(id, { bundles: [], datasets: [], gestures, models: [], recipes: [] }).gestures).toEqual([{ id: "g1", name: "Pinch" }]);
-    expect(usageOf("other", { bundles: [], datasets: [], gestures, models: [], recipes: [] }).gestures).toEqual([]);
-  });
-});

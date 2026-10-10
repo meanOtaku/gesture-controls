@@ -61,55 +61,6 @@ describe("proposeIntervals", () => {
   });
 });
 
-describe("closing and opening stretches", () => {
-  const withPhases: GestureDefinition = { ...pinch, closePhase: { labelId: "pinch_close", ms: 500 }, openPhase: { labelId: "pinch_open", ms: 500 } };
-  const propose = (over: Partial<Parameters<typeof proposeIntervals>[0]> = {}) =>
-    proposeIntervals({ definitions: [withPhases], frames, alignment, rawTimestampsNs: raw, existing: [], ...over });
-
-  it("adds the closing stretch just before the hold and the opening stretch just after it, under their own labels", () => {
-    const all = propose();
-    const hold = all.find((p) => p.phase === "hold")!;
-    const close = all.find((p) => p.phase === "close")!;
-    const open = all.find((p) => p.phase === "open")!;
-    expect([close.labelId, hold.labelId, open.labelId]).toEqual(["pinch_close", "pinch", "pinch_open"]);
-    expect(close.endRow).toBe(hold.startRow - 1);
-    expect(open.startRow).toBe(hold.endRow + 1);
-    // 500 ms of rows 20 ms apart is 25 rows.
-    expect(close.endRow - close.startRow + 1).toBeGreaterThanOrEqual(24);
-    expect(open.endRow - open.startRow + 1).toBeGreaterThanOrEqual(24);
-    expect(all.map((p) => p.phase)).toEqual(["close", "hold", "open"]); // in time order
-    expect(all.every((p) => !p.overlaps && !p.clipped)).toBe(true);
-    // None of the three share a row.
-    expect(close.endRow).toBeLessThan(hold.startRow);
-    expect(open.startRow).toBeGreaterThan(hold.endRow);
-  });
-
-  it("proposes no stretch for a gesture that did not ask for them", () => {
-    expect(proposeIntervals({ definitions: [pinch], frames, alignment, rawTimestampsNs: raw, existing: [] }).map((p) => p.phase)).toEqual(["hold"]);
-  });
-
-  it("shortens a stretch that would run into another interval, and drops one with too little left", () => {
-    const hold = propose().find((p) => p.phase === "hold")!;
-    // Something already owns rows up to 13 rows before the hold: the closing stretch keeps only the part next to the hold.
-    const clipped = propose({ existing: [{ startRow: 0, endRow: hold.startRow - 13 }] }).find((p) => p.phase === "close")!;
-    expect(clipped.clipped).toBe(true);
-    expect(clipped.startRow).toBe(hold.startRow - 12);
-    // 4 rows is under 200 ms: not worth a label.
-    expect(propose({ existing: [{ startRow: 0, endRow: hold.startRow - 5 }] }).some((p) => p.phase === "close")).toBe(false);
-    // The opening stretch is shortened from its far end.
-    const openClipped = propose({ existing: [{ startRow: hold.endRow + 14, endRow: 199 }] }).find((p) => p.phase === "open")!;
-    expect(openClipped.endRow).toBe(hold.endRow + 13);
-  });
-
-  it("never lets two intervals share a row, even when holds follow each other closely", () => {
-    const twice = Array.from({ length: 120 }, (_, i) => ({ frameIndex: i, captureMs: 10_000 + i * 33.333, hands: [makeHand({ pinch: (i >= 30 && i < 50) || (i >= 62 && i < 85) ? 0.1 : 1.2 })] }));
-    const all = proposeIntervals({ definitions: [withPhases], frames: twice, alignment, rawTimestampsNs: raw, existing: [] });
-    expect(all.filter((p) => p.phase === "hold").length).toBeGreaterThanOrEqual(1);
-    const sorted = [...all].sort((a, b) => a.startRow - b.startRow);
-    for (let i = 1; i < sorted.length; i++) expect(sorted[i].startRow).toBeGreaterThan(sorted[i - 1].endRow);
-  });
-});
-
 describe("two cameras", () => {
   const open = frames.map((f) => ({ ...f, hands: [makeHand({ pinch: 1.2 })] }));
   // The second camera's frames are 10 ms offset from the first's, with its own frame numbers.
@@ -119,21 +70,20 @@ describe("two cameras", () => {
 
   it("finds a gesture only the second camera saw", () => {
     const [p] = run({ frames: open, secondFrames: second });
-    expect(p.phase).toBe("hold");
     expect(p.startRow).toBeGreaterThanOrEqual(49);
     expect(p.startRow).toBeLessThanOrEqual(51);
   });
 
   it("finds a gesture both saw as one hold, not two, starting at the earlier camera's start", () => {
-    const both = run({ frames, secondFrames: second }).filter((p) => p.phase === "hold");
+    const both = run({ frames, secondFrames: second });
     expect(both).toHaveLength(1);
-    const firstOnly = run({}).filter((p) => p.phase === "hold");
+    const firstOnly = run({});
     expect(both[0].startRow).toBeLessThanOrEqual(firstOnly[0].startRow);
   });
 
   it("behaves as before with one camera, and works when only the second camera has frames", () => {
-    expect(run({}).filter((p) => p.phase === "hold")).toHaveLength(1);
-    expect(run({ frames: [], secondFrames: second }).filter((p) => p.phase === "hold")).toHaveLength(1);
+    expect(run({})).toHaveLength(1);
+    expect(run({ frames: [], secondFrames: second })).toHaveLength(1);
     expect(run({ frames: [], secondFrames: [] })).toEqual([]);
   });
 });

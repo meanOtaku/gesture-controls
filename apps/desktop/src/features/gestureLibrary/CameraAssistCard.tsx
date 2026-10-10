@@ -62,9 +62,6 @@ export function CameraAssistCard({ selectedLabel, recording, desktopAvailable }:
           <span><strong>Let the camera mark the gesture</strong> <small className="text-muted-foreground">Records as a timeline with no manual marks; the camera adds them when you stop.</small></span>
         </div>
         {enabled && blocker && <p className="hint" role="status">{blocker} Without it, this recording will be a timeline with no marks.</p>}
-        {enabled && mine.some((d) => d.labelId !== selectedLabel) && (
-          <p className="hint">“{selectedLabel?.replaceAll("_", " ")}” is a closing or opening stretch of {mine.map((d) => `“${d.name}”`).join(", ")}. The whole gesture is marked: its closing, hold and opening, each under its own label.</p>
-        )}
         {enabled && !blocker && (
           <div className="flex flex-wrap items-center gap-3" role="status">
             <Badge variant={seen ? "default" : "secondary"}>{seen ? "Camera sees it" : "Camera does not see it"}</Badge>

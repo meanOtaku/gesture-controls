@@ -29,16 +29,11 @@ export interface RegistryUsage {
 export interface UsageSources {
   bundles: { recordingId: string; labelIds: string[] }[];
   datasets: DatasetSummary[];
-  gestures: { id: string; name: string; labelId: string | null; closePhase?: { labelId: string } | null; openPhase?: { labelId: string } | null }[];
+  gestures: { id: string; name: string; labelId: string | null }[];
   models: Pick<LabelModel, "id" | "label" | "state">[];
   /** What the model registry holds about each label, from the desktop. */
   registry?: Record<string, RegistryUsage>;
   recipes: { id: string; name: string; enabled?: boolean; stages: { kind: string; label?: string; gesture?: string }[] }[];
-}
-
-/** Whether a gesture uses a label: as its own, or for its closing or opening stretch. */
-export function gestureUsesLabel(gesture: UsageSources["gestures"][number], labelId: string): boolean {
-  return gesture.labelId === labelId || gesture.closePhase?.labelId === labelId || gesture.openPhase?.labelId === labelId;
 }
 
 /** Recipes with a model step for the label, or a camera step for one of the label's gestures. */
@@ -53,7 +48,7 @@ export function usageOf(labelId: string, sources: UsageSources): LabelUsage {
   return {
     recordings: sources.bundles.filter((bundle) => bundle.labelIds.includes(labelId)).map((bundle) => ({ id: bundle.recordingId })),
     trainingRecordings: sources.datasets.filter((dataset) => datasetLabels(dataset).includes(labelId)).map((dataset) => ({ id: dataset.id, name: dataset.originalFilename })),
-    gestures: sources.gestures.filter((gesture) => gestureUsesLabel(gesture, labelId)).map(({ id, name }) => ({ id, name })),
+    gestures: sources.gestures.filter((gesture) => gesture.labelId === labelId).map(({ id, name }) => ({ id, name })),
     models: sources.models.filter((model) => model.label === labelId).map(({ id, state }) => ({ id, state })),
     recipes: recipesUsing(labelId, sources).map(({ id, name }) => ({ id, name })),
     trainingHistory: { projects: sources.registry?.[labelId]?.projects ?? 0, runs: sources.registry?.[labelId]?.runs ?? 0, snapshots: sources.registry?.[labelId]?.snapshots ?? 0 },

@@ -25,7 +25,7 @@ const percent = (value: number) => `${Math.round(value * 100)}%`;
  * watch.
  */
 export function GestureLibraryPage() {
-  const { definitions, labels, error, loaded, save, remove, createLabel } = useGestureLibrary();
+  const { definitions, labels, error, loaded, save, remove } = useGestureLibrary();
   const camera = getCameraController();
   const cam = useSyncExternalStore(camera.subscribe, camera.getSnapshot, camera.getSnapshot);
   const tracker = useRef(new AgreementTracker()).current;
@@ -52,7 +52,6 @@ export function GestureLibraryPage() {
           <GestureEditor
             initial={editing}
             labels={labels}
-            onCreateLabel={createLabel}
             onCancel={() => setEditing(null)}
             onSave={async (definition) => {
               const problem = await save(definition);
@@ -119,12 +118,6 @@ export function GestureLibraryPage() {
                     </span>
                   </div>
                   <p className="field-hint">{describeRule(definition)}</p>
-                  {(definition.closePhase || definition.openPhase) && (
-                    <p className="field-hint">
-                      Also marks:{" "}
-                      {[definition.closePhase && `closing → ${definition.closePhase.labelId} (${definition.closePhase.ms} ms)`, definition.openPhase && `opening → ${definition.openPhase.labelId} (${definition.openPhase.ms} ms)`].filter(Boolean).join(", ")}
-                    </p>
-                  )}
                   <small className="text-xs text-muted-foreground">
                     Label: {labelName(definition.labelId)}. {on ? `Recognised ${state?.count ?? 0} time${state?.count === 1 ? "" : "s"} since the camera was turned on.` : ""}
                     {!definition.calibration ? " Not calibrated; thresholds were set by hand." : ""}

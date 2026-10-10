@@ -48,7 +48,7 @@ export async function addProposals(found: Found, chosen: ProposedInterval[]): Pr
 }
 
 export type AutoMarkOutcome =
-  | { kind: "added"; count: number; jitterMs: number; holds: number; closing: number; opening: number }
+  | { kind: "added"; count: number; jitterMs: number }
   | { kind: "none"; frames: number }
   | { kind: "skipped"; reason: string };
 
@@ -63,6 +63,5 @@ export async function autoMarkRecording(recordingId: string, definitions: Gestur
   if (usable.length === 0) return { kind: "none", frames: result.found.frames };
   const problem = await addProposals(result.found, usable);
   if (problem) return { kind: "skipped", reason: problem };
-  const of = (phase: string) => usable.filter((proposal) => proposal.phase === phase).length;
-  return { kind: "added", count: usable.length, jitterMs: result.found.alignment.jitterMs, holds: of("hold"), closing: of("close"), opening: of("open") };
+  return { kind: "added", count: usable.length, jitterMs: result.found.alignment.jitterMs };
 }

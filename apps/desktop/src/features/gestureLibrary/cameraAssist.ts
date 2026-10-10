@@ -47,7 +47,7 @@ class CameraAssist {
       const definitions = definitionsForLabel(await listGestureDefinitions(), label);
       const outcome = await autoMarkRecording(recordingId, definitions);
       if (outcome.kind === "added") {
-        OperationFeedback.success(operation, `Marked ${outcome.holds} ${label} hold${outcome.holds === 1 ? "" : "s"}${outcome.closing + outcome.opening > 0 ? ` with ${outcome.closing} closing and ${outcome.opening} opening stretch${outcome.closing + outcome.opening === 1 ? "" : "es"}` : ""} (unreviewed; the camera and watch line up to about ${Math.max(1, Math.round(outcome.jitterMs))} ms). Review them in Recordings.`);
+        OperationFeedback.success(operation, `Marked ${outcome.count} ${label} interval${outcome.count === 1 ? "" : "s"} (unreviewed; the camera and watch line up to about ${Math.max(1, Math.round(outcome.jitterMs))} ms). Review them in Recordings.`);
       } else if (outcome.kind === "none") {
         OperationFeedback.warning(operation, `The camera did not see the ${label} gesture in this recording, so nothing was marked. The recording was kept.`);
       } else {

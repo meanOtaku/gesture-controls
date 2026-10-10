@@ -68,18 +68,6 @@ pub struct Calibration {
     pub calibrated_at: String,
 }
 
-/// A motion around a hold that is marked with a label of its own: the fingers closing before it, or opening after it.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PhaseSpec {
-    pub label_id: String,
-    /// How long the stretch is, in milliseconds. Closing ends where the hold begins; opening starts where it ends.
-    pub ms: u32,
-}
-
-pub const MIN_PHASE_MS: u32 = 200;
-pub const MAX_PHASE_MS: u32 = 2000;
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GestureDefinition {
@@ -91,12 +79,6 @@ pub struct GestureDefinition {
     pub min_hold_ms: u32,
     pub release_grace_ms: u32,
     pub calibration: Option<Calibration>,
-    /// The closing motion before the hold, marked as its own label (the "positive" side of a pinch).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub close_phase: Option<PhaseSpec>,
-    /// The opening motion after the hold (the "negative" side).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub open_phase: Option<PhaseSpec>,
 }
 
 fn valid_label(label: &str) -> bool {
@@ -124,29 +106,6 @@ pub fn validate(definition: &GestureDefinition) -> Result<(), String> {
             "the label must be lowercase letters, digits and underscores, starting with a letter"
                 .into(),
         );
-    }
-    let mut used_labels: Vec<&str> = definition.label_id.iter().map(String::as_str).collect();
-    for (what, phase) in [
-        ("closing", &definition.close_phase),
-        ("opening", &definition.open_phase),
-    ] {
-        let Some(phase) = phase else { continue };
-        if !valid_label(&phase.label_id) {
-            return Err(format!(
-                "the {what} label must be lowercase letters, digits and underscores, starting with a letter"
-            ));
-        }
-        if !(MIN_PHASE_MS..=MAX_PHASE_MS).contains(&phase.ms) {
-            return Err(format!(
-                "the {what} stretch must be {MIN_PHASE_MS} to {MAX_PHASE_MS} ms long"
-            ));
-        }
-        if used_labels.contains(&phase.label_id.as_str()) {
-            return Err(format!(
-                "the {what} label must differ from the gesture's other labels"
-            ));
-        }
-        used_labels.push(&phase.label_id);
     }
     if definition.conditions.is_empty() || definition.conditions.len() > MAX_CONDITIONS {
         return Err(format!("a gesture needs 1 to {MAX_CONDITIONS} conditions"));
@@ -271,14 +230,7 @@ pub fn labels_in_use(app: &AppHandle) -> std::collections::BTreeSet<String> {
         .map(|path| {
             read_definitions(&path)
                 .into_iter()
-                .flat_map(|d| {
-                    [
-                        d.label_id,
-                        d.close_phase.map(|p| p.label_id),
-                        d.open_phase.map(|p| p.label_id),
-                    ]
-                })
-                .flatten()
+                .filter_map(|d| d.label_id)
                 .collect()
         })
         .unwrap_or_default()
@@ -380,8 +332,6 @@ mod tests {
                 balanced_accuracy: 0.97,
                 calibrated_at: "2026-10-09T12:00:00Z".into(),
             }),
-            close_phase: None,
-            open_phase: None,
         }
     }
 
@@ -421,39 +371,6 @@ mod tests {
                 .contains("calibration")
         );
         assert!(bad(&|d| d.conditions[0].enter = -5000.0).contains("range") || true);
-    }
-
-    #[test]
-    fn a_closing_and_opening_stretch_need_their_own_valid_labels_and_a_sensible_length() {
-        let phase = |label: &str, ms| {
-            Some(PhaseSpec {
-                label_id: label.into(),
-                ms,
-            })
-        };
-        let mut d = pinch();
-        d.close_phase = phase("pinch_close", 500);
-        d.open_phase = phase("pinch_open", 500);
-        assert_eq!(validate(&d), Ok(()));
-        let bad = |change: &dyn Fn(&mut GestureDefinition)| {
-            let mut d = d.clone();
-            change(&mut d);
-            validate(&d).unwrap_err()
-        };
-        assert!(bad(&|d| d.close_phase = phase("Bad Label", 500)).contains("closing label"));
-        assert!(bad(&|d| d.open_phase = phase("pinch_open", 50)).contains("opening stretch"));
-        assert!(bad(&|d| d.open_phase = phase("pinch_open", 5000)).contains("opening stretch"));
-        assert!(bad(&|d| d.close_phase = phase("pinch", 500)).contains("must differ"));
-        assert!(bad(&|d| d.open_phase = phase("pinch_close", 500)).contains("must differ"));
-        // They are optional, and an older saved gesture without them still reads.
-        let old = serde_json::to_string(&pinch()).unwrap();
-        assert!(!old.contains("closePhase"));
-        assert_eq!(
-            serde_json::from_str::<GestureDefinition>(&old)
-                .unwrap()
-                .close_phase,
-            None
-        );
     }
 
     #[test]

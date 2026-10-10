@@ -19,7 +19,7 @@ export function useLabelCatalogue() {
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
   const [labels, setLabels] = useState<DatasetLabel[]>([]);
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
-  const [gestures, setGestures] = useState<UsageSources["gestures"]>([]);
+  const [gestures, setGestures] = useState<{ id: string; name: string; labelId: string | null }[]>([]);
   const [bundles, setBundles] = useState<{ recordingId: string; labelIds: string[] }[]>([]);
   const [recipes, setRecipes] = useState<UsageSources["recipes"]>([]);
   const [registry, setRegistry] = useState<Record<string, RegistryUsage>>({});
@@ -43,7 +43,7 @@ export function useLabelCatalogue() {
         if (!live) return;
         setLabels(Array.isArray(catalogue) ? catalogue : []);
         setDatasets(Array.isArray(sets) ? sets : []);
-        setGestures(gestureList.map(({ id, name, labelId, closePhase, openPhase }) => ({ id, name, labelId, closePhase, openPhase })));
+        setGestures(gestureList.map(({ id, name, labelId }) => ({ id, name, labelId })));
         setBundles(bundleList.status === "ok" && Array.isArray(bundleList.value) ? bundleList.value.map(({ recordingId, labelIds }) => ({ recordingId, labelIds })) : []);
         setRecipes(Array.isArray(automation?.recipes) ? automation.recipes : []);
         setRegistry(registryUsage && typeof registryUsage === "object" ? (registryUsage as Record<string, RegistryUsage>) : {});
@@ -66,7 +66,7 @@ export function useLabelCatalogue() {
   }, [datasets]);
   const gestureCountByLabel = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const gesture of gestures) for (const id of new Set([gesture.labelId, gesture.closePhase?.labelId, gesture.openPhase?.labelId])) if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
+    for (const gesture of gestures) if (gesture.labelId) counts.set(gesture.labelId, (counts.get(gesture.labelId) ?? 0) + 1);
     return counts;
   }, [gestures]);
 

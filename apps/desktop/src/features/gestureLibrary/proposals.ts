@@ -1,7 +1,7 @@
 import type { SyncPair } from "../camera/clockSync";
 import type { HandFrame } from "../camera/handTypes";
 import type { AnnotationInterval } from "../../shared/tauri/recordingBundle";
-import { PHASE_MS_RANGE, type GestureDefinition } from "./definition";
+import type { GestureDefinition } from "./definition";
 import { CombinedGestureDetector, type CameraSlot } from "./combinedDetector";
 
 /** How the camera's clock lines up with the watch's, from the pairs saved with a recording. */
@@ -21,13 +21,7 @@ export function alignClocks(pairs: SyncPair[]): ClockAlignment | null {
   return { offsetMs, jitterMs: delays[Math.min(delays.length - 1, Math.floor(delays.length * 0.9))] - offsetMs, samples: pairs.length };
 }
 
-/** Which part of a gesture a proposed interval is: the hold itself, the closing before it, or the opening after it. */
-export type Phase = "hold" | "close" | "open";
-
 export interface ProposedInterval {
-  phase: Phase;
-  /** True when a closing or opening stretch had to be shortened so it would not overlap another interval. */
-  clipped?: boolean;
   gestureId: string;
   gestureName: string;
   labelId: string;
@@ -106,10 +100,6 @@ export function proposeIntervals({ definitions, frames, secondFrames = [], align
 
   const taken = [...existing];
   const proposals: ProposedInterval[] = [];
-  const placed: { proposal: ProposedInterval; definition: GestureDefinition }[] = [];
-  const rowNs = (row: number) => rawTimestampsNs[row];
-  const rowAtOrAfter = (ns: number) => lowerBound(rawTimestampsNs, ns);
-  const rowAtOrBefore = (ns: number) => lowerBound(rawTimestampsNs, ns + 1) - 1;
   for (const hold of holds) {
     const startNs = Math.round((hold.startMs - alignment.offsetMs) * 1e6);
     const endNs = Math.round((hold.endMs - alignment.offsetMs) * 1e6);
@@ -119,52 +109,13 @@ export function proposeIntervals({ definitions, frames, secondFrames = [], align
     const definition = byId.get(hold.gestureId)!;
     const overlaps = taken.some((other) => startRow <= other.endRow && other.startRow <= endRow);
     if (!overlaps) taken.push({ startRow, endRow });
-    const proposal: ProposedInterval = {
-      phase: "hold", gestureId: definition.id, gestureName: definition.name, labelId: definition.labelId!,
+    proposals.push({
+      gestureId: definition.id, gestureName: definition.name, labelId: definition.labelId!,
       startMs: hold.startMs, endMs: hold.endMs, startRow, endRow, startNs, endNs, overlaps,
-    };
-    proposals.push(proposal);
-    if (!overlaps) placed.push({ proposal, definition });
+    });
   }
 
-  // The closing and opening stretches go in after every hold has its rows, so they never take rows from a hold. Each is
-  // shortened on its far side if another interval is in the way, and dropped if too little is left to be worth labelling.
-  for (const { proposal: hold, definition } of placed) {
-    const make = (phase: "close" | "open"): ProposedInterval | null => {
-      const spec = phase === "close" ? definition.closePhase : definition.openPhase;
-      if (!spec) return null;
-      const startMs = phase === "close" ? hold.startMs - spec.ms : hold.endMs;
-      const endMs = phase === "close" ? hold.startMs : hold.endMs + spec.ms;
-      const startNs = Math.round((startMs - alignment.offsetMs) * 1e6);
-      const endNs = Math.round((endMs - alignment.offsetMs) * 1e6);
-      let start = phase === "close" ? rowAtOrAfter(startNs) : hold.endRow + 1;
-      let end = phase === "close" ? hold.startRow - 1 : rowAtOrBefore(endNs);
-      start = Math.max(start, 0);
-      end = Math.min(end, rawTimestampsNs.length - 1);
-      if (end < start) return null;
-      const original = [start, end];
-      for (const other of taken) {
-        if (other.endRow < start || other.startRow > end) continue; // no overlap
-        if (phase === "close") start = other.endRow + 1; // keep the part nearest the hold
-        else end = other.startRow - 1;
-        if (end < start) return null;
-      }
-      if ((rowNs(end) - rowNs(start)) / 1e6 < PHASE_MS_RANGE[0]) return null;
-      return {
-        phase, gestureId: definition.id, gestureName: definition.name, labelId: spec.labelId,
-        startMs: rowNs(start) / 1e6 + alignment.offsetMs, endMs: rowNs(end) / 1e6 + alignment.offsetMs,
-        startRow: start, endRow: end, startNs: rowNs(start), endNs: rowNs(end), overlaps: false,
-        clipped: start !== original[0] || end !== original[1],
-      };
-    };
-    for (const phase of ["close", "open"] as const) {
-      const made = make(phase);
-      if (!made) continue;
-      taken.push({ startRow: made.startRow, endRow: made.endRow });
-      proposals.push(made);
-    }
-  }
-  return proposals.sort((a, b) => a.startRow - b.startRow);
+  return proposals;
 }
 
 /** The recording-bundle shape of a proposal, ready for the desktop to check and append. */

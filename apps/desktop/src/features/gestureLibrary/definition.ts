@@ -43,17 +43,6 @@ export interface CalibrationSummary {
   calibratedAt: string;
 }
 
-/** A motion around a hold that is marked with a label of its own: the fingers closing before it, or opening after it. */
-export interface PhaseSpec {
-  labelId: string;
-  /** How long the stretch is. Closing ends where the hold begins; opening starts where it ends. */
-  ms: number;
-}
-
-export const PHASE_MS_RANGE = [200, 2000] as const;
-/** Long enough to fill one training window (500 ms), the default the trainer uses. */
-export const DEFAULT_PHASE_MS = 500;
-
 export interface GestureDefinition {
   id: string;
   name: string;
@@ -68,19 +57,11 @@ export interface GestureDefinition {
   /** The pose may be lost this long without ending the gesture. */
   releaseGraceMs: number;
   calibration: CalibrationSummary | null;
-  /** The closing motion before the hold, marked as its own label (the "positive" side of a pinch). */
-  closePhase?: PhaseSpec | null;
-  /** The opening motion after the hold (the "negative" side). */
-  openPhase?: PhaseSpec | null;
 }
 
-/**
- * The gestures a recording of `label` is about: those with that label as their own, or as their closing or opening stretch.
- * Choosing the opening label of a pinch means the pinch, since its stretches are marked together with it.
- */
+/** The gestures a recording of `label` is about: those whose label it is. */
 export function definitionsForLabel(definitions: GestureDefinition[], label: string | null): GestureDefinition[] {
-  if (label === null) return [];
-  return definitions.filter((d) => d.labelId === label || d.closePhase?.labelId === label || d.openPhase?.labelId === label);
+  return label === null ? [] : definitions.filter((d) => d.labelId === label);
 }
 
 export const MAX_CONDITIONS = 4;
@@ -132,14 +113,6 @@ export function definitionProblem(definition: GestureDefinition): string | null 
     const looser = condition.direction === "below" ? condition.exit >= condition.enter : condition.exit <= condition.enter;
     if (!looser) return `For "${measureInfo(condition.measure).label}", the end threshold must be looser than the start threshold, or the gesture would flicker.`;
   }
-  const used = new Set<string>(definition.labelId ? [definition.labelId] : []);
-  for (const [what, phase] of [["closing", definition.closePhase], ["opening", definition.openPhase]] as const) {
-    if (!phase) continue;
-    if (!/^[a-z][a-z0-9_]*$/.test(phase.labelId) || phase.labelId.length > 48) return `Choose a label for the ${what} stretch.`;
-    if (phase.ms < PHASE_MS_RANGE[0] || phase.ms > PHASE_MS_RANGE[1]) return `The ${what} stretch must be ${PHASE_MS_RANGE[0]} to ${PHASE_MS_RANGE[1]} ms long.`;
-    if (used.has(phase.labelId)) return `The ${what} label must differ from the gesture's other labels.`;
-    used.add(phase.labelId);
-  }
   if (definition.minHoldMs < MIN_HOLD_RANGE[0] || definition.minHoldMs > MIN_HOLD_RANGE[1]) return `The hold time must be from ${MIN_HOLD_RANGE[0]} to ${MIN_HOLD_RANGE[1]} ms.`;
   if (definition.releaseGraceMs < RELEASE_GRACE_RANGE[0] || definition.releaseGraceMs > RELEASE_GRACE_RANGE[1]) return `The release time must be from ${RELEASE_GRACE_RANGE[0]} to ${RELEASE_GRACE_RANGE[1]} ms.`;
   return null;
@@ -155,7 +128,5 @@ export function blankDefinition(): GestureDefinition {
     minHoldMs: DEFAULT_MIN_HOLD_MS,
     releaseGraceMs: DEFAULT_RELEASE_GRACE_MS,
     calibration: null,
-    closePhase: null,
-    openPhase: null,
   };
 }
