@@ -12,6 +12,7 @@ import { useLabelModels } from "../model-lab/hooks/useLabelModels";
 import { AgreementTracker } from "./agreement";
 import { AgreementPanel } from "./AgreementPanel";
 import { blankDefinition, describeRule, type GestureDefinition } from "./definition";
+import { SecondCameraPanel } from "./SecondCameraPanel";
 import { HandSideCheck } from "./HandSideCheck";
 import { GestureEditor } from "./GestureEditor";
 import { useGestureLibrary } from "./useGestureLibrary";
@@ -29,7 +30,9 @@ export function GestureLibraryPage() {
   const camera = getCameraController();
   const cam = useSyncExternalStore(camera.subscribe, camera.getSnapshot, camera.getSnapshot);
   const tracker = useRef(new AgreementTracker()).current;
-  const states = useLiveGestures(definitions, cam, tracker);
+  const camera2 = getCameraController("secondary");
+  const cam2 = useSyncExternalStore(camera2.subscribe, camera2.getSnapshot, camera2.getSnapshot);
+  const states = useLiveGestures(definitions, cam, tracker, cam2);
   const { status } = useLabelModels("__TAURI_INTERNALS__" in window);
   const [editing, setEditing] = useState<GestureDefinition | null>(null);
   const labelName = (id: string | null) => (id ? labels.find((l) => l.id === id)?.displayName ?? id : "no label");
@@ -100,7 +103,8 @@ export function GestureLibraryPage() {
           </div>
           <CameraPicker camera={camera} state={cam} />
           <CameraPreview camera={camera} state={cam} hidden={!on} />
-          {on && <HandSideCheck camera={cam} />}
+          {on && <HandSideCheck camera={cam} secondary={cam2} />}
+          {on && <SecondCameraPanel primary={camera} primaryState={cam} secondary={camera2} secondaryState={cam2} />}
           {loaded && definitions.length === 0 && <p className="hint">No gestures yet. Make one with “New gesture”.</p>}
           <ul className="flex flex-col gap-3" aria-label="Gestures">
             {definitions.map((definition) => {

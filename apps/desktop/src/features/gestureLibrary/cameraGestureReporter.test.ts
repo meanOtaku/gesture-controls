@@ -70,4 +70,20 @@ describe("CameraGestureReporter", () => {
     reporter.setDefinitions([pinch]);
     expect(sent[sent.length - 1]).toEqual({ known: ["gesture-1"], held: [], risen: [] });
   });
+
+  it("with a second camera, reports a gesture held while either camera sees it, and goes quiet only when both cameras are off", () => {
+    const { reporter, sent, advance } = setup();
+    reporter.setDefinitions([pinch]);
+    reporter.setCameraOn(true, "primary");
+    reporter.setCameraOn(true, "secondary");
+    let n = 0;
+    const second = (value: number) => { advance(33); reporter.onFrame({ frameIndex: n++, captureMs: 1000 + n * 33, hands: [makeHand({ pinch: value })] }, "secondary"); };
+    for (let i = 0; i < 8; i++) second(0.1);
+    expect(sent.some((r) => r.risen.includes("gesture-1"))).toBe(true);
+    expect(sent[sent.length - 1].held).toEqual(["gesture-1"]);
+    reporter.setCameraOn(false, "primary"); // one camera stopping does not silence the other
+    expect(sent[sent.length - 1].known).toEqual(["gesture-1"]);
+    reporter.setCameraOn(false, "secondary");
+    expect(sent[sent.length - 1]).toEqual({ known: [], held: [], risen: [] });
+  });
 });

@@ -24,4 +24,12 @@ describe("CameraPicker", () => {
     fireEvent.change(screen.getByLabelText("Camera"), { target: { value: "b" } });
     expect(camera.selectDevice).toHaveBeenCalledWith("b");
   });
+
+  it("can leave one camera out and show a choice even for a single remaining camera", () => {
+    const camera = fake();
+    render(<CameraPicker camera={camera} state={state([{ deviceId: "a", label: "FaceTime HD" }, { deviceId: "b", label: "Desk camera" }], null)} label="Second camera" exclude="a" minimum={1} />);
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Choose a camera…", "Desk camera"]);
+    fireEvent.change(screen.getByLabelText("Second camera"), { target: { value: "b" } });
+    expect(camera.selectDevice).toHaveBeenCalledWith("b");
+  });
 });

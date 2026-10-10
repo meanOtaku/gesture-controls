@@ -1,6 +1,6 @@
-import type { HandFrame } from "../camera/handTypes";
+import type { CameraSlot, HandFrame } from "../camera/handTypes";
 import type { GestureDefinition } from "./definition";
-import { GestureDetector } from "./detector";
+import { CombinedGestureDetector, type CombineMode } from "./combinedDetector";
 
 export interface CameraReport {
   /** Every gesture the camera is running now; empty with the camera off. */
@@ -20,7 +20,8 @@ export const HEARTBEAT_MS = 250;
  * gesture go by itself, so a stuck window cannot leave one held.
  */
 export class CameraGestureReporter {
-  private detector = new GestureDetector([]);
+  private detector = new CombinedGestureDetector([]);
+  private slotOn: Record<CameraSlot, boolean> = { primary: false, secondary: false };
   private known: string[] = [];
   private lastHeld: string[] = [];
   private lastSentMs = -Infinity;
@@ -36,10 +37,24 @@ export class CameraGestureReporter {
     if (this.on) this.flush([], this.currentHeld());
   }
 
-  setCameraOn(on: boolean): void {
-    if (on === this.on) return;
-    this.on = on;
-    if (!on) {
+  /** How two cameras' decisions are merged: any camera sees a gesture, or all running cameras do. */
+  setMode(mode: CombineMode): void {
+    this.detector.setMode(mode);
+    if (this.on) this.flush([], this.currentHeld());
+  }
+
+  /** Says whether a camera is running. Reporting runs while any camera is; a camera that stops lets go of what it held. */
+  setCameraOn(on: boolean, slot: CameraSlot = "primary"): void {
+    if (this.slotOn[slot] === on) return;
+    this.slotOn[slot] = on;
+    this.detector.setSlotRunning(slot, on, this.clock());
+    const any = this.slotOn.primary || this.slotOn.secondary;
+    if (any === this.on) {
+      if (this.on) this.flush([], this.currentHeld());
+      return;
+    }
+    this.on = any;
+    if (!any) {
       this.detector.reset();
       this.lastHeld = [];
       if (this.reportedOn) this.send({ known: [], held: [], risen: [] });
@@ -47,9 +62,9 @@ export class CameraGestureReporter {
     }
   }
 
-  onFrame(frame: HandFrame): void {
-    if (!this.on) return;
-    const events = this.detector.update(frame.captureMs, frame.hands);
+  onFrame(frame: HandFrame, slot: CameraSlot = "primary"): void {
+    if (!this.slotOn[slot]) return;
+    const events = this.detector.update(slot, frame.captureMs, frame.hands);
     const risen = events.filter((event) => event.kind === "onset").map((event) => event.gestureId);
     const held = this.currentHeld();
     const changed = risen.length > 0 || held.join() !== this.lastHeld.join();

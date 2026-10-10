@@ -15,9 +15,11 @@ export function ModelAgreementSection({ status }: { status: LabelRuntimeStatus |
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
   const camera = getCameraController();
   const cam = useSyncExternalStore(camera.subscribe, camera.getSnapshot, camera.getSnapshot);
+  const camera2 = getCameraController("secondary");
+  const cam2 = useSyncExternalStore(camera2.subscribe, camera2.getSnapshot, camera2.getSnapshot);
   const tracker = useRef(new AgreementTracker()).current;
   const [definitions, setDefinitions] = useState<GestureDefinition[]>([]);
-  useLiveGestures(definitions, cam, tracker);
+  useLiveGestures(definitions, cam, tracker, cam2);
 
   useEffect(() => {
     if (!desktopAvailable) return;

@@ -9,6 +9,7 @@ import { CameraPicker } from "../camera/components/CameraPicker";
 import { CameraPreview } from "../camera/components/CameraPreview";
 import type { DatasetLabel } from "../model-lab/types";
 import { analyse, scoreRule, MIN_FRAMES } from "./calibration";
+import { SecondCameraPanel } from "./SecondCameraPanel";
 import { HandSideCheck } from "./HandSideCheck";
 import { CalibrationSession, GESTURE_SECONDS, NEGATIVE_MS, POSITIVE_MS, REST_SECONDS, type RecordLengths, type SessionSnapshot } from "./calibrationSession";
 import {
@@ -65,6 +66,8 @@ type EditorProps = {
 export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps) {
   const camera = getCameraController();
   const cam = useSyncExternalStore(camera.subscribe, camera.getSnapshot, camera.getSnapshot);
+  const camera2 = getCameraController("secondary");
+  const cam2 = useSyncExternalStore(camera2.subscribe, camera2.getSnapshot, camera2.getSnapshot);
   const [draft, setDraft] = useState<GestureDefinition>(initial);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -80,8 +83,11 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
   }, [draft.hand, lengths]);
 
   useEffect(() => {
-    if (cam.frame) session.current.onFrame(cam.frame);
+    if (cam.frame) session.current.onFrame(cam.frame, "primary");
   }, [cam.frame]);
+  useEffect(() => {
+    if (cam2.frame) session.current.onFrame(cam2.frame, "secondary");
+  }, [cam2.frame]);
 
   const running = snapshot.step !== "ready" && snapshot.step !== "done";
   useEffect(() => {
@@ -187,7 +193,8 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
         ) : (
           <>
             <CameraPreview camera={camera} state={cam} hidden={false} />
-            <HandSideCheck camera={cam} />
+            <HandSideCheck camera={cam} secondary={cam2} />
+            <SecondCameraPanel primary={camera} primaryState={cam} secondary={camera2} secondaryState={cam2} />
             <div className="flex flex-wrap items-end gap-3">
               <div className="field">
                 <div className="field-head"><Label htmlFor={ids.positive}>Hold the gesture for</Label></div>
@@ -204,7 +211,7 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
             </div>
             <p className="field-hint">Longer recordings give the rule more to learn from. Move your hand about during both parts: closer, further, turned, in different light.</p>
             <div className="flex flex-wrap items-center gap-3">
-              <Button type="button" onClick={start} disabled={running || cam.frame?.hands.length === 0}>
+              <Button type="button" onClick={start} disabled={running || (cam.frame?.hands.length === 0 && !(cam2.status === "on" && (cam2.frame?.hands.length ?? 0) > 0))}>
                 {recorded ? "Record again" : "Record gesture and background"}
               </Button>
               {running && <Button type="button" variant="outline" onClick={() => { session.current.reset(); setSnapshot(session.current.snapshot(0)); }}>Cancel</Button>}

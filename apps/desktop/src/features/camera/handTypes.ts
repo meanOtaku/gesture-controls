@@ -61,6 +61,9 @@ export function physicalHand(hand: Pick<TrackedHand, "modelHandedness">): "Left"
   return hand.modelHandedness === "Left" ? "Right" : "Left";
 }
 
+/** The app's cameras: a primary, and an optional second one that is treated as a separate source. */
+export type CameraSlot = "primary" | "secondary";
+
 export interface HandDetector {
   /** Finds the hands in one picture. `timestampMs` must increase from one call to the next. */
   detect(source: TexImageSource, timestampMs: number): TrackedHand[];

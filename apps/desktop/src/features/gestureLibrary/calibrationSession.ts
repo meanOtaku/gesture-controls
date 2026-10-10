@@ -1,4 +1,4 @@
-import { physicalHand, type HandFrame } from "../camera/handTypes";
+import { physicalHand, type CameraSlot, type HandFrame } from "../camera/handTypes";
 import type { MeasureSample } from "./calibration";
 import type { HandChoice } from "./definition";
 import { sampleFrame } from "./sampling";
@@ -50,7 +50,8 @@ export class CalibrationSession {
   private negative: MeasureSample[] = [];
   private missed = 0;
   private skipped: SkipReasons = { noHand: 0, otherHand: 0, unmeasurable: 0 };
-  private lastFrameIndex = -1;
+  /** The last frame taken from each camera, since each counts its own frames from zero. */
+  private lastFrameIndex: Record<CameraSlot, number> = { primary: -1, secondary: -1 };
 
   constructor(private readonly hand: HandChoice, private readonly lengths: RecordLengths = { positiveMs: POSITIVE_MS, negativeMs: NEGATIVE_MS }) {}
 
@@ -91,9 +92,10 @@ export class CalibrationSession {
     this.enter(next[this.step], nowMs);
   }
 
-  onFrame(frame: HandFrame): void {
-    if (frame.frameIndex === this.lastFrameIndex) return;
-    this.lastFrameIndex = frame.frameIndex;
+  /** One frame from one camera; frames from both cameras are pooled into the same recording. */
+  onFrame(frame: HandFrame, slot: CameraSlot = "primary"): void {
+    if (frame.frameIndex === this.lastFrameIndex[slot]) return;
+    this.lastFrameIndex[slot] = frame.frameIndex;
     if (this.step !== "positive" && this.step !== "negative") return;
     const sample = sampleFrame(frame, this.hand);
     if (!sample) {

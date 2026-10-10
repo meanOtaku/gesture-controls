@@ -87,3 +87,18 @@ describe("CalibrationSession with longer recordings", () => {
     expect(session.snapshot(start + 30_000).step).toBe("done");
   });
 });
+
+describe("CalibrationSession with two cameras", () => {
+  it("pools frames from both cameras, counting each camera's frame numbers on its own", () => {
+    const session = new CalibrationSession("either");
+    session.start(0);
+    session.tick(COUNTDOWN_MS);
+    session.onFrame(frame(1), "primary");
+    session.onFrame(frame(1), "secondary"); // the same number from the other camera is a different frame
+    session.onFrame(frame(1), "secondary"); // but a repeat from the same camera is not
+    session.onFrame(frame(2, []), "secondary");
+    const snapshot = session.snapshot(COUNTDOWN_MS);
+    expect(snapshot.positive).toHaveLength(2);
+    expect(snapshot.skipped.noHand).toBe(1);
+  });
+});
