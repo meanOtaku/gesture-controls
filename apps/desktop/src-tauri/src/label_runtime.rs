@@ -498,6 +498,12 @@ impl LabelRuntimeHost {
             .ok_or_else(|| "there is no such model".to_string())
     }
 
+    /// What the Inspect view shows about a model (see `ModelInspectionView`).
+    pub fn inspect_model(&self, app: &AppHandle, id: &str) -> Result<ModelInspectionView, String> {
+        let version = self.version_for(id)?;
+        read_model_inspection(&Self::model_lab_dir(app)?, &version)
+    }
+
     /// Moves a model between Draft, Evaluated, Approved and Archived. Becoming active is only through activation.
     pub fn set_model_state(
         &self,
@@ -942,6 +948,54 @@ pub(crate) fn training_history_of(
     projects
 }
 
+/// What the Inspect view needs about one model: where it came from, its manifest, and, for a model trained here, the
+/// inspection the trainer wrote (the weights, the importance of each input, real windows, the scores on held-out windows).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelInspectionView {
+    pub id: String,
+    pub label: String,
+    /// `trained` (made in this app) or `imported`.
+    pub origin: String,
+    pub manifest: serde_json::Value,
+    /// `None` for an imported model, or one trained before inspections existed.
+    pub inspection: Option<serde_json::Value>,
+}
+
+/// Reads a model's manifest and (if it was trained here) its inspection from the model-lab directory.
+pub fn read_model_inspection(
+    model_lab_dir: &std::path::Path,
+    version: &model_lab_core::ModelVersion,
+) -> Result<ModelInspectionView, String> {
+    let dir = model_lab_dir.join(&version.artifact_dir);
+    let manifest = std::fs::read(dir.join("manifest.json"))
+        .map_err(|e| format!("could not read the model's manifest: {e}"))
+        .and_then(|bytes| {
+            serde_json::from_slice::<serde_json::Value>(&bytes)
+                .map_err(|e| format!("the model's manifest is not readable: {e}"))
+        })?;
+    let (origin, inspection) = match &version.origin {
+        model_lab_core::ModelOrigin::Trained { run_id } => {
+            let path = model_lab_dir
+                .join("training-runs")
+                .join(run_id.to_string())
+                .join("inspection.json");
+            let inspection = std::fs::read(&path)
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
+            ("trained", inspection)
+        }
+        model_lab_core::ModelOrigin::Imported => ("imported", None),
+    };
+    Ok(ModelInspectionView {
+        id: version.id.to_string(),
+        label: version.label.to_string(),
+        origin: origin.into(),
+        manifest,
+        inspection,
+    })
+}
+
 #[tauri::command]
 pub fn list_training_history(host: State<'_, LabelRuntimeHost>) -> Vec<TrainingHistoryProject> {
     host.training_history()
@@ -962,6 +1016,15 @@ pub fn delete_label_history(
     label: String,
 ) -> Result<usize, String> {
     host.delete_label_history(&app, &label)
+}
+
+#[tauri::command]
+pub fn inspect_label_model(
+    app: AppHandle,
+    host: State<'_, LabelRuntimeHost>,
+    id: String,
+) -> Result<ModelInspectionView, String> {
+    host.inspect_model(&app, &id)
 }
 
 #[tauri::command]
@@ -1045,6 +1108,79 @@ mod tests {
     use super::*;
     use label_inference::LabelScore;
     use model_lab_core::ModelVersionId;
+
+    fn version_with(origin: model_lab_core::ModelOrigin) -> model_lab_core::ModelVersion {
+        use model_lab_core::{
+            InputContract, ModelVersion, ProjectId, QualityRules, StreamSource, Thresholds,
+        };
+        ModelVersion::new(
+            ModelVersionId::new("snap-v1").unwrap(),
+            ProjectId::new("p-snap").unwrap(),
+            label("snap"),
+            origin,
+            true,
+            Some("0".repeat(64)),
+            "models/snap-v1".into(),
+            InputContract {
+                sources: vec![StreamSource::WatchAcceleration],
+                features: vec!["accel_x_std".into()],
+                window_ms: 500,
+                stride_ms: 150,
+                max_gap_ms: 250,
+                min_samples: 3,
+            },
+            Thresholds::default(),
+            QualityRules::default(),
+            "2026-10-12T00:00:00Z",
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn the_inspect_view_gets_a_trained_models_inspection_and_an_imported_models_manifest_only() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("models/snap-v1")).unwrap();
+        std::fs::write(
+            root.path().join("models/snap-v1/manifest.json"),
+            br#"{"targetLabel":"snap"}"#,
+        )
+        .unwrap();
+        let trained = version_with(model_lab_core::ModelOrigin::Trained {
+            run_id: model_lab_core::RunId::new("run-9").unwrap(),
+        });
+
+        // Trained before inspections existed (or its inspection could not be made): the manifest alone.
+        let view = read_model_inspection(root.path(), &trained).unwrap();
+        assert_eq!(
+            (view.origin.as_str(), view.id.as_str()),
+            ("trained", "snap-v1")
+        );
+        assert_eq!(view.manifest["targetLabel"], "snap");
+        assert!(view.inspection.is_none());
+
+        std::fs::create_dir_all(root.path().join("training-runs/run-9")).unwrap();
+        std::fs::write(
+            root.path().join("training-runs/run-9/inspection.json"),
+            br#"{"version":1,"inputs":[]}"#,
+        )
+        .unwrap();
+        let view = read_model_inspection(root.path(), &trained).unwrap();
+        assert_eq!(view.inspection.unwrap()["version"], 1);
+
+        // An imported model has no run to look in, even if a run directory by some name exists.
+        let imported = version_with(model_lab_core::ModelOrigin::Imported);
+        let view = read_model_inspection(root.path(), &imported).unwrap();
+        assert_eq!(view.origin, "imported");
+        assert!(view.inspection.is_none());
+
+        // A model whose files are gone says so instead of showing nothing.
+        let gone = tempfile::tempdir().unwrap();
+        assert!(
+            read_model_inspection(gone.path(), &trained)
+                .unwrap_err()
+                .contains("manifest")
+        );
+    }
 
     fn label(id: &str) -> LabelId {
         LabelId::new(id).unwrap()

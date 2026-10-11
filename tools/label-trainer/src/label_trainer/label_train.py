@@ -228,6 +228,11 @@ def _mapping(spec: Spec):
 
 def build_matrices(spec: Spec):
     """Windows and features for every recording, split by the recordings the desktop assigned."""
+    return build_matrices_with_windows(spec)[:4]
+
+
+def build_matrices_with_windows(spec: Spec):
+    """`build_matrices`, and for each held-out window which recording it came from and where (for the inspection)."""
     recordings = []
     for rid, path in spec.recordings.items():
         recording = load_recording(path)
@@ -245,7 +250,11 @@ def build_matrices(spec: Spec):
     y = (dataset.targets == spec.target).astype(np.int64)
     train_mask = np.isin(dataset.groups, spec.train)
     eval_mask = np.isin(dataset.groups, spec.evaluation)
-    return x[train_mask], y[train_mask], x[eval_mask], y[eval_mask]
+    eval_windows = [
+        {"recording": str(dataset.groups[i]), "startNs": int(dataset.windows[i].start_ns), "label": str(dataset.raw_labels[i])}
+        for i in np.flatnonzero(eval_mask)
+    ]
+    return x[train_mask], y[train_mask], x[eval_mask], y[eval_mask], eval_windows
 
 
 def check_enough(y_train: np.ndarray, y_eval: np.ndarray) -> None:
@@ -550,13 +559,28 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
     return sha
 
 
+def write_inspection(spec: Spec, model, x_eval, y_eval, eval_windows, curve, metrics, out: Path) -> None:
+    """Writes `inspection.json` for the Inspect view. It is an extra: if it cannot be made, the model is still shipped."""
+    if spec.backend not in ("logreg", "mlp", "torch-mlp", "cnn1d"):
+        return
+    try:
+        from .inspection import build_inspection
+
+        parameters = parameter_count(spec.network, len(spec.features), spec.backend) if spec.backend in ("mlp", "torch-mlp", "cnn1d") else len(spec.features) + 1
+        inspection = build_inspection(spec, model, x_eval, y_eval, eval_windows, curve, metrics, parameters)
+        if inspection is not None:
+            (out / "inspection.json").write_text(json.dumps(inspection) + "\n")
+    except Exception as error:  # noqa: BLE001 - an extra must never stop a model being shipped
+        print(f"could not write the inspection: {type(error).__name__}: {error}", flush=True)
+
+
 def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
     """Trains and writes everything under `out`. Returns the result (also written as `result.json`)."""
     out.mkdir(parents=True, exist_ok=True)
     result: dict[str, Any] = {"outcome": "failed", "message": ""}
     try:
         spec = parse_spec(raw_spec)
-        x_train, y_train, x_eval, y_eval = build_matrices(spec)
+        x_train, y_train, x_eval, y_eval, eval_windows = build_matrices_with_windows(spec)
         check_enough(y_train, y_eval)
         curve: list[dict[str, Any]] = []
 
@@ -593,6 +617,7 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
         if parity > PARITY_TOLERANCE:
             raise TrainingRefused(f"the exported ONNX model differs from the trained one by {parity:.4f} (the limit is {PARITY_TOLERANCE}), so it is not shipped")
         sha = write_bundle(spec, out, scratch.read_bytes(), opset, metrics)
+        write_inspection(spec, model, x_eval, y_eval, eval_windows, curve, metrics, out)
         result = {
             "outcome": "deployable",
             "message": "",

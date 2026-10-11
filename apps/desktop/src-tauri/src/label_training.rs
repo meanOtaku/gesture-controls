@@ -816,6 +816,7 @@ fn finish(
             ("manifest", "bundle/manifest.json"),
             ("evaluation", "evaluation.json"),
             ("parity", "parity.json"),
+            ("inspection", "inspection.json"),
         ] {
             if let Ok(hash) = sha256_of_file(&out.join(file)) {
                 artifacts.push(ArtifactRef {
