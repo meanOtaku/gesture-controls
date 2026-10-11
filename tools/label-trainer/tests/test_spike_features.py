@@ -20,7 +20,9 @@ from label_trainer.features import (
     BASE_FEATURE_COUNT,
     FEATURE_NAMES,
     SPIKE_FEATURE_NAMES,
+    SPIKE_METHODS,
     SPIKE_STATS,
+    extract_spike_series,
     extract_features,
     spike_features,
 )
@@ -31,8 +33,8 @@ FIXTURE = Path(__file__).parent / "fixtures" / "spike_cases.json"
 STAT = {name: index for index, name in enumerate(SPIKE_STATS)}
 
 
-def run(values: list[float], times: list[float]) -> dict[str, float]:
-    out = spike_features(np.array(values, dtype=np.float64), np.array(times, dtype=np.float64))
+def run(values: list[float], times: list[float], method: str = "straight_line_baseline") -> dict[str, float]:
+    out = spike_features(np.array(values, dtype=np.float64), np.array(times, dtype=np.float64), method)
     return {name: out[index] for name, index in STAT.items()}
 
 
@@ -144,7 +146,8 @@ def test_the_window_vector_uses_only_rows_that_had_a_real_pulse_sample() -> None
         ppg += [10.0 + (30.0 if i == 7 else 0.0), None]
     recording = _recording(times, ppg)
     window = Window(session_id="s", label="x", start_ns=0, end_ns=0, row_indices=np.arange(len(times)))
-    vector = extract_features(recording, window)
+    vector = extract_features(recording, window, "straight_line_baseline")
+    assert not np.any(extract_features(recording, window)[BASE_FEATURE_COUNT:])  # no method, no spike features
     assert vector.shape == (len(FEATURE_NAMES),)
     spikes = dict(zip(SPIKE_FEATURE_NAMES, vector[BASE_FEATURE_COUNT:]))
     assert spikes["ppg_green_spike_height"] > 20
@@ -157,7 +160,7 @@ def _cases() -> list[dict]:
     cases: list[dict] = []
 
     def add(name: str, values: list[float], times: list[float]) -> None:
-        cases.append({"name": name, "values": values, "timestampsMs": times, "expected": run(values, times)})
+        cases.append({"name": name, "values": values, "timestampsMs": times, "expected": {m: run(values, times, m) for m in SPIKE_METHODS}})
 
     flat = [7.0] * 10
     add("flat", flat, evenly(10))
@@ -190,11 +193,41 @@ def _cases() -> list[dict]:
 def test_the_shared_cases_match_what_this_module_computes() -> None:
     cases = _cases()
     if os.environ.get("SPIKE_FIXTURE_REGENERATE"):
-        FIXTURE.write_text(json.dumps({"statOrder": list(SPIKE_STATS), "cases": cases}, indent=1) + "\n", encoding="utf-8")
+        FIXTURE.write_text(json.dumps({"statOrder": list(SPIKE_STATS), "methods": list(SPIKE_METHODS), "cases": cases}, indent=1) + "\n", encoding="utf-8")
     stored = json.loads(FIXTURE.read_text(encoding="utf-8"))
     assert stored["statOrder"] == list(SPIKE_STATS)
+    assert stored["methods"] == list(SPIKE_METHODS)
     assert len(stored["cases"]) == len(cases)
     for mine, theirs in zip(cases, stored["cases"]):
         assert mine["name"] == theirs["name"] and mine["values"] == theirs["values"]
+        for method in SPIKE_METHODS:
+            for stat in SPIKE_STATS:
+                assert mine["expected"][method][stat] == pytest.approx(theirs["expected"][method][stat], abs=1e-9, rel=1e-9), (mine["name"], method, stat)
+
+
+def test_every_method_leaves_the_spike_and_ignores_a_shifted_baseline() -> None:
+    values = [50.0 + 0.4 * i for i in range(14)]
+    values[8] += 40.0
+    for method in SPIKE_METHODS:
+        found = run(values, evenly(14), method)
+        shifted = run([v + 9000.0 for v in values], evenly(14), method)
+        assert abs(found["spike_height"]) > 5, method
+        assert found["spike_z"] > 2, method
         for stat in SPIKE_STATS:
-            assert mine["expected"][stat] == pytest.approx(theirs["expected"][stat], abs=1e-9, rel=1e-9), (mine["name"], stat)
+            assert found[stat] == pytest.approx(shifted[stat], abs=1e-6, rel=1e-6), (method, stat)
+
+
+def test_the_series_each_method_leaves_has_the_expected_length_and_shape() -> None:
+    x = np.array([5.0, 5.0, 5.0, 25.0, 5.0, 5.0, 5.0, 5.0, 5.0])
+    lengths = {m: len(extract_spike_series(m, x, 320.0)) for m in SPIKE_METHODS}
+    assert lengths["first_derivative"] == lengths["haar_wavelet_detail"] == len(x) - 1
+    assert all(lengths[m] == len(x) for m in SPIKE_METHODS if m not in ("first_derivative", "haar_wavelet_detail"))
+    # A median ignores a lone spike, so the residual at the spike is nearly its full height; the top-hat does too.
+    assert extract_spike_series("rolling_median_residual", x, 320.0)[3] == pytest.approx(20.0)
+    assert extract_spike_series("morphological_top_hat", x, 320.0)[3] == pytest.approx(20.0)
+    assert extract_spike_series("first_derivative", x, 320.0)[2] == pytest.approx(20.0)  # the rise into it
+
+
+def test_an_unknown_method_is_refused() -> None:
+    with pytest.raises(ValueError, match="unknown spike extraction method"):
+        run([1.0] * 8, evenly(8), "wavelet_soup")

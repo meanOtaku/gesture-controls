@@ -11,7 +11,7 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use model_lab_core::{LabelId, ModelVersionId, StreamSource};
-use pinch_inference::{FusedWindow, OrientationSnapshot, extract_features};
+use pinch_inference::{FusedWindow, OrientationSnapshot, extract_features_with};
 use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
 
 use crate::model::LoadedModel;
@@ -439,7 +439,7 @@ impl LabelPipeline {
             orientation_in_window: in_window,
             contact_quality_mean,
         };
-        let canonical = extract_features(&window);
+        let canonical = extract_features_with(&window, model.spike_method);
         let confidence = model
             .predict(&canonical)
             .map_err(|e| Rejection::Model(e.to_string()))?;

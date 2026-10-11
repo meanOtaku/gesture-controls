@@ -310,12 +310,20 @@ def test_a_model_can_learn_from_the_pulse_sensor_spikes_alone(tmp_path: Path) ->
     pulse = tmp_path / "pulse"
     pulse.mkdir()
     recordings = {rid: str(write_pulse_recording(pulse, rid, label, seed=index)) for index, (rid, label) in enumerate(plan.items())}
-    spec = spec_for(tmp_path, recordings=recordings, sources=["watchPpg"], movementOnly=True, spikeFeatures=True)
+    spec = spec_for(tmp_path, recordings=recordings, sources=["watchPpg"], movementOnly=True, spikeMethod="rolling_median_residual")
     out = tmp_path / "run"
     result = lt.run(spec, out)
     assert result["outcome"] == "deployable", result["message"]
     assert result["metrics"]["f1"] > 0.9
     assert set(SPIKE_FEATURE_NAMES) <= set(result["features"])
     manifest = json.loads((out / "bundle" / "manifest.json").read_text())
-    assert manifest["provenance"]["spikeFeatures"] is True
+    assert manifest["preprocessing"] == {"kind": "spike_extraction", "method": "rolling_median_residual"}
+    assert manifest["provenance"]["spikeMethod"] == "rolling_median_residual"
     assert manifest["input"]["features"] == result["features"]
+
+
+def test_a_spike_method_without_the_pulse_sensor_changes_nothing_and_an_unknown_one_is_refused(tmp_path: Path) -> None:
+    motion = lt.parse_spec(spec_for(tmp_path, spikeMethod="butterworth_high_pass"))
+    assert motion.spike_method is None
+    with pytest.raises(lt.TrainingRefused, match="unknown spike extraction method"):
+        lt.parse_spec(spec_for(tmp_path, sources=["watchPpg"], spikeMethod="soup"))

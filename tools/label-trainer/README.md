@@ -10,7 +10,7 @@ out), the streams the model may read, and the window. It hands them to this trai
 ## What it does
 
 1. Reads the recordings named in the spec (Model Lab datasets, CSV with a `label` column).
-2. Builds windows and the canonical features (55 statistics, plus 24 pulse-sensor spike features when `spikeFeatures` is set), limited to the streams the model is allowed to read. The spike features are defined in `features.spike_features` and mirrored in `crates/pinch-inference`; `tests/fixtures/spike_cases.json` keeps the two equal (regenerate with `SPIKE_FIXTURE_REGENERATE=1 uv run pytest tests/test_spike_features.py` after an intended change).
+2. Builds windows and the canonical features (55 statistics, plus 24 pulse-sensor spike features when a `spikeMethod` is set: one of `features.SPIKE_METHODS`), limited to the streams the model is allowed to read. The spike features are defined in `features.spike_features` and mirrored in `crates/pinch-inference`; `tests/fixtures/spike_cases.json` keeps the two equal (regenerate with `SPIKE_FIXTURE_REGENERATE=1 uv run pytest tests/test_spike_features.py` after an intended change).
 3. Trains logistic regression, a small multilayer perceptron, or a PyTorch network.
 4. Evaluates on the held-out recordings and fits the decision threshold there (the evaluation says so).
 5. Exports ONNX built from plain dense layers, and checks the ONNX file reproduces the trained model to 1e-3.

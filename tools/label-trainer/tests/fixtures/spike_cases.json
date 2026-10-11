@@ -9,6 +9,15 @@
   "deriv_max",
   "deriv_min"
  ],
+ "methods": [
+  "straight_line_baseline",
+  "first_derivative",
+  "rolling_median_residual",
+  "morphological_top_hat",
+  "butterworth_high_pass",
+  "savitzky_golay_residual",
+  "haar_wavelet_detail"
+ ],
  "cases": [
   {
    "name": "flat",
@@ -37,14 +46,76 @@
     1360.0
    ],
    "expected": {
-    "spike_height": 0.0,
-    "spike_z": 0.0,
-    "spike_time_frac": 0.0,
-    "spike_rise_ms": 0.0,
-    "spike_fall_ms": 0.0,
-    "spike_count": 0.0,
-    "deriv_max": 0.0,
-    "deriv_min": 0.0
+    "straight_line_baseline": {
+     "spike_height": 0.0,
+     "spike_z": 0.0,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "first_derivative": {
+     "spike_height": 0.0,
+     "spike_z": 0.0,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "rolling_median_residual": {
+     "spike_height": 0.0,
+     "spike_z": 0.0,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "morphological_top_hat": {
+     "spike_height": 0.0,
+     "spike_z": 0.0,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "butterworth_high_pass": {
+     "spike_height": 0.0,
+     "spike_z": 0.0,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "savitzky_golay_residual": {
+     "spike_height": 8.881784197001252e-16,
+     "spike_z": 8.881784197001251e-07,
+     "spike_time_frac": 0.3333333333333333,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 120.0,
+     "spike_count": 0.0,
+     "deriv_max": 2.2204460492503132e-17,
+     "deriv_min": -2.2204460492503132e-17
+    },
+    "haar_wavelet_detail": {
+     "spike_height": 0.0,
+     "spike_z": 0.0,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    }
    }
   },
   {
@@ -60,14 +131,76 @@
     1080.0
    ],
    "expected": {
-    "spike_height": 0.0,
-    "spike_z": 0.0,
-    "spike_time_frac": 0.0,
-    "spike_rise_ms": 0.0,
-    "spike_fall_ms": 0.0,
-    "spike_count": 0.0,
-    "deriv_max": 0.0,
-    "deriv_min": 0.0
+    "straight_line_baseline": {
+     "spike_height": 0.0,
+     "spike_z": 0.0,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "first_derivative": {
+     "spike_height": 0.0,
+     "spike_z": 0.0,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "rolling_median_residual": {
+     "spike_height": 0.0,
+     "spike_z": 0.0,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "morphological_top_hat": {
+     "spike_height": 0.0,
+     "spike_z": 0.0,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "butterworth_high_pass": {
+     "spike_height": 0.0,
+     "spike_z": 0.0,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "savitzky_golay_residual": {
+     "spike_height": 0.0,
+     "spike_z": 0.0,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "haar_wavelet_detail": {
+     "spike_height": 0.0,
+     "spike_z": 0.0,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    }
    }
   },
   {
@@ -101,14 +234,76 @@
     1440.0
    ],
    "expected": {
-    "spike_height": 29.213286713286713,
-    "spike_z": 17.890064429926834,
-    "spike_time_frac": 0.6363636363636364,
-    "spike_rise_ms": 0.0,
-    "spike_fall_ms": 0.0,
-    "spike_count": 1.0,
-    "deriv_max": 0.7421328671328671,
-    "deriv_min": -0.7578671328671328
+    "straight_line_baseline": {
+     "spike_height": 29.213286713286713,
+     "spike_z": 17.890064429926834,
+     "spike_time_frac": 0.6363636363636364,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.7421328671328671,
+     "deriv_min": -0.7578671328671328
+    },
+    "first_derivative": {
+     "spike_height": 30.0,
+     "spike_z": 50.0,
+     "spike_time_frac": 0.6,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.6818181818181818,
+     "deriv_min": -1.3636363636363635
+    },
+    "rolling_median_residual": {
+     "spike_height": 30.0,
+     "spike_z": 50.0,
+     "spike_time_frac": 0.6363636363636364,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.75,
+     "deriv_min": -0.75
+    },
+    "morphological_top_hat": {
+     "spike_height": 30.0,
+     "spike_z": 50.0,
+     "spike_time_frac": 0.6363636363636364,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.75,
+     "deriv_min": -0.75
+    },
+    "butterworth_high_pass": {
+     "spike_height": 22.76135636712183,
+     "spike_z": 8.463310004374403,
+     "spike_time_frac": 0.6363636363636364,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.715224180239575,
+     "deriv_min": -0.7205553548641264
+    },
+    "savitzky_golay_residual": {
+     "spike_height": 20.000000000000004,
+     "spike_z": 10.492078480747026,
+     "spike_time_frac": 0.6363636363636364,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.7142857142857143,
+     "deriv_min": -0.7142857142857143
+    },
+    "haar_wavelet_detail": {
+     "spike_height": -10.606601717798211,
+     "spike_z": 50.0,
+     "spike_time_frac": 0.5,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 44.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.4821182598999187,
+     "deriv_min": -0.24105912994995934
+    }
    }
   },
   {
@@ -146,14 +341,76 @@
     1520.0
    ],
    "expected": {
-    "spike_height": -39.340659340659336,
-    "spike_z": 16.768589714765344,
-    "spike_time_frac": 0.46153846153846156,
-    "spike_rise_ms": 0.0,
-    "spike_fall_ms": 80.0,
-    "spike_count": 1.0,
-    "deriv_max": 1.0065934065934066,
-    "deriv_min": -0.9934065934065934
+    "straight_line_baseline": {
+     "spike_height": -39.340659340659336,
+     "spike_z": 16.768589714765344,
+     "spike_time_frac": 0.46153846153846156,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 80.0,
+     "spike_count": 1.0,
+     "deriv_max": 1.0065934065934066,
+     "deriv_min": -0.9934065934065934
+    },
+    "first_derivative": {
+     "spike_height": -40.0,
+     "spike_z": 50.0,
+     "spike_time_frac": 0.41666666666666663,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 2.0,
+     "deriv_max": 0.9230769230769229,
+     "deriv_min": -0.9230769230769235
+    },
+    "rolling_median_residual": {
+     "spike_height": 0.0,
+     "spike_z": 0.0,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "morphological_top_hat": {
+     "spike_height": 0.0,
+     "spike_z": 0.0,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "butterworth_high_pass": {
+     "spike_height": -15.907084876961084,
+     "spike_z": 2.1786258466539925,
+     "spike_time_frac": 0.46153846153846156,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 80.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.7868881240275593,
+     "deriv_min": -0.7818275600177509
+    },
+    "savitzky_golay_residual": {
+     "spike_height": 13.333333333333334,
+     "spike_z": 4.721435316336161,
+     "spike_time_frac": 0.38461538461538464,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 2.0,
+     "deriv_max": 0.5714285714285714,
+     "deriv_min": -0.5714285714285715
+    },
+    "haar_wavelet_detail": {
+     "spike_height": 28.2842712474619,
+     "spike_z": 50.0,
+     "spike_time_frac": 0.41666666666666663,
+     "spike_rise_ms": 43.333333333333314,
+     "spike_fall_ms": 43.33333333333334,
+     "spike_count": 2.0,
+     "deriv_max": 0.3263569759322528,
+     "deriv_min": -0.6527139518645056
+    }
    }
   },
   {
@@ -187,14 +444,76 @@
     1440.0
    ],
    "expected": {
-    "spike_height": 59.68531468531468,
-    "spike_z": 50.0,
-    "spike_time_frac": 0.45454545454545453,
-    "spike_rise_ms": 0.0,
-    "spike_fall_ms": 0.0,
-    "spike_count": 1.0,
-    "deriv_max": 1.5052447552447552,
-    "deriv_min": -1.4947552447552446
+    "straight_line_baseline": {
+     "spike_height": 59.68531468531468,
+     "spike_z": 50.0,
+     "spike_time_frac": 0.45454545454545453,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 1.5052447552447552,
+     "deriv_min": -1.4947552447552446
+    },
+    "first_derivative": {
+     "spike_height": 60.0,
+     "spike_z": 50.0,
+     "spike_time_frac": 0.4,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 1.3636363636363635,
+     "deriv_min": -2.727272727272727
+    },
+    "rolling_median_residual": {
+     "spike_height": 55.0,
+     "spike_z": 14.838796708485095,
+     "spike_time_frac": 0.45454545454545453,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 1.5,
+     "deriv_min": -1.375
+    },
+    "morphological_top_hat": {
+     "spike_height": 55.0,
+     "spike_z": 50.0,
+     "spike_time_frac": 0.45454545454545453,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 2.0,
+     "deriv_max": 1.375,
+     "deriv_min": -1.375
+    },
+    "butterworth_high_pass": {
+     "spike_height": 44.95095784442008,
+     "spike_z": 5.359177291837312,
+     "spike_time_frac": 0.45454545454545453,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 1.4490135517320901,
+     "deriv_min": -1.426547803730244
+    },
+    "savitzky_golay_residual": {
+     "spike_height": 40.00000000000007,
+     "spike_z": 9.44287063267229,
+     "spike_time_frac": 0.45454545454545453,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 1.4285714285714293,
+     "deriv_min": -1.42857142857143
+    },
+    "haar_wavelet_detail": {
+     "spike_height": -21.213203435596423,
+     "spike_z": 8.093889113719142,
+     "spike_time_frac": 0.3,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 44.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.9642365197998374,
+     "deriv_min": -0.4821182598999187
+    }
    }
   },
   {
@@ -228,14 +547,76 @@
     1440.0
    ],
    "expected": {
-    "spike_height": 19.98146853146853,
-    "spike_z": 24.01565322854144,
-    "spike_time_frac": 0.36363636363636365,
-    "spike_rise_ms": 0.0,
-    "spike_fall_ms": 0.0,
-    "spike_count": 2.0,
-    "deriv_max": 0.49407342657342657,
-    "deriv_min": -0.5034265734265734
+    "straight_line_baseline": {
+     "spike_height": 19.98146853146853,
+     "spike_z": 24.01565322854144,
+     "spike_time_frac": 0.36363636363636365,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 2.0,
+     "deriv_max": 0.49407342657342657,
+     "deriv_min": -0.5034265734265734
+    },
+    "first_derivative": {
+     "spike_height": -20.2,
+     "spike_z": 27.249426682854544,
+     "spike_time_frac": 0.4,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 2.0,
+     "deriv_max": 0.45909090909090905,
+     "deriv_min": -0.9068181818181817
+    },
+    "rolling_median_residual": {
+     "spike_height": 20.0,
+     "spike_z": 50.0,
+     "spike_time_frac": 0.36363636363636365,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 2.0,
+     "deriv_max": 0.5,
+     "deriv_min": -0.5025000000000001
+    },
+    "morphological_top_hat": {
+     "spike_height": 19.950000000000003,
+     "spike_z": 50.0,
+     "spike_time_frac": 0.36363636363636365,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 2.0,
+     "deriv_max": 0.49750000000000005,
+     "deriv_min": -0.5
+    },
+    "butterworth_high_pass": {
+     "spike_height": 17.039076873932814,
+     "spike_z": 4.846307478276964,
+     "spike_time_frac": 0.36363636363636365,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 2.0,
+     "deriv_max": 0.4965815946184823,
+     "deriv_min": -0.5035861183169056
+    },
+    "savitzky_golay_residual": {
+     "spike_height": 13.376190476190477,
+     "spike_z": 2.419724831889854,
+     "spike_time_frac": 0.36363636363636365,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.4760714285714286,
+     "deriv_min": -0.5055238095238097
+    },
+    "haar_wavelet_detail": {
+     "spike_height": -7.247844507162112,
+     "spike_z": 0.6948271642849347,
+     "spike_time_frac": 0.6,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 44.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.3238227645661121,
+     "deriv_min": -0.32462629499927864
+    }
    }
   },
   {
@@ -261,14 +642,76 @@
     5000.0
    ],
    "expected": {
-    "spike_height": 17.0,
-    "spike_z": 11.46634291110212,
-    "spike_time_frac": 0.0,
-    "spike_rise_ms": 0.0,
-    "spike_fall_ms": 0.0,
-    "spike_count": 1.0,
-    "deriv_max": 0.0,
-    "deriv_min": 0.0
+    "straight_line_baseline": {
+     "spike_height": 17.0,
+     "spike_z": 11.46634291110212,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "first_derivative": {
+     "spike_height": 18.0,
+     "spike_z": 6.070416835289357,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "rolling_median_residual": {
+     "spike_height": 16.25,
+     "spike_z": 21.920949682989345,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "morphological_top_hat": {
+     "spike_height": 17.0,
+     "spike_z": 50.0,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "butterworth_high_pass": {
+     "spike_height": 14.318088802293431,
+     "spike_z": 9.037339351596508,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "savitzky_golay_residual": {
+     "spike_height": 10.571428571428573,
+     "spike_z": 11.883884809825728,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "haar_wavelet_detail": {
+     "spike_height": -8.131727983645296,
+     "spike_z": 1.4102988607237898,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    }
    }
   },
   {
@@ -302,14 +745,76 @@
     1315.00008
    ],
    "expected": {
-    "spike_height": 29.213286713286713,
-    "spike_z": 17.89006442992683,
-    "spike_time_frac": 0.6363636363636365,
-    "spike_rise_ms": 0.0,
-    "spike_fall_ms": 0.0,
-    "spike_count": 1.0,
-    "deriv_max": 1.0366297733589818,
-    "deriv_min": -1.0586077897552875
+    "straight_line_baseline": {
+     "spike_height": 29.213286713286713,
+     "spike_z": 17.89006442992683,
+     "spike_time_frac": 0.6363636363636365,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 1.0366297733589818,
+     "deriv_min": -1.0586077897552875
+    },
+    "first_derivative": {
+     "spike_height": 30.0,
+     "spike_z": 50.0,
+     "spike_time_frac": 0.6,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.9523807105064869,
+     "deriv_min": -1.904761421012972
+    },
+    "rolling_median_residual": {
+     "spike_height": 30.0,
+     "spike_z": 50.0,
+     "spike_time_frac": 0.6363636363636365,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 1.0476187815571336,
+     "deriv_min": -1.0476187815571356
+    },
+    "morphological_top_hat": {
+     "spike_height": 30.0,
+     "spike_z": 50.0,
+     "spike_time_frac": 0.6363636363636365,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 1.0476187815571336,
+     "deriv_min": -1.0476187815571356
+    },
+    "butterworth_high_pass": {
+     "spike_height": 22.76135636712183,
+     "spike_z": 8.463310004374403,
+     "spike_time_frac": 0.6363636363636365,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.9990430456570444,
+     "deriv_min": -1.0064897638763006
+    },
+    "savitzky_golay_residual": {
+     "spike_height": 20.000000000000004,
+     "spike_z": 10.492078480747026,
+     "spike_time_frac": 0.6363636363636365,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.9977321729115559,
+     "deriv_min": -0.9977321729115579
+    },
+    "haar_wavelet_detail": {
+     "spike_height": -10.606601717798211,
+     "spike_z": 50.0,
+     "spike_time_frac": 0.5,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 31.50000800000001,
+     "spike_count": 1.0,
+     "deriv_max": 0.6734348586703983,
+     "deriv_min": -0.3367174293351995
+    }
    }
   },
   {
@@ -343,14 +848,76 @@
     123857.5
    ],
    "expected": {
-    "spike_height": 75.68048426573522,
-    "spike_z": 2.056307031110932,
-    "spike_time_frac": 0.8181818181818182,
-    "spike_rise_ms": 0.0,
-    "spike_fall_ms": 0.0,
-    "spike_count": 0.0,
-    "deriv_max": 3.177202109524768,
-    "deriv_min": -2.3804793309183365
+    "straight_line_baseline": {
+     "spike_height": 75.68048426573522,
+     "spike_z": 2.056307031110932,
+     "spike_time_frac": 0.8181818181818182,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 3.177202109524768,
+     "deriv_min": -2.3804793309183365
+    },
+    "first_derivative": {
+     "spike_height": 127.21399999999994,
+     "spike_z": 1.8993418513382445,
+     "spike_time_frac": 0.4,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 4.629196675900313,
+     "deriv_min": -4.9418005540165595
+    },
+    "rolling_median_residual": {
+     "spike_height": 78.95599999999831,
+     "spike_z": 2.2686841784624874,
+     "spike_time_frac": 0.8181818181818182,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 3.1518199445982797,
+     "deriv_min": -2.278264542936237
+    },
+    "morphological_top_hat": {
+     "spike_height": 64.25200000000041,
+     "spike_z": 1.8777841448023922,
+     "spike_time_frac": 0.8181818181818182,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 2.661055401661999,
+     "deriv_min": -2.405861495844824
+    },
+    "butterworth_high_pass": {
+     "spike_height": 58.56015408283064,
+     "spike_z": 1.5130004783095987,
+     "spike_time_frac": 0.8181818181818182,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 3.122314318155931,
+     "deriv_min": -2.1214368859202177
+    },
+    "savitzky_golay_residual": {
+     "spike_height": -51.57423809522879,
+     "spike_z": 3.1165508556724775,
+     "spike_time_frac": 0.36363636363636365,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 2.0,
+     "deriv_max": 2.93691352064343,
+     "deriv_min": -1.8464198654529902
+    },
+    "haar_wavelet_detail": {
+     "spike_height": -44.99780068098324,
+     "spike_z": 2.248944550335013,
+     "spike_time_frac": 0.4,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 36.099999999999994,
+     "spike_count": 0.0,
+     "deriv_max": 1.1664617584439492,
+     "deriv_min": -1.2464764731574303
+    }
    }
   },
   {
@@ -382,14 +949,76 @@
     123913.25
    ],
    "expected": {
-    "spike_height": 647.8042727272724,
-    "spike_z": 6.588884706866919,
-    "spike_time_frac": 0.19999999999999998,
-    "spike_rise_ms": 0.0,
-    "spike_fall_ms": 0.0,
-    "spike_count": 1.0,
-    "deriv_max": 17.135421279380463,
-    "deriv_min": -17.572101216120473
+    "straight_line_baseline": {
+     "spike_height": 647.8042727272724,
+     "spike_z": 6.588884706866919,
+     "spike_time_frac": 0.19999999999999998,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 17.135421279380463,
+     "deriv_min": -17.572101216120473
+    },
+    "first_derivative": {
+     "spike_height": -775.0055000000066,
+     "spike_z": 11.553027268265437,
+     "spike_time_frac": 0.22222222222222224,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 17.054130773845255,
+     "deriv_min": -31.23677024595084
+    },
+    "rolling_median_residual": {
+     "spike_height": 703.976999999999,
+     "spike_z": 15.330319355050248,
+     "spike_time_frac": 0.19999999999999998,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 16.43037792441505,
+     "deriv_min": -18.025650869825967
+    },
+    "morphological_top_hat": {
+     "spike_height": 716.7560000000012,
+     "spike_z": 18.808905528513485,
+     "spike_time_frac": 0.19999999999999998,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 16.89206958608276,
+     "deriv_min": -17.815452909418173
+    },
+    "butterworth_high_pass": {
+     "spike_height": 540.6835109720746,
+     "spike_z": 6.717793199872797,
+     "spike_time_frac": 0.19999999999999998,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 16.3715634432457,
+     "deriv_min": -17.13760761225814
+    },
+    "savitzky_golay_residual": {
+     "spike_height": 372.535971428566,
+     "spike_z": 28.768473865035002,
+     "spike_time_frac": 0.19999999999999998,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 8.939075499185746,
+     "deriv_min": -14.63365201245448
+    },
+    "haar_wavelet_detail": {
+     "spike_height": 275.25810836292214,
+     "spike_z": 5.868247867684069,
+     "spike_time_frac": 0.22222222222222224,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 46.30555555555554,
+     "spike_count": 2.0,
+     "deriv_max": 10.990839385738568,
+     "deriv_min": -5.36040980573688
+    }
    }
   },
   {
@@ -421,14 +1050,76 @@
     124076.0
    ],
    "expected": {
-    "spike_height": -388.0095454545444,
-    "spike_z": 12.987563647493808,
-    "spike_time_frac": 0.4,
-    "spike_rise_ms": 0.0,
-    "spike_fall_ms": 0.0,
-    "spike_count": 1.0,
-    "deriv_max": 7.224653418870261,
-    "deriv_min": -7.573659834141775
+    "straight_line_baseline": {
+     "spike_height": -388.0095454545444,
+     "spike_z": 12.987563647493808,
+     "spike_time_frac": 0.4,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 7.224653418870261,
+     "deriv_min": -7.573659834141775
+    },
+    "first_derivative": {
+     "spike_height": -441.0109999999986,
+     "spike_z": 5.873158219193742,
+     "spike_time_frac": 0.3333333333333333,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 13.31848192771083,
+     "deriv_min": -7.62355765920832
+    },
+    "rolling_median_residual": {
+     "spike_height": -390.2589999999982,
+     "spike_z": 11.63687397447148,
+     "spike_time_frac": 0.4,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 7.425077452667766,
+     "deriv_min": -7.106351118760772
+    },
+    "morphological_top_hat": {
+     "spike_height": 41.51800000000367,
+     "spike_z": 1.1392338534621729,
+     "spike_time_frac": 0.5,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 1.1376764199656109,
+     "deriv_min": -0.9546127366609876
+    },
+    "butterworth_high_pass": {
+     "spike_height": -331.104046567335,
+     "spike_z": 7.257778778764308,
+     "spike_time_frac": 0.4,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 7.105814450218116,
+     "deriv_min": -7.19572331909153
+    },
+    "savitzky_golay_residual": {
+     "spike_height": -279.3042857142864,
+     "spike_z": 3.743278588930244,
+     "spike_time_frac": 0.4,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 7.102076059339615,
+     "deriv_min": -7.087957544463718
+    },
+    "haar_wavelet_detail": {
+     "spike_height": 146.3917865789596,
+     "spike_z": 6.09253225128271,
+     "spike_time_frac": 0.3333333333333333,
+     "spike_rise_ms": 64.55555555555554,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 2.1240021160076816,
+     "deriv_min": -4.204497083626687
+    }
    }
   },
   {
@@ -446,14 +1137,76 @@
     123697.75
    ],
    "expected": {
-    "spike_height": -13.58415000000241,
-    "spike_z": 0.7654519795775717,
-    "spike_time_frac": 0.6666666666666666,
-    "spike_rise_ms": 53.75,
-    "spike_fall_ms": 0.0,
-    "spike_count": 0.0,
-    "deriv_max": 0.48143069767447316,
-    "deriv_min": -0.4333786046511472
+    "straight_line_baseline": {
+     "spike_height": -13.58415000000241,
+     "spike_z": 0.7654519795775717,
+     "spike_time_frac": 0.6666666666666666,
+     "spike_rise_ms": 53.75,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.48143069767447316,
+     "deriv_min": -0.4333786046511472
+    },
+    "first_derivative": {
+     "spike_height": 27.814000000005763,
+     "spike_z": 0.8784139150671502,
+     "spike_time_frac": 1.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.3449798449613118,
+     "deriv_min": 0.26489302325576847
+    },
+    "rolling_median_residual": {
+     "spike_height": 48.26425000000745,
+     "spike_z": 2.6144473065956184,
+     "spike_time_frac": 1.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.7491255813955091,
+     "deriv_min": -0.16568372093024664
+    },
+    "morphological_top_hat": {
+     "spike_height": 65.1685000000034,
+     "spike_z": 3.530141031920296,
+     "spike_time_frac": 1.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.9807813953489152,
+     "deriv_min": 0.0
+    },
+    "butterworth_high_pass": {
+     "spike_height": 30.752106738984374,
+     "spike_z": 5.172129307104331,
+     "spike_time_frac": 1.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 0.5251760856443156,
+     "deriv_min": -0.05530979433964508
+    },
+    "savitzky_golay_residual": {
+     "spike_height": 0.0,
+     "spike_z": 0.0,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 0.0,
+     "deriv_min": 0.0
+    },
+    "haar_wavelet_detail": {
+     "spike_height": 26.18911385480377,
+     "spike_z": 2.058769924075827,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": -0.106419022423768,
+     "deriv_min": -0.3248262183541553
+    }
    }
   },
   {
@@ -513,14 +1266,76 @@
     124618.25
    ],
    "expected": {
-    "spike_height": 627.5538569230789,
-    "spike_z": 6.090161523509104,
-    "spike_time_frac": 0.6666666666666667,
-    "spike_rise_ms": 0.0,
-    "spike_fall_ms": 0.0,
-    "spike_count": 5.0,
-    "deriv_max": 14.194702409353608,
-    "deriv_min": -14.077222707651227
+    "straight_line_baseline": {
+     "spike_height": 627.5538569230789,
+     "spike_z": 6.090161523509104,
+     "spike_time_frac": 0.6666666666666667,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 5.0,
+     "deriv_max": 14.194702409353608,
+     "deriv_min": -14.077222707651227
+    },
+    "first_derivative": {
+     "spike_height": 665.2010000000046,
+     "spike_z": 4.039469242424672,
+     "spike_time_frac": 1.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 4.0,
+     "deriv_max": 25.656763984845213,
+     "deriv_min": -25.215914419433947
+    },
+    "rolling_median_residual": {
+     "spike_height": 669.9360000000015,
+     "spike_z": 12.637300670945804,
+     "spike_time_frac": 1.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 5.0,
+     "deriv_max": 14.373577000222939,
+     "deriv_min": -13.858146645865899
+    },
+    "morphological_top_hat": {
+     "spike_height": 669.9360000000015,
+     "spike_z": 50.0,
+     "spike_time_frac": 1.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 7.0,
+     "deriv_max": 14.413778471138937,
+     "deriv_min": -13.858146645865899
+    },
+    "butterworth_high_pass": {
+     "spike_height": 392.9107499584155,
+     "spike_z": 2.92558751247687,
+     "spike_time_frac": 0.75,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 14.438327758969647,
+     "deriv_min": -14.064974563772788
+    },
+    "savitzky_golay_residual": {
+     "spike_height": -369.99252380952385,
+     "spike_z": 2.702824114860852,
+     "spike_time_frac": 0.7083333333333333,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 13.75358043872782,
+     "deriv_min": -15.038156961380642
+    },
+    "haar_wavelet_detail": {
+     "spike_height": -470.2493440128354,
+     "spike_z": 2.6804783191803105,
+     "spike_time_frac": 1.0,
+     "spike_rise_ms": 48.77173913043475,
+     "spike_fall_ms": 0.0,
+     "spike_count": 0.0,
+     "deriv_max": 5.220283024287548,
+     "deriv_min": -7.586287843734063
+    }
    }
   },
   {
@@ -556,14 +1371,76 @@
     124039.75
    ],
    "expected": {
-    "spike_height": 597.712637362632,
-    "spike_z": 12.563368172128394,
-    "spike_time_frac": 0.16666666666666669,
-    "spike_rise_ms": 0.0,
-    "spike_fall_ms": 0.0,
-    "spike_count": 2.0,
-    "deriv_max": 12.459803902384907,
-    "deriv_min": -13.732710094861433
+    "straight_line_baseline": {
+     "spike_height": 597.712637362632,
+     "spike_z": 12.563368172128394,
+     "spike_time_frac": 0.16666666666666669,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 2.0,
+     "deriv_max": 12.459803902384907,
+     "deriv_min": -13.732710094861433
+    },
+    "first_derivative": {
+     "spike_height": -642.8949999999968,
+     "spike_z": 7.83497582100812,
+     "spike_time_frac": 0.18181818181818182,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 13.107173932996698,
+     "deriv_min": -24.009804497475812
+    },
+    "rolling_median_residual": {
+     "spike_height": 591.6329999999944,
+     "spike_z": 12.281893185850848,
+     "spike_time_frac": 0.16666666666666669,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 2.0,
+     "deriv_max": 12.463269389628286,
+     "deriv_min": -14.171741165672081
+    },
+    "morphological_top_hat": {
+     "spike_height": 587.8770000000004,
+     "spike_z": 12.203921215379319,
+     "spike_time_frac": 0.16666666666666669,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 1.0,
+     "deriv_max": 12.526766406608546,
+     "deriv_min": -13.665747590637798
+    },
+    "butterworth_high_pass": {
+     "spike_height": 508.5597729482091,
+     "spike_z": 12.491416395212868,
+     "spike_time_frac": 0.16666666666666669,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 2.0,
+     "deriv_max": 11.202785269166608,
+     "deriv_min": -13.863889596890715
+    },
+    "savitzky_golay_residual": {
+     "spike_height": 268.47925714284065,
+     "spike_z": 8.441666842329552,
+     "spike_time_frac": 0.16666666666666669,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 0.0,
+     "spike_count": 2.0,
+     "deriv_max": 5.914182809938665,
+     "deriv_min": -11.193459017897705
+    },
+    "haar_wavelet_detail": {
+     "spike_height": -541.8133232396827,
+     "spike_z": 9.365892054252903,
+     "spike_time_frac": 0.0,
+     "spike_rise_ms": 0.0,
+     "spike_fall_ms": 49.52272727272727,
+     "spike_count": 1.0,
+     "deriv_max": 11.593128282442482,
+     "deriv_min": -4.205525856105988
+    }
    }
   }
  ]

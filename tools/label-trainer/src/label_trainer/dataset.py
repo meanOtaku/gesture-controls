@@ -44,8 +44,11 @@ def build_dataset_from_recordings(
     window_config: WindowConfig,
     hold_handling: str,
     label_mapping: LabelMapping | None = None,
+    spike_method: str | None = None,
 ) -> Dataset:
-    """`label_mapping`, when given, fully replaces `hold_handling` and the legacy `resolve_target` lookup:
+    """`spike_method` is how the pulse sensor's spike features are extracted (see `features.SPIKE_METHODS`); none leaves them 0.
+
+    `label_mapping`, when given, fully replaces `hold_handling` and the legacy `resolve_target` lookup:
     every raw label present in `recordings` must have an explicit entry, or the whole run is rejected
     before any windowing/training happens (see `LabelMapping.resolve` / `missing_labels`).
     """
@@ -70,7 +73,7 @@ def build_dataset_from_recordings(
             target = label_mapping.resolve(window.label) if label_mapping is not None else resolve_target(window.label, hold_handling)
             if target is None:
                 continue
-            feature_rows.append(extract_features(recording, window))
+            feature_rows.append(extract_features(recording, window, spike_method))
             targets.append(target)
             groups.append(window.session_id)
             raw_labels.append(window.label)

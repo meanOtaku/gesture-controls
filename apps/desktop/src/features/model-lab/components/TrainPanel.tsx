@@ -21,7 +21,9 @@ import {
   hasLabel,
   otherLabels,
   recordingsWithLabel,
+  SPIKE_METHODS,
   type DataStream,
+  type SpikeMethodId,
   type OtherRole,
   type TrainMethod,
   type TrainPlan,
@@ -52,7 +54,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
   const [method, setMethod] = useState<TrainMethod>("logreg");
   const [sources, setSources] = useState<DataStream[]>(DEFAULT_STREAMS);
   const [movementOnly, setMovementOnly] = useState(false);
-  const [spikeFeatures, setSpikeFeatures] = useState(false);
+  const [spikeMethod, setSpikeMethod] = useState<SpikeMethodId>("none");
   const [plan, setPlan] = useState<TrainPlan | null>(null);
   const [environment, setEnvironment] = useState<TrainerEnvironment | null>(null);
   const [running, setRunning] = useState<string | null>(null);
@@ -63,7 +65,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
   const usable = labels.filter((label) => label.archivedAt === null);
   const candidates = datasets.filter((dataset) => datasetLabels(dataset).length > 0);
   const others = otherLabels(datasets, selected, target);
-  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, method, sources, movementOnly, spikeFeatures: spikeFeatures && sources.includes("watchPpg") });
+  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, method, sources, movementOnly, spikeMethod: sources.includes("watchPpg") ? spikeMethod : "none" });
   const requestKey = JSON.stringify(request);
 
   useEffect(() => {
@@ -241,6 +243,19 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
             )}
 
             <div className="field">
+              <div className="field-head"><Label htmlFor={`${uid}-spikes`}>Spike extraction</Label></div>
+              <select id={`${uid}-spikes`} className={NATIVE_SELECT} value={spikeMethod} disabled={running !== null} onChange={(event) => setSpikeMethod(event.target.value as SpikeMethodId)}>
+                {SPIKE_METHODS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <p className="field-hint">{SPIKE_METHODS.find((option) => option.value === spikeMethod)?.summary}</p>
+              {spikeMethod !== "none" && (
+                <p className="field-hint">{sources.includes("watchPpg")
+                  ? "Done to the pulse sensor inside each 500 ms window, in training and again live, so the model sees the same numbers. For each of the three pulse channels the model reads the biggest spike (how high, how far above the noise, where, how long it takes to rise and fall, how many) and the steepest rise and fall. Made for a short event such as a pinch."
+                  : "Needs the pulse sensor: tick it under “What the model may read” below, or no spike features are used."}</p>
+              )}
+            </div>
+
+            <div className="field">
               <div className="field-head"><Label htmlFor={`${uid}-method`}>Method</Label></div>
               <select id={`${uid}-method`} className={NATIVE_SELECT} value={method} disabled={running !== null} onChange={(event) => setMethod(event.target.value as TrainMethod)}>
                 {METHODS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -262,10 +277,6 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
               <div className="flex items-start gap-2 text-sm">
                 <Checkbox checked={movementOnly} disabled={running !== null} onCheckedChange={() => setMovementOnly((value) => !value)} aria-label="Only how things change" />
                 <span><strong>Only how things change</strong> <small className="text-muted-foreground">Ignore absolute levels such as how the watch is held. This stops a model from memorising a session&apos;s posture; try it for movement gestures.</small></span>
-              </div>
-              <div className="flex items-start gap-2 text-sm">
-                <Checkbox checked={spikeFeatures && sources.includes("watchPpg")} disabled={running !== null || !sources.includes("watchPpg")} onCheckedChange={() => setSpikeFeatures((value) => !value)} aria-label="Pulse sensor spikes" />
-                <span><strong>Pulse sensor spikes</strong> <small className="text-muted-foreground">Take the slow baseline away from the pulse sensor, then describe its biggest spike (how high, how wide, how steep, where in the window) and how many there are. Made for a short event such as a pinch. Needs the pulse sensor above.</small></span>
               </div>
             </fieldset>
 

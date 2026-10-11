@@ -3,7 +3,7 @@ use std::sync::Arc;
 use model_lab_core::{
     InputContract, LabelId, LifecycleState, ModelVersion, ModelVersionId, QualityRules, Thresholds,
 };
-use pinch_inference::{FEATURE_COUNT, FEATURE_NAMES};
+use pinch_inference::{FEATURE_COUNT, FEATURE_NAMES, SpikeMethod};
 use thiserror::Error;
 use tract_onnx::prelude::*;
 
@@ -39,7 +39,9 @@ pub struct LoadedModel {
     pub thresholds: Thresholds,
     pub quality: QualityRules,
     pub model_sha256: String,
-    /// Positions of this model's features within the canonical 55, in the order the model expects them.
+    /// How this model's pulse-sensor spike features are made, if it reads any: the way it was trained.
+    pub spike_method: Option<SpikeMethod>,
+    /// Positions of this model's features within the canonical vector, in the order the model expects them.
     feature_indices: Vec<usize>,
     plan: Arc<TypedRunnableModel<TypedModel>>,
     output_index: usize,
@@ -78,6 +80,7 @@ impl LoadedModel {
             thresholds: version.thresholds,
             quality: version.quality,
             model_sha256: bundle.model_sha256.clone(),
+            spike_method: bundle.manifest.spike_method(),
             feature_indices,
             output_index: bundle.output_index,
             positive_index: bundle.manifest.output.positive_index,

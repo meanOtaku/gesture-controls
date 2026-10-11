@@ -17,8 +17,8 @@ use std::sync::Mutex;
 
 use chrono::{SecondsFormat, Utc};
 use label_inference::{
-    RecordingInfo, RunPlan, begin_run, canonical_features_for, complete_run, evaluation_only_run,
-    fail_run, plan_split, stage_bundle, trainer_backend,
+    RecordingInfo, RunPlan, SpikeMethod, begin_run, canonical_features_for, complete_run,
+    evaluation_only_run, fail_run, plan_split, stage_bundle, trainer_backend,
 };
 use model_lab_core::{
     ArtifactRef, ExampleRole, InputContract, LabelId, LabelMapping, QualityRules, RecordingId,
@@ -70,10 +70,10 @@ pub struct TrainRequest {
     /// Only features about how things change, not their absolute levels (see `is_movement_feature`).
     #[serde(default)]
     pub movement_only: bool,
-    /// Also read the pulse sensor's spike features (the baseline taken away, then its biggest spike described). Only
-    /// has an effect when the pulse sensor is one of the streams.
+    /// How the pulse sensor's spikes are pulled out before the model reads their features (a `SpikeMethod` name), or
+    /// `none`. Only has an effect when the pulse sensor is one of the streams.
     #[serde(default)]
-    pub spike_features: bool,
+    pub spike_method: Option<String>,
 }
 
 fn default_window_ms() -> u32 {
@@ -99,7 +99,7 @@ struct Checked {
     backend: String,
     seed: u32,
     movement_only: bool,
-    spike_features: bool,
+    spike_method: Option<SpikeMethod>,
 }
 
 fn label_id(raw: &str) -> Result<LabelId, String> {
@@ -172,7 +172,15 @@ fn check_request(
     if sources.is_empty() {
         return Err("choose at least one data stream for the model to read".into());
     }
-    let features = canonical_features_for(&sources, request.movement_only, request.spike_features);
+    let spike_method = match request.spike_method.as_deref() {
+        None | Some("none") | Some("") => None,
+        Some(name) => Some(
+            SpikeMethod::from_name(name)
+                .ok_or_else(|| format!("unknown spike extraction method '{name}'"))?,
+        ),
+    }
+    .filter(|_| sources.contains(&StreamSource::WatchPpg)); // nothing for it to read without the pulse sensor
+    let features = canonical_features_for(&sources, request.movement_only, spike_method.is_some());
     if features.is_empty() {
         return Err("none of the chosen data streams can feed a model (head pose is not available to trained models)".into());
     }
@@ -193,7 +201,7 @@ fn check_request(
         backend: request.backend.clone(),
         seed: request.seed.unwrap_or(7),
         movement_only: request.movement_only,
-        spike_features: request.spike_features,
+        spike_method,
     })
 }
 
@@ -231,7 +239,7 @@ fn build_spec(
         "backend": checked.backend,
         "seed": checked.seed,
         "movementOnly": checked.movement_only,
-        "spikeFeatures": checked.spike_features,
+        "spikeMethod": checked.spike_method.map_or("none", SpikeMethod::name),
     })
 }
 
@@ -760,7 +768,7 @@ mod tests {
             min_samples: 3,
             seed: None,
             movement_only: false,
-            spike_features: false,
+            spike_method: None,
         }
     }
 
@@ -839,17 +847,18 @@ mod tests {
     }
 
     #[test]
-    fn spike_features_are_added_only_when_asked_for_and_only_with_the_pulse_sensor() {
+    fn a_spike_method_adds_the_spike_features_only_with_the_pulse_sensor_and_reaches_the_trainer() {
         let mut r = request();
-        r.spike_features = true;
-        // Motion streams only: nothing for the spike features to read.
+        r.spike_method = Some("rolling_median_residual".into());
+        // Motion streams only: nothing for the spike features to read, so the method is dropped.
         let motion = check_request(&r, &datasets(), &sha).unwrap();
         assert!(!motion.input.features.iter().any(|f| f.contains("_spike_")));
+        assert!(motion.spike_method.is_none());
 
         r.sources.push(StreamSource::WatchPpg);
         let without = {
             let mut plain = r.clone();
-            plain.spike_features = false;
+            plain.spike_method = Some("none".into());
             check_request(&plain, &datasets(), &sha).unwrap()
         };
         let with = check_request(&r, &datasets(), &sha).unwrap();
@@ -859,12 +868,25 @@ mod tests {
                 .features
                 .contains(&"ppg_green_spike_height".to_string())
         );
-        assert!(with.spike_features && !without.spike_features);
+        assert_eq!(with.spike_method, Some(SpikeMethod::RollingMedianResidual));
+        assert!(without.spike_method.is_none());
 
-        // The trainer is told, so it builds the same feature list.
+        // The trainer is told which, so it builds the same feature list the same way.
         let split = plan_split(&with.recordings, &with.mapping, &with.target).unwrap();
         let spec = build_spec(&with, &split, &BTreeMap::new());
-        assert_eq!(spec["spikeFeatures"], true);
+        assert_eq!(spec["spikeMethod"], "rolling_median_residual");
+        let split = plan_split(&without.recordings, &without.mapping, &without.target).unwrap();
+        assert_eq!(
+            build_spec(&without, &split, &BTreeMap::new())["spikeMethod"],
+            "none"
+        );
+
+        r.spike_method = Some("soup".into());
+        assert!(
+            check_request(&r, &datasets(), &sha)
+                .unwrap_err()
+                .contains("unknown spike extraction method")
+        );
     }
 
     #[test]

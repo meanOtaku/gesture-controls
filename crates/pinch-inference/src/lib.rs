@@ -7,6 +7,7 @@ mod fusion;
 
 pub use features::{
     BASE_FEATURE_COUNT, FEATURE_COUNT, FEATURE_NAMES, FusedWindow, OrientationSnapshot,
-    SPIKE_STATS_PER_CHANNEL, extract_features, select_features, spike_features,
+    SPIKE_STATS_PER_CHANNEL, SpikeMethod, extract_features, extract_features_with, select_features,
+    spike_features,
 };
 pub use fusion::{FusionRejection, ORIENTATION_STALENESS_TIMEOUT_NS, TelemetryFusion};

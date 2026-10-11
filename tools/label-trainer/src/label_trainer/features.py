@@ -11,6 +11,7 @@ that must feed it at inference time.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 
 import numpy as np
@@ -122,16 +123,147 @@ def _median(values: np.ndarray) -> float:
     return float((ordered[middle - 1] + ordered[middle]) / 2.0)
 
 
-def spike_features(values: np.ndarray, timestamps_ms: np.ndarray) -> list[float]:
+SPIKE_METHODS: tuple[str, ...] = (
+    "straight_line_baseline",
+    "first_derivative",
+    "rolling_median_residual",
+    "morphological_top_hat",
+    "butterworth_high_pass",
+    "savitzky_golay_residual",
+    "haar_wavelet_detail",
+)
+# The widths used inside one window. The Recordings tab's viewer runs the same methods over a whole recording with wider
+# windows (9, 9, 20, 11 and 8 samples); a 500 ms window holds only about a dozen pulse samples, so these are narrower.
+ROLLING_MEDIAN_RADIUS = 2
+TOP_HAT_RADIUS = 2
+BUTTERWORTH_PERIOD_SAMPLES = 8.0
+SAVITZKY_GOLAY_HALF_WIDTH = 3
+HAAR_SCALE = 2
+
+
+def _median_list(values: list[float]) -> float:
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2 == 1:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2.0
+
+
+def _sequential_sum(values: list[float]) -> float:
+    total = 0.0
+    for value in values:
+        total += value
+    return total
+
+
+def _sg_smoothing_coefficients(half_width: int) -> list[float]:
+    """Quadratic Savitzky-Golay smoothing weights for `half_width` neighbours each side (as the Recordings viewer uses)."""
+    if half_width == 0:
+        return [1.0]
+    offsets = range(-half_width, half_width + 1)
+    s0 = float(2 * half_width + 1)
+    s2 = float(sum(i * i for i in offsets))
+    s4 = float(sum(i * i * i * i for i in offsets))
+    denominator = s0 * s4 - s2 * s2
+    return [(s4 - s2 * float(i * i)) / denominator for i in offsets]
+
+
+def _butterworth_high_pass(x: list[float]) -> list[float]:
+    """Second-order Butterworth high-pass, forward then backward (as the Recordings viewer does), on the centred signal."""
+    period = BUTTERWORTH_PERIOD_SAMPLES
+    w0 = 2.0 * math.pi / period
+    q = 1.0 / math.sqrt(2.0)
+    alpha = math.sin(w0) / (2.0 * q)
+    cos_w0 = math.cos(w0)
+    a0 = 1.0 + alpha
+    b0 = (1.0 + cos_w0) / 2.0 / a0
+    b1 = -(1.0 + cos_w0) / a0
+    b2 = (1.0 + cos_w0) / 2.0 / a0
+    a1 = -2.0 * cos_w0 / a0
+    a2 = (1.0 - alpha) / a0
+
+    def apply(signal: list[float]) -> list[float]:
+        out = []
+        x1 = x2 = y1 = y2 = 0.0
+        for x0 in signal:
+            y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
+            out.append(y0)
+            x2, x1, y2, y1 = x1, x0, y1, y0
+        return out
+
+    mean = _sequential_sum(x) / len(x)
+    centred = [value - mean for value in x]
+    forward = apply(centred)
+    forward.reverse()
+    backward = apply(forward)
+    backward.reverse()
+    return backward
+
+
+def extract_spike_series(method: str, values: np.ndarray, span_ms: float) -> list[float]:
+    """The signal a spike method leaves of one PPG channel in one window (the spikes, with the baseline taken out).
+
+    `straight_line_baseline`: the least-squares straight line through the window taken away. `first_derivative`: the change
+    from each sample to the next (one fewer value). `rolling_median_residual`, `morphological_top_hat`,
+    `savitzky_golay_residual`: each value minus a rolling median, a morphological opening or a quadratic smooth of its
+    neighbours, the neighbourhood shrinking near the window's ends. `butterworth_high_pass`: a second-order high-pass,
+    forward then backward. `haar_wavelet_detail`: the difference between the mean of the samples up to and including
+    each one and of those just after it (one fewer value). The same definitions, in the same order of operations, are in
+    `crates/pinch-inference/src/features.rs`.
+    """
+    x = [float(v) for v in values]
+    n = len(x)
+    if method == "straight_line_baseline":
+        t = span_ms * np.arange(n, dtype=np.float64) / (n - 1)
+        t_mean = float(np.sum(t) / n)
+        x_mean = float(np.sum(values) / n)
+        tc = t - t_mean
+        sxx = float(np.sum(tc * tc))
+        slope = float(np.sum(tc * (values - x_mean)) / sxx) if sxx > 0.0 else 0.0
+        return [float(v) for v in (values - x_mean) - slope * tc]
+    if method == "first_derivative":
+        return [x[i + 1] - x[i] for i in range(n - 1)]
+    if method == "rolling_median_residual":
+        out = []
+        for i in range(n):
+            lo, hi = max(0, i - ROLLING_MEDIAN_RADIUS), min(n, i + ROLLING_MEDIAN_RADIUS + 1)
+            out.append(x[i] - _median_list(x[lo:hi]))
+        return out
+    if method == "morphological_top_hat":
+        radius = TOP_HAT_RADIUS
+        erosion = [min(x[max(0, i - radius) : min(n, i + radius + 1)]) for i in range(n)]
+        return [x[i] - max(erosion[max(0, i - radius) : min(n, i + radius + 1)]) for i in range(n)]
+    if method == "butterworth_high_pass":
+        return _butterworth_high_pass(x)
+    if method == "savitzky_golay_residual":
+        out = []
+        for i in range(n):
+            half = min(SAVITZKY_GOLAY_HALF_WIDTH, i, n - 1 - i)
+            smoothed = 0.0
+            for offset, coefficient in enumerate(_sg_smoothing_coefficients(half)):
+                smoothed += coefficient * x[i - half + offset]
+            out.append(x[i] - smoothed)
+        return out
+    if method == "haar_wavelet_detail":
+        out = []
+        for i in range(n - 1):
+            left = x[i + 1 - min(HAAR_SCALE, i + 1) : i + 1]
+            right = x[i + 1 : min(i + 1 + HAAR_SCALE, n)]
+            out.append((_sequential_sum(left) / len(left) - _sequential_sum(right) / len(right)) / math.sqrt(2.0))
+        return out
+    raise ValueError(f"unknown spike extraction method {method!r}; choose from {list(SPIKE_METHODS)}")
+
+
+def spike_features(values: np.ndarray, timestamps_ms: np.ndarray, method: str = "straight_line_baseline") -> list[float]:
     """The eight spike features of one PPG channel in one window, in `SPIKE_STATS` order.
 
     0. Time: the samples are taken as evenly spaced across the window (first to last PPG timestamp).
-    1. Baseline removal: the least-squares straight line through the window is taken away, so slow drift and how well the
-       watch touches the skin leave nothing behind but the changes. (It is fitted inside the window on purpose: a live
-       window and a training window then see exactly the same thing.)
-    2. Derivative: the change between neighbouring samples per millisecond; `deriv_max` is the steepest rise and
-       `deriv_min` the steepest fall.
-    3. Spike: the sample furthest from the median of what is left. `spike_height` is how far (signed),
+    1. Extraction: `extract_spike_series(method, ...)` leaves the spikes with the baseline taken out, so slow drift and how
+       well the watch touches the skin leave nothing behind but the changes. It is done inside the window on purpose: a
+       live window and a training window then see exactly the same thing.
+    2. Derivative: the change between neighbouring values of that signal per millisecond; `deriv_max` is the steepest rise
+       and `deriv_min` the steepest fall.
+    3. Spike: the value furthest from the median of that signal. `spike_height` is how far (signed),
        `spike_z` how many robust standard deviations (median absolute deviation x 1.4826, at most 50), `spike_time_frac`
        where in the window it is (0 to 1), `spike_rise_ms` / `spike_fall_ms` how long the signal stays above half the
        height before / after the peak, and `spike_count` how many separate peaks reach 3 robust standard deviations.
@@ -146,13 +278,9 @@ def spike_features(values: np.ndarray, timestamps_ms: np.ndarray) -> list[float]
     # The samples are spaced evenly over the window's span, not by their own timestamps: the watch stamps a batch of
     # samples a few nanoseconds apart and the next batch about 100 ms later, which would make every rate wild.
     span = float(timestamps_ms[-1] - timestamps_ms[0])
-    t = span * np.arange(n, dtype=np.float64) / (n - 1)
-    t_mean = float(np.sum(t) / n)
-    x_mean = float(np.sum(values) / n)
-    tc = t - t_mean
-    sxx = float(np.sum(tc * tc))
-    slope = float(np.sum(tc * (values - x_mean)) / sxx) if sxx > 0.0 else 0.0
-    residual = (values - x_mean) - slope * tc
+    residual = np.array(extract_spike_series(method, values, span), dtype=np.float64)
+    m = int(residual.shape[0])
+    t = span * np.arange(m, dtype=np.float64) / (m - 1)
 
     deltas = np.diff(t)
     steps = np.diff(residual)
@@ -175,17 +303,17 @@ def spike_features(values: np.ndarray, timestamps_ms: np.ndarray) -> list[float]
         while left > 0 and signed[left - 1] >= half:
             left -= 1
         right = peak_index
-        while right < n - 1 and signed[right + 1] >= half:
+        while right < m - 1 and signed[right + 1] >= half:
             right += 1
         rise = float(t[peak_index] - t[left])
         fall = float(t[right] - t[peak_index])
 
     threshold = SPIKE_COUNT_SIGMAS * max(sigma, SPIKE_SIGMA_FLOOR)
     count = 0
-    for i in range(n):
+    for i in range(m):
         if magnitude[i] < threshold:
             continue
-        if (i == 0 or magnitude[i] >= magnitude[i - 1]) and (i == n - 1 or magnitude[i] > magnitude[i + 1]):
+        if (i == 0 or magnitude[i] >= magnitude[i - 1]) and (i == m - 1 or magnitude[i] > magnitude[i + 1]):
             count += 1
     return [peak, z, time_frac, rise, fall, float(count), float(np.max(deriv)), float(np.min(deriv))]
 
@@ -314,16 +442,19 @@ def extract_base_features(recording: Recording, window: Window) -> np.ndarray:
     return vector
 
 
-def extract_features(recording: Recording, window: Window) -> np.ndarray:
-    """The full canonical vector for one window: the 55 base features, then the pulse-sensor spike features."""
+def extract_features(recording: Recording, window: Window, spike_method: str | None = None) -> np.ndarray:
+    """The full canonical vector for one window: the 55 base features, then the pulse-sensor spike features.
+
+    The spike features are computed with `spike_method` (one of `SPIKE_METHODS`); with none they are 0 and no model reads them.
+    """
     spikes = np.zeros(len(SPIKE_FEATURE_NAMES), dtype=np.float64)
     indices = window.row_indices
-    if recording.ppg_observed is not None:
+    if spike_method is not None and recording.ppg_observed is not None:
         indices = indices[recording.ppg_observed[indices]]  # only rows that carried a real PPG sample, as live windows do
-    if indices.shape[0] >= SPIKE_MIN_SAMPLES:
+    if spike_method is not None and indices.shape[0] >= SPIKE_MIN_SAMPLES:
         t_ms = recording.timestamps_ns[indices].astype(np.float64) / 1_000_000.0
         for channel, column in enumerate(PPG_COLUMNS):
             values = recording.channels[column][indices]
-            for stat, value in enumerate(spike_features(values, t_ms)):
+            for stat, value in enumerate(spike_features(values, t_ms, spike_method)):
                 spikes[stat * len(PPG_COLUMNS) + channel] = value
     return np.concatenate((extract_base_features(recording, window), spikes))

@@ -32,7 +32,7 @@ import numpy as np
 
 from .csv_io import load_recording
 from .dataset import build_dataset_from_recordings
-from .features import FEATURE_NAMES, SPIKE_FEATURE_NAMES
+from .features import FEATURE_NAMES, SPIKE_FEATURE_NAMES, SPIKE_METHODS
 from .labels import LABEL_MAPPING_VERSION, load_label_mapping
 from .windowing import WindowConfig
 
@@ -75,7 +75,7 @@ def is_movement_feature(name: str) -> bool:
 
 def features_for(sources: list[str], movement_only: bool = False, spikes: bool = False) -> list[str]:
     """Every canonical feature whose stream is in `sources`, in canonical order. The pulse-sensor spike features are only
-    included when asked for (`spikes`), and only if the pulse sensor is one of the streams."""
+    included when a spike extraction method is chosen (`spikes`), and only if the pulse sensor is one of the streams."""
     unknown = sorted(set(sources) - set(SOURCES))
     if unknown:
         raise TrainingRefused(f"unknown stream(s) {unknown}; choose from {list(SOURCES)}")
@@ -100,7 +100,7 @@ class Spec:
     sources: list[str]
     features: list[str]
     movement_only: bool
-    spike_features: bool
+    spike_method: str | None
     window: WindowConfig
     backend: str
     seed: int
@@ -114,7 +114,14 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
     if backend not in BACKENDS:
         raise TrainingRefused(f"unknown backend {backend!r}; choose from {list(BACKENDS)}")
     sources = list(raw.get("sources", []))
-    available = features_for(sources, bool(raw.get("movementOnly", False)), bool(raw.get("spikeFeatures", False)))
+    spike_method = raw.get("spikeMethod") or None
+    if spike_method == "none":
+        spike_method = None
+    if spike_method is not None and spike_method not in SPIKE_METHODS:
+        raise TrainingRefused(f"unknown spike extraction method {spike_method!r}; choose from {list(SPIKE_METHODS)}")
+    if spike_method is not None and "watchPpg" not in sources:
+        spike_method = None  # nothing for it to read
+    available = features_for(sources, bool(raw.get("movementOnly", False)), spike_method is not None)
     requested = raw.get("features")
     if requested:
         extra = [name for name in requested if name not in available]
@@ -143,7 +150,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         sources=sources,
         features=features,
         movement_only=bool(raw.get("movementOnly", False)),
-        spike_features=bool(raw.get("spikeFeatures", False)),
+        spike_method=spike_method,
         window=WindowConfig(
             window_ms=float(window.get("windowMs", 500)),
             stride_ms=float(window.get("strideMs", 150)),
@@ -171,7 +178,7 @@ def build_matrices(spec: Spec):
     for rid, path in spec.recordings.items():
         recording = load_recording(path)
         recordings.append(replace(recording, session_id=rid))
-    dataset = build_dataset_from_recordings(recordings, spec.window, "exclude", label_mapping=_mapping(spec))
+    dataset = build_dataset_from_recordings(recordings, spec.window, "exclude", label_mapping=_mapping(spec), spike_method=spec.spike_method)
     columns = [FEATURE_NAMES.index(name) for name in spec.features]
     x = dataset.features[:, columns].astype(np.float32)
     y = (dataset.targets == spec.target).astype(np.int64)
@@ -486,7 +493,7 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
         },
         "quality": {"maxContactQuality": 0.0, "minSampleCount": 3},
         "thresholds": {"activation": metrics["activationThreshold"], "release": round(max(0.05, metrics["activationThreshold"] - 0.15), 2)},
-        "preprocessing": {"kind": "none"},
+        "preprocessing": {"kind": "spike_extraction", "method": spec.spike_method} if spec.spike_method else {"kind": "none"},
         "provenance": {
             "backend": spec.backend,
             "trainRecordings": sorted(spec.train),
@@ -497,7 +504,7 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
             "evaluationRocAuc": metrics["rocAuc"],
             "thresholdChosenOnEvaluationRecordings": True,
             "movementOnly": spec.movement_only,
-            "spikeFeatures": spec.spike_features,
+            "spikeMethod": spec.spike_method or "none",
         },
     }
     (bundle / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

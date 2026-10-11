@@ -22,12 +22,12 @@ describe("buildRequest", () => {
   it("asks for movement-only features only when told to", () => {
     const base = { label: "snap", datasetIds: ["a"], others: [], roles: {}, method: "mlp" as const, sources: ["watchPpg" as const] };
     expect(buildRequest(base).movementOnly).toBe(false);
-    expect(buildRequest({ ...base, movementOnly: true, spikeFeatures: false }).movementOnly).toBe(true);
+    expect(buildRequest({ ...base, movementOnly: true, spikeMethod: "none" }).movementOnly).toBe(true);
   });
 
   it("makes every other label a negative unless it was set aside", () => {
     const request = buildRequest({ label: "snap", datasetIds: ["a", "b"], others: ["idle", "walking"], roles: { walking: "exclude" }, method: "logreg", sources: ["watchAcceleration"] });
-    expect(request).toEqual({ label: "snap", datasetIds: ["a", "b"], negatives: ["idle"], excludes: ["walking"], backend: "logreg", sources: ["watchAcceleration"], movementOnly: false, spikeFeatures: false });
+    expect(request).toEqual({ label: "snap", datasetIds: ["a", "b"], negatives: ["idle"], excludes: ["walking"], backend: "logreg", sources: ["watchAcceleration"], movementOnly: false, spikeMethod: "none" });
   });
 });
 

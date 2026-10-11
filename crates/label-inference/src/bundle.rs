@@ -17,7 +17,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use model_lab_core::{InputContract, LabelId, QualityRules, StreamSource, Thresholds};
-use pinch_inference::FEATURE_NAMES;
+use pinch_inference::{FEATURE_NAMES, SpikeMethod};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -69,8 +69,14 @@ pub enum BundleError {
     },
     #[error("the {0:?} stream has no canonical features yet, so no model can read it")]
     UnreadableSource(StreamSource),
-    #[error("unsupported preprocessing '{0}': only 'none' is supported")]
+    #[error(
+        "unsupported preprocessing '{0}': only 'none' and 'spike_extraction' (with a known method) are supported"
+    )]
     UnsupportedPreprocessing(String),
+    #[error(
+        "the model reads spike features but its manifest does not name a spike extraction method, so the runtime could not make them the way the model was trained"
+    )]
+    SpikeMethodMissing,
     #[error("the model contract does not match the manifest: {0}")]
     ContractMismatch(String),
     #[error(
@@ -139,7 +145,21 @@ pub struct ThresholdSpec {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Preprocessing {
+    /// `none`, or `spike_extraction` (the pulse sensor's spike features are made with `method`).
     pub kind: String,
+    /// The spike extraction method, when `kind` is `spike_extraction`.
+    #[serde(default)]
+    pub method: Option<String>,
+}
+
+impl Manifest {
+    /// How this model's spike features are extracted, or `None` when it reads none.
+    pub fn spike_method(&self) -> Option<SpikeMethod> {
+        self.preprocessing
+            .method
+            .as_deref()
+            .and_then(SpikeMethod::from_name)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -181,6 +201,11 @@ impl Manifest {
             ..Thresholds::default()
         }
     }
+}
+
+/// A pulse-sensor spike feature (the ones that depend on a spike extraction method).
+fn is_spike_name(feature: &str) -> bool {
+    feature.starts_with("ppg_") && (feature.contains("_spike_") || feature.contains("_deriv_"))
 }
 
 /// The stream a canonical feature is computed from.
@@ -270,10 +295,22 @@ pub fn validate_bundle(
     if !(MIN_OPSET..=MAX_OPSET).contains(&manifest.model.opset) {
         return Err(BundleError::UnsupportedOpset(manifest.model.opset));
     }
-    if manifest.preprocessing.kind != "none" {
-        return Err(BundleError::UnsupportedPreprocessing(
-            manifest.preprocessing.kind.clone(),
-        ));
+    match (
+        manifest.preprocessing.kind.as_str(),
+        manifest.preprocessing.method.as_deref(),
+    ) {
+        ("none", None) => {}
+        ("spike_extraction", Some(method)) if SpikeMethod::from_name(method).is_some() => {}
+        (kind, method) => {
+            return Err(BundleError::UnsupportedPreprocessing(match method {
+                Some(method) => format!("{kind} ({method})"),
+                None => kind.to_string(),
+            }));
+        }
+    }
+    if manifest.spike_method().is_none() && manifest.input.features.iter().any(|f| is_spike_name(f))
+    {
+        return Err(BundleError::SpikeMethodMissing);
     }
     if manifest.input.dtype != "float32" || manifest.output.dtype != "float32" {
         return Err(BundleError::ContractMismatch(
@@ -578,6 +615,50 @@ pub(crate) mod tests {
             validate_bundle(dir.path(), None),
             Err(BundleError::UnsupportedPreprocessing(_))
         ));
+    }
+
+    #[test]
+    fn spike_features_need_a_named_spike_extraction_method_the_runtime_knows() {
+        let reads_a_spike_feature = |m: &mut serde_json::Value| {
+            m["sources"] = serde_json::json!(["watchAcceleration", "watchGyroscope", "watchPpg"]);
+            let last = m["input"]["features"].as_array().unwrap().len() - 1;
+            m["input"]["features"][last] = "ppg_green_spike_height".into();
+        };
+        // Reading a spike feature while declaring no preprocessing: the runtime could not make it the way it was trained.
+        let dir = copy_fixture();
+        edit_manifest(dir.path(), reads_a_spike_feature);
+        assert!(matches!(
+            validate_bundle(dir.path(), None),
+            Err(BundleError::SpikeMethodMissing)
+        ));
+        // With a known method it is accepted, and the model knows which.
+        for method in SpikeMethod::ALL {
+            let dir = copy_fixture();
+            edit_manifest(dir.path(), |m| {
+                reads_a_spike_feature(m);
+                m["preprocessing"] =
+                    serde_json::json!({"kind": "spike_extraction", "method": method.name()});
+            });
+            let bundle = validate_bundle(dir.path(), None)
+                .unwrap_or_else(|e| panic!("{}: {e}", method.name()));
+            assert_eq!(bundle.manifest.spike_method(), Some(method));
+        }
+        // An unknown method, a method with no kind, and a kind with no method are all refused.
+        for preprocessing in [
+            serde_json::json!({"kind": "spike_extraction", "method": "soup"}),
+            serde_json::json!({"kind": "none", "method": "first_derivative"}),
+            serde_json::json!({"kind": "spike_extraction"}),
+        ] {
+            let dir = copy_fixture();
+            edit_manifest(dir.path(), |m| m["preprocessing"] = preprocessing.clone());
+            assert!(
+                matches!(
+                    validate_bundle(dir.path(), None),
+                    Err(BundleError::UnsupportedPreprocessing(_))
+                ),
+                "{preprocessing}"
+            );
+        }
     }
 
     #[test]

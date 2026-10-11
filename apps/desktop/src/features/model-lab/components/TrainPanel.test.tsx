@@ -55,7 +55,7 @@ describe("TrainPanel", () => {
     expect(screen.getByLabelText("Role of walking")).toBeInTheDocument();
     expect(await screen.findByText(/train on 2 recordings \(s1.csv, i1.csv\) and test on 2/)).toBeInTheDocument();
     expect(calls("plan_label_training").at(-1)?.[1]).toEqual({
-      request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["idle", "walking"], excludes: [], backend: "logreg", sources: ["watchAcceleration", "watchGyroscope"], movementOnly: false, spikeFeatures: false },
+      request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["idle", "walking"], excludes: [], backend: "logreg", sources: ["watchAcceleration", "watchGyroscope"], movementOnly: false, spikeMethod: "none" },
     });
   });
 
@@ -73,23 +73,36 @@ describe("TrainPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Train model" }));
     await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
     expect(calls("start_label_training")[0][1]).toEqual({
-      request: { label: "snap", datasetIds: ["s1", "s2", "i1"], negatives: ["idle"], excludes: ["walking"], backend: "mlp", sources: ["watchAcceleration", "watchOrientation"], movementOnly: true, spikeFeatures: false },
+      request: { label: "snap", datasetIds: ["s1", "s2", "i1"], negatives: ["idle"], excludes: ["walking"], backend: "mlp", sources: ["watchAcceleration", "watchOrientation"], movementOnly: true, spikeMethod: "none" },
     });
   });
 
-  it("offers the pulse sensor spikes only with the pulse sensor, and sends the choice", async () => {
+  it("offers a spike extraction method before the training method, and sends it only with the pulse sensor", async () => {
     setup();
     choose("snap");
     await screen.findByText(/It will train on/);
-    const spikes = screen.getByRole("checkbox", { name: "Pulse sensor spikes" });
-    expect(spikes).toHaveAttribute("aria-disabled", "true"); // the pulse sensor is not one of the streams yet
+    const spikes = screen.getByLabelText("Spike extraction") as HTMLSelectElement;
+    const method = screen.getByLabelText("Method");
+    expect(spikes.compareDocumentPosition(method) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); // before Method
+    expect(spikes.value).toBe("none");
+    expect(Array.from(spikes.options).map((option) => option.textContent)).toEqual(expect.arrayContaining(["None (statistics only)", "Rolling median residual", "Butterworth high-pass", "Haar wavelet detail"]));
+    fireEvent.change(spikes, { target: { value: "rolling_median_residual" } });
+    expect(screen.getByText(/Needs the pulse sensor/)).toBeInTheDocument(); // not one of the streams yet
+    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
+    await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
+    expect(calls("start_label_training")[0][1]).toMatchObject({ request: { spikeMethod: "none" } }); // nothing for it to read
+  });
+
+  it("sends the chosen spike extraction method once the pulse sensor is a stream", async () => {
+    setup();
+    choose("snap");
+    await screen.findByText(/It will train on/);
     fireEvent.click(screen.getByRole("checkbox", { name: /Pulse sensor \(PPG\)/ }));
-    expect(spikes).not.toHaveAttribute("aria-disabled", "true");
-    fireEvent.click(spikes);
+    fireEvent.change(screen.getByLabelText("Spike extraction"), { target: { value: "morphological_top_hat" } });
     await waitFor(() => expect(screen.getByRole("button", { name: "Train model" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Train model" }));
     await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
-    expect(calls("start_label_training")[0][1]).toMatchObject({ request: { sources: ["watchAcceleration", "watchGyroscope", "watchPpg"], spikeFeatures: true } });
+    expect(calls("start_label_training")[0][1]).toMatchObject({ request: { sources: ["watchAcceleration", "watchGyroscope", "watchPpg"], spikeMethod: "morphological_top_hat" } });
   });
 
   it("will not train when the plan says it cannot, and says why", async () => {

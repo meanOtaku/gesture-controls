@@ -261,11 +261,198 @@ fn median(values: &[f64]) -> f64 {
     }
 }
 
+/// How the spikes are pulled out of a PPG channel inside one window, before the spike features describe what is left.
+/// The names are the ones in a model's manifest (`preprocessing.method`) and in the trainer (`SPIKE_METHODS`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpikeMethod {
+    StraightLineBaseline,
+    FirstDerivative,
+    RollingMedianResidual,
+    MorphologicalTopHat,
+    ButterworthHighPass,
+    SavitzkyGolayResidual,
+    HaarWaveletDetail,
+}
+
+impl SpikeMethod {
+    pub const ALL: [SpikeMethod; 7] = [
+        SpikeMethod::StraightLineBaseline,
+        SpikeMethod::FirstDerivative,
+        SpikeMethod::RollingMedianResidual,
+        SpikeMethod::MorphologicalTopHat,
+        SpikeMethod::ButterworthHighPass,
+        SpikeMethod::SavitzkyGolayResidual,
+        SpikeMethod::HaarWaveletDetail,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::StraightLineBaseline => "straight_line_baseline",
+            Self::FirstDerivative => "first_derivative",
+            Self::RollingMedianResidual => "rolling_median_residual",
+            Self::MorphologicalTopHat => "morphological_top_hat",
+            Self::ButterworthHighPass => "butterworth_high_pass",
+            Self::SavitzkyGolayResidual => "savitzky_golay_residual",
+            Self::HaarWaveletDetail => "haar_wavelet_detail",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|method| method.name() == name)
+    }
+}
+
+// The widths used inside one window (see the trainer's `ROLLING_MEDIAN_RADIUS` and friends): a 500 ms window holds only
+// about a dozen pulse samples, so they are narrower than the Recordings viewer's.
+const ROLLING_MEDIAN_RADIUS: usize = 2;
+const TOP_HAT_RADIUS: usize = 2;
+const BUTTERWORTH_PERIOD_SAMPLES: f64 = 8.0;
+const SAVITZKY_GOLAY_HALF_WIDTH: usize = 3;
+const HAAR_SCALE: usize = 2;
+
+fn sequential_sum(values: &[f64]) -> f64 {
+    let mut total = 0.0;
+    for value in values {
+        total += value;
+    }
+    total
+}
+
+/// Quadratic Savitzky-Golay smoothing weights for `half_width` neighbours each side.
+fn sg_smoothing_coefficients(half_width: usize) -> Vec<f64> {
+    if half_width == 0 {
+        return vec![1.0];
+    }
+    let m = half_width as i64;
+    let s0 = (2 * half_width + 1) as f64;
+    let s2: f64 = (-m..=m).map(|i| (i * i) as f64).sum();
+    let s4: f64 = (-m..=m).map(|i| (i * i * i * i) as f64).sum();
+    let denominator = s0 * s4 - s2 * s2;
+    (-m..=m)
+        .map(|i| (s4 - s2 * ((i * i) as f64)) / denominator)
+        .collect()
+}
+
+/// Second-order Butterworth high-pass, forward then backward, on the centred signal.
+fn butterworth_high_pass(x: &[f64]) -> Vec<f64> {
+    let w0 = 2.0 * std::f64::consts::PI / BUTTERWORTH_PERIOD_SAMPLES;
+    let q = 1.0 / 2.0f64.sqrt();
+    let alpha = w0.sin() / (2.0 * q);
+    let cos_w0 = w0.cos();
+    let a0 = 1.0 + alpha;
+    let b0 = (1.0 + cos_w0) / 2.0 / a0;
+    let b1 = -(1.0 + cos_w0) / a0;
+    let b2 = (1.0 + cos_w0) / 2.0 / a0;
+    let a1 = -2.0 * cos_w0 / a0;
+    let a2 = (1.0 - alpha) / a0;
+    let apply = |signal: &[f64]| -> Vec<f64> {
+        let mut out = Vec::with_capacity(signal.len());
+        let (mut x1, mut x2, mut y1, mut y2) = (0.0, 0.0, 0.0, 0.0);
+        for &x0 in signal {
+            let y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+            out.push(y0);
+            x2 = x1;
+            x1 = x0;
+            y2 = y1;
+            y1 = y0;
+        }
+        out
+    };
+    let mean = sequential_sum(x) / x.len() as f64;
+    let centred: Vec<f64> = x.iter().map(|v| v - mean).collect();
+    let mut forward = apply(&centred);
+    forward.reverse();
+    let mut backward = apply(&forward);
+    backward.reverse();
+    backward
+}
+
+/// What a spike method leaves of one PPG channel in one window (the spikes, with the baseline taken out). Mirrors
+/// `extract_spike_series` in the trainer's `features.py`, which describes each method.
+fn extract_spike_series(method: SpikeMethod, x: &[f64], span_ms: f64) -> Vec<f64> {
+    let n = x.len();
+    match method {
+        SpikeMethod::StraightLineBaseline => {
+            let count = n as f64;
+            let t: Vec<f64> = (0..n)
+                .map(|i| span_ms * (i as f64) / (count - 1.0))
+                .collect();
+            let t_mean = numpy_sum(&t) / count;
+            let x_mean = numpy_sum(x) / count;
+            let tc: Vec<f64> = t.iter().map(|v| v - t_mean).collect();
+            let squares: Vec<f64> = tc.iter().map(|v| v * v).collect();
+            let sxx = numpy_sum(&squares);
+            let slope = if sxx > 0.0 {
+                let products: Vec<f64> = tc.iter().zip(x).map(|(c, v)| c * (v - x_mean)).collect();
+                numpy_sum(&products) / sxx
+            } else {
+                0.0
+            };
+            tc.iter()
+                .zip(x)
+                .map(|(c, v)| (v - x_mean) - slope * c)
+                .collect()
+        }
+        SpikeMethod::FirstDerivative => (0..n - 1).map(|i| x[i + 1] - x[i]).collect(),
+        SpikeMethod::RollingMedianResidual => (0..n)
+            .map(|i| {
+                let lo = i.saturating_sub(ROLLING_MEDIAN_RADIUS);
+                let hi = (i + ROLLING_MEDIAN_RADIUS + 1).min(n);
+                x[i] - median(&x[lo..hi])
+            })
+            .collect(),
+        SpikeMethod::MorphologicalTopHat => {
+            let radius = TOP_HAT_RADIUS;
+            let range = |i: usize| (i.saturating_sub(radius), (i + radius + 1).min(n));
+            let erosion: Vec<f64> = (0..n)
+                .map(|i| {
+                    let (lo, hi) = range(i);
+                    x[lo..hi].iter().copied().fold(f64::INFINITY, f64::min)
+                })
+                .collect();
+            (0..n)
+                .map(|i| {
+                    let (lo, hi) = range(i);
+                    let opening = erosion[lo..hi]
+                        .iter()
+                        .copied()
+                        .fold(f64::NEG_INFINITY, f64::max);
+                    x[i] - opening
+                })
+                .collect()
+        }
+        SpikeMethod::ButterworthHighPass => butterworth_high_pass(x),
+        SpikeMethod::SavitzkyGolayResidual => (0..n)
+            .map(|i| {
+                let half = SAVITZKY_GOLAY_HALF_WIDTH.min(i).min(n - 1 - i);
+                let mut smoothed = 0.0;
+                for (offset, coefficient) in sg_smoothing_coefficients(half).iter().enumerate() {
+                    smoothed += coefficient * x[i - half + offset];
+                }
+                x[i] - smoothed
+            })
+            .collect(),
+        SpikeMethod::HaarWaveletDetail => (0..n - 1)
+            .map(|i| {
+                let left = &x[i + 1 - HAAR_SCALE.min(i + 1)..i + 1];
+                let right = &x[i + 1..(i + 1 + HAAR_SCALE).min(n)];
+                (sequential_sum(left) / left.len() as f64
+                    - sequential_sum(right) / right.len() as f64)
+                    / 2.0f64.sqrt()
+            })
+            .collect(),
+    }
+}
+
 /// The eight spike features of one PPG channel in one window: height, z, time_frac, rise_ms, fall_ms, count, deriv_max,
 /// deriv_min. Mirrors `spike_features` in `tools/label-trainer/src/label_trainer/features.py`, which documents what each
-/// means: the straight-line baseline is taken away, then the biggest spike and the steepest rise and fall are described.
-/// `fixtures/spike_cases.json` holds shared cases both sides must reproduce.
-pub fn spike_features(values: &[f64], timestamps_ms: &[f64]) -> [f64; SPIKE_STATS_PER_CHANNEL] {
+/// means: the chosen method pulls the spikes out, then the biggest spike and the steepest rise and fall of what is left
+/// are described. `tests/fixtures/spike_cases.json` in the trainer holds shared cases both sides must reproduce.
+pub fn spike_features(
+    values: &[f64],
+    timestamps_ms: &[f64],
+    method: SpikeMethod,
+) -> [f64; SPIKE_STATS_PER_CHANNEL] {
     let n = values.len();
     if n < SPIKE_MIN_SAMPLES || timestamps_ms.len() != n {
         return [0.0; SPIKE_STATS_PER_CHANNEL];
@@ -273,32 +460,15 @@ pub fn spike_features(values: &[f64], timestamps_ms: &[f64]) -> [f64; SPIKE_STAT
     // Evenly spaced over the window's span: the watch stamps a batch of samples a few nanoseconds apart, which would make
     // every rate wild if the stamps were taken at face value.
     let span = timestamps_ms[n - 1] - timestamps_ms[0];
-    let count = n as f64;
-    let t: Vec<f64> = (0..n).map(|i| span * (i as f64) / (count - 1.0)).collect();
-    let t_mean = numpy_sum(&t) / count;
-    let x_mean = numpy_sum(values) / count;
-    let tc: Vec<f64> = t.iter().map(|v| v - t_mean).collect();
-    let squares: Vec<f64> = tc.iter().map(|v| v * v).collect();
-    let sxx = numpy_sum(&squares);
-    let slope = if sxx > 0.0 {
-        let products: Vec<f64> = tc
-            .iter()
-            .zip(values)
-            .map(|(c, v)| c * (v - x_mean))
-            .collect();
-        numpy_sum(&products) / sxx
-    } else {
-        0.0
-    };
-    let residual: Vec<f64> = tc
-        .iter()
-        .zip(values)
-        .map(|(c, v)| (v - x_mean) - slope * c)
+    let residual = extract_spike_series(method, values, span);
+    let m = residual.len();
+    let t: Vec<f64> = (0..m)
+        .map(|i| span * (i as f64) / ((m - 1) as f64))
         .collect();
 
     let mut deriv_max = f64::NEG_INFINITY;
     let mut deriv_min = f64::INFINITY;
-    for i in 0..n - 1 {
+    for i in 0..m - 1 {
         let delta = t[i + 1] - t[i];
         let d = if delta > 0.0 {
             (residual[i + 1] - residual[i]) / delta
@@ -314,8 +484,8 @@ pub fn spike_features(values: &[f64], timestamps_ms: &[f64]) -> [f64; SPIKE_STAT
     let magnitude: Vec<f64> = deviation.iter().map(|v| v.abs()).collect();
     let sigma = MAD_TO_SIGMA * median(&magnitude);
     let mut peak_index = 0;
-    for (i, m) in magnitude.iter().enumerate() {
-        if *m > magnitude[peak_index] {
+    for (i, value) in magnitude.iter().enumerate() {
+        if *value > magnitude[peak_index] {
             peak_index = i;
         }
     }
@@ -336,7 +506,7 @@ pub fn spike_features(values: &[f64], timestamps_ms: &[f64]) -> [f64; SPIKE_STAT
             left -= 1;
         }
         let mut right = peak_index;
-        while right < n - 1 && sign * deviation[right + 1] >= half {
+        while right < m - 1 && sign * deviation[right + 1] >= half {
             right += 1;
         }
         rise = t[peak_index] - t[left];
@@ -345,12 +515,12 @@ pub fn spike_features(values: &[f64], timestamps_ms: &[f64]) -> [f64; SPIKE_STAT
 
     let threshold = SPIKE_COUNT_SIGMAS * sigma.max(SPIKE_SIGMA_FLOOR);
     let mut peaks = 0.0;
-    for i in 0..n {
+    for i in 0..m {
         if magnitude[i] < threshold {
             continue;
         }
         let rises = i == 0 || magnitude[i] >= magnitude[i - 1];
-        let falls = i == n - 1 || magnitude[i] > magnitude[i + 1];
+        let falls = i == m - 1 || magnitude[i] > magnitude[i + 1];
         if rises && falls {
             peaks += 1.0;
         }
@@ -374,6 +544,15 @@ fn magnitudes(channels: &[Vec<f64>; 3]) -> Vec<f64> {
 /// [`FusedWindow::orientation_in_window`]); a window with none is a single
 /// carried snapshot, whose spread and delta angle are legitimately zero.
 pub fn extract_features(window: &FusedWindow) -> [f32; FEATURE_COUNT] {
+    extract_features_with(window, None)
+}
+
+/// [`extract_features`] with the spike features computed by `spike_method` (they are 0 with none, and no model reads
+/// them then). Each model says which method it was trained with, so each one is fed numbers made the same way.
+pub fn extract_features_with(
+    window: &FusedWindow,
+    spike_method: Option<SpikeMethod>,
+) -> [f32; FEATURE_COUNT] {
     let mut out = [0.0f32; FEATURE_COUNT];
     let mut cursor = 0usize;
     let mut push = |value: f64| {
@@ -499,7 +678,10 @@ pub fn extract_features(window: &FusedWindow) -> [f32; FEATURE_COUNT] {
         .collect();
     let spikes: Vec<[f64; SPIKE_STATS_PER_CHANNEL]> = ppg
         .iter()
-        .map(|channel| spike_features(channel, &ppg_ms))
+        .map(|channel| match spike_method {
+            Some(method) => spike_features(channel, &ppg_ms, method),
+            None => [0.0; SPIKE_STATS_PER_CHANNEL],
+        })
         .collect();
     for stat in 0..SPIKE_STATS_PER_CHANNEL {
         for channel in &spikes {
@@ -612,9 +794,10 @@ mod tests {
     }
 
     /// The same cases the trainer's tests check (`tools/label-trainer/tests/fixtures/spike_cases.json`): the spike
-    /// features here must equal the ones it computes, or a model trained there would see different numbers live.
+    /// features here must equal the ones it computes for every method, or a model trained there would see different
+    /// numbers live.
     #[test]
-    fn spike_features_match_the_trainer_on_the_shared_cases() {
+    fn spike_features_match_the_trainer_on_the_shared_cases_for_every_method() {
         let fixture: serde_json::Value = serde_json::from_str(include_str!(
             "../../../tools/label-trainer/tests/fixtures/spike_cases.json"
         ))
@@ -638,6 +821,17 @@ mod tests {
                 "deriv_min"
             ]
         );
+        let methods: Vec<&str> = fixture["methods"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        let known: Vec<&str> = SpikeMethod::ALL.iter().map(|m| m.name()).collect();
+        assert_eq!(
+            methods, known,
+            "the trainer and the runtime list the same methods"
+        );
         let numbers = |value: &serde_json::Value| -> Vec<f64> {
             value
                 .as_array()
@@ -650,17 +844,33 @@ mod tests {
         assert!(cases.len() >= 10);
         for case in cases {
             let name = case["name"].as_str().unwrap();
-            let got = spike_features(&numbers(&case["values"]), &numbers(&case["timestampsMs"]));
-            for (stat, key) in order.iter().enumerate() {
-                let want = case["expected"][key].as_f64().unwrap();
-                let tolerance = 1e-9 + 1e-9 * want.abs();
-                assert!(
-                    (got[stat] - want).abs() <= tolerance,
-                    "{name}: {key} was {} but the trainer computes {want}",
-                    got[stat]
+            for method in SpikeMethod::ALL {
+                let got = spike_features(
+                    &numbers(&case["values"]),
+                    &numbers(&case["timestampsMs"]),
+                    method,
                 );
+                for (stat, key) in order.iter().enumerate() {
+                    let want = case["expected"][method.name()][key].as_f64().unwrap();
+                    let tolerance = 1e-9 + 1e-9 * want.abs();
+                    assert!(
+                        (got[stat] - want).abs() <= tolerance,
+                        "{name} / {}: {key} was {} but the trainer computes {want}",
+                        method.name(),
+                        got[stat]
+                    );
+                }
             }
         }
+    }
+
+    #[test]
+    fn method_names_round_trip_and_unknown_ones_are_refused() {
+        for method in SpikeMethod::ALL {
+            assert_eq!(SpikeMethod::from_name(method.name()), Some(method));
+        }
+        assert_eq!(SpikeMethod::from_name("soup"), None);
+        assert_eq!(SpikeMethod::from_name("none"), None);
     }
 
     #[test]

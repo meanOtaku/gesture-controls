@@ -22,6 +22,20 @@ export const STREAMS: ReadonlyArray<{ value: DataStream; label: string; summary:
   { value: "watchPpg", label: "Pulse sensor (PPG)", summary: "The light sensor on the back of the watch, used for finger and hand gestures. Needs good skin contact." },
 ];
 
+/** The ways of pulling spikes out of the pulse sensor, as the trainer and the live runtime know them. */
+export const SPIKE_METHODS = [
+  { value: "none", label: "None (statistics only)", summary: "The model reads only the usual statistics of each window: averages, spread, minimum, maximum." },
+  { value: "straight_line_baseline", label: "Straight-line baseline removed", summary: "Fits a straight line through the 500 ms window and takes it away, so drift and skin contact leave nothing but the changes. A good first choice for a pinch." },
+  { value: "first_derivative", label: "First derivative", summary: "The change from each pulse sample to the next: sharp events stand out, and anything slow disappears." },
+  { value: "rolling_median_residual", label: "Rolling median residual", summary: "Each value minus the median of its neighbours: a short spike survives, a slow drift does not." },
+  { value: "morphological_top_hat", label: "Morphological top-hat", summary: "Each value minus the lowest-then-highest envelope of its neighbours: keeps short upward spikes, near zero on a flat or drifting baseline." },
+  { value: "butterworth_high_pass", label: "Butterworth high-pass", summary: "A smooth filter that lets fast changes through and blocks slow ones. In a short window its first and last samples are less reliable." },
+  { value: "savitzky_golay_residual", label: "Savitzky–Golay residual", summary: "Each value minus a smooth curve fitted to its neighbours: what the smooth curve cannot follow." },
+  { value: "haar_wavelet_detail", label: "Haar wavelet detail", summary: "The difference between the average just before each sample and just after it: finds steps and short bursts." },
+] as const;
+
+export type SpikeMethodId = (typeof SPIKE_METHODS)[number]["value"];
+
 export const DEFAULT_STREAMS: DataStream[] = ["watchAcceleration", "watchGyroscope"];
 
 export interface TrainRequest {
@@ -33,8 +47,8 @@ export interface TrainRequest {
   sources: DataStream[];
   /** Only features about how things change, not their absolute levels. */
   movementOnly: boolean;
-  /** Also read the pulse sensor's spikes: its baseline taken away, then its biggest spike and steepest rise and fall described. */
-  spikeFeatures: boolean;
+  /** How the pulse sensor's spikes are pulled out before the model reads their features; "none" reads no spike features. */
+  spikeMethod: SpikeMethodId;
 }
 
 export interface TrainPlan {
@@ -95,7 +109,7 @@ export function buildRequest(input: {
   method: TrainMethod;
   sources: DataStream[];
   movementOnly?: boolean;
-  spikeFeatures?: boolean;
+  spikeMethod?: SpikeMethodId;
 }): TrainRequest {
   const role = (label: string): OtherRole => input.roles[label] ?? "negative";
   return {
@@ -106,7 +120,7 @@ export function buildRequest(input: {
     backend: input.method,
     sources: [...input.sources],
     movementOnly: input.movementOnly ?? false,
-    spikeFeatures: input.spikeFeatures ?? false,
+    spikeMethod: input.spikeMethod ?? "none",
   };
 }
 
