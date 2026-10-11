@@ -1,7 +1,7 @@
 import { clockSync } from "./clockSync";
 import type { CameraSlot } from "./handTypes";
 import { CameraController, type RecordingPhase } from "./cameraController";
-import { createMediapipeDetector } from "./mediapipeDetector";
+import { createMediapipeDetector, createWorkerDetector } from "./mediapipeDetector";
 import { telemetryStore } from "../telemetry/store/telemetryStore";
 
 /**
@@ -16,12 +16,24 @@ function createController(slot: CameraSlot): CameraController {
     getUserMedia: (constraints) => navigator.mediaDevices.getUserMedia(constraints),
     enumerateDevices: () => navigator.mediaDevices.enumerateDevices(),
     createDetector: async () => {
-      const detector = await createMediapipeDetector();
-      // The graphics path takes seconds to compile on its first picture; do it now, not in the middle of a gesture.
+      // The hand model runs in a background worker, so it never holds up the page. If the worker cannot start (an older
+      // engine, a blocked worker), the same model runs on the page's own thread instead.
       const blank = document.createElement("canvas");
       blank.width = blank.height = 64;
-      detector.detect(blank, 0);
-      return detector;
+      try {
+        const detector = await createWorkerDetector();
+        try {
+          await detector.detect(blank, 0); // the graphics path takes seconds to compile on its first picture; do it now
+        } catch (error) {
+          detector.close();
+          throw error;
+        }
+        return detector;
+      } catch {
+        const detector = await createMediapipeDetector();
+        await detector.detect(blank, 0);
+        return detector;
+      }
     },
     createVideo: () => {
       const video = document.createElement("video");

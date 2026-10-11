@@ -65,7 +65,12 @@ export function physicalHand(hand: Pick<TrackedHand, "modelHandedness">): "Left"
 export type CameraSlot = "primary" | "secondary";
 
 export interface HandDetector {
-  /** Finds the hands in one picture. `timestampMs` must increase from one call to the next. */
-  detect(source: TexImageSource, timestampMs: number): TrackedHand[];
+  /**
+   * Finds the hands in one picture. `timestampMs` must increase from one call to the next. A detector that works on
+   * another thread answers later (a promise), and the camera then waits for the answer before taking the next picture.
+   */
+  detect(source: TexImageSource, timestampMs: number): TrackedHand[] | Promise<TrackedHand[]>;
+  /** What is doing the work, for display: "graphics chip, background thread". */
+  readonly description?: string;
   close(): void;
 }

@@ -1,7 +1,7 @@
 import type { RecordingSource } from "../../shared/tauri/recordingBundle";
 import { type SyncPair } from "./clockSync";
 import { CLOCK_SYNC_FILE, HAND_LANDMARKS_FILE, HAND_LANDMARKS_FILE_2, clockSyncCsv, frameToCsvRows, handLandmarksHeader } from "./handLandmarkCsv";
-import { type CameraSlot, type HandDetector, type HandFrame } from "./handTypes";
+import { type CameraSlot, type HandDetector, type HandFrame, type TrackedHand } from "./handTypes";
 
 /** Frames kept from before a recording starts, so the first moments of the recording have a picture. */
 export const PREROLL_MS = 3000;
@@ -37,6 +37,8 @@ export interface CameraSnapshot {
   fps: number;
   /** How long hand detection takes per picture, in ms (smoothed). Above about 30 the camera cannot keep up with 30 pictures a second. */
   detectMs: number;
+  /** What runs the hand model, once the camera is on: "graphics chip, background thread". */
+  engine: string | null;
   /** The newest frame, for the live preview. Pages are told about it about 20 times a second; `subscribeFrames` has every one. */
   frame: HandFrame | null;
   /** Whether hand landmarks are saved with recordings. */
@@ -81,7 +83,7 @@ const message = (error: unknown): string => (error instanceof Error ? error.mess
 export class CameraController {
   readonly video: HTMLVideoElement;
   private snapshot: CameraSnapshot = {
-    status: "off", error: null, devices: [], deviceId: null, fps: 0, detectMs: 0, frame: null,
+    status: "off", error: null, devices: [], deviceId: null, fps: 0, detectMs: 0, engine: null, frame: null,
     recordLandmarks: true, collecting: false, collectedFrames: 0, truncated: false,
   };
   private listeners = new Set<() => void>();
@@ -181,6 +183,7 @@ export class CameraController {
       }
       if (generation !== this.generation) return detector.close();
       this.detector = detector;
+      this.set({ engine: detector.description ?? null });
       const track = stream.getVideoTracks()[0];
       const settings = track?.getSettings?.() ?? {};
       this.picture = { width: settings.width ?? this.video.videoWidth, height: settings.height ?? this.video.videoHeight };
@@ -198,7 +201,7 @@ export class CameraController {
     this.generation += 1;
     this.stopEverything();
     this.detectEma = 0;
-    this.set({ status: "off", error: null, frame: null, fps: 0, detectMs: 0 });
+    this.set({ status: "off", error: null, frame: null, fps: 0, detectMs: 0, engine: null });
   }
 
   private explain(error: unknown): string {
@@ -231,28 +234,52 @@ export class CameraController {
 
   private onFrame(generation: number, callbackMs: number, captureTime: number | undefined): void {
     if (generation !== this.generation || !this.detector) return;
-    try {
-      this.process(callbackMs, captureTime);
-    } catch (error) {
+    const fail = (error: unknown) => {
+      if (generation !== this.generation) return;
       this.stopEverything();
       this.set({ status: "error", error: `Hand tracking stopped: ${message(error)}` });
+    };
+    let working: Promise<void> | void;
+    try {
+      working = this.process(callbackMs, captureTime);
+    } catch (error) {
+      return fail(error);
+    }
+    if (working) {
+      // A detector on another thread: the next picture is taken once this one is answered, so pictures never queue up
+      // and the hands always belong to the newest picture available.
+      working.then(() => {
+        if (generation === this.generation) this.scheduleFrame(generation);
+      }, fail);
       return;
     }
     this.scheduleFrame(generation);
   }
 
-  /** Detects the hands in the current picture and files the result. Public so a test can drive it frame by frame. */
-  process(callbackMs: number, captureTime?: number): void {
+  /**
+   * Detects the hands in the current picture and files the result. Public so a test can drive it frame by frame. Returns
+   * a promise when the detector answers later, nothing when it answered at once.
+   */
+  process(callbackMs: number, captureTime?: number): Promise<void> | void {
     const detector = this.detector;
     if (!detector) return;
+    const generation = this.generation;
     const captureMs = typeof captureTime === "number" && Number.isFinite(captureTime) ? captureTime : callbackMs;
     this.captureTimeSource[typeof captureTime === "number" ? "captureTime" : "callback"] += 1;
     // MediaPipe wants a strictly increasing whole-millisecond clock.
     const timestamp = Math.max(Math.round(captureMs), this.lastTimestampMs + 1);
     this.lastTimestampMs = timestamp;
     const started = performance.now();
-    const hands = detector.detect(this.video, timestamp);
-    const took = performance.now() - started;
+    const found = detector.detect(this.video, timestamp);
+    if (found instanceof Promise) {
+      return found.then((hands) => {
+        if (generation === this.generation) this.finishFrame(captureMs, hands, performance.now() - started);
+      });
+    }
+    this.finishFrame(captureMs, found, performance.now() - started);
+  }
+
+  private finishFrame(captureMs: number, hands: TrackedHand[], took: number): void {
     this.detectEma = this.detectEma === 0 ? took : this.detectEma * 0.9 + took * 0.1;
     const frame: HandFrame = { frameIndex: this.frameIndex, captureMs, hands };
     this.frameIndex += 1;

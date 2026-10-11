@@ -18,15 +18,23 @@ const MEDIAPIPE_WASM_FILES = [
   "vision_wasm_nosimd_internal.wasm",
 ];
 const MEDIAPIPE_URL = "/mediapipe/wasm/";
+/** The plain-script build of the library, for the hand worker (a classic worker cannot import modules). */
+const MEDIAPIPE_BUNDLE = "vision_bundle.js";
+const MEDIAPIPE_BUNDLE_URL = "/mediapipe/vision_bundle.js";
 
 function mediapipeWasm(): Plugin {
   const dir = path.resolve(__dirname, "../../node_modules/@mediapipe/tasks-vision/wasm");
   const localDir = path.resolve(__dirname, "node_modules/@mediapipe/tasks-vision/wasm");
   const source = () => (fs.existsSync(localDir) ? localDir : dir);
+  const bundle = () => path.join(path.dirname(source()), MEDIAPIPE_BUNDLE);
   return {
     name: "mediapipe-wasm",
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
+        if (request.url?.split("?")[0] === MEDIAPIPE_BUNDLE_URL) {
+          response.setHeader("Content-Type", "text/javascript");
+          return fs.createReadStream(bundle()).pipe(response);
+        }
         const name = request.url?.startsWith(MEDIAPIPE_URL) ? request.url.slice(MEDIAPIPE_URL.length).split("?")[0] : null;
         if (!name || !MEDIAPIPE_WASM_FILES.includes(name)) return next();
         response.setHeader("Content-Type", name.endsWith(".wasm") ? "application/wasm" : "text/javascript");
@@ -34,6 +42,7 @@ function mediapipeWasm(): Plugin {
       });
     },
     generateBundle() {
+      this.emitFile({ type: "asset", fileName: `mediapipe/${MEDIAPIPE_BUNDLE}`, source: fs.readFileSync(bundle()) });
       for (const name of MEDIAPIPE_WASM_FILES) {
         this.emitFile({ type: "asset", fileName: `mediapipe/wasm/${name}`, source: fs.readFileSync(path.join(source(), name)) });
       }

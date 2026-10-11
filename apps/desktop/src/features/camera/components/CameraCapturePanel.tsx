@@ -63,6 +63,7 @@ export function CameraCapturePanel() {
             <ul className="flex flex-wrap items-center gap-2" aria-label="Tracking status">
               <li><Badge variant={hands.length > 0 ? "default" : "secondary"}>{hands.length === 0 ? "No hand in view" : hands.length === 1 ? "1 hand" : `${hands.length} hands`}</Badge></li>
               <li><Badge variant="outline">{speedLabel(state)}</Badge></li>
+              {state.engine && <li><Badge variant="outline">Hand model: {state.engine}</Badge></li>}
               {hands.map((hand, index) => (
                 <li key={index}><Badge variant="outline">{physicalHand(hand)} hand · {Math.round(hand.score * 100)}%</Badge></li>
               ))}

@@ -6,7 +6,7 @@ vi.mock("../drawHands", () => ({ drawHands: vi.fn() }));
 
 import { CameraPreview } from "./CameraPreview";
 
-const state: CameraSnapshot = { status: "on", error: null, devices: [], deviceId: null, fps: 0, detectMs: 0, frame: null, recordLandmarks: true, collecting: false, collectedFrames: 0, truncated: false };
+const state: CameraSnapshot = { status: "on", error: null, devices: [], deviceId: null, fps: 0, detectMs: 0, engine: null, frame: null, recordLandmarks: true, collecting: false, collectedFrames: 0, truncated: false };
 
 beforeEach(() => { vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as unknown as CanvasRenderingContext2D); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });

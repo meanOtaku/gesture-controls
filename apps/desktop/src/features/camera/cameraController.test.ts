@@ -46,6 +46,65 @@ function setup(over: Partial<CameraDeps> & { hands?: () => TrackedHand[]; failDe
   return { camera, deps, frame, stopped, timestamps, closed, video };
 }
 
+describe("CameraController with a detector on another thread", () => {
+  /** A detector that answers when the test says so. */
+  function slowSetup() {
+    const answers: ((hands: TrackedHand[]) => void)[] = [];
+    const base = setup({
+      createDetector: vi.fn(async () => ({
+        description: "graphics chip, background thread",
+        detect: () => new Promise<TrackedHand[]>((resolve) => answers.push(resolve)),
+        close: () => undefined,
+      })),
+    });
+    return { ...base, answer: (hands: TrackedHand[] = [aHand()]) => answers.shift()?.(hands) };
+  }
+
+  it("takes the next picture only once the last is answered, files the answer under its own capture time, and says what runs the model", async () => {
+    const { camera, frame, video, answer } = slowSetup();
+    await camera.enable();
+    expect(camera.getSnapshot().engine).toBe("graphics chip, background thread");
+    const seen: number[] = [];
+    camera.subscribeFrames((f) => seen.push(f.captureMs));
+    frame(1000);
+    expect(video.requestVideoFrameCallback).toHaveBeenCalledTimes(1); // nothing asked for yet: the first picture is still being looked at
+    answer();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(video.requestVideoFrameCallback).toHaveBeenCalledTimes(2);
+    expect(seen).toEqual([1000]);
+    frame(1100);
+    answer([]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(seen).toEqual([1000, 1100]);
+    expect(camera.getSnapshot().frame?.hands).toHaveLength(0);
+  });
+
+  it("drops an answer that arrives after the camera was turned off", async () => {
+    const { camera, frame, answer } = slowSetup();
+    await camera.enable();
+    frame(1000);
+    camera.disable();
+    answer();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(camera.getSnapshot().frame).toBeNull();
+    expect(camera.getSnapshot().status).toBe("off");
+  });
+
+  it("stops with a reason when the detector fails", async () => {
+    const { camera, frame } = setup({
+      createDetector: vi.fn(async () => ({ detect: () => Promise.reject(new Error("worker crashed")), close: () => undefined })),
+    });
+    await camera.enable();
+    frame(1000);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(camera.getSnapshot()).toMatchObject({ status: "error", error: expect.stringContaining("worker crashed") });
+  });
+});
+
 describe("CameraController", () => {
   it("gives every frame to frame listeners, while pages are told about new frames only about 20 times a second", async () => {
     const { camera, frame } = setup();
