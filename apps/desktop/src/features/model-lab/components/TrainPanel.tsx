@@ -107,7 +107,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, lab = false, on
     label: target, datasetIds: [...selected], others, roles, method, sources: effectiveSources,
     movementOnly: columnsMode && method !== "cnn1d" ? false : movementOnly,
     spikeMethod: hasPulse ? spikeMethod : "none", ppgChannels: effectiveLights, windowMs,
-    features: columnsMode ? null : featuresRequest, network: networkRequest(network, method), research: lab && research,
+    features: columnsMode ? columns : featuresRequest, network: networkRequest(network, method), research: lab && research,
     ...(columnsMode ? { gridSteps: steps, ...(method !== "cnn1d" ? { inputMode: "raw" as const } : {}) } : {}),
   });
   const requestKey = JSON.stringify(request);

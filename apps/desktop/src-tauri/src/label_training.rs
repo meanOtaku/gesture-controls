@@ -50,7 +50,7 @@ const RAW_DEFAULT_STEPS: u32 = 1;
 const RAW_MAX_STEPS: u32 = 64;
 
 /// The backends offered, which extra packages the trainer needs for each.
-const BACKENDS: [&str; 4] = ["logreg", "mlp", "torch-mlp", "cnn1d"];
+pub(crate) const BACKENDS: [&str; 4] = ["logreg", "mlp", "torch-mlp", "cnn1d"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -257,6 +257,30 @@ fn resolve_inputs(request: &TrainRequest) -> Result<Inputs, String> {
         raw_columns,
         available,
         features,
+    })
+}
+
+/// What a request's inputs would be, from its streams and settings alone: every input available, the ones the model would
+/// read, and how many input neurons that makes (a dense method on raw columns has one for each column at each step; the
+/// convolutional method counts its channels, because it slides over the steps). For checking a saved network design.
+pub(crate) struct InputPreview {
+    pub available: Vec<String>,
+    pub inputs: Vec<String>,
+    pub neurons: u32,
+}
+
+pub(crate) fn preview_inputs(request: &TrainRequest) -> Result<InputPreview, String> {
+    let inputs = resolve_inputs(request)?;
+    let columns = inputs.raw_columns && request.backend != "cnn1d";
+    let neurons = if columns {
+        inputs.features.len() as u32 * inputs.grid_steps
+    } else {
+        inputs.features.len() as u32
+    };
+    Ok(InputPreview {
+        available: inputs.available,
+        inputs: inputs.features,
+        neurons,
     })
 }
 

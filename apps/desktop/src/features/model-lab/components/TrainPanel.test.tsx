@@ -242,6 +242,8 @@ describe("TrainPanel", () => {
     const request = calls("start_label_training")[0][1].request;
     expect(request).toMatchObject({ backend: "torch-mlp", inputMode: "raw", gridSteps: 4, movementOnly: false });
     expect(request.sources.sort()).toEqual(["watchAcceleration", "watchGyroscope", "watchOrientation", "watchPpg"]);
+    // Exactly the columns ticked: a stream provides all of its columns, so the request has to say which ones.
+    expect(request.features).toEqual(["ppg_green", "ppg_red", "ppg_ir", "accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z", "quat_y", "quat_z"]);
   });
 
   it("derives the streams from the columns ticked, and the convolutional method reads columns too", async () => {

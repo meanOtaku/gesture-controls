@@ -17,6 +17,7 @@ mod label_runtime;
 mod label_training;
 mod latest_write;
 mod model_lab;
+mod network_designs;
 mod network_spec;
 mod overlay;
 mod recording_bundle;
@@ -151,6 +152,7 @@ pub fn run() {
         .manage(model_lab::ModelLabRuntime::default())
         .manage(label_registry::LabelRegistryRuntime::default())
         .manage(gesture_library::GestureLibraryRuntime::default())
+        .manage(network_designs::NetworkDesignRuntime::default())
         .manage(recording_bundle::RawColumnCache::default())
         .invoke_handler(tauri::generate_handler![
             calibration::get_calibration_state,
@@ -169,6 +171,10 @@ pub fn run() {
             label_runtime::set_label_runtime_mode,
             label_training::plan_label_training,
             label_training::check_label_trainer,
+            network_designs::list_network_designs,
+            network_designs::save_network_design,
+            network_designs::delete_network_design,
+            network_designs::preview_network_design,
             label_training::start_label_training,
             label_training::start_label_edit,
             label_training::cancel_label_training,
