@@ -22,7 +22,7 @@ const datasets = [dataset("s1", ["snap"]), dataset("s2", ["snap"]), dataset("i1"
 const MOTION = ["accel_x_mean", "accel_x_std", "accel_y_mean", "accel_y_std", "gyro_x_mean", "gyro_x_std"];
 const okPlan: TrainPlan = { train: ["s1", "i1"], evaluation: ["s2", "i2"], problem: null, available: MOTION, features: MOTION };
 
-function setup(over: { plan?: TrainPlan; environment?: TrainerEnvironment; status?: TrainingStatus } = {}) {
+function setup(over: { plan?: TrainPlan; environment?: TrainerEnvironment; status?: TrainingStatus; lab?: boolean; onOpenNetworkLab?: () => void } = {}) {
   invokeMock.mockImplementation(async (command: string) => {
     if (command === "check_label_trainer") return over.environment ?? { available: true, detail: "uv 0.12" };
     if (command === "get_label_training_status") return over.status ?? { running: null, last: null };
@@ -30,7 +30,7 @@ function setup(over: { plan?: TrainPlan; environment?: TrainerEnvironment; statu
     if (command === "start_label_training") return "run-1";
     return undefined;
   });
-  render(<TrainPanel desktopAvailable labels={labels} datasets={datasets} />);
+  render(<TrainPanel desktopAvailable labels={labels} datasets={datasets} lab={over.lab} onOpenNetworkLab={over.onOpenNetworkLab} />);
 }
 
 const calls = (command: string) => invokeMock.mock.calls.filter(([name]) => name === command);
@@ -186,7 +186,7 @@ describe("TrainPanel", () => {
   });
 
   it("lets a neural network be designed, shows its size, and sends the design only when it differs from the default", async () => {
-    setup();
+    setup({ lab: true });
     choose("snap");
     await screen.findByText(/It will train on/);
     expect(screen.queryByText(/Design the network/)).not.toBeInTheDocument(); // logistic regression has no layers
@@ -208,8 +208,60 @@ describe("TrainPanel", () => {
     expect(await screen.findByLabelText("Filters in convolution layer 1")).toHaveValue(16);
   });
 
+  it("keeps the simple panel simple and points to the Network lab for the rest", async () => {
+    const open = vi.fn();
+    setup({ onOpenNetworkLab: open });
+    choose("snap");
+    await screen.findByText(/It will train on/);
+    expect(screen.queryByText(/Choose individual inputs/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Also run research checks" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("What goes into the model")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Method"), { target: { value: "torch-mlp" } });
+    expect(screen.queryByText(/Design the network/)).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Network lab" }));
+    expect(open).toHaveBeenCalled();
+  });
+
+  it("lets the dataset's own columns be the network's inputs, one neuron each", async () => {
+    setup({ lab: true });
+    choose("snap");
+    await screen.findByText(/It will train on/);
+    fireEvent.change(screen.getByLabelText("Method"), { target: { value: "torch-mlp" } });
+    fireEvent.change(screen.getByLabelText("What goes into the model"), { target: { value: "raw" } });
+    const size = screen.getByRole("status", { name: "Input layer size" });
+    expect(size).toHaveTextContent("13 columns × 1 reading = 13 input neurons"); // the thirteen columns of a dataset
+    expect(screen.getAllByRole("checkbox", { name: /^Column / })).toHaveLength(13);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Column quat_w" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Column quat_x" }));
+    fireEvent.change(screen.getByLabelText("Readings per column"), { target: { value: "4" } });
+    expect(size).toHaveTextContent("11 columns × 4 readings = 44 input neurons");
+    expect(await screen.findByText(/Design the network/)).toHaveTextContent("44 inputs → 32 → 16 → 2");
+    expect(screen.queryByRole("checkbox", { name: "Acceleration" })).not.toBeInTheDocument(); // the columns replace the streams
+    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
+    await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
+    const request = calls("start_label_training")[0][1].request;
+    expect(request).toMatchObject({ backend: "torch-mlp", inputMode: "raw", gridSteps: 4, movementOnly: false });
+    expect(request.sources.sort()).toEqual(["watchAcceleration", "watchGyroscope", "watchOrientation", "watchPpg"]);
+  });
+
+  it("derives the streams from the columns ticked, and the convolutional method reads columns too", async () => {
+    setup({ lab: true });
+    choose("snap");
+    await screen.findByText(/It will train on/);
+    fireEvent.change(screen.getByLabelText("Method"), { target: { value: "cnn1d" } });
+    expect(screen.getByLabelText("What goes into the model")).toBeDisabled(); // always columns
+    for (const name of ["ppg_green", "ppg_red", "ppg_ir", "quat_w", "quat_x", "quat_y", "quat_z"]) fireEvent.click(screen.getByRole("checkbox", { name: `Column ${name}` }));
+    expect(screen.getByRole("status", { name: "Input layer size" })).toHaveTextContent("6 channels × 32 steps");
+    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
+    await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
+    const request = calls("start_label_training")[0][1].request;
+    expect(request).toMatchObject({ backend: "cnn1d", gridSteps: 32 });
+    expect(request).not.toHaveProperty("inputMode");
+    expect(request.sources.sort()).toEqual(["watchAcceleration", "watchGyroscope"]);
+  });
+
   it("lets individual inputs be ticked off and sends only the ones still ticked", async () => {
-    setup();
+    setup({ lab: true });
     choose("snap");
     await screen.findByText(/It will train on/);
     const picker = await screen.findByText(/Choose individual inputs/);
@@ -223,7 +275,7 @@ describe("TrainPanel", () => {
   });
 
   it("asks for research checks only when ticked", async () => {
-    setup();
+    setup({ lab: true });
     choose("snap");
     await screen.findByText(/It will train on/);
     fireEvent.click(screen.getByRole("button", { name: "Train model" }));

@@ -82,6 +82,7 @@ const Dashboard = lazy(() => import("../features/dashboard/components/Dashboard"
 const LiveSignalsPage = memo(lazy(() => import("../features/telemetry/components/LiveSignalsPage").then((m) => ({ default: m.LiveSignalsPage }))));
 const RecorderPage = memo(lazy(() => import("../features/telemetry/components/RecorderPage").then((m) => ({ default: m.RecorderPage }))));
 const RecordingsPage = memo(lazy(() => import("../features/telemetry/components/RecordingsPage").then((m) => ({ default: m.RecordingsPage }))));
+const NetworkLab = memo(lazy(() => import("../features/model-lab/components/NetworkLab").then((m) => ({ default: m.NetworkLab }))));
 const ModelLab = memo(lazy(() => import("../features/model-lab/components/ModelLab").then((m) => ({ default: m.ModelLab }))));
 const RecipesPage = memo(lazy(() => import("../features/recipes/components/RecipesPage").then((m) => ({ default: m.RecipesPage }))));
 const GesturesPage = memo(lazy(() => import("../features/gestures/components/GesturesPage").then((m) => ({ default: m.GesturesPage }))));
@@ -591,6 +592,12 @@ function MainApp() {
   const clearStartWithDevice = useCallback(() => setStartWithDevice(null), []);
   const openModelLab = useCallback(() => setActiveTab("modelLab"), []);
   const openLabels = useCallback(() => setActiveTab("labels"), []);
+  const [networkLabModel, setNetworkLabModel] = useState<string | null>(null);
+  const openNetworkLab = useCallback(() => setActiveTab("networkLab"), []);
+  const inspectInNetworkLab = useCallback((id: string) => {
+    setNetworkLabModel(id);
+    setActiveTab("networkLab");
+  }, []);
   const openSettings = useCallback(() => setActiveTab("settings"), []);
   const makeRecipeFromDevice = useCallback((kind: DeviceKind) => {
     setStartWithDevice(kind);
@@ -716,8 +723,9 @@ function MainApp() {
     {activeTab === "labels" && <LabelsPage onOpen={setActiveTab} />}
     {activeTab === "gestureLibrary" && <GestureLibraryPage />}
     {activeTab === "modelLab" && (
-      <ModelLab onOpenLabels={openLabels} />
+      <ModelLab onOpenLabels={openLabels} onInspectModel={inspectInNetworkLab} onOpenNetworkLab={openNetworkLab} />
     )}
+    {activeTab === "networkLab" && <NetworkLab modelId={networkLabModel} onModelChange={setNetworkLabModel} />}
     {activeTab === "settings" && (
       <Settings
         settings={settings}

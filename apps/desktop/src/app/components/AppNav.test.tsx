@@ -80,7 +80,7 @@ describe("AppNav", () => {
       fireEvent.keyDown(window, { key: String(index + 1), ctrlKey: true });
       expect(onSelect).toHaveBeenLastCalledWith(tab);
     });
-    expect(NAV_ORDER).toEqual(["main", "headphone", "watch", "labels", "gestureLibrary", "signals", "recorder", "recordings", "modelLab", "gestures", "recipes", "devices", "settings"]);
+    expect(NAV_ORDER).toEqual(["main", "headphone", "watch", "labels", "gestureLibrary", "signals", "recorder", "recordings", "modelLab", "networkLab", "gestures", "recipes", "devices", "settings"]);
   });
 
   it("opens Settings with Ctrl+comma, since the tenth and later tabs have no number", () => {

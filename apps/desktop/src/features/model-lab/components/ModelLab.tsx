@@ -1,14 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
 import { useLabelModels } from "../hooks/useLabelModels";
-import { datasetLabels, type DatasetLabel, type DatasetSummary } from "../types";
+import { useModelLabData } from "../hooks/useModelLabData";
+import { datasetLabels } from "../types";
 import { DatasetManager } from "./DatasetManager";
 import { DetectionActivity } from "./DetectionActivity";
 import { LabelModelsPanel } from "./LabelModelsPanel";
-import { ModelInspector } from "./ModelInspector";
 import { RecorderRecordings } from "./RecorderRecordings";
 import { TrainingHistory } from "./TrainingHistory";
 import { TrainPanel } from "./TrainPanel";
@@ -18,45 +18,12 @@ import { TrainPanel } from "./TrainPanel";
  * to the training data, check which labels they cover, train, look back at what was tried, then switch the models on
  * and watch what they detect.
  */
-export function ModelLab({ onOpenLabels }: { onOpenLabels?: () => void }) {
+export function ModelLab({ onOpenLabels, onInspectModel, onOpenNetworkLab }: { onOpenLabels?: () => void; /** Opens the Network lab on this model, to look inside it. */ onInspectModel?: (id: string) => void; onOpenNetworkLab?: () => void }) {
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
-  const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
-  const [labels, setLabels] = useState<DatasetLabel[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { datasets, labels, loading, error, setError, refreshDatasets } = useModelLabData(desktopAvailable);
   const [importing, setImporting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [inspectId, setInspectId] = useState<string | null>(null);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
   const { models, status, error: modelsError, refresh } = useLabelModels(desktopAvailable);
-
-  const refreshDatasets = useCallback(async () => {
-    if (!desktopAvailable) return;
-    setLoading(true);
-    try {
-      setDatasets(await invoke<DatasetSummary[]>("list_model_datasets"));
-      setError(null);
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [desktopAvailable]);
-
-  useEffect(() => {
-    void refreshDatasets();
-  }, [refreshDatasets]);
-
-  useEffect(() => {
-    if (!desktopAvailable) return;
-    void (async () => {
-      try {
-        const result = await invoke<DatasetLabel[]>("list_model_labels");
-        setLabels(Array.isArray(result) ? result : []);
-      } catch (err) {
-        setError(String(err));
-      }
-    })();
-  }, [desktopAvailable]);
 
   const handleImport = useCallback(
     async ({ filename, csvContent }: { filename: string; csvContent: string }) => {
@@ -155,10 +122,10 @@ export function ModelLab({ onOpenLabels }: { onOpenLabels?: () => void }) {
             {onOpenLabels && <Button type="button" variant="outline" onClick={onOpenLabels}>Open Labels</Button>}
           </CardContent>
         </Card>
-        <TrainPanel desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} />
+        <TrainPanel desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} onOpenNetworkLab={onOpenNetworkLab} />
         <TrainingHistory desktopAvailable={desktopAvailable} labels={labels} refreshKey={models.map((model) => `${model.id}:${model.state}`).join(",")} />
-        <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} onInspect={(id) => { setInspectId(id); window.setTimeout(() => document.getElementById("lab-inspect")?.scrollIntoView?.({ behavior: "smooth", block: "start" }), 0); }} />
-        {inspectId !== null && <ModelInspector id={inspectId} models={models} onClose={() => setInspectId(null)} />}
+        <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} onInspect={onInspectModel}
+        />
         <DetectionActivity desktopAvailable={desktopAvailable} />
       </fieldset>
     </main>

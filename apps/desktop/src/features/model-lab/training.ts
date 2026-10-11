@@ -75,6 +75,10 @@ export interface TrainRequest {
   network?: Record<string, unknown>;
   /** Also retrain on less data and on all but one recording, to see how far the score can be trusted (slower). */
   research?: boolean;
+  /** `raw`: the dataset's own columns, each at each step, one input neuron apiece (dense methods). Absent: statistics of each window. */
+  inputMode?: "raw";
+  /** Steps each column is laid onto: for the convolutional method, or for raw columns. */
+  gridSteps?: number;
   /** Which of the pulse sensor's light channels the model may read (only matters when the pulse sensor is a stream). */
   ppgChannels: PpgChannel[];
   /** How the pulse sensor's spikes are pulled out before the model reads their features; "none" reads no spike features. */
@@ -148,6 +152,8 @@ export function buildRequest(input: {
   features?: string[] | null;
   network?: Record<string, unknown>;
   research?: boolean;
+  inputMode?: "raw";
+  gridSteps?: number;
 }): TrainRequest {
   const role = (label: string): OtherRole => input.roles[label] ?? "negative";
   return {
@@ -164,6 +170,8 @@ export function buildRequest(input: {
     ...(input.features && input.features.length > 0 ? { features: [...input.features] } : {}),
     ...(input.network ? { network: input.network } : {}),
     ...(input.research ? { research: true } : {}),
+    ...(input.inputMode ? { inputMode: input.inputMode } : {}),
+    ...(input.gridSteps ? { gridSteps: input.gridSteps } : {}),
   };
 }
 
@@ -188,3 +196,24 @@ export function appendLog(previous: string[], message: string): string[] {
   const next = [...previous, message];
   return next.length > MAX_LOG_LINES ? next.slice(next.length - MAX_LOG_LINES) : next;
 }
+
+/** The columns of a recording's data, in the order of the dataset's header, and which stream each comes from. */
+export const DATASET_COLUMNS: ReadonlyArray<{ name: string; stream: DataStream }> = [
+  { name: "ppg_green", stream: "watchPpg" }, { name: "ppg_red", stream: "watchPpg" }, { name: "ppg_ir", stream: "watchPpg" },
+  { name: "accel_x", stream: "watchAcceleration" }, { name: "accel_y", stream: "watchAcceleration" }, { name: "accel_z", stream: "watchAcceleration" },
+  { name: "gyro_x", stream: "watchGyroscope" }, { name: "gyro_y", stream: "watchGyroscope" }, { name: "gyro_z", stream: "watchGyroscope" },
+  { name: "quat_w", stream: "watchOrientation" }, { name: "quat_x", stream: "watchOrientation" }, { name: "quat_y", stream: "watchOrientation" }, { name: "quat_z", stream: "watchOrientation" },
+];
+export const ALL_COLUMNS: string[] = DATASET_COLUMNS.map((column) => column.name);
+
+/** The streams (and, for the pulse sensor, lights) that a choice of columns needs. */
+export function needsOf(columns: string[]): { sources: DataStream[]; lights: PpgChannel[] } {
+  const chosen = DATASET_COLUMNS.filter((column) => columns.includes(column.name));
+  const sources = [...new Set(chosen.map((column) => column.stream))];
+  const lights = ALL_PPG_CHANNELS.filter((light) => columns.includes(`ppg_${light}`));
+  return { sources, lights };
+}
+
+/** Steps per column the person can choose: 1 is the latest reading of each column, like one row of the dataset. */
+export const RAW_STEPS = [1, 2, 4, 8, 16, 32, 64] as const;
+export const CNN_STEPS = [8, 16, 32, 64, 128] as const;

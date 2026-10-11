@@ -13,6 +13,7 @@ import { InputPicker } from "./InputPicker";
 import { NetworkDesigner } from "./NetworkDesigner";
 import { TrainingCurve, parseCurveLine, type CurvePoint } from "./TrainingCurve";
 import { defaultNetwork, isNeural, networkRequest, parameterCount, type NetworkSettings } from "../network";
+import { ColumnsDesigner } from "./ColumnsDesigner";
 import {
   DEFAULT_STREAMS,
   LABEL_TRAINING_EVENT,
@@ -25,8 +26,10 @@ import {
   hasLabel,
   otherLabels,
   recordingsWithLabel,
+  ALL_COLUMNS,
   ALL_PPG_CHANNELS,
   DEFAULT_WINDOW_MS,
+  needsOf,
   PPG_CHANNELS,
   WINDOW_LENGTHS,
   SPIKE_METHODS,
@@ -46,6 +49,10 @@ type TrainPanelProps = {
   desktopAvailable: boolean;
   labels: DatasetLabel[];
   datasets: DatasetSummary[];
+  /** The Network lab's fuller version: design the network, choose the columns it reads, individual inputs, research checks. */
+  lab?: boolean;
+  /** Opens the Network lab (from the simpler panel in Model Lab). */
+  onOpenNetworkLab?: () => void;
 };
 
 const NATIVE_SELECT = "recipe-select";
@@ -55,7 +62,7 @@ const NATIVE_SELECT = "recipe-select";
  * the method and the data the model may read; the app then picks which recordings train and which test (never the same
  * one) and shows you that before anything runs. The result is a Draft you review before it can do anything.
  */
-export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelProps) {
+export function TrainPanel({ desktopAvailable, labels, datasets, lab = false, onOpenNetworkLab }: TrainPanelProps) {
   const uid = useId();
   const [target, setTarget] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -68,6 +75,10 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
   const [inputChoice, setInputChoice] = useState<string[] | null>(null);
   const [curve, setCurve] = useState<CurvePoint[]>([]);
   const [research, setResearch] = useState(false);
+  const [inputMode, setInputMode] = useState<"statistics" | "raw">("statistics");
+  const [columns, setColumns] = useState<string[]>(ALL_COLUMNS);
+  const [rawSteps, setRawSteps] = useState(1);
+  const [cnnSteps, setCnnSteps] = useState(32);
   const [ppgChannels, setPpgChannels] = useState<PpgChannel[]>(ALL_PPG_CHANNELS);
   const [spikeMethod, setSpikeMethod] = useState<SpikeMethodId>("none");
   const [plan, setPlan] = useState<TrainPlan | null>(null);
@@ -85,7 +96,20 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
   const narrowed = inputChoice === null ? null : inputChoice.filter((name) => available.includes(name));
   const featuresRequest = narrowed !== null && narrowed.length > 0 && narrowed.length < available.length ? narrowed : null;
   const network = networks[method];
-  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, method, sources, movementOnly, spikeMethod: sources.includes("watchPpg") ? spikeMethod : "none", ppgChannels, windowMs, features: featuresRequest, network: networkRequest(network, method), research });
+  // In the Network lab the dataset's own columns are the inputs of the convolutional method and of a dense method on raw columns.
+  const columnsMode = lab && (method === "cnn1d" || inputMode === "raw");
+  const steps = method === "cnn1d" ? cnnSteps : rawSteps;
+  const needs = columnsMode ? needsOf(columns) : null;
+  const effectiveSources = needs ? needs.sources : sources;
+  const effectiveLights = needs && needs.lights.length > 0 ? needs.lights : ppgChannels;
+  const hasPulse = effectiveSources.includes("watchPpg");
+  const request = target === "" ? null : buildRequest({
+    label: target, datasetIds: [...selected], others, roles, method, sources: effectiveSources,
+    movementOnly: columnsMode && method !== "cnn1d" ? false : movementOnly,
+    spikeMethod: hasPulse ? spikeMethod : "none", ppgChannels: effectiveLights, windowMs,
+    features: columnsMode ? null : featuresRequest, network: networkRequest(network, method), research: lab && research,
+    ...(columnsMode ? { gridSteps: steps, ...(method !== "cnn1d" ? { inputMode: "raw" as const } : {}) } : {}),
+  });
   const requestKey = JSON.stringify(request);
 
   useEffect(() => {
@@ -193,7 +217,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
     }
   };
 
-  const canStart = desktopAvailable && request !== null && sources.length > 0 && plan !== null && plan.problem === null && running === null && environment?.available !== false;
+  const canStart = desktopAvailable && request !== null && effectiveSources.length > 0 && plan !== null && plan.problem === null && running === null && environment?.available !== false;
   const name = (id: string) => datasets.find((dataset) => dataset.id === id)?.originalFilename ?? id;
 
   return (
@@ -278,7 +302,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
               </select>
               <p className="field-hint">{SPIKE_METHODS.find((option) => option.value === spikeMethod)?.summary}</p>
               {spikeMethod !== "none" && (
-                <p className="field-hint">{sources.includes("watchPpg")
+                <p className="field-hint">{hasPulse
                   ? "Done to the pulse sensor inside each 500 ms window, in training and again live, so the model sees the same numbers. For each of the three pulse channels the model reads the biggest spike (how high, how far above the noise, where, how long it takes to rise and fall, how many) and the steepest rise and fall. Made for a short event such as a pinch."
                   : "Needs the pulse sensor: tick it under “What the model may read” below, or no spike features are used."}</p>
               )}
@@ -292,16 +316,23 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
               <p className="field-hint">{METHODS.find((option) => option.value === method)?.summary}</p>
             </div>
 
-            {isNeural(method) && plan && plan.features.length > 0 && (
-              <details className="rounded-lg border border-input px-3 py-2">
-                <summary className="cursor-pointer text-sm font-semibold">
-                  Design the network <span className="font-normal text-muted-foreground">({plan.features.length} input{plan.features.length === 1 ? "" : "s"} → {method === "cnn1d" ? "convolution → " : ""}{network.hidden.map((layer) => `${layer.units} → `).join("")}2 · {parameterCount(network, plan.features.length, method).toLocaleString("en-US")} parameters)</span>
-                </summary>
-                <div className="mt-2">
-                  <NetworkDesigner method={method} settings={network} onChange={(next) => setNetworks((previous) => ({ ...previous, [method]: next }))} inputs={plan.features.length} steps={32} disabled={running !== null} />
-                </div>
-              </details>
+            {isNeural(method) && !lab && (
+              <p className="field-hint">The layers, neurons and learning settings of the neural networks have their defaults here. To design them, choose the columns the network reads, see inside a model or fine-tune one, open the{" "}
+                {onOpenNetworkLab ? <Button type="button" variant="link" className="h-auto p-0" onClick={onOpenNetworkLab}>Network lab</Button> : "Network lab"}.</p>
             )}
+            {isNeural(method) && lab && plan && plan.features.length > 0 && (() => {
+              const neurons = columnsMode ? (method === "cnn1d" ? columns.length : columns.length * steps) : plan.features.length;
+              return (
+                <details className="rounded-lg border border-input px-3 py-2" open>
+                  <summary className="cursor-pointer text-sm font-semibold">
+                    Design the network <span className="font-normal text-muted-foreground">({neurons} input{neurons === 1 ? "" : "s"} → {method === "cnn1d" ? "convolution → " : ""}{network.hidden.map((layer) => `${layer.units} → `).join("")}2 · {parameterCount(network, neurons, method).toLocaleString("en-US")} parameters)</span>
+                  </summary>
+                  <div className="mt-2">
+                    <NetworkDesigner method={method} settings={network} onChange={(next) => setNetworks((previous) => ({ ...previous, [method]: next }))} inputs={neurons} steps={method === "cnn1d" ? steps : 32} disabled={running !== null} />
+                  </div>
+                </details>
+              );
+            })()}
 
             <div className="field">
               <div className="field-head"><Label htmlFor={`${uid}-window`}>Window length</Label></div>
@@ -316,7 +347,20 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
               </p>
             </div>
 
-            <fieldset className="flex flex-col gap-2">
+            {lab ? (
+              <div className="field">
+                <div className="field-head"><Label htmlFor={`${uid}-inputmode`}>What goes into the model</Label></div>
+                <select id={`${uid}-inputmode`} className={NATIVE_SELECT} value={method === "cnn1d" ? "raw" : inputMode} disabled={running !== null || method === "cnn1d"} onChange={(event) => setInputMode(event.target.value as "statistics" | "raw")}>
+                  <option value="statistics">Statistics of each window (averages, spread, minimum, maximum…)</option>
+                  <option value="raw">The dataset&apos;s own columns, one input neuron each</option>
+                </select>
+                <p className="field-hint">{inputMode === "raw" ? "Each column of your recordings, at each reading, is one input. A straight-line method (logistic regression) can only weigh the readings themselves, so it cannot see how hard a signal swings; a neural network can." : "Short lists of numbers made from each window. The usual choice."}</p>
+              </div>
+            ) : null}
+
+            {columnsMode && <ColumnsDesigner method={method} columns={columns} onColumns={setColumns} steps={steps} onSteps={method === "cnn1d" ? setCnnSteps : setRawSteps} disabled={running !== null} />}
+
+            {!columnsMode && <fieldset className="flex flex-col gap-2">
               <legend className="label">What the model may read</legend>
               <ul className="flex flex-col gap-1" aria-label="Data the model may read">
                 {STREAMS.map((stream) => (
@@ -346,12 +390,12 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
                 ))}
               </ul>
               <p className="field-hint">The model only works while the watch sends everything it read. Pick what the gesture actually changes: a finger pinch barely moves the watch, so it shows in the pulse sensor, not in acceleration. A wrist twist or a shake shows in acceleration, gyroscope and orientation.</p>
-              <InputPicker available={available} chosen={inputChoice} onChange={setInputChoice} spikeMethodLabel={spikeMethod === "none" ? undefined : SPIKE_METHODS.find((option) => option.value === spikeMethod)?.label} disabled={running !== null} channels={method === "cnn1d"} />
+              {lab && <InputPicker available={available} chosen={inputChoice} onChange={setInputChoice} spikeMethodLabel={spikeMethod === "none" ? undefined : SPIKE_METHODS.find((option) => option.value === spikeMethod)?.label} disabled={running !== null} channels={method === "cnn1d"} />}
               <div className="flex items-start gap-2 text-sm">
                 <Checkbox checked={movementOnly} disabled={running !== null} onCheckedChange={() => setMovementOnly((value) => !value)} aria-label="Only how things change" />
                 <span><strong>Only how things change</strong> <small className="text-muted-foreground">Ignore absolute levels such as how the watch is held. This stops a model from memorising a session&apos;s posture; try it for movement gestures.</small></span>
               </div>
-            </fieldset>
+            </fieldset>}
 
             {plan && (
               <div role="status" aria-label="Training plan">
@@ -374,14 +418,14 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
               </div>
             )}
 
-            <div className="flex items-start gap-2 text-sm">
+            {lab && <div className="flex items-start gap-2 text-sm">
               <Checkbox checked={research} disabled={running !== null} onCheckedChange={() => setResearch((value) => !value)} aria-label="Also run research checks" />
               <span><strong>Also run research checks</strong> <small className="text-muted-foreground">After training, retrain the same model on a quarter, half and three quarters of the data, and on all but one recording at a time, to see how far its score can be trusted. It takes several times longer, and the results are in the model&apos;s Inspect view.</small></span>
-            </div>
+            </div>}
 
             <div className="flex flex-wrap items-center gap-2">
               {running === null && <Button type="button" disabled={!canStart} onClick={() => void start()}>Train model</Button>}
-              {sources.length === 0 && <span className="field-error">Choose at least one thing for the model to read.</span>}
+              {effectiveSources.length === 0 && <span className="field-error">Choose at least one thing for the model to read.</span>}
             </div>
           </>
         )}
