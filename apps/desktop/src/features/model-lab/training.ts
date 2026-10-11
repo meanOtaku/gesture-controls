@@ -33,6 +33,8 @@ export interface TrainRequest {
   sources: DataStream[];
   /** Only features about how things change, not their absolute levels. */
   movementOnly: boolean;
+  /** Also read the pulse sensor's spikes: its baseline taken away, then its biggest spike and steepest rise and fall described. */
+  spikeFeatures: boolean;
 }
 
 export interface TrainPlan {
@@ -93,6 +95,7 @@ export function buildRequest(input: {
   method: TrainMethod;
   sources: DataStream[];
   movementOnly?: boolean;
+  spikeFeatures?: boolean;
 }): TrainRequest {
   const role = (label: string): OtherRole => input.roles[label] ?? "negative";
   return {
@@ -103,6 +106,7 @@ export function buildRequest(input: {
     backend: input.method,
     sources: [...input.sources],
     movementOnly: input.movementOnly ?? false,
+    spikeFeatures: input.spikeFeatures ?? false,
   };
 }
 

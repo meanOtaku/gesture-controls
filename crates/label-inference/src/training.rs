@@ -64,13 +64,26 @@ pub fn is_movement_feature(name: &str) -> bool {
     name.ends_with("_std")
         || name == "quat_delta_angle_deg"
         || (name.starts_with("ppg_") && name.ends_with("_slope"))
+        || is_spike_feature(name)
+}
+
+/// A pulse-sensor spike feature: what is left of a PPG channel once its baseline is taken away (its biggest spike and
+/// its steepest rise and fall). These come after the 55 base features and are only used when asked for.
+pub fn is_spike_feature(name: &str) -> bool {
+    name.starts_with("ppg_") && (name.contains("_spike_") || name.contains("_deriv_"))
 }
 
 /// Every canonical feature computed from the given streams, in canonical order, optionally only the movement ones. A
-/// window-level value (sample count, duration, contact quality) comes with the PPG stream.
-pub fn canonical_features_for(sources: &[StreamSource], movement_only: bool) -> Vec<String> {
+/// window-level value (sample count, duration, contact quality) comes with the PPG stream. The pulse-sensor spike
+/// features are left out unless `spikes` asks for them (and the PPG stream is chosen).
+pub fn canonical_features_for(
+    sources: &[StreamSource],
+    movement_only: bool,
+    spikes: bool,
+) -> Vec<String> {
     FEATURE_NAMES
         .iter()
+        .filter(|name| spikes || !is_spike_feature(name))
         .filter(|name| source_of_feature(name).is_some_and(|s| sources.contains(&s)))
         .filter(|name| !movement_only || is_movement_feature(name))
         .map(ToString::to_string)
@@ -417,6 +430,7 @@ mod tests {
                     StreamSource::WatchGyroscope,
                 ],
                 false,
+                false,
             ),
             window_ms: 500,
             stride_ms: 150,
@@ -510,7 +524,7 @@ mod tests {
 
     #[test]
     fn the_features_follow_the_streams() {
-        let motion = canonical_features_for(&[StreamSource::WatchAcceleration], false);
+        let motion = canonical_features_for(&[StreamSource::WatchAcceleration], false, false);
         assert!(!motion.is_empty() && motion.iter().all(|f| f.starts_with("accel_")));
         let all = canonical_features_for(
             &[
@@ -520,9 +534,26 @@ mod tests {
                 StreamSource::WatchPpg,
             ],
             false,
+            false,
         );
-        assert_eq!(all.len(), FEATURE_NAMES.len());
-        assert!(canonical_features_for(&[StreamSource::HeadPose], false).is_empty());
+        assert_eq!(all.len(), FEATURE_NAMES.len() - 24); // the spike features are opt-in
+        let with_spikes = canonical_features_for(
+            &[
+                StreamSource::WatchOrientation,
+                StreamSource::WatchAcceleration,
+                StreamSource::WatchGyroscope,
+                StreamSource::WatchPpg,
+            ],
+            false,
+            true,
+        );
+        assert_eq!(with_spikes.len(), FEATURE_NAMES.len());
+        // Without the pulse sensor there is nothing for them to read.
+        assert_eq!(
+            canonical_features_for(&[StreamSource::WatchAcceleration], false, true),
+            canonical_features_for(&[StreamSource::WatchAcceleration], false, false)
+        );
+        assert!(canonical_features_for(&[StreamSource::HeadPose], false, true).is_empty());
     }
 
     #[test]
@@ -707,7 +738,8 @@ mod tests {
         assert_eq!(
             strs(canonical_features_for(
                 &[WatchAcceleration, WatchGyroscope],
-                true
+                true,
+                false
             )),
             [
                 "accel_x_std",
@@ -721,7 +753,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            strs(canonical_features_for(&[WatchOrientation], true)),
+            strs(canonical_features_for(&[WatchOrientation], true, false)),
             [
                 "quat_w_std",
                 "quat_x_std",
@@ -731,7 +763,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            strs(canonical_features_for(&[WatchPpg], true)),
+            strs(canonical_features_for(&[WatchPpg], true, false)),
             [
                 "ppg_green_std",
                 "ppg_red_std",
@@ -742,9 +774,13 @@ mod tests {
             ]
         );
         assert!(
-            canonical_features_for(&[WatchAcceleration], true).len()
-                < canonical_features_for(&[WatchAcceleration], false).len()
+            canonical_features_for(&[WatchAcceleration], true, false).len()
+                < canonical_features_for(&[WatchAcceleration], false, false).len()
         );
+        // The spike features are all about change, so "only how things change" keeps them.
+        let ppg_spikes = strs(canonical_features_for(&[WatchPpg], true, true));
+        assert_eq!(ppg_spikes.len(), 6 + 24);
+        assert!(ppg_spikes.iter().skip(6).all(|n| is_spike_feature(n)));
     }
 
     #[test]

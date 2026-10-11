@@ -36,5 +36,6 @@ pub use pipeline::{LabelPipeline, LabelScore, Rejection, WindowRejection};
 pub use runtime::{LabelRuntime, RuntimeMode, RuntimeOutput};
 pub use training::{
     BegunRun, RecordingInfo, RunPlan, TrainingError, begin_run, canonical_features_for,
-    complete_run, evaluation_only_run, fail_run, is_movement_feature, plan_split, trainer_backend,
+    complete_run, evaluation_only_run, fail_run, is_movement_feature, is_spike_feature, plan_split,
+    trainer_backend,
 };

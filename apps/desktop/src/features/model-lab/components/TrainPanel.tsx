@@ -52,6 +52,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
   const [method, setMethod] = useState<TrainMethod>("logreg");
   const [sources, setSources] = useState<DataStream[]>(DEFAULT_STREAMS);
   const [movementOnly, setMovementOnly] = useState(false);
+  const [spikeFeatures, setSpikeFeatures] = useState(false);
   const [plan, setPlan] = useState<TrainPlan | null>(null);
   const [environment, setEnvironment] = useState<TrainerEnvironment | null>(null);
   const [running, setRunning] = useState<string | null>(null);
@@ -62,7 +63,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
   const usable = labels.filter((label) => label.archivedAt === null);
   const candidates = datasets.filter((dataset) => datasetLabels(dataset).length > 0);
   const others = otherLabels(datasets, selected, target);
-  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, method, sources, movementOnly });
+  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, method, sources, movementOnly, spikeFeatures: spikeFeatures && sources.includes("watchPpg") });
   const requestKey = JSON.stringify(request);
 
   useEffect(() => {
@@ -261,6 +262,10 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
               <div className="flex items-start gap-2 text-sm">
                 <Checkbox checked={movementOnly} disabled={running !== null} onCheckedChange={() => setMovementOnly((value) => !value)} aria-label="Only how things change" />
                 <span><strong>Only how things change</strong> <small className="text-muted-foreground">Ignore absolute levels such as how the watch is held. This stops a model from memorising a session&apos;s posture; try it for movement gestures.</small></span>
+              </div>
+              <div className="flex items-start gap-2 text-sm">
+                <Checkbox checked={spikeFeatures && sources.includes("watchPpg")} disabled={running !== null || !sources.includes("watchPpg")} onCheckedChange={() => setSpikeFeatures((value) => !value)} aria-label="Pulse sensor spikes" />
+                <span><strong>Pulse sensor spikes</strong> <small className="text-muted-foreground">Take the slow baseline away from the pulse sensor, then describe its biggest spike (how high, how wide, how steep, where in the window) and how many there are. Made for a short event such as a pinch. Needs the pulse sensor above.</small></span>
               </div>
             </fieldset>
 

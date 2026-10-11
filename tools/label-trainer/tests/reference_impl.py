@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from label_trainer.csv_io import CsvFormatError, Recording, _strip_leading_comments
-from label_trainer.features import FEATURE_NAMES
+from label_trainer.features import BASE_FEATURE_NAMES as FEATURE_NAMES
 from label_trainer.schema import (
     ACCEL_COLUMNS,
     CONTACT_QUALITY_COLUMN,

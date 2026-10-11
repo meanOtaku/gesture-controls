@@ -1,13 +1,15 @@
 //! Deterministic statistical feature extraction, mirroring
 //! `tools/label-trainer/src/label_trainer/features.py`'s
-//! `FEATURE_NAMES`/`extract_features` exactly (same order, same 55 values) so
+//! `FEATURE_NAMES`/`extract_features` exactly (same order, same values) so
 //! a model trained offline sees the identical feature contract live on the
 //! desktop. See `crate::fusion` for how a raw watch telemetry window becomes
 //! a [`FusedWindow`].
 
-/// Number of features in the ordered vector every [`crate::model::PinchModel`]
-/// consumes. Matches Python's `len(FEATURE_NAMES)`.
-pub const FEATURE_COUNT: usize = 55;
+/// The statistics every window has always had; the pulse-sensor spike features follow them.
+pub const BASE_FEATURE_COUNT: usize = 55;
+/// Number of features in the ordered vector every model reads its inputs from: the 55 base statistics, then 24 spike
+/// features (8 for each of the three PPG channels). Matches Python's `len(FEATURE_NAMES)`.
+pub const FEATURE_COUNT: usize = 79;
 
 /// Exact feature order, matching `features.py`'s `FEATURE_NAMES` tuple. A
 /// model bundle's `metadata.json` records this same order (see `bundle.py`'s
@@ -68,6 +70,30 @@ pub const FEATURE_NAMES: [&str; FEATURE_COUNT] = [
     "contact_quality_mean",
     "sample_count",
     "duration_ms",
+    "ppg_green_spike_height",
+    "ppg_red_spike_height",
+    "ppg_ir_spike_height",
+    "ppg_green_spike_z",
+    "ppg_red_spike_z",
+    "ppg_ir_spike_z",
+    "ppg_green_spike_time_frac",
+    "ppg_red_spike_time_frac",
+    "ppg_ir_spike_time_frac",
+    "ppg_green_spike_rise_ms",
+    "ppg_red_spike_rise_ms",
+    "ppg_ir_spike_rise_ms",
+    "ppg_green_spike_fall_ms",
+    "ppg_red_spike_fall_ms",
+    "ppg_ir_spike_fall_ms",
+    "ppg_green_spike_count",
+    "ppg_red_spike_count",
+    "ppg_ir_spike_count",
+    "ppg_green_deriv_max",
+    "ppg_red_deriv_max",
+    "ppg_ir_deriv_max",
+    "ppg_green_deriv_min",
+    "ppg_red_deriv_min",
+    "ppg_ir_deriv_min",
 ];
 
 /// One fused, ready-to-classify window: a raw PPG batch's per-sample channel
@@ -179,6 +205,159 @@ fn quat_delta_angle_deg(a: [f64; 4], b: [f64; 4]) -> f64 {
     2.0 * dot.acos().to_degrees()
 }
 
+/// Fewer PPG samples than this in a window and there is no spike to speak of: every spike feature is 0.
+const SPIKE_MIN_SAMPLES: usize = 4;
+/// A peak is only counted above this many robust standard deviations of the baseline-free signal.
+const SPIKE_COUNT_SIGMAS: f64 = 3.0;
+/// Turns a median absolute deviation into a standard deviation for roughly normal noise.
+const MAD_TO_SIGMA: f64 = 1.4826;
+const SPIKE_SIGMA_FLOOR: f64 = 1e-9;
+const SPIKE_Z_CAP: f64 = 50.0;
+/// Spike features per PPG channel.
+pub const SPIKE_STATS_PER_CHANNEL: usize = 8;
+
+/// numpy's `np.sum` on a contiguous float64 array, operation for operation (eight running sums for blocks, halves above
+/// 128 values), so the spike features come out the same as the trainer's, not merely close.
+fn numpy_sum(values: &[f64]) -> f64 {
+    let n = values.len();
+    if n < 8 {
+        let mut total = 0.0;
+        for value in values {
+            total += value;
+        }
+        total
+    } else if n <= 128 {
+        let mut r = [0.0f64; 8];
+        r.copy_from_slice(&values[..8]);
+        let mut i = 8;
+        while i < n - (n % 8) {
+            for (j, slot) in r.iter_mut().enumerate() {
+                *slot += values[i + j];
+            }
+            i += 8;
+        }
+        let mut total = ((r[0] + r[1]) + (r[2] + r[3])) + ((r[4] + r[5]) + (r[6] + r[7]));
+        while i < n {
+            total += values[i];
+            i += 1;
+        }
+        total
+    } else {
+        let mut half = n / 2;
+        half -= half % 8;
+        numpy_sum(&values[..half]) + numpy_sum(&values[half..])
+    }
+}
+
+/// The middle value of `values` (the mean of the two middle ones when there is an even number).
+fn median(values: &[f64]) -> f64 {
+    let mut ordered = values.to_vec();
+    ordered.sort_by(|a, b| a.total_cmp(b));
+    let middle = ordered.len() / 2;
+    if ordered.len() % 2 == 1 {
+        ordered[middle]
+    } else {
+        (ordered[middle - 1] + ordered[middle]) / 2.0
+    }
+}
+
+/// The eight spike features of one PPG channel in one window: height, z, time_frac, rise_ms, fall_ms, count, deriv_max,
+/// deriv_min. Mirrors `spike_features` in `tools/label-trainer/src/label_trainer/features.py`, which documents what each
+/// means: the straight-line baseline is taken away, then the biggest spike and the steepest rise and fall are described.
+/// `fixtures/spike_cases.json` holds shared cases both sides must reproduce.
+pub fn spike_features(values: &[f64], timestamps_ms: &[f64]) -> [f64; SPIKE_STATS_PER_CHANNEL] {
+    let n = values.len();
+    if n < SPIKE_MIN_SAMPLES || timestamps_ms.len() != n {
+        return [0.0; SPIKE_STATS_PER_CHANNEL];
+    }
+    // Evenly spaced over the window's span: the watch stamps a batch of samples a few nanoseconds apart, which would make
+    // every rate wild if the stamps were taken at face value.
+    let span = timestamps_ms[n - 1] - timestamps_ms[0];
+    let count = n as f64;
+    let t: Vec<f64> = (0..n).map(|i| span * (i as f64) / (count - 1.0)).collect();
+    let t_mean = numpy_sum(&t) / count;
+    let x_mean = numpy_sum(values) / count;
+    let tc: Vec<f64> = t.iter().map(|v| v - t_mean).collect();
+    let squares: Vec<f64> = tc.iter().map(|v| v * v).collect();
+    let sxx = numpy_sum(&squares);
+    let slope = if sxx > 0.0 {
+        let products: Vec<f64> = tc
+            .iter()
+            .zip(values)
+            .map(|(c, v)| c * (v - x_mean))
+            .collect();
+        numpy_sum(&products) / sxx
+    } else {
+        0.0
+    };
+    let residual: Vec<f64> = tc
+        .iter()
+        .zip(values)
+        .map(|(c, v)| (v - x_mean) - slope * c)
+        .collect();
+
+    let mut deriv_max = f64::NEG_INFINITY;
+    let mut deriv_min = f64::INFINITY;
+    for i in 0..n - 1 {
+        let delta = t[i + 1] - t[i];
+        let d = if delta > 0.0 {
+            (residual[i + 1] - residual[i]) / delta
+        } else {
+            0.0
+        };
+        deriv_max = deriv_max.max(d);
+        deriv_min = deriv_min.min(d);
+    }
+
+    let centre = median(&residual);
+    let deviation: Vec<f64> = residual.iter().map(|v| v - centre).collect();
+    let magnitude: Vec<f64> = deviation.iter().map(|v| v.abs()).collect();
+    let sigma = MAD_TO_SIGMA * median(&magnitude);
+    let mut peak_index = 0;
+    for (i, m) in magnitude.iter().enumerate() {
+        if *m > magnitude[peak_index] {
+            peak_index = i;
+        }
+    }
+    let peak = deviation[peak_index];
+    let z = (peak.abs() / sigma.max(SPIKE_SIGMA_FLOOR)).min(SPIKE_Z_CAP);
+    let time_frac = if span > 0.0 {
+        t[peak_index] / span
+    } else {
+        0.0
+    };
+
+    let (mut rise, mut fall) = (0.0, 0.0);
+    if peak != 0.0 {
+        let sign = if peak >= 0.0 { 1.0 } else { -1.0 };
+        let half = peak.abs() / 2.0;
+        let mut left = peak_index;
+        while left > 0 && sign * deviation[left - 1] >= half {
+            left -= 1;
+        }
+        let mut right = peak_index;
+        while right < n - 1 && sign * deviation[right + 1] >= half {
+            right += 1;
+        }
+        rise = t[peak_index] - t[left];
+        fall = t[right] - t[peak_index];
+    }
+
+    let threshold = SPIKE_COUNT_SIGMAS * sigma.max(SPIKE_SIGMA_FLOOR);
+    let mut peaks = 0.0;
+    for i in 0..n {
+        if magnitude[i] < threshold {
+            continue;
+        }
+        let rises = i == 0 || magnitude[i] >= magnitude[i - 1];
+        let falls = i == n - 1 || magnitude[i] > magnitude[i + 1];
+        if rises && falls {
+            peaks += 1.0;
+        }
+    }
+    [peak, z, time_frac, rise, fall, peaks, deriv_max, deriv_min]
+}
+
 /// Per-sample Euclidean norm across three equal-length channels.
 fn magnitudes(channels: &[Vec<f64>; 3]) -> Vec<f64> {
     (0..channels[0].len())
@@ -189,7 +368,7 @@ fn magnitudes(channels: &[Vec<f64>; 3]) -> Vec<f64> {
         .collect()
 }
 
-/// Builds the ordered 55-value feature vector for `window`, in exactly the
+/// Builds the ordered 79-value feature vector (55 base statistics, then the spike features) for `window`, in exactly the
 /// order of [`FEATURE_NAMES`]. The orientation statistics run over the
 /// orientation samples that arrived during the window (see
 /// [`FusedWindow::orientation_in_window`]); a window with none is a single
@@ -311,6 +490,23 @@ pub fn extract_features(window: &FusedWindow) -> [f32; FEATURE_COUNT] {
     };
     push(duration_ms);
 
+    // The pulse-sensor spike features, statistic by statistic and channel by channel like the base ones. A window with
+    // too few PPG samples leaves them 0.
+    let ppg_ms: Vec<f64> = window
+        .ppg_timestamps_ns
+        .iter()
+        .map(|&ns| ns as f64 / 1_000_000.0)
+        .collect();
+    let spikes: Vec<[f64; SPIKE_STATS_PER_CHANNEL]> = ppg
+        .iter()
+        .map(|channel| spike_features(channel, &ppg_ms))
+        .collect();
+    for stat in 0..SPIKE_STATS_PER_CHANNEL {
+        for channel in &spikes {
+            push(channel[stat]);
+        }
+    }
+
     debug_assert_eq!(cursor, FEATURE_COUNT);
     out
 }
@@ -402,11 +598,75 @@ mod tests {
         assert!((features[0] - 12.0).abs() < 1e-4);
         assert!((features[1] - 20.0).abs() < 1e-4);
         assert!((features[2] - 5.0).abs() < 1e-4);
-        // sample_count, duration_ms are the last two features.
-        assert_eq!(features[FEATURE_COUNT - 2], 3.0);
-        assert_eq!(features[FEATURE_COUNT - 1], 20.0);
-        // contact_quality_mean is third from last.
-        assert_eq!(features[FEATURE_COUNT - 3], 0.0);
+        // The base statistics end with sample_count and duration_ms (contact_quality_mean is third from last of them);
+        // the spike features come after.
+        assert_eq!(features[BASE_FEATURE_COUNT - 2], 3.0);
+        assert_eq!(features[BASE_FEATURE_COUNT - 1], 20.0);
+        assert_eq!(features[BASE_FEATURE_COUNT - 3], 0.0);
+        assert_eq!(FEATURE_NAMES[BASE_FEATURE_COUNT - 1], "duration_ms");
+        assert_eq!(FEATURE_NAMES[BASE_FEATURE_COUNT], "ppg_green_spike_height");
+        assert_eq!(
+            FEATURE_NAMES.len(),
+            BASE_FEATURE_COUNT + 3 * SPIKE_STATS_PER_CHANNEL
+        );
+    }
+
+    /// The same cases the trainer's tests check (`tools/label-trainer/tests/fixtures/spike_cases.json`): the spike
+    /// features here must equal the ones it computes, or a model trained there would see different numbers live.
+    #[test]
+    fn spike_features_match_the_trainer_on_the_shared_cases() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../tools/label-trainer/tests/fixtures/spike_cases.json"
+        ))
+        .unwrap();
+        let order: Vec<&str> = fixture["statOrder"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert_eq!(
+            order,
+            [
+                "spike_height",
+                "spike_z",
+                "spike_time_frac",
+                "spike_rise_ms",
+                "spike_fall_ms",
+                "spike_count",
+                "deriv_max",
+                "deriv_min"
+            ]
+        );
+        let numbers = |value: &serde_json::Value| -> Vec<f64> {
+            value
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|n| n.as_f64().unwrap())
+                .collect()
+        };
+        let cases = fixture["cases"].as_array().unwrap();
+        assert!(cases.len() >= 10);
+        for case in cases {
+            let name = case["name"].as_str().unwrap();
+            let got = spike_features(&numbers(&case["values"]), &numbers(&case["timestampsMs"]));
+            for (stat, key) in order.iter().enumerate() {
+                let want = case["expected"][key].as_f64().unwrap();
+                let tolerance = 1e-9 + 1e-9 * want.abs();
+                assert!(
+                    (got[stat] - want).abs() <= tolerance,
+                    "{name}: {key} was {} but the trainer computes {want}",
+                    got[stat]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_window_with_too_few_ppg_samples_has_no_spike_features() {
+        let features = extract_features(&sample_window());
+        assert!(features[BASE_FEATURE_COUNT..].iter().all(|v| *v == 0.0));
     }
 
     #[test]

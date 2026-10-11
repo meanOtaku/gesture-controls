@@ -12,6 +12,7 @@ import pytest
 pytest.importorskip("onnxruntime")
 
 from label_trainer import label_train as lt  # noqa: E402
+from label_trainer.features import BASE_FEATURE_COUNT, FEATURE_NAMES, SPIKE_FEATURE_NAMES  # noqa: E402
 from label_trainer.schema import HEADER_COLUMNS  # noqa: E402
 
 INTERVAL_NS = 20_000_000
@@ -57,7 +58,10 @@ def test_features_follow_the_chosen_streams_and_window_level_values_need_ppg() -
     assert motion and all(lt.source_of(name) in {"watchAcceleration", "watchGyroscope"} for name in motion)
     assert "sample_count" not in motion and "duration_ms" not in motion
     assert "sample_count" in lt.features_for(["watchPpg"])
-    assert lt.features_for(["watchAcceleration", "watchGyroscope", "watchOrientation", "watchPpg"]) == list(lt.FEATURE_NAMES)
+    everything = ["watchAcceleration", "watchGyroscope", "watchOrientation", "watchPpg"]
+    assert lt.features_for(everything) == list(FEATURE_NAMES[:BASE_FEATURE_COUNT])  # spikes are opt-in
+    assert lt.features_for(everything, spikes=True) == list(FEATURE_NAMES)
+    assert not any(name in SPIKE_FEATURE_NAMES for name in lt.features_for(["watchAcceleration"], spikes=True))  # needs the pulse sensor
     with pytest.raises(lt.TrainingRefused):
         lt.features_for(["headPose"])
 
@@ -283,3 +287,35 @@ def test_movement_only_models_use_only_those_features(tmp_path: Path) -> None:
     result = lt.run(spec_for(tmp_path, movementOnly=True), out)
     assert result["outcome"] == "deployable", result["message"]
     assert result["features"] == MOVEMENT_FEATURES[("watchAcceleration", "watchGyroscope")]
+
+
+def write_pulse_recording(directory: Path, rid: str, label: str, *, seed: int, rows: int = 400) -> Path:
+    """Every row a pulse-sensor sample on a wandering baseline. The target adds a sharp spike every 12 rows; the rest is drift only."""
+    rng = np.random.default_rng(seed)
+    lines = ["# gesture-dataset-export: 1", f"# label: {label}", ",".join(HEADER_COLUMNS)]
+    level = float(rng.uniform(40000, 60000))  # a different resting level in each session
+    for row in range(rows):
+        level += rng.normal(0.0, 20.0)
+        spike = 900.0 if label == "snap" and row % 12 == 6 else 0.0
+        value = level + spike + rng.normal(0.0, 15.0)
+        fields = [str(row * INTERVAL_NS), str(row), f"{value:.2f}", f"{value * 0.9:.2f}", f"{value * 0.8:.2f}", "", "", "", "", "", "", "", "", "", "", "3", label]
+        lines.append(",".join(fields))
+    path = directory / f"{rid}.csv"
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
+def test_a_model_can_learn_from_the_pulse_sensor_spikes_alone(tmp_path: Path) -> None:
+    plan = {"s1": "snap", "s2": "snap", "s3": "snap", "i1": "idle", "i2": "idle", "i3": "idle"}
+    pulse = tmp_path / "pulse"
+    pulse.mkdir()
+    recordings = {rid: str(write_pulse_recording(pulse, rid, label, seed=index)) for index, (rid, label) in enumerate(plan.items())}
+    spec = spec_for(tmp_path, recordings=recordings, sources=["watchPpg"], movementOnly=True, spikeFeatures=True)
+    out = tmp_path / "run"
+    result = lt.run(spec, out)
+    assert result["outcome"] == "deployable", result["message"]
+    assert result["metrics"]["f1"] > 0.9
+    assert set(SPIKE_FEATURE_NAMES) <= set(result["features"])
+    manifest = json.loads((out / "bundle" / "manifest.json").read_text())
+    assert manifest["provenance"]["spikeFeatures"] is True
+    assert manifest["input"]["features"] == result["features"]

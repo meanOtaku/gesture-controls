@@ -41,6 +41,9 @@ class Recording:
     timestamps_ns: np.ndarray  # int64, strictly non-decreasing
     channels: dict[str, np.ndarray]  # column name -> float64 array, carry-forward filled
     raw_labels: np.ndarray  # str array, one label per row (as recorded)
+    # True on rows that carried a real PPG sample (the others are orientation rows, whose PPG values are carried forward).
+    # None for a recording built by hand, which counts every row.
+    ppg_observed: np.ndarray | None = None
 
     @cached_property
     def channel_matrix(self) -> np.ndarray:
@@ -137,6 +140,7 @@ def load_recording(path: str | Path) -> Recording:
             timestamps_ns=timestamps_ns,
             channels={column: _carry_forward(values) for column, values in channel_values.items()},
             raw_labels=raw_labels,
+            ppg_observed=~np.isnan(channel_values["ppg_green"]),
         )
 
     timestamps_ns = np.empty(row_count, dtype=np.int64)
@@ -199,6 +203,7 @@ def load_recording(path: str | Path) -> Recording:
         timestamps_ns=timestamps_ns,
         channels=filled_channels,
         raw_labels=raw_labels,
+        ppg_observed=~np.isnan(np.array(channels["ppg_green"], dtype=np.float64)),
     )
 
 

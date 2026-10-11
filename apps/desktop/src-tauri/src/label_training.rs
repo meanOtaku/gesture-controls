@@ -70,6 +70,10 @@ pub struct TrainRequest {
     /// Only features about how things change, not their absolute levels (see `is_movement_feature`).
     #[serde(default)]
     pub movement_only: bool,
+    /// Also read the pulse sensor's spike features (the baseline taken away, then its biggest spike described). Only
+    /// has an effect when the pulse sensor is one of the streams.
+    #[serde(default)]
+    pub spike_features: bool,
 }
 
 fn default_window_ms() -> u32 {
@@ -95,6 +99,7 @@ struct Checked {
     backend: String,
     seed: u32,
     movement_only: bool,
+    spike_features: bool,
 }
 
 fn label_id(raw: &str) -> Result<LabelId, String> {
@@ -167,7 +172,7 @@ fn check_request(
     if sources.is_empty() {
         return Err("choose at least one data stream for the model to read".into());
     }
-    let features = canonical_features_for(&sources, request.movement_only);
+    let features = canonical_features_for(&sources, request.movement_only, request.spike_features);
     if features.is_empty() {
         return Err("none of the chosen data streams can feed a model (head pose is not available to trained models)".into());
     }
@@ -188,6 +193,7 @@ fn check_request(
         backend: request.backend.clone(),
         seed: request.seed.unwrap_or(7),
         movement_only: request.movement_only,
+        spike_features: request.spike_features,
     })
 }
 
@@ -225,6 +231,7 @@ fn build_spec(
         "backend": checked.backend,
         "seed": checked.seed,
         "movementOnly": checked.movement_only,
+        "spikeFeatures": checked.spike_features,
     })
 }
 
@@ -753,6 +760,7 @@ mod tests {
             min_samples: 3,
             seed: None,
             movement_only: false,
+            spike_features: false,
         }
     }
 
@@ -828,6 +836,35 @@ mod tests {
         let checked = check_request(&r, &datasets(), &sha).unwrap();
         assert!(checked.input.features.iter().all(|f| f.ends_with("_std")));
         assert_eq!(checked.input.features.len(), 8);
+    }
+
+    #[test]
+    fn spike_features_are_added_only_when_asked_for_and_only_with_the_pulse_sensor() {
+        let mut r = request();
+        r.spike_features = true;
+        // Motion streams only: nothing for the spike features to read.
+        let motion = check_request(&r, &datasets(), &sha).unwrap();
+        assert!(!motion.input.features.iter().any(|f| f.contains("_spike_")));
+
+        r.sources.push(StreamSource::WatchPpg);
+        let without = {
+            let mut plain = r.clone();
+            plain.spike_features = false;
+            check_request(&plain, &datasets(), &sha).unwrap()
+        };
+        let with = check_request(&r, &datasets(), &sha).unwrap();
+        assert_eq!(with.input.features.len(), without.input.features.len() + 24);
+        assert!(
+            with.input
+                .features
+                .contains(&"ppg_green_spike_height".to_string())
+        );
+        assert!(with.spike_features && !without.spike_features);
+
+        // The trainer is told, so it builds the same feature list.
+        let split = plan_split(&with.recordings, &with.mapping, &with.target).unwrap();
+        let spec = build_spec(&with, &split, &BTreeMap::new());
+        assert_eq!(spec["spikeFeatures"], true);
     }
 
     #[test]

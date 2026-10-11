@@ -55,7 +55,7 @@ describe("TrainPanel", () => {
     expect(screen.getByLabelText("Role of walking")).toBeInTheDocument();
     expect(await screen.findByText(/train on 2 recordings \(s1.csv, i1.csv\) and test on 2/)).toBeInTheDocument();
     expect(calls("plan_label_training").at(-1)?.[1]).toEqual({
-      request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["idle", "walking"], excludes: [], backend: "logreg", sources: ["watchAcceleration", "watchGyroscope"], movementOnly: false },
+      request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["idle", "walking"], excludes: [], backend: "logreg", sources: ["watchAcceleration", "watchGyroscope"], movementOnly: false, spikeFeatures: false },
     });
   });
 
@@ -73,8 +73,23 @@ describe("TrainPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Train model" }));
     await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
     expect(calls("start_label_training")[0][1]).toEqual({
-      request: { label: "snap", datasetIds: ["s1", "s2", "i1"], negatives: ["idle"], excludes: ["walking"], backend: "mlp", sources: ["watchAcceleration", "watchOrientation"], movementOnly: true },
+      request: { label: "snap", datasetIds: ["s1", "s2", "i1"], negatives: ["idle"], excludes: ["walking"], backend: "mlp", sources: ["watchAcceleration", "watchOrientation"], movementOnly: true, spikeFeatures: false },
     });
+  });
+
+  it("offers the pulse sensor spikes only with the pulse sensor, and sends the choice", async () => {
+    setup();
+    choose("snap");
+    await screen.findByText(/It will train on/);
+    const spikes = screen.getByRole("checkbox", { name: "Pulse sensor spikes" });
+    expect(spikes).toHaveAttribute("aria-disabled", "true"); // the pulse sensor is not one of the streams yet
+    fireEvent.click(screen.getByRole("checkbox", { name: /Pulse sensor \(PPG\)/ }));
+    expect(spikes).not.toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(spikes);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Train model" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
+    await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
+    expect(calls("start_label_training")[0][1]).toMatchObject({ request: { sources: ["watchAcceleration", "watchGyroscope", "watchPpg"], spikeFeatures: true } });
   });
 
   it("will not train when the plan says it cannot, and says why", async () => {

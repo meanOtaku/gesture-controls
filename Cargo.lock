@@ -2958,6 +2958,7 @@ name = "pinch-inference"
 version = "0.1.0"
 dependencies = [
  "interaction-engine",
+ "serde_json",
  "spatial-protocol",
  "thiserror 2.0.21",
 ]

@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 from label_trainer.csv_io import CsvFormatError, _carry_forward, load_recording
-from label_trainer.features import extract_features
+from label_trainer.features import extract_base_features as extract_features
 from label_trainer.schema import HEADER_COLUMNS, NUMERIC_COLUMNS
 from label_trainer.windowing import WindowConfig, build_windows
 

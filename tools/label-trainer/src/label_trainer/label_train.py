@@ -32,7 +32,7 @@ import numpy as np
 
 from .csv_io import load_recording
 from .dataset import build_dataset_from_recordings
-from .features import FEATURE_NAMES
+from .features import FEATURE_NAMES, SPIKE_FEATURE_NAMES
 from .labels import LABEL_MAPPING_VERSION, load_label_mapping
 from .windowing import WindowConfig
 
@@ -65,15 +65,25 @@ def is_movement_feature(name: str) -> bool:
     in that session. A model can memorise those and then fail on any other session. Spread, change over the window and the
     PPG slope do not depend on that. (The desktop applies the same rule: keep the two in step.)
     """
-    return name.endswith("_std") or name == "quat_delta_angle_deg" or (name.startswith("ppg_") and name.endswith("_slope"))
+    return (
+        name.endswith("_std")
+        or name == "quat_delta_angle_deg"
+        or (name.startswith("ppg_") and name.endswith("_slope"))
+        or name in SPIKE_FEATURE_NAMES  # the spike features are all about change: the baseline is already taken away
+    )
 
 
-def features_for(sources: list[str], movement_only: bool = False) -> list[str]:
-    """Every canonical feature whose stream is in `sources`, in canonical order."""
+def features_for(sources: list[str], movement_only: bool = False, spikes: bool = False) -> list[str]:
+    """Every canonical feature whose stream is in `sources`, in canonical order. The pulse-sensor spike features are only
+    included when asked for (`spikes`), and only if the pulse sensor is one of the streams."""
     unknown = sorted(set(sources) - set(SOURCES))
     if unknown:
         raise TrainingRefused(f"unknown stream(s) {unknown}; choose from {list(SOURCES)}")
-    chosen = [name for name in FEATURE_NAMES if source_of(name) in sources and (not movement_only or is_movement_feature(name))]
+    chosen = [
+        name
+        for name in FEATURE_NAMES
+        if source_of(name) in sources and (spikes or name not in SPIKE_FEATURE_NAMES) and (not movement_only or is_movement_feature(name))
+    ]
     if not chosen:
         raise TrainingRefused("no features are available from the chosen streams")
     return chosen
@@ -90,6 +100,7 @@ class Spec:
     sources: list[str]
     features: list[str]
     movement_only: bool
+    spike_features: bool
     window: WindowConfig
     backend: str
     seed: int
@@ -103,7 +114,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
     if backend not in BACKENDS:
         raise TrainingRefused(f"unknown backend {backend!r}; choose from {list(BACKENDS)}")
     sources = list(raw.get("sources", []))
-    available = features_for(sources, bool(raw.get("movementOnly", False)))
+    available = features_for(sources, bool(raw.get("movementOnly", False)), bool(raw.get("spikeFeatures", False)))
     requested = raw.get("features")
     if requested:
         extra = [name for name in requested if name not in available]
@@ -132,6 +143,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         sources=sources,
         features=features,
         movement_only=bool(raw.get("movementOnly", False)),
+        spike_features=bool(raw.get("spikeFeatures", False)),
         window=WindowConfig(
             window_ms=float(window.get("windowMs", 500)),
             stride_ms=float(window.get("strideMs", 150)),
@@ -485,6 +497,7 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
             "evaluationRocAuc": metrics["rocAuc"],
             "thresholdChosenOnEvaluationRecordings": True,
             "movementOnly": spec.movement_only,
+            "spikeFeatures": spec.spike_features,
         },
     }
     (bundle / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

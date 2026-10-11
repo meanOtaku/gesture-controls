@@ -1,4 +1,4 @@
-"""Derives a fixed, deterministic feature vector for one window.
+"""Derives a fixed, deterministic feature vector for one window: 55 plain statistics plus the pulse-sensor spike features.
 
 All features are plain statistics (mean/std/min/max/slope/magnitude) over the
 carry-forward-filled channel arrays already sliced to the window's row
@@ -26,7 +26,7 @@ from .schema import (
 )
 from .windowing import Window
 
-FEATURE_NAMES: tuple[str, ...] = (
+BASE_FEATURE_NAMES: tuple[str, ...] = (
     *(f"{column}_mean" for column in PPG_COLUMNS),
     *(f"{column}_std" for column in PPG_COLUMNS),
     *(f"{column}_min" for column in PPG_COLUMNS),
@@ -51,6 +51,32 @@ FEATURE_NAMES: tuple[str, ...] = (
     "sample_count",
     "duration_ms",
 )
+
+# The pulse-sensor spike features: what is left of each PPG channel once its baseline is taken away, described by its
+# biggest spike. See `spike_features` for exactly how each one is computed. They come after the 55 base features so every
+# model trained before they existed still names the same features in the same places.
+SPIKE_STATS: tuple[str, ...] = (
+    "spike_height",
+    "spike_z",
+    "spike_time_frac",
+    "spike_rise_ms",
+    "spike_fall_ms",
+    "spike_count",
+    "deriv_max",
+    "deriv_min",
+)
+SPIKE_FEATURE_NAMES: tuple[str, ...] = tuple(f"{column}_{stat}" for stat in SPIKE_STATS for column in PPG_COLUMNS)
+FEATURE_NAMES: tuple[str, ...] = (*BASE_FEATURE_NAMES, *SPIKE_FEATURE_NAMES)
+BASE_FEATURE_COUNT = len(BASE_FEATURE_NAMES)
+
+# Fewer PPG samples than this in a window and there is no spike to speak of: every spike feature is 0.
+SPIKE_MIN_SAMPLES = 4
+# A spike is only counted above this many robust standard deviations of the (baseline-free) signal.
+SPIKE_COUNT_SIGMAS = 3.0
+# Scale that turns a median absolute deviation into a standard deviation for noise that is roughly normal.
+MAD_TO_SIGMA = 1.4826
+SPIKE_SIGMA_FLOOR = 1e-9
+SPIKE_Z_CAP = 50.0
 
 
 def resolve_feature_subset(names: Sequence[str]) -> tuple[str, ...]:
@@ -86,6 +112,82 @@ def resolve_feature_subset(names: Sequence[str]) -> tuple[str, ...]:
             "feature subset must preserve the canonical FEATURE_NAMES order; reordering is not supported"
         )
     return tuple(names)
+
+
+def _median(values: np.ndarray) -> float:
+    ordered = np.sort(values)
+    middle = ordered.shape[0] // 2
+    if ordered.shape[0] % 2 == 1:
+        return float(ordered[middle])
+    return float((ordered[middle - 1] + ordered[middle]) / 2.0)
+
+
+def spike_features(values: np.ndarray, timestamps_ms: np.ndarray) -> list[float]:
+    """The eight spike features of one PPG channel in one window, in `SPIKE_STATS` order.
+
+    0. Time: the samples are taken as evenly spaced across the window (first to last PPG timestamp).
+    1. Baseline removal: the least-squares straight line through the window is taken away, so slow drift and how well the
+       watch touches the skin leave nothing behind but the changes. (It is fitted inside the window on purpose: a live
+       window and a training window then see exactly the same thing.)
+    2. Derivative: the change between neighbouring samples per millisecond; `deriv_max` is the steepest rise and
+       `deriv_min` the steepest fall.
+    3. Spike: the sample furthest from the median of what is left. `spike_height` is how far (signed),
+       `spike_z` how many robust standard deviations (median absolute deviation x 1.4826, at most 50), `spike_time_frac`
+       where in the window it is (0 to 1), `spike_rise_ms` / `spike_fall_ms` how long the signal stays above half the
+       height before / after the peak, and `spike_count` how many separate peaks reach 3 robust standard deviations.
+
+    A window with fewer than `SPIKE_MIN_SAMPLES` samples has no spike: all zeros. The crate `pinch-inference` computes
+    the same numbers in the same order of operations, and the shared cases in `tests/fixtures/spike_cases.json` keep them
+    equal.
+    """
+    n = int(values.shape[0])
+    if n < SPIKE_MIN_SAMPLES:
+        return [0.0] * len(SPIKE_STATS)
+    # The samples are spaced evenly over the window's span, not by their own timestamps: the watch stamps a batch of
+    # samples a few nanoseconds apart and the next batch about 100 ms later, which would make every rate wild.
+    span = float(timestamps_ms[-1] - timestamps_ms[0])
+    t = span * np.arange(n, dtype=np.float64) / (n - 1)
+    t_mean = float(np.sum(t) / n)
+    x_mean = float(np.sum(values) / n)
+    tc = t - t_mean
+    sxx = float(np.sum(tc * tc))
+    slope = float(np.sum(tc * (values - x_mean)) / sxx) if sxx > 0.0 else 0.0
+    residual = (values - x_mean) - slope * tc
+
+    deltas = np.diff(t)
+    steps = np.diff(residual)
+    deriv = np.where(deltas > 0.0, steps / np.where(deltas > 0.0, deltas, 1.0), 0.0)
+
+    deviation = residual - _median(residual)
+    magnitude = np.abs(deviation)
+    sigma = MAD_TO_SIGMA * _median(magnitude)
+    peak_index = int(np.argmax(magnitude))
+    peak = float(deviation[peak_index])
+    z = min(abs(peak) / max(sigma, SPIKE_SIGMA_FLOOR), SPIKE_Z_CAP)
+    time_frac = float(t[peak_index]) / span if span > 0.0 else 0.0
+
+    rise = fall = 0.0
+    if peak != 0.0:
+        sign = 1.0 if peak >= 0.0 else -1.0
+        signed = sign * deviation
+        half = abs(peak) / 2.0
+        left = peak_index
+        while left > 0 and signed[left - 1] >= half:
+            left -= 1
+        right = peak_index
+        while right < n - 1 and signed[right + 1] >= half:
+            right += 1
+        rise = float(t[peak_index] - t[left])
+        fall = float(t[right] - t[peak_index])
+
+    threshold = SPIKE_COUNT_SIGMAS * max(sigma, SPIKE_SIGMA_FLOOR)
+    count = 0
+    for i in range(n):
+        if magnitude[i] < threshold:
+            continue
+        if (i == 0 or magnitude[i] >= magnitude[i - 1]) and (i == n - 1 or magnitude[i] > magnitude[i + 1]):
+            count += 1
+    return [peak, z, time_frac, rise, fall, float(count), float(np.max(deriv)), float(np.min(deriv))]
 
 
 def _stat_block(values: np.ndarray) -> tuple[float, float, float, float]:
@@ -147,7 +249,7 @@ def _mean_and_std_by_row(block: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return means, stds
 
 
-def extract_features(recording: Recording, window: Window) -> np.ndarray:
+def extract_base_features(recording: Recording, window: Window) -> np.ndarray:
     """The 55-feature vector for one window, in `FEATURE_NAMES` order.
 
     The per-channel statistics are computed over one (channels x samples) slice instead of one
@@ -208,5 +310,20 @@ def extract_features(recording: Recording, window: Window) -> np.ndarray:
             (float(duration_ms),),
         )
     ).astype(np.float64, copy=False)
-    assert vector.shape[0] == len(FEATURE_NAMES)
+    assert vector.shape[0] == BASE_FEATURE_COUNT
     return vector
+
+
+def extract_features(recording: Recording, window: Window) -> np.ndarray:
+    """The full canonical vector for one window: the 55 base features, then the pulse-sensor spike features."""
+    spikes = np.zeros(len(SPIKE_FEATURE_NAMES), dtype=np.float64)
+    indices = window.row_indices
+    if recording.ppg_observed is not None:
+        indices = indices[recording.ppg_observed[indices]]  # only rows that carried a real PPG sample, as live windows do
+    if indices.shape[0] >= SPIKE_MIN_SAMPLES:
+        t_ms = recording.timestamps_ns[indices].astype(np.float64) / 1_000_000.0
+        for channel, column in enumerate(PPG_COLUMNS):
+            values = recording.channels[column][indices]
+            for stat, value in enumerate(spike_features(values, t_ms)):
+                spikes[stat * len(PPG_COLUMNS) + channel] = value
+    return np.concatenate((extract_base_features(recording, window), spikes))
