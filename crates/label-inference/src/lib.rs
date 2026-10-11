@@ -39,5 +39,5 @@ pub use training::{
     BegunRun, PPG_CHANNELS, RecordingInfo, RunPlan, TrainingError, begin_run,
     canonical_features_for, canonical_features_with_channels, complete_run, evaluation_only_run,
     fail_run, grid_channels_for, is_movement_feature, is_spike_feature, plan_split,
-    trainer_backend,
+    plan_split_keeping, trainer_backend,
 };

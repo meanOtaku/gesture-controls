@@ -184,6 +184,7 @@ pub fn run() {
             fine_tune_plans::save_fine_tune_plan,
             fine_tune_plans::delete_fine_tune_plan,
             label_training::start_label_fine_tune,
+            label_training::get_model_training_info,
             label_training::start_label_training,
             label_training::start_label_edit,
             label_training::cancel_label_training,

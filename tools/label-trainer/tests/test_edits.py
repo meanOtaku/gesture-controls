@@ -207,6 +207,25 @@ def test_a_plan_can_freeze_everything_but_the_output_layer_without_naming_layers
     assert bad["outcome"] == "failed" and "allButOutput" in bad["message"]
 
 
+def test_extra_recordings_count_more_in_a_fine_tune_and_the_note_says_so(tmp_path: Path) -> None:
+    pytest.importorskip("torch")
+    raw, out, _ = train(tmp_path, "torch-mlp", features=["accel_x_std", "accel_y_std", "gyro_x_std"], network={"hidden": [{"units": 6}], "epochs": 10})
+    extra = [raw["train"][0]]
+    plain, plain_out = tuned(tmp_path, raw, out, [], {"epochs": 8}, name="plain")
+    weighted, weighted_out = tuned(tmp_path, raw, out, [], {"epochs": 8, "extraRecordings": extra, "extraWeight": 6}, name="weighted")
+    assert weighted["outcome"] in ("deployable", "evaluationOnly"), weighted["message"]
+    said = json.loads((weighted_out / "inspection.json").read_text())["edit"]["said"]
+    assert any("extra recording" in line and "counted 6 times" in line for line in said)
+    spec = lt.parse_spec(raw)
+    a = extract(spec, restore_model(spec, plain_out))
+    b = extract(spec, restore_model(spec, weighted_out))
+    assert not np.allclose(a.output.weights, b.output.weights)  # the weighting changed what it learned
+    bad, _ = tuned(tmp_path, raw, out, [], {"epochs": 3, "extraRecordings": extra, "extraWeight": 50}, name="bad")
+    assert bad["outcome"] == "failed" and "1 to 10" in bad["message"]
+    none, _ = tuned(tmp_path, raw, out, [], {"epochs": 3, "extraRecordings": ["not-a-recording"], "extraWeight": 2}, name="none")
+    assert none["outcome"] == "failed" and "no windows" in none["message"]
+
+
 @pytest.mark.parametrize("settings,message", [
     ({"epochs": 0}, "rounds"),
     ({"epochs": 9999}, "rounds"),

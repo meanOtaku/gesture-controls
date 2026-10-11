@@ -43,7 +43,7 @@ class _Trainer:
     network: Network
     seed: int
 
-    def _loop(self, parameters, logits, scaled, target, augment, eval_scaled, eval_target, on_epoch, modes, after_step=None) -> None:
+    def _loop(self, parameters, logits, scaled, target, augment, eval_scaled, eval_target, on_epoch, modes, after_step=None, sample_weights=None) -> None:
         torch = self.torch
         network = self.network
         counts = torch.bincount(target, minlength=2).float()
@@ -64,7 +64,14 @@ class _Trainer:
                 if augment is not None:
                     batch = augment(batch, generator)
                 optimiser.zero_grad()
-                loss_fn(logits(batch), target[index]).backward()
+                if sample_weights is None:
+                    loss = loss_fn(logits(batch), target[index])
+                else:
+                    # Windows from the extra recordings count more: the same weighted mean the plain loss takes, with each window's own weight.
+                    per_window = torch.nn.functional.cross_entropy(logits(batch), target[index], weight=weights, reduction="none")
+                    own = sample_weights[index]
+                    loss = (per_window * own).sum() / (weights[target[index]] * own).sum()
+                loss.backward()
                 optimiser.step()
                 if after_step is not None:
                     after_step()
@@ -120,7 +127,7 @@ class TorchModel(_Trainer):
         )
         return self
 
-    def fine_tune(self, x, y, x_eval, y_eval, on_epoch, network: Network, freeze_dense: set[int], pins) -> None:
+    def fine_tune(self, x, y, x_eval, y_eval, on_epoch, network: Network, freeze_dense: set[int], pins, sample_weights=None) -> None:
         """Carries on training from the weights it has: the scaling stays as it was, frozen layers do not move, pinned weights keep their values."""
         torch = self.torch
         from dataclasses import replace  # noqa: F401  (kept local: only fine-tuning needs it)
@@ -139,7 +146,8 @@ class TorchModel(_Trainer):
         previous, self.network = self.network, network
         try:
             self._loop(trainable, self.net, scaled, torch.tensor(y, dtype=torch.long), None, eval_scaled, eval_target, on_epoch,
-                       lambda training: self.net.train(training), after_step=lambda: _hold_pins(torch, self.net, pins))
+                       lambda training: self.net.train(training), after_step=lambda: _hold_pins(torch, self.net, pins),
+                       sample_weights=None if sample_weights is None else torch.tensor(sample_weights, dtype=torch.float32))
         finally:
             self.network = previous
             for parameter in self.net.parameters():
@@ -248,7 +256,7 @@ class CnnModel(_Trainer):
         )
         return self
 
-    def fine_tune(self, x, y, x_eval, y_eval, on_epoch, network: Network, freeze_conv: set[int], freeze_dense: set[int], pins) -> None:
+    def fine_tune(self, x, y, x_eval, y_eval, on_epoch, network: Network, freeze_conv: set[int], freeze_dense: set[int], pins, sample_weights=None) -> None:
         """Carries on training from the weights it has: the scaling stays as it was, frozen layers do not move, pinned weights keep their values."""
         torch = self.torch
         data = torch.tensor(x, dtype=torch.float32)
@@ -274,7 +282,8 @@ class CnnModel(_Trainer):
         try:
             self._loop(trainable, self._logits, self._scaled(data), torch.tensor(y, dtype=torch.long),
                        self._augment if network.augment else None, eval_scaled, eval_target, on_epoch, modes,
-                       after_step=lambda: (_hold_pins(torch, self.net, pins, "net."), _hold_pins(torch, self.head, pins, "head.")))
+                       after_step=lambda: (_hold_pins(torch, self.net, pins, "net."), _hold_pins(torch, self.head, pins, "head.")),
+                       sample_weights=None if sample_weights is None else torch.tensor(sample_weights, dtype=torch.float32))
         finally:
             self.network = previous
             for parameter in [*self.net.parameters(), *self.head.parameters()]:

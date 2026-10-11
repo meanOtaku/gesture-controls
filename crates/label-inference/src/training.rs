@@ -197,6 +197,32 @@ pub fn plan_split(
     })
 }
 
+/// Like [`plan_split`], but the recordings in `train_only` can only train, never test. The rest are split exactly as
+/// they would be without them, so adding recordings to train on (to fine-tune a model on corrections) never changes which
+/// recordings the model is tested on, and its score before and after stay comparable.
+pub fn plan_split_keeping(
+    recordings: &[RecordingInfo],
+    mapping: &LabelMapping,
+    target: &LabelId,
+    train_only: &[RecordingId],
+) -> Result<Split, TrainingError> {
+    if train_only.is_empty() {
+        return plan_split(recordings, mapping, target);
+    }
+    let base: Vec<RecordingInfo> = recordings
+        .iter()
+        .filter(|r| !train_only.contains(&r.id))
+        .cloned()
+        .collect();
+    let mut split = plan_split(&base, mapping, target)?;
+    for recording in recordings {
+        if train_only.contains(&recording.id) {
+            split.train.push(recording.id.clone());
+        }
+    }
+    Ok(split)
+}
+
 /// Everything about a training request that is decided up front.
 #[derive(Debug, Clone)]
 pub struct RunPlan {
@@ -206,6 +232,8 @@ pub struct RunPlan {
     pub quality: QualityRules,
     pub trainer: TrainerConfig,
     pub recordings: Vec<RecordingInfo>,
+    /// Recordings that may train but never test (see [`plan_split_keeping`]); empty for an ordinary run.
+    pub train_only: Vec<RecordingId>,
     /// Ends of the unique names for this run's records, e.g. a short random string.
     pub unique: String,
 }
@@ -241,7 +269,12 @@ pub fn begin_run<P: Persist>(
     {
         return Err(TrainingError::UnmappedLabel(missing.clone()));
     }
-    let split = plan_split(&plan.recordings, &plan.mapping, &plan.target)?;
+    let split = plan_split_keeping(
+        &plan.recordings,
+        &plan.mapping,
+        &plan.target,
+        &plan.train_only,
+    )?;
 
     let run_id = RunId::new(format!("run-{}", plan.unique))?;
     let snapshot_id = SnapshotId::new(format!("snap-{}", plan.unique))?;
@@ -488,6 +521,7 @@ mod tests {
                 params: BTreeMap::new(),
             },
             recordings,
+            train_only: Vec::new(),
             unique: "abc12345".into(),
         }
     }
@@ -864,5 +898,29 @@ mod tests {
         assert_eq!(trainer_backend("torch-mlp"), Some(TrainerBackend::PyTorch));
         assert_eq!(trainer_backend("keras"), None);
         let _ = fixture_dir();
+    }
+
+    #[test]
+    fn recordings_that_can_only_train_never_change_which_ones_test() {
+        let base = sessions();
+        let original = plan_split(&base, &mapping(), &label("snap")).unwrap();
+        let mut more = base.clone();
+        more.push(info("extra1", &["snap", "idle"]));
+        more.push(info("extra2", &["snap", "idle"]));
+        let keep = [
+            RecordingId::new("extra1").unwrap(),
+            RecordingId::new("extra2").unwrap(),
+        ];
+        let split = plan_split_keeping(&more, &mapping(), &label("snap"), &keep).unwrap();
+        assert_eq!(split.evaluation, original.evaluation);
+        assert_eq!(split.train.len(), original.train.len() + 2);
+        assert!(
+            keep.iter()
+                .all(|id| split.train.contains(id) && !split.evaluation.contains(id))
+        );
+        assert_eq!(
+            plan_split_keeping(&base, &mapping(), &label("snap"), &[]).unwrap(),
+            original
+        );
     }
 }

@@ -20,7 +20,7 @@ use chrono::{SecondsFormat, Utc};
 use label_inference::{
     MAX_GRID_STEPS, MIN_GRID_STEPS, PPG_CHANNELS, RecordingInfo, RunPlan, SpikeMethod, begin_run,
     canonical_features_with_channels, complete_run, evaluation_only_run, fail_run,
-    grid_channels_for, plan_split, stage_bundle, trainer_backend,
+    grid_channels_for, plan_split_keeping, stage_bundle, trainer_backend,
 };
 use model_lab_core::{
     ArtifactRef, ExampleRole, InputContract, LabelId, LabelMapping, QualityRules, RecordingId,
@@ -106,6 +106,10 @@ pub struct TrainRequest {
     /// request's own for the method, inputs, spike extraction, window and network; the label and recordings stay the request's.
     #[serde(default)]
     pub design_id: Option<String>,
+    /// Recordings (by id) that may train but never test: ones added to fine-tune a model on corrections. The rest are split
+    /// as they always were, so the held-out recordings, and the before and after scores, stay the same.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub train_only: Vec<String>,
 }
 
 fn default_window_ms() -> u32 {
@@ -533,6 +537,14 @@ fn recordings_for(app: &AppHandle, request: &TrainRequest) -> Result<Checked, St
     })
 }
 
+fn train_only_of(request: &TrainRequest) -> Vec<RecordingId> {
+    request
+        .train_only
+        .iter()
+        .filter_map(|id| RecordingId::new(id.clone()).ok())
+        .collect()
+}
+
 /// Says how a request would be split, or why it cannot be, without recording or starting anything.
 #[tauri::command]
 pub fn plan_label_training(app: AppHandle, request: TrainRequest) -> PlanView {
@@ -549,8 +561,13 @@ pub fn plan_label_training(app: AppHandle, request: TrainRequest) -> PlanView {
         }
     };
     let result = recordings_for(&app, &request).and_then(|checked| {
-        plan_split(&checked.recordings, &checked.mapping, &checked.target)
-            .map_err(|e| e.to_string())
+        plan_split_keeping(
+            &checked.recordings,
+            &checked.mapping,
+            &checked.target,
+            &train_only_of(&request),
+        )
+        .map_err(|e| e.to_string())
     });
     let inputs = resolve_inputs(&request);
     let (available, features) = match &inputs {
@@ -662,12 +679,14 @@ const EDIT_KINDS: [&str; 5] = [
 const MAX_EDITS: usize = 200;
 
 /// The settings of fine-tuning the trainer knows (see `FINE_TUNE_KEYS` in `edits.py`).
-const FINE_TUNE_KEYS: [&str; 5] = [
+const FINE_TUNE_KEYS: [&str; 7] = [
     "epochs",
     "learningRate",
     "freezeConv",
     "freezeDense",
     "freeze",
+    "extraRecordings",
+    "extraWeight",
 ];
 
 /// Refuses a list of edits (with or without fine-tuning after them) that cannot be an edit at all; the trainer checks each
@@ -704,7 +723,48 @@ fn check_edits(
     Ok(())
 }
 
-/// Carries on training a model with a saved fine-tune plan (see `fine_tune_plans`), without any hand edits.
+/// What a model was trained from, for choosing recordings to fine-tune it on.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelTrainingInfo {
+    pub label: String,
+    pub backend: String,
+    pub negatives: Vec<String>,
+    pub excludes: Vec<String>,
+    /// Every recording it was trained or tested on.
+    pub dataset_ids: Vec<String>,
+    /// The ones added later to train on only (corrections).
+    pub train_only: Vec<String>,
+    pub design_id: Option<String>,
+}
+
+/// The request a trained model came from. An error for an imported model, or one trained before this was kept.
+#[tauri::command]
+pub fn get_model_training_info(
+    app: AppHandle,
+    host: State<'_, LabelRuntimeHost>,
+    id: String,
+) -> Result<ModelTrainingInfo, String> {
+    let (run_id, _) = host.trained_run_of(&id)?;
+    let request: TrainRequest = fs::read(runs_dir(&app)?.join(&run_id).join("request.json"))
+        .map_err(|_| {
+            "this model was trained before its recordings were kept: train it again".to_string()
+        })
+        .and_then(|bytes| serde_json::from_slice(&bytes).map_err(|e| e.to_string()))?;
+    Ok(ModelTrainingInfo {
+        label: request.label,
+        backend: request.backend,
+        negatives: request.negatives,
+        excludes: request.excludes,
+        dataset_ids: request.dataset_ids,
+        train_only: request.train_only,
+        design_id: request.design_id,
+    })
+}
+
+/// Carries on training a model with a saved fine-tune plan (see `fine_tune_plans`), without any hand edits. Recordings
+/// in `extra_dataset_ids` are added to what it trains on (never to what it is tested on), and what the model gets wrong
+/// on them counts `extra_weight` times as much (1 to 10; 1 when absent).
 #[tauri::command]
 pub async fn start_label_fine_tune(
     app: AppHandle,
@@ -712,9 +772,21 @@ pub async fn start_label_fine_tune(
     host: State<'_, LabelRuntimeHost>,
     id: String,
     plan_id: String,
+    extra_dataset_ids: Option<Vec<String>>,
+    extra_weight: Option<f64>,
 ) -> Result<String, String> {
     let settings = crate::fine_tune_plans::settings_of(&app, &plan_id)?;
-    start_label_edit(app, runtime, host, id, Vec::new(), Some(settings)).await
+    begin_edit(
+        app,
+        runtime,
+        host,
+        id,
+        Vec::new(),
+        Some(settings),
+        extra_dataset_ids.unwrap_or_default(),
+        extra_weight,
+    )
+    .await
 }
 
 /// Changes a trained model by hand and saves the result as a new Draft: the same recordings and split, the original
@@ -729,6 +801,64 @@ pub async fn start_label_edit(
     edits: Vec<serde_json::Value>,
     fine_tune: Option<serde_json::Value>,
 ) -> Result<String, String> {
+    begin_edit(app, runtime, host, id, edits, fine_tune, Vec::new(), None).await
+}
+
+const MAX_EXTRA_WEIGHT: f64 = 10.0;
+
+/// The request a fine-tune is made from: the model's own, with the extra recordings added to those that may only train.
+fn with_extras(
+    mut request: TrainRequest,
+    extras: &[String],
+    weight: Option<f64>,
+    fine_tune: Option<serde_json::Value>,
+) -> Result<(TrainRequest, Option<serde_json::Value>), String> {
+    if let Some(weight) = weight
+        && !(1.0..=MAX_EXTRA_WEIGHT).contains(&weight)
+    {
+        return Err(format!(
+            "the weight of the extra recordings must be from 1 to {MAX_EXTRA_WEIGHT}"
+        ));
+    }
+    if (!extras.is_empty() || !request.train_only.is_empty()) && fine_tune.is_none() {
+        return Err("extra recordings are used by fine-tuning: choose a fine-tune plan".into());
+    }
+    for extra in extras {
+        if request.dataset_ids.contains(extra) {
+            return Err(format!(
+                "recording {extra} is already part of what this model was trained or tested on"
+            ));
+        }
+        request.dataset_ids.push(extra.clone());
+        request.train_only.push(extra.clone());
+    }
+    let mut fine_tune = fine_tune;
+    if !request.train_only.is_empty()
+        && let Some(settings) = fine_tune.as_mut().and_then(|s| s.as_object_mut())
+    {
+        settings.insert(
+            "extraRecordings".into(),
+            serde_json::json!(request.train_only),
+        );
+        settings.insert(
+            "extraWeight".into(),
+            serde_json::json!(weight.unwrap_or(1.0)),
+        );
+    }
+    Ok((request, fine_tune))
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn begin_edit(
+    app: AppHandle,
+    runtime: State<'_, LabelTrainingRuntime>,
+    host: State<'_, LabelRuntimeHost>,
+    id: String,
+    edits: Vec<serde_json::Value>,
+    fine_tune: Option<serde_json::Value>,
+    extras: Vec<String>,
+    extra_weight: Option<f64>,
+) -> Result<String, String> {
     check_edits(&edits, fine_tune.as_ref())?;
     let (run_id, _) = host.trained_run_of(&id)?;
     let from_dir = runs_dir(&app)?.join(&run_id);
@@ -741,6 +871,7 @@ pub async fn start_label_edit(
             serde_json::from_slice(&bytes)
                 .map_err(|e| format!("the model's training request is unreadable: {e}"))
         })?;
+    let (request, fine_tune) = with_extras(request, &extras, extra_weight, fine_tune)?;
     let job = EditJob {
         from_model: id,
         from_dir,
@@ -795,6 +926,7 @@ async fn start_run(
             },
         },
         recordings: checked.recordings.clone(),
+        train_only: train_only_of(&request),
         unique,
     };
     let begun =
@@ -1102,6 +1234,7 @@ pub fn get_label_training_status(runtime: State<'_, LabelTrainingRuntime>) -> Tr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use label_inference::plan_split;
 
     fn dataset(id: &str, labels: &[&str]) -> DatasetSummary {
         DatasetSummary {
@@ -1143,6 +1276,7 @@ mod tests {
             network: None,
             research: false,
             design_id: None,
+            train_only: Vec::new(),
         }
     }
 
@@ -1598,5 +1732,49 @@ mod tests {
         assert_eq!(listed("train") + listed("evaluation"), 6);
         assert_eq!(spec["recordings"].as_object().unwrap().len(), 6);
         assert_eq!(spec["recordings"]["s1"], "/data/s1.csv");
+    }
+
+    #[test]
+    fn extra_recordings_join_the_ones_that_may_only_train_and_are_weighted() {
+        let (extended, settings) = with_extras(
+            request(),
+            &["x1".into()],
+            Some(3.0),
+            Some(serde_json::json!({ "epochs": 5 })),
+        )
+        .unwrap();
+        assert_eq!(extended.train_only, ["x1"]);
+        assert!(extended.dataset_ids.contains(&"x1".to_string()));
+        let settings = settings.unwrap();
+        assert_eq!(
+            (
+                settings["extraRecordings"].clone(),
+                settings["extraWeight"].clone()
+            ),
+            (serde_json::json!(["x1"]), serde_json::json!(3.0))
+        );
+        // A second fine-tune of that model keeps them, and a recording cannot be added twice.
+        let (again, _) =
+            with_extras(extended.clone(), &[], None, Some(serde_json::json!({}))).unwrap();
+        assert_eq!(again.train_only, ["x1"]);
+        assert!(
+            with_extras(
+                extended.clone(),
+                &["x1".into()],
+                None,
+                Some(serde_json::json!({}))
+            )
+            .is_err()
+        );
+        assert!(
+            with_extras(
+                request(),
+                &["x2".into()],
+                Some(11.0),
+                Some(serde_json::json!({}))
+            )
+            .is_err()
+        );
+        assert!(with_extras(request(), &["x2".into()], None, None).is_err());
     }
 }

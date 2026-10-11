@@ -238,10 +238,10 @@ def pins_from(before: dict[str, np.ndarray], after: dict[str, np.ndarray]):
     return pins
 
 
-FINE_TUNE_KEYS = ("epochs", "learningRate", "freezeConv", "freezeDense", "freeze")
+FINE_TUNE_KEYS = ("epochs", "learningRate", "freezeConv", "freezeDense", "freeze", "extraRecordings", "extraWeight")
 
 
-def fine_tune_model(spec, model, x_train, y_train, x_eval, y_eval, settings: dict[str, Any], pins, on_epoch) -> str:
+def fine_tune_model(spec, model, x_train, y_train, x_eval, y_eval, settings: dict[str, Any], pins, on_epoch, train_groups=None) -> str:
     """Trains an (edited) PyTorch model a little further. Returns what was done, in words."""
     from dataclasses import replace
 
@@ -266,16 +266,33 @@ def fine_tune_model(spec, model, x_train, y_train, x_eval, y_eval, settings: dic
         freeze_conv |= set(range(len(spec.network.conv)))
         freeze_dense |= set(range(len(spec.network.hidden)))
     network = replace(spec.network, epochs=int(epochs), learning_rate=float(rate))
+    # Windows from the extra (correction) recordings count `extraWeight` times as much as the others.
+    weight = settings.get("extraWeight", 1.0)
+    if isinstance(weight, bool) or not isinstance(weight, (int, float)) or not 1 <= weight <= 10:
+        raise EditRefused("the weight of the extra recordings must be from 1 to 10")
+    extra = [str(r) for r in settings.get("extraRecordings", [])]
+    sample_weights = None
+    extra_windows = 0
+    if extra and train_groups is not None:
+        import numpy as np
+
+        is_extra = np.isin(np.asarray(train_groups), extra)
+        extra_windows = int(is_extra.sum())
+        if extra_windows == 0:
+            raise EditRefused("the extra recordings have no windows to train on")
+        if weight != 1:
+            sample_weights = np.where(is_extra, float(weight), 1.0)
     if spec.backend == "torch-mlp":
         if freeze_conv:
             raise EditRefused("only a convolutional model has convolution layers to freeze")
-        model.fine_tune(x_train, y_train, x_eval, y_eval, on_epoch, network, freeze_dense, pins)
+        model.fine_tune(x_train, y_train, x_eval, y_eval, on_epoch, network, freeze_dense, pins, sample_weights)
     else:
-        model.fine_tune(x_train, y_train, x_eval, y_eval, on_epoch, network, freeze_conv, freeze_dense, pins)
+        model.fine_tune(x_train, y_train, x_eval, y_eval, on_epoch, network, freeze_conv, freeze_dense, pins, sample_weights)
     frozen = [f"convolution layer {i + 1}" for i in sorted(freeze_conv)] + [f"dense layer {i + 1}" for i in sorted(freeze_dense)]
     pinned = sum(int(mask.sum()) for mask, _ in pins.values()) if pins else 0
     return (
         f"fine-tuned for {epochs} rounds at a learning rate of {rate:g}"
         + (f", with {', '.join(frozen)} frozen" if frozen else "")
+        + (f", on {extra_windows} windows from {len(extra)} extra recording{'s' if len(extra) != 1 else ''}" + (f" counted {weight:g} times" if weight != 1 else "") if extra_windows else "")
         + (f" and {pinned} weight{'s' if pinned != 1 else ''} held where they were set" if pinned else "")
     )

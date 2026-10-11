@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { DatasetSummary } from "../types";
 import { FineTuneModel } from "./FineTuneModel";
 import { FineTunePlans } from "./FineTunePlans";
 
@@ -60,7 +61,7 @@ describe("FineTuneModel", () => {
     render(<FineTuneModel modelId="snap-1" onClose={onClose} />);
     fireEvent.change(await screen.findByLabelText("Fine-tune plan"), { target: { value: "builtin-head" } });
     fireEvent.click(screen.getByRole("button", { name: "Start fine-tuning" }));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("start_label_fine_tune", { id: "snap-1", planId: "builtin-head" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("start_label_fine_tune", { id: "snap-1", planId: "builtin-head", extraDatasetIds: [], extraWeight: null }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
@@ -68,7 +69,7 @@ describe("FineTuneModel", () => {
     const onClose = vi.fn();
     invokeMock.mockImplementation(async (command: string) => {
       if (command === "start_label_fine_tune") throw "fine-tuning needs one of the PyTorch methods";
-      return saved;
+      return command === "list_fine_tune_plans" ? saved : undefined;
     });
     render(<FineTuneModel modelId="snap-1" onClose={onClose} />);
     await screen.findByLabelText("Fine-tune plan");
@@ -76,5 +77,38 @@ describe("FineTuneModel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start fine-tuning" }));
     expect(await screen.findByText(/needs one of the PyTorch methods/)).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+const dataset = (id: string, labels: string[], sequence: number): DatasetSummary => ({ id, originalFilename: `${id}.csv`, importedAt: "", label: labels.join(", "), labels, rowCount: 10, sequence });
+const info = { label: "snap", backend: "torch-mlp", negatives: ["idle"], excludes: ["walking"], datasetIds: ["d1", "d2"], trainOnly: [], designId: null };
+
+describe("FineTuneModel extra recordings", () => {
+  beforeEach(() => {
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "list_fine_tune_plans") return saved;
+      if (command === "get_model_training_info") return info;
+      if (command === "start_label_fine_tune") return "run-1";
+      return undefined;
+    });
+  });
+
+  it("offers recordings the model did not use, in import order, and refuses ones with a label it has no role for", async () => {
+    render(<FineTuneModel modelId="snap-1" onClose={() => undefined} datasets={[dataset("d2", ["snap"], 2), dataset("x2", ["snap", "idle"], 6), dataset("x1", ["snap", "idle"], 5), dataset("x3", ["snap", "mystery"], 7)]} />);
+    const list = await screen.findByRole("list", { name: "Extra recordings" });
+    const names = Array.from(list.querySelectorAll("li")).map((li) => li.textContent);
+    expect(names).toHaveLength(3); // d2 was already used
+    expect(names[0]).toContain("#5");
+    expect(names[1]).toContain("#6");
+    expect(screen.getByRole("checkbox", { name: "Also learn from x3.csv" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText(/“mystery”, which this model was not trained with a role for/)).toBeInTheDocument();
+  });
+
+  it("sends the chosen extra recordings and how much they count", async () => {
+    render(<FineTuneModel modelId="snap-1" onClose={() => undefined} datasets={[dataset("x1", ["snap", "idle"], 5)]} />);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Also learn from x1.csv" }));
+    fireEvent.change(screen.getByLabelText("How much the extra recordings count"), { target: { value: "5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start fine-tuning" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("start_label_fine_tune", { id: "snap-1", planId: "builtin-continue", extraDatasetIds: ["x1"], extraWeight: 5 }));
   });
 });

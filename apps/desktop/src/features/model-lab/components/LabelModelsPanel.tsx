@@ -20,6 +20,7 @@ import {
   type LabelRuntimeStatus,
   type ModelAction,
 } from "../labelModels";
+import type { DatasetSummary } from "../types";
 import { FineTuneModel } from "./FineTuneModel";
 
 const STATE_LABEL: Record<LabelModelState, string> = {
@@ -43,6 +44,7 @@ export function LabelModelsPanel({
   refresh,
   onInspect,
   onOpenNetworkLab,
+  datasets,
 }: {
   desktopAvailable: boolean;
   models: LabelModel[];
@@ -53,6 +55,8 @@ export function LabelModelsPanel({
   onInspect?: (id: string) => void;
   /** Opens the Network lab, where fine-tune plans are made. */
   onOpenNetworkLab?: () => void;
+  /** The recordings in Model Lab, offered as extra recordings to fine-tune a model on. */
+  datasets?: DatasetSummary[];
 }) {
   const modeId = useId();
   const [actionError, setActionError] = useState<string | null>(null);
@@ -200,7 +204,7 @@ export function LabelModelsPanel({
                             Added {model.createdAt}
                             {model.imported ? ". Imported models are not evaluated by this app: review them before approving." : ""}
                           </small>
-                          {tuning === model.id && <FineTuneModel modelId={model.id} onClose={() => setTuning(null)} onOpenNetworkLab={onOpenNetworkLab} />}
+                          {tuning === model.id && <FineTuneModel modelId={model.id} datasets={datasets} onClose={() => setTuning(null)} onOpenNetworkLab={onOpenNetworkLab} />}
                         </div>
                         <div className="recipe-item-actions">
                           {actionsFor(model).map((action) => (

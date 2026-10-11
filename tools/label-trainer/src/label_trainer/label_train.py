@@ -283,11 +283,16 @@ def build_all(spec: Spec):
 
 def build_matrices_with_windows(spec: Spec):
     """`build_matrices`, and for each held-out window which recording it came from and where (for the inspection)."""
+    return build_matrices_with_groups(spec)[:5]
+
+
+def build_matrices_with_groups(spec: Spec):
+    """`build_matrices_with_windows`, and last the recording each training window came from."""
     x, y, groups, meta = build_all(spec)
     train_mask = np.isin(groups, spec.train)
     eval_mask = np.isin(groups, spec.evaluation)
     eval_windows = [meta[i] for i in np.flatnonzero(eval_mask)]
-    return x[train_mask], y[train_mask], x[eval_mask], y[eval_mask], eval_windows
+    return x[train_mask], y[train_mask], x[eval_mask], y[eval_mask], eval_windows, groups[train_mask]
 
 
 def check_enough(y_train: np.ndarray, y_eval: np.ndarray) -> None:
@@ -636,7 +641,7 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
     result: dict[str, Any] = {"outcome": "failed", "message": ""}
     try:
         spec = parse_spec(raw_spec)
-        x_train, y_train, x_eval, y_eval, eval_windows = build_matrices_with_windows(spec)
+        x_train, y_train, x_eval, y_eval, eval_windows, train_groups = build_matrices_with_groups(spec)
         check_enough(y_train, y_eval)
         curve: list[dict[str, Any]] = []
 
@@ -664,7 +669,7 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
             if settings is not None:
                 pins = pins_from(before_edit, parameters_of(spec, model)) if before_edit is not None else {}
                 curve = []  # the curve of this run is the fine-tuning
-                said.append(fine_tune_model(spec, model, x_train, y_train, x_eval, y_eval, settings, pins, on_epoch))
+                said.append(fine_tune_model(spec, model, x_train, y_train, x_eval, y_eval, settings, pins, on_epoch, train_groups))
                 print(f"Edit: {said[-1]}", flush=True)
             before = json.loads((source / "evaluation.json").read_text()) if (source / "evaluation.json").is_file() else None
             edit_note = {"fromModel": spec.edit.get("fromModel"), "edits": spec.edit["edits"], "fineTune": settings, "said": said, "before": before}
