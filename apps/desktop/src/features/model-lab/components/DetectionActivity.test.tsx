@@ -37,6 +37,24 @@ describe("DetectionActivity", () => {
     expect(handler).toBeUndefined();
   });
 
+  it("clears the list on request, keeps listening afterwards, and scrolls instead of growing", async () => {
+    render(<DetectionActivity desktopAvailable />);
+    await vi.waitFor(() => expect(handler).toBeDefined());
+    const clear = screen.getByRole("button", { name: "Clear" });
+    expect(clear).toBeDisabled(); // nothing to clear yet
+    for (let n = 1; n <= 30; n += 1) act(() => handler?.({ payload: { events: [{ kind: n % 2 ? "rising" : "falling", label: `label_${n}`, confidence: 0.9, timestampNs: n, reason: "scoreBelowRelease" }], conflicts: [], rejections: [] } }));
+    const list = screen.getByLabelText("Recent detections");
+    expect(list.className).toMatch(/max-h-/);
+    expect(list.className).toMatch(/overflow-y-auto/);
+    expect(list).toHaveAttribute("tabindex", "0"); // the keyboard can scroll it
+    expect(clear).toBeEnabled();
+    fireEvent.click(clear);
+    expect(screen.getByText(/Nothing yet/)).toBeInTheDocument();
+    expect(clear).toBeDisabled();
+    act(() => handler?.({ payload: { events: [{ kind: "rising", label: "snap", confidence: 0.9, timestampNs: 99 }], conflicts: [], rejections: [] } }));
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+  });
+
   it("stops listening when it goes away", async () => {
     const { unmount } = render(<DetectionActivity desktopAvailable />);
     await vi.waitFor(() => expect(handler).toBeDefined());

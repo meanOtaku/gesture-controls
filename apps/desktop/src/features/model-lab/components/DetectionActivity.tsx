@@ -1,5 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
-import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
+import { ChevronDownIcon, ChevronRightIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Badge } from "../../../components/ui/badge";
@@ -77,10 +77,16 @@ export function DetectionActivity({ desktopAvailable }: { desktopAvailable: bool
           title="Activity"
           description="Detections and releases from active models, newest first."
           status={
-            <Button type="button" variant="ghost" aria-expanded={open} aria-controls={bodyId} onClick={toggle}>
-              {open ? <ChevronDownIcon aria-hidden="true" /> : <ChevronRightIcon aria-hidden="true" />}
-              {open ? "Collapse" : `Expand${entries.length > 0 ? ` (${entries.length})` : ""}`}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="ghost" disabled={entries.length === 0} onClick={() => setEntries([])}>
+                <Trash2Icon aria-hidden="true" />
+                Clear
+              </Button>
+              <Button type="button" variant="ghost" aria-expanded={open} aria-controls={bodyId} onClick={toggle}>
+                {open ? <ChevronDownIcon aria-hidden="true" /> : <ChevronRightIcon aria-hidden="true" />}
+                {open ? "Collapse" : `Expand${entries.length > 0 ? ` (${entries.length})` : ""}`}
+              </Button>
+            </div>
           }
           help={{
             label: "About activity",
@@ -92,7 +98,8 @@ export function DetectionActivity({ desktopAvailable }: { desktopAvailable: bool
         {entries.length === 0 ? (
           <p className="hint">Nothing yet. Activate a model, set the runtime to Monitor and perform the gesture.</p>
         ) : (
-          <ul className="flex flex-col gap-2" aria-label="Recent detections">
+          // A fixed height that scrolls, so a long session does not make the page longer. Focusable so the keyboard can scroll it.
+          <ul className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-1" aria-label="Recent detections" tabIndex={0}>
             {entries.map((entry) => (
               <li key={entry.id} className="flex items-center gap-2 text-sm">
                 <Badge variant={TONE[entry.tone].variant}>{TONE[entry.tone].label}</Badge>

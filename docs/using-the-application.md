@@ -284,7 +284,7 @@ Training runs on this computer and needs **uv** on the PATH and this repository 
 
 #### Activity
 
-A list of what the active models have done this session, newest first: **Detected** (with the model's confidence), **Released**, and **Attention** for a skipped window, a model that was swapped out, or two labels that cannot coexist being detected together (both are then held off). An identical line repeating is shown once with a count. The card can be **collapsed** (the button shows how many entries are inside, and it stays as you left it). In Monitor this is what the models would have done; in Live the same detections can start recipes. A release always shows, in every mode.
+A list of what the active models have done this session, newest first: **Detected** (with the model's confidence), **Released**, and **Attention** for a skipped window, a model that was swapped out, or two labels that cannot coexist being detected together (both are then held off). An identical line repeating is shown once with a count. The card can be **collapsed** (the button shows how many entries are inside, and it stays as you left it). In Monitor this is what the models would have done; in Live the same detections can start recipes. A release always shows, in every mode. The list has a fixed height and scrolls, so a long session does not make the page longer, and **Clear** empties it (new detections keep arriving afterwards; nothing about the models changes).
 
 #### Labels
 
