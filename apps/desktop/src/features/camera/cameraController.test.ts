@@ -47,6 +47,33 @@ function setup(over: Partial<CameraDeps> & { hands?: () => TrackedHand[]; failDe
 }
 
 describe("CameraController", () => {
+  it("gives every frame to frame listeners, while pages are told about new frames only about 20 times a second", async () => {
+    const { camera, frame } = setup();
+    await camera.enable();
+    const seen: number[] = [];
+    camera.subscribeFrames((f) => seen.push(f.frameIndex));
+    let pageUpdates = 0;
+    camera.subscribe(() => { pageUpdates += 1; });
+    for (let i = 0; i < 30; i += 1) frame(1000 + i * 33); // one second of 30 frames a second
+    expect(seen).toEqual(Array.from({ length: 30 }, (_, i) => i)); // none skipped
+    expect(pageUpdates).toBeGreaterThan(10);
+    expect(pageUpdates).toBeLessThan(25);
+    expect(camera.getSnapshot().frame?.frameIndex).toBe(29); // but the snapshot is always the newest
+  });
+
+  it("keeps working when a frame listener throws, and reports how long detection takes", async () => {
+    const { camera, frame } = setup();
+    await camera.enable();
+    const seen: number[] = [];
+    camera.subscribeFrames(() => { throw new Error("listener bug"); });
+    camera.subscribeFrames((f) => seen.push(f.frameIndex));
+    frame(1000);
+    frame(1033);
+    expect(seen).toEqual([0, 1]);
+    expect(camera.getSnapshot().status).toBe("on");
+    expect(camera.getSnapshot().detectMs).toBeGreaterThanOrEqual(0);
+  });
+
   it("turns on, lists the cameras, and reports each frame", async () => {
     const { camera, deps, frame } = setup();
     await camera.enable();

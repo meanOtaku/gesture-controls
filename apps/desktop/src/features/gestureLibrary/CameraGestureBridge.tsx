@@ -19,33 +19,21 @@ export function CameraGestureBridge() {
     const reload = () => void listGestureDefinitions().then((all) => reporter.setDefinitions(all)).catch(() => undefined);
     reload();
     window.addEventListener(GESTURE_LIBRARY_CHANGED, reload);
-    let lastFrame = -1;
-    const follow = () => {
-      const snapshot = camera.getSnapshot();
-      reporter.setCameraOn(snapshot.status === "on");
-      if (snapshot.frame && snapshot.frame.frameIndex !== lastFrame) {
-        lastFrame = snapshot.frame.frameIndex;
-        reporter.onFrame(snapshot.frame);
-      }
-    };
+    const follow = () => reporter.setCameraOn(camera.getSnapshot().status === "on");
     const unsubscribe = camera.subscribe(follow);
+    const unframes = camera.subscribeFrames((frame) => reporter.onFrame(frame));
     follow();
     // The optional second camera is a separate source; its decisions are merged with the first one's.
     const second = getCameraController("secondary");
-    let lastSecondFrame = -1;
-    const followSecond = () => {
-      const snapshot = second.getSnapshot();
-      reporter.setCameraOn(snapshot.status === "on", "secondary");
-      if (snapshot.frame && snapshot.frame.frameIndex !== lastSecondFrame) {
-        lastSecondFrame = snapshot.frame.frameIndex;
-        reporter.onFrame(snapshot.frame, "secondary");
-      }
-    };
+    const followSecond = () => reporter.setCameraOn(second.getSnapshot().status === "on", "secondary");
     const unsubscribeSecond = second.subscribe(followSecond);
+    const unframesSecond = second.subscribeFrames((frame) => reporter.onFrame(frame, "secondary"));
     followSecond();
     return () => {
       unsubscribe();
+      unframes();
       unsubscribeSecond();
+      unframesSecond();
       window.removeEventListener(GESTURE_LIBRARY_CHANGED, reload);
       reporter.setCameraOn(false);
       reporter.setCameraOn(false, "secondary");

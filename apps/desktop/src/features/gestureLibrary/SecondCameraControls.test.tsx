@@ -6,7 +6,7 @@ vi.mock("../camera/drawHands", () => ({ drawHands: vi.fn() }));
 
 import { SecondCameraControls } from "./SecondCameraControls";
 
-const base: CameraSnapshot = { status: "off", error: null, devices: [], deviceId: null, fps: 0, frame: null, recordLandmarks: true, collecting: false, collectedFrames: 0, truncated: false };
+const base: CameraSnapshot = { status: "off", error: null, devices: [], deviceId: null, fps: 0, detectMs: 0, frame: null, recordLandmarks: true, collecting: false, collectedFrames: 0, truncated: false };
 const devices = [{ deviceId: "a", label: "FaceTime HD" }, { deviceId: "b", label: "Desk camera" }];
 const fake = () => {
   const video = document.createElement("video");

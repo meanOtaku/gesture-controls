@@ -6,7 +6,7 @@ import { CameraPicker } from "./CameraPicker";
 afterEach(() => cleanup());
 
 const state = (devices: { deviceId: string; label: string }[], deviceId: string | null = "a"): CameraSnapshot => ({
-  status: "off", error: null, devices, deviceId, fps: 0, frame: null, recordLandmarks: true, collecting: false, collectedFrames: 0, truncated: false,
+  status: "off", error: null, devices, deviceId, fps: 0, detectMs: 0, frame: null, recordLandmarks: true, collecting: false, collectedFrames: 0, truncated: false,
 });
 const fake = () => ({ refreshDevices: vi.fn(async () => undefined), selectDevice: vi.fn() }) as unknown as CameraController & { refreshDevices: ReturnType<typeof vi.fn>; selectDevice: ReturnType<typeof vi.fn> };
 

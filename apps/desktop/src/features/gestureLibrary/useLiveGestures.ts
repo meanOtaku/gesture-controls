@@ -3,6 +3,7 @@ import type { CameraSnapshot } from "../camera/cameraController";
 import type { CameraSlot } from "../camera/handTypes";
 import type { GestureDefinition } from "./definition";
 import type { AgreementTracker } from "./agreement";
+import { getCameraController } from "../camera/cameraService";
 import { CombinedGestureDetector } from "./combinedDetector";
 import type { GestureEvent, GestureState } from "./detector";
 
@@ -80,8 +81,15 @@ export function useLiveGestures(
     },
     [report, publish, tracker],
   );
-  useEffect(() => feed("primary", camera.frame), [camera.frame, feed]);
-  useEffect(() => feed("secondary", secondary?.frame ?? null), [secondary?.frame, feed]);
+  // Fed straight from the cameras, not through page rendering, so no frame is skipped when the page is busy.
+  useEffect(() => {
+    const first = getCameraController("primary").subscribeFrames((frame) => feed("primary", frame));
+    const second = getCameraController("secondary").subscribeFrames((frame) => feed("secondary", frame));
+    return () => {
+      first();
+      second();
+    };
+  }, [feed]);
 
   return states;
 }

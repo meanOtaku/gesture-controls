@@ -23,11 +23,12 @@ const hand = (): TrackedHand => ({ modelHandedness: "Left", score: 0.93, image: 
 let hands: TrackedHand[] = [];
 let devices: { kind: string; deviceId: string; label: string }[] = [];
 let next: (() => void) | null = null;
+let tick = 1000; // each frame is later than the last, as real ones are
 
 function makeController(over: Partial<CameraDeps> = {}) {
   const video = document.createElement("video");
   Object.defineProperty(video, "play", { value: vi.fn(async () => undefined) });
-  Object.defineProperty(video, "requestVideoFrameCallback", { value: (cb: (now: number, m?: { captureTime?: number }) => void) => { next = () => cb(1000, { captureTime: 1000 }); return 1; } });
+  Object.defineProperty(video, "requestVideoFrameCallback", { value: (cb: (now: number, m?: { captureTime?: number }) => void) => { tick += 100; const at = tick; next = () => cb(at, { captureTime: at }); return 1; } });
   const detector: HandDetector = { detect: () => hands, close: () => undefined };
   const deps = {
     getUserMedia: vi.fn(async () => ({ getTracks: () => [], getVideoTracks: () => [{ getSettings: () => ({ width: 640, height: 480, deviceId: "a" }) }] }) as unknown as MediaStream),

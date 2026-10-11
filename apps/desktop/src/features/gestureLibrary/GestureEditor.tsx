@@ -81,12 +81,15 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
     setSnapshot(session.current.snapshot(0));
   }, [draft.hand, lengths]);
 
+  // Every frame, straight from the cameras: the calibration must not miss any when the page is busy.
   useEffect(() => {
-    if (cam.frame) session.current.onFrame(cam.frame, "primary");
-  }, [cam.frame]);
-  useEffect(() => {
-    if (cam2.frame) session.current.onFrame(cam2.frame, "secondary");
-  }, [cam2.frame]);
+    const first = getCameraController("primary").subscribeFrames((frame) => session.current.onFrame(frame, "primary"));
+    const second = getCameraController("secondary").subscribeFrames((frame) => session.current.onFrame(frame, "secondary"));
+    return () => {
+      first();
+      second();
+    };
+  }, []);
 
   const running = snapshot.step !== "ready" && snapshot.step !== "done";
   useEffect(() => {

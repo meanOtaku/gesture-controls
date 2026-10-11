@@ -4,6 +4,7 @@ import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
+import { speedLabel } from "../camera/cameraController";
 import { getCameraController } from "../camera/cameraService";
 import { OperationFeedback } from "../../components/app/OperationFeedback";
 import { useLabelModels } from "../model-lab/hooks/useLabelModels";
@@ -97,7 +98,7 @@ export function GestureLibraryPage() {
             <Button type="button" variant={on ? "outline" : "default"} disabled={cam.status === "starting"} onClick={() => (on ? camera.disable() : void camera.enable())}>
               {cam.status === "starting" ? "Starting…" : on ? "Turn camera off" : "Turn camera on"}
             </Button>
-            {on && <Badge variant="outline">{cam.fps > 0 ? `${cam.fps.toFixed(0)} frames/s` : "waiting for frames"}</Badge>}
+            {on && <Badge variant="outline">{speedLabel(cam)}</Badge>}
             {!on && <span className="hint">Turn the camera on to see your gestures recognised live.</span>}
           </div>
           <CameraPair primary={camera} primaryState={cam} secondary={camera2} secondaryState={cam2} />

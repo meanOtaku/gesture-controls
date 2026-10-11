@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { telemetryStore } from "../../telemetry/store/telemetryStore";
 import { clockSync } from "../clockSync";
+import { speedLabel } from "../cameraController";
 import { getCameraController } from "../cameraService";
 import { physicalHand } from "../handTypes";
 import { measureHand } from "../landmarkMath";
@@ -61,7 +62,7 @@ export function CameraCapturePanel() {
           <>
             <ul className="flex flex-wrap items-center gap-2" aria-label="Tracking status">
               <li><Badge variant={hands.length > 0 ? "default" : "secondary"}>{hands.length === 0 ? "No hand in view" : hands.length === 1 ? "1 hand" : `${hands.length} hands`}</Badge></li>
-              <li><Badge variant="outline">{state.fps > 0 ? `${state.fps.toFixed(0)} frames/s` : "waiting for frames"}</Badge></li>
+              <li><Badge variant="outline">{speedLabel(state)}</Badge></li>
               {hands.map((hand, index) => (
                 <li key={index}><Badge variant="outline">{physicalHand(hand)} hand · {Math.round(hand.score * 100)}%</Badge></li>
               ))}

@@ -4,6 +4,7 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
+import { SLOW_FPS } from "../camera/cameraController";
 import { getCameraController } from "../camera/cameraService";
 import { telemetryStore } from "../telemetry/store/telemetryStore";
 import { cameraAssist } from "./cameraAssist";
@@ -81,6 +82,9 @@ export function CameraAssistCard({ selectedLabel, recording, recordingState, des
           <span><strong>Let the camera mark the gesture</strong> <small className="text-muted-foreground">On by default. When the camera is on and the label has a gesture, the recording is a timeline and the camera marks the label live, while you record.</small></span>
         </div>
         {enabled && blocker && <p className="hint" role="status">{blocker} Until then, recordings are made as usual with no camera marks.</p>}
+        {enabled && !blocker && recording && [cam, cam2].some((c) => c.status === "on" && c.fps > 0 && c.fps < SLOW_FPS) && (
+          <p className="hint" role="status">The camera is running slowly ({Math.min(...[cam, cam2].filter((c) => c.status === "on" && c.fps > 0).map((c) => c.fps)).toFixed(0)} frames a second), so the start and end of marks may be a little off. Close other apps using the camera or the processor, or turn the second camera off.</p>
+        )}
         {enabled && !blocker && (
           <div className="flex flex-wrap items-center gap-3" role="status">
             <Badge variant={seen ? "default" : "secondary"}>{seen ? "Camera sees it" : "Camera does not see it"}</Badge>

@@ -9,6 +9,16 @@ export const PREROLL_MS = 3000;
 export const MAX_RECORDED_FRAMES = 30_000;
 /** Extra camera time saved either side of the recording, so labels near its ends have a picture. */
 export const EVIDENCE_MARGIN_MS = 1000;
+/** How often pages hear about a new frame. The detector and `subscribeFrames` run at the camera's own rate. */
+const UI_INTERVAL_MS = 50;
+/** "30 frames/s · 12 ms each": how fast the camera is going and how long the hand model takes per picture. */
+export function speedLabel(state: Pick<CameraSnapshot, "fps" | "detectMs">, waiting = "waiting for frames"): string {
+  if (state.fps <= 0) return waiting;
+  return `${state.fps.toFixed(0)} frames/s${state.detectMs > 0 ? ` · ${state.detectMs.toFixed(0)} ms each` : ""}`;
+}
+
+/** Below this the picture is too slow for a gesture's start and end to be placed well. */
+export const SLOW_FPS = 15;
 export const MODEL_NAME = "hand_landmarker.task (float16)";
 
 export type CameraStatus = "off" | "starting" | "on" | "error";
@@ -25,7 +35,9 @@ export interface CameraSnapshot {
   devices: CameraDevice[];
   deviceId: string | null;
   fps: number;
-  /** The newest frame, for the live preview. */
+  /** How long hand detection takes per picture, in ms (smoothed). Above about 30 the camera cannot keep up with 30 pictures a second. */
+  detectMs: number;
+  /** The newest frame, for the live preview. Pages are told about it about 20 times a second; `subscribeFrames` has every one. */
   frame: HandFrame | null;
   /** Whether hand landmarks are saved with recordings. */
   recordLandmarks: boolean;
@@ -69,10 +81,13 @@ const message = (error: unknown): string => (error instanceof Error ? error.mess
 export class CameraController {
   readonly video: HTMLVideoElement;
   private snapshot: CameraSnapshot = {
-    status: "off", error: null, devices: [], deviceId: null, fps: 0, frame: null,
+    status: "off", error: null, devices: [], deviceId: null, fps: 0, detectMs: 0, frame: null,
     recordLandmarks: true, collecting: false, collectedFrames: 0, truncated: false,
   };
   private listeners = new Set<() => void>();
+  private frameListeners = new Set<(frame: HandFrame) => void>();
+  private lastNotifyMs = -Infinity;
+  private detectEma = 0;
   private stream: MediaStream | null = null;
   private detector: HandDetector | null = null;
   private generation = 0;
@@ -96,8 +111,26 @@ export class CameraController {
   };
   readonly getSnapshot = (): CameraSnapshot => this.snapshot;
 
+  /**
+   * Every frame, as soon as it is detected and not through page rendering, so what decides on gestures never misses one
+   * when the pages are busy drawing. Use this, not `subscribe`, for anything that must see all frames.
+   */
+  readonly subscribeFrames = (listener: (frame: HandFrame) => void): (() => void) => {
+    this.frameListeners.add(listener);
+    return () => this.frameListeners.delete(listener);
+  };
+
   private set(patch: Partial<CameraSnapshot>): void {
     this.snapshot = { ...this.snapshot, ...patch };
+    this.lastNotifyMs = -Infinity;
+    this.listeners.forEach((listener) => listener());
+  }
+
+  /** A new frame: the snapshot is current at once, but pages are told at most every `UI_INTERVAL_MS`, so drawing keeps up. */
+  private setFrame(frame: HandFrame, fps: number, detectMs: number): void {
+    this.snapshot = { ...this.snapshot, frame, fps, detectMs };
+    if (frame.captureMs - this.lastNotifyMs < UI_INTERVAL_MS) return;
+    this.lastNotifyMs = frame.captureMs;
     this.listeners.forEach((listener) => listener());
   }
 
@@ -128,11 +161,11 @@ export class CameraController {
   async enable(deviceId?: string): Promise<void> {
     this.stopEverything();
     const generation = ++this.generation;
-    this.set({ status: "starting", error: null, frame: null, fps: 0, deviceId: deviceId ?? this.snapshot.deviceId });
+    this.set({ status: "starting", error: null, frame: null, fps: 0, detectMs: 0, deviceId: deviceId ?? this.snapshot.deviceId });
     try {
       const wanted = deviceId ?? this.snapshot.deviceId;
       const stream = await this.deps.getUserMedia({
-        video: { ...(wanted ? { deviceId: { exact: wanted } } : {}), width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 30 } },
+        video: { ...(wanted ? { deviceId: { exact: wanted } } : {}), width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 30 } },
         audio: false,
       });
       if (generation !== this.generation) return stream.getTracks().forEach((track) => track.stop());
@@ -164,7 +197,8 @@ export class CameraController {
   disable(): void {
     this.generation += 1;
     this.stopEverything();
-    this.set({ status: "off", error: null, frame: null, fps: 0 });
+    this.detectEma = 0;
+    this.set({ status: "off", error: null, frame: null, fps: 0, detectMs: 0 });
   }
 
   private explain(error: unknown): string {
@@ -216,7 +250,10 @@ export class CameraController {
     // MediaPipe wants a strictly increasing whole-millisecond clock.
     const timestamp = Math.max(Math.round(captureMs), this.lastTimestampMs + 1);
     this.lastTimestampMs = timestamp;
+    const started = performance.now();
     const hands = detector.detect(this.video, timestamp);
+    const took = performance.now() - started;
+    this.detectEma = this.detectEma === 0 ? took : this.detectEma * 0.9 + took * 0.1;
     const frame: HandFrame = { frameIndex: this.frameIndex, captureMs, hands };
     this.frameIndex += 1;
     if (hands.length > 0) this.handFrames += 1;
@@ -226,7 +263,14 @@ export class CameraController {
     }
     this.lastCaptureMs = captureMs;
     this.file({ captureMs, rows: frameToCsvRows(frame), hands: hands.length });
-    this.set({ frame, fps: this.fpsEma });
+    this.setFrame(frame, this.fpsEma, this.detectEma);
+    this.frameListeners.forEach((listener) => {
+      try {
+        listener(frame);
+      } catch {
+        // One listener's failure must not stop the camera or the others.
+      }
+    });
   }
 
   private file(stored: StoredFrame): void {

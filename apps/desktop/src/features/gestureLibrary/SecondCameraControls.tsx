@@ -1,7 +1,7 @@
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
-import type { CameraController, CameraSnapshot } from "../camera/cameraController";
+import { speedLabel, type CameraController, type CameraSnapshot } from "../camera/cameraController";
 
 type Props = {
   primary: CameraController;
@@ -49,8 +49,8 @@ export function SecondCameraControls({ primary, primaryState, secondary, seconda
         <>
           <ul className="flex flex-wrap items-center gap-2" aria-label="Second camera status">
             <li><Badge variant={hands > 0 ? "default" : "secondary"}>{hands === 0 ? "No hand in view" : hands === 1 ? "1 hand" : `${hands} hands`}</Badge></li>
-            <li><Badge variant="outline">{secondaryState.fps > 0 ? `${secondaryState.fps.toFixed(0)} frames/s` : "waiting for frames"}</Badge></li>
-            <li><Badge variant="outline">First camera: {primaryState.fps > 0 ? `${primaryState.fps.toFixed(0)} frames/s` : "waiting"}</Badge></li>
+            <li><Badge variant="outline">{speedLabel(secondaryState)}</Badge></li>
+            <li><Badge variant="outline">First camera: {speedLabel(primaryState, "waiting")}</Badge></li>
           </ul>
           <p className="field-hint">A gesture is marked when either camera sees it. If both do, the earlier start is used. If the frame rates above fall well below 25, two cameras are too much for this computer.</p>
         </>
