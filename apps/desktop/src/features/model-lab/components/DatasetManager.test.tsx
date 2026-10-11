@@ -20,9 +20,16 @@ describe("DatasetManager", () => {
   it("lists recordings plainly, with no training-role or selection leftovers", () => {
     setup();
     expect(screen.getByText("session-1.csv")).toBeInTheDocument();
-    expect(screen.getByText("pinch start · 42 rows")).toBeInTheDocument();
+    expect(screen.getByText(/pinch start · 42 rows/)).toBeInTheDocument();
     expect(screen.queryByText(/training role/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it("numbers each recording by when it was imported", () => {
+    setup({ datasets: [{ ...dataset, id: "d1", originalFilename: "first.csv", sequence: 1, importedAt: "2026-10-01T09:30:00Z" }, { ...dataset, id: "d4", originalFilename: "fourth.csv", sequence: 4 }] });
+    expect(screen.getByLabelText("Recording 1")).toHaveTextContent("#1");
+    expect(screen.getByLabelText("Recording 4")).toHaveTextContent("#4");
+    expect(screen.getByText(/imported 2026-10-01 09:30/)).toBeInTheDocument();
   });
 
   it("imports a chosen CSV", async () => {

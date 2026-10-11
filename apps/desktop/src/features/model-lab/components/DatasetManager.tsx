@@ -15,7 +15,7 @@ import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
-import type { DatasetSummary } from "../types";
+import { recordingNumber, type DatasetSummary } from "../types";
 
 function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -81,8 +81,8 @@ export function DatasetManager({ desktopAvailable, datasets, loading, importing,
             {datasets.map((dataset) => (
               <li key={dataset.id} className="recipe-item">
                 <div className="flex min-w-0 flex-col gap-1">
-                  <span className="text-sm">{dataset.originalFilename}</span>
-                  <small className="text-xs text-muted-foreground">{dataset.label.replaceAll("_", " ")} · {dataset.rowCount} rows</small>
+                  <span className="text-sm">{dataset.sequence ? <strong className="mr-2 font-mono" aria-label={`Recording ${dataset.sequence}`}>{recordingNumber(dataset)}</strong> : null}{dataset.originalFilename}</span>
+                  <small className="text-xs text-muted-foreground">{dataset.label.replaceAll("_", " ")} · {dataset.rowCount} rows{dataset.importedAt ? ` · imported ${dataset.importedAt.slice(0, 16).replace("T", " ")}` : ""}</small>
                 </div>
                 <AlertDialog>
                   <AlertDialogTrigger render={<Button type="button" variant="outline" disabled={pendingDeleteIds.has(dataset.id)}>Delete</Button>} />

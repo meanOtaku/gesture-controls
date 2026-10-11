@@ -55,6 +55,11 @@ pub struct DatasetSummary {
     #[serde(default)]
     pub labels: Vec<String>,
     pub row_count: usize,
+    /// Where this recording came in the order they were imported: 1 for the first, and never reused, so "recording 3"
+    /// keeps meaning the same recording after others are deleted. An index written before this existed is numbered
+    /// in the order it was stored (see [`number_unnumbered`]).
+    #[serde(default)]
+    pub sequence: u32,
     /// The saved Recorder recording this was made from, when it was added straight from one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_recording_id: Option<String>,
@@ -76,6 +81,22 @@ impl DatasetSummary {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DatasetIndex {
     pub(crate) datasets: Vec<DatasetSummary>,
+    /// The sequence number the next import gets. Absent in an older index.
+    #[serde(default)]
+    pub(crate) next_sequence: u32,
+}
+
+/// Numbers recordings that have no sequence yet (an index from before there was one) in the order they are stored, which
+/// is the order they were imported, and makes sure the next import gets a number nobody has had.
+fn number_unnumbered(index: &mut DatasetIndex) {
+    let mut next = index
+        .next_sequence
+        .max(index.datasets.iter().map(|d| d.sequence).max().unwrap_or(0) + 1);
+    for dataset in index.datasets.iter_mut().filter(|d| d.sequence == 0) {
+        dataset.sequence = next;
+        next += 1;
+    }
+    index.next_sequence = next;
 }
 
 /// Serializes writes to the on-disk dataset index/files so two concurrent
@@ -296,7 +317,10 @@ pub(crate) fn load_index(app: &AppHandle) -> DatasetIndex {
         return DatasetIndex::default();
     };
     match serde_json::from_str::<DatasetIndex>(&contents) {
-        Ok(index) => index,
+        Ok(mut index) => {
+            number_unnumbered(&mut index);
+            index
+        }
         Err(error) => {
             warn!(%error, "failed to parse model lab dataset index; using empty index");
             DatasetIndex::default()
@@ -394,9 +418,11 @@ pub(crate) fn ingest_dataset(
         label: parsed.labels.join(", "),
         labels: parsed.labels,
         row_count: parsed.row_count,
+        sequence: index.next_sequence,
         source_recording_id,
     };
 
+    index.next_sequence += 1;
     index.datasets.push(summary.clone());
     if let Err(error) = write_index_atomic(app, &index) {
         let _ = fs::remove_file(&csv_path);
@@ -568,6 +594,7 @@ mod tests {
             label: "idle, pinch_start".into(),
             labels: vec!["idle".into(), "pinch_start".into()],
             row_count: 3,
+            sequence: 1,
             source_recording_id: None,
         };
         assert_eq!(dataset.effective_labels(), vec!["idle", "pinch_start"]);
@@ -645,5 +672,40 @@ mod tests {
         validate_dataset_id(&id).expect("generated id must validate");
         let path = dataset_csv_path(&dir, &id);
         assert!(path.starts_with(&dir));
+    }
+
+    #[test]
+    fn recordings_are_numbered_in_the_order_stored_and_a_number_is_never_reused() {
+        let old = |id: &str| {
+            format!(
+                r#"{{"id":"{id}","originalFilename":"t.csv","importedAt":"","label":"idle","rowCount":3}}"#
+            )
+        };
+        let mut index: DatasetIndex = serde_json::from_str(&format!(
+            r#"{{"datasets":[{},{},{}]}}"#,
+            old("a"),
+            old("b"),
+            old("c")
+        ))
+        .unwrap();
+        number_unnumbered(&mut index);
+        assert_eq!(
+            index
+                .datasets
+                .iter()
+                .map(|d| d.sequence)
+                .collect::<Vec<_>>(),
+            [1, 2, 3]
+        );
+        assert_eq!(index.next_sequence, 4);
+        index.datasets.retain(|d| d.id != "c"); // the last one is deleted
+        number_unnumbered(&mut index);
+        assert_eq!(
+            index.next_sequence, 4,
+            "the number 3 is not handed out again"
+        );
+        index.datasets[0].sequence = 9; // already numbered ones are kept
+        number_unnumbered(&mut index);
+        assert_eq!((index.datasets[0].sequence, index.next_sequence), (9, 10));
     }
 }

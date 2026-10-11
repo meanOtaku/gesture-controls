@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
-import type { DatasetLabel, DatasetSummary } from "../types";
+import { inImportOrder, type DatasetLabel, type DatasetSummary } from "../types";
 
 /** The training recordings and the labels they can have: what Model Lab and the Network lab both train from. */
 export function useModelLabData(desktopAvailable: boolean) {
@@ -13,7 +13,7 @@ export function useModelLabData(desktopAvailable: boolean) {
     if (!desktopAvailable) return;
     setLoading(true);
     try {
-      setDatasets(await invoke<DatasetSummary[]>("list_model_datasets"));
+      setDatasets(inImportOrder(await invoke<DatasetSummary[]>("list_model_datasets")));
       setError(null);
     } catch (err) {
       setError(String(err));

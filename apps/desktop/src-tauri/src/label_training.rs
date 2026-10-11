@@ -1111,6 +1111,7 @@ mod tests {
             label: labels.join(", "),
             labels: labels.iter().map(ToString::to_string).collect(),
             row_count: 100,
+            sequence: 0,
             source_recording_id: None,
         }
     }

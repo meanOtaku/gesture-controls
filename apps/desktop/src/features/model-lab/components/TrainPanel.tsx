@@ -10,7 +10,7 @@ import { Label } from "../../../components/ui/label";
 import { describeDesign, type DesignPreview, type NetworkDesign } from "../designs";
 import { useTrainingRun } from "../hooks/useTrainingRun";
 import { buildRequest, hasLabel, otherLabels, recordingsWithLabel, type OtherRole, type TrainPlan, type TrainerEnvironment } from "../training";
-import { datasetLabels, type DatasetLabel, type DatasetSummary } from "../types";
+import { datasetLabels, inImportOrder, recordingNumber, type DatasetLabel, type DatasetSummary } from "../types";
 import { TrainingRunView } from "./TrainingRunView";
 
 type TrainPanelProps = {
@@ -44,7 +44,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
   const [error, setError] = useState<string | null>(null);
 
   const usable = labels.filter((label) => label.archivedAt === null);
-  const candidates = datasets.filter((dataset) => datasetLabels(dataset).length > 0);
+  const candidates = inImportOrder(datasets.filter((dataset) => datasetLabels(dataset).length > 0));
   const others = otherLabels(datasets, selected, target);
   const design = designs.find((d) => d.id === designId) ?? null;
   // The design's own choices are filled in by the desktop; what is sent here is only its id (and the fields every request has).
@@ -162,7 +162,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
                   {candidates.map((dataset) => (
                     <li key={dataset.id} className="flex items-center gap-2 text-sm">
                       <Checkbox checked={selected.has(dataset.id)} disabled={running !== null} onCheckedChange={() => toggleRecording(dataset.id)} aria-label={`Use ${dataset.originalFilename}`} />
-                      <span>{dataset.originalFilename}</span>
+                      <span>{dataset.sequence ? <strong className="mr-2 font-mono">{recordingNumber(dataset)}</strong> : null}{dataset.originalFilename}</span>
                       <small className="text-muted-foreground">{datasetLabels(dataset).join(", ")}</small>
                       {hasLabel(dataset, target) && <Badge variant="secondary">has {target}</Badge>}
                     </li>
