@@ -42,6 +42,9 @@ pub struct GridPlan {
 
 /// How far past its training range an input may be before it counts as outside, as a share of that range's width.
 pub const RANGE_MARGIN: f64 = 0.25;
+/// An input this many range-widths past its range is far outside it: one such input is enough to say a window is unlike
+/// the training ones (it measured 5 to 6 widths out on the one pulse level that had drifted, and none in training).
+pub const FAR_EXCESS: f64 = 2.0;
 /// The most inputs named when a window is unlike the training ones.
 const WORST_INPUTS: usize = 3;
 
@@ -64,6 +67,8 @@ pub struct InputCheck {
     pub judged: usize,
     /// Of those, the ones further outside their range than the margin allows.
     pub outside: usize,
+    /// Of those, the ones far outside it (see [`FAR_EXCESS`]).
+    pub far: usize,
     /// The furthest outside, most first.
     pub worst: Vec<OutsideInput>,
 }
@@ -202,11 +207,13 @@ impl LoadedModel {
             }
         }
         let count = outside.len();
+        let far = outside.iter().filter(|o| o.excess >= FAR_EXCESS).count();
         outside.sort_by(|a, b| b.excess.total_cmp(&a.excess));
         outside.truncate(WORST_INPUTS);
         Some(InputCheck {
             judged,
             outside: count,
+            far,
             worst: outside,
         })
     }
@@ -315,6 +322,7 @@ pub(crate) mod tests {
         assert_eq!(found.outside, 2);
         assert_eq!(found.worst[0].name, model.input_names[2]);
         assert!((found.worst[0].excess - 6.0).abs() < 1e-6 && found.worst[0].value == -3.0);
+        assert_eq!(found.far, 1, "only the one six widths out is far outside");
         // The wrong number of values cannot be compared.
         assert!(model.check_input(&quiet[..n - 1]).is_none());
     }

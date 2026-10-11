@@ -781,11 +781,46 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
     return result
 
 
+def backfill_range(raw_spec: dict[str, Any], manifests: list[Path]) -> dict[str, Any]:
+    """Works out the usual range of each input of a model that was trained before the manifest recorded one, from the
+    windows it was trained on, and writes it into the model's manifest(s). Nothing else about the model changes: the model
+    file, its hash and its answers are untouched. Refused if the recordings are gone or the settings no longer name the
+    inputs the manifest lists."""
+    try:
+        spec = parse_spec(raw_spec)
+        x_train, *_ = build_matrices(spec)
+    except FileNotFoundError as missing:
+        raise TrainingRefused(f"a recording this model was trained on is no longer there ({Path(str(missing.filename)).name}), so its range cannot be worked out") from missing
+    usual = training_range(spec, x_train)
+    if usual is None:
+        return {"outcome": "none", "message": "this model has no range to record: it either takes the window's own level away or was trained on too few windows"}
+    for path in manifests:
+        manifest = json.loads(path.read_text())
+        if manifest["input"]["features"] != spec.features:
+            raise TrainingRefused(f"the saved training settings do not name the inputs {path.parent.name} reads, so its range was not written")
+        manifest["input"]["trainingRange"] = usual
+        scratch = path.with_suffix(".json.tmp")
+        scratch.write_text(json.dumps(manifest, indent=2) + "\n")
+        scratch.replace(path)
+    return {"outcome": "written", "message": f"recorded the range of {len(usual['low'])} inputs from {x_train.shape[0]} training windows", "inputs": len(usual["low"]), "windows": int(x_train.shape[0])}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--spec", required=True, type=Path, help="the training spec the desktop wrote")
-    parser.add_argument("--out", required=True, type=Path, help="directory for the results")
+    parser.add_argument("--out", type=Path, help="directory for the results")
+    parser.add_argument("--backfill-range", action="store_true", help="work out and record the training range of an existing model instead of training")
+    parser.add_argument("--manifest", action="append", type=Path, default=[], help="with --backfill-range: a manifest to write the range into (repeatable)")
     args = parser.parse_args(argv)
+    if args.backfill_range:
+        try:
+            done = backfill_range(json.loads(args.spec.read_text()), args.manifest)
+        except TrainingRefused as refusal:
+            done = {"outcome": "refused", "message": str(refusal)}
+        print(json.dumps(done), flush=True)
+        return 0 if done["outcome"] in ("written", "none") else 2
+    if args.out is None:
+        parser.error("--out is required to train")
     result = run(json.loads(args.spec.read_text()), args.out)
     print(json.dumps({"outcome": result["outcome"], "message": result["message"]}), flush=True)
     return 0 if result["outcome"] == "deployable" else 2

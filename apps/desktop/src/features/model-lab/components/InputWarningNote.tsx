@@ -19,7 +19,7 @@ export function InputWarningNote({ warning }: { warning: InputWarning }) {
     <Alert role="alert" aria-label={`Inputs outside training for ${warning.modelId}`}>
       <AlertTitle>{warning.modelId} is seeing values it was never trained on</AlertTitle>
       <AlertDescription>
-        <p>For about {Math.round(warning.unfamiliarShare * 100)}% of the last few seconds, most of this model&apos;s inputs have been well outside the range they had in its training recordings, so what it scores means little right now: it may fire on everything, or on nothing.</p>
+        <p>For about {Math.round(warning.unfamiliarShare * 100)}% of the last few seconds, an input of this model has been far outside the range it had in the model&apos;s training recordings (or most of them well outside it), so what it scores means little right now: it may fire on everything, or on nothing.</p>
         <ul className="mt-1 list-disc pl-5" aria-label="Inputs furthest outside">
           {warning.worst.map((input) => (
             <li key={input.name}><strong>{inputTitle(input.name)}</strong> is {number(input.value)}; in training it was {number(input.low)} to {number(input.high)}.</li>

@@ -23,6 +23,7 @@ import {
 import type { DatasetLabel, DatasetSummary } from "../types";
 import { FineTuneModel } from "./FineTuneModel";
 import { InputWarningNote } from "./InputWarningNote";
+import { TrainingRangeBackfill } from "./TrainingRangeBackfill";
 
 const STATE_LABEL: Record<LabelModelState, string> = {
   draft: "Draft",
@@ -183,6 +184,8 @@ export function LabelModelsPanel({
             </AlertDescription>
           </Alert>
         )}
+
+        <TrainingRangeBackfill desktopAvailable={desktopAvailable} refreshKey={models.map((m) => m.id).join(",")} />
 
         {groups.length === 0 ? (
           <p className="hint">No label models yet. Import a model folder, or train one from your recordings below.</p>

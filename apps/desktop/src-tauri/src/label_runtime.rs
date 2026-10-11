@@ -503,6 +503,11 @@ impl LabelRuntimeHost {
         self.reload_models(app);
     }
 
+    /// Loads the active models again (after a manifest was changed on disk, for instance).
+    pub fn reload(&self, app: &AppHandle) {
+        self.reload_models(app);
+    }
+
     /// Loads whatever the registry now says is active into the runtime and sets its mode from the registry. A model
     /// that is being replaced is released before the new one is used (the runtime does that); anything that fails to
     /// load leaves that label without a model.

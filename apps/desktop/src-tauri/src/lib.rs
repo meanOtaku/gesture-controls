@@ -23,6 +23,7 @@ mod model_lab;
 mod network_designs;
 mod network_spec;
 mod overlay;
+mod range_backfill;
 mod recording_bundle;
 mod recording_sequence;
 mod settings;
@@ -185,6 +186,8 @@ pub fn run() {
             network_designs::delete_network_design,
             network_designs::preview_network_design,
             design_results::list_design_results,
+            range_backfill::list_models_without_range,
+            range_backfill::backfill_model_ranges,
             correction_rounds::save_correction_round,
             correction_rounds::list_correction_rounds,
             fine_tune_plans::list_fine_tune_plans,

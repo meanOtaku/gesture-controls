@@ -33,7 +33,9 @@ pub use import::{
 pub use loader::{
     ModelLoadFailure, check_loadable, load_active_models, load_version, removable_model_dir,
 };
-pub use model::{GridPlan, InputCheck, LoadedModel, ModelError, OutsideInput, RANGE_MARGIN};
+pub use model::{
+    FAR_EXCESS, GridPlan, InputCheck, LoadedModel, ModelError, OutsideInput, RANGE_MARGIN,
+};
 pub use pinch_inference::{GridChannel, MAX_GRID_STEPS, MIN_GRID_STEPS, SpikeMethod};
 pub use pipeline::{LabelPipeline, LabelScore, Rejection, WindowRejection};
 pub use runtime::{InputWarning, LabelRuntime, RuntimeMode, RuntimeOutput};

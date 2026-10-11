@@ -44,7 +44,8 @@ const CLEAR_SHARE: f64 = 0.3;
 const WARNING_REFRESH_NS: u64 = 1_000_000_000;
 
 /// A model that is being given inputs far outside what it was trained on: its answers mean little. Raised when most
-/// recent windows have at least half of their inputs well outside the training range, lowered when most are back.
+/// recent windows have an input far outside its training range or at least half of them well outside it, lowered when most
+/// are back.
 #[derive(Debug, Clone, PartialEq)]
 pub struct InputWarning {
     pub label: LabelId,
@@ -356,7 +357,9 @@ impl LabelRuntime {
             let Some(check) = &score.input_check else {
                 continue;
             };
-            let unfamiliar = check.judged > 0 && check.outside * 2 >= check.judged;
+            // Unlike its training windows: one input far outside its range, or at least half of them well outside.
+            let unfamiliar =
+                check.far >= 1 || (check.judged > 0 && check.outside * 2 >= check.judged);
             let tracker = self.familiarity.entry(score.label.clone()).or_default();
             if tracker.version.as_ref() != Some(&score.model_version) {
                 *tracker = Familiarity {
@@ -617,6 +620,32 @@ mod tests {
             warnings(&calm).last().is_some_and(Vec::is_empty),
             "{:?}",
             warnings(&calm).last()
+        );
+    }
+
+    #[test]
+    fn one_input_far_outside_its_range_is_enough_when_the_rest_are_at_home() {
+        let mut model = loaded();
+        let n = model.input.features.len();
+        // Every input may range widely, except the first, which is usually between 0 and 0.5.
+        let mut low = vec![-100.0; n];
+        let mut high = vec![100.0; n];
+        low[0] = 0.0;
+        high[0] = 0.5;
+        model.training_range = Some(crate::bundle::TrainingRange { low, high });
+        let mut rt = LabelRuntime::default();
+        rt.set_models(vec![model]);
+        rt.set_mode(RuntimeMode::Monitor);
+        // Shaking makes the std inputs about 5: far outside the first one's range, well inside all the others'.
+        let shaking = drive(&mut rt, 0, 200, 5.0);
+        let up = shaking
+            .iter()
+            .find_map(|o| o.input_warnings.clone())
+            .expect("a warning went up");
+        assert_eq!(up.len(), 1);
+        assert!(
+            up[0].worst.iter().all(|w| w.name == up[0].worst[0].name),
+            "only that input is named"
         );
     }
 
