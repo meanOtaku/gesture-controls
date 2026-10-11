@@ -298,6 +298,17 @@ Each label shows its recordings and its model's furthest state (No model, or Mod
 
 Labels an older version shipped (idle, walking, typing and so on) are removed on the first start of this version unless a recording or model still uses them; those that are used stay as ordinary labels you can archive.
 
+#### Inspect a model (Model Lab)
+
+Every model under **Label models** has an **Inspect** button, which opens a card that looks inside it. For a model trained in this app it shows:
+
+- **Inputs:** every input with what it is and what value it takes in words, the average and spread the model scales it by, and its **importance**: how far the ROC AUC on the held-out windows falls when that input is shuffled between windows, so the model cannot use it (near zero means the model does without it, or another input says the same thing). For logistic regression it also shows each input's weight. The list can be sorted by importance or kept in the model's own order.
+- **Weights:** logistic regression shows a bar for each input. A dense network shows one picture per layer, a row for each of the layer's inputs and a column for each neuron, red where the neuron adds the input and blue where it subtracts it. A convolutional network shows each first-layer filter as a small picture (a row for each channel, a column for each step it looks across), how strongly each deeper filter listens to the filters before it, and the dense and output layers.
+- **Try a window:** real windows from the recordings the model was tested on, picked to show what it gets right and wrong (the clearest hits, the misses, the clearest rejections, the false alarms). For one, a dense model shows what each input took as its value, how that compares with the training average, and how many percentage points the score falls when that input takes its average instead; plus what each neuron produced. A convolutional model shows the window as it reads it, what each filter did at each step, and a map of what mattered: how much the score falls when a stretch of one channel is replaced by its own average.
+- **How it learned:** the same loss and AUC charts as during training.
+
+Hover or focus a cell of any picture for its row, column and value. Everything shown was computed from the model's own weights and checked against the model itself, and the windows and importance come only from recordings the model never trained on. An imported model, or one trained before inspections were saved, shows only the inputs it declares and its settings.
+
 #### Training history (Model Lab)
 
 **Training history** lists, for each label you have trained, what the model registry remembers: the project, every run and how it ended (ready to use, scored only, or failed), the sealed snapshots of exactly which recordings were used, and how many models exist now. It also shows which labels a project was trained against (for example "not the gesture") and which other labels' history mentions this one.

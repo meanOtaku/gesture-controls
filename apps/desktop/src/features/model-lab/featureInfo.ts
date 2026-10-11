@@ -99,3 +99,11 @@ export function groupInputs(names: string[], spikeMethod?: string): { stream: In
     groups: [...(byStream.get(stream) ?? new Map()).entries()].map(([group, inputs]) => ({ group, inputs })),
   }));
 }
+
+const SHORT_STREAM: Record<InputStream, string> = { watchAcceleration: "Accel", watchGyroscope: "Gyro", watchOrientation: "Orient.", watchPpg: "Pulse" };
+
+/** A short label that tells inputs apart anywhere (a chart axis, a list): "Accel X spread", "Pulse Green signal". */
+export function inputLabel(name: string): string {
+  const info = describeInput(name);
+  return `${SHORT_STREAM[info.stream]} ${info.group} ${info.short}`;
+}

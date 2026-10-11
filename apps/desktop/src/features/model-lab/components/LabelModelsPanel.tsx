@@ -40,12 +40,15 @@ export function LabelModelsPanel({
   status,
   loadError,
   refresh,
+  onInspect,
 }: {
   desktopAvailable: boolean;
   models: LabelModel[];
   status: LabelRuntimeStatus | null;
   loadError: string | null;
   refresh: () => Promise<void>;
+  /** Opens the Inspect view for a model. */
+  onInspect?: (id: string) => void;
 }) {
   const modeId = useId();
   const [actionError, setActionError] = useState<string | null>(null);
@@ -227,6 +230,11 @@ export function LabelModelsPanel({
                                 Delete
                               </Button>
                             ))}
+                          {onInspect && (
+                            <Button type="button" variant="ghost" aria-label={`Inspect ${model.id}`} onClick={() => onInspect(model.id)}>
+                              Inspect
+                            </Button>
+                          )}
                           {model.state === "active" && (
                             <Button type="button" variant="ghost" aria-label={`Roll back ${model.label}`} disabled={isPending(`${model.label}:rollback`)}
                               onClick={() => void attempt(`${model.label}:rollback`, "Roll back", () => invoke("rollback_label_model", { label: model.label }))}>

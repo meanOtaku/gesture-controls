@@ -8,6 +8,7 @@ import { datasetLabels, type DatasetLabel, type DatasetSummary } from "../types"
 import { DatasetManager } from "./DatasetManager";
 import { DetectionActivity } from "./DetectionActivity";
 import { LabelModelsPanel } from "./LabelModelsPanel";
+import { ModelInspector } from "./ModelInspector";
 import { RecorderRecordings } from "./RecorderRecordings";
 import { TrainingHistory } from "./TrainingHistory";
 import { TrainPanel } from "./TrainPanel";
@@ -24,6 +25,7 @@ export function ModelLab({ onOpenLabels }: { onOpenLabels?: () => void }) {
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inspectId, setInspectId] = useState<string | null>(null);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
   const { models, status, error: modelsError, refresh } = useLabelModels(desktopAvailable);
 
@@ -155,7 +157,8 @@ export function ModelLab({ onOpenLabels }: { onOpenLabels?: () => void }) {
         </Card>
         <TrainPanel desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} />
         <TrainingHistory desktopAvailable={desktopAvailable} labels={labels} refreshKey={models.map((model) => `${model.id}:${model.state}`).join(",")} />
-        <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} />
+        <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} onInspect={(id) => { setInspectId(id); window.setTimeout(() => document.getElementById("lab-inspect")?.scrollIntoView?.({ behavior: "smooth", block: "start" }), 0); }} />
+        {inspectId !== null && <ModelInspector id={inspectId} onClose={() => setInspectId(null)} />}
         <DetectionActivity desktopAvailable={desktopAvailable} />
       </fieldset>
     </main>

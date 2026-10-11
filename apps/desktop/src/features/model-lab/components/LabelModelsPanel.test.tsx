@@ -4,9 +4,9 @@ import type { LabelModel, LabelRuntimeStatus } from "../labelModels";
 import { useLabelModels } from "../hooks/useLabelModels";
 import { LabelModelsPanel } from "./LabelModelsPanel";
 
-function Harness({ desktopAvailable = true }: { desktopAvailable?: boolean }) {
+function Harness({ desktopAvailable = true, onInspect }: { desktopAvailable?: boolean; onInspect?: (id: string) => void }) {
   const { models, status, error, refresh } = useLabelModels(desktopAvailable);
-  return <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={error} refresh={refresh} />;
+  return <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={error} refresh={refresh} onInspect={onInspect} />;
 }
 
 const invokeMock = vi.fn();
@@ -22,14 +22,14 @@ const baseStatus: LabelRuntimeStatus = {
   mode: "monitor", loadedLabels: [], loadFailures: [], quarantined: [], registryError: null, activeDetections: [], lastScores: {},
 };
 
-function setup(models: LabelModel[], status: Partial<LabelRuntimeStatus> = {}) {
+function setup(models: LabelModel[], status: Partial<LabelRuntimeStatus> = {}, onInspect?: (id: string) => void) {
   let current = models;
   invokeMock.mockImplementation(async (command: string) => {
     if (command === "list_label_models") return current;
     if (command === "get_label_runtime_status") return { ...baseStatus, ...status };
     return undefined;
   });
-  render(<Harness />);
+  render(<Harness onInspect={onInspect} />);
   return { set: (next: LabelModel[]) => { current = next; } };
 }
 
@@ -38,6 +38,15 @@ const calls = (command: string) => invokeMock.mock.calls.filter(([name]) => name
 describe("LabelModelsPanel", () => {
   beforeEach(() => { invokeMock.mockReset(); openMock.mockReset(); });
   afterEach(cleanup);
+
+  it("offers Inspect for every model, and tells the page which one", async () => {
+    const onInspect = vi.fn();
+    setup([draft, { ...draft, id: "fist-1", label: "fist" }], {}, onInspect);
+    fireEvent.click(await screen.findByRole("button", { name: "Inspect fist-1" }));
+    expect(onInspect).toHaveBeenCalledWith("fist-1");
+    fireEvent.click(screen.getByRole("button", { name: "Inspect snap-abc" }));
+    expect(onInspect).toHaveBeenLastCalledWith("snap-abc");
+  });
 
   it("says so when there are no models and does nothing outside the desktop app", () => {
     cleanup();
