@@ -30,6 +30,8 @@ use crate::automation::AutomationRuntime;
 use crate::model_lab::MODEL_LAB_DIR_NAME;
 
 pub const LABEL_DETECTIONS_EVENT: &str = "label-detections";
+/// What a model being compared beside the active ones detects (see [`ShadowSlot`]). Only ever shown, never acted on.
+pub const LABEL_SHADOW_EVENT: &str = "label-shadow-detections";
 /// Sent when the set of registered models changes (an import).
 pub const LABEL_MODELS_EVENT: &str = "label-models-changed";
 const TICK_INTERVAL: Duration = Duration::from_millis(100);
@@ -213,8 +215,37 @@ struct HostState {
     store: Option<RegistryStore<FileStore>>,
 }
 
+/// A model run beside the active ones, to compare it with the camera before anything is switched on. It has a runtime of
+/// its own that is always in Monitor, so it can only report: what it detects goes to the display (`label-shadow-detections`)
+/// and nowhere else, never to recipes, and it never changes which models are active. It runs only while the model runtime
+/// itself is not Off.
+struct ShadowSlot {
+    model_id: String,
+    label: String,
+    runtime: LabelRuntime,
+}
+
+/// What the display is told about the model being compared.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShadowReport {
+    pub model_id: String,
+    pub label: String,
+    pub events: Vec<DetectionEventView>,
+}
+
+/// The report for a shadow runtime's output, or nothing when it detected nothing new.
+fn shadow_report(model_id: &str, label: &str, output: &RuntimeOutput) -> Option<ShadowReport> {
+    (!output.events.is_empty()).then(|| ShadowReport {
+        model_id: model_id.into(),
+        label: label.into(),
+        events: output.events.iter().map(DetectionEventView::from).collect(),
+    })
+}
+
 pub struct LabelRuntimeHost {
     push_gate: Mutex<PushGate>,
+    shadow: Mutex<Option<ShadowSlot>>,
     runtime: Mutex<LabelRuntime>,
     state: Mutex<HostState>,
     started_at: Instant,
@@ -224,6 +255,7 @@ impl Default for LabelRuntimeHost {
     fn default() -> Self {
         Self {
             push_gate: Mutex::new(PushGate::default()),
+            shadow: Mutex::new(None),
             runtime: Mutex::new(LabelRuntime::default()),
             state: Mutex::new(HostState::default()),
             started_at: Instant::now(),
@@ -569,6 +601,9 @@ impl LabelRuntimeHost {
     /// Deletes an archived model: removed from the registry first (which is what counts), then its files. Only a folder
     /// this app made is ever deleted. If the files cannot be removed the model is already gone and the error says so.
     pub fn delete_model(&self, app: &AppHandle, id: &str) -> Result<(), String> {
+        if self.shadow_model().is_some_and(|(shadow, _)| shadow == id) {
+            self.stop_shadow();
+        }
         let version = self.version_for(id)?;
         let removed = self.change_registry(app, |r| r.remove_version(&version.id))?;
         let dir = Self::model_lab_dir(app)?;
@@ -696,16 +731,81 @@ impl LabelRuntimeHost {
     pub fn observe_orientation(&self, app: &AppHandle, sample: &WatchOrientationSample) {
         let now = self.now_ns();
         self.with_runtime(app, |runtime| runtime.observe_orientation(sample, now));
+        self.with_shadow(app, |runtime| runtime.observe_orientation(sample, now));
     }
 
     pub fn observe_ppg(&self, app: &AppHandle, batch: &WatchPpgBatchSample) {
         let now = self.now_ns();
         self.with_runtime(app, |runtime| runtime.observe_ppg(batch, now));
+        self.with_shadow(app, |runtime| runtime.observe_ppg(batch, now));
     }
 
     pub fn tick(&self, app: &AppHandle) {
         let now = self.now_ns();
         self.with_runtime(app, |runtime| runtime.tick(now));
+        self.with_shadow(app, |runtime| runtime.tick(now));
+    }
+
+    /// Feeds the model being compared (if there is one) and tells the display what it detected. Nothing here touches the
+    /// recipes or the registry, and nothing runs while the model runtime is Off.
+    fn with_shadow(&self, app: &AppHandle, step: impl FnOnce(&mut LabelRuntime) -> RuntimeOutput) {
+        let off = self
+            .runtime
+            .lock()
+            .map_or(true, |runtime| runtime.mode() == RuntimeMode::Off);
+        let report = match self.shadow.lock() {
+            Ok(mut slot) => match slot.as_mut() {
+                Some(shadow) if !off => {
+                    let output = step(&mut shadow.runtime);
+                    shadow_report(&shadow.model_id, &shadow.label, &output)
+                }
+                _ => None,
+            },
+            Err(_) => None,
+        };
+        if let Some(report) = report {
+            let _ = app.emit(LABEL_SHADOW_EVENT, report);
+        }
+    }
+
+    /// Starts running this model beside the active ones, to compare it (it replaces any model compared before). The model
+    /// is loaded and checked like an active one but nothing about the registry changes.
+    pub fn start_shadow(&self, app: &AppHandle, id: &str) -> Result<(), String> {
+        let version = self.version_for(id)?;
+        if !version.deployable {
+            return Err("this model cannot run (it did not pass its checks)".into());
+        }
+        let dir = Self::model_lab_dir(app)?;
+        let mut probe = version.clone();
+        probe.state = LifecycleState::Active;
+        let model = label_inference::load_version(&probe, &dir)?;
+        let mut runtime = LabelRuntime::default();
+        runtime.set_models(vec![model]);
+        runtime.set_mode(RuntimeMode::Monitor);
+        *self
+            .shadow
+            .lock()
+            .map_err(|_| "model state is unavailable")? = Some(ShadowSlot {
+            model_id: version.id.to_string(),
+            label: version.label.to_string(),
+            runtime,
+        });
+        Ok(())
+    }
+
+    pub fn stop_shadow(&self) {
+        if let Ok(mut slot) = self.shadow.lock() {
+            *slot = None;
+        }
+    }
+
+    /// The model being compared, if any, as (id, label).
+    pub fn shadow_model(&self) -> Option<(String, String)> {
+        self.shadow
+            .lock()
+            .ok()?
+            .as_ref()
+            .map(|s| (s.model_id.clone(), s.label.clone()))
     }
 
     /// The watch disconnected or sent something malformed: everything depending on it lets go.
@@ -1144,6 +1244,29 @@ pub fn set_label_runtime_mode(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn what_a_compared_model_detects_is_reported_for_display_and_nothing_else_is_made_of_it() {
+        let nothing = RuntimeOutput::default();
+        assert!(shadow_report("snap-v2", "snap", &nothing).is_none());
+        let rising = RuntimeOutput {
+            events: vec![label_inference::DetectionEvent::Rising {
+                label: LabelId::new("snap").unwrap(),
+                confidence: 0.9,
+                timestamp_ns: 5,
+            }],
+            ..RuntimeOutput::default()
+        };
+        let report = shadow_report("snap-v2", "snap", &rising).unwrap();
+        assert_eq!(
+            (
+                report.model_id.as_str(),
+                report.label.as_str(),
+                report.events.len()
+            ),
+            ("snap-v2", "snap", 1)
+        );
+    }
     use label_inference::LabelScore;
     use model_lab_core::ModelVersionId;
 
@@ -1378,4 +1501,25 @@ mod tests {
         assert!(gate.needed(&loaded, &none, false, start + 800_000_000));
         assert!(!gate.needed(&loaded, &none, false, start + 900_000_000));
     }
+}
+
+/// Compares this model with the camera beside the active ones, without switching anything on.
+#[tauri::command]
+pub fn start_shadow_model(
+    app: AppHandle,
+    host: State<'_, LabelRuntimeHost>,
+    id: String,
+) -> Result<(), String> {
+    host.start_shadow(&app, &id)
+}
+
+#[tauri::command]
+pub fn stop_shadow_model(host: State<'_, LabelRuntimeHost>) {
+    host.stop_shadow();
+}
+
+/// The model being compared: its id and label.
+#[tauri::command]
+pub fn get_shadow_model(host: State<'_, LabelRuntimeHost>) -> Option<(String, String)> {
+    host.shadow_model()
 }

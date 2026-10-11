@@ -14,6 +14,9 @@ export const LEAD_MS = 300;
 /** A detection this long after the camera's start still counts as the same gesture. */
 export const LAG_MS = 2000;
 const MAX_KEPT = 2000;
+/** The source of the detections of the active model. */
+export const ACTIVE = "active";
+const SEPARATOR = "\u0000";
 
 export interface LabelAgreement {
   /** Holds the camera saw whose window has closed, so they can be judged. */
@@ -65,8 +68,9 @@ export class AgreementTracker {
     if (open && open.endMs === null) open.endMs = atMs;
   }
 
-  modelDetected(label: string, atMs: number): void {
-    this.push(this.detections, label, atMs);
+  /** A detection by a model: the active one by default, or another named `source` run beside it for comparison. */
+  modelDetected(label: string, atMs: number, source: string = ACTIVE): void {
+    this.push(this.detections, `${source}${SEPARATOR}${label}`, atMs);
   }
 
   private push<T>(map: Map<string, T[]>, label: string, item: T): void {
@@ -77,12 +81,13 @@ export class AgreementTracker {
   }
 
   labels(): string[] {
-    return [...new Set([...this.holds.keys(), ...this.detections.keys()])];
+    const detected = [...this.detections.keys()].map((key) => key.slice(key.indexOf(SEPARATOR) + 1));
+    return [...new Set([...this.holds.keys(), ...detected])];
   }
 
-  summarize(label: string, nowMs: number): LabelAgreement {
+  summarize(label: string, nowMs: number, source: string = ACTIVE): LabelAgreement {
     const holds = this.holds.get(label) ?? [];
-    const detections = [...(this.detections.get(label) ?? [])].sort((a, b) => a - b);
+    const detections = [...(this.detections.get(`${source}${SEPARATOR}${label}`) ?? [])].sort((a, b) => a - b);
     const used = new Set<number>();
     const delays: number[] = [];
     let judged = 0;

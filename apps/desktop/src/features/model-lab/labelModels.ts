@@ -31,6 +31,14 @@ export interface ImportedLabelModel {
   projectCreated: boolean;
 }
 
+/** What a model being compared beside the active ones detects (see `ShadowReport` in label_runtime.rs). */
+export const LABEL_SHADOW_EVENT = "label-shadow-detections";
+export interface ShadowReport {
+  modelId: string;
+  label: string;
+  events: DetectionReport["events"];
+}
+
 export const LABEL_MODELS_EVENT = "label-models-changed";
 
 export const MODE_OPTIONS: ReadonlyArray<{ value: LabelRuntimeMode; label: string; summary: string }> = [

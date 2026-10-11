@@ -3,6 +3,23 @@ import { AgreementTracker, LAG_MS } from "./agreement";
 
 const seen = () => { const t = new AgreementTracker(); t.setHandInView(0, true); return t; };
 
+describe("AgreementTracker with a model beside the active one", () => {
+  it("judges each model against the same camera holds, separately", () => {
+    const t = seen();
+    t.cameraOnset("pinch", 1000);
+    t.cameraRelease("pinch", 1500);
+    t.modelDetected("pinch", 1200); // the active model finds it
+    t.modelDetected("pinch", 9000); // and fires when nothing happened
+    t.modelDetected("pinch", 1300, "candidate"); // the candidate finds it too, and stays quiet
+    const active = t.summarize("pinch", 20_000);
+    const candidate = t.summarize("pinch", 20_000, "candidate");
+    expect([active.found, active.falseAlarms]).toEqual([1, 1]);
+    expect([candidate.found, candidate.falseAlarms]).toEqual([1, 0]);
+    expect(t.labels()).toEqual(["pinch"]);
+    expect(t.summarize("pinch", 20_000, "nobody")).toMatchObject({ found: 0, missed: 1 });
+  });
+});
+
 describe("AgreementTracker", () => {
   it("counts a detection soon after a camera hold as found, with its delay", () => {
     const t = seen();
