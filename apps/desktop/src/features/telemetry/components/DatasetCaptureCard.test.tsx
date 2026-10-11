@@ -69,6 +69,17 @@ function renderCard(overrides: Partial<React.ComponentProps<typeof DatasetCaptur
 }
 
 describe("DatasetCaptureCard", () => {
+  it("offers one CSV in the older format as a second choice, and runs only that", async () => {
+    const onExportSingleCsv = vi.fn().mockResolvedValue(undefined);
+    const props = renderCard({ datasetRowCount: 5, onExportSingleCsv });
+    fireEvent.click(screen.getByRole("button", { name: "Export one CSV (older format)" }));
+    await waitFor(() => expect(onExportSingleCsv).toHaveBeenCalledTimes(1));
+    expect(props.onExport).not.toHaveBeenCalled();
+    cleanup();
+    renderCard({ datasetRowCount: 0, onExportSingleCsv });
+    expect(screen.getByRole("button", { name: "Export one CSV (older format)" })).toBeDisabled();
+  });
+
   it("accepts a valid custom label and clears the field", () => {
     const props = renderCard();
     fireEvent.change(screen.getByLabelText("Dataset label"), { target: { value: "wrist_flick" } });
@@ -171,12 +182,12 @@ describe("DatasetCaptureCard", () => {
     expect(screen.getByRole("button", { name: "Discard" })).toBeDisabled();
   });
 
-  it("disables Export Dataset CSV when there are no buffered rows and enables it once rows exist", () => {
+  it("disables Export dataset folder when there are no buffered rows and enables it once rows exist", () => {
     renderCard({ datasetRowCount: 0 });
-    expect(screen.getByRole("button", { name: "Export Dataset CSV" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Export dataset folder" })).toBeDisabled();
     cleanup();
     renderCard({ datasetRowCount: 5 });
-    expect(screen.getByRole("button", { name: "Export Dataset CSV" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Export dataset folder" })).toBeEnabled();
   });
 
   it("shows pending feedback while exporting and re-enables afterward", async () => {
@@ -184,10 +195,10 @@ describe("DatasetCaptureCard", () => {
     const onExport = vi.fn(() => new Promise<void>((resolve) => { resolveExport = resolve; }));
     renderCard({ datasetRowCount: 5, onExport });
 
-    fireEvent.click(screen.getByRole("button", { name: "Export Dataset CSV" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export dataset folder" }));
     expect(await screen.findByRole("button", { name: "Exporting…" })).toBeDisabled();
     resolveExport();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Export Dataset CSV" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Export dataset folder" })).toBeEnabled());
   });
 
   describe("export data-quality review gate", () => {
@@ -201,7 +212,7 @@ describe("DatasetCaptureCard", () => {
       fireEvent.change(screen.getByLabelText("Dataset label"), { target: { value: "wrist_flick" } });
       expect(getDatasetRows).not.toHaveBeenCalled();
 
-      fireEvent.click(screen.getByRole("button", { name: "Export Dataset CSV" }));
+      fireEvent.click(screen.getByRole("button", { name: "Export dataset folder" }));
       expect(await screen.findByText("Review data quality before export")).toBeInTheDocument();
       expect(getDatasetRows).toHaveBeenCalledTimes(1);
     });
@@ -210,7 +221,7 @@ describe("DatasetCaptureCard", () => {
       const onExport = vi.fn().mockResolvedValue(undefined);
       const getDatasetRows = vi.fn(() => []);
       renderCard({ datasetRowCount: 5, onExport, getDatasetRows });
-      fireEvent.click(screen.getByRole("button", { name: "Export Dataset CSV" }));
+      fireEvent.click(screen.getByRole("button", { name: "Export dataset folder" }));
       await waitFor(() => expect(onExport).toHaveBeenCalledTimes(1));
       expect(screen.queryByText("Review data quality before export")).not.toBeInTheDocument();
     });
@@ -218,7 +229,7 @@ describe("DatasetCaptureCard", () => {
     it("exports directly with no review dialog when there is no buffered summary data", async () => {
       const onExport = vi.fn().mockResolvedValue(undefined);
       renderCard({ datasetRowCount: 5, onExport, datasetRows: [] });
-      fireEvent.click(screen.getByRole("button", { name: "Export Dataset CSV" }));
+      fireEvent.click(screen.getByRole("button", { name: "Export dataset folder" }));
       await waitFor(() => expect(onExport).toHaveBeenCalledTimes(1));
       expect(screen.queryByText("Review data quality before export")).not.toBeInTheDocument();
     });
@@ -226,7 +237,7 @@ describe("DatasetCaptureCard", () => {
     it("clean data shows the review gate with no warnings and exports on Export", async () => {
       const onExport = vi.fn().mockResolvedValue(undefined);
       renderCard({ datasetRowCount: cleanRows.length, onExport, datasetRows: cleanRows });
-      fireEvent.click(screen.getByRole("button", { name: "Export Dataset CSV" }));
+      fireEvent.click(screen.getByRole("button", { name: "Export dataset folder" }));
 
       expect(await screen.findByText("Review data quality before export")).toBeInTheDocument();
       expect(screen.getByText(/data-quality review/i)).toBeInTheDocument();
@@ -241,7 +252,7 @@ describe("DatasetCaptureCard", () => {
     it("warning data requires explicit 'Export anyway' confirmation and surfaces the M1 warning", async () => {
       const onExport = vi.fn().mockResolvedValue(undefined);
       renderCard({ datasetRowCount: warningRows.length, onExport, datasetRows: warningRows });
-      fireEvent.click(screen.getByRole("button", { name: "Export Dataset CSV" }));
+      fireEvent.click(screen.getByRole("button", { name: "Export dataset folder" }));
 
       expect(await screen.findByText("Review data quality before export")).toBeInTheDocument();
       expect(screen.getByRole("alert")).toHaveTextContent(/fewer than two rows/i);
@@ -255,7 +266,7 @@ describe("DatasetCaptureCard", () => {
       const onExport = vi.fn().mockResolvedValue(undefined);
       const onDiscard = vi.fn();
       renderCard({ datasetRowCount: warningRows.length, onExport, onDiscard, datasetRows: warningRows });
-      fireEvent.click(screen.getByRole("button", { name: "Export Dataset CSV" }));
+      fireEvent.click(screen.getByRole("button", { name: "Export dataset folder" }));
       expect(await screen.findByText("Review data quality before export")).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -270,7 +281,7 @@ describe("DatasetCaptureCard", () => {
         throw new Error("boom");
       });
       renderCard({ datasetRowCount: warningRows.length, onExport, datasetRows: warningRows });
-      fireEvent.click(screen.getByRole("button", { name: "Export Dataset CSV" }));
+      fireEvent.click(screen.getByRole("button", { name: "Export dataset folder" }));
 
       expect(await screen.findByText("Review data quality before export")).toBeInTheDocument();
       expect(screen.getByText(/quality review is unavailable/i)).toBeInTheDocument();

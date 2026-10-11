@@ -578,6 +578,77 @@ pub fn import_model_dataset_folder(
     ingest_folder(&app, &runtime, std::path::Path::new(&path))
 }
 
+/// Writes a dataset exported from the Recorder as a folder of two dense files in `parent`, named after the session. A name that
+/// is taken gets a number after it, so an export never overwrites another. Nothing is required of the labels here: an export
+/// is for keeping and sharing, and Model Lab checks them when the folder is imported. Returns where it was written.
+#[tauri::command]
+pub fn export_dataset_folder(
+    parent: String,
+    name: String,
+    ppg_csv: String,
+    imu_csv: String,
+) -> Result<String, String> {
+    validate_filename(&name)?;
+    let parent = PathBuf::from(&parent);
+    if !parent.is_dir() {
+        return Err("the export folder does not exist: choose another".into());
+    }
+    let mut target = parent.join(&name);
+    let mut number = 2;
+    while target.exists() {
+        target = parent.join(format!("{name}-{number}"));
+        number += 1;
+    }
+    let rows = |text: &str| {
+        text.lines()
+            .filter(|l| !l.trim().is_empty() && !l.trim_start().starts_with('#'))
+            .count()
+            .saturating_sub(1)
+    };
+    let labels: std::collections::BTreeSet<String> = [&ppg_csv, &imu_csv]
+        .iter()
+        .flat_map(|text| {
+            text.lines()
+                .filter(|l| !l.trim().is_empty() && !l.trim_start().starts_with('#'))
+                .skip(1)
+        })
+        .filter_map(|line| line.rsplit(',').next())
+        .map(|label| label.trim().to_string())
+        .filter(|label| !label.is_empty())
+        .collect();
+    let meta = Meta {
+        format_version: dataset_files::FORMAT_VERSION,
+        ppg_rows: rows(&ppg_csv),
+        imu_rows: rows(&imu_csv),
+        labels: labels.into_iter().collect(),
+        original_sha256: None,
+    };
+    let staging = parent.join(format!(
+        ".{}.exporting",
+        target
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("export")
+    ));
+    let _ = fs::remove_dir_all(&staging);
+    fs::create_dir_all(&staging).map_err(|e| e.to_string())?;
+    let written = (|| -> Result<(), String> {
+        fs::write(staging.join(dataset_files::PPG_FILE), &ppg_csv).map_err(|e| e.to_string())?;
+        fs::write(staging.join(dataset_files::IMU_FILE), &imu_csv).map_err(|e| e.to_string())?;
+        fs::write(
+            staging.join(dataset_files::META_FILE),
+            serde_json::to_vec_pretty(&meta).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+        fs::rename(&staging, &target).map_err(|e| e.to_string())
+    })();
+    if let Err(error) = written {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(error);
+    }
+    Ok(target.display().to_string())
+}
+
 /// What happened to one recording when converting older recordings to the two-file format.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -1029,5 +1100,67 @@ mod tests {
         assert!(!dataset_exists(&dir, "nothing-here"));
         assert!(dataset_sha(&dataset_csv_path(&dir, "nothing-here")).is_err());
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_exported_folder_never_overwrites_another_and_what_it_holds_can_be_imported_back() {
+        let parent = temp_dir("export");
+        let pair = dataset_files::split_legacy(LEGACY).unwrap();
+        let first = export_dataset_folder(
+            parent.display().to_string(),
+            "session".into(),
+            pair.ppg_csv.clone(),
+            pair.imu_csv.clone(),
+        )
+        .unwrap();
+        let second = export_dataset_folder(
+            parent.display().to_string(),
+            "session".into(),
+            pair.ppg_csv.clone(),
+            pair.imu_csv.clone(),
+        )
+        .unwrap();
+        assert!(first.ends_with("session") && second.ends_with("session-2"));
+        let meta: Meta =
+            serde_json::from_slice(&fs::read(PathBuf::from(&first).join("dataset.json")).unwrap())
+                .unwrap();
+        assert_eq!(
+            (meta.ppg_rows, meta.imu_rows, meta.labels),
+            (2, 1, vec!["pinch".to_string()])
+        );
+        // What was written validates as a pair, exactly as it was.
+        let back = dataset_files::parse_pair(
+            &fs::read_to_string(PathBuf::from(&first).join("ppg.csv")).unwrap(),
+            &fs::read_to_string(PathBuf::from(&first).join("imu.csv")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!((back.ppg_rows, back.imu_rows), (2, 1));
+        assert!(
+            fs::read_dir(&parent).unwrap().all(|e| !e
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with('.')),
+            "no staging folder is left"
+        );
+        assert!(
+            export_dataset_folder(
+                parent.display().to_string(),
+                "../escape".into(),
+                String::new(),
+                String::new()
+            )
+            .is_err()
+        );
+        assert!(
+            export_dataset_folder(
+                "/no/such/folder".into(),
+                "x".into(),
+                String::new(),
+                String::new()
+            )
+            .is_err()
+        );
+        let _ = fs::remove_dir_all(&parent);
     }
 }

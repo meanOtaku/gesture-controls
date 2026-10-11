@@ -15,7 +15,7 @@ import { telemetryStore } from "../store/telemetryStore";
 export function RecorderPage() {
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
-  const { exportDatasetCsv, saveDatasetRecording, datasetExportFolder, chooseDatasetExportFolder } = useTelemetryExport();
+  const { exportDatasetCsv, exportDatasetFolder, saveDatasetRecording, datasetExportFolder, chooseDatasetExportFolder } = useTelemetryExport();
 
   const selectedLabel = telemetryStore.getSelectedLabel();
   const sessionLabels = telemetryStore.getSessionLabels();
@@ -65,7 +65,8 @@ export function RecorderPage() {
           void saveDatasetRecording();
         }}
         onDiscard={() => { cameraAssist.disarm(); telemetryStore.discardDatasetRecording(); }}
-        onExport={exportDatasetCsv}
+        onExport={exportDatasetFolder}
+        onExportSingleCsv={exportDatasetCsv}
         getDatasetRows={() => telemetryStore.getDatasetRows()}
         timelineIntervals={telemetryStore.getTimelineIntervals()}
       />

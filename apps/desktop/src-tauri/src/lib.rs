@@ -225,6 +225,7 @@ pub fn run() {
             head_pose::get_head_tracker_provider,
             model_lab::import_model_dataset,
             model_lab::import_model_dataset_folder,
+            model_lab::export_dataset_folder,
             model_lab::convert_datasets_to_folders,
             model_lab::list_model_datasets,
             model_lab::delete_model_dataset,

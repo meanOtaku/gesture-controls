@@ -75,6 +75,8 @@ type DatasetCaptureCardProps = {
   onStop: () => void;
   onDiscard: () => void;
   onExport: () => Promise<void>;
+  /** Exports the session as one CSV file with blank cells (the older format), as a secondary choice. */
+  onExportSingleCsv?: () => Promise<void>;
   /** Buffered session rows/intervals, for the pre-export data-quality review gate. Empty when there is nothing buffered yet. */
   datasetRows?: DatasetRow[];
   /**
@@ -121,6 +123,7 @@ export function DatasetCaptureCard({
   onStop,
   onDiscard,
   onExport,
+  onExportSingleCsv,
   datasetRows = [],
   getDatasetRows,
   timelineIntervals = [],
@@ -439,13 +442,23 @@ export function DatasetCaptureCard({
             onPress={handleExportPress}
             pendingLabel="Exporting…"
           >
-            Export Dataset CSV
+            Export dataset folder
           </AsyncActionButton>
           <HelpTooltip label="About exporting the dataset">
             {desktopAvailable
-              ? "Saves the buffered labeled rows straight into the export folder above, under an auto-generated timestamped file name — choose a folder first, then Export writes there directly with no save dialog."
-              : "Browser preview has no native folder picker, so this downloads the CSV directly instead."}
+              ? "Saves the buffered labeled rows as a folder of two files, ppg.csv and imu.csv, in the export folder above, under an auto-generated timestamped name. Each file has a row only where its own sensor had a sample, so neither has blank cells. Import the folder in Model Lab. Choose a folder first, then Export writes there directly with no save dialog."
+              : "Browser preview has no native folder picker, so it can only download one CSV file."}
           </HelpTooltip>
+          {onExportSingleCsv && (
+            <AsyncActionButton
+              variant="outline"
+              disabled={datasetRowCount === 0 || (desktopAvailable && !datasetExportFolder)}
+              onPress={onExportSingleCsv}
+              pendingLabel="Exporting…"
+            >
+              Export one CSV (older format)
+            </AsyncActionButton>
+          )}
 
           <AlertDialog open={exportReviewOpen} onOpenChange={setExportReviewOpen}>
             <AlertDialogContent>

@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { useSyncExternalStore } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { chooseExportFolder, exportCsvToFolder, isTauriDesktop, type ExportCsvResult } from "../../../shared/tauri/exportCsv";
@@ -62,6 +63,31 @@ export function useTelemetryExport() {
   };
 
   /**
+   * Exports the session as a folder of two dense files, `ppg.csv` and `imu.csv`, into the chosen export folder. This is the
+   * dataset format Model Lab imports as one folder and the trainer reads, with no blank cells in either file.
+   */
+  const exportDatasetFolder = async () => {
+    const operation = "Export dataset folder";
+    if (!isTauriDesktop()) {
+      OperationFeedback.error(operation, "Exporting a folder needs the desktop app. The browser preview can export one CSV file.");
+      return;
+    }
+    if (!datasetExportFolder) {
+      OperationFeedback.error(operation, "Choose an output folder first.");
+      return;
+    }
+    const label = telemetryStore.getDatasetSession()?.label || telemetryStore.getSelectedLabel() || "unlabeled";
+    const name = `gesture-dataset-${label}-${new Date().toISOString().replaceAll(":", "-")}`;
+    const files = telemetryStore.generateDatasetFolderFiles();
+    try {
+      const written = await invoke<string>("export_dataset_folder", { parent: datasetExportFolder, name, ppgCsv: files.ppgCsv, imuCsv: files.imuCsv });
+      OperationFeedback.success(operation, `Saved ${basename(written)} (${files.ppgRows.toLocaleString()} pulse rows, ${files.imuRows.toLocaleString()} motion rows)`);
+    } catch (error) {
+      OperationFeedback.error(operation, `Could not save: ${String(error)}`);
+    }
+  };
+
+  /**
    * Persists the recorded session as an immutable recording bundle (raw.csv +
    * recording.json + annotations.json) in the app's own data directory,
    * independent of the manual "Export Dataset CSV" folder export above.
@@ -80,5 +106,5 @@ export function useTelemetryExport() {
     return result;
   };
 
-  return { exportDatasetCsv, saveDatasetRecording, datasetExportFolder, chooseDatasetExportFolder };
+  return { exportDatasetCsv, exportDatasetFolder, saveDatasetRecording, datasetExportFolder, chooseDatasetExportFolder };
 }

@@ -10,11 +10,11 @@ import { resetFeedbackForTests } from "../../../components/app/OperationFeedback
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-const { exportCsvToFolder } = vi.hoisted(() => ({ exportCsvToFolder: vi.fn() }));
+const { exportCsvToFolder, isTauriDesktop } = vi.hoisted(() => ({ exportCsvToFolder: vi.fn(), isTauriDesktop: vi.fn(() => false) }));
 vi.mock("../../../shared/tauri/exportCsv", () => ({
   exportCsvToFolder,
   chooseExportFolder: vi.fn(),
-  isTauriDesktop: vi.fn(() => false),
+  isTauriDesktop,
 }));
 
 beforeEach(() => { telemetryStore.reset(); invoke.mockReset(); exportCsvToFolder.mockReset(); resetFeedbackForTests(); });
@@ -60,14 +60,30 @@ describe("Live telemetry", () => {
     exportCsvToFolder.mockResolvedValue({ status: "error", message: "disk full" });
     render(<><Toaster /><RecorderPage /></>);
 
-    const button = screen.getByRole("button", { name: "Export Dataset CSV" });
-    fireEvent.click(button);
-
-    // One buffered row trips M1's "insufficient_data" quality warning, so the
-    // pre-export review gate requires an explicit "Export anyway" here.
-    fireEvent.click(await screen.findByRole("button", { name: "Export anyway" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export one CSV (older format)" }));
 
     expect(await screen.findByText("Could not save: disk full")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Export Dataset CSV" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Export one CSV (older format)" })).toBeEnabled());
+  });
+
+  it("exports the dataset as a folder of two files, and reports a failed one via toast", async () => {
+    isTauriDesktop.mockReturnValue(true);
+    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+    const { exportFolderStore } = await import("../store/exportFolderStore");
+    exportFolderStore.set("/exports");
+    telemetryStore.startDatasetRecording();
+    telemetryStore.ingestWatchOrientation({ deviceId: "watch-test", sequence: 1, timestampNs: 123, quaternion: [1, 0, 0, 0], accelerometer: [0, 0, 0], gyroscope: [0, 0, 0] });
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "export_dataset_folder") throw "disk full";
+      return undefined;
+    });
+    render(<><Toaster /><RecorderPage /></>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Export dataset folder" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Export anyway" })); // one row trips the quality review
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("export_dataset_folder", expect.objectContaining({ parent: "/exports", ppgCsv: expect.stringContaining("ppg_green"), imuCsv: expect.stringContaining("quat_w") })));
+    expect(await screen.findByText("Could not save: disk full")).toBeInTheDocument();
+    isTauriDesktop.mockReturnValue(false);
+    exportFolderStore.set(null);
   });
 });

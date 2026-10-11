@@ -89,6 +89,21 @@ export const DATASET_CSV_COLUMNS = [
   "quat_w", "quat_x", "quat_y", "quat_z", "contact_quality", "label",
 ] as const;
 
+/** The columns of `ppg.csv` and `imu.csv` in an exported dataset folder: the single file's, without the other sensor's. */
+export const PPG_FILE_COLUMNS = ["timestamp_ns", "sequence", "ppg_green", "ppg_red", "ppg_ir", "contact_quality", "label"] as const;
+export const IMU_FILE_COLUMNS = [
+  "timestamp_ns", "sequence", "accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z",
+  "quat_w", "quat_x", "quat_y", "quat_z", "label",
+] as const;
+
+/** The two dense files of an exported dataset folder (see `dataset_files.rs`). */
+export interface DatasetFolderFiles {
+  ppgCsv: string;
+  imuCsv: string;
+  ppgRows: number;
+  imuRows: number;
+}
+
 /**
  * `raw.csv` columns for the immutable recording-bundle contract (see
  * `docs/decisions/2026-09-dataset-capture-recording-contract.md`): the same
@@ -678,21 +693,8 @@ class TelemetryStore {
 
   /** Renders the buffered labeled session as CSV text: leading `#` metadata comment lines, then the header, then rows. */
   generateDatasetCsv(): string {
-    const session = this.datasetSession;
     const rows = this.datasetRows.toArray();
-    const metadataLines = [
-      "# gesture-dataset-export: 1",
-      `# label: ${session?.label ?? ""}`,
-      `# started_at: ${session?.startedAtIso ?? ""}`,
-      `# row_count: ${rows.length}`,
-    ];
-    // A row's label is the interval that covers it, so intervals edited or added after the recording (by hand, or by the
-    // camera) are in the export; a row no interval covers keeps the label it was recorded with.
-    const intervalLabels: (string | null)[] = new Array(rows.length).fill(null);
-    for (const interval of this.timelineIntervals) {
-      if (interval.endRawRow === null) continue;
-      for (let index = Math.max(0, interval.startRawRow); index < Math.min(rows.length, interval.endRawRow); index += 1) intervalLabels[index] = interval.labelId;
-    }
+    const labels = this.datasetRowLabels(rows);
     const dataLines = rows.map((row, rowIndex) => [
       row.timestampNs,
       row.sequence,
@@ -710,9 +712,61 @@ class TelemetryStore {
       datasetCsvValue(row.quatY),
       datasetCsvValue(row.quatZ),
       datasetCsvValue(row.contactQuality),
-      intervalLabels[rowIndex] ?? row.label,
+      labels[rowIndex],
     ].join(","));
-    return [...metadataLines, DATASET_CSV_COLUMNS.join(","), ...dataLines].join("\n");
+    return [...this.datasetMetadataLines(rows.length), DATASET_CSV_COLUMNS.join(","), ...dataLines].join("\n");
+  }
+
+  /**
+   * The same session as two dense files: a pulse row for each row that carried a pulse sample and a motion row for each row
+   * that carried a motion sample, each with every column filled (a row that somehow carried both is a row in each). The
+   * labels are exactly the single file's. Together the files hold the same samples as `generateDatasetCsv`, without the
+   * empty cells where the other sensor had nothing.
+   */
+  generateDatasetFolderFiles(): DatasetFolderFiles {
+    const rows = this.datasetRows.toArray();
+    const labels = this.datasetRowLabels(rows);
+    const ppg: string[] = [];
+    const imu: string[] = [];
+    rows.forEach((row, index) => {
+      if (row.ppgGreen != null || row.ppgRed != null || row.ppgIr != null) {
+        ppg.push([row.timestampNs, row.sequence, datasetCsvValue(row.ppgGreen), datasetCsvValue(row.ppgRed), datasetCsvValue(row.ppgIr), datasetCsvValue(row.contactQuality), labels[index]].join(","));
+      }
+      const motion = [row.accelX, row.accelY, row.accelZ, row.gyroX, row.gyroY, row.gyroZ, row.quatW, row.quatX, row.quatY, row.quatZ];
+      if (motion.some((value) => value != null)) {
+        imu.push([row.timestampNs, row.sequence, ...motion.map(datasetCsvValue), labels[index]].join(","));
+      }
+    });
+    const comments = this.datasetMetadataLines(rows.length);
+    return {
+      ppgCsv: [...comments, PPG_FILE_COLUMNS.join(","), ...ppg].join("\n") + "\n",
+      imuCsv: [...comments, IMU_FILE_COLUMNS.join(","), ...imu].join("\n") + "\n",
+      ppgRows: ppg.length,
+      imuRows: imu.length,
+    };
+  }
+
+  private datasetMetadataLines(rowCount: number): string[] {
+    const session = this.datasetSession;
+    return [
+      "# gesture-dataset-export: 1",
+      `# label: ${session?.label ?? ""}`,
+      `# started_at: ${session?.startedAtIso ?? ""}`,
+      `# row_count: ${rowCount}`,
+    ];
+  }
+
+  /**
+   * A row's label is the interval that covers it, so intervals edited or added after the recording (by hand, or by the
+   * camera) are in the export; a row no interval covers keeps the label it was recorded with.
+   */
+  private datasetRowLabels(rows: DatasetRow[]): string[] {
+    const intervalLabels: (string | null)[] = new Array(rows.length).fill(null);
+    for (const interval of this.timelineIntervals) {
+      if (interval.endRawRow === null) continue;
+      for (let index = Math.max(0, interval.startRawRow); index < Math.min(rows.length, interval.endRawRow); index += 1) intervalLabels[index] = interval.labelId;
+    }
+    return rows.map((row, index) => intervalLabels[index] ?? row.label);
   }
 
   /**

@@ -8,6 +8,7 @@ type AsyncActionButtonProps = {
   onPress: () => Promise<void>;
   disabled?: boolean;
   className?: string;
+  variant?: "default" | "outline";
 };
 
 /**
@@ -15,7 +16,7 @@ type AsyncActionButtonProps = {
  * duration of its own request so a slow or repeated click cannot fire the
  * same operation twice; unrelated controls are unaffected.
  */
-export function AsyncActionButton({ pendingLabel, children, onPress, disabled, className }: AsyncActionButtonProps) {
+export function AsyncActionButton({ pendingLabel, children, onPress, disabled, className, variant }: AsyncActionButtonProps) {
   const [pending, setPending] = useState(false);
 
   const handleClick = () => {
@@ -25,7 +26,7 @@ export function AsyncActionButton({ pendingLabel, children, onPress, disabled, c
   };
 
   return (
-    <Button type="button" className={className} disabled={disabled || pending} aria-busy={pending} onClick={handleClick}>
+    <Button type="button" variant={variant} className={className} disabled={disabled || pending} aria-busy={pending} onClick={handleClick}>
       {pending && <Loader2Icon className="animate-spin" aria-hidden="true" />}
       {pending ? pendingLabel : children}
     </Button>
