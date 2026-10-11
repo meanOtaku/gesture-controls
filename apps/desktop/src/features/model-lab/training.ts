@@ -3,7 +3,7 @@ import { datasetLabels } from "./types";
 
 /** Training a model for one label (see `label_training.rs`). */
 
-export type TrainMethod = "logreg" | "mlp" | "torch-mlp";
+export type TrainMethod = "logreg" | "mlp" | "torch-mlp" | "cnn1d";
 export type DataStream = "watchOrientation" | "watchAcceleration" | "watchGyroscope" | "watchPpg";
 export type OtherRole = "negative" | "exclude";
 
@@ -13,7 +13,18 @@ export const METHODS: ReadonlyArray<{ value: TrainMethod; label: string; summary
   { value: "logreg", label: "Logistic regression", summary: "Fast and simple. A good first try, and easy to trust." },
   { value: "mlp", label: "Small neural network (scikit-learn)", summary: "Can learn more complicated patterns than logistic regression." },
   { value: "torch-mlp", label: "Small neural network (PyTorch)", summary: "The same idea in PyTorch. The first run downloads PyTorch, which is large." },
+  { value: "cnn1d", label: "1D convolutional network (PyTorch)", summary: "Reads the window itself, as each channel over time, instead of statistics of it, and finds the patterns. Needs more recordings than the others, and a longer window helps. The first run downloads PyTorch, which is large." },
 ];
+
+/** How long a window of data a model reads, in milliseconds. Longer shows a slower or longer event, with fewer windows per recording. */
+export const WINDOW_LENGTHS: ReadonlyArray<{ value: number; label: string }> = [
+  { value: 500, label: "0.5 s (default)" },
+  { value: 750, label: "0.75 s" },
+  { value: 1000, label: "1 s" },
+  { value: 1500, label: "1.5 s" },
+  { value: 2000, label: "2 s" },
+];
+export const DEFAULT_WINDOW_MS = 500;
 
 export const STREAMS: ReadonlyArray<{ value: DataStream; label: string; summary: string }> = [
   { value: "watchAcceleration", label: "Acceleration", summary: "How hard and in which direction the watch is pushed. Most gestures need this." },
@@ -56,6 +67,8 @@ export interface TrainRequest {
   sources: DataStream[];
   /** Only features about how things change, not their absolute levels. */
   movementOnly: boolean;
+  /** How long a window of data the model reads, in milliseconds. */
+  windowMs: number;
   /** Which of the pulse sensor's light channels the model may read (only matters when the pulse sensor is a stream). */
   ppgChannels: PpgChannel[];
   /** How the pulse sensor's spikes are pulled out before the model reads their features; "none" reads no spike features. */
@@ -122,6 +135,7 @@ export function buildRequest(input: {
   movementOnly?: boolean;
   spikeMethod?: SpikeMethodId;
   ppgChannels?: PpgChannel[];
+  windowMs?: number;
 }): TrainRequest {
   const role = (label: string): OtherRole => input.roles[label] ?? "negative";
   return {
@@ -134,6 +148,7 @@ export function buildRequest(input: {
     movementOnly: input.movementOnly ?? false,
     spikeMethod: input.spikeMethod ?? "none",
     ppgChannels: [...(input.ppgChannels ?? ALL_PPG_CHANNELS)],
+    windowMs: input.windowMs ?? DEFAULT_WINDOW_MS,
   };
 }
 

@@ -17,8 +17,9 @@ use std::sync::Mutex;
 
 use chrono::{SecondsFormat, Utc};
 use label_inference::{
-    PPG_CHANNELS, RecordingInfo, RunPlan, SpikeMethod, begin_run, canonical_features_with_channels,
-    complete_run, evaluation_only_run, fail_run, plan_split, stage_bundle, trainer_backend,
+    MAX_GRID_STEPS, MIN_GRID_STEPS, PPG_CHANNELS, RecordingInfo, RunPlan, SpikeMethod, begin_run,
+    canonical_features_with_channels, complete_run, evaluation_only_run, fail_run,
+    grid_channels_for, plan_split, stage_bundle, trainer_backend,
 };
 use model_lab_core::{
     ArtifactRef, ExampleRole, InputContract, LabelId, LabelMapping, QualityRules, RecordingId,
@@ -43,7 +44,7 @@ const TRAINER_PROJECT_DIR: &str =
 const SPEC_VERSION: u32 = 1;
 
 /// The backends offered, which extra packages the trainer needs for each.
-const BACKENDS: [&str; 3] = ["logreg", "mlp", "torch-mlp"];
+const BACKENDS: [&str; 4] = ["logreg", "mlp", "torch-mlp", "cnn1d"];
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -77,6 +78,9 @@ pub struct TrainRequest {
     /// Which of the pulse sensor's light channels the model may read (`green`, `red`, `ir`). Absent means all three.
     #[serde(default)]
     pub ppg_channels: Option<Vec<String>>,
+    /// For the convolutional method: how many steps each channel of the window is laid onto. Absent means 32.
+    #[serde(default)]
+    pub grid_steps: Option<u32>,
 }
 
 fn default_window_ms() -> u32 {
@@ -104,6 +108,7 @@ struct Checked {
     movement_only: bool,
     spike_method: Option<SpikeMethod>,
     ppg_channels: Vec<String>,
+    grid_steps: u32,
 }
 
 fn label_id(raw: &str) -> Result<LabelId, String> {
@@ -204,12 +209,23 @@ fn check_request(
         return Err("choose at least one pulse sensor channel for the model to read".into());
     }
     let channel_refs: Vec<&str> = ppg_channels.iter().map(String::as_str).collect();
-    let features = canonical_features_with_channels(
-        &sources,
-        request.movement_only,
-        spike_method.is_some(),
-        &channel_refs,
-    );
+    let grid_steps = request.grid_steps.unwrap_or(32);
+    let features = if request.backend == "cnn1d" {
+        if !(MIN_GRID_STEPS..=MAX_GRID_STEPS).contains(&grid_steps) {
+            return Err(format!(
+                "the window grid must have from {MIN_GRID_STEPS} to {MAX_GRID_STEPS} steps, got {grid_steps}"
+            ));
+        }
+        // A convolutional model reads the window's channels themselves, not statistics of them.
+        grid_channels_for(&sources, &channel_refs)
+    } else {
+        canonical_features_with_channels(
+            &sources,
+            request.movement_only,
+            spike_method.is_some(),
+            &channel_refs,
+        )
+    };
     if features.is_empty() {
         return Err("none of the chosen data streams can feed a model (head pose is not available to trained models)".into());
     }
@@ -232,6 +248,7 @@ fn check_request(
         movement_only: request.movement_only,
         spike_method,
         ppg_channels,
+        grid_steps,
     })
 }
 
@@ -271,6 +288,7 @@ fn build_spec(
         "movementOnly": checked.movement_only,
         "spikeMethod": checked.spike_method.map_or("none", SpikeMethod::name),
         "ppgChannels": checked.ppg_channels,
+        "gridSteps": checked.grid_steps,
     })
 }
 
@@ -514,11 +532,13 @@ pub async fn start_label_training(
     let mut command = Command::new("uv");
     command
         .args(["run", "--project", TRAINER_PROJECT_DIR, "--extra", "onnx"])
-        .args(if checked.backend == "torch-mlp" {
-            vec!["--extra", "torch"]
-        } else {
-            vec![]
-        })
+        .args(
+            if matches!(checked.backend.as_str(), "torch-mlp" | "cnn1d") {
+                vec!["--extra", "torch"]
+            } else {
+                vec![]
+            },
+        )
         .arg("label-classifier-train")
         .arg("--spec")
         .arg(&spec_path)
@@ -801,6 +821,7 @@ mod tests {
             movement_only: false,
             spike_method: None,
             ppg_channels: None,
+            grid_steps: None,
         }
     }
 
@@ -960,6 +981,42 @@ mod tests {
             check_request(&r, &datasets(), &sha)
                 .unwrap_err()
                 .contains("unknown pulse sensor channel")
+        );
+    }
+
+    #[test]
+    fn a_convolutional_request_reads_channels_and_tells_the_trainer_the_grid() {
+        let mut r = request();
+        r.backend = "cnn1d".into();
+        r.window_ms = 1000;
+        r.sources.push(StreamSource::WatchPpg);
+        r.ppg_channels = Some(vec!["green".into()]);
+        let checked = check_request(&r, &datasets(), &sha).unwrap();
+        assert_eq!(
+            checked.input.features,
+            [
+                "ppg_green",
+                "accel_x",
+                "accel_y",
+                "accel_z",
+                "gyro_x",
+                "gyro_y",
+                "gyro_z"
+            ]
+        );
+        assert_eq!(checked.input.window_ms, 1000);
+        assert_eq!(checked.grid_steps, 32);
+        let split = plan_split(&checked.recordings, &checked.mapping, &checked.target).unwrap();
+        let spec = build_spec(&checked, &split, &BTreeMap::new());
+        assert_eq!(spec["backend"], "cnn1d");
+        assert_eq!(spec["gridSteps"], 32);
+        assert_eq!(spec["window"]["windowMs"], 1000);
+
+        r.grid_steps = Some(2);
+        assert!(
+            check_request(&r, &datasets(), &sha)
+                .unwrap_err()
+                .contains("window grid")
         );
     }
 

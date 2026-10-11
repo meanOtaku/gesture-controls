@@ -18,10 +18,10 @@ use model_lab_core::{
     RunOutcome, SnapshotDraft, SnapshotId, Split, StreamSource, Thresholds, TrainerBackend,
     TrainerConfig, TrainingRun,
 };
-use pinch_inference::FEATURE_NAMES;
+use pinch_inference::{FEATURE_NAMES, GridChannel};
 use thiserror::Error;
 
-use crate::bundle::source_of_feature;
+use crate::bundle::{source_of_channel, source_of_feature};
 use crate::import::{ImportError, ImportOutcome, StagedBundle, publish_staged_with};
 
 #[derive(Debug, Error)]
@@ -111,6 +111,23 @@ pub fn canonical_features_with_channels(
         .filter(|name| source_of_feature(name).is_some_and(|s| sources.contains(&s)))
         .filter(|name| !movement_only || is_movement_feature(name))
         .map(ToString::to_string)
+        .collect()
+}
+
+/// The grid channels a convolutional model reads from the chosen streams, in canonical order: for the pulse sensor only
+/// the lights in `ppg_channels`. Mirrors `channels_for` in the trainer's `grid.py`.
+pub fn grid_channels_for(sources: &[StreamSource], ppg_channels: &[&str]) -> Vec<String> {
+    GridChannel::ALL
+        .into_iter()
+        .filter(|channel| sources.contains(&source_of_channel(*channel)))
+        .filter(|channel| {
+            !channel.is_ppg()
+                || channel
+                    .name()
+                    .strip_prefix("ppg_")
+                    .is_some_and(|light| ppg_channels.contains(&light))
+        })
+        .map(|channel| channel.name().to_string())
         .collect()
 }
 
@@ -381,7 +398,7 @@ pub fn complete_run<P: Persist>(
 pub fn trainer_backend(name: &str) -> Option<TrainerBackend> {
     match name {
         "logreg" | "mlp" => Some(TrainerBackend::ScikitLearn),
-        "torch-mlp" => Some(TrainerBackend::PyTorch),
+        "torch-mlp" | "cnn1d" => Some(TrainerBackend::PyTorch),
         _ => None,
     }
 }
@@ -578,6 +595,39 @@ mod tests {
             canonical_features_for(&[StreamSource::WatchAcceleration], false, false)
         );
         assert!(canonical_features_for(&[StreamSource::HeadPose], false, true).is_empty());
+    }
+
+    #[test]
+    fn a_convolutional_model_reads_channels_not_statistics() {
+        use StreamSource::*;
+        let all = ["green", "red", "ir"];
+        assert_eq!(
+            grid_channels_for(&[WatchAcceleration], &all),
+            ["accel_x", "accel_y", "accel_z"]
+        );
+        assert_eq!(
+            grid_channels_for(&[WatchPpg], &["ir", "green"]),
+            ["ppg_green", "ppg_ir"]
+        );
+        assert_eq!(
+            grid_channels_for(&[WatchPpg, WatchOrientation], &["red"]),
+            ["ppg_red", "quat_w", "quat_x", "quat_y", "quat_z"]
+        );
+        assert_eq!(
+            grid_channels_for(
+                &[
+                    WatchPpg,
+                    WatchGyroscope,
+                    WatchAcceleration,
+                    WatchOrientation
+                ],
+                &all
+            )
+            .len(),
+            13
+        );
+        assert!(grid_channels_for(&[HeadPose], &all).is_empty());
+        assert_eq!(trainer_backend("cnn1d"), Some(TrainerBackend::PyTorch));
     }
 
     #[test]

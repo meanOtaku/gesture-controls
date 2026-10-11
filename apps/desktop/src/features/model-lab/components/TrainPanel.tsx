@@ -22,7 +22,9 @@ import {
   otherLabels,
   recordingsWithLabel,
   ALL_PPG_CHANNELS,
+  DEFAULT_WINDOW_MS,
   PPG_CHANNELS,
+  WINDOW_LENGTHS,
   SPIKE_METHODS,
   type DataStream,
   type PpgChannel,
@@ -57,6 +59,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
   const [method, setMethod] = useState<TrainMethod>("logreg");
   const [sources, setSources] = useState<DataStream[]>(DEFAULT_STREAMS);
   const [movementOnly, setMovementOnly] = useState(false);
+  const [windowMs, setWindowMs] = useState(DEFAULT_WINDOW_MS);
   const [ppgChannels, setPpgChannels] = useState<PpgChannel[]>(ALL_PPG_CHANNELS);
   const [spikeMethod, setSpikeMethod] = useState<SpikeMethodId>("none");
   const [plan, setPlan] = useState<TrainPlan | null>(null);
@@ -69,7 +72,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
   const usable = labels.filter((label) => label.archivedAt === null);
   const candidates = datasets.filter((dataset) => datasetLabels(dataset).length > 0);
   const others = otherLabels(datasets, selected, target);
-  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, method, sources, movementOnly, spikeMethod: sources.includes("watchPpg") ? spikeMethod : "none", ppgChannels });
+  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, method, sources, movementOnly, spikeMethod: sources.includes("watchPpg") ? spikeMethod : "none", ppgChannels, windowMs });
   const requestKey = JSON.stringify(request);
 
   useEffect(() => {
@@ -270,6 +273,19 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
                 {METHODS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
               <p className="field-hint">{METHODS.find((option) => option.value === method)?.summary}</p>
+            </div>
+
+            <div className="field">
+              <div className="field-head"><Label htmlFor={`${uid}-window`}>Window length</Label></div>
+              <select id={`${uid}-window`} className={NATIVE_SELECT} value={windowMs} disabled={running !== null} onChange={(event) => setWindowMs(Number(event.target.value))}>
+                {WINDOW_LENGTHS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <p className="field-hint">
+                {method === "cnn1d"
+                  ? "How much of the recent past the model looks at each time. For a convolutional model 1 to 1.5 s usually works better than 0.5 s, because it has more to find a pattern in."
+                  : "How much of the recent past the model looks at each time. A short window reacts sooner; a longer one sees a slower or longer event."}
+                {" "}Windows never cross from one label to another, and it is also the window the model uses live.
+              </p>
             </div>
 
             <fieldset className="flex flex-col gap-2">

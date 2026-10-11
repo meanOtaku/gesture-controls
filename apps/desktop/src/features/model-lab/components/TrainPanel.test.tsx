@@ -55,7 +55,7 @@ describe("TrainPanel", () => {
     expect(screen.getByLabelText("Role of walking")).toBeInTheDocument();
     expect(await screen.findByText(/train on 2 recordings \(s1.csv, i1.csv\) and test on 2/)).toBeInTheDocument();
     expect(calls("plan_label_training").at(-1)?.[1]).toEqual({
-      request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["idle", "walking"], excludes: [], backend: "logreg", sources: ["watchAcceleration", "watchGyroscope"], movementOnly: false, spikeMethod: "none", ppgChannels: ["green", "red", "ir"] },
+      request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["idle", "walking"], excludes: [], backend: "logreg", sources: ["watchAcceleration", "watchGyroscope"], movementOnly: false, spikeMethod: "none", ppgChannels: ["green", "red", "ir"], windowMs: 500 },
     });
   });
 
@@ -73,7 +73,7 @@ describe("TrainPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Train model" }));
     await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
     expect(calls("start_label_training")[0][1]).toEqual({
-      request: { label: "snap", datasetIds: ["s1", "s2", "i1"], negatives: ["idle"], excludes: ["walking"], backend: "mlp", sources: ["watchAcceleration", "watchOrientation"], movementOnly: true, spikeMethod: "none", ppgChannels: ["green", "red", "ir"] },
+      request: { label: "snap", datasetIds: ["s1", "s2", "i1"], negatives: ["idle"], excludes: ["walking"], backend: "mlp", sources: ["watchAcceleration", "watchOrientation"], movementOnly: true, spikeMethod: "none", ppgChannels: ["green", "red", "ir"], windowMs: 500 },
     });
   });
 
@@ -90,7 +90,7 @@ describe("TrainPanel", () => {
     expect(screen.getByText(/Needs the pulse sensor/)).toBeInTheDocument(); // not one of the streams yet
     fireEvent.click(screen.getByRole("button", { name: "Train model" }));
     await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
-    expect(calls("start_label_training")[0][1]).toMatchObject({ request: { spikeMethod: "none", ppgChannels: ["green", "red", "ir"] } }); // nothing for it to read
+    expect(calls("start_label_training")[0][1]).toMatchObject({ request: { spikeMethod: "none", ppgChannels: ["green", "red", "ir"], windowMs: 500 } }); // nothing for it to read
   });
 
   it("sends the chosen spike extraction method once the pulse sensor is a stream", async () => {
@@ -120,6 +120,24 @@ describe("TrainPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Train model" }));
     await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
     expect(calls("start_label_training")[0][1]).toMatchObject({ request: { ppgChannels: ["red", "ir"] } });
+  });
+
+  it("offers the convolutional method and a window length, and sends both", async () => {
+    setup();
+    choose("snap");
+    await screen.findByText(/It will train on/);
+    const methodSelect = screen.getByLabelText("Method") as HTMLSelectElement;
+    expect(Array.from(methodSelect.options).map((o) => o.textContent)).toContain("1D convolutional network (PyTorch)");
+    const length = screen.getByLabelText("Window length") as HTMLSelectElement;
+    expect(length.value).toBe("500");
+    expect(Array.from(length.options).map((o) => o.textContent)).toEqual(["0.5 s (default)", "0.75 s", "1 s", "1.5 s", "2 s"]);
+    fireEvent.change(methodSelect, { target: { value: "cnn1d" } });
+    expect(screen.getByText(/1 to 1.5 s usually works better/)).toBeInTheDocument();
+    fireEvent.change(length, { target: { value: "1000" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Train model" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
+    await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
+    expect(calls("start_label_training")[0][1]).toMatchObject({ request: { backend: "cnn1d", windowMs: 1000 } });
   });
 
   it("will not train when the plan says it cannot, and says why", async () => {
