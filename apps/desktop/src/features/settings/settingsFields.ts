@@ -10,7 +10,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   watchOrientationRateHz: 50,
   watchAccelerationRateHz: 50,
   watchGyroscopeRateHz: 50,
-  watchPpgFlushRateHz: 1,
+  watchPpgFlushRateHz: 10,
   watchHeartRateAcceptanceRateHz: 200,
   watchSkinTemperatureAcceptanceRateHz: 200,
   watchEdaAcceptanceRateHz: 200,

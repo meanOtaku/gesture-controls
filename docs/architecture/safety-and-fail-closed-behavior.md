@@ -157,8 +157,8 @@ The overlay has one `grabbed` flag, so it also records an **owner**:
   (verified against `features.py`), but which samples a window contains can differ.
   Only a trained bundle measured on hardware can quantify the remaining gap.
 - **Window length is a guard, not an alignment.** There is no sliding window
-  live. A default 500 ms bundle will not run in Live against the default 1 Hz PPG
-  flush (about 960 ms windows) until the flush rate is aligned or the model is
+  live. A default 500 ms bundle will not run in Live against a 1 Hz PPG
+  flush (about 960 ms windows; the default flush is now 10 Hz) until the flush rate is aligned or the model is
   retrained.
 - **A stale reference pose** at grab time is not bounded by the velocity check; the
   orientation reference has no freshness limit.
