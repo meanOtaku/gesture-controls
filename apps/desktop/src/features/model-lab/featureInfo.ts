@@ -107,3 +107,18 @@ export function inputLabel(name: string): string {
   const info = describeInput(name);
   return `${SHORT_STREAM[info.stream]} ${info.group} ${info.short}`;
 }
+
+const COLUMN_MEANING: Record<string, string> = {
+  ppg_green: "the green light of the pulse sensor", ppg_red: "the red light of the pulse sensor", ppg_ir: "the infrared light of the pulse sensor",
+  accel_x: "the acceleration on the x axis", accel_y: "the acceleration on the y axis", accel_z: "the acceleration on the z axis",
+  gyro_x: "the turning speed about the x axis", gyro_y: "the turning speed about the y axis", gyro_z: "the turning speed about the z axis",
+  quat_w: "the w number of the watch's orientation", quat_x: "the x number of the watch's orientation", quat_y: "the y number of the watch's orientation", quat_z: "the z number of the watch's orientation",
+};
+
+/** What a raw column feeds the network: its latest reading, or its readings across the window, one neuron for each. */
+export function describeColumn(name: string, steps: number): string {
+  const meaning = COLUMN_MEANING[name] ?? name;
+  return steps === 1
+    ? `The latest reading of ${meaning} in the window (one input neuron).`
+    : `${meaning[0].toUpperCase()}${meaning.slice(1)} across the window, laid onto ${steps} evenly spaced readings: ${steps} input neurons, one for each.`;
+}

@@ -587,6 +587,7 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
             "inputMode": "raw" if spec.raw_columns else ("grid" if spec.backend == "cnn1d" else "statistics"),
             "editedFrom": spec.edit.get("fromModel") if spec.edit else None,
             "edits": spec.edit["edits"] if spec.edit else None,
+            "fineTune": spec.edit.get("fineTune") if spec.edit else None,
             "network": spec.network.as_dict() if spec.backend in ("mlp", "torch-mlp", "cnn1d") else None,
             "parameters": parameter_count(spec.network, network_inputs(spec), spec.backend) if spec.backend in ("mlp", "torch-mlp", "cnn1d") else None,
         },
@@ -647,17 +648,26 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
         edit_note: dict[str, Any] | None = None
         if spec.edit:
             # Not trained: an existing model, changed by hand, then scored on the same held-out windows like any other.
-            from .edits import apply_edits, restore_model
+            from .edits import apply_edits, fine_tune_model, parameters_of, pins_from, restore_model
 
             source = Path(spec.edit["fromDir"])
             model = restore_model(spec, source)
-            said = apply_edits(spec, model, spec.edit["edits"])
+            settings = spec.edit.get("fineTune")
+            if not spec.edit["edits"] and settings is None:
+                raise EditRefused("there is nothing to change")
+            before_edit = parameters_of(spec, model) if settings and spec.backend in ("torch-mlp", "cnn1d") else None
+            said = apply_edits(spec, model, spec.edit["edits"]) if spec.edit["edits"] else []
             for line in said:
                 print(f"Edit: {line}", flush=True)
             if (source / "training_curve.json").is_file():
                 curve = json.loads((source / "training_curve.json").read_text())
+            if settings is not None:
+                pins = pins_from(before_edit, parameters_of(spec, model)) if before_edit is not None else {}
+                curve = []  # the curve of this run is the fine-tuning
+                said.append(fine_tune_model(spec, model, x_train, y_train, x_eval, y_eval, settings, pins, on_epoch))
+                print(f"Edit: {said[-1]}", flush=True)
             before = json.loads((source / "evaluation.json").read_text()) if (source / "evaluation.json").is_file() else None
-            edit_note = {"fromModel": spec.edit.get("fromModel"), "edits": spec.edit["edits"], "said": said, "before": before}
+            edit_note = {"fromModel": spec.edit.get("fromModel"), "edits": spec.edit["edits"], "fineTune": settings, "said": said, "before": before}
         else:
             model = fit(spec, x_train, y_train, x_eval, y_eval, on_epoch)
         if curve:

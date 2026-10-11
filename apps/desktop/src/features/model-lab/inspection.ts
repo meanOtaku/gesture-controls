@@ -6,6 +6,8 @@ export interface InspectionInput {
   name: string;
   mean: number;
   std: number;
+  /** For raw columns: how many input neurons this column has (one per step). */
+  neurons?: number;
 }
 export interface DenseLayerData {
   units: number;
@@ -73,7 +75,7 @@ export interface Inspection {
   version: number;
   backend: string;
   target: string;
-  inputKind: "features" | "channels";
+  inputKind: "features" | "channels" | "columns";
   gridSteps: number | null;
   centreWindows: boolean;
   spikeMethod: string | null;
@@ -161,3 +163,8 @@ export function foldGrid(flat: number[], steps: number): number[][] {
 }
 
 export const percent = (value: number): string => `${(value * 100).toFixed(0)}%`;
+
+/** The column and step a first-layer neuron of a raw-columns model belongs to. */
+export function neuronOf(neuron: number, steps: number): { column: number; step: number } {
+  return { column: Math.floor(neuron / steps), step: neuron % steps };
+}

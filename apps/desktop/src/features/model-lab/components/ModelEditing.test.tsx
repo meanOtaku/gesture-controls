@@ -145,3 +145,93 @@ describe("a model made by editing another", () => {
     expect(within(table).getByRole("row", { name: /After/ })).toHaveTextContent(/\d\.\d{3}/);
   });
 });
+
+describe("a model that reads the dataset's own columns", () => {
+  it("shows columns and neurons: the inputs per column, a first layer with a row for each neuron, and values per column", async () => {
+    const columns = (await import("../fixtures/inspection-columns.json")).default;
+    await open(view(columns));
+    const summary = screen.getByRole("status", { name: "Model summary" });
+    expect(summary).toHaveTextContent("3 columns × 2 readings = 6 input neurons");
+    const table = screen.getByRole("table", { name: "Inputs of the model" });
+    expect(within(table).getByRole("columnheader", { name: "Neurons" })).toBeInTheDocument();
+    expect(within(table).getAllByRole("row")).toHaveLength(4); // header + three columns
+    expect(table).toHaveTextContent("2 input neurons, one for each");
+    // The first layer has a row for each column at each reading.
+    expect(screen.getByRole("img", { name: /^Layer 1 weights: 6 by 5/ })).toBeInTheDocument();
+    const windowTable = screen.getByRole("table", { name: "Inputs for this window" });
+    expect(within(windowTable).getAllByRole("row")).toHaveLength(4);
+    expect(windowTable).toHaveTextContent("Its value (average of its readings)");
+  });
+
+  it("edits one neuron of a column, and switches a whole column off", async () => {
+    const columns = (await import("../fixtures/inspection-columns.json")).default;
+    await open(view(columns));
+    edit();
+    fireEvent.click(screen.getByRole("button", { name: /^Accel Y signal @2, 3: / })); // the second reading of the second column
+    const chosen = screen.getByRole("group", { name: "The chosen weight" });
+    expect(chosen).toHaveTextContent("Dense layer 1: from Y signal, reading 2 to neuron 3");
+    fireEvent.change(within(chosen).getByLabelText("New value"), { target: { value: "0.25" } });
+    fireEvent.click(within(chosen).getByRole("button", { name: "Set the weight" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Switch off Acceleration X signal" }));
+    const list = screen.getByRole("list", { name: "Changes waiting" });
+    expect(list).toHaveTextContent("Set the weight from Y signal reading 2 to neuron 3 in dense layer 1 to 0.25");
+    expect(list).toHaveTextContent("Switch off X signal");
+    fireEvent.click(screen.getByRole("button", { name: "Save as a new model" }));
+    await waitFor(() => expect(calls("start_label_edit")).toHaveLength(1));
+    expect(calls("start_label_edit")[0][1].edits).toEqual([
+      { kind: "setWeight", layer: 0, row: 3, column: 2, value: 0.25 },
+      { kind: "disableInput", input: "accel_x" },
+    ]);
+  });
+});
+
+describe("fine-tuning", () => {
+  it("carries on training a PyTorch model on its own, with a layer frozen, and sends the settings", async () => {
+    await open(view(dense));
+    edit();
+    const box = screen.getByRole("checkbox", { name: "Fine-tune after these changes" });
+    expect(screen.getByRole("button", { name: "Save as a new model" })).toBeDisabled(); // nothing to save yet
+    fireEvent.click(box);
+    expect(screen.getByRole("button", { name: "Fine-tune as a new model" })).toBeEnabled(); // fine-tuning is a change on its own
+    fireEvent.change(screen.getByLabelText("Fine-tuning rounds"), { target: { value: "12" } });
+    fireEvent.change(screen.getByLabelText("Fine-tuning learning rate"), { target: { value: "0.002" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Freeze dense layer 1" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Freeze dense layer 3" })); // the output layer of a network with two hidden layers
+    fireEvent.click(screen.getByRole("button", { name: "Fine-tune as a new model" }));
+    await waitFor(() => expect(calls("start_label_edit")).toHaveLength(1));
+    expect(calls("start_label_edit")[0][1]).toEqual({
+      id: "snap-abc", edits: [], fineTune: { epochs: 12, learningRate: 0.002, freezeConv: [], freezeDense: [0, 2] },
+    });
+    expect(await screen.findByText(/The fine-tuned model is being scored/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Fine-tuning rounds")).not.toBeInTheDocument(); // sent: the choice is cleared
+  });
+
+  it("fine-tunes after hand edits, and warns when every layer is frozen", async () => {
+    await open(view(dense));
+    edit();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Switch off Acceleration X spread" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Fine-tune after these changes" }));
+    for (const layer of [1, 2, 3]) fireEvent.click(screen.getByRole("checkbox", { name: `Freeze dense layer ${layer}` }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Every layer is frozen");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Freeze dense layer 2" })); // unfreeze one
+    fireEvent.click(screen.getByRole("button", { name: "Save as a new model" }));
+    await waitFor(() => expect(calls("start_label_edit")).toHaveLength(1));
+    expect(calls("start_label_edit")[0][1]).toMatchObject({ edits: [{ kind: "disableInput", input: "accel_x_std" }], fineTune: { freezeDense: [0, 2] } });
+  });
+
+  it("freezes convolution layers for a convolutional model, and is not offered for a scikit-learn one", async () => {
+    await open(view(conv));
+    edit();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Fine-tune after these changes" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Freeze convolution layer 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fine-tune as a new model" }));
+    await waitFor(() => expect(calls("start_label_edit")).toHaveLength(1));
+    expect(calls("start_label_edit")[0][1].fineTune).toMatchObject({ learningRate: 0.001, freezeConv: [0], freezeDense: [] });
+    cleanup();
+    invokeMock.mockReset();
+    await open(view(linear));
+    edit();
+    expect(screen.getByRole("checkbox", { name: "Fine-tune after these changes" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText(/Needs one of the PyTorch methods/)).toBeInTheDocument();
+  });
+});

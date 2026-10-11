@@ -24,6 +24,18 @@ def _report_every(epochs: int) -> int:
     return max(1, epochs // 60)
 
 
+def _hold_pins(torch, module, pins, prefix: str = "") -> None:
+    """Puts every pinned weight back to the value it was given by hand, after each step of training."""
+    if not pins:
+        return
+    with torch.no_grad():
+        for name, parameter in module.named_parameters():
+            pinned = pins.get(prefix + name)
+            if pinned is not None:
+                mask, values = pinned
+                parameter.copy_(torch.where(mask, values, parameter))
+
+
 class _Trainer:
     """What the two networks share: the loop, the balancing of classes, and the progress reports."""
 
@@ -31,7 +43,7 @@ class _Trainer:
     network: Network
     seed: int
 
-    def _loop(self, parameters, logits, scaled, target, augment, eval_scaled, eval_target, on_epoch, modes) -> None:
+    def _loop(self, parameters, logits, scaled, target, augment, eval_scaled, eval_target, on_epoch, modes, after_step=None) -> None:
         torch = self.torch
         network = self.network
         counts = torch.bincount(target, minlength=2).float()
@@ -54,6 +66,8 @@ class _Trainer:
                 optimiser.zero_grad()
                 loss_fn(logits(batch), target[index]).backward()
                 optimiser.step()
+                if after_step is not None:
+                    after_step()
             if on_epoch is not None and (epoch % every == 0 or epoch == network.epochs or epoch == 1):
                 modes(False)
                 with torch.no_grad():
@@ -105,6 +119,31 @@ class TorchModel(_Trainer):
             lambda training: self.net.train(training),
         )
         return self
+
+    def fine_tune(self, x, y, x_eval, y_eval, on_epoch, network: Network, freeze_dense: set[int], pins) -> None:
+        """Carries on training from the weights it has: the scaling stays as it was, frozen layers do not move, pinned weights keep their values."""
+        torch = self.torch
+        from dataclasses import replace  # noqa: F401  (kept local: only fine-tuning needs it)
+
+        data = torch.tensor(x, dtype=torch.float32)
+        scaled = (data - self.mean) / self.std
+        eval_scaled = None if x_eval is None else (torch.tensor(x_eval, dtype=torch.float32) - self.mean) / self.std
+        eval_target = None if y_eval is None else torch.tensor(y_eval, dtype=torch.long)
+        linears = [m for m in self.net if isinstance(m, torch.nn.Linear)]
+        for index, module in enumerate(linears):
+            for parameter in module.parameters():
+                parameter.requires_grad_(index not in freeze_dense)
+        trainable = [p for p in self.net.parameters() if p.requires_grad]
+        if not trainable:
+            raise ValueError("every layer is frozen, so there is nothing to train")
+        previous, self.network = self.network, network
+        try:
+            self._loop(trainable, self.net, scaled, torch.tensor(y, dtype=torch.long), None, eval_scaled, eval_target, on_epoch,
+                       lambda training: self.net.train(training), after_step=lambda: _hold_pins(torch, self.net, pins))
+        finally:
+            self.network = previous
+            for parameter in self.net.parameters():
+                parameter.requires_grad_(True)
 
     def module(self):
         torch = self.torch
@@ -208,6 +247,38 @@ class CnnModel(_Trainer):
             self._augment if self.network.augment else None, eval_scaled, eval_target, on_epoch, modes,
         )
         return self
+
+    def fine_tune(self, x, y, x_eval, y_eval, on_epoch, network: Network, freeze_conv: set[int], freeze_dense: set[int], pins) -> None:
+        """Carries on training from the weights it has: the scaling stays as it was, frozen layers do not move, pinned weights keep their values."""
+        torch = self.torch
+        data = torch.tensor(x, dtype=torch.float32)
+        eval_scaled = None if x_eval is None else self._scaled(torch.tensor(x_eval, dtype=torch.float32))
+        eval_target = None if y_eval is None else torch.tensor(y_eval, dtype=torch.long)
+        convs = [m for m in self.net if isinstance(m, torch.nn.Conv1d)]
+        linears = [m for m in self.head if isinstance(m, torch.nn.Linear)]
+        for index, module in enumerate(convs):
+            for parameter in module.parameters():
+                parameter.requires_grad_(index not in freeze_conv)
+        for index, module in enumerate(linears):
+            for parameter in module.parameters():
+                parameter.requires_grad_(index not in freeze_dense)
+        trainable = [p for p in [*self.net.parameters(), *self.head.parameters()] if p.requires_grad]
+        if not trainable:
+            raise ValueError("every layer is frozen, so there is nothing to train")
+
+        def modes(training: bool) -> None:
+            self.net.train(training)
+            self.head.train(training)
+
+        previous, self.network = self.network, network
+        try:
+            self._loop(trainable, self._logits, self._scaled(data), torch.tensor(y, dtype=torch.long),
+                       self._augment if network.augment else None, eval_scaled, eval_target, on_epoch, modes,
+                       after_step=lambda: (_hold_pins(torch, self.net, pins, "net."), _hold_pins(torch, self.head, pins, "head.")))
+        finally:
+            self.network = previous
+            for parameter in [*self.net.parameters(), *self.head.parameters()]:
+                parameter.requires_grad_(True)
 
     def module(self):
         torch = self.torch

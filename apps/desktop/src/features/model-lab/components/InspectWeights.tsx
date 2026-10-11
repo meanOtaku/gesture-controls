@@ -1,13 +1,13 @@
 import { inputLabel } from "../featureInfo";
 import type { Selection } from "../edits";
-import { divergingColor, type Inspection } from "../inspection";
+import { divergingColor, neuronOf, type Inspection } from "../inspection";
 import { Heatmap } from "./Heatmap";
 
 const WIDTH = 520;
 const ROW = 16;
 
 /** A weight for each input, as bars to the right (positive) or left (negative) of a centre line. */
-function WeightBars({ names, weights }: { names: string[]; weights: number[] }) {
+function WeightBars({ names, labels, weights }: { names: string[]; /** What to write beside each bar. */ labels: string[]; weights: number[] }) {
   const limit = Math.max(0.0001, ...weights.map(Math.abs));
   const middle = 260 + 90;
   const order = weights.map((w, i) => i).sort((a, b) => Math.abs(weights[b]) - Math.abs(weights[a]));
@@ -20,7 +20,7 @@ function WeightBars({ names, weights }: { names: string[]; weights: number[] }) 
         const span = (Math.abs(weight) / limit) * 250;
         return (
           <g key={names[index]}>
-            <text x={middle - 262} y={row * ROW + 12} fontSize={10} textAnchor="start" fill="currentColor">{inputLabel(names[index])}</text>
+            <text x={middle - 262} y={row * ROW + 12} fontSize={10} textAnchor="start" fill="currentColor">{labels[index]}</text>
             <rect x={weight >= 0 ? middle : middle - span} y={row * ROW + 3} width={Math.max(span, 1)} height={ROW - 5} fill={divergingColor(weight, limit)} stroke="rgba(0,0,0,0.3)" strokeWidth={0.5}>
               <title>{`${names[index]}: ${weight.toFixed(3)}`}</title>
             </rect>
@@ -38,16 +38,19 @@ export function InspectWeights({ inspection, editing = false, selection = null, 
   const { network, inputs } = inspection;
   const names = inputs.map((input) => input.name);
   const shortNames = names.map(inputLabel);
+  const steps = inspection.gridSteps ?? 1;
+  // A raw-columns model has a neuron for each column at each step: the first layer's rows are those neurons.
+  const firstRows = inspection.inputKind === "columns" ? Array.from({ length: names.length * steps }, (_, neuron) => { const { column, step } = neuronOf(neuron, steps); return steps === 1 ? shortNames[column] : `${shortNames[column]} @${step + 1}`; }) : shortNames;
 
   if (network.kind === "linear") {
     return (
       <section aria-label="Weights" className="flex flex-col gap-2">
         <h3 className="text-base font-semibold">Weights</h3>
         <p className="field-hint">Logistic regression adds up each scaled input times its weight, plus {network.output.bias[0]?.toFixed(3)}, and turns the total into a probability. A red bar pushes the answer toward the gesture, a blue one away from it.</p>
-        <WeightBars names={names} weights={network.output.weights.map((row) => row[0])} />
+        <WeightBars names={firstRows} labels={firstRows} weights={network.output.weights.map((row) => row[0])} />
         {editing && (
           <Heatmap
-            title="Weights to change" matrix={network.output.weights} rowLabels={shortNames} colLabels={["weight"]} cell={18}
+            title="Weights to change" matrix={network.output.weights} rowLabels={firstRows} colLabels={["weight"]} cell={18}
             caption="Press a weight to change it"
             onCellClick={(row, column) => onSelect?.({ kind: "dense", layer: 0, row, column })}
             selected={selection?.kind === "dense" && selection.layer === 0 ? { row: selection.row, column: selection.column } : null}
@@ -71,7 +74,7 @@ export function InspectWeights({ inspection, editing = false, selection = null, 
               key={index}
               title={last ? "Output layer weights" : `Layer ${index + 1} weights`}
               matrix={weights}
-              rowLabels={index === 0 ? shortNames : ordinal(weights.length).map((n) => `neuron ${n}`)}
+              rowLabels={index === 0 ? firstRows : ordinal(weights.length).map((n) => `neuron ${n}`)}
               colLabels={last ? Array.from({ length: weights[0].length }, (_, k) => (weights[0].length === 1 ? "the gesture" : k === 1 ? "gesture" : "not")) : ordinal(weights[0].length)}
               caption={last ? "Output layer: how the last neurons add up to the answer" : `Layer ${index + 1}: ${weights.length} inputs → ${layer.units} neurons (${layer.activation ?? "no"} activation)`}
               onCellClick={editing ? (row, column) => onSelect?.({ kind: "dense", layer: index, row, column }) : undefined}

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
-import { describeInput, STREAM_TITLES } from "../featureInfo";
+import { describeColumn, describeInput, STREAM_TITLES } from "../featureInfo";
 import type { Inspection } from "../inspection";
 
 /**
@@ -12,17 +12,19 @@ export function InspectInputs({ inspection, spikeLabel, editing = false, switche
   const [byImportance, setByImportance] = useState(true);
   const importance = useMemo(() => new Map(inspection.importance.map((entry) => [entry.name, entry])), [inspection]);
   const linear = inspection.network.kind === "linear";
+  const columns = inspection.inputKind === "columns";
+  const steps = inspection.gridSteps ?? 1;
   const rows = useMemo(() => {
     const list = inspection.inputs.map((input, index) => ({
       input,
-      info: describeInput(input.name, spikeLabel),
+      info: columns ? { ...describeInput(input.name, spikeLabel), text: describeColumn(input.name, steps) } : describeInput(input.name, spikeLabel),
       importance: importance.get(input.name),
-      weight: linear ? inspection.network.output.weights[index]?.[0] : undefined,
+      weight: linear ? (columns ? inspection.network.output.weights.slice(index * steps, (index + 1) * steps).reduce((sum, row) => sum + (row[0] ?? 0), 0) : inspection.network.output.weights[index]?.[0]) : undefined,
     }));
     return byImportance ? [...list].sort((a, b) => (b.importance?.aucDrop ?? 0) - (a.importance?.aucDrop ?? 0)) : list;
-  }, [inspection, importance, linear, spikeLabel, byImportance]);
+  }, [inspection, importance, linear, spikeLabel, byImportance, columns, steps]);
   const biggest = Math.max(0.0001, ...inspection.importance.map((entry) => Math.abs(entry.aucDrop)));
-  const channels = inspection.inputKind === "channels";
+  const channels = inspection.inputKind === "channels" || inspection.inputKind === "columns";
 
   return (
     <section aria-label="Inputs" className="flex flex-col gap-2">
@@ -42,9 +44,10 @@ export function InspectInputs({ inspection, spikeLabel, editing = false, switche
             <tr className="text-left">
               <th className="pr-3">Input</th>
               <th className="pr-3">What it takes as its value</th>
+              {columns && <th className="pr-3">Neurons</th>}
               <th className="pr-3">Scaled by (average, spread)</th>
               <th className="pr-3">Importance</th>
-              {linear && <th className="pr-3">Weight</th>}
+              {linear && <th className="pr-3">{columns ? "Weight (all its readings)" : "Weight"}</th>}
               {editing && <th className="pr-3">Switch off</th>}
             </tr>
           </thead>
@@ -53,6 +56,7 @@ export function InspectInputs({ inspection, spikeLabel, editing = false, switche
               <tr key={input.name} className="align-top border-t border-input/40">
                 <th scope="row" className="pr-3 text-left font-medium">{STREAM_TITLES[info.stream]} · {info.group} · {info.short}</th>
                 <td className="pr-3 text-muted-foreground">{info.text}</td>
+                {columns && <td className="pr-3">{input.neurons ?? steps}</td>}
                 <td className="pr-3 whitespace-nowrap">{input.mean.toPrecision(4)}, {input.std.toPrecision(3)}</td>
                 <td className="pr-3 whitespace-nowrap">
                   {entry ? (

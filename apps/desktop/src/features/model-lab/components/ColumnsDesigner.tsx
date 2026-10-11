@@ -63,7 +63,7 @@ export function ColumnsDesigner({
                 <td key={column.name} className="border border-input px-2 py-1" style={{ background: chosen.has(column.name) ? "rgba(255,210,63,0.45)" : undefined }} title={`Feed ${MEANING[column.name]} to the network`}>
                   <div className="flex items-center gap-1">
                     <Checkbox checked={chosen.has(column.name)} disabled={disabled} onCheckedChange={() => toggle(column.name)} aria-label={`Column ${column.name}`} />
-                    <code>{column.name}</code>
+                    <code className="whitespace-nowrap">{column.name}</code>
                   </div>
                 </td>
               ))}

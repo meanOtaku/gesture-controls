@@ -26,15 +26,19 @@ export function InspectWindows({ inspection, spikeLabel }: { inspection: Inspect
   const windows = inspection.windows;
   const window: InspectionWindow | undefined = windows[Math.min(chosen, windows.length - 1)];
   const convolutional = inspection.inputKind === "channels";
+  const columns = inspection.inputKind === "columns";
+  const readings = inspection.gridSteps ?? 1;
   const names = inspection.inputs.map((input) => input.name);
   const rows = useMemo(() => {
     if (!window || convolutional) return [];
     const list = names.map((name, index) => {
       const input = inspection.inputs[index];
-      return { name, info: describeInput(name, spikeLabel), value: window.values[index], z: (window.values[index] - input.mean) / input.std, move: window.contributions?.[index] ?? 0 };
+      // A raw column has a reading at each step: show their average, against the column's average.
+      const value = columns ? window.values.slice(index * readings, (index + 1) * readings).reduce((sum, v) => sum + v, 0) / readings : window.values[index];
+      return { name, info: describeInput(name, spikeLabel), value, z: (value - input.mean) / input.std, move: window.contributions?.[index] ?? 0 };
     });
     return bySize ? [...list].sort((a, b) => Math.abs(b.move) - Math.abs(a.move)) : list;
-  }, [window, convolutional, names, inspection.inputs, bySize, spikeLabel]);
+  }, [window, convolutional, columns, readings, names, inspection.inputs, bySize, spikeLabel]);
 
   if (!window) return <section aria-label="Windows"><h3 className="text-base font-semibold">Try a window</h3><p className="hint">No windows were saved with this model.</p></section>;
   const threshold = inspection.evaluation.threshold;
@@ -91,7 +95,7 @@ export function InspectWindows({ inspection, spikeLabel }: { inspection: Inspect
               <thead>
                 <tr className="text-left">
                   <th className="pr-3">Input</th>
-                  <th className="pr-3">Its value</th>
+                  <th className="pr-3">{columns && readings > 1 ? "Its value (average of its readings)" : "Its value"}</th>
                   <th className="pr-3">Compared with the training average</th>
                   <th className="pr-3">Moved the answer by</th>
                 </tr>

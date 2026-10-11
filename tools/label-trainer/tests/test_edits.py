@@ -148,3 +148,69 @@ def test_a_model_without_saved_parameters_says_so(tmp_path: Path) -> None:
     (out / "model.pkl").unlink()
     result, _ = edited(tmp_path, raw, out, [{"kind": "setBias", "layer": 0, "neuron": 0, "value": 0.1}])
     assert result["outcome"] == "failed" and "cannot be edited" in result["message"]
+
+
+# ---- fine-tuning --------------------------------------------------------------------------------------------------------
+
+def tuned(tmp_path: Path, raw: dict, source: Path, edits: list[dict], fine_tune: dict, name: str = "tuned"):
+    spec = {**raw, "edit": {"fromDir": str(source), "fromModel": "snap-v1", "edits": edits, "fineTune": fine_tune}}
+    out = tmp_path / name
+    return lt.run(spec, out), out
+
+
+def test_fine_tuning_carries_on_training_and_holds_what_was_set_by_hand(tmp_path: Path, capsys) -> None:
+    pytest.importorskip("torch")
+    raw, out, _ = train(tmp_path, "torch-mlp", features=["accel_x_std", "accel_y_std", "gyro_x_std"], network={"hidden": [{"units": 6}, {"units": 4}], "epochs": 10})
+    capsys.readouterr()
+    pinned = {"kind": "setWeight", "layer": 0, "row": 0, "column": 1, "value": 0.77}
+    result, new = tuned(tmp_path, raw, out, [pinned, {"kind": "disableInput", "input": "gyro_x_std"}], {"epochs": 12, "learningRate": 0.02, "freezeDense": [2]})
+    assert result["outcome"] in ("deployable", "evaluationOnly"), result["message"]
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.startswith("@curve ")]
+    assert len(lines) >= 2 and json.loads(lines[-1][len("@curve "):])["epoch"] == 12  # the desktop draws the fine-tuning as it happens
+    spec = lt.parse_spec(raw)
+    before = extract(spec, restore_model(spec, out))
+    after = extract(spec, restore_model(spec, new))
+    assert after.dense[0].weights[0, 1] == pytest.approx(0.77, abs=1e-6)  # held where it was put, however long it trained
+    assert np.all(after.dense[0].weights[2, :] == 0)  # the switched-off input stays off
+    assert not np.allclose(after.dense[0].weights[1, :], before.dense[0].weights[1, :])  # the rest moved
+    assert np.array_equal(after.output.weights, before.output.weights)  # the frozen layer (the output layer) did not
+    inspection = json.loads((new / "inspection.json").read_text())
+    assert any("fine-tuned for 12 rounds" in line and "dense layer 3 frozen" in line and "held where they were set" in line for line in inspection["edit"]["said"])
+    assert inspection["edit"]["fineTune"]["epochs"] == 12
+    assert inspection["curve"][-1]["epoch"] == 12  # this run's curve is the fine-tuning
+
+
+def test_a_convolutional_model_can_be_fine_tuned_with_a_layer_frozen(tmp_path: Path) -> None:
+    pytest.importorskip("torch")
+    raw, out, _ = train(tmp_path, "cnn1d", gridSteps=8, features=["accel_x", "accel_y", "gyro_x"], network={"conv": [{"filters": 4, "kernel": 3}, {"filters": 3, "kernel": 3}], "epochs": 10})
+    result, new = tuned(tmp_path, raw, out, [], {"epochs": 8, "freezeConv": [0]})  # fine-tuning on its own, no edits
+    assert result["outcome"] in ("deployable", "evaluationOnly"), result["message"]
+    spec = lt.parse_spec(raw)
+    before = extract(spec, restore_model(spec, out))
+    after = extract(spec, restore_model(spec, new))
+    assert np.array_equal(after.conv[0].weights, before.conv[0].weights)  # frozen
+    assert not np.array_equal(after.conv[1].weights, before.conv[1].weights)  # the rest carried on learning
+
+
+@pytest.mark.parametrize("settings,message", [
+    ({"epochs": 0}, "rounds"),
+    ({"epochs": 9999}, "rounds"),
+    ({"learningRate": 5}, "learning rate"),
+    ({"surprise": 1}, "unknown fine-tuning"),
+    ({"freezeDense": [0, 1, 2]}, "frozen"),
+    ({"freezeConv": [0]}, "convolution layers to freeze"),
+])
+def test_fine_tuning_settings_are_checked(tmp_path: Path, settings: dict, message: str) -> None:
+    pytest.importorskip("torch")
+    raw, out, _ = train(tmp_path, "torch-mlp", features=["accel_x_std", "accel_y_std"], network={"hidden": [{"units": 4}, {"units": 3}], "epochs": 8})
+    result, _ = tuned(tmp_path, raw, out, [], settings)
+    assert result["outcome"] == "failed" and message in result["message"]
+
+
+def test_the_scikit_learn_methods_cannot_be_fine_tuned_and_nothing_to_change_is_refused(tmp_path: Path) -> None:
+    raw, out, _ = train(tmp_path, "logreg", features=["accel_x_std", "accel_y_std"])
+    result, _ = tuned(tmp_path, raw, out, [], {"epochs": 5})
+    assert result["outcome"] == "failed" and "PyTorch" in result["message"]
+    spec = {**raw, "edit": {"fromDir": str(out), "fromModel": "snap-v1", "edits": []}}
+    nothing = lt.run(spec, tmp_path / "nothing")
+    assert nothing["outcome"] == "failed" and "nothing to change" in nothing["message"]

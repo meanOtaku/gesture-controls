@@ -1,5 +1,5 @@
 import { describeInput } from "./featureInfo";
-import type { Inspection } from "./inspection";
+import { neuronOf, type Inspection } from "./inspection";
 
 /** A change to a trained model, as the trainer knows it (see `edits.py`). */
 export type Edit =
@@ -28,7 +28,11 @@ export function describeEdit(edit: Edit, inspection: Inspection): string {
     case "disableInput":
       return `Switch off ${label(edit.input)}: the model stops using it`;
     case "setWeight": {
-      const from = edit.layer === 0 && inspection.network.kind !== "conv" ? label(names[edit.row] ?? `input ${edit.row + 1}`) : `neuron ${edit.row + 1}`;
+      const steps = inspection.gridSteps ?? 1;
+      const reading = inspection.inputKind === "columns" ? neuronOf(edit.row, steps) : null;
+      const from = edit.layer === 0 && reading
+        ? `${label(names[reading.column] ?? `column ${reading.column + 1}`)}${steps > 1 ? ` reading ${reading.step + 1}` : ""}`
+        : edit.layer === 0 && inspection.network.kind !== "conv" ? label(names[edit.row] ?? `input ${edit.row + 1}`) : `neuron ${edit.row + 1}`;
       return `Set the weight from ${from} to neuron ${edit.column + 1} in ${layerName(edit.layer)} to ${edit.value}`;
     }
     case "setBias":
@@ -56,3 +60,17 @@ export function addEdit(edits: Edit[], next: Edit): Edit[] {
   };
   return [...edits.filter((edit) => target(edit) !== target(next)), next];
 }
+
+/** How to carry on training an edited model: for how long, how fast, and which layers stay as they are. */
+export interface FineTune {
+  epochs: number;
+  learningRate: number;
+  freezeConv: number[];
+  freezeDense: number[];
+}
+
+/** Only the PyTorch methods can carry on training from changed weights. */
+export const canFineTune = (backend: string): boolean => backend === "torch-mlp" || backend === "cnn1d";
+
+/** A gentle start: a few rounds at a smaller step than the model was trained with. */
+export const defaultFineTune = (backend: string): FineTune => ({ epochs: 30, learningRate: backend === "cnn1d" ? 0.001 : 0.003, freezeConv: [], freezeDense: [] });

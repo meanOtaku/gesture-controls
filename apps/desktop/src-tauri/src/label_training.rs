@@ -607,6 +607,7 @@ struct EditJob {
     from_model: String,
     from_dir: PathBuf,
     edits: Vec<serde_json::Value>,
+    fine_tune: Option<serde_json::Value>,
 }
 
 /// The kinds of edit the trainer knows (see `KINDS` in `edits.py`).
@@ -619,9 +620,26 @@ const EDIT_KINDS: [&str; 5] = [
 ];
 const MAX_EDITS: usize = 200;
 
-/// Refuses a list of edits that cannot be an edit list at all; the trainer checks each against the model.
-fn check_edits(edits: &[serde_json::Value]) -> Result<(), String> {
-    if edits.is_empty() {
+/// The settings of fine-tuning the trainer knows (see `FINE_TUNE_KEYS` in `edits.py`).
+const FINE_TUNE_KEYS: [&str; 4] = ["epochs", "learningRate", "freezeConv", "freezeDense"];
+
+/// Refuses a list of edits (with or without fine-tuning after them) that cannot be an edit at all; the trainer checks each
+/// against the model.
+fn check_edits(
+    edits: &[serde_json::Value],
+    fine_tune: Option<&serde_json::Value>,
+) -> Result<(), String> {
+    if let Some(settings) = fine_tune {
+        let object = settings
+            .as_object()
+            .ok_or("the fine-tuning settings must be an object")?;
+        if let Some(unknown) = object
+            .keys()
+            .find(|key| !FINE_TUNE_KEYS.contains(&key.as_str()))
+        {
+            return Err(format!("unknown fine-tuning setting '{unknown}'"));
+        }
+    } else if edits.is_empty() {
         return Err("there is nothing to change".into());
     }
     if edits.len() > MAX_EDITS {
@@ -649,8 +667,9 @@ pub async fn start_label_edit(
     host: State<'_, LabelRuntimeHost>,
     id: String,
     edits: Vec<serde_json::Value>,
+    fine_tune: Option<serde_json::Value>,
 ) -> Result<String, String> {
-    check_edits(&edits)?;
+    check_edits(&edits, fine_tune.as_ref())?;
     let (run_id, _) = host.trained_run_of(&id)?;
     let from_dir = runs_dir(&app)?.join(&run_id);
     let request: TrainRequest = fs::read(from_dir.join("request.json"))
@@ -666,6 +685,7 @@ pub async fn start_label_edit(
         from_model: id,
         from_dir,
         edits,
+        fine_tune,
     };
     start_run(app, runtime, host, request, Some(job)).await
 }
@@ -738,6 +758,7 @@ async fn start_run(
                 "fromDir": job.from_dir,
                 "fromModel": job.from_model,
                 "edits": job.edits,
+                "fineTune": job.fine_tune,
             });
         }
         // Kept so this model can be edited later: the same request rebuilds the same plan.
@@ -1376,20 +1397,42 @@ mod tests {
     #[test]
     fn a_list_of_edits_is_checked_before_anything_is_started() {
         let edit = |kind: &str| serde_json::json!({"kind": kind});
-        assert!(check_edits(&[edit("disableInput"), edit("setWeight")]).is_ok());
-        assert!(check_edits(&[]).unwrap_err().contains("nothing to change"));
+        assert!(check_edits(&[edit("disableInput"), edit("setWeight")], None).is_ok());
         assert!(
-            check_edits(&[edit("teleport")])
+            check_edits(&[], None)
+                .unwrap_err()
+                .contains("nothing to change")
+        );
+        assert!(
+            check_edits(&[edit("teleport")], None)
                 .unwrap_err()
                 .contains("edit 1: unknown kind")
         );
         assert!(
-            check_edits(&[edit("setBias"), serde_json::json!({"nope": 1})])
+            check_edits(&[edit("setBias"), serde_json::json!({"nope": 1})], None)
                 .unwrap_err()
                 .contains("edit 2")
         );
         let many: Vec<_> = (0..201).map(|_| edit("setBias")).collect();
-        assert!(check_edits(&many).unwrap_err().contains("at most 200"));
+        assert!(
+            check_edits(&many, None)
+                .unwrap_err()
+                .contains("at most 200")
+        );
+        // Fine-tuning on its own is a change, and is checked for what it is.
+        let tune = serde_json::json!({"epochs": 20, "learningRate": 0.01, "freezeDense": [0]});
+        assert!(check_edits(&[], Some(&tune)).is_ok());
+        assert!(check_edits(&[edit("setBias")], Some(&tune)).is_ok());
+        assert!(
+            check_edits(&[], Some(&serde_json::json!({"momentum": 1})))
+                .unwrap_err()
+                .contains("unknown fine-tuning setting")
+        );
+        assert!(
+            check_edits(&[], Some(&serde_json::json!(5)))
+                .unwrap_err()
+                .contains("must be an object")
+        );
     }
 
     #[test]

@@ -5,7 +5,7 @@ import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
-import { addEdit, type Edit, type Selection } from "../edits";
+import { addEdit, type Edit, type FineTune, type Selection } from "../edits";
 import type { LabelModel } from "../labelModels";
 import type { ModelInspectionView } from "../inspection";
 import { SPIKE_METHODS } from "../training";
@@ -62,6 +62,7 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
   const [selection, setSelection] = useState<Selection | null>(null);
   const [saving, setSaving] = useState(false);
   const [editMessage, setEditMessage] = useState<string | null>(null);
+  const [fineTune, setFineTune] = useState<FineTune | null>(null);
 
   useEffect(() => {
     let stale = false;
@@ -84,6 +85,7 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
     setEdits([]);
     setSelection(null);
     setEditMessage(null);
+    setFineTune(null);
   }, [id]);
   useEffect(() => {
     let stale = false;
@@ -105,9 +107,10 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
     setSaving(true);
     setEditMessage(null);
     try {
-      await invoke("start_label_edit", { id, edits });
-      setEditMessage("Started. The edited model is being scored and will appear as a new draft under Label models when it is done; the progress is under Train a model.");
+      await invoke("start_label_edit", { id, edits, ...(fineTune ? { fineTune } : {}) });
+      setEditMessage(`Started. The ${fineTune ? "fine-tuned" : "edited"} model is being scored and will appear as a new draft under Label models when it is done; the progress is under Train a model.`);
       setEdits([]);
+      setFineTune(null);
       setSelection(null);
     } catch (err) {
       setEditMessage(String(err));
@@ -165,7 +168,7 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
           <>
             <div className="flex flex-wrap items-center gap-2" role="status" aria-label="Model summary">
               <Badge variant="outline">{METHOD_NAMES[backend] ?? backend}</Badge>
-              <Badge variant="outline">{inspection.inputs.length} {inspection.inputKind === "channels" ? "channels" : "inputs"}</Badge>
+              <Badge variant="outline">{inspection.inputKind === "columns" ? `${inspection.inputs.length} columns × ${inspection.gridSteps ?? 1} reading${(inspection.gridSteps ?? 1) === 1 ? "" : "s"} = ${inspection.inputs.length * (inspection.gridSteps ?? 1)} input neurons` : `${inspection.inputs.length} ${inspection.inputKind === "channels" ? "channels" : "inputs"}`}</Badge>
               {inspection.parameters !== null && <Badge variant="outline">{inspection.parameters.toLocaleString("en-US")} parameters</Badge>}
               {typeof auc === "number" && <Badge variant="outline">Held-out ROC AUC {auc.toFixed(2)}</Badge>}
               {inspection.spikeMethod && <Badge variant="outline">Spikes: {spikeLabel}</Badge>}
@@ -194,7 +197,8 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
                 inspection={inspection} selection={selection} edits={edits} saving={saving} message={editMessage}
                 onAdd={(edit) => setEdits((previous) => addEdit(previous, edit))}
                 onRemove={(index) => setEdits((previous) => previous.filter((_, i) => i !== index))}
-                onClearAll={() => { setEdits([]); setSelection(null); }}
+                onClearAll={() => { setEdits([]); setSelection(null); setFineTune(null); }}
+                fineTune={fineTune} onFineTune={setFineTune}
                 onSave={() => void saveEdits()}
               />
             )}

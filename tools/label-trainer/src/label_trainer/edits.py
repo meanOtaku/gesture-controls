@@ -211,3 +211,64 @@ def apply_edits(spec, model, edits: list[dict[str, Any]]) -> list[str]:
                 said.append(f"silenced neuron {neuron + 1} of dense layer {layer + 1}")
     params.commit()
     return said
+
+
+# ---- fine-tuning: carry on training an edited model, with what was set by hand held where it was put ----------------------------------------
+
+def parameters_of(spec, model) -> dict[str, np.ndarray]:
+    """Every parameter of a PyTorch model by name, as numpy copies (for finding out what an edit changed)."""
+    out: dict[str, np.ndarray] = {}
+    if spec.backend == "torch-mlp":
+        out.update({f"{name}": p.detach().numpy().copy() for name, p in model.net.named_parameters()})
+    else:
+        out.update({f"net.{name}": p.detach().numpy().copy() for name, p in model.net.named_parameters()})
+        out.update({f"head.{name}": p.detach().numpy().copy() for name, p in model.head.named_parameters()})
+    return out
+
+
+def pins_from(before: dict[str, np.ndarray], after: dict[str, np.ndarray]):
+    """The weights an edit changed, with the values it gave them: during fine-tuning they stay as they were set."""
+    import torch
+
+    pins = {}
+    for name, new in after.items():
+        mask = np.not_equal(new, before[name])
+        if mask.any():
+            pins[name] = (torch.tensor(mask), torch.tensor(new))
+    return pins
+
+
+FINE_TUNE_KEYS = ("epochs", "learningRate", "freezeConv", "freezeDense")
+
+
+def fine_tune_model(spec, model, x_train, y_train, x_eval, y_eval, settings: dict[str, Any], pins, on_epoch) -> str:
+    """Trains an (edited) PyTorch model a little further. Returns what was done, in words."""
+    from dataclasses import replace
+
+    if spec.backend not in ("torch-mlp", "cnn1d"):
+        raise EditRefused("fine-tuning needs one of the PyTorch methods: the scikit-learn ones cannot carry on training from changed weights")
+    unknown = sorted(set(settings) - set(FINE_TUNE_KEYS))
+    if unknown:
+        raise EditRefused(f"unknown fine-tuning setting(s) {unknown}")
+    epochs = settings.get("epochs", 30)
+    rate = settings.get("learningRate", spec.network.learning_rate * 0.3)
+    if isinstance(epochs, bool) or not isinstance(epochs, int) or not 1 <= epochs <= 500:
+        raise EditRefused("fine-tuning rounds must be a whole number from 1 to 500")
+    if isinstance(rate, bool) or not isinstance(rate, (int, float)) or not 1e-5 <= rate <= 0.1:
+        raise EditRefused("the fine-tuning learning rate must be from 0.00001 to 0.1")
+    freeze_conv = {int(i) for i in settings.get("freezeConv", [])}
+    freeze_dense = {int(i) for i in settings.get("freezeDense", [])}
+    network = replace(spec.network, epochs=int(epochs), learning_rate=float(rate))
+    if spec.backend == "torch-mlp":
+        if freeze_conv:
+            raise EditRefused("only a convolutional model has convolution layers to freeze")
+        model.fine_tune(x_train, y_train, x_eval, y_eval, on_epoch, network, freeze_dense, pins)
+    else:
+        model.fine_tune(x_train, y_train, x_eval, y_eval, on_epoch, network, freeze_conv, freeze_dense, pins)
+    frozen = [f"convolution layer {i + 1}" for i in sorted(freeze_conv)] + [f"dense layer {i + 1}" for i in sorted(freeze_dense)]
+    pinned = sum(int(mask.sum()) for mask, _ in pins.values()) if pins else 0
+    return (
+        f"fine-tuned for {epochs} rounds at a learning rate of {rate:g}"
+        + (f", with {', '.join(frozen)} frozen" if frozen else "")
+        + (f" and {pinned} weight{'s' if pinned != 1 else ''} held where they were set" if pinned else "")
+    )
