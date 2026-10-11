@@ -22,13 +22,21 @@ from test_label_train import spec_for  # noqa: E402
 
 
 def main(out_root: Path, only: list[str]) -> None:
-    for backend, name in (("logreg", "trained_logreg_bundle"), ("mlp", "trained_mlp_bundle"), ("torch-mlp", "trained_torch_bundle"), ("cnn1d", "trained_cnn_bundle")):
+    designed_dense = {"hidden": [{"units": 8, "activation": "tanh"}, {"units": 5, "activation": "leaky_relu"}, {"units": 4, "activation": "sigmoid"}], "epochs": 80, "dropout": 0.1}
+    designed_cnn = {"conv": [{"filters": 8, "kernel": 3, "activation": "tanh"}, {"filters": 6, "kernel": 7}], "pooling": "max", "hidden": [{"units": 5, "activation": "leaky_relu"}], "epochs": 40}
+    for backend, name, network in (
+        ("logreg", "trained_logreg_bundle", None), ("mlp", "trained_mlp_bundle", None), ("torch-mlp", "trained_torch_bundle", None),
+        ("cnn1d", "trained_cnn_bundle", None),
+        ("torch-mlp", "trained_designed_dense_bundle", designed_dense), ("cnn1d", "trained_designed_cnn_bundle", designed_cnn),
+    ):
         if only and name not in only:
             continue
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             extra = {"gridSteps": 16} if backend == "cnn1d" else {}
-            spec = spec_for(tmp_path, backend, params={"epochs": 120} if backend == "torch-mlp" else {"epochs": 60} if backend == "cnn1d" else {}, **extra)
+            if network:
+                extra["network"] = network
+            spec = spec_for(tmp_path, backend, params={} if network else {"epochs": 120} if backend == "torch-mlp" else {"epochs": 60} if backend == "cnn1d" else {}, **extra)
             run_dir = tmp_path / "run"
             result = lt.run(spec, run_dir)
             assert result["outcome"] == "deployable", result["message"]
@@ -37,7 +45,7 @@ def main(out_root: Path, only: list[str]) -> None:
             model = lt.fit(parsed, x_train, y_train)
             probe = np.vstack([x_eval[y_eval == 0][:2], x_eval[y_eval == 1][:2]]).astype(np.float32)
             # What the shipped file gives, which is what the desktop's runtime must reproduce.
-            shipped = lt.onnx_probabilities(run_dir / "model.onnx", probe)[:, 1] if backend == "cnn1d" else model.predict_proba(probe)[:, 1]
+            shipped = lt.onnx_probabilities(run_dir / "model.onnx", probe)[:, 1] if backend == "cnn1d" or network else model.predict_proba(probe)[:, 1]
             destination = out_root / name
             destination.mkdir(parents=True, exist_ok=True)
             for file in ("manifest.json", "model.onnx"):

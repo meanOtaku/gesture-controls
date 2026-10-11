@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "modelId": "snap-ecc945a4",
+  "targetLabel": "snap",
+  "model": {
+    "file": "model.onnx",
+    "sha256": "ecc945a4883157f03ae2c4347a66d20577347fdc4efa47f5dadac7eaa4636a83",
+    "format": "onnx",
+    "opset": 17
+  },
+  "framework": {
+    "name": "pytorch",
+    "version": "2.14.1"
+  },
+  "input": {
+    "name": "X",
+    "shape": [
+      null,
+      96
+    ],
+    "dtype": "float32",
+    "features": [
+      "accel_x",
+      "accel_y",
+      "accel_z",
+      "gyro_x",
+      "gyro_y",
+      "gyro_z"
+    ],
+    "grid": {
+      "steps": 16
+    }
+  },
+  "output": {
+    "name": "probabilities",
+    "shape": [
+      null,
+      2
+    ],
+    "dtype": "float32",
+    "positiveIndex": 1
+  },
+  "sources": [
+    "watchAcceleration",
+    "watchGyroscope"
+  ],
+  "window": {
+    "durationMs": 500,
+    "strideMs": 150,
+    "maxGapMs": 250,
+    "minSamples": 3
+  },
+  "quality": {
+    "maxContactQuality": 0.0,
+    "minSampleCount": 3
+  },
+  "thresholds": {
+    "activation": 0.95,
+    "release": 0.8
+  },
+  "preprocessing": {
+    "kind": "none"
+  },
+  "provenance": {
+    "backend": "cnn1d",
+    "trainRecordings": [
+      "i1",
+      "i2",
+      "s1",
+      "s2"
+    ],
+    "evaluationRecordings": [
+      "i3",
+      "s3"
+    ],
+    "seed": 7,
+    "evaluationF1": 1.0,
+    "evaluationFalseActivationRate": 0.0,
+    "evaluationRocAuc": 1.0,
+    "thresholdChosenOnEvaluationRecordings": true,
+    "movementOnly": false,
+    "spikeMethod": "none",
+    "ppgChannels": [
+      "green",
+      "red",
+      "ir"
+    ],
+    "gridSteps": 16,
+    "network": {
+      "hidden": [
+        {
+          "units": 5,
+          "activation": "leaky_relu"
+        }
+      ],
+      "conv": [
+        {
+          "filters": 8,
+          "kernel": 3,
+          "activation": "tanh"
+        },
+        {
+          "filters": 6,
+          "kernel": 7,
+          "activation": "relu"
+        }
+      ],
+      "pooling": "max",
+      "dropout": 0.2,
+      "learningRate": 0.003,
+      "epochs": 40,
+      "batchSize": 64,
+      "weightDecay": 0.001,
+      "balanceClasses": true,
+      "augment": true
+    },
+    "parameters": 541
+  }
+}

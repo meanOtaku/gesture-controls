@@ -246,41 +246,49 @@ pub(crate) mod tests {
     /// runtime scores the trainer's grids the way the exported file does, and the grid it expects is the one declared.
     #[test]
     fn a_convolutional_bundle_validates_and_scores_the_trainers_grids() {
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/trained_cnn_bundle");
-        let bundle = validate_bundle(&dir, Some(&LabelId::new("snap").unwrap())).unwrap();
-        let version = active_version(&bundle);
-        let channels = bundle.manifest.grid_channels().expect("a grid model");
-        assert_eq!(channels.len(), 6);
-        assert_eq!(bundle.manifest.input.grid.as_ref().unwrap().steps, 16);
-        let model = LoadedModel::load(bundle, &version).unwrap();
-        let plan = model.grid.clone().expect("the model reads a grid");
-        assert_eq!((plan.channels.len(), plan.steps), (6, 16));
-        let expected: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(dir.join("expected.json")).unwrap()).unwrap();
-        let rows = expected["inputs"].as_array().unwrap();
-        let want = expected["positive_probability"].as_array().unwrap();
-        assert!(!rows.is_empty());
-        for (row, want) in rows.iter().zip(want) {
-            let input: Vec<f32> = row
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|v| v.as_f64().unwrap() as f32)
-                .collect();
-            assert_eq!(input.len(), 6 * 16);
-            let got = model.predict_input(input).unwrap();
+        // The default convolutional network, and a designed one (tanh and ReLU convolutions, max pooling, a dense layer).
+        for (name, channels_expected) in [
+            ("trained_cnn_bundle", 6),
+            ("trained_designed_cnn_bundle", 6),
+        ] {
+            let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures")
+                .join(name);
+            let bundle = validate_bundle(&dir, Some(&LabelId::new("snap").unwrap()))
+                .unwrap_or_else(|e| panic!("{name}: {e}"));
+            let version = active_version(&bundle);
+            let channels = bundle.manifest.grid_channels().expect("a grid model");
+            assert_eq!(channels.len(), channels_expected);
+            assert_eq!(bundle.manifest.input.grid.as_ref().unwrap().steps, 16);
+            let model = LoadedModel::load(bundle, &version).unwrap();
+            let plan = model.grid.clone().expect("the model reads a grid");
+            assert_eq!((plan.channels.len(), plan.steps), (6, 16));
+            let expected: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(dir.join("expected.json")).unwrap()).unwrap();
+            let rows = expected["inputs"].as_array().unwrap();
+            let want = expected["positive_probability"].as_array().unwrap();
+            assert!(!rows.is_empty());
+            for (row, want) in rows.iter().zip(want) {
+                let input: Vec<f32> = row
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|v| v.as_f64().unwrap() as f32)
+                    .collect();
+                assert_eq!(input.len(), 6 * 16);
+                let got = model.predict_input(input).unwrap();
+                assert!(
+                    (got - want.as_f64().unwrap()).abs() < 1e-4,
+                    "{name}: {got} vs {want}"
+                );
+            }
+            let first = want.first().unwrap().as_f64().unwrap();
+            let last = want.last().unwrap().as_f64().unwrap();
             assert!(
-                (got - want.as_f64().unwrap()).abs() < 1e-4,
-                "{got} vs {want}"
+                first < last,
+                "{name}: the negative rows score below the positive ones: {first} {last}"
             );
         }
-        let first = want.first().unwrap().as_f64().unwrap();
-        let last = want.last().unwrap().as_f64().unwrap();
-        assert!(
-            first < last,
-            "the negative rows score below the positive ones: {first} {last}"
-        );
     }
 
     /// Bundles written by the real per-label trainer (`tools/model-bundle-fixture/make_trained_fixtures.py`), one per
@@ -291,6 +299,8 @@ pub(crate) mod tests {
             "trained_logreg_bundle",
             "trained_mlp_bundle",
             "trained_torch_bundle",
+            // Designed networks: tanh, leaky ReLU and sigmoid layers, three hidden layers, dropout.
+            "trained_designed_dense_bundle",
         ] {
             let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("tests/fixtures")

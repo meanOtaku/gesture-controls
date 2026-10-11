@@ -33,6 +33,8 @@ import numpy as np
 from .csv_io import load_recording
 from .dataset import build_dataset_from_recordings
 from .features import FEATURE_NAMES, SPIKE_FEATURE_NAMES, SPIKE_METHODS
+from .nets import CnnModel, TorchModel
+from .network import Network, NetworkRefused, parameter_count, parse_network
 from .grid import DEFAULT_STEPS, MAX_STEPS, MIN_STEPS, build_grid, channels_for
 from .labels import LABEL_MAPPING_VERSION, load_label_mapping
 from .windowing import WindowConfig
@@ -121,6 +123,7 @@ class Spec:
     spike_method: str | None
     ppg_channels: list[str]
     grid_steps: int
+    network: Network
     window: WindowConfig
     backend: str
     seed: int
@@ -171,6 +174,13 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         features = [name for name in available if name in set(requested)]
     else:
         features = available
+    params = dict(raw.get("params", {}))
+    try:
+        network = parse_network(raw.get("network"), backend)
+    except NetworkRefused as refusal:
+        raise TrainingRefused(str(refusal)) from refusal
+    if "epochs" in params and "epochs" not in (raw.get("network") or {}):
+        network = replace(network, epochs=max(5, int(params["epochs"])))  # the older way of asking for fewer rounds
     window = raw.get("window", {})
     recordings = {rid: Path(path) for rid, path in raw.get("recordings", {}).items()}
     train, evaluation = list(raw.get("train", [])), list(raw.get("evaluation", []))
@@ -194,6 +204,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         spike_method=spike_method,
         ppg_channels=ppg_channels,
         grid_steps=grid_steps,
+        network=network,
         window=WindowConfig(
             window_ms=float(window.get("windowMs", 500)),
             stride_ms=float(window.get("strideMs", 150)),
@@ -253,188 +264,47 @@ def check_enough(y_train: np.ndarray, y_eval: np.ndarray) -> None:
         )
 
 
-def make_model(backend: str, n_features: int, seed: int, params: dict[str, Any]):
+def make_model(backend: str, n_features: int, seed: int, params: dict[str, Any], network: Network | None = None):
     """An untrained model whose scaling (if any) is inside it, so the exported file needs no separate preprocessing."""
     from sklearn.linear_model import LogisticRegression
     from sklearn.neural_network import MLPClassifier
     from sklearn.pipeline import Pipeline
     from sklearn.preprocessing import StandardScaler
 
+    network = network or parse_network(None, backend)
     if backend == "logreg":
         return Pipeline([("scale", StandardScaler()), ("model", LogisticRegression(max_iter=2000, class_weight="balanced", random_state=seed))])
     if backend == "mlp":
-        hidden = tuple(params.get("hidden", (32, 16)))
-        return Pipeline([("scale", StandardScaler()), ("model", MLPClassifier(hidden_layer_sizes=hidden, max_iter=600, early_stopping=True, random_state=seed))])
+        hidden = tuple(layer.units for layer in network.hidden) or tuple(params.get("hidden", (32, 16)))
+        return Pipeline([("scale", StandardScaler()), ("model", MLPClassifier(hidden_layer_sizes=hidden, max_iter=network.epochs, early_stopping=True, random_state=seed))])
     raise TrainingRefused(f"{backend} is not a scikit-learn backend")
 
 
-class TorchModel:
-    """A small neural network with the feature scaling inside it. Imported lazily: PyTorch is an optional extra."""
-
-    def __init__(self, n_features: int, seed: int, params: dict[str, Any]):
-        import torch
-
-        torch.manual_seed(seed)
-        self.torch = torch
-        hidden = int(params.get("hidden", 32))
-        self.epochs = int(params.get("epochs", 200))
-        self.mean = torch.zeros(n_features)
-        self.std = torch.ones(n_features)
-        self.net = torch.nn.Sequential(
-            torch.nn.Linear(n_features, hidden), torch.nn.ReLU(), torch.nn.Linear(hidden, hidden // 2 or 1), torch.nn.ReLU(), torch.nn.Linear(hidden // 2 or 1, 2)
-        )
-
-    def fit(self, x: np.ndarray, y: np.ndarray) -> "TorchModel":
-        torch = self.torch
-        data = torch.tensor(x, dtype=torch.float32)
-        self.mean = data.mean(dim=0)
-        self.std = data.std(dim=0).clamp_min(1e-6)
-        target = torch.tensor(y, dtype=torch.long)
-        counts = torch.bincount(target, minlength=2).float()
-        weights = counts.sum() / (2 * counts.clamp_min(1))
-        loss_fn = torch.nn.CrossEntropyLoss(weight=weights)
-        optimiser = torch.optim.Adam(self.net.parameters(), lr=float(0.01))
-        scaled = (data - self.mean) / self.std
-        for _ in range(self.epochs):
-            optimiser.zero_grad()
-            loss_fn(self.net(scaled), target).backward()
-            optimiser.step()
-        return self
-
-    def module(self):
-        torch = self.torch
-
-        class Wrapped(torch.nn.Module):
-            def __init__(self, net, mean, std):
-                super().__init__()
-                self.net = net
-                self.register_buffer("mean", mean)
-                self.register_buffer("std", std)
-
-            def forward(self, features):
-                return torch.softmax(self.net((features - self.mean) / self.std), dim=1)
-
-        return Wrapped(self.net, self.mean, self.std).eval()
-
-    def predict_proba(self, x: np.ndarray) -> np.ndarray:
-        torch = self.torch
-        with torch.no_grad():
-            return self.module()(torch.tensor(x, dtype=torch.float32)).numpy()
-
-
-class CnnModel:
-    """A small 1D convolutional network over the window's grid (channels x steps), with its scaling inside it.
-
-    The input is the grid as one flat row (`channels x steps` numbers, channel after channel); the first thing the model
-    does is fold it back into rows. Then, per channel, it takes the window's own mean away (with `centre_windows`, so
-    only how a signal changes is left, never its level) or the training mean, and divides by the training spread. Two
-    convolutions follow, then the average and the maximum over time of each filter, and one layer that gives the two
-    probabilities. While training, windows are shifted a little in time, scaled a little and given a little noise, so the
-    few windows of a few recordings are not simply memorised. Imported lazily: PyTorch is an optional extra.
-    """
-
-    def __init__(self, channels: int, steps: int, seed: int, params: dict[str, Any], centre_windows: bool):
-        import torch
-
-        torch.manual_seed(seed)
-        self.torch = torch
-        self.channels, self.steps, self.centre = channels, steps, centre_windows
-        filters = int(params.get("filters", 16))
-        kernel = int(params.get("kernel", 5))
-        self.epochs = int(params.get("epochs", 80))
-        self.seed = seed
-        self.mean = torch.zeros(1, channels, 1)
-        self.std = torch.ones(1, channels, 1)
-        self.net = torch.nn.Sequential(
-            torch.nn.Conv1d(channels, filters, kernel, padding=kernel // 2), torch.nn.ReLU(),
-            torch.nn.Conv1d(filters, filters, kernel, padding=kernel // 2), torch.nn.ReLU(),
-        )
-        self.head = torch.nn.Sequential(torch.nn.Dropout(0.2), torch.nn.Linear(2 * filters, 2))
-
-    def _scaled(self, flat):
-        grid = flat.reshape(-1, self.channels, self.steps)
-        grid = grid - (grid.mean(dim=2, keepdim=True) if self.centre else self.mean)
-        return grid / self.std
-
-    def _logits(self, scaled):
-        features = self.net(scaled)
-        return self.head(self.torch.cat([features.mean(dim=2), features.amax(dim=2)], dim=1))
-
-    def fit(self, x: np.ndarray, y: np.ndarray) -> "CnnModel":
-        torch = self.torch
-        data = torch.tensor(x, dtype=torch.float32)
-        grid = data.reshape(-1, self.channels, self.steps)
-        if self.centre:
-            centred = grid - grid.mean(dim=2, keepdim=True)
-        else:
-            self.mean = grid.mean(dim=(0, 2), keepdim=True)
-            centred = grid - self.mean
-        self.std = centred.std(dim=(0, 2), keepdim=True).clamp_min(1e-6)
-        target = torch.tensor(y, dtype=torch.long)
-        counts = torch.bincount(target, minlength=2).float()
-        weights = counts.sum() / (2 * counts.clamp_min(1))
-        loss_fn = torch.nn.CrossEntropyLoss(weight=weights)
-        parameters = [*self.net.parameters(), *self.head.parameters()]
-        optimiser = torch.optim.Adam(parameters, lr=3e-3, weight_decay=1e-3)
-        generator = torch.Generator().manual_seed(self.seed)
-        scaled = self._scaled(data)
-        count = scaled.shape[0]
-        self.net.train()
-        self.head.train()
-        for _ in range(self.epochs):
-            order = torch.randperm(count, generator=generator)
-            for start in range(0, count, 64):
-                index = order[start : start + 64]
-                batch = scaled[index]
-                shifts = torch.randint(-2, 3, (batch.shape[0],), generator=generator)
-                batch = torch.stack([torch.roll(row, int(shift), dims=1) for row, shift in zip(batch, shifts)])
-                batch = batch * (0.9 + 0.2 * torch.rand(batch.shape[0], batch.shape[1], 1, generator=generator))
-                batch = batch + 0.05 * torch.randn(batch.shape, generator=generator)
-                optimiser.zero_grad()
-                loss_fn(self._logits(batch), target[index]).backward()
-                optimiser.step()
-        self.net.eval()
-        self.head.eval()
-        return self
-
-    def module(self):
-        torch = self.torch
-        outer = self
-
-        class Wrapped(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.net, self.head = outer.net, outer.head
-                self.register_buffer("mean", outer.mean)
-                self.register_buffer("std", outer.std)
-
-            def forward(self, flat):
-                grid = flat.reshape(-1, outer.channels, outer.steps)
-                grid = grid - (grid.mean(dim=2, keepdim=True) if outer.centre else self.mean)
-                features = self.net(grid / self.std)
-                pooled = torch.cat([features.mean(dim=2), features.amax(dim=2)], dim=1)
-                return torch.softmax(self.head(pooled), dim=1)
-
-        return Wrapped().eval()
-
-    def predict_proba(self, x: np.ndarray) -> np.ndarray:
-        torch = self.torch
-        with torch.no_grad():
-            return self.module()(torch.tensor(x, dtype=torch.float32)).numpy()
-
-
-def fit(spec: Spec, x_train: np.ndarray, y_train: np.ndarray):
+def fit(spec: Spec, x_train: np.ndarray, y_train: np.ndarray, x_eval: np.ndarray | None = None, y_eval: np.ndarray | None = None, on_epoch=None):
+    """Trains the model. The held-out windows, when given, are only used to report progress, never to choose anything."""
+    missing = "PyTorch is not installed. Run the trainer with the 'torch' extra to use this backend"
     if spec.backend == "cnn1d":
         try:
-            return CnnModel(len(spec.features), spec.grid_steps, spec.seed, spec.params, spec.movement_only).fit(x_train, y_train)
+            model = CnnModel(len(spec.features), spec.grid_steps, spec.seed, spec.params, spec.movement_only, spec.network)
         except ImportError as error:
-            raise TrainingRefused("PyTorch is not installed. Run the trainer with the 'torch' extra to use this backend") from error
+            raise TrainingRefused(missing) from error
+        return model.fit(x_train, y_train, x_eval, y_eval, on_epoch)
     if spec.backend == "torch-mlp":
         try:
-            return TorchModel(x_train.shape[1], spec.seed, spec.params).fit(x_train, y_train)
+            model = TorchModel(x_train.shape[1], spec.seed, spec.params, spec.network)
         except ImportError as error:
-            raise TrainingRefused("PyTorch is not installed. Run the trainer with the 'torch' extra to use this backend") from error
-    return make_model(spec.backend, x_train.shape[1], spec.seed, spec.params).fit(x_train, y_train)
+            raise TrainingRefused(missing) from error
+        return model.fit(x_train, y_train, x_eval, y_eval, on_epoch)
+    model = make_model(spec.backend, x_train.shape[1], spec.seed, spec.params, spec.network).fit(x_train, y_train)
+    if spec.backend == "mlp" and on_epoch is not None:
+        final = model.named_steps["model"]
+        scores = getattr(final, "validation_scores_", None) or []
+        for index, loss in enumerate(final.loss_curve_, start=1):
+            metrics = {"trainLoss": float(loss)}
+            if index - 1 < len(scores):
+                metrics["evalAccuracy"] = float(scores[index - 1])  # on windows the network itself held back
+            on_epoch(index, len(final.loss_curve_), metrics)
+    return model
 
 
 def _rates(probability: np.ndarray, y: np.ndarray, threshold: float) -> dict[str, Any]:
@@ -521,6 +391,8 @@ RUNNABLE_OPERATORS = {
     ("", "Transpose"), ("", "Unsqueeze"), ("", "Squeeze"),
     # What the convolutional model adds: convolutions, and pooling over time.
     ("", "Conv"), ("", "ReduceMean"), ("", "ReduceMax"),
+    # The other activations a network can be given.
+    ("", "Tanh"), ("", "LeakyRelu"),
 }
 
 
@@ -670,6 +542,8 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
             "spikeMethod": spec.spike_method or "none",
             "ppgChannels": spec.ppg_channels,
             "gridSteps": spec.grid_steps if spec.backend == "cnn1d" else None,
+            "network": spec.network.as_dict() if spec.backend in ("mlp", "torch-mlp", "cnn1d") else None,
+            "parameters": parameter_count(spec.network, len(spec.features), spec.backend) if spec.backend in ("mlp", "torch-mlp", "cnn1d") else None,
         },
     }
     (bundle / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -684,7 +558,16 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
         spec = parse_spec(raw_spec)
         x_train, y_train, x_eval, y_eval = build_matrices(spec)
         check_enough(y_train, y_eval)
-        model = fit(spec, x_train, y_train)
+        curve: list[dict[str, Any]] = []
+
+        def on_epoch(epoch: int, epochs: int, metrics: dict[str, float]) -> None:
+            point = {"epoch": epoch, "epochs": epochs, **metrics}
+            curve.append(point)
+            print("@curve " + json.dumps(point), flush=True)  # the desktop draws these while the trainer runs
+
+        model = fit(spec, x_train, y_train, x_eval, y_eval, on_epoch)
+        if curve:
+            (out / "training_curve.json").write_text(json.dumps(curve) + "\n")
         probability = model.predict_proba(x_eval)[:, 1]
         metrics = evaluate(probability, y_eval)
         (out / "evaluation.json").write_text(json.dumps(metrics, indent=2) + "\n")
