@@ -20,6 +20,7 @@ import {
   type LabelRuntimeStatus,
   type ModelAction,
 } from "../labelModels";
+import { FineTuneModel } from "./FineTuneModel";
 
 const STATE_LABEL: Record<LabelModelState, string> = {
   draft: "Draft",
@@ -41,6 +42,7 @@ export function LabelModelsPanel({
   loadError,
   refresh,
   onInspect,
+  onOpenNetworkLab,
 }: {
   desktopAvailable: boolean;
   models: LabelModel[];
@@ -49,6 +51,8 @@ export function LabelModelsPanel({
   refresh: () => Promise<void>;
   /** Opens the Inspect view for a model. */
   onInspect?: (id: string) => void;
+  /** Opens the Network lab, where fine-tune plans are made. */
+  onOpenNetworkLab?: () => void;
 }) {
   const modeId = useId();
   const [actionError, setActionError] = useState<string | null>(null);
@@ -56,6 +60,7 @@ export function LabelModelsPanel({
   const setError = setActionError;
   const [confirmLive, setConfirmLive] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const [tuning, setTuning] = useState<string | null>(null);
   const { isPending, run } = usePendingActions();
 
   const attempt = (key: string, title: string, work: () => Promise<unknown>, success?: string) =>
@@ -195,6 +200,7 @@ export function LabelModelsPanel({
                             Added {model.createdAt}
                             {model.imported ? ". Imported models are not evaluated by this app: review them before approving." : ""}
                           </small>
+                          {tuning === model.id && <FineTuneModel modelId={model.id} onClose={() => setTuning(null)} onOpenNetworkLab={onOpenNetworkLab} />}
                         </div>
                         <div className="recipe-item-actions">
                           {actionsFor(model).map((action) => (
@@ -233,6 +239,11 @@ export function LabelModelsPanel({
                           {onInspect && (
                             <Button type="button" variant="ghost" aria-label={`Inspect ${model.id}`} onClick={() => onInspect(model.id)}>
                               Inspect
+                            </Button>
+                          )}
+                          {!model.imported && model.state !== "archived" && (
+                            <Button type="button" variant="ghost" aria-label={`Fine-tune ${model.id}`} aria-pressed={tuning === model.id} onClick={() => setTuning(tuning === model.id ? null : model.id)}>
+                              Fine-tune…
                             </Button>
                           )}
                           {model.state === "active" && (

@@ -192,6 +192,21 @@ def test_a_convolutional_model_can_be_fine_tuned_with_a_layer_frozen(tmp_path: P
     assert not np.array_equal(after.conv[1].weights, before.conv[1].weights)  # the rest carried on learning
 
 
+def test_a_plan_can_freeze_everything_but_the_output_layer_without_naming_layers(tmp_path: Path) -> None:
+    pytest.importorskip("torch")
+    raw, out, _ = train(tmp_path, "cnn1d", gridSteps=8, features=["accel_x", "accel_y", "gyro_x"], network={"conv": [{"filters": 4, "kernel": 3}], "hidden": [{"units": 5}], "epochs": 10})
+    result, new = tuned(tmp_path, raw, out, [], {"epochs": 8, "freeze": "allButOutput"})
+    assert result["outcome"] in ("deployable", "evaluationOnly"), result["message"]
+    spec = lt.parse_spec(raw)
+    before = extract(spec, restore_model(spec, out))
+    after = extract(spec, restore_model(spec, new))
+    assert np.array_equal(after.conv[0].weights, before.conv[0].weights)
+    assert np.array_equal(after.dense[0].weights, before.dense[0].weights)
+    assert not np.array_equal(after.output.weights, before.output.weights)  # only the output layer learned
+    bad, _ = tuned(tmp_path, raw, out, [], {"freeze": "sideways"}, name="bad")
+    assert bad["outcome"] == "failed" and "allButOutput" in bad["message"]
+
+
 @pytest.mark.parametrize("settings,message", [
     ({"epochs": 0}, "rounds"),
     ({"epochs": 9999}, "rounds"),

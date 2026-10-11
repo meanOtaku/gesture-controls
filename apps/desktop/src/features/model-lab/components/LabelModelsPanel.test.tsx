@@ -48,6 +48,16 @@ describe("LabelModelsPanel", () => {
     expect(onInspect).toHaveBeenLastCalledWith("snap-abc");
   });
 
+  it("offers Fine-tune… on models trained here, not imported or archived ones, and opens the plan chooser", async () => {
+    const trained = { ...draft, id: "snap-own", imported: false };
+    setup([draft, trained, { ...trained, id: "snap-old", state: "archived" }]);
+    await screen.findByRole("button", { name: "Fine-tune snap-own" });
+    expect(screen.queryByRole("button", { name: "Fine-tune snap-abc" })).toBeNull(); // imported
+    expect(screen.queryByRole("button", { name: "Fine-tune snap-old" })).toBeNull(); // archived
+    fireEvent.click(screen.getByRole("button", { name: "Fine-tune snap-own" }));
+    expect(await screen.findByRole("region", { name: "Fine-tune snap-own" })).toBeInTheDocument();
+  });
+
   it("says so when there are no models and does nothing outside the desktop app", () => {
     cleanup();
     render(<Harness desktopAvailable={false} />);

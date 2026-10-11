@@ -662,7 +662,13 @@ const EDIT_KINDS: [&str; 5] = [
 const MAX_EDITS: usize = 200;
 
 /// The settings of fine-tuning the trainer knows (see `FINE_TUNE_KEYS` in `edits.py`).
-const FINE_TUNE_KEYS: [&str; 4] = ["epochs", "learningRate", "freezeConv", "freezeDense"];
+const FINE_TUNE_KEYS: [&str; 5] = [
+    "epochs",
+    "learningRate",
+    "freezeConv",
+    "freezeDense",
+    "freeze",
+];
 
 /// Refuses a list of edits (with or without fine-tuning after them) that cannot be an edit at all; the trainer checks each
 /// against the model.
@@ -696,6 +702,19 @@ fn check_edits(
         }
     }
     Ok(())
+}
+
+/// Carries on training a model with a saved fine-tune plan (see `fine_tune_plans`), without any hand edits.
+#[tauri::command]
+pub async fn start_label_fine_tune(
+    app: AppHandle,
+    runtime: State<'_, LabelTrainingRuntime>,
+    host: State<'_, LabelRuntimeHost>,
+    id: String,
+    plan_id: String,
+) -> Result<String, String> {
+    let settings = crate::fine_tune_plans::settings_of(&app, &plan_id)?;
+    start_label_edit(app, runtime, host, id, Vec::new(), Some(settings)).await
 }
 
 /// Changes a trained model by hand and saves the result as a new Draft: the same recordings and split, the original

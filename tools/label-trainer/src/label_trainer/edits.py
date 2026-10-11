@@ -238,7 +238,7 @@ def pins_from(before: dict[str, np.ndarray], after: dict[str, np.ndarray]):
     return pins
 
 
-FINE_TUNE_KEYS = ("epochs", "learningRate", "freezeConv", "freezeDense")
+FINE_TUNE_KEYS = ("epochs", "learningRate", "freezeConv", "freezeDense", "freeze")
 
 
 def fine_tune_model(spec, model, x_train, y_train, x_eval, y_eval, settings: dict[str, Any], pins, on_epoch) -> str:
@@ -258,6 +258,13 @@ def fine_tune_model(spec, model, x_train, y_train, x_eval, y_eval, settings: dic
         raise EditRefused("the fine-tuning learning rate must be from 0.00001 to 0.1")
     freeze_conv = {int(i) for i in settings.get("freezeConv", [])}
     freeze_dense = {int(i) for i in settings.get("freezeDense", [])}
+    # A model-independent way to say what to freeze (for a saved fine-tune plan): everything but the output layer.
+    mode = settings.get("freeze", "none")
+    if mode not in ("none", "allButOutput"):
+        raise EditRefused("'freeze' must be 'none' or 'allButOutput'")
+    if mode == "allButOutput":
+        freeze_conv |= set(range(len(spec.network.conv)))
+        freeze_dense |= set(range(len(spec.network.hidden)))
     network = replace(spec.network, epochs=int(epochs), learning_rate=float(rate))
     if spec.backend == "torch-mlp":
         if freeze_conv:
