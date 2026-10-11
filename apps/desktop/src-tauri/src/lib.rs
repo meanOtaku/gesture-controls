@@ -170,6 +170,7 @@ pub fn run() {
             label_training::plan_label_training,
             label_training::check_label_trainer,
             label_training::start_label_training,
+            label_training::start_label_edit,
             label_training::cancel_label_training,
             label_training::get_label_training_status,
             automation::get_automation_state,

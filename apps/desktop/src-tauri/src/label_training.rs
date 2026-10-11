@@ -47,7 +47,7 @@ const SPEC_VERSION: u32 = 1;
 /// The backends offered, which extra packages the trainer needs for each.
 const BACKENDS: [&str; 4] = ["logreg", "mlp", "torch-mlp", "cnn1d"];
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrainRequest {
     /// The label to train a model for.
@@ -563,6 +563,84 @@ pub async fn start_label_training(
     host: State<'_, LabelRuntimeHost>,
     request: TrainRequest,
 ) -> Result<String, String> {
+    start_run(app, runtime, host, request, None).await
+}
+
+/// A trained model's parameters, to be changed by hand (see `edits.py`): where they are, which model they are, and what to change.
+struct EditJob {
+    from_model: String,
+    from_dir: PathBuf,
+    edits: Vec<serde_json::Value>,
+}
+
+/// The kinds of edit the trainer knows (see `KINDS` in `edits.py`).
+const EDIT_KINDS: [&str; 5] = [
+    "disableInput",
+    "setWeight",
+    "setBias",
+    "setFilterWeight",
+    "silenceNeuron",
+];
+const MAX_EDITS: usize = 200;
+
+/// Refuses a list of edits that cannot be an edit list at all; the trainer checks each against the model.
+fn check_edits(edits: &[serde_json::Value]) -> Result<(), String> {
+    if edits.is_empty() {
+        return Err("there is nothing to change".into());
+    }
+    if edits.len() > MAX_EDITS {
+        return Err(format!("at most {MAX_EDITS} edits at a time"));
+    }
+    for (number, edit) in edits.iter().enumerate() {
+        let kind = edit.get("kind").and_then(serde_json::Value::as_str);
+        if !kind.is_some_and(|kind| EDIT_KINDS.contains(&kind)) {
+            return Err(format!(
+                "edit {}: unknown kind; choose from {EDIT_KINDS:?}",
+                number + 1
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Changes a trained model by hand and saves the result as a new Draft: the same recordings and split, the original
+/// untouched, the new model scored on the same held-out windows. Runs as a training run, with the same progress and
+/// result events.
+#[tauri::command]
+pub async fn start_label_edit(
+    app: AppHandle,
+    runtime: State<'_, LabelTrainingRuntime>,
+    host: State<'_, LabelRuntimeHost>,
+    id: String,
+    edits: Vec<serde_json::Value>,
+) -> Result<String, String> {
+    check_edits(&edits)?;
+    let (run_id, _) = host.trained_run_of(&id)?;
+    let from_dir = runs_dir(&app)?.join(&run_id);
+    let request: TrainRequest = fs::read(from_dir.join("request.json"))
+        .map_err(|_| {
+            "this model was trained before editing was possible: train it again to edit it"
+                .to_string()
+        })
+        .and_then(|bytes| {
+            serde_json::from_slice(&bytes)
+                .map_err(|e| format!("the model's training request is unreadable: {e}"))
+        })?;
+    let job = EditJob {
+        from_model: id,
+        from_dir,
+        edits,
+    };
+    start_run(app, runtime, host, request, Some(job)).await
+}
+
+async fn start_run(
+    app: AppHandle,
+    runtime: State<'_, LabelTrainingRuntime>,
+    host: State<'_, LabelRuntimeHost>,
+    request: TrainRequest,
+    edit: Option<EditJob>,
+) -> Result<String, String> {
     {
         let active = runtime
             .active
@@ -586,10 +664,19 @@ pub async fn start_label_training(
         quality: QualityRules::default(),
         trainer: TrainerConfig {
             backend: trainer_backend(&checked.backend).ok_or("unknown training method")?,
-            params: BTreeMap::from([(
-                "method".to_string(),
-                serde_json::Value::String(checked.backend.clone()),
-            )]),
+            params: {
+                let mut params = BTreeMap::from([(
+                    "method".to_string(),
+                    serde_json::Value::String(checked.backend.clone()),
+                )]);
+                if let Some(job) = &edit {
+                    params.insert(
+                        "editedFrom".into(),
+                        serde_json::Value::String(job.from_model.clone()),
+                    );
+                }
+                params
+            },
         },
         recordings: checked.recordings.clone(),
         unique,
@@ -609,7 +696,20 @@ pub async fn start_label_training(
             .iter()
             .map(|r| (r.id.to_string(), dataset_csv_path(&dir, r.id.as_str())))
             .collect();
-        let spec = build_spec(&checked, &begun.split, &paths);
+        let mut spec = build_spec(&checked, &begun.split, &paths);
+        if let Some(job) = &edit {
+            spec["edit"] = serde_json::json!({
+                "fromDir": job.from_dir,
+                "fromModel": job.from_model,
+                "edits": job.edits,
+            });
+        }
+        // Kept so this model can be edited later: the same request rebuilds the same plan.
+        fs::write(
+            out.join("request.json"),
+            serde_json::to_vec_pretty(&request).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
         let spec_path = out.join("spec.json");
         fs::write(
             &spec_path,
@@ -1204,6 +1304,55 @@ mod tests {
                 .unwrap_err()
                 .contains("neural network methods")
         );
+    }
+
+    #[test]
+    fn a_saved_request_rebuilds_the_same_plan_so_a_model_can_be_edited_later() {
+        let mut r = request();
+        r.backend = "torch-mlp".into();
+        r.sources.push(StreamSource::WatchPpg);
+        r.ppg_channels = Some(vec!["green".into()]);
+        r.spike_method = Some("morphological_top_hat".into());
+        r.features = Some(vec!["accel_x_std".into(), "ppg_green_spike_z".into()]);
+        r.network = Some(
+            serde_json::from_value(
+                serde_json::json!({"hidden": [{"units": 9, "activation": "tanh"}]}),
+            )
+            .unwrap(),
+        );
+        r.research = true;
+        let saved = serde_json::to_vec(&r).unwrap();
+        let back: TrainRequest = serde_json::from_slice(&saved).unwrap();
+        let (a, b) = (
+            check_request(&r, &datasets(), &sha).unwrap(),
+            check_request(&back, &datasets(), &sha).unwrap(),
+        );
+        assert_eq!(a.input, b.input);
+        assert_eq!(a.network, b.network);
+        assert_eq!((a.spike_method, a.research), (b.spike_method, b.research));
+        let split_a = plan_split(&a.recordings, &a.mapping, &a.target).unwrap();
+        let split_b = plan_split(&b.recordings, &b.mapping, &b.target).unwrap();
+        assert_eq!(split_a.train, split_b.train); // the split is the same, so the edited model is scored on the same held-out windows
+        assert_eq!(split_a.evaluation, split_b.evaluation);
+    }
+
+    #[test]
+    fn a_list_of_edits_is_checked_before_anything_is_started() {
+        let edit = |kind: &str| serde_json::json!({"kind": kind});
+        assert!(check_edits(&[edit("disableInput"), edit("setWeight")]).is_ok());
+        assert!(check_edits(&[]).unwrap_err().contains("nothing to change"));
+        assert!(
+            check_edits(&[edit("teleport")])
+                .unwrap_err()
+                .contains("edit 1: unknown kind")
+        );
+        assert!(
+            check_edits(&[edit("setBias"), serde_json::json!({"nope": 1})])
+                .unwrap_err()
+                .contains("edit 2")
+        );
+        let many: Vec<_> = (0..201).map(|_| edit("setBias")).collect();
+        assert!(check_edits(&many).unwrap_err().contains("at most 200"));
     }
 
     #[test]

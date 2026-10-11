@@ -33,6 +33,7 @@ import numpy as np
 from .csv_io import load_recording
 from .dataset import build_dataset_from_recordings
 from .features import FEATURE_NAMES, SPIKE_FEATURE_NAMES, SPIKE_METHODS
+from .edits import EditRefused
 from .nets import CnnModel, TorchModel
 from .network import Network, NetworkRefused, parameter_count, parse_network
 from .grid import DEFAULT_STEPS, MAX_STEPS, MIN_STEPS, build_grid, channels_for
@@ -125,6 +126,7 @@ class Spec:
     grid_steps: int
     network: Network
     research: bool
+    edit: dict[str, Any] | None
     window: WindowConfig
     backend: str
     seed: int
@@ -207,6 +209,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         grid_steps=grid_steps,
         network=network,
         research=bool(raw.get("research", False)),
+        edit=raw.get("edit") or None,
         window=WindowConfig(
             window_ms=float(window.get("windowMs", 500)),
             stride_ms=float(window.get("strideMs", 150)),
@@ -557,6 +560,8 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
             "spikeMethod": spec.spike_method or "none",
             "ppgChannels": spec.ppg_channels,
             "gridSteps": spec.grid_steps if spec.backend == "cnn1d" else None,
+            "editedFrom": spec.edit.get("fromModel") if spec.edit else None,
+            "edits": spec.edit["edits"] if spec.edit else None,
             "network": spec.network.as_dict() if spec.backend in ("mlp", "torch-mlp", "cnn1d") else None,
             "parameters": parameter_count(spec.network, len(spec.features), spec.backend) if spec.backend in ("mlp", "torch-mlp", "cnn1d") else None,
         },
@@ -582,7 +587,7 @@ def run_research_checks(spec: Spec) -> dict[str, Any] | None:
         return None
 
 
-def write_inspection(spec: Spec, model, x_eval, y_eval, eval_windows, curve, metrics, out: Path, research: dict[str, Any] | None = None) -> None:
+def write_inspection(spec: Spec, model, x_eval, y_eval, eval_windows, curve, metrics, out: Path, research: dict[str, Any] | None = None, edit: dict[str, Any] | None = None) -> None:
     """Writes `inspection.json` for the Inspect view. It is an extra: if it cannot be made, the model is still shipped."""
     if spec.backend not in ("logreg", "mlp", "torch-mlp", "cnn1d"):
         return
@@ -593,6 +598,7 @@ def write_inspection(spec: Spec, model, x_eval, y_eval, eval_windows, curve, met
         inspection = build_inspection(spec, model, x_eval, y_eval, eval_windows, curve, metrics, parameters)
         if inspection is not None:
             inspection["research"] = research
+            inspection["edit"] = edit
             (out / "inspection.json").write_text(json.dumps(inspection) + "\n")
     except Exception as error:  # noqa: BLE001 - an extra must never stop a model being shipped
         print(f"could not write the inspection: {type(error).__name__}: {error}", flush=True)
@@ -613,7 +619,22 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
             curve.append(point)
             print("@curve " + json.dumps(point), flush=True)  # the desktop draws these while the trainer runs
 
-        model = fit(spec, x_train, y_train, x_eval, y_eval, on_epoch)
+        edit_note: dict[str, Any] | None = None
+        if spec.edit:
+            # Not trained: an existing model, changed by hand, then scored on the same held-out windows like any other.
+            from .edits import apply_edits, restore_model
+
+            source = Path(spec.edit["fromDir"])
+            model = restore_model(spec, source)
+            said = apply_edits(spec, model, spec.edit["edits"])
+            for line in said:
+                print(f"Edit: {line}", flush=True)
+            if (source / "training_curve.json").is_file():
+                curve = json.loads((source / "training_curve.json").read_text())
+            before = json.loads((source / "evaluation.json").read_text()) if (source / "evaluation.json").is_file() else None
+            edit_note = {"fromModel": spec.edit.get("fromModel"), "edits": spec.edit["edits"], "said": said, "before": before}
+        else:
+            model = fit(spec, x_train, y_train, x_eval, y_eval, on_epoch)
         if curve:
             (out / "training_curve.json").write_text(json.dumps(curve) + "\n")
         probability = model.predict_proba(x_eval)[:, 1]
@@ -642,7 +663,13 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
             raise TrainingRefused(f"the exported ONNX model differs from the trained one by {parity:.4f} (the limit is {PARITY_TOLERANCE}), so it is not shipped")
         sha = write_bundle(spec, out, scratch.read_bytes(), opset, metrics)
         research = run_research_checks(spec) if spec.research else None
-        write_inspection(spec, model, x_eval, y_eval, eval_windows, curve, metrics, out, research)
+        if edit_note is not None:
+            edit_note["after"] = metrics
+        write_inspection(spec, model, x_eval, y_eval, eval_windows, curve, metrics, out, research, edit_note)
+        if spec.backend in ("logreg", "mlp", "torch-mlp", "cnn1d"):
+            from .edits import persist_model
+
+            persist_model(spec, model, out)  # so this model can be edited in turn
         result = {
             "outcome": "deployable",
             "message": "",
@@ -656,6 +683,8 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
             "parityMaxAbsDifference": parity,
         }
     except TrainingRefused as refusal:
+        result["message"] = str(refusal)
+    except EditRefused as refusal:
         result["message"] = str(refusal)
     except Exception as error:  # noqa: BLE001 - any failure must be reported, not crash without a result
         result["message"] = f"{type(error).__name__}: {error}"

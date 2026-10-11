@@ -498,6 +498,15 @@ impl LabelRuntimeHost {
             .ok_or_else(|| "there is no such model".to_string())
     }
 
+    /// The run that trained a model, and its label; an error for an imported model, which has no run.
+    pub fn trained_run_of(&self, id: &str) -> Result<(String, String), String> {
+        let version = self.version_for(id)?;
+        match version.origin {
+            model_lab_core::ModelOrigin::Trained { run_id } => Ok((run_id.to_string(), version.label.to_string())),
+            model_lab_core::ModelOrigin::Imported => Err("an imported model cannot be edited here: only a model trained in this app keeps its parameters".into()),
+        }
+    }
+
     /// What the Inspect view shows about a model (see `ModelInspectionView`).
     pub fn inspect_model(&self, app: &AppHandle, id: &str) -> Result<ModelInspectionView, String> {
         let version = self.version_for(id)?;
