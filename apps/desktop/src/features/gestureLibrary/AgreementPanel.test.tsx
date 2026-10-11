@@ -23,6 +23,14 @@ describe("AgreementPanel", () => {
     expect(row.textContent).toBe("Pinch11000400 ms");
   });
 
+  it("can stay out of the way until the check can run", () => {
+    const { container } = render(<AgreementPanel tracker={new AgreementTracker()} definitions={[pinch]} status={status({ mode: "off" })} cameraOn={false} hideUntilReady />);
+    expect(container).toBeEmptyDOMElement();
+    cleanup();
+    render(<AgreementPanel tracker={new AgreementTracker()} definitions={[pinch]} status={status()} cameraOn hideUntilReady />);
+    expect(screen.getByRole("region", { name: "Model against camera" })).toBeInTheDocument();
+  });
+
   it("says what is missing instead of showing an empty table", () => {
     render(<AgreementPanel tracker={new AgreementTracker()} definitions={[pinch]} status={status({ mode: "off" })} cameraOn={false} />);
     expect(screen.queryByRole("table")).toBeNull();

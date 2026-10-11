@@ -248,7 +248,7 @@ export function CorrectionSession({
       {recording && <p className="field-hint">Stay on this page while recording: leaving it stops the camera from marking.</p>}
       {message && <Alert role="status"><AlertDescription>{message}</AlertDescription></Alert>}
       {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
-      <AgreementPanel tracker={tracker} definitions={mine} status={status} cameraOn={camOn} candidateId={candidate} />
+      <AgreementPanel tracker={tracker} definitions={mine} status={status} cameraOn={camOn} candidateId={candidate} hideUntilReady />
 
       {rounds.length > 0 && (
         <section className="flex flex-col gap-2" aria-label="Rounds so far">

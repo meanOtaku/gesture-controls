@@ -19,6 +19,8 @@ type Props = {
   onTurnCameraOn?: () => void;
   /** A model being compared beside the active one (its id): its detections are counted separately and shown next to the active model's. */
   candidateId?: string | null;
+  /** Show nothing until the check can run (the page around it already says what is missing). */
+  hideUntilReady?: boolean;
 };
 
 /** Feeds the label runtime's detections (and those of a model being compared beside it) to the tracker for as long as the page is open. */
@@ -52,7 +54,7 @@ const ms = (value: number | null) => (value === null ? "–" : `${Math.round(val
  * Checks a deployed model against the camera while you perform: each time the camera sees a gesture linked to a label the
  * model is loaded for, did the model notice it, how late, and did it fire when you did nothing. Nothing is saved.
  */
-export function AgreementPanel({ tracker, definitions, status, cameraOn, onTurnCameraOn, candidateId = null }: Props) {
+export function AgreementPanel({ tracker, definitions, status, cameraOn, onTurnCameraOn, candidateId = null, hideUntilReady = false }: Props) {
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
   useModelDetections(tracker, desktopAvailable);
   const [rows, setRows] = useState<{ label: string; name: string; summary: LabelAgreement; candidate: LabelAgreement | null }[]>([]);
@@ -73,6 +75,8 @@ export function AgreementPanel({ tracker, definitions, status, cameraOn, onTurnC
     // `pairs` is rebuilt every render; its content is what matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tracker, candidateId, pairs.map((d) => d.id).join(",")]);
+
+  if (hideUntilReady && !ready) return null;
 
   return (
     <Card role="region" aria-label="Model against camera">

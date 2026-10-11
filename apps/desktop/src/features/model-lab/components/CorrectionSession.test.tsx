@@ -18,7 +18,7 @@ const live = vi.hoisted(() => ({ held: false }));
 vi.mock("../../gestureLibrary/useLiveGestures", () => ({
   useLiveGestures: () => (live.held ? new Map([["g1", { held: true, sinceMs: 5 }]]) : new Map()),
 }));
-vi.mock("../../gestureLibrary/AgreementPanel", () => ({ AgreementPanel: ({ candidateId }: { candidateId?: string | null }) => <div>agreement tally {candidateId ?? "alone"}</div> }));
+vi.mock("../../gestureLibrary/AgreementPanel", () => ({ AgreementPanel: ({ candidateId, hideUntilReady }: { candidateId?: string | null; hideUntilReady?: boolean }) => <div>agreement tally {candidateId ?? "alone"}{hideUntilReady ? " (quiet until ready)" : ""}</div> }));
 const exporter = vi.hoisted(() => ({ save: vi.fn() }));
 vi.mock("../../telemetry/hooks/useTelemetryExport", () => ({ useTelemetryExport: () => ({ saveDatasetRecording: exporter.save }) }));
 
@@ -92,7 +92,7 @@ describe("CorrectionSession", () => {
     view({ onSaved });
     fireEvent.change(await screen.findByLabelText("Run beside the active model"), { target: { value: "snap-2" } });
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("start_shadow_model", { id: "snap-2" }));
-    expect(await screen.findByText("agreement tally snap-2")).toBeInTheDocument();
+    expect(await screen.findByText("agreement tally snap-2 (quiet until ready)")).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Start recording a round" }));
     expect(telemetryStore.getDatasetRecording()).toBe(true);
     expect(telemetryStore.getDatasetCaptureMode()).toBe("timeline");
