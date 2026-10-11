@@ -10,6 +10,7 @@ import type { ModelInspectionView } from "../inspection";
 import { SPIKE_METHODS } from "../training";
 import { DeclaredInputs, InspectInputs } from "./InspectInputs";
 import { InspectEvaluation } from "./InspectEvaluation";
+import { InspectResearch } from "./InspectResearch";
 import { InspectWeights } from "./InspectWeights";
 import { InspectWindows } from "./InspectWindows";
 import { TrainingCurve } from "./TrainingCurve";
@@ -123,6 +124,7 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
               </div>
             )}
             <InspectEvaluation inspection={inspection} other={compare?.inspection ?? null} otherName={compare?.id} />
+            <InspectResearch inspection={inspection} />
             <InspectInputs inspection={inspection} spikeLabel={spikeLabel} />
             <InspectWeights inspection={inspection} />
             <InspectWindows inspection={inspection} spikeLabel={spikeLabel} />

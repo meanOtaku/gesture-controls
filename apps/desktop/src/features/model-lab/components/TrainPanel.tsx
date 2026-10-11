@@ -67,6 +67,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
   const [networks, setNetworks] = useState<Record<TrainMethod, NetworkSettings>>(() => ({ logreg: defaultNetwork("logreg"), mlp: defaultNetwork("mlp"), "torch-mlp": defaultNetwork("torch-mlp"), cnn1d: defaultNetwork("cnn1d") }));
   const [inputChoice, setInputChoice] = useState<string[] | null>(null);
   const [curve, setCurve] = useState<CurvePoint[]>([]);
+  const [research, setResearch] = useState(false);
   const [ppgChannels, setPpgChannels] = useState<PpgChannel[]>(ALL_PPG_CHANNELS);
   const [spikeMethod, setSpikeMethod] = useState<SpikeMethodId>("none");
   const [plan, setPlan] = useState<TrainPlan | null>(null);
@@ -84,7 +85,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
   const narrowed = inputChoice === null ? null : inputChoice.filter((name) => available.includes(name));
   const featuresRequest = narrowed !== null && narrowed.length > 0 && narrowed.length < available.length ? narrowed : null;
   const network = networks[method];
-  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, method, sources, movementOnly, spikeMethod: sources.includes("watchPpg") ? spikeMethod : "none", ppgChannels, windowMs, features: featuresRequest, network: networkRequest(network, method) });
+  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, method, sources, movementOnly, spikeMethod: sources.includes("watchPpg") ? spikeMethod : "none", ppgChannels, windowMs, features: featuresRequest, network: networkRequest(network, method), research });
   const requestKey = JSON.stringify(request);
 
   useEffect(() => {
@@ -372,6 +373,11 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
                 )}
               </div>
             )}
+
+            <div className="flex items-start gap-2 text-sm">
+              <Checkbox checked={research} disabled={running !== null} onCheckedChange={() => setResearch((value) => !value)} aria-label="Also run research checks" />
+              <span><strong>Also run research checks</strong> <small className="text-muted-foreground">After training, retrain the same model on a quarter, half and three quarters of the data, and on all but one recording at a time, to see how far its score can be trusted. It takes several times longer, and the results are in the model&apos;s Inspect view.</small></span>
+            </div>
 
             <div className="flex flex-wrap items-center gap-2">
               {running === null && <Button type="button" disabled={!canStart} onClick={() => void start()}>Train model</Button>}

@@ -48,6 +48,27 @@ export interface CurveRow {
   evalAuc?: number;
   evalAccuracy?: number;
 }
+export interface LearningCurveRow {
+  fraction: number;
+  windows: number;
+  aucMean: number;
+  aucStd: number;
+  draws: number;
+}
+export interface LeaveOneOutFold {
+  recording: string;
+  windows: number;
+  gestureWindows: number;
+  otherWindows: number;
+  meanScore?: number;
+  auc?: number | null;
+  /** Why this recording could not be left out. */
+  skipped?: string;
+}
+export interface Research {
+  learningCurve: LearningCurveRow[];
+  leaveOneOut: { folds: LeaveOneOutFold[]; pooledAuc: number | null; pooledWindows: number };
+}
 export interface Inspection {
   version: number;
   backend: string;
@@ -76,6 +97,8 @@ export interface Inspection {
     metrics: Record<string, unknown> & { rocAuc: number };
   };
   forwardMaxAbsDifference: number;
+  /** Only when research checks were asked for. */
+  research?: Research | null;
 }
 export interface ModelInspectionView {
   id: string;

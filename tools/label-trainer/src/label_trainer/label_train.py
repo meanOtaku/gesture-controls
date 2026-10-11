@@ -124,6 +124,7 @@ class Spec:
     ppg_channels: list[str]
     grid_steps: int
     network: Network
+    research: bool
     window: WindowConfig
     backend: str
     seed: int
@@ -205,6 +206,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         ppg_channels=ppg_channels,
         grid_steps=grid_steps,
         network=network,
+        research=bool(raw.get("research", False)),
         window=WindowConfig(
             window_ms=float(window.get("windowMs", 500)),
             stride_ms=float(window.get("strideMs", 150)),
@@ -231,8 +233,8 @@ def build_matrices(spec: Spec):
     return build_matrices_with_windows(spec)[:4]
 
 
-def build_matrices_with_windows(spec: Spec):
-    """`build_matrices`, and for each held-out window which recording it came from and where (for the inspection)."""
+def build_all(spec: Spec):
+    """Every window of every recording: features, whether it is the target, the recording it came from, and where it is."""
     recordings = []
     for rid, path in spec.recordings.items():
         recording = load_recording(path)
@@ -248,12 +250,16 @@ def build_matrices_with_windows(spec: Spec):
         columns = [FEATURE_NAMES.index(name) for name in spec.features]
         x = dataset.features[:, columns].astype(np.float32)
     y = (dataset.targets == spec.target).astype(np.int64)
-    train_mask = np.isin(dataset.groups, spec.train)
-    eval_mask = np.isin(dataset.groups, spec.evaluation)
-    eval_windows = [
-        {"recording": str(dataset.groups[i]), "startNs": int(dataset.windows[i].start_ns), "label": str(dataset.raw_labels[i])}
-        for i in np.flatnonzero(eval_mask)
-    ]
+    meta = [{"recording": str(dataset.groups[i]), "startNs": int(dataset.windows[i].start_ns), "label": str(dataset.raw_labels[i])} for i in range(len(dataset.groups))]
+    return x, y, np.array([str(g) for g in dataset.groups]), meta
+
+
+def build_matrices_with_windows(spec: Spec):
+    """`build_matrices`, and for each held-out window which recording it came from and where (for the inspection)."""
+    x, y, groups, meta = build_all(spec)
+    train_mask = np.isin(groups, spec.train)
+    eval_mask = np.isin(groups, spec.evaluation)
+    eval_windows = [meta[i] for i in np.flatnonzero(eval_mask)]
     return x[train_mask], y[train_mask], x[eval_mask], y[eval_mask], eval_windows
 
 
@@ -559,7 +565,24 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
     return sha
 
 
-def write_inspection(spec: Spec, model, x_eval, y_eval, eval_windows, curve, metrics, out: Path) -> None:
+def run_research_checks(spec: Spec) -> dict[str, Any] | None:
+    """The learning curve and leave-one-recording-out (see `research.py`). An extra: if it fails the model is still shipped."""
+    try:
+        from .research import run_research
+
+        x, y, groups, _ = build_all(spec)
+
+        def say(message: str) -> None:
+            print(message, flush=True)
+
+        say("Running the research checks: they retrain the model several times, so this takes a while")
+        return run_research(lambda xs, ys: fit(spec, xs, ys), x, y, groups, spec.train, spec.evaluation, spec.seed, say)
+    except Exception as error:  # noqa: BLE001 - an extra must never stop a model being shipped
+        print(f"could not run the research checks: {type(error).__name__}: {error}", flush=True)
+        return None
+
+
+def write_inspection(spec: Spec, model, x_eval, y_eval, eval_windows, curve, metrics, out: Path, research: dict[str, Any] | None = None) -> None:
     """Writes `inspection.json` for the Inspect view. It is an extra: if it cannot be made, the model is still shipped."""
     if spec.backend not in ("logreg", "mlp", "torch-mlp", "cnn1d"):
         return
@@ -569,6 +592,7 @@ def write_inspection(spec: Spec, model, x_eval, y_eval, eval_windows, curve, met
         parameters = parameter_count(spec.network, len(spec.features), spec.backend) if spec.backend in ("mlp", "torch-mlp", "cnn1d") else len(spec.features) + 1
         inspection = build_inspection(spec, model, x_eval, y_eval, eval_windows, curve, metrics, parameters)
         if inspection is not None:
+            inspection["research"] = research
             (out / "inspection.json").write_text(json.dumps(inspection) + "\n")
     except Exception as error:  # noqa: BLE001 - an extra must never stop a model being shipped
         print(f"could not write the inspection: {type(error).__name__}: {error}", flush=True)
@@ -617,7 +641,8 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
         if parity > PARITY_TOLERANCE:
             raise TrainingRefused(f"the exported ONNX model differs from the trained one by {parity:.4f} (the limit is {PARITY_TOLERANCE}), so it is not shipped")
         sha = write_bundle(spec, out, scratch.read_bytes(), opset, metrics)
-        write_inspection(spec, model, x_eval, y_eval, eval_windows, curve, metrics, out)
+        research = run_research_checks(spec) if spec.research else None
+        write_inspection(spec, model, x_eval, y_eval, eval_windows, curve, metrics, out, research)
         result = {
             "outcome": "deployable",
             "message": "",

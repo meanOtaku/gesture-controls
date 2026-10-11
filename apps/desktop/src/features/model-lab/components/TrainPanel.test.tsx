@@ -222,6 +222,21 @@ describe("TrainPanel", () => {
     expect(calls("start_label_training")[0][1].request.features).toEqual(["accel_x_std", "accel_y_mean", "accel_y_std", "gyro_x_std"]);
   });
 
+  it("asks for research checks only when ticked", async () => {
+    setup();
+    choose("snap");
+    await screen.findByText(/It will train on/);
+    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
+    await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
+    expect(calls("start_label_training")[0][1].request).not.toHaveProperty("research");
+    handlers.get("label-training-event")?.({ payload: { kind: "finished", runId: "r", label: "snap", outcome: "failed", message: "x" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Also run research checks" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Train model" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
+    await waitFor(() => expect(calls("start_label_training")).toHaveLength(2));
+    expect(calls("start_label_training")[1][1].request.research).toBe(true);
+  });
+
   it("draws the trainer's progress reports as a chart and keeps them out of the log", async () => {
     setup();
     choose("snap");

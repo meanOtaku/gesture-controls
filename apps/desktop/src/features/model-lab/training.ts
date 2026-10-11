@@ -73,6 +73,8 @@ export interface TrainRequest {
   features?: string[];
   /** The shape of a neural network and how it is trained; left out means the method's default. */
   network?: Record<string, unknown>;
+  /** Also retrain on less data and on all but one recording, to see how far the score can be trusted (slower). */
+  research?: boolean;
   /** Which of the pulse sensor's light channels the model may read (only matters when the pulse sensor is a stream). */
   ppgChannels: PpgChannel[];
   /** How the pulse sensor's spikes are pulled out before the model reads their features; "none" reads no spike features. */
@@ -145,6 +147,7 @@ export function buildRequest(input: {
   windowMs?: number;
   features?: string[] | null;
   network?: Record<string, unknown>;
+  research?: boolean;
 }): TrainRequest {
   const role = (label: string): OtherRole => input.roles[label] ?? "negative";
   return {
@@ -160,6 +163,7 @@ export function buildRequest(input: {
     windowMs: input.windowMs ?? DEFAULT_WINDOW_MS,
     ...(input.features && input.features.length > 0 ? { features: [...input.features] } : {}),
     ...(input.network ? { network: input.network } : {}),
+    ...(input.research ? { research: true } : {}),
   };
 }
 

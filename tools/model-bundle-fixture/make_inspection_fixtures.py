@@ -18,6 +18,7 @@ from test_label_train import spec_for  # noqa: E402
 CASES = {
     "inspection-linear": ("logreg", {"features": ["accel_x_std", "accel_x_mean", "accel_y_std", "gyro_x_std"]}),
     "inspection-dense": ("torch-mlp", {"features": ["accel_x_std", "accel_y_std", "accel_z_std", "gyro_x_std", "gyro_y_std"], "network": {"hidden": [{"units": 6, "activation": "tanh"}, {"units": 4}], "epochs": 40}}),
+    "inspection-research": ("logreg", {"features": ["accel_x_std", "accel_x_mean", "accel_y_std", "gyro_x_std"], "research": True}),
     "inspection-conv": ("cnn1d", {"gridSteps": 8, "features": ["accel_x", "accel_y", "gyro_x"], "network": {"conv": [{"filters": 4, "kernel": 3}, {"filters": 3, "kernel": 3}], "epochs": 20}}),
 }
 

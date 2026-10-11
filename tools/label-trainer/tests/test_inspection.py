@@ -111,3 +111,49 @@ def test_the_inspection_never_stops_a_model_being_shipped(tmp_path: Path, monkey
     result = lt.run(spec_for(tmp_path, "logreg"), out)
     assert result["outcome"] == "deployable"
     assert (out / "bundle" / "model.onnx").exists() and not (out / "inspection.json").exists()
+
+
+def test_the_research_checks_retrain_on_less_data_and_on_all_but_one_recording(tmp_path: Path) -> None:
+    inspection, spec, _ = trained(tmp_path, "logreg", research=True)
+    research = inspection["research"]
+    curve = research["learningCurve"]
+    assert [row["fraction"] for row in curve] == [0.25, 0.5, 0.75, 1.0]
+    assert [row["windows"] for row in curve] == sorted(row["windows"] for row in curve)  # more data each time
+    assert all(0.0 <= row["aucMean"] <= 1.0 and row["aucStd"] >= 0 for row in curve)
+    assert curve[-1]["draws"] == 1 and curve[0]["draws"] == 3
+    loo = research["leaveOneOut"]
+    assert {fold["recording"] for fold in loo["folds"]} == set(spec.recordings)  # every recording, training and held-out
+    scored = [fold for fold in loo["folds"] if "skipped" not in fold]
+    assert scored and all(fold["meanScore"] >= 0 for fold in scored)
+    assert loo["pooledAuc"] is not None and loo["pooledAuc"] > 0.9
+    assert loo["pooledWindows"] == sum(fold["windows"] for fold in scored)
+
+
+def test_without_asking_there_are_no_research_checks_and_a_failure_does_not_stop_the_model(tmp_path: Path, monkeypatch) -> None:
+    inspection, _, _ = trained(tmp_path, "logreg")
+    assert inspection["research"] is None
+    from label_trainer import research
+
+    monkeypatch.setattr(research, "run_research", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no research today")))
+    out = tmp_path / "again"
+    result = lt.run(spec_for(tmp_path, "logreg", research=True), out)
+    assert result["outcome"] == "deployable"
+    assert json.loads((out / "inspection.json").read_text())["research"] is None
+
+
+def test_a_recording_that_leaves_too_little_to_train_on_is_skipped_with_the_reason() -> None:
+    from label_trainer.research import leave_one_recording_out
+
+    class Const:
+        def __init__(self, *a):
+            pass
+
+        def predict_proba(self, x):
+            return np.tile([0.5, 0.5], (len(x), 1))
+
+    y = np.array([1] * 12 + [0] * 12 + [1] * 12)
+    groups = np.array(["a"] * 12 + ["b"] * 12 + ["c"] * 12)
+    result = leave_one_recording_out(lambda x, y: Const(), np.zeros((36, 2)), y, groups)
+    by = {f["recording"]: f for f in result["folds"]}
+    assert "skipped" in by["b"] and "only 24 windows of the gesture and 0" in by["b"]["skipped"]  # without b there is nothing else to train on
+    assert "skipped" not in by["a"] or "gesture" in by["a"]["skipped"]

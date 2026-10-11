@@ -89,6 +89,9 @@ pub struct TrainRequest {
     /// The shape of a neural network and how it is trained; absent means the method's own default.
     #[serde(default)]
     pub network: Option<NetworkSpec>,
+    /// Also retrain on less data and on all but one recording, to see how far the score can be trusted. Slower.
+    #[serde(default)]
+    pub research: bool,
 }
 
 fn default_window_ms() -> u32 {
@@ -119,6 +122,7 @@ struct Checked {
     grid_steps: u32,
     network: Option<NetworkSpec>,
     explicit_features: Option<Vec<String>>,
+    research: bool,
 }
 
 fn label_id(raw: &str) -> Result<LabelId, String> {
@@ -321,6 +325,7 @@ fn check_request(
         grid_steps,
         network,
         explicit_features: request.features.clone(),
+        research: request.research,
     })
 }
 
@@ -363,6 +368,7 @@ fn build_spec(
         "gridSteps": checked.grid_steps,
         "features": checked.explicit_features,
         "network": checked.network,
+        "research": checked.research,
     })
 }
 
@@ -916,6 +922,7 @@ mod tests {
             grid_steps: None,
             features: None,
             network: None,
+            research: false,
         }
     }
 
@@ -1170,6 +1177,14 @@ mod tests {
             serde_json::json!({"units": 16, "activation": "tanh"})
         );
         assert_eq!(spec["network"]["epochs"], 50);
+        assert_eq!(spec["research"], false);
+        r.research = true;
+        let checked = check_request(&r, &datasets(), &sha).unwrap();
+        assert_eq!(
+            build_spec(&checked, &split, &BTreeMap::new())["research"],
+            true
+        );
+        r.research = false;
         // No network settings: the trainer is told nothing and uses the method's own default.
         r.network = None;
         let checked = check_request(&r, &datasets(), &sha).unwrap();
