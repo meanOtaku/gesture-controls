@@ -1,4 +1,5 @@
-import { useId } from "react";
+import { useId, useRef } from "react";
+import { SaveSvgButton } from "./saveSvg";
 
 export interface ChartPoint {
   x: number;
@@ -35,7 +36,7 @@ const format = (value: number): string => (Math.abs(value) >= 100 || Number.isIn
  * given and nothing else, so what a chart says is what the numbers say.
  */
 export function LineChart({
-  title, series, xLabel, yLabel, yRange, summary,
+  title, series, xLabel, yLabel, yRange, xRange, summary, markers, verticalLine, exportName,
 }: {
   title: string;
   series: ChartSeries[];
@@ -43,16 +44,25 @@ export function LineChart({
   yLabel: string;
   /** Fixed vertical range (for example 0 to 1); otherwise it fits the data. */
   yRange?: [number, number];
+  /** Fixed horizontal range; otherwise it fits the data. */
+  xRange?: [number, number];
+  /** Labelled points to pick out (for example the model's own operating point on a curve). */
+  markers?: { x: number; y: number; label: string; color: string }[];
+  /** A vertical line at an x value (for example the cut-off), with a label. */
+  verticalLine?: { x: number; label: string };
+  /** A name for the picture; with it, a button saves the chart as an SVG file. */
+  exportName?: string;
   /** What the chart says, in words, for screen readers and for the caption. */
   summary: string;
 }) {
   const titleId = useId();
+  const svgRef = useRef<SVGSVGElement | null>(null);
   const all = series.flatMap((s) => s.points);
   if (all.length === 0) return <p className="hint" role="status">{title}: nothing to show yet.</p>;
   const xs = all.map((p) => p.x);
   const ys = all.map((p) => p.y);
-  const xLow = Math.min(...xs);
-  const xHigh = Math.max(...xs);
+  const xLow = xRange ? xRange[0] : Math.min(...xs);
+  const xHigh = xRange ? xRange[1] : Math.max(...xs);
   let yLow = yRange ? yRange[0] : Math.min(0, ...ys);
   let yHigh = yRange ? yRange[1] : Math.max(...ys);
   if (!(yHigh > yLow)) yHigh = yLow + 1;
@@ -63,7 +73,7 @@ export function LineChart({
   const yTicks = niceTicks(yLow, yHigh, 5);
   return (
     <figure className="m-0 flex flex-col gap-1">
-      <svg role="img" aria-labelledby={titleId} viewBox={`0 0 ${W} ${H}`} className="h-auto w-full max-w-xl">
+      <svg ref={svgRef} role="img" aria-labelledby={titleId} viewBox={`0 0 ${W} ${H}`} className="h-auto w-full max-w-xl">
         <title id={titleId}>{`${title}. ${summary}`}</title>
         {yTicks.map((tick) => (
           <g key={`y${tick}`}>
@@ -78,6 +88,12 @@ export function LineChart({
         <line x1={PAD.left} x2={W - PAD.right} y1={H - PAD.bottom} y2={H - PAD.bottom} stroke="currentColor" />
         <text x={(PAD.left + W - PAD.right) / 2} y={H - 4} textAnchor="middle" fontSize={11} fill="currentColor">{xLabel}</text>
         <text transform={`translate(11 ${(PAD.top + H - PAD.bottom) / 2}) rotate(-90)`} textAnchor="middle" fontSize={11} fill="currentColor">{yLabel}</text>
+        {verticalLine && verticalLine.x >= xLow && verticalLine.x <= xHigh && (
+          <g>
+            <line x1={sx(verticalLine.x)} x2={sx(verticalLine.x)} y1={PAD.top} y2={H - PAD.bottom} stroke="currentColor" strokeDasharray="2 3" strokeOpacity={0.7} />
+            <text x={sx(verticalLine.x) + 3} y={PAD.top + 9} fontSize={9} fill="currentColor">{verticalLine.label}</text>
+          </g>
+        )}
         {series.map((line) => (
           <g key={line.name}>
             <polyline
@@ -85,6 +101,12 @@ export function LineChart({
               points={line.points.map((p) => `${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`).join(" ")}
             />
             {line.points.length === 1 && <circle cx={sx(line.points[0].x)} cy={sy(line.points[0].y)} r={3} fill={line.color} />}
+          </g>
+        ))}
+        {markers?.map((marker) => (
+          <g key={marker.label}>
+            <circle cx={sx(marker.x)} cy={sy(marker.y)} r={4.5} fill={marker.color} stroke="currentColor" />
+            <title>{marker.label}</title>
           </g>
         ))}
       </svg>
@@ -95,6 +117,8 @@ export function LineChart({
             {line.name}
           </span>
         ))}
+        {markers?.map((marker) => <span key={marker.label} className="inline-flex items-center gap-1"><span aria-hidden="true" style={{ background: marker.color }} className="inline-block size-2 rounded-full border border-foreground" />{marker.label}</span>)}
+        {exportName && <SaveSvgButton target={svgRef} name={exportName} />}
       </figcaption>
     </figure>
   );

@@ -1,3 +1,5 @@
+import { useRef } from "react";
+import { SaveSvgButton } from "../../../components/charts/saveSvg";
 import { divergingColor, maxAbs, minMax, sequentialColor } from "../inspection";
 
 const LABEL_WIDTH = 150;
@@ -10,7 +12,7 @@ const number = (value: number): string => (Math.abs(value) >= 100 ? value.toFixe
  * (white to teal) for activations. Hover or focus a cell for its row, column and value. A caption says the range.
  */
 export function Heatmap({
-  title, matrix, rowLabels, colLabels, scale = "diverging", cell: cellProp, caption,
+  title, matrix, rowLabels, colLabels, scale = "diverging", cell: cellProp, caption, exportName,
 }: {
   title: string;
   matrix: number[][];
@@ -20,7 +22,10 @@ export function Heatmap({
   /** Side of one cell, in pixels. By default it fits: bigger for a small matrix, smaller for a wide one. */
   cell?: number;
   caption?: string;
+  /** With a name, a button saves the picture as an SVG file. */
+  exportName?: string;
 }) {
+  const svgRef = useRef<SVGSVGElement | null>(null);
   if (matrix.length === 0 || matrix[0].length === 0) return <p className="hint" role="status">{title}: nothing to show.</p>;
   const rows = matrix.length;
   const cols = matrix[0].length;
@@ -36,7 +41,7 @@ export function Heatmap({
   return (
     <figure className="m-0 flex flex-col gap-1">
       <div className="max-w-full overflow-auto">
-        <svg role="img" aria-label={`${title}: ${rows} by ${cols}, ${range}.`} width={width} height={height + LEGEND + 4} viewBox={`0 0 ${width} ${height + LEGEND + 4}`} className="block">
+        <svg ref={svgRef} role="img" aria-label={`${title}: ${rows} by ${cols}, ${range}.`} width={width} height={height + LEGEND + 4} viewBox={`0 0 ${width} ${height + LEGEND + 4}`} className="block">
           {colLabels && top > 0 && matrix[0].map((_, c) => (
             <text key={`c${c}`} transform={`translate(${left + c * cell + cell / 2} ${top - 4}) rotate(-60)`} fontSize={9} fill="currentColor">{colLabels[c]}</text>
           ))}
@@ -50,7 +55,7 @@ export function Heatmap({
           )))}
         </svg>
       </div>
-      <figcaption className="text-xs text-muted-foreground">{caption ?? title} · {rows} × {cols} · {range}</figcaption>
+      <figcaption className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">{caption ?? title} · {rows} × {cols} · {range}{exportName && <SaveSvgButton target={svgRef} name={exportName} />}</figcaption>
     </figure>
   );
 }

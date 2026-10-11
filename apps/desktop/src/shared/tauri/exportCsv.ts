@@ -11,6 +11,14 @@ export type ExportCsvRequest = {
   title: string;
 };
 
+/** What kinds of file `exportFile` can write, with the name its save dialog shows. */
+const FILE_KINDS = {
+  csv: { name: "CSV", extensions: ["csv"], mime: "text/csv;charset=utf-8" },
+  json: { name: "JSON", extensions: ["json"], mime: "application/json;charset=utf-8" },
+  svg: { name: "SVG image", extensions: ["svg"], mime: "image/svg+xml;charset=utf-8" },
+} as const;
+export type ExportFileKind = keyof typeof FILE_KINDS;
+
 export type ExportCsvResult =
   | { status: "saved"; path: string }
   | { status: "cancelled" }
@@ -72,8 +80,14 @@ export async function exportCsvToFolder({ content, folder, fileName }: ExportCsv
  * never used to paper over a Tauri write failure.
  */
 export async function exportCsv({ content, suggestedName, title }: ExportCsvRequest): Promise<ExportCsvResult> {
+  return exportFile({ content, suggestedName, title, kind: "csv" });
+}
+
+/** Writes any text file (CSV, JSON or SVG) through the native save dialog, or a browser download in browser preview. */
+export async function exportFile({ content, suggestedName, title, kind }: ExportCsvRequest & { kind: ExportFileKind }): Promise<ExportCsvResult> {
+  const { name, extensions, mime } = FILE_KINDS[kind];
   if (!isTauriDesktop()) {
-    return exportCsvViaBrowserDownload(content, suggestedName);
+    return exportCsvViaBrowserDownload(content, suggestedName, mime);
   }
 
   let path: string | null;
@@ -81,7 +95,7 @@ export async function exportCsv({ content, suggestedName, title }: ExportCsvRequ
     path = await save({
       title,
       defaultPath: suggestedName,
-      filters: [{ name: "CSV", extensions: ["csv"] }],
+      filters: [{ name, extensions: [...extensions] }],
     });
   } catch (error) {
     return { status: "error", message: describeError(error) };
@@ -100,9 +114,9 @@ export async function exportCsv({ content, suggestedName, title }: ExportCsvRequ
   return { status: "saved", path };
 }
 
-function exportCsvViaBrowserDownload(content: string, suggestedName: string): ExportCsvResult {
+function exportCsvViaBrowserDownload(content: string, suggestedName: string, mime = "text/csv;charset=utf-8"): ExportCsvResult {
   const anchor = document.createElement("a");
-  const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
+  const url = URL.createObjectURL(new Blob([content], { type: mime }));
   try {
     anchor.href = url;
     anchor.download = suggestedName;

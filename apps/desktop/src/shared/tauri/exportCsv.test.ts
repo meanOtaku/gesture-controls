@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { chooseExportFolder, exportCsv, exportCsvToFolder } from "./exportCsv";
+import { chooseExportFolder, exportCsv, exportCsvToFolder, exportFile } from "./exportCsv";
 
 const { open, save, writeTextFile, join } = vi.hoisted(() => ({
   open: vi.fn(),
@@ -159,5 +159,32 @@ describe("exportCsvToFolder", () => {
 
     clickSpy.mockRestore();
     vi.unstubAllGlobals();
+  });
+});
+
+describe("exportFile", () => {
+  it("offers the right kind of file in the save dialog and writes the exact text", async () => {
+    setDesktop(true);
+    save.mockResolvedValue("/tmp/report.json");
+    writeTextFile.mockResolvedValue(undefined);
+    expect(await exportFile({ content: "{}", suggestedName: "report.json", title: "Save report", kind: "json" })).toEqual({ status: "saved", path: "/tmp/report.json" });
+    expect(save).toHaveBeenCalledWith({ title: "Save report", defaultPath: "report.json", filters: [{ name: "JSON", extensions: ["json"] }] });
+    expect(writeTextFile).toHaveBeenCalledWith("/tmp/report.json", "{}");
+    save.mockResolvedValue("/tmp/chart.svg");
+    await exportFile({ content: "<svg/>", suggestedName: "chart.svg", title: "Save the picture", kind: "svg" });
+    expect(save).toHaveBeenLastCalledWith(expect.objectContaining({ filters: [{ name: "SVG image", extensions: ["svg"] }] }));
+  });
+
+  it("reports a cancelled dialog and a failed write, and CSV still uses the CSV filter", async () => {
+    setDesktop(true);
+    save.mockResolvedValue(null);
+    expect(await exportFile({ content: "x", suggestedName: "a.csv", title: "t", kind: "csv" })).toEqual({ status: "cancelled" });
+    save.mockResolvedValue("/tmp/a.csv");
+    writeTextFile.mockRejectedValue(new Error("disk full"));
+    expect(await exportFile({ content: "x", suggestedName: "a.csv", title: "t", kind: "csv" })).toEqual({ status: "error", message: "disk full" });
+    save.mockResolvedValue("/tmp/b.csv");
+    writeTextFile.mockResolvedValue(undefined);
+    await exportCsv({ content: "x", suggestedName: "b.csv", title: "t" });
+    expect(save).toHaveBeenLastCalledWith(expect.objectContaining({ filters: [{ name: "CSV", extensions: ["csv"] }] }));
   });
 });

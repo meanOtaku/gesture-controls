@@ -52,6 +52,38 @@ describe("ModelInspector: logistic regression", () => {
   });
 });
 
+describe("ModelInspector: how well it works and comparing models", () => {
+  const model = (id: string, label = "snap", state = "approved") => ({ id, label, state, deployable: true, imported: false, modelSha256: "x", createdAt: "", active: false }) as never;
+
+  it("shows how well it works, and offers only other models of the same label to compare with", async () => {
+    invokeMock.mockImplementation(async (_: string, args: { id: string }) => (args.id === "snap-abc" ? view(linear) : view(dense, { id: args.id })));
+    render(<ModelInspector id="snap-abc" onClose={() => undefined} models={[model("snap-abc"), model("snap-2"), model("fist-1", "fist")]} />);
+    expect(await screen.findByRole("region", { name: "How well it works" })).toBeInTheDocument();
+    const choose = screen.getByLabelText("Compare with another model") as HTMLSelectElement;
+    expect(Array.from(choose.options).map((o) => o.textContent)).toEqual(["No other model", "snap-2 (approved)"]);
+    expect(screen.queryByRole("table", { name: "Comparison with another model" })).not.toBeInTheDocument();
+    fireEvent.change(choose, { target: { value: "snap-2" } });
+    expect(await screen.findByRole("table", { name: "Comparison with another model" })).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith("inspect_label_model", { id: "snap-2" });
+    fireEvent.change(choose, { target: { value: "" } });
+    await waitFor(() => expect(screen.queryByRole("table", { name: "Comparison with another model" })).not.toBeInTheDocument());
+  });
+
+  it("says when the other model has no saved inspection", async () => {
+    invokeMock.mockImplementation(async (_: string, args: { id: string }) => (args.id === "snap-abc" ? view(linear) : view(null, { id: args.id, origin: "imported" })));
+    render(<ModelInspector id="snap-abc" onClose={() => undefined} models={[model("snap-abc"), model("snap-2")]} />);
+    fireEvent.change(await screen.findByLabelText("Compare with another model"), { target: { value: "snap-2" } });
+    expect(await screen.findByText(/snap-2 has no saved inspection/)).toBeInTheDocument();
+  });
+
+  it("offers nothing to compare with when it is the only model of its label", async () => {
+    invokeMock.mockResolvedValue(view(linear));
+    render(<ModelInspector id="snap-abc" onClose={() => undefined} models={[model("snap-abc")]} />);
+    await screen.findByRole("region", { name: "How well it works" });
+    expect(screen.queryByLabelText("Compare with another model")).not.toBeInTheDocument();
+  });
+});
+
 describe("ModelInspector: dense network", () => {
   it("draws one weights picture per layer, the learning curve, and lets a window be tried", async () => {
     await open(view(dense));

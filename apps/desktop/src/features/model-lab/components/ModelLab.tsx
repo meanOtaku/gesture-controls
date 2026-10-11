@@ -158,7 +158,7 @@ export function ModelLab({ onOpenLabels }: { onOpenLabels?: () => void }) {
         <TrainPanel desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} />
         <TrainingHistory desktopAvailable={desktopAvailable} labels={labels} refreshKey={models.map((model) => `${model.id}:${model.state}`).join(",")} />
         <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} onInspect={(id) => { setInspectId(id); window.setTimeout(() => document.getElementById("lab-inspect")?.scrollIntoView?.({ behavior: "smooth", block: "start" }), 0); }} />
-        {inspectId !== null && <ModelInspector id={inspectId} onClose={() => setInspectId(null)} />}
+        {inspectId !== null && <ModelInspector id={inspectId} models={models} onClose={() => setInspectId(null)} />}
         <DetectionActivity desktopAvailable={desktopAvailable} />
       </fieldset>
     </main>
