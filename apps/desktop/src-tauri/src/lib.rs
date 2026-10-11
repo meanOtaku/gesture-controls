@@ -10,6 +10,7 @@ use watch_bridge::{WatchBridgeServer, WatchEvent};
 mod actuators;
 mod automation;
 mod calibration;
+mod design_results;
 mod fine_tune_plans;
 mod gesture_library;
 mod head_pose;
@@ -177,6 +178,7 @@ pub fn run() {
             network_designs::save_network_design,
             network_designs::delete_network_design,
             network_designs::preview_network_design,
+            design_results::list_design_results,
             fine_tune_plans::list_fine_tune_plans,
             fine_tune_plans::save_fine_tune_plan,
             fine_tune_plans::delete_fine_tune_plan,

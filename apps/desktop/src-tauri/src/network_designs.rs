@@ -179,6 +179,11 @@ impl NetworkDesign {
     }
 }
 
+/// Every design, built-in and saved.
+pub fn all_designs(app: &AppHandle) -> Result<Vec<NetworkDesign>, String> {
+    Ok(everything(read_designs(&designs_path(app)?)))
+}
+
 /// Fills in a request that names a design with that design's choices; a request without one is returned as it is.
 pub fn resolve_design(app: &AppHandle, mut request: TrainRequest) -> Result<TrainRequest, String> {
     let Some(id) = request.design_id.clone() else {

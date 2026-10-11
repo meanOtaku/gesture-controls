@@ -498,6 +498,35 @@ impl LabelRuntimeHost {
             .ok_or_else(|| "there is no such model".to_string())
     }
 
+    /// Where the training runs are kept.
+    pub fn runs_dir_of(&self, app: &AppHandle) -> Result<PathBuf, String> {
+        Ok(Self::model_lab_dir(app)?.join("training-runs"))
+    }
+
+    /// Every model made in this app as (id, label, created at, run id).
+    pub fn trained_models(&self) -> Vec<(String, String, String, String)> {
+        let Ok(state) = self.state.lock() else {
+            return Vec::new();
+        };
+        let Some(store) = &state.store else {
+            return Vec::new();
+        };
+        store
+            .registry()
+            .versions
+            .values()
+            .filter_map(|v| match &v.origin {
+                model_lab_core::ModelOrigin::Trained { run_id } => Some((
+                    v.id.to_string(),
+                    v.label.to_string(),
+                    v.created_at.clone(),
+                    run_id.to_string(),
+                )),
+                model_lab_core::ModelOrigin::Imported => None,
+            })
+            .collect()
+    }
+
     /// The run that trained a model, and its label; an error for an imported model, which has no run.
     pub fn trained_run_of(&self, id: &str) -> Result<(String, String), String> {
         let version = self.version_for(id)?;

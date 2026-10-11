@@ -5,6 +5,7 @@ import { SectionHeader } from "../../../components/app/SectionHeader";
 import { useLabelModels } from "../hooks/useLabelModels";
 import type { LabelModel } from "../labelModels";
 import { ModelInspector } from "./ModelInspector";
+import { DesignResults } from "./DesignResults";
 import { FineTunePlans } from "./FineTunePlans";
 import { NetworkDesigns } from "./NetworkDesigns";
 import { useTrainingRun } from "../hooks/useTrainingRun";
@@ -64,12 +65,14 @@ export function NetworkLab({ modelId, onModelChange }: { modelId: string | null;
       )}
 
       <nav className="lab-workflow" aria-label="Network lab sections">
-        <a href="#lab-designs">Network designs</a><a href="#lab-plans">Fine-tune plans</a><a href="#lab-models">Look inside a model</a>
+        <a href="#lab-designs">Network designs</a><a href="#lab-plans">Fine-tune plans</a><a href="#lab-results">Results by design</a><a href="#lab-models">Look inside a model</a>
       </nav>
 
       <fieldset className="lab-workspace card-stack" disabled={!desktopAvailable} aria-label="Network tools">
         <NetworkDesigns desktopAvailable={desktopAvailable} />
         <FineTunePlans desktopAvailable={desktopAvailable} />
+
+        <DesignResults desktopAvailable={desktopAvailable} refreshKey={models.map((model) => `${model.id}:${model.state}`).join(",")} onInspect={onModelChange} />
 
         <Card id="lab-models" role="region" aria-label="Your models" className="min-w-0">
           <CardHeader>
