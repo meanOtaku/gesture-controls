@@ -1,6 +1,6 @@
-//! The order saved recordings came in: each gets a number (1 for the first) the first time it is listed, kept in a small
-//! file beside the recordings, so "recording 3" keeps meaning the same recording after others are deleted. A number is
-//! never given to another recording. Recordings that already existed are numbered by when they were saved.
+//! The order saved recordings came in: each is numbered 1, 2, 3 … by when it was saved, with no gaps. The order is kept in
+//! a small file beside the recordings, so it stays the same between runs; when a recording is deleted the ones after it
+//! move up by one, so the numbers always run 1 to the number of recordings.
 //!
 //! Nothing inside a recording is changed: the numbers live only in `sequence.json` next to the recording folders.
 
@@ -24,24 +24,34 @@ pub struct Sequence {
 }
 
 impl Sequence {
-    /// Numbers the recordings that have no number yet, oldest first (`saved_at`, then id, so the result never depends on
-    /// the order they were read in), and forgets numbers of recordings that no longer exist. True if anything changed.
+    /// Numbers the recordings that have no number yet after the ones that have, oldest first (`saved_at`, then id, so the
+    /// result never depends on the order they were read in), forgets the ones that no longer exist, and closes any gap so
+    /// the numbers run 1 to the count. True if anything changed.
     pub fn assign(&mut self, present: &[(String, String)]) -> bool {
         let before = (self.numbers.clone(), self.next);
-        self.next = self
-            .next
-            .max(self.numbers.values().copied().max().unwrap_or(0) + 1);
+        self.numbers
+            .retain(|id, _| present.iter().any(|(p, _)| p == id));
         let mut fresh: Vec<&(String, String)> = present
             .iter()
             .filter(|(id, _)| !self.numbers.contains_key(id))
             .collect();
         fresh.sort_by(|a, b| (&a.1, &a.0).cmp(&(&b.1, &b.0)));
+        // Past every number kept; the closing of gaps below then puts them in their place.
+        let mut next = self.numbers.values().copied().max().unwrap_or(0);
         for (id, _) in fresh {
-            self.numbers.insert(id.clone(), self.next);
-            self.next += 1;
+            next += 1;
+            self.numbers.insert(id.clone(), next);
         }
-        self.numbers
-            .retain(|id, _| present.iter().any(|(p, _)| p == id));
+        let mut in_order: Vec<(u32, String)> = self
+            .numbers
+            .iter()
+            .map(|(id, n)| (*n, id.clone()))
+            .collect();
+        in_order.sort();
+        for (position, (_, id)) in in_order.into_iter().enumerate() {
+            self.numbers.insert(id, position as u32 + 1);
+        }
+        self.next = self.numbers.len() as u32 + 1;
         (self.numbers.clone(), self.next) != before
     }
 }
@@ -102,14 +112,39 @@ mod tests {
     }
 
     #[test]
-    fn a_number_is_not_given_again_after_its_recording_is_deleted() {
+    fn deleting_a_recording_closes_the_gap_so_the_numbers_run_without_a_break() {
         let mut sequence = Sequence::default();
-        sequence.assign(&[rec("a", "1"), rec("b", "2"), rec("c", "3")]);
-        sequence.assign(&[rec("a", "1"), rec("b", "2")]); // c is deleted
-        assert!(!sequence.numbers.contains_key("c"));
-        sequence.assign(&[rec("a", "1"), rec("b", "2"), rec("d", "4")]);
-        assert_eq!(sequence.numbers["d"], 4);
-        assert_eq!(sequence.numbers["a"], 1);
+        sequence.assign(&[
+            rec("a", "1"),
+            rec("b", "2"),
+            rec("c", "3"),
+            rec("d", "4"),
+            rec("e", "5"),
+        ]);
+        sequence.assign(&[rec("a", "1"), rec("b", "2"), rec("c", "3"), rec("d", "4")]); // e is deleted
+        sequence.assign(&[
+            rec("a", "1"),
+            rec("b", "2"),
+            rec("c", "3"),
+            rec("d", "4"),
+            rec("f", "6"),
+        ]);
+        let mut numbers: Vec<(u32, &str)> = sequence
+            .numbers
+            .iter()
+            .map(|(id, n)| (*n, id.as_str()))
+            .collect();
+        numbers.sort();
+        assert_eq!(numbers, [(1, "a"), (2, "b"), (3, "c"), (4, "d"), (5, "f")]);
+        sequence.assign(&[rec("a", "1"), rec("c", "3"), rec("d", "4"), rec("f", "6")]); // b is deleted
+        assert_eq!(
+            (
+                sequence.numbers["a"],
+                sequence.numbers["c"],
+                sequence.numbers["f"]
+            ),
+            (1, 2, 4)
+        );
     }
 
     #[test]

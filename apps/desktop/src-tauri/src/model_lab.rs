@@ -55,9 +55,8 @@ pub struct DatasetSummary {
     #[serde(default)]
     pub labels: Vec<String>,
     pub row_count: usize,
-    /// Where this recording came in the order they were imported: 1 for the first, and never reused, so "recording 3"
-    /// keeps meaning the same recording after others are deleted. An index written before this existed is numbered
-    /// in the order it was stored (see [`number_unnumbered`]).
+    /// Where this recording came in the order they were imported: 1 for the first, with no gaps (see
+    /// [`number_unnumbered`]); worked out when the index is read.
     #[serde(default)]
     pub sequence: u32,
     /// The saved Recorder recording this was made from, when it was added straight from one.
@@ -86,17 +85,13 @@ pub(crate) struct DatasetIndex {
     pub(crate) next_sequence: u32,
 }
 
-/// Numbers recordings that have no sequence yet (an index from before there was one) in the order they are stored, which
-/// is the order they were imported, and makes sure the next import gets a number nobody has had.
+/// Numbers the recordings 1, 2, 3 … in the order they are stored, which is the order they were imported, so the numbers
+/// always run without a gap: deleting one moves the ones after it up.
 fn number_unnumbered(index: &mut DatasetIndex) {
-    let mut next = index
-        .next_sequence
-        .max(index.datasets.iter().map(|d| d.sequence).max().unwrap_or(0) + 1);
-    for dataset in index.datasets.iter_mut().filter(|d| d.sequence == 0) {
-        dataset.sequence = next;
-        next += 1;
+    for (position, dataset) in index.datasets.iter_mut().enumerate() {
+        dataset.sequence = position as u32 + 1;
     }
-    index.next_sequence = next;
+    index.next_sequence = index.datasets.len() as u32 + 1;
 }
 
 /// Serializes writes to the on-disk dataset index/files so two concurrent
@@ -675,17 +670,18 @@ mod tests {
     }
 
     #[test]
-    fn recordings_are_numbered_in_the_order_stored_and_a_number_is_never_reused() {
+    fn recordings_are_numbered_in_the_order_stored_without_a_gap_after_a_delete() {
         let old = |id: &str| {
             format!(
                 r#"{{"id":"{id}","originalFilename":"t.csv","importedAt":"","label":"idle","rowCount":3}}"#
             )
         };
         let mut index: DatasetIndex = serde_json::from_str(&format!(
-            r#"{{"datasets":[{},{},{}]}}"#,
+            r#"{{"datasets":[{},{},{},{}]}}"#,
             old("a"),
             old("b"),
-            old("c")
+            old("c"),
+            old("d")
         ))
         .unwrap();
         number_unnumbered(&mut index);
@@ -695,17 +691,18 @@ mod tests {
                 .iter()
                 .map(|d| d.sequence)
                 .collect::<Vec<_>>(),
-            [1, 2, 3]
+            [1, 2, 3, 4]
         );
-        assert_eq!(index.next_sequence, 4);
-        index.datasets.retain(|d| d.id != "c"); // the last one is deleted
+        index.datasets.retain(|d| d.id != "c");
         number_unnumbered(&mut index);
         assert_eq!(
-            index.next_sequence, 4,
-            "the number 3 is not handed out again"
+            index
+                .datasets
+                .iter()
+                .map(|d| (d.id.as_str(), d.sequence))
+                .collect::<Vec<_>>(),
+            [("a", 1), ("b", 2), ("d", 3)]
         );
-        index.datasets[0].sequence = 9; // already numbered ones are kept
-        number_unnumbered(&mut index);
-        assert_eq!((index.datasets[0].sequence, index.next_sequence), (9, 10));
+        assert_eq!(index.next_sequence, 4);
     }
 }

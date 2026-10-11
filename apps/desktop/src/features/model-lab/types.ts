@@ -10,7 +10,7 @@ export interface DatasetSummary {
   /** Every distinct label on the dataset's rows. Empty or absent for a dataset imported before multi-label support. */
   labels?: string[];
   rowCount: number;
-  /** Where it came in the order recordings were imported (1 is the first); never reused after a delete. */
+  /** Where it came in the order recordings were imported (1 is the first); no gaps, so a delete moves the later ones up. */
   sequence?: number;
   /** The Recorder recording this was added from, if it was added directly. */
   sourceRecordingId?: string;
