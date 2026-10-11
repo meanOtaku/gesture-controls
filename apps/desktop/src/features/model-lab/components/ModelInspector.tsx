@@ -5,9 +5,11 @@ import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
+import { addEdit, type Edit, type Selection } from "../edits";
 import type { LabelModel } from "../labelModels";
 import type { ModelInspectionView } from "../inspection";
 import { SPIKE_METHODS } from "../training";
+import { EditPanel } from "./EditPanel";
 import { DeclaredInputs, InspectInputs } from "./InspectInputs";
 import { InspectEvaluation } from "./InspectEvaluation";
 import { InspectResearch } from "./InspectResearch";
@@ -22,6 +24,30 @@ const METHOD_NAMES: Record<string, string> = {
   cnn1d: "1D convolutional network (PyTorch)",
 };
 
+/** What was changed to make this model, and how the changes moved its score on the same held-out windows. */
+function EditedFrom({ inspection }: { inspection: NonNullable<ModelInspectionView["inspection"]> }) {
+  const edit = inspection.edit;
+  if (!edit) return null;
+  const rate = (metrics: Record<string, unknown> | null | undefined, key: string) => (metrics && typeof metrics[key] === "number" ? (metrics[key] as number).toFixed(3) : "–");
+  return (
+    <section aria-label="Edited from another model" className="flex flex-col gap-2 rounded-lg border border-input p-3">
+      <h3 className="text-base font-semibold">Edited from {edit.fromModel ?? "another model"}</h3>
+      <ul className="flex flex-col gap-1 text-sm" aria-label="What was changed">
+        {edit.said.map((line) => <li key={line}>{line}</li>)}
+      </ul>
+      <table className="text-sm" aria-label="Before and after the changes">
+        <caption className="caption-top text-left text-xs text-muted-foreground">On the same held-out windows, each at its own cut-off</caption>
+        <thead><tr className="text-left"><th /><th className="px-2">ROC AUC</th><th className="px-2">F1</th><th className="px-2">Recall</th><th className="px-2">Precision</th><th className="px-2">False alarms</th></tr></thead>
+        <tbody>
+          {([["Before", edit.before], ["After", edit.after]] as const).map(([name, metrics]) => (
+            <tr key={name}><th scope="row" className="pr-2 text-left">{name}</th><td className="px-2">{rate(metrics, "rocAuc")}</td><td className="px-2">{rate(metrics, "f1")}</td><td className="px-2">{rate(metrics, "recall")}</td><td className="px-2">{rate(metrics, "precision")}</td><td className="px-2">{rate(metrics, "falseActivationRate")}</td></tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
 const asStrings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
 
 /** Looks inside one model: its inputs, weights, what it does with real windows, and how it learned. */
@@ -31,6 +57,11 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
   const [compareId, setCompareId] = useState("");
   const [compare, setCompare] = useState<ModelInspectionView | null>(null);
   const [compareError, setCompareError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [edits, setEdits] = useState<Edit[]>([]);
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [editMessage, setEditMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let stale = false;
@@ -49,6 +80,10 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
 
   useEffect(() => {
     setCompareId("");
+    setEditing(false);
+    setEdits([]);
+    setSelection(null);
+    setEditMessage(null);
   }, [id]);
   useEffect(() => {
     let stale = false;
@@ -66,6 +101,23 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
     return () => { stale = true; };
   }, [compareId]);
 
+  const saveEdits = async () => {
+    setSaving(true);
+    setEditMessage(null);
+    try {
+      await invoke("start_label_edit", { id, edits });
+      setEditMessage("Started. The edited model is being scored and will appear as a new draft under Label models when it is done; the progress is under Train a model.");
+      setEdits([]);
+      setSelection(null);
+    } catch (err) {
+      setEditMessage(String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const switchedOff = new Set(edits.flatMap((edit) => (edit.kind === "disableInput" ? [edit.input] : [])));
+  const toggleInput = (name: string) => setEdits((previous) => (switchedOff.has(name) ? previous.filter((edit) => !(edit.kind === "disableInput" && edit.input === name)) : addEdit(previous, { kind: "disableInput", input: name })));
+
   const inspection = view?.inspection ?? null;
   const sameLabel = view ? models.filter((model) => model.label === view.label && model.id !== view.id) : [];
   const manifestInput = (view?.manifest?.input ?? {}) as { features?: unknown };
@@ -80,7 +132,16 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
         <SectionHeader
           title={view ? `Inspect: ${view.label}` : "Inspect a model"}
           description={view ? `${view.id} · ${view.origin === "trained" ? "trained in this app" : "imported"}` : "Loading…"}
-          status={<Button type="button" variant="outline" onClick={onClose}>Close</Button>}
+          status={
+            <div className="flex items-center gap-2">
+              {inspection && view?.origin === "trained" && (
+                <Button type="button" variant={editing ? "default" : "outline"} aria-pressed={editing} onClick={() => setEditing((value) => !value)}>
+                  {editing ? "Stop editing" : "Edit this model"}
+                </Button>
+              )}
+              <Button type="button" variant="outline" onClick={onClose}>Close</Button>
+            </div>
+          }
           help={{
             label: "About inspecting a model",
             content: "Everything here is what the model really does. The weights are read from the model, and every number computed from them was checked against the model itself. The windows and the importance come from the recordings the model was tested on, never the ones it trained on.",
@@ -124,9 +185,19 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
               </div>
             )}
             <InspectEvaluation inspection={inspection} other={compare?.inspection ?? null} otherName={compare?.id} />
+            {inspection.edit && <EditedFrom inspection={inspection} />}
             <InspectResearch inspection={inspection} />
-            <InspectInputs inspection={inspection} spikeLabel={spikeLabel} />
-            <InspectWeights inspection={inspection} />
+            <InspectInputs inspection={inspection} spikeLabel={spikeLabel} editing={editing} switchedOff={switchedOff} onToggleInput={toggleInput} />
+            <InspectWeights inspection={inspection} editing={editing} selection={selection} onSelect={setSelection} />
+            {editing && (
+              <EditPanel
+                inspection={inspection} selection={selection} edits={edits} saving={saving} message={editMessage}
+                onAdd={(edit) => setEdits((previous) => addEdit(previous, edit))}
+                onRemove={(index) => setEdits((previous) => previous.filter((_, i) => i !== index))}
+                onClearAll={() => { setEdits([]); setSelection(null); }}
+                onSave={() => void saveEdits()}
+              />
+            )}
             <InspectWindows inspection={inspection} spikeLabel={spikeLabel} />
             {inspection.curve.length > 0 && (
               <section aria-label="How it learned" className="flex flex-col gap-2">

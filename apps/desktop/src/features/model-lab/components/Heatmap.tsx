@@ -12,7 +12,7 @@ const number = (value: number): string => (Math.abs(value) >= 100 ? value.toFixe
  * (white to teal) for activations. Hover or focus a cell for its row, column and value. A caption says the range.
  */
 export function Heatmap({
-  title, matrix, rowLabels, colLabels, scale = "diverging", cell: cellProp, caption, exportName,
+  title, matrix, rowLabels, colLabels, scale = "diverging", cell: cellProp, caption, exportName, onCellClick, selected,
 }: {
   title: string;
   matrix: number[][];
@@ -24,6 +24,9 @@ export function Heatmap({
   caption?: string;
   /** With a name, a button saves the picture as an SVG file. */
   exportName?: string;
+  /** Makes every cell pressable (by pointer or keyboard), for choosing one. */
+  onCellClick?: (row: number, column: number) => void;
+  selected?: { row: number; column: number } | null;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   if (matrix.length === 0 || matrix[0].length === 0) return <p className="hint" role="status">{title}: nothing to show.</p>;
@@ -41,18 +44,30 @@ export function Heatmap({
   return (
     <figure className="m-0 flex flex-col gap-1">
       <div className="max-w-full overflow-auto">
-        <svg ref={svgRef} role="img" aria-label={`${title}: ${rows} by ${cols}, ${range}.`} width={width} height={height + LEGEND + 4} viewBox={`0 0 ${width} ${height + LEGEND + 4}`} className="block">
+        <svg ref={svgRef} role={onCellClick ? "group" : "img"} aria-label={`${title}: ${rows} by ${cols}, ${range}.`} width={width} height={height + LEGEND + 4} viewBox={`0 0 ${width} ${height + LEGEND + 4}`} className="block">
           {colLabels && top > 0 && matrix[0].map((_, c) => (
             <text key={`c${c}`} transform={`translate(${left + c * cell + cell / 2} ${top - 4}) rotate(-60)`} fontSize={9} fill="currentColor">{colLabels[c]}</text>
           ))}
           {rowLabels && matrix.map((_, r) => (
             <text key={`r${r}`} x={left - 4} y={top + r * cell + cell / 2 + 3} textAnchor="end" fontSize={Math.min(10, cell - 2)} fill="currentColor">{rowLabels[r]?.slice(0, 26)}</text>
           ))}
-          {matrix.map((row, r) => row.map((value, c) => (
-            <rect key={`${r}-${c}`} x={left + c * cell} y={top + r * cell} width={cell} height={cell} fill={colour(value)} stroke="rgba(0,0,0,0.08)" strokeWidth={0.5}>
-              <title>{`${rowLabels?.[r] ?? `row ${r + 1}`}, ${colLabels?.[c] ?? `column ${c + 1}`}: ${number(value)}`}</title>
-            </rect>
-          )))}
+          {matrix.map((row, r) => row.map((value, c) => {
+            const name = `${rowLabels?.[r] ?? `row ${r + 1}`}, ${colLabels?.[c] ?? `column ${c + 1}`}: ${number(value)}`;
+            const chosen = selected?.row === r && selected?.column === c;
+            return (
+              <rect
+                key={`${r}-${c}`} x={left + c * cell} y={top + r * cell} width={cell} height={cell} fill={colour(value)}
+                stroke={chosen ? "#000" : "rgba(0,0,0,0.08)"} strokeWidth={chosen ? 2 : 0.5}
+                {...(onCellClick ? {
+                  role: "button", tabIndex: 0, "aria-label": name, "aria-pressed": chosen, style: { cursor: "pointer" },
+                  onClick: () => onCellClick(r, c),
+                  onKeyDown: (event: React.KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onCellClick(r, c); } },
+                } : {})}
+              >
+                <title>{name}</title>
+              </rect>
+            );
+          }))}
         </svg>
       </div>
       <figcaption className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">{caption ?? title} · {rows} × {cols} · {range}{exportName && <SaveSvgButton target={svgRef} name={exportName} />}</figcaption>

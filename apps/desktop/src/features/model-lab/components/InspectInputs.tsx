@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Button } from "../../../components/ui/button";
+import { Checkbox } from "../../../components/ui/checkbox";
 import { describeInput, STREAM_TITLES } from "../featureInfo";
 import type { Inspection } from "../inspection";
 
@@ -7,7 +8,7 @@ import type { Inspection } from "../inspection";
  * Every input of the model: what it is, what value it takes, what the model scales it by, how much it matters (how far the
  * held-out ROC AUC falls when it is shuffled between windows) and, for a linear model, its weight.
  */
-export function InspectInputs({ inspection, spikeLabel }: { inspection: Inspection; spikeLabel?: string }) {
+export function InspectInputs({ inspection, spikeLabel, editing = false, switchedOff, onToggleInput }: { inspection: Inspection; spikeLabel?: string; /** Adds a column to switch an input off. */ editing?: boolean; switchedOff?: Set<string>; onToggleInput?: (name: string) => void }) {
   const [byImportance, setByImportance] = useState(true);
   const importance = useMemo(() => new Map(inspection.importance.map((entry) => [entry.name, entry])), [inspection]);
   const linear = inspection.network.kind === "linear";
@@ -44,6 +45,7 @@ export function InspectInputs({ inspection, spikeLabel }: { inspection: Inspecti
               <th className="pr-3">Scaled by (average, spread)</th>
               <th className="pr-3">Importance</th>
               {linear && <th className="pr-3">Weight</th>}
+              {editing && <th className="pr-3">Switch off</th>}
             </tr>
           </thead>
           <tbody>
@@ -61,6 +63,11 @@ export function InspectInputs({ inspection, spikeLabel }: { inspection: Inspecti
                   ) : "–"}
                 </td>
                 {linear && <td className="pr-3 whitespace-nowrap">{weight === undefined ? "–" : weight.toFixed(3)}</td>}
+                {editing && (
+                  <td className="pr-3">
+                    <Checkbox checked={switchedOff?.has(input.name) ?? false} onCheckedChange={() => onToggleInput?.(input.name)} aria-label={`Switch off ${STREAM_TITLES[info.stream]} ${info.group} ${info.short}`} />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

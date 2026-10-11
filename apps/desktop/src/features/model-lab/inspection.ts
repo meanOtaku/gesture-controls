@@ -99,6 +99,8 @@ export interface Inspection {
   forwardMaxAbsDifference: number;
   /** Only when research checks were asked for. */
   research?: Research | null;
+  /** Only for a model made by editing another. */
+  edit?: { fromModel: string | null; edits: unknown[]; said: string[]; before?: Record<string, unknown> | null; after?: Record<string, unknown> | null } | null;
 }
 export interface ModelInspectionView {
   id: string;

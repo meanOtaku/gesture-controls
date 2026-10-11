@@ -33,6 +33,15 @@ def main(out_root: Path) -> None:
             assert result["outcome"] == "deployable", result["message"]
             (out_root / f"{name}.json").write_text((run_dir / "inspection.json").read_text())
             print("wrote", name, (out_root / f"{name}.json").stat().st_size, "bytes")
+            if name == "inspection-linear":
+                # The same model with two changes made by hand, scored on the same held-out windows.
+                raw = spec_for(tmp_path, backend, **extra)
+                raw["edit"] = {"fromDir": str(run_dir), "fromModel": "snap-v1", "edits": [{"kind": "disableInput", "input": "accel_x_mean"}, {"kind": "setBias", "layer": 0, "neuron": 0, "value": 0.5}]}
+                edited = tmp_path / "edited"
+                edited_result = lt.run(raw, edited)
+                assert edited_result["outcome"] in ("deployable", "evaluationOnly"), edited_result["message"]
+                (out_root / "inspection-edited.json").write_text((edited / "inspection.json").read_text())
+                print("wrote inspection-edited")
 
 
 if __name__ == "__main__":
