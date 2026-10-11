@@ -302,6 +302,8 @@ export interface AppSettings {
   watchAccelerationRateHz: number;
   watchGyroscopeRateHz: number;
   watchPpgFlushRateHz: number;
+  /** Whether the watch sends motion and pulse samples of one flush as one message (true) or each motion reading on its own. */
+  watchCombinedSensorMessages: boolean;
   watchHeartRateAcceptanceRateHz: number;
   watchSkinTemperatureAcceptanceRateHz: number;
   watchEdaAcceptanceRateHz: number;

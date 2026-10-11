@@ -14,6 +14,7 @@ import { SwipeSettings } from "./SwipeSettings";
 import { TapSettings } from "./TapSettings";
 import { WatchHealthDeliverySettingsSection } from "./WatchHealthDeliverySettingsSection";
 import { WatchRateSettingsSection } from "./WatchRateSettingsSection";
+import { WatchCombinedMessagesSection } from "./WatchCombinedMessagesSection";
 import { WatchSensorSwitchSection } from "./WatchSensorSwitchSection";
 import { WatchOrientationSettings } from "./WatchOrientationSettings";
 import { WatchTransportSection } from "./WatchTransportSection";
@@ -144,6 +145,11 @@ export function Settings({
           <WatchHealthDeliverySettingsSection />
 
           <WatchSensorSwitchSection watchSensorsEnabled={current.watchSensorsEnabled} onToggle={toggleWatchSensor} />
+
+          <WatchCombinedMessagesSection
+            enabled={current.watchCombinedSensorMessages}
+            onToggle={() => onUpdate({ ...current, watchCombinedSensorMessages: !current.watchCombinedSensorMessages })}
+          />
 
           <ApplySettingsFooter
             dirtyCount={drafts.dirtyCount}

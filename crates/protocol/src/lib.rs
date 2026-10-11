@@ -165,6 +165,10 @@ pub const SENSOR_ORIENTATION: &str = "orientation";
 pub const SENSOR_ACCELERATION: &str = "acceleration";
 pub const SENSOR_GYROSCOPE: &str = "gyroscope";
 pub const SENSOR_PPG_FLUSH: &str = "ppg_continuous";
+/// Not a sensor: the `desktop.set_sensor` id that switches the watch's combined `watch.sensor_batch`
+/// messages on or off. Off, the watch sends each motion reading as its own `watch.orientation`.
+/// Kept out of [`CONTROLLABLE_SENSOR_IDS`], which lists real sensors.
+pub const COMBINED_SENSOR_BATCH: &str = "combined_sensor_batch";
 
 pub const IMU_SENSOR_IDS: &[&str] = &[SENSOR_ORIENTATION, SENSOR_ACCELERATION, SENSOR_GYROSCOPE];
 pub const RATE_CONTROLLABLE_SENSOR_IDS: &[&str] = &[
