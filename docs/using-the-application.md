@@ -287,6 +287,12 @@ When training finishes you see, in words, how much of the gesture it found, how 
 
 Training runs on this computer and needs **uv** on the PATH and this repository checkout (`tools/label-trainer`); the card says so if it is missing. The first run downloads the Python packages. Running a model needs none of this.
 
+#### Label timing
+
+The camera marks a hold when it sees it, which can be a little before or after the pulse sensor and motion sensor show it. The Train card's **Label timing (ms)** moves every label later in time by that much (earlier when negative) before the windows are made; 0 leaves the labels as recorded and the samples are never changed. The value is limited to ±1500 ms and is kept in the model's manifest.
+
+**Check which timing fits** tries offsets from −1000 to +1500 ms in steps of 250 on the chosen recordings and lists each one's score: every recording is scored by a simple model (logistic regression on the design's inputs) trained without it, pooled into one ROC AUC. The best offset is highlighted, with **Use +N ms** to set it. The offset is picked using the same recordings it is scored on, so the best score is a little optimistic, and when the best and worst differ by less than 0.03 the card says the timing barely matters. On the recordings so far, scores were flat from 0 to +250 ms, so timing is not what limits them.
+
 #### Activity
 
 A list of what the active models have done this session, newest first: **Detected** (with the model's confidence), **Released**, and **Attention** for a skipped window, a model that was swapped out, or two labels that cannot coexist being detected together (both are then held off). An identical line repeating is shown once with a count. The card can be **collapsed** (the button shows how many entries are inside, and it stays as you left it). In Monitor this is what the models would have done; in Live the same detections can start recipes. A release always shows, in every mode. The list has a fixed height and scrolls, so a long session does not make the page longer, and **Clear** empties it (new detections keep arriving afterwards; nothing about the models changes).

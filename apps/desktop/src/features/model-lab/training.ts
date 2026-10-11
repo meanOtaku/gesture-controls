@@ -91,6 +91,19 @@ export interface TrainRequest {
   ppgChannels: PpgChannel[];
   /** How the pulse sensor's spikes are pulled out before the model reads their features; "none" reads no spike features. */
   spikeMethod: SpikeMethodId;
+  /** Moves every label later in time by this many milliseconds (earlier when negative); absent leaves them as recorded. */
+  labelOffsetMs?: number;
+}
+
+/** The most the labels may be moved in time, either way (the desktop's limit). */
+export const MAX_LABEL_OFFSET_MS = 1500;
+
+/** How well recordings separate the gesture from the rest at one label offset (see `OffsetScore` in label_training.rs). */
+export interface OffsetScore {
+  offsetMs: number;
+  auc: number | null;
+  windows: number;
+  positives: number;
 }
 
 export interface TrainPlan {

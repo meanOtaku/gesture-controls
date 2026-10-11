@@ -11,6 +11,7 @@ import { describeDesign, type DesignPreview, type NetworkDesign } from "../desig
 import { useTrainingRun } from "../hooks/useTrainingRun";
 import { buildRequest, hasLabel, otherLabels, recordingsWithLabel, type OtherRole, type TrainPlan, type TrainerEnvironment } from "../training";
 import { datasetLabels, inImportOrder, recordingNumber, type DatasetLabel, type DatasetSummary } from "../types";
+import { LabelTiming } from "./LabelTiming";
 import { TrainingRunView } from "./TrainingRunView";
 
 type TrainPanelProps = {
@@ -39,6 +40,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
   const [designId, setDesignId] = useState("");
   const [summary, setSummary] = useState<DesignPreview | null>(null);
   const [research, setResearch] = useState(false);
+  const [labelOffset, setLabelOffset] = useState(0);
   const [plan, setPlan] = useState<TrainPlan | null>(null);
   const [environment, setEnvironment] = useState<TrainerEnvironment | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +53,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
   const request = target === "" || design === null ? null : {
     ...buildRequest({ label: target, datasetIds: [...selected], others, roles, method: design.method, sources: design.sources, research }),
     designId: design.id,
+    ...(labelOffset !== 0 ? { labelOffsetMs: labelOffset } : {}),
   };
   const requestKey = JSON.stringify(request);
 
@@ -200,6 +203,8 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
                 {onOpenNetworkLab ? <Button type="button" variant="link" className="h-auto p-0" onClick={onOpenNetworkLab}>Network lab</Button> : "Network lab"}.
               </p>
             </div>
+
+            <LabelTiming request={request} offset={labelOffset} onOffset={setLabelOffset} disabled={running !== null} />
 
             {plan && (
               <div role="status" aria-label="Training plan">

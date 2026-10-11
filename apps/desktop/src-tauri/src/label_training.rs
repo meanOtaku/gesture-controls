@@ -48,6 +48,8 @@ const CNN_MIN_STEPS: u32 = 8;
 /// A dense model reading raw columns: one step (the latest reading) by default, and at most this many.
 const RAW_DEFAULT_STEPS: u32 = 1;
 const RAW_MAX_STEPS: u32 = 64;
+/// How far the labels may be moved in time, in milliseconds either way (the trainer's `MAX_LABEL_OFFSET_MS`).
+const MAX_LABEL_OFFSET_MS: i32 = 1500;
 
 /// The backends offered, which extra packages the trainer needs for each.
 pub(crate) const BACKENDS: [&str; 4] = ["logreg", "mlp", "torch-mlp", "cnn1d"];
@@ -106,6 +108,10 @@ pub struct TrainRequest {
     /// Also retrain on less data and on all but one recording, to see how far the score can be trusted. Slower.
     #[serde(default)]
     pub research: bool,
+    /// Moves the labels later in time by this many milliseconds (earlier when negative) before windows are made, for when the
+    /// camera marked a hold a little before or after the signal showed it. From -1500 to 1500; absent or 0 leaves them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label_offset_ms: Option<i32>,
     /// A saved network design to train with (see `network_designs`). When present, the design's choices replace the
     /// request's own for the method, inputs, spike extraction, window and network; the label and recordings stay the request's.
     #[serde(default)]
@@ -147,6 +153,7 @@ struct Checked {
     network: Option<NetworkSpec>,
     explicit_features: Option<Vec<String>>,
     research: bool,
+    label_offset_ms: i32,
 }
 
 fn label_id(raw: &str) -> Result<LabelId, String> {
@@ -384,6 +391,12 @@ fn check_request(
         features,
         ..
     } = resolved;
+    let label_offset_ms = request.label_offset_ms.unwrap_or(0);
+    if label_offset_ms.abs() > MAX_LABEL_OFFSET_MS {
+        return Err(format!(
+            "the label offset must be from -{MAX_LABEL_OFFSET_MS} to {MAX_LABEL_OFFSET_MS} milliseconds, got {label_offset_ms}"
+        ));
+    }
     let network = match &request.network {
         Some(network) => {
             network.validate(&request.backend)?;
@@ -416,6 +429,7 @@ fn check_request(
         network,
         explicit_features: request.features.clone(),
         research: request.research,
+        label_offset_ms,
     })
 }
 
@@ -461,6 +475,7 @@ fn build_spec(
         "features": checked.explicit_features,
         "network": checked.network,
         "research": checked.research,
+        "labelOffsetMs": checked.label_offset_ms,
     })
 }
 
@@ -559,6 +574,99 @@ fn recordings_for(app: &AppHandle, request: &TrainRequest) -> Result<Checked, St
     check_request(request, &index.datasets, &|id| {
         dataset_sha(&dataset_csv_path(&dir, id))
     })
+}
+
+/// How well the recordings separate the gesture from the rest when the labels are moved to each of a range of offsets.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct OffsetScore {
+    pub offset_ms: i32,
+    /// ROC AUC over every recording judged by a model that never saw it; absent when it could not be worked out.
+    pub auc: Option<f64>,
+    pub windows: u32,
+    pub positives: u32,
+}
+
+/// The trainer's last line of output about a timing check, as the scores or the reason it could not be done.
+pub fn offsets_from(line: Option<&str>) -> Result<Vec<OffsetScore>, String> {
+    let parsed: serde_json::Value = line
+        .and_then(|l| serde_json::from_str(l).ok())
+        .ok_or("the trainer gave no answer")?;
+    if parsed.get("outcome").and_then(serde_json::Value::as_str) != Some("ok") {
+        return Err(parsed
+            .get("message")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("the trainer could not check the timing")
+            .to_string());
+    }
+    let scores = parsed
+        .get("scores")
+        .and_then(serde_json::Value::as_array)
+        .ok_or("the trainer gave no scores")?;
+    scores
+        .iter()
+        .map(|s| {
+            Ok(OffsetScore {
+                offset_ms: s["offsetMs"].as_i64().ok_or("a score has no offset")? as i32,
+                auc: s["auc"].as_f64(),
+                windows: s["windows"].as_u64().unwrap_or(0) as u32,
+                positives: s["positives"].as_u64().unwrap_or(0) as u32,
+            })
+        })
+        .collect()
+}
+
+/// Tries moving the labels to a range of offsets and says how well the chosen recordings and inputs separate the gesture from
+/// the rest at each, judged on recordings left out. Nothing is recorded or trained.
+#[tauri::command]
+pub async fn suggest_label_offset(
+    app: AppHandle,
+    request: TrainRequest,
+) -> Result<Vec<OffsetScore>, String> {
+    let request = crate::network_designs::resolve_design(&app, request)?;
+    let checked = recordings_for(&app, &request)?;
+    let split = plan_split_keeping(
+        &checked.recordings,
+        &checked.mapping,
+        &checked.target,
+        &train_only_of(&request),
+    )
+    .map_err(|e| e.to_string())?;
+    if !Path::new(TRAINER_PROJECT_DIR)
+        .join("pyproject.toml")
+        .is_file()
+    {
+        return Err("the trainer was not found, so the timing cannot be checked here".into());
+    }
+    let data = datasets_dir(&app)?;
+    let paths: BTreeMap<String, PathBuf> = checked
+        .recordings
+        .iter()
+        .map(|r| (r.id.to_string(), dataset_csv_path(&data, r.id.as_str())))
+        .collect();
+    let mut spec = build_spec(&checked, &split, &paths);
+    spec["labelOffsetMs"] = serde_json::json!(0);
+    let work = runs_dir(&app)?.join(format!(".timing-{}", Uuid::new_v4().simple()));
+    fs::create_dir_all(&work).map_err(|e| e.to_string())?;
+    let spec_path = work.join("spec.json");
+    let done = async {
+        fs::write(&spec_path, serde_json::to_vec(&spec).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        let output = Command::new("uv")
+            .args(["run", "--project", TRAINER_PROJECT_DIR, "--extra", "onnx"])
+            .arg("label-classifier-train")
+            .arg("--suggest-offset")
+            .arg("--spec")
+            .arg(&spec_path)
+            .kill_on_drop(true)
+            .output()
+            .await
+            .map_err(|e| format!("could not start the trainer: {e}. It needs uv (https://docs.astral.sh/uv/) on the PATH"))?;
+        let text = String::from_utf8_lossy(&output.stdout).into_owned();
+        offsets_from(text.lines().rev().find(|l| !l.trim().is_empty()))
+    }
+    .await;
+    let _ = fs::remove_dir_all(&work);
+    done
 }
 
 fn train_only_of(request: &TrainRequest) -> Vec<RecordingId> {
@@ -1351,6 +1459,7 @@ mod tests {
             network: None,
             research: false,
             design_id: None,
+            label_offset_ms: None,
             train_only: Vec::new(),
         }
     }
@@ -1974,5 +2083,49 @@ mod tests {
             as_excluded.excludes.contains(&"mystery".to_string())
                 && !as_excluded.negatives.contains(&"mystery".to_string())
         );
+    }
+
+    #[test]
+    fn a_label_offset_reaches_the_trainer_and_must_stay_within_the_limit() {
+        let mut r = request();
+        let checked = check_request(&r, &datasets(), &sha).unwrap();
+        let split = plan_split(&checked.recordings, &checked.mapping, &checked.target).unwrap();
+        assert_eq!(
+            build_spec(&checked, &split, &BTreeMap::new())["labelOffsetMs"],
+            0
+        );
+        r.label_offset_ms = Some(-250);
+        let moved = check_request(&r, &datasets(), &sha).unwrap();
+        assert_eq!(
+            build_spec(&moved, &split, &BTreeMap::new())["labelOffsetMs"],
+            -250
+        );
+        for bad in [1501, -1501] {
+            r.label_offset_ms = Some(bad);
+            assert!(
+                check_request(&r, &datasets(), &sha)
+                    .unwrap_err()
+                    .contains("label offset")
+            );
+        }
+        r.label_offset_ms = Some(1500);
+        assert!(check_request(&r, &datasets(), &sha).is_ok());
+    }
+
+    #[test]
+    fn the_trainers_timing_scores_become_the_numbers_shown_and_a_refusal_becomes_its_reason() {
+        let line = r#"{"outcome":"ok","scores":[{"offsetMs":0,"auc":0.8,"windows":900,"positives":500},{"offsetMs":250,"auc":null,"windows":0,"positives":0}]}"#;
+        let scores = offsets_from(Some(line)).unwrap();
+        assert_eq!(
+            (scores[0].offset_ms, scores[0].auc, scores[0].windows),
+            (0, Some(0.8), 900)
+        );
+        assert_eq!(scores[1].auc, None);
+        let refused = offsets_from(Some(
+            r#"{"outcome":"refused","message":"too few recordings"}"#,
+        ))
+        .unwrap_err();
+        assert_eq!(refused, "too few recordings");
+        assert!(offsets_from(None).is_err() && offsets_from(Some("not json")).is_err());
     }
 }

@@ -9,7 +9,7 @@ instead of silently corrupting a training run.
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cached_property
 from pathlib import Path
 
@@ -256,6 +256,21 @@ def load_recording(path: str | Path) -> Recording:
         ppg_observed=~np.isnan(np.array(channels["ppg_green"], dtype=np.float64)),
         orient_observed=~np.isnan(np.array(channels["quat_w"], dtype=np.float64)),
     )
+
+
+def shift_labels(recording: Recording, offset_ms: int) -> Recording:
+    """The recording with its labels moved later in time by `offset_ms` (earlier when negative): the label a row has is the one
+    the recording had `offset_ms` before it. The samples and their timestamps are not touched.
+
+    Camera marking labels a hold when the camera has seen it, which is not when the watch's signal responds, so the label and
+    the signal can sit a fraction of a second apart. The ends take the first (or last) label, since there is nothing before
+    (or after) the recording to take one from."""
+    if offset_ms == 0 or recording.timestamps_ns.shape[0] == 0:
+        return recording
+    stamps = recording.timestamps_ns
+    source = np.searchsorted(stamps, stamps - int(offset_ms) * 1_000_000, side="right") - 1
+    source = np.clip(source, 0, stamps.shape[0] - 1)
+    return replace(recording, raw_labels=recording.raw_labels[source])
 
 
 def _carry_forward(values: np.ndarray) -> np.ndarray:

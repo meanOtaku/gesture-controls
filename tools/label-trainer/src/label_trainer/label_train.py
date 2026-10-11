@@ -30,7 +30,7 @@ from typing import Any
 
 import numpy as np
 
-from .csv_io import load_recording
+from .csv_io import load_recording, shift_labels
 from .dataset import build_dataset_from_recordings
 from .features import BASELINE_CHOICES_MS, BASELINE_FEATURE_NAMES, FEATURE_NAMES, SPIKE_FEATURE_NAMES, SPIKE_METHODS
 from .edits import EditRefused
@@ -87,6 +87,9 @@ def is_movement_feature(name: str) -> bool:
 
 PPG_CHANNELS = ("green", "red", "ir")
 
+# How far the labels may be moved in time (see `csv_io.shift_labels`).
+MAX_LABEL_OFFSET_MS = 1500
+
 
 def features_for(
     sources: list[str],
@@ -139,6 +142,7 @@ class Spec:
     backend: str
     seed: int
     params: dict[str, Any]
+    label_offset_ms: int = 0
 
 
 def reads_grid(spec: Spec) -> bool:
@@ -227,6 +231,9 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         raise TrainingRefused("a recording is in both the training and the evaluation set")
     if set(train) | set(evaluation) != set(recordings):
         raise TrainingRefused("every recording must be in exactly one of the training and evaluation sets")
+    label_offset_ms = raw.get("labelOffsetMs", 0) or 0
+    if isinstance(label_offset_ms, bool) or not isinstance(label_offset_ms, int) or abs(label_offset_ms) > MAX_LABEL_OFFSET_MS:
+        raise TrainingRefused(f"the label offset must be a whole number of milliseconds from -{MAX_LABEL_OFFSET_MS} to {MAX_LABEL_OFFSET_MS}, got {label_offset_ms!r}")
     target = raw.get("target")
     if not target:
         raise TrainingRefused("the spec has no target label")
@@ -257,6 +264,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         backend=backend,
         seed=int(raw.get("seed", 7)),
         params=dict(raw.get("params", {})),
+        label_offset_ms=int(label_offset_ms),
     )
 
 
@@ -278,7 +286,7 @@ def build_all(spec: Spec):
     """Every window of every recording: features, whether it is the target, the recording it came from, and where it is."""
     recordings = []
     for rid, path in spec.recordings.items():
-        recording = load_recording(path)
+        recording = shift_labels(load_recording(path), spec.label_offset_ms)
         recordings.append(replace(recording, session_id=rid))
     if reads_grid(spec):
         dataset = build_dataset_from_recordings(
@@ -634,6 +642,7 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
             "spikeMethod": spec.spike_method or "none",
             "baselineMs": spec.baseline_ms,
             "ppgChannels": spec.ppg_channels,
+            "labelOffsetMs": spec.label_offset_ms,
             "gridSteps": spec.grid_steps if reads_grid(spec) else None,
             "inputMode": "raw" if spec.raw_columns else ("grid" if spec.backend == "cnn1d" else "statistics"),
             "editedFrom": spec.edit.get("fromModel") if spec.edit else None,
@@ -805,11 +814,54 @@ def backfill_range(raw_spec: dict[str, Any], manifests: list[Path]) -> dict[str,
     return {"outcome": "written", "message": f"recorded the range of {len(usual['low'])} inputs from {x_train.shape[0]} training windows", "inputs": len(usual["low"]), "windows": int(x_train.shape[0])}
 
 
+# The label offsets (milliseconds) tried when looking for the timing that fits the recordings best.
+OFFSET_CANDIDATES_MS: tuple[int, ...] = (-1000, -750, -500, -250, 0, 250, 500, 750, 1000, 1250, 1500)
+
+
+def suggest_label_offset(raw_spec: dict[str, Any], candidates: tuple[int, ...] = OFFSET_CANDIDATES_MS) -> list[dict[str, Any]]:
+    """How well the recordings separate the gesture from the rest at each label offset, so the one that fits best can be chosen.
+
+    For each candidate the windows are rebuilt with the labels moved that far, then a logistic regression on the spec's inputs
+    is trained on all recordings but one and scored on the one left out, for each recording in turn; the score is the ROC AUC
+    over all the left-out windows together. Every recording is judged by a model that never saw it, so the offset that scores
+    best is the one that carries over, not one that fits the training recordings. (It is chosen using all of them, so the
+    score at the chosen offset is a little optimistic.)"""
+    from sklearn.metrics import roc_auc_score
+
+    base = {**raw_spec, "backend": "logreg", "research": False}
+    base.pop("network", None)
+    base.pop("edit", None)
+    if raw_spec.get("backend") == "cnn1d":
+        base.update({"inputMode": "raw", "gridSteps": 8})  # a convolutional model's columns, read by a simple model
+    results: list[dict[str, Any]] = []
+    for offset in candidates:
+        spec = parse_spec({**base, "labelOffsetMs": offset})
+        x, y, groups, _ = build_all(spec)
+        held_out = np.full(y.shape[0], np.nan)
+        for group in sorted(set(groups.tolist())):
+            test = groups == group
+            train = ~test
+            if int(y[train].sum()) < MIN_POSITIVE_TRAIN_WINDOWS or int((y[train] == 0).sum()) < MIN_POSITIVE_TRAIN_WINDOWS:
+                continue
+            model = make_model("logreg", x.shape[1], spec.seed, {}, None).fit(x[train], y[train])
+            held_out[test] = model.predict_proba(x[test])[:, 1]
+        judged = ~np.isnan(held_out)
+        scoreable = bool(judged.any()) and 0 < int(y[judged].sum()) < int(judged.sum())
+        results.append({
+            "offsetMs": offset,
+            "auc": round(float(roc_auc_score(y[judged], held_out[judged])), 4) if scoreable else None,
+            "windows": int(judged.sum()),
+            "positives": int(y[judged].sum()),
+        })
+    return results
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--spec", required=True, type=Path, help="the training spec the desktop wrote")
     parser.add_argument("--out", type=Path, help="directory for the results")
     parser.add_argument("--backfill-range", action="store_true", help="work out and record the training range of an existing model instead of training")
+    parser.add_argument("--suggest-offset", action="store_true", help="try label offsets and say how well each fits the recordings, instead of training")
     parser.add_argument("--manifest", action="append", type=Path, default=[], help="with --backfill-range: a manifest to write the range into (repeatable)")
     args = parser.parse_args(argv)
     if args.backfill_range:
@@ -819,6 +871,14 @@ def main(argv: list[str] | None = None) -> int:
             done = {"outcome": "refused", "message": str(refusal)}
         print(json.dumps(done), flush=True)
         return 0 if done["outcome"] in ("written", "none") else 2
+    if args.suggest_offset:
+        try:
+            scores = suggest_label_offset(json.loads(args.spec.read_text()))
+            print(json.dumps({"outcome": "ok", "scores": scores}), flush=True)
+            return 0
+        except TrainingRefused as refusal:
+            print(json.dumps({"outcome": "refused", "message": str(refusal)}), flush=True)
+            return 2
     if args.out is None:
         parser.error("--out is required to train")
     result = run(json.loads(args.spec.read_text()), args.out)
