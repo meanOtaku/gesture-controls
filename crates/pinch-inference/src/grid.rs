@@ -27,7 +27,8 @@ pub enum GridChannel {
     QuatZ,
 }
 
-pub const MIN_GRID_STEPS: u32 = 8;
+/// A dense model reading raw columns may take a single step (the latest reading of each column).
+pub const MIN_GRID_STEPS: u32 = 1;
 pub const MAX_GRID_STEPS: u32 = 256;
 
 impl GridChannel {
@@ -80,8 +81,8 @@ pub fn resample(values: &[f64], steps: usize) -> Vec<f64> {
     if n == 0 {
         return vec![0.0; steps];
     }
-    if n == 1 {
-        return vec![values[0]; steps];
+    if steps == 1 || n == 1 {
+        return vec![values[n - 1]; steps]; // one step is the latest reading
     }
     (0..steps)
         .map(|k| {
@@ -154,6 +155,8 @@ mod tests {
         assert_eq!(resample(&[7.0], 3), [7.0; 3]);
         assert_eq!(resample(&[0.0, 10.0], 5), [0.0, 2.5, 5.0, 7.5, 10.0]);
         assert_eq!(resample(&[1.0, 2.0, 4.0], 3), [1.0, 2.0, 4.0]); // as many steps as samples: unchanged
+        assert_eq!(resample(&[1.0, 2.0, 4.0], 1), [4.0]); // one step is the latest reading
+        assert_eq!(resample(&[], 1), [0.0]);
     }
 
     #[test]

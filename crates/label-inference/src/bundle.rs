@@ -741,7 +741,7 @@ pub(crate) mod tests {
         assert!(validate_bundle(copy().path(), None).is_ok());
         // Steps outside the allowed range, and an input shape that is not channels x steps.
         let dir = copy();
-        edit_manifest(dir.path(), |m| m["input"]["grid"]["steps"] = 2.into());
+        edit_manifest(dir.path(), |m| m["input"]["grid"]["steps"] = 0.into());
         assert!(matches!(
             validate_bundle(dir.path(), None),
             Err(BundleError::ContractMismatch(_))

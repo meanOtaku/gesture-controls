@@ -64,7 +64,8 @@ def restore_model(spec, directory: Path):
         raise EditRefused("this model's parameters were not saved, so it cannot be edited (train it again)")
     state = torch.load(path, weights_only=True)
     if spec.backend == "torch-mlp":
-        model = TorchModel(len(spec.features), spec.seed, spec.params, spec.network)
+        inputs = len(spec.features) * (spec.grid_steps if getattr(spec, "raw_columns", False) else 1)  # a raw column is one neuron per step
+        model = TorchModel(inputs, spec.seed, spec.params, spec.network)
         model.net.load_state_dict(state["net"])
     else:
         model = CnnModel(len(spec.features), spec.grid_steps, spec.seed, spec.params, spec.movement_only, spec.network)
@@ -162,6 +163,9 @@ def apply_edits(spec, model, edits: list[dict[str, Any]]) -> list[str]:
             index = spec.features.index(name)
             if convolutional:
                 params.conv[0][:, index, :] = 0.0
+            elif getattr(spec, "raw_columns", False):
+                steps = spec.grid_steps  # a column is one neuron per step
+                params.dense[0][0][index * steps : (index + 1) * steps, :] = 0.0
             else:
                 params.dense[0][0][index, :] = 0.0
             said.append(f"switched off {name}")

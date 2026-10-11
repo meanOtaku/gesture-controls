@@ -43,6 +43,11 @@ const RUNS_DIR: &str = "training-runs";
 const TRAINER_PROJECT_DIR: &str =
     concat!(env!("CARGO_MANIFEST_DIR"), "/../../../tools/label-trainer");
 const SPEC_VERSION: u32 = 1;
+/// The convolutional method's grid needs at least this many steps to slide over.
+const CNN_MIN_STEPS: u32 = 8;
+/// A dense model reading raw columns: one step (the latest reading) by default, and at most this many.
+const RAW_DEFAULT_STEPS: u32 = 1;
+const RAW_MAX_STEPS: u32 = 64;
 
 /// The backends offered, which extra packages the trainer needs for each.
 const BACKENDS: [&str; 4] = ["logreg", "mlp", "torch-mlp", "cnn1d"];
@@ -79,9 +84,14 @@ pub struct TrainRequest {
     /// Which of the pulse sensor's light channels the model may read (`green`, `red`, `ir`). Absent means all three.
     #[serde(default)]
     pub ppg_channels: Option<Vec<String>>,
-    /// For the convolutional method: how many steps each channel of the window is laid onto. Absent means 32.
+    /// How many steps each column of the window is laid onto: for the convolutional method, or for a dense method reading
+    /// raw columns. Absent means 32 (convolutional) or 1 (raw columns).
     #[serde(default)]
     pub grid_steps: Option<u32>,
+    /// `statistics` (the default: averages, spreads and so on of each window) or `raw`: the dataset's own columns, each
+    /// at each step, one input neuron apiece. Raw is for the dense methods; the convolutional method always reads columns.
+    #[serde(default)]
+    pub input_mode: Option<String>,
     /// Exactly which inputs the model reads, by name (statistics, or for the convolutional method channels), out of the
     /// ones the chosen streams provide. Absent means all of them.
     #[serde(default)]
@@ -120,6 +130,7 @@ struct Checked {
     spike_method: Option<SpikeMethod>,
     ppg_channels: Vec<String>,
     grid_steps: u32,
+    raw_columns: bool,
     network: Option<NetworkSpec>,
     explicit_features: Option<Vec<String>>,
     research: bool,
@@ -137,6 +148,7 @@ struct Inputs {
     spike_method: Option<SpikeMethod>,
     ppg_channels: Vec<String>,
     grid_steps: u32,
+    raw_columns: bool,
     /// Every input the chosen streams provide, in canonical order.
     available: Vec<String>,
     /// The ones the model will read: `available`, or the explicit subset asked for.
@@ -178,14 +190,34 @@ fn resolve_inputs(request: &TrainRequest) -> Result<Inputs, String> {
         return Err("choose at least one pulse sensor channel for the model to read".into());
     }
     let channel_refs: Vec<&str> = ppg_channels.iter().map(String::as_str).collect();
-    let grid_steps = request.grid_steps.unwrap_or(32);
-    let available = if request.backend == "cnn1d" {
-        if !(MIN_GRID_STEPS..=MAX_GRID_STEPS).contains(&grid_steps) {
+    let raw_columns = match request.input_mode.as_deref() {
+        None | Some("statistics") | Some("") => false,
+        Some("raw") => true,
+        Some(other) => {
             return Err(format!(
-                "the window grid must have from {MIN_GRID_STEPS} to {MAX_GRID_STEPS} steps, got {grid_steps}"
+                "unknown input mode '{other}'; choose statistics or raw"
             ));
         }
-        // A convolutional model reads the window's channels themselves, not statistics of them.
+    };
+    let convolutional = request.backend == "cnn1d";
+    let grid_steps =
+        request
+            .grid_steps
+            .unwrap_or(if convolutional { 32 } else { RAW_DEFAULT_STEPS });
+    let available = if convolutional || raw_columns {
+        // The convolutional method's grid, and a dense method's raw columns: the window's columns themselves, not statistics.
+        let (low, high) = if convolutional {
+            (CNN_MIN_STEPS, MAX_GRID_STEPS)
+        } else {
+            (MIN_GRID_STEPS, RAW_MAX_STEPS)
+        };
+        if !(low..=high).contains(&grid_steps) {
+            return Err(if convolutional {
+                format!("the window grid must have from {low} to {high} steps, got {grid_steps}")
+            } else {
+                format!("the samples per window must be from {low} to {high}, got {grid_steps}")
+            });
+        }
         grid_channels_for(&sources, &channel_refs)
     } else {
         canonical_features_with_channels(
@@ -222,6 +254,7 @@ fn resolve_inputs(request: &TrainRequest) -> Result<Inputs, String> {
         spike_method,
         ppg_channels,
         grid_steps,
+        raw_columns,
         available,
         features,
     })
@@ -293,6 +326,7 @@ fn check_request(
         spike_method,
         ppg_channels,
         grid_steps,
+        raw_columns,
         features,
         ..
     } = resolved;
@@ -323,6 +357,7 @@ fn check_request(
         spike_method,
         ppg_channels,
         grid_steps,
+        raw_columns,
         network,
         explicit_features: request.features.clone(),
         research: request.research,
@@ -366,6 +401,7 @@ fn build_spec(
         "spikeMethod": checked.spike_method.map_or("none", SpikeMethod::name),
         "ppgChannels": checked.ppg_channels,
         "gridSteps": checked.grid_steps,
+        "inputMode": if checked.raw_columns { "raw" } else { "statistics" },
         "features": checked.explicit_features,
         "network": checked.network,
         "research": checked.research,
@@ -1020,6 +1056,7 @@ mod tests {
             spike_method: None,
             ppg_channels: None,
             grid_steps: None,
+            input_mode: None,
             features: None,
             network: None,
             research: false,
@@ -1353,6 +1390,64 @@ mod tests {
         );
         let many: Vec<_> = (0..201).map(|_| edit("setBias")).collect();
         assert!(check_edits(&many).unwrap_err().contains("at most 200"));
+    }
+
+    #[test]
+    fn a_dense_method_can_read_the_datasets_columns_themselves_one_neuron_each() {
+        let mut r = request();
+        r.backend = "torch-mlp".into();
+        r.input_mode = Some("raw".into());
+        r.sources = vec![
+            StreamSource::WatchPpg,
+            StreamSource::WatchAcceleration,
+            StreamSource::WatchGyroscope,
+            StreamSource::WatchOrientation,
+        ];
+        let checked = check_request(&r, &datasets(), &sha).unwrap();
+        // The thirteen columns of a dataset are thirteen inputs at the default of one step.
+        assert_eq!(checked.input.features.len(), 13);
+        assert_eq!(checked.input.features[0], "ppg_green");
+        assert_eq!(checked.input.features[12], "quat_z");
+        assert_eq!(checked.grid_steps, 1);
+        assert!(checked.raw_columns);
+        let split = plan_split(&checked.recordings, &checked.mapping, &checked.target).unwrap();
+        let spec = build_spec(&checked, &split, &BTreeMap::new());
+        assert_eq!(
+            (spec["inputMode"].as_str(), spec["gridSteps"].as_u64()),
+            (Some("raw"), Some(1))
+        );
+
+        // Chosen columns, and several steps: each column at each step is a neuron.
+        r.features = Some(vec!["accel_x".into(), "gyro_z".into()]);
+        r.grid_steps = Some(8);
+        let checked = check_request(&r, &datasets(), &sha).unwrap();
+        assert_eq!(checked.input.features, ["accel_x", "gyro_z"]);
+        assert_eq!(checked.grid_steps, 8);
+
+        // Limits, and a mode that does not exist.
+        r.grid_steps = Some(65);
+        assert!(
+            check_request(&r, &datasets(), &sha)
+                .unwrap_err()
+                .contains("samples per window")
+        );
+        r.grid_steps = Some(0);
+        assert!(
+            check_request(&r, &datasets(), &sha)
+                .unwrap_err()
+                .contains("samples per window")
+        );
+        r.grid_steps = None;
+        r.input_mode = Some("pixels".into());
+        assert!(
+            check_request(&r, &datasets(), &sha)
+                .unwrap_err()
+                .contains("unknown input mode")
+        );
+        // Statistics stay the default.
+        r.input_mode = None;
+        r.features = None;
+        assert!(!check_request(&r, &datasets(), &sha).unwrap().raw_columns);
     }
 
     #[test]

@@ -247,10 +247,13 @@ pub(crate) mod tests {
     #[test]
     fn a_convolutional_bundle_validates_and_scores_the_trainers_grids() {
         // The default convolutional network, and a designed one (tanh and ReLU convolutions, max pooling, a dense layer).
-        for (name, channels_expected) in [
-            ("trained_cnn_bundle", 6),
-            ("trained_designed_cnn_bundle", 6),
+        // And a dense network reading the raw columns themselves: six columns at four steps are twenty-four input neurons.
+        for (name, steps) in [
+            ("trained_cnn_bundle", 16usize),
+            ("trained_designed_cnn_bundle", 16),
+            ("trained_raw_columns_bundle", 4),
         ] {
+            let channels_expected = 6;
             let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("tests/fixtures")
                 .join(name);
@@ -259,10 +262,13 @@ pub(crate) mod tests {
             let version = active_version(&bundle);
             let channels = bundle.manifest.grid_channels().expect("a grid model");
             assert_eq!(channels.len(), channels_expected);
-            assert_eq!(bundle.manifest.input.grid.as_ref().unwrap().steps, 16);
+            assert_eq!(
+                bundle.manifest.input.grid.as_ref().unwrap().steps as usize,
+                steps
+            );
             let model = LoadedModel::load(bundle, &version).unwrap();
             let plan = model.grid.clone().expect("the model reads a grid");
-            assert_eq!((plan.channels.len(), plan.steps), (6, 16));
+            assert_eq!((plan.channels.len(), plan.steps), (6, steps));
             let expected: serde_json::Value =
                 serde_json::from_slice(&std::fs::read(dir.join("expected.json")).unwrap()).unwrap();
             let rows = expected["inputs"].as_array().unwrap();
@@ -275,7 +281,7 @@ pub(crate) mod tests {
                     .iter()
                     .map(|v| v.as_f64().unwrap() as f32)
                     .collect();
-                assert_eq!(input.len(), 6 * 16);
+                assert_eq!(input.len(), 6 * steps);
                 let got = model.predict_input(input).unwrap();
                 assert!(
                     (got - want.as_f64().unwrap()).abs() < 1e-4,

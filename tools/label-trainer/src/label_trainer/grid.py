@@ -11,7 +11,8 @@ numbers of the orientation) is turned into `steps` values:
 * the samples are taken as evenly spaced across the window, and laid onto `steps` evenly spaced points by linear
   interpolation. No timestamps are used: the watch stamps the samples of a batch a few nanoseconds apart, and a model
   trained on one clock must see the same thing on another;
-* a channel with no samples in the window is all zeros, and one with a single sample is that value throughout.
+* a channel with no samples in the window is all zeros, and one with a single sample is that value throughout; with a single
+  step the one value is the latest sample (the "current reading" of a dataset column).
 
 The result is the channels one after another (all the steps of the first, then the second...), so it is one flat row of
 `channels x steps` numbers; the model's first layer folds it back into rows. `crates/pinch-inference/src/grid.rs` makes
@@ -35,6 +36,9 @@ GRID_CHANNELS: tuple[str, ...] = (
 DEFAULT_STEPS = 32
 MIN_STEPS = 8
 MAX_STEPS = 256
+# A dense model reading raw columns may take as few as one step (the latest reading of each column), and at most this many.
+MIN_RAW_STEPS = 1
+MAX_RAW_STEPS = 64
 
 
 def source_of_channel(channel: str) -> str:
@@ -56,8 +60,8 @@ def resample(values: list[float], steps: int) -> list[float]:
     n = len(values)
     if n == 0:
         return [0.0] * steps
-    if n == 1:
-        return [values[0]] * steps
+    if steps == 1 or n == 1:
+        return [values[-1]] * steps  # one step is the latest reading
     out = []
     for k in range(steps):
         position = (k * (n - 1)) / (steps - 1)

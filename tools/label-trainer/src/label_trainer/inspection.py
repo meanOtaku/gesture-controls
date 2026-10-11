@@ -71,10 +71,16 @@ class Extracted:
     pooling: str = "mean_max"
     centre: bool = False
     steps: int = 0  # >0 for a convolutional model
+    columns_steps: int = 0  # >0 for a dense model reading raw columns: every column at every one of this many steps
 
     @property
     def convolutional(self) -> bool:
         return self.steps > 0
+
+    @property
+    def grouped_steps(self) -> int:
+        """The steps per channel when the inputs are channels over steps (convolutional, or raw columns), else 0."""
+        return self.steps or self.columns_steps
 
 
 def _activation_name(module: Any) -> str | None:
@@ -84,6 +90,13 @@ def _activation_name(module: Any) -> str | None:
 
 def extract(spec, model) -> Extracted:
     """Pulls the weights out of a trained model of any of the methods."""
+    extracted = _extract(spec, model)
+    if getattr(spec, "raw_columns", False) and spec.backend != "cnn1d":
+        extracted.columns_steps = int(spec.grid_steps)
+    return extracted
+
+
+def _extract(spec, model) -> Extracted:
     backend = spec.backend
     names = list(spec.features)
     if backend == "logreg":
@@ -178,8 +191,8 @@ def permutation_importance(p: Extracted, model, x: np.ndarray, y: np.ndarray, se
         for _ in range(PERMUTATION_REPEATS):
             shuffled = x.copy()
             order = rng.permutation(x.shape[0])
-            if p.convolutional:
-                grid = shuffled.reshape(x.shape[0], len(p.names), p.steps)
+            if p.grouped_steps:
+                grid = shuffled.reshape(x.shape[0], len(p.names), p.grouped_steps)
                 grid[:, index, :] = grid[order, index, :]
                 shuffled = grid.reshape(x.shape[0], -1)
             else:
@@ -187,6 +200,17 @@ def permutation_importance(p: Extracted, model, x: np.ndarray, y: np.ndarray, se
             drops.append(base - _auc(y, model.predict_proba(shuffled)[:, 1]))
         out.append({"name": name, "aucDrop": float(np.mean(drops)), "aucDropStd": float(np.std(drops))})
     return out
+
+
+def _input_rows(p: Extracted) -> list[dict[str, Any]]:
+    """One row per input; for raw columns, one per column, with the average and spread of its neurons and how many it has."""
+    if p.columns_steps:
+        steps = p.columns_steps
+        return [
+            {"name": name, "mean": float(np.mean(p.mean[i * steps : (i + 1) * steps])), "std": float(np.mean(p.std[i * steps : (i + 1) * steps])), "neurons": steps}
+            for i, name in enumerate(p.names)
+        ]
+    return [{"name": name, "mean": float(p.mean[i]), "std": float(p.std[i])} for i, name in enumerate(p.names)]
 
 
 def _category(label: int, probability: float, threshold: float) -> str:
@@ -219,7 +243,14 @@ def _window_view(p: Extracted, x: np.ndarray, index: int, probability: float) ->
         "values": _round(row[0], 5),
         "activations": [_round(layer[0], 5) for layer in layers],
     }
-    if p.convolutional:
+    if p.columns_steps:
+        # How much the answer falls when one column (at every step) takes the value it has on average in the training windows.
+        steps = p.columns_steps
+        variants = np.repeat(row, len(p.names), axis=0)
+        for c in range(len(p.names)):
+            variants[c, c * steps : (c + 1) * steps] = p.mean[c * steps : (c + 1) * steps]
+        view["contributions"] = _round(probability - forward(p, variants)[0], 5)
+    elif p.convolutional:
         # How much the answer falls when a stretch of one channel is replaced by that channel's own average.
         channels, steps, width = len(p.names), p.steps, OCCLUSION_STEPS
         grid = row.reshape(channels, steps)
@@ -265,11 +296,11 @@ def build_inspection(spec, model, x_eval: np.ndarray, y_eval: np.ndarray, eval_w
         "version": INSPECTION_VERSION,
         "backend": spec.backend,
         "target": spec.target,
-        "inputKind": "channels" if p.convolutional else "features",
-        "gridSteps": p.steps or None,
+        "inputKind": "channels" if p.convolutional else "columns" if p.columns_steps else "features",
+        "gridSteps": p.grouped_steps or None,
         "centreWindows": p.centre,
         "spikeMethod": spec.spike_method,
-        "inputs": [{"name": name, "mean": float(p.mean[i]), "std": float(p.std[i])} for i, name in enumerate(p.names)],
+        "inputs": _input_rows(p),
         "network": network,
         "parameters": parameters,
         "importance": permutation_importance(p, model, x_eval, y_eval, spec.seed),

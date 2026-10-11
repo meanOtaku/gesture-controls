@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "modelId": "snap-dcf1f664",
+  "targetLabel": "snap",
+  "model": {
+    "file": "model.onnx",
+    "sha256": "dcf1f66416516faf1ccdda402107a37f3d185332fbfb584a129e1affbc8530ef",
+    "format": "onnx",
+    "opset": 17
+  },
+  "framework": {
+    "name": "pytorch",
+    "version": "2.14.1"
+  },
+  "input": {
+    "name": "X",
+    "shape": [
+      null,
+      24
+    ],
+    "dtype": "float32",
+    "features": [
+      "accel_x",
+      "accel_y",
+      "accel_z",
+      "gyro_x",
+      "gyro_y",
+      "gyro_z"
+    ],
+    "grid": {
+      "steps": 4
+    }
+  },
+  "output": {
+    "name": "probabilities",
+    "shape": [
+      null,
+      2
+    ],
+    "dtype": "float32",
+    "positiveIndex": 1
+  },
+  "sources": [
+    "watchAcceleration",
+    "watchGyroscope"
+  ],
+  "window": {
+    "durationMs": 500,
+    "strideMs": 150,
+    "maxGapMs": 250,
+    "minSamples": 3
+  },
+  "quality": {
+    "maxContactQuality": 0.0,
+    "minSampleCount": 3
+  },
+  "thresholds": {
+    "activation": 0.21,
+    "release": 0.06
+  },
+  "preprocessing": {
+    "kind": "none"
+  },
+  "provenance": {
+    "backend": "torch-mlp",
+    "trainRecordings": [
+      "i1",
+      "i2",
+      "s1",
+      "s2"
+    ],
+    "evaluationRecordings": [
+      "i3",
+      "s3"
+    ],
+    "seed": 7,
+    "evaluationF1": 0.9690721649484536,
+    "evaluationFalseActivationRate": 0.0,
+    "evaluationRocAuc": 0.9972,
+    "thresholdChosenOnEvaluationRecordings": true,
+    "movementOnly": false,
+    "spikeMethod": "none",
+    "ppgChannels": [
+      "green",
+      "red",
+      "ir"
+    ],
+    "gridSteps": 4,
+    "inputMode": "raw",
+    "editedFrom": null,
+    "edits": null,
+    "network": {
+      "hidden": [
+        {
+          "units": 12,
+          "activation": "tanh"
+        },
+        {
+          "units": 6,
+          "activation": "relu"
+        }
+      ],
+      "conv": [],
+      "pooling": "mean_max",
+      "dropout": 0.0,
+      "learningRate": 0.01,
+      "epochs": 80,
+      "batchSize": 0,
+      "weightDecay": 0.0,
+      "balanceClasses": true,
+      "augment": false
+    },
+    "parameters": 392
+  }
+}

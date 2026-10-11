@@ -36,7 +36,7 @@ from .features import FEATURE_NAMES, SPIKE_FEATURE_NAMES, SPIKE_METHODS
 from .edits import EditRefused
 from .nets import CnnModel, TorchModel
 from .network import Network, NetworkRefused, parameter_count, parse_network
-from .grid import DEFAULT_STEPS, MAX_STEPS, MIN_STEPS, build_grid, channels_for
+from .grid import DEFAULT_STEPS, MAX_RAW_STEPS, MAX_STEPS, MIN_RAW_STEPS, MIN_STEPS, build_grid, channels_for
 from .labels import LABEL_MAPPING_VERSION, load_label_mapping
 from .windowing import WindowConfig
 
@@ -124,6 +124,7 @@ class Spec:
     spike_method: str | None
     ppg_channels: list[str]
     grid_steps: int
+    raw_columns: bool
     network: Network
     research: bool
     edit: dict[str, Any] | None
@@ -131,6 +132,21 @@ class Spec:
     backend: str
     seed: int
     params: dict[str, Any]
+
+
+def reads_grid(spec: Spec) -> bool:
+    """Whether the model reads the window as columns over steps (a convolutional model, or a dense one on raw columns)."""
+    return spec.backend == "cnn1d" or spec.raw_columns
+
+
+def input_count(spec: Spec) -> int:
+    """How many numbers go into the model for one window: the statistics, or every column at every step."""
+    return len(spec.features) * spec.grid_steps if reads_grid(spec) else len(spec.features)
+
+
+def network_inputs(spec: Spec) -> int:
+    """The number the network's first layer counts (a convolutional network counts channels: it slides over the steps)."""
+    return len(spec.features) if spec.backend == "cnn1d" else input_count(spec)
 
 
 def parse_spec(raw: dict[str, Any]) -> Spec:
@@ -158,10 +174,17 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         if "watchPpg" in sources and not ppg_channels:
             raise TrainingRefused("choose at least one pulse sensor channel for the model to read")
     grid_steps = int(raw.get("gridSteps", DEFAULT_STEPS))
-    if backend == "cnn1d":
-        if not MIN_STEPS <= grid_steps <= MAX_STEPS:
+    raw_columns = raw.get("inputMode") == "raw"
+    if raw_columns and backend not in ("logreg", "mlp", "torch-mlp", "cnn1d"):
+        raise TrainingRefused(f"unknown training method {backend!r}")
+    if raw_columns and backend != "cnn1d":
+        if not MIN_RAW_STEPS <= grid_steps <= MAX_RAW_STEPS:
+            raise TrainingRefused(f"the samples per window must be from {MIN_RAW_STEPS} to {MAX_RAW_STEPS}, got {grid_steps}")
+    if backend == "cnn1d" or raw_columns:
+        if backend == "cnn1d" and not MIN_STEPS <= grid_steps <= MAX_STEPS:
             raise TrainingRefused(f"gridSteps must be from {MIN_STEPS} to {MAX_STEPS}, got {grid_steps}")
-        # A convolutional model reads the window's channels, not statistics: the "features" are the channel names.
+        # These models read the window's columns (channels), not statistics: the "features" are the column names, and the
+        # model's inputs are each column at each step.
         available = channels_for(sources, ppg_channels)
         if not available:
             raise TrainingRefused("no channels are available from the chosen streams")
@@ -207,6 +230,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         spike_method=spike_method,
         ppg_channels=ppg_channels,
         grid_steps=grid_steps,
+        raw_columns=raw_columns,
         network=network,
         research=bool(raw.get("research", False)),
         edit=raw.get("edit") or None,
@@ -242,7 +266,7 @@ def build_all(spec: Spec):
     for rid, path in spec.recordings.items():
         recording = load_recording(path)
         recordings.append(replace(recording, session_id=rid))
-    if spec.backend == "cnn1d":
+    if reads_grid(spec):
         dataset = build_dataset_from_recordings(
             recordings, spec.window, "exclude", label_mapping=_mapping(spec),
             feature_fn=lambda recording, window: build_grid(recording, window, spec.features, spec.grid_steps, spec.spike_method),
@@ -532,8 +556,8 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
         "framework": framework_of(spec),
         "input": (
             # A convolutional model: the channels (one flat row of channels x steps numbers), and how many steps each has.
-            {"name": "X", "shape": [None, len(spec.features) * spec.grid_steps], "dtype": "float32", "features": spec.features, "grid": {"steps": spec.grid_steps}}
-            if spec.backend == "cnn1d"
+            {"name": "X", "shape": [None, input_count(spec)], "dtype": "float32", "features": spec.features, "grid": {"steps": spec.grid_steps}}
+            if reads_grid(spec)
             else {"name": "X", "shape": [None, len(spec.features)], "dtype": "float32", "features": spec.features}
         ),
         "output": {"name": "probabilities", "shape": [None, 2], "dtype": "float32", "positiveIndex": 1},
@@ -559,11 +583,12 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
             "movementOnly": spec.movement_only,
             "spikeMethod": spec.spike_method or "none",
             "ppgChannels": spec.ppg_channels,
-            "gridSteps": spec.grid_steps if spec.backend == "cnn1d" else None,
+            "gridSteps": spec.grid_steps if reads_grid(spec) else None,
+            "inputMode": "raw" if spec.raw_columns else ("grid" if spec.backend == "cnn1d" else "statistics"),
             "editedFrom": spec.edit.get("fromModel") if spec.edit else None,
             "edits": spec.edit["edits"] if spec.edit else None,
             "network": spec.network.as_dict() if spec.backend in ("mlp", "torch-mlp", "cnn1d") else None,
-            "parameters": parameter_count(spec.network, len(spec.features), spec.backend) if spec.backend in ("mlp", "torch-mlp", "cnn1d") else None,
+            "parameters": parameter_count(spec.network, network_inputs(spec), spec.backend) if spec.backend in ("mlp", "torch-mlp", "cnn1d") else None,
         },
     }
     (bundle / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -594,7 +619,7 @@ def write_inspection(spec: Spec, model, x_eval, y_eval, eval_windows, curve, met
     try:
         from .inspection import build_inspection
 
-        parameters = parameter_count(spec.network, len(spec.features), spec.backend) if spec.backend in ("mlp", "torch-mlp", "cnn1d") else len(spec.features) + 1
+        parameters = parameter_count(spec.network, network_inputs(spec), spec.backend) if spec.backend in ("mlp", "torch-mlp", "cnn1d") else input_count(spec) + 1
         inspection = build_inspection(spec, model, x_eval, y_eval, eval_windows, curve, metrics, parameters)
         if inspection is not None:
             inspection["research"] = research

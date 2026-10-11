@@ -81,6 +81,8 @@ def test_resampling_keeps_the_ends_interpolates_between_and_handles_short_series
     assert resample([7.0], 3) == [7.0] * 3
     assert resample([0.0, 10.0], 5) == [0.0, 2.5, 5.0, 7.5, 10.0]
     assert resample([1.0, 2.0, 4.0], 3) == [1.0, 2.0, 4.0]
+    assert resample([1.0, 2.0, 4.0], 1) == [4.0]  # one step is the latest reading
+    assert resample([], 1) == [0.0]
 
 
 def test_channels_follow_the_streams_and_the_pulse_lights_chosen() -> None:
@@ -129,6 +131,9 @@ def _cases() -> list[dict]:
     add("too_few_for_a_method", ppg, orientation, ["ppg_green", "gyro_x"], 12, "rolling_median_residual")
     ppg, _ = synthetic(rng, 12, 0)
     add("no_orientation", ppg, [], ["ppg_red", "accel_y"], 16, "morphological_top_hat")
+    ppg, orientation = synthetic(rng, 12, 20)
+    add("one_step_latest_reading", ppg, orientation, list(GRID_CHANNELS), 1, None)
+    add("one_step_with_a_method", ppg, orientation, ["ppg_green", "accel_x"], 1, "morphological_top_hat")
     for index in range(4):
         ppg, orientation = synthetic(rng, rng.choice([5, 9, 13, 20, 31]), rng.choice([2, 7, 26, 40]))
         add(f"random_{index}", ppg, orientation, list(GRID_CHANNELS), rng.choice([8, 24, 32, 64]), rng.choice([None, *SPIKE_METHODS]))
