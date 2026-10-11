@@ -185,6 +185,21 @@ export const EMPTY_WATCH_STATUS: WatchStatus = {
   sweatLossLast: null,
 };
 
+function liveIntervalFrom(interval: AnnotationInterval): LiveInterval {
+  return {
+    intervalId: interval.interval_id,
+    labelId: interval.label_id,
+    startMonotonicNs: interval.requested_start_monotonic_ns,
+    endMonotonicNs: interval.requested_end_monotonic_ns,
+    startRawRow: interval.resolved_start.raw_row,
+    endRawRow: interval.resolved_end.raw_row + 1,
+    creationMechanism: interval.creation_mechanism,
+    curationStatus: interval.curation_status,
+    createdAt: interval.created_at,
+    revision: interval.revision,
+  };
+}
+
 class TelemetryStore {
   private readonly listeners = new Set<() => void>();
   private readonly series = new Map<TelemetrySeries, RingBuffer<SeriesPoint>>(
@@ -233,6 +248,7 @@ class TelemetryStore {
   private selectedLabel: GestureDatasetLabel | null = null;
   private readonly sessionLabels = new Set<GestureDatasetLabel>();
   private datasetRecordingState: DatasetRecordingState = "idle";
+  private savedRecordingId: string | null = null;
   private datasetRecording = false;
   private datasetSession: DatasetSessionMetadata | null = null;
   private datasetRecordingStartedAtMs: number | null = null;
@@ -443,6 +459,7 @@ class TelemetryStore {
       startedAtIso: new Date().toISOString(),
     };
     this.datasetRecordingState = "arming";
+    this.savedRecordingId = null;
     this.datasetRecording = true;
     this.datasetRecordingStartedAtMs = null;
     this.datasetRequestedStartAtIso = new Date().toISOString();
@@ -597,18 +614,7 @@ class TelemetryStore {
     if (this.datasetRecordingState !== "saved" || this.datasetRows.length !== rawRowCount) return 0;
     let added = 0;
     for (const interval of intervals) {
-      const candidate: LiveInterval = {
-        intervalId: interval.interval_id,
-        labelId: interval.label_id,
-        startMonotonicNs: interval.requested_start_monotonic_ns,
-        endMonotonicNs: interval.requested_end_monotonic_ns,
-        startRawRow: interval.resolved_start.raw_row,
-        endRawRow: interval.resolved_end.raw_row + 1,
-        creationMechanism: interval.creation_mechanism,
-        curationStatus: interval.curation_status,
-        createdAt: interval.created_at,
-        revision: interval.revision,
-      };
+      const candidate = liveIntervalFrom(interval);
       if (interval.resolved_end.raw_row + 1 > this.datasetRows.length || hasOverlap(candidate, this.timelineIntervals)) continue;
       this.sessionLabels.add(candidate.labelId);
       this.timelineIntervals.push(candidate);
@@ -616,6 +622,29 @@ class TelemetryStore {
     }
     if (added > 0) this.publishNow();
     return added;
+  }
+
+  /** The id the session was saved under, so the export can read the recording's intervals as they are on disk. */
+  setSavedRecordingId(recordingId: string | null): void {
+    this.savedRecordingId = recordingId;
+  }
+  getSavedRecordingId(): string | null {
+    return this.savedRecordingId;
+  }
+
+  /**
+   * Makes the session's intervals the ones in the saved recording (marks added by the camera, by hand in Recordings, or
+   * edited there). Only for the session that was saved, with the same rows. Returns whether it did.
+   */
+  adoptRecordingIntervals(intervals: AnnotationInterval[], rawRowCount: number): boolean {
+    if (this.datasetRecordingState !== "saved" || this.datasetCaptureMode !== "timeline" || this.datasetRows.length !== rawRowCount) return false;
+    const adopted = intervals
+      .filter((interval) => interval.resolved_end.raw_row + 1 <= this.datasetRows.length)
+      .map(liveIntervalFrom);
+    this.timelineIntervals = adopted;
+    adopted.forEach((interval) => this.sessionLabels.add(interval.labelId));
+    this.publishNow();
+    return true;
   }
 
   /** Post-capture editing: removes an interval entirely, returning its rows to `unannotated`. Raw data is untouched. */
@@ -671,6 +700,7 @@ class TelemetryStore {
   discardDatasetRecording(): void {
     this.datasetRecording = false;
     this.datasetRecordingState = "discarded";
+    this.savedRecordingId = null;
     this.datasetSession = null;
     this.datasetRequestedStartAtIso = null;
     this.datasetActualStartAtIso = null;
@@ -1064,6 +1094,7 @@ class TelemetryStore {
     this.selectedLabel = null;
     this.sessionLabels.clear();
     this.datasetRecordingState = "idle";
+    this.savedRecordingId = null;
     this.datasetRecording = false;
     this.datasetSession = null;
     this.datasetRecordingStartedAtMs = null;

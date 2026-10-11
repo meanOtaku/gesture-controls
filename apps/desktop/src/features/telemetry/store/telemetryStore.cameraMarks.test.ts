@@ -61,4 +61,15 @@ describe("camera marks in the session", () => {
     telemetryStore.stopDatasetRecording();
     expect(labelsOf(telemetryStore.generateDatasetCsv())).toEqual(["", "snap", "snap"]);
   });
+
+  it("takes the intervals saved with the recording when asked, so marks added on disk reach the export", () => {
+    savedSession();
+    telemetryStore.setSavedRecordingId("rec-1");
+    expect(telemetryStore.adoptRecordingIntervals([mark("a", "pinch", 0, 2), mark("b", "pinch", 5, 6)], 10)).toBe(true);
+    expect(labelsOf(telemetryStore.generateDatasetCsv())).toEqual(["pinch", "pinch", "pinch", "", "", "pinch", "pinch", "", "", ""]);
+    expect(telemetryStore.adoptRecordingIntervals([], 99)).toBe(false); // not the recording's rows
+    expect(telemetryStore.getSavedRecordingId()).toBe("rec-1");
+    telemetryStore.startDatasetRecording();
+    expect(telemetryStore.getSavedRecordingId()).toBeNull();
+  });
 });
