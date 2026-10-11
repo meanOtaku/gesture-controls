@@ -5,7 +5,7 @@ import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { Label } from "../../../components/ui/label";
 import { describePlan, type FineTunePlan } from "../fineTunePlans";
-import type { LabelRuntimeStatus } from "../labelModels";
+import type { LabelModel, LabelRuntimeStatus } from "../labelModels";
 import { datasetLabels, inImportOrder, recordingNumber, type DatasetLabel, type DatasetSummary } from "../types";
 import { CorrectionSession } from "./CorrectionSession";
 
@@ -34,10 +34,12 @@ export function unknownLabels(dataset: DatasetSummary, info: ModelTrainingInfo):
  * always tested on, so the score before and after can be compared. The result is a new draft; the original is untouched.
  */
 export function FineTuneModel({
-  modelId, datasets = [], labels, status = null, refreshKey = "", onClose, onOpenNetworkLab, onDatasetsChanged,
+  modelId, datasets = [], models, labels, status = null, refreshKey = "", onClose, onOpenNetworkLab, onDatasetsChanged,
 }: {
   modelId: string;
   datasets?: DatasetSummary[];
+  /** Every model, so a candidate can be run beside the active one. */
+  models?: LabelModel[];
   /** With these, the panel offers to record corrections with the camera. */
   labels?: DatasetLabel[];
   status?: LabelRuntimeStatus | null;
@@ -109,7 +111,7 @@ export function FineTuneModel({
         </p>
       </div>
 
-      {info !== null && labels && <CorrectionSession info={info} labels={labels} status={status} onSaved={(made) => { addExtra(made.id); onDatasetsChanged?.(); }} />}
+      {info !== null && labels && <CorrectionSession info={info} modelId={modelId} models={models} labels={labels} status={status} onSaved={(made) => { addExtra(made.id); onDatasetsChanged?.(); }} />}
 
       {info !== null && (
         <fieldset className="flex flex-col gap-2" disabled={starting}>

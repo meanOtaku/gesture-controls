@@ -209,7 +209,7 @@ export function LabelModelsPanel({
                             Added {model.createdAt}
                             {model.imported ? ". Imported models are not evaluated by this app: review them before approving." : ""}
                           </small>
-                          {tuning === model.id && <FineTuneModel modelId={model.id} datasets={datasets} labels={labels} status={status} refreshKey={`${datasets?.length ?? 0}`} onDatasetsChanged={onDatasetsChanged} onClose={() => setTuning(null)} onOpenNetworkLab={onOpenNetworkLab} />}
+                          {tuning === model.id && <FineTuneModel modelId={model.id} datasets={datasets} models={models} labels={labels} status={status} refreshKey={`${datasets?.length ?? 0}`} onDatasetsChanged={onDatasetsChanged} onClose={() => setTuning(null)} onOpenNetworkLab={onOpenNetworkLab} />}
                         </div>
                         <div className="recipe-item-actions">
                           {actionsFor(model).map((action) => (

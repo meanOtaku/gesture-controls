@@ -10,6 +10,7 @@ use watch_bridge::{WatchBridgeServer, WatchEvent};
 mod actuators;
 mod automation;
 mod calibration;
+mod correction_rounds;
 mod design_results;
 mod fine_tune_plans;
 mod gesture_library;
@@ -157,6 +158,7 @@ pub fn run() {
         .manage(gesture_library::GestureLibraryRuntime::default())
         .manage(network_designs::NetworkDesignRuntime::default())
         .manage(fine_tune_plans::FineTunePlanRuntime::default())
+        .manage(correction_rounds::CorrectionRoundRuntime::default())
         .manage(recording_bundle::RawColumnCache::default())
         .invoke_handler(tauri::generate_handler![
             calibration::get_calibration_state,
@@ -183,6 +185,8 @@ pub fn run() {
             network_designs::delete_network_design,
             network_designs::preview_network_design,
             design_results::list_design_results,
+            correction_rounds::save_correction_round,
+            correction_rounds::list_correction_rounds,
             fine_tune_plans::list_fine_tune_plans,
             fine_tune_plans::save_fine_tune_plan,
             fine_tune_plans::delete_fine_tune_plan,
