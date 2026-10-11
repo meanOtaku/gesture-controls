@@ -129,12 +129,10 @@ impl NetworkSpec {
                 activation(&layer.activation)?;
             }
         }
-        if let Some(pooling) = &self.pooling {
-            if !POOLINGS.contains(&pooling.as_str()) {
-                return Err(format!(
-                    "unknown pooling '{pooling}'; choose from {POOLINGS:?}"
-                ));
-            }
+        if let Some(pooling) = self.pooling.as_deref().filter(|p| !POOLINGS.contains(p)) {
+            return Err(format!(
+                "unknown pooling '{pooling}'; choose from {POOLINGS:?}"
+            ));
         }
         if let Some(v) = self.dropout {
             between("dropout", v, 0.0, 0.7)?;
