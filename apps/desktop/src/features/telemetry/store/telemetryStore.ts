@@ -185,20 +185,8 @@ export const EMPTY_WATCH_STATUS: WatchStatus = {
   sweatLossLast: null,
 };
 
-function liveIntervalFrom(interval: AnnotationInterval): LiveInterval {
-  return {
-    intervalId: interval.interval_id,
-    labelId: interval.label_id,
-    startMonotonicNs: interval.requested_start_monotonic_ns,
-    endMonotonicNs: interval.requested_end_monotonic_ns,
-    startRawRow: interval.resolved_start.raw_row,
-    endRawRow: interval.resolved_end.raw_row + 1,
-    creationMechanism: interval.creation_mechanism,
-    curationStatus: interval.curation_status,
-    createdAt: interval.created_at,
-    revision: interval.revision,
-  };
-}
+/** How far back a camera mark can start: longer than any hold time. */
+const ARRIVAL_TRAIL_MS = 5000;
 
 class TelemetryStore {
   private readonly listeners = new Set<() => void>();
@@ -248,7 +236,8 @@ class TelemetryStore {
   private selectedLabel: GestureDatasetLabel | null = null;
   private readonly sessionLabels = new Set<GestureDatasetLabel>();
   private datasetRecordingState: DatasetRecordingState = "idle";
-  private savedRecordingId: string | null = null;
+  /** When recent rows arrived (browser clock) and how many rows there were then, to start a camera mark where the gesture began. */
+  private arrivalTrail: { ms: number; rows: number }[] = [];
   private datasetRecording = false;
   private datasetSession: DatasetSessionMetadata | null = null;
   private datasetRecordingStartedAtMs: number | null = null;
@@ -454,12 +443,12 @@ class TelemetryStore {
     if (this.datasetRecording) return false;
     if (this.datasetCaptureMode === "quick" && !this.selectedLabel) return false;
     this.datasetRows.clear();
+    this.arrivalTrail = [];
     this.datasetSession = {
       label: this.datasetCaptureMode === "quick" ? (this.selectedLabel as GestureDatasetLabel) : "",
       startedAtIso: new Date().toISOString(),
     };
     this.datasetRecordingState = "arming";
-    this.savedRecordingId = null;
     this.datasetRecording = true;
     this.datasetRecordingStartedAtMs = null;
     this.datasetRequestedStartAtIso = new Date().toISOString();
@@ -478,7 +467,7 @@ class TelemetryStore {
    * stays `unannotated`. Only valid while a timeline session is `recording`.
    * `mechanism` distinguishes hold-to-label from press-to-toggle for audit.
    */
-  setTimelineLabel(label: GestureDatasetLabel | null, mechanism: "hotkey_hold" | "hotkey_toggle" = "hotkey_toggle"): boolean {
+  setTimelineLabel(label: GestureDatasetLabel | null, mechanism: "hotkey_hold" | "hotkey_toggle" | "camera_proposal" = "hotkey_toggle", sinceMs?: number): boolean {
     if (this.datasetCaptureMode !== "timeline") return false;
     if (this.datasetRecordingState !== "recording") return false;
     const normalized = label === null ? null : normalizeDatasetLabel(label);
@@ -491,13 +480,16 @@ class TelemetryStore {
     this.closeActiveTimelineInterval(nowMonotonicNs, currentRowCount);
 
     if (normalized) {
+      // The camera only knows a gesture is held after its hold time, so it says when it began (`sinceMs`, the browser
+      // clock) and the interval starts at the first row that arrived then, but never inside an earlier interval.
+      const startRow = sinceMs === undefined ? currentRowCount : this.firstRowSince(sinceMs, currentRowCount);
       this.sessionLabels.add(normalized);
       const interval: LiveInterval = {
         intervalId: crypto.randomUUID(),
         labelId: normalized,
-        startMonotonicNs: nowMonotonicNs,
+        startMonotonicNs: sinceMs === undefined ? nowMonotonicNs : Math.round(sinceMs * 1_000_000),
         endMonotonicNs: null,
-        startRawRow: currentRowCount,
+        startRawRow: startRow,
         endRawRow: null,
         creationMechanism: mechanism,
         curationStatus: "unreviewed",
@@ -605,48 +597,6 @@ class TelemetryStore {
     return true;
   }
 
-  /**
-   * Adds the intervals the camera found in the recording just saved, so the session (and its CSV export) carries them.
-   * Only while the session is the one that was saved: the rows must be the same ones the intervals were found in.
-   * An interval that overlaps one already there is skipped. Returns how many were added.
-   */
-  addCameraMarkedIntervals(intervals: AnnotationInterval[], rawRowCount: number): number {
-    if (this.datasetRecordingState !== "saved" || this.datasetRows.length !== rawRowCount) return 0;
-    let added = 0;
-    for (const interval of intervals) {
-      const candidate = liveIntervalFrom(interval);
-      if (interval.resolved_end.raw_row + 1 > this.datasetRows.length || hasOverlap(candidate, this.timelineIntervals)) continue;
-      this.sessionLabels.add(candidate.labelId);
-      this.timelineIntervals.push(candidate);
-      added += 1;
-    }
-    if (added > 0) this.publishNow();
-    return added;
-  }
-
-  /** The id the session was saved under, so the export can read the recording's intervals as they are on disk. */
-  setSavedRecordingId(recordingId: string | null): void {
-    this.savedRecordingId = recordingId;
-  }
-  getSavedRecordingId(): string | null {
-    return this.savedRecordingId;
-  }
-
-  /**
-   * Makes the session's intervals the ones in the saved recording (marks added by the camera, by hand in Recordings, or
-   * edited there). Only for the session that was saved, with the same rows. Returns whether it did.
-   */
-  adoptRecordingIntervals(intervals: AnnotationInterval[], rawRowCount: number): boolean {
-    if (this.datasetRecordingState !== "saved" || this.datasetCaptureMode !== "timeline" || this.datasetRows.length !== rawRowCount) return false;
-    const adopted = intervals
-      .filter((interval) => interval.resolved_end.raw_row + 1 <= this.datasetRows.length)
-      .map(liveIntervalFrom);
-    this.timelineIntervals = adopted;
-    adopted.forEach((interval) => this.sessionLabels.add(interval.labelId));
-    this.publishNow();
-    return true;
-  }
-
   /** Post-capture editing: removes an interval entirely, returning its rows to `unannotated`. Raw data is untouched. */
   deleteTimelineInterval(intervalId: string): boolean {
     if (this.datasetRecordingState !== "saved") return false;
@@ -667,6 +617,9 @@ class TelemetryStore {
    * shifted by one so it keeps pointing at the same logical rows.
    */
   private pushDatasetRowSorted(row: DatasetRow): void {
+    const arrivedAt = performance.now();
+    this.arrivalTrail.push({ ms: arrivedAt, rows: this.datasetRows.length });
+    while (this.arrivalTrail.length > 0 && arrivedAt - this.arrivalTrail[0].ms > ARRIVAL_TRAIL_MS) this.arrivalTrail.shift();
     const timestampNs = Number(row.timestampNs);
     const previousLength = this.datasetRows.length;
     const insertIndex = Number.isFinite(timestampNs)
@@ -685,6 +638,19 @@ class TelemetryStore {
     );
   }
 
+  /** The first row that arrived at or after `sinceMs`, not before the end of an interval already made. */
+  private firstRowSince(sinceMs: number, currentRowCount: number): number {
+    const entry = this.arrivalTrail.find((item) => item.ms >= sinceMs);
+    const earliest = entry ? entry.rows : currentRowCount;
+    const floor = this.timelineIntervals.reduce((end, interval) => Math.max(end, interval.endRawRow ?? 0), 0);
+    return Math.min(currentRowCount, Math.max(earliest, floor));
+  }
+
+  /** How many intervals the camera has marked in this session. */
+  countCameraIntervals(): number {
+    return this.timelineIntervals.filter((interval) => interval.creationMechanism === "camera_proposal" && interval.endRawRow !== null).length;
+  }
+
   /** Stops accepting new rows but keeps the buffered session so it can still be exported. Transitions to Saved state. */
   stopDatasetRecording(): void {
     if (!this.datasetRecording) return;
@@ -700,7 +666,6 @@ class TelemetryStore {
   discardDatasetRecording(): void {
     this.datasetRecording = false;
     this.datasetRecordingState = "discarded";
-    this.savedRecordingId = null;
     this.datasetSession = null;
     this.datasetRequestedStartAtIso = null;
     this.datasetActualStartAtIso = null;
@@ -1094,7 +1059,6 @@ class TelemetryStore {
     this.selectedLabel = null;
     this.sessionLabels.clear();
     this.datasetRecordingState = "idle";
-    this.savedRecordingId = null;
     this.datasetRecording = false;
     this.datasetSession = null;
     this.datasetRecordingStartedAtMs = null;

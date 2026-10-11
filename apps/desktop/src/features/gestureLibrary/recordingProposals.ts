@@ -51,24 +51,3 @@ export async function addProposals(found: Found, chosen: ProposedInterval[]): Pr
   const nowIso = new Date().toISOString();
   return addIntervals(found.recordingId, chosen.map((p) => toAnnotationInterval(p, found.rawTimestampsNs, nowIso)));
 }
-
-export type AutoMarkOutcome =
-  | { kind: "added"; count: number; jitterMs: number; intervals: AnnotationInterval[]; rawRowCount: number }
-  | { kind: "none"; frames: number }
-  | { kind: "skipped"; reason: string };
-
-/**
- * After a recording is saved: finds the gesture in its camera data and adds every hold as an unreviewed interval. The
- * recording itself is untouched if nothing is found or anything goes wrong.
- */
-export async function autoMarkRecording(recordingId: string, definitions: GestureDefinition[]): Promise<AutoMarkOutcome> {
-  const result = await findProposals(recordingId, definitions);
-  if (!result.ok) return { kind: "skipped", reason: result.message };
-  const usable = result.found.proposals.filter((proposal) => !proposal.overlaps);
-  if (usable.length === 0) return { kind: "none", frames: result.found.frames };
-  const nowIso = new Date().toISOString();
-  const intervals = usable.map((proposal) => toAnnotationInterval(proposal, result.found.rawTimestampsNs, nowIso));
-  const problem = await addIntervals(recordingId, intervals);
-  if (problem) return { kind: "skipped", reason: problem };
-  return { kind: "added", count: usable.length, jitterMs: result.found.alignment.jitterMs, intervals, rawRowCount: result.found.rawTimestampsNs.length };
-}

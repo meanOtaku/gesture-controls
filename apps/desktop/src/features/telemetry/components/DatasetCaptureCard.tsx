@@ -75,8 +75,6 @@ type DatasetCaptureCardProps = {
   onStop: () => void;
   onDiscard: () => void;
   onExport: () => Promise<void>;
-  /** Camera marking is still adding marks to the recording just stopped; exporting now would miss them. */
-  exportBusy?: boolean;
   /** Buffered session rows/intervals, for the pre-export data-quality review gate. Empty when there is nothing buffered yet. */
   datasetRows?: DatasetRow[];
   /**
@@ -123,7 +121,6 @@ export function DatasetCaptureCard({
   onStop,
   onDiscard,
   onExport,
-  exportBusy = false,
   datasetRows = [],
   getDatasetRows,
   timelineIntervals = [],
@@ -438,7 +435,7 @@ export function DatasetCaptureCard({
           </AlertDialog>
 
           <AsyncActionButton
-            disabled={datasetRowCount === 0 || exportBusy || (desktopAvailable && !datasetExportFolder)}
+            disabled={datasetRowCount === 0 || (desktopAvailable && !datasetExportFolder)}
             onPress={handleExportPress}
             pendingLabel="Exporting…"
           >

@@ -5,6 +5,7 @@ import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { getCameraController } from "../camera/cameraService";
+import { telemetryStore } from "../telemetry/store/telemetryStore";
 import { cameraAssist } from "./cameraAssist";
 import { definitionsForLabel, type GestureDefinition } from "./definition";
 import { listGestureDefinitions } from "./gestureLibraryApi";
@@ -15,10 +16,10 @@ import { useLiveGestures } from "./useLiveGestures";
  * camera sees that label's library gesture. Shows live whether the camera sees it right now, so you can check before you
  * start. Everything it adds is unreviewed, like any other interval.
  */
-export function CameraAssistCard({ selectedLabel, recording, desktopAvailable }: { selectedLabel: string | null; recording: boolean; desktopAvailable: boolean }) {
+export function CameraAssistCard({ selectedLabel, recording, recordingState, desktopAvailable }: { selectedLabel: string | null; recording: boolean; recordingState?: string; desktopAvailable: boolean }) {
   const camera = getCameraController();
   const cam = useSyncExternalStore(camera.subscribe, camera.getSnapshot, camera.getSnapshot);
-  const { enabled, marking } = useSyncExternalStore(cameraAssist.subscribe, cameraAssist.getSnapshot, cameraAssist.getSnapshot);
+  const { enabled } = useSyncExternalStore(cameraAssist.subscribe, cameraAssist.getSnapshot, cameraAssist.getSnapshot);
   const [definitions, setDefinitions] = useState<GestureDefinition[]>([]);
 
   useEffect(() => {
@@ -31,7 +32,17 @@ export function CameraAssistCard({ selectedLabel, recording, desktopAvailable }:
   const camera2 = getCameraController("secondary");
   const cam2 = useSyncExternalStore(camera2.subscribe, camera2.getSnapshot, camera2.getSnapshot);
   const states = useLiveGestures(mine, cam, undefined, cam2);
-  const seen = mine.some((definition) => states.get(definition.id)?.held);
+  const heldNow = mine.map((definition) => states.get(definition.id)).filter((state) => state?.held);
+  const seen = heldNow.length > 0;
+  const sinceMs = seen ? Math.min(...heldNow.map((state) => state?.sinceMs ?? Infinity)) : null;
+
+  // While recording, the camera marks the session directly: the label is on while it sees the gesture, off when it lets go.
+  const armed = recording ? cameraAssist.armedFor() : null;
+  useEffect(() => {
+    if (!armed || recordingState !== "recording") return;
+    if (seen) telemetryStore.setTimelineLabel(armed, "camera_proposal", sinceMs !== null && Number.isFinite(sinceMs) ? sinceMs : undefined);
+    else if (telemetryStore.getActiveTimelineLabel() === armed) telemetryStore.setTimelineLabel(null);
+  }, [armed, recordingState, seen, sinceMs]);
   const camOn = cam.status === "on" || cam2.status === "on";
 
   const blocker = !desktopAvailable
@@ -60,17 +71,16 @@ export function CameraAssistCard({ selectedLabel, recording, desktopAvailable }:
           description="Mark the gesture in your recording automatically, using the camera."
           help={{
             label: "About camera marking",
-            content: "Record as usual with the watch worn on the hand the camera sees. When you stop, the camera's recording of your hand is searched for the label's gesture from the Gesture library, and each time it was held becomes a labelled stretch of the watch data, so the PPG and motion rows are marked with that label. Everything it adds starts unreviewed. The recording keeps no manual marks, and nothing is marked if the camera never saw the gesture.",
+            content: "Record as usual with the watch worn on the hand the camera sees. While you record, the label is switched on in the watch data whenever the camera sees the label's gesture from the Gesture library, and off when you let go, just like holding the Mark label button. The PPG and motion rows in between carry the label, in the recording and in the exported CSV. Everything it marks starts unreviewed, and nothing is marked if the camera never sees the gesture.",
           }}
         />
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="flex items-start gap-2 text-sm">
           <Checkbox checked={enabled} disabled={recording} onCheckedChange={(on) => cameraAssist.setEnabled(on === true)} aria-label="Let the camera mark the gesture" />
-          <span><strong>Let the camera mark the gesture</strong> <small className="text-muted-foreground">On by default. When the camera is on and the label has a gesture, the recording is a timeline with no manual marks, and the camera adds them when you stop.</small></span>
+          <span><strong>Let the camera mark the gesture</strong> <small className="text-muted-foreground">On by default. When the camera is on and the label has a gesture, the recording is a timeline and the camera marks the label live, while you record.</small></span>
         </div>
         {enabled && blocker && <p className="hint" role="status">{blocker} Until then, recordings are made as usual with no camera marks.</p>}
-        {marking && <p className="hint" role="status">Marking the recording you just stopped… The export is ready when this finishes.</p>}
         {enabled && !blocker && (
           <div className="flex flex-wrap items-center gap-3" role="status">
             <Badge variant={seen ? "default" : "secondary"}>{seen ? "Camera sees it" : "Camera does not see it"}</Badge>

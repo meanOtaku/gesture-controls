@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { chooseExportFolder, exportCsvToFolder, isTauriDesktop, type ExportCsvResult } from "../../../shared/tauri/exportCsv";
-import { loadRecordingBundle, saveRecordingBundle, type SaveRecordingBundleResult, type StopReason } from "../../../shared/tauri/recordingBundle";
+import { saveRecordingBundle, type SaveRecordingBundleResult, type StopReason } from "../../../shared/tauri/recordingBundle";
 import { cameraAssist } from "../../gestureLibrary/cameraAssist";
 import { exportFolderStore } from "../store/exportFolderStore";
 import { telemetryStore } from "../store/telemetryStore";
@@ -45,12 +45,6 @@ export function useTelemetryExport() {
   };
 
   const exportDatasetCsv = async () => {
-    // Label the rows from the recording as it is saved, so marks the camera added (or that were edited in Recordings) are in the file.
-    const savedId = telemetryStore.getSavedRecordingId();
-    if (savedId) {
-      const detail = await loadRecordingBundle(savedId);
-      if (detail.status !== "error") telemetryStore.adoptRecordingIntervals(detail.value.annotations.intervals, detail.value.recording.raw_row_count);
-    }
     const csv = telemetryStore.generateDatasetCsv();
     // Timeline Capture's session label is always "" (its per-row labels live in
     // `timelineIntervals` instead), so an empty string must fall through here too,
@@ -81,10 +75,7 @@ export function useTelemetryExport() {
     if (!payload) return cameraAssist.disarm();
     const result = await saveRecordingBundle(payload);
     reportRecordingBundleOutcome(result);
-    if (result.status === "saved") {
-      telemetryStore.setSavedRecordingId(result.recordingId);
-      void cameraAssist.finish(result.recordingId);
-    }
+    if (result.status === "saved") cameraAssist.finish();
     else cameraAssist.disarm();
   };
 
