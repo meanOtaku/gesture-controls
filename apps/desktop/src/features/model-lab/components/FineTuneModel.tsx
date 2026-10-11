@@ -22,11 +22,10 @@ export interface ModelTrainingInfo {
 
 export const EXTRA_WEIGHTS = [1, 2, 3, 5, 10] as const;
 
-/** Why a recording cannot be added to a model's fine-tune, or null: its labels must all have a role the model was trained with. */
-export function extraBlocker(dataset: DatasetSummary, info: ModelTrainingInfo): string | null {
+/** The labels in a recording that the model was not trained with a role for: each needs one chosen before it can be learned from. */
+export function unknownLabels(dataset: DatasetSummary, info: ModelTrainingInfo): string[] {
   const known = new Set([info.label, ...info.negatives, ...info.excludes]);
-  const unknown = datasetLabels(dataset).filter((label) => !known.has(label));
-  return unknown.length === 0 ? null : `It has ${unknown.map((l) => `“${l}”`).join(", ")}, which this model was not trained with a role for.`;
+  return datasetLabels(dataset).filter((label) => !known.has(label));
 }
 
 /**
@@ -55,6 +54,7 @@ export function FineTuneModel({
   const [info, setInfo] = useState<ModelTrainingInfo | null>(null);
   const [extras, setExtras] = useState<string[]>([]);
   const [weight, setWeight] = useState<number>(3);
+  const [roles, setRoles] = useState<Record<string, "negative" | "exclude">>({});
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,6 +77,7 @@ export function FineTuneModel({
   const taken = new Set([...(info?.datasetIds ?? []), ...(info?.trainOnly ?? [])]);
   const offered = inImportOrder(datasets.filter((d) => info !== null && !taken.has(d.id)));
   const chosen = extras.filter((id) => offered.some((d) => d.id === id));
+  const needRoles = info === null ? [] : [...new Set(offered.filter((d) => chosen.includes(d.id)).flatMap((d) => unknownLabels(d, info)))];
   const toggle = (id: string) => setExtras((current) => (current.includes(id) ? current.filter((e) => e !== id) : [...current, id]));
   const addExtra = (id: string) => setExtras((current) => (current.includes(id) ? current : [...current, id]));
 
@@ -84,7 +85,8 @@ export function FineTuneModel({
     setStarting(true);
     setError(null);
     try {
-      await invoke<string>("start_label_fine_tune", { id: modelId, planId, extraDatasetIds: chosen, extraWeight: chosen.length > 0 || (info?.trainOnly.length ?? 0) > 0 ? weight : null });
+      const weighted = chosen.length > 0 || (info?.trainOnly.length ?? 0) > 0;
+      await invoke<string>("start_label_fine_tune", { id: modelId, planId, extras: weighted ? { ids: chosen, weight, roles: Object.fromEntries(needRoles.map((label) => [label, roles[label] ?? "negative"])) } : null });
       onClose(); // progress and the result show under Train a model
     } catch (err) {
       setError(String(err));
@@ -118,17 +120,34 @@ export function FineTuneModel({
           ) : (
             <ul className="flex flex-col gap-1" aria-label="Extra recordings">
               {offered.map((dataset) => {
-                const blocker = extraBlocker(dataset, info);
+                const unknown = unknownLabels(dataset, info);
                 return (
                   <li key={dataset.id} className="flex flex-wrap items-center gap-2 text-sm">
-                    <Checkbox checked={chosen.includes(dataset.id)} disabled={blocker !== null} onCheckedChange={() => toggle(dataset.id)} aria-label={`Also learn from ${dataset.originalFilename}`} />
+                    <Checkbox checked={chosen.includes(dataset.id)} onCheckedChange={() => toggle(dataset.id)} aria-label={`Also learn from ${dataset.originalFilename}`} />
                     <span>{dataset.sequence ? <strong className="mr-2 font-mono">{recordingNumber(dataset)}</strong> : null}{dataset.originalFilename}</span>
                     <small className="text-muted-foreground">{datasetLabels(dataset).join(", ")}</small>
-                    {blocker && <small className="text-muted-foreground">{blocker}</small>}
+                    {unknown.length > 0 && <small className="text-muted-foreground">has {unknown.map((l) => `“${l}”`).join(", ")}, new to this model</small>}
                   </li>
                 );
               })}
             </ul>
+          )}
+          {needRoles.length > 0 && (
+            <div className="field" role="group" aria-label="Labels new to this model">
+              <div className="field-head"><span className="label">Labels new to this model</span></div>
+              <ul className="flex flex-col gap-1">
+                {needRoles.map((label) => (
+                  <li key={label} className="flex flex-wrap items-center gap-2 text-sm">
+                    <code>{label}</code>
+                    <select className="recipe-select" aria-label={`Role of ${label}`} value={roles[label] ?? "negative"} onChange={(event) => setRoles((current) => ({ ...current, [label]: event.target.value as "negative" | "exclude" }))}>
+                      <option value="negative">Something else (not {info.label})</option>
+                      <option value="exclude">Leave out</option>
+                    </select>
+                  </li>
+                ))}
+              </ul>
+              <p className="field-hint">The model was not trained with a role for these. “Something else” teaches it what is not {info.label} (this changes what the new model counts as not the gesture); “Leave out” ignores those parts of the recordings.</p>
+            </div>
           )}
           {(chosen.length > 0 || info.trainOnly.length > 0) && (
             <div className="field">

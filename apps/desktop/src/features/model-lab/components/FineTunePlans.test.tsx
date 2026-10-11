@@ -61,7 +61,7 @@ describe("FineTuneModel", () => {
     render(<FineTuneModel modelId="snap-1" onClose={onClose} />);
     fireEvent.change(await screen.findByLabelText("Fine-tune plan"), { target: { value: "builtin-head" } });
     fireEvent.click(screen.getByRole("button", { name: "Start fine-tuning" }));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("start_label_fine_tune", { id: "snap-1", planId: "builtin-head", extraDatasetIds: [], extraWeight: null }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("start_label_fine_tune", { id: "snap-1", planId: "builtin-head", extras: null }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
@@ -93,15 +93,21 @@ describe("FineTuneModel extra recordings", () => {
     });
   });
 
-  it("offers recordings the model did not use, in import order, and refuses ones with a label it has no role for", async () => {
+  it("offers recordings the model did not use, in import order, and asks what a label new to the model means", async () => {
     render(<FineTuneModel modelId="snap-1" onClose={() => undefined} datasets={[dataset("d2", ["snap"], 2), dataset("x2", ["snap", "idle"], 6), dataset("x1", ["snap", "idle"], 5), dataset("x3", ["snap", "mystery"], 7)]} />);
     const list = await screen.findByRole("list", { name: "Extra recordings" });
     const names = Array.from(list.querySelectorAll("li")).map((li) => li.textContent);
     expect(names).toHaveLength(3); // d2 was already used
     expect(names[0]).toContain("#5");
     expect(names[1]).toContain("#6");
-    expect(screen.getByRole("checkbox", { name: "Also learn from x3.csv" })).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByText(/“mystery”, which this model was not trained with a role for/)).toBeInTheDocument();
+    expect(screen.getByText(/“mystery”, new to this model/)).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Labels new to this model" })).toBeNull(); // only once such a recording is ticked
+    fireEvent.click(screen.getByRole("checkbox", { name: "Also learn from x3.csv" }));
+    const role = screen.getByLabelText("Role of mystery");
+    expect(role).toHaveValue("negative");
+    fireEvent.change(role, { target: { value: "exclude" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start fine-tuning" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("start_label_fine_tune", { id: "snap-1", planId: "builtin-continue", extras: { ids: ["x3"], weight: 3, roles: { mystery: "exclude" } } }));
   });
 
   it("sends the chosen extra recordings and how much they count", async () => {
@@ -109,6 +115,6 @@ describe("FineTuneModel extra recordings", () => {
     fireEvent.click(await screen.findByRole("checkbox", { name: "Also learn from x1.csv" }));
     fireEvent.change(screen.getByLabelText("How much the extra recordings count"), { target: { value: "5" } });
     fireEvent.click(screen.getByRole("button", { name: "Start fine-tuning" }));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("start_label_fine_tune", { id: "snap-1", planId: "builtin-continue", extraDatasetIds: ["x1"], extraWeight: 5 }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("start_label_fine_tune", { id: "snap-1", planId: "builtin-continue", extras: { ids: ["x1"], weight: 5, roles: {} } }));
   });
 });

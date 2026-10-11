@@ -764,8 +764,8 @@ pub fn get_model_training_info(
 }
 
 /// Carries on training a model with a saved fine-tune plan (see `fine_tune_plans`), without any hand edits. Recordings
-/// in `extra_dataset_ids` are added to what it trains on (never to what it is tested on), and what the model gets wrong
-/// on them counts `extra_weight` times as much (1 to 10; 1 when absent).
+/// in `extras` are added to what it trains on (never to what it is tested on), and what the model gets wrong on them
+/// counts `weight` times as much (1 to 10; 1 when absent).
 #[tauri::command]
 pub async fn start_label_fine_tune(
     app: AppHandle,
@@ -773,8 +773,7 @@ pub async fn start_label_fine_tune(
     host: State<'_, LabelRuntimeHost>,
     id: String,
     plan_id: String,
-    extra_dataset_ids: Option<Vec<String>>,
-    extra_weight: Option<f64>,
+    extras: Option<Extras>,
 ) -> Result<String, String> {
     let settings = crate::fine_tune_plans::settings_of(&app, &plan_id)?;
     begin_edit(
@@ -784,8 +783,7 @@ pub async fn start_label_fine_tune(
         id,
         Vec::new(),
         Some(settings),
-        extra_dataset_ids.unwrap_or_default(),
-        extra_weight,
+        extras.unwrap_or_default(),
     )
     .await
 }
@@ -802,33 +800,72 @@ pub async fn start_label_edit(
     edits: Vec<serde_json::Value>,
     fine_tune: Option<serde_json::Value>,
 ) -> Result<String, String> {
-    begin_edit(app, runtime, host, id, edits, fine_tune, Vec::new(), None).await
+    begin_edit(app, runtime, host, id, edits, fine_tune, Extras::default()).await
 }
 
 const MAX_EXTRA_WEIGHT: f64 = 10.0;
 
-/// The request a fine-tune is made from: the model's own, with the extra recordings added to those that may only train.
+/// Recordings to fine-tune a model on besides the ones it was trained on.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Extras {
+    ids: Vec<String>,
+    /// How much more what the model gets wrong on them counts (1 to 10; 1 when absent).
+    weight: Option<f64>,
+    /// What each label in them that the model has no role for means here: `negative` ("something else") or `exclude`.
+    roles: BTreeMap<String, String>,
+}
+
+/// The request a fine-tune is made from: the model's own, with the extra recordings added to those that may only train,
+/// and a role for each label in them the model did not have one for. Nothing is assumed: such a label with no role chosen
+/// refuses the fine-tune.
 fn with_extras(
     mut request: TrainRequest,
-    extras: &[String],
-    weight: Option<f64>,
+    extras: &Extras,
+    labels_of: &dyn Fn(&str) -> Option<Vec<String>>,
     fine_tune: Option<serde_json::Value>,
 ) -> Result<(TrainRequest, Option<serde_json::Value>), String> {
-    if let Some(weight) = weight
+    if let Some(weight) = extras.weight
         && !(1.0..=MAX_EXTRA_WEIGHT).contains(&weight)
     {
         return Err(format!(
             "the weight of the extra recordings must be from 1 to {MAX_EXTRA_WEIGHT}"
         ));
     }
-    if (!extras.is_empty() || !request.train_only.is_empty()) && fine_tune.is_none() {
+    if (!extras.ids.is_empty() || !request.train_only.is_empty()) && fine_tune.is_none() {
         return Err("extra recordings are used by fine-tuning: choose a fine-tune plan".into());
     }
-    for extra in extras {
+    for (label, role) in &extras.roles {
+        if !matches!(role.as_str(), "negative" | "exclude") {
+            return Err(format!(
+                "the role of '{label}' must be 'negative' (something else) or 'exclude'"
+            ));
+        }
+    }
+    for extra in &extras.ids {
         if request.dataset_ids.contains(extra) {
             return Err(format!(
                 "recording {extra} is already part of what this model was trained or tested on"
             ));
+        }
+        let labels =
+            labels_of(extra).ok_or_else(|| format!("there is no recording with id '{extra}'"))?;
+        for label in labels {
+            let known = label == request.label
+                || request.negatives.contains(&label)
+                || request.excludes.contains(&label);
+            if known {
+                continue;
+            }
+            match extras.roles.get(&label).map(String::as_str) {
+                Some("negative") => request.negatives.push(label),
+                Some(_) => request.excludes.push(label),
+                None => {
+                    return Err(format!(
+                        "recording {extra} has the label '{label}', which this model has no role for: choose whether it means something else or is left out"
+                    ));
+                }
+            }
         }
         request.dataset_ids.push(extra.clone());
         request.train_only.push(extra.clone());
@@ -843,13 +880,12 @@ fn with_extras(
         );
         settings.insert(
             "extraWeight".into(),
-            serde_json::json!(weight.unwrap_or(1.0)),
+            serde_json::json!(extras.weight.unwrap_or(1.0)),
         );
     }
     Ok((request, fine_tune))
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn begin_edit(
     app: AppHandle,
     runtime: State<'_, LabelTrainingRuntime>,
@@ -857,8 +893,7 @@ async fn begin_edit(
     id: String,
     edits: Vec<serde_json::Value>,
     fine_tune: Option<serde_json::Value>,
-    extras: Vec<String>,
-    extra_weight: Option<f64>,
+    extras: Extras,
 ) -> Result<String, String> {
     check_edits(&edits, fine_tune.as_ref())?;
     let (run_id, _) = host.trained_run_of(&id)?;
@@ -872,7 +907,19 @@ async fn begin_edit(
             serde_json::from_slice(&bytes)
                 .map_err(|e| format!("the model's training request is unreadable: {e}"))
         })?;
-    let (request, fine_tune) = with_extras(request, &extras, extra_weight, fine_tune)?;
+    let index = load_index(&app);
+    let (request, fine_tune) = with_extras(
+        request,
+        &extras,
+        &|dataset| {
+            index
+                .datasets
+                .iter()
+                .find(|d| d.id == dataset)
+                .map(DatasetSummary::effective_labels)
+        },
+        fine_tune,
+    )?;
     let job = EditJob {
         from_model: id,
         from_dir,
@@ -1735,47 +1782,117 @@ mod tests {
         assert_eq!(spec["recordings"]["s1"], "/data/s1.csv");
     }
 
+    fn labels_of(id: &str) -> Option<Vec<String>> {
+        match id {
+            "x1" => Some(vec!["snap".into(), "idle".into()]),
+            "x2" => Some(vec!["snap".into(), "mystery".into()]),
+            _ => None,
+        }
+    }
+
+    fn extras(ids: &[&str], weight: Option<f64>, roles: &[(&str, &str)]) -> Extras {
+        Extras {
+            ids: ids.iter().map(ToString::to_string).collect(),
+            weight,
+            roles: roles
+                .iter()
+                .map(|(l, r)| (l.to_string(), r.to_string()))
+                .collect(),
+        }
+    }
+
     #[test]
     fn extra_recordings_join_the_ones_that_may_only_train_and_are_weighted() {
-        let (extended, settings) = with_extras(
+        let settings = || Some(serde_json::json!({ "epochs": 5 }));
+        let (extended, tuned) = with_extras(
             request(),
-            &["x1".into()],
-            Some(3.0),
-            Some(serde_json::json!({ "epochs": 5 })),
+            &extras(&["x1"], Some(3.0), &[]),
+            &labels_of,
+            settings(),
         )
         .unwrap();
         assert_eq!(extended.train_only, ["x1"]);
         assert!(extended.dataset_ids.contains(&"x1".to_string()));
-        let settings = settings.unwrap();
+        let tuned = tuned.unwrap();
         assert_eq!(
             (
-                settings["extraRecordings"].clone(),
-                settings["extraWeight"].clone()
+                tuned["extraRecordings"].clone(),
+                tuned["extraWeight"].clone()
             ),
             (serde_json::json!(["x1"]), serde_json::json!(3.0))
         );
         // A second fine-tune of that model keeps them, and a recording cannot be added twice.
-        let (again, _) =
-            with_extras(extended.clone(), &[], None, Some(serde_json::json!({}))).unwrap();
+        let none = extras(&[], None, &[]);
+        let (again, _) = with_extras(extended.clone(), &none, &labels_of, settings()).unwrap();
         assert_eq!(again.train_only, ["x1"]);
         assert!(
             with_extras(
                 extended.clone(),
-                &["x1".into()],
-                None,
-                Some(serde_json::json!({}))
+                &extras(&["x1"], None, &[]),
+                &labels_of,
+                settings()
             )
             .is_err()
         );
         assert!(
             with_extras(
                 request(),
-                &["x2".into()],
-                Some(11.0),
-                Some(serde_json::json!({}))
+                &extras(&["x1"], Some(11.0), &[]),
+                &labels_of,
+                settings()
             )
             .is_err()
         );
-        assert!(with_extras(request(), &["x2".into()], None, None).is_err());
+        assert!(with_extras(request(), &extras(&["x1"], None, &[]), &labels_of, None).is_err());
+        assert!(
+            with_extras(
+                request(),
+                &extras(&["nope"], None, &[]),
+                &labels_of,
+                settings()
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn a_label_the_model_has_no_role_for_needs_one_chosen_and_then_joins_the_mapping() {
+        let settings = || Some(serde_json::json!({}));
+        let refused = with_extras(
+            request(),
+            &extras(&["x2"], None, &[]),
+            &labels_of,
+            settings(),
+        )
+        .unwrap_err();
+        assert!(refused.contains("'mystery'") && refused.contains("no role"));
+        assert!(
+            with_extras(
+                request(),
+                &extras(&["x2"], None, &[("mystery", "target")]),
+                &labels_of,
+                settings()
+            )
+            .is_err()
+        );
+        let (as_negative, _) = with_extras(
+            request(),
+            &extras(&["x2"], None, &[("mystery", "negative")]),
+            &labels_of,
+            settings(),
+        )
+        .unwrap();
+        assert!(as_negative.negatives.contains(&"mystery".to_string()));
+        let (as_excluded, _) = with_extras(
+            request(),
+            &extras(&["x2"], None, &[("mystery", "exclude")]),
+            &labels_of,
+            settings(),
+        )
+        .unwrap();
+        assert!(
+            as_excluded.excludes.contains(&"mystery".to_string())
+                && !as_excluded.negatives.contains(&"mystery".to_string())
+        );
     }
 }
