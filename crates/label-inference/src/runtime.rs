@@ -381,6 +381,56 @@ mod tests {
         assert!(rt.loaded_labels().is_empty());
     }
 
+    /// Switching to another model and back must leave no trace: the model scores the same live data exactly as it would have
+    /// had it never been switched away from, and starts with a clean detection each time.
+    #[test]
+    fn switching_to_another_model_and_back_scores_exactly_as_if_it_had_never_been_switched() {
+        let amplitude = |n: u64| if (n / 40) % 2 == 0 { 5.0 } else { 0.0 }; // shake for 0.8 s, then be still, and so on
+        let drive_pattern = |rt: &mut LabelRuntime, from: u64, to: u64| -> Vec<(u64, f64)> {
+            (from..to)
+                .flat_map(|n| {
+                    rt.observe_orientation(&orientation(n, amplitude(n)), n * 20_000_000)
+                        .scores
+                        .into_iter()
+                        .map(move |s| (n, s.confidence))
+                })
+                .collect()
+        };
+        let other = || {
+            let mut model = loaded();
+            model.version_id = model_lab_core::ModelVersionId::new("shake-v2").unwrap();
+            model
+        };
+
+        // Re-adopting the same model at the same moment only restarts the scoring schedule, which a switch does too, so the
+        // two runs score at the same instants.
+        let mut straight = runtime(RuntimeMode::Monitor);
+        let mut never_switched = drive_pattern(&mut straight, 0, 200);
+        straight.set_models(vec![loaded()]);
+        never_switched.extend(drive_pattern(&mut straight, 200, 400));
+
+        let mut switched = runtime(RuntimeMode::Monitor);
+        drive_pattern(&mut switched, 0, 100);
+        switched.set_models(vec![other()]);
+        drive_pattern(&mut switched, 100, 200);
+        switched.set_models(vec![loaded()]); // back to the first model
+        let after = drive_pattern(&mut switched, 200, 400);
+
+        let expected: Vec<&(u64, f64)> = never_switched.iter().filter(|(n, _)| *n >= 200).collect();
+        assert!(!after.is_empty());
+        assert_eq!(after.len(), expected.len(), "the same windows are scored");
+        for (got, want) in after.iter().zip(expected) {
+            assert_eq!(got.0, want.0);
+            assert!(
+                (got.1 - want.1).abs() < 1e-12,
+                "sample {}: {} vs {}",
+                got.0,
+                got.1,
+                want.1
+            );
+        }
+    }
+
     #[test]
     fn keeping_the_same_model_does_not_disturb_a_running_detection() {
         let mut rt = runtime(RuntimeMode::Live);
