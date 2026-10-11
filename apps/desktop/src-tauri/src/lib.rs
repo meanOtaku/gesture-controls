@@ -23,6 +23,7 @@ mod network_designs;
 mod network_spec;
 mod overlay;
 mod recording_bundle;
+mod recording_sequence;
 mod settings;
 mod watch;
 

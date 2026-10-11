@@ -76,6 +76,10 @@ export type RecordingBundleSummary = {
   excludedCount: number;
   /** Informational only: true for a recording imported via `import_recording_from_raw_csv`. Every bundle, imported or manually captured, is equally deletable via `deleteRecordingBundle`. */
   isImported: boolean;
+  /** Which recording this is in the order they came in (1 is the first); never reused after a delete. */
+  sequence?: number;
+  /** When it was saved. */
+  savedAt?: string;
 };
 
 /** Mirrors `recording_bundle::RecordingBundleDetail`: metadata plus annotations, no raw CSV. */

@@ -10,6 +10,7 @@ import { listRecordingBundles, onRecordingsChanged, type RecordingBundleSummary 
 import type { GestureDefinition } from "./definition";
 import { listGestureDefinitions } from "./gestureLibraryApi";
 import { addProposals, findProposals, type Found } from "./recordingProposals";
+import { recordingTag } from "../../shared/tauri/recordingTag";
 
 type Shown = Found & { skipped: string[] };
 
@@ -95,7 +96,7 @@ export function CameraProposalsPanel() {
           <div className="field-head"><Label htmlFor={selectId} required>Recording</Label></div>
           <select id={selectId} className="recipe-select" value={recordingId} onChange={(e) => { setRecordingId(e.target.value); setFound(null); setMessage(null); }}>
             <option value="">Choose a recording…</option>
-            {recordings.map((r) => <option key={r.recordingId} value={r.recordingId}>{r.recordingId.slice(0, 8)} · {(r.actualDurationMs / 1000).toFixed(0)} s · {r.intervalCount} interval{r.intervalCount === 1 ? "" : "s"}</option>)}
+            {recordings.map((r) => <option key={r.recordingId} value={r.recordingId}>{recordingTag(r) ? `${recordingTag(r)} · ` : ""}{r.recordingId.slice(0, 8)} · {(r.actualDurationMs / 1000).toFixed(0)} s · {r.intervalCount} interval{r.intervalCount === 1 ? "" : "s"}</option>)}
           </select>
         </div>
         <div><Button type="button" disabled={!recordingId || busy} onClick={() => void find()}>{busy && !found ? "Looking…" : "Find gestures"}</Button></div>

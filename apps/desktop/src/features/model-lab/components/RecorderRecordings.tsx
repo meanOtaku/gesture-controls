@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Label } from "../../../components/ui/label";
 import { listRecordingBundles, onRecordingsChanged, type RecordingBundleSummary } from "../../../shared/tauri/recordingBundle";
 import type { DatasetLabel, DatasetSummary } from "../types";
+import { recordingTag } from "../../../shared/tauri/recordingTag";
 
 export type IntervalFilter = "notExcluded" | "approvedOnly";
 
@@ -107,7 +108,7 @@ export function RecorderRecordings({ desktopAvailable, labels, datasets, onAdded
               return (
                 <li key={summary.recordingId} className="recipe-item">
                   <div className="flex min-w-0 flex-col gap-1">
-                    <span className="text-sm">{summary.recordingId.slice(0, 8)} · {(summary.actualDurationMs / 1000).toFixed(0)} s {added > 0 && <Badge variant="outline">Added{added > 1 ? ` ${added}×` : ""}</Badge>}</span>
+                    <span className="text-sm">{recordingTag(summary) ? <strong className="mr-2 font-mono">{recordingTag(summary)}</strong> : null}{summary.recordingId.slice(0, 8)} · {(summary.actualDurationMs / 1000).toFixed(0)} s {added > 0 && <Badge variant="outline">Added{added > 1 ? ` ${added}×` : ""}</Badge>}</span>
                     <small className="text-xs text-muted-foreground">
                       {summary.labelIds.length === 0 ? "No labelled intervals" : summary.labelIds.join(", ")} · {summary.approvedCount} approved, {summary.unreviewedCount} unreviewed, {summary.excludedCount} excluded
                     </small>

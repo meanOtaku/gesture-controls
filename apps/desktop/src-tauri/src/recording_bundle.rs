@@ -224,6 +224,10 @@ pub struct RecordingBundleSummary {
     /// captured — is equally eligible for `delete_recording_bundle`; this
     /// field is not a deletion gate.
     pub is_imported: bool,
+    /// Which recording this is in the order they came in (1 is the first); see `recording_sequence`. 0 until numbered.
+    pub sequence: u32,
+    /// When it was saved (the wall clock at its start).
+    pub saved_at: String,
 }
 
 /// True only when `recording.sources` is exactly the single
@@ -272,6 +276,20 @@ fn summarize_bundle(
         approved_count: count_where(CurationStatus::Approved),
         excluded_count: count_where(CurationStatus::Excluded),
         is_imported: is_imported_only(recording),
+        sequence: 0,
+        saved_at: recording.actual_start.wall_clock_at.clone(),
+    }
+}
+
+/// Puts each summary's sequence number on it, numbering recordings that have none yet.
+fn number_summaries(dir: &Path, summaries: &mut [RecordingBundleSummary]) {
+    let present: Vec<(String, String)> = summaries
+        .iter()
+        .map(|s| (s.recording_id.clone(), s.saved_at.clone()))
+        .collect();
+    let numbers = crate::recording_sequence::numbers_for(dir, &present);
+    for summary in summaries {
+        summary.sequence = numbers.get(&summary.recording_id).copied().unwrap_or(0);
     }
 }
 
@@ -516,7 +534,7 @@ pub fn save_recording_bundle(
         return Err(error.to_string());
     }
 
-    Ok(summarize_bundle(&recording, &annotations))
+    Ok(numbered_summary(&app, &recording, &annotations))
 }
 
 /// Rejects a data row whose field count is not `RAW_CSV_HEADER.len()`. Counting
@@ -796,7 +814,7 @@ pub fn import_recording_from_raw_csv(
         return Err(error.to_string());
     }
 
-    Ok(summarize_bundle(&recording, &annotations))
+    Ok(numbered_summary(&app, &recording, &annotations))
 }
 
 /// Lists every saved bundle for curation review. A bundle directory that fails
@@ -807,11 +825,16 @@ pub fn import_recording_from_raw_csv(
 #[tauri::command]
 pub fn list_recording_bundles(app: AppHandle) -> Result<Vec<RecordingBundleSummary>, String> {
     let dir = recording_bundles_dir(&app)?;
+    all_summaries(&dir)
+}
+
+/// Every saved bundle, numbered and in that order.
+fn all_summaries(dir: &Path) -> Result<Vec<RecordingBundleSummary>, String> {
     if !dir.exists() {
         return Ok(Vec::new());
     }
     let mut summaries = Vec::new();
-    for entry in fs::read_dir(&dir).map_err(|error| error.to_string())? {
+    for entry in fs::read_dir(dir).map_err(|error| error.to_string())? {
         let entry = entry.map_err(|error| error.to_string())?;
         let path = entry.path();
         if !path.is_dir() {
@@ -821,8 +844,30 @@ pub fn list_recording_bundles(app: AppHandle) -> Result<Vec<RecordingBundleSumma
             summaries.push(summarize_bundle(&recording, &annotations));
         }
     }
-    summaries.sort_by(|a, b| a.recording_id.cmp(&b.recording_id));
+    number_summaries(dir, &mut summaries);
+    summaries.sort_by(|a, b| {
+        a.sequence
+            .cmp(&b.sequence)
+            .then_with(|| a.recording_id.cmp(&b.recording_id))
+    });
     Ok(summaries)
+}
+
+/// The summary of a bundle that was just written, with its number (found among all of them, so the numbering sees
+/// every recording and not only this one).
+fn numbered_summary(
+    app: &AppHandle,
+    recording: &RecordingMetadata,
+    annotations: &AnnotationsFile,
+) -> RecordingBundleSummary {
+    recording_bundles_dir(app)
+        .ok()
+        .and_then(|dir| all_summaries(&dir).ok())
+        .and_then(|all| {
+            all.into_iter()
+                .find(|s| s.recording_id == recording.recording_id)
+        })
+        .unwrap_or_else(|| summarize_bundle(recording, annotations))
 }
 
 /// Loads one bundle's metadata and annotations for curation review, without

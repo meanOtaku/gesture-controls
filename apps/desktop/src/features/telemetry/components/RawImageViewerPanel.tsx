@@ -39,6 +39,7 @@ import {
   type RecordingQualitySummary,
   type SpikeExtractionMethod,
 } from "../../../shared/tauri/recordingBundle";
+import { recordingTag } from "../../../shared/tauri/recordingTag";
 import { deriveVisibleCompactLabelRanges, deriveVisibleLabelRanges } from "../annotations/visibleLabelRanges";
 import { rawImageViewerStore } from "../store/rawImageViewerStore";
 import { RawImageCanvas } from "./RawImageCanvas";
@@ -68,7 +69,8 @@ function channelLabel(channel: RawImageViewerChannel): string {
 
 function recordingLabel(summary: RecordingBundleSummary): string {
   const seconds = (summary.actualDurationMs / 1000).toFixed(1);
-  return `${summary.recordingId} · ${summary.rawRowCount.toLocaleString()} rows · ${seconds}s`;
+  const tag = recordingTag(summary);
+  return `${tag ? `${tag} · ` : ""}${summary.recordingId} · ${summary.rawRowCount.toLocaleString()} rows · ${seconds}s`;
 }
 
 /**
