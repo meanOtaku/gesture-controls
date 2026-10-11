@@ -8,6 +8,8 @@ use tauri::{AppHandle, Manager, State};
 use tracing::warn;
 use uuid::Uuid;
 
+use crate::dataset_files::{self, GapReport, Meta, Pair};
+
 const DATASETS_DIR_NAME: &str = "datasets";
 pub(crate) const MODEL_LAB_DIR_NAME: &str = "model-lab";
 const INDEX_FILE_NAME: &str = "index.json";
@@ -59,6 +61,12 @@ pub struct DatasetSummary {
     /// [`number_unnumbered`]); worked out when the index is read.
     #[serde(default)]
     pub sequence: u32,
+    /// Stored as a folder of two dense files (`ppg.csv` and `imu.csv`) rather than one file with blank cells.
+    #[serde(default)]
+    pub two_files: bool,
+    /// How dense each stream is: where it went quiet and for how long. Absent for a recording made before this was kept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gaps: Option<GapReport>,
     /// The saved Recorder recording this was made from, when it was added straight from one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_recording_id: Option<String>,
@@ -292,8 +300,44 @@ pub(crate) fn datasets_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(base.join(MODEL_LAB_DIR_NAME).join(DATASETS_DIR_NAME))
 }
 
+/// Where a dataset's data is: its folder of two files if it has one, otherwise the single file older recordings are in.
+/// This is the path the trainer is given and that `dataset_sha` reads.
 pub(crate) fn dataset_csv_path(dir: &std::path::Path, id: &str) -> PathBuf {
-    dir.join(format!("{id}.csv"))
+    let folder = dir.join(id);
+    if folder.join(dataset_files::META_FILE).is_file() {
+        folder
+    } else {
+        dir.join(format!("{id}.csv"))
+    }
+}
+
+/// Whether a dataset's data is on disk, in either form.
+pub(crate) fn dataset_exists(dir: &std::path::Path, id: &str) -> bool {
+    dir.join(id).exists() || dir.join(format!("{id}.csv")).exists()
+}
+
+/// The identity a recording is sealed with when a model is trained on it: the SHA-256 of the single file, or of the pair of
+/// files (or, for a folder converted from a single file, of the file it was made from: the data is the same).
+pub(crate) fn dataset_sha(path: &std::path::Path) -> Result<String, String> {
+    if path.is_dir() {
+        let read = |name: &str| {
+            fs::read_to_string(path.join(name))
+                .map_err(|e| format!("could not read {}: {e}", path.join(name).display()))
+        };
+        let meta: Option<Meta> = fs::read_to_string(path.join(dataset_files::META_FILE))
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok());
+        if let Some(original) = meta.and_then(|m| m.original_sha256) {
+            return Ok(original);
+        }
+        return Ok(dataset_files::pair_sha(
+            &read(dataset_files::PPG_FILE)?,
+            &read(dataset_files::IMU_FILE)?,
+        ));
+    }
+    fs::read(path)
+        .map(|bytes| model_lab_core::sha256_hex(&bytes))
+        .map_err(|e| format!("could not read {}: {e}", path.display()))
 }
 
 fn index_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -348,8 +392,9 @@ pub fn import_model_dataset(
     ingest_dataset(&app, &runtime, filename, csv_content, None)
 }
 
-/// Validates a dataset CSV and stores it as a new recording in Model Lab. When it comes from a saved Recorder
-/// recording (`source_recording_id`), adding the same, unchanged recording twice is refused rather than duplicated.
+/// Validates a single-file dataset CSV and stores it as a new recording in Model Lab, as a folder of two dense files. When it
+/// comes from a saved Recorder recording (`source_recording_id`), adding the same, unchanged recording twice is refused
+/// rather than duplicated.
 pub(crate) fn ingest_dataset(
     app: &AppHandle,
     runtime: &ModelLabRuntime,
@@ -365,14 +410,78 @@ pub(crate) fn ingest_dataset(
         ));
     }
     let parsed = parse_csv(&csv_content)?;
-    for label in &parsed.labels {
+    let pair = dataset_files::split_legacy(&parsed.csv)?;
+    store_pair(
+        app,
+        runtime,
+        filename,
+        pair,
+        source_recording_id,
+        Some(&parsed.csv),
+    )
+}
+
+/// Imports a recording folder (`ppg.csv` and `imu.csv`) and stores it as a new recording in Model Lab.
+pub(crate) fn ingest_folder(
+    app: &AppHandle,
+    runtime: &ModelLabRuntime,
+    folder: &std::path::Path,
+) -> Result<DatasetSummary, String> {
+    let name = folder
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("that is not a folder name this app can use")?
+        .to_string();
+    validate_filename(&name)?;
+    if !folder.is_dir() {
+        return Err("choose the folder that holds ppg.csv and imu.csv".into());
+    }
+    let read = |file: &str| -> Result<String, String> {
+        let path = folder.join(file);
+        let meta = fs::metadata(&path).map_err(|_| {
+            format!("the folder has no {file}: a recording folder holds ppg.csv and imu.csv")
+        })?;
+        if meta.len() as usize > MAX_DATASET_CSV_BYTES {
+            return Err(format!(
+                "{file} exceeds the {MAX_DATASET_CSV_BYTES}-byte import limit"
+            ));
+        }
+        fs::read_to_string(&path).map_err(|e| format!("could not read {file}: {e}"))
+    };
+    let pair = dataset_files::parse_pair(
+        &read(dataset_files::PPG_FILE)?,
+        &read(dataset_files::IMU_FILE)?,
+    )?;
+    store_pair(app, runtime, name, pair, None, None)
+}
+
+/// Whether a recording already stored holds exactly this data (so adding it again would only duplicate it).
+fn already_holds(dir: &std::path::Path, id: &str, pair: &Pair, legacy_text: Option<&str>) -> bool {
+    let path = dataset_csv_path(dir, id);
+    if path.is_dir() {
+        return dataset_sha(&path)
+            .is_ok_and(|sha| sha == dataset_files::pair_sha(&pair.ppg_csv, &pair.imu_csv));
+    }
+    legacy_text.is_some_and(|text| fs::read_to_string(&path).is_ok_and(|saved| saved == text))
+}
+
+/// Stores a validated pair as a new recording: its labels must exist, it is written whole or not at all, and it takes the next
+/// import number.
+fn store_pair(
+    app: &AppHandle,
+    runtime: &ModelLabRuntime,
+    filename: String,
+    pair: Pair,
+    source_recording_id: Option<String>,
+    legacy_text: Option<&str>,
+) -> Result<DatasetSummary, String> {
+    for label in &pair.labels {
         if !crate::label_registry::contains_label(app, label) {
             return Err(format!(
                 "unknown label '{label}'; create it on the Labels tab before adding recordings"
             ));
         }
     }
-
     let _guard = runtime
         .lock
         .lock()
@@ -384,8 +493,7 @@ pub(crate) fn ingest_dataset(
     if let Some(source) = &source_recording_id
         && index.datasets.iter().any(|existing| {
             existing.source_recording_id.as_ref() == Some(source)
-                && fs::read_to_string(dataset_csv_path(&dir, &existing.id))
-                    .is_ok_and(|saved| saved == parsed.csv)
+                && already_holds(&dir, &existing.id, &pair, legacy_text)
         })
     {
         return Err(
@@ -396,35 +504,165 @@ pub(crate) fn ingest_dataset(
 
     let id = loop {
         let candidate = Uuid::new_v4().to_string();
-        if !dataset_csv_path(&dir, &candidate).exists() {
+        if !dataset_exists(&dir, &candidate) {
             break candidate;
         }
     };
-
-    let csv_path = dataset_csv_path(&dir, &id);
-    let tmp_path = csv_path.with_extension("csv.tmp");
-    fs::write(&tmp_path, &parsed.csv).map_err(|error| error.to_string())?;
-    fs::rename(&tmp_path, &csv_path).map_err(|error| error.to_string())?;
+    write_folder(&dir, &id, &pair, None)?;
+    let folder = dir.join(&id);
 
     let summary = DatasetSummary {
         id,
         original_filename: filename,
         imported_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
-        label: parsed.labels.join(", "),
-        labels: parsed.labels,
-        row_count: parsed.row_count,
+        label: pair.labels.join(", "),
+        labels: pair.labels.clone(),
+        row_count: pair.ppg_rows + pair.imu_rows,
         sequence: index.next_sequence,
+        two_files: true,
+        gaps: Some(pair.gaps.clone()),
         source_recording_id,
     };
 
     index.next_sequence += 1;
     index.datasets.push(summary.clone());
     if let Err(error) = write_index_atomic(app, &index) {
-        let _ = fs::remove_file(&csv_path);
+        let _ = fs::remove_dir_all(&folder);
         return Err(error);
     }
-
     Ok(summary)
+}
+
+/// Writes a recording's folder: the two files and `dataset.json`, in a temporary folder that is renamed into place so a
+/// folder is there whole or not at all.
+fn write_folder(
+    dir: &std::path::Path,
+    id: &str,
+    pair: &Pair,
+    original_sha256: Option<String>,
+) -> Result<(), String> {
+    let staging = dir.join(format!("{id}.staging"));
+    let _ = fs::remove_dir_all(&staging);
+    fs::create_dir_all(&staging).map_err(|e| e.to_string())?;
+    let written = (|| -> Result<(), String> {
+        fs::write(staging.join(dataset_files::PPG_FILE), &pair.ppg_csv)
+            .map_err(|e| e.to_string())?;
+        fs::write(staging.join(dataset_files::IMU_FILE), &pair.imu_csv)
+            .map_err(|e| e.to_string())?;
+        let meta = Meta {
+            format_version: dataset_files::FORMAT_VERSION,
+            ppg_rows: pair.ppg_rows,
+            imu_rows: pair.imu_rows,
+            labels: pair.labels.clone(),
+            original_sha256,
+        };
+        fs::write(
+            staging.join(dataset_files::META_FILE),
+            serde_json::to_vec_pretty(&meta).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+        fs::rename(&staging, dir.join(id)).map_err(|e| e.to_string())
+    })();
+    if written.is_err() {
+        let _ = fs::remove_dir_all(&staging);
+    }
+    written
+}
+
+#[tauri::command]
+pub fn import_model_dataset_folder(
+    path: String,
+    app: AppHandle,
+    runtime: State<'_, ModelLabRuntime>,
+) -> Result<DatasetSummary, String> {
+    ingest_folder(&app, &runtime, std::path::Path::new(&path))
+}
+
+/// What happened to one recording when converting older recordings to the two-file format.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversionResult {
+    pub id: String,
+    pub original_filename: String,
+    /// `converted` or `failed`.
+    pub outcome: String,
+    pub message: String,
+}
+
+/// Converts every recording stored as a single file into a folder of two dense files, one at a time. The data is the same
+/// (a row with both sensors' values becomes a row in each file), and a recording keeps the identity models trained on it were
+/// sealed with. A recording is only replaced once its new folder is written and checked against the old file.
+#[tauri::command]
+pub fn convert_datasets_to_folders(
+    app: AppHandle,
+    runtime: State<'_, ModelLabRuntime>,
+) -> Result<Vec<ConversionResult>, String> {
+    let _guard = runtime
+        .lock
+        .lock()
+        .map_err(|_| "model lab lock was poisoned".to_string())?;
+    let dir = datasets_dir(&app)?;
+    let mut index = load_index(&app);
+    let mut results = Vec::new();
+    for entry in index.datasets.iter_mut().filter(|d| !d.two_files) {
+        let done = convert_one(&dir, &entry.id);
+        results.push(match done {
+            Ok(gaps) => {
+                entry.two_files = true;
+                entry.gaps = Some(gaps);
+                ConversionResult {
+                    id: entry.id.clone(),
+                    original_filename: entry.original_filename.clone(),
+                    outcome: "converted".into(),
+                    message: "now two dense files".into(),
+                }
+            }
+            Err(message) => ConversionResult {
+                id: entry.id.clone(),
+                original_filename: entry.original_filename.clone(),
+                outcome: "failed".into(),
+                message,
+            },
+        });
+    }
+    if results.iter().any(|r| r.outcome == "converted") {
+        write_index_atomic(&app, &index)?;
+        // Only now, with the index saying so, are the old files removed.
+        for result in results.iter().filter(|r| r.outcome == "converted") {
+            let _ = fs::remove_file(dir.join(format!("{}.csv", result.id)));
+        }
+    }
+    Ok(results)
+}
+
+/// Writes the folder for one single-file recording and checks it against the file; the file is left for the caller to remove.
+fn convert_one(dir: &std::path::Path, id: &str) -> Result<GapReport, String> {
+    let file = dir.join(format!("{id}.csv"));
+    let text = fs::read_to_string(&file).map_err(|e| format!("could not read the file: {e}"))?;
+    let original = model_lab_core::sha256_hex(text.as_bytes());
+    let pair = dataset_files::split_legacy(&text)?;
+    // Lossless by construction; this checks it: the rows that carried a pulse reading are the pulse file's, and the rows that
+    // carried a motion reading are the motion file's.
+    let (mut ppg_rows, mut imu_rows) = (0usize, 0usize);
+    for line in text
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#'))
+        .skip(1)
+    {
+        let fields: Vec<&str> = line.split(',').collect();
+        if fields.len() == 17 {
+            ppg_rows += usize::from(fields[2..5].iter().any(|v| !v.trim().is_empty()));
+            imu_rows += usize::from(fields[5..15].iter().any(|v| !v.trim().is_empty()));
+        }
+    }
+    if (ppg_rows, imu_rows) != (pair.ppg_rows, pair.imu_rows) {
+        return Err(format!(
+            "the split did not keep every row ({ppg_rows} pulse and {imu_rows} motion rows expected, {} and {} found)",
+            pair.ppg_rows, pair.imu_rows
+        ));
+    }
+    write_folder(dir, id, &pair, Some(original))?;
+    Ok(pair.gaps)
 }
 
 /// Every label on any imported recording.
@@ -470,9 +708,11 @@ pub fn delete_model_dataset(
     write_index_atomic(&app, &index)?;
 
     let dir = datasets_dir(&app)?;
-    let csv_path = dataset_csv_path(&dir, &id);
-    if csv_path.exists() {
-        fs::remove_file(&csv_path).map_err(|error| error.to_string())?;
+    let path = dataset_csv_path(&dir, &id);
+    if path.is_dir() {
+        fs::remove_dir_all(&path).map_err(|error| error.to_string())?;
+    } else if path.exists() {
+        fs::remove_file(&path).map_err(|error| error.to_string())?;
     }
     Ok(())
 }
@@ -590,6 +830,8 @@ mod tests {
             labels: vec!["idle".into(), "pinch_start".into()],
             row_count: 3,
             sequence: 1,
+            two_files: false,
+            gaps: None,
             source_recording_id: None,
         };
         assert_eq!(dataset.effective_labels(), vec!["idle", "pinch_start"]);
@@ -704,5 +946,88 @@ mod tests {
             [("a", 1), ("b", 2), ("d", 3)]
         );
         assert_eq!(index.next_sequence, 4);
+    }
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("model-lab-{name}-{}", Uuid::new_v4().simple()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    const LEGACY: &str = "# gesture-dataset-export: 1\n# label: pinch\ntimestamp_ns,sequence,ppg_green,ppg_red,ppg_ir,accel_x,accel_y,accel_z,gyro_x,gyro_y,gyro_z,quat_w,quat_x,quat_y,quat_z,contact_quality,label\n100,1,10,20,30,,,,,,,,,,,0,pinch\n120,2,,,,0.1,0.2,0.3,0.4,0.5,0.6,1,0,0,0,,pinch\n140,3,11,21,31,,,,,,,,,,,0,pinch\n";
+
+    #[test]
+    fn a_single_file_recording_is_converted_to_a_folder_that_keeps_its_identity_and_replaces_nothing_until_told()
+     {
+        let dir = temp_dir("convert");
+        let id = Uuid::new_v4().to_string();
+        let file = dir.join(format!("{id}.csv"));
+        fs::write(&file, LEGACY).unwrap();
+        let before_path = dataset_csv_path(&dir, &id);
+        assert_eq!(before_path, file);
+        let sealed = dataset_sha(&before_path).unwrap();
+
+        let gaps = convert_one(&dir, &id).unwrap();
+        assert_eq!((gaps.ppg.samples, gaps.imu.samples), (2, 1));
+        assert!(
+            file.exists(),
+            "the old file is only removed by the caller, once the index agrees"
+        );
+        let after = dataset_csv_path(&dir, &id);
+        assert_eq!(
+            after,
+            dir.join(&id),
+            "the folder is what the trainer is now given"
+        );
+        assert!(
+            after.join("ppg.csv").is_file()
+                && after.join("imu.csv").is_file()
+                && after.join("dataset.json").is_file()
+        );
+        assert_eq!(
+            dataset_sha(&after).unwrap(),
+            sealed,
+            "models trained on it stay sealed to the same data"
+        );
+        assert_eq!(
+            fs::read_to_string(after.join("ppg.csv"))
+                .unwrap()
+                .lines()
+                .last()
+                .unwrap(),
+            "140,3,11,21,31,0,pinch"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_folder_made_from_scratch_is_identified_by_its_two_files_and_found_by_its_id() {
+        let dir = temp_dir("fresh");
+        let id = Uuid::new_v4().to_string();
+        let pair = dataset_files::split_legacy(LEGACY).unwrap();
+        write_folder(&dir, &id, &pair, None).unwrap();
+        assert!(dataset_exists(&dir, &id) && dataset_csv_path(&dir, &id).is_dir());
+        assert_eq!(
+            dataset_sha(&dataset_csv_path(&dir, &id)).unwrap(),
+            dataset_files::pair_sha(&pair.ppg_csv, &pair.imu_csv)
+        );
+        assert!(
+            !dir.join(format!("{id}.staging")).exists(),
+            "no half-written folder is left"
+        );
+        assert!(already_holds(&dir, &id, &pair, None));
+        let other =
+            dataset_files::split_legacy(&LEGACY.replace(",10,20,30,", ",10,20,31,")).unwrap();
+        assert!(!already_holds(&dir, &id, &other, None));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_missing_dataset_has_no_path_that_exists() {
+        let dir = temp_dir("missing");
+        assert!(!dataset_exists(&dir, "nothing-here"));
+        assert!(dataset_sha(&dataset_csv_path(&dir, "nothing-here")).is_err());
+        let _ = fs::remove_dir_all(&dir);
     }
 }

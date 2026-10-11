@@ -35,7 +35,7 @@ use uuid::Uuid;
 
 use crate::label_runtime::LabelRuntimeHost;
 use crate::model_lab::{
-    DatasetSummary, MODEL_LAB_DIR_NAME, dataset_csv_path, datasets_dir, load_index,
+    DatasetSummary, MODEL_LAB_DIR_NAME, dataset_csv_path, dataset_sha, datasets_dir, load_index,
 };
 
 pub const LABEL_TRAINING_EVENT: &str = "label-training-event";
@@ -557,7 +557,7 @@ fn recordings_for(app: &AppHandle, request: &TrainRequest) -> Result<Checked, St
     let index = load_index(app);
     let dir = datasets_dir(app)?;
     check_request(request, &index.datasets, &|id| {
-        sha256_of_file(&dataset_csv_path(&dir, id))
+        dataset_sha(&dataset_csv_path(&dir, id))
     })
 }
 
@@ -1317,6 +1317,8 @@ mod tests {
             labels: labels.iter().map(ToString::to_string).collect(),
             row_count: 100,
             sequence: 0,
+            two_files: false,
+            gaps: None,
             source_recording_id: None,
         }
     }

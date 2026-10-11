@@ -186,11 +186,7 @@ pub async fn backfill_model_ranges(
     let data = datasets_dir(&app)?;
     let mut results = Vec::new();
     for job in work {
-        let sha_of = |id: &str| {
-            std::fs::read(dataset_csv_path(&data, id))
-                .map(|bytes| model_lab_core::sha256_hex(&bytes))
-                .map_err(|e| e.to_string())
-        };
+        let sha_of = |id: &str| crate::model_lab::dataset_sha(&dataset_csv_path(&data, id));
         if let Some(problem) = problem_with(&job, &sha_of) {
             results.push(BackfillResult {
                 model_id: job.model_id,

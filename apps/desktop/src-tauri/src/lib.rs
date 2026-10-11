@@ -11,6 +11,7 @@ mod actuators;
 mod automation;
 mod calibration;
 mod correction_rounds;
+mod dataset_files;
 mod design_results;
 mod fine_tune_plans;
 mod gesture_library;
@@ -223,6 +224,8 @@ pub fn run() {
             settings::reset_settings,
             head_pose::get_head_tracker_provider,
             model_lab::import_model_dataset,
+            model_lab::import_model_dataset_folder,
+            model_lab::convert_datasets_to_folders,
             model_lab::list_model_datasets,
             model_lab::delete_model_dataset,
             recording_bundle::save_recording_bundle,

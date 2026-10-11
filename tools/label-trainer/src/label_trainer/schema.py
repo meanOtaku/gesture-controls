@@ -29,6 +29,17 @@ HEADER_COLUMNS: tuple[str, ...] = (
     "label",
 )
 
+# A recording can also be a folder of two dense files, one for each sensor, with a row only where that sensor had a sample
+# (see `csv_io.load_recording`). The columns are the single file's, without the other sensor's.
+PPG_FILE = "ppg.csv"
+IMU_FILE = "imu.csv"
+META_FILE = "dataset.json"
+PPG_FILE_COLUMNS: tuple[str, ...] = ("timestamp_ns", "sequence", "ppg_green", "ppg_red", "ppg_ir", "contact_quality", "label")
+IMU_FILE_COLUMNS: tuple[str, ...] = (
+    "timestamp_ns", "sequence", "accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z",
+    "quat_w", "quat_x", "quat_y", "quat_z", "label",
+)
+
 TIMESTAMP_COLUMN = "timestamp_ns"
 SEQUENCE_COLUMN = "sequence"
 LABEL_COLUMN = "label"

@@ -17,9 +17,13 @@ import numpy as np
 
 from .schema import (
     HEADER_COLUMNS,
+    IMU_FILE,
+    IMU_FILE_COLUMNS,
     LABEL_COLUMN,
     METADATA_COMMENT_PREFIX,
     NUMERIC_COLUMNS,
+    PPG_FILE,
+    PPG_FILE_COLUMNS,
     TIMESTAMP_COLUMN,
 )
 
@@ -103,9 +107,51 @@ def _parse_rows_fast(
         return None
 
 
+def _file_rows(path: Path, expected: tuple[str, ...]) -> list[tuple[int, int, list[str]]]:
+    """The data rows of one of a folder's files as (timestamp, which file, fields), after checking its header."""
+    if not path.is_file():
+        raise CsvFormatError(f"{path.parent}: the folder has no {path.name}: a recording folder holds {PPG_FILE} and {IMU_FILE}")
+    lines = path.read_text(encoding="utf-8").splitlines()
+    body, comments = _strip_leading_comments(lines)
+    if not body:
+        raise CsvFormatError(f"{path}: no header found")
+    header = next(csv.reader([body[0]]))
+    if tuple(header) != expected:
+        raise CsvFormatError(f"{path}: header is not the one this file must have.\n  expected: {','.join(expected)}\n  actual:   {body[0]}")
+    which = 0 if path.name == PPG_FILE else 1
+    rows = []
+    for offset, fields in enumerate(csv.reader(body[1:])):
+        if len(fields) != len(expected):
+            raise CsvFormatError(f"{path}:{comments + 2 + offset}: expected {len(expected)} columns, got {len(fields)}")
+        try:
+            stamp = int(fields[0])
+        except ValueError as exc:
+            raise CsvFormatError(f"{path}:{comments + 2 + offset}: malformed {TIMESTAMP_COLUMN!r} value {fields[0]!r}") from exc
+        rows.append((stamp, which, fields))
+    return rows
+
+
+def _merge_folder(folder: Path) -> str:
+    """A recording folder (`ppg.csv` and `imu.csv`) as the text of the single-file dataset it stands for: every row of both,
+    in timestamp order (a tie puts the pulse row first), each with the other sensor's columns empty."""
+    ppg = _file_rows(folder / PPG_FILE, PPG_FILE_COLUMNS)
+    imu = _file_rows(folder / IMU_FILE, IMU_FILE_COLUMNS)
+    for rows, name in ((ppg, PPG_FILE), (imu, IMU_FILE)):
+        for before, after in zip(rows, rows[1:]):
+            if after[0] < before[0]:
+                raise CsvFormatError(f"{folder / name}: out-of-order timestamp {after[0]} follows {before[0]}")
+    merged: list[tuple[int, int, str]] = []
+    for stamp, _, f in ppg:
+        merged.append((stamp, 0, ",".join([f[0], f[1], f[2], f[3], f[4], *([""] * 10), f[5], f[6]])))
+    for stamp, _, f in imu:
+        merged.append((stamp, 1, ",".join([f[0], f[1], "", "", "", *f[2:12], "", f[12]])))
+    merged.sort(key=lambda row: (row[0], row[1]))
+    return "\n".join([",".join(HEADER_COLUMNS), *(line for _, _, line in merged)]) + "\n"
+
+
 def load_recording(path: str | Path) -> Recording:
     path = Path(path)
-    text = path.read_text(encoding="utf-8")
+    text = _merge_folder(path) if path.is_dir() else path.read_text(encoding="utf-8")
     all_lines = text.splitlines()
     if not all_lines:
         raise CsvFormatError(f"{path}: empty file")
