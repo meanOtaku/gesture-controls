@@ -22,6 +22,17 @@ export interface LabelRuntimeStatus {
   registryError: string | null;
   activeDetections: string[];
   lastScores: Record<string, number>;
+  /** Models being given inputs far outside what they were trained on (absent from an older desktop). */
+  inputWarnings?: InputWarning[];
+}
+
+/** One model whose live inputs are unlike its training ones (see `InputWarningView` in label_runtime.rs). */
+export interface InputWarning {
+  label: string;
+  modelId: string;
+  /** The share of the last few seconds' windows that were unfamiliar, 0 to 1. */
+  unfamiliarShare: number;
+  worst: { name: string; value: number; low: number; high: number }[];
 }
 
 export interface ImportedLabelModel {

@@ -167,6 +167,49 @@ pub struct LabelRuntimeStatus {
     /// Labels detected right now that are cleared to act (Live only).
     pub active_detections: Vec<String>,
     pub last_scores: BTreeMap<String, f64>,
+    /// Models being given inputs far outside what they were trained on, so their answers mean little.
+    pub input_warnings: Vec<InputWarningView>,
+}
+
+/// One model whose live inputs are unlike its training ones (see `label_inference::InputWarning`).
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct InputWarningView {
+    pub label: String,
+    pub model_id: String,
+    /// The share of the last few seconds' windows that were unfamiliar, from 0 to 1.
+    pub unfamiliar_share: f64,
+    /// The inputs furthest outside their training range, most first.
+    pub worst: Vec<OutsideInputView>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct OutsideInputView {
+    pub name: String,
+    pub value: f64,
+    pub low: f64,
+    pub high: f64,
+}
+
+impl From<&label_inference::InputWarning> for InputWarningView {
+    fn from(warning: &label_inference::InputWarning) -> Self {
+        Self {
+            label: warning.label.to_string(),
+            model_id: warning.model_version.to_string(),
+            unfamiliar_share: warning.unfamiliar_share,
+            worst: warning
+                .worst
+                .iter()
+                .map(|w| OutsideInputView {
+                    name: w.name.clone(),
+                    value: w.value,
+                    low: w.low,
+                    high: w.high,
+                })
+                .collect(),
+        }
+    }
 }
 
 /// Decides when the recipe engine needs to hear from the label runtime. The runtime reports on every watch sample (tens of
@@ -873,6 +916,9 @@ impl LabelRuntimeHost {
 /// Updates what the host remembers from one runtime output: the latest scores, and which detections are active and
 /// cleared to be acted on (only what the runtime marked actionable, so Monitor never adds one).
 fn record(state: &mut HostState, output: &RuntimeOutput) {
+    if let Some(warnings) = &output.input_warnings {
+        state.status.input_warnings = warnings.iter().map(InputWarningView::from).collect();
+    }
     for score in &output.scores {
         state
             .status
@@ -1246,6 +1292,42 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_status_shows_the_models_given_unfamiliar_inputs_and_forgets_them_when_they_stop() {
+        let mut state = HostState::default();
+        let warning = label_inference::InputWarning {
+            label: LabelId::new("pinch").unwrap(),
+            model_version: ModelVersionId::new("pinch-v1").unwrap(),
+            unfamiliar_share: 0.9,
+            worst: vec![label_inference::OutsideInput {
+                name: "ppg_green".into(),
+                value: 5_000.0,
+                low: 95_000.0,
+                high: 214_000.0,
+                excess: 0.75,
+            }],
+        };
+        let raised = RuntimeOutput {
+            input_warnings: Some(vec![warning]),
+            ..RuntimeOutput::default()
+        };
+        record(&mut state, &raised);
+        let shown = &state.status.input_warnings;
+        assert_eq!((shown.len(), shown[0].model_id.as_str()), (1, "pinch-v1"));
+        assert_eq!(shown[0].worst[0].name, "ppg_green");
+        // An output that says nothing about warnings leaves them as they were; an empty list takes them down.
+        record(&mut state, &RuntimeOutput::default());
+        assert_eq!(state.status.input_warnings.len(), 1);
+        record(
+            &mut state,
+            &RuntimeOutput {
+                input_warnings: Some(Vec::new()),
+                ..RuntimeOutput::default()
+            },
+        );
+        assert!(state.status.input_warnings.is_empty());
+    }
+
+    #[test]
     fn what_a_compared_model_detects_is_reported_for_display_and_nothing_else_is_made_of_it() {
         let nothing = RuntimeOutput::default();
         assert!(shadow_report("snap-v2", "snap", &nothing).is_none());
@@ -1406,6 +1488,7 @@ mod tests {
             confidence: c,
             timestamp_ns: 5,
             received_ns: 6,
+            input_check: None,
         };
         record(
             &mut state,

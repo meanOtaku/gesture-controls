@@ -299,6 +299,12 @@ Each label shows its recordings and its model's furthest state (No model, or Mod
 
 Labels an older version shipped (idle, walking, typing and so on) are removed on the first start of this version unless a recording or model still uses them; those that are used stay as ordinary labels you can archive.
 
+#### Warning: a model is seeing values it was never trained on
+
+A trained model records, for each input, the range that input usually had in its training windows (the 1st to the 99th percentile). While the model runs, each window's inputs are compared with that range, and an input counts as outside when it is more than a quarter of the range's width beyond either end. If, over the last three seconds, most windows (70% or more, once there are at least six) have at least half of their inputs outside, an alert appears under the label in **Label models** and on the **Gestures** tab: which model, how much of the time, the inputs furthest outside with their live value and their training range, and the usual cause (the watch sits differently, or the sensor's level has drifted since the training recordings). It goes away when most windows are back inside. A model that is being given inputs it never trained on can fire on everything or on nothing, so its score means little until this is fixed: train on recordings made now, or use inputs that do not depend on the absolute level.
+
+Only models trained after this existed carry a range, so an older model shows no warning (train it again to get one). A model that takes the window's own level away (the convolutional method with **Only how things change**) records none, because the level is nothing it uses. A model run beside the active one for comparison is not checked. The check never changes a model's answer or what a recipe does: it only says that the answer is not to be trusted.
+
 #### The Network lab
 
 The **Network lab** tab (under Model Lab in the sidebar) is the workbench for the neural networks. It has these parts:

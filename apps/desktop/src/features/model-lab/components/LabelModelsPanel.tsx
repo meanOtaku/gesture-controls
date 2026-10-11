@@ -22,6 +22,7 @@ import {
 } from "../labelModels";
 import type { DatasetLabel, DatasetSummary } from "../types";
 import { FineTuneModel } from "./FineTuneModel";
+import { InputWarningNote } from "./InputWarningNote";
 
 const STATE_LABEL: Record<LabelModelState, string> = {
   draft: "Draft",
@@ -197,6 +198,7 @@ export function LabelModelsPanel({
                     {detected && <Badge>Detected</Badge>}
                     {score !== undefined && <small className="text-muted-foreground">score {(score * 100).toFixed(0)}%</small>}
                   </div>
+                  {(status?.inputWarnings ?? []).filter((w) => w.label === group.label).map((w) => <InputWarningNote key={w.modelId} warning={w} />)}
                   <ul className="flex flex-col gap-2" aria-label={`${group.label} models`}>
                     {group.models.map((model) => (
                       <li key={model.id} className="recipe-item">

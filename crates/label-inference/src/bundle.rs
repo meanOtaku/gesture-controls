@@ -122,6 +122,19 @@ pub struct InputSpec {
     /// out as one flat row (`channels x steps` numbers, channel after channel) that the model folds back into rows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grid: Option<GridSpec>,
+    /// The values each input usually takes in the windows the model was trained on, when the trainer recorded them: one low
+    /// and one high per listed input (per channel for a grid, over all its steps). Lets the app tell when live data is
+    /// unlike anything the model trained on. Absent for a model trained before this was kept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub training_range: Option<TrainingRange>,
+}
+
+/// See [`InputSpec::training_range`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TrainingRange {
+    pub low: Vec<f64>,
+    pub high: Vec<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -381,6 +394,21 @@ pub fn validate_bundle(
         && manifest.input.features.iter().any(|f| is_spike_name(f))
     {
         return Err(BundleError::SpikeMethodMissing);
+    }
+    if let Some(usual) = &manifest.input.training_range {
+        let n = manifest.input.features.len();
+        let sound = usual.low.len() == n
+            && usual.high.len() == n
+            && usual
+                .low
+                .iter()
+                .zip(&usual.high)
+                .all(|(low, high)| low.is_finite() && high.is_finite() && low <= high);
+        if !sound {
+            return Err(BundleError::ContractMismatch(format!(
+                "the training range must give a finite low and high, low not above high, for each of the {n} inputs"
+            )));
+        }
     }
     if manifest.input.dtype != "float32" || manifest.output.dtype != "float32" {
         return Err(BundleError::ContractMismatch(
@@ -758,6 +786,41 @@ pub(crate) mod tests {
                 ),
                 "{preprocessing}"
             );
+        }
+    }
+
+    #[test]
+    fn a_training_range_must_give_a_sound_low_and_high_for_every_input() {
+        let n = {
+            let dir = copy_fixture();
+            validate_bundle(dir.path(), None)
+                .unwrap()
+                .manifest
+                .input
+                .features
+                .len()
+        };
+        let dir = copy_fixture();
+        edit_manifest(dir.path(), |m| {
+            m["input"]["trainingRange"] =
+                serde_json::json!({"low": vec![0.0; n], "high": vec![1.0; n]});
+        });
+        assert!(
+            validate_bundle(dir.path(), None)
+                .unwrap()
+                .manifest
+                .input
+                .training_range
+                .is_some()
+        );
+        for range in [
+            serde_json::json!({"low": vec![0.0; n - 1], "high": vec![1.0; n - 1]}),
+            serde_json::json!({"low": vec![2.0; n], "high": vec![1.0; n]}),
+            serde_json::json!({"low": vec![0.0; n], "high": vec![1.0; n], "extra": 1}),
+        ] {
+            let dir = copy_fixture();
+            edit_manifest(dir.path(), |m| m["input"]["trainingRange"] = range.clone());
+            assert!(validate_bundle(dir.path(), None).is_err(), "{range}");
         }
     }
 

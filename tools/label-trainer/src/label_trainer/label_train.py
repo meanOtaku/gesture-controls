@@ -562,7 +562,35 @@ def framework_of(spec: Spec) -> dict[str, str]:
     return {"name": "scikit-learn", "version": sklearn.__version__}
 
 
-def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics: dict[str, Any]) -> str:
+# The range of values an input usually takes in the training windows: from the 1st to the 99th percentile. A live window
+# whose inputs are far outside it is something this model has never seen, so its answer means little.
+RANGE_LOW_PERCENT = 1
+RANGE_HIGH_PERCENT = 99
+RANGE_MIN_WINDOWS = 20
+
+
+def training_range(spec: Spec, x_train: np.ndarray) -> dict[str, list[float]] | None:
+    """Per input (per column, for a model that reads columns over steps), the usual low and high of its value in the training
+    windows. None when there is too little to say, or when the model takes the window's own level away (the level is then
+    nothing the model uses)."""
+    if x_train.shape[0] < RANGE_MIN_WINDOWS:
+        return None
+    if spec.backend == "cnn1d" and spec.movement_only:
+        return None
+    if reads_grid(spec):
+        channels = len(spec.features)
+        values = x_train.reshape(x_train.shape[0], channels, spec.grid_steps)  # channel after channel, as the model reads it
+        columns = [values[:, index, :].ravel() for index in range(channels)]
+    else:
+        columns = [x_train[:, index] for index in range(x_train.shape[1])]
+    round_ = lambda value: float(f"{value:.8g}")  # noqa: E731
+    return {
+        "low": [round_(np.percentile(column, RANGE_LOW_PERCENT)) for column in columns],
+        "high": [round_(np.percentile(column, RANGE_HIGH_PERCENT)) for column in columns],
+    }
+
+
+def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics: dict[str, Any], x_train: np.ndarray | None = None) -> str:
     bundle = out / "bundle"
     bundle.mkdir(parents=True, exist_ok=True)
     (bundle / "model.onnx").write_bytes(model_bytes)
@@ -615,6 +643,9 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
             "parameters": parameter_count(spec.network, network_inputs(spec), spec.backend) if spec.backend in ("mlp", "torch-mlp", "cnn1d") else None,
         },
     }
+    usual = training_range(spec, x_train) if x_train is not None else None
+    if usual is not None:
+        manifest["input"]["trainingRange"] = usual
     (bundle / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return sha
 
@@ -719,7 +750,7 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
         (out / "parity.json").write_text(json.dumps({"maxAbsDifference": parity, "tolerance": PARITY_TOLERANCE, "windows": int(x_eval.shape[0])}, indent=2) + "\n")
         if parity > PARITY_TOLERANCE:
             raise TrainingRefused(f"the exported ONNX model differs from the trained one by {parity:.4f} (the limit is {PARITY_TOLERANCE}), so it is not shipped")
-        sha = write_bundle(spec, out, scratch.read_bytes(), opset, metrics)
+        sha = write_bundle(spec, out, scratch.read_bytes(), opset, metrics, x_train)
         research = run_research_checks(spec) if spec.research else None
         if edit_note is not None:
             edit_note["after"] = metrics

@@ -17,7 +17,7 @@ use pinch_inference::{
 };
 use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
 
-use crate::model::LoadedModel;
+use crate::model::{InputCheck, LoadedModel};
 
 const NS_PER_MS: u64 = 1_000_000;
 const MAX_BUFFERED_SAMPLES: usize = 20_000;
@@ -32,6 +32,8 @@ pub struct LabelScore {
     pub timestamp_ns: u64,
     /// When the desktop scored it, on the desktop's receive clock.
     pub received_ns: u64,
+    /// How this window's inputs compare with what the model was trained on, when the model's manifest says what that was.
+    pub input_check: Option<InputCheck>,
 }
 
 /// Why a window was not scored. Every one of these ends the label's detection.
@@ -481,23 +483,22 @@ impl LabelPipeline {
             contact_quality_mean,
             baseline,
         };
-        let confidence = match &model.grid {
+        let selected = match &model.grid {
             // A convolutional model reads the window itself, as a grid of channels over time.
-            Some(grid) => model.predict_input(build_grid(
-                &window,
-                &grid.channels,
-                grid.steps,
-                model.spike_method,
-            )),
-            None => model.predict(&extract_features_with(&window, model.spike_method)),
-        }
-        .map_err(|e| Rejection::Model(e.to_string()))?;
+            Some(grid) => build_grid(&window, &grid.channels, grid.steps, model.spike_method),
+            None => model.select(&extract_features_with(&window, model.spike_method)),
+        };
+        let input_check = model.check_input(&selected);
+        let confidence = model
+            .predict_input(selected)
+            .map_err(|e| Rejection::Model(e.to_string()))?;
         Ok(Some(LabelScore {
             label: model.label.clone(),
             model_version: model.version_id.clone(),
             confidence,
             timestamp_ns: primary_raw.unwrap_or(0),
             received_ns: now_ns,
+            input_check,
         }))
     }
 }

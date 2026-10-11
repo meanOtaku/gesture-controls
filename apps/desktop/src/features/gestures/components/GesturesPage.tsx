@@ -9,6 +9,7 @@ import { ModelAgreementSection } from "../../gestureLibrary/ModelAgreementSectio
 import { WRIST_GESTURES, recipesUsingGesture, recipesUsingLabel, recipesUsingStem, type WristGesture } from "../gestureCatalog";
 import { useFlash } from "../useFlash";
 import { useLabelDetections } from "../useLabelDetections";
+import { InputWarningNote } from "../../model-lab/components/InputWarningNote";
 
 /** The latest recognition of a gesture family: which variant, and how many so far. */
 export type LastRecognised = { id: string; count: number } | null;
@@ -178,6 +179,7 @@ export function GesturesPage({ heuristics, watchConnected, stemDown, shakeCount,
               <AlertDescription>The model runtime is Off, so nothing is being scored. Set it to Monitor in Model Lab to try these without anything acting.</AlertDescription>
             </Alert>
           )}
+          {(status?.inputWarnings ?? []).map((warning) => <InputWarningNote key={warning.modelId} warning={warning} />)}
           {loaded.length === 0 ? (
             <p className="hint">No model is loaded. Import one in Model Lab, then approve and activate it, and it will show up here.</p>
           ) : (

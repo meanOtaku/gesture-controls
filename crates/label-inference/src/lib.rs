@@ -20,7 +20,9 @@ mod pipeline;
 mod runtime;
 mod training;
 
-pub use bundle::{BASELINE_CHOICES_MS, BundleError, Manifest, ValidatedBundle, validate_bundle};
+pub use bundle::{
+    BASELINE_CHOICES_MS, BundleError, Manifest, TrainingRange, ValidatedBundle, validate_bundle,
+};
 pub use detection::{
     ClearReason, Conflict, DetectionEvent, DetectionHub, ExclusivityGroup, TemporalDetector,
 };
@@ -31,10 +33,10 @@ pub use import::{
 pub use loader::{
     ModelLoadFailure, check_loadable, load_active_models, load_version, removable_model_dir,
 };
-pub use model::{GridPlan, LoadedModel, ModelError};
+pub use model::{GridPlan, InputCheck, LoadedModel, ModelError, OutsideInput, RANGE_MARGIN};
 pub use pinch_inference::{GridChannel, MAX_GRID_STEPS, MIN_GRID_STEPS, SpikeMethod};
 pub use pipeline::{LabelPipeline, LabelScore, Rejection, WindowRejection};
-pub use runtime::{LabelRuntime, RuntimeMode, RuntimeOutput};
+pub use runtime::{InputWarning, LabelRuntime, RuntimeMode, RuntimeOutput};
 pub use training::{
     BegunRun, PPG_CHANNELS, RecordingInfo, RunPlan, TrainingError, begin_run,
     canonical_features_for, canonical_features_with_channels, complete_run, evaluation_only_run,

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::bundle::TrainingRange;
 use model_lab_core::{
     InputContract, LabelId, LifecycleState, ModelVersion, ModelVersionId, QualityRules, Thresholds,
 };
@@ -39,6 +40,34 @@ pub struct GridPlan {
     pub steps: usize,
 }
 
+/// How far past its training range an input may be before it counts as outside, as a share of that range's width.
+pub const RANGE_MARGIN: f64 = 0.25;
+/// The most inputs named when a window is unlike the training ones.
+const WORST_INPUTS: usize = 3;
+
+/// One input of a live window that is outside what the model was trained on.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OutsideInput {
+    pub name: String,
+    pub value: f64,
+    /// The usual low and high of this input in the training windows.
+    pub low: f64,
+    pub high: f64,
+    /// How far past the nearer end it is, as a share of the range's width (above `RANGE_MARGIN` it counts as outside).
+    pub excess: f64,
+}
+
+/// How a live window's inputs compare with the windows the model was trained on.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InputCheck {
+    /// Inputs that could be judged (their training range had some width).
+    pub judged: usize,
+    /// Of those, the ones further outside their range than the margin allows.
+    pub outside: usize,
+    /// The furthest outside, most first.
+    pub worst: Vec<OutsideInput>,
+}
+
 pub struct LoadedModel {
     pub version_id: ModelVersionId,
     pub label: LabelId,
@@ -54,6 +83,11 @@ pub struct LoadedModel {
     pub grid: Option<GridPlan>,
     /// Positions of this model's features within the canonical vector, in the order the model expects them.
     feature_indices: Vec<usize>,
+    /// The inputs' names as the manifest lists them, and (for a grid) how many steps each channel has.
+    input_names: Vec<String>,
+    grid_steps: usize,
+    /// What each input usually is in the training windows, when the manifest says.
+    pub training_range: Option<TrainingRange>,
     plan: Arc<TypedRunnableModel<TypedModel>>,
     output_index: usize,
     positive_index: usize,
@@ -105,16 +139,76 @@ impl LoadedModel {
             baseline_ms: bundle.manifest.baseline_ms(),
             grid,
             feature_indices,
+            input_names: bundle.manifest.input.features.clone(),
+            grid_steps: bundle
+                .manifest
+                .input
+                .grid
+                .as_ref()
+                .map_or(0, |g| g.steps as usize),
+            training_range: bundle.manifest.input.training_range.clone(),
             output_index: bundle.output_index,
             positive_index: bundle.manifest.output.positive_index,
             plan: bundle.plan,
         })
     }
 
+    /// The numbers this model reads out of the canonical features of one window, in its own order.
+    pub fn select(&self, canonical: &[f32; FEATURE_COUNT]) -> Vec<f32> {
+        self.feature_indices.iter().map(|&i| canonical[i]).collect()
+    }
+
     /// The probability that this model's label is present, from the canonical features of one window.
     pub fn predict(&self, canonical: &[f32; FEATURE_COUNT]) -> Result<f64, ModelError> {
-        let selected: Vec<f32> = self.feature_indices.iter().map(|&i| canonical[i]).collect();
-        self.predict_input(selected)
+        self.predict_input(self.select(canonical))
+    }
+
+    /// How the numbers this model is about to read compare with the windows it was trained on: `None` when the trainer
+    /// recorded no range (an older model, or one that takes the window's own level away). A grid's channel is judged by its
+    /// average over the steps, against the range of that channel's values.
+    pub fn check_input(&self, input: &[f32]) -> Option<InputCheck> {
+        let range = self.training_range.as_ref()?;
+        let names = self.input_names.len();
+        let steps = self.grid_steps.max(1);
+        if input.len() != names * steps || range.low.len() != names {
+            return None;
+        }
+        let mut judged = 0;
+        let mut outside = Vec::new();
+        for (index, name) in self.input_names.iter().enumerate() {
+            let (low, high) = (range.low[index], range.high[index]);
+            let width = high - low;
+            if width <= 0.0 || width.is_nan() {
+                continue; // it never varied in training: nothing to compare with
+            }
+            judged += 1;
+            let slice = &input[index * steps..(index + 1) * steps];
+            let value = slice.iter().map(|v| f64::from(*v)).sum::<f64>() / slice.len() as f64;
+            let excess = if value < low {
+                (low - value) / width
+            } else if value > high {
+                (value - high) / width
+            } else {
+                0.0
+            };
+            if excess > RANGE_MARGIN {
+                outside.push(OutsideInput {
+                    name: name.clone(),
+                    value,
+                    low,
+                    high,
+                    excess,
+                });
+            }
+        }
+        let count = outside.len();
+        outside.sort_by(|a, b| b.excess.total_cmp(&a.excess));
+        outside.truncate(WORST_INPUTS);
+        Some(InputCheck {
+            judged,
+            outside: count,
+            worst: outside,
+        })
     }
 
     /// The probability that this model's label is present, from exactly the numbers the model reads: the selected
@@ -191,6 +285,62 @@ pub(crate) mod tests {
             f[FEATURE_NAMES.iter().position(|n| *n == name).unwrap()] = level;
         }
         f
+    }
+
+    #[test]
+    fn inputs_far_outside_the_training_range_are_counted_and_the_furthest_named() {
+        let mut model = loaded();
+        let n = model.input.features.len();
+        let quiet = vec![0.2f32; n];
+        assert!(
+            model.check_input(&quiet).is_none(),
+            "no range recorded, nothing to say"
+        );
+
+        let mut low = vec![0.0; n];
+        let mut high = vec![0.5; n];
+        low[0] = 0.0;
+        high[0] = 0.0; // this one never varied in training: it cannot be judged
+        model.training_range = Some(TrainingRange { low, high });
+        let at_home = model.check_input(&quiet).unwrap();
+        assert_eq!((at_home.judged, at_home.outside), (n - 1, 0));
+        // A little past the end is allowed (up to a quarter of the range's width), a lot is not.
+        let mut edge = quiet.clone();
+        edge[1] = 0.5 + 0.1; // 20% of the width past the high end
+        assert_eq!(model.check_input(&edge).unwrap().outside, 0);
+        let mut far = quiet.clone();
+        far[1] = 0.5 + 0.2; // 40% past
+        far[2] = -3.0; // six widths below
+        let found = model.check_input(&far).unwrap();
+        assert_eq!(found.outside, 2);
+        assert_eq!(found.worst[0].name, model.input_names[2]);
+        assert!((found.worst[0].excess - 6.0).abs() < 1e-6 && found.worst[0].value == -3.0);
+        // The wrong number of values cannot be compared.
+        assert!(model.check_input(&quiet[..n - 1]).is_none());
+    }
+
+    #[test]
+    fn a_grid_channel_is_judged_by_its_average_over_the_steps() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/trained_cnn_bundle");
+        let bundle = validate_bundle(&dir, Some(&LabelId::new("snap").unwrap())).unwrap();
+        let version = active_version(&bundle);
+        let mut model = LoadedModel::load(bundle, &version).unwrap();
+        let channels = model.input.features.len();
+        let steps = model.grid.as_ref().unwrap().steps;
+        model.training_range = Some(TrainingRange {
+            low: vec![-1.0; channels],
+            high: vec![1.0; channels],
+        });
+        let mut flat = vec![0.0f32; channels * steps];
+        assert_eq!(model.check_input(&flat).unwrap().outside, 0);
+        // One channel's steps all far above its range: that channel, and only it, is outside.
+        for step in 0..steps {
+            flat[steps + step] = 5.0;
+        }
+        let found = model.check_input(&flat).unwrap();
+        assert_eq!((found.judged, found.outside), (channels, 1));
+        assert_eq!(found.worst[0].name, model.input_names[1]);
     }
 
     #[test]

@@ -7,13 +7,13 @@
 //! * A stale or bad stream, a failed window, a model error, a mode change or a lost runtime clears the affected
 //!   labels and reports a falling edge for each, so anything depending on them lets go.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 
-use model_lab_core::{InferenceMode, LabelId, StreamSource};
+use model_lab_core::{InferenceMode, LabelId, ModelVersionId, StreamSource};
 use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
 
 use crate::detection::{ClearReason, Conflict, DetectionEvent, DetectionHub, ExclusivityGroup};
-use crate::model::LoadedModel;
+use crate::model::{LoadedModel, OutsideInput};
 use crate::pipeline::{LabelPipeline, LabelScore, Rejection, WindowRejection};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,6 +33,72 @@ impl From<InferenceMode> for RuntimeMode {
     }
 }
 
+/// How long a stretch of windows is judged together when deciding whether a model is seeing something it never trained on.
+const FAMILIARITY_SPAN_NS: u64 = 3_000_000_000;
+/// Fewer windows than this in that stretch and nothing is said.
+const FAMILIARITY_MIN_WINDOWS: usize = 6;
+/// The warning goes up when at least this share of the stretch's windows are unfamiliar, and comes down at or below the other.
+const WARN_SHARE: f64 = 0.7;
+const CLEAR_SHARE: f64 = 0.3;
+/// While a warning stands it is re-sent this often, so the numbers in it stay current.
+const WARNING_REFRESH_NS: u64 = 1_000_000_000;
+
+/// A model that is being given inputs far outside what it was trained on: its answers mean little. Raised when most
+/// recent windows have at least half of their inputs well outside the training range, lowered when most are back.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InputWarning {
+    pub label: LabelId,
+    pub model_version: ModelVersionId,
+    /// The share of the last few seconds' windows that were unfamiliar.
+    pub unfamiliar_share: f64,
+    /// The inputs furthest outside their training range in the latest unfamiliar window.
+    pub worst: Vec<OutsideInput>,
+}
+
+#[derive(Debug, Default)]
+struct Familiarity {
+    version: Option<ModelVersionId>,
+    /// (when, whether the window was unfamiliar) for the last few seconds.
+    recent: VecDeque<(u64, bool)>,
+    raised: bool,
+    worst: Vec<OutsideInput>,
+}
+
+impl Familiarity {
+    fn share(&self) -> f64 {
+        if self.recent.is_empty() {
+            return 0.0;
+        }
+        self.recent
+            .iter()
+            .filter(|(_, unfamiliar)| *unfamiliar)
+            .count() as f64
+            / self.recent.len() as f64
+    }
+
+    fn see(&mut self, now_ns: u64, unfamiliar: bool, worst: &[OutsideInput]) {
+        self.recent.push_back((now_ns, unfamiliar));
+        while self
+            .recent
+            .front()
+            .is_some_and(|(at, _)| now_ns.saturating_sub(*at) > FAMILIARITY_SPAN_NS)
+        {
+            self.recent.pop_front();
+        }
+        if unfamiliar {
+            self.worst = worst.to_vec();
+        }
+        if self.recent.len() >= FAMILIARITY_MIN_WINDOWS {
+            let share = self.share();
+            if !self.raised && share >= WARN_SHARE {
+                self.raised = true;
+            } else if self.raised && share <= CLEAR_SHARE {
+                self.raised = false;
+            }
+        }
+    }
+}
+
 #[derive(Debug, Default, PartialEq)]
 pub struct RuntimeOutput {
     pub scores: Vec<LabelScore>,
@@ -42,6 +108,9 @@ pub struct RuntimeOutput {
     pub conflicts: Vec<Conflict>,
     /// What may be acted on: in Live everything, otherwise only falling edges (releasing is always safe).
     pub actionable: Vec<DetectionEvent>,
+    /// Every model now being given inputs unlike its training ones; present only when that changed (a warning went up or
+    /// down) or its numbers are due a refresh, and empty when none does.
+    pub input_warnings: Option<Vec<InputWarning>>,
 }
 
 pub struct LabelRuntime {
@@ -49,6 +118,10 @@ pub struct LabelRuntime {
     pipeline: LabelPipeline,
     hub: DetectionHub,
     mode: RuntimeMode,
+    familiarity: BTreeMap<LabelId, Familiarity>,
+    /// What was last sent as the warnings, and when.
+    warned: Vec<InputWarning>,
+    warned_at_ns: u64,
 }
 
 impl Default for LabelRuntime {
@@ -58,6 +131,9 @@ impl Default for LabelRuntime {
             pipeline: LabelPipeline::default(),
             hub: DetectionHub::default(),
             mode: RuntimeMode::Off,
+            familiarity: BTreeMap::new(),
+            warned: Vec::new(),
+            warned_at_ns: 0,
         }
     }
 }
@@ -91,8 +167,45 @@ impl LabelRuntime {
         RuntimeOutput {
             actionable: events.clone(),
             events,
+            input_warnings: self.warnings_changed(0, false),
             ..RuntimeOutput::default()
         }
+    }
+
+    /// The warnings standing now.
+    fn standing_warnings(&self) -> Vec<InputWarning> {
+        self.familiarity
+            .iter()
+            .filter(|(_, f)| f.raised)
+            .filter_map(|(label, f)| {
+                Some(InputWarning {
+                    label: label.clone(),
+                    model_version: f.version.clone()?,
+                    unfamiliar_share: f.share(),
+                    worst: f.worst.clone(),
+                })
+            })
+            .collect()
+    }
+
+    /// The standing warnings if they differ from what was last sent (a warning went up or down), or, with `refresh`, if it has
+    /// been a while since they were sent.
+    fn warnings_changed(&mut self, now_ns: u64, refresh: bool) -> Option<Vec<InputWarning>> {
+        let now = self.standing_warnings();
+        let same_set = now.len() == self.warned.len()
+            && now
+                .iter()
+                .zip(&self.warned)
+                .all(|(a, b)| a.label == b.label && a.model_version == b.model_version);
+        let due = refresh
+            && !now.is_empty()
+            && now_ns.saturating_sub(self.warned_at_ns) >= WARNING_REFRESH_NS;
+        if same_set && !due {
+            return None;
+        }
+        self.warned.clone_from(&now);
+        self.warned_at_ns = now_ns;
+        Some(now)
     }
 
     /// Changes the mode. Any change ends every detection, so a mode downgrade can never leave something held.
@@ -102,6 +215,7 @@ impl LabelRuntime {
         }
         self.mode = mode;
         self.pipeline.reset();
+        self.familiarity.clear();
         let events = self
             .hub
             .clear_all(&ClearReason::Runtime(format!("mode changed to {mode:?}")));
@@ -131,6 +245,11 @@ impl LabelRuntime {
                 self.hub.track(label.clone(), new.thresholds);
             }
         }
+        // A model that is new to its label starts with a clean slate; one that is gone leaves nothing behind.
+        self.familiarity.retain(|label, f| {
+            next.get(label)
+                .is_some_and(|new| f.version.as_ref() == Some(&new.version_id))
+        });
         self.models = next;
         let refs: Vec<&LoadedModel> = self.models.values().collect();
         self.pipeline.configure(&refs);
@@ -140,6 +259,7 @@ impl LabelRuntime {
     /// The runtime itself failed (a crash, a lost backend): end everything and drop buffered telemetry.
     pub fn fail(&mut self, detail: &str) -> RuntimeOutput {
         self.pipeline.reset();
+        self.familiarity.clear();
         let events = self
             .hub
             .clear_all(&ClearReason::Runtime(detail.to_string()));
@@ -232,12 +352,28 @@ impl LabelRuntime {
             .collect();
         let (changes, conflicts) = self.hub.process(&batch);
         events.extend(changes);
+        for score in &scores {
+            let Some(check) = &score.input_check else {
+                continue;
+            };
+            let unfamiliar = check.judged > 0 && check.outside * 2 >= check.judged;
+            let tracker = self.familiarity.entry(score.label.clone()).or_default();
+            if tracker.version.as_ref() != Some(&score.model_version) {
+                *tracker = Familiarity {
+                    version: Some(score.model_version.clone()),
+                    ..Familiarity::default()
+                };
+            }
+            tracker.see(now_ns, unfamiliar, &check.worst);
+        }
+        let input_warnings = self.warnings_changed(now_ns, true);
         RuntimeOutput {
             actionable: allow(self.mode, &events),
             scores,
             rejections,
             events,
             conflicts,
+            input_warnings,
         }
     }
 }
@@ -385,7 +521,7 @@ mod tests {
     /// had it never been switched away from, and starts with a clean detection each time.
     #[test]
     fn switching_to_another_model_and_back_scores_exactly_as_if_it_had_never_been_switched() {
-        let amplitude = |n: u64| if (n / 40) % 2 == 0 { 5.0 } else { 0.0 }; // shake for 0.8 s, then be still, and so on
+        let amplitude = |n: u64| if (n / 40).is_multiple_of(2) { 5.0 } else { 0.0 }; // shake for 0.8 s, then be still, and so on
         let drive_pattern = |rt: &mut LabelRuntime, from: u64, to: u64| -> Vec<(u64, f64)> {
             (from..to)
                 .flat_map(|n| {
@@ -429,6 +565,85 @@ mod tests {
                 want.1
             );
         }
+    }
+
+    /// The fixture model with a training range that only quiet windows fit: every input usually between 0 and 0.5.
+    fn with_a_quiet_training_range() -> LoadedModel {
+        let mut model = loaded();
+        let n = model.input.features.len();
+        model.training_range = Some(crate::bundle::TrainingRange {
+            low: vec![0.0; n],
+            high: vec![0.5; n],
+        });
+        model
+    }
+
+    #[test]
+    fn a_warning_goes_up_when_most_windows_are_unlike_the_training_ones_and_comes_down_when_they_are_back()
+     {
+        let mut rt = LabelRuntime::default();
+        rt.set_models(vec![with_a_quiet_training_range()]);
+        rt.set_mode(RuntimeMode::Monitor);
+        let warnings = |outputs: &[RuntimeOutput]| -> Vec<Vec<InputWarning>> {
+            outputs
+                .iter()
+                .filter_map(|o| o.input_warnings.clone())
+                .collect()
+        };
+
+        // Quiet windows are what it trained on: nothing is said.
+        let quiet = drive(&mut rt, 0, 150, 0.0);
+        assert!(warnings(&quiet).is_empty());
+
+        // Vigorous shaking is far outside that range, in every input.
+        let shaking = drive(&mut rt, 150, 250, 5.0);
+        let raised = warnings(&shaking);
+        let first = raised.first().expect("a warning went up");
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].label, shake_label());
+        assert!(first[0].unfamiliar_share >= 0.7);
+        assert!(!first[0].worst.is_empty() && first[0].worst[0].value > first[0].worst[0].high);
+        // Once up it is refreshed now and then, not on every window.
+        assert!(
+            raised.len() < shaking.len() / 4,
+            "{} of {}",
+            raised.len(),
+            shaking.len()
+        );
+
+        // Back to quiet: it comes down, and says so.
+        let calm = drive(&mut rt, 250, 450, 0.0);
+        assert!(
+            warnings(&calm).last().is_some_and(Vec::is_empty),
+            "{:?}",
+            warnings(&calm).last()
+        );
+    }
+
+    #[test]
+    fn a_model_with_no_recorded_range_is_never_warned_about_and_changing_the_model_clears_a_warning()
+     {
+        let mut rt = runtime(RuntimeMode::Monitor); // the fixture records no range
+        assert!(
+            drive(&mut rt, 0, 200, 5.0)
+                .iter()
+                .all(|o| o.input_warnings.is_none())
+        );
+
+        let mut rt = LabelRuntime::default();
+        rt.set_models(vec![with_a_quiet_training_range()]);
+        rt.set_mode(RuntimeMode::Monitor);
+        drive(&mut rt, 0, 150, 5.0);
+        let mut replacement = with_a_quiet_training_range();
+        replacement.version_id = model_lab_core::ModelVersionId::new("shake-v2").unwrap();
+        let out = rt.set_models(vec![replacement]);
+        assert_eq!(
+            out.input_warnings,
+            Some(Vec::new()),
+            "the new model starts with a clean slate"
+        );
+        let out = rt.set_mode(RuntimeMode::Off);
+        assert!(out.input_warnings.is_none(), "nothing was standing");
     }
 
     #[test]

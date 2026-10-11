@@ -58,6 +58,16 @@ describe("LabelModelsPanel", () => {
     expect(await screen.findByRole("region", { name: "Fine-tune snap-own" })).toBeInTheDocument();
   });
 
+  it("shows a warning under a label whose model is being given inputs it was never trained on, and not for another label", async () => {
+    setup([{ ...draft, state: "active", active: true }, { ...draft, id: "fist-1", label: "fist", state: "active", active: true }], {
+      inputWarnings: [{ label: "snap", modelId: "snap-abc", unfamiliarShare: 0.8, worst: [{ name: "ppg_green", value: 5000, low: 90000, high: 210000 }] }],
+    });
+    const warning = await screen.findByRole("alert", { name: "Inputs outside training for snap-abc" });
+    const snap = screen.getByRole("list", { name: "snap models" });
+    expect(warning.compareDocumentPosition(snap) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); // under the label's name, above its models
+    expect(screen.queryByRole("alert", { name: /fist-1/ })).toBeNull();
+  });
+
   it("says so when there are no models and does nothing outside the desktop app", () => {
     cleanup();
     render(<Harness desktopAvailable={false} />);
