@@ -124,7 +124,7 @@ export function ModelLab({ onOpenLabels, onInspectModel, onOpenNetworkLab }: { o
         </Card>
         <TrainPanel desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} onOpenNetworkLab={onOpenNetworkLab} />
         <TrainingHistory desktopAvailable={desktopAvailable} labels={labels} refreshKey={models.map((model) => `${model.id}:${model.state}`).join(",")} />
-        <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} onInspect={onInspectModel} onOpenNetworkLab={onOpenNetworkLab} datasets={datasets}
+        <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} onInspect={onInspectModel} onOpenNetworkLab={onOpenNetworkLab} datasets={datasets} labels={labels} onDatasetsChanged={() => void refreshDatasets()}
         />
         <DetectionActivity desktopAvailable={desktopAvailable} />
       </fieldset>

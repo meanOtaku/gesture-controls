@@ -77,6 +77,7 @@ export function useTelemetryExport() {
     reportRecordingBundleOutcome(result);
     if (result.status === "saved") cameraAssist.finish();
     else cameraAssist.disarm();
+    return result;
   };
 
   return { exportDatasetCsv, saveDatasetRecording, datasetExportFolder, chooseDatasetExportFolder };

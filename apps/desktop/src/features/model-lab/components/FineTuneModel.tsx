@@ -5,7 +5,9 @@ import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { Label } from "../../../components/ui/label";
 import { describePlan, type FineTunePlan } from "../fineTunePlans";
-import { datasetLabels, inImportOrder, recordingNumber, type DatasetSummary } from "../types";
+import type { LabelRuntimeStatus } from "../labelModels";
+import { datasetLabels, inImportOrder, recordingNumber, type DatasetLabel, type DatasetSummary } from "../types";
+import { CorrectionSession } from "./CorrectionSession";
 
 /** What a model was trained from (see `ModelTrainingInfo` in label_training.rs). */
 export interface ModelTrainingInfo {
@@ -33,24 +35,25 @@ export function extraBlocker(dataset: DatasetSummary, info: ModelTrainingInfo): 
  * always tested on, so the score before and after can be compared. The result is a new draft; the original is untouched.
  */
 export function FineTuneModel({
-  modelId, datasets = [], initialExtras = [], refreshKey = "", onClose, onOpenNetworkLab, children,
+  modelId, datasets = [], labels, status = null, refreshKey = "", onClose, onOpenNetworkLab, onDatasetsChanged,
 }: {
   modelId: string;
   datasets?: DatasetSummary[];
-  /** Recordings ticked from the start (for example one just made as corrections). */
-  initialExtras?: string[];
+  /** With these, the panel offers to record corrections with the camera. */
+  labels?: DatasetLabel[];
+  status?: LabelRuntimeStatus | null;
   /** Changes when more recordings arrive, so the list reloads. */
   refreshKey?: string;
   onClose: () => void;
   onOpenNetworkLab?: () => void;
-  /** Shown between the plan and the recordings: where the correction session is. */
-  children?: (info: ModelTrainingInfo | null, addExtra: (id: string) => void) => React.ReactNode;
+  /** Called when a recording was added to the training data here, so the lists around it reload. */
+  onDatasetsChanged?: () => void;
 }) {
   const uid = useId();
   const [plans, setPlans] = useState<FineTunePlan[]>([]);
   const [planId, setPlanId] = useState("");
   const [info, setInfo] = useState<ModelTrainingInfo | null>(null);
-  const [extras, setExtras] = useState<string[]>(initialExtras);
+  const [extras, setExtras] = useState<string[]>([]);
   const [weight, setWeight] = useState<number>(3);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,7 +107,7 @@ export function FineTuneModel({
         </p>
       </div>
 
-      {children?.(info, addExtra)}
+      {info !== null && labels && <CorrectionSession info={info} labels={labels} status={status} onSaved={(made) => { addExtra(made.id); onDatasetsChanged?.(); }} />}
 
       {info !== null && (
         <fieldset className="flex flex-col gap-2" disabled={starting}>

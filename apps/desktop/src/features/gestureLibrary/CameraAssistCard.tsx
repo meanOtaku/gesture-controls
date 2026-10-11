@@ -10,6 +10,7 @@ import { telemetryStore } from "../telemetry/store/telemetryStore";
 import { cameraAssist } from "./cameraAssist";
 import { definitionsForLabel, type GestureDefinition } from "./definition";
 import { listGestureDefinitions } from "./gestureLibraryApi";
+import { useCameraMarking } from "./useCameraMarking";
 import { useLiveGestures } from "./useLiveGestures";
 
 /**
@@ -39,11 +40,7 @@ export function CameraAssistCard({ selectedLabel, recording, recordingState, des
 
   // While recording, the camera marks the session directly: the label is on while it sees the gesture, off when it lets go.
   const armed = recording ? cameraAssist.armedFor() : null;
-  useEffect(() => {
-    if (!armed || recordingState !== "recording") return;
-    if (seen) telemetryStore.setTimelineLabel(armed, "camera_proposal", sinceMs !== null && Number.isFinite(sinceMs) ? sinceMs : undefined);
-    else if (telemetryStore.getActiveTimelineLabel() === armed) telemetryStore.setTimelineLabel(null);
-  }, [armed, recordingState, seen, sinceMs]);
+  useCameraMarking(armed, recordingState, seen, sinceMs);
   const camOn = cam.status === "on" || cam2.status === "on";
 
   // The slowest camera that is running: warned about only once it has stayed slow, and until it is clearly back up.
