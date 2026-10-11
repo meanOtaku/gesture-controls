@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { SectionHeader } from "../../components/app/SectionHeader";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
-import { SLOW_FPS } from "../camera/cameraController";
+import { NOT_SLOW, nextSlowState, type SlowState } from "../camera/slowWarning";
 import { getCameraController } from "../camera/cameraService";
 import { telemetryStore } from "../telemetry/store/telemetryStore";
 import { cameraAssist } from "./cameraAssist";
@@ -46,6 +46,17 @@ export function CameraAssistCard({ selectedLabel, recording, recordingState, des
   }, [armed, recordingState, seen, sinceMs]);
   const camOn = cam.status === "on" || cam2.status === "on";
 
+  // The slowest camera that is running: warned about only once it has stayed slow, and until it is clearly back up.
+  const running = [cam, cam2].filter((c) => c.status === "on" && c.fps > 0);
+  const slowest = running.length === 0 ? null : running.reduce((a, b) => (b.fps < a.fps ? b : a));
+  const slowState = useRef<SlowState>(NOT_SLOW);
+  const [slow, setSlow] = useState(false);
+  const slowestFps = slowest?.fps ?? null;
+  useEffect(() => {
+    slowState.current = nextSlowState(slowState.current, recording ? slowestFps : null, Date.now());
+    setSlow(slowState.current.slow);
+  }, [slowestFps, recording]);
+
   const blocker = !desktopAvailable
     ? "Needs the desktop app."
     : selectedLabel === null
@@ -82,8 +93,8 @@ export function CameraAssistCard({ selectedLabel, recording, recordingState, des
           <span><strong>Let the camera mark the gesture</strong> <small className="text-muted-foreground">On by default. When the camera is on and the label has a gesture, the recording is a timeline and the camera marks the label live, while you record.</small></span>
         </div>
         {enabled && blocker && <p className="hint" role="status">{blocker} Until then, recordings are made as usual with no camera marks.</p>}
-        {enabled && !blocker && recording && [cam, cam2].some((c) => c.status === "on" && c.fps > 0 && c.fps < SLOW_FPS) && (
-          <p className="hint" role="status">The camera is running slowly ({Math.min(...[cam, cam2].filter((c) => c.status === "on" && c.fps > 0).map((c) => c.fps)).toFixed(0)} frames a second), so the start and end of marks may be a little off. Close other apps using the camera or the processor, or turn the second camera off.</p>
+        {enabled && !blocker && recording && slow && slowest && (
+          <p className="hint" role="status">The camera is running slowly ({slowest.fps.toFixed(0)} frames a second{slowest.detectMs > 0 ? `, ${slowest.detectMs.toFixed(0)} ms for each hand-tracking pass` : ""}), so the start and end of marks may be a little off. Close other apps using the camera or the processor, or turn the second camera off.</p>
         )}
         {enabled && !blocker && (
           <div className="flex flex-wrap items-center gap-3" role="status">

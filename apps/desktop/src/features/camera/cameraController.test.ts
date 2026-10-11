@@ -60,25 +60,28 @@ describe("CameraController with a detector on another thread", () => {
     return { ...base, answer: (hands: TrackedHand[] = [aHand()]) => answers.shift()?.(hands) };
   }
 
-  it("takes the next picture only once the last is answered, files the answer under its own capture time, and says what runs the model", async () => {
+  it("works on up to two pictures at once, takes no more until one is answered, and files each answer under its own capture time", async () => {
     const { camera, frame, video, answer } = slowSetup();
     await camera.enable();
     expect(camera.getSnapshot().engine).toBe("graphics chip, background thread");
     const seen: number[] = [];
     camera.subscribeFrames((f) => seen.push(f.captureMs));
+    expect(video.requestVideoFrameCallback).toHaveBeenCalledTimes(1);
     frame(1000);
-    expect(video.requestVideoFrameCallback).toHaveBeenCalledTimes(1); // nothing asked for yet: the first picture is still being looked at
+    expect(video.requestVideoFrameCallback).toHaveBeenCalledTimes(2); // the next picture is taken while the first is looked at
+    frame(1033);
+    expect(video.requestVideoFrameCallback).toHaveBeenCalledTimes(2); // two in flight: no third until one is answered
     answer();
     await Promise.resolve();
     await Promise.resolve();
-    expect(video.requestVideoFrameCallback).toHaveBeenCalledTimes(2);
+    expect(video.requestVideoFrameCallback).toHaveBeenCalledTimes(3);
     expect(seen).toEqual([1000]);
-    frame(1100);
     answer([]);
     await Promise.resolve();
     await Promise.resolve();
-    expect(seen).toEqual([1000, 1100]);
+    expect(seen).toEqual([1000, 1033]);
     expect(camera.getSnapshot().frame?.hands).toHaveLength(0);
+    expect(video.requestVideoFrameCallback).toHaveBeenCalledTimes(3); // already waiting for the next: never two callbacks at once
   });
 
   it("drops an answer that arrives after the camera was turned off", async () => {

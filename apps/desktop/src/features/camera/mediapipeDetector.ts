@@ -75,6 +75,7 @@ export async function createWorkerDetector(options: DetectorOptions = {}): Promi
   const worker = new Worker(WORKER_URL);
   const waiting = new Map<number, { resolve: (hands: TrackedHand[]) => void; reject: (error: Error) => void }>();
   let nextId = 0;
+  let sent: Promise<void> = Promise.resolve();
   let broken: Error | null = null;
   const failAll = (error: Error) => {
     broken = error;
@@ -125,7 +126,12 @@ export async function createWorkerDetector(options: DetectorOptions = {}): Promi
     description: `${delegate === "GPU" ? "graphics chip" : "processor"}, background thread`,
     async detect(source, timestampMs) {
       if (broken) throw broken;
-      const bitmap = await createImageBitmap(source as ImageBitmapSource);
+      // The picture is copied now (it is the current one) but handed over in the order taken, because the hand model
+      // needs its timestamps to increase.
+      const copy = createImageBitmap(source as ImageBitmapSource);
+      const turn = sent.then(() => copy);
+      sent = turn.then(() => undefined, () => undefined);
+      const bitmap = await turn;
       return new Promise<TrackedHand[]>((resolve, reject) => {
         const id = (nextId += 1);
         waiting.set(id, { resolve, reject });

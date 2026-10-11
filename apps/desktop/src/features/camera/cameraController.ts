@@ -11,6 +11,8 @@ export const MAX_RECORDED_FRAMES = 30_000;
 export const EVIDENCE_MARGIN_MS = 1000;
 /** How often pages hear about a new frame. The detector and `subscribeFrames` run at the camera's own rate. */
 const UI_INTERVAL_MS = 50;
+/** Pictures a detector on another thread may be working on at once. */
+export const MAX_IN_FLIGHT = 2;
 /** "30 frames/s · 12 ms each": how fast the camera is going and how long the hand model takes per picture. */
 export function speedLabel(state: Pick<CameraSnapshot, "fps" | "detectMs">, waiting = "waiting for frames"): string {
   if (state.fps <= 0) return waiting;
@@ -93,6 +95,10 @@ export class CameraController {
   private stream: MediaStream | null = null;
   private detector: HandDetector | null = null;
   private generation = 0;
+  /** Pictures sent to a detector on another thread and not yet answered. */
+  private inFlight = 0;
+  /** Whether a callback for the next picture is already waiting. */
+  private framePending = false;
   private frameIndex = 0;
   private lastTimestampMs = -1;
   private lastCaptureMs = 0;
@@ -163,6 +169,8 @@ export class CameraController {
   async enable(deviceId?: string): Promise<void> {
     this.stopEverything();
     const generation = ++this.generation;
+    this.inFlight = 0;
+    this.framePending = false;
     this.set({ status: "starting", error: null, frame: null, fps: 0, detectMs: 0, deviceId: deviceId ?? this.snapshot.deviceId });
     try {
       const wanted = deviceId ?? this.snapshot.deviceId;
@@ -199,6 +207,8 @@ export class CameraController {
 
   disable(): void {
     this.generation += 1;
+    this.inFlight = 0;
+    this.framePending = false;
     this.stopEverything();
     this.detectEma = 0;
     this.set({ status: "off", error: null, frame: null, fps: 0, detectMs: 0, engine: null });
@@ -224,6 +234,8 @@ export class CameraController {
   }
 
   private scheduleFrame(generation: number): void {
+    if (this.framePending) return;
+    this.framePending = true;
     const video = this.video;
     if (typeof video.requestVideoFrameCallback === "function") {
       video.requestVideoFrameCallback((now, metadata) => this.onFrame(generation, now, metadata?.captureTime));
@@ -234,6 +246,7 @@ export class CameraController {
 
   private onFrame(generation: number, callbackMs: number, captureTime: number | undefined): void {
     if (generation !== this.generation || !this.detector) return;
+    this.framePending = false;
     const fail = (error: unknown) => {
       if (generation !== this.generation) return;
       this.stopEverything();
@@ -246,11 +259,23 @@ export class CameraController {
       return fail(error);
     }
     if (working) {
-      // A detector on another thread: the next picture is taken once this one is answered, so pictures never queue up
-      // and the hands always belong to the newest picture available.
-      working.then(() => {
-        if (generation === this.generation) this.scheduleFrame(generation);
-      }, fail);
+      // A detector on another thread. Copying a picture across takes time on this thread too, so the next picture is
+      // taken while this one is still being worked on (at most `MAX_IN_FLIGHT` at once): without that, a detector that
+      // needs a little more than one frame period misses every other picture and the rate halves. Beyond that, pictures
+      // never queue up: the next is taken only when one is answered, so the hands belong to a recent picture.
+      this.inFlight += 1;
+      working.then(
+        () => {
+          if (generation !== this.generation) return;
+          this.inFlight = Math.max(0, this.inFlight - 1);
+          this.scheduleFrame(generation);
+        },
+        (error) => {
+          if (generation === this.generation) this.inFlight = Math.max(0, this.inFlight - 1);
+          fail(error);
+        },
+      );
+      if (this.inFlight < MAX_IN_FLIGHT) this.scheduleFrame(generation);
       return;
     }
     this.scheduleFrame(generation);
