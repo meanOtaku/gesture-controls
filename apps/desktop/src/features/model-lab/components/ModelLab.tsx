@@ -13,8 +13,9 @@ import { TrainingHistory } from "./TrainingHistory";
 import { TrainPanel } from "./TrainPanel";
 
 /**
- * Model Lab: teach the app a gesture one label at a time. Models are listed and switched on first, because that is
- * what you come back to; recordings and label coverage follow.
+ * Model Lab: teach the app a gesture one label at a time. The sections follow the order you use them: add recordings
+ * to the training data, check which labels they cover, train, look back at what was tried, then switch the models on
+ * and watch what they detect.
  */
 export function ModelLab({ onOpenLabels }: { onOpenLabels?: () => void }) {
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
@@ -131,20 +132,10 @@ export function ModelLab({ onOpenLabels }: { onOpenLabels?: () => void }) {
       </section>
 
       <nav className="lab-workflow" aria-label="Model Lab sections">
-        <a href="#lab-labels">Models</a><a href="#lab-train">Train</a><a href="#lab-activity">Activity</a><a href="#lab-coverage">Labels</a><a href="#lab-history">History</a><a href="#lab-recorder">From the Recorder</a><a href="#lab-dataset">Recordings</a>
+        <a href="#lab-recorder">From the Recorder</a><a href="#lab-dataset">Recordings</a><a href="#lab-coverage">Labels</a><a href="#lab-train">Train</a><a href="#lab-history">History</a><a href="#lab-labels">Models</a><a href="#lab-activity">Activity</a>
       </nav>
 
       <fieldset className="lab-workspace card-stack" disabled={!desktopAvailable} aria-label="Desktop model tools">
-        <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} />
-        <TrainPanel desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} />
-        <DetectionActivity desktopAvailable={desktopAvailable} />
-        <Card id="lab-coverage" role="region" aria-label="Labels">
-          <CardContent className="flex flex-wrap items-center justify-between gap-3">
-            <span><strong>Labels</strong> <small className="text-muted-foreground">Add, rename and archive labels on the Labels tab. {labels.filter((label) => label.archivedAt === null).length} in use here.</small></span>
-            {onOpenLabels && <Button type="button" variant="outline" onClick={onOpenLabels}>Open Labels</Button>}
-          </CardContent>
-        </Card>
-        <TrainingHistory desktopAvailable={desktopAvailable} labels={labels} refreshKey={models.map((model) => `${model.id}:${model.state}`).join(",")} />
         <RecorderRecordings desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} onAdded={() => void refreshDatasets()} />
         <DatasetManager
           desktopAvailable={desktopAvailable}
@@ -156,6 +147,16 @@ export function ModelLab({ onOpenLabels }: { onOpenLabels?: () => void }) {
           onImport={handleImport}
           onDelete={handleDelete}
         />
+        <Card id="lab-coverage" role="region" aria-label="Labels">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3">
+            <span><strong>Labels</strong> <small className="text-muted-foreground">Add, rename and archive labels on the Labels tab. {labels.filter((label) => label.archivedAt === null).length} in use here.</small></span>
+            {onOpenLabels && <Button type="button" variant="outline" onClick={onOpenLabels}>Open Labels</Button>}
+          </CardContent>
+        </Card>
+        <TrainPanel desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} />
+        <TrainingHistory desktopAvailable={desktopAvailable} labels={labels} refreshKey={models.map((model) => `${model.id}:${model.state}`).join(",")} />
+        <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} />
+        <DetectionActivity desktopAvailable={desktopAvailable} />
       </fieldset>
     </main>
   );

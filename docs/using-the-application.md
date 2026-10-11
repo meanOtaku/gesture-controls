@@ -243,17 +243,20 @@ Saved gestures show **Detected** live while the camera is on.
 
 ### Model Lab
 
-Model Lab is organised around **one model per label**: a label is a gesture or activity ("snap_fingers", "pinch_start"), and each label has its own model. Models run inside the app; nothing else needs to be installed to use one. The page shows, top to bottom:
+Model Lab is organised around **one model per label**: a label is a gesture or activity ("snap_fingers", "pinch_start"), and each label has its own model. Models run inside the app; nothing else needs to be installed to use one. The page follows the order you use it, top to bottom, and the buttons under the overview jump to each part:
 
 1. an overview (runtime mode, active models, recordings);
-2. **Label models**: your models, and the Off / Monitor / Live switch;
-3. **Activity**: detections and releases this session;
-4. **Labels**: recordings per label and how far along each label's model is;
-5. **Recordings**: the labelled sessions you have imported.
+2. **From the Recorder**: add recordings you made in the Recorder to the training data;
+3. **Recordings**: the labelled sessions in the training data, and importing a CSV;
+4. **Labels**: a pointer to the Labels tab, and how many labels are in use;
+5. **Train a model**: teach a label from the recordings;
+6. **Training history**: what was tried for each label;
+7. **Label models**: your models, and the Off / Monitor / Live switch;
+8. **Activity**: detections and releases this session.
 
 #### Label models
 
-The **Label models** card at the top of Model Lab is the per-label model system: one binary model per label, several active at once, all run inside the app (nothing else to install).
+The **Label models** card in Model Lab is the per-label model system: one binary model per label, several active at once, all run inside the app (nothing else to install).
 
 - **Import a model folder** picks a folder holding `manifest.json` and one ONNX model. It is checked in full and added as a **Draft**. Nothing is activated by importing.
 - Each model moves forward by your explicit choice: **Mark as evaluated → Approve → Activate**. Imported models are not evaluated by this app, so review them yourself first. Activating checks that the model's files are intact and that it runs; a model that cannot run is not activated. **Deactivate** and **Roll back** work per label. An **archived** model can be **deleted for good** (after a confirmation): it is removed from the registry and its files are deleted. Only archived models can go, so nothing under review or in use is lost; the training run that made it stays as a record, and the same model can be imported again later.
