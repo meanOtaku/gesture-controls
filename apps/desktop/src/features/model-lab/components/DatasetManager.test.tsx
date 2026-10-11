@@ -1,5 +1,8 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const invokeMock = vi.hoisted(() => vi.fn());
+vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invokeMock(...args) }));
 import type { DatasetSummary } from "../types";
 import { DatasetManager } from "./DatasetManager";
 
@@ -52,5 +55,46 @@ describe("DatasetManager", () => {
     const buttons = await screen.findAllByRole("button", { name: "Delete" });
     fireEvent.click(buttons[buttons.length - 1]);
     expect(props.onDelete).toHaveBeenCalledWith("d1");
+  });
+
+  const gaps = (share: number, count: number) => ({ samples: 500, durationS: 30, rateHz: 25, gaps: count, longestGapS: 4.6, shareInGaps: share });
+
+  it("imports a recording folder as the main way, keeps the single CSV as an older-format choice, and shows how dense each stream is", () => {
+    const onImportFolder = vi.fn().mockResolvedValue(undefined);
+    setup({
+      onImportFolder,
+      datasets: [
+        { ...dataset, id: "a", originalFilename: "steady", twoFiles: true, gaps: { ppg: gaps(0, 0), imu: gaps(0, 0) } },
+        { ...dataset, id: "b", originalFilename: "stalled", twoFiles: true, gaps: { ppg: gaps(0.4, 15), imu: gaps(0.4, 15) } },
+      ],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import a recording folder" }));
+    expect(onImportFolder).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Import a single CSV (older format)" })).toBeInTheDocument();
+    expect(screen.getByText(/pulse steady at 25 Hz · motion steady at 25 Hz/)).toBeInTheDocument();
+    expect(screen.getByText(/Watch stream stalled: pulse: 15 stalls, longest 4.6 s, 40% of the time/)).toBeInTheDocument();
+    expect(screen.getAllByText(/two files/)).toHaveLength(2);
+  });
+
+  it("offers to convert recordings in the older format, says what happened to each, and reloads", async () => {
+    const onConverted = vi.fn();
+    invokeMock.mockResolvedValue([
+      { id: "old", originalFilename: "old.csv", outcome: "converted", message: "now two dense files" },
+      { id: "bad", originalFilename: "bad.csv", outcome: "failed", message: "the split did not keep every row" },
+    ]);
+    setup({ onConverted, datasets: [{ ...dataset, id: "old", originalFilename: "old.csv" }, { ...dataset, id: "new", originalFilename: "new", twoFiles: true }] });
+    const group = screen.getByRole("group", { name: "Older recordings" });
+    expect(group).toHaveTextContent("1 recording is in the older single-file format");
+    fireEvent.click(within(group).getByRole("button", { name: "Convert to two files" }));
+    const results = await screen.findByRole("list", { name: "Conversion results" });
+    expect(results).toHaveTextContent("old.csv: converted");
+    expect(results).toHaveTextContent("bad.csv: left as it was. the split did not keep every row");
+    await waitFor(() => expect(onConverted).toHaveBeenCalled());
+    expect(invokeMock).toHaveBeenCalledWith("convert_datasets_to_folders");
+  });
+
+  it("says nothing about converting when every recording is already two files", () => {
+    setup({ datasets: [{ ...dataset, twoFiles: true }] });
+    expect(screen.queryByRole("group", { name: "Older recordings" })).toBeNull();
   });
 });

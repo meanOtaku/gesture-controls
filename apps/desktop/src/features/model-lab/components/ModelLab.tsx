@@ -1,11 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useState } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
 import { useLabelModels } from "../hooks/useLabelModels";
 import { useModelLabData } from "../hooks/useModelLabData";
-import { datasetLabels } from "../types";
+import { datasetLabels, describeGaps, type DatasetSummary } from "../types";
 import { DatasetManager } from "./DatasetManager";
 import { DetectionActivity } from "./DetectionActivity";
 import { LabelModelsPanel } from "./LabelModelsPanel";
@@ -42,6 +43,24 @@ export function ModelLab({ onOpenLabels, onInspectModel, onOpenNetworkLab }: { o
     },
     [refreshDatasets],
   );
+
+  const handleImportFolder = useCallback(async () => {
+    const chosen = await open({ directory: true, multiple: false, title: "Choose a recording folder (it holds ppg.csv and imu.csv)" });
+    if (typeof chosen !== "string") return;
+    setImporting(true);
+    try {
+      const made = await invoke<DatasetSummary>("import_model_dataset_folder", { path: chosen });
+      setError(null);
+      await refreshDatasets();
+      const gaps = describeGaps(made?.gaps);
+      OperationFeedback.success("Import recording folder", `Imported ${made?.originalFilename ?? "the folder"}.${gaps?.warn ? ` The watch stream stalled in it (${gaps.text}).` : ""}`);
+    } catch (err) {
+      setError(String(err));
+      OperationFeedback.error("Import recording folder", String(err));
+    } finally {
+      setImporting(false);
+    }
+  }, [refreshDatasets]);
 
   const handleDelete = useCallback(
     async (id: string) => {
@@ -114,6 +133,8 @@ export function ModelLab({ onOpenLabels, onInspectModel, onOpenNetworkLab }: { o
           error={error}
           pendingDeleteIds={pendingDeleteIds}
           onImport={handleImport}
+          onImportFolder={handleImportFolder}
+          onConverted={() => void refreshDatasets()}
           onDelete={handleDelete}
         />
         <Card id="lab-coverage" role="region" aria-label="Labels">

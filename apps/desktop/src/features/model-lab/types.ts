@@ -12,8 +12,40 @@ export interface DatasetSummary {
   rowCount: number;
   /** Where it came in the order recordings were imported (1 is the first); no gaps, so a delete moves the later ones up. */
   sequence?: number;
+  /** Stored as a folder of two dense files (`ppg.csv` and `imu.csv`) rather than one file with blank cells. */
+  twoFiles?: boolean;
+  /** How dense each stream is: where it went quiet and for how long (see `dataset_files.rs`). */
+  gaps?: DatasetGaps;
   /** The Recorder recording this was added from, if it was added directly. */
   sourceRecordingId?: string;
+}
+
+/** How dense one stream of a recording is. */
+export interface StreamGaps {
+  samples: number;
+  durationS: number;
+  /** Samples per second over the stretches without a gap. */
+  rateHz: number;
+  /** How many times it went quiet for longer than a quarter of a second. */
+  gaps: number;
+  longestGapS: number;
+  /** The share of the recording spent in those gaps, 0 to 1. */
+  shareInGaps: number;
+}
+export interface DatasetGaps {
+  ppg: StreamGaps;
+  imu: StreamGaps;
+}
+
+/** A stream that spent more than this share of the recording silent is worth a warning. */
+export const STALL_WARNING_SHARE = 0.1;
+
+/** One line about a recording's stalls, and whether it is bad enough to warn about; null when it has no gap report. */
+export function describeGaps(gaps: DatasetGaps | undefined): { text: string; warn: boolean } | null {
+  if (!gaps) return null;
+  const part = (name: string, s: StreamGaps) =>
+    s.gaps === 0 ? `${name} steady at ${s.rateHz.toFixed(0)} Hz` : `${name}: ${s.gaps} stall${s.gaps === 1 ? "" : "s"}, longest ${s.longestGapS.toFixed(1)} s, ${Math.round(s.shareInGaps * 100)}% of the time`;
+  return { text: `${part("pulse", gaps.ppg)} · ${part("motion", gaps.imu)}`, warn: Math.max(gaps.ppg.shareInGaps, gaps.imu.shareInGaps) > STALL_WARNING_SHARE };
 }
 
 /** The labels a dataset trains on: what coverage and training-role checks apply to. */
