@@ -121,6 +121,9 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
   const switchedOff = new Set(edits.flatMap((edit) => (edit.kind === "disableInput" ? [edit.input] : [])));
   const toggleInput = (name: string) => setEdits((previous) => (switchedOff.has(name) ? previous.filter((edit) => !(edit.kind === "disableInput" && edit.input === name)) : addEdit(previous, { kind: "disableInput", input: name })));
 
+  const emphasis = new Map(edits.flatMap((edit) => (edit.kind === "scaleInput" ? [[edit.input, edit.factor] as [string, number]] : [])));
+  const emphasise = (name: string, factor: number) => setEdits((previous) => (factor === 1 ? previous.filter((edit) => !(edit.kind === "scaleInput" && edit.input === name)) : addEdit(previous, { kind: "scaleInput", input: name, factor })));
+
   const inspection = view?.inspection ?? null;
   const sameLabel = view ? models.filter((model) => model.label === view.label && model.id !== view.id) : [];
   const manifestInput = (view?.manifest?.input ?? {}) as { features?: unknown };
@@ -190,7 +193,7 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
             <InspectEvaluation inspection={inspection} other={compare?.inspection ?? null} otherName={compare?.id} />
             {inspection.edit && <EditedFrom inspection={inspection} />}
             <InspectResearch inspection={inspection} />
-            <InspectInputs inspection={inspection} spikeLabel={spikeLabel} editing={editing} switchedOff={switchedOff} onToggleInput={toggleInput} />
+            <InspectInputs inspection={inspection} spikeLabel={spikeLabel} editing={editing} switchedOff={switchedOff} onToggleInput={toggleInput} emphasis={emphasis} onEmphasis={emphasise} />
             <InspectWeights inspection={inspection} editing={editing} selection={selection} onSelect={setSelection} />
             {editing && (
               <EditPanel

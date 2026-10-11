@@ -669,8 +669,9 @@ struct EditJob {
 }
 
 /// The kinds of edit the trainer knows (see `KINDS` in `edits.py`).
-const EDIT_KINDS: [&str; 5] = [
+const EDIT_KINDS: [&str; 6] = [
     "disableInput",
+    "scaleInput",
     "setWeight",
     "setBias",
     "setFilterWeight",

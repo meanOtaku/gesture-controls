@@ -45,6 +45,45 @@ def test_every_method_saves_its_parameters_and_can_be_restored_exactly(tmp_path:
     assert np.max(np.abs(again.predict_proba(x_eval)[:, 1] - onnx)) < 1e-4  # the restored model is the one that was shipped
 
 
+@pytest.mark.parametrize("backend", ["logreg", "torch-mlp", "cnn1d"])
+def test_emphasising_an_input_scales_what_it_feeds_the_first_layer_and_nothing_else(tmp_path: Path, backend: str) -> None:
+    if backend != "logreg":
+        pytest.importorskip("torch")
+    extra = {"gridSteps": 8, "features": ["accel_x", "accel_y", "gyro_x"], "network": {"epochs": 10}} if backend == "cnn1d" else {"features": ["accel_x_std", "accel_y_std", "gyro_x_std"]}
+    if backend == "torch-mlp":
+        extra["network"] = {"hidden": [{"units": 4}], "epochs": 10}
+    raw, out, _ = train(tmp_path, backend, **extra)
+    spec = lt.parse_spec(raw)
+    model = restore_model(spec, out)
+    from label_trainer.edits import _Params
+
+    def first_layer(m):
+        p = _Params(spec, m)
+        return p.conv[0].copy() if backend == "cnn1d" else p.dense[0][0].copy()
+
+    before = first_layer(model)
+    name = spec.features[1]
+    said = apply_edits(spec, model, [{"kind": "scaleInput", "input": name, "factor": 3}])
+    assert said == [f"multiplied what {name} feeds the first layer by 3"]
+    after = first_layer(model)
+    if backend == "cnn1d":
+        assert np.allclose(after[:, 1, :], before[:, 1, :] * 3)
+        assert np.array_equal(after[:, [0, 2], :], before[:, [0, 2], :])
+    else:
+        assert np.allclose(after[1, :], before[1, :] * 3)
+        assert np.array_equal(after[[0, 2], :], before[[0, 2], :])
+
+
+@pytest.mark.parametrize("factor", [0, -1, 11, True, "2", float("nan")])
+def test_an_emphasis_outside_zero_to_ten_is_refused(tmp_path: Path, factor) -> None:
+    raw, out, _ = train(tmp_path, "logreg", features=["accel_x_std", "accel_x_mean", "gyro_x_std"])
+    spec = lt.parse_spec(raw)
+    with pytest.raises(EditRefused, match="factor"):
+        apply_edits(spec, restore_model(spec, out), [{"kind": "scaleInput", "input": "accel_x_std", "factor": factor}])
+    with pytest.raises(EditRefused, match="no input"):
+        apply_edits(spec, restore_model(spec, out), [{"kind": "scaleInput", "input": "nope", "factor": 2}])
+
+
 def test_switching_an_input_off_makes_the_model_ignore_it(tmp_path: Path) -> None:
     raw, out, _ = train(tmp_path, "logreg", features=["accel_x_std", "accel_x_mean", "gyro_x_std"])
     spec = lt.parse_spec(raw)

@@ -2,13 +2,14 @@ import { useMemo, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { describeColumn, describeInput, STREAM_TITLES } from "../featureInfo";
+import { EMPHASIS_FACTORS } from "../edits";
 import type { Inspection } from "../inspection";
 
 /**
  * Every input of the model: what it is, what value it takes, what the model scales it by, how much it matters (how far the
  * held-out ROC AUC falls when it is shuffled between windows) and, for a linear model, its weight.
  */
-export function InspectInputs({ inspection, spikeLabel, editing = false, switchedOff, onToggleInput }: { inspection: Inspection; spikeLabel?: string; /** Adds a column to switch an input off. */ editing?: boolean; switchedOff?: Set<string>; onToggleInput?: (name: string) => void }) {
+export function InspectInputs({ inspection, spikeLabel, editing = false, switchedOff, onToggleInput, emphasis, onEmphasis }: { inspection: Inspection; spikeLabel?: string; /** Adds columns to switch an input off and to emphasise it. */ editing?: boolean; switchedOff?: Set<string>; onToggleInput?: (name: string) => void; /** The strength chosen for each input so far (absent means as the model has it). */ emphasis?: Map<string, number>; onEmphasis?: (name: string, factor: number) => void }) {
   const [byImportance, setByImportance] = useState(true);
   const importance = useMemo(() => new Map(inspection.importance.map((entry) => [entry.name, entry])), [inspection]);
   const linear = inspection.network.kind === "linear";
@@ -38,6 +39,7 @@ export function InspectInputs({ inspection, spikeLabel, editing = false, switche
         Importance is how far the ROC AUC on the held-out windows falls when this {channels ? "channel" : "input"} is shuffled between windows, so the model cannot use it. Near zero means the model does without it (or another input says the same thing).
         {channels ? " The model scales each channel by the average and spread shown, after taking the window's own average away if that was chosen." : " The model scales each input by the average and spread shown before it uses it."}
       </p>
+      {editing && <p className="field-hint">Emphasis multiplies everything that leaves an input for the first layer: above 1 the model leans on it more, below 1 less. It changes the model's answers straight away, so score it, and fine-tune it to let the rest of the model adjust (the emphasis itself is held where you set it).</p>}
       <div className="max-w-full overflow-auto">
         <table className="w-full text-sm" aria-label="Inputs of the model">
           <thead>
@@ -48,6 +50,7 @@ export function InspectInputs({ inspection, spikeLabel, editing = false, switche
               <th className="pr-3">Scaled by (average, spread)</th>
               <th className="pr-3">Importance</th>
               {linear && <th className="pr-3">{columns ? "Weight (all its readings)" : "Weight"}</th>}
+              {editing && <th className="pr-3">Emphasis</th>}
               {editing && <th className="pr-3">Switch off</th>}
             </tr>
           </thead>
@@ -67,6 +70,19 @@ export function InspectInputs({ inspection, spikeLabel, editing = false, switche
                   ) : "–"}
                 </td>
                 {linear && <td className="pr-3 whitespace-nowrap">{weight === undefined ? "–" : weight.toFixed(3)}</td>}
+                {editing && (
+                  <td className="pr-3">
+                    <select
+                      className="recipe-select"
+                      aria-label={`Emphasis of ${STREAM_TITLES[info.stream]} ${info.group} ${info.short}`}
+                      value={emphasis?.get(input.name) ?? 1}
+                      disabled={switchedOff?.has(input.name) ?? false}
+                      onChange={(event) => onEmphasis?.(input.name, Number(event.target.value))}
+                    >
+                      {EMPHASIS_FACTORS.map((factor) => <option key={factor} value={factor}>{factor === 1 ? "As it is (1×)" : `${factor}×`}</option>)}
+                    </select>
+                  </td>
+                )}
                 {editing && (
                   <td className="pr-3">
                     <Checkbox checked={switchedOff?.has(input.name) ?? false} onCheckedChange={() => onToggleInput?.(input.name)} aria-label={`Switch off ${STREAM_TITLES[info.stream]} ${info.group} ${info.short}`} />

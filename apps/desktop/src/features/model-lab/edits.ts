@@ -4,6 +4,7 @@ import { neuronOf, type Inspection } from "./inspection";
 /** A change to a trained model, as the trainer knows it (see `edits.py`). */
 export type Edit =
   | { kind: "disableInput"; input: string }
+  | { kind: "scaleInput"; input: string; factor: number }
   | { kind: "setWeight"; layer: number; row: number; column: number; value: number }
   | { kind: "setBias"; layer: number; neuron: number; value: number }
   | { kind: "setFilterWeight"; layer: number; filter: number; channel: number; tap: number; value: number }
@@ -27,6 +28,8 @@ export function describeEdit(edit: Edit, inspection: Inspection): string {
   switch (edit.kind) {
     case "disableInput":
       return `Switch off ${label(edit.input)}: the model stops using it`;
+    case "scaleInput":
+      return `${edit.factor > 1 ? "Emphasise" : "Play down"} ${label(edit.input)}: what it feeds the first layer is multiplied by ${edit.factor}`;
     case "setWeight": {
       const steps = inspection.gridSteps ?? 1;
       const reading = inspection.inputKind === "columns" ? neuronOf(edit.row, steps) : null;
@@ -55,6 +58,7 @@ export function addEdit(edits: Edit[], next: Edit): Edit[] {
       case "setBias": return `b${edit.layer}:${edit.neuron}`;
       case "setFilterWeight": return `f${edit.layer}:${edit.filter}:${edit.channel}:${edit.tap}`;
       case "disableInput": return `d${edit.input}`;
+      case "scaleInput": return `e${edit.input}`;
       case "silenceNeuron": return `s${edit.conv ? "c" : "d"}${edit.layer}:${edit.neuron}`;
     }
   };
@@ -74,3 +78,6 @@ export const canFineTune = (backend: string): boolean => backend === "torch-mlp"
 
 /** A gentle start: a few rounds at a smaller step than the model was trained with. */
 export const defaultFineTune = (backend: string): FineTune => ({ epochs: 30, learningRate: backend === "cnn1d" ? 0.001 : 0.003, freezeConv: [], freezeDense: [] });
+
+/** The strengths an input can be emphasised or played down to (1 is as the model has it). */
+export const EMPHASIS_FACTORS = [0.25, 0.5, 1, 2, 3, 5, 10] as const;

@@ -7,6 +7,9 @@ nothing about an edited model is trusted until it has been scored. The original 
 Edits are plain dictionaries (they come from the desktop as JSON):
 
 * `{"kind": "disableInput", "input": "accel_x_std"}`: the model stops using that input (a convolutional model: that channel).
+* `{"kind": "scaleInput", "input": "ppg_green_mean", "factor": 3}`: every weight leaving that input is multiplied by `factor` (above 1 makes
+  the model lean on it more, below 1 less; the model's own scaling of its inputs comes first, so this is the input's pull on the
+  first layer). A column read at several steps is scaled at every step; a convolutional model, at every filter.
 * `{"kind": "setWeight", "layer": 0, "row": 3, "column": 5, "value": 0.2}`: one weight of a dense layer. Layers are counted
   from the first dense layer; the last one is the layer that gives the probability. `row` is the input, `column` the neuron.
 * `{"kind": "setBias", "layer": 0, "neuron": 5, "value": 0.1}`
@@ -24,7 +27,8 @@ from typing import Any
 import numpy as np
 
 MAX_EDITS = 200
-KINDS = ("disableInput", "setWeight", "setBias", "setFilterWeight", "silenceNeuron")
+KINDS = ("disableInput", "scaleInput", "setWeight", "setBias", "setFilterWeight", "silenceNeuron")
+MAX_FACTOR = 10.0
 
 
 class EditRefused(ValueError):
@@ -156,19 +160,25 @@ def apply_edits(spec, model, edits: list[dict[str, Any]]) -> list[str]:
         kind = edit.get("kind") if isinstance(edit, dict) else None
         if kind not in KINDS:
             raise EditRefused(f"edit {number}: unknown kind {kind!r}; choose from {list(KINDS)}")
-        if kind == "disableInput":
+        if kind in ("disableInput", "scaleInput"):
             name = edit.get("input")
             if name not in spec.features:
                 raise EditRefused(f"edit {number}: the model has no input {name!r}")
+            factor = 0.0
+            if kind == "scaleInput":
+                factor = edit.get("factor")
+                if isinstance(factor, bool) or not isinstance(factor, (int, float)) or not np.isfinite(factor) or not 0 < factor <= MAX_FACTOR:
+                    raise EditRefused(f"edit {number}: factor must be above 0 and at most {MAX_FACTOR:g}")
+                factor = float(factor)
             index = spec.features.index(name)
             if convolutional:
-                params.conv[0][:, index, :] = 0.0
+                params.conv[0][:, index, :] *= factor
             elif getattr(spec, "raw_columns", False):
                 steps = spec.grid_steps  # a column is one neuron per step
-                params.dense[0][0][index * steps : (index + 1) * steps, :] = 0.0
+                params.dense[0][0][index * steps : (index + 1) * steps, :] *= factor
             else:
-                params.dense[0][0][index, :] = 0.0
-            said.append(f"switched off {name}")
+                params.dense[0][0][index, :] *= factor
+            said.append(f"switched off {name}" if kind == "disableInput" else f"multiplied what {name} feeds the first layer by {factor:g}")
         elif kind == "setWeight":
             layer = _int(edit, "layer", 0, len(params.dense), number)
             weights, _ = params.dense[layer]

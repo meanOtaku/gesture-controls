@@ -87,6 +87,25 @@ describe("editing a dense network", () => {
     expect(screen.queryByRole("checkbox", { name: /Switch off/ })).not.toBeInTheDocument();
   });
 
+  it("emphasises an input from the table, replaces an earlier emphasis, lets go of it at 1×, and sends it with the edit", async () => {
+    await open(view(dense));
+    edit();
+    const emphasis = () => screen.getByRole("combobox", { name: "Emphasis of Acceleration X spread" });
+    fireEvent.change(emphasis(), { target: { value: "3" } });
+    expect(screen.getByRole("list", { name: "Changes waiting" })).toHaveTextContent("Emphasise X spread: what it feeds the first layer is multiplied by 3");
+    fireEvent.change(emphasis(), { target: { value: "5" } });
+    const list = screen.getByRole("list", { name: "Changes waiting" });
+    expect(list).toHaveTextContent("multiplied by 5");
+    expect(list).not.toHaveTextContent("multiplied by 3"); // replaced, not added
+    fireEvent.change(emphasis(), { target: { value: "0.5" } });
+    expect(screen.getByRole("list", { name: "Changes waiting" })).toHaveTextContent("Play down X spread");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Switch off Acceleration X spread" }));
+    expect(emphasis()).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Switch off Acceleration X spread" }));
+    fireEvent.change(emphasis(), { target: { value: "1" } });
+    expect(screen.queryByText(/Play down X spread/)).not.toBeInTheDocument();
+  });
+
   it("refuses a value that is not a number and shows the reason when saving fails", async () => {
     await open(view(dense));
     edit();
