@@ -6,6 +6,7 @@ import { useLabelModels } from "../hooks/useLabelModels";
 import { useModelLabData } from "../hooks/useModelLabData";
 import type { LabelModel } from "../labelModels";
 import { ModelInspector } from "./ModelInspector";
+import { NetworkDesigns } from "./NetworkDesigns";
 import { TrainPanel } from "./TrainPanel";
 
 const STATE_TEXT: Record<string, string> = { draft: "Draft", evaluated: "Evaluated", approved: "Approved", active: "Active", archived: "Archived" };
@@ -62,10 +63,11 @@ export function NetworkLab({ modelId, onModelChange }: { modelId: string | null;
       )}
 
       <nav className="lab-workflow" aria-label="Network lab sections">
-        <a href="#lab-train">Build a network</a><a href="#lab-models">Look inside a model</a>
+        <a href="#lab-designs">Network designs</a><a href="#lab-train">Train with a design</a><a href="#lab-models">Look inside a model</a>
       </nav>
 
       <fieldset className="lab-workspace card-stack" disabled={!desktopAvailable} aria-label="Network tools">
+        <NetworkDesigns desktopAvailable={desktopAvailable} />
         <TrainPanel desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} lab />
 
         <Card id="lab-models" role="region" aria-label="Your models" className="min-w-0">
