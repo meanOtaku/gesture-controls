@@ -17,6 +17,7 @@ mod label_runtime;
 mod label_training;
 mod latest_write;
 mod model_lab;
+mod network_spec;
 mod overlay;
 mod recording_bundle;
 mod settings;

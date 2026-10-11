@@ -15,6 +15,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use crate::network_spec::NetworkSpec;
 use chrono::{SecondsFormat, Utc};
 use label_inference::{
     MAX_GRID_STEPS, MIN_GRID_STEPS, PPG_CHANNELS, RecordingInfo, RunPlan, SpikeMethod, begin_run,
@@ -81,6 +82,13 @@ pub struct TrainRequest {
     /// For the convolutional method: how many steps each channel of the window is laid onto. Absent means 32.
     #[serde(default)]
     pub grid_steps: Option<u32>,
+    /// Exactly which inputs the model reads, by name (statistics, or for the convolutional method channels), out of the
+    /// ones the chosen streams provide. Absent means all of them.
+    #[serde(default)]
+    pub features: Option<Vec<String>>,
+    /// The shape of a neural network and how it is trained; absent means the method's own default.
+    #[serde(default)]
+    pub network: Option<NetworkSpec>,
 }
 
 fn default_window_ms() -> u32 {
@@ -109,10 +117,110 @@ struct Checked {
     spike_method: Option<SpikeMethod>,
     ppg_channels: Vec<String>,
     grid_steps: u32,
+    network: Option<NetworkSpec>,
+    explicit_features: Option<Vec<String>>,
 }
 
 fn label_id(raw: &str) -> Result<LabelId, String> {
     LabelId::new(raw).map_err(|e| e.to_string())
+}
+
+/// What the model may read, worked out from the chosen streams and settings alone (no recordings needed), so the card can
+/// show every available input before anything is chosen.
+#[derive(Debug, Clone)]
+struct Inputs {
+    sources: Vec<StreamSource>,
+    spike_method: Option<SpikeMethod>,
+    ppg_channels: Vec<String>,
+    grid_steps: u32,
+    /// Every input the chosen streams provide, in canonical order.
+    available: Vec<String>,
+    /// The ones the model will read: `available`, or the explicit subset asked for.
+    features: Vec<String>,
+}
+
+fn resolve_inputs(request: &TrainRequest) -> Result<Inputs, String> {
+    let mut sources = request.sources.clone();
+    sources.sort_by_key(|s| format!("{s:?}"));
+    sources.dedup();
+    if sources.is_empty() {
+        return Err("choose at least one data stream for the model to read".into());
+    }
+    let spike_method = match request.spike_method.as_deref() {
+        None | Some("none") | Some("") => None,
+        Some(name) => Some(
+            SpikeMethod::from_name(name)
+                .ok_or_else(|| format!("unknown spike extraction method '{name}'"))?,
+        ),
+    }
+    .filter(|_| sources.contains(&StreamSource::WatchPpg)); // nothing for it to read without the pulse sensor
+    let ppg_channels: Vec<String> = match &request.ppg_channels {
+        None => PPG_CHANNELS.iter().map(ToString::to_string).collect(),
+        Some(chosen) => {
+            if let Some(bad) = chosen.iter().find(|c| !PPG_CHANNELS.contains(&c.as_str())) {
+                return Err(format!(
+                    "unknown pulse sensor channel '{bad}'; choose from green, red, ir"
+                ));
+            }
+            // In the sensor's own order, once each.
+            PPG_CHANNELS
+                .iter()
+                .filter(|c| chosen.iter().any(|x| x == **c))
+                .map(ToString::to_string)
+                .collect()
+        }
+    };
+    if sources.contains(&StreamSource::WatchPpg) && ppg_channels.is_empty() {
+        return Err("choose at least one pulse sensor channel for the model to read".into());
+    }
+    let channel_refs: Vec<&str> = ppg_channels.iter().map(String::as_str).collect();
+    let grid_steps = request.grid_steps.unwrap_or(32);
+    let available = if request.backend == "cnn1d" {
+        if !(MIN_GRID_STEPS..=MAX_GRID_STEPS).contains(&grid_steps) {
+            return Err(format!(
+                "the window grid must have from {MIN_GRID_STEPS} to {MAX_GRID_STEPS} steps, got {grid_steps}"
+            ));
+        }
+        // A convolutional model reads the window's channels themselves, not statistics of them.
+        grid_channels_for(&sources, &channel_refs)
+    } else {
+        canonical_features_with_channels(
+            &sources,
+            request.movement_only,
+            spike_method.is_some(),
+            &channel_refs,
+        )
+    };
+    if available.is_empty() {
+        return Err("none of the chosen data streams can feed a model (head pose is not available to trained models)".into());
+    }
+    let features = match &request.features {
+        None => available.clone(),
+        Some(wanted) => {
+            if let Some(bad) = wanted.iter().find(|name| !available.contains(name)) {
+                return Err(format!(
+                    "'{bad}' is not an input the chosen streams and settings provide"
+                ));
+            }
+            let chosen: Vec<String> = available
+                .iter()
+                .filter(|name| wanted.contains(name))
+                .cloned()
+                .collect();
+            if chosen.is_empty() {
+                return Err("choose at least one input for the model to read".into());
+            }
+            chosen
+        }
+    };
+    Ok(Inputs {
+        sources,
+        spike_method,
+        ppg_channels,
+        grid_steps,
+        available,
+        features,
+    })
 }
 
 /// Checks the request and turns it into the sealed decisions. `sha_of` reads a recording's SHA-256.
@@ -175,60 +283,22 @@ fn check_request(
     if recordings.is_empty() {
         return Err("choose at least one recording".into());
     }
-    let mut sources = request.sources.clone();
-    sources.sort_by_key(|s| format!("{s:?}"));
-    sources.dedup();
-    if sources.is_empty() {
-        return Err("choose at least one data stream for the model to read".into());
-    }
-    let spike_method = match request.spike_method.as_deref() {
-        None | Some("none") | Some("") => None,
-        Some(name) => Some(
-            SpikeMethod::from_name(name)
-                .ok_or_else(|| format!("unknown spike extraction method '{name}'"))?,
-        ),
-    }
-    .filter(|_| sources.contains(&StreamSource::WatchPpg)); // nothing for it to read without the pulse sensor
-    let ppg_channels: Vec<String> = match &request.ppg_channels {
-        None => PPG_CHANNELS.iter().map(ToString::to_string).collect(),
-        Some(chosen) => {
-            if let Some(bad) = chosen.iter().find(|c| !PPG_CHANNELS.contains(&c.as_str())) {
-                return Err(format!(
-                    "unknown pulse sensor channel '{bad}'; choose from green, red, ir"
-                ));
-            }
-            // In the sensor's own order, once each.
-            PPG_CHANNELS
-                .iter()
-                .filter(|c| chosen.iter().any(|x| x == **c))
-                .map(ToString::to_string)
-                .collect()
+    let resolved = resolve_inputs(request)?;
+    let Inputs {
+        sources,
+        spike_method,
+        ppg_channels,
+        grid_steps,
+        features,
+        ..
+    } = resolved;
+    let network = match &request.network {
+        Some(network) => {
+            network.validate(&request.backend)?;
+            Some(network.clone())
         }
+        None => None,
     };
-    if sources.contains(&StreamSource::WatchPpg) && ppg_channels.is_empty() {
-        return Err("choose at least one pulse sensor channel for the model to read".into());
-    }
-    let channel_refs: Vec<&str> = ppg_channels.iter().map(String::as_str).collect();
-    let grid_steps = request.grid_steps.unwrap_or(32);
-    let features = if request.backend == "cnn1d" {
-        if !(MIN_GRID_STEPS..=MAX_GRID_STEPS).contains(&grid_steps) {
-            return Err(format!(
-                "the window grid must have from {MIN_GRID_STEPS} to {MAX_GRID_STEPS} steps, got {grid_steps}"
-            ));
-        }
-        // A convolutional model reads the window's channels themselves, not statistics of them.
-        grid_channels_for(&sources, &channel_refs)
-    } else {
-        canonical_features_with_channels(
-            &sources,
-            request.movement_only,
-            spike_method.is_some(),
-            &channel_refs,
-        )
-    };
-    if features.is_empty() {
-        return Err("none of the chosen data streams can feed a model (head pose is not available to trained models)".into());
-    }
     let input = InputContract {
         sources,
         features,
@@ -249,6 +319,8 @@ fn check_request(
         spike_method,
         ppg_channels,
         grid_steps,
+        network,
+        explicit_features: request.features.clone(),
     })
 }
 
@@ -289,6 +361,8 @@ fn build_spec(
         "spikeMethod": checked.spike_method.map_or("none", SpikeMethod::name),
         "ppgChannels": checked.ppg_channels,
         "gridSteps": checked.grid_steps,
+        "features": checked.explicit_features,
+        "network": checked.network,
     })
 }
 
@@ -306,6 +380,9 @@ pub struct PlanView {
     pub evaluation: Vec<String>,
     /// Why this cannot be trained, in words; `None` when it can.
     pub problem: Option<String>,
+    /// Every input the chosen streams and settings provide (for the card to list), and the ones the model will read.
+    pub available: Vec<String>,
+    pub features: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -393,16 +470,30 @@ pub fn plan_label_training(app: AppHandle, request: TrainRequest) -> PlanView {
         plan_split(&checked.recordings, &checked.mapping, &checked.target)
             .map_err(|e| e.to_string())
     });
+    let inputs = resolve_inputs(&request);
+    let (available, features) = match &inputs {
+        Ok(inputs) => (inputs.available.clone(), inputs.features.clone()),
+        Err(_) => {
+            // An explicit choice that does not fit still lets the card list what is available.
+            let mut open = request.clone();
+            open.features = None;
+            resolve_inputs(&open).map_or((Vec::new(), Vec::new()), |i| (i.available, Vec::new()))
+        }
+    };
     match result {
         Ok(split) => PlanView {
             train: split.train.iter().map(ToString::to_string).collect(),
             evaluation: split.evaluation.iter().map(ToString::to_string).collect(),
             problem: None,
+            available,
+            features,
         },
         Err(problem) => PlanView {
             train: Vec::new(),
             evaluation: Vec::new(),
             problem: Some(problem),
+            available,
+            features,
         },
     }
 }
@@ -822,6 +913,8 @@ mod tests {
             spike_method: None,
             ppg_channels: None,
             grid_steps: None,
+            features: None,
+            network: None,
         }
     }
 
@@ -1017,6 +1110,83 @@ mod tests {
             check_request(&r, &datasets(), &sha)
                 .unwrap_err()
                 .contains("window grid")
+        );
+    }
+
+    #[test]
+    fn a_chosen_subset_of_inputs_is_what_the_model_reads_and_the_trainer_is_told() {
+        let mut r = request();
+        let all = check_request(&r, &datasets(), &sha).unwrap();
+        r.features = Some(vec!["gyro_z_max".into(), "accel_x_std".into()]);
+        let some = check_request(&r, &datasets(), &sha).unwrap();
+        assert_eq!(some.input.features, ["accel_x_std", "gyro_z_max"]); // canonical order, whatever order they were asked in
+        assert!(some.input.features.len() < all.input.features.len());
+        let split = plan_split(&some.recordings, &some.mapping, &some.target).unwrap();
+        assert_eq!(
+            build_spec(&some, &split, &BTreeMap::new())["features"],
+            serde_json::json!(["gyro_z_max", "accel_x_std"])
+        );
+        // The card lists what is available however it is narrowed.
+        let inputs = resolve_inputs(&r).unwrap();
+        assert_eq!(inputs.available, all.input.features);
+        r.features = Some(vec!["ppg_green_mean".into()]);
+        assert!(
+            check_request(&r, &datasets(), &sha)
+                .unwrap_err()
+                .contains("not an input")
+        );
+        r.features = Some(vec![]);
+        assert!(
+            check_request(&r, &datasets(), &sha)
+                .unwrap_err()
+                .contains("at least one input")
+        );
+        // For the convolutional method the inputs are channels.
+        let mut c = request();
+        c.backend = "cnn1d".into();
+        c.features = Some(vec!["gyro_y".into(), "accel_x".into()]);
+        assert_eq!(
+            check_request(&c, &datasets(), &sha).unwrap().input.features,
+            ["accel_x", "gyro_y"]
+        );
+    }
+
+    #[test]
+    fn a_designed_network_is_checked_and_passed_to_the_trainer() {
+        let mut r = request();
+        r.backend = "torch-mlp".into();
+        r.network = Some(
+            serde_json::from_value(serde_json::json!({
+                "hidden": [{"units": 16, "activation": "tanh"}], "epochs": 50, "learningRate": 0.02
+            }))
+            .unwrap(),
+        );
+        let checked = check_request(&r, &datasets(), &sha).unwrap();
+        let split = plan_split(&checked.recordings, &checked.mapping, &checked.target).unwrap();
+        let spec = build_spec(&checked, &split, &BTreeMap::new());
+        assert_eq!(
+            spec["network"]["hidden"][0],
+            serde_json::json!({"units": 16, "activation": "tanh"})
+        );
+        assert_eq!(spec["network"]["epochs"], 50);
+        // No network settings: the trainer is told nothing and uses the method's own default.
+        r.network = None;
+        let checked = check_request(&r, &datasets(), &sha).unwrap();
+        assert!(build_spec(&checked, &split, &BTreeMap::new())["network"].is_null());
+        // Settings that cannot be trained are refused here, and settings for a method without a network are too.
+        r.network =
+            Some(serde_json::from_value(serde_json::json!({"hidden": [{"units": 0}]})).unwrap());
+        assert!(
+            check_request(&r, &datasets(), &sha)
+                .unwrap_err()
+                .contains("units")
+        );
+        r.backend = "logreg".into();
+        r.network = Some(NetworkSpec::default());
+        assert!(
+            check_request(&r, &datasets(), &sha)
+                .unwrap_err()
+                .contains("neural network methods")
         );
     }
 
