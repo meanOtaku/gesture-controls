@@ -31,7 +31,7 @@ pub use import::{
 pub use loader::{
     ModelLoadFailure, check_loadable, load_active_models, load_version, removable_model_dir,
 };
-pub use model::{LoadedModel, ModelError};
+pub use model::{GridPlan, LoadedModel, ModelError};
 pub use pinch_inference::SpikeMethod;
 pub use pipeline::{LabelPipeline, LabelScore, Rejection, WindowRejection};
 pub use runtime::{LabelRuntime, RuntimeMode, RuntimeOutput};

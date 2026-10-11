@@ -17,7 +17,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use model_lab_core::{InputContract, LabelId, QualityRules, StreamSource, Thresholds};
-use pinch_inference::{FEATURE_NAMES, SpikeMethod};
+use pinch_inference::{FEATURE_NAMES, GridChannel, MAX_GRID_STEPS, MIN_GRID_STEPS, SpikeMethod};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -112,8 +112,18 @@ pub struct InputSpec {
     /// `[null, features]`: any batch size, then one value per feature.
     pub shape: Vec<Option<u32>>,
     pub dtype: String,
-    /// Ordered: position n is input n of the model.
+    /// Ordered: position n is input n of the model. For a convolutional model (`grid` present), the channel names.
     pub features: Vec<String>,
+    /// Present for a convolutional model: the window is read as a grid of the listed channels over `steps` steps, laid
+    /// out as one flat row (`channels x steps` numbers, channel after channel) that the model folds back into rows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grid: Option<GridSpec>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GridSpec {
+    pub steps: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -153,6 +163,16 @@ pub struct Preprocessing {
 }
 
 impl Manifest {
+    /// The channels a convolutional model reads, in order; `None` for a model that reads statistics.
+    pub fn grid_channels(&self) -> Option<Vec<GridChannel>> {
+        self.input.grid.as_ref()?;
+        self.input
+            .features
+            .iter()
+            .map(|name| GridChannel::from_name(name))
+            .collect()
+    }
+
     /// How this model's spike features are extracted, or `None` when it reads none.
     pub fn spike_method(&self) -> Option<SpikeMethod> {
         self.preprocessing
@@ -200,6 +220,20 @@ impl Manifest {
             release: self.thresholds.release,
             ..Thresholds::default()
         }
+    }
+}
+
+/// The stream a grid channel comes from.
+pub fn source_of_channel(channel: GridChannel) -> StreamSource {
+    match channel {
+        GridChannel::PpgGreen | GridChannel::PpgRed | GridChannel::PpgIr => StreamSource::WatchPpg,
+        GridChannel::AccelX | GridChannel::AccelY | GridChannel::AccelZ => {
+            StreamSource::WatchAcceleration
+        }
+        GridChannel::GyroX | GridChannel::GyroY | GridChannel::GyroZ => {
+            StreamSource::WatchGyroscope
+        }
+        _ => StreamSource::WatchOrientation,
     }
 }
 
@@ -308,7 +342,9 @@ pub fn validate_bundle(
             }));
         }
     }
-    if manifest.spike_method().is_none() && manifest.input.features.iter().any(|f| is_spike_name(f))
+    if manifest.input.grid.is_none()
+        && manifest.spike_method().is_none()
+        && manifest.input.features.iter().any(|f| is_spike_name(f))
     {
         return Err(BundleError::SpikeMethodMissing);
     }
@@ -337,20 +373,50 @@ pub fn validate_bundle(
             return Err(BundleError::UnreadableSource(*source));
         }
     }
-    for feature in &manifest.input.features {
-        let source = source_of_feature(feature)
-            .ok_or_else(|| BundleError::UnknownFeature(feature.clone()))?;
-        if !declared.contains(&source) {
-            return Err(BundleError::SourceNotDeclared {
-                feature: feature.clone(),
-                stream: source,
-            });
+    let width = match &manifest.input.grid {
+        None => {
+            for feature in &manifest.input.features {
+                let source = source_of_feature(feature)
+                    .ok_or_else(|| BundleError::UnknownFeature(feature.clone()))?;
+                if !declared.contains(&source) {
+                    return Err(BundleError::SourceNotDeclared {
+                        feature: feature.clone(),
+                        stream: source,
+                    });
+                }
+            }
+            manifest.input.features.len()
         }
-    }
-    let width = manifest.input.features.len();
+        Some(grid) => {
+            if !(MIN_GRID_STEPS..=MAX_GRID_STEPS).contains(&grid.steps) {
+                return Err(BundleError::ContractMismatch(format!(
+                    "a convolutional model's grid must have from {MIN_GRID_STEPS} to {MAX_GRID_STEPS} steps, got {}",
+                    grid.steps
+                )));
+            }
+            for feature in &manifest.input.features {
+                let channel = GridChannel::from_name(feature)
+                    .ok_or_else(|| BundleError::UnknownFeature(feature.clone()))?;
+                let source = source_of_channel(channel);
+                if !declared.contains(&source) {
+                    return Err(BundleError::SourceNotDeclared {
+                        feature: feature.clone(),
+                        stream: source,
+                    });
+                }
+            }
+            manifest.input.features.len() * grid.steps as usize
+        }
+    };
     if manifest.input.shape.len() != 2 || manifest.input.shape[1] != Some(width as u32) {
         return Err(BundleError::ContractMismatch(format!(
-            "the input shape must be [batch, {width}] to match the {width} listed features"
+            "the input shape must be [batch, {width}] to match the {} listed {}",
+            manifest.input.features.len(),
+            if manifest.input.grid.is_some() {
+                "channels over the grid's steps"
+            } else {
+                "features"
+            }
         )));
     }
 
@@ -659,6 +725,56 @@ pub(crate) mod tests {
                 "{preprocessing}"
             );
         }
+    }
+
+    #[test]
+    fn a_convolutional_manifest_is_checked_against_its_grid() {
+        let cnn = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/trained_cnn_bundle");
+        let copy = || {
+            let dir = tempfile::tempdir().unwrap();
+            for file in ["manifest.json", "model.onnx"] {
+                fs::copy(cnn.join(file), dir.path().join(file)).unwrap();
+            }
+            dir
+        };
+        assert!(validate_bundle(copy().path(), None).is_ok());
+        // Steps outside the allowed range, and an input shape that is not channels x steps.
+        let dir = copy();
+        edit_manifest(dir.path(), |m| m["input"]["grid"]["steps"] = 2.into());
+        assert!(matches!(
+            validate_bundle(dir.path(), None),
+            Err(BundleError::ContractMismatch(_))
+        ));
+        let dir = copy();
+        edit_manifest(dir.path(), |m| {
+            m["input"]["shape"] = serde_json::json!([null, 6])
+        });
+        assert!(matches!(
+            validate_bundle(dir.path(), None),
+            Err(BundleError::ContractMismatch(_))
+        ));
+        // A channel that does not exist, and a channel whose stream is not declared.
+        let dir = copy();
+        edit_manifest(dir.path(), |m| m["input"]["features"][0] = "accel_w".into());
+        assert!(matches!(
+            validate_bundle(dir.path(), None),
+            Err(BundleError::UnknownFeature(_))
+        ));
+        let dir = copy();
+        edit_manifest(dir.path(), |m| {
+            m["input"]["features"][0] = "ppg_green".into()
+        });
+        assert!(matches!(
+            validate_bundle(dir.path(), None),
+            Err(BundleError::SourceNotDeclared { .. })
+        ));
+        // A statistics model cannot claim a grid it does not read.
+        let dir = copy_fixture();
+        edit_manifest(dir.path(), |m| {
+            m["input"]["grid"] = serde_json::json!({"steps": 16})
+        });
+        assert!(validate_bundle(dir.path(), None).is_err());
     }
 
     #[test]

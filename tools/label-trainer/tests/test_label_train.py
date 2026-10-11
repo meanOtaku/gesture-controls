@@ -347,3 +347,27 @@ def test_the_spec_checks_the_pulse_channels(tmp_path: Path) -> None:
     with pytest.raises(lt.TrainingRefused, match="at least one pulse sensor channel"):
         lt.parse_spec(spec_for(tmp_path, sources=["watchPpg"], ppgChannels=[]))
     assert lt.parse_spec(spec_for(tmp_path)).ppg_channels == ["green", "red", "ir"]
+
+
+def test_a_convolutional_model_learns_trains_exports_and_describes_its_grid(tmp_path: Path) -> None:
+    pytest.importorskip("torch")
+    out = tmp_path / "run"
+    result = lt.run(spec_for(tmp_path, "cnn1d", gridSteps=16, params={"epochs": 40}), out)
+    assert result["outcome"] == "deployable", result["message"]
+    assert result["metrics"]["f1"] > 0.9
+    assert result["parityMaxAbsDifference"] <= lt.PARITY_TOLERANCE
+    assert result["features"] == ["accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z"]  # channels, not statistics
+    manifest = json.loads((out / "bundle" / "manifest.json").read_text())
+    assert manifest["input"]["features"] == result["features"]
+    assert manifest["input"]["shape"] == [None, 6 * 16]
+    assert manifest["input"]["grid"] == {"steps": 16}
+    assert manifest["framework"]["name"] == "pytorch"
+    assert manifest["provenance"]["backend"] == "cnn1d" and manifest["provenance"]["gridSteps"] == 16
+
+
+def test_the_convolutional_model_can_read_the_window_without_its_level_and_checks_the_steps(tmp_path: Path) -> None:
+    pytest.importorskip("torch")
+    result = lt.run(spec_for(tmp_path, "cnn1d", gridSteps=16, movementOnly=True, params={"epochs": 30}), tmp_path / "run")
+    assert result["outcome"] == "deployable", result["message"]
+    with pytest.raises(lt.TrainingRefused, match="gridSteps"):
+        lt.parse_spec(spec_for(tmp_path, "cnn1d", gridSteps=2))

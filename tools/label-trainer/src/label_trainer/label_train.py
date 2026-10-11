@@ -33,11 +33,12 @@ import numpy as np
 from .csv_io import load_recording
 from .dataset import build_dataset_from_recordings
 from .features import FEATURE_NAMES, SPIKE_FEATURE_NAMES, SPIKE_METHODS
+from .grid import DEFAULT_STEPS, MAX_STEPS, MIN_STEPS, build_grid, channels_for
 from .labels import LABEL_MAPPING_VERSION, load_label_mapping
 from .windowing import WindowConfig
 
 SPEC_VERSION = 1
-BACKENDS = ("logreg", "mlp", "torch-mlp")
+BACKENDS = ("logreg", "mlp", "torch-mlp", "cnn1d")
 SOURCES = ("watchOrientation", "watchAcceleration", "watchGyroscope", "watchPpg")
 ONNX_OPSET = 15
 TORCH_OPSET = 17
@@ -119,6 +120,7 @@ class Spec:
     movement_only: bool
     spike_method: str | None
     ppg_channels: list[str]
+    grid_steps: int
     window: WindowConfig
     backend: str
     seed: int
@@ -149,7 +151,18 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         ppg_channels = [channel for channel in PPG_CHANNELS if channel in chosen_channels]
         if "watchPpg" in sources and not ppg_channels:
             raise TrainingRefused("choose at least one pulse sensor channel for the model to read")
-    available = features_for(sources, bool(raw.get("movementOnly", False)), spike_method is not None, ppg_channels)
+    grid_steps = int(raw.get("gridSteps", DEFAULT_STEPS))
+    if backend == "cnn1d":
+        if not MIN_STEPS <= grid_steps <= MAX_STEPS:
+            raise TrainingRefused(f"gridSteps must be from {MIN_STEPS} to {MAX_STEPS}, got {grid_steps}")
+        # A convolutional model reads the window's channels, not statistics: the "features" are the channel names.
+        available = channels_for(sources, ppg_channels)
+        if not available:
+            raise TrainingRefused("no channels are available from the chosen streams")
+        if not any(channel.startswith("ppg_") for channel in available):
+            spike_method = None  # nothing for it to read
+    else:
+        available = features_for(sources, bool(raw.get("movementOnly", False)), spike_method is not None, ppg_channels)
     requested = raw.get("features")
     if requested:
         extra = [name for name in requested if name not in available]
@@ -180,6 +193,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         movement_only=bool(raw.get("movementOnly", False)),
         spike_method=spike_method,
         ppg_channels=ppg_channels,
+        grid_steps=grid_steps,
         window=WindowConfig(
             window_ms=float(window.get("windowMs", 500)),
             stride_ms=float(window.get("strideMs", 150)),
@@ -207,9 +221,16 @@ def build_matrices(spec: Spec):
     for rid, path in spec.recordings.items():
         recording = load_recording(path)
         recordings.append(replace(recording, session_id=rid))
-    dataset = build_dataset_from_recordings(recordings, spec.window, "exclude", label_mapping=_mapping(spec), spike_method=spec.spike_method)
-    columns = [FEATURE_NAMES.index(name) for name in spec.features]
-    x = dataset.features[:, columns].astype(np.float32)
+    if spec.backend == "cnn1d":
+        dataset = build_dataset_from_recordings(
+            recordings, spec.window, "exclude", label_mapping=_mapping(spec),
+            feature_fn=lambda recording, window: build_grid(recording, window, spec.features, spec.grid_steps, spec.spike_method),
+        )
+        x = dataset.features.astype(np.float32)
+    else:
+        dataset = build_dataset_from_recordings(recordings, spec.window, "exclude", label_mapping=_mapping(spec), spike_method=spec.spike_method)
+        columns = [FEATURE_NAMES.index(name) for name in spec.features]
+        x = dataset.features[:, columns].astype(np.float32)
     y = (dataset.targets == spec.target).astype(np.int64)
     train_mask = np.isin(dataset.groups, spec.train)
     eval_mask = np.isin(dataset.groups, spec.evaluation)
@@ -301,7 +322,113 @@ class TorchModel:
             return self.module()(torch.tensor(x, dtype=torch.float32)).numpy()
 
 
+class CnnModel:
+    """A small 1D convolutional network over the window's grid (channels x steps), with its scaling inside it.
+
+    The input is the grid as one flat row (`channels x steps` numbers, channel after channel); the first thing the model
+    does is fold it back into rows. Then, per channel, it takes the window's own mean away (with `centre_windows`, so
+    only how a signal changes is left, never its level) or the training mean, and divides by the training spread. Two
+    convolutions follow, then the average and the maximum over time of each filter, and one layer that gives the two
+    probabilities. While training, windows are shifted a little in time, scaled a little and given a little noise, so the
+    few windows of a few recordings are not simply memorised. Imported lazily: PyTorch is an optional extra.
+    """
+
+    def __init__(self, channels: int, steps: int, seed: int, params: dict[str, Any], centre_windows: bool):
+        import torch
+
+        torch.manual_seed(seed)
+        self.torch = torch
+        self.channels, self.steps, self.centre = channels, steps, centre_windows
+        filters = int(params.get("filters", 16))
+        kernel = int(params.get("kernel", 5))
+        self.epochs = int(params.get("epochs", 80))
+        self.seed = seed
+        self.mean = torch.zeros(1, channels, 1)
+        self.std = torch.ones(1, channels, 1)
+        self.net = torch.nn.Sequential(
+            torch.nn.Conv1d(channels, filters, kernel, padding=kernel // 2), torch.nn.ReLU(),
+            torch.nn.Conv1d(filters, filters, kernel, padding=kernel // 2), torch.nn.ReLU(),
+        )
+        self.head = torch.nn.Sequential(torch.nn.Dropout(0.2), torch.nn.Linear(2 * filters, 2))
+
+    def _scaled(self, flat):
+        grid = flat.reshape(-1, self.channels, self.steps)
+        grid = grid - (grid.mean(dim=2, keepdim=True) if self.centre else self.mean)
+        return grid / self.std
+
+    def _logits(self, scaled):
+        features = self.net(scaled)
+        return self.head(self.torch.cat([features.mean(dim=2), features.amax(dim=2)], dim=1))
+
+    def fit(self, x: np.ndarray, y: np.ndarray) -> "CnnModel":
+        torch = self.torch
+        data = torch.tensor(x, dtype=torch.float32)
+        grid = data.reshape(-1, self.channels, self.steps)
+        if self.centre:
+            centred = grid - grid.mean(dim=2, keepdim=True)
+        else:
+            self.mean = grid.mean(dim=(0, 2), keepdim=True)
+            centred = grid - self.mean
+        self.std = centred.std(dim=(0, 2), keepdim=True).clamp_min(1e-6)
+        target = torch.tensor(y, dtype=torch.long)
+        counts = torch.bincount(target, minlength=2).float()
+        weights = counts.sum() / (2 * counts.clamp_min(1))
+        loss_fn = torch.nn.CrossEntropyLoss(weight=weights)
+        parameters = [*self.net.parameters(), *self.head.parameters()]
+        optimiser = torch.optim.Adam(parameters, lr=3e-3, weight_decay=1e-3)
+        generator = torch.Generator().manual_seed(self.seed)
+        scaled = self._scaled(data)
+        count = scaled.shape[0]
+        self.net.train()
+        self.head.train()
+        for _ in range(self.epochs):
+            order = torch.randperm(count, generator=generator)
+            for start in range(0, count, 64):
+                index = order[start : start + 64]
+                batch = scaled[index]
+                shifts = torch.randint(-2, 3, (batch.shape[0],), generator=generator)
+                batch = torch.stack([torch.roll(row, int(shift), dims=1) for row, shift in zip(batch, shifts)])
+                batch = batch * (0.9 + 0.2 * torch.rand(batch.shape[0], batch.shape[1], 1, generator=generator))
+                batch = batch + 0.05 * torch.randn(batch.shape, generator=generator)
+                optimiser.zero_grad()
+                loss_fn(self._logits(batch), target[index]).backward()
+                optimiser.step()
+        self.net.eval()
+        self.head.eval()
+        return self
+
+    def module(self):
+        torch = self.torch
+        outer = self
+
+        class Wrapped(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.net, self.head = outer.net, outer.head
+                self.register_buffer("mean", outer.mean)
+                self.register_buffer("std", outer.std)
+
+            def forward(self, flat):
+                grid = flat.reshape(-1, outer.channels, outer.steps)
+                grid = grid - (grid.mean(dim=2, keepdim=True) if outer.centre else self.mean)
+                features = self.net(grid / self.std)
+                pooled = torch.cat([features.mean(dim=2), features.amax(dim=2)], dim=1)
+                return torch.softmax(self.head(pooled), dim=1)
+
+        return Wrapped().eval()
+
+    def predict_proba(self, x: np.ndarray) -> np.ndarray:
+        torch = self.torch
+        with torch.no_grad():
+            return self.module()(torch.tensor(x, dtype=torch.float32)).numpy()
+
+
 def fit(spec: Spec, x_train: np.ndarray, y_train: np.ndarray):
+    if spec.backend == "cnn1d":
+        try:
+            return CnnModel(len(spec.features), spec.grid_steps, spec.seed, spec.params, spec.movement_only).fit(x_train, y_train)
+        except ImportError as error:
+            raise TrainingRefused("PyTorch is not installed. Run the trainer with the 'torch' extra to use this backend") from error
     if spec.backend == "torch-mlp":
         try:
             return TorchModel(x_train.shape[1], spec.seed, spec.params).fit(x_train, y_train)
@@ -392,6 +519,8 @@ RUNNABLE_OPERATORS = {
     ("", "Add"), ("", "Sub"), ("", "Mul"), ("", "Div"), ("", "MatMul"), ("", "Gemm"), ("", "Relu"), ("", "Sigmoid"),
     ("", "Softmax"), ("", "Concat"), ("", "Identity"), ("", "Constant"), ("", "Cast"), ("", "Reshape"), ("", "Flatten"),
     ("", "Transpose"), ("", "Unsqueeze"), ("", "Squeeze"),
+    # What the convolutional model adds: convolutions, and pooling over time.
+    ("", "Conv"), ("", "ReduceMean"), ("", "ReduceMax"),
 }
 
 
@@ -448,7 +577,7 @@ def dense_network_onnx(layers: list[tuple[np.ndarray, np.ndarray]], mean: np.nda
 
 def export_onnx(spec: Spec, model, x_sample: np.ndarray, path: Path) -> int:
     """Writes the ONNX file and returns the opset it was written with."""
-    if spec.backend == "torch-mlp":
+    if spec.backend in ("torch-mlp", "cnn1d"):
         import torch
 
         module = model.module()
@@ -491,7 +620,7 @@ def onnx_probabilities(path: Path, x: np.ndarray) -> np.ndarray:
 
 
 def framework_of(spec: Spec) -> dict[str, str]:
-    if spec.backend == "torch-mlp":
+    if spec.backend in ("torch-mlp", "cnn1d"):
         import torch
 
         return {"name": "pytorch", "version": torch.__version__.split("+")[0]}
@@ -511,7 +640,12 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
         "targetLabel": spec.target,
         "model": {"file": "model.onnx", "sha256": sha, "format": "onnx", "opset": opset},
         "framework": framework_of(spec),
-        "input": {"name": "X", "shape": [None, len(spec.features)], "dtype": "float32", "features": spec.features},
+        "input": (
+            # A convolutional model: the channels (one flat row of channels x steps numbers), and how many steps each has.
+            {"name": "X", "shape": [None, len(spec.features) * spec.grid_steps], "dtype": "float32", "features": spec.features, "grid": {"steps": spec.grid_steps}}
+            if spec.backend == "cnn1d"
+            else {"name": "X", "shape": [None, len(spec.features)], "dtype": "float32", "features": spec.features}
+        ),
         "output": {"name": "probabilities", "shape": [None, 2], "dtype": "float32", "positiveIndex": 1},
         "sources": spec.sources,
         "window": {
@@ -535,6 +669,7 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
             "movementOnly": spec.movement_only,
             "spikeMethod": spec.spike_method or "none",
             "ppgChannels": spec.ppg_channels,
+            "gridSteps": spec.grid_steps if spec.backend == "cnn1d" else None,
         },
     }
     (bundle / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

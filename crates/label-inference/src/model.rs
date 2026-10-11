@@ -3,7 +3,7 @@ use std::sync::Arc;
 use model_lab_core::{
     InputContract, LabelId, LifecycleState, ModelVersion, ModelVersionId, QualityRules, Thresholds,
 };
-use pinch_inference::{FEATURE_COUNT, FEATURE_NAMES, SpikeMethod};
+use pinch_inference::{FEATURE_COUNT, FEATURE_NAMES, GridChannel, SpikeMethod};
 use thiserror::Error;
 use tract_onnx::prelude::*;
 
@@ -32,6 +32,13 @@ pub enum ModelError {
 }
 
 /// A validated model, tied to the registry version that approved it, ready to score windows.
+/// The grid a convolutional model reads: these channels, each laid onto this many steps.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GridPlan {
+    pub channels: Vec<GridChannel>,
+    pub steps: usize,
+}
+
 pub struct LoadedModel {
     pub version_id: ModelVersionId,
     pub label: LabelId,
@@ -41,6 +48,8 @@ pub struct LoadedModel {
     pub model_sha256: String,
     /// How this model's pulse-sensor spike features are made, if it reads any: the way it was trained.
     pub spike_method: Option<SpikeMethod>,
+    /// For a convolutional model: the channels and steps of the grid it reads, instead of canonical features.
+    pub grid: Option<GridPlan>,
     /// Positions of this model's features within the canonical vector, in the order the model expects them.
     feature_indices: Vec<usize>,
     plan: Arc<TypedRunnableModel<TypedModel>>,
@@ -65,11 +74,21 @@ impl LoadedModel {
             return Err(ModelError::NotTheApprovedModel);
         }
         // The bundle validator already proved every feature name is canonical.
+        let grid = bundle.manifest.grid_channels().map(|channels| GridPlan {
+            channels,
+            steps: bundle
+                .manifest
+                .input
+                .grid
+                .as_ref()
+                .map_or(0, |g| g.steps as usize),
+        });
         let feature_indices = bundle
             .manifest
             .input
             .features
             .iter()
+            .filter(|_| grid.is_none())
             .filter_map(|name| FEATURE_NAMES.iter().position(|canonical| canonical == name))
             .collect();
         Ok(Self {
@@ -81,6 +100,7 @@ impl LoadedModel {
             quality: version.quality,
             model_sha256: bundle.model_sha256.clone(),
             spike_method: bundle.manifest.spike_method(),
+            grid,
             feature_indices,
             output_index: bundle.output_index,
             positive_index: bundle.manifest.output.positive_index,
@@ -91,6 +111,12 @@ impl LoadedModel {
     /// The probability that this model's label is present, from the canonical features of one window.
     pub fn predict(&self, canonical: &[f32; FEATURE_COUNT]) -> Result<f64, ModelError> {
         let selected: Vec<f32> = self.feature_indices.iter().map(|&i| canonical[i]).collect();
+        self.predict_input(selected)
+    }
+
+    /// The probability that this model's label is present, from exactly the numbers the model reads: the selected
+    /// features, or for a convolutional model the flat grid.
+    pub fn predict_input(&self, selected: Vec<f32>) -> Result<f64, ModelError> {
         if selected.iter().any(|v| !v.is_finite()) {
             return Err(ModelError::NonFiniteFeature);
         }
@@ -214,6 +240,47 @@ pub(crate) mod tests {
             load(&|v| v.model_sha256 = Some("0".repeat(64))),
             Err(ModelError::NotTheApprovedModel)
         ));
+    }
+
+    /// A convolutional model from the real trainer reads the window as a flat grid: the validator accepts it, the
+    /// runtime scores the trainer's grids the way the exported file does, and the grid it expects is the one declared.
+    #[test]
+    fn a_convolutional_bundle_validates_and_scores_the_trainers_grids() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/trained_cnn_bundle");
+        let bundle = validate_bundle(&dir, Some(&LabelId::new("snap").unwrap())).unwrap();
+        let version = active_version(&bundle);
+        let channels = bundle.manifest.grid_channels().expect("a grid model");
+        assert_eq!(channels.len(), 6);
+        assert_eq!(bundle.manifest.input.grid.as_ref().unwrap().steps, 16);
+        let model = LoadedModel::load(bundle, &version).unwrap();
+        let plan = model.grid.clone().expect("the model reads a grid");
+        assert_eq!((plan.channels.len(), plan.steps), (6, 16));
+        let expected: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(dir.join("expected.json")).unwrap()).unwrap();
+        let rows = expected["inputs"].as_array().unwrap();
+        let want = expected["positive_probability"].as_array().unwrap();
+        assert!(!rows.is_empty());
+        for (row, want) in rows.iter().zip(want) {
+            let input: Vec<f32> = row
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_f64().unwrap() as f32)
+                .collect();
+            assert_eq!(input.len(), 6 * 16);
+            let got = model.predict_input(input).unwrap();
+            assert!(
+                (got - want.as_f64().unwrap()).abs() < 1e-4,
+                "{got} vs {want}"
+            );
+        }
+        let first = want.first().unwrap().as_f64().unwrap();
+        let last = want.last().unwrap().as_f64().unwrap();
+        assert!(
+            first < last,
+            "the negative rows score below the positive ones: {first} {last}"
+        );
     }
 
     /// Bundles written by the real per-label trainer (`tools/model-bundle-fixture/make_trained_fixtures.py`), one per

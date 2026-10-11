@@ -11,7 +11,7 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use model_lab_core::{LabelId, ModelVersionId, StreamSource};
-use pinch_inference::{FusedWindow, OrientationSnapshot, extract_features_with};
+use pinch_inference::{FusedWindow, OrientationSnapshot, build_grid, extract_features_with};
 use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
 
 use crate::model::LoadedModel;
@@ -439,10 +439,17 @@ impl LabelPipeline {
             orientation_in_window: in_window,
             contact_quality_mean,
         };
-        let canonical = extract_features_with(&window, model.spike_method);
-        let confidence = model
-            .predict(&canonical)
-            .map_err(|e| Rejection::Model(e.to_string()))?;
+        let confidence = match &model.grid {
+            // A convolutional model reads the window itself, as a grid of channels over time.
+            Some(grid) => model.predict_input(build_grid(
+                &window,
+                &grid.channels,
+                grid.steps,
+                model.spike_method,
+            )),
+            None => model.predict(&extract_features_with(&window, model.spike_method)),
+        }
+        .map_err(|e| Rejection::Model(e.to_string()))?;
         Ok(Some(LabelScore {
             label: model.label.clone(),
             model_version: model.version_id.clone(),
@@ -519,6 +526,29 @@ pub(crate) mod tests {
         let now = feed(&mut p, 0, 60, 0.0);
         let (scores, _) = p.evaluate(&[&model], now);
         assert!(scores[0].confidence < 0.1, "{}", scores[0].confidence);
+    }
+
+    /// A convolutional model is fed the window as a grid, through the same shared buffers, and tells vigorous shaking
+    /// from stillness (the fixture was trained on exactly that).
+    #[test]
+    fn a_convolutional_model_scores_the_window_as_a_grid() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/trained_cnn_bundle");
+        let bundle = crate::bundle::validate_bundle(&dir, None).unwrap();
+        let version = crate::model::tests::active_version(&bundle);
+        let model = LoadedModel::load(bundle, &version).unwrap();
+        let score = |amplitude: f64| {
+            let mut pipeline = LabelPipeline::default();
+            pipeline.configure(&[&model]);
+            let now = feed(&mut pipeline, 0, 60, amplitude);
+            let (scores, rejections) = pipeline.evaluate(&[&model], now);
+            assert!(rejections.is_empty(), "{rejections:?}");
+            scores[0].confidence
+        };
+        let shaking = score(5.0);
+        let still = score(0.0);
+        assert!(shaking > still, "{shaking} vs {still}");
+        assert!(shaking > 0.5 && still < 0.5, "{shaking} vs {still}");
     }
 
     #[test]
