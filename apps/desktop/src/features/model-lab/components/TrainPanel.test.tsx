@@ -19,7 +19,8 @@ const dataset = (id: string, labels: string[]): DatasetSummary => ({ id, origina
 const labels = [label("snap", "Snap"), label("idle", "Idle"), label("old", "Old", "2026-01-01")];
 const datasets = [dataset("s1", ["snap"]), dataset("s2", ["snap"]), dataset("i1", ["idle", "walking"]), dataset("i2", ["idle"])];
 
-const okPlan: TrainPlan = { train: ["s1", "i1"], evaluation: ["s2", "i2"], problem: null };
+const MOTION = ["accel_x_mean", "accel_x_std", "accel_y_mean", "accel_y_std", "gyro_x_mean", "gyro_x_std"];
+const okPlan: TrainPlan = { train: ["s1", "i1"], evaluation: ["s2", "i2"], problem: null, available: MOTION, features: MOTION };
 
 function setup(over: { plan?: TrainPlan; environment?: TrainerEnvironment; status?: TrainingStatus } = {}) {
   invokeMock.mockImplementation(async (command: string) => {
@@ -141,7 +142,7 @@ describe("TrainPanel", () => {
   });
 
   it("will not train when the plan says it cannot, and says why", async () => {
-    setup({ plan: { train: [], evaluation: [], problem: "there must be at least two recordings with 'snap'" } });
+    setup({ plan: { train: [], evaluation: [], problem: "there must be at least two recordings with 'snap'", available: [], features: [] } });
     choose("snap");
     expect(await screen.findByText(/at least two recordings with 'snap'/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Train model" })).toBeDisabled();
@@ -184,6 +185,63 @@ describe("TrainPanel", () => {
     expect(screen.getByRole("button", { name: "Train model" })).toBeInTheDocument();
   });
 
+  it("lets a neural network be designed, shows its size, and sends the design only when it differs from the default", async () => {
+    setup();
+    choose("snap");
+    await screen.findByText(/It will train on/);
+    expect(screen.queryByText(/Design the network/)).not.toBeInTheDocument(); // logistic regression has no layers
+    fireEvent.change(screen.getByLabelText("Method"), { target: { value: "torch-mlp" } });
+    expect(await screen.findByText(/Design the network/)).toHaveTextContent("6 inputs → 32 → 16 → 2 · 786 parameters");
+    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
+    await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
+    expect(calls("start_label_training")[0][1].request).not.toHaveProperty("network"); // still the default
+    handlers.get("label-training-event")?.({ payload: { kind: "finished", runId: "r", label: "snap", outcome: "failed", message: "x" } });
+    fireEvent.change(await screen.findByLabelText("Neurons in layer 1"), { target: { value: "8" } });
+    fireEvent.change(screen.getByLabelText("Activation of layer 1"), { target: { value: "tanh" } });
+    expect(screen.getByText(/Design the network/)).toHaveTextContent("6 inputs → 8 → 16 → 2");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Train model" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
+    await waitFor(() => expect(calls("start_label_training")).toHaveLength(2));
+    expect(calls("start_label_training")[1][1].request.network).toMatchObject({ hidden: [{ units: 8, activation: "tanh" }, { units: 16, activation: "relu" }], epochs: 200, learningRate: 0.01 });
+    // Each method keeps its own design: the convolutional one starts from its own default.
+    fireEvent.change(screen.getByLabelText("Method"), { target: { value: "cnn1d" } });
+    expect(await screen.findByLabelText("Filters in convolution layer 1")).toHaveValue(16);
+  });
+
+  it("lets individual inputs be ticked off and sends only the ones still ticked", async () => {
+    setup();
+    choose("snap");
+    await screen.findByText(/It will train on/);
+    const picker = await screen.findByText(/Choose individual inputs/);
+    expect(picker).toHaveTextContent("6 of 6 used");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Acceleration X mean" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Gyroscope X mean" }));
+    expect(picker).toHaveTextContent("4 of 6 used");
+    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
+    await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
+    expect(calls("start_label_training")[0][1].request.features).toEqual(["accel_x_std", "accel_y_mean", "accel_y_std", "gyro_x_std"]);
+  });
+
+  it("draws the trainer's progress reports as a chart and keeps them out of the log", async () => {
+    setup();
+    choose("snap");
+    await screen.findByText(/It will train on/);
+    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
+    await vi.waitFor(() => expect(handlers.has("label-training-event")).toBe(true));
+    const send = (payload: unknown) => act(() => handlers.get("label-training-event")?.({ payload }));
+    send({ kind: "started", runId: "run-1", label: "snap", backend: "torch-mlp" });
+    send({ kind: "log", runId: "run-1", message: "loading the recordings" });
+    for (let epoch = 1; epoch <= 3; epoch += 1) {
+      send({ kind: "log", runId: "run-1", message: `@curve ${JSON.stringify({ epoch, epochs: 3, trainLoss: 1 / epoch, evalLoss: 1.1 / epoch, evalAuc: 0.5 + epoch / 10 })}` });
+    }
+    const progress = await screen.findByRole("region", { name: "Training progress" });
+    expect(progress).toHaveTextContent("Round 3 of 3: training loss 0.3333, held-out loss 0.3667");
+    expect(screen.getByLabelText("Training log")).toHaveTextContent("loading the recordings");
+    expect(screen.getByLabelText("Training log")).not.toHaveTextContent("@curve");
+    send({ kind: "started", runId: "run-2", label: "snap", backend: "torch-mlp" }); // a new run starts clean
+    expect(screen.queryByRole("region", { name: "Training progress" })).not.toBeInTheDocument();
+  });
+
   it("says a model that was trained but is not good enough was not kept, and what to try", async () => {
     setup();
     await vi.waitFor(() => expect(handlers.has("label-training-event")).toBe(true));
@@ -196,11 +254,11 @@ describe("TrainPanel", () => {
   });
 
   it("warns when only one recording of the gesture would be trained on", async () => {
-    setup({ plan: { train: ["s1", "i1"], evaluation: ["s2", "i2"], problem: null } });
+    setup({ plan: okPlan });
     choose("snap");
     expect(await screen.findByText(/Only 1 recording with snap to train on/)).toBeInTheDocument();
     cleanup();
-    setup({ plan: { train: ["s1", "s2", "i1"], evaluation: ["i2"], problem: null } });
+    setup({ plan: { ...okPlan, train: ["s1", "s2", "i1"], evaluation: ["i2"] } });
     choose("snap");
     await screen.findByText(/It will train on 3/);
     expect(screen.queryByText(/Only .* recording with snap/)).not.toBeInTheDocument();

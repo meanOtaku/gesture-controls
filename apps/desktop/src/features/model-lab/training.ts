@@ -69,6 +69,10 @@ export interface TrainRequest {
   movementOnly: boolean;
   /** How long a window of data the model reads, in milliseconds. */
   windowMs: number;
+  /** Exactly which inputs the model reads, by name; left out means all the streams provide. */
+  features?: string[];
+  /** The shape of a neural network and how it is trained; left out means the method's default. */
+  network?: Record<string, unknown>;
   /** Which of the pulse sensor's light channels the model may read (only matters when the pulse sensor is a stream). */
   ppgChannels: PpgChannel[];
   /** How the pulse sensor's spikes are pulled out before the model reads their features; "none" reads no spike features. */
@@ -80,6 +84,9 @@ export interface TrainPlan {
   evaluation: string[];
   /** Why this cannot be trained, in words; null when it can. */
   problem: string | null;
+  /** Every input the chosen streams and settings provide, and the ones the model will read. */
+  available: string[];
+  features: string[];
 }
 
 export interface TrainerEnvironment {
@@ -136,6 +143,8 @@ export function buildRequest(input: {
   spikeMethod?: SpikeMethodId;
   ppgChannels?: PpgChannel[];
   windowMs?: number;
+  features?: string[] | null;
+  network?: Record<string, unknown>;
 }): TrainRequest {
   const role = (label: string): OtherRole => input.roles[label] ?? "negative";
   return {
@@ -149,6 +158,8 @@ export function buildRequest(input: {
     spikeMethod: input.spikeMethod ?? "none",
     ppgChannels: [...(input.ppgChannels ?? ALL_PPG_CHANNELS)],
     windowMs: input.windowMs ?? DEFAULT_WINDOW_MS,
+    ...(input.features && input.features.length > 0 ? { features: [...input.features] } : {}),
+    ...(input.network ? { network: input.network } : {}),
   };
 }
 

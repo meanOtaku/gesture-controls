@@ -9,6 +9,10 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { Label } from "../../../components/ui/label";
+import { InputPicker } from "./InputPicker";
+import { NetworkDesigner } from "./NetworkDesigner";
+import { TrainingCurve, parseCurveLine, type CurvePoint } from "./TrainingCurve";
+import { defaultNetwork, isNeural, networkRequest, parameterCount, type NetworkSettings } from "../network";
 import {
   DEFAULT_STREAMS,
   LABEL_TRAINING_EVENT,
@@ -60,6 +64,9 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
   const [sources, setSources] = useState<DataStream[]>(DEFAULT_STREAMS);
   const [movementOnly, setMovementOnly] = useState(false);
   const [windowMs, setWindowMs] = useState(DEFAULT_WINDOW_MS);
+  const [networks, setNetworks] = useState<Record<TrainMethod, NetworkSettings>>(() => ({ logreg: defaultNetwork("logreg"), mlp: defaultNetwork("mlp"), "torch-mlp": defaultNetwork("torch-mlp"), cnn1d: defaultNetwork("cnn1d") }));
+  const [inputChoice, setInputChoice] = useState<string[] | null>(null);
+  const [curve, setCurve] = useState<CurvePoint[]>([]);
   const [ppgChannels, setPpgChannels] = useState<PpgChannel[]>(ALL_PPG_CHANNELS);
   const [spikeMethod, setSpikeMethod] = useState<SpikeMethodId>("none");
   const [plan, setPlan] = useState<TrainPlan | null>(null);
@@ -72,7 +79,12 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
   const usable = labels.filter((label) => label.archivedAt === null);
   const candidates = datasets.filter((dataset) => datasetLabels(dataset).length > 0);
   const others = otherLabels(datasets, selected, target);
-  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, method, sources, movementOnly, spikeMethod: sources.includes("watchPpg") ? spikeMethod : "none", ppgChannels, windowMs });
+  // Which inputs the model reads: all that the streams provide, unless some were ticked off (only ones that are still available count).
+  const available = plan?.available ?? [];
+  const narrowed = inputChoice === null ? null : inputChoice.filter((name) => available.includes(name));
+  const featuresRequest = narrowed !== null && narrowed.length > 0 && narrowed.length < available.length ? narrowed : null;
+  const network = networks[method];
+  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, method, sources, movementOnly, spikeMethod: sources.includes("watchPpg") ? spikeMethod : "none", ppgChannels, windowMs, features: featuresRequest, network: networkRequest(network, method) });
   const requestKey = JSON.stringify(request);
 
   useEffect(() => {
@@ -96,9 +108,12 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
         if (payload.kind === "started") {
           setRunning(payload.runId);
           setLog([]);
+          setCurve([]);
           setResult(null);
         } else if (payload.kind === "log") {
-          setLog((previous) => appendLog(previous, payload.message));
+          const point = parseCurveLine(payload.message);
+          if (point) setCurve((previous) => [...previous, point]);
+          else setLog((previous) => appendLog(previous, payload.message));
         } else {
           setRunning(null);
           setResult(payload);
@@ -127,7 +142,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
     let stale = false;
     void invoke<TrainPlan>("plan_label_training", { request })
       .then((next) => { if (!stale) setPlan(next); })
-      .catch((err) => { if (!stale) setPlan({ train: [], evaluation: [], problem: String(err) }); });
+      .catch((err) => { if (!stale) setPlan({ train: [], evaluation: [], problem: String(err), available: [], features: [] }); });
     return () => { stale = true; };
     // `requestKey` stands for every part of `request`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -161,6 +176,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
     setError(null);
     setResult(null);
     setLog([]);
+    setCurve([]);
     try {
       await invoke<string>("start_label_training", { request });
     } catch (err) {
@@ -275,6 +291,17 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
               <p className="field-hint">{METHODS.find((option) => option.value === method)?.summary}</p>
             </div>
 
+            {isNeural(method) && plan && plan.features.length > 0 && (
+              <details className="rounded-lg border border-input px-3 py-2">
+                <summary className="cursor-pointer text-sm font-semibold">
+                  Design the network <span className="font-normal text-muted-foreground">({plan.features.length} input{plan.features.length === 1 ? "" : "s"} → {method === "cnn1d" ? "convolution → " : ""}{network.hidden.map((layer) => `${layer.units} → `).join("")}2 · {parameterCount(network, plan.features.length, method).toLocaleString("en-US")} parameters)</span>
+                </summary>
+                <div className="mt-2">
+                  <NetworkDesigner method={method} settings={network} onChange={(next) => setNetworks((previous) => ({ ...previous, [method]: next }))} inputs={plan.features.length} steps={32} disabled={running !== null} />
+                </div>
+              </details>
+            )}
+
             <div className="field">
               <div className="field-head"><Label htmlFor={`${uid}-window`}>Window length</Label></div>
               <select id={`${uid}-window`} className={NATIVE_SELECT} value={windowMs} disabled={running !== null} onChange={(event) => setWindowMs(Number(event.target.value))}>
@@ -318,6 +345,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
                 ))}
               </ul>
               <p className="field-hint">The model only works while the watch sends everything it read. Pick what the gesture actually changes: a finger pinch barely moves the watch, so it shows in the pulse sensor, not in acceleration. A wrist twist or a shake shows in acceleration, gyroscope and orientation.</p>
+              <InputPicker available={available} chosen={inputChoice} onChange={setInputChoice} spikeMethodLabel={spikeMethod === "none" ? undefined : SPIKE_METHODS.find((option) => option.value === spikeMethod)?.label} disabled={running !== null} channels={method === "cnn1d"} />
               <div className="flex items-start gap-2 text-sm">
                 <Checkbox checked={movementOnly} disabled={running !== null} onCheckedChange={() => setMovementOnly((value) => !value)} aria-label="Only how things change" />
                 <span><strong>Only how things change</strong> <small className="text-muted-foreground">Ignore absolute levels such as how the watch is held. This stops a model from memorising a session&apos;s posture; try it for movement gestures.</small></span>
@@ -351,6 +379,8 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
             </div>
           </>
         )}
+
+        <TrainingCurve points={curve} />
 
         {log.length > 0 && (
           <pre className="model-lab-log" aria-label="Training log">{log.join("\n")}</pre>
