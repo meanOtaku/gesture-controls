@@ -17,8 +17,8 @@ use std::sync::Mutex;
 
 use chrono::{SecondsFormat, Utc};
 use label_inference::{
-    RecordingInfo, RunPlan, SpikeMethod, begin_run, canonical_features_for, complete_run,
-    evaluation_only_run, fail_run, plan_split, stage_bundle, trainer_backend,
+    PPG_CHANNELS, RecordingInfo, RunPlan, SpikeMethod, begin_run, canonical_features_with_channels,
+    complete_run, evaluation_only_run, fail_run, plan_split, stage_bundle, trainer_backend,
 };
 use model_lab_core::{
     ArtifactRef, ExampleRole, InputContract, LabelId, LabelMapping, QualityRules, RecordingId,
@@ -74,6 +74,9 @@ pub struct TrainRequest {
     /// `none`. Only has an effect when the pulse sensor is one of the streams.
     #[serde(default)]
     pub spike_method: Option<String>,
+    /// Which of the pulse sensor's light channels the model may read (`green`, `red`, `ir`). Absent means all three.
+    #[serde(default)]
+    pub ppg_channels: Option<Vec<String>>,
 }
 
 fn default_window_ms() -> u32 {
@@ -100,6 +103,7 @@ struct Checked {
     seed: u32,
     movement_only: bool,
     spike_method: Option<SpikeMethod>,
+    ppg_channels: Vec<String>,
 }
 
 fn label_id(raw: &str) -> Result<LabelId, String> {
@@ -180,7 +184,32 @@ fn check_request(
         ),
     }
     .filter(|_| sources.contains(&StreamSource::WatchPpg)); // nothing for it to read without the pulse sensor
-    let features = canonical_features_for(&sources, request.movement_only, spike_method.is_some());
+    let ppg_channels: Vec<String> = match &request.ppg_channels {
+        None => PPG_CHANNELS.iter().map(ToString::to_string).collect(),
+        Some(chosen) => {
+            if let Some(bad) = chosen.iter().find(|c| !PPG_CHANNELS.contains(&c.as_str())) {
+                return Err(format!(
+                    "unknown pulse sensor channel '{bad}'; choose from green, red, ir"
+                ));
+            }
+            // In the sensor's own order, once each.
+            PPG_CHANNELS
+                .iter()
+                .filter(|c| chosen.iter().any(|x| x == **c))
+                .map(ToString::to_string)
+                .collect()
+        }
+    };
+    if sources.contains(&StreamSource::WatchPpg) && ppg_channels.is_empty() {
+        return Err("choose at least one pulse sensor channel for the model to read".into());
+    }
+    let channel_refs: Vec<&str> = ppg_channels.iter().map(String::as_str).collect();
+    let features = canonical_features_with_channels(
+        &sources,
+        request.movement_only,
+        spike_method.is_some(),
+        &channel_refs,
+    );
     if features.is_empty() {
         return Err("none of the chosen data streams can feed a model (head pose is not available to trained models)".into());
     }
@@ -202,6 +231,7 @@ fn check_request(
         seed: request.seed.unwrap_or(7),
         movement_only: request.movement_only,
         spike_method,
+        ppg_channels,
     })
 }
 
@@ -240,6 +270,7 @@ fn build_spec(
         "seed": checked.seed,
         "movementOnly": checked.movement_only,
         "spikeMethod": checked.spike_method.map_or("none", SpikeMethod::name),
+        "ppgChannels": checked.ppg_channels,
     })
 }
 
@@ -769,6 +800,7 @@ mod tests {
             seed: None,
             movement_only: false,
             spike_method: None,
+            ppg_channels: None,
         }
     }
 
@@ -886,6 +918,48 @@ mod tests {
             check_request(&r, &datasets(), &sha)
                 .unwrap_err()
                 .contains("unknown spike extraction method")
+        );
+    }
+
+    #[test]
+    fn the_model_reads_only_the_pulse_channels_chosen_and_the_trainer_is_told() {
+        let mut r = request();
+        r.sources.push(StreamSource::WatchPpg);
+        let all = check_request(&r, &datasets(), &sha).unwrap();
+        assert!(all.input.features.contains(&"ppg_red_mean".to_string()));
+
+        r.ppg_channels = Some(vec!["ir".into(), "green".into()]);
+        let some = check_request(&r, &datasets(), &sha).unwrap();
+        assert_eq!(some.ppg_channels, ["green", "ir"]); // the sensor's own order
+        assert!(some.input.features.contains(&"ppg_green_mean".to_string()));
+        assert!(some.input.features.contains(&"ppg_ir_mean".to_string()));
+        assert!(
+            !some
+                .input
+                .features
+                .iter()
+                .any(|f| f.starts_with("ppg_red_"))
+        );
+        // The window-level values that come with the pulse sensor stay.
+        assert!(some.input.features.contains(&"sample_count".to_string()));
+        assert!(some.input.features.len() < all.input.features.len());
+        let split = plan_split(&some.recordings, &some.mapping, &some.target).unwrap();
+        assert_eq!(
+            build_spec(&some, &split, &BTreeMap::new())["ppgChannels"],
+            serde_json::json!(["green", "ir"])
+        );
+
+        r.ppg_channels = Some(vec![]);
+        assert!(
+            check_request(&r, &datasets(), &sha)
+                .unwrap_err()
+                .contains("at least one pulse sensor channel")
+        );
+        r.ppg_channels = Some(vec!["blue".into()]);
+        assert!(
+            check_request(&r, &datasets(), &sha)
+                .unwrap_err()
+                .contains("unknown pulse sensor channel")
         );
     }
 

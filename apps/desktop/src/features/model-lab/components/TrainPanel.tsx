@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useId, useState } from "react";
+import { Fragment, useEffect, useId, useState } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
@@ -21,8 +21,11 @@ import {
   hasLabel,
   otherLabels,
   recordingsWithLabel,
+  ALL_PPG_CHANNELS,
+  PPG_CHANNELS,
   SPIKE_METHODS,
   type DataStream,
+  type PpgChannel,
   type SpikeMethodId,
   type OtherRole,
   type TrainMethod,
@@ -54,6 +57,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
   const [method, setMethod] = useState<TrainMethod>("logreg");
   const [sources, setSources] = useState<DataStream[]>(DEFAULT_STREAMS);
   const [movementOnly, setMovementOnly] = useState(false);
+  const [ppgChannels, setPpgChannels] = useState<PpgChannel[]>(ALL_PPG_CHANNELS);
   const [spikeMethod, setSpikeMethod] = useState<SpikeMethodId>("none");
   const [plan, setPlan] = useState<TrainPlan | null>(null);
   const [environment, setEnvironment] = useState<TrainerEnvironment | null>(null);
@@ -65,7 +69,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
   const usable = labels.filter((label) => label.archivedAt === null);
   const candidates = datasets.filter((dataset) => datasetLabels(dataset).length > 0);
   const others = otherLabels(datasets, selected, target);
-  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, method, sources, movementOnly, spikeMethod: sources.includes("watchPpg") ? spikeMethod : "none" });
+  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, method, sources, movementOnly, spikeMethod: sources.includes("watchPpg") ? spikeMethod : "none", ppgChannels });
   const requestKey = JSON.stringify(request);
 
   useEffect(() => {
@@ -134,6 +138,11 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
       return next;
     });
 
+  const toggleChannel = (channel: PpgChannel) =>
+    setPpgChannels((previous) => {
+      const next = previous.includes(channel) ? previous.filter((c) => c !== channel) : [...previous, channel];
+      return ALL_PPG_CHANNELS.filter((c) => next.includes(c)); // always at least one, in the sensor's order
+    });
   const toggleStream = (stream: DataStream) =>
     setSources((previous) => (previous.includes(stream) ? previous.filter((s) => s !== stream) : [...previous, stream]));
 
@@ -267,10 +276,29 @@ export function TrainPanel({ desktopAvailable, labels, datasets }: TrainPanelPro
               <legend className="label">What the model may read</legend>
               <ul className="flex flex-col gap-1" aria-label="Data the model may read">
                 {STREAMS.map((stream) => (
-                  <li key={stream.value} className="flex items-start gap-2 text-sm">
-                    <Checkbox checked={sources.includes(stream.value)} disabled={running !== null} onCheckedChange={() => toggleStream(stream.value)} aria-label={stream.label} />
-                    <span><strong>{stream.label}</strong> <small className="text-muted-foreground">{stream.summary}</small></span>
-                  </li>
+                  <Fragment key={stream.value}>
+                    <li className="flex items-start gap-2 text-sm">
+                      <Checkbox checked={sources.includes(stream.value)} disabled={running !== null} onCheckedChange={() => toggleStream(stream.value)} aria-label={stream.label} />
+                      <span><strong>{stream.label}</strong> <small className="text-muted-foreground">{stream.summary}</small></span>
+                    </li>
+                    {stream.value === "watchPpg" && sources.includes("watchPpg") && (
+                      <li className="ml-7">
+                        <ul className="flex flex-col gap-1" aria-label="Pulse sensor channels the model may read">
+                          {PPG_CHANNELS.map((channel) => (
+                            <li key={channel.value} className="flex items-start gap-2 text-sm">
+                              <Checkbox
+                                checked={ppgChannels.includes(channel.value)}
+                                disabled={running !== null || (ppgChannels.length === 1 && ppgChannels[0] === channel.value)}
+                                onCheckedChange={() => toggleChannel(channel.value)}
+                                aria-label={`Pulse channel: ${channel.label}`}
+                              />
+                              <span><strong>{channel.label}</strong> <small className="text-muted-foreground">{channel.summary}</small></span>
+                            </li>
+                          ))}
+                        </ul>
+                      </li>
+                    )}
+                  </Fragment>
                 ))}
               </ul>
               <p className="field-hint">The model only works while the watch sends everything it read. Pick what the gesture actually changes: a finger pinch barely moves the watch, so it shows in the pulse sensor, not in acceleration. A wrist twist or a shake shows in acceleration, gyroscope and orientation.</p>

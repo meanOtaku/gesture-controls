@@ -36,6 +36,15 @@ export const SPIKE_METHODS = [
 
 export type SpikeMethodId = (typeof SPIKE_METHODS)[number]["value"];
 
+/** The three lights of the watch's pulse sensor, each a channel of its own the model can be given or not. */
+export const PPG_CHANNELS = [
+  { value: "green", label: "Green", summary: "The strongest, cleanest pulse signal; the one most affected by motion." },
+  { value: "red", label: "Red", summary: "Reaches a little deeper into the skin." },
+  { value: "ir", label: "Infrared", summary: "Deepest and steadiest; the least bothered by ambient light." },
+] as const;
+export type PpgChannel = (typeof PPG_CHANNELS)[number]["value"];
+export const ALL_PPG_CHANNELS: PpgChannel[] = PPG_CHANNELS.map((channel) => channel.value);
+
 export const DEFAULT_STREAMS: DataStream[] = ["watchAcceleration", "watchGyroscope"];
 
 export interface TrainRequest {
@@ -47,6 +56,8 @@ export interface TrainRequest {
   sources: DataStream[];
   /** Only features about how things change, not their absolute levels. */
   movementOnly: boolean;
+  /** Which of the pulse sensor's light channels the model may read (only matters when the pulse sensor is a stream). */
+  ppgChannels: PpgChannel[];
   /** How the pulse sensor's spikes are pulled out before the model reads their features; "none" reads no spike features. */
   spikeMethod: SpikeMethodId;
 }
@@ -110,6 +121,7 @@ export function buildRequest(input: {
   sources: DataStream[];
   movementOnly?: boolean;
   spikeMethod?: SpikeMethodId;
+  ppgChannels?: PpgChannel[];
 }): TrainRequest {
   const role = (label: string): OtherRole => input.roles[label] ?? "negative";
   return {
@@ -121,6 +133,7 @@ export function buildRequest(input: {
     sources: [...input.sources],
     movementOnly: input.movementOnly ?? false,
     spikeMethod: input.spikeMethod ?? "none",
+    ppgChannels: [...(input.ppgChannels ?? ALL_PPG_CHANNELS)],
   };
 }
 

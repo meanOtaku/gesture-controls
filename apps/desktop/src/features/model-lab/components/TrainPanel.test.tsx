@@ -55,7 +55,7 @@ describe("TrainPanel", () => {
     expect(screen.getByLabelText("Role of walking")).toBeInTheDocument();
     expect(await screen.findByText(/train on 2 recordings \(s1.csv, i1.csv\) and test on 2/)).toBeInTheDocument();
     expect(calls("plan_label_training").at(-1)?.[1]).toEqual({
-      request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["idle", "walking"], excludes: [], backend: "logreg", sources: ["watchAcceleration", "watchGyroscope"], movementOnly: false, spikeMethod: "none" },
+      request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["idle", "walking"], excludes: [], backend: "logreg", sources: ["watchAcceleration", "watchGyroscope"], movementOnly: false, spikeMethod: "none", ppgChannels: ["green", "red", "ir"] },
     });
   });
 
@@ -73,7 +73,7 @@ describe("TrainPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Train model" }));
     await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
     expect(calls("start_label_training")[0][1]).toEqual({
-      request: { label: "snap", datasetIds: ["s1", "s2", "i1"], negatives: ["idle"], excludes: ["walking"], backend: "mlp", sources: ["watchAcceleration", "watchOrientation"], movementOnly: true, spikeMethod: "none" },
+      request: { label: "snap", datasetIds: ["s1", "s2", "i1"], negatives: ["idle"], excludes: ["walking"], backend: "mlp", sources: ["watchAcceleration", "watchOrientation"], movementOnly: true, spikeMethod: "none", ppgChannels: ["green", "red", "ir"] },
     });
   });
 
@@ -90,7 +90,7 @@ describe("TrainPanel", () => {
     expect(screen.getByText(/Needs the pulse sensor/)).toBeInTheDocument(); // not one of the streams yet
     fireEvent.click(screen.getByRole("button", { name: "Train model" }));
     await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
-    expect(calls("start_label_training")[0][1]).toMatchObject({ request: { spikeMethod: "none" } }); // nothing for it to read
+    expect(calls("start_label_training")[0][1]).toMatchObject({ request: { spikeMethod: "none", ppgChannels: ["green", "red", "ir"] } }); // nothing for it to read
   });
 
   it("sends the chosen spike extraction method once the pulse sensor is a stream", async () => {
@@ -103,6 +103,23 @@ describe("TrainPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Train model" }));
     await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
     expect(calls("start_label_training")[0][1]).toMatchObject({ request: { sources: ["watchAcceleration", "watchGyroscope", "watchPpg"], spikeMethod: "morphological_top_hat" } });
+  });
+
+  it("lets you choose which pulse sensor channels to read, never fewer than one, and sends them", async () => {
+    setup();
+    choose("snap");
+    await screen.findByText(/It will train on/);
+    expect(screen.queryByRole("checkbox", { name: "Pulse channel: Green" })).not.toBeInTheDocument(); // the pulse sensor is not a stream yet
+    fireEvent.click(screen.getByRole("checkbox", { name: /Pulse sensor \(PPG\)/ }));
+    for (const name of ["Green", "Red", "Infrared"]) expect(screen.getByRole("checkbox", { name: `Pulse channel: ${name}` })).toBeChecked();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Pulse channel: Red" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Pulse channel: Green" }));
+    expect(screen.getByRole("checkbox", { name: "Pulse channel: Infrared" })).toHaveAttribute("aria-disabled", "true"); // the last one stays
+    fireEvent.click(screen.getByRole("checkbox", { name: "Pulse channel: Red" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Train model" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
+    await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
+    expect(calls("start_label_training")[0][1]).toMatchObject({ request: { ppgChannels: ["red", "ir"] } });
   });
 
   it("will not train when the plan says it cannot, and says why", async () => {

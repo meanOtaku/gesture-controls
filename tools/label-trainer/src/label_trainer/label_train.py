@@ -58,6 +58,13 @@ def source_of(feature: str) -> str:
     return {"accel": "watchAcceleration", "gyro": "watchGyroscope", "quat": "watchOrientation"}.get(prefix, "watchPpg")
 
 
+def _channel_wanted(name: str, ppg_channels) -> bool:
+    parts = name.split("_")
+    if parts[0] == "ppg" and len(parts) > 1 and parts[1] in PPG_CHANNELS:
+        return parts[1] in ppg_channels
+    return True
+
+
 def is_movement_feature(name: str) -> bool:
     """A feature about how a signal changes, not its absolute level.
 
@@ -73,16 +80,26 @@ def is_movement_feature(name: str) -> bool:
     )
 
 
-def features_for(sources: list[str], movement_only: bool = False, spikes: bool = False) -> list[str]:
+PPG_CHANNELS = ("green", "red", "ir")
+
+
+def features_for(
+    sources: list[str], movement_only: bool = False, spikes: bool = False, ppg_channels: tuple[str, ...] | list[str] = PPG_CHANNELS
+) -> list[str]:
     """Every canonical feature whose stream is in `sources`, in canonical order. The pulse-sensor spike features are only
-    included when a spike extraction method is chosen (`spikes`), and only if the pulse sensor is one of the streams."""
+    included when a spike extraction method is chosen (`spikes`), and only if the pulse sensor is one of the streams. A
+    pulse sensor feature of a channel not in `ppg_channels` is left out; the window-level values that come with the pulse
+    sensor (sample count, duration, contact quality) stay."""
     unknown = sorted(set(sources) - set(SOURCES))
     if unknown:
         raise TrainingRefused(f"unknown stream(s) {unknown}; choose from {list(SOURCES)}")
     chosen = [
         name
         for name in FEATURE_NAMES
-        if source_of(name) in sources and (spikes or name not in SPIKE_FEATURE_NAMES) and (not movement_only or is_movement_feature(name))
+        if source_of(name) in sources
+        and (spikes or name not in SPIKE_FEATURE_NAMES)
+        and (not movement_only or is_movement_feature(name))
+        and _channel_wanted(name, ppg_channels)
     ]
     if not chosen:
         raise TrainingRefused("no features are available from the chosen streams")
@@ -101,6 +118,7 @@ class Spec:
     features: list[str]
     movement_only: bool
     spike_method: str | None
+    ppg_channels: list[str]
     window: WindowConfig
     backend: str
     seed: int
@@ -121,7 +139,17 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         raise TrainingRefused(f"unknown spike extraction method {spike_method!r}; choose from {list(SPIKE_METHODS)}")
     if spike_method is not None and "watchPpg" not in sources:
         spike_method = None  # nothing for it to read
-    available = features_for(sources, bool(raw.get("movementOnly", False)), spike_method is not None)
+    chosen_channels = raw.get("ppgChannels")
+    if chosen_channels is None:
+        ppg_channels = list(PPG_CHANNELS)
+    else:
+        unknown = sorted(set(chosen_channels) - set(PPG_CHANNELS))
+        if unknown:
+            raise TrainingRefused(f"unknown pulse sensor channel(s) {unknown}; choose from {list(PPG_CHANNELS)}")
+        ppg_channels = [channel for channel in PPG_CHANNELS if channel in chosen_channels]
+        if "watchPpg" in sources and not ppg_channels:
+            raise TrainingRefused("choose at least one pulse sensor channel for the model to read")
+    available = features_for(sources, bool(raw.get("movementOnly", False)), spike_method is not None, ppg_channels)
     requested = raw.get("features")
     if requested:
         extra = [name for name in requested if name not in available]
@@ -151,6 +179,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         features=features,
         movement_only=bool(raw.get("movementOnly", False)),
         spike_method=spike_method,
+        ppg_channels=ppg_channels,
         window=WindowConfig(
             window_ms=float(window.get("windowMs", 500)),
             stride_ms=float(window.get("strideMs", 150)),
@@ -505,6 +534,7 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
             "thresholdChosenOnEvaluationRecordings": True,
             "movementOnly": spec.movement_only,
             "spikeMethod": spec.spike_method or "none",
+            "ppgChannels": spec.ppg_channels,
         },
     }
     (bundle / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

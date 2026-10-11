@@ -327,3 +327,23 @@ def test_a_spike_method_without_the_pulse_sensor_changes_nothing_and_an_unknown_
     assert motion.spike_method is None
     with pytest.raises(lt.TrainingRefused, match="unknown spike extraction method"):
         lt.parse_spec(spec_for(tmp_path, sources=["watchPpg"], spikeMethod="soup"))
+
+
+def test_only_the_chosen_pulse_channels_are_read_and_the_window_level_values_stay() -> None:
+    both = lt.features_for(["watchPpg"], spikes=True, ppg_channels=["green", "ir"])
+    assert not any(name.startswith("ppg_red_") for name in both)
+    assert {"ppg_green_mean", "ppg_ir_spike_height", "sample_count", "duration_ms", "contact_quality_mean"} <= set(both)
+    assert lt.features_for(["watchPpg"]) == lt.features_for(["watchPpg"], ppg_channels=["green", "red", "ir"])
+    motion = lt.features_for(["watchAcceleration"], ppg_channels=[])
+    assert motion == lt.features_for(["watchAcceleration"])  # the channels only matter to the pulse sensor
+
+
+def test_the_spec_checks_the_pulse_channels(tmp_path: Path) -> None:
+    spec = lt.parse_spec(spec_for(tmp_path, sources=["watchPpg"], ppgChannels=["ir", "green"]))
+    assert spec.ppg_channels == ["green", "ir"]
+    assert not any(name.startswith("ppg_red_") for name in spec.features)
+    with pytest.raises(lt.TrainingRefused, match="unknown pulse sensor channel"):
+        lt.parse_spec(spec_for(tmp_path, sources=["watchPpg"], ppgChannels=["blue"]))
+    with pytest.raises(lt.TrainingRefused, match="at least one pulse sensor channel"):
+        lt.parse_spec(spec_for(tmp_path, sources=["watchPpg"], ppgChannels=[]))
+    assert lt.parse_spec(spec_for(tmp_path)).ppg_channels == ["green", "red", "ir"]

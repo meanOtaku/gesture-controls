@@ -81,8 +81,32 @@ pub fn canonical_features_for(
     movement_only: bool,
     spikes: bool,
 ) -> Vec<String> {
+    canonical_features_with_channels(sources, movement_only, spikes, &PPG_CHANNELS)
+}
+
+/// The three light channels of the watch's pulse sensor, as they appear in feature names (`ppg_green_std`).
+pub const PPG_CHANNELS: [&str; 3] = ["green", "red", "ir"];
+
+/// [`canonical_features_for`] limited to some of the pulse sensor's channels. A feature of a channel that is not listed is
+/// left out; the window-level values that come with the pulse sensor (sample count, duration, contact quality) stay.
+pub fn canonical_features_with_channels(
+    sources: &[StreamSource],
+    movement_only: bool,
+    spikes: bool,
+    ppg_channels: &[&str],
+) -> Vec<String> {
+    let wanted = |name: &str| {
+        let channel = name
+            .strip_prefix("ppg_")
+            .and_then(|rest| rest.split('_').next());
+        match channel {
+            Some(channel) if PPG_CHANNELS.contains(&channel) => ppg_channels.contains(&channel),
+            _ => true,
+        }
+    };
     FEATURE_NAMES
         .iter()
+        .filter(|name| wanted(name))
         .filter(|name| spikes || !is_spike_feature(name))
         .filter(|name| source_of_feature(name).is_some_and(|s| sources.contains(&s)))
         .filter(|name| !movement_only || is_movement_feature(name))
