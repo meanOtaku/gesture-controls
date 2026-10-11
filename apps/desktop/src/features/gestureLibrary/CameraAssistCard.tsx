@@ -5,6 +5,7 @@ import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { NOT_SLOW, nextSlowState, type SlowState } from "../camera/slowWarning";
+import { CameraQuickControl } from "../camera/components/CameraQuickControl";
 import { getCameraController } from "../camera/cameraService";
 import { telemetryStore } from "../telemetry/store/telemetryStore";
 import { cameraAssist } from "./cameraAssist";
@@ -99,9 +100,7 @@ export function CameraAssistCard({ selectedLabel, recording, recordingState, des
             <span className="hint">{recording ? "Recording. Perform the gesture, with the watch hand in view." : "Perform the gesture now to check, then start recording."}</span>
           </div>
         )}
-        {enabled && !camOn && (
-          <div><Button type="button" variant="outline" onClick={() => void camera.enable()}>Turn camera on</Button></div>
-        )}
+        {enabled && <CameraQuickControl />}
       </CardContent>
     </Card>
   );

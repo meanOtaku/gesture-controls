@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Label } from "../../../components/ui/label";
+import { CameraQuickControl } from "../../camera/components/CameraQuickControl";
 import { getCameraController } from "../../camera/cameraService";
 import { AgreementTracker, LAG_MS, type LabelAgreement } from "../../gestureLibrary/agreement";
 import { AgreementPanel } from "../../gestureLibrary/AgreementPanel";
@@ -127,7 +128,7 @@ export function CorrectionSession({
   const chosenRest = choices.find((l) => l.id === restLabel) ?? null;
   const restIsNew = chosenRest !== null && !info.negatives.includes(chosenRest.id) && !info.excludes.includes(chosenRest.id);
   const checklist: { ok: boolean; text: string; action?: React.ReactNode }[] = [
-    { ok: camOn, text: "Camera on", action: !camOn ? <Button type="button" variant="outline" size="sm" onClick={() => void camera.enable()}>Turn camera on</Button> : undefined },
+    { ok: camOn, text: "Camera on", action: <CameraQuickControl compact /> },
     { ok: mine.length > 0, text: mine.length > 0 ? `A gesture in the Gesture library for “${info.label.replaceAll("_", " ")}”` : `A gesture in the Gesture library for “${info.label.replaceAll("_", " ")}”: none yet, make one in the Gesture library` },
     { ok: mode !== "off" && activeModel !== null, text: activeModel === null ? "An active model for this label, to check live (the recording works without one)" : mode === "off" ? "Model runtime set to Monitor in Model Lab (it is Off)" : `Active model ${activeModel.id} running` },
     { ok: choices.length > 0, text: choices.length > 0 ? "A label for the rest of the recording" : "A label for the rest of the recording: make one under Labels" },

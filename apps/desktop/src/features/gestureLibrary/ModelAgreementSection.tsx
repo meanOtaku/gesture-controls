@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { CameraQuickControl } from "../camera/components/CameraQuickControl";
 import { getCameraController } from "../camera/cameraService";
 import type { LabelRuntimeStatus } from "../model-lab/labelModels";
 import { AgreementTracker } from "./agreement";
@@ -33,6 +34,7 @@ export function ModelAgreementSection({ status }: { status: LabelRuntimeStatus |
       status={status}
       cameraOn={cam.status === "on"}
       onTurnCameraOn={cam.status === "off" || cam.status === "error" ? () => void camera.enable() : undefined}
+      cameraControl={<CameraQuickControl />}
     />
   );
 }

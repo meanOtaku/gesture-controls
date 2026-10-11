@@ -3,6 +3,7 @@ import { useState, useSyncExternalStore } from "react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
 import { Switch } from "../../components/ui/switch";
+import { CameraQuickControl } from "../camera/components/CameraQuickControl";
 import { getCameraController } from "../camera/cameraService";
 
 /**
@@ -43,7 +44,7 @@ export function CameraArmSwitch({ armed }: { armed: boolean }) {
           </small>
         </div>
         <div className="flex items-center gap-3">
-          {!camOn && !armed && <Button type="button" variant="outline" size="sm" disabled={cam.status === "starting"} onClick={() => void camera.enable()}>{cam.status === "starting" ? "Starting…" : "Turn camera on"}</Button>}
+          <CameraQuickControl compact preview={false} />
           <Switch aria-label="Arm camera gestures" checked={armed} disabled={busy || (!armed && !camOn)} onCheckedChange={(checked) => void change(checked === true)} />
         </div>
       </div>

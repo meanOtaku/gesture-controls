@@ -21,6 +21,8 @@ type Props = {
   candidateId?: string | null;
   /** Show nothing until the check can run (the page around it already says what is missing). */
   hideUntilReady?: boolean;
+  /** The camera's own controls (turn on and off, preview), shown in the card. Replaces the plain turn-on button. */
+  cameraControl?: React.ReactNode;
 };
 
 /** Feeds the label runtime's detections (and those of a model being compared beside it) to the tracker for as long as the page is open. */
@@ -54,7 +56,7 @@ const ms = (value: number | null) => (value === null ? "–" : `${Math.round(val
  * Checks a deployed model against the camera while you perform: each time the camera sees a gesture linked to a label the
  * model is loaded for, did the model notice it, how late, and did it fire when you did nothing. Nothing is saved.
  */
-export function AgreementPanel({ tracker, definitions, status, cameraOn, onTurnCameraOn, candidateId = null, hideUntilReady = false }: Props) {
+export function AgreementPanel({ tracker, definitions, status, cameraOn, onTurnCameraOn, candidateId = null, hideUntilReady = false, cameraControl }: Props) {
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
   useModelDetections(tracker, desktopAvailable);
   const [rows, setRows] = useState<{ label: string; name: string; summary: LabelAgreement; candidate: LabelAgreement | null }[]>([]);
@@ -97,7 +99,7 @@ export function AgreementPanel({ tracker, definitions, status, cameraOn, onTurnC
             {!cameraOn ? (onTurnCameraOn ? "Turn the camera on. " : "Turn the camera on above. ") : ""}
             {mode === "off" ? "Set the model runtime to Monitor in Model Lab. " : ""}
             {pairs.length === 0 ? "Needs a gesture in the library linked to a label that has an active model." : ""}
-            {!cameraOn && onTurnCameraOn && <Button type="button" variant="outline" size="sm" onClick={onTurnCameraOn}>Turn camera on</Button>}
+            {!cameraOn && onTurnCameraOn && !cameraControl && <Button type="button" variant="outline" size="sm" onClick={onTurnCameraOn}>Turn camera on</Button>}
           </p>
         ) : (
           <table className="agreement-table" aria-label="Model against camera, by label">
@@ -118,6 +120,7 @@ export function AgreementPanel({ tracker, definitions, status, cameraOn, onTurnC
             </tbody>
           </table>
         )}
+        {cameraControl}
         <p className="field-hint">Counts start when this page opens or when you press Start over. Delay includes the time the detection takes to reach the app.</p>
       </CardContent>
     </Card>

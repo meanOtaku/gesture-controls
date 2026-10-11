@@ -4,6 +4,7 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
+import { CameraQuickControl } from "../camera/components/CameraQuickControl";
 import { getCameraController } from "../camera/cameraService";
 import type { DatasetLabel } from "../model-lab/types";
 import { analyse, scoreRule, MIN_FRAMES } from "./calibration";
@@ -187,9 +188,9 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
       <section className="flex flex-col gap-3" aria-label="Calibration">
         <h3 className="text-sm font-semibold">1. Show it to the camera</h3>
         <CameraPair primary={camera} primaryState={cam} secondary={camera2} secondaryState={cam2} />
+        <CameraQuickControl preview={false} />
         {!camOn ? (
           <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" onClick={() => void camera.enable()} disabled={cam.status === "starting"}>{cam.status === "starting" ? "Starting…" : "Turn camera on"}</Button>
             <span className="hint">The camera must be on to calibrate. Nothing but hand landmarks is kept.</span>
           </div>
         ) : (
