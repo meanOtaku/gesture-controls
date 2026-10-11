@@ -48,6 +48,8 @@ pub struct LoadedModel {
     pub model_sha256: String,
     /// How this model's pulse-sensor spike features are made, if it reads any: the way it was trained.
     pub spike_method: Option<SpikeMethod>,
+    /// How far back (milliseconds) its pulse-sensor level features look for their baseline, if it reads any.
+    pub baseline_ms: Option<u32>,
     /// For a convolutional model: the channels and steps of the grid it reads, instead of canonical features.
     pub grid: Option<GridPlan>,
     /// Positions of this model's features within the canonical vector, in the order the model expects them.
@@ -100,6 +102,7 @@ impl LoadedModel {
             quality: version.quality,
             model_sha256: bundle.model_sha256.clone(),
             spike_method: bundle.manifest.spike_method(),
+            baseline_ms: bundle.manifest.baseline_ms(),
             grid,
             feature_indices,
             output_index: bundle.output_index,

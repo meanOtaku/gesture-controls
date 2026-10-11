@@ -41,6 +41,11 @@ const SPIKE_STATS: Record<string, { short: string; text: (w: string) => string }
   deriv_min: { short: "steepest fall", text: (w) => `The steepest fall of the ${w} between neighbouring points, per millisecond (negative).` },
 };
 
+const BASELINE_STATS: Record<string, { short: string; text: (w: string) => string }> = {
+  rel_low: { short: "above its resting level", text: (w) => `How far the average of the ${w} in this window sits above the low end (10th percentile) of where it was in the last few seconds: the change against the recent past, not the level itself, which differs from one session to the next.` },
+  rel_high: { short: "above its highest level", text: (w) => `How far the average of the ${w} in this window sits above the high end (90th percentile) of where it was in the last few seconds (negative when it is below it).` },
+};
+
 const AXES: Record<string, string> = { x: "x axis", y: "y axis", z: "z axis", magnitude: "overall strength" };
 const QUAT: Record<string, string> = { w: "w", x: "x", y: "y", z: "z" };
 
@@ -59,6 +64,7 @@ export function describeInput(name: string, spikeMethod?: string): InputInfo {
     const rest = part.slice(2).join("_");
     if (rest === "") return { name, stream: "watchPpg", group, short: "signal", text: `The ${light} signal over the window, as a row of evenly spaced points.` };
     if (STATS[rest]) return { name, stream: "watchPpg", group, short: STATS[rest].short, text: STATS[rest].text(`the ${light} signal`) };
+    if (BASELINE_STATS[rest]) return { name, stream: "watchPpg", group, short: BASELINE_STATS[rest].short, text: BASELINE_STATS[rest].text(`${light} signal`) };
     if (SPIKE_STATS[rest]) return { name, stream: "watchPpg", group, short: SPIKE_STATS[rest].short, text: SPIKE_STATS[rest].text(`${light} signal`) + spikeNote };
   }
   if (part[0] === "accel" || part[0] === "gyro") {

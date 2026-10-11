@@ -7,9 +7,10 @@ mod fusion;
 mod grid;
 
 pub use features::{
-    BASE_FEATURE_COUNT, FEATURE_COUNT, FEATURE_NAMES, FusedWindow, OrientationSnapshot,
-    SPIKE_STATS_PER_CHANNEL, SpikeMethod, extract_features, extract_features_with, select_features,
-    spike_features,
+    BASE_FEATURE_COUNT, BASELINE_HIGH_PERCENT, BASELINE_LOW_PERCENT, BASELINE_MIN_SAMPLES,
+    BASELINE_SLACK_MS, FEATURE_COUNT, FEATURE_NAMES, FusedWindow, OrientationSnapshot, PpgBaseline,
+    SPIKE_STATS_PER_CHANNEL, SpikeMethod, baseline_features, extract_features,
+    extract_features_with, select_features, spike_features,
 };
 pub use fusion::{FusionRejection, ORIENTATION_STALENESS_TIMEOUT_NS, TelemetryFusion};
 pub use grid::{GridChannel, MAX_GRID_STEPS, MIN_GRID_STEPS, build_grid, resample};

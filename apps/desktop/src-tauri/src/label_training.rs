@@ -81,6 +81,10 @@ pub struct TrainRequest {
     /// `none`. Only has an effect when the pulse sensor is one of the streams.
     #[serde(default)]
     pub spike_method: Option<String>,
+    /// How far back (milliseconds: 2000, 4000 or 8000) the pulse sensor's level features look for what a window is compared
+    /// with, or absent for none. Only for the statistics inputs, and only with the pulse sensor.
+    #[serde(default)]
+    pub baseline_ms: Option<u32>,
     /// Which of the pulse sensor's light channels the model may read (`green`, `red`, `ir`). Absent means all three.
     #[serde(default)]
     pub ppg_channels: Option<Vec<String>>,
@@ -136,6 +140,7 @@ struct Checked {
     seed: u32,
     movement_only: bool,
     spike_method: Option<SpikeMethod>,
+    baseline_ms: Option<u32>,
     ppg_channels: Vec<String>,
     grid_steps: u32,
     raw_columns: bool,
@@ -154,6 +159,7 @@ fn label_id(raw: &str) -> Result<LabelId, String> {
 struct Inputs {
     sources: Vec<StreamSource>,
     spike_method: Option<SpikeMethod>,
+    baseline_ms: Option<u32>,
     ppg_channels: Vec<String>,
     grid_steps: u32,
     raw_columns: bool,
@@ -178,6 +184,17 @@ fn resolve_inputs(request: &TrainRequest) -> Result<Inputs, String> {
         ),
     }
     .filter(|_| sources.contains(&StreamSource::WatchPpg)); // nothing for it to read without the pulse sensor
+    let baseline_ms = match request.baseline_ms {
+        None | Some(0) => None,
+        Some(ms) if label_inference::BASELINE_CHOICES_MS.contains(&ms) => Some(ms),
+        Some(ms) => {
+            return Err(format!(
+                "the baseline must be one of {:?} milliseconds, got {ms}",
+                label_inference::BASELINE_CHOICES_MS
+            ));
+        }
+    }
+    .filter(|_| sources.contains(&StreamSource::WatchPpg) && request.backend != "cnn1d");
     let ppg_channels: Vec<String> = match &request.ppg_channels {
         None => PPG_CHANNELS.iter().map(ToString::to_string).collect(),
         Some(chosen) => {
@@ -232,9 +249,12 @@ fn resolve_inputs(request: &TrainRequest) -> Result<Inputs, String> {
             &sources,
             request.movement_only,
             spike_method.is_some(),
+            baseline_ms.is_some(),
             &channel_refs,
         )
     };
+    // The columns models (the convolutional one, and a dense one on raw columns) read the window itself: no baseline.
+    let baseline_ms = baseline_ms.filter(|_| !(convolutional || raw_columns));
     if available.is_empty() {
         return Err("none of the chosen data streams can feed a model (head pose is not available to trained models)".into());
     }
@@ -260,6 +280,7 @@ fn resolve_inputs(request: &TrainRequest) -> Result<Inputs, String> {
     Ok(Inputs {
         sources,
         spike_method,
+        baseline_ms,
         ppg_channels,
         grid_steps,
         raw_columns,
@@ -356,6 +377,7 @@ fn check_request(
     let Inputs {
         sources,
         spike_method,
+        baseline_ms,
         ppg_channels,
         grid_steps,
         raw_columns,
@@ -387,6 +409,7 @@ fn check_request(
         seed: request.seed.unwrap_or(7),
         movement_only: request.movement_only,
         spike_method,
+        baseline_ms,
         ppg_channels,
         grid_steps,
         raw_columns,
@@ -431,6 +454,7 @@ fn build_spec(
         "seed": checked.seed,
         "movementOnly": checked.movement_only,
         "spikeMethod": checked.spike_method.map_or("none", SpikeMethod::name),
+        "baselineMs": checked.baseline_ms,
         "ppgChannels": checked.ppg_channels,
         "gridSteps": checked.grid_steps,
         "inputMode": if checked.raw_columns { "raw" } else { "statistics" },
@@ -1317,6 +1341,7 @@ mod tests {
             seed: None,
             movement_only: false,
             spike_method: None,
+            baseline_ms: None,
             ppg_channels: None,
             grid_steps: None,
             input_mode: None,
@@ -1400,6 +1425,59 @@ mod tests {
         let checked = check_request(&r, &datasets(), &sha).unwrap();
         assert!(checked.input.features.iter().all(|f| f.ends_with("_std")));
         assert_eq!(checked.input.features.len(), 8);
+    }
+
+    #[test]
+    fn a_baseline_adds_the_level_features_only_with_the_pulse_sensor_and_statistics_and_reaches_the_trainer()
+     {
+        let mut r = request();
+        r.baseline_ms = Some(4000);
+        // Motion streams only: nothing for the level features to read, so the baseline is dropped.
+        let motion = check_request(&r, &datasets(), &sha).unwrap();
+        assert!(motion.baseline_ms.is_none());
+        assert!(!motion.input.features.iter().any(|f| f.contains("_rel_")));
+
+        r.sources.push(StreamSource::WatchPpg);
+        let with = check_request(&r, &datasets(), &sha).unwrap();
+        let mut plain = r.clone();
+        plain.baseline_ms = None;
+        let without = check_request(&plain, &datasets(), &sha).unwrap();
+        assert_eq!(with.input.features.len(), without.input.features.len() + 6);
+        assert!(with.input.features.contains(&"ppg_red_rel_low".to_string()));
+        assert_eq!(with.baseline_ms, Some(4000));
+        // They are about change, so "only how things change" keeps them.
+        let mut change = r.clone();
+        change.movement_only = true;
+        let kept = check_request(&change, &datasets(), &sha).unwrap();
+        assert!(
+            kept.input
+                .features
+                .contains(&"ppg_green_rel_high".to_string())
+        );
+        // The trainer is told, so it builds the same features the same way.
+        let split = plan_split(&with.recordings, &with.mapping, &with.target).unwrap();
+        assert_eq!(
+            build_spec(&with, &split, &BTreeMap::new())["baselineMs"],
+            4000
+        );
+        let split = plan_split(&without.recordings, &without.mapping, &without.target).unwrap();
+        assert!(build_spec(&without, &split, &BTreeMap::new())["baselineMs"].is_null());
+        // Columns models read the window itself: no baseline for them.
+        let mut raw = r.clone();
+        raw.input_mode = Some("raw".into());
+        raw.features = None;
+        assert!(
+            check_request(&raw, &datasets(), &sha)
+                .unwrap()
+                .baseline_ms
+                .is_none()
+        );
+        r.baseline_ms = Some(3000);
+        assert!(
+            check_request(&r, &datasets(), &sha)
+                .unwrap_err()
+                .contains("baseline")
+        );
     }
 
     #[test]

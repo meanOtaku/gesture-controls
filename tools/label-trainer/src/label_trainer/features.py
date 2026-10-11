@@ -67,7 +67,17 @@ SPIKE_STATS: tuple[str, ...] = (
     "deriv_min",
 )
 SPIKE_FEATURE_NAMES: tuple[str, ...] = tuple(f"{column}_{stat}" for stat in SPIKE_STATS for column in PPG_COLUMNS)
-FEATURE_NAMES: tuple[str, ...] = (*BASE_FEATURE_NAMES, *SPIKE_FEATURE_NAMES)
+
+# The pulse-sensor level relative to its recent past: how far the window's average PPG sits above the low end (10th
+# percentile) and the high end (90th percentile) of the PPG in the `baseline_ms` before the window. A held pinch moves the
+# sensor's level, and that level differs wildly from one session to the next, so only the change against the recent past
+# generalises. Both ends are used so that it does not matter how much of the past was spent pinching: with rest and pinch
+# both in it, the low end is the rest level and the high end the pinch level whatever the mix; with only rest in it, both
+# are the rest level. After the spike features so every model trained before they existed still names the same features in
+# the same places.
+BASELINE_STATS: tuple[str, ...] = ("rel_low", "rel_high")
+BASELINE_FEATURE_NAMES: tuple[str, ...] = tuple(f"{column}_{stat}" for stat in BASELINE_STATS for column in PPG_COLUMNS)
+FEATURE_NAMES: tuple[str, ...] = (*BASE_FEATURE_NAMES, *SPIKE_FEATURE_NAMES, *BASELINE_FEATURE_NAMES)
 BASE_FEATURE_COUNT = len(BASE_FEATURE_NAMES)
 
 # Fewer PPG samples than this in a window and there is no spike to speak of: every spike feature is 0.
@@ -78,6 +88,17 @@ SPIKE_COUNT_SIGMAS = 3.0
 MAD_TO_SIGMA = 1.4826
 SPIKE_SIGMA_FLOOR = 1e-9
 SPIKE_Z_CAP = 50.0
+# How much of the past a model may be asked to compare the window with, in milliseconds.
+BASELINE_CHOICES_MS: tuple[int, ...] = (2000, 4000, 8000)
+# Fewer PPG samples than this in the baseline and there is nothing to compare with: the window is not scored (live) or not
+# used (training), never given a made-up baseline.
+BASELINE_MIN_SAMPLES = 16
+# The oldest pulse sample of the baseline may be this far after the baseline's start (a gap or a slow first sample), but no
+# more: a baseline that does not reach back that far is not the length the model was trained with, so it is not used.
+BASELINE_SLACK_MS = 250
+# Which points of the baseline the window is compared with (by nearest rank below: see `baseline_percentile`).
+BASELINE_LOW_PERCENT = 10
+BASELINE_HIGH_PERCENT = 90
 
 
 def resolve_feature_subset(names: Sequence[str]) -> tuple[str, ...]:
@@ -442,10 +463,12 @@ def extract_base_features(recording: Recording, window: Window) -> np.ndarray:
     return vector
 
 
-def extract_features(recording: Recording, window: Window, spike_method: str | None = None) -> np.ndarray:
-    """The full canonical vector for one window: the 55 base features, then the pulse-sensor spike features.
+def extract_features(recording: Recording, window: Window, spike_method: str | None = None, baseline_ms: int | None = None) -> np.ndarray:
+    """The full canonical vector for one window: the 55 base features, the pulse-sensor spike features, then the relative-level ones.
 
     The spike features are computed with `spike_method` (one of `SPIKE_METHODS`); with none they are 0 and no model reads them.
+    The relative-level features are computed against the `baseline_ms` before the window; with none (or too little past) they
+    are 0 and no model reads them.
     """
     spikes = np.zeros(len(SPIKE_FEATURE_NAMES), dtype=np.float64)
     indices = window.row_indices
@@ -457,4 +480,55 @@ def extract_features(recording: Recording, window: Window, spike_method: str | N
             values = recording.channels[column][indices]
             for stat, value in enumerate(spike_features(values, t_ms, spike_method)):
                 spikes[stat * len(PPG_COLUMNS) + channel] = value
-    return np.concatenate((extract_base_features(recording, window), spikes))
+    relative = np.zeros(len(BASELINE_FEATURE_NAMES), dtype=np.float64)
+    if baseline_ms is not None:
+        rows = baseline_rows(recording, window, baseline_ms)
+        if rows is not None:
+            in_window = window.row_indices
+            if recording.ppg_observed is not None:
+                in_window = in_window[recording.ppg_observed[in_window]]
+            relative[:] = baseline_features(
+                [recording.channels[column][in_window] for column in PPG_COLUMNS],
+                [recording.channels[column][rows] for column in PPG_COLUMNS],
+            )
+    return np.concatenate((extract_base_features(recording, window), spikes, relative))
+
+
+def baseline_rows(recording: Recording, window: Window, baseline_ms: int) -> np.ndarray | None:
+    """The rows (in order) that carried a real PPG sample in the `baseline_ms` before the window starts, or None when fewer
+    than `BASELINE_MIN_SAMPLES` did or the first of them is more than `BASELINE_SLACK_MS` after the baseline's start (the
+    recording does not reach back that far). The window's own rows are never part of it."""
+    first = int(window.row_indices[0])
+    stamps = recording.timestamps_ns
+    start_ns = int(stamps[first]) - int(baseline_ms) * 1_000_000
+    begin = int(np.searchsorted(stamps, start_ns, side="left"))
+    rows = np.arange(begin, first)
+    if recording.ppg_observed is not None:
+        rows = rows[recording.ppg_observed[rows]]
+    if rows.shape[0] < BASELINE_MIN_SAMPLES or int(stamps[rows[0]]) > start_ns + BASELINE_SLACK_MS * 1_000_000:
+        return None
+    return rows
+
+
+def baseline_percentile(values: np.ndarray, percent: int) -> float:
+    """The value at rank `floor((n - 1) * percent / 100)` of the sorted values, in whole-number arithmetic so the desktop's
+    copy picks the very same sample."""
+    ordered = np.sort(values)
+    return float(ordered[((ordered.shape[0] - 1) * percent) // 100])
+
+
+def baseline_features(window_ppg: Sequence[np.ndarray], baseline_ppg: Sequence[np.ndarray]) -> list[float]:
+    """The six relative-level features (`BASELINE_FEATURE_NAMES` order) from each PPG channel's window samples and baseline
+    samples: the window's average minus the baseline's low end, for each channel, then minus its high end. A channel with no
+    window samples, or too few baseline samples, is all zeros."""
+    lows: list[float] = []
+    highs: list[float] = []
+    for window_values, baseline_values in zip(window_ppg, baseline_ppg, strict=True):
+        if window_values.shape[0] == 0 or baseline_values.shape[0] < BASELINE_MIN_SAMPLES:
+            lows.append(0.0)
+            highs.append(0.0)
+            continue
+        level = float(np.mean(window_values))
+        lows.append(level - baseline_percentile(baseline_values, BASELINE_LOW_PERCENT))
+        highs.append(level - baseline_percentile(baseline_values, BASELINE_HIGH_PERCENT))
+    return [*lows, *highs]

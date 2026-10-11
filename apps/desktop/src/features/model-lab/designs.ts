@@ -20,6 +20,8 @@ export interface NetworkDesign {
   columns: string[];
   readings: number;
   spikeMethod: SpikeMethodId;
+  /** How far back (milliseconds) the pulse sensor's level is compared with, or null for no comparison. Statistics only. */
+  baselineMs: number | null;
   windowMs: number;
   /** The network's settings that differ from the method's own default; null means the default. */
   network: Record<string, unknown> | null;
@@ -40,7 +42,7 @@ export const isBuiltIn = (design: NetworkDesign): boolean => design.builtIn || d
 export function newDesign(): NetworkDesign {
   return {
     id: "", name: "", description: "", method: "torch-mlp", inputMode: "statistics", sources: ["watchAcceleration", "watchGyroscope"],
-    ppgChannels: null, movementOnly: false, features: null, columns: [...ALL_COLUMNS], readings: 1, spikeMethod: "none", windowMs: DEFAULT_WINDOW_MS, network: null, builtIn: false,
+    ppgChannels: null, movementOnly: false, features: null, columns: [...ALL_COLUMNS], readings: 1, spikeMethod: "none", baselineMs: null, windowMs: DEFAULT_WINDOW_MS, network: null, builtIn: false,
   };
 }
 
@@ -95,5 +97,6 @@ export function describeDesign(design: NetworkDesign, preview: DesignPreview | n
   const shape = isNeural(design.method)
     ? ` · ${design.method === "cnn1d" ? "convolution → " : ""}${settings.hidden.map((layer) => `${layer.units} → `).join("")}2 · ${parameterCount(settings, preview.neurons, design.method).toLocaleString("en-US")} parameters`
     : "";
-  return `${method} · ${input}${shape} · ${design.windowMs / 1000} s window`;
+  const baseline = !columns && design.baselineMs ? ` · level against the last ${design.baselineMs / 1000} s` : "";
+  return `${method} · ${input}${shape} · ${design.windowMs / 1000} s window${baseline}`;
 }

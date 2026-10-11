@@ -65,6 +65,13 @@ pub fn is_movement_feature(name: &str) -> bool {
         || name == "quat_delta_angle_deg"
         || (name.starts_with("ppg_") && name.ends_with("_slope"))
         || is_spike_feature(name)
+        || is_baseline_feature(name)
+}
+
+/// A pulse-sensor level feature against the recent past (its average minus the median of the pulse just before the
+/// window). They come after the spike features and are only used when asked for with a baseline length.
+pub fn is_baseline_feature(name: &str) -> bool {
+    name.starts_with("ppg_") && name.contains("_rel_")
 }
 
 /// A pulse-sensor spike feature: what is left of a PPG channel once its baseline is taken away (its biggest spike and
@@ -75,13 +82,14 @@ pub fn is_spike_feature(name: &str) -> bool {
 
 /// Every canonical feature computed from the given streams, in canonical order, optionally only the movement ones. A
 /// window-level value (sample count, duration, contact quality) comes with the PPG stream. The pulse-sensor spike
-/// features are left out unless `spikes` asks for them (and the PPG stream is chosen).
+/// features are left out unless `spikes` asks for them (and the PPG stream is chosen), and the level-against-the-past
+/// features unless `baseline` does.
 pub fn canonical_features_for(
     sources: &[StreamSource],
     movement_only: bool,
     spikes: bool,
 ) -> Vec<String> {
-    canonical_features_with_channels(sources, movement_only, spikes, &PPG_CHANNELS)
+    canonical_features_with_channels(sources, movement_only, spikes, false, &PPG_CHANNELS)
 }
 
 /// The three light channels of the watch's pulse sensor, as they appear in feature names (`ppg_green_std`).
@@ -93,6 +101,7 @@ pub fn canonical_features_with_channels(
     sources: &[StreamSource],
     movement_only: bool,
     spikes: bool,
+    baseline: bool,
     ppg_channels: &[&str],
 ) -> Vec<String> {
     let wanted = |name: &str| {
@@ -108,6 +117,7 @@ pub fn canonical_features_with_channels(
         .iter()
         .filter(|name| wanted(name))
         .filter(|name| spikes || !is_spike_feature(name))
+        .filter(|name| baseline || !is_baseline_feature(name))
         .filter(|name| source_of_feature(name).is_some_and(|s| sources.contains(&s)))
         .filter(|name| !movement_only || is_movement_feature(name))
         .map(ToString::to_string)
@@ -611,7 +621,7 @@ mod tests {
             false,
             false,
         );
-        assert_eq!(all.len(), FEATURE_NAMES.len() - 24); // the spike features are opt-in
+        assert_eq!(all.len(), FEATURE_NAMES.len() - 24 - 6); // the spike and the level features are opt-in
         let with_spikes = canonical_features_for(
             &[
                 StreamSource::WatchOrientation,
@@ -622,7 +632,27 @@ mod tests {
             false,
             true,
         );
-        assert_eq!(with_spikes.len(), FEATURE_NAMES.len());
+        assert_eq!(with_spikes.len(), FEATURE_NAMES.len() - 6);
+        let with_both = canonical_features_with_channels(
+            &[StreamSource::WatchPpg],
+            false,
+            true,
+            true,
+            &PPG_CHANNELS,
+        );
+        assert_eq!(
+            with_both.iter().filter(|f| is_baseline_feature(f)).count(),
+            6
+        );
+        // They are about change, so "only how things change" keeps them.
+        let moving = canonical_features_with_channels(
+            &[StreamSource::WatchPpg],
+            true,
+            false,
+            true,
+            &PPG_CHANNELS,
+        );
+        assert!(moving.contains(&"ppg_red_rel_low".to_string()));
         // Without the pulse sensor there is nothing for them to read.
         assert_eq!(
             canonical_features_for(&[StreamSource::WatchAcceleration], false, true),

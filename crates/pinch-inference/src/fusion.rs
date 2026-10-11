@@ -188,6 +188,7 @@ impl TelemetryFusion {
             orientation,
             orientation_in_window,
             contact_quality_mean,
+            baseline: None,
         })
     }
 }

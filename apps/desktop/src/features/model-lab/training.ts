@@ -17,6 +17,14 @@ export const METHODS: ReadonlyArray<{ value: TrainMethod; label: string; summary
 ];
 
 /** How long a window of data a model reads, in milliseconds. Longer shows a slower or longer event, with fewer windows per recording. */
+/** How far back the pulse sensor's level can be compared with (the desktop's `BASELINE_CHOICES_MS`). */
+export const BASELINE_CHOICES: ReadonlyArray<{ value: number | null; label: string }> = [
+  { value: null, label: "None (the window on its own)" },
+  { value: 2000, label: "The last 2 s" },
+  { value: 4000, label: "The last 4 s" },
+  { value: 8000, label: "The last 8 s" },
+];
+
 export const WINDOW_LENGTHS: ReadonlyArray<{ value: number; label: string }> = [
   { value: 500, label: "0.5 s (default)" },
   { value: 750, label: "0.75 s" },

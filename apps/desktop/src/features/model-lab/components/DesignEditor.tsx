@@ -5,7 +5,7 @@ import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { isBuiltIn, networkSettingsOf, readsColumns, withNetwork, type DesignPreview, type NetworkDesign } from "../designs";
 import { isNeural } from "../network";
-import { ALL_COLUMNS, METHODS, SPIKE_METHODS, WINDOW_LENGTHS, type SpikeMethodId, type TrainMethod } from "../training";
+import { ALL_COLUMNS, BASELINE_CHOICES, METHODS, SPIKE_METHODS, WINDOW_LENGTHS, type SpikeMethodId, type TrainMethod } from "../training";
 import { ColumnsDesigner } from "./ColumnsDesigner";
 import { NetworkDesigner } from "./NetworkDesigner";
 import { StatisticsInputs } from "./StatisticsInputs";
@@ -88,6 +88,20 @@ export function DesignEditor({
           </select>
           <p className="field-hint">{SPIKE_METHODS.find((option) => option.value === design.spikeMethod)?.summary} Only the pulse sensor&apos;s columns are affected.</p>
         </div>
+
+        {!columns && design.sources.includes("watchPpg") && (
+          <div className="field">
+            <div className="field-head"><Label htmlFor={`${uid}-baseline`}>Compare the pulse level with the recent past</Label></div>
+            <select id={`${uid}-baseline`} className={NATIVE_SELECT} value={design.baselineMs ?? ""} onChange={(event) => set({ baselineMs: event.target.value === "" ? null : Number(event.target.value), features: null })}>
+              {BASELINE_CHOICES.map((option) => <option key={option.label} value={option.value ?? ""}>{option.label}</option>)}
+            </select>
+            <p className="field-hint">
+              {design.baselineMs
+                ? `Adds, for each pulse channel, how far the window's average sits above the low end and the high end of the last ${design.baselineMs / 1000} seconds. A held pinch moves the sensor's level, but the level itself differs from session to session, so only the change against the recent past carries over. The model only scores once that much data has arrived, and the first ${design.baselineMs / 1000} seconds of each recording are not used. “Above its resting level” is the one to rely on for a gesture that raises the level; the other is for one that lowers it.`
+                : "Off: every pulse statistic is about the window alone, so it includes the session's own level."}
+            </p>
+          </div>
+        )}
 
         <div className="field">
           <div className="field-head"><Label htmlFor={`${uid}-window`}>Window length</Label></div>

@@ -12,7 +12,7 @@ import pytest
 pytest.importorskip("onnxruntime")
 
 from label_trainer import label_train as lt  # noqa: E402
-from label_trainer.features import BASE_FEATURE_COUNT, FEATURE_NAMES, SPIKE_FEATURE_NAMES  # noqa: E402
+from label_trainer.features import BASE_FEATURE_COUNT, BASELINE_FEATURE_NAMES, FEATURE_NAMES, SPIKE_FEATURE_NAMES  # noqa: E402
 from label_trainer.schema import HEADER_COLUMNS  # noqa: E402
 
 INTERVAL_NS = 20_000_000
@@ -60,7 +60,10 @@ def test_features_follow_the_chosen_streams_and_window_level_values_need_ppg() -
     assert "sample_count" in lt.features_for(["watchPpg"])
     everything = ["watchAcceleration", "watchGyroscope", "watchOrientation", "watchPpg"]
     assert lt.features_for(everything) == list(FEATURE_NAMES[:BASE_FEATURE_COUNT])  # spikes are opt-in
-    assert lt.features_for(everything, spikes=True) == list(FEATURE_NAMES)
+    assert lt.features_for(everything, spikes=True, baseline=True) == list(FEATURE_NAMES)
+    assert not any(name in BASELINE_FEATURE_NAMES for name in lt.features_for(everything, spikes=True))  # opt-in too
+    assert [n for n in lt.features_for(everything, baseline=True) if n in BASELINE_FEATURE_NAMES] == list(BASELINE_FEATURE_NAMES)
+    assert all(name in lt.features_for(everything, movement_only=True, baseline=True) for name in BASELINE_FEATURE_NAMES)  # they are about change
     assert not any(name in SPIKE_FEATURE_NAMES for name in lt.features_for(["watchAcceleration"], spikes=True))  # needs the pulse sensor
     with pytest.raises(lt.TrainingRefused):
         lt.features_for(["headPose"])

@@ -32,7 +32,7 @@ import numpy as np
 
 from .csv_io import load_recording
 from .dataset import build_dataset_from_recordings
-from .features import FEATURE_NAMES, SPIKE_FEATURE_NAMES, SPIKE_METHODS
+from .features import BASELINE_CHOICES_MS, BASELINE_FEATURE_NAMES, FEATURE_NAMES, SPIKE_FEATURE_NAMES, SPIKE_METHODS
 from .edits import EditRefused
 from .nets import CnnModel, TorchModel
 from .network import Network, NetworkRefused, parameter_count, parse_network
@@ -81,6 +81,7 @@ def is_movement_feature(name: str) -> bool:
         or name == "quat_delta_angle_deg"
         or (name.startswith("ppg_") and name.endswith("_slope"))
         or name in SPIKE_FEATURE_NAMES  # the spike features are all about change: the baseline is already taken away
+        or name in BASELINE_FEATURE_NAMES  # and these are the level against the recent past, not the level itself
     )
 
 
@@ -88,12 +89,16 @@ PPG_CHANNELS = ("green", "red", "ir")
 
 
 def features_for(
-    sources: list[str], movement_only: bool = False, spikes: bool = False, ppg_channels: tuple[str, ...] | list[str] = PPG_CHANNELS
+    sources: list[str],
+    movement_only: bool = False,
+    spikes: bool = False,
+    ppg_channels: tuple[str, ...] | list[str] = PPG_CHANNELS,
+    baseline: bool = False,
 ) -> list[str]:
     """Every canonical feature whose stream is in `sources`, in canonical order. The pulse-sensor spike features are only
     included when a spike extraction method is chosen (`spikes`), and only if the pulse sensor is one of the streams. A
     pulse sensor feature of a channel not in `ppg_channels` is left out; the window-level values that come with the pulse
-    sensor (sample count, duration, contact quality) stay."""
+    sensor (sample count, duration, contact quality) stay. The relative-level features are only included with a baseline (`baseline`)."""
     unknown = sorted(set(sources) - set(SOURCES))
     if unknown:
         raise TrainingRefused(f"unknown stream(s) {unknown}; choose from {list(SOURCES)}")
@@ -102,6 +107,7 @@ def features_for(
         for name in FEATURE_NAMES
         if source_of(name) in sources
         and (spikes or name not in SPIKE_FEATURE_NAMES)
+        and (baseline or name not in BASELINE_FEATURE_NAMES)
         and (not movement_only or is_movement_feature(name))
         and _channel_wanted(name, ppg_channels)
     ]
@@ -122,6 +128,7 @@ class Spec:
     features: list[str]
     movement_only: bool
     spike_method: str | None
+    baseline_ms: int | None
     ppg_channels: list[str]
     grid_steps: int
     raw_columns: bool
@@ -163,6 +170,11 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         raise TrainingRefused(f"unknown spike extraction method {spike_method!r}; choose from {list(SPIKE_METHODS)}")
     if spike_method is not None and "watchPpg" not in sources:
         spike_method = None  # nothing for it to read
+    baseline_ms = raw.get("baselineMs") or None
+    if baseline_ms is not None and baseline_ms not in BASELINE_CHOICES_MS:
+        raise TrainingRefused(f"the baseline must be one of {list(BASELINE_CHOICES_MS)} milliseconds, got {baseline_ms!r}")
+    if baseline_ms is not None and "watchPpg" not in sources:
+        baseline_ms = None  # nothing for it to read
     chosen_channels = raw.get("ppgChannels")
     if chosen_channels is None:
         ppg_channels = list(PPG_CHANNELS)
@@ -190,8 +202,9 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
             raise TrainingRefused("no channels are available from the chosen streams")
         if not any(channel.startswith("ppg_") for channel in available):
             spike_method = None  # nothing for it to read
+        baseline_ms = None  # these models read the columns themselves, not statistics against a baseline
     else:
-        available = features_for(sources, bool(raw.get("movementOnly", False)), spike_method is not None, ppg_channels)
+        available = features_for(sources, bool(raw.get("movementOnly", False)), spike_method is not None, ppg_channels, baseline_ms is not None)
     requested = raw.get("features")
     if requested:
         extra = [name for name in requested if name not in available]
@@ -228,6 +241,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         features=features,
         movement_only=bool(raw.get("movementOnly", False)),
         spike_method=spike_method,
+        baseline_ms=baseline_ms,
         ppg_channels=ppg_channels,
         grid_steps=grid_steps,
         raw_columns=raw_columns,
@@ -273,7 +287,7 @@ def build_all(spec: Spec):
         )
         x = dataset.features.astype(np.float32)
     else:
-        dataset = build_dataset_from_recordings(recordings, spec.window, "exclude", label_mapping=_mapping(spec), spike_method=spec.spike_method)
+        dataset = build_dataset_from_recordings(recordings, spec.window, "exclude", label_mapping=_mapping(spec), spike_method=spec.spike_method, baseline_ms=spec.baseline_ms)
         columns = [FEATURE_NAMES.index(name) for name in spec.features]
         x = dataset.features[:, columns].astype(np.float32)
     y = (dataset.targets == spec.target).astype(np.int64)
@@ -575,7 +589,10 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
         },
         "quality": {"maxContactQuality": 0.0, "minSampleCount": 3},
         "thresholds": {"activation": metrics["activationThreshold"], "release": round(max(0.05, metrics["activationThreshold"] - 0.15), 2)},
-        "preprocessing": {"kind": "spike_extraction", "method": spec.spike_method} if spec.spike_method else {"kind": "none"},
+        "preprocessing": {
+            **({"kind": "spike_extraction", "method": spec.spike_method} if spec.spike_method else {"kind": "none"}),
+            **({"baselineMs": spec.baseline_ms} if spec.baseline_ms else {}),
+        },
         "provenance": {
             "backend": spec.backend,
             "trainRecordings": sorted(spec.train),
@@ -587,6 +604,7 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
             "thresholdChosenOnEvaluationRecordings": True,
             "movementOnly": spec.movement_only,
             "spikeMethod": spec.spike_method or "none",
+            "baselineMs": spec.baseline_ms,
             "ppgChannels": spec.ppg_channels,
             "gridSteps": spec.grid_steps if reads_grid(spec) else None,
             "inputMode": "raw" if spec.raw_columns else ("grid" if spec.backend == "cnn1d" else "statistics"),

@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 
 from .csv_io import Recording, load_recordings
-from .features import FEATURE_NAMES, extract_features
+from .features import FEATURE_NAMES, baseline_rows, extract_features
 from .labels import LabelMapping, missing_labels, resolve_target
 from .windowing import Window, WindowConfig, build_windows
 
@@ -46,11 +46,15 @@ def build_dataset_from_recordings(
     label_mapping: LabelMapping | None = None,
     spike_method: str | None = None,
     feature_fn=None,
+    baseline_ms: int | None = None,
 ) -> Dataset:
     """`feature_fn(recording, window)`, when given, makes each window's row instead of the canonical features (a
     convolutional model reads the window as a grid, see `grid.build_grid`).
 
     `spike_method` is how the pulse sensor's spike features are extracted (see `features.SPIKE_METHODS`); none leaves them 0.
+
+    `baseline_ms` is how far back the pulse sensor's relative-level features look for their baseline; a window with too little
+    past before it (the first seconds of a recording) has nothing to compare with and is left out, as it would not be scored live.
 
     `label_mapping`, when given, fully replaces `hold_handling` and the legacy `resolve_target` lookup:
     every raw label present in `recordings` must have an explicit entry, or the whole run is rejected
@@ -77,7 +81,9 @@ def build_dataset_from_recordings(
             target = label_mapping.resolve(window.label) if label_mapping is not None else resolve_target(window.label, hold_handling)
             if target is None:
                 continue
-            feature_rows.append(feature_fn(recording, window) if feature_fn is not None else extract_features(recording, window, spike_method))
+            if baseline_ms is not None and feature_fn is None and baseline_rows(recording, window, baseline_ms) is None:
+                continue
+            feature_rows.append(feature_fn(recording, window) if feature_fn is not None else extract_features(recording, window, spike_method, baseline_ms))
             targets.append(target)
             groups.append(window.session_id)
             raw_labels.append(window.label)

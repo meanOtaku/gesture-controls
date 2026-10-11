@@ -92,6 +92,9 @@ pub struct NetworkDesign {
     /// How the pulse sensor's spikes are pulled out (a spike method name), or `none`.
     #[serde(default = "none")]
     pub spike_method: String,
+    /// How far back (milliseconds: 2000, 4000 or 8000) the pulse sensor's level is compared with, or none. Statistics only.
+    #[serde(default)]
+    pub baseline_ms: Option<u32>,
     #[serde(default = "window_default")]
     pub window_ms: u32,
     /// The network's shape and learning settings; absent means the method's own default.
@@ -149,6 +152,11 @@ impl NetworkDesign {
         request.movement_only = !self.columns_mode() && self.movement_only
             || self.method == "cnn1d" && self.movement_only;
         request.spike_method = Some(self.spike_method.clone());
+        request.baseline_ms = if self.columns_mode() {
+            None
+        } else {
+            self.baseline_ms
+        };
         request.window_ms = self.window_ms;
         request.input_mode = if self.input_mode == "raw" && self.method != "cnn1d" {
             Some("raw".into())
@@ -257,6 +265,17 @@ pub fn validate(design: &NetworkDesign) -> Result<(), String> {
             design.spike_method
         ));
     }
+    if let Some(ms) = design.baseline_ms
+        && !label_inference::BASELINE_CHOICES_MS.contains(&ms)
+    {
+        return Err(format!(
+            "the baseline must be one of {:?} milliseconds",
+            label_inference::BASELINE_CHOICES_MS
+        ));
+    }
+    if design.baseline_ms.is_some() && design.columns_mode() {
+        return Err("a baseline is for statistics: a model that reads the dataset's columns reads the window itself".into());
+    }
     if design.columns_mode() {
         if design.columns.is_empty() {
             return Err("choose at least one column for the network to read".into());
@@ -350,6 +369,7 @@ fn base(id: &str, name: &str, description: &str, method: &str) -> NetworkDesign 
         columns: Vec::new(),
         readings: 1,
         spike_method: "none".into(),
+        baseline_ms: None,
         window_ms: 500,
         network: None,
         built_in: true,
@@ -383,7 +403,23 @@ pub fn built_in_designs() -> Vec<NetworkDesign> {
     );
     raw.input_mode = "raw".into();
     raw.columns = COLUMNS.iter().map(ToString::to_string).collect();
+    // The pulse sensor's level against its recent past: the one thing that told a pinch from rest in the first recordings, and
+    // the only form of it that carries over from one session to the next (the level itself is the session's).
+    let mut level = base(
+        "pulse-level",
+        "Pulse level against the recent past",
+        "Logistic regression on how far the pulse sensor's level sits above the low end of where it was in the last 4 seconds (the resting level). Made for a held pinch: the level itself differs from session to session, the change against the recent past does not.",
+        "logreg",
+    );
+    level.sources = vec![StreamSource::WatchPpg];
+    level.baseline_ms = Some(4000);
+    level.features = Some(
+        ["ppg_green_rel_low", "ppg_red_rel_low", "ppg_ir_rel_low"]
+            .map(ToString::to_string)
+            .to_vec(),
+    );
     vec![
+        level,
         base(
             "logreg",
             "Logistic regression",
@@ -574,6 +610,27 @@ pub fn preview_network_design(design: NetworkDesign) -> DesignPreview {
 mod tests {
     use super::*;
 
+    #[test]
+    fn the_pulse_level_design_reads_only_the_level_features_against_a_four_second_baseline() {
+        let level = built_in_designs()
+            .into_iter()
+            .find(|d| d.id == "builtin-pulse-level")
+            .unwrap();
+        validate(&level).unwrap();
+        assert_eq!(
+            (level.method.as_str(), level.baseline_ms),
+            ("logreg", Some(4000))
+        );
+        let mut request = level.template_request();
+        level.apply_to(&mut request);
+        assert_eq!(request.baseline_ms, Some(4000));
+        assert_eq!(request.sources, vec![StreamSource::WatchPpg]);
+        let preview = preview(&level);
+        assert_eq!(preview.problem, None);
+        assert_eq!(preview.neurons, 3);
+        assert!(preview.inputs.iter().all(|name| name.contains("_rel_")));
+    }
+
     fn dense() -> NetworkDesign {
         let mut d = base("x", "My design", "", "torch-mlp");
         d.id = String::new();
@@ -680,6 +737,18 @@ mod tests {
                     d.readings = 4;
                 }),
                 "readings per column",
+            ),
+            (
+                Box::new(|d| d.baseline_ms = Some(3000)),
+                "baseline must be one of",
+            ),
+            (
+                Box::new(|d| {
+                    d.input_mode = "raw".into();
+                    d.columns = vec!["ppg_red".into()];
+                    d.baseline_ms = Some(4000);
+                }),
+                "baseline is for statistics",
             ),
             (
                 Box::new(|d| {

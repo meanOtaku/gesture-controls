@@ -37,3 +37,12 @@ describe("groupInputs", () => {
     expect(grouped[2].groups.map((g) => g.group)).toEqual(["Green", "Window"]);
   });
 });
+
+describe("the level against the recent past", () => {
+  it("describes the two inputs in words", () => {
+    const low = describeInput("ppg_red_rel_low");
+    expect(low).toMatchObject({ stream: "watchPpg", group: "Red", short: "above its resting level" });
+    expect(low.text).toMatch(/low end \(10th percentile\)/);
+    expect(describeInput("ppg_ir_rel_high")).toMatchObject({ group: "Infrared", short: "above its highest level" });
+  });
+});

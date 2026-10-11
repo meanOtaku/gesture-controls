@@ -18,6 +18,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "label-trainer" / "tests"))
 from label_trainer import label_train as lt  # noqa: E402
+from test_baseline_features import BASELINE_FEATURE_NAMES, _session_spec  # noqa: E402
 from test_label_train import spec_for  # noqa: E402
 
 
@@ -29,6 +30,7 @@ def main(out_root: Path, only: list[str]) -> None:
         ("cnn1d", "trained_cnn_bundle", None),
         ("torch-mlp", "trained_designed_dense_bundle", designed_dense), ("cnn1d", "trained_designed_cnn_bundle", designed_cnn),
         ("torch-mlp", "trained_raw_columns_bundle", {"hidden": [{"units": 12, "activation": "tanh"}, {"units": 6}], "epochs": 80}),
+        ("logreg", "trained_baseline_bundle", None),
     ):
         if only and name not in only:
             continue
@@ -37,7 +39,11 @@ def main(out_root: Path, only: list[str]) -> None:
             extra = {"gridSteps": 16} if backend == "cnn1d" else {"inputMode": "raw", "gridSteps": 4} if name == "trained_raw_columns_bundle" else {}
             if network:
                 extra["network"] = network
-            spec = spec_for(tmp_path, backend, params={} if network else {"epochs": 120} if backend == "torch-mlp" else {"epochs": 60} if backend == "cnn1d" else {}, **extra)
+            if name == "trained_baseline_bundle":
+                # The pulse sensor's level above the low end of its recent past, on sessions whose own levels differ widely.
+                spec = _session_spec(tmp_path, baselineMs=4000, features=[n for n in BASELINE_FEATURE_NAMES if n.endswith("_rel_low")])
+            else:
+                spec = spec_for(tmp_path, backend, params={} if network else {"epochs": 120} if backend == "torch-mlp" else {"epochs": 60} if backend == "cnn1d" else {}, **extra)
             run_dir = tmp_path / "run"
             result = lt.run(spec, run_dir)
             assert result["outcome"] == "deployable", result["message"]

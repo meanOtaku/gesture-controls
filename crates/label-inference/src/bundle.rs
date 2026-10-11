@@ -77,6 +77,10 @@ pub enum BundleError {
         "the model reads spike features but its manifest does not name a spike extraction method, so the runtime could not make them the way the model was trained"
     )]
     SpikeMethodMissing,
+    #[error(
+        "the model reads pulse-sensor level features against the recent past but its manifest does not say how far back (preprocessing.baselineMs), so the runtime could not make them the way the model was trained"
+    )]
+    BaselineMissing,
     #[error("the model contract does not match the manifest: {0}")]
     ContractMismatch(String),
     #[error(
@@ -160,7 +164,14 @@ pub struct Preprocessing {
     /// The spike extraction method, when `kind` is `spike_extraction`.
     #[serde(default)]
     pub method: Option<String>,
+    /// How far back (in milliseconds) the pulse sensor's level features look for what the window is compared with; absent
+    /// when the model reads none of them.
+    #[serde(default)]
+    pub baseline_ms: Option<u32>,
 }
+
+/// The lengths of past a model may be compared with, in milliseconds (the trainer's `BASELINE_CHOICES_MS`).
+pub const BASELINE_CHOICES_MS: [u32; 3] = [2000, 4000, 8000];
 
 impl Manifest {
     /// The channels a convolutional model reads, in order; `None` for a model that reads statistics.
@@ -171,6 +182,11 @@ impl Manifest {
             .iter()
             .map(|name| GridChannel::from_name(name))
             .collect()
+    }
+
+    /// How far back this model's level-against-the-past features look, or `None` when it reads none.
+    pub fn baseline_ms(&self) -> Option<u32> {
+        self.preprocessing.baseline_ms
     }
 
     /// How this model's spike features are extracted, or `None` when it reads none.
@@ -240,6 +256,11 @@ pub fn source_of_channel(channel: GridChannel) -> StreamSource {
 /// A pulse-sensor spike feature (the ones that depend on a spike extraction method).
 fn is_spike_name(feature: &str) -> bool {
     feature.starts_with("ppg_") && (feature.contains("_spike_") || feature.contains("_deriv_"))
+}
+
+/// A pulse-sensor level feature against the recent past (the ones that depend on a baseline length).
+fn is_baseline_name(feature: &str) -> bool {
+    feature.starts_with("ppg_") && feature.contains("_rel_")
 }
 
 /// The stream a canonical feature is computed from.
@@ -341,6 +362,19 @@ pub fn validate_bundle(
                 None => kind.to_string(),
             }));
         }
+    }
+    if let Some(ms) = manifest.baseline_ms()
+        && !BASELINE_CHOICES_MS.contains(&ms)
+    {
+        return Err(BundleError::UnsupportedPreprocessing(format!(
+            "a baseline of {ms} ms: choose from {BASELINE_CHOICES_MS:?}"
+        )));
+    }
+    if manifest.input.grid.is_none()
+        && manifest.baseline_ms().is_none()
+        && manifest.input.features.iter().any(|f| is_baseline_name(f))
+    {
+        return Err(BundleError::BaselineMissing);
     }
     if manifest.input.grid.is_none()
         && manifest.spike_method().is_none()
@@ -725,6 +759,40 @@ pub(crate) mod tests {
                 "{preprocessing}"
             );
         }
+    }
+
+    #[test]
+    fn level_features_against_the_past_need_a_known_baseline_length() {
+        let reads_a_level_feature = |m: &mut serde_json::Value| {
+            m["sources"] = serde_json::json!(["watchAcceleration", "watchGyroscope", "watchPpg"]);
+            let last = m["input"]["features"].as_array().unwrap().len() - 1;
+            m["input"]["features"][last] = "ppg_red_rel_low".into();
+        };
+        // Reading one while saying nothing about how far back to look: the runtime could not make it as it was trained.
+        let dir = copy_fixture();
+        edit_manifest(dir.path(), reads_a_level_feature);
+        assert!(matches!(
+            validate_bundle(dir.path(), None),
+            Err(BundleError::BaselineMissing)
+        ));
+        for ms in BASELINE_CHOICES_MS {
+            let dir = copy_fixture();
+            edit_manifest(dir.path(), |m| {
+                reads_a_level_feature(m);
+                m["preprocessing"] = serde_json::json!({"kind": "none", "baselineMs": ms});
+            });
+            let bundle = validate_bundle(dir.path(), None).unwrap_or_else(|e| panic!("{ms}: {e}"));
+            assert_eq!(bundle.manifest.baseline_ms(), Some(ms));
+        }
+        // A length the app does not offer is refused, even if no feature reads it.
+        let dir = copy_fixture();
+        edit_manifest(dir.path(), |m| {
+            m["preprocessing"] = serde_json::json!({"kind": "none", "baselineMs": 3000});
+        });
+        assert!(matches!(
+            validate_bundle(dir.path(), None),
+            Err(BundleError::UnsupportedPreprocessing(_))
+        ));
     }
 
     #[test]

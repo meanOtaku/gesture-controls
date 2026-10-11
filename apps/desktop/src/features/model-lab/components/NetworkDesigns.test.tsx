@@ -85,3 +85,27 @@ describe("window length hint", () => {
     expect(screen.getByText(/spread evenly across it/)).toBeInTheDocument();
   });
 });
+
+describe("comparing the pulse level with the recent past", () => {
+  it("is offered for statistics that read the pulse sensor, sent with the design, and not for the dataset's own columns", async () => {
+    const pulse = { ...builtIn, id: "mine", name: "Mine", builtIn: false, sources: ["watchPpg"], baselineMs: null };
+    saved = [pulse];
+    render(<NetworkDesigns desktopAvailable />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Mine" }));
+    const select = await screen.findByLabelText("Compare the pulse level with the recent past");
+    expect(screen.getByText(/includes the session's own level/)).toBeInTheDocument();
+    fireEvent.change(select, { target: { value: "4000" } });
+    expect(await screen.findByText(/last 4 seconds/)).toBeInTheDocument();
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("preview_network_design", { design: expect.objectContaining({ baselineMs: 4000, features: null }) }));
+    fireEvent.change(screen.getByLabelText("What goes into the model"), { target: { value: "raw" } });
+    expect(screen.queryByLabelText("Compare the pulse level with the recent past")).toBeNull();
+  });
+
+  it("is not offered without the pulse sensor", async () => {
+    saved = [{ ...builtIn, id: "mine", name: "Mine", builtIn: false, sources: ["watchAcceleration"] }];
+    render(<NetworkDesigns desktopAvailable />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Mine" }));
+    await screen.findByLabelText("Method");
+    expect(screen.queryByLabelText("Compare the pulse level with the recent past")).toBeNull();
+  });
+});

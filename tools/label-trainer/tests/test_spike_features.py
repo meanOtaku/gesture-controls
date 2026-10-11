@@ -43,7 +43,7 @@ def evenly(n: int, step: float = 40.0) -> list[float]:
 
 
 def test_names_are_appended_after_the_base_features_and_cover_every_ppg_channel() -> None:
-    assert FEATURE_NAMES[BASE_FEATURE_COUNT:] == SPIKE_FEATURE_NAMES
+    assert FEATURE_NAMES[BASE_FEATURE_COUNT : BASE_FEATURE_COUNT + len(SPIKE_FEATURE_NAMES)] == SPIKE_FEATURE_NAMES
     assert len(SPIKE_FEATURE_NAMES) == 24
     assert "ppg_ir_deriv_min" in SPIKE_FEATURE_NAMES and "ppg_green_spike_height" in SPIKE_FEATURE_NAMES
     assert all(name.startswith("ppg_") for name in SPIKE_FEATURE_NAMES)

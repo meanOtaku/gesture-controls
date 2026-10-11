@@ -11,7 +11,10 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use model_lab_core::{LabelId, ModelVersionId, StreamSource};
-use pinch_inference::{FusedWindow, OrientationSnapshot, build_grid, extract_features_with};
+use pinch_inference::{
+    BASELINE_MIN_SAMPLES, BASELINE_SLACK_MS, FusedWindow, OrientationSnapshot, PpgBaseline,
+    build_grid, extract_features_with,
+};
 use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
 
 use crate::model::LoadedModel;
@@ -132,6 +135,28 @@ pub struct LabelPipeline {
     next_due_ns: BTreeMap<LabelId, u64>,
 }
 
+/// The real pulse samples in the `baseline_ms` before `start`, or `None` while there are not enough of them or they do not
+/// reach back to the baseline's start (give or take [`BASELINE_SLACK_MS`]): the same rule the trainer uses to keep a window.
+fn baseline_before(ppg: &VecDeque<PpgSample>, start: u64, baseline_ms: u32) -> Option<PpgBaseline> {
+    // Not even that much time has passed since the clock began: nothing to compare with yet.
+    let from = start.checked_sub(u64::from(baseline_ms) * NS_PER_MS)?;
+    let past: Vec<&PpgSample> = ppg
+        .iter()
+        .filter(|s| s.at_ns >= from && s.at_ns < start)
+        .collect();
+    let reaches_back = past
+        .first()
+        .is_some_and(|s| s.at_ns <= from + BASELINE_SLACK_MS * NS_PER_MS);
+    if past.len() < BASELINE_MIN_SAMPLES || !reaches_back {
+        return None;
+    }
+    Some(PpgBaseline {
+        green: past.iter().map(|s| s.green).collect(),
+        red: past.iter().map(|s| s.red).collect(),
+        ir: past.iter().map(|s| s.ir).collect(),
+    })
+}
+
 fn finite3(v: &[f64; 3]) -> bool {
     v.iter().all(|c| c.is_finite())
 }
@@ -141,7 +166,12 @@ impl LabelPipeline {
     pub fn configure(&mut self, models: &[&LoadedModel]) {
         self.retention_ns = models
             .iter()
-            .map(|m| (u64::from(m.input.window_ms) + u64::from(m.input.max_gap_ms)) * NS_PER_MS)
+            .map(|m| {
+                (u64::from(m.input.window_ms)
+                    + u64::from(m.input.max_gap_ms)
+                    + u64::from(m.baseline_ms.unwrap_or(0)))
+                    * NS_PER_MS
+            })
             .max()
             .unwrap_or(0)
             + 1_000 * NS_PER_MS;
@@ -403,6 +433,17 @@ impl LabelPipeline {
             }
         }
 
+        // A model that compares the window's pulse level with the recent past needs that past: the real pulse samples in the
+        // `baseline_ms` before the window, reaching back to its start (give or take the slack). Until then it is warming up,
+        // not failing: nothing is scored, and nothing is reported.
+        let baseline = match model.baseline_ms.filter(|_| uses_ppg) {
+            None => None,
+            Some(baseline_ms) => match baseline_before(&self.ppg, start, baseline_ms) {
+                Some(baseline) => Some(baseline),
+                None => return Ok(None),
+            },
+        };
+
         // Orientation samples in the window, with a missing acceleration or gyroscope carried forward from the last
         // one that had it, as the live fusion has always done.
         let mut carried_accel = [0.0; 3];
@@ -438,6 +479,7 @@ impl LabelPipeline {
             orientation: latest,
             orientation_in_window: in_window,
             contact_quality_mean,
+            baseline,
         };
         let confidence = match &model.grid {
             // A convolutional model reads the window itself, as a grid of channels over time.
@@ -681,5 +723,118 @@ pub(crate) mod tests {
             p.orientation.len()
         );
         assert!(p.evaluate(&[&model], now).1.is_empty());
+    }
+
+    fn ppg_at(at_ms: u64, level: f64) -> PpgSample {
+        PpgSample {
+            at_ns: at_ms * NS_PER_MS,
+            raw_ts_ns: at_ms * NS_PER_MS,
+            green: level,
+            red: level + 1.0,
+            ir: level + 2.0,
+            quality: 0.0,
+        }
+    }
+
+    #[test]
+    fn the_baseline_is_the_real_pulse_samples_just_before_the_window_and_waits_until_it_reaches_back()
+     {
+        // A pulse sample every 60 ms from 0 to 5000 ms.
+        let ppg: VecDeque<PpgSample> = (0..84).map(|i| ppg_at(i * 60, 100.0 + i as f64)).collect();
+        let start = 5_000 * NS_PER_MS;
+        let past = baseline_before(&ppg, start, 2000).expect("2 s of past is there");
+        assert!(past.green.len() >= 30 && past.green.len() <= 34);
+        assert!(past.green.iter().all(|v| *v < 100.0 + 84.0)); // nothing from the window itself or later
+        assert_eq!(
+            (past.red[0] - past.green[0], past.ir[0] - past.green[0]),
+            (1.0, 2.0)
+        );
+        // The same window with only 1.5 s of history: not there yet (a warm-up), not an error.
+        let young: VecDeque<PpgSample> = ppg
+            .iter()
+            .filter(|s| s.at_ns >= 3_500 * NS_PER_MS)
+            .cloned()
+            .collect();
+        assert!(baseline_before(&young, start, 2000).is_none());
+        // Too few samples even when they reach back.
+        let sparse: VecDeque<PpgSample> = [3_000, 3_900, 4_900]
+            .iter()
+            .map(|t| ppg_at(*t, 1.0))
+            .collect();
+        assert!(baseline_before(&sparse, start, 2000).is_none());
+        // A longer baseline needs more history.
+        assert!(baseline_before(&ppg, start, 8000).is_none());
+    }
+
+    #[test]
+    fn the_buffers_keep_a_models_baseline_as_well_as_its_window() {
+        let mut model = loaded();
+        let mut pipeline = LabelPipeline::default();
+        pipeline.configure(&[&model]);
+        let without = pipeline.retention_ns;
+        model.baseline_ms = Some(4000);
+        pipeline.configure(&[&model]);
+        assert_eq!(pipeline.retention_ns, without + 4_000 * NS_PER_MS);
+    }
+
+    /// A model from the real trainer that reads the pulse sensor's level against its recent past, run through the whole
+    /// live path: it waits until it has the baseline, then scores a held level shift high and the rest low, at a level
+    /// (90 000) unlike the sessions it was trained on.
+    #[test]
+    fn a_model_on_the_level_against_the_recent_past_warms_up_then_tells_a_held_shift_from_rest() {
+        use crate::bundle::validate_bundle;
+        use crate::model::tests::active_version;
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/trained_baseline_bundle");
+        let bundle = validate_bundle(&dir, Some(&LabelId::new("pinch").unwrap())).unwrap();
+        let version = active_version(&bundle);
+        let model = LoadedModel::load(bundle, &version).unwrap();
+        assert_eq!(model.baseline_ms, Some(4000));
+        let mut pipeline = LabelPipeline::default();
+        pipeline.configure(&[&model]);
+
+        let mut scores: Vec<(u64, f64)> = Vec::new();
+        let mut first_score_ms = None;
+        for n in 0..170u64 {
+            let at_ms = n * 60;
+            let shifted = (6_000..8_400).contains(&at_ms);
+            // A little noise that repeats, so the run is the same every time.
+            let noise = [-120.0, 40.0, 90.0, -60.0, 140.0, -20.0][(n % 6) as usize];
+            let level = 90_000.0 + noise + if shifted { 3_000.0 } else { 0.0 };
+            let batch = WatchPpgBatchSample {
+                device_id: "watch-1".into(),
+                sequence: n,
+                timestamp_ns: at_ms * NS_PER_MS,
+                sample_count: 1,
+                timestamps_ns: vec![at_ms * NS_PER_MS],
+                green: vec![level as i32],
+                green_status: vec![0],
+                red: vec![level as i32],
+                red_status: vec![0],
+                ir: vec![level as i32],
+                ir_status: vec![0],
+            };
+            pipeline.observe_ppg(&batch, at_ms * NS_PER_MS).unwrap();
+            let (got, rejected) = pipeline.evaluate(&[&model], at_ms * NS_PER_MS);
+            assert!(rejected.is_empty(), "{at_ms} ms: {rejected:?}");
+            for score in got {
+                first_score_ms.get_or_insert(at_ms);
+                scores.push((at_ms, score.confidence));
+            }
+        }
+        // 4 s of past plus a 0.5 s window must have passed before anything is scored.
+        assert!(first_score_ms.unwrap() >= 4_000, "{first_score_ms:?}");
+        let mean = |from: u64, to: u64| {
+            let in_range: Vec<f64> = scores
+                .iter()
+                .filter(|(t, _)| (from..to).contains(t))
+                .map(|(_, c)| *c)
+                .collect();
+            assert!(!in_range.is_empty(), "no scores in {from}..{to}");
+            in_range.iter().sum::<f64>() / in_range.len() as f64
+        };
+        let rest = mean(4_500, 5_800);
+        let held = mean(6_800, 8_400);
+        assert!(held > 0.8 && rest < 0.3, "held {held}, rest {rest}");
     }
 }

@@ -8,8 +8,9 @@
 /// The statistics every window has always had; the pulse-sensor spike features follow them.
 pub const BASE_FEATURE_COUNT: usize = 55;
 /// Number of features in the ordered vector every model reads its inputs from: the 55 base statistics, then 24 spike
-/// features (8 for each of the three PPG channels). Matches Python's `len(FEATURE_NAMES)`.
-pub const FEATURE_COUNT: usize = 79;
+/// features (8 for each of the three PPG channels), then 6 pulse-sensor level features relative to the recent past (2 for
+/// each channel). Matches Python's `len(FEATURE_NAMES)`.
+pub const FEATURE_COUNT: usize = 85;
 
 /// Exact feature order, matching `features.py`'s `FEATURE_NAMES` tuple. A
 /// model bundle's `metadata.json` records this same order (see `bundle.py`'s
@@ -94,7 +95,57 @@ pub const FEATURE_NAMES: [&str; FEATURE_COUNT] = [
     "ppg_green_deriv_min",
     "ppg_red_deriv_min",
     "ppg_ir_deriv_min",
+    "ppg_green_rel_low",
+    "ppg_red_rel_low",
+    "ppg_ir_rel_low",
+    "ppg_green_rel_high",
+    "ppg_red_rel_high",
+    "ppg_ir_rel_high",
 ];
+
+/// Fewer pulse samples than this in the baseline and there is nothing to compare the window with.
+pub const BASELINE_MIN_SAMPLES: usize = 16;
+/// The oldest pulse sample of a baseline may be this far after the baseline's start, but no more (see the trainer's
+/// `BASELINE_SLACK_MS`): a baseline that does not reach back that far is not the length the model was trained with.
+pub const BASELINE_SLACK_MS: u64 = 250;
+/// Which points of the baseline the window is compared with: the sample at rank `floor((n - 1) * percent / 100)` of the
+/// sorted baseline, in whole numbers so it is the very sample the trainer picks.
+pub const BASELINE_LOW_PERCENT: usize = 10;
+pub const BASELINE_HIGH_PERCENT: usize = 90;
+
+/// The pulse samples (per channel, oldest first) from the stretch just before a window: what its level is compared with.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PpgBaseline {
+    pub green: Vec<f64>,
+    pub red: Vec<f64>,
+    pub ir: Vec<f64>,
+}
+
+/// The sample at rank `floor((n - 1) * percent / 100)` of `values` sorted (`values` must not be empty).
+fn baseline_percentile(values: &[f64], percent: usize) -> f64 {
+    let mut ordered = values.to_vec();
+    ordered.sort_by(|a, b| a.total_cmp(b));
+    ordered[((ordered.len() - 1) * percent) / 100]
+}
+
+/// The six level-against-the-past features of one window, in the order of the last six names of [`FEATURE_NAMES`]: for each
+/// channel (green, red, ir) the window's average minus the low end (10th percentile) of its baseline, then minus the high
+/// end (90th percentile). With rest and a held pinch both in the past, those two ends are the rest level and the pinch level
+/// whatever the mix; with only rest in it, both are the rest level. A channel with no window samples or too few baseline
+/// samples is 0. Mirrors `baseline_features` in the trainer; `tests/fixtures/baseline_cases.json` there holds the shared cases.
+pub fn baseline_features(window: [&[f64]; 3], baseline: [&[f64]; 3]) -> [f64; 6] {
+    let mut out = [0.0; 6];
+    for channel in 0..3 {
+        let (values, past) = (window[channel], baseline[channel]);
+        if values.is_empty() || past.len() < BASELINE_MIN_SAMPLES {
+            continue;
+        }
+        let level = values.iter().sum::<f64>() / values.len() as f64;
+        out[channel] = level - baseline_percentile(past, BASELINE_LOW_PERCENT);
+        out[3 + channel] = level - baseline_percentile(past, BASELINE_HIGH_PERCENT);
+    }
+    out
+}
 
 /// One fused, ready-to-classify window: a raw PPG batch's per-sample channel
 /// arrays plus the last-known watch orientation (accel/gyro/quat), carried
@@ -125,6 +176,9 @@ pub struct FusedWindow {
     /// means the carried snapshot stands alone and those statistics are 0.
     pub orientation_in_window: Vec<OrientationSnapshot>,
     pub contact_quality_mean: f64,
+    /// The pulse samples just before the window, for the features that compare its level with the recent past. `None` when
+    /// the model reads none of them (they are then 0).
+    pub baseline: Option<PpgBaseline>,
 }
 
 impl FusedWindow {
@@ -689,6 +743,17 @@ pub fn extract_features_with(
         }
     }
 
+    // The level against the recent past (0 when the model has no baseline).
+    let relative = window.baseline.as_ref().map_or([0.0; 6], |past| {
+        baseline_features(
+            [&window.ppg_green, &window.ppg_red, &window.ppg_ir],
+            [&past.green, &past.red, &past.ir],
+        )
+    });
+    for value in relative {
+        push(value);
+    }
+
     debug_assert_eq!(cursor, FEATURE_COUNT);
     out
 }
@@ -720,6 +785,7 @@ mod tests {
                 quat: [1.0, 0.0, 0.0, 0.0],
             },
             contact_quality_mean: 0.0,
+            baseline: None,
         }
     }
 
@@ -789,8 +855,73 @@ mod tests {
         assert_eq!(FEATURE_NAMES[BASE_FEATURE_COUNT], "ppg_green_spike_height");
         assert_eq!(
             FEATURE_NAMES.len(),
-            BASE_FEATURE_COUNT + 3 * SPIKE_STATS_PER_CHANNEL
+            BASE_FEATURE_COUNT + 3 * SPIKE_STATS_PER_CHANNEL + 6
         );
+    }
+
+    /// The same cases the trainer's tests check (`tools/label-trainer/tests/fixtures/baseline_cases.json`): the level-
+    /// against-the-past features here must equal the ones it computes, or a model trained there would see different
+    /// numbers live.
+    #[test]
+    fn baseline_features_match_the_trainer_on_the_shared_cases() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../tools/label-trainer/tests/fixtures/baseline_cases.json"
+        ))
+        .unwrap();
+        assert_eq!(fixture["minSamples"], BASELINE_MIN_SAMPLES);
+        assert_eq!(fixture["slackMs"], BASELINE_SLACK_MS);
+        assert_eq!(fixture["lowPercent"], BASELINE_LOW_PERCENT);
+        assert_eq!(fixture["highPercent"], BASELINE_HIGH_PERCENT);
+        let channels = |value: &serde_json::Value| -> Vec<Vec<f64>> {
+            value
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|channel| {
+                    channel
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|v| v.as_f64().unwrap())
+                        .collect()
+                })
+                .collect()
+        };
+        for case in fixture["cases"].as_array().unwrap() {
+            let (window, past) = (channels(&case["window"]), channels(&case["baseline"]));
+            let got = baseline_features(
+                [&window[0], &window[1], &window[2]],
+                [&past[0], &past[1], &past[2]],
+            );
+            for (index, expected) in case["expected"].as_array().unwrap().iter().enumerate() {
+                let expected = expected.as_f64().unwrap();
+                assert!(
+                    (got[index] - expected).abs() <= 1e-9 * expected.abs().max(1.0),
+                    "{}: feature {index}: {} vs {expected}",
+                    case["name"],
+                    got[index]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_window_with_a_baseline_carries_its_level_features_at_the_end_and_none_without() {
+        let mut window = sample_window();
+        let none = extract_features_with(&window, None);
+        assert!(none[FEATURE_COUNT - 6..].iter().all(|v| *v == 0.0));
+        let past: Vec<f64> = (0..21).map(|i| 1.0 + f64::from(i)).collect(); // 1..21: low end 3, high end 19
+        window.baseline = Some(PpgBaseline {
+            green: past.clone(),
+            red: past.clone(),
+            ir: past,
+        });
+        let with = extract_features_with(&window, None);
+        let names = &FEATURE_NAMES[FEATURE_COUNT - 6..];
+        assert_eq!(names[0], "ppg_green_rel_low");
+        assert!((with[FEATURE_COUNT - 6] - (12.0 - 3.0)).abs() < 1e-5); // green mean 12 against the low end, 3
+        assert!((with[FEATURE_COUNT - 3] - (12.0 - 19.0)).abs() < 1e-5); // and against the high end, 19
+        assert_eq!(&with[..FEATURE_COUNT - 6], &none[..FEATURE_COUNT - 6]); // nothing else changes
     }
 
     /// The same cases the trainer's tests check (`tools/label-trainer/tests/fixtures/spike_cases.json`): the spike

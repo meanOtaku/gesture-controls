@@ -191,6 +191,7 @@ mod tests {
                 },
             ],
             contact_quality_mean: 0.0,
+            baseline: None,
         };
         let grid = build_grid(
             &window,
@@ -276,6 +277,7 @@ mod tests {
                     })
                     .collect(),
                 contact_quality_mean: 0.0,
+                baseline: None,
             };
             let channels: Vec<GridChannel> = case["channels"]
                 .as_array()

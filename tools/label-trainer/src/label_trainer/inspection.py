@@ -300,6 +300,7 @@ def build_inspection(spec, model, x_eval: np.ndarray, y_eval: np.ndarray, eval_w
         "gridSteps": p.grouped_steps or None,
         "centreWindows": p.centre,
         "spikeMethod": spec.spike_method,
+        "baselineMs": spec.baseline_ms,
         "inputs": _input_rows(p),
         "network": network,
         "parameters": parameters,
