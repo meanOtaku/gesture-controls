@@ -369,7 +369,7 @@ fn butterworth_high_pass(x: &[f64]) -> Vec<f64> {
 
 /// What a spike method leaves of one PPG channel in one window (the spikes, with the baseline taken out). Mirrors
 /// `extract_spike_series` in the trainer's `features.py`, which describes each method.
-fn extract_spike_series(method: SpikeMethod, x: &[f64], span_ms: f64) -> Vec<f64> {
+pub(crate) fn extract_spike_series(method: SpikeMethod, x: &[f64], span_ms: f64) -> Vec<f64> {
     let n = x.len();
     match method {
         SpikeMethod::StraightLineBaseline => {

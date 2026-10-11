@@ -44,6 +44,9 @@ class Recording:
     # True on rows that carried a real PPG sample (the others are orientation rows, whose PPG values are carried forward).
     # None for a recording built by hand, which counts every row.
     ppg_observed: np.ndarray | None = None
+    # True on rows that carried a real orientation sample (orientation, acceleration and gyroscope arrive together); the PPG
+    # rows have none, and carry the last one forward. None for a recording built by hand, which counts every row.
+    orient_observed: np.ndarray | None = None
 
     @cached_property
     def channel_matrix(self) -> np.ndarray:
@@ -141,6 +144,7 @@ def load_recording(path: str | Path) -> Recording:
             channels={column: _carry_forward(values) for column, values in channel_values.items()},
             raw_labels=raw_labels,
             ppg_observed=~np.isnan(channel_values["ppg_green"]),
+            orient_observed=~np.isnan(channel_values["quat_w"]),
         )
 
     timestamps_ns = np.empty(row_count, dtype=np.int64)
@@ -204,6 +208,7 @@ def load_recording(path: str | Path) -> Recording:
         channels=filled_channels,
         raw_labels=raw_labels,
         ppg_observed=~np.isnan(np.array(channels["ppg_green"], dtype=np.float64)),
+        orient_observed=~np.isnan(np.array(channels["quat_w"], dtype=np.float64)),
     )
 
 
