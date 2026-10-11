@@ -102,6 +102,10 @@ pub struct TrainRequest {
     /// Also retrain on less data and on all but one recording, to see how far the score can be trusted. Slower.
     #[serde(default)]
     pub research: bool,
+    /// A saved network design to train with (see `network_designs`). When present, the design's choices replace the
+    /// request's own for the method, inputs, spike extraction, window and network; the label and recordings stay the request's.
+    #[serde(default)]
+    pub design_id: Option<String>,
 }
 
 fn default_window_ms() -> u32 {
@@ -532,6 +536,18 @@ fn recordings_for(app: &AppHandle, request: &TrainRequest) -> Result<Checked, St
 /// Says how a request would be split, or why it cannot be, without recording or starting anything.
 #[tauri::command]
 pub fn plan_label_training(app: AppHandle, request: TrainRequest) -> PlanView {
+    let request = match crate::network_designs::resolve_design(&app, request) {
+        Ok(request) => request,
+        Err(problem) => {
+            return PlanView {
+                train: Vec::new(),
+                evaluation: Vec::new(),
+                problem: Some(problem),
+                available: Vec::new(),
+                features: Vec::new(),
+            };
+        }
+    };
     let result = recordings_for(&app, &request).and_then(|checked| {
         plan_split(&checked.recordings, &checked.mapping, &checked.target)
             .map_err(|e| e.to_string())
@@ -623,6 +639,7 @@ pub async fn start_label_training(
     host: State<'_, LabelRuntimeHost>,
     request: TrainRequest,
 ) -> Result<String, String> {
+    let request = crate::network_designs::resolve_design(&app, request)?;
     start_run(app, runtime, host, request, None).await
 }
 
@@ -1105,6 +1122,7 @@ mod tests {
             features: None,
             network: None,
             research: false,
+            design_id: None,
         }
     }
 

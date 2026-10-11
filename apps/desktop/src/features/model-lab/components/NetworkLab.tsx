@@ -3,11 +3,11 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { useLabelModels } from "../hooks/useLabelModels";
-import { useModelLabData } from "../hooks/useModelLabData";
 import type { LabelModel } from "../labelModels";
 import { ModelInspector } from "./ModelInspector";
 import { NetworkDesigns } from "./NetworkDesigns";
-import { TrainPanel } from "./TrainPanel";
+import { useTrainingRun } from "../hooks/useTrainingRun";
+import { TrainingRunView } from "./TrainingRunView";
 
 const STATE_TEXT: Record<string, string> = { draft: "Draft", evaluated: "Evaluated", approved: "Approved", active: "Active", archived: "Archived" };
 
@@ -26,13 +26,13 @@ function ModelRow({ model, chosen, onChoose }: { model: LabelModel; chosen: bool
 }
 
 /**
- * The Network lab: design a neural network (the columns it reads, how many input neurons that makes, its layers and neurons),
- * train it, then look inside it (weights, heatmaps, how well it works), edit its weights by hand and fine-tune it. It is the
- * workbench for the networks; Model Lab is where the models are trained simply, reviewed and switched on.
+ * The Network lab: design the networks (the columns a model reads, how many input neurons that makes, its layers and neurons)
+ * that Model Lab trains with, then look inside a trained model (weights, heatmaps, how well it works), edit its weights by hand
+ * and fine-tune it. Training itself happens in Model Lab.
  */
 export function NetworkLab({ modelId, onModelChange }: { modelId: string | null; onModelChange: (id: string | null) => void }) {
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
-  const { datasets, labels } = useModelLabData(desktopAvailable);
+  const run = useTrainingRun(desktopAvailable);
   const { models } = useLabelModels(desktopAvailable);
 
   // A model that was deleted while it was open is no longer there to look inside.
@@ -47,7 +47,7 @@ export function NetworkLab({ modelId, onModelChange }: { modelId: string | null;
           <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Network lab</h1>
           <p className="subtitle">
-            Design a neural network from your data's columns, train it, look inside it, edit its weights and fine-tune it.
+            Design the networks models are trained with, look inside a trained model, edit its weights and fine-tune it.
           </p>
         </div>
       </header>
@@ -63,12 +63,11 @@ export function NetworkLab({ modelId, onModelChange }: { modelId: string | null;
       )}
 
       <nav className="lab-workflow" aria-label="Network lab sections">
-        <a href="#lab-designs">Network designs</a><a href="#lab-train">Train with a design</a><a href="#lab-models">Look inside a model</a>
+        <a href="#lab-designs">Network designs</a><a href="#lab-models">Look inside a model</a>
       </nav>
 
       <fieldset className="lab-workspace card-stack" disabled={!desktopAvailable} aria-label="Network tools">
         <NetworkDesigns desktopAvailable={desktopAvailable} />
-        <TrainPanel desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} lab />
 
         <Card id="lab-models" role="region" aria-label="Your models" className="min-w-0">
           <CardHeader>
@@ -80,7 +79,7 @@ export function NetworkLab({ modelId, onModelChange }: { modelId: string | null;
           </CardHeader>
           <CardContent>
             {models.length === 0 ? (
-              <p className="hint">No models yet. Build one above, or import one under Model Lab.</p>
+              <p className="hint">No models yet. Train one in Model Lab, or import one there.</p>
             ) : (
               <ul className="flex flex-col gap-2" aria-label="Models">
                 {models.map((model) => <ModelRow key={model.id} model={model} chosen={model.id === modelId} onChoose={() => onModelChange(model.id)} />)}
@@ -88,6 +87,13 @@ export function NetworkLab({ modelId, onModelChange }: { modelId: string | null;
             )}
           </CardContent>
         </Card>
+
+        {(run.running !== null || run.curve.length > 0 || run.result !== null) && (
+          <Card id="lab-run" role="region" aria-label="Training progress" className="min-w-0">
+            <CardHeader><SectionHeader title="Training progress" description="Fine-tuning a model runs here; models are trained from Model Lab." /></CardHeader>
+            <CardContent className="flex flex-col gap-4"><TrainingRunView run={run} /></CardContent>
+          </Card>
+        )}
 
         {modelId !== null && <ModelInspector id={modelId} models={models} onClose={() => onModelChange(null)} />}
       </fieldset>

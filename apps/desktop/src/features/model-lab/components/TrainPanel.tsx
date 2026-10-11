@@ -1,7 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { Fragment, useEffect, useId, useState } from "react";
-import { OperationFeedback } from "../../../components/app/OperationFeedback";
+import { useEffect, useId, useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
@@ -9,154 +7,75 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { Label } from "../../../components/ui/label";
-import { InputPicker } from "./InputPicker";
-import { NetworkDesigner } from "./NetworkDesigner";
-import { TrainingCurve, parseCurveLine, type CurvePoint } from "./TrainingCurve";
-import { defaultNetwork, isNeural, networkRequest, parameterCount, type NetworkSettings } from "../network";
-import { ColumnsDesigner } from "./ColumnsDesigner";
-import {
-  DEFAULT_STREAMS,
-  LABEL_TRAINING_EVENT,
-  METHODS,
-  STREAMS,
-  appendLog,
-  buildRequest,
-  THRESHOLD_CAVEAT,
-  describeMetrics,
-  hasLabel,
-  otherLabels,
-  recordingsWithLabel,
-  ALL_COLUMNS,
-  ALL_PPG_CHANNELS,
-  DEFAULT_WINDOW_MS,
-  needsOf,
-  PPG_CHANNELS,
-  WINDOW_LENGTHS,
-  SPIKE_METHODS,
-  type DataStream,
-  type PpgChannel,
-  type SpikeMethodId,
-  type OtherRole,
-  type TrainMethod,
-  type TrainPlan,
-  type TrainerEnvironment,
-  type TrainingEvent,
-  type TrainingStatus,
-} from "../training";
+import { describeDesign, type DesignPreview, type NetworkDesign } from "../designs";
+import { useTrainingRun } from "../hooks/useTrainingRun";
+import { buildRequest, hasLabel, otherLabels, recordingsWithLabel, type OtherRole, type TrainPlan, type TrainerEnvironment } from "../training";
 import { datasetLabels, type DatasetLabel, type DatasetSummary } from "../types";
+import { TrainingRunView } from "./TrainingRunView";
 
 type TrainPanelProps = {
   desktopAvailable: boolean;
   labels: DatasetLabel[];
   datasets: DatasetSummary[];
-  /** The Network lab's fuller version: design the network, choose the columns it reads, individual inputs, research checks. */
-  lab?: boolean;
-  /** Opens the Network lab (from the simpler panel in Model Lab). */
+  /** Opens the Network lab, where the designs are made. */
   onOpenNetworkLab?: () => void;
 };
 
 const NATIVE_SELECT = "recipe-select";
 
 /**
- * Train a model for one label from your recordings. You choose the label, the recordings, what each other label means,
- * the method and the data the model may read; the app then picks which recordings train and which test (never the same
- * one) and shows you that before anything runs. The result is a Draft you review before it can do anything.
+ * Train a model for one label from your recordings. You choose the label, the recordings, what each other label means and a
+ * network design (made in the Network lab); the app then picks which recordings train and which test (never the same one)
+ * and shows you that before anything runs. The result is a Draft you review before it can do anything.
  */
-export function TrainPanel({ desktopAvailable, labels, datasets, lab = false, onOpenNetworkLab }: TrainPanelProps) {
+export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLab }: TrainPanelProps) {
   const uid = useId();
+  const run = useTrainingRun(desktopAvailable);
+  const running = run.running;
   const [target, setTarget] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [roles, setRoles] = useState<Record<string, OtherRole>>({});
-  const [method, setMethod] = useState<TrainMethod>("logreg");
-  const [sources, setSources] = useState<DataStream[]>(DEFAULT_STREAMS);
-  const [movementOnly, setMovementOnly] = useState(false);
-  const [windowMs, setWindowMs] = useState(DEFAULT_WINDOW_MS);
-  const [networks, setNetworks] = useState<Record<TrainMethod, NetworkSettings>>(() => ({ logreg: defaultNetwork("logreg"), mlp: defaultNetwork("mlp"), "torch-mlp": defaultNetwork("torch-mlp"), cnn1d: defaultNetwork("cnn1d") }));
-  const [inputChoice, setInputChoice] = useState<string[] | null>(null);
-  const [curve, setCurve] = useState<CurvePoint[]>([]);
+  const [designs, setDesigns] = useState<NetworkDesign[]>([]);
+  const [designId, setDesignId] = useState("");
+  const [summary, setSummary] = useState<DesignPreview | null>(null);
   const [research, setResearch] = useState(false);
-  const [inputMode, setInputMode] = useState<"statistics" | "raw">("statistics");
-  const [columns, setColumns] = useState<string[]>(ALL_COLUMNS);
-  const [rawSteps, setRawSteps] = useState(1);
-  const [cnnSteps, setCnnSteps] = useState(32);
-  const [ppgChannels, setPpgChannels] = useState<PpgChannel[]>(ALL_PPG_CHANNELS);
-  const [spikeMethod, setSpikeMethod] = useState<SpikeMethodId>("none");
   const [plan, setPlan] = useState<TrainPlan | null>(null);
   const [environment, setEnvironment] = useState<TrainerEnvironment | null>(null);
-  const [running, setRunning] = useState<string | null>(null);
-  const [log, setLog] = useState<string[]>([]);
-  const [result, setResult] = useState<Extract<TrainingEvent, { kind: "finished" }> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const usable = labels.filter((label) => label.archivedAt === null);
   const candidates = datasets.filter((dataset) => datasetLabels(dataset).length > 0);
   const others = otherLabels(datasets, selected, target);
-  // Which inputs the model reads: all that the streams provide, unless some were ticked off (only ones that are still available count).
-  const available = plan?.available ?? [];
-  const narrowed = inputChoice === null ? null : inputChoice.filter((name) => available.includes(name));
-  const featuresRequest = narrowed !== null && narrowed.length > 0 && narrowed.length < available.length ? narrowed : null;
-  const network = networks[method];
-  // In the Network lab the dataset's own columns are the inputs of the convolutional method and of a dense method on raw columns.
-  const columnsMode = lab && (method === "cnn1d" || inputMode === "raw");
-  const steps = method === "cnn1d" ? cnnSteps : rawSteps;
-  const needs = columnsMode ? needsOf(columns) : null;
-  const effectiveSources = needs ? needs.sources : sources;
-  const effectiveLights = needs && needs.lights.length > 0 ? needs.lights : ppgChannels;
-  const hasPulse = effectiveSources.includes("watchPpg");
-  const request = target === "" ? null : buildRequest({
-    label: target, datasetIds: [...selected], others, roles, method, sources: effectiveSources,
-    movementOnly: columnsMode && method !== "cnn1d" ? false : movementOnly,
-    spikeMethod: hasPulse ? spikeMethod : "none", ppgChannels: effectiveLights, windowMs,
-    features: columnsMode ? columns : featuresRequest, network: networkRequest(network, method), research: lab && research,
-    ...(columnsMode ? { gridSteps: steps, ...(method !== "cnn1d" ? { inputMode: "raw" as const } : {}) } : {}),
-  });
+  const design = designs.find((d) => d.id === designId) ?? null;
+  // The design's own choices are filled in by the desktop; what is sent here is only its id (and the fields every request has).
+  const request = target === "" || design === null ? null : {
+    ...buildRequest({ label: target, datasetIds: [...selected], others, roles, method: design.method, sources: design.sources, research }),
+    designId: design.id,
+  };
   const requestKey = JSON.stringify(request);
 
   useEffect(() => {
     if (!desktopAvailable) return;
     void invoke<TrainerEnvironment>("check_label_trainer").then(setEnvironment).catch(() => undefined);
-    void invoke<TrainingStatus>("get_label_training_status")
-      .then((status) => {
-        if (status?.running) setRunning(status.running.runId);
-        else if (status?.last?.kind === "finished") setResult(status.last);
+    void invoke<NetworkDesign[]>("list_network_designs")
+      .then((list) => {
+        const all = Array.isArray(list) ? list : [];
+        setDesigns(all);
+        setDesignId((current) => current || all[0]?.id || "");
       })
       .catch(() => undefined);
   }, [desktopAvailable]);
 
+  // What the chosen design reads, in words.
   useEffect(() => {
-    if (!desktopAvailable) return;
-    let disposed = false;
-    let unlisten: (() => void) | undefined;
-    void Promise.resolve(
-      listen<TrainingEvent>(LABEL_TRAINING_EVENT, ({ payload }) => {
-        if (disposed) return;
-        if (payload.kind === "started") {
-          setRunning(payload.runId);
-          setLog([]);
-          setCurve([]);
-          setResult(null);
-        } else if (payload.kind === "log") {
-          const point = parseCurveLine(payload.message);
-          if (point) setCurve((previous) => [...previous, point]);
-          else setLog((previous) => appendLog(previous, payload.message));
-        } else {
-          setRunning(null);
-          setResult(payload);
-          if (payload.outcome === "deployable") OperationFeedback.success("Training", `A model for ${payload.label} was added as a draft.`);
-          else if (payload.outcome === "failed") OperationFeedback.error("Training", payload.message);
-        }
-      }),
-    )
-      .then((fn) => {
-        if (disposed) fn?.();
-        else unlisten = fn;
-      })
+    setSummary(null);
+    if (!desktopAvailable || design === null) return;
+    let stale = false;
+    void invoke<DesignPreview>("preview_network_design", { design })
+      .then((found) => { if (!stale) setSummary(found); })
       .catch(() => undefined);
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, [desktopAvailable]);
+    return () => { stale = true; };
+  }, [desktopAvailable, design]);
 
   // What the app would do with this choice, shown before anything runs.
   useEffect(() => {
@@ -181,17 +100,9 @@ export function TrainPanel({ desktopAvailable, labels, datasets, lab = false, on
       return next;
     });
 
-  const toggleChannel = (channel: PpgChannel) =>
-    setPpgChannels((previous) => {
-      const next = previous.includes(channel) ? previous.filter((c) => c !== channel) : [...previous, channel];
-      return ALL_PPG_CHANNELS.filter((c) => next.includes(c)); // always at least one, in the sensor's order
-    });
-  const toggleStream = (stream: DataStream) =>
-    setSources((previous) => (previous.includes(stream) ? previous.filter((s) => s !== stream) : [...previous, stream]));
-
   const chooseTarget = (label: string) => {
     setTarget(label);
-    setResult(null);
+    run.clearResult();
     // Start from every recording, so what to leave out is a decision rather than something to remember.
     setSelected(new Set(candidates.map((dataset) => dataset.id)));
   };
@@ -199,9 +110,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, lab = false, on
   const start = async () => {
     if (request === null) return;
     setError(null);
-    setResult(null);
-    setLog([]);
-    setCurve([]);
+    run.reset();
     try {
       await invoke<string>("start_label_training", { request });
     } catch (err) {
@@ -209,15 +118,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, lab = false, on
     }
   };
 
-  const cancel = async () => {
-    try {
-      await invoke("cancel_label_training");
-    } catch (err) {
-      setError(String(err));
-    }
-  };
-
-  const canStart = desktopAvailable && request !== null && effectiveSources.length > 0 && plan !== null && plan.problem === null && running === null && environment?.available !== false;
+  const canStart = desktopAvailable && request !== null && plan !== null && plan.problem === null && summary?.problem == null && running === null && environment?.available !== false;
   const name = (id: string) => datasets.find((dataset) => dataset.id === id)?.originalFilename ?? id;
 
   return (
@@ -240,13 +141,6 @@ export function TrainPanel({ desktopAvailable, labels, datasets, lab = false, on
           </Alert>
         )}
         {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
-
-        {running !== null && (
-          <div className="flex flex-wrap items-center gap-2" role="status" aria-label="Training in progress">
-            <Badge>Training…</Badge>
-            <Button type="button" variant="outline" onClick={() => void cancel()}>Cancel</Button>
-          </div>
-        )}
 
         <div className="field">
           <div className="field-head"><Label htmlFor={`${uid}-label`} required>Label to teach</Label></div>
@@ -296,106 +190,16 @@ export function TrainPanel({ desktopAvailable, labels, datasets, lab = false, on
             )}
 
             <div className="field">
-              <div className="field-head"><Label htmlFor={`${uid}-spikes`}>Spike extraction</Label></div>
-              <select id={`${uid}-spikes`} className={NATIVE_SELECT} value={spikeMethod} disabled={running !== null} onChange={(event) => setSpikeMethod(event.target.value as SpikeMethodId)}>
-                {SPIKE_METHODS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              <div className="field-head"><Label htmlFor={`${uid}-design`} required>Network design</Label></div>
+              <select id={`${uid}-design`} className={NATIVE_SELECT} value={designId} disabled={running !== null} onChange={(event) => setDesignId(event.target.value)}>
+                {designs.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
               </select>
-              <p className="field-hint">{SPIKE_METHODS.find((option) => option.value === spikeMethod)?.summary}</p>
-              {spikeMethod !== "none" && (
-                <p className="field-hint">{hasPulse
-                  ? "Done to the pulse sensor inside each 500 ms window, in training and again live, so the model sees the same numbers. For each of the three pulse channels the model reads the biggest spike (how high, how far above the noise, where, how long it takes to rise and fall, how many) and the steepest rise and fall. Made for a short event such as a pinch."
-                  : "Needs the pulse sensor: tick it under “What the model may read” below, or no spike features are used."}</p>
-              )}
-            </div>
-
-            <div className="field">
-              <div className="field-head"><Label htmlFor={`${uid}-method`}>Method</Label></div>
-              <select id={`${uid}-method`} className={NATIVE_SELECT} value={method} disabled={running !== null} onChange={(event) => setMethod(event.target.value as TrainMethod)}>
-                {METHODS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-              <p className="field-hint">{METHODS.find((option) => option.value === method)?.summary}</p>
-            </div>
-
-            {isNeural(method) && !lab && (
-              <p className="field-hint">The layers, neurons and learning settings of the neural networks have their defaults here. To design them, choose the columns the network reads, see inside a model or fine-tune one, open the{" "}
-                {onOpenNetworkLab ? <Button type="button" variant="link" className="h-auto p-0" onClick={onOpenNetworkLab}>Network lab</Button> : "Network lab"}.</p>
-            )}
-            {isNeural(method) && lab && plan && plan.features.length > 0 && (() => {
-              const neurons = columnsMode ? (method === "cnn1d" ? columns.length : columns.length * steps) : plan.features.length;
-              return (
-                <details className="rounded-lg border border-input px-3 py-2" open>
-                  <summary className="cursor-pointer text-sm font-semibold">
-                    Design the network <span className="font-normal text-muted-foreground">({neurons} input{neurons === 1 ? "" : "s"} → {method === "cnn1d" ? "convolution → " : ""}{network.hidden.map((layer) => `${layer.units} → `).join("")}2 · {parameterCount(network, neurons, method).toLocaleString("en-US")} parameters)</span>
-                  </summary>
-                  <div className="mt-2">
-                    <NetworkDesigner method={method} settings={network} onChange={(next) => setNetworks((previous) => ({ ...previous, [method]: next }))} inputs={neurons} steps={method === "cnn1d" ? steps : 32} disabled={running !== null} />
-                  </div>
-                </details>
-              );
-            })()}
-
-            <div className="field">
-              <div className="field-head"><Label htmlFor={`${uid}-window`}>Window length</Label></div>
-              <select id={`${uid}-window`} className={NATIVE_SELECT} value={windowMs} disabled={running !== null} onChange={(event) => setWindowMs(Number(event.target.value))}>
-                {WINDOW_LENGTHS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
+              {design && <p className="field-hint">{design.description ? `${design.description} ` : ""}{describeDesign(design, summary)}</p>}
               <p className="field-hint">
-                {method === "cnn1d"
-                  ? "How much of the recent past the model looks at each time. For a convolutional model 1 to 1.5 s usually works better than 0.5 s, because it has more to find a pattern in."
-                  : "How much of the recent past the model looks at each time. A short window reacts sooner; a longer one sees a slower or longer event."}
-                {" "}Windows never cross from one label to another, and it is also the window the model uses live.
+                A design says what the model reads, how its pulse spikes are pulled out, the window length and the network. Make or change designs in the{" "}
+                {onOpenNetworkLab ? <Button type="button" variant="link" className="h-auto p-0" onClick={onOpenNetworkLab}>Network lab</Button> : "Network lab"}.
               </p>
             </div>
-
-            {lab ? (
-              <div className="field">
-                <div className="field-head"><Label htmlFor={`${uid}-inputmode`}>What goes into the model</Label></div>
-                <select id={`${uid}-inputmode`} className={NATIVE_SELECT} value={method === "cnn1d" ? "raw" : inputMode} disabled={running !== null || method === "cnn1d"} onChange={(event) => setInputMode(event.target.value as "statistics" | "raw")}>
-                  <option value="statistics">Statistics of each window (averages, spread, minimum, maximum…)</option>
-                  <option value="raw">The dataset&apos;s own columns, one input neuron each</option>
-                </select>
-                <p className="field-hint">{inputMode === "raw" ? "Each column of your recordings, at each reading, is one input. A straight-line method (logistic regression) can only weigh the readings themselves, so it cannot see how hard a signal swings; a neural network can." : "Short lists of numbers made from each window. The usual choice."}</p>
-              </div>
-            ) : null}
-
-            {columnsMode && <ColumnsDesigner method={method} columns={columns} onColumns={setColumns} steps={steps} onSteps={method === "cnn1d" ? setCnnSteps : setRawSteps} disabled={running !== null} />}
-
-            {!columnsMode && <fieldset className="flex flex-col gap-2">
-              <legend className="label">What the model may read</legend>
-              <ul className="flex flex-col gap-1" aria-label="Data the model may read">
-                {STREAMS.map((stream) => (
-                  <Fragment key={stream.value}>
-                    <li className="flex items-start gap-2 text-sm">
-                      <Checkbox checked={sources.includes(stream.value)} disabled={running !== null} onCheckedChange={() => toggleStream(stream.value)} aria-label={stream.label} />
-                      <span><strong>{stream.label}</strong> <small className="text-muted-foreground">{stream.summary}</small></span>
-                    </li>
-                    {stream.value === "watchPpg" && sources.includes("watchPpg") && (
-                      <li className="ml-7">
-                        <ul className="flex flex-col gap-1" aria-label="Pulse sensor channels the model may read">
-                          {PPG_CHANNELS.map((channel) => (
-                            <li key={channel.value} className="flex items-start gap-2 text-sm">
-                              <Checkbox
-                                checked={ppgChannels.includes(channel.value)}
-                                disabled={running !== null || (ppgChannels.length === 1 && ppgChannels[0] === channel.value)}
-                                onCheckedChange={() => toggleChannel(channel.value)}
-                                aria-label={`Pulse channel: ${channel.label}`}
-                              />
-                              <span><strong>{channel.label}</strong> <small className="text-muted-foreground">{channel.summary}</small></span>
-                            </li>
-                          ))}
-                        </ul>
-                      </li>
-                    )}
-                  </Fragment>
-                ))}
-              </ul>
-              <p className="field-hint">The model only works while the watch sends everything it read. Pick what the gesture actually changes: a finger pinch barely moves the watch, so it shows in the pulse sensor, not in acceleration. A wrist twist or a shake shows in acceleration, gyroscope and orientation.</p>
-              {lab && <InputPicker available={available} chosen={inputChoice} onChange={setInputChoice} spikeMethodLabel={spikeMethod === "none" ? undefined : SPIKE_METHODS.find((option) => option.value === spikeMethod)?.label} disabled={running !== null} channels={method === "cnn1d"} />}
-              <div className="flex items-start gap-2 text-sm">
-                <Checkbox checked={movementOnly} disabled={running !== null} onCheckedChange={() => setMovementOnly((value) => !value)} aria-label="Only how things change" />
-                <span><strong>Only how things change</strong> <small className="text-muted-foreground">Ignore absolute levels such as how the watch is held. This stops a model from memorising a session&apos;s posture; try it for movement gestures.</small></span>
-              </div>
-            </fieldset>}
 
             {plan && (
               <div role="status" aria-label="Training plan">
@@ -418,54 +222,19 @@ export function TrainPanel({ desktopAvailable, labels, datasets, lab = false, on
               </div>
             )}
 
-            {lab && <div className="flex items-start gap-2 text-sm">
+            <div className="flex items-start gap-2 text-sm">
               <Checkbox checked={research} disabled={running !== null} onCheckedChange={() => setResearch((value) => !value)} aria-label="Also run research checks" />
               <span><strong>Also run research checks</strong> <small className="text-muted-foreground">After training, retrain the same model on a quarter, half and three quarters of the data, and on all but one recording at a time, to see how far its score can be trusted. It takes several times longer, and the results are in the model&apos;s Inspect view.</small></span>
-            </div>}
+            </div>
 
             <div className="flex flex-wrap items-center gap-2">
               {running === null && <Button type="button" disabled={!canStart} onClick={() => void start()}>Train model</Button>}
-              {effectiveSources.length === 0 && <span className="field-error">Choose at least one thing for the model to read.</span>}
+              {design === null && <span className="field-error">Choose a network design.</span>}
             </div>
           </>
         )}
 
-        <TrainingCurve points={curve} />
-
-        {log.length > 0 && (
-          <pre className="model-lab-log" aria-label="Training log">{log.join("\n")}</pre>
-        )}
-
-        {result && (
-          <Alert variant={result.outcome === "deployable" ? "default" : "destructive"} role="status" aria-label="Training result">
-            <AlertTitle>
-              {result.outcome === "deployable"
-                ? `A model for ${result.label} was added as a draft`
-                : result.outcome === "evaluationOnly"
-                  ? "A model was trained but it is not good enough to keep"
-                  : result.outcome === "cancelled"
-                    ? "Training was cancelled"
-                    : "Training did not produce a model"}
-            </AlertTitle>
-            <AlertDescription>
-              {result.outcome === "deployable" && result.metrics ? (
-                <>
-                  <p>{describeMetrics(result.metrics)}</p>
-                  <p>{THRESHOLD_CAVEAT}</p>
-                  <p>Review it under Label models: mark it evaluated, approve it, then activate it. Check it in Monitor before Live.</p>
-                </>
-              ) : result.outcome === "evaluationOnly" ? (
-                <>
-                  <p>{result.message}.</p>
-                  {result.metrics && <p>Its test score (AUC) was {result.metrics.rocAuc.toFixed(2)}, where 0.5 is chance. Nothing was added to your models.</p>}
-                  <p>Things to try: pick the data the gesture really changes (the pulse sensor for finger gestures), tick “Only how things change”, or record more sessions of the gesture.</p>
-                </>
-              ) : (
-                <p>{result.message}</p>
-              )}
-            </AlertDescription>
-          </Alert>
-        )}
+        <TrainingRunView run={run} />
       </CardContent>
     </Card>
   );

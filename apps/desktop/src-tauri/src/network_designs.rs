@@ -179,6 +179,19 @@ impl NetworkDesign {
     }
 }
 
+/// Fills in a request that names a design with that design's choices; a request without one is returned as it is.
+pub fn resolve_design(app: &AppHandle, mut request: TrainRequest) -> Result<TrainRequest, String> {
+    let Some(id) = request.design_id.clone() else {
+        return Ok(request);
+    };
+    let design = everything(read_designs(&designs_path(app)?))
+        .into_iter()
+        .find(|d| d.id == id)
+        .ok_or("that network design no longer exists: choose another")?;
+    design.apply_to(&mut request);
+    Ok(request)
+}
+
 /// What a design would read, for the editor to show as it is edited.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

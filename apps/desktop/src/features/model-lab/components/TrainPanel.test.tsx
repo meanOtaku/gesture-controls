@@ -22,15 +22,23 @@ const datasets = [dataset("s1", ["snap"]), dataset("s2", ["snap"]), dataset("i1"
 const MOTION = ["accel_x_mean", "accel_x_std", "accel_y_mean", "accel_y_std", "gyro_x_mean", "gyro_x_std"];
 const okPlan: TrainPlan = { train: ["s1", "i1"], evaluation: ["s2", "i2"], problem: null, available: MOTION, features: MOTION };
 
-function setup(over: { plan?: TrainPlan; environment?: TrainerEnvironment; status?: TrainingStatus; lab?: boolean; onOpenNetworkLab?: () => void } = {}) {
+const design = (id: string, name: string, method: string) => ({
+  id, name, description: "", method, inputMode: "statistics", sources: ["watchAcceleration", "watchGyroscope"], ppgChannels: null, movementOnly: false,
+  features: null, columns: [], readings: 1, spikeMethod: "none", windowMs: 500, network: null, builtIn: true,
+});
+const designs = [design("builtin-logreg", "Straight line", "logreg"), design("builtin-mlp", "Small network", "mlp")];
+
+function setup(over: { plan?: TrainPlan; environment?: TrainerEnvironment; status?: TrainingStatus; preview?: unknown; onOpenNetworkLab?: () => void } = {}) {
   invokeMock.mockImplementation(async (command: string) => {
     if (command === "check_label_trainer") return over.environment ?? { available: true, detail: "uv 0.12" };
     if (command === "get_label_training_status") return over.status ?? { running: null, last: null };
+    if (command === "list_network_designs") return designs;
+    if (command === "preview_network_design") return over.preview ?? { problem: null, available: MOTION, inputs: MOTION, neurons: 6 };
     if (command === "plan_label_training") return over.plan ?? okPlan;
     if (command === "start_label_training") return "run-1";
     return undefined;
   });
-  render(<TrainPanel desktopAvailable labels={labels} datasets={datasets} lab={over.lab} onOpenNetworkLab={over.onOpenNetworkLab} />);
+  render(<TrainPanel desktopAvailable labels={labels} datasets={datasets} onOpenNetworkLab={over.onOpenNetworkLab} />);
 }
 
 const calls = (command: string) => invokeMock.mock.calls.filter(([name]) => name === command);
@@ -56,89 +64,23 @@ describe("TrainPanel", () => {
     expect(screen.getByLabelText("Role of walking")).toBeInTheDocument();
     expect(await screen.findByText(/train on 2 recordings \(s1.csv, i1.csv\) and test on 2/)).toBeInTheDocument();
     expect(calls("plan_label_training").at(-1)?.[1]).toEqual({
-      request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["idle", "walking"], excludes: [], backend: "logreg", sources: ["watchAcceleration", "watchGyroscope"], movementOnly: false, spikeMethod: "none", ppgChannels: ["green", "red", "ir"], windowMs: 500 },
+      request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["idle", "walking"], excludes: [], backend: "logreg", sources: ["watchAcceleration", "watchGyroscope"], movementOnly: false, spikeMethod: "none", ppgChannels: ["green", "red", "ir"], windowMs: 500, designId: "builtin-logreg" },
     });
   });
 
-  it("sends exactly the choices made: roles, method, streams and recordings", async () => {
+  it("sends the roles, the recordings and the chosen design, and nothing else about the network", async () => {
     setup();
     choose("snap");
     await screen.findByText(/It will train on/);
     fireEvent.change(screen.getByLabelText("Role of walking"), { target: { value: "exclude" } });
-    fireEvent.change(screen.getByLabelText("Method"), { target: { value: "mlp" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: "Only how things change" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Orientation" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Gyroscope" }));
+    fireEvent.change(await screen.findByLabelText("Network design"), { target: { value: "builtin-mlp" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Use i2.csv" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Train model" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Train model" }));
     await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
     expect(calls("start_label_training")[0][1]).toEqual({
-      request: { label: "snap", datasetIds: ["s1", "s2", "i1"], negatives: ["idle"], excludes: ["walking"], backend: "mlp", sources: ["watchAcceleration", "watchOrientation"], movementOnly: true, spikeMethod: "none", ppgChannels: ["green", "red", "ir"], windowMs: 500 },
+      request: { label: "snap", datasetIds: ["s1", "s2", "i1"], negatives: ["idle"], excludes: ["walking"], backend: "mlp", sources: ["watchAcceleration", "watchGyroscope"], movementOnly: false, spikeMethod: "none", ppgChannels: ["green", "red", "ir"], windowMs: 500, designId: "builtin-mlp" },
     });
-  });
-
-  it("offers a spike extraction method before the training method, and sends it only with the pulse sensor", async () => {
-    setup();
-    choose("snap");
-    await screen.findByText(/It will train on/);
-    const spikes = screen.getByLabelText("Spike extraction") as HTMLSelectElement;
-    const method = screen.getByLabelText("Method");
-    expect(spikes.compareDocumentPosition(method) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); // before Method
-    expect(spikes.value).toBe("none");
-    expect(Array.from(spikes.options).map((option) => option.textContent)).toEqual(expect.arrayContaining(["None (statistics only)", "Rolling median residual", "Butterworth high-pass", "Haar wavelet detail"]));
-    fireEvent.change(spikes, { target: { value: "rolling_median_residual" } });
-    expect(screen.getByText(/Needs the pulse sensor/)).toBeInTheDocument(); // not one of the streams yet
-    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
-    await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
-    expect(calls("start_label_training")[0][1]).toMatchObject({ request: { spikeMethod: "none", ppgChannels: ["green", "red", "ir"], windowMs: 500 } }); // nothing for it to read
-  });
-
-  it("sends the chosen spike extraction method once the pulse sensor is a stream", async () => {
-    setup();
-    choose("snap");
-    await screen.findByText(/It will train on/);
-    fireEvent.click(screen.getByRole("checkbox", { name: /Pulse sensor \(PPG\)/ }));
-    fireEvent.change(screen.getByLabelText("Spike extraction"), { target: { value: "morphological_top_hat" } });
-    await waitFor(() => expect(screen.getByRole("button", { name: "Train model" })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
-    await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
-    expect(calls("start_label_training")[0][1]).toMatchObject({ request: { sources: ["watchAcceleration", "watchGyroscope", "watchPpg"], spikeMethod: "morphological_top_hat" } });
-  });
-
-  it("lets you choose which pulse sensor channels to read, never fewer than one, and sends them", async () => {
-    setup();
-    choose("snap");
-    await screen.findByText(/It will train on/);
-    expect(screen.queryByRole("checkbox", { name: "Pulse channel: Green" })).not.toBeInTheDocument(); // the pulse sensor is not a stream yet
-    fireEvent.click(screen.getByRole("checkbox", { name: /Pulse sensor \(PPG\)/ }));
-    for (const name of ["Green", "Red", "Infrared"]) expect(screen.getByRole("checkbox", { name: `Pulse channel: ${name}` })).toBeChecked();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Pulse channel: Red" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Pulse channel: Green" }));
-    expect(screen.getByRole("checkbox", { name: "Pulse channel: Infrared" })).toHaveAttribute("aria-disabled", "true"); // the last one stays
-    fireEvent.click(screen.getByRole("checkbox", { name: "Pulse channel: Red" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Train model" })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
-    await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
-    expect(calls("start_label_training")[0][1]).toMatchObject({ request: { ppgChannels: ["red", "ir"] } });
-  });
-
-  it("offers the convolutional method and a window length, and sends both", async () => {
-    setup();
-    choose("snap");
-    await screen.findByText(/It will train on/);
-    const methodSelect = screen.getByLabelText("Method") as HTMLSelectElement;
-    expect(Array.from(methodSelect.options).map((o) => o.textContent)).toContain("1D convolutional network (PyTorch)");
-    const length = screen.getByLabelText("Window length") as HTMLSelectElement;
-    expect(length.value).toBe("500");
-    expect(Array.from(length.options).map((o) => o.textContent)).toEqual(["0.5 s (default)", "0.75 s", "1 s", "1.5 s", "2 s"]);
-    fireEvent.change(methodSelect, { target: { value: "cnn1d" } });
-    expect(screen.getByText(/1 to 1.5 s usually works better/)).toBeInTheDocument();
-    fireEvent.change(length, { target: { value: "1000" } });
-    await waitFor(() => expect(screen.getByRole("button", { name: "Train model" })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
-    await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
-    expect(calls("start_label_training")[0][1]).toMatchObject({ request: { backend: "cnn1d", windowMs: 1000 } });
   });
 
   it("will not train when the plan says it cannot, and says why", async () => {
@@ -148,14 +90,16 @@ describe("TrainPanel", () => {
     expect(screen.getByRole("button", { name: "Train model" })).toBeDisabled();
   });
 
-  it("will not train with nothing to read, or without the trainer", async () => {
+  it("will not train with a design that cannot be used, or without the trainer", async () => {
     setup();
     choose("snap");
     await screen.findByText(/It will train on/);
-    fireEvent.click(screen.getByRole("checkbox", { name: "Acceleration" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Gyroscope" }));
+    cleanup();
+    setup({ preview: { problem: "No data.", available: [], inputs: [], neurons: 0 } });
+    choose("snap");
+    expect(await screen.findByText(/No data\./)).toBeInTheDocument();
+    await screen.findByText(/It will train on/);
     expect(screen.getByRole("button", { name: "Train model" })).toBeDisabled();
-    expect(screen.getByText("Choose at least one thing for the model to read.")).toBeInTheDocument();
     cleanup();
     setup({ environment: { available: false, detail: "Training needs uv on the PATH." } });
     expect(await screen.findByText("Training is not available here")).toBeInTheDocument();
@@ -185,110 +129,26 @@ describe("TrainPanel", () => {
     expect(screen.getByRole("button", { name: "Train model" })).toBeInTheDocument();
   });
 
-  it("lets a neural network be designed, shows its size, and sends the design only when it differs from the default", async () => {
-    setup({ lab: true });
-    choose("snap");
-    await screen.findByText(/It will train on/);
-    expect(screen.queryByText(/Design the network/)).not.toBeInTheDocument(); // logistic regression has no layers
-    fireEvent.change(screen.getByLabelText("Method"), { target: { value: "torch-mlp" } });
-    expect(await screen.findByText(/Design the network/)).toHaveTextContent("6 inputs → 32 → 16 → 2 · 786 parameters");
-    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
-    await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
-    expect(calls("start_label_training")[0][1].request).not.toHaveProperty("network"); // still the default
-    handlers.get("label-training-event")?.({ payload: { kind: "finished", runId: "r", label: "snap", outcome: "failed", message: "x" } });
-    fireEvent.change(await screen.findByLabelText("Neurons in layer 1"), { target: { value: "8" } });
-    fireEvent.change(screen.getByLabelText("Activation of layer 1"), { target: { value: "tanh" } });
-    expect(screen.getByText(/Design the network/)).toHaveTextContent("6 inputs → 8 → 16 → 2");
-    await waitFor(() => expect(screen.getByRole("button", { name: "Train model" })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
-    await waitFor(() => expect(calls("start_label_training")).toHaveLength(2));
-    expect(calls("start_label_training")[1][1].request.network).toMatchObject({ hidden: [{ units: 8, activation: "tanh" }, { units: 16, activation: "relu" }], epochs: 200, learningRate: 0.01 });
-    // Each method keeps its own design: the convolutional one starts from its own default.
-    fireEvent.change(screen.getByLabelText("Method"), { target: { value: "cnn1d" } });
-    expect(await screen.findByLabelText("Filters in convolution layer 1")).toHaveValue(16);
-  });
-
-  it("keeps the simple panel simple and points to the Network lab for the rest", async () => {
-    const open = vi.fn();
-    setup({ onOpenNetworkLab: open });
-    choose("snap");
-    await screen.findByText(/It will train on/);
-    expect(screen.queryByText(/Choose individual inputs/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "Also run research checks" })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("What goes into the model")).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Method"), { target: { value: "torch-mlp" } });
-    expect(screen.queryByText(/Design the network/)).not.toBeInTheDocument();
-    fireEvent.click(await screen.findByRole("button", { name: "Network lab" }));
-    expect(open).toHaveBeenCalled();
-  });
-
-  it("lets the dataset's own columns be the network's inputs, one neuron each", async () => {
-    setup({ lab: true });
-    choose("snap");
-    await screen.findByText(/It will train on/);
-    fireEvent.change(screen.getByLabelText("Method"), { target: { value: "torch-mlp" } });
-    fireEvent.change(screen.getByLabelText("What goes into the model"), { target: { value: "raw" } });
-    const size = screen.getByRole("status", { name: "Input layer size" });
-    expect(size).toHaveTextContent("13 columns × 1 reading = 13 input neurons"); // the thirteen columns of a dataset
-    expect(screen.getAllByRole("checkbox", { name: /^Column / })).toHaveLength(13);
-    fireEvent.click(screen.getByRole("checkbox", { name: "Column quat_w" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Column quat_x" }));
-    fireEvent.change(screen.getByLabelText("Readings per column"), { target: { value: "4" } });
-    expect(size).toHaveTextContent("11 columns × 4 readings = 44 input neurons");
-    expect(await screen.findByText(/Design the network/)).toHaveTextContent("44 inputs → 32 → 16 → 2");
-    expect(screen.queryByRole("checkbox", { name: "Acceleration" })).not.toBeInTheDocument(); // the columns replace the streams
-    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
-    await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
-    const request = calls("start_label_training")[0][1].request;
-    expect(request).toMatchObject({ backend: "torch-mlp", inputMode: "raw", gridSteps: 4, movementOnly: false });
-    expect(request.sources.sort()).toEqual(["watchAcceleration", "watchGyroscope", "watchOrientation", "watchPpg"]);
-    // Exactly the columns ticked: a stream provides all of its columns, so the request has to say which ones.
-    expect(request.features).toEqual(["ppg_green", "ppg_red", "ppg_ir", "accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z", "quat_y", "quat_z"]);
-  });
-
-  it("derives the streams from the columns ticked, and the convolutional method reads columns too", async () => {
-    setup({ lab: true });
-    choose("snap");
-    await screen.findByText(/It will train on/);
-    fireEvent.change(screen.getByLabelText("Method"), { target: { value: "cnn1d" } });
-    expect(screen.getByLabelText("What goes into the model")).toBeDisabled(); // always columns
-    for (const name of ["ppg_green", "ppg_red", "ppg_ir", "quat_w", "quat_x", "quat_y", "quat_z"]) fireEvent.click(screen.getByRole("checkbox", { name: `Column ${name}` }));
-    expect(screen.getByRole("status", { name: "Input layer size" })).toHaveTextContent("6 channels × 32 steps");
-    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
-    await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
-    const request = calls("start_label_training")[0][1].request;
-    expect(request).toMatchObject({ backend: "cnn1d", gridSteps: 32 });
-    expect(request).not.toHaveProperty("inputMode");
-    expect(request.sources.sort()).toEqual(["watchAcceleration", "watchGyroscope"]);
-  });
-
-  it("lets individual inputs be ticked off and sends only the ones still ticked", async () => {
-    setup({ lab: true });
-    choose("snap");
-    await screen.findByText(/It will train on/);
-    const picker = await screen.findByText(/Choose individual inputs/);
-    expect(picker).toHaveTextContent("6 of 6 used");
-    fireEvent.click(screen.getByRole("checkbox", { name: "Acceleration X mean" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Gyroscope X mean" }));
-    expect(picker).toHaveTextContent("4 of 6 used");
-    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
-    await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
-    expect(calls("start_label_training")[0][1].request.features).toEqual(["accel_x_std", "accel_y_mean", "accel_y_std", "gyro_x_std"]);
-  });
-
   it("asks for research checks only when ticked", async () => {
-    setup({ lab: true });
+    setup();
     choose("snap");
     await screen.findByText(/It will train on/);
     fireEvent.click(screen.getByRole("button", { name: "Train model" }));
     await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
     expect(calls("start_label_training")[0][1].request).not.toHaveProperty("research");
-    handlers.get("label-training-event")?.({ payload: { kind: "finished", runId: "r", label: "snap", outcome: "failed", message: "x" } });
-    fireEvent.click(await screen.findByRole("checkbox", { name: "Also run research checks" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Also run research checks" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Train model" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Train model" }));
     await waitFor(() => expect(calls("start_label_training")).toHaveLength(2));
     expect(calls("start_label_training")[1][1].request.research).toBe(true);
+  });
+
+  it("points to the Network lab for making designs", async () => {
+    const onOpen = vi.fn();
+    setup({ onOpenNetworkLab: onOpen });
+    choose("snap");
+    fireEvent.click(await screen.findByRole("button", { name: "Network lab" }));
+    expect(onOpen).toHaveBeenCalled();
   });
 
   it("draws the trainer's progress reports as a chart and keeps them out of the log", async () => {

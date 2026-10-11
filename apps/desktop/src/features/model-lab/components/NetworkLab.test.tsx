@@ -50,15 +50,14 @@ describe("NetworkLab", () => {
   it("is the workbench for networks: the full training panel, and the models to look inside", async () => {
     render(<Harness />);
     expect(screen.getByRole("heading", { name: "Network lab" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Train a model" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Network designs" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Your models" })).toBeInTheDocument();
     const list = await screen.findByRole("list", { name: "Models" });
     expect(within(list).getAllByRole("listitem")).toHaveLength(2);
     expect(within(list).getByText(/imported/)).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: /^Inspect/ })).not.toBeInTheDocument();
-    // The training panel here is the full one: it offers what goes into the model.
-    fireEvent.change(await screen.findByLabelText("Label to teach"), { target: { value: "snap" } });
-    expect(await screen.findByLabelText("What goes into the model")).toBeInTheDocument();
+    // Training happens in Model Lab: the Network lab has no training panel.
+    expect(screen.queryByLabelText("Label to teach")).not.toBeInTheDocument();
   });
 
   it("looks inside a chosen model, and closes it", async () => {
