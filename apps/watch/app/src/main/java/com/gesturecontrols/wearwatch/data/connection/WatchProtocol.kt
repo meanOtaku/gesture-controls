@@ -11,6 +11,14 @@ import org.json.JSONObject
  * (org.json ships with Android) so the desktop protocol crate has no Kotlin
  * counterpart to drift out of sync with.
  */
+/** One motion reading waiting for the next flush; the arrays are copies the sensor callback will not touch again. */
+class ImuSample(
+    val timestampNs: Long,
+    val quaternion: FloatArray,
+    val accelerometer: FloatArray?,
+    val gyroscope: FloatArray?,
+)
+
 object WatchProtocol {
     const val VERSION = 1
 
@@ -18,6 +26,8 @@ object WatchProtocol {
     const val TYPE_HEARTBEAT = "watch.heartbeat"
     const val TYPE_TIME_SYNC = "watch.time_sync"
     const val TYPE_PPG_BATCH = "watch.ppg_batch"
+    /** Motion and pulse samples of one flush in a single message; see docs/protocols/watch-websocket-protocol.md. */
+    const val TYPE_SENSOR_BATCH = "watch.sensor_batch"
     const val TYPE_PPG_STATUS = "watch.ppg_status"
     const val TYPE_BUTTON = "watch.button"
     /** Whether the watch is on a wrist; while it is not, the watch stops its sensors. */
@@ -210,6 +220,40 @@ object WatchProtocol {
         timestampNs: Long,
         samples: List<PpgSample>,
     ): String {
+        val payload = ppgPayload(samples)
+        return envelope(TYPE_PPG_BATCH, deviceId, sequence, timestampNs, payload)
+    }
+
+    /**
+     * One flush of both sensors in a single envelope: `imu` carries the motion samples as per-sample
+     * arrays (each accelerometer/gyroscope entry null when that sensor gave nothing), `ppg` the same
+     * arrays as [ppgBatchMessage] or null. A motion reading with a non-finite component is left out,
+     * as JSON cannot carry it. Returns null when nothing is left to send.
+     */
+    fun sensorBatchMessage(
+        deviceId: String,
+        sequence: Long,
+        timestampNs: Long,
+        imu: List<ImuSample>,
+        ppg: List<PpgSample>,
+    ): String? {
+        val motion = imu.filter { allFinite(it.quaternion) && allFinite(it.accelerometer) && allFinite(it.gyroscope) }
+        if (motion.isEmpty() && ppg.isEmpty()) return null
+        val payload = JSONObject()
+        if (motion.isNotEmpty()) {
+            val block = JSONObject()
+            block.put("count", motion.size)
+            block.put("timestampsNs", JSONArray(motion.map { it.timestampNs }))
+            block.put("quaternion", JSONArray(motion.map { vectorOrNull(it.quaternion) }))
+            block.put("accelerometer", JSONArray(motion.map { vectorOrNull(it.accelerometer) ?: JSONObject.NULL }))
+            block.put("gyroscope", JSONArray(motion.map { vectorOrNull(it.gyroscope) ?: JSONObject.NULL }))
+            payload.put("imu", block)
+        }
+        if (ppg.isNotEmpty()) payload.put("ppg", ppgPayload(ppg))
+        return envelope(TYPE_SENSOR_BATCH, deviceId, sequence, timestampNs, payload)
+    }
+
+    private fun ppgPayload(samples: List<PpgSample>): JSONObject {
         val payload = JSONObject()
         payload.put("sampleCount", samples.size)
         payload.put("timestampsNs", JSONArray(samples.map { it.timestampNs }))
@@ -219,7 +263,7 @@ object WatchProtocol {
         payload.put("redStatus", JSONArray(samples.map { it.redStatus }))
         payload.put("ir", JSONArray(samples.map { it.ir }))
         payload.put("irStatus", JSONArray(samples.map { it.irStatus }))
-        return envelope(TYPE_PPG_BATCH, deviceId, sequence, timestampNs, payload)
+        return payload
     }
 
     /** Encodes the watch's PPG availability (permission/unavailable/streaming/etc.), independent of the WebSocket connection. */
