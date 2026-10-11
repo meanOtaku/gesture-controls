@@ -72,3 +72,16 @@ describe("NetworkDesigns", () => {
     expect(screen.getByRole("button", { name: "Save design" })).toBeDisabled();
   });
 });
+
+describe("window length hint", () => {
+  it("says the window barely matters for one reading without spike extraction, and stops saying so once it does", async () => {
+    const raw = { ...builtIn, id: "mine", name: "Mine", builtIn: false, method: "torch-mlp", inputMode: "raw", columns: ["accel_x", "accel_y"], readings: 1, spikeMethod: "none" };
+    saved = [raw];
+    render(<NetworkDesigns desktopAvailable />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Mine" }));
+    expect(await screen.findByText(/window length has almost no effect/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Spike extraction"), { target: { value: "morphological_top_hat" } });
+    await waitFor(() => expect(screen.queryByText(/window length has almost no effect/)).toBeNull());
+    expect(screen.getByText(/spread evenly across it/)).toBeInTheDocument();
+  });
+});

@@ -78,10 +78,10 @@ export function ColumnsDesigner({
         </select>
         <p className="field-hint">
           {convolutional
-            ? "Each column of the window is laid onto this many evenly spaced steps, and the convolution layers slide along them."
+            ? "This many values, spread evenly across the window, are taken from each column, and the convolution layers slide along them."
             : steps === 1
-              ? "The network sees the latest reading of each column, like one row of the dataset: no memory of the moments before."
-              : `The last readings of each column over the window, laid onto ${steps} evenly spaced steps and fed side by side: the network sees how each column moved.`}
+              ? "One value from the window: the latest reading of each column, like one row of the dataset. The network has no memory of the moments before."
+              : `${steps} readings spread evenly across the window, fed side by side: the network sees how each column moved over the window.`}
         </p>
       </div>
       <p className="text-sm" role="status" aria-label="Input layer size">

@@ -94,6 +94,11 @@ export function DesignEditor({
           <select id={`${uid}-window`} className={NATIVE_SELECT} value={design.windowMs} onChange={(event) => set({ windowMs: Number(event.target.value) })}>
             {WINDOW_LENGTHS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
+          {columns && design.method !== "cnn1d" && design.readings === 1 && design.spikeMethod === "none" ? (
+            <p className="field-hint" role="note">With 1 reading and no spike extraction the network only sees the latest row, so the window length has almost no effect on what it reads. It only decides how the recordings are cut into examples (a window never crosses from one label to another) and how much data must have arrived before the model can score live. Choose more readings per column, or a spike extraction method, to make use of the window.</p>
+          ) : (
+            <p className="field-hint">How far back each example looks. {columns ? "The readings per column are spread evenly across it." : "The statistics are worked out over it."}</p>
+          )}
         </div>
 
         {isNeural(design.method) && neurons > 0 ? (
