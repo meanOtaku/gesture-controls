@@ -370,7 +370,10 @@ pub(crate) fn load_index(app: &AppHandle) -> DatasetIndex {
 /// Writes `index.json` atomically: serialize to a sibling `.tmp` file, then
 /// rename over the real path, matching `settings::write_atomic`.
 fn write_index_atomic(app: &AppHandle, index: &DatasetIndex) -> Result<(), String> {
-    let path = index_path(app)?;
+    write_index_file(&index_path(app)?, index)
+}
+
+fn write_index_file(path: &std::path::Path, index: &DatasetIndex) -> Result<(), String> {
     let dir = path
         .parent()
         .ok_or_else(|| "dataset index path has no parent directory".to_string())?;
@@ -378,7 +381,7 @@ fn write_index_atomic(app: &AppHandle, index: &DatasetIndex) -> Result<(), Strin
     let tmp_path = path.with_extension("json.tmp");
     let json = serde_json::to_string_pretty(index).map_err(|error| error.to_string())?;
     fs::write(&tmp_path, json).map_err(|error| error.to_string())?;
-    fs::rename(&tmp_path, &path).map_err(|error| error.to_string())?;
+    fs::rename(&tmp_path, path).map_err(|error| error.to_string())?;
     Ok(())
 }
 
@@ -674,10 +677,21 @@ pub fn convert_datasets_to_folders(
         .map_err(|_| "model lab lock was poisoned".to_string())?;
     let dir = datasets_dir(&app)?;
     let mut index = load_index(&app);
+    let results = convert_all(&dir, &mut index);
+    if results.iter().any(|r| r.outcome == "converted") {
+        write_index_atomic(&app, &index)?;
+        // Only now, with the index saying so, are the old files removed.
+        remove_converted_files(&dir, &results);
+    }
+    Ok(results)
+}
+
+/// Converts every recording in `index` that is still a single file, one at a time, updating the index entries of the ones
+/// that worked. The old files are left for [`remove_converted_files`], to be removed once the index has been saved.
+fn convert_all(dir: &std::path::Path, index: &mut DatasetIndex) -> Vec<ConversionResult> {
     let mut results = Vec::new();
     for entry in index.datasets.iter_mut().filter(|d| !d.two_files) {
-        let done = convert_one(&dir, &entry.id);
-        results.push(match done {
+        results.push(match convert_one(dir, &entry.id) {
             Ok(gaps) => {
                 entry.two_files = true;
                 entry.gaps = Some(gaps);
@@ -696,14 +710,13 @@ pub fn convert_datasets_to_folders(
             },
         });
     }
-    if results.iter().any(|r| r.outcome == "converted") {
-        write_index_atomic(&app, &index)?;
-        // Only now, with the index saying so, are the old files removed.
-        for result in results.iter().filter(|r| r.outcome == "converted") {
-            let _ = fs::remove_file(dir.join(format!("{}.csv", result.id)));
-        }
+    results
+}
+
+fn remove_converted_files(dir: &std::path::Path, results: &[ConversionResult]) {
+    for result in results.iter().filter(|r| r.outcome == "converted") {
+        let _ = fs::remove_file(dir.join(format!("{}.csv", result.id)));
     }
-    Ok(results)
 }
 
 /// Writes the folder for one single-file recording and checks it against the file; the file is left for the caller to remove.
@@ -1162,5 +1175,81 @@ mod tests {
             .is_err()
         );
         let _ = fs::remove_dir_all(&parent);
+    }
+
+    #[test]
+    fn converting_a_whole_index_updates_it_and_only_then_the_old_files_go() {
+        let dir = temp_dir("convert-all");
+        let ids: Vec<String> = (0..2).map(|_| Uuid::new_v4().to_string()).collect();
+        for id in &ids {
+            fs::write(dir.join(format!("{id}.csv")), LEGACY).unwrap();
+        }
+        let entry = |id: &String| DatasetSummary {
+            id: id.clone(),
+            original_filename: format!("{id}.csv"),
+            imported_at: String::new(),
+            label: "pinch".into(),
+            labels: vec!["pinch".into()],
+            row_count: 3,
+            sequence: 1,
+            two_files: false,
+            gaps: None,
+            source_recording_id: None,
+        };
+        let mut index = DatasetIndex {
+            datasets: ids.iter().map(entry).collect(),
+            next_sequence: 3,
+        };
+        index.datasets.push(DatasetSummary {
+            id: "broken".into(),
+            ..entry(&"broken".to_string())
+        }); // no file for this one
+        let results = convert_all(&dir, &mut index);
+        assert_eq!(
+            results.iter().filter(|r| r.outcome == "converted").count(),
+            2
+        );
+        assert_eq!(
+            results.iter().find(|r| r.id == "broken").unwrap().outcome,
+            "failed"
+        );
+        assert!(
+            index.datasets.iter().filter(|d| d.two_files).count() == 2
+                && !index.datasets[2].two_files
+        );
+        assert!(
+            ids.iter().all(|id| dir.join(format!("{id}.csv")).exists()),
+            "nothing removed yet"
+        );
+        write_index_file(&dir.join("index.json"), &index).unwrap();
+        remove_converted_files(&dir, &results);
+        assert!(
+            ids.iter()
+                .all(|id| !dir.join(format!("{id}.csv")).exists() && dir.join(id).is_dir())
+        );
+        let saved: DatasetIndex =
+            serde_json::from_slice(&fs::read(dir.join("index.json")).unwrap()).unwrap();
+        assert!(saved.datasets[0].two_files && saved.datasets[0].gaps.is_some());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[ignore = "one-off: converts the recordings in REAL_DATASETS_DIR (a datasets folder with an index.json)"]
+    fn converts_the_recordings_of_a_real_datasets_folder() {
+        let dir = PathBuf::from(std::env::var("REAL_DATASETS_DIR").unwrap());
+        let mut index: DatasetIndex =
+            serde_json::from_slice(&fs::read(dir.join("index.json")).unwrap()).unwrap();
+        let results = convert_all(&dir, &mut index);
+        for r in &results {
+            eprintln!(
+                "{} {}: {} ({})",
+                r.original_filename, r.id, r.outcome, r.message
+            );
+        }
+        if results.iter().any(|r| r.outcome == "converted") {
+            write_index_file(&dir.join("index.json"), &index).unwrap();
+            remove_converted_files(&dir, &results);
+        }
+        assert!(results.iter().all(|r| r.outcome == "converted"));
     }
 }
