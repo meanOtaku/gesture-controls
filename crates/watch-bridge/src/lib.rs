@@ -1358,16 +1358,6 @@ fn handle_inbound(
         Ok(WatchInboundMessage::PpgBatch(sample)) => {
             let _ = shared.events.send(WatchEvent::Ppg(sample));
         }
-        Ok(WatchInboundMessage::SensorBatch(batch)) => {
-            // Motion first, then pulse: the same events, in the same order of time, as when each
-            // arrived on its own.
-            for sample in batch.orientations {
-                let _ = shared.events.send(WatchEvent::Orientation(sample));
-            }
-            if let Some(sample) = batch.ppg {
-                let _ = shared.events.send(WatchEvent::Ppg(sample));
-            }
-        }
         Ok(WatchInboundMessage::PpgStatus(sample)) => {
             let _ = shared.events.send(WatchEvent::PpgStatusUpdated(sample));
         }

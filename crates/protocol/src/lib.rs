@@ -81,10 +81,6 @@ pub const WATCH_ORIENTATION_TYPE: &str = "watch.orientation";
 pub const WATCH_HEARTBEAT_TYPE: &str = "watch.heartbeat";
 pub const WATCH_TIME_SYNC_TYPE: &str = "watch.time_sync";
 pub const WATCH_PPG_BATCH_TYPE: &str = "watch.ppg_batch";
-/// One flush of motion and pulse samples in a single message.
-pub const WATCH_SENSOR_BATCH_TYPE: &str = "watch.sensor_batch";
-/// Most motion samples accepted in one `watch.sensor_batch`.
-pub const MAX_IMU_BATCH_SAMPLES: usize = 64;
 pub const WATCH_PPG_STATUS_TYPE: &str = "watch.ppg_status";
 /// Whether the watch is on a wrist, from its off-body detector. While it is `false` the
 /// watch stops its IMU and PPG collection (and, over Bluetooth, lets the CPU sleep).
@@ -282,8 +278,6 @@ pub enum WatchPacketError {
     InvalidPayload(serde_json::Error),
     #[error("watch PPG batch is malformed: {0}")]
     InvalidPpgBatch(String),
-    #[error("watch sensor batch is malformed: {0}")]
-    InvalidSensorBatch(String),
     #[error("watch PPG status has an unknown state '{0}'")]
     UnknownPpgState(String),
     #[error("watch button message has an unknown state '{0}'")]
@@ -363,68 +357,6 @@ impl WatchEnvelope {
                     red_status: payload.red_status,
                     ir: payload.ir,
                     ir_status: payload.ir_status,
-                }))
-            }
-            WATCH_SENSOR_BATCH_TYPE => {
-                let payload: WatchSensorBatchPayload = serde_json::from_value(self.payload)
-                    .map_err(WatchPacketError::InvalidPayload)?;
-                let mut orientations = Vec::new();
-                if let Some(imu) = payload.imu {
-                    let count = imu.count as usize;
-                    if count == 0 || count > MAX_IMU_BATCH_SAMPLES {
-                        return Err(WatchPacketError::InvalidSensorBatch(format!(
-                            "motion sampleCount {count} is outside 1..={MAX_IMU_BATCH_SAMPLES}"
-                        )));
-                    }
-                    let lengths = [
-                        imu.timestamps_ns.len(),
-                        imu.quaternion.len(),
-                        imu.accelerometer.len(),
-                        imu.gyroscope.len(),
-                    ];
-                    if lengths.iter().any(|&len| len != count) {
-                        return Err(WatchPacketError::InvalidSensorBatch(format!(
-                            "motion count {count} does not match array lengths {lengths:?}"
-                        )));
-                    }
-                    for index in 0..count {
-                        orientations.push(WatchOrientationSample {
-                            device_id: self.device_id.clone(),
-                            sequence: self.sequence,
-                            timestamp_ns: imu.timestamps_ns[index],
-                            quaternion: imu.quaternion[index],
-                            accelerometer: imu.accelerometer[index],
-                            gyroscope: imu.gyroscope[index],
-                        });
-                    }
-                }
-                let ppg = match payload.ppg {
-                    Some(ppg) => {
-                        validate_ppg_batch(&ppg)?;
-                        Some(WatchPpgBatchSample {
-                            device_id: self.device_id,
-                            sequence: self.sequence,
-                            timestamp_ns: self.timestamp_ns,
-                            sample_count: ppg.sample_count,
-                            timestamps_ns: ppg.timestamps_ns,
-                            green: ppg.green,
-                            green_status: ppg.green_status,
-                            red: ppg.red,
-                            red_status: ppg.red_status,
-                            ir: ppg.ir,
-                            ir_status: ppg.ir_status,
-                        })
-                    }
-                    None => None,
-                };
-                if orientations.is_empty() && ppg.is_none() {
-                    return Err(WatchPacketError::InvalidSensorBatch(
-                        "batch has neither motion nor pulse samples".to_string(),
-                    ));
-                }
-                Ok(WatchInboundMessage::SensorBatch(WatchSensorBatch {
-                    orientations,
-                    ppg,
                 }))
             }
             WATCH_PPG_STATUS_TYPE => {
@@ -770,36 +702,6 @@ pub struct WatchPpgBatchPayload {
     pub red_status: Vec<i32>,
     pub ir: Vec<i32>,
     pub ir_status: Vec<i32>,
-}
-
-/// The motion half of a `watch.sensor_batch`: one entry per sample in every array; a sensor that gave
-/// nothing for a sample is `null` there.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WatchImuBatchPayload {
-    pub count: u32,
-    pub timestamps_ns: Vec<u64>,
-    pub quaternion: Vec<[f64; 4]>,
-    pub accelerometer: Vec<Option<[f64; 3]>>,
-    pub gyroscope: Vec<Option<[f64; 3]>>,
-}
-
-/// `watch.sensor_batch` payload: the motion and pulse samples of one flush, either of which may be absent.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WatchSensorBatchPayload {
-    #[serde(default)]
-    pub imu: Option<WatchImuBatchPayload>,
-    #[serde(default)]
-    pub ppg: Option<WatchPpgBatchPayload>,
-}
-
-/// A decoded `watch.sensor_batch`: each motion sample as the orientation sample it would have been on its
-/// own (with its own timestamp), and the pulse samples as the batch they would have been.
-#[derive(Debug, Clone, PartialEq)]
-pub struct WatchSensorBatch {
-    pub orientations: Vec<WatchOrientationSample>,
-    pub ppg: Option<WatchPpgBatchSample>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1161,7 +1063,6 @@ pub enum WatchInboundMessage {
     Heartbeat(WatchHeartbeatSample),
     TimeSync(WatchTimeSyncSample),
     PpgBatch(WatchPpgBatchSample),
-    SensorBatch(WatchSensorBatch),
     PpgStatus(WatchPpgStatusSample),
     WearState(WatchWearStateSample),
     Button(WatchButtonSample),
@@ -1250,61 +1151,4 @@ pub struct DesktopSensorRateCommandPayload {
 #[serde(rename_all = "camelCase")]
 pub struct DesktopHapticPayload {
     pub duration_ms: u32,
-}
-
-#[cfg(test)]
-mod sensor_batch_tests {
-    use super::*;
-
-    fn decode(json: &str) -> Result<WatchInboundMessage, WatchPacketError> {
-        WatchEnvelope::from_json(json.as_bytes())?.decode()
-    }
-
-    fn envelope(payload: &str) -> String {
-        format!(
-            r#"{{"type":"watch.sensor_batch","version":1,"deviceId":"w","sequence":5,"timestampNs":900,"payload":{payload}}}"#
-        )
-    }
-
-    const IMU: &str = r#""imu":{"count":2,"timestampsNs":[100,120],"quaternion":[[1,0,0,0],[1,0,0,0]],"accelerometer":[[0,0,9.8],null],"gyroscope":[null,[0.1,0,0]]}"#;
-    const PPG: &str = r#""ppg":{"sampleCount":1,"timestampsNs":[110],"green":[5],"greenStatus":[0],"red":[6],"redStatus":[0],"ir":[7],"irStatus":[0]}"#;
-
-    #[test]
-    fn splits_into_one_orientation_per_motion_sample_and_one_pulse_batch() {
-        let message = decode(&envelope(&format!("{{{IMU},{PPG}}}"))).unwrap();
-        let WatchInboundMessage::SensorBatch(batch) = message else {
-            panic!("expected a sensor batch");
-        };
-        assert_eq!(batch.orientations.len(), 2);
-        assert_eq!(batch.orientations[1].timestamp_ns, 120);
-        assert_eq!(batch.orientations[0].accelerometer, Some([0.0, 0.0, 9.8]));
-        assert_eq!(batch.orientations[1].accelerometer, None);
-        assert_eq!(batch.orientations[0].gyroscope, None);
-        let ppg = batch.ppg.unwrap();
-        assert_eq!(
-            (ppg.timestamps_ns, ppg.ir, ppg.timestamp_ns),
-            (vec![110], vec![7], 900)
-        );
-    }
-
-    #[test]
-    fn either_half_may_be_missing_but_not_both() {
-        assert!(decode(&envelope(&format!("{{{IMU}}}"))).is_ok());
-        assert!(decode(&envelope(&format!("{{{PPG}}}"))).is_ok());
-        assert!(matches!(
-            decode(&envelope("{}")),
-            Err(WatchPacketError::InvalidSensorBatch(_))
-        ));
-    }
-
-    #[test]
-    fn rejects_motion_arrays_that_disagree_with_the_count() {
-        let short = r#"{"imu":{"count":2,"timestampsNs":[100],"quaternion":[[1,0,0,0],[1,0,0,0]],"accelerometer":[null,null],"gyroscope":[null,null]}}"#;
-        assert!(matches!(
-            decode(&envelope(short)),
-            Err(WatchPacketError::InvalidSensorBatch(_))
-        ));
-        let zero = r#"{"imu":{"count":0,"timestampsNs":[],"quaternion":[],"accelerometer":[],"gyroscope":[]}}"#;
-        assert!(decode(&envelope(zero)).is_err());
-    }
 }

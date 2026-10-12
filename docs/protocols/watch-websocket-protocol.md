@@ -136,16 +136,6 @@ existing `HealthTracker.flush()` schedule at runtime. This only controls how oft
 the Watch asks Samsung's SDK to release buffered raw PPG callbacks; it does not
 change physical PPG sampling or manufacture callback cadence.
 
-## Combined sensor batch
-
-While raw PPG is streaming, the watch holds each motion reading until the next PPG flush and sends both together in one `watch.sensor_batch`, instead of one `watch.orientation` per reading plus a separate `watch.ppg_batch`. This puts the motion and pulse samples of the same moment in one message and removes an envelope from every motion reading, which matters on the Bluetooth link. When PPG is not streaming the watch keeps sending `watch.orientation` as before.
-
-```json
-{"type":"watch.sensor_batch","version":1,"deviceId":"galaxy-watch-4","sequence":9,"timestampNs":900,"payload":{"imu":{"count":2,"timestampsNs":[100,120],"quaternion":[[1,0,0,0],[1,0,0,0]],"accelerometer":[[0,0,9.8],null],"gyroscope":[null,[0.1,0,0]]},"ppg":{"sampleCount":1,"timestampsNs":[110],"green":[5],"greenStatus":[0],"red":[6],"redStatus":[0],"ir":[7],"irStatus":[0]}}}
-```
-
-`imu` and `ppg` are each optional but at least one is present. In `imu`, every array has `count` entries (1 to 64); an accelerometer or gyroscope entry is `null` when that sensor gave nothing for that reading. `ppg` is the `watch.ppg_batch` payload. The desktop turns a batch back into the same events as separate messages: one orientation per motion reading, with its own timestamp, then the PPG batch. One `sequence` covers the whole batch. A motion reading is held at most one flush interval (100 ms at the default 10 Hz PPG flush); if the PPG callbacks stop, held readings are sent alone after 250 ms.
-
 ## Raw PPG (Galaxy Watch 4+ Samsung Wear OS only)
 
 Raw green/red/IR PPG is available only on Galaxy Watch 4 or later running Samsung

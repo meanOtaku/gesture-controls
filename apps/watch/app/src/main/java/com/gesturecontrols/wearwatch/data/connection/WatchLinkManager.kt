@@ -67,8 +67,6 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
     private var link: WatchTransportLink? = null
     private var heartbeatJob: Job? = null
     private val ppgBuffer = mutableListOf<PpgSample>()
-    private val imuBuffer = mutableListOf<ImuSample>()
-    private var imuHoldJob: Job? = null
     @Volatile private var lastPpgStatus: String? = null
     @Volatile private var lastWearState: Boolean? = null
     private var medicalFlushJob: Job? = null
@@ -169,12 +167,6 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         timestampNs: Long,
     ) {
         val link = streamingLink() ?: return
-        if (lastPpgStatus == PPG_STREAMING) {
-            // Pulse samples arrive in bursts; the motion samples ride along with each burst so
-            // the desktop gets both from the same moment in one message.
-            holdForNextFlush(ImuSample(timestampNs, quaternion.copyOf(), accelerometer?.copyOf(), gyroscope?.copyOf()))
-            return
-        }
         val seq = sequence.incrementAndGet()
         val message = WatchProtocol.orientationMessage(
             wireDeviceId,
@@ -196,25 +188,13 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         // The Samsung SDK already delivers samples in bursts at the configured flush
         // rate, so sending on arrival keeps the same batches without a 25 Hz timer
         // that woke the CPU to find an empty buffer most of the time.
-        flushSensorBuffers()
-    }
-
-    /** Keeps a motion sample for the next pulse burst; a timer sends it alone if the pulse sensor goes quiet. */
-    private fun holdForNextFlush(sample: ImuSample) {
-        synchronized(imuBuffer) { imuBuffer.add(sample) }
-        if (imuHoldJob?.isActive == true) return
-        imuHoldJob = scope.launch {
-            delay(IMU_MAX_HOLD_MS)
-            flushSensorBuffers()
-        }
+        flushPpgBuffer()
     }
 
     /** Reports [PpgState] to the desktop; independent of the PPG sample buffer. */
     fun sendPpgStatus(state: String) {
         if (state == lastPpgStatus) return
         lastPpgStatus = state
-        // Motion held for a pulse burst that will no longer come goes out now.
-        if (state != PPG_STREAMING) flushSensorBuffers()
         sendStoredPpgStatus()
     }
 
@@ -366,9 +346,6 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         medicalFlushJob?.cancel()
         medicalFlushJob = null
         synchronized(ppgBuffer) { ppgBuffer.clear() }
-        synchronized(imuBuffer) { imuBuffer.clear() }
-        imuHoldJob?.cancel()
-        imuHoldJob = null
         synchronized(heartRateBuffer) { heartRateBuffer.clear() }
         synchronized(skinTemperatureBuffer) { skinTemperatureBuffer.clear() }
         synchronized(edaBuffer) { edaBuffer.clear() }
@@ -448,36 +425,18 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         }
     }
 
-    /** Sends everything buffered from both sensors, as combined messages with the pulse and motion of the same flush together. */
-    private fun flushSensorBuffers() {
-        imuHoldJob?.cancel()
-        imuHoldJob = null
-        val ppg = synchronized(ppgBuffer) {
+    private fun flushPpgBuffer() {
+        val batch = synchronized(ppgBuffer) {
+            if (ppgBuffer.isEmpty()) return
             val copy = ppgBuffer.toList()
             ppgBuffer.clear()
             copy
         }
-        val imu = synchronized(imuBuffer) {
-            val copy = imuBuffer.toList()
-            imuBuffer.clear()
-            copy
-        }
-        if (ppg.isEmpty() && imu.isEmpty()) return
         val link = streamingLink() ?: return
-        val ppgChunks = ppg.chunked(PPG_BATCH_MAX_SAMPLES)
-        val imuChunks = imu.chunked(IMU_BATCH_MAX_SAMPLES)
-        for (index in 0 until maxOf(ppgChunks.size, imuChunks.size)) {
+        for (chunk in batch.chunked(PPG_BATCH_MAX_SAMPLES)) {
             val timestampNs = SystemClock.elapsedRealtimeNanos()
             val seq = sequence.incrementAndGet()
-            val message = WatchProtocol.sensorBatchMessage(
-                wireDeviceId,
-                seq,
-                timestampNs,
-                imuChunks.getOrElse(index) { emptyList() },
-                ppgChunks.getOrElse(index) { emptyList() },
-            ) ?: continue
-            link.send(message)
-            if (index < imuChunks.size) _lastOrientationSequence.value = seq
+            link.send(WatchProtocol.ppgBatchMessage(wireDeviceId, seq, timestampNs, chunk))
         }
     }
 
@@ -534,10 +493,6 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         private const val HEARTBEAT_INTERVAL_MS = 1000L
         private const val MEDICAL_BATCH_INTERVAL_MS = 100L
         private const val PPG_BATCH_MAX_SAMPLES = 32
-        private const val IMU_BATCH_MAX_SAMPLES = 16
-        /** A held motion sample is sent alone after this long if no pulse burst has come to carry it. */
-        private const val IMU_MAX_HOLD_MS = 250L
-        private const val PPG_STREAMING = "streaming"
         private const val MEDICAL_BATCH_MAX_SAMPLES = 32
     }
 }
