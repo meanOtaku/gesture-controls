@@ -995,7 +995,9 @@ fn with_extras(
             "the weight of the extra recordings must be from 1 to {MAX_EXTRA_WEIGHT}"
         ));
     }
-    if (!extras.ids.is_empty() || !request.train_only.is_empty()) && fine_tune.is_none() {
+    // Only new extra recordings need a fine-tune; a model already trained with some (correction rounds, say) can still be
+    // edited by hand, which keeps its recordings and split as they are.
+    if !extras.ids.is_empty() && fine_tune.is_none() {
         return Err("extra recordings are used by fine-tuning: choose a fine-tune plan".into());
     }
     for (label, role) in &extras.roles {
@@ -2108,6 +2110,23 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn a_model_trained_with_extra_recordings_can_still_be_edited_by_hand() {
+        let tuned = Some(serde_json::json!({}));
+        let (with_corrections, _) =
+            with_extras(request(), &extras(&["x1"], None, &[]), &labels_of, tuned).unwrap();
+        // A hand edit: no new recordings and no fine-tune plan.
+        let (edited, settings) = with_extras(
+            with_corrections.clone(),
+            &extras(&[], None, &[]),
+            &labels_of,
+            None,
+        )
+        .unwrap();
+        assert_eq!(edited.train_only, ["x1"]);
+        assert!(settings.is_none());
     }
 
     #[test]

@@ -74,6 +74,35 @@ describe("editing a dense network", () => {
     expect(within(panel).getByText("None yet.")).toBeInTheDocument(); // the list is cleared once it is saved
   });
 
+  it("leaves another model's edits alone when an earlier save finishes after switching to it", async () => {
+    let finishSave: () => void = () => undefined;
+    const a = view(dense);
+    const b = view(dense, { id: "snap-def" });
+    invokeMock.mockImplementation(async (command: string, args: { id: string }) => {
+      if (command === "inspect_label_model") return args.id === b.id ? b : a;
+      if (command === "start_label_edit") return new Promise<void>((resolve) => { finishSave = resolve; });
+      return undefined;
+    });
+    const page = render(<ModelInspector id={a.id} onClose={() => undefined} />);
+    await screen.findByRole("status", { name: "Model summary" });
+    edit();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Switch off Acceleration X spread" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save as a new model" }));
+    await waitFor(() => expect(calls("start_label_edit")).toHaveLength(1));
+    // Model B is opened and edited while A's save is still going.
+    page.rerender(<ModelInspector id={b.id} onClose={() => undefined} />);
+    await screen.findByRole("status", { name: "Model summary" });
+    edit();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Switch off Acceleration X spread" }));
+    const list = within(screen.getByRole("region", { name: "Edit this model" })).getByRole("list", { name: "Changes waiting" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Save as a new model" })).not.toBeDisabled();
+    finishSave();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(within(list).getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.queryByText(/being scored and will appear as a new draft/)).not.toBeInTheDocument();
+  });
+
   it("switches inputs off from the table, and a second tick undoes it", async () => {
     await open(view(dense));
     edit();

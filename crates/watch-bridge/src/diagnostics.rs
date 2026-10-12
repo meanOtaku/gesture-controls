@@ -10,6 +10,19 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// Most recent events kept; older ones fall off the front.
 const MAX_EVENTS: usize = 60;
+/// About ten seconds of motion samples at 50 Hz.
+const MAX_DELAYS: usize = 500;
+
+/// The median and 95th percentile of `delays`, and how many there are; `None` for none.
+fn percentiles(delays: &VecDeque<u64>) -> Option<(u64, u64, usize)> {
+    if delays.is_empty() {
+        return None;
+    }
+    let mut sorted: Vec<u64> = delays.iter().copied().collect();
+    sorted.sort_unstable();
+    let at = |percent: usize| sorted[((sorted.len() - 1) * percent) / 100];
+    Some((at(50), at(95), sorted.len()))
+}
 
 pub fn unix_ms() -> u64 {
     SystemTime::now()
@@ -72,6 +85,10 @@ pub struct LinkDiagnostics {
     pub max_gap_ms: Option<u64>,
     /// Negotiated ATT MTU (Bluetooth).
     pub mtu: Option<u32>,
+    /// How old a motion sample is when it arrives (watch clock lined up by the time sync), over recent samples: the median
+    /// and the 95th percentile. What a lagging link shows as.
+    pub delay_p50_ms: Option<u64>,
+    pub delay_p95_ms: Option<u64>,
     /// When the next attempt starts, while waiting to retry.
     pub retry_in_ms: Option<u64>,
     pub events: Vec<LinkEvent>,
@@ -81,6 +98,8 @@ pub struct LinkDiagnostics {
 struct Inner {
     data: LinkDiagnostics,
     events: VecDeque<LinkEvent>,
+    /// Arrival delays of the latest motion samples, in milliseconds.
+    delays: VecDeque<u64>,
     session_started: Option<Instant>,
 }
 
@@ -151,6 +170,7 @@ impl LinkLog {
         self.with(|inner| {
             inner.data.sessions += 1;
             inner.data.connected_since_unix_ms = Some(unix_ms());
+            inner.delays.clear();
             inner.data.last_message_unix_ms = None;
             inner.data.write_max_ms = None;
             inner.data.max_gap_ms = None;
@@ -203,6 +223,21 @@ impl LinkLog {
         });
     }
 
+    /// Records how old a motion sample was on arrival.
+    pub fn sample_delay(&self, delay: Duration) {
+        self.with(|inner| {
+            if inner.delays.len() == MAX_DELAYS {
+                inner.delays.pop_front();
+            }
+            inner.delays.push_back(delay.as_millis() as u64);
+        });
+    }
+
+    /// The median and 95th-percentile arrival delay of recent motion samples, and how many they are over.
+    pub fn delay_summary(&self) -> Option<(u64, u64, usize)> {
+        self.with(|inner| percentiles(&inner.delays)).flatten()
+    }
+
     pub fn invalid_message(&self) {
         self.with(|inner| inner.data.invalid_messages += 1);
     }
@@ -232,6 +267,10 @@ impl LinkLog {
                 data.phase = "idle";
             }
             data.events = inner.events.iter().cloned().collect();
+            if let Some((p50, p95, _)) = percentiles(&inner.delays) {
+                data.delay_p50_ms = Some(p50);
+                data.delay_p95_ms = Some(p95);
+            }
             data
         })
         .unwrap_or_default()
@@ -241,6 +280,28 @@ impl LinkLog {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn arrival_delays_are_summarised_over_recent_samples_and_restart_with_a_session() {
+        let log = LinkLog::default();
+        assert_eq!(log.delay_summary(), None);
+        for ms in 1..=100 {
+            log.sample_delay(Duration::from_millis(ms));
+        }
+        assert_eq!(log.delay_summary(), Some((50, 95, 100)));
+        let snapshot = log.snapshot();
+        assert_eq!(
+            (snapshot.delay_p50_ms, snapshot.delay_p95_ms),
+            (Some(50), Some(95))
+        );
+        // Only the latest samples count.
+        for _ in 0..MAX_DELAYS {
+            log.sample_delay(Duration::from_millis(7));
+        }
+        assert_eq!(log.delay_summary(), Some((7, 7, MAX_DELAYS)));
+        log.session_started(None);
+        assert_eq!(log.delay_summary(), None);
+    }
 
     #[test]
     fn a_fresh_log_reads_as_idle_with_nothing_recorded() {

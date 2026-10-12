@@ -302,6 +302,8 @@ export interface AppSettings {
   watchAccelerationRateHz: number;
   watchGyroscopeRateHz: number;
   watchPpgFlushRateHz: number;
+  /** Whether the watch sends motion and pulse samples of one flush as one message (true) or each motion reading on its own. */
+  watchCombinedSensorMessages: boolean;
   watchHeartRateAcceptanceRateHz: number;
   watchSkinTemperatureAcceptanceRateHz: number;
   watchEdaAcceptanceRateHz: number;
@@ -397,6 +399,9 @@ export interface LinkDiagnostics {
   writeMaxMs: number | null;
   maxGapMs: number | null;
   mtu: number | null;
+  /** How old a motion sample is when it arrives, over recent samples: median and 95th percentile. */
+  delayP50Ms?: number | null;
+  delayP95Ms?: number | null;
   retryInMs: number | null;
   events: LinkEvent[];
 }

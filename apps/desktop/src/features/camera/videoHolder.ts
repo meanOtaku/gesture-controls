@@ -23,6 +23,35 @@ export function parkVideo(video: HTMLVideoElement): void {
   ensureHolder()?.appendChild(video);
 }
 
+/** Where each video is being shown, oldest first: the newest is the one showing it. */
+const owners = new WeakMap<HTMLVideoElement, HTMLElement[]>();
+
+/**
+ * Shows `video` at the start of `host` until the returned function is called. Several places can show the same camera (a
+ * page and the quick preview, say); the newest shows it, and when it lets go the video goes back to the newest place still
+ * showing it, or is parked when there is none.
+ */
+export function showVideo(video: HTMLVideoElement, host: HTMLElement, className = "camera-video"): () => void {
+  const stack = owners.get(video) ?? [];
+  owners.set(video, [...stack.filter((h) => h !== host), host]);
+  video.className = className;
+  host.prepend(video);
+  resumeVideo(video);
+  return () => {
+    const remaining = (owners.get(video) ?? []).filter((h) => h !== host);
+    owners.set(video, remaining);
+    if (video.parentElement !== host) return; // someone newer is showing it
+    const previous = remaining.at(-1);
+    if (previous && previous.isConnected) {
+      video.className = className;
+      previous.prepend(video);
+      resumeVideo(video);
+    } else {
+      parkVideo(video);
+    }
+  };
+}
+
 /** Starts a video that was paused when it was moved, if it has a picture to play. */
 export function resumeVideo(video: HTMLVideoElement): void {
   if (video.srcObject && video.paused && typeof video.play === "function") void Promise.resolve(video.play()).catch(() => undefined);

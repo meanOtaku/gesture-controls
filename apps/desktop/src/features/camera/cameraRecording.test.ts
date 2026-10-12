@@ -71,7 +71,8 @@ describe("clock alignment from the watch stream", () => {
   });
 
   it("ignores a repeated sample, as the store does", () => {
-    for (let i = 0; i < 25; i += 1) telemetryStore.ingestWatchOrientation(orientation(1, 1_000_000_000 + i));
+    // The same sample again (as the status poll delivers it): same sequence, same time.
+    for (let i = 0; i < 25; i += 1) telemetryStore.ingestWatchOrientation(orientation(1, 1_000_000_000));
     expect(clockSync.estimate()).toBeNull();
   });
 });

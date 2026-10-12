@@ -28,7 +28,8 @@ const plural = (count: number, one: string, many: string) => `${count} ${count =
 /**
  * The form's action bar: says how many edits are waiting (and how many cannot be applied as typed),
  * applies them together on submit (a submit button, so Enter in any field works), discards them,
- * or restores every default after explicit confirmation. Stays in view while the page scrolls.
+ * or restores every default after explicit confirmation. Stays in view while the page scrolls whenever there is something
+ * to apply, and otherwise sits at the end of the form.
  */
 export function ApplySettingsFooter({
   dirtyCount,
@@ -47,7 +48,7 @@ export function ApplySettingsFooter({
         : "All changes are applied.";
 
   return (
-    <Card role="region" aria-label="Apply or reset settings" className="settings-footer">
+    <Card role="region" aria-label="Apply or reset settings" className={dirtyCount > 0 ? "settings-footer is-pending" : "settings-footer"}>
       <CardContent className="flex flex-wrap items-center justify-between gap-3">
         <p className={invalidCount > 0 ? "field-error" : "hint"} role="status" aria-live="polite">{status}</p>
         <div className="flex flex-wrap items-center gap-2">

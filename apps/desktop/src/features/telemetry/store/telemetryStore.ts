@@ -135,6 +135,8 @@ export type TelemetrySeries =
 
 /** How long the watch must be silent, after reporting it is off the wrist, before its charts are emptied. */
 const WATCH_PAUSE_QUIET_MS = 1500;
+/** A gap this long between two motion samples' own times means the watch clock restarted, not a pause. */
+const MOTION_CLOCK_JUMP_MS = 5_000;
 export const MAX_VISIBLE_SAMPLES = 600;
 export const MAX_CSV_ROWS = 200_000;
 export const ESTIMATED_BYTES_PER_CSV_ROW = 200;
@@ -210,9 +212,20 @@ class TelemetryStore {
   // `clearOrdinaryLabel`, independent of any draft text the UI input holds —
   // editing the input alone must never change what gets stamped on rows.
   private appliedOrdinaryLabel: string = DEFAULT_ORDINARY_LABEL;
-  private lastWatchOrientationSequence: number | null = null;
+  /**
+   * The last motion sample taken in, so the status poll's copy of it is not taken twice. Sequence and time together: the
+   * samples of one combined `watch.sensor_batch` share their message's sequence.
+   */
+  private lastWatchOrientationKey: string | null = null;
   /** The pulse sensor's SDK clock, mapped onto the watch clock every other watch message uses. */
   private readonly ppgClock = new SourceClockMap();
+  /**
+   * The motion charts are drawn on the watch's own clock. Bluetooth delivers samples in bursts; drawn where they arrived,
+   * a burst piles up at one moment and leaves a gap, which looks like the graph stalling on a sudden movement. Mapping
+   * the watch clock onto this one first would need an estimate that settles only after a while (a late start made the
+   * graph freeze until it did); the charts only need the spacing, which the watch clock has exactly.
+   */
+  private lastWatchMotionPlotAt: number | null = null;
   private lastSpo2TimestampNs: number | null = null;
   private lastEcgTimestampNs: number | null = null;
   // "Graph refresh rate" setting: how often listeners are notified, not a
@@ -232,8 +245,11 @@ class TelemetryStore {
   private selectedLabel: GestureDatasetLabel | null = null;
   private readonly sessionLabels = new Set<GestureDatasetLabel>();
   private datasetRecordingState: DatasetRecordingState = "idle";
-  /** When recent rows arrived (browser clock) and how many rows there were then, to start a camera mark where the gesture began. */
-  private arrivalTrail: { ms: number; rows: number }[] = [];
+  /**
+   * When recent rows arrived (browser clock) and each one's own timestamp, to place a camera mark where the gesture began
+   * or ended. A row index would go stale: a delayed sample is inserted in time order and moves every later row.
+   */
+  private arrivalTrail: { ms: number; timestampNs: number }[] = [];
   private datasetRecording = false;
   private datasetSession: DatasetSessionMetadata | null = null;
   private datasetRecordingStartedAtMs: number | null = null;
@@ -499,6 +515,27 @@ class TelemetryStore {
     return true;
   }
 
+  /**
+   * Timeline Capture only: closes `label`'s active interval where the gesture actually ended (`atMs`, the browser clock),
+   * not where the camera noticed, so the end is not stretched by the release grace or the detector's latency.
+   */
+  closeTimelineLabelAt(label: GestureDatasetLabel, atMs: number): boolean {
+    if (this.datasetCaptureMode !== "timeline" || this.datasetRecordingState !== "recording") return false;
+    if (this.getActiveTimelineLabel() !== normalizeDatasetLabel(label)) return false;
+    const active = this.timelineIntervals.find((entry) => entry.intervalId === this.activeTimelineIntervalId);
+    const currentRowCount = this.datasetRows.length;
+    const endRow = Math.max(active?.startRawRow ?? 0, this.rowArrivedSince(atMs, currentRowCount));
+    const endNs = Math.max(active?.startMonotonicNs ?? 0, Math.round(atMs * 1_000_000));
+    this.closeActiveTimelineInterval(endNs, endRow);
+    // Rows that arrived after the gesture ended were recorded while the label was still on; give them back.
+    for (let index = endRow; index < currentRowCount; index += 1) {
+      const row = this.datasetRows.get(index);
+      if (row && row.label === active?.labelId) row.label = "";
+    }
+    this.publishNow();
+    return true;
+  }
+
   /** Post-capture editing (only while `saved`): rename a label without moving boundaries. Bumps revision for audit. */
   relabelTimelineInterval(intervalId: string, label: GestureDatasetLabel): boolean {
     if (this.datasetRecordingState !== "saved") return false;
@@ -614,9 +651,10 @@ class TelemetryStore {
    */
   private pushDatasetRowSorted(row: DatasetRow): void {
     const arrivedAt = performance.now();
-    this.arrivalTrail.push({ ms: arrivedAt, rows: this.datasetRows.length });
-    while (this.arrivalTrail.length > 0 && arrivedAt - this.arrivalTrail[0].ms > ARRIVAL_TRAIL_MS) this.arrivalTrail.shift();
     const timestampNs = Number(row.timestampNs);
+    // A row without a usable timestamp is appended last, so it stands for "the end".
+    this.arrivalTrail.push({ ms: arrivedAt, timestampNs: Number.isFinite(timestampNs) ? timestampNs : Infinity });
+    while (this.arrivalTrail.length > 0 && arrivedAt - this.arrivalTrail[0].ms > ARRIVAL_TRAIL_MS) this.arrivalTrail.shift();
     const previousLength = this.datasetRows.length;
     const insertIndex = Number.isFinite(timestampNs)
       ? this.datasetRows.upperBound((existing) => Number(existing.timestampNs), timestampNs)
@@ -636,10 +674,15 @@ class TelemetryStore {
 
   /** The first row that arrived at or after `sinceMs`, not before the end of an interval already made. */
   private firstRowSince(sinceMs: number, currentRowCount: number): number {
-    const entry = this.arrivalTrail.find((item) => item.ms >= sinceMs);
-    const earliest = entry ? entry.rows : currentRowCount;
     const floor = this.timelineIntervals.reduce((end, interval) => Math.max(end, interval.endRawRow ?? 0), 0);
-    return Math.min(currentRowCount, Math.max(earliest, floor));
+    return Math.min(currentRowCount, Math.max(this.rowArrivedSince(sinceMs, currentRowCount), floor));
+  }
+
+  /** Where the row that arrived first at or after `atMs` sits now, found by its timestamp; `currentRowCount` if none has. */
+  private rowArrivedSince(atMs: number, currentRowCount: number): number {
+    const entry = this.arrivalTrail.find((item) => item.ms >= atMs);
+    if (!entry || !Number.isFinite(entry.timestampNs)) return currentRowCount;
+    return Math.min(currentRowCount, this.datasetRows.lowerBound((row) => Number(row.timestampNs), entry.timestampNs));
   }
 
   /** How many intervals the camera has marked in this session. */
@@ -922,18 +965,20 @@ class TelemetryStore {
     // M1: reject an impossible/non-finite source timestamp outright rather
     // than accepting or inventing one for row-ordering/timing purposes.
     if (!Number.isFinite(orientation.timestampNs)) return;
-    if (orientation.sequence === this.lastWatchOrientationSequence) return;
-    this.lastWatchOrientationSequence = orientation.sequence;
+    const key = `${orientation.sequence}:${orientation.timestampNs}`;
+    if (key === this.lastWatchOrientationKey) return;
+    this.lastWatchOrientationKey = key;
     this.noteWatchSample();
     // Lines the watch's clock up with the browser's, which camera frames are stamped with.
     clockSync.observe(orientation.timestampNs, performance.now());
     const at = Date.now();
+    const plotAt = this.watchMotionPlotAt(orientation.timestampNs);
     const euler = quaternionToEulerDegrees(orientation.quaternion);
-    this.series.get("watchOrientation")?.push({ at, values: this.watchUnwrap.next(euler) });
+    this.series.get("watchOrientation")?.push({ at: plotAt, values: this.watchUnwrap.next(euler) });
     // Acceleration rides on each orientation sample and is absent when the watch's
     // acceleration sensor is off or its reading was stale; a missing reading is a gap in
     // the chart, never a plotted zero.
-    if (orientation.accelerometer) this.series.get("watchAcceleration")?.push({ at, values: [...orientation.accelerometer] });
+    if (orientation.accelerometer) this.series.get("watchAcceleration")?.push({ at: plotAt, values: [...orientation.accelerometer] });
     if (this.canRecord("watchOrientation", at)) this.rows.push({
       recordedAt: new Date(at).toISOString(),
       source: "watch",
@@ -980,6 +1025,22 @@ class TelemetryStore {
       });
     }
     this.schedulePublish();
+  }
+
+  /**
+   * Where to draw a motion sample taken at `timestampNs` (watch clock, ns): its own time in milliseconds. A watch clock
+   * that jumped (a restarted watch) starts the motion charts afresh rather than squeezing both runs into one.
+   */
+  private watchMotionPlotAt(timestampNs: number): number {
+    const plotAt = timestampNs / 1_000_000;
+    const last = this.lastWatchMotionPlotAt;
+    if (last !== null && (plotAt < last || plotAt - last > MOTION_CLOCK_JUMP_MS)) {
+      this.series.get("watchOrientation")?.clear();
+      this.series.get("watchAcceleration")?.clear();
+      this.watchUnwrap.reset();
+    }
+    this.lastWatchMotionPlotAt = plotAt;
+    return plotAt;
   }
 
   ingestPpgBatch(batch: WatchPpgBatch): void {
@@ -1086,8 +1147,9 @@ class TelemetryStore {
     this.recording = false;
     this.savedCount = 0;
     this.appliedOrdinaryLabel = DEFAULT_ORDINARY_LABEL;
-    this.lastWatchOrientationSequence = null;
+    this.lastWatchOrientationKey = null;
     this.ppgClock.reset();
+    this.lastWatchMotionPlotAt = null;
     this.lastSpo2TimestampNs = null;
     this.lastEcgTimestampNs = null;
     this.lastRecordedAtByChannel.clear();

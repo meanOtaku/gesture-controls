@@ -1,5 +1,7 @@
 import { OperationFeedback } from "../../components/app/OperationFeedback";
 import { telemetryStore } from "../telemetry/store/telemetryStore";
+import { startCameraMarking } from "./cameraMarker";
+import type { GestureDefinition } from "./definition";
 
 const KEY = "cameraMarkingOn";
 const readSaved = (): boolean => {
@@ -18,14 +20,16 @@ interface Snapshot {
  * Camera marking. It is on by default and the choice is remembered, but it only takes effect when it can work: the camera
  * is on and the chosen label has a gesture in the library (the Recorder card checks that and says which label it has
  * verified, see `setReady`). Then the recording is a timeline, and while it runs the camera opens and closes unreviewed
- * intervals of that label in the session itself, the way the Mark label button does (see `CameraAssistCard`), so the
- * rows, the saved recording and the CSV export all carry them. The label is remembered when the recording starts, so
- * changing the picker mid-recording changes nothing.
+ * intervals of that label in the session itself, the way the Mark label button does (see `startCameraMarking`), so the
+ * rows, the saved recording and the CSV export all carry them. The label and its gestures are fixed when the recording
+ * starts, and the marking runs until the recording is saved or discarded, whichever page is open.
  */
 class CameraAssist {
   private enabled = readSaved();
   private armedLabel: string | null = null;
   private readyLabel: string | null = null;
+  private readyDefinitions: GestureDefinition[] = [];
+  private stopMarking: (() => void) | null = null;
   private listeners = new Set<() => void>();
   private snapshot: Snapshot = { enabled: this.enabled };
 
@@ -53,21 +57,37 @@ class CameraAssist {
     return this.enabled;
   }
 
-  /** The Recorder card says which label it has checked can be marked right now (camera on, gesture present), or none. */
-  setReady(label: string | null): void {
+  /**
+   * The Recorder card says which label it has checked can be marked right now (camera on, gesture present), or none,
+   * and that label's gestures from the library.
+   */
+  setReady(label: string | null, definitions: GestureDefinition[] = []): void {
     this.readyLabel = label;
+    this.readyDefinitions = label === null ? [] : definitions;
   }
   /** Whether a recording of `label` starting now will be marked: switched on, and the card has checked it can work. */
   willMark(label: string | null): boolean {
     return this.enabled && label !== null && this.readyLabel === label;
   }
 
-  /** Called as a recording starts. */
-  arm(label: string): void {
+  /**
+   * Called as a recording starts: marks `label` with `definitions`, or with the gestures the card checked for it.
+   * Marking runs until `finish` or `disarm`, wherever the person goes in the app meanwhile.
+   */
+  arm(label: string, definitions?: GestureDefinition[]): void {
+    this.stop();
     this.armedLabel = label;
+    const gestures = definitions ?? (this.readyLabel === label ? this.readyDefinitions : []);
+    this.stopMarking = startCameraMarking(label, gestures);
   }
   disarm(): void {
+    this.stop();
     this.armedLabel = null;
+  }
+
+  private stop(): void {
+    this.stopMarking?.();
+    this.stopMarking = null;
   }
 
   /** The label being marked by the camera in the recording now under way, or null. */
@@ -77,6 +97,7 @@ class CameraAssist {
 
   /** Called once the recording is saved: says what the camera marked while it ran. */
   finish(): void {
+    this.stop();
     const label = this.armedLabel;
     this.armedLabel = null;
     if (!label) return;

@@ -135,18 +135,34 @@ def _file_rows(path: Path, expected: tuple[str, ...]) -> list[tuple[int, int, li
 
 def _merge_folder(folder: Path) -> str:
     """A recording folder (`ppg.csv` and `imu.csv`) as the text of the single-file dataset it stands for: every row of both,
-    in timestamp order (a tie puts the pulse row first), each with the other sensor's columns empty."""
+    in timestamp order (a tie puts the pulse row first), each with the other sensor's columns empty.
+
+    A pulse row and a motion row with the same timestamp, sequence and label are one row of an older fused export, which
+    the desktop's conversion put in both files; they become that one row again, so a converted recording reads exactly as
+    the file it was made from (and keeps that file's identity truthfully). Rows the watch sent separately never share a
+    sequence."""
     ppg = _file_rows(folder / PPG_FILE, PPG_FILE_COLUMNS)
     imu = _file_rows(folder / IMU_FILE, IMU_FILE_COLUMNS)
     for rows, name in ((ppg, PPG_FILE), (imu, IMU_FILE)):
         for before, after in zip(rows, rows[1:]):
             if after[0] < before[0]:
                 raise CsvFormatError(f"{folder / name}: out-of-order timestamp {after[0]} follows {before[0]}")
+    motion_by_key: dict[tuple[str, str, str], list[int]] = {}
+    for index, (_, _, f) in enumerate(imu):
+        motion_by_key.setdefault((f[0], f[1], f[12]), []).append(index)
+    fused: set[int] = set()
     merged: list[tuple[int, int, str]] = []
     for stamp, _, f in ppg:
-        merged.append((stamp, 0, ",".join([f[0], f[1], f[2], f[3], f[4], *([""] * 10), f[5], f[6]])))
-    for stamp, _, f in imu:
-        merged.append((stamp, 1, ",".join([f[0], f[1], "", "", "", *f[2:12], "", f[12]])))
+        partners = motion_by_key.get((f[0], f[1], f[6]))
+        if partners:
+            partner = partners.pop(0)
+            fused.add(partner)
+            merged.append((stamp, 0, ",".join([f[0], f[1], f[2], f[3], f[4], *imu[partner][2][2:12], f[5], f[6]])))
+        else:
+            merged.append((stamp, 0, ",".join([f[0], f[1], f[2], f[3], f[4], *([""] * 10), f[5], f[6]])))
+    for index, (stamp, _, f) in enumerate(imu):
+        if index not in fused:
+            merged.append((stamp, 1, ",".join([f[0], f[1], "", "", "", *f[2:12], "", f[12]])))
     merged.sort(key=lambda row: (row[0], row[1]))
     return "\n".join([",".join(HEADER_COLUMNS), *(line for _, _, line in merged)]) + "\n"
 

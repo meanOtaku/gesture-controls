@@ -57,6 +57,13 @@ describe("CameraProposalsPanel", () => {
     expect(box).toBeTruthy();
   });
 
+  it("finds the gesture in a recording that only the second camera saw", async () => {
+    api.getRecordingCameraEvidence.mockResolvedValue({ status: "ok", value: { ...evidence, handLandmarks: null, handLandmarksSecond: evidence.handLandmarks } });
+    render(<CameraProposalsPanel />);
+    await choose();
+    expect(await screen.findByRole("checkbox", { name: /Pinch at/ })).toBeTruthy();
+  });
+
   it("says so when the recording has no camera data, or no gesture has a label", async () => {
     api.getRecordingCameraEvidence.mockResolvedValue({ status: "ok", value: null });
     render(<CameraProposalsPanel />);

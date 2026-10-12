@@ -128,3 +128,17 @@ Blocked or unavailable:
 ## Delivery state
 
 This document records review findings only. Apart from the three already-pushed PPG rollback commits, these findings have not been repaired or pushed.
+
+## Repairs
+
+All 18 findings are repaired on `fix/review-regressions`, each with a test that fails without the fix:
+
+| Findings | Commit | What changed |
+|---|---|---|
+| 1, 4, 6, 7 | `b7d1e56` | Camera marking is owned by the recording (`startCameraMarking`), not a page; gestures fixed at start; marks close at the detector's release time; camera onset/release rows found by timestamp, not a stale index. |
+| 2, 9, 10, 11 | `e7b9843` | A converted fused row is read back as one row (features match the original exactly); duplicate check compares contents; backfill gets current paths; an interrupted conversion can be retried. |
+| 16, 17 | `3f55f75` | Live baseline anchored on the window's first sample, as training; a lost baseline is reported once (`BaselineUnavailable`), releasing the detection. |
+| 3, 5, 8 | `6715c93` | Frame request per camera generation, checked after every await; previews hand the video back to the newest one open; second-camera-only evidence counts. |
+| 13, 14, 15 | `404f1b9` | Timing results tied to the request they answer; a save leaves another model's edits alone; Stop and Discard stay available mid-round. |
+| 12 | `0d0ad47` | Hand edits allowed on models trained with correction recordings. |
+| 18 | `641ef8d` | Dense networks get exactly the requested shape (legacy `params.hidden` honoured, empty list kept empty). |

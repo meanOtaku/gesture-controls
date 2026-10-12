@@ -640,7 +640,7 @@ export async function getRecordingQualitySummary(
 }
 
 /** Mirrors `recording_bundle::CameraEvidence`: the camera files of a recording, and its raw rows' watch timestamps. */
-export type CameraEvidenceFiles = { handLandmarks: string; /** The second camera's landmarks, when the recording used two. */ handLandmarksSecond?: string | null; clockSync: string; rawTimestampsNs: number[] };
+export type CameraEvidenceFiles = { /** The first camera's landmarks; absent when only the second camera recorded. */ handLandmarks?: string | null; /** The second camera's landmarks, when the recording used two. */ handLandmarksSecond?: string | null; clockSync: string; rawTimestampsNs: number[] };
 
 /** The saved camera evidence of a recording, or null when it was recorded without the camera. */
 export async function getRecordingCameraEvidence(recordingId: string): Promise<RecordingBundleResult<CameraEvidenceFiles | null>> {

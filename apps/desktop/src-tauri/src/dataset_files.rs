@@ -353,25 +353,46 @@ pub fn split_legacy(legacy_csv: &str) -> Result<Pair, String> {
 
 #[cfg(test)]
 /// The pair merged back into the single-file dataset: every row of both, in timestamp order (a tie puts the pulse row first),
-/// with the other sensor's columns empty. What the trainer builds in memory.
+/// with the other sensor's columns empty, except that a pulse row and a motion row with the same timestamp, sequence and
+/// label (one row of an older fused export, written to both files) become that one row again. What the trainer builds in
+/// memory (`csv_io._merge_folder`).
 pub fn merge_to_legacy(ppg_csv: &str, imu_csv: &str) -> Result<String, String> {
     let (ppg_head, imu_head) = (ppg_header(), imu_header());
     let ppg = read_rows(PPG_FILE, ppg_csv, &ppg_head, PPG_HEADER.len())?;
     let imu = read_rows(IMU_FILE, imu_csv, &imu_head, IMU_HEADER.len())?;
+    let motion: Vec<Vec<&str>> = imu
+        .rows
+        .iter()
+        .map(|(_, line, _)| line.split(',').collect())
+        .collect();
+    let mut fused = vec![false; motion.len()];
     let mut merged: Vec<(i128, u8, String)> = Vec::new();
     for (stamp, line, _) in &ppg.rows {
         let f: Vec<&str> = line.split(',').collect();
+        let partner = motion
+            .iter()
+            .enumerate()
+            .position(|(i, m)| !fused[i] && m[0] == f[0] && m[1] == f[1] && m[12] == f[6]);
+        let middle = match partner {
+            Some(i) => {
+                fused[i] = true;
+                motion[i][2..12].join(",")
+            }
+            None => ",".repeat(9),
+        };
         merged.push((
             *stamp,
             0,
             format!(
-                "{},{},{},{},{},,,,,,,,,,,{},{}",
+                "{},{},{},{},{},{middle},{},{}",
                 f[0], f[1], f[2], f[3], f[4], f[5], f[6]
             ),
         ));
     }
-    for (stamp, line, _) in &imu.rows {
-        let f: Vec<&str> = line.split(',').collect();
+    for (index, ((stamp, _, _), f)) in imu.rows.iter().zip(&motion).enumerate() {
+        if fused[index] {
+            continue;
+        }
         merged.push((
             *stamp,
             1,
@@ -440,17 +461,14 @@ mod tests {
             imu.iter().skip(1).all(|row| !row.contains(",,")),
             "no blank cells in the motion file"
         );
-        // Merged back: the rows that had one sensor are as they were, and the fused row is a row of each.
+        // Merged back: every row is as it was, the fused one included, so the conversion is lossless in what a model reads.
         let merged = merge_to_legacy(&pair.ppg_csv, &pair.imu_csv).unwrap();
         let rows: Vec<&str> = merged
             .lines()
             .filter(|l| !l.starts_with('#'))
             .skip(1)
             .collect();
-        assert_eq!(rows[0], PPG_ROW);
-        assert_eq!(rows[1], IMU_ROW);
-        assert_eq!(rows.len(), 4);
-        assert!(rows[2].starts_with("140,3,11,21,31,,,,") && rows[3].starts_with("140,3,,,,0.1"));
+        assert_eq!(rows, [PPG_ROW, IMU_ROW, BOTH_ROW]);
     }
 
     #[test]

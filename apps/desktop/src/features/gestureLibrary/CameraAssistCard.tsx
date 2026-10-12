@@ -7,11 +7,9 @@ import { Checkbox } from "../../components/ui/checkbox";
 import { NOT_SLOW, nextSlowState, type SlowState } from "../camera/slowWarning";
 import { CameraQuickControl } from "../camera/components/CameraQuickControl";
 import { getCameraController } from "../camera/cameraService";
-import { telemetryStore } from "../telemetry/store/telemetryStore";
 import { cameraAssist } from "./cameraAssist";
 import { definitionsForLabel, type GestureDefinition } from "./definition";
 import { listGestureDefinitions } from "./gestureLibraryApi";
-import { useCameraMarking } from "./useCameraMarking";
 import { useLiveGestures } from "./useLiveGestures";
 
 /**
@@ -19,7 +17,7 @@ import { useLiveGestures } from "./useLiveGestures";
  * camera sees that label's library gesture. Shows live whether the camera sees it right now, so you can check before you
  * start. Everything it adds is unreviewed, like any other interval.
  */
-export function CameraAssistCard({ selectedLabel, recording, recordingState, desktopAvailable }: { selectedLabel: string | null; recording: boolean; recordingState?: string; desktopAvailable: boolean }) {
+export function CameraAssistCard({ selectedLabel, recording, desktopAvailable }: { selectedLabel: string | null; recording: boolean; desktopAvailable: boolean }) {
   const camera = getCameraController();
   const cam = useSyncExternalStore(camera.subscribe, camera.getSnapshot, camera.getSnapshot);
   const { enabled } = useSyncExternalStore(cameraAssist.subscribe, cameraAssist.getSnapshot, cameraAssist.getSnapshot);
@@ -37,11 +35,7 @@ export function CameraAssistCard({ selectedLabel, recording, recordingState, des
   const states = useLiveGestures(mine, cam, undefined, cam2);
   const heldNow = mine.map((definition) => states.get(definition.id)).filter((state) => state?.held);
   const seen = heldNow.length > 0;
-  const sinceMs = seen ? Math.min(...heldNow.map((state) => state?.sinceMs ?? Infinity)) : null;
 
-  // While recording, the camera marks the session directly: the label is on while it sees the gesture, off when it lets go.
-  const armed = recording ? cameraAssist.armedFor() : null;
-  useCameraMarking(armed, recordingState, seen, sinceMs);
   const camOn = cam.status === "on" || cam2.status === "on";
 
   // The slowest camera that is running: warned about only once it has stayed slow, and until it is clearly back up.
@@ -69,9 +63,9 @@ export function CameraAssistCard({ selectedLabel, recording, recordingState, des
 
   // Tells the Recorder whether a recording started now will be marked, so it only changes how it records when it can work.
   useEffect(() => {
-    cameraAssist.setReady(blocker === null ? selectedLabel : null);
+    cameraAssist.setReady(blocker === null ? selectedLabel : null, mine);
     return () => cameraAssist.setReady(null);
-  }, [blocker, selectedLabel]);
+  }, [blocker, selectedLabel, mine]);
 
   return (
     <Card role="region" aria-label="Camera marking" className="min-w-0">

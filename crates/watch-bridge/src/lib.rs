@@ -29,17 +29,18 @@ use axum::routing::get;
 use futures_util::StreamExt;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use spatial_protocol::{
-    CONTROLLABLE_SENSOR_IDS, DESKTOP_CONNECTED_TYPE, DESKTOP_HAPTIC_TYPE,
+    COMBINED_SENSOR_BATCH, CONTROLLABLE_SENSOR_IDS, DESKTOP_CONNECTED_TYPE, DESKTOP_HAPTIC_TYPE,
     DESKTOP_SET_SENSOR_RATE_TYPE, DESKTOP_SET_SENSOR_TYPE, DESKTOP_START_MEASUREMENT_TYPE,
     DESKTOP_STOP_MEASUREMENT_TYPE, DESKTOP_TIME_SYNC_TYPE, DesktopConnectedPayload,
     DesktopHapticPayload, DesktopMeasurementCommandPayload, DesktopOutboundEnvelope,
     DesktopSensorControlPayload, DesktopSensorRateCommandPayload, DesktopTimeSyncPayload,
     MAX_HAPTIC_DURATION_MS, MAX_PPG_FLUSH_RATE_HZ, MAX_SENSOR_RATE_HZ, MIN_HAPTIC_DURATION_MS,
     MIN_PPG_FLUSH_RATE_HZ, MIN_SENSOR_RATE_HZ, ON_DEMAND_MEDICAL_TRACKER_IDS,
-    RATE_CONTROLLABLE_SENSOR_IDS, SENSOR_PPG_FLUSH, WATCH_PROTOCOL_VERSION, WatchBiaResultSample,
-    WatchButtonSample, WatchEcgBatchSample, WatchEdaBatchSample, WatchEnvelope,
-    WatchHeartRateBatchSample, WatchHeartbeatSample, WatchInboundMessage, WatchMedicalStatusSample,
-    WatchOrientationSample, WatchPpgBatchSample, WatchPpgStatusSample, WatchSensorStatusSample,
+    RATE_CONTROLLABLE_SENSOR_IDS, SENSOR_PPG_FLUSH, WATCH_ORIENTATION_TYPE, WATCH_PPG_BATCH_TYPE,
+    WATCH_PROTOCOL_VERSION, WATCH_SENSOR_BATCH_TYPE, WatchBiaResultSample, WatchButtonSample,
+    WatchEcgBatchSample, WatchEdaBatchSample, WatchEnvelope, WatchHeartRateBatchSample,
+    WatchHeartbeatSample, WatchInboundMessage, WatchMedicalStatusSample, WatchOrientationSample,
+    WatchPpgBatchSample, WatchPpgStatusSample, WatchSensorStatusSample,
     WatchSkinTemperatureBatchSample, WatchSpo2BatchSample, WatchSweatLossBatchSample,
     WatchTimeSyncSample, WatchWearStateSample,
 };
@@ -63,6 +64,8 @@ const PAIRING_RETRY_INTERVAL: Duration = Duration::from_secs(4);
 /// How often the discovery thread wakes to look at the roster when no mDNS event arrives.
 const PAIRING_TICK: Duration = Duration::from_secs(1);
 const TIME_SYNC_INTERVAL: Duration = Duration::from_secs(5);
+/// How often the desktop log says how late motion samples arrive.
+const DELAY_REPORT_INTERVAL: Duration = Duration::from_secs(30);
 const CLOCK_OFFSET_SAMPLE_COUNT: usize = 5;
 const DEVICE_ALREADY_CONNECTED_CLOSE_CODE: u16 = 4409;
 /// How long the desktop waits, connected and subscribed, for the watch's trust
@@ -372,7 +375,7 @@ impl WatchBridgeServer {
         let sensor = match &command {
             SensorControlCommand::Enable(sensor) | SensorControlCommand::Disable(sensor) => sensor,
         };
-        if !CONTROLLABLE_SENSOR_IDS.contains(&sensor.as_str()) {
+        if !CONTROLLABLE_SENSOR_IDS.contains(&sensor.as_str()) && sensor != COMBINED_SENSOR_BATCH {
             return Err(WatchBridgeError::UnknownControllableSensor(sensor.clone()));
         }
         if !self.shared.active.load(Ordering::Acquire) {
@@ -1128,10 +1131,14 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
     let mut last_activity = Instant::now();
     let mut last_sequence: Option<u64> = None;
     let mut time_sync_ticker = tokio::time::interval(TIME_SYNC_INTERVAL);
+    let mut delay_report = tokio::time::interval(DELAY_REPORT_INTERVAL);
+    delay_report.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut pending_time_sync_at: Option<u64> = None;
     let mut clock_offset_samples = VecDeque::with_capacity(CLOCK_OFFSET_SAMPLE_COUNT);
     // Set from the watch's own `watch.wear_state`; false (worn) until it says otherwise.
     let mut off_body = false;
+    // When motion or pulse data last arrived: a watch set to stream off the wrist is still streaming.
+    let mut last_sensor_data: Option<Instant> = None;
 
     loop {
         let idle_timeout = if off_body && may_sleep_off_body {
@@ -1152,10 +1159,17 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
                     break ConnectionEnd::StreamClosed;
                 }
             }
+            _ = delay_report.tick() => {
+                if let Some((p50, p95, count)) = shared.link.delay_summary() {
+                    info!(p50_ms = p50, p95_ms = p95, samples = count, "watch motion samples arrive this late");
+                }
+            }
             _ = time_sync_ticker.tick() => {
                 // A write would wake a sleeping watch's CPU every few seconds for an
-                // offset nothing is using while it is not streaming.
-                if off_body {
+                // offset nothing is using while it is not streaming. A watch set to
+                // stream off the wrist is streaming, though, and drops a link that stays
+                // silent (DesktopSilence on the watch), so it keeps getting the sync.
+                if off_body && !streaming_recently(last_sensor_data) {
                     continue;
                 }
                 let desktop_time_ns = now_ns();
@@ -1261,6 +1275,9 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
                             warn!(gap_ms = gap.as_millis() as u64, "no watch message for a while before this one");
                         }
                         last_activity = Instant::now();
+                        if carries_sensor_data(&bytes) {
+                            last_sensor_data = Some(last_activity);
+                        }
                         if let Some(worn) = handle_inbound(
                             &bytes,
                             &mut last_sequence,
@@ -1288,6 +1305,35 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
 
 /// Decodes and forwards one inbound message. Returns `Some(worn)` when it was a
 /// `watch.wear_state`, so the caller can adjust how long a silent link is tolerated.
+/// Whether a message is motion or pulse data, from its type alone.
+fn carries_sensor_data(bytes: &[u8]) -> bool {
+    #[derive(serde::Deserialize)]
+    struct TypeOnly<'a> {
+        #[serde(rename = "type", borrow)]
+        message_type: std::borrow::Cow<'a, str>,
+    }
+    serde_json::from_slice::<TypeOnly>(bytes).is_ok_and(|m| {
+        m.message_type == WATCH_ORIENTATION_TYPE
+            || m.message_type == WATCH_PPG_BATCH_TYPE
+            || m.message_type == WATCH_SENSOR_BATCH_TYPE
+    })
+}
+
+/// Records how old a motion sample taken at `timestamp_ns` (watch clock) is now, once the time sync has lined the clocks up.
+fn note_delay(shared: &SharedState, clock_offset_samples: &VecDeque<i64>, timestamp_ns: u64) {
+    if clock_offset_samples.is_empty() {
+        return;
+    }
+    let taken_ns = timestamp_ns as i64 - median_clock_offset(clock_offset_samples);
+    let age_ns = (now_ns() as i64).saturating_sub(taken_ns).max(0) as u64;
+    shared.link.sample_delay(Duration::from_nanos(age_ns));
+}
+
+/// Whether the watch has sent motion or pulse data within the last two time-sync periods.
+fn streaming_recently(last_sensor_data: Option<Instant>) -> bool {
+    last_sensor_data.is_some_and(|at| at.elapsed() < TIME_SYNC_INTERVAL * 2)
+}
+
 fn handle_inbound(
     bytes: &[u8],
     last_sequence: &mut Option<u64>,
@@ -1340,6 +1386,7 @@ fn handle_inbound(
 
     match envelope.decode() {
         Ok(WatchInboundMessage::Orientation(sample)) => {
+            note_delay(shared, clock_offset_samples, sample.timestamp_ns);
             let _ = shared.events.send(WatchEvent::Orientation(sample));
         }
         Ok(WatchInboundMessage::Heartbeat(sample)) => {
@@ -1357,6 +1404,20 @@ fn handle_inbound(
         }
         Ok(WatchInboundMessage::PpgBatch(sample)) => {
             let _ = shared.events.send(WatchEvent::Ppg(sample));
+        }
+        Ok(WatchInboundMessage::SensorBatch(batch)) => {
+            // Its newest motion sample is the one the delay is about: the older ones waited for the batch on purpose.
+            if let Some(newest) = batch.orientations.last() {
+                note_delay(shared, clock_offset_samples, newest.timestamp_ns);
+            }
+            // Motion first, then pulse: the same events, in the same order of time, as when each
+            // arrived on its own.
+            for sample in batch.orientations {
+                let _ = shared.events.send(WatchEvent::Orientation(sample));
+            }
+            if let Some(sample) = batch.ppg {
+                let _ = shared.events.send(WatchEvent::Ppg(sample));
+            }
         }
         Ok(WatchInboundMessage::PpgStatus(sample)) => {
             let _ = shared.events.send(WatchEvent::PpgStatusUpdated(sample));
@@ -1462,7 +1523,7 @@ fn now_ns() -> u64 {
 mod tests {
     use super::*;
     use serde_json::json;
-    use spatial_protocol::{WATCH_ORIENTATION_TYPE, WATCH_PROTOCOL_VERSION};
+    use spatial_protocol::WATCH_PROTOCOL_VERSION;
 
     fn shared_state() -> Arc<SharedState> {
         let (events, _) = broadcast::channel(16);
@@ -1894,6 +1955,29 @@ mod tests {
                 "the watch's message that arrived during the slow write was never read: {other:?}"
             ),
         }
+    }
+
+    #[test]
+    fn motion_and_pulse_messages_count_as_streaming_and_others_do_not() {
+        let message = |kind: &str| {
+            format!(
+                r#"{{"type":"{kind}","version":1,"deviceId":"w","sequence":1,"timestampNs":1,"payload":{{}}}}"#
+            )
+        };
+        assert!(carries_sensor_data(
+            message(WATCH_ORIENTATION_TYPE).as_bytes()
+        ));
+        assert!(carries_sensor_data(
+            message(WATCH_PPG_BATCH_TYPE).as_bytes()
+        ));
+        assert!(!carries_sensor_data(message("watch.heartbeat").as_bytes()));
+        assert!(!carries_sensor_data(message("watch.wear_state").as_bytes()));
+        assert!(!carries_sensor_data(b"not json"));
+        assert!(!streaming_recently(None));
+        assert!(streaming_recently(Some(Instant::now())));
+        assert!(!streaming_recently(Some(
+            Instant::now() - TIME_SYNC_INTERVAL * 3
+        )));
     }
 
     #[test]

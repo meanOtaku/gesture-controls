@@ -66,6 +66,38 @@ describe("camera marks written live into the session", () => {
     expect(second.startRawRow).toBeGreaterThanOrEqual(first.endRawRow as number);
   });
 
+  it("ends the mark where the gesture ended, not where the camera let go after its grace and latency", () => {
+    rows(1, 2);
+    telemetryStore.setTimelineLabel("pinch", "camera_proposal");
+    rows(3, 5); // rows 2..4, arriving at 1030..1050
+    const ended = clock - 19; // the gesture ended at 1031; the camera is only now sure
+    rows(6, 7);
+    expect(telemetryStore.closeTimelineLabelAt("pinch", ended)).toBe(true);
+    telemetryStore.stopDatasetRecording();
+    // Rows that arrived after the gesture ended (1040 on) are no longer labelled.
+    expect(labelsOf(telemetryStore.generateDatasetCsv())).toEqual(["", "", "pinch", "", "", "", ""]);
+  });
+
+  it("closes only the label it is asked to close", () => {
+    rows(1, 2);
+    telemetryStore.setTimelineLabel("snap");
+    expect(telemetryStore.closeTimelineLabelAt("pinch", clock)).toBe(false);
+    expect(telemetryStore.getActiveTimelineLabel()).toBe("snap");
+  });
+
+  it("keeps a mark's start on the right row when a delayed sample is inserted before it", () => {
+    rows(1, 5); // rows 0..4 (sequence 1..5), arriving at 1010..1050
+    const began = clock - 19; // began between the arrivals of sequence 3 and 4
+    // A sample older than all of them arrives late and is placed first, moving every row one place on.
+    clock += 1;
+    telemetryStore.ingestWatchOrientation(sample(0));
+    telemetryStore.setTimelineLabel("pinch", "camera_proposal", began);
+    rows(6, 6);
+    telemetryStore.stopDatasetRecording();
+    // Sequence 0..6 in time order; the mark still starts at sequence 4, the first row that arrived after it began.
+    expect(labelsOf(telemetryStore.generateDatasetCsv())).toEqual(["", "", "", "", "pinch", "pinch", "pinch"]);
+  });
+
   it("still exports the label a row was recorded with when no interval covers it", () => {
     rows(1, 1);
     telemetryStore.setTimelineLabel("snap");

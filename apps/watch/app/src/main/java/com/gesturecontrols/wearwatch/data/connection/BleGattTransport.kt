@@ -85,9 +85,11 @@ class BleGattTransport(
     @Volatile private var mtu = DEFAULT_MTU
 
     /** Fragments waiting on [BluetoothGattServerCallback.onNotificationSent]. */
-    private val outbound = ArrayDeque<ByteArray>()
+    private val outbound = OutboundQueue(MAX_QUEUED_FRAGMENTS)
     private var notificationInFlight = false
-    private var droppedBacklogs = 0
+    /** Old messages dropped to keep the stream live, not yet reported, and when that was last reported. */
+    private var unreportedDrops = 0
+    private var lastDropReportMs = 0L
     private var refusedNotifications = 0
 
     /**
@@ -205,17 +207,16 @@ class BleGattTransport(
         val fragments = BleFraming.fragment(message.toByteArray(Charsets.UTF_8), BleFraming.attPayloadFor(mtu))
         if (fragments == null) return false
         synchronized(outbound) {
-            // Bounded queue: telemetry is time-sensitive, so a stalled link
-            // drops a backlog rather than growing without limit. The whole
-            // backlog goes at once — dropping the *oldest* fragments would
-            // leave a half-sent envelope at the head and desync the desktop's
-            // reassembler, which is worse than losing the backlog outright.
-            if (outbound.size + fragments.size > MAX_QUEUED_FRAGMENTS) {
-                droppedBacklogs++
-                LinkLog.add("dropped ${outbound.size} queued fragments (#$droppedBacklogs, MTU $mtu): the desktop is not keeping up")
-                outbound.clear()
+            // Telemetry is only useful fresh: when the link falls behind, the oldest whole messages that have not
+            // started sending give way (see OutboundQueue), instead of a backlog growing for seconds and then going
+            // all at once.
+            unreportedDrops += outbound.add(fragments)
+            val now = SystemClock.elapsedRealtime()
+            if (unreportedDrops > 0 && now - lastDropReportMs >= DROP_REPORT_INTERVAL_MS) {
+                LinkLog.add("the link fell behind: dropped $unreportedDrops old messages to keep the stream live (MTU $mtu)")
+                unreportedDrops = 0
+                lastDropReportMs = now
             }
-            fragments.forEach { outbound.addLast(it) }
         }
         pumpOutbound()
         return true
@@ -470,7 +471,7 @@ class BleGattTransport(
         val frame = synchronized(outbound) {
             if (notificationInFlight || outbound.isEmpty()) return
             notificationInFlight = true
-            outbound.pollFirst()
+            outbound.poll()
         } ?: return
         val sent = runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -705,11 +706,13 @@ class BleGattTransport(
         private const val WATCHDOG_INTERVAL_MS = 5_000L
 
         /**
-         * Roughly two seconds of orientation frames at 50Hz and the default
-         * MTU. Past this the desktop is not keeping up and stale motion is
-         * worthless anyway.
+         * About half a second of telemetry at a 517-byte MTU (combined messages are one or two fragments each). Past
+         * this the link is behind, and the oldest waiting messages are dropped: stale motion is worthless.
          */
-        private const val MAX_QUEUED_FRAGMENTS = 512
+        private const val MAX_QUEUED_FRAGMENTS = 12
+
+        /** Drops to stay live are reported in the link log at most this often. */
+        private const val DROP_REPORT_INTERVAL_MS = 5_000L
 
         /** Requested at runtime on API 31+; see [missingPermissions]. */
         val REQUIRED_RUNTIME_PERMISSIONS = listOf(

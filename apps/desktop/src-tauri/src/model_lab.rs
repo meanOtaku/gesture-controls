@@ -458,14 +458,33 @@ pub(crate) fn ingest_folder(
     store_pair(app, runtime, name, pair, None, None)
 }
 
-/// Whether a recording already stored holds exactly this data (so adding it again would only duplicate it).
+/// Whether a recording already stored holds exactly this data (so adding it again would only duplicate it). Compares like
+/// with like: the two files' contents, whatever identity a converted folder keeps, and a single file's text either as text
+/// or as the pair it splits into.
 fn already_holds(dir: &std::path::Path, id: &str, pair: &Pair, legacy_text: Option<&str>) -> bool {
     let path = dataset_csv_path(dir, id);
+    let incoming = dataset_files::pair_sha(&pair.ppg_csv, &pair.imu_csv);
     if path.is_dir() {
-        return dataset_sha(&path)
-            .is_ok_and(|sha| sha == dataset_files::pair_sha(&pair.ppg_csv, &pair.imu_csv));
+        let read = |name: &str| fs::read_to_string(path.join(name)).ok();
+        let same_files = read(dataset_files::PPG_FILE)
+            .zip(read(dataset_files::IMU_FILE))
+            .is_some_and(|(ppg, imu)| dataset_files::pair_sha(&ppg, &imu) == incoming);
+        // A folder converted from a single file also holds that file's data.
+        let same_original = legacy_text.is_some_and(|text| {
+            read(dataset_files::META_FILE)
+                .and_then(|meta| serde_json::from_str::<Meta>(&meta).ok())
+                .and_then(|meta| meta.original_sha256)
+                .is_some_and(|original| original == model_lab_core::sha256_hex(text.as_bytes()))
+        });
+        return same_files || same_original;
     }
-    legacy_text.is_some_and(|text| fs::read_to_string(&path).is_ok_and(|saved| saved == text))
+    let Ok(saved) = fs::read_to_string(&path) else {
+        return false;
+    };
+    legacy_text.is_some_and(|text| saved == text)
+        || dataset_files::split_legacy(&saved).is_ok_and(|stored| {
+            dataset_files::pair_sha(&stored.ppg_csv, &stored.imu_csv) == incoming
+        })
 }
 
 /// Stores a validated pair as a new recording: its labels must exist, it is written whole or not at all, and it takes the next
@@ -745,8 +764,30 @@ fn convert_one(dir: &std::path::Path, id: &str) -> Result<GapReport, String> {
             pair.ppg_rows, pair.imu_rows
         ));
     }
+    // A folder can be left from an earlier attempt whose index update failed; the index still says this recording is the
+    // single file, so that file decides. A folder that already holds exactly this conversion is kept; any other is replaced.
+    let target = dir.join(id);
+    if target.is_dir() {
+        if holds_conversion(&target, &pair, &original) {
+            return Ok(pair.gaps);
+        }
+        fs::remove_dir_all(&target)
+            .map_err(|e| format!("could not replace a folder left by an earlier attempt: {e}"))?;
+    }
     write_folder(dir, id, &pair, Some(original))?;
     Ok(pair.gaps)
+}
+
+/// Whether `folder` holds `pair` converted from the single file whose hash is `original`.
+fn holds_conversion(folder: &std::path::Path, pair: &Pair, original: &str) -> bool {
+    let read = |name: &str| fs::read_to_string(folder.join(name)).ok();
+    let meta_matches = read(dataset_files::META_FILE)
+        .and_then(|text| serde_json::from_str::<Meta>(&text).ok())
+        .and_then(|meta| meta.original_sha256)
+        .is_some_and(|sha| sha == original);
+    meta_matches
+        && read(dataset_files::PPG_FILE).as_deref() == Some(pair.ppg_csv.as_str())
+        && read(dataset_files::IMU_FILE).as_deref() == Some(pair.imu_csv.as_str())
 }
 
 /// Every label on any imported recording.
@@ -1104,6 +1145,56 @@ mod tests {
         let other =
             dataset_files::split_legacy(&LEGACY.replace(",10,20,30,", ",10,20,31,")).unwrap();
         assert!(!already_holds(&dir, &id, &other, None));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_converted_recording_is_found_again_by_its_files_and_by_the_file_it_was_made_from() {
+        // A converted folder keeps the old file's identity; adding the same data again, as a pair or as that old file, must
+        // still be seen as a duplicate.
+        let dir = temp_dir("converted-duplicate");
+        let id = Uuid::new_v4().to_string();
+        fs::write(dir.join(format!("{id}.csv")), LEGACY).unwrap();
+        convert_one(&dir, &id).unwrap();
+        let pair = dataset_files::split_legacy(LEGACY).unwrap();
+        assert!(already_holds(&dir, &id, &pair, None));
+        assert!(already_holds(&dir, &id, &pair, Some(LEGACY)));
+        let other =
+            dataset_files::split_legacy(&LEGACY.replace(",10,20,30,", ",10,20,31,")).unwrap();
+        assert!(!already_holds(&dir, &id, &other, None));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_conversion_interrupted_before_the_index_was_saved_can_be_run_again() {
+        let dir = temp_dir("retry-conversion");
+        let id = Uuid::new_v4().to_string();
+        fs::write(dir.join(format!("{id}.csv")), LEGACY).unwrap();
+        // The first attempt wrote the folder; saving the index then failed, so the file is still the recording.
+        convert_one(&dir, &id).unwrap();
+        assert!(dir.join(&id).is_dir() && dir.join(format!("{id}.csv")).is_file());
+        assert!(
+            convert_one(&dir, &id).is_ok(),
+            "the retry reuses the finished folder"
+        );
+        // A folder that does not match the file (left by something else) is replaced from the file.
+        fs::write(dir.join(&id).join(dataset_files::PPG_FILE), "stale").unwrap();
+        convert_one(&dir, &id).unwrap();
+        let pair = dataset_files::split_legacy(LEGACY).unwrap();
+        assert_eq!(
+            fs::read_to_string(dir.join(&id).join(dataset_files::PPG_FILE)).unwrap(),
+            pair.ppg_csv
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_single_file_recording_is_found_again_when_the_same_data_comes_as_a_pair() {
+        let dir = temp_dir("legacy-duplicate");
+        let id = Uuid::new_v4().to_string();
+        fs::write(dir.join(format!("{id}.csv")), LEGACY).unwrap();
+        let pair = dataset_files::split_legacy(LEGACY).unwrap();
+        assert!(already_holds(&dir, &id, &pair, None));
         let _ = fs::remove_dir_all(&dir);
     }
 

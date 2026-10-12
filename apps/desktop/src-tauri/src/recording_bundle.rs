@@ -2627,7 +2627,8 @@ pub fn set_interval_curation_status(
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CameraEvidence {
-    pub hand_landmarks: String,
+    /// The first camera's landmarks; absent when only the second camera recorded.
+    pub hand_landmarks: Option<String>,
     /// The second camera's landmarks, when the recording used two cameras.
     pub hand_landmarks_second: Option<String>,
     pub clock_sync: String,
@@ -2656,11 +2657,16 @@ pub fn get_recording_camera_evidence(
     app: AppHandle,
 ) -> Result<Option<CameraEvidence>, String> {
     validate_recording_id(&recording_id)?;
-    let dir = recording_bundles_dir(&app)?.join(&recording_id);
-    let Ok(hand_landmarks) = fs::read_to_string(dir.join(HAND_LANDMARKS_FILE_NAME)) else {
-        return Ok(None);
-    };
+    camera_evidence_in(&recording_bundles_dir(&app)?.join(&recording_id))
+}
+
+/// The camera evidence saved in one recording's folder: `None` only when neither camera's landmarks are there.
+fn camera_evidence_in(dir: &Path) -> Result<Option<CameraEvidence>, String> {
+    let hand_landmarks = fs::read_to_string(dir.join(HAND_LANDMARKS_FILE_NAME)).ok();
     let hand_landmarks_second = fs::read_to_string(dir.join(HAND_LANDMARKS_SECOND_FILE_NAME)).ok();
+    if hand_landmarks.is_none() && hand_landmarks_second.is_none() {
+        return Ok(None);
+    }
     let clock_sync = fs::read_to_string(dir.join(CLOCK_SYNC_FILE_NAME)).unwrap_or_default();
     let raw = fs::read_to_string(dir.join(RAW_CSV_FILE_NAME)).map_err(|error| error.to_string())?;
     Ok(Some(CameraEvidence {
@@ -2911,6 +2917,44 @@ fn write_bundle_with_evidence(
 mod tests {
     use super::*;
     use uuid::Uuid;
+
+    #[test]
+    fn camera_evidence_from_only_the_second_camera_is_still_evidence() {
+        let dir =
+            std::env::temp_dir().join(format!("recording-bundle-evidence-{}", Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join(RAW_CSV_FILE_NAME),
+            "timestamp_ns,sequence\n100,1\n",
+        )
+        .unwrap();
+        assert!(
+            camera_evidence_in(&dir).unwrap().is_none(),
+            "no camera at all"
+        );
+        fs::write(
+            dir.join(HAND_LANDMARKS_SECOND_FILE_NAME),
+            "frame_index,capture_ms\n",
+        )
+        .unwrap();
+        let evidence = camera_evidence_in(&dir)
+            .unwrap()
+            .expect("the second camera's landmarks count");
+        assert!(evidence.hand_landmarks.is_none() && evidence.hand_landmarks_second.is_some());
+        fs::write(
+            dir.join(HAND_LANDMARKS_FILE_NAME),
+            "frame_index,capture_ms\n",
+        )
+        .unwrap();
+        assert!(
+            camera_evidence_in(&dir)
+                .unwrap()
+                .unwrap()
+                .hand_landmarks
+                .is_some()
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     fn sample_metadata(id: &str) -> RecordingMetadata {
         RecordingMetadata {

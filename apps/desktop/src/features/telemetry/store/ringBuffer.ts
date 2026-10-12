@@ -42,6 +42,18 @@ export class RingBuffer<T> {
   }
 
   /** Upper-bound binary search: first logical index whose `key` exceeds `target`, assuming the buffer is already sorted ascending by `key`. Ties land after existing equal-key entries (stable). */
+  /** Index of the first element whose key is `>= target`, for a buffer kept sorted by `key`. */
+  lowerBound(key: (item: T) => number, target: number): number {
+    let lo = 0;
+    let hi = this.count;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (key(this.get(mid) as T) < target) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  }
+
   upperBound(key: (item: T) => number, target: number): number {
     let lo = 0;
     let hi = this.count;

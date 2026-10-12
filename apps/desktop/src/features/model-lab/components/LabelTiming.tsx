@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
@@ -27,9 +27,17 @@ export const TIMING_MATTERS_SPREAD = 0.03;
 export function LabelTiming({ request, offset, onOffset, disabled }: { request: TrainRequest | null; offset: number; onOffset: (ms: number) => void; disabled: boolean }) {
   const uid = useId();
   const [text, setText] = useState(String(offset));
-  const [scores, setScores] = useState<OffsetScore[] | null>(null);
-  const [checking, setChecking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // A check answers one question: these recordings, roles, target and design, whatever offset is set. Its answer is kept
+  // with that question and shown only while it is still the one being asked, and a late answer to an old one is dropped.
+  const question = request === null ? null : JSON.stringify({ ...request, labelOffsetMs: undefined });
+  const asking = useRef(question);
+  asking.current = question;
+  const [answer, setAnswer] = useState<{ question: string; scores: OffsetScore[] | null; error: string | null } | null>(null);
+  const [checkingFor, setCheckingFor] = useState<string | null>(null);
+  const current = answer !== null && answer.question === question ? answer : null;
+  const scores = current?.scores ?? null;
+  const error = current?.error ?? null;
+  const checking = checkingFor !== null && checkingFor === question;
 
   useEffect(() => setText(String(offset)), [offset]);
 
@@ -42,19 +50,20 @@ export function LabelTiming({ request, offset, onOffset, disabled }: { request: 
   };
 
   const check = async () => {
-    if (request === null) return;
-    setChecking(true);
-    setError(null);
+    if (request === null || question === null) return;
+    const asked = question;
+    setCheckingFor(asked);
+    setAnswer(null);
+    let reply: { scores: OffsetScore[] | null; error: string | null };
     try {
       // Whatever offset is set now is not part of the question: every offset is tried.
       const found = await invoke<OffsetScore[]>("suggest_label_offset", { request: { ...request, labelOffsetMs: undefined } });
-      setScores(Array.isArray(found) ? found : []);
+      reply = { scores: Array.isArray(found) ? found : [], error: null };
     } catch (err) {
-      setError(String(err));
-      setScores(null);
-    } finally {
-      setChecking(false);
+      reply = { scores: null, error: String(err) };
     }
+    setCheckingFor((now) => (now === asked ? null : now));
+    if (asking.current === asked) setAnswer({ question: asked, ...reply });
   };
 
   const verdict = scores ? bestOffset(scores) : null;

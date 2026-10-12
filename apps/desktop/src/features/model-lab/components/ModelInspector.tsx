@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
@@ -60,7 +60,11 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
   const [editing, setEditing] = useState(false);
   const [edits, setEdits] = useState<Edit[]>([]);
   const [selection, setSelection] = useState<Selection | null>(null);
-  const [saving, setSaving] = useState(false);
+  // The model a save was started for: its answer only touches the editor if that model is still the one open.
+  const [savingFor, setSavingFor] = useState<string | null>(null);
+  const saving = savingFor === id;
+  const openId = useRef(id);
+  openId.current = id;
   const [editMessage, setEditMessage] = useState<string | null>(null);
   const [fineTune, setFineTune] = useState<FineTune | null>(null);
 
@@ -104,18 +108,24 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
   }, [compareId]);
 
   const saveEdits = async () => {
-    setSaving(true);
+    const saved = id;
+    setSavingFor(saved);
     setEditMessage(null);
+    let outcome: { ok: boolean; message: string };
     try {
-      await invoke("start_label_edit", { id, edits, ...(fineTune ? { fineTune } : {}) });
-      setEditMessage(`Started. The ${fineTune ? "fine-tuned" : "edited"} model is being scored and will appear as a new draft under Label models when it is done; the progress is under Train a model.`);
+      await invoke("start_label_edit", { id: saved, edits, ...(fineTune ? { fineTune } : {}) });
+      outcome = { ok: true, message: `Started. The ${fineTune ? "fine-tuned" : "edited"} model is being scored and will appear as a new draft under Label models when it is done; the progress is under Train a model.` };
+    } catch (err) {
+      outcome = { ok: false, message: String(err) };
+    }
+    setSavingFor((now) => (now === saved ? null : now));
+    // Another model was opened meanwhile: its edits are its own, so this answer leaves them alone.
+    if (openId.current !== saved) return;
+    setEditMessage(outcome.message);
+    if (outcome.ok) {
       setEdits([]);
       setFineTune(null);
       setSelection(null);
-    } catch (err) {
-      setEditMessage(String(err));
-    } finally {
-      setSaving(false);
     }
   };
   const switchedOff = new Set(edits.flatMap((edit) => (edit.kind === "disableInput" ? [edit.input] : [])));

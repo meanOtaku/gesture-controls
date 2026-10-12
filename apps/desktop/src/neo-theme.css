@@ -313,6 +313,8 @@ html[data-theme="neo"] .device-tick { stroke: var(--ink-3); }
 html[data-theme="neo"] .device-pointer { stroke: var(--pink); }
 html[data-theme="neo"] .device-handle { fill: var(--pink); stroke: var(--ink); stroke-width: 2; }
 html[data-theme="neo"] .device-slider { accent-color: var(--pink); }
+html[data-theme="neo"] .settings-nav button { border: 2px solid var(--ink); border-radius: 999px; background: var(--surface); color: var(--ink); font-weight: 600; }
+html[data-theme="neo"] .settings-nav button[aria-current="true"] { background: var(--yellow); color: var(--ink); box-shadow: 2px 2px 0 var(--ink); }
 html[data-theme="neo"] .settings-footer { background: var(--yellow); border: var(--neo-border); border-radius: 12px; box-shadow: var(--neo-shadow); }
 html[data-theme="neo"] .viewer-group { border-top: 2px dashed var(--line-soft); }
 html[data-theme="neo"] .viewer-empty { border: 2px dashed var(--ink); border-radius: 12px; background: var(--surface); }

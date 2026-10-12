@@ -12,7 +12,6 @@ import { AgreementPanel } from "../../gestureLibrary/AgreementPanel";
 import { cameraAssist } from "../../gestureLibrary/cameraAssist";
 import { definitionsForLabel, type GestureDefinition } from "../../gestureLibrary/definition";
 import { listGestureDefinitions } from "../../gestureLibrary/gestureLibraryApi";
-import { useCameraMarking } from "../../gestureLibrary/useCameraMarking";
 import { useLiveGestures } from "../../gestureLibrary/useLiveGestures";
 import { useTelemetryExport } from "../../telemetry/hooks/useTelemetryExport";
 import { telemetryStore } from "../../telemetry/store/telemetryStore";
@@ -79,7 +78,6 @@ export function CorrectionSession({
   const states = useLiveGestures(mine, cam, tracker, cam2);
   const heldNow = mine.map((definition) => states.get(definition.id)).filter((state) => state?.held);
   const seen = heldNow.length > 0;
-  const sinceMs = seen ? Math.min(...heldNow.map((state) => state?.sinceMs ?? Infinity)) : null;
 
   const [started, setStarted] = useState(false); // this component started the recording now under way
   const [phase, setPhase] = useState<"idle" | "saving">("idle");
@@ -117,7 +115,6 @@ export function CorrectionSession({
   }, [choices.map((l) => l.id).join(",")]);
 
   const recording = started && busyElsewhere;
-  useCameraMarking(recording ? info.label : null, recordingState, seen, sinceMs);
   // If the recording was ended elsewhere (or discarded), this session is over.
   useEffect(() => {
     if (started && !busyElsewhere && phase === "idle") setStarted(false);
@@ -156,7 +153,7 @@ export function CorrectionSession({
       setError("The recording could not start.");
       return;
     }
-    cameraAssist.arm(info.label);
+    cameraAssist.arm(info.label, mine);
     tracker.reset();
     setStarted(true);
   };
@@ -232,8 +229,9 @@ export function CorrectionSession({
         <p className="field-hint">{candidates.length === 0 ? "No other model for this label to compare yet: fine-tune one, then come back." : "The chosen model watches the same live data in Monitor, so it can only report, never act, and is compared with the camera next to the active model. Nothing is switched on until you approve and activate it under Label models."}</p>
       </div>
 
-      {blocker && <p className="hint" role="status">{blocker}</p>}
-      {!blocker && (
+      {/* What is missing only stops a new round from starting; a round under way can always be stopped or discarded. */}
+      {blocker && <p className="hint" role="status">{recording ? "A check above is no longer met (the camera went off, say), so nothing is being marked now. Fix it to carry on, or stop or discard the round." : blocker}</p>}
+      {(recording || !blocker) && (
         <div className="flex flex-wrap items-center gap-2">
           {!recording && <Button type="button" disabled={phase === "saving" || restLabel === ""} onClick={start}>Start recording a round</Button>}
           {recording && (
@@ -246,7 +244,7 @@ export function CorrectionSession({
           )}
         </div>
       )}
-      {recording && <p className="field-hint">Stay on this page while recording: leaving it stops the camera from marking.</p>}
+      {recording && <p className="field-hint">The camera keeps marking if you leave this page, but the live check against the model runs only while it is open.</p>}
       {message && <Alert role="status"><AlertDescription>{message}</AlertDescription></Alert>}
       {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
       <AgreementPanel tracker={tracker} definitions={mine} status={status} cameraOn={camOn} candidateId={candidate} hideUntilReady />

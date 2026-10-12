@@ -7,6 +7,7 @@ import { AppearanceSection } from "./AppearanceSection";
 import { BuiltInGesturesSection } from "./BuiltInGesturesSection";
 import { HeadphonesSettingsSection } from "./HeadphonesSettingsSection";
 import { RecordingGraphSettingsSection } from "./RecordingGraphSettingsSection";
+import { SettingsGroup, SettingsNav } from "./SettingsGroups";
 import { PitchSettings } from "./PitchSettings";
 import { RollSettings } from "./RollSettings";
 import { ShakeSettings } from "./ShakeSettings";
@@ -14,6 +15,7 @@ import { SwipeSettings } from "./SwipeSettings";
 import { TapSettings } from "./TapSettings";
 import { WatchHealthDeliverySettingsSection } from "./WatchHealthDeliverySettingsSection";
 import { WatchRateSettingsSection } from "./WatchRateSettingsSection";
+import { WatchCombinedMessagesSection } from "./WatchCombinedMessagesSection";
 import { WatchSensorSwitchSection } from "./WatchSensorSwitchSection";
 import { WatchOrientationSettings } from "./WatchOrientationSettings";
 import { WatchTransportSection } from "./WatchTransportSection";
@@ -95,7 +97,7 @@ export function Settings({
         <div>
           <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Settings</h1>
-          <p className="subtitle">Edit acceptance, recording, and sampling rates, then apply them together without restarting. Sensor switches remain immediate.</p>
+          <p className="subtitle">Grouped by what they affect. Typed values are applied together with Apply changes, without restarting; switches and choices take effect at once.</p>
         </div>
       </header>
 
@@ -105,45 +107,48 @@ export function Settings({
         </Alert>
       )}
 
-      <AppearanceSection />
+      <SettingsNav />
 
       <SettingsFormProvider value={drafts}>
-        <form noValidate aria-label="Settings" className="flex flex-col gap-8" onSubmit={submit}>
-          <HeadphonesSettingsSection enabled={current.headphonesEnabled} onToggleEnabled={toggleHeadphonesEnabled} />
+        <form noValidate aria-label="Settings" className="flex flex-col gap-10" onSubmit={submit}>
+          <SettingsGroup id="watch">
+            <WatchTransportSection
+              selected={current.watchTransport}
+              onSelect={(watchTransport) => onUpdate({ ...current, watchTransport })}
+            />
+            <WatchOrientationSettings
+              crownSide={current.crownSide}
+              wrist={current.watchWrist}
+              onCrownSideChange={(crownSide) => onUpdate({ ...current, crownSide })}
+              onWristChange={(watchWrist) => onUpdate({ ...current, watchWrist })}
+            />
+            <WatchSensorSwitchSection watchSensorsEnabled={current.watchSensorsEnabled} onToggle={toggleWatchSensor} />
+            <WatchRateSettingsSection />
+            <WatchHealthDeliverySettingsSection />
+          </SettingsGroup>
 
-          <WristRotationSettings />
+          <SettingsGroup id="gestures">
+            <BuiltInGesturesSection gestures={current.heuristicGestures} onToggle={toggleBuiltInGesture} />
+            <ShakeSettings detections={shakeDetections} />
+            <SwipeSettings lastSwipe={lastSwipe} />
+            <TapSettings lastTap={lastTap} />
+            <RollSettings lastRoll={lastRoll} />
+            <PitchSettings lastPitch={lastPitch} />
+            <WristRotationSettings />
+          </SettingsGroup>
 
-          <ShakeSettings detections={shakeDetections} />
+          <SettingsGroup id="headphones">
+            <HeadphonesSettingsSection enabled={current.headphonesEnabled} onToggleEnabled={toggleHeadphonesEnabled} />
+          </SettingsGroup>
 
-          <PitchSettings lastPitch={lastPitch} />
+          <SettingsGroup id="recording">
+            <RecordingGraphSettingsSection />
+          </SettingsGroup>
 
-          <RollSettings lastRoll={lastRoll} />
-
-          <TapSettings lastTap={lastTap} />
-
-          <BuiltInGesturesSection gestures={current.heuristicGestures} onToggle={toggleBuiltInGesture} />
-
-          <WatchOrientationSettings
-            crownSide={current.crownSide}
-            wrist={current.watchWrist}
-            onCrownSideChange={(crownSide) => onUpdate({ ...current, crownSide })}
-            onWristChange={(watchWrist) => onUpdate({ ...current, watchWrist })}
+          <WatchCombinedMessagesSection
+            enabled={current.watchCombinedSensorMessages}
+            onToggle={() => onUpdate({ ...current, watchCombinedSensorMessages: !current.watchCombinedSensorMessages })}
           />
-
-          <SwipeSettings lastSwipe={lastSwipe} />
-
-          <RecordingGraphSettingsSection />
-
-          <WatchTransportSection
-            selected={current.watchTransport}
-            onSelect={(watchTransport) => onUpdate({ ...current, watchTransport })}
-          />
-
-          <WatchRateSettingsSection />
-
-          <WatchHealthDeliverySettingsSection />
-
-          <WatchSensorSwitchSection watchSensorsEnabled={current.watchSensorsEnabled} onToggle={toggleWatchSensor} />
 
           <ApplySettingsFooter
             dirtyCount={drafts.dirtyCount}
@@ -155,6 +160,11 @@ export function Settings({
           />
         </form>
       </SettingsFormProvider>
+
+      {/* Outside the form: a theme applies at once, with nothing to apply or discard. */}
+      <SettingsGroup id="appearance">
+        <AppearanceSection />
+      </SettingsGroup>
     </main>
   );
 }

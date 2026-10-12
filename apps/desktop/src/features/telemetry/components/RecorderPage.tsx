@@ -70,7 +70,7 @@ export function RecorderPage() {
         getDatasetRows={() => telemetryStore.getDatasetRows()}
         timelineIntervals={telemetryStore.getTimelineIntervals()}
       />
-      <CameraAssistCard selectedLabel={selectedLabel} recording={datasetRecording} recordingState={datasetRecordingState} desktopAvailable={desktopAvailable} />
+      <CameraAssistCard selectedLabel={selectedLabel} recording={datasetRecording} desktopAvailable={desktopAvailable} />
       <CameraCapturePanel />
     </div>
   </main>;

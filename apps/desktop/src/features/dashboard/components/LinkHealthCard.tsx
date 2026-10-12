@@ -66,6 +66,7 @@ export function LinkHealthPanel({ diagnostics, nowUnixMs, onCopy }: LinkHealthPa
           <Metric label="Last message" value={formatAgo(diagnostics.lastMessageUnixMs, nowUnixMs)} />
           <Metric label="Drops / sessions" value={`${diagnostics.drops} / ${diagnostics.sessions}`} />
           <Metric label="Write latency (last / worst)" value={`${formatMs(diagnostics.writeLastMs)} / ${formatMs(diagnostics.writeMaxMs)}`} />
+          <Metric label="Sample delay (typical / worst 5%)" value={diagnostics.delayP50Ms == null ? "—" : `${formatMs(diagnostics.delayP50Ms)} / ${formatMs(diagnostics.delayP95Ms ?? null)}`} />
           <Metric label="Longest silence" value={formatMs(diagnostics.maxGapMs)} />
           <Metric label="MTU" value={diagnostics.mtu ? `${diagnostics.mtu} bytes` : "—"} />
           <Metric label="Messages" value={String(diagnostics.messagesReceived)} />

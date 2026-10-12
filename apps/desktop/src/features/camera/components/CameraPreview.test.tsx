@@ -34,4 +34,25 @@ describe("CameraPreview", () => {
     expect(second.container.querySelector(".camera-stage")?.contains(video)).toBe(true);
     expect(play).toHaveBeenCalled();
   });
+
+  it("goes back to the page still showing it when a second preview of the same camera closes", () => {
+    const video = document.createElement("video");
+    const camera = { video } as unknown as CameraController;
+    const page = render(<CameraPreview camera={camera} state={state} hidden={false} />);
+    const quick = render(<CameraPreview camera={camera} state={state} hidden={false} />);
+    expect(quick.container.querySelector(".camera-stage")?.contains(video)).toBe(true);
+    quick.unmount(); // the quick preview closes; the Recorder page is still open
+    expect(page.container.querySelector(".camera-stage")?.contains(video)).toBe(true);
+    page.unmount();
+    expect(video.parentElement?.hasAttribute("data-camera-holder")).toBe(true);
+  });
+
+  it("stays with the newest preview when an older one closes first", () => {
+    const video = document.createElement("video");
+    const camera = { video } as unknown as CameraController;
+    const page = render(<CameraPreview camera={camera} state={state} hidden={false} />);
+    const quick = render(<CameraPreview camera={camera} state={state} hidden={false} />);
+    page.unmount();
+    expect(quick.container.querySelector(".camera-stage")?.contains(video)).toBe(true);
+  });
 });

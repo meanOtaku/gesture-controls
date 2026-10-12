@@ -98,7 +98,8 @@ export class CameraController {
   /** Pictures sent to a detector on another thread and not yet answered. */
   private inFlight = 0;
   /** Whether a callback for the next picture is already waiting. */
-  private framePending = false;
+  /** The generation that has a frame callback outstanding, if any. Per generation, so a stale one cannot block a new one. */
+  private framePendingFor: number | null = null;
   private frameIndex = 0;
   private lastTimestampMs = -1;
   private lastCaptureMs = 0;
@@ -170,7 +171,7 @@ export class CameraController {
     this.stopEverything();
     const generation = ++this.generation;
     this.inFlight = 0;
-    this.framePending = false;
+    this.framePendingFor = null;
     this.set({ status: "starting", error: null, frame: null, fps: 0, detectMs: 0, deviceId: deviceId ?? this.snapshot.deviceId });
     try {
       const wanted = deviceId ?? this.snapshot.deviceId;
@@ -183,6 +184,7 @@ export class CameraController {
       this.video.srcObject = stream;
       this.video.muted = true;
       await this.video.play();
+      if (generation !== this.generation) return;
       let detector: HandDetector;
       try {
         detector = await this.deps.createDetector();
@@ -196,6 +198,8 @@ export class CameraController {
       const settings = track?.getSettings?.() ?? {};
       this.picture = { width: settings.width ?? this.video.videoWidth, height: settings.height ?? this.video.videoHeight };
       await this.refreshDevices();
+      // Turned off or restarted meanwhile: that newer start owns the status and the frames.
+      if (generation !== this.generation) return;
       this.set({ status: "on", deviceId: settings.deviceId ?? wanted ?? null });
       this.scheduleFrame(generation);
     } catch (error) {
@@ -208,7 +212,7 @@ export class CameraController {
   disable(): void {
     this.generation += 1;
     this.inFlight = 0;
-    this.framePending = false;
+    this.framePendingFor = null;
     this.stopEverything();
     this.detectEma = 0;
     this.set({ status: "off", error: null, frame: null, fps: 0, detectMs: 0, engine: null });
@@ -234,8 +238,8 @@ export class CameraController {
   }
 
   private scheduleFrame(generation: number): void {
-    if (this.framePending) return;
-    this.framePending = true;
+    if (this.framePendingFor === generation) return;
+    this.framePendingFor = generation;
     const video = this.video;
     if (typeof video.requestVideoFrameCallback === "function") {
       video.requestVideoFrameCallback((now, metadata) => this.onFrame(generation, now, metadata?.captureTime));
@@ -245,8 +249,8 @@ export class CameraController {
   }
 
   private onFrame(generation: number, callbackMs: number, captureTime: number | undefined): void {
+    if (this.framePendingFor === generation) this.framePendingFor = null;
     if (generation !== this.generation || !this.detector) return;
-    this.framePending = false;
     const fail = (error: unknown) => {
       if (generation !== this.generation) return;
       this.stopEverything();

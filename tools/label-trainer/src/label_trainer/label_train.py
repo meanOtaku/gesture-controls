@@ -256,6 +256,14 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         raise TrainingRefused(str(refusal)) from refusal
     if "epochs" in params and "epochs" not in (raw.get("network") or {}):
         network = replace(network, epochs=max(5, int(params["epochs"])))  # the older way of asking for fewer rounds
+    if "hidden" in params and "hidden" not in (raw.get("network") or {}):
+        # The older way of asking for a dense shape: a list of layer sizes. A designed network's own layers win.
+        try:
+            sizes = list(params["hidden"])
+            legacy = parse_network({"hidden": [{"units": units} for units in sizes]}, backend)
+        except (NetworkRefused, TypeError) as refusal:
+            raise TrainingRefused(f"params.hidden must be a list of layer sizes: {refusal}") from refusal
+        network = replace(network, hidden=legacy.hidden)
     window = raw.get("window", {})
     window_ms = float(window.get("windowMs", 500))
     pretrained = Path(raw["pretrained"]) if raw.get("pretrained") else None
@@ -495,7 +503,8 @@ def make_model(backend: str, n_features: int, seed: int, params: dict[str, Any],
     if backend == "logreg":
         return Pipeline([("scale", StandardScaler()), ("model", LogisticRegression(max_iter=2000, class_weight="balanced", random_state=seed))])
     if backend == "mlp":
-        hidden = tuple(layer.units for layer in network.hidden) or tuple(params.get("hidden", (32, 16)))
+        # Exactly the layers asked for: none at all is a linear model, as the provenance then says.
+        hidden = tuple(layer.units for layer in network.hidden)
         return Pipeline([("scale", StandardScaler()), ("model", MLPClassifier(hidden_layer_sizes=hidden, max_iter=network.epochs, early_stopping=True, random_state=seed))])
     raise TrainingRefused(f"{backend} is not a scikit-learn backend")
 

@@ -41,6 +41,35 @@ describe("LabelTiming", () => {
     expect(onOffset).toHaveBeenCalledWith(250);
   });
 
+  it("drops a result once the recordings or design change, and ignores an answer to a question no longer asked", async () => {
+    invokeMock.mockResolvedValueOnce(scores([0.7, 0.72, 0.85, 0.74]));
+    const view = render(<LabelTiming request={{ label: "x", datasets: ["a"] } as never} offset={0} onOffset={vi.fn()} disabled={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Check which timing fits" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Use +250 ms" })).toBeTruthy());
+    // Another recording is chosen: the old recommendation no longer applies.
+    view.rerender(<LabelTiming request={{ label: "x", datasets: ["a", "b"] } as never} offset={0} onOffset={vi.fn()} disabled={false} />);
+    expect(screen.queryByRole("button", { name: /^Use / })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Timing check" })).toBeNull();
+    // A check is asked, then the request changes before it answers: the answer is not shown for the new request.
+    let answer: (value: unknown) => void = () => undefined;
+    invokeMock.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+    fireEvent.click(screen.getByRole("button", { name: "Check which timing fits" }));
+    view.rerender(<LabelTiming request={{ label: "x", datasets: ["c"] } as never} offset={0} onOffset={vi.fn()} disabled={false} />);
+    answer(scores([0.7, 0.72, 0.85, 0.74]));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByRole("group", { name: "Timing check" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Check which timing fits" })).not.toBeDisabled();
+  });
+
+  it("keeps a result when only the offset changes", async () => {
+    invokeMock.mockResolvedValueOnce(scores([0.7, 0.72, 0.85, 0.74]));
+    const view = render(<LabelTiming request={{ label: "x", labelOffsetMs: 0 } as never} offset={0} onOffset={vi.fn()} disabled={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Check which timing fits" }));
+    await waitFor(() => expect(screen.getByRole("group", { name: "Timing check" })).toBeTruthy());
+    view.rerender(<LabelTiming request={{ label: "x", labelOffsetMs: 250 } as never} offset={250} onOffset={vi.fn()} disabled={false} />);
+    expect(screen.getByRole("group", { name: "Timing check" })).toBeTruthy();
+  });
+
   it("says the timing barely matters when the scores are flat, and shows a refusal", async () => {
     invokeMock.mockResolvedValueOnce(scores([0.8, 0.81, 0.82, 0.81]));
     render(<LabelTiming request={request} offset={0} onOffset={vi.fn()} disabled={false} />);

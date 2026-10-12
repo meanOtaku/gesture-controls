@@ -10,7 +10,7 @@
 //! sees it. Raw sensor timestamps are never altered: they are checked for order and carried through, and a score is
 //! stamped with the raw timestamp of the newest sample of the model's primary stream.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use model_lab_core::{LabelId, ModelVersionId, StreamSource};
 use pinch_inference::{
@@ -70,6 +70,10 @@ pub enum Rejection {
         actual: f64,
         max_allowed: f64,
     },
+    /// A model that compares the pulse with its recent past was scoring, and that past is gone (a gap in the pulse stream).
+    BaselineUnavailable {
+        baseline_ms: u32,
+    },
     Model(String),
 }
 
@@ -92,6 +96,12 @@ impl std::fmt::Display for Rejection {
                 write!(
                     f,
                     "contact quality {actual} is worse than the allowed {max_allowed}"
+                )
+            }
+            Self::BaselineUnavailable { baseline_ms } => {
+                write!(
+                    f,
+                    "the pulse's last {baseline_ms} ms are missing, so it cannot be compared with its recent past"
                 )
             }
             Self::Model(detail) => write!(f, "model error: {detail}"),
@@ -141,10 +151,14 @@ pub struct LabelPipeline {
     /// The longest history any loaded model needs, so buffers are bounded by what is used.
     retention_ns: u64,
     next_due_ns: BTreeMap<LabelId, u64>,
+    /// Models that have scored since they were loaded or the stream was reset, so a lost baseline is reported for them
+    /// (releasing what they hold) instead of passing as a quiet warm-up.
+    scoring: BTreeSet<LabelId>,
 }
 
-/// The real pulse samples in the `baseline_ms` before `start`, or `None` while there are not enough of them or they do not
-/// reach back to the baseline's start (give or take [`BASELINE_SLACK_MS`]): the same rule the trainer uses to keep a window.
+/// The real pulse samples in the `baseline_ms` before `start` (the window's first sample), or `None` while there are not
+/// enough of them or they do not reach back to the baseline's start (give or take [`BASELINE_SLACK_MS`]): the same rule the
+/// trainer's `baseline_rows` uses to keep a window.
 fn baseline_before(ppg: &VecDeque<PpgSample>, start: u64, baseline_ms: u32) -> Option<PpgBaseline> {
     // Not even that much time has passed since the clock began: nothing to compare with yet.
     let from = start.checked_sub(u64::from(baseline_ms) * NS_PER_MS)?;
@@ -184,6 +198,7 @@ impl LabelPipeline {
             .unwrap_or(0)
             + 1_000 * NS_PER_MS;
         self.next_due_ns.clear();
+        self.scoring.clear();
     }
 
     /// Forgets all buffered telemetry and the ordering state (the watch went away, or the runtime was reset).
@@ -196,6 +211,18 @@ impl LabelPipeline {
         self.orientation_clock.reset();
         self.ppg_clock.reset();
         self.next_due_ns.clear();
+        self.scoring.clear();
+    }
+
+    /// When the window starting at `start` really begins: its first sample of any stream (the trainer's first row).
+    fn first_sample_since(&self, start: u64) -> u64 {
+        self.orientation
+            .iter()
+            .map(|s| s.at_ns)
+            .chain(self.ppg.iter().map(|s| s.at_ns))
+            .filter(|&at| at >= start)
+            .min()
+            .unwrap_or(start)
     }
 
     fn adopt_device(&mut self, device_id: &str) {
@@ -336,14 +363,24 @@ impl LabelPipeline {
             if now_ns < due {
                 continue;
             }
-            match self.score(model, now_ns) {
-                Ok(Some(score)) => scores.push(score),
+            let established = self.scoring.contains(&model.label);
+            match self.score(model, now_ns, established) {
+                Ok(Some(score)) => {
+                    self.scoring.insert(model.label.clone());
+                    scores.push(score);
+                }
                 Ok(None) => continue, // not enough history yet: try again next tick
-                Err(reason) => rejections.push(WindowRejection {
-                    label: model.label.clone(),
-                    model_version: model.version_id.clone(),
-                    reason,
-                }),
+                Err(reason) => {
+                    // Reported once: from here the model warms up again, quietly, until its past is back.
+                    if matches!(reason, Rejection::BaselineUnavailable { .. }) {
+                        self.scoring.remove(&model.label);
+                    }
+                    rejections.push(WindowRejection {
+                        label: model.label.clone(),
+                        model_version: model.version_id.clone(),
+                        reason,
+                    });
+                }
             }
             self.next_due_ns.insert(
                 model.label.clone(),
@@ -353,8 +390,14 @@ impl LabelPipeline {
         (scores, rejections)
     }
 
-    /// `Ok(None)`: the buffers do not yet cover the window.
-    fn score(&self, model: &LoadedModel, now_ns: u64) -> Result<Option<LabelScore>, Rejection> {
+    /// `Ok(None)`: the buffers do not yet cover the window. `established`: the model has been scoring, so a missing baseline
+    /// is a loss to report, not a warm-up.
+    fn score(
+        &self,
+        model: &LoadedModel,
+        now_ns: u64,
+        established: bool,
+    ) -> Result<Option<LabelScore>, Rejection> {
         let window_ns = u64::from(model.input.window_ms) * NS_PER_MS;
         let max_gap_ns = u64::from(model.input.max_gap_ms) * NS_PER_MS;
         let start = now_ns.saturating_sub(window_ns);
@@ -458,10 +501,15 @@ impl LabelPipeline {
         // A model that compares the window's pulse level with the recent past needs that past: the real pulse samples in the
         // `baseline_ms` before the window, reaching back to its start (give or take the slack). Until then it is warming up,
         // not failing: nothing is scored, and nothing is reported.
+        // The past is measured back from the window's first sample of any stream, not from its nominal start: the trainer
+        // reads a recording as one row per sample and anchors on the window's first row, and the two differ whenever the
+        // start falls between samples.
+        let first_sample = self.first_sample_since(start);
         let baseline = match model.baseline_ms.filter(|_| uses_ppg) {
             None => None,
-            Some(baseline_ms) => match baseline_before(&self.ppg, start, baseline_ms) {
+            Some(baseline_ms) => match baseline_before(&self.ppg, first_sample, baseline_ms) {
                 Some(baseline) => Some(baseline),
+                None if established => return Err(Rejection::BaselineUnavailable { baseline_ms }),
                 None => return Ok(None),
             },
         };
@@ -900,5 +948,94 @@ pub(crate) mod tests {
         let rest = mean(4_500, 5_800);
         let held = mean(6_800, 8_400);
         assert!(held > 0.8 && rest < 0.3, "held {held}, rest {rest}");
+    }
+
+    /// Once a model on the recent past is scoring, losing that past is reported (so the runtime releases what the model held)
+    /// once, and the model then warms up again quietly instead of failing on every tick.
+    #[test]
+    fn an_established_model_that_loses_its_baseline_reports_it_once_then_warms_up_again() {
+        use crate::bundle::validate_bundle;
+        use crate::model::tests::active_version;
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/trained_baseline_bundle");
+        let bundle = validate_bundle(&dir, Some(&LabelId::new("pinch").unwrap())).unwrap();
+        let version = active_version(&bundle);
+        let model = LoadedModel::load(bundle, &version).unwrap();
+        let mut pipeline = LabelPipeline::default();
+        pipeline.configure(&[&model]);
+        let feed = |pipeline: &mut LabelPipeline, n: u64| {
+            let at_ns = n * 60 * NS_PER_MS;
+            let batch = WatchPpgBatchSample {
+                device_id: "watch-1".into(),
+                sequence: n,
+                timestamp_ns: at_ns,
+                sample_count: 1,
+                timestamps_ns: vec![at_ns],
+                green: vec![90_000 + (n % 5) as i32 * 50],
+                green_status: vec![0],
+                red: vec![90_000],
+                red_status: vec![0],
+                ir: vec![90_000],
+                ir_status: vec![0],
+            };
+            pipeline.observe_ppg(&batch, at_ns).unwrap();
+            pipeline.evaluate(&[&model], at_ns)
+        };
+        let mut scored = false;
+        let mut n = 0;
+        while !scored {
+            let (scores, rejected) = feed(&mut pipeline, n);
+            assert!(rejected.is_empty());
+            scored = !scores.is_empty();
+            n += 1;
+        }
+        // The past before the window disappears; the window itself is intact.
+        let now_ns = (n - 1) * 60 * NS_PER_MS;
+        let window_start = now_ns - u64::from(model.input.window_ms) * NS_PER_MS;
+        pipeline.ppg.retain(|s| s.at_ns >= window_start);
+        pipeline.next_due_ns.clear();
+        let (scores, rejected) = pipeline.evaluate(&[&model], now_ns);
+        assert!(scores.is_empty());
+        assert!(
+            matches!(rejected.as_slice(), [r] if matches!(r.reason, Rejection::BaselineUnavailable { baseline_ms: 4000 })),
+            "{rejected:?}"
+        );
+        pipeline.next_due_ns.clear();
+        let (scores, rejected) = pipeline.evaluate(&[&model], now_ns);
+        assert!(
+            scores.is_empty() && rejected.is_empty(),
+            "then a quiet warm-up: {rejected:?}"
+        );
+    }
+
+    /// The past is measured back from the window's first sample, as the trainer does, not from the window's nominal start.
+    #[test]
+    fn the_baseline_is_measured_back_from_the_windows_first_sample() {
+        // A 500 ms window ending at 10 000 ms starts at 9 500; its first sample is at 9 550.
+        let pipeline = LabelPipeline {
+            ppg: std::iter::once(7_520)
+                .chain((76..=94).map(|i| i * 100))
+                .chain([9_550, 9_700])
+                .map(|t| ppg_at(t, 1.0))
+                .collect(),
+            ..LabelPipeline::default()
+        };
+        let first = pipeline.first_sample_since(9_500 * NS_PER_MS);
+        assert_eq!(first, 9_550 * NS_PER_MS);
+        // The trainer's past is [7 550, 9 550): the sample at 7 520 is outside it, though it is inside [7 500, 9 500).
+        assert_eq!(
+            baseline_before(&pipeline.ppg, first, 2000)
+                .unwrap()
+                .green
+                .len(),
+            19
+        );
+        assert_eq!(
+            baseline_before(&pipeline.ppg, 9_500 * NS_PER_MS, 2000)
+                .unwrap()
+                .green
+                .len(),
+            20
+        );
     }
 }

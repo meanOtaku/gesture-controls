@@ -46,6 +46,33 @@ function setup(over: Partial<CameraDeps> & { hands?: () => TrackedHand[]; failDe
   return { camera, deps, frame, stopped, timestamps, closed, video };
 }
 
+describe("CameraController started twice at once", () => {
+  it("keeps taking pictures for the newer start when the older one finishes setting up after it", async () => {
+    const release: (() => void)[] = [];
+    const devices = [{ kind: "videoinput", deviceId: "cam-1", label: "FaceTime HD" }] as MediaDeviceInfo[];
+    const { camera, frame } = setup({
+      // Each start waits in its device listing until the test lets it go.
+      enumerateDevices: vi.fn(() => new Promise<MediaDeviceInfo[]>((resolve) => release.push(() => resolve(devices)))),
+    });
+    const first = camera.enable();
+    await vi.waitFor(() => expect(release).toHaveLength(1));
+    const second = camera.enable(); // switched camera while the first was still starting
+    await vi.waitFor(() => expect(release).toHaveLength(2));
+    // The older start finishes first, while the newer one is still setting up.
+    release[0]();
+    await first;
+    release[1]();
+    await second;
+    expect(camera.getSnapshot().status).toBe("on");
+    const seen: number[] = [];
+    camera.subscribeFrames((f) => seen.push(f.captureMs));
+    frame(1000);
+    frame(1033);
+    frame(1066);
+    expect(seen).toEqual([1000, 1033, 1066]);
+  });
+});
+
 describe("CameraController with a detector on another thread", () => {
   /** A detector that answers when the test says so. */
   function slowSetup() {

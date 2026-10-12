@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Settings } from "./Settings";
 import type { AppSettings } from "../../../shared/protocol/events";
 
@@ -14,6 +14,7 @@ const settings: AppSettings = {
   watchAccelerationRateHz: 50,
   watchGyroscopeRateHz: 50,
   watchPpgFlushRateHz: 10,
+  watchCombinedSensorMessages: true,
   watchHeartRateAcceptanceRateHz: 200,
   watchSkinTemperatureAcceptanceRateHz: 200,
   watchEdaAcceptanceRateHz: 200,
@@ -31,6 +32,32 @@ const settings: AppSettings = {
   watchSensorsEnabled: { orientation: true, acceleration: true, gyroscope: true },
   watchTransport: "bluetooth",
 };
+
+describe("Settings page layout", () => {
+  afterEach(cleanup);
+
+  it("groups the sections by what they affect, in a fixed order", () => {
+    render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
+    const groups = screen.getAllByRole("region").filter((region) => region.id.startsWith("settings-group-"));
+    expect(groups.map((group) => group.id)).toEqual(["settings-group-watch", "settings-group-gestures", "settings-group-headphones", "settings-group-recording", "settings-group-appearance"]);
+    const sectionsIn = (group: string) => within(screen.getByRole("region", { name: group })).getAllByRole("region").map((region) => region.getAttribute("aria-label"));
+    expect(sectionsIn("Watch")).toEqual(["Watch transport", "Watch orientation", "Watch sensor enable switches", "Watch sensor rates", "Samsung health delivery controls"]);
+    expect(sectionsIn("Gestures")).toEqual(["Built-in gestures", "Shake sensitivity", "Swipe sensitivity", "Tap sensitivity", "Roll sensitivity", "Pitch sensitivity", "Wrist rotation controls"]);
+    expect(sectionsIn("Display")).toEqual(["Appearance"]);
+  });
+
+  it("has an index that scrolls to a group and marks it as the current one", () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
+    const index = screen.getByRole("navigation", { name: "Settings sections" });
+    expect(within(index).getByRole("button", { name: "Watch" })).toHaveAttribute("aria-current", "true");
+    fireEvent.click(within(index).getByRole("button", { name: "Gestures" }));
+    expect(scrolled).toHaveBeenCalled();
+    expect(within(index).getByRole("button", { name: "Gestures" })).toHaveAttribute("aria-current", "true");
+    expect(within(index).getByRole("button", { name: "Watch" })).not.toHaveAttribute("aria-current");
+  });
+});
 
 describe("Settings", () => {
   it("renders every numeric control with its current value, unit and allowed range", () => {
@@ -289,4 +316,13 @@ describe("Settings", () => {
     expect(applyButton).toBeDisabled();
     expect(screen.getByRole("button", { name: "Reset to defaults" })).toBeDisabled();
   });
+
+describe("Settings combined watch messages", () => {
+  it("shows the switch and sends the flipped setting at once", () => {
+    const updates: AppSettings[] = [];
+    render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
+    fireEvent.click(screen.getByRole("switch", { name: "Combined watch messages on" }));
+    expect(updates.at(-1)?.watchCombinedSensorMessages).toBe(false);
+  });
+});
 });

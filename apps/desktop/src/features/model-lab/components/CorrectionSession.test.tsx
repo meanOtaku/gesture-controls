@@ -10,7 +10,7 @@ const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invokeMock(...args) }));
 const camera = vi.hoisted(() => ({ snapshot: { status: "on", fps: 30, detectMs: 10 } as Record<string, unknown>, enable: vi.fn() }));
 vi.mock("../../camera/cameraService", () => ({
-  getCameraController: () => ({ subscribe: () => () => undefined, getSnapshot: () => camera.snapshot, enable: camera.enable }),
+  getCameraController: () => ({ subscribe: () => () => undefined, subscribeFrames: () => () => undefined, getSnapshot: () => camera.snapshot, enable: camera.enable }),
 }));
 const library = vi.hoisted(() => ({ listGestureDefinitions: vi.fn() }));
 vi.mock("../../gestureLibrary/gestureLibraryApi", () => library);
@@ -75,6 +75,18 @@ describe("CorrectionSession", () => {
     expect(camera.enable).toHaveBeenCalled();
     expect(screen.getByText("Finish the checks above to record.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Start recording a round" })).toBeNull();
+  });
+
+  it("keeps Stop and Discard while recording when the camera goes off", async () => {
+    const page = view();
+    fireEvent.click(await screen.findByRole("button", { name: "Start recording a round" }));
+    expect(telemetryStore.getDatasetRecording()).toBe(true);
+    camera.snapshot = { status: "off", fps: 0, detectMs: 0 };
+    page.rerender(<CorrectionSession info={info} modelId="snap-1" models={models} labels={labels} status={{ ...status }} onSaved={() => undefined} />);
+    expect(await screen.findByText(/nothing is being marked now/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop and use it" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(telemetryStore.getDatasetRecording()).toBe(false);
   });
 
   it("says each missing thing at once, not only the first", async () => {

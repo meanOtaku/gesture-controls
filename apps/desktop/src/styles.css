@@ -305,7 +305,18 @@ html.overlay-document body::before { display:none; }
 .field-control [data-slot="input"]::-webkit-outer-spin-button, .field-control [data-slot="input"]::-webkit-inner-spin-button { opacity:.6; }
 
 /* The settings action bar stays reachable while a long form scrolls beneath it. */
-.settings-footer { position:sticky; bottom:1rem; z-index:5; background:var(--surface-2); border:1px solid var(--ink); }
+.settings-footer { background:var(--surface-2); border:1px solid var(--ink); }
+.settings-footer.is-pending { position:sticky; bottom:1rem; z-index:5; }
+/* The Settings page's index stays under the top edge while scrolling; groups leave room for it when scrolled to. */
+.settings-nav { position:sticky; top:0; z-index:6; display:flex; flex-wrap:wrap; gap:.5rem; padding:.6rem 0; background:var(--background); }
+.settings-nav button { font:inherit; font-size:.9rem; padding:.35rem .8rem; border:1px solid var(--line); background:transparent; color:var(--ink-2); cursor:pointer; }
+.settings-nav button:hover { color:var(--ink); border-color:var(--ink); }
+.settings-nav button[aria-current="true"] { background:var(--ink); color:var(--background); border-color:var(--ink); }
+.settings-nav button:focus-visible { outline:2px solid var(--ring); outline-offset:2px; }
+.settings-group { scroll-margin-top:4rem; }
+.settings-group-head { padding-top:.25rem; border-top:3px solid var(--ink); }
+.settings-group-head h2 { font-family:var(--font-display); text-transform:uppercase; letter-spacing:.06em; font-size:2.4rem; line-height:1; margin:.6rem 0 .3rem; }
+.settings-group-head p { margin:0; }
 
 /* Segmented control: equal-width joined options filling the control, the chosen one filled; the whole segment is the target. */
 /* One height for every control in a row: this is the select trigger's (h-8), so segments and dropdowns line up. */

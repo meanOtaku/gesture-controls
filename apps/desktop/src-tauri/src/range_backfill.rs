@@ -122,6 +122,17 @@ pub fn problem_with(job: &Job, sha_of: &dyn Fn(&str) -> Result<String, String>) 
 }
 
 /// What the trainer's last line of output says happened.
+/// The saved training settings with every recording pointed at where it is now. A recording converted to a folder since the
+/// model was trained has the same identity (checked by [`problem_with`]) but no longer lives at the path the spec names.
+pub fn with_current_paths(mut spec: Value, path_of: &dyn Fn(&str) -> PathBuf) -> Value {
+    if let Some(recordings) = spec.get_mut("recordings").and_then(Value::as_object_mut) {
+        for (id, path) in recordings.iter_mut() {
+            *path = Value::String(path_of(id).display().to_string());
+        }
+    }
+    spec
+}
+
 pub fn result_of(model_id: &str, output_line: Option<&str>, exit_ok: bool) -> BackfillResult {
     let parsed: Option<Value> = output_line.and_then(|line| serde_json::from_str(line).ok());
     let message = parsed
@@ -195,17 +206,41 @@ pub async fn backfill_model_ranges(
             });
             continue;
         }
+        let spec = match read_json(&job.spec) {
+            Some(spec) => with_current_paths(spec, &|id| dataset_csv_path(&data, id)),
+            None => {
+                results.push(BackfillResult {
+                    model_id: job.model_id,
+                    outcome: "failed".into(),
+                    message: "the settings this model was trained with could not be read".into(),
+                });
+                continue;
+            }
+        };
+        let current_spec = job.spec.with_file_name("spec.backfill.json");
+        if let Err(error) = serde_json::to_vec(&spec)
+            .map_err(|e| e.to_string())
+            .and_then(|bytes| std::fs::write(&current_spec, bytes).map_err(|e| e.to_string()))
+        {
+            results.push(BackfillResult {
+                model_id: job.model_id,
+                outcome: "failed".into(),
+                message: format!("could not prepare the training settings: {error}"),
+            });
+            continue;
+        }
         let mut command = Command::new("uv");
         command
             .args(["run", "--project", TRAINER_PROJECT_DIR, "--extra", "onnx"])
             .arg("label-classifier-train")
             .arg("--backfill-range")
             .arg("--spec")
-            .arg(&job.spec);
+            .arg(&current_spec);
         for manifest in &job.manifests {
             command.arg("--manifest").arg(manifest);
         }
         let output = command.kill_on_drop(true).output().await;
+        let _ = std::fs::remove_file(&current_spec);
         results.push(match output {
             Ok(done) => {
                 let text = String::from_utf8_lossy(&done.stdout).into_owned();
@@ -228,6 +263,19 @@ pub async fn backfill_model_ranges(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_trainer_is_given_where_each_recording_is_now() {
+        // Trained when recording r1 was a single file; it has since been converted to a folder.
+        let saved = serde_json::json!({
+            "label": "pinch",
+            "recordings": {"r1": "/data/datasets/r1.csv", "r2": "/data/datasets/r2"},
+        });
+        let now = with_current_paths(saved, &|id| PathBuf::from(format!("/data/datasets/{id}")));
+        assert_eq!(now["recordings"]["r1"], "/data/datasets/r1");
+        assert_eq!(now["recordings"]["r2"], "/data/datasets/r2");
+        assert_eq!(now["label"], "pinch");
+    }
 
     #[test]
     fn a_manifest_with_a_range_is_recognised_and_one_without_is_not() {
