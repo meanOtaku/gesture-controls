@@ -88,13 +88,22 @@ MOTION_FEATURE_NAMES: tuple[str, ...] = tuple(f"{sensor}_{stat}" for sensor in (
 # pinch-against-fist from 0.42-0.53 to 0.72-0.81, each recording judged by a model that never saw it.
 BASELINE_Z_STATS: tuple[str, ...] = ("rel_z_mean", "rel_z_max", "rel_z_min", "rel_z_slope")
 BASELINE_Z_FEATURE_NAMES: tuple[str, ...] = tuple(f"{column}_{stat}" for stat in BASELINE_Z_STATS for column in PPG_COLUMNS)
+# The step through the window, in the same units (see `baseline_step_features`): the mean of its last part less the mean of
+# its first. A gesture's PPG deformation is a step, not a level: on 10 pinch sessions over three days, the step across a
+# pinch's start told it from rest at 0.83-0.90 AUC on sessions a model never saw, where the raw level was at chance
+# (docs/research/slope-morphology-event-detection.md). Needs a window long enough to hold the step (about 1.3 s).
+BASELINE_STEP_FEATURE_NAMES: tuple[str, ...] = tuple(f"{column}_rel_z_step" for column in PPG_COLUMNS)
+# The share of the window, from its start and from its end, whose samples are the "before" and the "after" of the step.
+STEP_EARLY_SHARE = 0.25
+STEP_LATE_SHARE = 0.4
 # The later blocks come after the earlier ones so every model trained before them still names the same features in the
 # same places.
 FEATURE_NAMES: tuple[str, ...] = (
     *BASE_FEATURE_NAMES, *SPIKE_FEATURE_NAMES, *BASELINE_FEATURE_NAMES, *MOTION_FEATURE_NAMES, *BASELINE_Z_FEATURE_NAMES,
+    *BASELINE_STEP_FEATURE_NAMES,
 )
 # Every feature that compares the pulse with the recent past, so needs a baseline.
-ALL_BASELINE_FEATURE_NAMES: tuple[str, ...] = (*BASELINE_FEATURE_NAMES, *BASELINE_Z_FEATURE_NAMES)
+ALL_BASELINE_FEATURE_NAMES: tuple[str, ...] = (*BASELINE_FEATURE_NAMES, *BASELINE_Z_FEATURE_NAMES, *BASELINE_STEP_FEATURE_NAMES)
 BASE_FEATURE_COUNT = len(BASE_FEATURE_NAMES)
 
 # Fewer PPG samples than this in a window and there is no spike to speak of: every spike feature is 0.
@@ -529,6 +538,7 @@ def extract_features(recording: Recording, window: Window, spike_method: str | N
                 spikes[stat * len(PPG_COLUMNS) + channel] = value
     relative = np.zeros(len(BASELINE_FEATURE_NAMES), dtype=np.float64)
     zs = np.zeros(len(BASELINE_Z_FEATURE_NAMES), dtype=np.float64)
+    steps = np.zeros(len(BASELINE_STEP_FEATURE_NAMES), dtype=np.float64)
     if baseline_ms is not None:
         rows = baseline_rows(recording, window, baseline_ms)
         if rows is not None:
@@ -541,6 +551,7 @@ def extract_features(recording: Recording, window: Window, spike_method: str | N
             stamps = recording.timestamps_ns[in_window]
             times_ms = (stamps - (stamps[0] if stamps.shape[0] else 0)).astype(np.float64) / 1_000_000.0
             zs[:] = baseline_z_features(window_ppg, times_ms, past_ppg)
+            steps[:] = baseline_step_features(window_ppg, times_ms, past_ppg)
     _, orient_rows = stream_rows(recording, window)
     stamps = recording.timestamps_ns[orient_rows]
     times_ms = (stamps - (stamps[0] if stamps.shape[0] else 0)).astype(np.float64) / 1_000_000.0
@@ -549,7 +560,7 @@ def extract_features(recording: Recording, window: Window, spike_method: str | N
         for columns in (ACCEL_COLUMNS, GYRO_COLUMNS)
         for value in motion_features(np.stack([recording.channels[c][orient_rows] for c in columns], axis=1), times_ms)
     ]
-    return np.concatenate((extract_base_features(recording, window), spikes, relative, motion, zs))
+    return np.concatenate((extract_base_features(recording, window), spikes, relative, motion, zs, steps))
 
 
 def baseline_rows(recording: Recording, window: Window, baseline_ms: int) -> np.ndarray | None:
@@ -620,6 +631,31 @@ def baseline_z_features(window_ppg: Sequence[np.ndarray], times_ms: np.ndarray, 
             if denominator > 0:
                 out[3, channel] = float(np.sum(centred * (z - float(np.mean(z))))) / denominator
     return out.ravel().tolist()
+
+
+def baseline_step_features(window_ppg: Sequence[np.ndarray], times_ms: np.ndarray, baseline_ppg: Sequence[np.ndarray]) -> list[float]:
+    """The three step features (`BASELINE_STEP_FEATURE_NAMES` order): for each channel, its window samples through `pulse_z`
+    against its baseline, then the mean of those in the last `STEP_LATE_SHARE` of the window's time span less the mean of
+    those in the first `STEP_EARLY_SHARE` (`times_ms` are the samples' times, from the window's first sample). Positive
+    when the signal stepped up through the window. A channel with no window samples, too few baseline samples, no time
+    span or an empty part is 0. The same, in the same order of operations, is `baseline_step_features` in
+    `crates/pinch-inference/src/features.rs`."""
+    out = [0.0] * len(PPG_COLUMNS)
+    times = np.asarray(times_ms, dtype=np.float64)
+    for channel, (window_values, baseline_values) in enumerate(zip(window_ppg, baseline_ppg, strict=True)):
+        if window_values.shape[0] == 0 or baseline_values.shape[0] < BASELINE_MIN_SAMPLES or times.shape[0] != window_values.shape[0]:
+            continue
+        start, end = float(times[0]), float(times[-1])
+        span = end - start
+        if span <= 0:
+            continue
+        z = pulse_z(window_values, baseline_values)
+        early = z[times <= start + span * STEP_EARLY_SHARE]
+        late = z[times >= end - span * STEP_LATE_SHARE]
+        if early.shape[0] == 0 or late.shape[0] == 0:
+            continue
+        out[channel] = float(np.sum(late)) / late.shape[0] - float(np.sum(early)) / early.shape[0]
+    return out
 
 
 def motion_features(values: np.ndarray, times_ms: np.ndarray) -> list[float]:

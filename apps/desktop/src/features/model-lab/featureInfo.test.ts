@@ -63,5 +63,6 @@ describe("the motion dynamics and the level shares", () => {
     expect(info.stream).toBe("watchPpg");
     expect(info.text).toContain("in units of the last few seconds");
     expect(describeInput("ppg_ir_rel_z_slope").short).toBe("trend in recent spreads");
+    expect(describeInput("ppg_green_rel_z_step").short).toBe("step in recent spreads");
   });
 });

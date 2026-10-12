@@ -1,6 +1,25 @@
 # PPG slope-event technique
 
-**Status:** proposed experiment. This document defines the intended technique; it does not claim implementation or model validation.
+**Status:** stage 1 implemented: the window-level step (`ppg_{green,red,ir}_rel_z_step`, below). The causal event tracker
+is still a proposal.
+
+## Stage 1: the step through the window (implemented)
+
+Before building the tracker, the idea was tested offline on 17 earlier recordings (10 pinch sessions over three days). In
+units of each session's recent past, the PPG steps up across a pinch's start in every pinch session, and a rule on that
+step told pinch starts from rest at about 0.83-0.90 AUC on sessions it never saw, where the raw level was at chance. Fist
+was not consistent between sessions; thumbs-up dipped in both of its two sessions.
+
+So the trainer and the live runtime now compute, for each channel, `rel_z_step`: the window's PPG through `pulse_z` against
+the baseline before it, then the mean over the window's last 40% less the mean over its first 25%. It is one of the
+baseline features (opt-in with a baseline), identical in `features.py` and `crates/pinch-inference/src/features.rs`, pinned
+by the shared cases in `tests/fixtures/baseline_cases.json`. Use a window of about 1.3 s so the whole step fits.
+
+With the trainer's own windows (leave one recording out, PPG only, 1.3 s windows, "did a pinch just start"), the step
+alone scored 0.68-0.70 pooled across recordings; the existing PPG features ranked windows well inside each recording
+(median 0.81-0.87) but their scores shifted between recordings (pooled 0.3-0.5). The step is the feature whose scale
+carries over. Two limits remain: the trainer labels every window of a held gesture, while the step marks its start (an
+onset target is the next step), and only six recordings had enough rest to be judged.
 
 ## Purpose
 

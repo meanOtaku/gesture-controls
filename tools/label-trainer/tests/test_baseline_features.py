@@ -21,6 +21,7 @@ from label_trainer.dataset import build_dataset_from_recordings
 from label_trainer.features import (
     BASE_FEATURE_COUNT,
     BASELINE_FEATURE_NAMES,
+    BASELINE_STEP_FEATURE_NAMES,
     BASELINE_Z_FEATURE_NAMES,
     BASELINE_HIGH_PERCENT,
     BASELINE_LOW_PERCENT,
@@ -29,6 +30,7 @@ from label_trainer.features import (
     FEATURE_NAMES,
     SPIKE_FEATURE_NAMES,
     baseline_features,
+    baseline_step_features,
     baseline_z_features,
     pulse_z,
     baseline_rows,
@@ -44,8 +46,10 @@ def test_the_names_come_after_the_spike_features_and_cover_every_ppg_channel() -
     start = BASE_FEATURE_COUNT + len(SPIKE_FEATURE_NAMES)
     assert FEATURE_NAMES[BASE_FEATURE_COUNT:start] == SPIKE_FEATURE_NAMES
     assert FEATURE_NAMES[start : start + len(BASELINE_FEATURE_NAMES)] == BASELINE_FEATURE_NAMES
-    # The pulse in units of its recent past comes last, after the motion dynamics, so nothing before it moved.
-    assert FEATURE_NAMES[-len(BASELINE_Z_FEATURE_NAMES) :] == BASELINE_Z_FEATURE_NAMES
+    # The pulse in units of its recent past comes after the motion dynamics, then its step, so nothing before them moved.
+    steps = len(BASELINE_STEP_FEATURE_NAMES)
+    assert FEATURE_NAMES[-steps:] == BASELINE_STEP_FEATURE_NAMES
+    assert FEATURE_NAMES[-steps - len(BASELINE_Z_FEATURE_NAMES) : -steps] == BASELINE_Z_FEATURE_NAMES
     assert BASELINE_FEATURE_NAMES == (
         "ppg_green_rel_low", "ppg_red_rel_low", "ppg_ir_rel_low", "ppg_green_rel_high", "ppg_red_rel_high", "ppg_ir_rel_high",
     )
@@ -166,6 +170,7 @@ def _cases() -> list[dict]:
             "name": name, "window": window, "baseline": past, "windowTimesMs": times,
             "expected": baseline_features(arrays_w, arrays_p),
             "expectedZ": baseline_z_features(arrays_w, np.array(times), arrays_p),
+            "expectedStep": baseline_step_features(arrays_w, np.array(times), arrays_p),
             # What a convolutional model's pulse channels become (input.grid.pulse "recentPast").
             "zSeries": [pulse_z(w, b).tolist() if b.shape[0] else [] for w, b in zip(arrays_w, arrays_p)],
         })
@@ -178,11 +183,32 @@ def _cases() -> list[dict]:
     add("flat_past", [[3.0]] * 3, [[1.0] * 20] * 3)
     add("rest_and_held_mixed", [[4001.0, 3999.0]] * 3, [[4000.0 if i < 28 else 1000.0 for i in range(40)]] * 3)
     add("session_offset", [[250_105.0, 250_106.0, 250_107.0]] * 3, [[250_100.0 + (i % 5) for i in range(20)]] * 3)
+    # A step up through a 1.3 s window (33 samples at 25 Hz), and the same step down: the shape the feature is for.
+    rest = [[1000.0 + (i % 7) for i in range(50)]] * 3
+    add("step_up", [[1003.0 if i < 12 else 1030.0 for i in range(33)]] * 3, rest)
+    add("step_down", [[1003.0 if i < 12 else 976.0 for i in range(33)]] * 3, rest)
+    add("single_sample", [[1010.0]] * 3, rest)
     for n in range(3):
         past = [[rng.gauss(50_000.0 * (c + 1), 800.0) for _ in range(30 + 7 * n)] for c in range(3)]
         window = [[rng.gauss(50_000.0 * (c + 1) + 1500.0 * n, 800.0) for _ in range(9)] for c in range(3)]
         add(f"random_{n}", window, past)
     return cases
+
+
+def test_the_step_is_the_later_part_less_the_earlier_part_and_ignores_the_level() -> None:
+    rest = np.array([1000.0 + (i % 7) for i in range(50)])
+    times = np.arange(33) * 40.0  # 1.28 s at 25 Hz
+    up = np.where(np.arange(33) < 12, 1003.0, 1030.0)
+    [step, *_] = baseline_step_features([up] * 3, times, [rest] * 3)
+    assert step > 5  # well above the past's spread
+    down = 2006.0 - up
+    assert baseline_step_features([down] * 3, times, [rest] * 3)[0] == pytest.approx(-step)
+    # The same step a session at another level and swing: the same number.
+    assert baseline_step_features([250_000 + 8 * up] * 3, times, [250_000 + 8 * rest] * 3)[0] == pytest.approx(step)
+    # Flat: no step. One sample or too little past: nothing to say.
+    assert baseline_step_features([np.full(33, 1003.0)] * 3, times, [rest] * 3)[0] == pytest.approx(0.0)
+    assert baseline_step_features([up[:1]] * 3, times[:1], [rest] * 3) == [0.0, 0.0, 0.0]
+    assert baseline_step_features([up] * 3, times, [rest[:5]] * 3) == [0.0, 0.0, 0.0]
 
 
 def test_the_pulse_in_units_of_its_past_ignores_the_sessions_level_and_swing() -> None:

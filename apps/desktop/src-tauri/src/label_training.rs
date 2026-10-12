@@ -1611,7 +1611,7 @@ mod tests {
         plain.baseline_ms = None;
         let without = check_request(&plain, &datasets(), &sha).unwrap();
         // The differences from the recent past, and the pulse in units of that past.
-        assert_eq!(with.input.features.len(), without.input.features.len() + 18);
+        assert_eq!(with.input.features.len(), without.input.features.len() + 21);
         assert!(with.input.features.contains(&"ppg_red_rel_low".to_string()));
         assert!(
             with.input

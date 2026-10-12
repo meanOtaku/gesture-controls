@@ -10,8 +10,19 @@ pub const BASE_FEATURE_COUNT: usize = 55;
 /// Number of features in the ordered vector every model reads its inputs from: the 55 base statistics, then 24 spike
 /// features (8 for each of the three PPG channels), then 6 pulse-sensor level features relative to the recent past (2 for
 /// each channel), then 10 motion-dynamics features (5 for the acceleration, 5 for the gyroscope), then 12 pulse features in
-/// units of the recent past (4 for each channel). Matches Python's `len(FEATURE_NAMES)`.
-pub const FEATURE_COUNT: usize = 107;
+/// units of the recent past (4 for each channel), then their step through the window (1 for each channel). Matches
+/// Python's `len(FEATURE_NAMES)`.
+pub const FEATURE_COUNT: usize = 110;
+/// Where the pulse-in-units-of-its-recent-past block starts (twelve features), and its step (three).
+pub const BASELINE_Z_START: usize = 95;
+pub const BASELINE_STEP_START: usize = 107;
+/// The share of the window, from its start and from its end, whose samples are the "before" and "after" of the step (the
+/// trainer's `STEP_EARLY_SHARE` and `STEP_LATE_SHARE`).
+pub const STEP_EARLY_SHARE: f64 = 0.25;
+pub const STEP_LATE_SHARE: f64 = 0.4;
+// The blocks sit end to end: the pulse in units of its past right after the motion dynamics, its step last.
+const _: () = assert!(BASELINE_Z_START == MOTION_FEATURE_START + 2 * MOTION_STATS);
+const _: () = assert!(BASELINE_STEP_START == BASELINE_Z_START + 12 && BASELINE_STEP_START + 3 == FEATURE_COUNT);
 /// Where the motion-dynamics features start in [`FEATURE_NAMES`], and how many statistics each motion sensor has.
 pub const MOTION_FEATURE_START: usize = 85;
 pub const MOTION_STATS: usize = 5;
@@ -127,6 +138,9 @@ pub const FEATURE_NAMES: [&str; FEATURE_COUNT] = [
     "ppg_green_rel_z_slope",
     "ppg_red_rel_z_slope",
     "ppg_ir_rel_z_slope",
+    "ppg_green_rel_z_step",
+    "ppg_red_rel_z_step",
+    "ppg_ir_rel_z_step",
 ];
 
 /// Fewer pulse samples than this in the baseline and there is nothing to compare the window with.
@@ -242,6 +256,48 @@ pub fn baseline_z_features(
                 out[9 + channel] = numerator / denominator;
             }
         }
+    }
+    out
+}
+
+/// The three step features, in the order of the last three names of [`FEATURE_NAMES`]: for each channel its window samples
+/// through [`pulse_z`] against its baseline, then the mean of those in the last [`STEP_LATE_SHARE`] of the window's time
+/// span less the mean of those in the first [`STEP_EARLY_SHARE`] (`times_ms` from the window's first sample). Positive when
+/// the signal stepped up. A channel with no window samples, too few baseline samples, no time span or an empty part is 0.
+/// A gesture's PPG deformation is a step, not a level. Mirrors `baseline_step_features` in the trainer.
+pub fn baseline_step_features(
+    window: [&[f64]; 3],
+    times_ms: &[f64],
+    baseline: [&[f64]; 3],
+) -> [f64; 3] {
+    let mut out = [0.0; 3];
+    for channel in 0..3 {
+        let (values, past) = (window[channel], baseline[channel]);
+        if values.is_empty() || past.len() < BASELINE_MIN_SAMPLES || times_ms.len() != values.len()
+        {
+            continue;
+        }
+        let (start, end) = (times_ms[0], times_ms[times_ms.len() - 1]);
+        let span = end - start;
+        if span <= 0.0 {
+            continue;
+        }
+        let z = pulse_z(values, past);
+        let (mut early_sum, mut early_n, mut late_sum, mut late_n) = (0.0, 0usize, 0.0, 0usize);
+        for (value, &at) in z.iter().zip(times_ms) {
+            if at <= start + span * STEP_EARLY_SHARE {
+                early_sum += value;
+                early_n += 1;
+            }
+            if at >= end - span * STEP_LATE_SHARE {
+                late_sum += value;
+                late_n += 1;
+            }
+        }
+        if early_n == 0 || late_n == 0 {
+            continue;
+        }
+        out[channel] = late_sum / late_n as f64 - early_sum / early_n as f64;
     }
     out
 }
@@ -957,6 +1013,17 @@ pub fn extract_features_with(
     for value in zs {
         push(value);
     }
+    // The pulse's step through the window, in the same units (0 when the model has no baseline).
+    let steps = window.baseline.as_ref().map_or([0.0; 3], |past| {
+        baseline_step_features(
+            [&window.ppg_green, &window.ppg_red, &window.ppg_ir],
+            &ppg_times_ms,
+            [&past.green, &past.red, &past.ir],
+        )
+    });
+    for value in steps {
+        push(value);
+    }
 
     debug_assert_eq!(cursor, FEATURE_COUNT);
     out
@@ -1157,8 +1224,10 @@ mod tests {
         assert_eq!(FEATURE_NAMES[BASE_FEATURE_COUNT], "ppg_green_spike_height");
         assert_eq!(
             FEATURE_NAMES.len(),
-            BASE_FEATURE_COUNT + 3 * SPIKE_STATS_PER_CHANNEL + 6 + 2 * MOTION_STATS + 12
+            BASE_FEATURE_COUNT + 3 * SPIKE_STATS_PER_CHANNEL + 6 + 2 * MOTION_STATS + 12 + 3
         );
+        assert_eq!(BASELINE_Z_START, MOTION_FEATURE_START + 2 * MOTION_STATS);
+        assert_eq!(BASELINE_STEP_START, BASELINE_Z_START + 12);
         assert_eq!(
             MOTION_FEATURE_START,
             BASE_FEATURE_COUNT + 3 * SPIKE_STATS_PER_CHANNEL + 6
@@ -1229,6 +1298,20 @@ mod tests {
                     zs[index]
                 );
             }
+            let steps = baseline_step_features(
+                [&window[0], &window[1], &window[2]],
+                &times,
+                [&past[0], &past[1], &past[2]],
+            );
+            for (index, expected) in case["expectedStep"].as_array().unwrap().iter().enumerate() {
+                let expected = expected.as_f64().unwrap();
+                assert!(
+                    (steps[index] - expected).abs() <= 1e-9 * expected.abs().max(1.0),
+                    "{}: step feature {index}: {} vs {expected}",
+                    case["name"],
+                    steps[index]
+                );
+            }
             for (channel, series) in channels(&case["zSeries"]).iter().enumerate() {
                 if series.is_empty() {
                     continue;
@@ -1265,12 +1348,13 @@ mod tests {
         assert!((with[LEVEL + 3] - (12.0 - 19.0)).abs() < 1e-5); // and against the high end, 19
         // And in units of the past: 1..21 has median 11 and median absolute deviation 5, so green (10, 12, 14) is
         // (-1, 1, 3) / (5 x 1.4826): mean 1/7.413.
-        assert_eq!(FEATURE_NAMES[FEATURE_COUNT - 12], "ppg_green_rel_z_mean");
-        assert!((with[FEATURE_COUNT - 12] - 1.0 / (5.0 * 1.4826)).abs() < 1e-5);
+        assert_eq!(FEATURE_NAMES[BASELINE_Z_START], "ppg_green_rel_z_mean");
+        assert_eq!(FEATURE_NAMES[BASELINE_STEP_START], "ppg_green_rel_z_step");
+        assert!((with[BASELINE_Z_START] - 1.0 / (5.0 * 1.4826)).abs() < 1e-5);
         assert_eq!(&with[..LEVEL], &none[..LEVEL]); // nothing else changes
         assert_eq!(
-            &with[MOTION_FEATURE_START..FEATURE_COUNT - 12],
-            &none[MOTION_FEATURE_START..FEATURE_COUNT - 12]
+            &with[MOTION_FEATURE_START..BASELINE_Z_START],
+            &none[MOTION_FEATURE_START..BASELINE_Z_START]
         );
     }
 

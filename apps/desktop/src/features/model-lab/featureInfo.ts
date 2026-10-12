@@ -48,6 +48,7 @@ const BASELINE_STATS: Record<string, { short: string; text: (w: string) => strin
   rel_z_max: { short: "peak in recent spreads", text: (w) => `The highest value of the ${w} in this window, in units of the last few seconds (minus their middle value, over how much they varied).` },
   rel_z_min: { short: "dip in recent spreads", text: (w) => `The lowest value of the ${w} in this window, in units of the last few seconds (minus their middle value, over how much they varied).` },
   rel_z_slope: { short: "trend in recent spreads", text: (w) => `How fast the ${w} rises or falls through the window, per second, in units of how much it varied in the last few seconds.` },
+  rel_z_step: { short: "step in recent spreads", text: (w) => `How far the ${w} stepped up (positive) or down through the window: the average of its last part less the average of its first, in units of how much it varied in the last few seconds. A gesture's pulse change is a step; use a window of about 1.3 s so the whole step fits.` },
 };
 
 /** How a motion sensor moved inside the window, beyond its spread (`accel_jerk_rms`, `gyro_magnitude_kurtosis`...). */

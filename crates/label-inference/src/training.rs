@@ -628,7 +628,7 @@ mod tests {
             false,
             false,
         );
-        assert_eq!(all.len(), FEATURE_NAMES.len() - 24 - 18); // the spike and the level features are opt-in
+        assert_eq!(all.len(), FEATURE_NAMES.len() - 24 - 21); // the spike and the level features are opt-in
         let with_spikes = canonical_features_for(
             &[
                 StreamSource::WatchOrientation,
@@ -639,7 +639,7 @@ mod tests {
             false,
             true,
         );
-        assert_eq!(with_spikes.len(), FEATURE_NAMES.len() - 18);
+        assert_eq!(with_spikes.len(), FEATURE_NAMES.len() - 21);
         let with_both = canonical_features_with_channels(
             &[StreamSource::WatchPpg],
             false,
@@ -649,7 +649,7 @@ mod tests {
         );
         assert_eq!(
             with_both.iter().filter(|f| is_baseline_feature(f)).count(),
-            18
+            21
         );
         // They are about change, so "only how things change" keeps them.
         let moving = canonical_features_with_channels(
@@ -661,6 +661,7 @@ mod tests {
         );
         assert!(moving.contains(&"ppg_red_rel_low".to_string()));
         assert!(moving.contains(&"ppg_red_rel_z_mean".to_string()));
+        assert!(moving.contains(&"ppg_red_rel_z_step".to_string()));
         // The motion dynamics are about change too; they come with their sensor.
         let shaking = canonical_features_for(&[StreamSource::WatchGyroscope], true, false);
         assert!(shaking.contains(&"gyro_jerk_rms".to_string()));
