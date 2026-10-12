@@ -164,7 +164,7 @@ fn default_health_acceptance_rate_hz() -> f64 {
 }
 
 fn default_ppg_flush_rate_hz() -> f64 {
-    10.0
+    1.0
 }
 
 fn default_shake_peak_threshold() -> f64 {

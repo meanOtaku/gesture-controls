@@ -103,7 +103,7 @@ being on, so a reconnect that lands with the display off now starts the sensors.
 
 - **Sensor rates.** `watchOrientationRateHz`, the acceleration and gyroscope rates and
   `watchPpgFlushRateHz` are desktop settings that decide what the model sees. The largest single
-  lever is `watchPpgFlushRateHz`: it is **10** in the settings file reviewed (the maximum, and now also the default; it used to be 1),
+  lever is `watchPpgFlushRateHz`: it is **10** in the settings file reviewed (the maximum; the default is 1),
   which makes the Samsung sensor service flush ten times a second. Lowering it would save more than
   everything above, but it also changes the live window length the model is validated against.
 - **Batching the companion sensors** (acceleration, gyroscope) would cut CPU wake-ups, but it makes the

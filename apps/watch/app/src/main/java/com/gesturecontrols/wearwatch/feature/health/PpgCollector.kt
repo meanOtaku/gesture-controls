@@ -336,7 +336,7 @@ class PpgCollector(
 
     private companion object {
         const val CONNECTION_TIMEOUT_MS = 12_000L
-        const val DEFAULT_FLUSH_INTERVAL_MS = 100L
+        const val DEFAULT_FLUSH_INTERVAL_MS = 1_000L
         private const val ROUTINE_DIAGNOSTIC_INTERVAL_MS = 1_000L
         const val MIN_FLUSH_RATE_HZ = 0.1
         const val MAX_FLUSH_RATE_HZ = 10.0
