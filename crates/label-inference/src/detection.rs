@@ -304,6 +304,44 @@ mod tests {
 
     const MS: u64 = 1_000_000;
 
+    /// The trainer replays held-out recordings through its copy of this rule to count caught gestures and false
+    /// activations (`tools/label-trainer/src/label_trainer/events.py`). On the shared cases both must find the same
+    /// detections, or its numbers would describe a different detector from the one that runs.
+    #[test]
+    fn detections_match_the_trainers_replay_on_the_shared_cases() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../tools/label-trainer/tests/fixtures/detection_cases.json"
+        ))
+        .unwrap();
+        for case in fixture["cases"].as_array().unwrap() {
+            let policy = &case["policy"];
+            let mut detector = TemporalDetector::new(thresholds(
+                policy["activation"].as_f64().unwrap(),
+                policy["release"].as_f64().unwrap(),
+                policy["debounceMs"].as_u64().unwrap() as u32,
+                policy["cooldownMs"].as_u64().unwrap() as u32,
+            ));
+            let times = case["timesNs"].as_array().unwrap();
+            let scores = case["scores"].as_array().unwrap();
+            let mut found: Vec<(u64, Option<u64>)> = Vec::new();
+            for (time, score) in times.iter().zip(scores) {
+                let at = time.as_u64().unwrap();
+                match detector.step(score.as_f64().unwrap(), at) {
+                    Step::Rising => found.push((at, None)),
+                    Step::Falling => found.last_mut().unwrap().1 = Some(at),
+                    Step::Quiet | Step::Active => {}
+                }
+            }
+            let expected: Vec<(u64, Option<u64>)> = case["detections"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|d| (d[0].as_u64().unwrap(), d[1].as_u64()))
+                .collect();
+            assert_eq!(found, expected, "{}", case["name"]);
+        }
+    }
+
     fn run(detector: &mut TemporalDetector, scores: &[(f64, u64)]) -> Vec<Step> {
         scores
             .iter()

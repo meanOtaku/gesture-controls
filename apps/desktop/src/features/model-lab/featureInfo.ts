@@ -44,6 +44,19 @@ const SPIKE_STATS: Record<string, { short: string; text: (w: string) => string }
 const BASELINE_STATS: Record<string, { short: string; text: (w: string) => string }> = {
   rel_low: { short: "above its resting level", text: (w) => `How far the average of the ${w} in this window sits above the low end (10th percentile) of where it was in the last few seconds: the change against the recent past, not the level itself, which differs from one session to the next.` },
   rel_high: { short: "above its highest level", text: (w) => `How far the average of the ${w} in this window sits above the high end (90th percentile) of where it was in the last few seconds (negative when it is below it).` },
+  rel_z_mean: { short: "level in recent spreads", text: (w) => `The average of the ${w} in this window, in units of the last few seconds: minus their middle value, over how much they varied. The sensor's own level and how far it swings differ between sessions; measured this way, neither matters.` },
+  rel_z_max: { short: "peak in recent spreads", text: (w) => `The highest value of the ${w} in this window, in units of the last few seconds (minus their middle value, over how much they varied).` },
+  rel_z_min: { short: "dip in recent spreads", text: (w) => `The lowest value of the ${w} in this window, in units of the last few seconds (minus their middle value, over how much they varied).` },
+  rel_z_slope: { short: "trend in recent spreads", text: (w) => `How fast the ${w} rises or falls through the window, per second, in units of how much it varied in the last few seconds.` },
+};
+
+/** How a motion sensor moved inside the window, beyond its spread (`accel_jerk_rms`, `gyro_magnitude_kurtosis`...). */
+const MOTION_STATS: Record<string, { short: string; text: (w: string) => string }> = {
+  jerk_rms: { short: "jerkiness", text: (w) => `How fast the ${w} changes from one reading to the next, per second, on average (root mean square): high for quick taps and flicks.` },
+  jerk_max: { short: "sharpest change", text: (w) => `The fastest change of the ${w} between two readings in the window, per second: one sharp movement is enough to make it high.` },
+  magnitude_ptp: { short: "strength range", text: (w) => `The overall strength of the ${w} at its highest in the window, less at its lowest.` },
+  magnitude_kurtosis: { short: "burstiness", text: (w) => `How much a brief burst stands out of the rest of the window in the overall strength of the ${w} (0 for an even spread, high for one burst in a quiet window).` },
+  crossing_rate: { short: "back-and-forth", text: (w) => `How often each axis of the ${w} crosses its own average, per second: high for shaking or vibration.` },
 };
 
 const AXES: Record<string, string> = { x: "x axis", y: "y axis", z: "z axis", magnitude: "overall strength" };
@@ -70,6 +83,8 @@ export function describeInput(name: string, spikeMethod?: string): InputInfo {
   if (part[0] === "accel" || part[0] === "gyro") {
     const stream: InputStream = part[0] === "accel" ? "watchAcceleration" : "watchGyroscope";
     const what = part[0] === "accel" ? "acceleration" : "turning speed";
+    const motion = MOTION_STATS[part.slice(1).join("_")];
+    if (motion) return { name, stream, group: "Movement", short: motion.short, text: motion.text(what) };
     const axis = AXES[part[1]];
     if (axis) {
       const rest = part.slice(2).join("_");

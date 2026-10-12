@@ -12,6 +12,7 @@
 //! affected labels' detections and reports a falling edge for each, so whatever depended on them is released.
 
 mod bundle;
+mod clock;
 mod detection;
 mod import;
 mod loader;
@@ -42,6 +43,6 @@ pub use runtime::{InputWarning, LabelRuntime, RuntimeMode, RuntimeOutput};
 pub use training::{
     BegunRun, PPG_CHANNELS, RecordingInfo, RunPlan, TrainingError, begin_run,
     canonical_features_for, canonical_features_with_channels, complete_run, evaluation_only_run,
-    fail_run, grid_channels_for, is_baseline_feature, is_movement_feature, is_spike_feature,
-    plan_split, plan_split_keeping, trainer_backend,
+    fail_run, grid_channels_for, is_baseline_feature, is_motion_dynamics_feature,
+    is_movement_feature, is_spike_feature, plan_split, plan_split_keeping, trainer_backend,
 };

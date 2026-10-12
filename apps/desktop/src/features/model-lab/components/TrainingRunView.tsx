@@ -4,7 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/aler
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import type { useTrainingRun } from "../hooks/useTrainingRun";
-import { THRESHOLD_CAVEAT, describeMetrics } from "../training";
+import { describeEvents, describeMetrics, thresholdNote } from "../training";
 import { TrainingCurve } from "./TrainingCurve";
 
 /** The progress of a training run: whether it runs (with Cancel), the learning curve, the log and the result. */
@@ -47,7 +47,8 @@ export function TrainingRunView({ run }: { run: ReturnType<typeof useTrainingRun
             {result.outcome === "deployable" && result.metrics ? (
               <>
                 <p>{describeMetrics(result.metrics)}</p>
-                <p>{THRESHOLD_CAVEAT}</p>
+                {result.metrics.events && <p>{describeEvents(result.metrics.events)}</p>}
+                <p>{thresholdNote(result.metrics)}</p>
                 <p>Review it under Label models: mark it evaluated, approve it, then activate it. Check it in Monitor before Live.</p>
               </>
             ) : result.outcome === "evaluationOnly" ? (

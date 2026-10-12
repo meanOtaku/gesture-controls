@@ -100,6 +100,12 @@ pub struct NetworkDesign {
     /// The network's shape and learning settings; absent means the method's own default.
     #[serde(default)]
     pub network: Option<NetworkSpec>,
+    /// The convolutional method only: a pre-trained motion encoder (by name) to start from, and whether to keep its
+    /// layers as they are (see `motion_encoders`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pretrained: Option<String>,
+    #[serde(default)]
+    pub pretrained_freeze: bool,
     /// Set by the app: a built-in design cannot be changed or deleted.
     #[serde(default)]
     pub built_in: bool,
@@ -152,11 +158,9 @@ impl NetworkDesign {
         request.movement_only = !self.columns_mode() && self.movement_only
             || self.method == "cnn1d" && self.movement_only;
         request.spike_method = Some(self.spike_method.clone());
-        request.baseline_ms = if self.columns_mode() {
-            None
-        } else {
-            self.baseline_ms
-        };
+        // A columns model keeps it to read its pulse channels against their recent past (the request's checks drop it
+        // when nothing can use it).
+        request.baseline_ms = self.baseline_ms;
         request.window_ms = self.window_ms;
         request.input_mode = if self.input_mode == "raw" && self.method != "cnn1d" {
             Some("raw".into())
@@ -175,6 +179,8 @@ impl NetworkDesign {
             self.features.clone()
         };
         request.network = self.network.clone();
+        request.pretrained = self.pretrained.clone().filter(|_| self.method == "cnn1d");
+        request.pretrained_freeze = self.pretrained_freeze;
     }
 
     fn template_request(&self) -> TrainRequest {
@@ -372,6 +378,8 @@ fn base(id: &str, name: &str, description: &str, method: &str) -> NetworkDesign 
         baseline_ms: None,
         window_ms: 500,
         network: None,
+        pretrained: None,
+        pretrained_freeze: false,
         built_in: true,
     }
 }
@@ -437,6 +445,12 @@ pub fn built_in_designs() -> Vec<NetworkDesign> {
             "Small neural network (PyTorch)",
             "The same idea in PyTorch, which can be designed layer by layer and fine-tuned.",
             "torch-mlp",
+        ),
+        base(
+            "gbt",
+            "Boosted trees",
+            "Statistics and motion dynamics of acceleration and gyroscope into 150 small decision trees. With few recordings it often beats a neural network.",
+            "gbt",
         ),
         cnn,
         raw,
@@ -638,6 +652,25 @@ mod tests {
         d
     }
 
+    #[test]
+    fn the_encoder_goes_with_a_convolutional_design_only_and_a_columns_design_keeps_its_pulse_baseline()
+     {
+        let mut cnn = base("cnn", "Mine", "", "cnn1d");
+        cnn.input_mode = "raw".into();
+        cnn.columns = vec!["accel_x".into(), "ppg_green".into()];
+        cnn.readings = 32;
+        cnn.pretrained = Some("motion-encoder".into());
+        cnn.pretrained_freeze = true;
+        cnn.baseline_ms = Some(4000);
+        let request = cnn.template_request();
+        assert_eq!(request.pretrained.as_deref(), Some("motion-encoder"));
+        assert!(request.pretrained_freeze);
+        assert_eq!(request.baseline_ms, Some(4000));
+        let mut other = dense();
+        other.pretrained = Some("motion-encoder".into());
+        assert!(other.template_request().pretrained.is_none());
+    }
+
     fn temp(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
             "network-designs-test-{}-{name}",
@@ -777,13 +810,13 @@ mod tests {
 
     #[test]
     fn a_designs_inputs_follow_its_choices_and_it_applies_itself_to_a_training_request() {
-        // Statistics: acceleration and gyroscope are 28 inputs.
+        // Statistics: acceleration and gyroscope are 38 inputs (14 statistics and 5 motion dynamics each).
         let stats = dense();
         let found = preview(&stats);
         assert!(found.problem.is_none());
         assert_eq!(
             (found.neurons, found.inputs.len(), found.available.len()),
-            (28, 28, 28)
+            (38, 38, 38)
         );
         // Raw columns: each column at each reading is a neuron.
         let mut raw = dense();
@@ -826,7 +859,7 @@ mod tests {
         bad.features = Some(vec!["nope".into()]);
         let found = preview(&bad);
         assert!(found.problem.unwrap().contains("not an input"));
-        assert_eq!(found.available.len(), 28);
+        assert_eq!(found.available.len(), 38);
     }
 
     #[test]

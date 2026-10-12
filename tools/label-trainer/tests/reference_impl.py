@@ -44,24 +44,43 @@ def _quat_delta_angle_deg(quat_first: np.ndarray, quat_last: np.ndarray) -> floa
     return float(np.degrees(2.0 * np.arccos(dot)))
 
 def reference_extract_features(recording: Recording, window: Window) -> np.ndarray:
+    """Each sensor's statistics over that sensor's own samples in the window, as the live runtime computes them (changed
+    from statistics over every merged, carried-forward row, which the runtime never produced)."""
     indices = window.row_indices
-    timestamps_ns = recording.timestamps_ns[indices]
+    if recording.ppg_observed is None:
+        ppg_rows = indices
+    else:
+        ppg_rows = np.array([i for i in indices if recording.ppg_observed[i]], dtype=np.int64)
+    if recording.orient_observed is None:
+        orient_rows = indices
+    else:
+        orient_rows = np.array([i for i in indices if recording.orient_observed[i]], dtype=np.int64)
 
     values: list[float] = []
 
-    ppg_arrays = [recording.channels[column][indices] for column in PPG_COLUMNS]
-    for array in ppg_arrays:
-        values.append(float(np.mean(array)))
-    for array in ppg_arrays:
-        values.append(float(np.std(array)))
-    for array in ppg_arrays:
-        values.append(float(np.min(array)))
-    for array in ppg_arrays:
-        values.append(float(np.max(array)))
-    for array in ppg_arrays:
-        values.append(_slope(array, timestamps_ns))
+    ppg_arrays = [recording.channels[column][ppg_rows] for column in PPG_COLUMNS]
+    if len(ppg_rows) > 0:
+        for array in ppg_arrays:
+            values.append(float(np.mean(array)))
+        for array in ppg_arrays:
+            values.append(float(np.std(array)))
+        for array in ppg_arrays:
+            values.append(float(np.min(array)))
+        for array in ppg_arrays:
+            values.append(float(np.max(array)))
+        for array in ppg_arrays:
+            values.append(_slope(array, recording.timestamps_ns[ppg_rows]))
+    else:
+        values.extend([0.0] * (5 * len(PPG_COLUMNS)))
 
-    accel_arrays = [recording.channels[column][indices] for column in ACCEL_COLUMNS]
+    def motion(column: str) -> np.ndarray:
+        if len(orient_rows) > 0:
+            return recording.channels[column][orient_rows]
+        if column in QUAT_COLUMNS:
+            return np.array([1.0 if column == QUAT_COLUMNS[0] else 0.0])
+        return recording.channels[column][indices[:1]]
+
+    accel_arrays = [motion(column) for column in ACCEL_COLUMNS]
     for array in accel_arrays:
         values.append(float(np.mean(array)))
     for array in accel_arrays:
@@ -74,7 +93,7 @@ def reference_extract_features(recording: Recording, window: Window) -> np.ndarr
     values.append(float(np.mean(accel_magnitude)))
     values.append(float(np.std(accel_magnitude)))
 
-    gyro_arrays = [recording.channels[column][indices] for column in GYRO_COLUMNS]
+    gyro_arrays = [motion(column) for column in GYRO_COLUMNS]
     for array in gyro_arrays:
         values.append(float(np.mean(array)))
     for array in gyro_arrays:
@@ -87,18 +106,21 @@ def reference_extract_features(recording: Recording, window: Window) -> np.ndarr
     values.append(float(np.mean(gyro_magnitude)))
     values.append(float(np.std(gyro_magnitude)))
 
-    quat_arrays = [recording.channels[column][indices] for column in QUAT_COLUMNS]
+    quat_arrays = [motion(column) for column in QUAT_COLUMNS]
     for array in quat_arrays:
         values.append(float(np.mean(array)))
     for array in quat_arrays:
         values.append(float(np.std(array)))
-    quat_first = np.array([recording.channels[column][indices[0]] for column in QUAT_COLUMNS])
-    quat_last = np.array([recording.channels[column][indices[-1]] for column in QUAT_COLUMNS])
+    quat_first = np.array([array[0] for array in quat_arrays])
+    quat_last = np.array([array[-1] for array in quat_arrays])
     values.append(_quat_delta_angle_deg(quat_first, quat_last))
 
-    values.append(float(np.mean(recording.channels[CONTACT_QUALITY_COLUMN][indices])))
-    values.append(float(indices.shape[0]))
-    values.append(float((timestamps_ns[-1] - timestamps_ns[0]) / 1_000_000.0))
+    values.append(float(np.mean(recording.channels[CONTACT_QUALITY_COLUMN][ppg_rows])) if len(ppg_rows) > 0 else 0.0)
+    values.append(float(len(ppg_rows) + len(orient_rows)))
+    if len(ppg_rows) > 1:
+        values.append(max(float((recording.timestamps_ns[ppg_rows][-1] - recording.timestamps_ns[ppg_rows][0]) / 1_000_000.0), 0.0))
+    else:
+        values.append(0.0)
 
     vector = np.array(values, dtype=np.float64)
     assert vector.shape[0] == len(FEATURE_NAMES)

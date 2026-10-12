@@ -52,7 +52,7 @@ const RAW_MAX_STEPS: u32 = 64;
 const MAX_LABEL_OFFSET_MS: i32 = 1500;
 
 /// The backends offered, which extra packages the trainer needs for each.
-pub(crate) const BACKENDS: [&str; 4] = ["logreg", "mlp", "torch-mlp", "cnn1d"];
+pub(crate) const BACKENDS: [&str; 5] = ["logreg", "mlp", "torch-mlp", "cnn1d", "gbt"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -116,6 +116,12 @@ pub struct TrainRequest {
     /// request's own for the method, inputs, spike extraction, window and network; the label and recordings stay the request's.
     #[serde(default)]
     pub design_id: Option<String>,
+    /// A pre-trained motion encoder (by name, see `motion_encoders`) for a convolutional model to start its convolution
+    /// layers from, and whether to keep those layers as they are so only its head learns from the recordings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pretrained: Option<String>,
+    #[serde(default)]
+    pub pretrained_freeze: bool,
     /// Recordings (by id) that may train but never test: ones added to fine-tune a model on corrections. The rest are split
     /// as they always were, so the held-out recordings, and the before and after scores, stay the same.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -154,6 +160,9 @@ struct Checked {
     explicit_features: Option<Vec<String>>,
     research: bool,
     label_offset_ms: i32,
+    /// The encoder file to start from (always one in the encoders folder), and whether its layers stay as they are.
+    pretrained: Option<PathBuf>,
+    pretrained_freeze: bool,
 }
 
 fn label_id(raw: &str) -> Result<LabelId, String> {
@@ -201,7 +210,7 @@ fn resolve_inputs(request: &TrainRequest) -> Result<Inputs, String> {
             ));
         }
     }
-    .filter(|_| sources.contains(&StreamSource::WatchPpg) && request.backend != "cnn1d");
+    .filter(|_| sources.contains(&StreamSource::WatchPpg));
     let ppg_channels: Vec<String> = match &request.ppg_channels {
         None => PPG_CHANNELS.iter().map(ToString::to_string).collect(),
         Some(chosen) => {
@@ -260,8 +269,6 @@ fn resolve_inputs(request: &TrainRequest) -> Result<Inputs, String> {
             &channel_refs,
         )
     };
-    // The columns models (the convolutional one, and a dense one on raw columns) read the window itself: no baseline.
-    let baseline_ms = baseline_ms.filter(|_| !(convolutional || raw_columns));
     if available.is_empty() {
         return Err("none of the chosen data streams can feed a model (head pose is not available to trained models)".into());
     }
@@ -284,6 +291,11 @@ fn resolve_inputs(request: &TrainRequest) -> Result<Inputs, String> {
             chosen
         }
     };
+    // A columns model (the convolutional one, or a dense one on raw columns) uses the baseline to read its pulse channels
+    // in units of their recent past (the grid's `pulse: "recentPast"`), so it keeps one only if it reads a pulse channel.
+    let baseline_ms = baseline_ms.filter(|_| {
+        !(convolutional || raw_columns) || features.iter().any(|f| f.starts_with("ppg_"))
+    });
     Ok(Inputs {
         sources,
         spike_method,
@@ -404,6 +416,21 @@ fn check_request(
         }
         None => None,
     };
+    // A model starting from a pre-trained encoder must read what it read, and centres each window as it did.
+    let pretrained = match &request.pretrained {
+        Some(id) => Some(
+            crate::motion_encoders::check_encoder(
+                Path::new(crate::motion_encoders::ENCODERS_DIR),
+                id,
+                &request.backend,
+                &features,
+                request.window_ms,
+                grid_steps,
+            )?
+            .1,
+        ),
+        None => None,
+    };
     let input = InputContract {
         sources,
         features,
@@ -420,7 +447,7 @@ fn check_request(
         recordings,
         backend: request.backend.clone(),
         seed: request.seed.unwrap_or(7),
-        movement_only: request.movement_only,
+        movement_only: request.movement_only || pretrained.is_some(),
         spike_method,
         baseline_ms,
         ppg_channels,
@@ -430,6 +457,8 @@ fn check_request(
         explicit_features: request.features.clone(),
         research: request.research,
         label_offset_ms,
+        pretrained_freeze: pretrained.is_some() && request.pretrained_freeze,
+        pretrained,
     })
 }
 
@@ -475,6 +504,8 @@ fn build_spec(
         "features": checked.explicit_features,
         "network": checked.network,
         "research": checked.research,
+        "pretrained": checked.pretrained.as_ref().map(|p| p.display().to_string()),
+        "pretrainedFreeze": checked.pretrained_freeze,
         "labelOffsetMs": checked.label_offset_ms,
     })
 }
@@ -1459,6 +1490,8 @@ mod tests {
             network: None,
             research: false,
             design_id: None,
+            pretrained: None,
+            pretrained_freeze: false,
             label_offset_ms: None,
             train_only: Vec::new(),
         }
@@ -1530,12 +1563,34 @@ mod tests {
     }
 
     #[test]
+    fn an_encoder_that_is_not_there_or_does_not_fit_is_refused_before_training() {
+        let mut r = request();
+        r.pretrained = Some("no-such-encoder".into());
+        r.backend = "cnn1d".into();
+        let error = check_request(&r, &datasets(), &sha).unwrap_err();
+        assert!(error.contains("no pre-trained encoder"), "{error}");
+        r.backend = "logreg".into();
+        let error = check_request(&r, &datasets(), &sha).unwrap_err();
+        assert!(error.contains("only the convolutional"), "{error}");
+        r.pretrained = Some("../../etc/passwd".into());
+        r.backend = "cnn1d".into();
+        assert!(check_request(&r, &datasets(), &sha).is_err());
+    }
+
+    #[test]
     fn movement_only_narrows_the_features_the_contract_lists() {
         let mut r = request();
         r.movement_only = true;
         let checked = check_request(&r, &datasets(), &sha).unwrap();
-        assert!(checked.input.features.iter().all(|f| f.ends_with("_std")));
-        assert_eq!(checked.input.features.len(), 8);
+        // The spreads, and how fast and often the motion changes: never a level.
+        assert!(
+            checked
+                .input
+                .features
+                .iter()
+                .all(|f| f.ends_with("_std") || label_inference::is_motion_dynamics_feature(f))
+        );
+        assert_eq!(checked.input.features.len(), 8 + 10);
     }
 
     #[test]
@@ -1553,8 +1608,14 @@ mod tests {
         let mut plain = r.clone();
         plain.baseline_ms = None;
         let without = check_request(&plain, &datasets(), &sha).unwrap();
-        assert_eq!(with.input.features.len(), without.input.features.len() + 6);
+        // The differences from the recent past, and the pulse in units of that past.
+        assert_eq!(with.input.features.len(), without.input.features.len() + 18);
         assert!(with.input.features.contains(&"ppg_red_rel_low".to_string()));
+        assert!(
+            with.input
+                .features
+                .contains(&"ppg_red_rel_z_slope".to_string())
+        );
         assert_eq!(with.baseline_ms, Some(4000));
         // They are about change, so "only how things change" keeps them.
         let mut change = r.clone();
@@ -1573,10 +1634,15 @@ mod tests {
         );
         let split = plan_split(&without.recordings, &without.mapping, &without.target).unwrap();
         assert!(build_spec(&without, &split, &BTreeMap::new())["baselineMs"].is_null());
-        // Columns models read the window itself: no baseline for them.
+        // A columns model keeps it to read its pulse channels against their recent past, and only then.
         let mut raw = r.clone();
         raw.input_mode = Some("raw".into());
         raw.features = None;
+        assert_eq!(
+            check_request(&raw, &datasets(), &sha).unwrap().baseline_ms,
+            Some(4000)
+        );
+        raw.features = Some(vec!["accel_x".into()]);
         assert!(
             check_request(&raw, &datasets(), &sha)
                 .unwrap()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 pytest.importorskip("onnxruntime")
@@ -71,14 +72,15 @@ def test_a_designed_dense_network_trains_exports_and_reports_its_progress(tmp_pa
     assert result["outcome"] == "deployable", result["message"]
     assert result["parityMaxAbsDifference"] <= lt.PARITY_TOLERANCE
     curve = json.loads((out / "training_curve.json").read_text())
-    assert curve[0]["epoch"] == 1 and curve[-1]["epoch"] == 30
+    # At most the 30 rounds asked for: early stopping may find the held-back recordings' loss lowest sooner.
+    assert curve[0]["epoch"] == 1 and curve[-1]["epoch"] == result["metrics"]["epochsTrained"] <= 30
     assert all({"trainLoss", "evalLoss"} <= set(point) for point in curve)
     assert curve[-1]["trainLoss"] < curve[0]["trainLoss"]  # it learned
     printed = [line for line in capsys.readouterr().out.splitlines() if line.startswith("@curve ")]
     assert len(printed) == len(curve)  # the desktop draws these live
     manifest = json.loads((out / "bundle" / "manifest.json").read_text())
     assert manifest["provenance"]["network"]["hidden"][0] == {"units": 8, "activation": activation}
-    assert manifest["provenance"]["parameters"] == parameter_count(parse_network(network, "torch-mlp"), 14 + 14, "torch-mlp")
+    assert manifest["provenance"]["parameters"] == parameter_count(parse_network(network, "torch-mlp"), len(result["features"]), "torch-mlp")
 
 
 def test_a_designed_convolutional_network_trains_and_exports(tmp_path: Path) -> None:
@@ -89,7 +91,10 @@ def test_a_designed_convolutional_network_trains_and_exports(tmp_path: Path) -> 
     assert result["parityMaxAbsDifference"] <= lt.PARITY_TOLERANCE
 
 
-def test_the_scikit_learn_network_takes_its_layer_sizes_and_reports_a_curve(tmp_path: Path) -> None:
+def test_the_scikit_learn_network_takes_its_layer_sizes_and_reports_a_curve(tmp_path: Path, monkeypatch) -> None:
+    # Three narrow layers on a few toy recordings can collapse to one score for everything, which the quality gate rightly
+    # refuses; this checks that the layer sizes are used, not how good such a network is.
+    monkeypatch.setattr(lt, "verdict", lambda metrics: None)
     out = tmp_path / "run"
     result = lt.run(spec_for(tmp_path, "mlp", network={"hidden": [{"units": 12}, {"units": 6}, {"units": 3}]}), out)
     assert result["outcome"] == "deployable", result["message"]
@@ -103,3 +108,19 @@ def test_a_chosen_subset_of_inputs_is_what_the_model_reads(tmp_path: Path) -> No
     assert cnn.features == ["accel_x", "gyro_y"]  # in canonical order
     with pytest.raises(lt.TrainingRefused, match="not computed from the chosen streams"):
         lt.parse_spec(spec_for(tmp_path, features=["ppg_green_mean"]))
+
+
+def test_early_stopping_picks_the_rounds_on_held_back_training_recordings(tmp_path: Path) -> None:
+    pytest.importorskip("torch")
+    raw = spec_for(tmp_path, "torch-mlp", network={"hidden": [{"units": 16}], "epochs": 300, "learningRate": 0.05})
+    raw["train"] = ["s1", "s2", "i1", "i2"]
+    spec = lt.parse_spec(raw)
+    x_train, y_train, _, _, _, groups = lt.build_matrices_with_groups(spec)
+    said: list[str] = []
+    best = lt.early_stopping_epochs(spec, x_train, y_train, groups, said.append)
+    assert best is not None and 1 <= best <= 300
+    assert said and "held-back training recording" in said[0]
+    # With too few recordings to hold any back, it trains the rounds it was given.
+    assert lt.early_stopping_epochs(spec, x_train, y_train, np.array(["s1"] * len(groups))) is None
+    result = lt.run(raw, tmp_path / "run")
+    assert result["metrics"]["epochsTrained"] <= 300

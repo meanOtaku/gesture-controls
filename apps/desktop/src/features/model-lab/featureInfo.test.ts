@@ -46,3 +46,22 @@ describe("the level against the recent past", () => {
     expect(describeInput("ppg_ir_rel_high")).toMatchObject({ group: "Infrared", short: "above its highest level" });
   });
 });
+
+describe("the motion dynamics and the level shares", () => {
+  it("describes each new input in words, in its sensor's Movement group", () => {
+    for (const name of ["accel_jerk_rms", "accel_jerk_max", "accel_magnitude_ptp", "accel_magnitude_kurtosis", "accel_crossing_rate", "gyro_jerk_rms", "gyro_crossing_rate"]) {
+      const info = describeInput(name);
+      expect(info.group, name).toBe("Movement");
+      expect(info.text, name).not.toBe(name);
+    }
+    expect(describeInput("gyro_magnitude_kurtosis").stream).toBe("watchGyroscope");
+    expect(describeInput("accel_jerk_rms").text).toContain("acceleration");
+  });
+
+  it("describes the pulse in units of its recent past", () => {
+    const info = describeInput("ppg_red_rel_z_mean");
+    expect(info.stream).toBe("watchPpg");
+    expect(info.text).toContain("in units of the last few seconds");
+    expect(describeInput("ppg_ir_rel_z_slope").short).toBe("trend in recent spreads");
+  });
+});

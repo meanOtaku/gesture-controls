@@ -87,7 +87,7 @@ describe("window length hint", () => {
 });
 
 describe("comparing the pulse level with the recent past", () => {
-  it("is offered for statistics that read the pulse sensor, sent with the design, and not for the dataset's own columns", async () => {
+  it("is offered whenever the pulse sensor is read, sent with the design, and for columns reads the pulse in units of its past", async () => {
     const pulse = { ...builtIn, id: "mine", name: "Mine", builtIn: false, sources: ["watchPpg"], baselineMs: null };
     saved = [pulse];
     render(<NetworkDesigns desktopAvailable />);
@@ -98,7 +98,7 @@ describe("comparing the pulse level with the recent past", () => {
     expect(await screen.findByText(/last 4 seconds/)).toBeInTheDocument();
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("preview_network_design", { design: expect.objectContaining({ baselineMs: 4000, features: null }) }));
     fireEvent.change(screen.getByLabelText("What goes into the model"), { target: { value: "raw" } });
-    expect(screen.queryByLabelText("Compare the pulse level with the recent past")).toBeNull();
+    expect(await screen.findByText(/Each pulse channel is read in units of its last 4 seconds/)).toBeInTheDocument();
   });
 
   it("is not offered without the pulse sensor", async () => {
@@ -107,5 +107,45 @@ describe("comparing the pulse level with the recent past", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Edit Mine" }));
     await screen.findByLabelText("Method");
     expect(screen.queryByLabelText("Compare the pulse level with the recent past")).toBeNull();
+  });
+});
+
+describe("starting a convolutional design from a pre-trained encoder", () => {
+  const encoder = { id: "motion-encoder", windowMs: 1000, steps: 32, accuracy: 0.55, gestureVsNothingAuc: 0.93, pinchVsOtherGesturesAuc: 0.82, sha256: "ab" };
+  const cnn = { ...own, id: "cnn", name: "Conv", method: "cnn1d", inputMode: "raw", sources: ["watchPpg"], columns: ["ppg_green"], readings: 16, windowMs: 500 };
+
+  it("offers the encoders in this checkout and, when one is chosen, makes the design read what it read", async () => {
+    saved = [cnn];
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation(async (command: string, args?: unknown) => (command === "list_motion_encoders" ? [encoder] : base(command, args as never)));
+    render(<NetworkDesigns desktopAvailable />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Conv" }));
+    const select = await screen.findByLabelText("Start from a pre-trained encoder");
+    await waitFor(() => expect(screen.getByRole("option", { name: "motion-encoder (1 s, 32 readings)" })).toBeInTheDocument());
+    fireEvent.change(select, { target: { value: "motion-encoder" } });
+    expect(await screen.findByText(/pinch from other gestures with 0.82/)).toBeInTheDocument();
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("preview_network_design", {
+      design: expect.objectContaining({
+        pretrained: "motion-encoder", columns: ["accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z"], readings: 32, windowMs: 1000, movementOnly: true,
+      }),
+    }));
+    fireEvent.click(screen.getAllByRole("checkbox", { name: "Keep its layers as they are (only the last layer learns)" })[0]);
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("preview_network_design", { design: expect.objectContaining({ pretrainedFreeze: true }) }));
+  });
+
+  it("says how to make one when the checkout has none", async () => {
+    saved = [cnn];
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation(async (command: string, args?: unknown) => (command === "list_motion_encoders" ? [] : base(command, args as never)));
+    render(<NetworkDesigns desktopAvailable />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Conv" }));
+    expect(await screen.findByText(/No pre-trained encoder in this checkout/)).toBeInTheDocument();
+  });
+
+  it("is not offered for other methods", async () => {
+    render(<NetworkDesigns desktopAvailable />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Mine" }));
+    await screen.findByLabelText("Method");
+    expect(screen.queryByLabelText("Start from a pre-trained encoder")).toBeNull();
   });
 });

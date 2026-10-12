@@ -18,7 +18,7 @@ use model_lab_core::{
     RunOutcome, SnapshotDraft, SnapshotId, Split, StreamSource, Thresholds, TrainerBackend,
     TrainerConfig, TrainingRun,
 };
-use pinch_inference::{FEATURE_NAMES, GridChannel};
+use pinch_inference::{FEATURE_NAMES, GridChannel, MOTION_FEATURE_START, MOTION_STATS};
 use thiserror::Error;
 
 use crate::bundle::{source_of_channel, source_of_feature};
@@ -66,6 +66,13 @@ pub fn is_movement_feature(name: &str) -> bool {
         || (name.starts_with("ppg_") && name.ends_with("_slope"))
         || is_spike_feature(name)
         || is_baseline_feature(name)
+        || is_motion_dynamics_feature(name)
+}
+
+/// How fast and how often a motion sensor changes inside the window (jerk, peak-to-peak and peakedness of its length,
+/// crossings of its mean): all about change, never posture.
+pub fn is_motion_dynamics_feature(name: &str) -> bool {
+    FEATURE_NAMES[MOTION_FEATURE_START..MOTION_FEATURE_START + 2 * MOTION_STATS].contains(&name)
 }
 
 /// A pulse-sensor level feature against the recent past (its average minus the median of the pulse just before the
@@ -440,7 +447,7 @@ pub fn complete_run<P: Persist>(
 /// The trainer backends this app offers, as the registry records them.
 pub fn trainer_backend(name: &str) -> Option<TrainerBackend> {
     match name {
-        "logreg" | "mlp" => Some(TrainerBackend::ScikitLearn),
+        "logreg" | "mlp" | "gbt" => Some(TrainerBackend::ScikitLearn),
         "torch-mlp" | "cnn1d" => Some(TrainerBackend::PyTorch),
         _ => None,
     }
@@ -621,7 +628,7 @@ mod tests {
             false,
             false,
         );
-        assert_eq!(all.len(), FEATURE_NAMES.len() - 24 - 6); // the spike and the level features are opt-in
+        assert_eq!(all.len(), FEATURE_NAMES.len() - 24 - 18); // the spike and the level features are opt-in
         let with_spikes = canonical_features_for(
             &[
                 StreamSource::WatchOrientation,
@@ -632,7 +639,7 @@ mod tests {
             false,
             true,
         );
-        assert_eq!(with_spikes.len(), FEATURE_NAMES.len() - 6);
+        assert_eq!(with_spikes.len(), FEATURE_NAMES.len() - 18);
         let with_both = canonical_features_with_channels(
             &[StreamSource::WatchPpg],
             false,
@@ -642,7 +649,7 @@ mod tests {
         );
         assert_eq!(
             with_both.iter().filter(|f| is_baseline_feature(f)).count(),
-            6
+            18
         );
         // They are about change, so "only how things change" keeps them.
         let moving = canonical_features_with_channels(
@@ -653,6 +660,11 @@ mod tests {
             &PPG_CHANNELS,
         );
         assert!(moving.contains(&"ppg_red_rel_low".to_string()));
+        assert!(moving.contains(&"ppg_red_rel_z_mean".to_string()));
+        // The motion dynamics are about change too; they come with their sensor.
+        let shaking = canonical_features_for(&[StreamSource::WatchGyroscope], true, false);
+        assert!(shaking.contains(&"gyro_jerk_rms".to_string()));
+        assert!(!shaking.iter().any(|f| f.starts_with("accel_")));
         // Without the pulse sensor there is nothing for them to read.
         assert_eq!(
             canonical_features_for(&[StreamSource::WatchAcceleration], false, true),
@@ -887,7 +899,17 @@ mod tests {
                 "gyro_x_std",
                 "gyro_y_std",
                 "gyro_z_std",
-                "gyro_magnitude_std"
+                "gyro_magnitude_std",
+                "accel_jerk_rms",
+                "accel_jerk_max",
+                "accel_magnitude_ptp",
+                "accel_magnitude_kurtosis",
+                "accel_crossing_rate",
+                "gyro_jerk_rms",
+                "gyro_jerk_max",
+                "gyro_magnitude_ptp",
+                "gyro_magnitude_kurtosis",
+                "gyro_crossing_rate"
             ]
         );
         assert_eq!(
@@ -924,6 +946,7 @@ mod tests {
     #[test]
     fn the_offered_backends_map_to_the_registry_ones() {
         assert_eq!(trainer_backend("logreg"), Some(TrainerBackend::ScikitLearn));
+        assert_eq!(trainer_backend("gbt"), Some(TrainerBackend::ScikitLearn));
         assert_eq!(trainer_backend("mlp"), Some(TrainerBackend::ScikitLearn));
         assert_eq!(trainer_backend("torch-mlp"), Some(TrainerBackend::PyTorch));
         assert_eq!(trainer_backend("keras"), None);

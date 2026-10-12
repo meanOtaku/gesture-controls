@@ -9,8 +9,12 @@
 pub const BASE_FEATURE_COUNT: usize = 55;
 /// Number of features in the ordered vector every model reads its inputs from: the 55 base statistics, then 24 spike
 /// features (8 for each of the three PPG channels), then 6 pulse-sensor level features relative to the recent past (2 for
-/// each channel). Matches Python's `len(FEATURE_NAMES)`.
-pub const FEATURE_COUNT: usize = 85;
+/// each channel), then 10 motion-dynamics features (5 for the acceleration, 5 for the gyroscope), then 12 pulse features in
+/// units of the recent past (4 for each channel). Matches Python's `len(FEATURE_NAMES)`.
+pub const FEATURE_COUNT: usize = 107;
+/// Where the motion-dynamics features start in [`FEATURE_NAMES`], and how many statistics each motion sensor has.
+pub const MOTION_FEATURE_START: usize = 85;
+pub const MOTION_STATS: usize = 5;
 
 /// Exact feature order, matching `features.py`'s `FEATURE_NAMES` tuple. A
 /// model bundle's `metadata.json` records this same order (see `bundle.py`'s
@@ -101,6 +105,28 @@ pub const FEATURE_NAMES: [&str; FEATURE_COUNT] = [
     "ppg_green_rel_high",
     "ppg_red_rel_high",
     "ppg_ir_rel_high",
+    "accel_jerk_rms",
+    "accel_jerk_max",
+    "accel_magnitude_ptp",
+    "accel_magnitude_kurtosis",
+    "accel_crossing_rate",
+    "gyro_jerk_rms",
+    "gyro_jerk_max",
+    "gyro_magnitude_ptp",
+    "gyro_magnitude_kurtosis",
+    "gyro_crossing_rate",
+    "ppg_green_rel_z_mean",
+    "ppg_red_rel_z_mean",
+    "ppg_ir_rel_z_mean",
+    "ppg_green_rel_z_max",
+    "ppg_red_rel_z_max",
+    "ppg_ir_rel_z_max",
+    "ppg_green_rel_z_min",
+    "ppg_red_rel_z_min",
+    "ppg_ir_rel_z_min",
+    "ppg_green_rel_z_slope",
+    "ppg_red_rel_z_slope",
+    "ppg_ir_rel_z_slope",
 ];
 
 /// Fewer pulse samples than this in the baseline and there is nothing to compare the window with.
@@ -147,6 +173,144 @@ pub fn baseline_features(window: [&[f64]; 3], baseline: [&[f64]; 3]) -> [f64; 6]
     out
 }
 
+/// Below this a baseline's level is taken to be zero, and a share of it is 0 rather than a division by nothing.
+const RATIO_FLOOR: f64 = 1e-9;
+
+/// The smallest spread a pulse channel's recent past is taken to have, in counts (see [`pulse_z`]).
+pub const Z_SCALE_FLOOR: f64 = 1.0;
+/// How far, in spreads of the recent past, a pulse value may be counted.
+pub const Z_CLIP: f64 = 20.0;
+const MAD_TO_SD: f64 = 1.4826;
+
+/// The middle value of `values` (the average of the two middle ones for an even count; 0 for none).
+fn true_median(values: &[f64]) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    let mut ordered = values.to_vec();
+    ordered.sort_by(|a, b| a.total_cmp(b));
+    let middle = ordered.len() / 2;
+    if ordered.len() % 2 == 1 {
+        ordered[middle]
+    } else {
+        (ordered[middle - 1] + ordered[middle]) / 2.0
+    }
+}
+
+/// `values` of one pulse channel in units of its recent `past`: minus the past's median, over its spread (the median
+/// absolute deviation scaled to a standard deviation, at least [`Z_SCALE_FLOOR`]), clipped to +/-[`Z_CLIP`]. The sensor's
+/// level is arbitrary and how far it swings depends on how the watch sits; this cancels both, so what a model learns in
+/// one session carries over to the next. Mirrors `pulse_z` in the trainer.
+pub fn pulse_z(values: &[f64], past: &[f64]) -> Vec<f64> {
+    let centre = true_median(past);
+    let deviations: Vec<f64> = past.iter().map(|v| (v - centre).abs()).collect();
+    let spread = (true_median(&deviations) * MAD_TO_SD).max(Z_SCALE_FLOOR);
+    values
+        .iter()
+        .map(|v| ((v - centre) / spread).clamp(-Z_CLIP, Z_CLIP))
+        .collect()
+}
+
+/// The twelve pulse features in units of the recent past, in the order of the last twelve names of [`FEATURE_NAMES`]:
+/// for each channel its window samples through [`pulse_z`] against its baseline, then their mean, largest, smallest and
+/// least-squares slope per second (`times_ms` are the window samples' times). A channel with no window samples or too few
+/// baseline samples is all zeros; the slope is zero without two samples apart in time. Mirrors `baseline_z_features`.
+pub fn baseline_z_features(
+    window: [&[f64]; 3],
+    times_ms: &[f64],
+    baseline: [&[f64]; 3],
+) -> [f64; 12] {
+    let mut out = [0.0; 12];
+    for channel in 0..3 {
+        let (values, past) = (window[channel], baseline[channel]);
+        if values.is_empty() || past.len() < BASELINE_MIN_SAMPLES {
+            continue;
+        }
+        let z = pulse_z(values, past);
+        let n = z.len() as f64;
+        let mean = z.iter().sum::<f64>() / n;
+        out[channel] = mean;
+        out[3 + channel] = z.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        out[6 + channel] = z.iter().copied().fold(f64::INFINITY, f64::min);
+        if z.len() >= 2 && times_ms.len() == z.len() {
+            let seconds: Vec<f64> = times_ms.iter().map(|t| t / 1000.0).collect();
+            let average = seconds.iter().sum::<f64>() / n;
+            let centred: Vec<f64> = seconds.iter().map(|s| s - average).collect();
+            let denominator: f64 = centred.iter().map(|c| c * c).sum();
+            if denominator > 0.0 {
+                let numerator: f64 = centred.iter().zip(&z).map(|(c, v)| c * (v - mean)).sum();
+                out[9 + channel] = numerator / denominator;
+            }
+        }
+    }
+    out
+}
+
+/// The five motion-dynamics statistics of one motion sensor from its samples in the window (`values`, taken at `times_ms`):
+/// how fast the vector changes per second (root mean square and largest), the largest length less the smallest, how
+/// peaked the length is (excess kurtosis; 0 under 4 samples or with no spread), and how often an axis crosses its own mean
+/// per second (averaged over the axes). Those needing two samples, or time between them, are 0 without. `times_ms` of
+/// another length than `values` counts as no time. Mirrors `motion_features` in the trainer.
+pub fn motion_features(values: &[[f64; 3]], times_ms: &[f64]) -> [f64; MOTION_STATS] {
+    let mut out = [0.0; MOTION_STATS];
+    let n = values.len();
+    if n == 0 {
+        return out;
+    }
+    let magnitude: Vec<f64> = values
+        .iter()
+        .map(|v| (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt())
+        .collect();
+    let (low, high) = magnitude
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), &m| {
+            (l.min(m), h.max(m))
+        });
+    out[2] = high - low;
+    if n >= 4 {
+        let mean = magnitude.iter().sum::<f64>() / n as f64;
+        let m2 = magnitude.iter().map(|m| (m - mean).powi(2)).sum::<f64>() / n as f64;
+        if m2 > RATIO_FLOOR {
+            let m4 = magnitude.iter().map(|m| (m - mean).powi(4)).sum::<f64>() / n as f64;
+            out[3] = m4 / (m2 * m2) - 3.0;
+        }
+    }
+    if n < 2 || times_ms.len() != n {
+        return out;
+    }
+    let rates: Vec<f64> = values
+        .windows(2)
+        .zip(times_ms.windows(2))
+        .filter_map(|(v, t)| {
+            let dt_s = (t[1] - t[0]) / 1000.0;
+            (dt_s > 0.0).then(|| {
+                let step = ((v[1][0] - v[0][0]).powi(2)
+                    + (v[1][1] - v[0][1]).powi(2)
+                    + (v[1][2] - v[0][2]).powi(2))
+                .sqrt();
+                step / dt_s
+            })
+        })
+        .collect();
+    if !rates.is_empty() {
+        out[0] = (rates.iter().map(|r| r * r).sum::<f64>() / rates.len() as f64).sqrt();
+        out[1] = rates.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    }
+    let duration_s = (times_ms[n - 1] - times_ms[0]) / 1000.0;
+    if duration_s > 0.0 {
+        let mut crossings = 0usize;
+        for axis in 0..3 {
+            let mean = values.iter().map(|v| v[axis]).sum::<f64>() / n as f64;
+            crossings += values
+                .windows(2)
+                .filter(|w| (w[0][axis] - mean) * (w[1][axis] - mean) < 0.0)
+                .count();
+        }
+        out[4] = crossings as f64 / 3.0 / duration_s;
+    }
+    out
+}
+
 /// One fused, ready-to-classify window: a raw PPG batch's per-sample channel
 /// arrays plus the last-known watch orientation (accel/gyro/quat), carried
 /// forward exactly like `telemetryStore.ts`'s dataset recorder. Orientation
@@ -175,6 +339,9 @@ pub struct FusedWindow {
     /// they carry the in-window motion like the training windows' do; empty
     /// means the carried snapshot stands alone and those statistics are 0.
     pub orientation_in_window: Vec<OrientationSnapshot>,
+    /// When each of `orientation_in_window` was taken (on any one clock; only the differences are used), for a grid laid
+    /// out in time.
+    pub orientation_timestamps_ns: Vec<u64>,
     pub contact_quality_mean: f64,
     /// The pulse samples just before the window, for the features that compare its level with the recent past. `None` when
     /// the model reads none of them (they are then 0).
@@ -754,6 +921,43 @@ pub fn extract_features_with(
         push(value);
     }
 
+    // How the motion moved inside the window (0 when no orientation sample arrived in it, like the trainer's).
+    let first_ms = window
+        .orientation_timestamps_ns
+        .first()
+        .copied()
+        .unwrap_or(0);
+    let times_ms: Vec<f64> = window
+        .orientation_timestamps_ns
+        .iter()
+        .map(|&t| t.saturating_sub(first_ms) as f64 / 1_000_000.0)
+        .collect();
+    let sensors: [fn(&OrientationSnapshot) -> [f64; 3]; 2] = [|s| s.accel, |s| s.gyro];
+    for select in sensors {
+        let values: Vec<[f64; 3]> = window.orientation_in_window.iter().map(select).collect();
+        for value in motion_features(&values, &times_ms) {
+            push(value);
+        }
+    }
+
+    // The pulse in units of its recent past (0 when the model has no baseline).
+    let first_ppg = window.ppg_timestamps_ns.first().copied().unwrap_or(0);
+    let ppg_times_ms: Vec<f64> = window
+        .ppg_timestamps_ns
+        .iter()
+        .map(|&t| t.saturating_sub(first_ppg) as f64 / 1_000_000.0)
+        .collect();
+    let zs = window.baseline.as_ref().map_or([0.0; 12], |past| {
+        baseline_z_features(
+            [&window.ppg_green, &window.ppg_red, &window.ppg_ir],
+            &ppg_times_ms,
+            [&past.green, &past.red, &past.ir],
+        )
+    });
+    for value in zs {
+        push(value);
+    }
+
     debug_assert_eq!(cursor, FEATURE_COUNT);
     out
 }
@@ -772,8 +976,106 @@ pub fn select_features(features: &[f32; FEATURE_COUNT], indices: &[usize]) -> Ve
 mod tests {
     use super::*;
 
+    /// The same cases the trainer's tests check (`tools/label-trainer/tests/fixtures/base_feature_cases.json`): the 55
+    /// statistics made here from the samples that arrived must equal the ones the trainer makes from a recording of the
+    /// same samples, or a model trained there would see different inputs live.
+    #[test]
+    fn base_features_match_the_trainer_on_the_shared_cases() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../tools/label-trainer/tests/fixtures/base_feature_cases.json"
+        ))
+        .unwrap();
+        let names: Vec<&str> = fixture["featureNames"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert_eq!(names, FEATURE_NAMES[..BASE_FEATURE_COUNT]);
+        let numbers = |value: &serde_json::Value| -> Vec<f64> {
+            value
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|n| n.as_f64().unwrap())
+                .collect()
+        };
+        for case in fixture["cases"].as_array().unwrap() {
+            let name = case["name"].as_str().unwrap();
+            let ppg = &case["ppg"];
+            let quality = numbers(&ppg["quality"]);
+            let in_window: Vec<OrientationSnapshot> = case["orientation"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|sample| {
+                    let (a, g, q) = (
+                        numbers(&sample["accel"]),
+                        numbers(&sample["gyro"]),
+                        numbers(&sample["quat"]),
+                    );
+                    OrientationSnapshot {
+                        accel: [a[0], a[1], a[2]],
+                        gyro: [g[0], g[1], g[2]],
+                        quat: [q[0], q[1], q[2], q[3]],
+                    }
+                })
+                .collect();
+            // What the pipeline hands over when nothing arrived in the window and nothing came before it.
+            let latest = in_window.last().copied().unwrap_or(OrientationSnapshot {
+                accel: [0.0; 3],
+                gyro: [0.0; 3],
+                quat: [1.0, 0.0, 0.0, 0.0],
+            });
+            let window = FusedWindow {
+                orientation_timestamps_ns: case["orientation"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|s| s["timestampNs"].as_u64().unwrap())
+                    .collect(),
+                ppg_green: numbers(&ppg["green"]),
+                ppg_red: numbers(&ppg["red"]),
+                ppg_ir: numbers(&ppg["ir"]),
+                ppg_timestamps_ns: ppg["timestampsNs"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|n| n.as_u64().unwrap())
+                    .collect(),
+                orientation: latest,
+                orientation_in_window: in_window,
+                contact_quality_mean: if quality.is_empty() {
+                    0.0
+                } else {
+                    quality.iter().sum::<f64>() / quality.len() as f64
+                },
+                baseline: None,
+            };
+            let made = extract_features_with(&window, None);
+            for (index, expected) in numbers(&case["expected"]).iter().enumerate() {
+                let got = f64::from(made[index]);
+                assert!(
+                    (got - expected).abs() <= 1e-5 * expected.abs().max(1.0),
+                    "{name}: {} is {got} here and {expected} in the trainer",
+                    FEATURE_NAMES[index]
+                );
+            }
+            for (offset, expected) in numbers(&case["expectedMotion"]).iter().enumerate() {
+                let index = MOTION_FEATURE_START + offset;
+                let got = f64::from(made[index]);
+                assert!(
+                    (got - expected).abs() <= 1e-5 * expected.abs().max(1.0),
+                    "{name}: {} is {got} here and {expected} in the trainer",
+                    FEATURE_NAMES[index]
+                );
+            }
+        }
+    }
+
     fn sample_window() -> FusedWindow {
         FusedWindow {
+            orientation_timestamps_ns: Vec::new(),
             ppg_green: vec![10.0, 12.0, 14.0],
             ppg_red: vec![20.0, 21.0, 19.0],
             ppg_ir: vec![5.0, 5.0, 5.0],
@@ -855,8 +1157,13 @@ mod tests {
         assert_eq!(FEATURE_NAMES[BASE_FEATURE_COUNT], "ppg_green_spike_height");
         assert_eq!(
             FEATURE_NAMES.len(),
+            BASE_FEATURE_COUNT + 3 * SPIKE_STATS_PER_CHANNEL + 6 + 2 * MOTION_STATS + 12
+        );
+        assert_eq!(
+            MOTION_FEATURE_START,
             BASE_FEATURE_COUNT + 3 * SPIKE_STATS_PER_CHANNEL + 6
         );
+        assert_eq!(FEATURE_NAMES[MOTION_FEATURE_START], "accel_jerk_rms");
     }
 
     /// The same cases the trainer's tests check (`tools/label-trainer/tests/fixtures/baseline_cases.json`): the level-
@@ -902,14 +1209,50 @@ mod tests {
                     got[index]
                 );
             }
+            let times: Vec<f64> = case["windowTimesMs"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_f64().unwrap())
+                .collect();
+            let zs = baseline_z_features(
+                [&window[0], &window[1], &window[2]],
+                &times,
+                [&past[0], &past[1], &past[2]],
+            );
+            for (index, expected) in case["expectedZ"].as_array().unwrap().iter().enumerate() {
+                let expected = expected.as_f64().unwrap();
+                assert!(
+                    (zs[index] - expected).abs() <= 1e-9 * expected.abs().max(1.0),
+                    "{}: z feature {index}: {} vs {expected}",
+                    case["name"],
+                    zs[index]
+                );
+            }
+            for (channel, series) in channels(&case["zSeries"]).iter().enumerate() {
+                if series.is_empty() {
+                    continue;
+                }
+                let got = pulse_z(&window[channel], &past[channel]);
+                for (g, w) in got.iter().zip(series) {
+                    assert!(
+                        (g - w).abs() <= 1e-9 * w.abs().max(1.0),
+                        "{}: z series: {g} vs {w}",
+                        case["name"]
+                    );
+                }
+            }
         }
     }
 
     #[test]
-    fn a_window_with_a_baseline_carries_its_level_features_at_the_end_and_none_without() {
+    fn a_window_with_a_baseline_carries_its_level_features_and_none_without() {
+        // The differences come right before the motion dynamics, the shares at the very end.
+        const LEVEL: usize = MOTION_FEATURE_START - 6;
         let mut window = sample_window();
         let none = extract_features_with(&window, None);
-        assert!(none[FEATURE_COUNT - 6..].iter().all(|v| *v == 0.0));
+        assert!(none[LEVEL..MOTION_FEATURE_START].iter().all(|v| *v == 0.0));
+        assert!(none[FEATURE_COUNT - 12..].iter().all(|v| *v == 0.0));
         let past: Vec<f64> = (0..21).map(|i| 1.0 + f64::from(i)).collect(); // 1..21: low end 3, high end 19
         window.baseline = Some(PpgBaseline {
             green: past.clone(),
@@ -917,11 +1260,18 @@ mod tests {
             ir: past,
         });
         let with = extract_features_with(&window, None);
-        let names = &FEATURE_NAMES[FEATURE_COUNT - 6..];
-        assert_eq!(names[0], "ppg_green_rel_low");
-        assert!((with[FEATURE_COUNT - 6] - (12.0 - 3.0)).abs() < 1e-5); // green mean 12 against the low end, 3
-        assert!((with[FEATURE_COUNT - 3] - (12.0 - 19.0)).abs() < 1e-5); // and against the high end, 19
-        assert_eq!(&with[..FEATURE_COUNT - 6], &none[..FEATURE_COUNT - 6]); // nothing else changes
+        assert_eq!(FEATURE_NAMES[LEVEL], "ppg_green_rel_low");
+        assert!((with[LEVEL] - (12.0 - 3.0)).abs() < 1e-5); // green mean 12 against the low end, 3
+        assert!((with[LEVEL + 3] - (12.0 - 19.0)).abs() < 1e-5); // and against the high end, 19
+        // And in units of the past: 1..21 has median 11 and median absolute deviation 5, so green (10, 12, 14) is
+        // (-1, 1, 3) / (5 x 1.4826): mean 1/7.413.
+        assert_eq!(FEATURE_NAMES[FEATURE_COUNT - 12], "ppg_green_rel_z_mean");
+        assert!((with[FEATURE_COUNT - 12] - 1.0 / (5.0 * 1.4826)).abs() < 1e-5);
+        assert_eq!(&with[..LEVEL], &none[..LEVEL]); // nothing else changes
+        assert_eq!(
+            &with[MOTION_FEATURE_START..FEATURE_COUNT - 12],
+            &none[MOTION_FEATURE_START..FEATURE_COUNT - 12]
+        );
     }
 
     /// The same cases the trainer's tests check (`tools/label-trainer/tests/fixtures/spike_cases.json`): the spike

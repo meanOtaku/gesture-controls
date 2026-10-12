@@ -4,7 +4,9 @@ use crate::bundle::TrainingRange;
 use model_lab_core::{
     InputContract, LabelId, LifecycleState, ModelVersion, ModelVersionId, QualityRules, Thresholds,
 };
-use pinch_inference::{FEATURE_COUNT, FEATURE_NAMES, GridChannel, SpikeMethod};
+use pinch_inference::{
+    FEATURE_COUNT, FEATURE_NAMES, GridChannel, GridPulse, GridTiming, SpikeMethod,
+};
 use thiserror::Error;
 use tract_onnx::prelude::*;
 
@@ -38,6 +40,8 @@ pub enum ModelError {
 pub struct GridPlan {
     pub channels: Vec<GridChannel>,
     pub steps: usize,
+    pub timing: GridTiming,
+    pub pulse: GridPulse,
 }
 
 /// How far past its training range an input may be before it counts as outside, as a share of that range's width.
@@ -115,14 +119,14 @@ impl LoadedModel {
             return Err(ModelError::NotTheApprovedModel);
         }
         // The bundle validator already proved every feature name is canonical.
-        let grid = bundle.manifest.grid_channels().map(|channels| GridPlan {
-            channels,
-            steps: bundle
-                .manifest
-                .input
-                .grid
-                .as_ref()
-                .map_or(0, |g| g.steps as usize),
+        let grid = bundle.manifest.grid_channels().map(|channels| {
+            let spec = bundle.manifest.input.grid.as_ref();
+            GridPlan {
+                channels,
+                steps: spec.map_or(0, |g| g.steps as usize),
+                timing: spec.map_or(GridTiming::Samples, |g| g.timing.into()),
+                pulse: spec.map_or(GridPulse::Raw, |g| g.pulse.into()),
+            }
         });
         let feature_indices = bundle
             .manifest
@@ -468,6 +472,8 @@ pub(crate) mod tests {
             "trained_torch_bundle",
             // Designed networks: tanh, leaky ReLU and sigmoid layers, three hidden layers, dropout.
             "trained_designed_dense_bundle",
+            // Gradient-boosted trees, written as matrix arithmetic and comparisons (no tree operator).
+            "trained_gbt_bundle",
         ] {
             let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("tests/fixtures")

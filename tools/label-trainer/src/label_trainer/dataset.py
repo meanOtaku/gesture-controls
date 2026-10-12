@@ -81,7 +81,7 @@ def build_dataset_from_recordings(
             target = label_mapping.resolve(window.label) if label_mapping is not None else resolve_target(window.label, hold_handling)
             if target is None:
                 continue
-            if baseline_ms is not None and feature_fn is None and baseline_rows(recording, window, baseline_ms) is None:
+            if baseline_ms is not None and baseline_rows(recording, window, baseline_ms) is None:
                 continue
             feature_rows.append(feature_fn(recording, window) if feature_fn is not None else extract_features(recording, window, spike_method, baseline_ms))
             targets.append(target)

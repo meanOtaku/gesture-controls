@@ -16,9 +16,14 @@ dependencies = [
 dev = ["pytest>=8"]
 onnx = ["onnx>=1.16", "onnxruntime>=1.18"]
 torch = ["torch>=2.3", "onnx>=1.16", "onnxruntime>=1.18", "onnxscript>=0.1"]
+# Reading the MicroDPad dataset to pre-train a motion encoder (see pretrain.py).
+pretrain = ["h5py>=3.10"]
 
 [project.scripts]
 label-classifier-train = "label_trainer.label_train:cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+markers = ["strict_gate: keep the trainer's real whole-recording limits (see tests/conftest.py)"]

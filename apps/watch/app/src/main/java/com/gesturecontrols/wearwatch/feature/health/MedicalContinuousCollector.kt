@@ -262,7 +262,7 @@ class MedicalContinuousCollector(
             if (dataPoints.isEmpty()) return
             val samples = dataPoints.map { point ->
                 HeartRateSample(
-                    timestampNs = point.timestamp,
+                    timestampNs = sdkTimestampToNs(point.timestamp),
                     heartRate = point.getValue(ValueKey.HeartRateSet.HEART_RATE),
                     heartRateStatus = point.getValue(ValueKey.HeartRateSet.HEART_RATE_STATUS),
                     ibiMs = point.getValue(ValueKey.HeartRateSet.IBI_LIST),
@@ -284,7 +284,7 @@ class MedicalContinuousCollector(
             if (dataPoints.isEmpty()) return
             val samples = dataPoints.map { point ->
                 SkinTemperatureSample(
-                    timestampNs = point.timestamp,
+                    timestampNs = sdkTimestampToNs(point.timestamp),
                     objectTemperatureCelsius =
                         point.getValue(ValueKey.SkinTemperatureSet.OBJECT_TEMPERATURE).toDouble(),
                     ambientTemperatureCelsius =
@@ -307,7 +307,7 @@ class MedicalContinuousCollector(
             if (dataPoints.isEmpty()) return
             val samples = dataPoints.map { point ->
                 EdaSample(
-                    timestampNs = point.timestamp,
+                    timestampNs = sdkTimestampToNs(point.timestamp),
                     skinConductanceMicrosiemens = point.getValue(ValueKey.EdaSet.SKIN_CONDUCTANCE).toDouble(),
                     status = point.getValue(ValueKey.EdaSet.STATUS),
                 )

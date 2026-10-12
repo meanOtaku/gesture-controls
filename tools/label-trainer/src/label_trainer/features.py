@@ -77,7 +77,24 @@ SPIKE_FEATURE_NAMES: tuple[str, ...] = tuple(f"{column}_{stat}" for stat in SPIK
 # the same places.
 BASELINE_STATS: tuple[str, ...] = ("rel_low", "rel_high")
 BASELINE_FEATURE_NAMES: tuple[str, ...] = tuple(f"{column}_{stat}" for stat in BASELINE_STATS for column in PPG_COLUMNS)
-FEATURE_NAMES: tuple[str, ...] = (*BASE_FEATURE_NAMES, *SPIKE_FEATURE_NAMES, *BASELINE_FEATURE_NAMES)
+# How the motion sensors move inside the window, beyond their spread: the quick changes of a tap or a pinch. For the
+# acceleration and the gyroscope each (see `motion_features`). All about change, none about posture.
+MOTION_STATS: tuple[str, ...] = ("jerk_rms", "jerk_max", "magnitude_ptp", "magnitude_kurtosis", "crossing_rate")
+MOTION_FEATURE_NAMES: tuple[str, ...] = tuple(f"{sensor}_{stat}" for sensor in ("accel", "gyro") for stat in MOTION_STATS)
+# The pulse in units of its own recent past (see `pulse_z`): the sensor's level is arbitrary (one session sits at
+# -250,000 counts, another at +310,000) and how far it swings depends on how the watch sits, so neither carries over
+# between sessions; measured against the last few seconds' median and spread, both are cancelled. Only with a baseline,
+# like the differences. On 18 recordings over five days this lifted pinch-against-rest from 0.61 to 0.77 AUC and
+# pinch-against-fist from 0.42-0.53 to 0.72-0.81, each recording judged by a model that never saw it.
+BASELINE_Z_STATS: tuple[str, ...] = ("rel_z_mean", "rel_z_max", "rel_z_min", "rel_z_slope")
+BASELINE_Z_FEATURE_NAMES: tuple[str, ...] = tuple(f"{column}_{stat}" for stat in BASELINE_Z_STATS for column in PPG_COLUMNS)
+# The later blocks come after the earlier ones so every model trained before them still names the same features in the
+# same places.
+FEATURE_NAMES: tuple[str, ...] = (
+    *BASE_FEATURE_NAMES, *SPIKE_FEATURE_NAMES, *BASELINE_FEATURE_NAMES, *MOTION_FEATURE_NAMES, *BASELINE_Z_FEATURE_NAMES,
+)
+# Every feature that compares the pulse with the recent past, so needs a baseline.
+ALL_BASELINE_FEATURE_NAMES: tuple[str, ...] = (*BASELINE_FEATURE_NAMES, *BASELINE_Z_FEATURE_NAMES)
 BASE_FEATURE_COUNT = len(BASE_FEATURE_NAMES)
 
 # Fewer PPG samples than this in a window and there is no spike to speak of: every spike feature is 0.
@@ -398,48 +415,78 @@ def _mean_and_std_by_row(block: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return means, stds
 
 
+_IDENTITY_QUATERNION = np.array([1.0, 0.0, 0.0, 0.0])
+
+
+def stream_rows(recording: Recording, window: Window) -> tuple[np.ndarray, np.ndarray]:
+    """The window's rows that carried a real pulse sample, and those that carried a real orientation sample. A recording
+    built by hand (no `*_observed`) counts every row as both."""
+    rows = window.row_indices
+    ppg = rows if recording.ppg_observed is None else rows[recording.ppg_observed[rows]]
+    orient = rows if recording.orient_observed is None else rows[recording.orient_observed[rows]]
+    return ppg, orient
+
+
 def extract_base_features(recording: Recording, window: Window) -> np.ndarray:
     """The 55-feature vector for one window, in `FEATURE_NAMES` order.
 
-    The per-channel statistics are computed over one (channels x samples) slice instead of one
-    numpy call per channel per statistic, and the result is bit-identical to the per-channel
-    computation (population variance, `ddof=0`; same left-to-right order for the magnitude
-    sums); `tests/test_optimized_equivalence.py` pins that against the original implementation.
-    """
-    indices = window.row_indices
-    timestamps_ns = recording.timestamps_ns[indices]
-    block = recording.channel_matrix[:, indices]
+    Each sensor's statistics are taken over that sensor's own samples in the window, as the live runtime takes them
+    (`pinch_inference::extract_features_with`): the pulse statistics, slope, contact quality and duration over the pulse
+    samples, the motion and orientation statistics over the orientation samples, and `sample_count` the two counts added.
+    They used to be taken over every row of the merged recording, where the gaps were filled with the last value, so a
+    pulse value counted once for each motion row that followed it and a motion sensor's spread was diluted by repeats:
+    numbers the live runtime never produces. A window with no orientation sample uses the motion values carried into it
+    and no rotation (the runtime's last snapshot); one with no pulse sample has zero pulse statistics.
 
-    means, stds = _mean_and_std_by_row(block)
+    The per-channel statistics are computed over one (channels x samples) slice instead of one numpy call per channel per
+    statistic, bit-identical to the per-channel computation (population variance, `ddof=0`; same left-to-right order for
+    the magnitude sums); `tests/test_optimized_equivalence.py` pins that against the straightforward implementation.
+    """
+    ppg_rows, orient_rows = stream_rows(recording, window)
+    matrix = recording.channel_matrix
+
+    if ppg_rows.shape[0] > 0:
+        ppg = matrix[_PPG_ROWS][:, ppg_rows]
+        ppg_means, ppg_stds = _mean_and_std_by_row(ppg)
+        ppg_mins, ppg_maxs = ppg.min(axis=1), ppg.max(axis=1)
+        ppg_stamps = recording.timestamps_ns[ppg_rows]
+        duration_ms = (ppg_stamps[-1] - ppg_stamps[0]) / 1_000_000.0
+        slopes = (ppg[:, -1] - ppg[:, 0]) / duration_ms if duration_ms > 0 else np.zeros(ppg.shape[0])
+        if duration_ms <= 0:
+            duration_ms = 0.0
+        contact = float(np.mean(matrix[_CONTACT_ROW, ppg_rows]))
+    else:
+        ppg_means = ppg_stds = ppg_mins = ppg_maxs = slopes = np.zeros(len(PPG_COLUMNS))
+        duration_ms, contact = 0.0, 0.0
+
+    if orient_rows.shape[0] > 0:
+        motion = matrix[:, orient_rows]
+    else:
+        motion = matrix[:, window.row_indices[:1]].copy()
+        motion[_QUAT_ROWS, 0] = _IDENTITY_QUATERNION
+    means, stds = _mean_and_std_by_row(motion)
     # min and max do not depend on summation order, so one reduction over the whole block is
     # exact (unlike mean/std; see `_mean_and_std_by_row`).
-    mins = block.min(axis=1)
-    maxs = block.max(axis=1)
-
-    duration_ms = (timestamps_ns[-1] - timestamps_ns[0]) / 1_000_000.0
-    ppg = block[_PPG_ROWS]
-    if duration_ms <= 0:
-        slopes = np.zeros(ppg.shape[0])
-    else:
-        slopes = (ppg[:, -1] - ppg[:, 0]) / duration_ms
+    mins = motion.min(axis=1)
+    maxs = motion.max(axis=1)
 
     def magnitude_stats(rows: slice) -> tuple[float, float]:
-        x, y, z = block[rows]
+        x, y, z = motion[rows]
         magnitude = np.sqrt(x**2 + y**2 + z**2)
         return float(np.mean(magnitude)), float(np.std(magnitude))
 
     accel_magnitude_mean, accel_magnitude_std = magnitude_stats(_ACCEL_ROWS)
     gyro_magnitude_mean, gyro_magnitude_std = magnitude_stats(_GYRO_ROWS)
 
-    quat = block[_QUAT_ROWS]
+    quat = motion[_QUAT_ROWS]
     quat_delta = _quat_delta_angle_deg(quat[:, 0], quat[:, -1])
 
     vector = np.concatenate(
         (
-            means[_PPG_ROWS],
-            stds[_PPG_ROWS],
-            mins[_PPG_ROWS],
-            maxs[_PPG_ROWS],
+            ppg_means,
+            ppg_stds,
+            ppg_mins,
+            ppg_maxs,
             slopes,
             means[_ACCEL_ROWS],
             stds[_ACCEL_ROWS],
@@ -454,8 +501,8 @@ def extract_base_features(recording: Recording, window: Window) -> np.ndarray:
             means[_QUAT_ROWS],
             stds[_QUAT_ROWS],
             (quat_delta,),
-            (means[_CONTACT_ROW],),
-            (float(indices.shape[0]),),
+            (contact,),
+            (float(ppg_rows.shape[0] + orient_rows.shape[0]),),
             (float(duration_ms),),
         )
     ).astype(np.float64, copy=False)
@@ -481,17 +528,28 @@ def extract_features(recording: Recording, window: Window, spike_method: str | N
             for stat, value in enumerate(spike_features(values, t_ms, spike_method)):
                 spikes[stat * len(PPG_COLUMNS) + channel] = value
     relative = np.zeros(len(BASELINE_FEATURE_NAMES), dtype=np.float64)
+    zs = np.zeros(len(BASELINE_Z_FEATURE_NAMES), dtype=np.float64)
     if baseline_ms is not None:
         rows = baseline_rows(recording, window, baseline_ms)
         if rows is not None:
             in_window = window.row_indices
             if recording.ppg_observed is not None:
                 in_window = in_window[recording.ppg_observed[in_window]]
-            relative[:] = baseline_features(
-                [recording.channels[column][in_window] for column in PPG_COLUMNS],
-                [recording.channels[column][rows] for column in PPG_COLUMNS],
-            )
-    return np.concatenate((extract_base_features(recording, window), spikes, relative))
+            window_ppg = [recording.channels[column][in_window] for column in PPG_COLUMNS]
+            past_ppg = [recording.channels[column][rows] for column in PPG_COLUMNS]
+            relative[:] = baseline_features(window_ppg, past_ppg)
+            stamps = recording.timestamps_ns[in_window]
+            times_ms = (stamps - (stamps[0] if stamps.shape[0] else 0)).astype(np.float64) / 1_000_000.0
+            zs[:] = baseline_z_features(window_ppg, times_ms, past_ppg)
+    _, orient_rows = stream_rows(recording, window)
+    stamps = recording.timestamps_ns[orient_rows]
+    times_ms = (stamps - (stamps[0] if stamps.shape[0] else 0)).astype(np.float64) / 1_000_000.0
+    motion = [
+        value
+        for columns in (ACCEL_COLUMNS, GYRO_COLUMNS)
+        for value in motion_features(np.stack([recording.channels[c][orient_rows] for c in columns], axis=1), times_ms)
+    ]
+    return np.concatenate((extract_base_features(recording, window), spikes, relative, motion, zs))
 
 
 def baseline_rows(recording: Recording, window: Window, baseline_ms: int) -> np.ndarray | None:
@@ -515,6 +573,94 @@ def baseline_percentile(values: np.ndarray, percent: int) -> float:
     copy picks the very same sample."""
     ordered = np.sort(values)
     return float(ordered[((ordered.shape[0] - 1) * percent) // 100])
+
+
+# Below this the variance of a motion sensor's strength is taken to be zero (no spread to measure peakedness against).
+RATIO_FLOOR = 1e-9
+# The smallest spread a pulse channel's recent past is taken to have, in the sensor's counts: a flat past (a spread of
+# less than one count) would otherwise make any change look enormous.
+Z_SCALE_FLOOR = 1.0
+# How far, in spreads of the recent past, a pulse value may be counted: a sudden jump of the sensor saturates there.
+Z_CLIP = 20.0
+MAD_TO_SD = 1.4826
+
+
+def _true_median(values: np.ndarray) -> float:
+    """The middle value (the average of the two middle ones for an even count), as the runtime computes it."""
+    ordered = np.sort(np.asarray(values, dtype=np.float64))
+    middle = ordered.shape[0] // 2
+    return float(ordered[middle]) if ordered.shape[0] % 2 else float((ordered[middle - 1] + ordered[middle]) / 2.0)
+
+
+def pulse_z(values: np.ndarray, past: np.ndarray) -> np.ndarray:
+    """`values` of one pulse channel in units of its recent `past`: minus the past's median, over its spread (the median
+    absolute deviation, scaled to a standard deviation, at least `Z_SCALE_FLOOR`), clipped to +/-`Z_CLIP`. Cancels the
+    session's arbitrary level and how far the signal swings in it. The same, in the same order of operations, is
+    `pulse_z` in `crates/pinch-inference/src/features.rs`."""
+    centre = _true_median(past)
+    spread = max(_true_median(np.abs(np.asarray(past, dtype=np.float64) - centre)) * MAD_TO_SD, Z_SCALE_FLOOR)
+    return np.clip((np.asarray(values, dtype=np.float64) - centre) / spread, -Z_CLIP, Z_CLIP)
+
+
+def baseline_z_features(window_ppg: Sequence[np.ndarray], times_ms: np.ndarray, baseline_ppg: Sequence[np.ndarray]) -> list[float]:
+    """The twelve pulse features in units of the recent past (`BASELINE_Z_FEATURE_NAMES` order): for each channel, its
+    window samples through `pulse_z` against its baseline, then their mean, largest, smallest and least-squares slope per
+    second (`times_ms` are the samples' times). A channel with no window samples or too few baseline samples is all
+    zeros; the slope is zero without two samples apart in time."""
+    out = np.zeros((len(BASELINE_Z_STATS), len(PPG_COLUMNS)))
+    for channel, (window_values, baseline_values) in enumerate(zip(window_ppg, baseline_ppg, strict=True)):
+        if window_values.shape[0] == 0 or baseline_values.shape[0] < BASELINE_MIN_SAMPLES:
+            continue
+        z = pulse_z(window_values, baseline_values)
+        out[0, channel], out[1, channel], out[2, channel] = float(np.mean(z)), float(z.max()), float(z.min())
+        if z.shape[0] >= 2:
+            seconds = np.asarray(times_ms, dtype=np.float64) / 1000.0
+            centred = seconds - float(np.mean(seconds))
+            denominator = float(np.sum(centred * centred))
+            if denominator > 0:
+                out[3, channel] = float(np.sum(centred * (z - float(np.mean(z))))) / denominator
+    return out.ravel().tolist()
+
+
+def motion_features(values: np.ndarray, times_ms: np.ndarray) -> list[float]:
+    """The five `MOTION_STATS` of one motion sensor from its samples in the window (`values` n x 3, taken at `times_ms`):
+
+    * `jerk_rms`, `jerk_max`: how fast the vector changes, per second (the length of each step from one sample to the
+      next over the time between them), as a root mean square and at its largest;
+    * `magnitude_ptp`: the largest length of the vector less the smallest;
+    * `magnitude_kurtosis`: how peaked the length is (excess kurtosis: 0 for a normal spread, high when a brief burst
+      stands out of a quiet window); 0 with fewer than 4 samples or no spread;
+    * `crossing_rate`: how often an axis crosses its own mean, per second, averaged over the three axes.
+
+    With fewer than two samples (or no time between the first and the last) the ones that need them are 0. The same, in
+    the same order of operations, is `motion_features` in `crates/pinch-inference/src/features.rs`."""
+    n = values.shape[0]
+    out = [0.0] * len(MOTION_STATS)
+    if n == 0:
+        return out
+    magnitude = np.sqrt(values[:, 0] ** 2 + values[:, 1] ** 2 + values[:, 2] ** 2)
+    out[2] = float(magnitude.max() - magnitude.min())
+    if n >= 4:
+        centred = magnitude - float(np.mean(magnitude))
+        m2 = float(np.mean(centred**2))
+        if m2 > RATIO_FLOOR:
+            out[3] = float(np.mean(centred**4)) / (m2 * m2) - 3.0
+    if n < 2:
+        return out
+    steps = np.sqrt(np.sum(np.diff(values, axis=0) ** 2, axis=1))
+    dt_s = np.diff(times_ms) / 1000.0
+    rates = steps[dt_s > 0] / dt_s[dt_s > 0]
+    if rates.shape[0] > 0:
+        out[0] = float(np.sqrt(np.mean(rates**2)))
+        out[1] = float(rates.max())
+    duration_s = float(times_ms[-1] - times_ms[0]) / 1000.0
+    if duration_s > 0:
+        crossings = 0
+        for axis in range(3):
+            centred = values[:, axis] - float(np.mean(values[:, axis]))
+            crossings += int(np.sum(centred[:-1] * centred[1:] < 0))
+        out[4] = crossings / 3.0 / duration_s
+    return out
 
 
 def baseline_features(window_ppg: Sequence[np.ndarray], baseline_ppg: Sequence[np.ndarray]) -> list[float]:

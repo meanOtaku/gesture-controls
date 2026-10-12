@@ -19,7 +19,9 @@ import pytest
 from label_trainer.csv_io import Recording
 from label_trainer.dataset import build_dataset_from_recordings
 from label_trainer.features import (
+    BASE_FEATURE_COUNT,
     BASELINE_FEATURE_NAMES,
+    BASELINE_Z_FEATURE_NAMES,
     BASELINE_HIGH_PERCENT,
     BASELINE_LOW_PERCENT,
     BASELINE_MIN_SAMPLES,
@@ -27,6 +29,8 @@ from label_trainer.features import (
     FEATURE_NAMES,
     SPIKE_FEATURE_NAMES,
     baseline_features,
+    baseline_z_features,
+    pulse_z,
     baseline_rows,
     extract_features,
 )
@@ -37,8 +41,11 @@ FIXTURE = Path(__file__).parent / "fixtures" / "baseline_cases.json"
 
 
 def test_the_names_come_after_the_spike_features_and_cover_every_ppg_channel() -> None:
-    assert FEATURE_NAMES[-len(BASELINE_FEATURE_NAMES) :] == BASELINE_FEATURE_NAMES
-    assert FEATURE_NAMES[-len(BASELINE_FEATURE_NAMES) - len(SPIKE_FEATURE_NAMES) : -len(BASELINE_FEATURE_NAMES)] == SPIKE_FEATURE_NAMES
+    start = BASE_FEATURE_COUNT + len(SPIKE_FEATURE_NAMES)
+    assert FEATURE_NAMES[BASE_FEATURE_COUNT:start] == SPIKE_FEATURE_NAMES
+    assert FEATURE_NAMES[start : start + len(BASELINE_FEATURE_NAMES)] == BASELINE_FEATURE_NAMES
+    # The pulse in units of its recent past comes last, after the motion dynamics, so nothing before it moved.
+    assert FEATURE_NAMES[-len(BASELINE_Z_FEATURE_NAMES) :] == BASELINE_Z_FEATURE_NAMES
     assert BASELINE_FEATURE_NAMES == (
         "ppg_green_rel_low", "ppg_red_rel_low", "ppg_ir_rel_low", "ppg_green_rel_high", "ppg_red_rel_high", "ppg_ir_rel_high",
     )
@@ -154,7 +161,14 @@ def _cases() -> list[dict]:
 
     def add(name: str, window: list[list[float]], past: list[list[float]]) -> None:
         arrays_w, arrays_p = _arrays(*window), _arrays(*past)
-        cases.append({"name": name, "window": window, "baseline": past, "expected": baseline_features(arrays_w, arrays_p)})
+        times = [40.0 * i + (3.0 if i % 3 == 2 else 0.0) for i in range(len(window[0]))]  # 25 Hz, a little uneven
+        cases.append({
+            "name": name, "window": window, "baseline": past, "windowTimesMs": times,
+            "expected": baseline_features(arrays_w, arrays_p),
+            "expectedZ": baseline_z_features(arrays_w, np.array(times), arrays_p),
+            # What a convolutional model's pulse channels become (input.grid.pulse "recentPast").
+            "zSeries": [pulse_z(w, b).tolist() if b.shape[0] else [] for w, b in zip(arrays_w, arrays_p)],
+        })
 
     steady = [[100.0 + (i % 5) for i in range(20)]] * 3
     add("steady_up", [[110.0, 112.0, 114.0]] * 3, steady)
@@ -169,6 +183,18 @@ def _cases() -> list[dict]:
         window = [[rng.gauss(50_000.0 * (c + 1) + 1500.0 * n, 800.0) for _ in range(9)] for c in range(3)]
         add(f"random_{n}", window, past)
     return cases
+
+
+def test_the_pulse_in_units_of_its_past_ignores_the_sessions_level_and_swing() -> None:
+    rng = np.random.default_rng(1)
+    rest = rng.normal(0.0, 1.0, 40)
+    window = np.array([0.0, 2.0, 4.0])
+    # The same change in two sessions: one sitting at -250,000 counts with a small swing, one at +310,000 with a swing 8x larger.
+    quiet = pulse_z(-250_000 + 100 * window, -250_000 + 100 * rest)
+    loud = pulse_z(310_000 + 800 * window, 310_000 + 800 * rest)
+    assert np.allclose(quiet, loud)
+    assert pulse_z(np.array([1e9]), rest * 100).max() == 20.0  # a jump saturates
+    assert np.all(np.isfinite(pulse_z(np.array([5.0]), np.ones(20))))  # a flat past does not divide by zero
 
 
 def test_the_shared_cases_with_the_desktop_match() -> None:
@@ -249,3 +275,38 @@ def test_the_baseline_needs_the_pulse_sensor_and_a_known_length(tmp_path: Path) 
     assert spec.baseline_ms is None  # nothing for it to read
     assert not any(name in BASELINE_FEATURE_NAMES for name in spec.features)
     assert [n for n in lt.parse_spec(_session_spec(tmp_path, baselineMs=2000)).features if n in BASELINE_FEATURE_NAMES] == list(BASELINE_FEATURE_NAMES)
+
+
+def test_the_pulse_in_units_of_its_past_works_on_sessions_whose_level_and_swing_are_unlike_the_training_ones(tmp_path: Path) -> None:
+    pytest.importorskip("onnxruntime")
+    from label_trainer import label_train as lt
+
+    result = lt.run(_session_spec(tmp_path, baselineMs=4000, features=list(BASELINE_Z_FEATURE_NAMES)), tmp_path / "z")
+    assert result["outcome"] == "deployable", result["message"]
+    assert result["metrics"]["rocAuc"] > 0.9 and result["metrics"]["crossCheckRocAuc"] > 0.9
+
+
+def test_a_columns_model_reads_its_pulse_in_units_of_its_past_with_a_baseline(tmp_path: Path) -> None:
+    pytest.importorskip("onnxruntime")
+    from label_trainer import label_train as lt
+    from label_trainer.csv_io import load_recording
+    from label_trainer.grid import build_grid
+    from label_trainer.windowing import WindowConfig, continuous_windows
+
+    raw = _session_spec(tmp_path, inputMode="raw", gridSteps=4, baselineMs=4000, features=["ppg_green"])
+    spec = lt.parse_spec(raw)
+    assert lt.grid_pulse_baseline(spec) == 4000
+    result = lt.run(raw, tmp_path / "run")
+    assert result["outcome"] == "deployable", result["message"]
+    manifest = json.loads((tmp_path / "run" / "bundle" / "manifest.json").read_text())
+    assert manifest["input"]["grid"]["pulse"] == "recentPast" and manifest["preprocessing"]["baselineMs"] == 4000
+    # Two sessions 360,000 counts apart give the same inputs for the same change against their own past.
+    recording = load_recording(raw["recordings"]["p2"])
+    windows = continuous_windows(recording, WindowConfig(window_ms=500, stride_ms=150, max_gap_ms=250))
+    early = build_grid(recording, windows[0], ["ppg_green"], 4, pulse_baseline_ms=4000)
+    assert early is None  # not enough past yet: not used, as live
+    late = [build_grid(recording, w, ["ppg_green"], 4, pulse_baseline_ms=4000) for w in windows[-5:]]
+    assert all(g is not None and np.all(np.abs(g) <= 20) for g in late)
+    # Without a baseline a columns model reads the counts, as before.
+    plain = lt.parse_spec(_session_spec(tmp_path, inputMode="raw", gridSteps=4, features=["ppg_green"]))
+    assert lt.grid_pulse_baseline(plain) is None

@@ -21,6 +21,7 @@ mod label_runtime;
 mod label_training;
 mod latest_write;
 mod model_lab;
+mod motion_encoders;
 mod network_designs;
 mod network_spec;
 mod overlay;
@@ -182,6 +183,7 @@ pub fn run() {
             label_runtime::get_shadow_model,
             label_training::plan_label_training,
             label_training::check_label_trainer,
+            motion_encoders::list_motion_encoders,
             network_designs::list_network_designs,
             network_designs::save_network_design,
             network_designs::delete_network_design,

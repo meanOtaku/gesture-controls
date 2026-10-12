@@ -141,6 +141,49 @@ pub struct TrainingRange {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GridSpec {
     pub steps: u32,
+    /// How samples are laid onto the steps; absent in manifests written before the trainer used timestamps.
+    #[serde(default)]
+    pub timing: GridTimingSpec,
+    /// What the pulse channels carry: the counts ("raw", the default) or each channel in units of its recent past
+    /// ("recentPast", which needs the manifest's `baselineMs`).
+    #[serde(default)]
+    pub pulse: GridPulseSpec,
+}
+
+/// `input.grid.pulse` in a manifest. See [`pinch_inference::GridPulse`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum GridPulseSpec {
+    #[default]
+    Raw,
+    RecentPast,
+}
+
+impl From<GridPulseSpec> for pinch_inference::GridPulse {
+    fn from(spec: GridPulseSpec) -> Self {
+        match spec {
+            GridPulseSpec::Raw => Self::Raw,
+            GridPulseSpec::RecentPast => Self::RecentPast,
+        }
+    }
+}
+
+/// `input.grid.timing` in a manifest: "samples" (the default) or "time". See [`pinch_inference::GridTiming`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum GridTimingSpec {
+    #[default]
+    Samples,
+    Time,
+}
+
+impl From<GridTimingSpec> for pinch_inference::GridTiming {
+    fn from(spec: GridTimingSpec) -> Self {
+        match spec {
+            GridTimingSpec::Samples => Self::Samples,
+            GridTimingSpec::Time => Self::Time,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -388,6 +431,27 @@ pub fn validate_bundle(
         && manifest.input.features.iter().any(|f| is_baseline_name(f))
     {
         return Err(BundleError::BaselineMissing);
+    }
+    // Pulse channels in units of their recent past need that past kept, and a pulse channel to apply to.
+    if manifest
+        .input
+        .grid
+        .as_ref()
+        .is_some_and(|g| g.pulse == GridPulseSpec::RecentPast)
+    {
+        if manifest.baseline_ms().is_none() {
+            return Err(BundleError::BaselineMissing);
+        }
+        if !manifest
+            .input
+            .features
+            .iter()
+            .any(|f| f.starts_with("ppg_"))
+        {
+            return Err(BundleError::ContractMismatch(
+                "the grid's pulse is measured against its recent past, but it reads no pulse channel".into(),
+            ));
+        }
     }
     if manifest.input.grid.is_none()
         && manifest.spike_method().is_none()
@@ -869,7 +933,42 @@ pub(crate) mod tests {
             }
             dir
         };
-        assert!(validate_bundle(copy().path(), None).is_ok());
+        let samples = validate_bundle(copy().path(), None).unwrap();
+        assert_eq!(
+            samples.manifest.input.grid.as_ref().unwrap().timing,
+            GridTimingSpec::Samples,
+            "a manifest from before timing was written keeps the old layout"
+        );
+        let dir = copy();
+        edit_manifest(dir.path(), |m| m["input"]["grid"]["timing"] = "time".into());
+        let timed = validate_bundle(dir.path(), None).unwrap();
+        assert_eq!(
+            timed.manifest.input.grid.as_ref().unwrap().timing,
+            GridTimingSpec::Time
+        );
+        let dir = copy();
+        edit_manifest(dir.path(), |m| {
+            m["input"]["grid"]["timing"] = "sideways".into()
+        });
+        assert!(validate_bundle(dir.path(), None).is_err());
+        // The pulse in units of its recent past needs that past, and a pulse channel to apply to.
+        let dir = copy();
+        edit_manifest(dir.path(), |m| {
+            m["input"]["grid"]["pulse"] = "recentPast".into()
+        });
+        assert!(matches!(
+            validate_bundle(dir.path(), None),
+            Err(BundleError::BaselineMissing)
+        ));
+        let dir = copy();
+        edit_manifest(dir.path(), |m| {
+            m["input"]["grid"]["pulse"] = "recentPast".into();
+            m["preprocessing"]["baselineMs"] = 4000.into();
+        });
+        assert!(matches!(
+            validate_bundle(dir.path(), None),
+            Err(BundleError::ContractMismatch(_))
+        ));
         // Steps outside the allowed range, and an input shape that is not channels x steps.
         let dir = copy();
         edit_manifest(dir.path(), |m| m["input"]["grid"]["steps"] = 0.into());

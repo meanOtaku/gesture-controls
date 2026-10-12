@@ -287,7 +287,7 @@ class PpgCollector(
             if (dataPoints.isEmpty()) return
             val samples = dataPoints.map { point ->
                 PpgSample(
-                    timestampNs = point.timestamp,
+                    timestampNs = sdkTimestampToNs(point.timestamp),
                     green = point.getValue(ValueKey.PpgSet.PPG_GREEN),
                     greenStatus = point.getValue(ValueKey.PpgSet.GREEN_STATUS),
                     red = point.getValue(ValueKey.PpgSet.PPG_RED),
@@ -336,7 +336,7 @@ class PpgCollector(
 
     private companion object {
         const val CONNECTION_TIMEOUT_MS = 12_000L
-        const val DEFAULT_FLUSH_INTERVAL_MS = 1_000L
+        const val DEFAULT_FLUSH_INTERVAL_MS = 100L
         private const val ROUTINE_DIAGNOSTIC_INTERVAL_MS = 1_000L
         const val MIN_FLUSH_RATE_HZ = 0.1
         const val MAX_FLUSH_RATE_HZ = 10.0

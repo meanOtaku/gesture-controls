@@ -72,7 +72,7 @@ def restore_model(spec, directory: Path):
         model = TorchModel(inputs, spec.seed, spec.params, spec.network)
         model.net.load_state_dict(state["net"])
     else:
-        model = CnnModel(len(spec.features), spec.grid_steps, spec.seed, spec.params, spec.movement_only, spec.network)
+        model = CnnModel(len(spec.features), spec.grid_steps, spec.seed, spec.params, spec.movement_only, spec.network, names=list(spec.features))
         model.net.load_state_dict(state["net"])
         model.head.load_state_dict(state["head"])
     model.mean, model.std = state["mean"], state["std"]

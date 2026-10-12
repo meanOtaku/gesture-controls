@@ -12,7 +12,13 @@ import pytest
 pytest.importorskip("onnxruntime")
 
 from label_trainer import label_train as lt  # noqa: E402
-from label_trainer.features import BASE_FEATURE_COUNT, BASELINE_FEATURE_NAMES, FEATURE_NAMES, SPIKE_FEATURE_NAMES  # noqa: E402
+from label_trainer.features import (  # noqa: E402
+    ALL_BASELINE_FEATURE_NAMES,
+    BASE_FEATURE_COUNT,
+    FEATURE_NAMES,
+    MOTION_FEATURE_NAMES,
+    SPIKE_FEATURE_NAMES,
+)
 from label_trainer.schema import HEADER_COLUMNS  # noqa: E402
 
 INTERVAL_NS = 20_000_000
@@ -59,11 +65,12 @@ def test_features_follow_the_chosen_streams_and_window_level_values_need_ppg() -
     assert "sample_count" not in motion and "duration_ms" not in motion
     assert "sample_count" in lt.features_for(["watchPpg"])
     everything = ["watchAcceleration", "watchGyroscope", "watchOrientation", "watchPpg"]
-    assert lt.features_for(everything) == list(FEATURE_NAMES[:BASE_FEATURE_COUNT])  # spikes are opt-in
+    # Spikes and the level against the past are opt-in; the motion dynamics come with their sensors.
+    assert lt.features_for(everything) == [*FEATURE_NAMES[:BASE_FEATURE_COUNT], *MOTION_FEATURE_NAMES]
     assert lt.features_for(everything, spikes=True, baseline=True) == list(FEATURE_NAMES)
-    assert not any(name in BASELINE_FEATURE_NAMES for name in lt.features_for(everything, spikes=True))  # opt-in too
-    assert [n for n in lt.features_for(everything, baseline=True) if n in BASELINE_FEATURE_NAMES] == list(BASELINE_FEATURE_NAMES)
-    assert all(name in lt.features_for(everything, movement_only=True, baseline=True) for name in BASELINE_FEATURE_NAMES)  # they are about change
+    assert not any(name in ALL_BASELINE_FEATURE_NAMES for name in lt.features_for(everything, spikes=True))  # opt-in too
+    assert [n for n in lt.features_for(everything, baseline=True) if n in ALL_BASELINE_FEATURE_NAMES] == list(ALL_BASELINE_FEATURE_NAMES)
+    assert all(name in lt.features_for(everything, movement_only=True, baseline=True) for name in ALL_BASELINE_FEATURE_NAMES)  # they are about change
     assert not any(name in SPIKE_FEATURE_NAMES for name in lt.features_for(["watchAcceleration"], spikes=True))  # needs the pulse sensor
     with pytest.raises(lt.TrainingRefused):
         lt.features_for(["headPose"])
@@ -208,6 +215,7 @@ MOVEMENT_FEATURES = {
     ("watchAcceleration", "watchGyroscope"): [
         "accel_x_std", "accel_y_std", "accel_z_std", "accel_magnitude_std",
         "gyro_x_std", "gyro_y_std", "gyro_z_std", "gyro_magnitude_std",
+        *MOTION_FEATURE_NAMES,  # how fast and how often the motion changes
     ],
     ("watchOrientation",): ["quat_w_std", "quat_x_std", "quat_y_std", "quat_z_std", "quat_delta_angle_deg"],
     ("watchPpg",): ["ppg_green_std", "ppg_red_std", "ppg_ir_std", "ppg_green_slope", "ppg_red_slope", "ppg_ir_slope"],
@@ -224,16 +232,29 @@ def test_movement_only_keeps_how_things_change_and_drops_absolute_levels(sources
 def test_a_threshold_is_fitted_so_a_model_whose_scores_are_all_low_is_still_usable() -> None:
     rng = np.random.default_rng(0)
     y = np.array([0] * 100 + [1] * 100)
-    # Perfectly ranked, but every score is well under the default 0.8: what a session-to-session shift does.
-    probability = np.concatenate([rng.uniform(0.0, 0.15, 100), rng.uniform(0.25, 0.4, 100)])
-    metrics = lt.evaluate(probability, y)
-    assert metrics["rocAuc"] == 1.0
-    assert 0.15 < metrics["activationThreshold"] <= 0.25
-    assert metrics["f1"] == 1.0 and metrics["falseActivationRate"] == 0.0
+    # Perfectly ranked, but every score is well under the default 0.8: what a session-to-session shift does. The cut-off
+    # is fitted on scores like these from the training recordings, then the held-out ones are judged at it.
+    scores = lambda: np.concatenate([rng.uniform(0.0, 0.15, 100), rng.uniform(0.25, 0.4, 100)])  # noqa: E731
+    threshold = lt.choose_threshold(scores(), y)
+    assert 0.15 < threshold <= 0.25
+    metrics = lt.evaluate(scores(), y, threshold, "trainingRecordings")
+    assert metrics["rocAuc"] == 1.0 and metrics["activationThreshold"] == threshold
+    assert metrics["f1"] == 1.0 and metrics["falseActivationRate"] == 0.0 and metrics["balancedAccuracy"] == 1.0
     # At the default the same model would have found nothing: that is reported too.
     assert metrics["atDefaultThreshold"]["recall"] == 0.0
-    assert metrics["thresholdChosenOnEvaluationRecordings"] is True
+    assert metrics["thresholdChosenOnEvaluationRecordings"] is False
     assert lt.verdict(metrics) is None
+
+
+def test_the_cut_off_is_not_pulled_down_by_a_mostly_gesture_set_of_windows() -> None:
+    """F1 would pick the lowest cut-off here (flagging all 20 other windows costs it little against 400 found gestures);
+    the cut-off that tells them apart sits between the two groups."""
+    rng = np.random.default_rng(4)
+    y = np.array([1] * 400 + [0] * 20)
+    probability = np.concatenate([rng.uniform(0.5, 1.0, 400), rng.uniform(0.1, 0.4, 20)])
+    threshold = lt.choose_threshold(probability, y)
+    assert 0.4 <= threshold <= 0.5
+    assert lt._rates(probability, y, threshold)["falseActivationRate"] == 0.0
 
 
 @pytest.mark.parametrize("auc_scores, text", [(0.2, "lower"), (0.6, "barely")])
@@ -241,7 +262,7 @@ def test_a_model_that_cannot_tell_the_gesture_apart_is_not_kept(auc_scores: floa
     y = np.array([0] * 50 + [1] * 50)
     rng = np.random.default_rng(1)
     probability = np.clip(rng.normal(0.5, 0.2, 100) + (y * (auc_scores - 0.5) * 1.2), 0, 1)
-    metrics = lt.evaluate(probability, y)
+    metrics = lt.evaluate(probability, y, 0.5, "trainingRecordings")
     assert text in (lt.verdict(metrics) or "")
 
 
@@ -281,7 +302,8 @@ def test_the_manifest_carries_the_fitted_thresholds_and_says_where_they_came_fro
     manifest = json.loads((out / "bundle" / "manifest.json").read_text())
     act, rel = manifest["thresholds"]["activation"], manifest["thresholds"]["release"]
     assert act == result["metrics"]["activationThreshold"] and 0 < rel <= act
-    assert manifest["provenance"]["thresholdChosenOnEvaluationRecordings"] is True
+    assert manifest["provenance"]["thresholdSource"] == "trainingRecordings"
+    assert manifest["provenance"]["thresholdChosenOnEvaluationRecordings"] is False
     assert manifest["provenance"]["movementOnly"] is False
 
 
@@ -363,7 +385,7 @@ def test_a_convolutional_model_learns_trains_exports_and_describes_its_grid(tmp_
     manifest = json.loads((out / "bundle" / "manifest.json").read_text())
     assert manifest["input"]["features"] == result["features"]
     assert manifest["input"]["shape"] == [None, 6 * 16]
-    assert manifest["input"]["grid"] == {"steps": 16}
+    assert manifest["input"]["grid"] == {"steps": 16, "timing": "time"}
     assert manifest["framework"]["name"] == "pytorch"
     assert manifest["provenance"]["backend"] == "cnn1d" and manifest["provenance"]["gridSteps"] == 16
 
@@ -374,3 +396,44 @@ def test_the_convolutional_model_can_read_the_window_without_its_level_and_check
     assert result["outcome"] == "deployable", result["message"]
     with pytest.raises(lt.TrainingRefused, match="gridSteps"):
         lt.parse_spec(spec_for(tmp_path, "cnn1d", gridSteps=2))
+
+
+def test_calibration_says_whether_a_score_can_be_read_as_a_probability() -> None:
+    y = np.array([0] * 50 + [1] * 50)
+    honest = lt.calibration(np.where(y == 1, 0.95, 0.05), y)
+    assert honest["brierScore"] == pytest.approx(0.0025) and honest["expectedCalibrationError"] == pytest.approx(0.05)
+    # Ranked perfectly (AUC 1) but every score near the middle: right about which is which, wrong about how sure.
+    timid = lt.calibration(np.where(y == 1, 0.55, 0.45), y)
+    assert timid["expectedCalibrationError"] == pytest.approx(0.45) and timid["brierScore"] > 0.2
+    assert set(lt.evaluate(np.where(y == 1, 0.9, 0.1), y, 0.5, "trainingRecordings")) >= {"brierScore", "expectedCalibrationError"}
+
+
+def test_boosted_trees_are_written_as_plain_onnx_that_reproduces_them(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    result = lt.run(spec_for(tmp_path, "gbt"), out)
+    assert result["outcome"] == "deployable", result["message"]
+    assert result["parityMaxAbsDifference"] <= 1e-5  # exact arithmetic: only the final sigmoid rounds
+    import onnx
+
+    operators = {node.op_type for node in onnx.load(str(out / "bundle" / "model.onnx")).graph.node}
+    assert "TreeEnsembleClassifier" not in operators and "LessOrEqual" in operators
+    manifest = json.loads((out / "bundle" / "manifest.json").read_text())
+    assert manifest["framework"]["name"] == "scikit-learn" and manifest["provenance"]["backend"] == "gbt"
+
+
+def test_the_tree_compiler_matches_scikit_learn_on_awkward_inputs(tmp_path: Path) -> None:
+    """Values exactly on a split, far outside the training range, and a tree that never split."""
+    from sklearn.ensemble import GradientBoostingClassifier
+
+    rng = np.random.default_rng(6)
+    x = rng.normal(size=(300, 5)).astype(np.float32)
+    y = (x[:, 0] + 0.5 * x[:, 3] > 0).astype(int)
+    model = GradientBoostingClassifier(n_estimators=40, max_depth=3, random_state=0).fit(x, y)
+    thresholds = model.estimators_[0, 0].tree_.threshold
+    probe = np.vstack([x[:50], np.full((1, 5), np.float32(thresholds[0])), np.full((1, 5), 1e6, dtype=np.float32), -np.full((1, 5), 1e6, dtype=np.float32)])
+    lt.tree_ensemble_onnx(model, x, tmp_path / "m.onnx")
+    got = lt.onnx_probabilities(tmp_path / "m.onnx", probe)[:, 1]
+    assert np.max(np.abs(got - model.predict_proba(probe)[:, 1])) < 1e-5
+    stump = GradientBoostingClassifier(n_estimators=3, max_depth=1, min_samples_split=10_000, random_state=0).fit(x, y)
+    lt.tree_ensemble_onnx(stump, x, tmp_path / "stump.onnx")
+    assert np.allclose(lt.onnx_probabilities(tmp_path / "stump.onnx", x[:5])[:, 1], stump.predict_proba(x[:5])[:, 1], atol=1e-5)

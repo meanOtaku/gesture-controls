@@ -458,32 +458,49 @@ describe("telemetryStore", () => {
     });
 
     it("translates PPG's SDK-clock-domain timestamps onto orientation's watch-clock domain instead of sorting incomparable clocks (GC-030)", () => {
-      // The PPG batch's own per-sample SDK timestamps (1e9-scale, an
-      // unrelated clock domain) sit nowhere near the watch-clock-domain
-      // orientation timestamps below; only the batch envelope timestamp
-      // (1_040 — the same domain as orientation) is comparable.
+      // The PPG batch's own per-sample SDK timestamps (an unrelated clock domain, 40 ms apart at 25 Hz) sit nowhere near
+      // the watch-clock-domain orientation timestamps below; only the batch envelope timestamp (the same domain as
+      // orientation) is comparable.
+      const ms = 1_000_000;
       telemetryStore.ingestWatchOrientation({
-        deviceId: "watch-test", sequence: 1, timestampNs: 1_000,
+        deviceId: "watch-test", sequence: 1, timestampNs: 1_000 * ms,
         quaternion: [1, 0, 0, 0], accelerometer: null, gyroscope: null,
       });
       telemetryStore.ingestPpgBatch({
         sequence: 1,
-        timestampNs: 1_040,
-        timestampsNs: [1_000_000_000, 1_000_000_040],
+        timestampNs: 1_045 * ms,
+        timestampsNs: [900_000 * ms, 900_040 * ms],
         green: [1, 2], greenStatus: [0, 0], red: [1, 2], redStatus: [0, 0], ir: [1, 2], irStatus: [0, 0],
       });
       telemetryStore.ingestWatchOrientation({
-        deviceId: "watch-test", sequence: 2, timestampNs: 1_080,
+        deviceId: "watch-test", sequence: 2, timestampNs: 1_080 * ms,
         quaternion: [1, 0, 0, 0], accelerometer: null, gyroscope: null,
       });
 
+      // The newest sample lands at the batch's send time (the only estimate so far) and the other 40 ms before it:
+      // interleaved among the orientation rows, never the raw SDK values.
       const rows = telemetryStore.getDatasetRows();
-      // Translated PPG timestamps land at 1000 and 1040 (envelope 1040,
-      // anchored on the last sample, offset by the genuine 40ns intra-batch
-      // SDK delta) — comparable with and correctly interleaved among the
-      // orientation rows, never the raw ~1e9 SDK values.
-      expect(rows.map((row) => row.timestampNs)).toEqual(["1000", "1000", "1040", "1080"]);
-      expect(rows.map((row) => Number(row.timestampNs))).toEqual([1_000, 1_000, 1_040, 1_080]);
+      expect(rows.map((row) => Number(row.timestampNs) / ms)).toEqual([1_000, 1_005, 1_045, 1_080]);
+    });
+
+    it("places every pulse batch with the fastest delivery seen, so a batch that waited longer is not moved later", () => {
+      const ms = 1_000_000;
+      const batch = (sequence: number, sentMs: number, sdkMs: number[]) => telemetryStore.ingestPpgBatch({
+        sequence, timestampNs: sentMs * ms, timestampsNs: sdkMs.map((t) => t * ms),
+        green: sdkMs.map(() => 1), greenStatus: sdkMs.map(() => 0), red: sdkMs.map(() => 1), redStatus: sdkMs.map(() => 0),
+        ir: sdkMs.map(() => 1), irStatus: sdkMs.map(() => 0),
+      });
+      telemetryStore.ingestWatchOrientation({
+        deviceId: "watch-test", sequence: 1, timestampNs: 1 * ms,
+        quaternion: [1, 0, 0, 0], accelerometer: null, gyroscope: null,
+      });
+      batch(1, 5_090, [80, 120]); // sent 10 ms after its newest sample
+      batch(2, 5_240, [160, 200]); // waited 40 ms
+      batch(3, 5_290, [240, 280]); // waited 10 ms
+
+      const pulse = telemetryStore.getDatasetRows().filter((row) => row.ppgGreen !== null);
+      const stamps = pulse.map((row) => Number(row.timestampNs) / ms);
+      expect(stamps).toEqual([5_050, 5_090, 5_130, 5_170, 5_210, 5_250]);
     });
   });
 });

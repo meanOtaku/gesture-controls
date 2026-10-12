@@ -25,6 +25,9 @@ export interface NetworkDesign {
   windowMs: number;
   /** The network's settings that differ from the method's own default; null means the default. */
   network: Record<string, unknown> | null;
+  /** The convolutional method only: a pre-trained motion encoder (by name) to start from, and whether to keep its layers. */
+  pretrained?: string | null;
+  pretrainedFreeze?: boolean;
   builtIn: boolean;
 }
 
@@ -97,6 +100,7 @@ export function describeDesign(design: NetworkDesign, preview: DesignPreview | n
   const shape = isNeural(design.method)
     ? ` · ${design.method === "cnn1d" ? "convolution → " : ""}${settings.hidden.map((layer) => `${layer.units} → `).join("")}2 · ${parameterCount(settings, preview.neurons, design.method).toLocaleString("en-US")} parameters`
     : "";
-  const baseline = !columns && design.baselineMs ? ` · level against the last ${design.baselineMs / 1000} s` : "";
-  return `${method} · ${input}${shape} · ${design.windowMs / 1000} s window${baseline}`;
+  const baseline = design.baselineMs ? (columns ? ` · pulse in units of the last ${design.baselineMs / 1000} s` : ` · level against the last ${design.baselineMs / 1000} s`) : "";
+  const encoder = design.method === "cnn1d" && design.pretrained ? ` · from encoder ${design.pretrained}${design.pretrainedFreeze ? " (kept as it is)" : ""}` : "";
+  return `${method} · ${input}${shape} · ${design.windowMs / 1000} s window${baseline}${encoder}`;
 }

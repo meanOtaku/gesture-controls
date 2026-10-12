@@ -24,6 +24,26 @@ def _report_every(epochs: int) -> int:
     return max(1, epochs // 60)
 
 
+# How far `CnnModel._augment` varies a window.
+ROTATION_DEG = 15.0
+STRETCH = 0.1
+SHIFT_STEPS = 2
+SCALE = 0.1
+NOISE = 0.05
+
+
+def _random_rotations(torch, count: int, generator, max_degrees: float):
+    """`count` 3x3 rotations, each about a random axis by a random angle of up to `max_degrees` (Rodrigues' formula)."""
+    axis = torch.randn(count, 3, generator=generator)
+    axis = axis / axis.norm(dim=1, keepdim=True).clamp_min(1e-9)
+    angle = torch.deg2rad(max_degrees * (2 * torch.rand(count, generator=generator) - 1))
+    x, y, z = axis[:, 0], axis[:, 1], axis[:, 2]
+    zero = torch.zeros(count)
+    cross = torch.stack([torch.stack([zero, -z, y], 1), torch.stack([z, zero, -x], 1), torch.stack([-y, x, zero], 1)], 1)
+    sin, cos = torch.sin(angle).view(-1, 1, 1), torch.cos(angle).view(-1, 1, 1)
+    return torch.eye(3).expand(count, 3, 3) + sin * cross + (1 - cos) * torch.bmm(cross, cross)
+
+
 def _hold_pins(torch, module, pins, prefix: str = "") -> None:
     """Puts every pinned weight back to the value it was given by hand, after each step of training."""
     if not pins:
@@ -181,17 +201,24 @@ class CnnModel(_Trainer):
     does is fold it back into rows. Then, per channel, it takes the window's own mean away (with `centre_windows`, so only
     how a signal changes is left, never its level) or the training mean, and divides by the training spread. The chosen
     convolution layers follow, then the pooling over time (the average, the maximum, or both, of each filter), any dense
-    layers, and one layer that gives the two probabilities. While training, windows are (with `augment`) shifted a little
-    in time, scaled a little and given a little noise, so the few windows of a few recordings are not simply memorised.
+    layers, and one layer that gives the two probabilities. While training, windows are (with `augment`) varied in ways a
+    real window could be, so the few windows of a few recordings are not simply memorised (see `_augment`).
     """
 
-    def __init__(self, channels: int, steps: int, seed: int, params: dict[str, Any], centre_windows: bool, network: Network | None = None):
+    def __init__(self, channels: int, steps: int, seed: int, params: dict[str, Any], centre_windows: bool, network: Network | None = None, names: list[str] | None = None):
         import torch
 
         torch.manual_seed(seed)
         self.torch, self.seed = torch, seed
         self.network = network or default_network("cnn1d")
         self.channels, self.steps, self.centre = channels, steps, centre_windows
+        # The (x, y, z) channel positions of each motion sensor in the grid, turned together by the rotation augmentation.
+        names = names or []
+        self.triplets = [
+            [names.index(f"{sensor}_{axis}") for axis in "xyz"]
+            for sensor in ("accel", "gyro")
+            if all(f"{sensor}_{axis}" in names for axis in "xyz")
+        ]
         self.mean = torch.zeros(1, channels, 1)
         self.std = torch.ones(1, channels, 1)
         convolution, width = [], channels
@@ -208,6 +235,13 @@ class CnnModel(_Trainer):
             head.append(torch.nn.Dropout(self.network.dropout))
         head.append(torch.nn.Linear(width, 2))
         self.head = torch.nn.Sequential(*head)
+
+    def load_encoder(self, state: dict, freeze: bool) -> None:
+        """Starts the convolution layers from a pre-trained encoder's (see `pretrain.py`); with `freeze` they stay as they
+        are and only the head learns."""
+        self.net.load_state_dict(state)
+        for parameter in self.net.parameters():
+            parameter.requires_grad_(not freeze)
 
     def _scaled(self, flat):
         grid = flat.reshape(-1, self.channels, self.steps)
@@ -226,12 +260,37 @@ class CnnModel(_Trainer):
     def _logits(self, scaled):
         return self.head(self._pool(self.net(scaled)))
 
-    def _augment(self, batch, generator):
+    def _augment(self, flat, generator):
+        """A batch of windows (in the sensors' own units, before scaling) varied the ways a real window could be:
+
+        * the watch sitting a little differently on the wrist: each motion sensor's three axes turned together by up to
+          `ROTATION_DEG` about a random axis;
+        * the gesture a little faster or slower, or a little earlier or later: the time axis stretched by up to
+          `STRETCH` about its middle and shifted by up to `SHIFT_STEPS` steps, read by linear interpolation; beyond the
+          window's ends the first or last value carries on (the old circular shift wrapped the end round to the start);
+        * a little stronger or weaker: each channel's swing about its own mean scaled by up to `SCALE` (its level is not
+          scaled, so a pulse reading of 50,000 is not moved by thousands);
+        * a little noise, a twentieth of each channel's spread.
+        """
         torch = self.torch
-        shifts = torch.randint(-2, 3, (batch.shape[0],), generator=generator)
-        batch = torch.stack([torch.roll(row, int(shift), dims=1) for row, shift in zip(batch, shifts)])
-        batch = batch * (0.9 + 0.2 * torch.rand(batch.shape[0], batch.shape[1], 1, generator=generator))
-        return batch + 0.05 * torch.randn(batch.shape, generator=generator)
+        count = flat.shape[0]
+        grid = flat.reshape(count, self.channels, self.steps).clone()
+        for triplet in self.triplets:
+            grid[:, triplet, :] = torch.bmm(_random_rotations(torch, count, generator, ROTATION_DEG), grid[:, triplet, :])
+        positions = torch.arange(self.steps, dtype=torch.float32)
+        middle = (self.steps - 1) / 2.0
+        stretch = 1.0 + STRETCH * (2 * torch.rand(count, 1, generator=generator) - 1)
+        shift = torch.randint(-SHIFT_STEPS, SHIFT_STEPS + 1, (count, 1), generator=generator).float()
+        source = ((positions - middle) * stretch + middle + shift).clamp(0, self.steps - 1)
+        low = source.floor().long().clamp(max=self.steps - 2) if self.steps > 1 else source.floor().long()
+        high = (low + 1).clamp(max=self.steps - 1)
+        fraction = (source - low.float()).unsqueeze(1)
+        gather = lambda index: torch.gather(grid, 2, index.unsqueeze(1).expand(-1, self.channels, -1))  # noqa: E731
+        grid = gather(low) * (1 - fraction) + gather(high) * fraction
+        mean = grid.mean(dim=2, keepdim=True)
+        grid = mean + (grid - mean) * (1.0 + SCALE * (2 * torch.rand(count, self.channels, 1, generator=generator) - 1))
+        grid = grid + NOISE * self.std * torch.randn(grid.shape, generator=generator)
+        return grid.reshape(count, -1)
 
     def fit(self, x: np.ndarray, y: np.ndarray, x_eval: np.ndarray | None = None, y_eval: np.ndarray | None = None, on_epoch: EpochCallback | None = None) -> "CnnModel":
         torch = self.torch
@@ -243,16 +302,19 @@ class CnnModel(_Trainer):
             self.mean = grid.mean(dim=(0, 2), keepdim=True)
             centred = grid - self.mean
         self.std = centred.std(dim=(0, 2), keepdim=True).clamp_min(1e-6)
-        eval_scaled = None if x_eval is None else self._scaled(torch.tensor(x_eval, dtype=torch.float32))
+        eval_raw = None if x_eval is None else torch.tensor(x_eval, dtype=torch.float32)
         eval_target = None if y_eval is None else torch.tensor(y_eval, dtype=torch.long)
 
         def modes(training: bool) -> None:
             self.net.train(training)
             self.head.train(training)
 
+        # The windows go in unscaled and are scaled on the way into the network, so the augmentation works in the
+        # sensors' own units (a rotation of acceleration is only a rotation before each axis is scaled on its own).
         self._loop(
-            [*self.net.parameters(), *self.head.parameters()], self._logits, self._scaled(data), torch.tensor(y, dtype=torch.long),
-            self._augment if self.network.augment else None, eval_scaled, eval_target, on_epoch, modes,
+            [p for p in [*self.net.parameters(), *self.head.parameters()] if p.requires_grad], lambda raw: self._logits(self._scaled(raw)), data,
+            torch.tensor(y, dtype=torch.long), self._augment if self.network.augment else None, eval_raw, eval_target,
+            on_epoch, modes,
         )
         return self
 
@@ -260,7 +322,7 @@ class CnnModel(_Trainer):
         """Carries on training from the weights it has: the scaling stays as it was, frozen layers do not move, pinned weights keep their values."""
         torch = self.torch
         data = torch.tensor(x, dtype=torch.float32)
-        eval_scaled = None if x_eval is None else self._scaled(torch.tensor(x_eval, dtype=torch.float32))
+        eval_raw = None if x_eval is None else torch.tensor(x_eval, dtype=torch.float32)
         eval_target = None if y_eval is None else torch.tensor(y_eval, dtype=torch.long)
         convs = [m for m in self.net if isinstance(m, torch.nn.Conv1d)]
         linears = [m for m in self.head if isinstance(m, torch.nn.Linear)]
@@ -280,8 +342,8 @@ class CnnModel(_Trainer):
 
         previous, self.network = self.network, network
         try:
-            self._loop(trainable, self._logits, self._scaled(data), torch.tensor(y, dtype=torch.long),
-                       self._augment if network.augment else None, eval_scaled, eval_target, on_epoch, modes,
+            self._loop(trainable, lambda raw: self._logits(self._scaled(raw)), data, torch.tensor(y, dtype=torch.long),
+                       self._augment if network.augment else None, eval_raw, eval_target, on_epoch, modes,
                        after_step=lambda: (_hold_pins(torch, self.net, pins, "net."), _hold_pins(torch, self.head, pins, "head.")),
                        sample_weights=None if sample_weights is None else torch.tensor(sample_weights, dtype=torch.float32))
         finally:

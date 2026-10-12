@@ -3,7 +3,7 @@ import { datasetLabels } from "./types";
 
 /** Training a model for one label (see `label_training.rs`). */
 
-export type TrainMethod = "logreg" | "mlp" | "torch-mlp" | "cnn1d";
+export type TrainMethod = "logreg" | "mlp" | "torch-mlp" | "cnn1d" | "gbt";
 export type DataStream = "watchOrientation" | "watchAcceleration" | "watchGyroscope" | "watchPpg";
 export type OtherRole = "negative" | "exclude";
 
@@ -12,6 +12,7 @@ export const LABEL_TRAINING_EVENT = "label-training-event";
 export const METHODS: ReadonlyArray<{ value: TrainMethod; label: string; summary: string }> = [
   { value: "logreg", label: "Logistic regression", summary: "Fast and simple. A good first try, and easy to trust." },
   { value: "mlp", label: "Small neural network (scikit-learn)", summary: "Can learn more complicated patterns than logistic regression." },
+  { value: "gbt", label: "Boosted trees", summary: "Many small decision trees, each correcting the ones before. With few recordings it often beats a neural network on statistics, and it needs no scaling or network design." },
   { value: "torch-mlp", label: "Small neural network (PyTorch)", summary: "The same idea in PyTorch. The first run downloads PyTorch, which is large." },
   { value: "cnn1d", label: "1D convolutional network (PyTorch)", summary: "Reads the window itself, as each channel over time, instead of statistics of it, and finds the patterns. Needs more recordings than the others, and a longer window helps. The first run downloads PyTorch, which is large." },
 ];
@@ -132,6 +133,25 @@ export interface TrainingMetrics {
   /** 0.5 is chance; under 0.5 the model ranks the gesture's windows below the rest. */
   rocAuc: number;
   activationThreshold: number;
+  /** Recall and the share of other windows left alone, averaged; absent from runs before it was reported. */
+  balancedAccuracy?: number;
+  /** Where the cut-off came from; absent from runs before it was chosen on the training recordings. */
+  thresholdSource?: "trainingRecordings" | "evaluationRecordings" | "editedFrom" | "default";
+  thresholdChosenOnEvaluationRecordings?: boolean;
+  /** The model replayed as a detector over the whole held-out recordings (the trainer's `events.py`). */
+  events?: EventMetrics;
+}
+
+export interface EventMetrics {
+  recordings: number;
+  gestures: number;
+  caught: number;
+  gestureRecall: number | null;
+  repeats: number;
+  medianLatencyMs: number | null;
+  falseActivations: number;
+  negativeSeconds: number;
+  falseActivationsPerHour: number | null;
 }
 
 export type TrainingEvent =
@@ -203,8 +223,30 @@ export function describeMetrics(metrics: TrainingMetrics): string {
   return `On recordings it never saw: it found ${pct(metrics.recall)} of the ${metrics.positiveWindows} windows of the gesture, ${pct(metrics.precision)} of what it flagged was right, and it wrongly flagged ${pct(metrics.falseActivationRate)} of the ${metrics.negativeWindows} windows of something else.`;
 }
 
-/** The caveat that goes with those numbers: the cut-off was fitted on the same recordings. */
-export const THRESHOLD_CAVEAT = "The cut-off for “detected” was chosen using those same test recordings, so these numbers are a little optimistic. Try the model in Monitor before trusting it.";
+/** The replay over whole held-out recordings, in words: what a person using it would notice. */
+export function describeEvents(events: EventMetrics): string {
+  const minutes = events.negativeSeconds / 60;
+  const time = minutes >= 1 ? `${minutes.toFixed(1)} minutes` : `${Math.round(events.negativeSeconds)} seconds`;
+  const caught = events.gestures > 0
+    ? `it caught ${events.caught} of ${events.gestures} gestures${events.medianLatencyMs !== null ? `, typically ${Math.round(events.medianLatencyMs)} ms after each began` : ""}, and `
+    : "";
+  const perHour = events.falseActivationsPerHour !== null ? ` (about ${Math.round(events.falseActivationsPerHour)} an hour)` : "";
+  return `Played through the test recordings as it would run live, ${caught}it went off ${events.falseActivations} times in ${time} without the gesture${perHour}.`;
+}
+
+/** Where the cut-off for “detected” came from, and so how far the test numbers can be trusted. */
+export function thresholdNote(metrics: TrainingMetrics): string {
+  switch (metrics.thresholdChosenOnEvaluationRecordings === false ? metrics.thresholdSource : "evaluationRecordings") {
+    case "trainingRecordings":
+      return "The cut-off for “detected” was chosen on the training recordings, so the test numbers are fair. Still try the model in Monitor before Live.";
+    case "editedFrom":
+      return "The cut-off for “detected” is the one of the model this was edited from. Try it in Monitor before Live.";
+    case "default":
+      return "There were too few training recordings to choose a cut-off for “detected”, so the default is used. Try it in Monitor before Live.";
+    default:
+      return "The cut-off for “detected” was chosen using those same test recordings, so these numbers are a little optimistic. Try the model in Monitor before trusting it.";
+  }
+}
 
 /** How many of the recordings in `ids` have the label: a model needs several to learn the gesture rather than a session. */
 export function recordingsWithLabel(datasets: DatasetSummary[], ids: string[], label: string): number {

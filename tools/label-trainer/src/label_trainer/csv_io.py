@@ -16,12 +16,14 @@ from pathlib import Path
 import numpy as np
 
 from .schema import (
+    CONTACT_QUALITY_COLUMN,
     HEADER_COLUMNS,
     IMU_FILE,
     IMU_FILE_COLUMNS,
     LABEL_COLUMN,
     METADATA_COMMENT_PREFIX,
     NUMERIC_COLUMNS,
+    PPG_COLUMNS,
     PPG_FILE,
     PPG_FILE_COLUMNS,
     TIMESTAMP_COLUMN,
@@ -271,6 +273,63 @@ def shift_labels(recording: Recording, offset_ms: int) -> Recording:
     source = np.searchsorted(stamps, stamps - int(offset_ms) * 1_000_000, side="right") - 1
     source = np.clip(source, 0, stamps.shape[0] - 1)
     return replace(recording, raw_labels=recording.raw_labels[source])
+
+
+# Watch builds before October 2026 sent the Samsung SDK's pulse timestamps, which are milliseconds, as nanoseconds. The
+# desktop kept each batch's last sample at its arrival time and placed the others before it by the SDK's spacing, so a
+# 25 Hz batch's samples landed 40 ns apart instead of 40 ms, followed by a jump to the next batch. Two pulse samples are
+# never really closer than this, so a recording where many are is one of those.
+MILLISECOND_PPG_SPACING_NS = 1_000
+# The share of pulse-sample gaps that must be that small before a recording is taken to be one (one or two can happen by
+# accident in a correct recording; in an affected one most gaps inside a batch are, so well over a third of all of them).
+MILLISECOND_PPG_SHARE = 0.1
+_PPG_ROW_COLUMNS = (*PPG_COLUMNS, CONTACT_QUALITY_COLUMN)
+
+
+def repair_millisecond_ppg_timestamps(recording: Recording) -> Recording:
+    """The recording with its pulse samples put back where they were taken, if it was made by a watch that sent
+    milliseconds as nanoseconds (see `MILLISECOND_PPG_SPACING_NS`); otherwise the recording unchanged.
+
+    Within each batch (pulse samples under a microsecond apart) the last sample keeps its time, as the desktop anchored
+    it there, and each earlier one moves back by its distance from it times 1,000,000, which is the SDK's own spacing in
+    nanoseconds. A sample is never moved before the one ahead of it in the previous batch. The rows are then put back in
+    time order and the gaps between each sensor's samples filled again from the past, as on loading. Only the times of
+    pulse rows change; no value is altered."""
+    observed = recording.ppg_observed
+    if observed is None:
+        return recording
+    ppg_rows = np.flatnonzero(observed)
+    if ppg_rows.shape[0] < 3:
+        return recording
+    stamps = recording.timestamps_ns[ppg_rows].astype(np.int64)
+    tight = np.diff(stamps) < MILLISECOND_PPG_SPACING_NS
+    if float(tight.mean()) < MILLISECOND_PPG_SHARE:
+        return recording
+
+    starts = np.r_[0, np.flatnonzero(~tight) + 1]
+    ends = np.r_[starts[1:] - 1, stamps.shape[0] - 1]
+    batch_last = np.repeat(stamps[ends], ends - starts + 1)
+    repaired = batch_last - (batch_last - stamps) * 1_000_000
+    # Strictly increasing, as pulse samples always are: subtracting the position makes "strictly" into "not decreasing".
+    position = np.arange(repaired.shape[0], dtype=np.int64)
+    repaired = np.maximum.accumulate(repaired - position) + position
+
+    timestamps = recording.timestamps_ns.astype(np.int64).copy()
+    timestamps[ppg_rows] = repaired
+    order = np.argsort(timestamps, kind="stable")
+    orient = recording.orient_observed if recording.orient_observed is not None else ~observed
+    channels = {}
+    for column, values in recording.channels.items():
+        real = observed if column in _PPG_ROW_COLUMNS else orient
+        channels[column] = _carry_forward(np.where(real, values, np.nan)[order])
+    return replace(
+        recording,
+        timestamps_ns=timestamps[order],
+        channels=channels,
+        raw_labels=recording.raw_labels[order],
+        ppg_observed=observed[order],
+        orient_observed=orient[order],
+    )
 
 
 def _carry_forward(values: np.ndarray) -> np.ndarray:

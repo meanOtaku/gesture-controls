@@ -149,7 +149,7 @@ arrays (one entry per sample, ascending SDK-timestamp order), not one message pe
 sample:
 
 ```json
-{"type":"watch.ppg_batch","version":1,"deviceId":"galaxy-watch-4","sequence":3,"timestampNs":125,"payload":{"sampleCount":2,"timestampsNs":[100,140],"green":[812345,812350],"greenStatus":[0,0],"red":[512345,512348],"redStatus":[0,0],"ir":[312345,312349],"irStatus":[0,0]}}
+{"type":"watch.ppg_batch","version":1,"deviceId":"galaxy-watch-4","sequence":3,"timestampNs":125,"payload":{"sampleCount":2,"timestampsNs":[100000000,140000000],"green":[812345,812350],"greenStatus":[0,0],"red":[512345,512348],"redStatus":[0,0],"ir":[312345,312349],"irStatus":[0,0]}}
 ```
 
 - `green`, `red`, `ir` are the raw ADC counts from `ValueKey.PpgSet`.
@@ -157,7 +157,13 @@ sample:
   non-zero flags a degraded reading (e.g. poor skin contact).
 - `timestampsNs` are the SDK's own per-sample timestamps (`DataPoint.getTimestamp()`),
   not the watch's `SystemClock.elapsedRealtimeNanos()` used elsewhere in this
-  protocol — they are monotonic but on their own clock domain.
+  protocol — they are monotonic but on their own clock domain. The SDK reports
+  milliseconds; the watch multiplies by 1,000,000 so the field is nanoseconds like
+  every other `timestampsNs` (the same holds for the heart-rate, skin-temperature,
+  EDA, SpO2, ECG and sweat-loss batches). Watch builds before October 2026 sent the
+  milliseconds unchanged; the desktop logs a warning when a batch implies an
+  impossible rate, and the trainer repairs recordings made that way (see
+  `csv_io.repair_millisecond_ppg_timestamps`).
 - The desktop rejects a batch whose `sampleCount` doesn't match every channel
   array's length, or whose `sampleCount` is `0` or exceeds 512 samples.
 

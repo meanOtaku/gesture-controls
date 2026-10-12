@@ -149,6 +149,23 @@ fn batch_rate_hz(timestamps_ns: &[u64]) -> Option<f64> {
     Some((timestamps_ns.len() as f64 - 1.0) / seconds)
 }
 
+/// A pulse batch whose timestamps put its samples more than this many times a second apart cannot be real: the sensor runs
+/// at 25 Hz.
+const IMPOSSIBLE_PPG_RATE_HZ: f64 = 10_000.0;
+
+/// Watch builds before the fix sent the Samsung SDK's millisecond timestamps as nanoseconds, which makes 25 Hz look like
+/// 25 GHz. Their pulse samples are squeezed together in recordings and live windows, so say so once, loudly.
+fn warn_if_sdk_milliseconds(rate_hz: f64) {
+    static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if rate_hz > IMPOSSIBLE_PPG_RATE_HZ && !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed)
+    {
+        tracing::warn!(
+            rate_hz,
+            "the watch sends pulse-sensor timestamps in milliseconds; update the watch app, or its pulse timing is wrong"
+        );
+    }
+}
+
 /// The longest an orientation-driven status update may be held back. Orientation arrives at
 /// up to 200 Hz, and the frontend can render at most ~15 Hz (the telemetry publish interval),
 /// so more frequent status events only cost serialization and an IPC round trip each. The
@@ -216,7 +233,9 @@ impl WatchRuntime {
                     && last > first
                 {
                     let seconds = (last - first) as f64 / 1_000_000_000.0;
-                    state.ppg_rate_hz = Some((sample.sample_count as f64 - 1.0) / seconds);
+                    let rate_hz = (sample.sample_count as f64 - 1.0) / seconds;
+                    warn_if_sdk_milliseconds(rate_hz);
+                    state.ppg_rate_hz = Some(rate_hz);
                 }
                 if let (
                     Some(&timestamp_ns),

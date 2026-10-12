@@ -23,6 +23,7 @@ import {
   type LiveInterval,
 } from "../annotations/timeline";
 import { RingBuffer } from "./ringBuffer";
+import { SourceClockMap } from "./sourceClock";
 
 export type SeriesPoint = { at: number; values: number[] };
 export type CsvRow = {
@@ -120,28 +121,6 @@ function datasetCsvValue(value: number | null): string {
   return value == null ? "" : String(value);
 }
 
-/**
- * PPG batch per-sample timestamps (`WatchPpgBatch.timestampsNs`) are on the
- * Samsung Health Sensor SDK's own clock (`DataPoint.getTimestamp()`), a
- * different, incomparable domain from the watch `SystemClock`-based envelope
- * timestamp used everywhere else, including `WatchOrientationSample.timestampNs`
- * (the watch's `SensorClockRebaser` guarantees that for orientation on every
- * device; see docs/protocols/watch-websocket-protocol.md). This is the single
- * canonical capture-time basis for newly captured rows: anchoring on the
- * envelope timestamp (the last sample = batch arrival, same domain as every
- * other channel) and applying the SDK domain's own intra-batch deltas — valid
- * since both clocks are monotonic at the same rate — translates each sample
- * onto that shared domain so it can be legitimately compared/sorted against
- * other channels. Neither value is fabricated: both the anchor and the deltas
- * are genuine device-reported numbers, so this is a domain translation, not a
- * synthesized timestamp.
- */
-function translateToWatchClockDomain(envelopeTimestampNs: number, sdkTimestampsNs: number[]): number[] {
-  if (sdkTimestampsNs.length === 0) return [];
-  const lastSdkTimestampNs = sdkTimestampsNs[sdkTimestampsNs.length - 1];
-  return sdkTimestampsNs.map((sdkTimestampNs) => envelopeTimestampNs - (lastSdkTimestampNs - sdkTimestampNs));
-}
-
 export type TelemetrySeries =
   | "head"
   | "watchOrientation"
@@ -232,6 +211,8 @@ class TelemetryStore {
   // editing the input alone must never change what gets stamped on rows.
   private appliedOrdinaryLabel: string = DEFAULT_ORDINARY_LABEL;
   private lastWatchOrientationSequence: number | null = null;
+  /** The pulse sensor's SDK clock, mapped onto the watch clock every other watch message uses. */
+  private readonly ppgClock = new SourceClockMap();
   private lastSpo2TimestampNs: number | null = null;
   private lastEcgTimestampNs: number | null = null;
   // "Graph refresh rate" setting: how often listeners are notified, not a
@@ -1003,10 +984,10 @@ class TelemetryStore {
 
   ingestPpgBatch(batch: WatchPpgBatch): void {
     this.noteWatchSample();
-    // Translate the SDK-clock-domain per-sample timestamps onto the same
-    // watch-monotonic domain orientation samples use before they ever reach
-    // row ordering/timing — see `translateToWatchClockDomain`.
-    const canonicalTimestampsNs = translateToWatchClockDomain(batch.timestampNs, batch.timestampsNs);
+    // The per-sample timestamps are on the Samsung SDK's own clock, which cannot be compared with the watch clock
+    // orientation rows use. Put them on that clock before they reach row ordering or timing (see `SourceClockMap`).
+    this.ppgClock.observe(batch.timestampsNs[batch.timestampsNs.length - 1], batch.timestampNs);
+    const canonicalTimestampsNs = batch.timestampsNs.map((sdkTimestampNs) => this.ppgClock.map(sdkTimestampNs) ?? Number.NaN);
     this.ingestTimestampedBatch(canonicalTimestampsNs, (timestampNs, index, at) => {
       this.series.get("ppg")?.push({ at, values: [batch.green[index] ?? 0, batch.red[index] ?? 0, batch.ir[index] ?? 0] });
       if (this.canRecord("ppg", at)) this.rows.push({
@@ -1106,6 +1087,7 @@ class TelemetryStore {
     this.savedCount = 0;
     this.appliedOrdinaryLabel = DEFAULT_ORDINARY_LABEL;
     this.lastWatchOrientationSequence = null;
+    this.ppgClock.reset();
     this.lastSpo2TimestampNs = null;
     this.lastEcgTimestampNs = null;
     this.lastRecordedAtByChannel.clear();

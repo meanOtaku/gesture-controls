@@ -5,8 +5,10 @@
 //! is re-validated and no stream is stored twice.
 //!
 //! Time. Windows are cut on the desktop's receive clock, the only one the watch's streams share (their own clocks are
-//! not comparable). Raw sensor timestamps are never altered: they are checked for order and carried through, and a
-//! score is stamped with the raw timestamp of the newest sample of the model's primary stream.
+//! not comparable). Each stream's samples are placed on it by their own timestamps through a [`ClockMap`] (the fastest
+//! delivery recently seen gives the offset), so samples that arrive together keep their real spacing, as the trainer
+//! sees it. Raw sensor timestamps are never altered: they are checked for order and carried through, and a score is
+//! stamped with the raw timestamp of the newest sample of the model's primary stream.
 
 use std::collections::{BTreeMap, VecDeque};
 
@@ -17,6 +19,7 @@ use pinch_inference::{
 };
 use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
 
+use crate::clock::ClockMap;
 use crate::model::{InputCheck, LoadedModel};
 
 const NS_PER_MS: u64 = 1_000_000;
@@ -106,6 +109,8 @@ pub struct WindowRejection {
 #[derive(Debug, Clone)]
 struct OrientationSample {
     received_ns: u64,
+    /// When it was taken, on the receive clock (see [`ClockMap`]).
+    at_ns: u64,
     accel: Option<[f64; 3]>,
     gyro: Option<[f64; 3]>,
     quat: [f64; 4],
@@ -114,8 +119,7 @@ struct OrientationSample {
 
 #[derive(Debug, Clone)]
 struct PpgSample {
-    /// Aligned to the desktop's receive clock: the batch's receive time, less how long before the batch's last sample
-    /// this one was taken (an interval, so the watch's unrelated absolute clock does not matter).
+    /// When it was taken, on the receive clock (see [`ClockMap`]; the pulse sensor's own clock is unrelated to the rest).
     at_ns: u64,
     raw_ts_ns: u64,
     green: f64,
@@ -132,6 +136,8 @@ pub struct LabelPipeline {
     device_id: Option<String>,
     last_orientation_raw: Option<u64>,
     last_ppg_raw: Option<u64>,
+    orientation_clock: ClockMap,
+    ppg_clock: ClockMap,
     /// The longest history any loaded model needs, so buffers are bounded by what is used.
     retention_ns: u64,
     next_due_ns: BTreeMap<LabelId, u64>,
@@ -187,6 +193,8 @@ impl LabelPipeline {
         self.device_id = None;
         self.last_orientation_raw = None;
         self.last_ppg_raw = None;
+        self.orientation_clock.reset();
+        self.ppg_clock.reset();
         self.next_due_ns.clear();
     }
 
@@ -240,8 +248,15 @@ impl LabelPipeline {
             return Err(bad("timestamps did not increase"));
         }
         self.last_orientation_raw = Some(sample.timestamp_ns);
+        self.orientation_clock
+            .observe(sample.timestamp_ns, received_ns);
+        let at_ns = self
+            .orientation_clock
+            .map(sample.timestamp_ns)
+            .unwrap_or(received_ns);
         self.orientation.push_back(OrientationSample {
             received_ns,
+            at_ns,
             accel: sample.accelerometer,
             gyro: sample.gyroscope,
             quat: sample.quaternion,
@@ -283,10 +298,15 @@ impl LabelPipeline {
         }
         let last_raw = batch.timestamps_ns[n - 1];
         self.last_ppg_raw = Some(last_raw);
+        // The batch left the watch just after its newest sample was taken; the others are placed by their own times.
+        self.ppg_clock.observe(last_raw, received_ns);
         for i in 0..n {
             let age = last_raw - batch.timestamps_ns[i];
             self.ppg.push_back(PpgSample {
-                at_ns: received_ns.saturating_sub(age),
+                at_ns: self
+                    .ppg_clock
+                    .map(batch.timestamps_ns[i])
+                    .unwrap_or(received_ns.saturating_sub(age)),
                 raw_ts_ns: batch.timestamps_ns[i],
                 green: f64::from(batch.green[i]),
                 red: f64::from(batch.red[i]),
@@ -349,18 +369,18 @@ impl LabelPipeline {
                     .orientation
                     .iter()
                     .filter(|s| s.accel.is_some())
-                    .map(|s| (s.received_ns, s.raw_ts_ns))
+                    .map(|s| (s.at_ns, s.raw_ts_ns))
                     .collect(),
                 StreamSource::WatchGyroscope => self
                     .orientation
                     .iter()
                     .filter(|s| s.gyro.is_some())
-                    .map(|s| (s.received_ns, s.raw_ts_ns))
+                    .map(|s| (s.at_ns, s.raw_ts_ns))
                     .collect(),
                 StreamSource::WatchOrientation => self
                     .orientation
                     .iter()
-                    .map(|s| (s.received_ns, s.raw_ts_ns))
+                    .map(|s| (s.at_ns, s.raw_ts_ns))
                     .collect(),
                 StreamSource::HeadPose => {
                     return Err(Rejection::Model(
@@ -450,14 +470,14 @@ impl LabelPipeline {
         // one that had it, as the live fusion has always done.
         let mut carried_accel = [0.0; 3];
         let mut carried_gyro = [0.0; 3];
-        for sample in self.orientation.iter().filter(|s| s.received_ns < start) {
+        for sample in self.orientation.iter().filter(|s| s.at_ns < start) {
             carried_accel = sample.accel.unwrap_or(carried_accel);
             carried_gyro = sample.gyro.unwrap_or(carried_gyro);
         }
         let in_window: Vec<OrientationSnapshot> = self
             .orientation
             .iter()
-            .filter(|s| s.received_ns >= start && s.received_ns <= now_ns)
+            .filter(|s| s.at_ns >= start && s.at_ns <= now_ns)
             .map(|s| {
                 carried_accel = s.accel.unwrap_or(carried_accel);
                 carried_gyro = s.gyro.unwrap_or(carried_gyro);
@@ -467,6 +487,12 @@ impl LabelPipeline {
                     quat: s.quat,
                 }
             })
+            .collect();
+        let orientation_timestamps_ns: Vec<u64> = self
+            .orientation
+            .iter()
+            .filter(|s| s.at_ns >= start && s.at_ns <= now_ns)
+            .map(|s| s.raw_ts_ns)
             .collect();
         let latest = in_window.last().copied().unwrap_or(OrientationSnapshot {
             accel: carried_accel,
@@ -480,12 +506,20 @@ impl LabelPipeline {
             ppg_timestamps_ns: ppg.iter().map(|s| s.raw_ts_ns).collect(),
             orientation: latest,
             orientation_in_window: in_window,
+            orientation_timestamps_ns,
             contact_quality_mean,
             baseline,
         };
         let selected = match &model.grid {
             // A convolutional model reads the window itself, as a grid of channels over time.
-            Some(grid) => build_grid(&window, &grid.channels, grid.steps, model.spike_method),
+            Some(grid) => build_grid(
+                &window,
+                &grid.channels,
+                grid.steps,
+                model.spike_method,
+                grid.timing,
+                grid.pulse,
+            ),
             None => model.select(&extract_features_with(&window, model.spike_method)),
         };
         let input_check = model.check_input(&selected);
@@ -543,6 +577,35 @@ pub(crate) mod tests {
         let mut pipeline = LabelPipeline::default();
         pipeline.configure(&[&model]);
         (pipeline, model)
+    }
+
+    #[test]
+    fn motion_samples_delivered_together_keep_their_real_spacing() {
+        let (mut p, _) = configured();
+        // 50 Hz samples sent five at a time, every 100 ms, arriving 7 ms (one batch 30 ms) after the newest was taken.
+        for batch in 0..10u64 {
+            let newest = batch * 5 + 4;
+            let delay_ms = if batch == 3 { 30 } else { 7 };
+            let received = 10_000_000_000 + newest * 20_000_000 + delay_ms * NS_PER_MS;
+            for n in batch * 5..=newest {
+                p.observe_orientation(&orientation(n, 1.0), received)
+                    .unwrap();
+            }
+        }
+        let spacing: Vec<u64> = p
+            .orientation
+            .iter()
+            .skip(5) // the first batch is placed before the estimate has settled on the fastest delivery
+            .map(|s| s.at_ns)
+            .collect::<Vec<_>>()
+            .windows(2)
+            .map(|w| w[1] - w[0])
+            .collect();
+        assert!(
+            spacing.iter().all(|&gap| gap == 20 * NS_PER_MS),
+            "{spacing:?}"
+        );
+        assert!(p.orientation.iter().all(|s| s.at_ns <= s.received_ns));
     }
 
     #[test]

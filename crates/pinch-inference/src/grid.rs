@@ -3,11 +3,12 @@
 //! `tools/label-trainer/tests/fixtures/grid_cases.json` keep the two equal.
 //!
 //! Each channel is turned into `steps` values: only samples that really arrived in the window are used; with a spike
-//! extraction method a pulse channel is first replaced by what the method leaves of it; the samples are taken as evenly
-//! spaced across the window and laid onto `steps` evenly spaced points by linear interpolation; a channel with no samples
-//! is all zeros and one with a single sample is that value throughout.
+//! extraction method a pulse channel is first replaced by what the method leaves of it; the samples are laid onto `steps`
+//! evenly spaced points by linear interpolation, either at their own timestamps ([`GridTiming::Time`]) or taken as evenly
+//! spaced ([`GridTiming::Samples`], models trained before); a channel with no samples is all zeros and one with a single
+//! sample is that value throughout.
 
-use crate::features::{FusedWindow, SpikeMethod, extract_spike_series};
+use crate::features::{FusedWindow, SpikeMethod, extract_spike_series, pulse_z};
 
 /// One channel of the grid, named like the CSV column it comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -75,6 +76,74 @@ impl GridChannel {
     }
 }
 
+/// How a grid lays a channel's samples onto its steps. A manifest without it means [`GridTiming::Samples`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GridTiming {
+    /// The samples taken as evenly spaced (what every model trained before the trainer used timestamps reads).
+    #[default]
+    Samples,
+    /// Each sample at its own timestamp, the steps evenly spaced in time from the channel's first sample to its last.
+    Time,
+}
+
+/// What a grid's pulse channels carry. A manifest without it means [`GridPulse::Raw`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GridPulse {
+    /// The sensor's counts, as every model trained before it could be chosen reads them.
+    #[default]
+    Raw,
+    /// Each channel in units of its own recent past ([`pulse_z`] against the window's baseline), which cancels the
+    /// session's arbitrary level and swing. Needs the model's baseline.
+    RecentPast,
+}
+
+/// `values`, taken at `times_ms` (increasing), laid onto `steps` points evenly spaced in time from the first to the last by
+/// linear interpolation. Falls back to [`resample`] when the times give no span. Mirrors the trainer's `resample_in_time`.
+pub fn resample_in_time(values: &[f64], times_ms: &[f64], steps: usize) -> Vec<f64> {
+    let n = values.len();
+    if n < 2 || steps == 1 || times_ms.len() != n || times_ms[n - 1] <= times_ms[0] {
+        return resample(values, steps);
+    }
+    let (first, span) = (times_ms[0], times_ms[n - 1] - times_ms[0]);
+    let mut low = 0;
+    (0..steps)
+        .map(|k| {
+            let at = first + span * k as f64 / (steps - 1) as f64;
+            while low < n - 2 && times_ms[low + 1] < at {
+                low += 1;
+            }
+            let gap = times_ms[low + 1] - times_ms[low];
+            let fraction = if gap <= 0.0 {
+                0.0
+            } else {
+                ((at - times_ms[low]) / gap).clamp(0.0, 1.0)
+            };
+            values[low] + (values[low + 1] - values[low]) * fraction
+        })
+        .collect()
+}
+
+/// Milliseconds from the first of `stamps_ns`: only differences matter, and they round the same on any clock.
+fn relative_ms(stamps_ns: &[u64]) -> Vec<f64> {
+    let first = stamps_ns.first().copied().unwrap_or(0);
+    stamps_ns
+        .iter()
+        .map(|&t| t.saturating_sub(first) as f64 / 1_000_000.0)
+        .collect()
+}
+
+/// The times of a channel's values: the samples' own, or for a series one shorter (differences between neighbours) the
+/// midpoints between consecutive samples.
+fn times_for(series_len: usize, times_ms: &[f64]) -> Vec<f64> {
+    if series_len == times_ms.len() {
+        times_ms.to_vec()
+    } else if series_len + 1 == times_ms.len() {
+        times_ms.windows(2).map(|w| (w[0] + w[1]) / 2.0).collect()
+    } else {
+        Vec::new()
+    }
+}
+
 /// `values` laid onto `steps` evenly spaced points by linear interpolation (first to first, last to last).
 pub fn resample(values: &[f64], steps: usize) -> Vec<f64> {
     let n = values.len();
@@ -100,7 +169,11 @@ pub fn build_grid(
     channels: &[GridChannel],
     steps: usize,
     spike_method: Option<SpikeMethod>,
+    timing: GridTiming,
+    pulse: GridPulse,
 ) -> Vec<f32> {
+    let ppg_ms = relative_ms(&window.ppg_timestamps_ns);
+    let motion_ms = relative_ms(&window.orientation_timestamps_ns);
     let ppg_span_ms = match (
         window.ppg_timestamps_ns.first(),
         window.ppg_timestamps_ns.last(),
@@ -113,12 +186,24 @@ pub fn build_grid(
     };
     let mut out = Vec::with_capacity(channels.len() * steps);
     for channel in channels {
+        let is_ppg = matches!(
+            channel,
+            GridChannel::PpgGreen | GridChannel::PpgRed | GridChannel::PpgIr
+        );
         let series: Vec<f64> = match channel {
             GridChannel::PpgGreen | GridChannel::PpgRed | GridChannel::PpgIr => {
-                let raw = match channel {
-                    GridChannel::PpgGreen => &window.ppg_green,
-                    GridChannel::PpgRed => &window.ppg_red,
-                    _ => &window.ppg_ir,
+                let (counts, past) = match (channel, window.baseline.as_ref()) {
+                    (GridChannel::PpgGreen, b) => (&window.ppg_green, b.map(|b| &b.green)),
+                    (GridChannel::PpgRed, b) => (&window.ppg_red, b.map(|b| &b.red)),
+                    (_, b) => (&window.ppg_ir, b.map(|b| &b.ir)),
+                };
+                let normalised;
+                let raw = match (pulse, past) {
+                    (GridPulse::RecentPast, Some(past)) => {
+                        normalised = pulse_z(counts, past);
+                        &normalised
+                    }
+                    _ => counts,
                 };
                 match spike_method {
                     Some(method) if raw.len() >= 4 => {
@@ -139,7 +224,14 @@ pub fn build_grid(
             GridChannel::QuatY => motion(&|s| s.quat[2]),
             GridChannel::QuatZ => motion(&|s| s.quat[3]),
         };
-        out.extend(resample(&series, steps).into_iter().map(|v| v as f32));
+        let laid = match timing {
+            GridTiming::Samples => resample(&series, steps),
+            GridTiming::Time => {
+                let times = times_for(series.len(), if is_ppg { &ppg_ms } else { &motion_ms });
+                resample_in_time(&series, &times, steps)
+            }
+        };
+        out.extend(laid.into_iter().map(|v| v as f32));
     }
     out
 }
@@ -157,6 +249,78 @@ mod tests {
         assert_eq!(resample(&[1.0, 2.0, 4.0], 3), [1.0, 2.0, 4.0]); // as many steps as samples: unchanged
         assert_eq!(resample(&[1.0, 2.0, 4.0], 1), [4.0]); // one step is the latest reading
         assert_eq!(resample(&[], 1), [0.0]);
+    }
+
+    #[test]
+    fn resampling_in_time_puts_each_sample_at_its_own_time() {
+        // Samples at 0, 10 and 40 ms (one missing at 20-30): the steps at 0, 20 and 40 ms read 0, the 10-40 line at 20, and 4.
+        assert_eq!(
+            resample_in_time(&[0.0, 1.0, 4.0], &[0.0, 10.0, 40.0], 3),
+            [0.0, 2.0, 4.0]
+        );
+        // Without a span in time it is the plain resampling.
+        assert_eq!(
+            resample_in_time(&[1.0, 2.0], &[5.0, 5.0], 3),
+            resample(&[1.0, 2.0], 3)
+        );
+    }
+
+    #[test]
+    fn pulse_channels_can_be_read_in_units_of_their_recent_past() {
+        let still = OrientationSnapshot {
+            accel: [0.0; 3],
+            gyro: [0.0; 3],
+            quat: [1.0, 0.0, 0.0, 0.0],
+        };
+        let past: Vec<f64> = (0..20).map(|i| 250_000.0 + f64::from(i % 5)).collect();
+        let mut window = FusedWindow {
+            ppg_green: vec![250_010.0, 250_020.0, 250_030.0],
+            ppg_red: vec![],
+            ppg_ir: vec![],
+            ppg_timestamps_ns: vec![0, 40_000_000, 80_000_000],
+            orientation: still,
+            orientation_in_window: vec![],
+            orientation_timestamps_ns: vec![],
+            contact_quality_mean: 0.0,
+            baseline: Some(crate::features::PpgBaseline {
+                green: past.clone(),
+                red: past.clone(),
+                ir: past.clone(),
+            }),
+        };
+        let channels = [GridChannel::PpgGreen];
+        let z = build_grid(
+            &window,
+            &channels,
+            3,
+            None,
+            GridTiming::Samples,
+            GridPulse::RecentPast,
+        );
+        let want = pulse_z(&window.ppg_green, &past);
+        assert_eq!(z, want.iter().map(|v| *v as f32).collect::<Vec<_>>());
+        let raw = build_grid(
+            &window,
+            &channels,
+            3,
+            None,
+            GridTiming::Samples,
+            GridPulse::Raw,
+        );
+        assert_eq!(raw, [250_010.0, 250_020.0, 250_030.0]);
+        // Without a baseline there is nothing to measure against: the counts, as before.
+        window.baseline = None;
+        assert_eq!(
+            build_grid(
+                &window,
+                &channels,
+                3,
+                None,
+                GridTiming::Samples,
+                GridPulse::RecentPast
+            ),
+            raw
+        );
     }
 
     #[test]
@@ -190,6 +354,7 @@ mod tests {
                     ..still
                 },
             ],
+            orientation_timestamps_ns: vec![0, 1],
             contact_quality_mean: 0.0,
             baseline: None,
         };
@@ -202,6 +367,8 @@ mod tests {
             ],
             4,
             None,
+            GridTiming::Samples,
+            GridPulse::Raw,
         );
         assert_eq!(grid.len(), 12);
         assert_eq!(&grid[0..4], [1.0, 2.0, 3.0, 4.0]);
@@ -276,6 +443,12 @@ mod tests {
                         }
                     })
                     .collect(),
+                orientation_timestamps_ns: case["orientation"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|s| s["timestampNs"].as_u64().unwrap())
+                    .collect(),
                 contact_quality_mean: 0.0,
                 baseline: None,
             };
@@ -289,7 +462,11 @@ mod tests {
                 .as_str()
                 .map(|m| SpikeMethod::from_name(m).unwrap());
             let steps = case["steps"].as_u64().unwrap() as usize;
-            let got = build_grid(&window, &channels, steps, method);
+            let timing = match case["timing"].as_str() {
+                Some("time") => GridTiming::Time,
+                _ => GridTiming::Samples,
+            };
+            let got = build_grid(&window, &channels, steps, method, timing, GridPulse::Raw);
             let want = numbers(&case["expected"]);
             assert_eq!(got.len(), want.len(), "{name}");
             for (i, (g, w)) in got.iter().zip(&want).enumerate() {

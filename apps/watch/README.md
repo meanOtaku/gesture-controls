@@ -79,9 +79,13 @@ apps/watch/
   Disconnect or exhausting reconnect attempts stops it to avoid unnecessary battery use.
 - **SensorCollector**: registers `TYPE_ROTATION_VECTOR`, gravity-compensated
   `TYPE_LINEAR_ACCELERATION` (falling back to `TYPE_ACCELEROMETER`), and
-  `TYPE_GYROSCOPE` at `SENSOR_DELAY_GAME`. Accelerometer and gyro vectors are
-  low-pass filtered and omitted when stale, then paired with each rotation-vector
-  sample using the sensor event timestamp. The orientation message's envelope
+  `TYPE_GYROSCOPE` at `SENSOR_DELAY_GAME` (or the rate the desktop sets).
+  `ImuRowAssembler` makes one row per event of the fastest sensor that is on (the
+  accelerometer, else the gyroscope, else the rotation vector), stamped with that
+  event's time and carrying the latest reading of the other two, which is omitted
+  when more than 100 ms old. Values are sent unfiltered: the quick movements of a
+  pinch or tap are the signal, and any filtering happens on the desktop, where
+  training and live inference share it. The orientation message's envelope
   timestamp is put on the `SystemClock.elapsedRealtimeNanos()` base every other
   message uses: `SensorClockRebaser` checks each event and rebases it only if a
   device's sensor clock turns out to differ (logging once when it does).

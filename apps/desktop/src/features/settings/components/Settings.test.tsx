@@ -13,7 +13,7 @@ const settings: AppSettings = {
   watchOrientationRateHz: 50,
   watchAccelerationRateHz: 50,
   watchGyroscopeRateHz: 50,
-  watchPpgFlushRateHz: 1,
+  watchPpgFlushRateHz: 10,
   watchHeartRateAcceptanceRateHz: 200,
   watchSkinTemperatureAcceptanceRateHz: 200,
   watchEdaAcceptanceRateHz: 200,
@@ -37,7 +37,7 @@ describe("Settings", () => {
     render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
     expect(screen.getByLabelText("Headphones rate")).toHaveValue(60);
     expect(screen.getByLabelText("Max angular velocity")).toHaveValue(360);
-    expect(screen.getByLabelText("Raw PPG flush")).toHaveValue(1);
+    expect(screen.getByLabelText("Raw PPG flush")).toHaveValue(10);
     // The range and default are stated up front, not discovered by failing.
     expect(screen.getByLabelText("Headphones rate")).toHaveAccessibleDescription(/Allowed: 1–200 Hz.*default 60 Hz/);
   });

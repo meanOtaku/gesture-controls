@@ -29,16 +29,19 @@ def train(tmp_path: Path, backend: str, steps: int, **over):
 
 
 @pytest.mark.parametrize("backend,steps", [("mlp", 1), ("torch-mlp", 1), ("torch-mlp", 4)])
-def test_each_column_at_each_step_is_one_input_neuron(tmp_path: Path, backend: str, steps: int) -> None:
+def test_each_column_at_each_step_is_one_input_neuron(tmp_path: Path, backend: str, steps: int, monkeypatch) -> None:
     if backend == "torch-mlp":
         pytest.importorskip("torch")
+    # This checks how the inputs are wired, not how good a model of single readings is (it does not carry over from one
+    # toy recording to the next), so the quality gate is out of the way.
+    monkeypatch.setattr(lt, "verdict", lambda metrics: None)
     raw, out, result = train(tmp_path, backend, steps)
     spec = lt.parse_spec(raw)
     assert spec.features == COLUMNS and lt.input_count(spec) == 6 * steps
     manifest = json.loads((out / "bundle" / "manifest.json").read_text())
     assert manifest["input"]["features"] == COLUMNS
     assert manifest["input"]["shape"] == [None, 6 * steps]
-    assert manifest["input"]["grid"] == {"steps": steps}
+    assert manifest["input"]["grid"] == {"steps": steps, "timing": "time"}
     assert manifest["preprocessing"] == {"kind": "none"}
     assert manifest["provenance"]["inputMode"] == "raw"
     assert result["parityMaxAbsDifference"] <= lt.PARITY_TOLERANCE

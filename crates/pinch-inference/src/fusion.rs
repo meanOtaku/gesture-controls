@@ -154,12 +154,15 @@ impl TelemetryFusion {
             _ => 0,
         };
         let window_start_ns = received_at_ns.saturating_sub(span_ns);
-        let orientation_in_window: Vec<OrientationSnapshot> = self
+        let (orientation_timestamps_ns, orientation_in_window): (
+            Vec<u64>,
+            Vec<OrientationSnapshot>,
+        ) = self
             .history
             .iter()
             .filter(|(at, _)| *at >= window_start_ns && *at <= received_at_ns)
-            .map(|(_, snapshot)| *snapshot)
-            .collect();
+            .map(|(at, snapshot)| (*at, *snapshot))
+            .unzip();
         let all_finite = std::iter::once(&orientation)
             .chain(orientation_in_window.iter())
             .all(|snapshot| {
@@ -187,6 +190,7 @@ impl TelemetryFusion {
             ppg_timestamps_ns: sample.timestamps_ns.clone(),
             orientation,
             orientation_in_window,
+            orientation_timestamps_ns,
             contact_quality_mean,
             baseline: None,
         })

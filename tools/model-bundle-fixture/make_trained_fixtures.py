@@ -23,6 +23,9 @@ from test_label_train import spec_for  # noqa: E402
 
 
 def main(out_root: Path, only: list[str]) -> None:
+    # The fixtures are trained on seconds of synthetic data, far less than the minute without a gesture the trainer needs
+    # before it trusts a false-alarm rate, so the whole-recording gate is relaxed here as in the trainer's tests.
+    lt.MIN_NEGATIVE_SECONDS, lt.MAX_FALSE_ACTIVATIONS_PER_HOUR, lt.MIN_GESTURE_RECALL = 0.0, float("inf"), 0.0
     designed_dense = {"hidden": [{"units": 8, "activation": "tanh"}, {"units": 5, "activation": "leaky_relu"}, {"units": 4, "activation": "sigmoid"}], "epochs": 80, "dropout": 0.1}
     designed_cnn = {"conv": [{"filters": 8, "kernel": 3, "activation": "tanh"}, {"filters": 6, "kernel": 7}], "pooling": "max", "hidden": [{"units": 5, "activation": "leaky_relu"}], "epochs": 40}
     for backend, name, network in (
@@ -31,6 +34,7 @@ def main(out_root: Path, only: list[str]) -> None:
         ("torch-mlp", "trained_designed_dense_bundle", designed_dense), ("cnn1d", "trained_designed_cnn_bundle", designed_cnn),
         ("torch-mlp", "trained_raw_columns_bundle", {"hidden": [{"units": 12, "activation": "tanh"}, {"units": 6}], "epochs": 80}),
         ("logreg", "trained_baseline_bundle", None),
+        ("gbt", "trained_gbt_bundle", None),
     ):
         if only and name not in only:
             continue

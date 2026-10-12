@@ -228,5 +228,5 @@ with a BLE adapter:
    on one that is, it never does. (Either outcome is evidence; it is currently
    unknown which applies to the target hardware.)
 9. Default-settings Live session: the live PPG window duration shown in Model Lab
-   diagnostics (expected roughly 960 ms at the default 1 Hz flush) against the
+   diagnostics (roughly 960 ms at a 1 Hz flush; the default is now 10 Hz, so expect about 100 ms) against the
    model's trained window.

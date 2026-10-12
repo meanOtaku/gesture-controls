@@ -236,7 +236,7 @@ class OnDemandMedicalSampler(
             TRACKER_SPO2_ON_DEMAND -> onSpo2(
                 dataPoints.map { point ->
                     Spo2Sample(
-                        timestampNs = point.timestamp,
+                        timestampNs = sdkTimestampToNs(point.timestamp),
                         spo2 = point.getValue(ValueKey.SpO2Set.SPO2),
                         heartRate = point.getValue(ValueKey.SpO2Set.HEART_RATE),
                         accuracyFlag = point.getValue(ValueKey.SpO2Set.ACCURACY_FLAG),
@@ -247,7 +247,7 @@ class OnDemandMedicalSampler(
             TRACKER_ECG_ON_DEMAND -> onEcg(
                 dataPoints.map { point ->
                     EcgSample(
-                        timestampNs = point.timestamp,
+                        timestampNs = sdkTimestampToNs(point.timestamp),
                         ecgMillivolts = point.getValue(ValueKey.EcgSet.ECG_MV).toDouble(),
                         leadOff = point.getValue(ValueKey.EcgSet.LEAD_OFF),
                         sequenceNumber = point.getValue(ValueKey.EcgSet.SEQUENCE),
@@ -280,7 +280,7 @@ class OnDemandMedicalSampler(
             TRACKER_SWEAT_LOSS_ON_DEMAND -> onSweatLoss(
                 dataPoints.map { point ->
                     SweatLossSample(
-                        timestampNs = point.timestamp,
+                        timestampNs = sdkTimestampToNs(point.timestamp),
                         sweatLossMilliliters = point.getValue(ValueKey.SweatLossSet.SWEAT_LOSS).toDouble(),
                         status = point.getValue(ValueKey.SweatLossSet.STATUS),
                     )

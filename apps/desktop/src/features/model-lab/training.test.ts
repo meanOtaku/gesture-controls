@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_LOG_LINES, appendLog, buildRequest, describeMetrics, hasLabel, otherLabels, recordingsWithLabel } from "./training";
+import { MAX_LOG_LINES, appendLog, buildRequest, describeEvents, describeMetrics, hasLabel, otherLabels, recordingsWithLabel, thresholdNote } from "./training";
 import type { DatasetSummary } from "./types";
 
 const dataset = (id: string, labels: string[]): DatasetSummary => ({ id, originalFilename: `${id}.csv`, importedAt: "", label: labels.join(", "), labels, rowCount: 10 });
@@ -55,5 +55,30 @@ describe("appendLog", () => {
     expect(log).toHaveLength(MAX_LOG_LINES);
     expect(log[log.length - 1]).toBe(`line ${MAX_LOG_LINES + 19}`);
     expect(log[0]).toBe("line 20");
+  });
+});
+
+describe("describeEvents", () => {
+  it("says what someone using it would notice: gestures caught, how soon, and false alarms over the time without one", () => {
+    const text = describeEvents({ recordings: 2, gestures: 12, caught: 11, gestureRecall: 11 / 12, repeats: 0, medianLatencyMs: 240.4, falseActivations: 2, negativeSeconds: 300, falseActivationsPerHour: 24 });
+    expect(text).toContain("caught 11 of 12 gestures, typically 240 ms after each began");
+    expect(text).toContain("went off 2 times in 5.0 minutes without the gesture (about 24 an hour)");
+  });
+
+  it("leaves out the gestures when the test recordings hold none", () => {
+    const text = describeEvents({ recordings: 1, gestures: 0, caught: 0, gestureRecall: null, repeats: 0, medianLatencyMs: null, falseActivations: 0, negativeSeconds: 45, falseActivationsPerHour: 0 });
+    expect(text).toBe("Played through the test recordings as it would run live, it went off 0 times in 45 seconds without the gesture (about 0 an hour).");
+  });
+});
+
+describe("thresholdNote", () => {
+  const metrics = { windows: 100, positiveWindows: 40, negativeWindows: 60, precision: 0.9, recall: 0.8, f1: 0.85, falseActivationRate: 0.05, rocAuc: 0.97, activationThreshold: 0.6 };
+
+  it("calls the numbers fair when the cut-off came from the training recordings", () => {
+    expect(thresholdNote({ ...metrics, thresholdSource: "trainingRecordings", thresholdChosenOnEvaluationRecordings: false })).toContain("chosen on the training recordings");
+  });
+
+  it("keeps the old caveat for a run from before, which chose it on the test recordings", () => {
+    expect(thresholdNote(metrics)).toContain("chosen using those same test recordings");
   });
 });

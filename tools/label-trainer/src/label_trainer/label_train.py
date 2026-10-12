@@ -8,7 +8,7 @@ model, and writes:
 
     <out>/bundle/manifest.json   what the desktop's bundle validator reads
     <out>/bundle/model.onnx
-    <out>/evaluation.json        metrics on the held-out recordings
+    <out>/evaluation.json        metrics on the held-out recordings: per window, and as a detector over whole recordings
     <out>/result.json            the outcome: deployable, evaluationOnly or failed, and why
 
 Features are the same 55 canonical statistics the desktop computes while running (`features.FEATURE_NAMES`), restricted
@@ -30,18 +30,29 @@ from typing import Any
 
 import numpy as np
 
-from .csv_io import load_recording, shift_labels
+from .csv_io import Recording, load_recording, repair_millisecond_ppg_timestamps, shift_labels
 from .dataset import build_dataset_from_recordings
-from .features import BASELINE_CHOICES_MS, BASELINE_FEATURE_NAMES, FEATURE_NAMES, SPIKE_FEATURE_NAMES, SPIKE_METHODS
+from .events import Policy, continuous_windows, detect, labelled_spans, match_events, summarise
+from .features import (
+    ALL_BASELINE_FEATURE_NAMES,
+    BASELINE_CHOICES_MS,
+    FEATURE_NAMES,
+    MOTION_FEATURE_NAMES,
+    SPIKE_FEATURE_NAMES,
+    SPIKE_METHODS,
+    baseline_rows,
+    extract_features,
+)
 from .edits import EditRefused
 from .nets import CnnModel, TorchModel
 from .network import Network, NetworkRefused, parameter_count, parse_network
-from .grid import DEFAULT_STEPS, MAX_RAW_STEPS, MAX_STEPS, MIN_RAW_STEPS, MIN_STEPS, build_grid, channels_for
-from .labels import LABEL_MAPPING_VERSION, load_label_mapping
-from .windowing import WindowConfig
+from .grid import DEFAULT_STEPS, GRID_TIMINGS, MAX_RAW_STEPS, MAX_STEPS, MIN_RAW_STEPS, MIN_STEPS, build_grid, channels_for
+from .labels import LABEL_MAPPING_VERSION, load_label_mapping, missing_labels
+from .windowing import Window, WindowConfig, label_by_overlap
 
 SPEC_VERSION = 1
-BACKENDS = ("logreg", "mlp", "torch-mlp", "cnn1d")
+WINDOWINGS = ("continuous", "segments")
+BACKENDS = ("logreg", "mlp", "torch-mlp", "cnn1d", "gbt")
 SOURCES = ("watchOrientation", "watchAcceleration", "watchGyroscope", "watchPpg")
 ONNX_OPSET = 15
 TORCH_OPSET = 17
@@ -50,6 +61,9 @@ PARITY_TOLERANCE = 1e-3
 MIN_POSITIVE_TRAIN_WINDOWS = 10
 MIN_WINDOWS_PER_CLASS_EVAL = 3
 ACTIVATION = 0.8
+# The cut-off is chosen from predictions on the training recordings by models that did not see them (grouped by recording),
+# using at most this many folds.
+MAX_THRESHOLD_FOLDS = 5
 
 
 class TrainingRefused(Exception):
@@ -81,7 +95,8 @@ def is_movement_feature(name: str) -> bool:
         or name == "quat_delta_angle_deg"
         or (name.startswith("ppg_") and name.endswith("_slope"))
         or name in SPIKE_FEATURE_NAMES  # the spike features are all about change: the baseline is already taken away
-        or name in BASELINE_FEATURE_NAMES  # and these are the level against the recent past, not the level itself
+        or name in ALL_BASELINE_FEATURE_NAMES  # and these are the level against the recent past, not the level itself
+        or name in MOTION_FEATURE_NAMES  # how fast and how often the motion changes
     )
 
 
@@ -110,7 +125,7 @@ def features_for(
         for name in FEATURE_NAMES
         if source_of(name) in sources
         and (spikes or name not in SPIKE_FEATURE_NAMES)
-        and (baseline or name not in BASELINE_FEATURE_NAMES)
+        and (baseline or name not in ALL_BASELINE_FEATURE_NAMES)
         and (not movement_only or is_movement_feature(name))
         and _channel_wanted(name, ppg_channels)
     ]
@@ -143,6 +158,23 @@ class Spec:
     seed: int
     params: dict[str, Any]
     label_offset_ms: int = 0
+    # "continuous": windows slide across the whole recording and are labelled by how much the gesture covers them, as
+    # the runtime meets them. "segments": the older way, windows only inside one label's stretch.
+    windowing: str = "continuous"
+    # How a grid lays samples onto its steps (see `grid.build_grid`): "time" for new models; an edit keeps its source's.
+    grid_timing: str = "time"
+    # A convolutional model can start its convolution layers from a pre-trained motion encoder (see `pretrain.py`), and
+    # keep them as they are (`pretrained_freeze`) so only its head learns from the recordings.
+    pretrained: Path | None = None
+    pretrained_freeze: bool = False
+
+
+def grid_pulse_baseline(spec: Spec) -> int | None:
+    """For a model reading columns with a baseline and a pulse channel: how far back the pulse is measured against (see
+    `grid.build_grid`); None otherwise."""
+    if not reads_grid(spec) or spec.baseline_ms is None or not any(name.startswith("ppg_") for name in spec.features):
+        return None
+    return spec.baseline_ms
 
 
 def reads_grid(spec: Spec) -> bool:
@@ -191,7 +223,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
             raise TrainingRefused("choose at least one pulse sensor channel for the model to read")
     grid_steps = int(raw.get("gridSteps", DEFAULT_STEPS))
     raw_columns = raw.get("inputMode") == "raw"
-    if raw_columns and backend not in ("logreg", "mlp", "torch-mlp", "cnn1d"):
+    if raw_columns and backend not in ("logreg", "mlp", "torch-mlp", "cnn1d", "gbt"):
         raise TrainingRefused(f"unknown training method {backend!r}")
     if raw_columns and backend != "cnn1d":
         if not MIN_RAW_STEPS <= grid_steps <= MAX_RAW_STEPS:
@@ -206,7 +238,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
             raise TrainingRefused("no channels are available from the chosen streams")
         if not any(channel.startswith("ppg_") for channel in available):
             spike_method = None  # nothing for it to read
-        baseline_ms = None  # these models read the columns themselves, not statistics against a baseline
+            baseline_ms = None  # with a pulse channel the baseline puts it in units of its recent past (see grid_pulse_baseline)
     else:
         available = features_for(sources, bool(raw.get("movementOnly", False)), spike_method is not None, ppg_channels, baseline_ms is not None)
     requested = raw.get("features")
@@ -225,6 +257,11 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
     if "epochs" in params and "epochs" not in (raw.get("network") or {}):
         network = replace(network, epochs=max(5, int(params["epochs"])))  # the older way of asking for fewer rounds
     window = raw.get("window", {})
+    window_ms = float(window.get("windowMs", 500))
+    pretrained = Path(raw["pretrained"]) if raw.get("pretrained") else None
+    movement_only = bool(raw.get("movementOnly", False))
+    if pretrained is not None:
+        network, movement_only = _pretrained_network(pretrained, backend, features, grid_steps, window_ms, network)
     recordings = {rid: Path(path) for rid, path in raw.get("recordings", {}).items()}
     train, evaluation = list(raw.get("train", [])), list(raw.get("evaluation", []))
     if set(train) & set(evaluation):
@@ -237,6 +274,14 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
     target = raw.get("target")
     if not target:
         raise TrainingRefused("the spec has no target label")
+    windowing = raw.get("windowing", "continuous")
+    if windowing not in WINDOWINGS:
+        raise TrainingRefused(f"windowing must be one of {list(WINDOWINGS)}, got {windowing!r}")
+    grid_timing = raw.get("gridTiming") or _source_grid_timing(raw.get("edit")) or "time"
+    if grid_timing not in GRID_TIMINGS:
+        raise TrainingRefused(f"gridTiming must be one of {list(GRID_TIMINGS)}, got {grid_timing!r}")
+    if (backend == "cnn1d" or raw_columns) and not any(name.startswith("ppg_") for name in features):
+        baseline_ms = None
     return Spec(
         target=target,
         negatives=list(raw.get("negatives", [])),
@@ -246,7 +291,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         evaluation=evaluation,
         sources=sources,
         features=features,
-        movement_only=bool(raw.get("movementOnly", False)),
+        movement_only=movement_only,
         spike_method=spike_method,
         baseline_ms=baseline_ms,
         ppg_channels=ppg_channels,
@@ -256,7 +301,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         research=bool(raw.get("research", False)),
         edit=raw.get("edit") or None,
         window=WindowConfig(
-            window_ms=float(window.get("windowMs", 500)),
+            window_ms=window_ms,
             stride_ms=float(window.get("strideMs", 150)),
             max_gap_ms=float(window.get("maxGapMs", 250)),
             min_samples_per_window=int(window.get("minSamples", 3)),
@@ -265,7 +310,48 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         seed=int(raw.get("seed", 7)),
         params=dict(raw.get("params", {})),
         label_offset_ms=int(label_offset_ms),
+        windowing=windowing,
+        grid_timing=grid_timing,
+        pretrained=pretrained,
+        pretrained_freeze=bool(raw.get("pretrainedFreeze", False)),
     )
+
+
+def _pretrained_network(path: Path, backend: str, features: list[str], grid_steps: int, window_ms: float, network: Network) -> tuple[Network, bool]:
+    """The network a model starting from the encoder at `path` must have (the encoder's convolution layers and pooling,
+    the request's own training settings), after checking the model reads what the encoder was trained on. Such a model
+    always takes each window's own mean away, as the encoder did (which also takes gravity away)."""
+    from .pretrain import MOTION_CHANNELS, load_encoder
+
+    if backend != "cnn1d":
+        raise TrainingRefused("only the convolutional network can start from a pre-trained encoder")
+    if not path.is_file():
+        raise TrainingRefused(f"the pre-trained encoder {path} is not there; make it with --pretrain-microdpad")
+    try:
+        encoder = load_encoder(path)
+    except (ValueError, ImportError) as error:
+        raise TrainingRefused(str(error)) from error
+    if features != MOTION_CHANNELS:
+        raise TrainingRefused(f"the pre-trained encoder reads {MOTION_CHANNELS}; choose acceleration and gyroscope only (got {features})")
+    if grid_steps != encoder["steps"] or int(window_ms) != encoder["windowMs"]:
+        raise TrainingRefused(
+            f"the pre-trained encoder reads {encoder['windowMs']} ms windows in {encoder['steps']} steps; "
+            f"this model asks for {int(window_ms)} ms in {grid_steps}"
+        )
+    built = parse_network(encoder["network"], "cnn1d")
+    return replace(network, conv=built.conv, pooling=built.pooling), True
+
+
+def _source_grid_timing(edit: dict[str, Any] | None) -> str | None:
+    """The grid timing of the model an edit starts from: what its manifest says, or "samples" for one from before the
+    manifest said (it was trained that way). None when there is no edit or no grid."""
+    if not edit or not edit.get("fromDir"):
+        return None
+    try:
+        grid = json.loads((Path(edit["fromDir"]) / "bundle" / "manifest.json").read_text())["input"].get("grid")
+    except (OSError, KeyError, ValueError):
+        return None
+    return None if grid is None else grid.get("timing", "samples")
 
 
 def _mapping(spec: Spec):
@@ -282,16 +368,45 @@ def build_matrices(spec: Spec):
     return build_matrices_with_windows(spec)[:4]
 
 
-def build_all(spec: Spec):
+def load_spec_recordings(spec: Spec) -> dict[str, Recording]:
+    """Every recording the spec names, as training reads it: repaired if needed, labels moved by the chosen offset."""
+    return {
+        rid: replace(shift_labels(repair_millisecond_ppg_timestamps(load_recording(path)), spec.label_offset_ms), session_id=rid)
+        for rid, path in spec.recordings.items()
+    }
+
+
+def window_inputs(spec: Spec, recording: Recording, windows: list[Window]) -> tuple[np.ndarray, list[Window]]:
+    """The model's input for each window, made as for training; a window the runtime would not score (too little pulse
+    history for the baseline) is left out. Returns the inputs and the windows kept."""
+    columns = None if reads_grid(spec) else [FEATURE_NAMES.index(name) for name in spec.features]
+    rows: list[np.ndarray] = []
+    kept: list[Window] = []
+    for window in windows:
+        if columns is None:
+            grid = build_grid(recording, window, spec.features, spec.grid_steps, spec.spike_method, spec.grid_timing, grid_pulse_baseline(spec))
+            if grid is None:
+                continue
+            rows.append(grid)
+        else:
+            if spec.baseline_ms is not None and baseline_rows(recording, window, spec.baseline_ms) is None:
+                continue
+            rows.append(extract_features(recording, window, spec.spike_method, spec.baseline_ms)[columns])
+        kept.append(window)
+    width = input_count(spec)
+    return (np.array(rows, dtype=np.float32) if rows else np.zeros((0, width), dtype=np.float32)), kept
+
+
+def build_all(spec: Spec, recordings: dict[str, Recording] | None = None):
     """Every window of every recording: features, whether it is the target, the recording it came from, and where it is."""
-    recordings = []
-    for rid, path in spec.recordings.items():
-        recording = shift_labels(load_recording(path), spec.label_offset_ms)
-        recordings.append(replace(recording, session_id=rid))
+    if spec.windowing == "continuous":
+        return _build_continuous(spec, recordings or load_spec_recordings(spec))
+    recordings = list((recordings or load_spec_recordings(spec)).values())
     if reads_grid(spec):
         dataset = build_dataset_from_recordings(
             recordings, spec.window, "exclude", label_mapping=_mapping(spec),
-            feature_fn=lambda recording, window: build_grid(recording, window, spec.features, spec.grid_steps, spec.spike_method),
+            feature_fn=lambda recording, window: build_grid(recording, window, spec.features, spec.grid_steps, spec.spike_method, spec.grid_timing, grid_pulse_baseline(spec)),
+            baseline_ms=grid_pulse_baseline(spec),
         )
         x = dataset.features.astype(np.float32)
     else:
@@ -303,14 +418,50 @@ def build_all(spec: Spec):
     return x, y, np.array([str(g) for g in dataset.groups]), meta
 
 
+def _build_continuous(spec: Spec, recordings: dict[str, Recording]):
+    """`build_all` with windows that slide across label changes, each labelled by `windowing.label_by_overlap`."""
+    present = {label for recording in recordings.values() for label in recording.raw_labels.tolist()}
+    unmapped = missing_labels(_mapping(spec), present)
+    if unmapped:
+        raise TrainingRefused(
+            "the following collection label(s) have no explicit training role mapping "
+            f"(target/negative/exclude): {', '.join(sorted(unmapped))}. Assign a role for each "
+            "before training; unmapped labels are never silently treated as negative."
+        )
+    excluded_labels = list(spec.excludes)
+    xs: list[np.ndarray] = []
+    ys: list[int] = []
+    groups: list[str] = []
+    meta: list[dict[str, Any]] = []
+    for rid, recording in recordings.items():
+        labels = recording.raw_labels
+        labelled = label_by_overlap(
+            recording,
+            continuous_windows(recording, spec.window),
+            labels == spec.target,
+            np.isin(labels, excluded_labels) if excluded_labels else np.zeros(labels.shape[0], dtype=bool),
+        )
+        answer = {id(window): y for window, y in labelled}
+        x, kept = window_inputs(spec, recording, [window for window, _ in labelled])
+        for row, window in zip(x, kept):
+            window_labels = labels[window.row_indices].tolist()
+            xs.append(row)
+            ys.append(answer[id(window)])
+            groups.append(rid)
+            meta.append({"recording": rid, "startNs": int(window.start_ns), "label": max(set(window_labels), key=window_labels.count)})
+    if not xs:
+        raise TrainingRefused("no window could be made from the recordings; check the window length and gap against the recording rate")
+    return np.stack(xs).astype(np.float32), np.array(ys, dtype=np.int64), np.array(groups), meta
+
+
 def build_matrices_with_windows(spec: Spec):
     """`build_matrices`, and for each held-out window which recording it came from and where (for the inspection)."""
     return build_matrices_with_groups(spec)[:5]
 
 
-def build_matrices_with_groups(spec: Spec):
+def build_matrices_with_groups(spec: Spec, recordings: dict[str, Recording] | None = None):
     """`build_matrices_with_windows`, and last the recording each training window came from."""
-    x, y, groups, meta = build_all(spec)
+    x, y, groups, meta = build_all(spec, recordings)
     train_mask = np.isin(groups, spec.train)
     eval_mask = np.isin(groups, spec.evaluation)
     eval_windows = [meta[i] for i in np.flatnonzero(eval_mask)]
@@ -349,14 +500,72 @@ def make_model(backend: str, n_features: int, seed: int, params: dict[str, Any],
     raise TrainingRefused(f"{backend} is not a scikit-learn backend")
 
 
+# Early stopping holds back this share of the training recordings (at least one) to find the best number of rounds.
+EARLY_STOPPING_SHARE = 0.25
+EARLY_STOPPING_MIN_RECORDINGS = 3
+
+
+def early_stopping_epochs(spec: Spec, x_train: np.ndarray, y_train: np.ndarray, groups: np.ndarray, say=lambda _: None) -> int | None:
+    """How many rounds a PyTorch network should train: some of the training recordings are held back, the network is trained
+    on the rest for its full `epochs` while it is scored on the held-back ones, and the round where it told the gesture
+    apart best there (ROC AUC; of those, the lowest loss) is returned. AUC, not loss alone: the loss rises as a network
+    grows confident even while it separates the two better, and only the separation matters (the cut-off is fitted
+    afterwards). Held back by recording, not window, so the loss says how it does on a session it has not seen.
+    None (train the full `epochs`) with fewer than `EARLY_STOPPING_MIN_RECORDINGS` recordings or no split with both kinds
+    of window on each side."""
+    recordings = sorted(set(groups.tolist()))
+    if len(recordings) < EARLY_STOPPING_MIN_RECORDINGS:
+        return None
+    both = lambda mask: 0 < int(y_train[mask].sum()) < int(mask.sum())  # noqa: E731
+    wanted = max(1, int(round(EARLY_STOPPING_SHARE * len(recordings))))
+    held: list[str] = []
+    # In a random order, hold recordings back until the held-back ones have both kinds of window and are at least the
+    # wanted share, never taking one the rest cannot spare (they must keep both kinds too).
+    for index in np.random.default_rng(spec.seed).permutation(len(recordings)):
+        if len(held) >= wanted and both(np.isin(groups, held)):
+            break
+        candidate = [*held, recordings[index]]
+        if both(~np.isin(groups, candidate)):
+            held = candidate
+    validation = np.isin(groups, held)
+    if not (both(validation) and both(~validation)):
+        return None
+    count = len(held)
+    scores: list[tuple[int, float, float]] = []
+
+    def watch(epoch: int, epochs: int, metrics: dict[str, float]) -> None:
+        if "evalLoss" in metrics and "evalAuc" in metrics:
+            scores.append((epoch, metrics["evalAuc"], metrics["evalLoss"]))
+
+    fit(spec, x_train[~validation], y_train[~validation], x_train[validation], y_train[validation], watch)
+    if not scores:
+        return None
+    best = min(scores, key=lambda point: (-round(point[1], 4), point[2], point[0]))[0]
+    say(f"Early stopping: on {count} held-back training recording(s) it told the gesture apart best after {best} of {spec.network.epochs} rounds")
+    return best
+
+
+def with_early_stopping(spec: Spec, x_train: np.ndarray, y_train: np.ndarray, groups: np.ndarray, say=lambda _: None) -> Spec:
+    """`spec` with a PyTorch network's rounds set by `early_stopping_epochs`, once for the run: the final model and every
+    model that chooses the cut-off then train the same number. Unchanged for other methods or when it cannot tell."""
+    if spec.backend not in ("torch-mlp", "cnn1d"):
+        return spec
+    best = early_stopping_epochs(spec, x_train, y_train, groups, say)
+    return spec if best is None else replace(spec, network=replace(spec.network, epochs=best))
+
+
 def fit(spec: Spec, x_train: np.ndarray, y_train: np.ndarray, x_eval: np.ndarray | None = None, y_eval: np.ndarray | None = None, on_epoch=None):
     """Trains the model. The held-out windows, when given, are only used to report progress, never to choose anything."""
     missing = "PyTorch is not installed. Run the trainer with the 'torch' extra to use this backend"
     if spec.backend == "cnn1d":
         try:
-            model = CnnModel(len(spec.features), spec.grid_steps, spec.seed, spec.params, spec.movement_only, spec.network)
+            model = CnnModel(len(spec.features), spec.grid_steps, spec.seed, spec.params, spec.movement_only, spec.network, names=list(spec.features))
         except ImportError as error:
             raise TrainingRefused(missing) from error
+        if spec.pretrained is not None:
+            from .pretrain import load_encoder
+
+            model.load_encoder(load_encoder(spec.pretrained)["state"], spec.pretrained_freeze)
         return model.fit(x_train, y_train, x_eval, y_eval, on_epoch)
     if spec.backend == "torch-mlp":
         try:
@@ -364,6 +573,11 @@ def fit(spec: Spec, x_train: np.ndarray, y_train: np.ndarray, x_eval: np.ndarray
         except ImportError as error:
             raise TrainingRefused(missing) from error
         return model.fit(x_train, y_train, x_eval, y_eval, on_epoch)
+    if spec.backend == "gbt":
+        from sklearn.utils.class_weight import compute_sample_weight
+
+        # Each kind of window counts as much in total however many there are of it, like the networks' class balancing.
+        return make_gbt(spec.seed).fit(x_train, y_train, sample_weight=compute_sample_weight("balanced", y_train))
     model = make_model(spec.backend, x_train.shape[1], spec.seed, spec.params, spec.network).fit(x_train, y_train)
     if spec.backend == "mlp" and on_epoch is not None:
         final = model.named_steps["model"]
@@ -398,25 +612,71 @@ def _rates(probability: np.ndarray, y: np.ndarray, threshold: float) -> dict[str
 
 
 def choose_threshold(probability: np.ndarray, y: np.ndarray) -> float:
-    """The activation threshold with the best F1 on these windows (ties go to fewer false alarms, then the higher one).
+    """The activation threshold that best tells the two kinds of window apart: the highest share of gesture windows found
+    less the share of other windows flagged (Youden's J; ties go to fewer false alarms, then the higher threshold).
 
     A model's scores shift from one recording session to the next, so a fixed 0.8 can sit above every score of a model
-    that ranks the windows perfectly. The threshold is therefore fitted, but it is fitted on the held-out recordings, so
-    the rates reported at it are a little optimistic. `evaluation.json` says so, and also reports the default.
+    that ranks the windows perfectly; the threshold is therefore fitted (on predictions for recordings the model did not
+    see, see `out_of_fold_threshold`). Not by F1: when most windows are the gesture, F1 is best at a threshold that flags
+    everything, which is the one thing a detector must not do. J weighs the two kinds of window equally however many of
+    each there are.
     """
-    best = (-1.0, 0.0, 0.0)
+    best = (-2.0, 0.0, 0.0)
     for threshold in np.round(np.arange(0.05, 0.96, 0.01), 2):
         rates = _rates(probability, y, float(threshold))
-        key = (rates["f1"], -rates["falseActivationRate"], float(threshold))
+        key = (rates["recall"] - rates["falseActivationRate"], -rates["falseActivationRate"], float(threshold))
         if key > best:
             best = key
     return best[2]
 
 
-def evaluate(probability: np.ndarray, y: np.ndarray) -> dict[str, Any]:
+def out_of_fold_threshold(spec: Spec, x_train: np.ndarray, y_train: np.ndarray, train_groups: np.ndarray, say=lambda _: None) -> tuple[float, str, float | None]:
+    """The cut-off, chosen without looking at the held-out recordings: the training recordings are split into groups by
+    recording, a model is trained on all groups but one and scores the one left out, for each in turn, and the cut-off with
+    the best F1 on those scores is taken. Every score comes from a model that never saw that recording, as on the held-out
+    ones, so the cut-off carries over and the held-out numbers at it are honest.
+
+    Returns the cut-off, where it came from ("trainingRecordings", or "default" (`ACTIVATION`) when the training
+    recordings are too few to judge each other: fewer than two, or no fold with both kinds of window to learn from), and
+    the ROC AUC of those scores taken together: how well a model trained on some of the training recordings tells the
+    gesture apart in the others, with one cut-off for all of them (None when there is nothing to judge)."""
     from sklearn.metrics import roc_auc_score
 
-    threshold = choose_threshold(probability, y)
+    groups = sorted(set(train_groups.tolist()))
+    if len(groups) < 2:
+        return ACTIVATION, "default", None
+    folds = min(MAX_THRESHOLD_FOLDS, len(groups))
+    fold_of = {group: index % folds for index, group in enumerate(groups)}
+    fold = np.array([fold_of[g] for g in train_groups.tolist()])
+    held_out = np.full(y_train.shape[0], np.nan)
+    say(f"Choosing the cut-off on the training recordings: training {folds} more times, each without some of them")
+    for k in range(folds):
+        test = fold == k
+        train = ~test
+        if int(y_train[train].sum()) < MIN_POSITIVE_TRAIN_WINDOWS or int((y_train[train] == 0).sum()) < MIN_POSITIVE_TRAIN_WINDOWS:
+            continue
+        model = fit(spec, x_train[train], y_train[train])
+        held_out[test] = model.predict_proba(x_train[test])[:, 1]
+    judged = ~np.isnan(held_out)
+    if not judged.any() or not 0 < int(y_train[judged].sum()) < int(judged.sum()):
+        return ACTIVATION, "default", None
+    scores, truth = held_out[judged], y_train[judged]
+    return choose_threshold(scores, truth), "trainingRecordings", float(roc_auc_score(truth, scores))
+
+
+def edited_threshold(source: Path) -> tuple[float, str]:
+    """The cut-off of the model an edit started from (its manifest), or the default if it has none."""
+    manifest = source / "bundle" / "manifest.json"
+    try:
+        return float(json.loads(manifest.read_text())["thresholds"]["activation"]), "editedFrom"
+    except (OSError, KeyError, TypeError, ValueError):
+        return ACTIVATION, "default"
+
+
+def evaluate(probability: np.ndarray, y: np.ndarray, threshold: float, threshold_source: str) -> dict[str, Any]:
+    """The held-out windows' numbers at `threshold`, which must not have been chosen on them (see `out_of_fold_threshold`)."""
+    from sklearn.metrics import roc_auc_score
+
     chosen = _rates(probability, y, threshold)
     return {
         "windows": int(y.shape[0]),
@@ -425,39 +685,148 @@ def evaluate(probability: np.ndarray, y: np.ndarray) -> dict[str, Any]:
         # Does the model rank the gesture's windows above the rest at all? 0.5 is chance; under 0.5 it is backwards.
         "rocAuc": float(roc_auc_score(y, probability)),
         "activationThreshold": threshold,
-        "thresholdChosenOnEvaluationRecordings": True,
+        "thresholdSource": threshold_source,
+        "thresholdChosenOnEvaluationRecordings": threshold_source == "evaluationRecordings",
         **{k: v for k, v in chosen.items() if k != "threshold"},
+        # The share of each kind of window it gets right, averaged: unlike F1 or accuracy it does not look better just
+        # because the held-out recordings happen to hold mostly one kind.
+        "balancedAccuracy": (chosen["recall"] + 1.0 - chosen["falseActivationRate"]) / 2.0,
         "atDefaultThreshold": _rates(probability, y, ACTIVATION),
+        **calibration(probability, y),
     }
 
 
+CALIBRATION_BINS = 10
+
+
+def calibration(probability: np.ndarray, y: np.ndarray) -> dict[str, float]:
+    """Whether the scores can be read as probabilities on the held-out windows: the Brier score (the mean squared gap
+    between score and truth; 0 is perfect, 0.25 is a constant 0.5) and the expected calibration error (scores split into
+    ten equal bins, the gap between each bin's average score and its share of gesture windows, weighted by its size: 0.1
+    means a score of 0.8 is right about 70% or 90% of the time). The cut-off does not need them; they say how much a
+    score itself can be trusted, as the Inspect view's calibration chart shows."""
+    probability = np.asarray(probability, dtype=np.float64)
+    bins = np.minimum((probability * CALIBRATION_BINS).astype(int), CALIBRATION_BINS - 1)
+    gap = 0.0
+    for b in range(CALIBRATION_BINS):
+        members = bins == b
+        if members.any():
+            gap += float(members.mean()) * abs(float(probability[members].mean()) - float(y[members].mean()))
+    return {"brierScore": float(np.mean((probability - y) ** 2)), "expectedCalibrationError": gap}
+
+
+def replay(spec: Spec, model, recordings: dict[str, Recording], threshold: float) -> dict[str, Any]:
+    """The model as a detector over the held-out recordings: every window the runtime would score, in time order, through
+    the runtime's detection rule, matched with the gestures in the labels (see `events.py`)."""
+    policy = Policy.for_threshold(threshold)
+    excluded = set(spec.excludes)
+    per_recording = []
+    for rid in sorted(spec.evaluation):
+        recording = recordings[rid]
+        x, windows = window_inputs(spec, recording, continuous_windows(recording, spec.window))
+        if not windows:
+            continue
+        ends = np.array([w.end_ns for w in windows], dtype=np.int64)
+        scores = model.predict_proba(x)[:, 1]
+        detections = detect(ends, scores, policy)
+        # Scored time: from one window's end to the next, unless the stream stopped in between.
+        step = int(round(max(spec.window.stride_ms, spec.window.max_gap_ms) * 1_000_000))
+        breaks = np.flatnonzero(np.diff(ends) > step) + 1
+        bounds = [0, *breaks.tolist(), ends.shape[0]]
+        observed = [(int(ends[a]), int(ends[b - 1])) for a, b in zip(bounds, bounds[1:])]
+        labels = recording.raw_labels
+        per_recording.append(match_events(
+            detections,
+            labelled_spans(recording, labels == spec.target),
+            labelled_spans(recording, np.isin(labels, list(excluded))) if excluded else [],
+            observed,
+            spec.window.window_ms,
+        ))
+    return {**summarise(per_recording), "policy": {"activation": policy.activation, "release": policy.release}}
+
+
 MIN_AUC = 0.7
-MIN_F1 = 0.5
+MIN_BALANCED_ACCURACY = 0.7
+# The share of held-out windows of something else it may flag.
+MAX_FALSE_ACTIVATION_RATE = 0.1
+# Over whole held-out recordings, how often it may fire when there is no gesture, and the least time without a gesture
+# needed to say: fewer seconds than this and a model that fires once a minute could look perfect.
+MAX_FALSE_ACTIVATIONS_PER_HOUR = 30.0
+MIN_NEGATIVE_SECONDS = 60.0
+MIN_GESTURE_RECALL = 0.5
+MORE_DATA = ". Record more sessions of the gesture (at least three, in different positions), or change what the model may read"
 
 
 def verdict(metrics: dict[str, Any]) -> str | None:
     """Why a model is not worth keeping, in words; None when it is good enough to review."""
-    auc, f1 = metrics["rocAuc"], metrics["f1"]
+    auc = metrics["rocAuc"]
     if auc < 0.5:
         return (
             f"It scored the gesture's windows *lower* than the others on recordings it had not seen (AUC {auc:.2f}; 0.5 is chance). "
-            "It memorised the training recordings rather than the gesture"
+            "It memorised the training recordings rather than the gesture" + MORE_DATA
         )
     if auc < MIN_AUC:
-        return f"It could barely tell the gesture from the rest on recordings it had not seen (AUC {auc:.2f}; at least {MIN_AUC} is needed)"
-    if f1 < MIN_F1:
-        return f"Even with the best cut-off it only reached an F1 of {f1:.2f} on recordings it had not seen (at least {MIN_F1} is needed)"
+        return f"It could barely tell the gesture from the rest on recordings it had not seen (AUC {auc:.2f}; at least {MIN_AUC} is needed)" + MORE_DATA
+    cross = metrics.get("crossCheckRocAuc")
+    if cross is not None and cross < MIN_AUC:
+        return (
+            f"The training recordings do not agree with each other: trained on some of them, it could not tell the gesture "
+            f"apart in the others (AUC {cross:.2f}; at least {MIN_AUC} is needed), so doing well on the test recordings was "
+            "luck. It has probably learnt each session's levels rather than the gesture: try “Only how things change”, or "
+            "record more sessions"
+        )
+    threshold = metrics["activationThreshold"]
+    if metrics["balancedAccuracy"] < MIN_BALANCED_ACCURACY:
+        return (
+            f"At its cut-off ({threshold:.2f}) it found {metrics['recall']:.0%} of the gesture's windows and wrongly flagged "
+            f"{metrics['falseActivationRate']:.0%} of the others on recordings it had not seen (balanced accuracy "
+            f"{metrics['balancedAccuracy']:.2f}; at least {MIN_BALANCED_ACCURACY} is needed)" + MORE_DATA
+        )
+    if metrics["falseActivationRate"] > MAX_FALSE_ACTIVATION_RATE:
+        return (
+            f"At its cut-off ({threshold:.2f}) it wrongly flagged {metrics['falseActivationRate']:.0%} of the windows of "
+            f"something else on recordings it had not seen (at most {MAX_FALSE_ACTIVATION_RATE:.0%} is allowed)" + MORE_DATA
+        )
+    events = metrics.get("events")
+    if events is None:
+        return None
+    if events["negativeSeconds"] < MIN_NEGATIVE_SECONDS:
+        already = (
+            f" (it already went off {events['falseActivations']} time{'s' if events['falseActivations'] != 1 else ''} in them)"
+            if events["falseActivations"]
+            else ""
+        )
+        return (
+            f"The held-out recordings hold only {events['negativeSeconds']:.0f} s without the gesture{already}, too little to tell "
+            f"how often it would fire by mistake (at least {MIN_NEGATIVE_SECONDS:.0f} s is needed). Record a few minutes of "
+            "ordinary activity (typing, using the mouse, resting, moving about) labelled as something else, in sessions of its own"
+        )
+    per_hour = events["falseActivationsPerHour"]
+    if per_hour is not None and per_hour > MAX_FALSE_ACTIVATIONS_PER_HOUR:
+        return (
+            f"Replayed over the held-out recordings it fired {events['falseActivations']} times without the gesture, about "
+            f"{per_hour:.0f} times an hour (at most {MAX_FALSE_ACTIVATIONS_PER_HOUR:.0f} is allowed). Record more ordinary "
+            "activity labelled as something else, so it learns what to ignore"
+        )
+    recall = events["gestureRecall"]
+    if recall is not None and recall < MIN_GESTURE_RECALL:
+        return (
+            f"Replayed over the held-out recordings it caught {events['caught']} of {events['gestures']} gestures "
+            f"(at least {MIN_GESTURE_RECALL:.0%} is needed)" + MORE_DATA
+        )
     return None
 
 
 # The operators the desktop's runtime (tract) can run. An exported file using anything else is refused here, where the
 # reason can be explained, instead of failing to load on the desktop. Notably absent: the scikit-learn converter's
-# `Scaler`, `LinearClassifier` and (as exported by it) `TreeEnsembleClassifier`, so the dense models are written by hand
-# below and tree models are not offered.
+# `Scaler`, `LinearClassifier` and (as exported by it) `TreeEnsembleClassifier`, so the dense models and the boosted trees
+# are written by hand below.
 RUNNABLE_OPERATORS = {
     ("", "Add"), ("", "Sub"), ("", "Mul"), ("", "Div"), ("", "MatMul"), ("", "Gemm"), ("", "Relu"), ("", "Sigmoid"),
     ("", "Softmax"), ("", "Concat"), ("", "Identity"), ("", "Constant"), ("", "Cast"), ("", "Reshape"), ("", "Flatten"),
     ("", "Transpose"), ("", "Unsqueeze"), ("", "Squeeze"),
+    # What a tree ensemble adds (see `tree_ensemble_onnx`): the comparison at each split.
+    ("", "LessOrEqual"),
     # What the convolutional model adds: convolutions, and pooling over time.
     ("", "Conv"), ("", "ReduceMean"), ("", "ReduceMax"),
     # The other activations a network can be given.
@@ -516,6 +885,106 @@ def dense_network_onnx(layers: list[tuple[np.ndarray, np.ndarray]], mean: np.nda
     return ONNX_OPSET
 
 
+# Gradient-boosted trees: small trees, many of them, each fitted to what the ones before got wrong. With few recordings they
+# often beat a network on statistics, and they need no scaling.
+GBT_TREES = 150
+GBT_DEPTH = 3
+GBT_LEARNING_RATE = 0.1
+GBT_SUBSAMPLE = 0.8
+
+
+def make_gbt(seed: int):
+    from sklearn.ensemble import GradientBoostingClassifier
+
+    return GradientBoostingClassifier(
+        n_estimators=GBT_TREES, max_depth=GBT_DEPTH, learning_rate=GBT_LEARNING_RATE, subsample=GBT_SUBSAMPLE, random_state=seed,
+    )
+
+
+def tree_ensemble_onnx(model, x_sample: np.ndarray, path: Path) -> int:
+    """Writes a scikit-learn `GradientBoostingClassifier` (two classes) as plain ONNX the desktop's runtime can run.
+
+    scikit-learn's own converter writes `TreeEnsembleClassifier`, which the runtime cannot load, so the trees are written
+    as matrix arithmetic instead. Every split k of every tree reads one feature f_k and goes left when x[f_k] <= t_k:
+    `X @ A` (A one-hot, features x splits) picks each split's feature, and `LessOrEqual` against the thresholds gives 1
+    for left, 0 for right. A leaf is reached when every split on its path went its way: with C (splits x leaves) +1 where
+    the path goes left and -1 where it goes right, `went @ C` equals the number of left turns on the leaf's path only for
+    the leaf that was reached and is at least 1 short of it for every other, so `Relu(went @ C - lefts + 1)` is 1 for the
+    reached leaf of each tree and 0 elsewhere. Those times each leaf's value (already times the learning rate), plus the
+    starting score, is the model's score, and a sigmoid makes it the probability. Every count is a small whole number, so
+    it is exact in single precision.
+    """
+    import onnx
+    from onnx import TensorProto, helper, numpy_helper
+
+    features = x_sample.shape[1]
+    splits: list[tuple[int, float]] = []
+    leaves: list[tuple[float, dict[int, int]]] = []  # (value, {split: +1 left / -1 right})
+    for estimator in model.estimators_[:, 0]:
+        tree = estimator.tree_
+        index_of: dict[int, int] = {}
+        for node in range(tree.node_count):
+            if tree.children_left[node] != -1:
+                index_of[node] = len(splits)
+                splits.append((int(tree.feature[node]), float(tree.threshold[node])))
+
+        def walk(node: int, route: dict[int, int]) -> None:
+            if tree.children_left[node] == -1:
+                leaves.append((float(tree.value[node].ravel()[0]) * model.learning_rate, route))
+                return
+            walk(int(tree.children_left[node]), {**route, index_of[node]: 1})
+            walk(int(tree.children_right[node]), {**route, index_of[node]: -1})
+
+        walk(0, {})
+    # The starting score (the prior's log-odds): what the decision function adds to the trees' sum.
+    trees_sum = sum(model.learning_rate * estimator.predict(x_sample[:1]) for estimator in model.estimators_[:, 0])
+    offset = float(model.decision_function(x_sample[:1])[0] - trees_sum[0])
+
+    k, n_leaves = max(len(splits), 1), len(leaves)
+    pick = np.zeros((features, k), dtype=np.float32)
+    thresholds = np.full((1, k), np.float32(np.inf), dtype=np.float32)
+    for index, (feature, threshold) in enumerate(splits):
+        pick[feature, index] = 1.0
+        thresholds[0, index] = np.float32(threshold)
+    paths = np.zeros((k, n_leaves), dtype=np.float32)
+    lefts = np.zeros((1, n_leaves), dtype=np.float32)
+    values = np.zeros((n_leaves, 1), dtype=np.float32)
+    for leaf, (value, route) in enumerate(leaves):
+        for split, direction in route.items():
+            paths[split, leaf] = direction
+        lefts[0, leaf] = sum(1 for direction in route.values() if direction == 1)
+        values[leaf, 0] = value
+    arrays = {
+        "PICK": pick, "THRESHOLDS": thresholds, "PATHS": paths, "LEFTS_LESS_ONE": lefts - 1.0, "VALUES": values,
+        "OFFSET": np.array([[offset]], dtype=np.float32), "ONE": np.array([[1.0]], dtype=np.float32),
+    }
+    nodes = [
+        helper.make_node("MatMul", ["X", "PICK"], ["PICKED"]),
+        helper.make_node("LessOrEqual", ["PICKED", "THRESHOLDS"], ["LEFT"]),
+        helper.make_node("Cast", ["LEFT"], ["WENT"], to=TensorProto.FLOAT),
+        helper.make_node("MatMul", ["WENT", "PATHS"], ["AGREED"]),
+        helper.make_node("Sub", ["AGREED", "LEFTS_LESS_ONE"], ["MARGIN"]),
+        helper.make_node("Relu", ["MARGIN"], ["REACHED"]),
+        helper.make_node("MatMul", ["REACHED", "VALUES"], ["SUMMED"]),
+        helper.make_node("Add", ["SUMMED", "OFFSET"], ["SCORE"]),
+        helper.make_node("Sigmoid", ["SCORE"], ["P"]),
+        helper.make_node("Sub", ["ONE", "P"], ["Q"]),
+        helper.make_node("Concat", ["Q", "P"], ["probabilities"], axis=1),
+    ]
+    graph = helper.make_graph(
+        nodes,
+        "label_model",
+        [helper.make_tensor_value_info("X", TensorProto.FLOAT, [None, features])],
+        [helper.make_tensor_value_info("probabilities", TensorProto.FLOAT, [None, 2])],
+        [numpy_helper.from_array(array, name) for name, array in arrays.items()],
+    )
+    exported = helper.make_model(graph, opset_imports=[helper.make_opsetid("", ONNX_OPSET)])
+    exported.ir_version = 8
+    onnx.checker.check_model(exported)
+    path.write_bytes(exported.SerializeToString())
+    return ONNX_OPSET
+
+
 def export_onnx(spec: Spec, model, x_sample: np.ndarray, path: Path) -> int:
     """Writes the ONNX file and returns the opset it was written with."""
     if spec.backend in ("torch-mlp", "cnn1d"):
@@ -534,6 +1003,10 @@ def export_onnx(spec: Spec, model, x_sample: np.ndarray, path: Path) -> int:
         )
         check_runnable(path)
         return TORCH_OPSET
+    if spec.backend == "gbt":
+        opset = tree_ensemble_onnx(model, x_sample, path)
+        check_runnable(path)
+        return opset
     if spec.backend in ("logreg", "mlp"):
         scaler, final = model.named_steps["scale"], model.named_steps["model"]
         if spec.backend == "logreg":
@@ -611,7 +1084,7 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
         "framework": framework_of(spec),
         "input": (
             # A convolutional model: the channels (one flat row of channels x steps numbers), and how many steps each has.
-            {"name": "X", "shape": [None, input_count(spec)], "dtype": "float32", "features": spec.features, "grid": {"steps": spec.grid_steps}}
+            {"name": "X", "shape": [None, input_count(spec)], "dtype": "float32", "features": spec.features, "grid": {"steps": spec.grid_steps, "timing": spec.grid_timing, **({"pulse": "recentPast"} if grid_pulse_baseline(spec) else {})}}
             if reads_grid(spec)
             else {"name": "X", "shape": [None, len(spec.features)], "dtype": "float32", "features": spec.features}
         ),
@@ -637,12 +1110,21 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, opset: int, metrics:
             "evaluationF1": metrics["f1"],
             "evaluationFalseActivationRate": metrics["falseActivationRate"],
             "evaluationRocAuc": metrics["rocAuc"],
-            "thresholdChosenOnEvaluationRecordings": True,
+            "evaluationBalancedAccuracy": metrics["balancedAccuracy"],
+            "evaluationFalseActivationsPerHour": (metrics.get("events") or {}).get("falseActivationsPerHour"),
+            "thresholdSource": metrics["thresholdSource"],
+            "thresholdChosenOnEvaluationRecordings": metrics["thresholdChosenOnEvaluationRecordings"],
             "movementOnly": spec.movement_only,
             "spikeMethod": spec.spike_method or "none",
             "baselineMs": spec.baseline_ms,
             "ppgChannels": spec.ppg_channels,
             "labelOffsetMs": spec.label_offset_ms,
+            "windowing": spec.windowing,
+            "pretrained": (
+                {"file": spec.pretrained.name, "sha256": hashlib.sha256(spec.pretrained.read_bytes()).hexdigest(), "frozen": spec.pretrained_freeze}
+                if spec.pretrained is not None
+                else None
+            ),
             "gridSteps": spec.grid_steps if reads_grid(spec) else None,
             "inputMode": "raw" if spec.raw_columns else ("grid" if spec.backend == "cnn1d" else "statistics"),
             "editedFrom": spec.edit.get("fromModel") if spec.edit else None,
@@ -699,7 +1181,8 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
     result: dict[str, Any] = {"outcome": "failed", "message": ""}
     try:
         spec = parse_spec(raw_spec)
-        x_train, y_train, x_eval, y_eval, eval_windows, train_groups = build_matrices_with_groups(spec)
+        recordings = load_spec_recordings(spec)
+        x_train, y_train, x_eval, y_eval, eval_windows, train_groups = build_matrices_with_groups(spec, recordings)
         check_enough(y_train, y_eval)
         curve: list[dict[str, Any]] = []
 
@@ -732,17 +1215,29 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
             before = json.loads((source / "evaluation.json").read_text()) if (source / "evaluation.json").is_file() else None
             edit_note = {"fromModel": spec.edit.get("fromModel"), "edits": spec.edit["edits"], "fineTune": settings, "said": said, "before": before}
         else:
+            spec = with_early_stopping(spec, x_train, y_train, train_groups, lambda line: print(line, flush=True))
             model = fit(spec, x_train, y_train, x_eval, y_eval, on_epoch)
         if curve:
             (out / "training_curve.json").write_text(json.dumps(curve) + "\n")
+        if spec.edit:
+            # An edited model keeps the cut-off of the model it came from: retraining it on parts of the training
+            # recordings would not be the edited model any more.
+            threshold, source = edited_threshold(Path(spec.edit["fromDir"]))
+            cross_check = None
+        else:
+            threshold, source, cross_check = out_of_fold_threshold(spec, x_train, y_train, train_groups, lambda line: print(line, flush=True))
         probability = model.predict_proba(x_eval)[:, 1]
-        metrics = evaluate(probability, y_eval)
+        metrics = evaluate(probability, y_eval, threshold, source)
+        metrics["crossCheckRocAuc"] = cross_check
+        # Rounds actually trained (fewer than asked for when early stopping found the held-back loss lowest sooner).
+        metrics["epochsTrained"] = curve[-1]["epochs"] if curve and spec.backend in ("torch-mlp", "cnn1d") and not spec.edit else None
+        metrics["events"] = replay(spec, model, recordings, threshold)
         (out / "evaluation.json").write_text(json.dumps(metrics, indent=2) + "\n")
         poor = verdict(metrics)
         if poor is not None:
             result = {
                 "outcome": "evaluationOnly",
-                "message": poor + ". Record more sessions of the gesture (at least three, in different positions), or change what the model may read",
+                "message": poor,
                 "backend": spec.backend,
                 "features": spec.features,
                 "trainWindows": int(y_train.shape[0]),
@@ -858,12 +1353,31 @@ def suggest_label_offset(raw_spec: dict[str, Any], candidates: tuple[int, ...] =
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--spec", required=True, type=Path, help="the training spec the desktop wrote")
+    parser.add_argument("--spec", type=Path, help="the training spec the desktop wrote")
+    parser.add_argument("--pretrain-microdpad", type=Path, metavar="ROOT", help="pre-train a motion encoder on the MicroDPad dataset at ROOT and save it to --out (see pretrain.py)")
     parser.add_argument("--out", type=Path, help="directory for the results")
     parser.add_argument("--backfill-range", action="store_true", help="work out and record the training range of an existing model instead of training")
     parser.add_argument("--suggest-offset", action="store_true", help="try label offsets and say how well each fits the recordings, instead of training")
     parser.add_argument("--manifest", action="append", type=Path, default=[], help="with --backfill-range: a manifest to write the range into (repeatable)")
+    parser.add_argument("--compare", action="store_true", help="train every method on the spec's recordings and split, and print them side by side (see compare.py)")
     args = parser.parse_args(argv)
+    if args.pretrain_microdpad is not None:
+        if args.out is None:
+            parser.error("--out is required to pre-train (the encoder file)")
+        from .pretrain import pretrain
+
+        metrics = pretrain(args.pretrain_microdpad, args.out, say=lambda line: print(line, flush=True))
+        print(json.dumps({"outcome": "ok", "metrics": {k: v for k, v in metrics.items() if k != "heldOutPeople"}}), flush=True)
+        return 0
+    if args.spec is None:
+        parser.error("--spec is required")
+    if args.compare:
+        if args.out is None:
+            parser.error("--out is required to compare")
+        from .compare import compare, table
+
+        print(table(compare(json.loads(args.spec.read_text()), args.out)), flush=True)
+        return 0
     if args.backfill_range:
         try:
             done = backfill_range(json.loads(args.spec.read_text()), args.manifest)

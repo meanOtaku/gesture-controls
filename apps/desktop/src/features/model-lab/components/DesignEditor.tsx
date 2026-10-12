@@ -7,6 +7,7 @@ import { isBuiltIn, networkSettingsOf, readsColumns, withNetwork, type DesignPre
 import { isNeural } from "../network";
 import { ALL_COLUMNS, BASELINE_CHOICES, METHODS, SPIKE_METHODS, WINDOW_LENGTHS, type SpikeMethodId, type TrainMethod } from "../training";
 import { ColumnsDesigner } from "./ColumnsDesigner";
+import { EncoderChooser } from "./EncoderChooser";
 import { NetworkDesigner } from "./NetworkDesigner";
 import { StatisticsInputs } from "./StatisticsInputs";
 
@@ -35,7 +36,7 @@ export function DesignEditor({
   const set = (patch: Partial<NetworkDesign>) => onChange({ ...design, ...patch });
   const setMethod = (method: TrainMethod) => {
     // The convolutional method always reads columns; the others keep what they had, with the network back to that method's default.
-    const next: NetworkDesign = { ...design, method, network: null, readings: method === "cnn1d" ? Math.max(design.readings, 8) : Math.min(design.readings, 64) };
+    const next: NetworkDesign = { ...design, method, network: null, pretrained: null, pretrainedFreeze: false, readings: method === "cnn1d" ? Math.max(design.readings, 8) : Math.min(design.readings, 64) };
     onChange(method === "cnn1d" ? { ...next, inputMode: "raw", readings: design.method === "cnn1d" ? design.readings : 32 } : next);
   };
   const neurons = preview?.neurons ?? 0;
@@ -89,7 +90,7 @@ export function DesignEditor({
           <p className="field-hint">{SPIKE_METHODS.find((option) => option.value === design.spikeMethod)?.summary} Only the pulse sensor&apos;s columns are affected.</p>
         </div>
 
-        {!columns && design.sources.includes("watchPpg") && (
+        {design.sources.includes("watchPpg") && (
           <div className="field">
             <div className="field-head"><Label htmlFor={`${uid}-baseline`}>Compare the pulse level with the recent past</Label></div>
             <select id={`${uid}-baseline`} className={NATIVE_SELECT} value={design.baselineMs ?? ""} onChange={(event) => set({ baselineMs: event.target.value === "" ? null : Number(event.target.value), features: null })}>
@@ -97,8 +98,12 @@ export function DesignEditor({
             </select>
             <p className="field-hint">
               {design.baselineMs
-                ? `Adds, for each pulse channel, how far the window's average sits above the low end and the high end of the last ${design.baselineMs / 1000} seconds. A held pinch moves the sensor's level, but the level itself differs from session to session, so only the change against the recent past carries over. The model only scores once that much data has arrived, and the first ${design.baselineMs / 1000} seconds of each recording are not used. “Above its resting level” is the one to rely on for a gesture that raises the level; the other is for one that lowers it.`
-                : "Off: every pulse statistic is about the window alone, so it includes the session's own level."}
+                ? columns
+                  ? `Each pulse channel is read in units of its last ${design.baselineMs / 1000} seconds (minus their middle value, over how much they varied) instead of the sensor's raw counts. The counts sit at a different level, and swing by a different amount, in every session; measured this way the model learns the response, not the session. The model only scores once that much data has arrived, and the first ${design.baselineMs / 1000} seconds of each recording are not used.`
+                  : `Adds, for each pulse channel, how far the window's average sits above the low and high ends of the last ${design.baselineMs / 1000} seconds, and the window in units of those seconds (its average, peak, dip and trend, minus their middle value over how much they varied). The sensor's level and swing differ from session to session, so only the change against the recent past carries over. The model only scores once that much data has arrived, and the first ${design.baselineMs / 1000} seconds of each recording are not used.`
+                : columns
+                  ? "Off: the pulse channels are the sensor's raw counts, which sit at a different level in every session."
+                  : "Off: every pulse statistic is about the window alone, so it includes the session's own level."}
             </p>
           </div>
         )}
@@ -115,9 +120,13 @@ export function DesignEditor({
           )}
         </div>
 
+        {design.method === "cnn1d" && <EncoderChooser design={design} set={set} uid={uid} />}
+
         {isNeural(design.method) && neurons > 0 ? (
           <NetworkDesigner method={design.method} settings={settings} onChange={(next) => onChange(withNetwork(design, next))} inputs={neurons} steps={design.method === "cnn1d" ? design.readings : 32} disabled={locked || saving} />
-        ) : isNeural(design.method) ? null : (
+        ) : isNeural(design.method) ? null : design.method === "gbt" ? (
+          <p className="field-hint">Boosted trees have no layers to design: 150 small decision trees, each correcting the ones before. Its inputs are the whole of the design.</p>
+        ) : (
           <p className="field-hint">Logistic regression has no layers to design: it weighs each input once. Its inputs are the whole of the design.</p>
         )}
       </fieldset>

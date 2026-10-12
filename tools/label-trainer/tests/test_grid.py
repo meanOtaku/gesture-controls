@@ -30,7 +30,7 @@ def make_window(ppg: dict, orientation: list[dict]) -> tuple[Recording, Window]:
     n = p + o
     data = {column: np.full(n, np.nan) for column in NUMERIC_COLUMNS}
     timestamps = list(ppg["timestampsNs"]) + [
-        (ppg["timestampsNs"][0] if p else 0) + int(i * 1e6) for i in range(o)
+        sample.get("timestampNs", (ppg["timestampsNs"][0] if p else 0) + int(i * 1e6)) for i, sample in enumerate(orientation)
     ]
     for i in range(p):
         data["ppg_green"][i], data["ppg_red"][i], data["ppg_ir"][i] = ppg["green"][i], ppg["red"][i], ppg["ir"][i]
@@ -57,7 +57,7 @@ def make_window(ppg: dict, orientation: list[dict]) -> tuple[Recording, Window]:
 
 def synthetic(rng: random.Random, p: int, o: int) -> tuple[dict, list[dict]]:
     t0 = 5_000_000_000
-    stamps = [t0 + (i // 3) * 105_000_000 + (i % 3) * 40 for i in range(p)]  # three samples a batch, as the watch stamps them
+    stamps = [t0 + i * 40_000_000 + (i // 3) * 3_000_000 for i in range(p)]  # 25 Hz, a little late after each batch
     level = rng.uniform(40000, 60000)
     green, red, ir = [], [], []
     for i in range(p):
@@ -67,8 +67,11 @@ def synthetic(rng: random.Random, p: int, o: int) -> tuple[dict, list[dict]]:
         red.append(round(level * 0.9 + spike * 0.5 + rng.gauss(0, 10), 3))
         ir.append(round(level * 0.8 + rng.gauss(0, 10), 3))
     samples = []
+    motion_at = t0
     for i in range(o):
+        motion_at += 20_000_000 * (2 if i % 7 == 6 else 1)  # 50 Hz with an occasional sample missing
         samples.append({
+            "timestampNs": motion_at,
             "accel": [round(rng.gauss(0, 2), 4) for _ in range(3)],
             "gyro": [round(rng.gauss(0, 0.5), 4) for _ in range(3)],
             "quat": [round(1.0 - 0.001 * i, 5), round(0.01 * i, 5), 0.0, round(rng.gauss(0, 0.01), 5)],
@@ -119,8 +122,9 @@ def _cases() -> list[dict]:
 
     def add(name, ppg, orientation, channels, steps, method):
         recording, window = make_window(ppg, orientation)
-        grid = build_grid(recording, window, channels, steps, method)
-        cases.append({"name": name, "ppg": ppg, "orientation": orientation, "channels": channels, "steps": steps, "method": method, "expected": [float(v) for v in grid]})
+        for timing in ("samples", "time"):
+            grid = build_grid(recording, window, channels, steps, method, timing)
+            cases.append({"name": f"{name}_{timing}", "ppg": ppg, "orientation": orientation, "channels": channels, "steps": steps, "method": method, "timing": timing, "expected": [float(v) for v in grid]})
 
     ppg, orientation = synthetic(rng, 14, 25)
     add("typical_all_channels", ppg, orientation, list(GRID_CHANNELS), 32, None)
@@ -138,6 +142,19 @@ def _cases() -> list[dict]:
         ppg, orientation = synthetic(rng, rng.choice([5, 9, 13, 20, 31]), rng.choice([2, 7, 26, 40]))
         add(f"random_{index}", ppg, orientation, list(GRID_CHANNELS), rng.choice([8, 24, 32, 64]), rng.choice([None, *SPIKE_METHODS]))
     return cases
+
+
+def test_in_time_a_missing_sample_does_not_bend_the_time_axis() -> None:
+    ppg = {"timestampsNs": [], "green": [], "red": [], "ir": []}
+    # Motion at 0, 10 and 40 ms: one sample missing between the last two. In time, the step at 20 ms falls on the line from
+    # 1 (10 ms) to 4 (40 ms); taken as evenly spaced, the middle step would simply be the middle sample.
+    orientation = [
+        {"timestampNs": t * 1_000_000, "accel": [a, 0.0, 0.0], "gyro": [0.0] * 3, "quat": [1.0, 0.0, 0.0, 0.0]}
+        for t, a in ((0, 0.0), (10, 1.0), (40, 4.0))
+    ]
+    recording, window = make_window(ppg, orientation)
+    assert list(build_grid(recording, window, ["accel_x"], 3, timing="time")) == [0.0, 2.0, 4.0]
+    assert list(build_grid(recording, window, ["accel_x"], 3, timing="samples")) == [0.0, 1.0, 4.0]
 
 
 def test_the_shared_cases_match_what_this_module_makes() -> None:

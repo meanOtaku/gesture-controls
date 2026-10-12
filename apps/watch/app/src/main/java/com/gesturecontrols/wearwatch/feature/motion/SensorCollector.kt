@@ -10,9 +10,8 @@ import android.util.Log
 
 /**
  * Wraps SensorManager for the three IMU inputs the protocol cares about.
- * Linear acceleration and gyroscope readings are filtered, freshness-checked,
- * and attached to the next rotation-vector sample. This keeps gravity and stale
- * sensor samples from appearing as erratic watch motion on the desktop.
+ * Readings are sent unfiltered: [ImuRowAssembler] makes one row per event of
+ * the fastest sensor that is on, with the latest fresh reading of the others.
  */
 class SensorCollector(
     context: Context,
@@ -28,10 +27,7 @@ class SensorCollector(
         ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private val gyroscopeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
 
-    private var lastAccelerometer: FloatArray? = null
-    private var lastGyroscope: FloatArray? = null
-    private var lastAccelerometerTimestampNs = Long.MIN_VALUE
-    private var lastGyroscopeTimestampNs = Long.MIN_VALUE
+    private val rows = ImuRowAssembler()
     private val quaternionBuffer = FloatArray(4)
     // Orientation is the only message stamped with the sensor's own clock;
     // put it on the elapsedRealtimeNanos base every other message uses.
@@ -96,8 +92,7 @@ class SensorCollector(
     fun stop() {
         if (!isRegistered) return
         unregisterAll()
-        lastAccelerometer = null
-        lastGyroscope = null
+        rows.reset()
         orientationClock.reset()
         isRegistered = false
         isMonitoring = false
@@ -108,8 +103,8 @@ class SensorCollector(
      * ([SENSOR_ORIENTATION], [SENSOR_ACCELERATION], [SENSOR_GYROSCOPE]),
      * applied immediately if a capture/monitoring session is active, and
      * remembered for the next [start]/[startMonitoring] otherwise. Disabling
-     * [SENSOR_ORIENTATION] stops every IMU sample, since acceleration/gyroscope
-     * are only ever sent attached to a rotation-vector event.
+     * [SENSOR_ORIENTATION] stops every IMU sample, since every row the watch
+     * sends carries an orientation.
      */
     fun setSensorEnabled(sensorId: String, enabled: Boolean) {
         when (sensorId) {
@@ -169,6 +164,16 @@ class SensorCollector(
         orientationRegistered = false
         accelerationRegistered = false
         gyroscopeRegistered = false
+        updateDriver()
+    }
+
+    /** Rows follow the fastest-changing sensor that is registered; see [ImuRowAssembler]. */
+    private fun updateDriver() {
+        rows.driver = when {
+            accelerationRegistered -> ImuRowAssembler.Driver.ACCELEROMETER
+            gyroscopeRegistered -> ImuRowAssembler.Driver.GYROSCOPE
+            else -> ImuRowAssembler.Driver.ROTATION_VECTOR
+        }
     }
 
     // Always unregisters before re-registering when enabled (rather than
@@ -184,6 +189,7 @@ class SensorCollector(
             sensorManager.unregisterListener(this, sensor)
             orientationRegistered = false
         }
+        updateDriver()
     }
 
     private fun applyAccelerationRegistration(rate: Int) {
@@ -195,8 +201,9 @@ class SensorCollector(
         } else if (accelerationRegistered) {
             sensorManager.unregisterListener(this, sensor)
             accelerationRegistered = false
-            lastAccelerometer = null
+            rows.forgetAccelerometer()
         }
+        updateDriver()
     }
 
     private fun applyGyroscopeRegistration(rate: Int) {
@@ -208,64 +215,38 @@ class SensorCollector(
         } else if (gyroscopeRegistered) {
             sensorManager.unregisterListener(this, sensor)
             gyroscopeRegistered = false
-            lastGyroscope = null
+            rows.forgetGyroscope()
         }
+        updateDriver()
     }
 
     override fun onSensorChanged(event: SensorEvent) {
-        when (event.sensor.type) {
-            Sensor.TYPE_LINEAR_ACCELERATION, Sensor.TYPE_ACCELEROMETER -> {
-                lastAccelerometer = smooth(lastAccelerometer, event.values, ACCELERATION_ALPHA)
-                lastAccelerometerTimestampNs = event.timestamp
-            }
-            Sensor.TYPE_GYROSCOPE -> {
-                lastGyroscope = smooth(lastGyroscope, event.values, GYROSCOPE_ALPHA)
-                lastGyroscopeTimestampNs = event.timestamp
-            }
+        val row = when (event.sensor.type) {
+            Sensor.TYPE_LINEAR_ACCELERATION, Sensor.TYPE_ACCELEROMETER -> rows.onAccelerometer(event.values, event.timestamp)
+            Sensor.TYPE_GYROSCOPE -> rows.onGyroscope(event.values, event.timestamp)
             Sensor.TYPE_ROTATION_VECTOR -> {
                 SensorManager.getQuaternionFromVector(quaternionBuffer, event.values)
-                val envelopeTimestampNs = orientationClock.toElapsedRealtime(
-                    event.timestamp,
-                    SystemClock.elapsedRealtimeNanos(),
-                )
-                if (orientationClock.isRebasing && !loggedClockRebase) {
-                    loggedClockRebase = true
-                    Log.w(
-                        TAG,
-                        "SensorEvent.timestamp is not on the elapsedRealtimeNanos base on this device; " +
-                            "rebasing orientation timestamps so they match every other watch message",
-                    )
-                }
-                // Companion-sensor freshness stays on the sensor clock: both sides
-                // of that comparison are raw SensorEvent timestamps.
-                onOrientation(
-                    quaternionBuffer.copyOf(4),
-                    freshSample(lastAccelerometer, lastAccelerometerTimestampNs, event.timestamp),
-                    freshSample(lastGyroscope, lastGyroscopeTimestampNs, event.timestamp),
-                    envelopeTimestampNs,
-                )
+                rows.onRotation(quaternionBuffer, event.timestamp)
             }
+            else -> null
+        } ?: return
+        // Companion freshness above stays on the sensor clock (both sides are raw SensorEvent timestamps); only the
+        // timestamp put on the wire is moved onto the elapsedRealtimeNanos base every other message uses.
+        val envelopeTimestampNs = orientationClock.toElapsedRealtime(row.sensorTimestampNs, SystemClock.elapsedRealtimeNanos())
+        if (orientationClock.isRebasing && !loggedClockRebase) {
+            loggedClockRebase = true
+            Log.w(
+                TAG,
+                "SensorEvent.timestamp is not on the elapsedRealtimeNanos base on this device; " +
+                    "rebasing orientation timestamps so they match every other watch message",
+            )
         }
+        onOrientation(row.quaternion, row.accelerometer, row.gyroscope, envelopeTimestampNs)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
-    private fun smooth(previous: FloatArray?, current: FloatArray, alpha: Float): FloatArray {
-        val smoothed = previous ?: FloatArray(3)
-        for (index in 0 until 3) {
-            smoothed[index] += alpha * (current[index] - smoothed[index])
-        }
-        return smoothed
-    }
-    private fun freshSample(sample: FloatArray?, sampleTimestampNs: Long, orientationTimestampNs: Long): FloatArray? {
-        if (sample == null || orientationTimestampNs - sampleTimestampNs > MAX_COMPANION_SENSOR_AGE_NS) return null
-        return sample.copyOf()
-    }
-
     private companion object {
         const val TAG = "SensorCollector"
-        const val ACCELERATION_ALPHA = 0.2f
-        const val GYROSCOPE_ALPHA = 0.15f
-        const val MAX_COMPANION_SENSOR_AGE_NS = 100_000_000L
     }
 }

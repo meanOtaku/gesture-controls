@@ -47,3 +47,69 @@ def test_drops_short_trailing_segment(tmp_path):
     windows = build_windows(recording, config)
 
     assert windows == []
+
+
+def _labelled_recording(labels: list[str]):
+    """A recording of one row every 20 ms with the given label on each row."""
+    from pathlib import Path
+
+    import numpy as np
+
+    from label_trainer.csv_io import Recording
+    from label_trainer.schema import NUMERIC_COLUMNS
+
+    n = len(labels)
+    return Recording(
+        session_id="r",
+        source_path=Path("r.csv"),
+        timestamps_ns=np.arange(n, dtype=np.int64) * 20_000_000,
+        channels={column: np.zeros(n) for column in NUMERIC_COLUMNS},
+        raw_labels=np.array(labels, dtype=object),
+    )
+
+
+def _overlap_labels(labels: list[str], window_ms: float = 500.0, excluded: tuple[str, ...] = ()):
+    import numpy as np
+
+    from label_trainer.windowing import continuous_windows, label_by_overlap
+
+    recording = _labelled_recording(labels)
+    config = WindowConfig(window_ms=window_ms, stride_ms=100.0, max_gap_ms=250.0, min_samples_per_window=3)
+    raw = recording.raw_labels
+    labelled = label_by_overlap(recording, continuous_windows(recording, config), raw == "tap", np.isin(raw, list(excluded)))
+    return [(w.start_ns // 1_000_000, y) for w, y in labelled]
+
+
+def test_a_quick_gesture_is_positive_in_windows_that_hold_most_of_it():
+    # A 200 ms tap (rows 50-59) in a 500 ms window can never fill half of it, but windows holding all of it are the tap.
+    labelled = dict(_overlap_labels(["rest"] * 50 + ["tap"] * 10 + ["rest"] * 50))
+    assert [labelled[start] for start in (700, 800, 900, 1000)] == [1] * 4  # each holds the whole tap at 1000-1200
+    assert labelled[0] == 0 and labelled[1400] == 0  # no tap in them
+    assert 600 not in labelled and 1100 not in labelled  # half the tap each: neither, so left out
+
+
+def test_a_held_gesture_is_positive_where_it_fills_half_the_window():
+    labelled = dict(_overlap_labels(["rest"] * 50 + ["tap"] * 100 + ["rest"] * 50))
+    assert labelled[1500] == 1  # wholly inside the hold (1000-3000)
+    assert labelled[800] == 1  # [800, 1300]: 300 of 500 ms are the hold
+    assert 600 not in labelled  # [600, 1100]: 100 ms of it, the edge
+    assert labelled[400] == 0
+
+
+def test_a_window_that_touches_a_left_out_label_is_dropped():
+    labelled = dict(_overlap_labels(["rest"] * 50 + ["noise"] * 10 + ["rest"] * 50, excluded=("noise",)))
+    assert 800 not in labelled and 1000 not in labelled
+    assert labelled[0] == 0
+
+
+def test_a_gesture_cut_by_a_few_stray_rows_is_one_gesture():
+    import numpy as np
+
+    from label_trainer.windowing import labelled_spans
+
+    # A tap, then 2 rows (40 ms) of rest, then the tap again: rows labelled on arrival around a change of label.
+    labels = ["rest"] * 20 + ["tap"] * 10 + ["rest"] * 2 + ["tap"] * 10 + ["rest"] * 20 + ["tap"] * 10
+    recording = _labelled_recording(labels)
+    spans = labelled_spans(recording, np.array(labels) == "tap")
+    assert len(spans) == 2  # the first two runs are one tap; the last, 400 ms later, is another
+    assert spans[0] == (20 * 20_000_000, 41 * 20_000_000)

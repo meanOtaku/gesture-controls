@@ -69,7 +69,9 @@ export function InspectEvaluation({ inspection, other, otherName }: { inspection
     <section aria-label="How well it works" className="flex flex-col gap-3">
       <h3 className="text-base font-semibold">How well it works</h3>
       <p className="field-hint">
-        On {probabilities.length} windows from {new Set(recordings).size} recording{new Set(recordings).size === 1 ? "" : "s"} the model never trained on: {positives} of the gesture and {negatives} of something else. The model's own cut-off for “detected” was chosen on these same windows, so the numbers at it are a little optimistic: move the cut-off to see what any other would do.
+        On {probabilities.length} windows from {new Set(recordings).size} recording{new Set(recordings).size === 1 ? "" : "s"} the model never trained on: {positives} of the gesture and {negatives} of something else. {inspection.evaluation.metrics.thresholdChosenOnEvaluationRecordings === false
+          ? "The model's own cut-off for “detected” was chosen on its training recordings, not on these windows, so the numbers at it are fair: move the cut-off to see what any other would do."
+          : "The model's own cut-off for “detected” was chosen on these same windows, so the numbers at it are a little optimistic: move the cut-off to see what any other would do."}
       </p>
 
       <div className="flex flex-wrap items-center gap-3">
