@@ -3,7 +3,8 @@ package com.gesturecontrols.wearwatch.data.connection
 /**
  * BLE fragmentation for protocol envelopes, byte-compatible with the desktop's
  * `crates/watch-bridge/src/ble.rs`. A GATT notification or write carries at
- * most `MTU - 3` bytes, which is 20 with the default 23-byte MTU — far smaller
+ * most `MTU - 3` bytes (and never more than 512), which is 20 with the default
+ * 23-byte MTU — far smaller
  * than a PPG batch — so every envelope is split across fragments:
  *
  * ```
@@ -30,8 +31,16 @@ object BleFraming {
     /** ATT opcode + handle overhead deducted from the negotiated MTU. */
     const val ATT_OVERHEAD = 3
 
+    /**
+     * Longest value one attribute may carry (Bluetooth Core spec, Vol 3 Part F 3.2.9),
+     * whatever the MTU. Android refuses a longer notification outright, so at an MTU
+     * of 517 the usable payload is 512, not `MTU - 3` = 514.
+     */
+    const val MAX_ATTRIBUTE_VALUE = 512
+
     /** Usable payload for one notification/write at [mtu]. */
-    fun attPayloadFor(mtu: Int): Int = (mtu - ATT_OVERHEAD).coerceAtLeast(MIN_ATT_PAYLOAD)
+    fun attPayloadFor(mtu: Int): Int =
+        (mtu - ATT_OVERHEAD).coerceIn(MIN_ATT_PAYLOAD, MAX_ATTRIBUTE_VALUE)
 
     /**
      * Splits [message] into fragments of at most [maxAttPayload] bytes each.

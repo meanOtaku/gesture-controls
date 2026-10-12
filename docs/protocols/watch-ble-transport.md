@@ -99,7 +99,12 @@ fragmented:
   The largest real message (a 32-sample batch) is a few KB.
 
 Both sides size fragments from the negotiated MTU (`onMtuChanged` on the Watch,
-`Peripheral::mtu()` on the desktop), never dropping below the 20-byte guarantee.
+`Peripheral::mtu()` on the desktop), never dropping below the 20-byte guarantee
+and never above **512 bytes**, the longest value an attribute may carry. At an
+MTU of 517 `MTU - 3` would be 514; Android refuses such a notification, and the
+first fragment of every PPG batch was dropped that way while the shorter
+orientation messages got through. A refused or failed notification is written
+to the watch's link log.
 
 ### Backpressure
 

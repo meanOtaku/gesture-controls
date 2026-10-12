@@ -88,6 +88,7 @@ class BleGattTransport(
     private val outbound = ArrayDeque<ByteArray>()
     private var notificationInFlight = false
     private var droppedBacklogs = 0
+    private var refusedNotifications = 0
 
     /**
      * A GATT *client* connection back to the central, held only so the Bluetooth
@@ -487,10 +488,14 @@ class BleGattTransport(
             // The stack refused the frame outright; the rest of this envelope
             // would reach the desktop as a truncated message, so drop the whole
             // queue and let the next envelope resynchronize it at index 0.
-            synchronized(outbound) {
+            val dropped = synchronized(outbound) {
+                val queued = outbound.size
                 outbound.clear()
                 notificationInFlight = false
+                queued
             }
+            refusedNotifications++
+            LinkLog.add("the stack refused a ${frame.size}-byte notification (#$refusedNotifications, MTU $mtu); dropped $dropped queued fragments")
         }
     }
 
@@ -656,7 +661,9 @@ class BleGattTransport(
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 // Same reasoning as a refused notify: the desktop would see a
                 // hole in this envelope, so abandon it rather than truncate.
-                synchronized(outbound) { outbound.clear() }
+                val dropped = synchronized(outbound) { outbound.size.also { outbound.clear() } }
+                refusedNotifications++
+                LinkLog.add("a notification failed with status $status (#$refusedNotifications); dropped $dropped queued fragments")
                 return
             }
             pumpOutbound()

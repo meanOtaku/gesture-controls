@@ -58,6 +58,16 @@ pub const MAX_BLE_MESSAGE_BYTES: usize = 16 * 1024;
 const MIN_ATT_PAYLOAD: usize = 20;
 /// Bytes ATT spends on the notification/write opcode + handle.
 const ATT_OVERHEAD: usize = 3;
+/// Longest value one attribute may carry (Bluetooth Core spec, Vol 3 Part F 3.2.9),
+/// whatever the MTU: at an MTU of 517 a fragment is 512 bytes, not `MTU - 3`.
+pub const MAX_ATTRIBUTE_VALUE: usize = 512;
+
+/// Usable payload for one notification/write at `mtu`, never below the 23-byte-MTU
+/// guarantee nor above [`MAX_ATTRIBUTE_VALUE`].
+pub fn att_payload_for(mtu: usize) -> usize {
+    mtu.saturating_sub(ATT_OVERHEAD)
+        .clamp(MIN_ATT_PAYLOAD, MAX_ATTRIBUTE_VALUE)
+}
 
 const SCAN_POLL_INTERVAL: Duration = Duration::from_millis(250);
 pub const BLE_SCAN_TIMEOUT: Duration = Duration::from_secs(20);
@@ -372,9 +382,7 @@ impl BleLink {
         debug!(
             mtu = peripheral.mtu(),
             "watch BLE link negotiated; command writes use {} byte fragments",
-            (peripheral.mtu() as usize)
-                .saturating_sub(ATT_OVERHEAD)
-                .max(MIN_ATT_PAYLOAD)
+            att_payload_for(peripheral.mtu() as usize)
         );
         Ok(Self {
             peripheral,
@@ -391,9 +399,7 @@ impl BleLink {
     /// Usable ATT payload for one write, from the negotiated MTU. Backends that
     /// report nothing useful fall back to the 23-byte-MTU guarantee.
     fn att_payload(&self) -> usize {
-        (self.peripheral.mtu() as usize)
-            .saturating_sub(ATT_OVERHEAD)
-            .max(MIN_ATT_PAYLOAD)
+        att_payload_for(self.peripheral.mtu() as usize)
     }
 
     /// Writes one protocol envelope as write-with-response fragments. Using
@@ -640,6 +646,15 @@ mod tests {
         // envelope per fragment, so a real PPG batch spans many fragments.
         let message: Vec<u8> = (0..1000).map(|index| (index % 251) as u8).collect();
         assert_eq!(roundtrip(&message, MIN_ATT_PAYLOAD), message);
+    }
+
+    #[test]
+    fn att_payload_follows_the_mtu_within_the_attribute_limits() {
+        assert_eq!(att_payload_for(23), MIN_ATT_PAYLOAD);
+        assert_eq!(att_payload_for(5), MIN_ATT_PAYLOAD);
+        assert_eq!(att_payload_for(247), 244);
+        // `MTU - 3` would be 514, one fragment longer than an attribute may be.
+        assert_eq!(att_payload_for(517), MAX_ATTRIBUTE_VALUE);
     }
 
     #[test]

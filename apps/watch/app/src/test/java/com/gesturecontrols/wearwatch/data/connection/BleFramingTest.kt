@@ -87,6 +87,16 @@ class BleFramingTest {
     fun attPayloadFollowsTheNegotiatedMtuButNeverDropsBelowTheDefault() {
         assertEquals(BleFraming.MIN_ATT_PAYLOAD, BleFraming.attPayloadFor(23))
         assertEquals(BleFraming.MIN_ATT_PAYLOAD, BleFraming.attPayloadFor(5))
-        assertEquals(514, BleFraming.attPayloadFor(517))
+        assertEquals(244, BleFraming.attPayloadFor(247))
+    }
+
+    @Test
+    fun attPayloadNeverExceedsTheLongestAttributeValue() {
+        // Android refuses a 514-byte notification at MTU 517; every PPG batch's first
+        // fragment was that size, so each batch was dropped while short messages got through.
+        assertEquals(512, BleFraming.attPayloadFor(515))
+        assertEquals(512, BleFraming.attPayloadFor(517))
+        val fragments = BleFraming.fragment(ByteArray(1600), BleFraming.attPayloadFor(517))!!
+        assert(fragments.all { it.size <= BleFraming.MAX_ATTRIBUTE_VALUE })
     }
 }
