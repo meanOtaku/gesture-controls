@@ -29,7 +29,7 @@ use axum::routing::get;
 use futures_util::StreamExt;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use spatial_protocol::{
-    COMBINED_SENSOR_BATCH, CONTROLLABLE_SENSOR_IDS, DESKTOP_CONNECTED_TYPE, DESKTOP_HAPTIC_TYPE,
+    CONTROLLABLE_SENSOR_IDS, DESKTOP_CONNECTED_TYPE, DESKTOP_HAPTIC_TYPE,
     DESKTOP_SET_SENSOR_RATE_TYPE, DESKTOP_SET_SENSOR_TYPE, DESKTOP_START_MEASUREMENT_TYPE,
     DESKTOP_STOP_MEASUREMENT_TYPE, DESKTOP_TIME_SYNC_TYPE, DesktopConnectedPayload,
     DesktopHapticPayload, DesktopMeasurementCommandPayload, DesktopOutboundEnvelope,
@@ -372,7 +372,7 @@ impl WatchBridgeServer {
         let sensor = match &command {
             SensorControlCommand::Enable(sensor) | SensorControlCommand::Disable(sensor) => sensor,
         };
-        if !CONTROLLABLE_SENSOR_IDS.contains(&sensor.as_str()) && sensor != COMBINED_SENSOR_BATCH {
+        if !CONTROLLABLE_SENSOR_IDS.contains(&sensor.as_str()) {
             return Err(WatchBridgeError::UnknownControllableSensor(sensor.clone()));
         }
         if !self.shared.active.load(Ordering::Acquire) {

@@ -70,7 +70,6 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
     private val imuBuffer = mutableListOf<ImuSample>()
     private var imuHoldJob: Job? = null
     @Volatile private var lastPpgStatus: String? = null
-    @Volatile private var combinedMessages = true
     @Volatile private var lastWearState: Boolean? = null
     private var medicalFlushJob: Job? = null
     private val heartRateBuffer = mutableListOf<HeartRateSample>()
@@ -170,7 +169,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         timestampNs: Long,
     ) {
         val link = streamingLink() ?: return
-        if (combinedMessages && lastPpgStatus == PPG_STREAMING) {
+        if (lastPpgStatus == PPG_STREAMING) {
             // Pulse samples arrive in bursts; the motion samples ride along with each burst so
             // the desktop gets both from the same moment in one message.
             holdForNextFlush(ImuSample(timestampNs, quaternion.copyOf(), accelerometer?.copyOf(), gyroscope?.copyOf()))
@@ -198,12 +197,6 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         // rate, so sending on arrival keeps the same batches without a 25 Hz timer
         // that woke the CPU to find an empty buffer most of the time.
         flushSensorBuffers()
-    }
-
-    /** Switches combined `watch.sensor_batch` messages on or off; turning them off sends what is held at once. */
-    fun setCombinedMessages(enabled: Boolean) {
-        combinedMessages = enabled
-        if (!enabled) flushSensorBuffers()
     }
 
     /** Keeps a motion sample for the next pulse burst; a timer sends it alone if the pulse sensor goes quiet. */

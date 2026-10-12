@@ -14,7 +14,6 @@ const settings: AppSettings = {
   watchAccelerationRateHz: 50,
   watchGyroscopeRateHz: 50,
   watchPpgFlushRateHz: 10,
-  watchCombinedSensorMessages: true,
   watchHeartRateAcceptanceRateHz: 200,
   watchSkinTemperatureAcceptanceRateHz: 200,
   watchEdaAcceptanceRateHz: 200,
@@ -290,13 +289,4 @@ describe("Settings", () => {
     expect(applyButton).toBeDisabled();
     expect(screen.getByRole("button", { name: "Reset to defaults" })).toBeDisabled();
   });
-
-describe("Settings combined watch messages", () => {
-  it("shows the switch and sends the flipped setting at once", () => {
-    const updates: AppSettings[] = [];
-    render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
-    fireEvent.click(screen.getByRole("switch", { name: "Combined watch messages on" }));
-    expect(updates.at(-1)?.watchCombinedSensorMessages).toBe(false);
-  });
-});
 });

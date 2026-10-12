@@ -28,8 +28,6 @@ object WatchProtocol {
     const val TYPE_PPG_BATCH = "watch.ppg_batch"
     /** Motion and pulse samples of one flush in a single message; see docs/protocols/watch-websocket-protocol.md. */
     const val TYPE_SENSOR_BATCH = "watch.sensor_batch"
-    /** The `desktop.set_sensor` id that switches [TYPE_SENSOR_BATCH] on or off; not a sensor. */
-    const val SENSOR_COMBINED_BATCH = "combined_sensor_batch"
     const val TYPE_PPG_STATUS = "watch.ppg_status"
     const val TYPE_BUTTON = "watch.button"
     /** Whether the watch is on a wrist; while it is not, the watch stops its sensors. */
