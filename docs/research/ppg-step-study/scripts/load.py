@@ -1,4 +1,8 @@
-"""Loads the Downloads recordings as the trainer reads them, with unmarked rows as rest."""
+"""Loads the study's recordings as the trainer reads them, with unmarked rows as rest.
+
+They are read from data/recordings/2026-10-downloads/ in the repo (git-ignored; data/recordings.manifest.json lists them and
+`python3 scripts/recordings_manifest.py check` confirms a copy is the same), else from ~/Downloads where they were exported.
+"""
 import glob, re, tempfile
 from pathlib import Path
 from label_trainer.csv_io import load_recording
@@ -10,7 +14,9 @@ SKIP = {"unlabeled", "hand_twit_clockwise_and_anti_clockwise", "pinch_open"}
 def recordings():
     out = []
     tmp = Path(tempfile.mkdtemp())
-    for f in sorted(glob.glob(str(Path.home() / "Downloads/gesture-dataset-*.csv"))):
+    repo_copy = Path(__file__).resolve().parents[4] / "data" / "recordings" / "2026-10-downloads"
+    source = repo_copy if repo_copy.is_dir() else Path.home() / "Downloads"
+    for f in sorted(glob.glob(str(source / "gesture-dataset-*.csv"))):
         name = Path(f).name[len("gesture-dataset-"):-len(".csv")]
         gesture = re.sub(r"-\d{4}-\d\d-\d\dT.*$", "", name)
         if gesture in SKIP:

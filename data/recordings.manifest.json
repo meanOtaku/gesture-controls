@@ -1,0 +1,414 @@
+{
+ "about": "Our own recordings, kept in data/recordings/ (git-ignored). Regenerate with scripts/recordings_manifest.py write.",
+ "recordings": [
+  {
+   "file": "2026-10-downloads/gesture-dataset-fist-2026-10-04T12-09-26.941Z.csv",
+   "bytes": 518945,
+   "sha256": "9edb5853f869562fc673a34b55b48f76cd2b3a986495f485c1e5a0472322abe5",
+   "gesture": "fist",
+   "recordedAt": "2026-10-04T12-09-26.941Z",
+   "rows": 4512,
+   "ppgRows": 1506,
+   "labels": {
+    "(unmarked)": 2285,
+    "fist": 2227
+   },
+   "studies": {
+    "ppg-step-2026-10": "used"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-fist-2026-10-11T03-26-47.633Z.csv",
+   "bytes": 258827,
+   "sha256": "f47ab8f36eebc55485aa0880907a6f6f12c69516d1a4d6617f50e89045b35c49",
+   "gesture": "fist",
+   "recordedAt": "2026-10-11T03-26-47.633Z",
+   "rows": 2252,
+   "ppgRows": 751,
+   "labels": {
+    "(unmarked)": 974,
+    "fist": 1278
+   },
+   "studies": {
+    "ppg-step-2026-10": "used"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-fist-2026-10-11T09-11-54.466Z.csv",
+   "bytes": 518487,
+   "sha256": "9d8b4e30079b13941e07b67e35b8f6fd52bfba8effeeae89fcf353fc71ad2eb6",
+   "gesture": "fist",
+   "recordedAt": "2026-10-11T09-11-54.466Z",
+   "rows": 4508,
+   "ppgRows": 1503,
+   "labels": {
+    "(unmarked)": 2515,
+    "fist": 1993
+   },
+   "studies": {
+    "ppg-step-2026-10": "used"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-fist-2026-10-11T12-11-54.033Z.csv",
+   "bytes": 525036,
+   "sha256": "a800fbf937a7751b5b63074188a6f9e0c9383b721609ce80144e84544fb74c3c",
+   "gesture": "fist",
+   "recordedAt": "2026-10-11T12-11-54.033Z",
+   "rows": 4500,
+   "ppgRows": 1501,
+   "labels": {
+    "(unmarked)": 1702,
+    "fist": 2798
+   },
+   "studies": {
+    "ppg-step-2026-10": "used"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-fist-2026-10-11T12-13-10.266Z.csv",
+   "bytes": 523380,
+   "sha256": "8f63cc1a61e52c3d4ac592dda9e8623a192edb12601792aecab658a1667e3606",
+   "gesture": "fist",
+   "recordedAt": "2026-10-11T12-13-10.266Z",
+   "rows": 4494,
+   "ppgRows": 1498,
+   "labels": {
+    "(unmarked)": 1706,
+    "fist": 2788
+   },
+   "studies": {
+    "ppg-step-2026-10": "used"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-hand_twit_clockwise_and_anti_clockwise-2026-10-04T12-11-43.384Z.csv",
+   "bytes": 448525,
+   "sha256": "9fc7725394e83329fda8911af819cb35b57ed51da51e76e0fdd22685cc7b86ec",
+   "gesture": "hand_twit_clockwise_and_anti_clockwise",
+   "recordedAt": "2026-10-04T12-11-43.384Z",
+   "rows": 3478,
+   "ppgRows": 1159,
+   "labels": {
+    "(unmarked)": 1800,
+    "hand_twit_clockwise_and_anti_clockwise": 1678
+   },
+   "studies": {
+    "ppg-step-2026-10": "skipped: a single session"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-pinch-2026-09-22T13-39-36.998Z.csv",
+   "bytes": 1141192,
+   "sha256": "631035921ea2d6f00443fa9229da6018e17db832aeb5bb7c33779a70ec9df993",
+   "gesture": "pinch",
+   "recordedAt": "2026-09-22T13-39-36.998Z",
+   "rows": 4499,
+   "ppgRows": 4499,
+   "labels": {
+    "(unmarked)": 3351,
+    "pinch": 1148
+   },
+   "studies": {
+    "ppg-step-2026-10": "excluded: its timestamps span 5 million seconds and cannot be placed in time"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-pinch-2026-10-04T11-43-31.691Z.csv",
+   "bytes": 499504,
+   "sha256": "babd10f7e3e72091226f820cab3e99a5eb00a3697a5f98fa08b9092acbc799b4",
+   "gesture": "pinch",
+   "recordedAt": "2026-10-04T11-43-31.691Z",
+   "rows": 4407,
+   "ppgRows": 1463,
+   "labels": {
+    "(unmarked)": 2133,
+    "pinch": 2274
+   },
+   "studies": {
+    "ppg-step-2026-10": "used"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-pinch-2026-10-10T17-22-55.071Z.csv",
+   "bytes": 249112,
+   "sha256": "1862c11c5af60cf6955a7ac7789e77edb16544fe648739de64e3402c9e038c97",
+   "gesture": "pinch",
+   "recordedAt": "2026-10-10T17-22-55.071Z",
+   "rows": 2252,
+   "ppgRows": 751,
+   "labels": {
+    "(unmarked)": 2252
+   },
+   "studies": {
+    "ppg-step-2026-10": "skipped: no gesture marked"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-pinch-2026-10-10T17-29-59.392Z.csv",
+   "bytes": 255552,
+   "sha256": "fe01d35ec61993c0a28d8ea35da66687fbda5f1c13285e6fcceb32b538c273c7",
+   "gesture": "pinch",
+   "recordedAt": "2026-10-10T17-29-59.392Z",
+   "rows": 2257,
+   "ppgRows": 752,
+   "labels": {
+    "(unmarked)": 2257
+   },
+   "studies": {
+    "ppg-step-2026-10": "skipped: no gesture marked"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-pinch-2026-10-11T02-54-01.797Z.csv",
+   "bytes": 256589,
+   "sha256": "d9f6d459c4dd6e8927392f8da9740fef897be774adaf033f402a6036482c768a",
+   "gesture": "pinch",
+   "recordedAt": "2026-10-11T02-54-01.797Z",
+   "rows": 2261,
+   "ppgRows": 754,
+   "labels": {
+    "(unmarked)": 2261
+   },
+   "studies": {
+    "ppg-step-2026-10": "skipped: no gesture marked"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-pinch-2026-10-11T02-54-10.616Z.csv",
+   "bytes": 265944,
+   "sha256": "f5ccb9030d8d44ccfb147c8cd5bdc5adb45dfa8b9a8264ccf4f3bc06b74878fe",
+   "gesture": "pinch",
+   "recordedAt": "2026-10-11T02-54-10.616Z",
+   "rows": 2261,
+   "ppgRows": 754,
+   "labels": {
+    "(unmarked)": 390,
+    "pinch": 1871
+   },
+   "studies": {
+    "ppg-step-2026-10": "used"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-pinch-2026-10-11T03-23-55.502Z.csv",
+   "bytes": 261924,
+   "sha256": "aef77ce097f90e75da7b502a0f4bfe820f50c115dba14c394b78d2f3a5abfa11",
+   "gesture": "pinch",
+   "recordedAt": "2026-10-11T03-23-55.502Z",
+   "rows": 2254,
+   "ppgRows": 751,
+   "labels": {
+    "(unmarked)": 830,
+    "pinch": 1424
+   },
+   "studies": {
+    "ppg-step-2026-10": "used"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-pinch-2026-10-11T03-25-53.983Z.csv",
+   "bytes": 262276,
+   "sha256": "2401ac1b704642bd7aa8a2f9cd9fd150cf27a3fbf718a4e05e0d497317b5ff24",
+   "gesture": "pinch",
+   "recordedAt": "2026-10-11T03-25-53.983Z",
+   "rows": 2250,
+   "ppgRows": 750,
+   "labels": {
+    "(unmarked)": 596,
+    "pinch": 1654
+   },
+   "studies": {
+    "ppg-step-2026-10": "used"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-pinch-2026-10-11T08-25-29.427Z.csv",
+   "bytes": 528322,
+   "sha256": "133e822491639adec571c51baa402be207864709ef7c4f7a52af5fe86dbfd022",
+   "gesture": "pinch",
+   "recordedAt": "2026-10-11T08-25-29.427Z",
+   "rows": 4493,
+   "ppgRows": 1498,
+   "labels": {
+    "(unmarked)": 842,
+    "pinch": 3651
+   },
+   "studies": {
+    "ppg-step-2026-10": "used"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-pinch-2026-10-11T08-35-42.008Z.csv",
+   "bytes": 527069,
+   "sha256": "0fb8388044478a4870aa0316f0e1818efec214e25dfd728aebb04d8d42310821",
+   "gesture": "pinch",
+   "recordedAt": "2026-10-11T08-35-42.008Z",
+   "rows": 4502,
+   "ppgRows": 1501,
+   "labels": {
+    "(unmarked)": 821,
+    "pinch": 3681
+   },
+   "studies": {
+    "ppg-step-2026-10": "used"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-pinch-2026-10-11T08-53-30.484Z.csv",
+   "bytes": 526665,
+   "sha256": "02dae9eaeaa704a391165d7036d70e5a45d1e5b99ba5affd53b419e144791c96",
+   "gesture": "pinch",
+   "recordedAt": "2026-10-11T08-53-30.484Z",
+   "rows": 4502,
+   "ppgRows": 1499,
+   "labels": {
+    "(unmarked)": 1627,
+    "pinch": 2875
+   },
+   "studies": {
+    "ppg-step-2026-10": "used"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-pinch-2026-10-11T12-05-39.593Z.csv",
+   "bytes": 525431,
+   "sha256": "706066201cb5b58ef661d4b04cf9b401022a476b3b12b3d092bd338a4b01be63",
+   "gesture": "pinch",
+   "recordedAt": "2026-10-11T12-05-39.593Z",
+   "rows": 4499,
+   "ppgRows": 1500,
+   "labels": {
+    "(unmarked)": 954,
+    "pinch": 3545
+   },
+   "studies": {
+    "ppg-step-2026-10": "used"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-pinch-2026-10-11T12-08-32.241Z.csv",
+   "bytes": 524228,
+   "sha256": "1520b53b4d6279ccf47d0a2f66729b5c402bebd4b198264e5498fe75f128f733",
+   "gesture": "pinch",
+   "recordedAt": "2026-10-11T12-08-32.241Z",
+   "rows": 4502,
+   "ppgRows": 1500,
+   "labels": {
+    "(unmarked)": 1227,
+    "pinch": 3275
+   },
+   "studies": {
+    "ppg-step-2026-10": "used"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-pinch_open-2026-10-10T17-07-46.069Z.csv",
+   "bytes": 253973,
+   "sha256": "f641d4ae699607a8109e8b94aa3a16e32a30ba4508b146e25cfc2554e47850f7",
+   "gesture": "pinch_open",
+   "recordedAt": "2026-10-10T17-07-46.069Z",
+   "rows": 2292,
+   "ppgRows": 764,
+   "labels": {
+    "(unmarked)": 2292
+   },
+   "studies": {
+    "ppg-step-2026-10": "skipped: not part of the study"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-pinch_open-2026-10-10T17-16-11.792Z.csv",
+   "bytes": 247579,
+   "sha256": "380908f9972770de2328c3af4e35b2d0714302c7491ff1313287be3eeb488df0",
+   "gesture": "pinch_open",
+   "recordedAt": "2026-10-10T17-16-11.792Z",
+   "rows": 2260,
+   "ppgRows": 754,
+   "labels": {
+    "(unmarked)": 2260
+   },
+   "studies": {
+    "ppg-step-2026-10": "skipped: not part of the study"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-pinching-2026-09-23T02-26-28.273Z.csv",
+   "bytes": 807015,
+   "sha256": "117db3ef5c6e92632386193f37bd63be8fead422e39771e35ae7e7240b9b4c35",
+   "gesture": "pinching",
+   "recordedAt": "2026-09-23T02-26-28.273Z",
+   "rows": 4514,
+   "ppgRows": 1505,
+   "labels": {
+    "(unmarked)": 2597,
+    "pinching": 1917
+   },
+   "studies": {
+    "ppg-step-2026-10": "used"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-thumbs_up-2026-10-11T03-28-55.957Z.csv",
+   "bytes": 263995,
+   "sha256": "0edb94aaa049f66d13d2e34ef80228b607772691b31f67eb43a62becab3f3929",
+   "gesture": "thumbs_up",
+   "recordedAt": "2026-10-11T03-28-55.957Z",
+   "rows": 2249,
+   "ppgRows": 748,
+   "labels": {
+    "(unmarked)": 950,
+    "thumbs_up": 1299
+   },
+   "studies": {
+    "ppg-step-2026-10": "used"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-thumbs_up-2026-10-11T09-13-46.511Z.csv",
+   "bytes": 535381,
+   "sha256": "aeb50ea24e6e9e2778b4be04970df9e30b0778bee44cd1f7e9ed4189bfe7f480",
+   "gesture": "thumbs_up",
+   "recordedAt": "2026-10-11T09-13-46.511Z",
+   "rows": 4506,
+   "ppgRows": 1502,
+   "labels": {
+    "(unmarked)": 1761,
+    "thumbs_up": 2745
+   },
+   "studies": {
+    "ppg-step-2026-10": "used"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-unlabeled-2026-10-10T17-40-15.951Z.csv",
+   "bytes": 255409,
+   "sha256": "a627fdd020f1919ee71688e6bd1fefe7229ca054660d21996c0382c67d6ce0e4",
+   "gesture": "unlabeled",
+   "recordedAt": "2026-10-10T17-40-15.951Z",
+   "rows": 2251,
+   "ppgRows": 750,
+   "labels": {
+    "(unmarked)": 2251
+   },
+   "studies": {
+    "ppg-step-2026-10": "skipped: no gesture marked"
+   }
+  },
+  {
+   "file": "2026-10-downloads/gesture-dataset-unlabeled-2026-10-11T14-23-15.255Z.csv",
+   "bytes": 520432,
+   "sha256": "be4d815c1caa1e14f6e9a0ccabe6aadd726f3854258a30df6d8eefd3425bba1f",
+   "gesture": "unlabeled",
+   "recordedAt": "2026-10-11T14-23-15.255Z",
+   "rows": 4500,
+   "ppgRows": 1499,
+   "labels": {
+    "(unmarked)": 4500
+   },
+   "studies": {
+    "ppg-step-2026-10": "skipped: no gesture marked"
+   }
+  }
+ ]
+}
