@@ -1,0 +1,82 @@
+
+=== ppg_green ===
+per-session AUC, gesture start vs rest (0.5 = no difference, 1 = always larger):
+session                                         prominence onset_to_peak    rise_slope     max_slope peak_delay_ms       fall_ms   +sign
+fist-2026-10-04T12-09-26.941Z                         0.69          0.50          0.56          0.52          0.46          0.54     45%
+fist-2026-10-11T09-11-54.466Z                         0.25          0.45          0.21          0.43          0.45          0.79     50%
+fist-2026-10-11T12-11-54.033Z                         0.14          0.20          0.52          0.18          0.51          0.45     83%
+fist-2026-10-11T12-13-10.266Z                         0.45          0.33          0.66          0.21          0.07           nan     93%
+pinch-2026-10-11T02-54-10.616Z                        0.78          0.80          0.47          0.45          0.68          0.50     83%
+pinch-2026-10-11T08-25-29.427Z                        0.36          0.43          0.46          0.38          0.45          0.45     45%
+pinch-2026-10-11T08-35-42.008Z                        0.64          0.36          0.85          0.78          0.51          0.74     73%
+pinch-2026-10-11T12-05-39.593Z                        0.52          0.48          0.47          0.49          0.48          0.16     41%
+pinch-2026-10-11T12-08-32.241Z                        0.79          0.36          0.52          0.66          0.32          0.68     32%
+pinching-2026-09-23T02-26-28.273Z                     0.46          0.50          0.47          0.59          0.38          0.63     50%
+thumbs_up-2026-10-11T03-28-55.957Z                    0.87          0.89          0.33          0.78          0.89          0.48     22%
+thumbs_up-2026-10-11T09-13-46.511Z                    0.62          0.72          0.27          0.44          0.55          0.90     26%
+
+consistency of gesture starts (between-session spread / within-session spread; < 1 means sessions agree):
+  fist (5 sessions): prominence=0.26 (median 2.8), onset_to_peak_ms=0.56 (median 265.2), rise_slope=0.51 (median 9.7), max_slope=0.35 (median 9.0), peak_delay_ms=0.62 (median 495.4), fall_ms=0.51 (median 320.3)
+      share of starts that rise, per session: 45%, 100%, 50%, 83%, 93%
+  pinch (10 sessions): prominence=0.56 (median 2.9), onset_to_peak_ms=0.53 (median 333.3), rise_slope=0.85 (median 9.3), max_slope=0.96 (median 12.3), peak_delay_ms=0.50 (median 632.8), fall_ms=0.39 (median 275.6)
+      share of starts that rise, per session: 67%, 83%, 78%, 20%, 45%, 73%, 52%, 41%, 32%, 50%
+  thumbs_up (2 sessions): prominence=0.41 (median 3.3), onset_to_peak_ms=0.12 (median 430.3), rise_slope=0.08 (median 6.9), max_slope=0.25 (median 12.8), peak_delay_ms=0.10 (median 791.5), fall_ms=0.35 (median 264.2)
+      share of starts that rise, per session: 22%, 26%
+
+=== ppg_red ===
+per-session AUC, gesture start vs rest (0.5 = no difference, 1 = always larger):
+session                                         prominence onset_to_peak    rise_slope     max_slope peak_delay_ms       fall_ms   +sign
+fist-2026-10-04T12-09-26.941Z                         0.96          0.48          1.00          0.90          0.31          0.84      9%
+fist-2026-10-11T09-11-54.466Z                         0.72          0.54          0.71          0.75          0.09          0.48     12%
+fist-2026-10-11T12-11-54.033Z                         0.15          0.14          0.57          0.38          0.17          0.34     28%
+fist-2026-10-11T12-13-10.266Z                         0.67          0.45          0.61          0.79          0.72           nan     87%
+pinch-2026-10-11T02-54-10.616Z                        0.62          0.90          0.19          0.48          0.50          0.86     83%
+pinch-2026-10-11T08-25-29.427Z                        0.66          0.34          0.76          0.72          0.39          0.42     55%
+pinch-2026-10-11T08-35-42.008Z                        0.58          0.59          0.37          0.58          0.42          0.47     73%
+pinch-2026-10-11T12-05-39.593Z                        0.34          0.43          0.25          0.36          0.30          0.51     59%
+pinch-2026-10-11T12-08-32.241Z                        0.71          0.21          0.75          0.35          0.10          0.86     37%
+pinching-2026-09-23T02-26-28.273Z                     0.57          0.34          0.65          0.68          0.61          0.39     44%
+thumbs_up-2026-10-11T03-28-55.957Z                    1.00          0.00          1.00          1.00          0.00          0.78     11%
+thumbs_up-2026-10-11T09-13-46.511Z                    0.52          0.44          0.44          0.36          0.58          0.46     37%
+
+consistency of gesture starts (between-session spread / within-session spread; < 1 means sessions agree):
+  fist (5 sessions): prominence=2.10 (median 3.4), onset_to_peak_ms=0.62 (median 369.1), rise_slope=0.74 (median 17.3), max_slope=0.83 (median 27.6), peak_delay_ms=1.18 (median 285.1), fall_ms=0.60 (median 315.5)
+      share of starts that rise, per session: 9%, 12%, 12%, 28%, 87%
+  pinch (10 sessions): prominence=0.60 (median 3.3), onset_to_peak_ms=0.79 (median 289.8), rise_slope=0.38 (median 11.0), max_slope=0.59 (median 22.5), peak_delay_ms=0.78 (median 522.9), fall_ms=0.56 (median 289.4)
+      share of starts that rise, per session: 58%, 83%, 11%, 40%, 55%, 73%, 52%, 59%, 37%, 44%
+  thumbs_up (2 sessions): prominence=0.62 (median 5.4), onset_to_peak_ms=0.47 (median 252.6), rise_slope=0.66 (median 18.6), max_slope=0.57 (median 43.6), peak_delay_ms=1.29 (median 566.1), fall_ms=1.62 (median 520.0)
+      share of starts that rise, per session: 11%, 37%
+
+=== ppg_ir ===
+per-session AUC, gesture start vs rest (0.5 = no difference, 1 = always larger):
+session                                         prominence onset_to_peak    rise_slope     max_slope peak_delay_ms       fall_ms   +sign
+fist-2026-10-04T12-09-26.941Z                         1.00          0.64          0.97          1.00          0.33          0.75      9%
+fist-2026-10-11T09-11-54.466Z                         0.58          0.29          0.80          0.60          0.11          0.07      6%
+fist-2026-10-11T12-11-54.033Z                         0.15          0.15          0.33          0.16          0.19          0.56     22%
+fist-2026-10-11T12-13-10.266Z                         0.55          0.24          0.80          0.38          0.06           nan     80%
+pinch-2026-10-11T02-54-10.616Z                        0.77          0.87          0.33          0.44          0.67          0.78     83%
+pinch-2026-10-11T08-25-29.427Z                        0.83          0.31          0.88          0.87          0.24          0.34     18%
+pinch-2026-10-11T08-35-42.008Z                        0.67          0.45          0.53          0.68          0.36          0.65     73%
+pinch-2026-10-11T12-05-39.593Z                        0.35          0.39          0.30          0.39          0.28          0.66     59%
+pinch-2026-10-11T12-08-32.241Z                        0.64          0.37          0.46          0.18          0.14          0.60     37%
+pinching-2026-09-23T02-26-28.273Z                     0.67          0.07          0.89          0.78          0.23          0.25     25%
+thumbs_up-2026-10-11T03-28-55.957Z                    0.96          0.57          0.86          0.71          0.11          0.78     22%
+thumbs_up-2026-10-11T09-13-46.511Z                    0.58          0.51          0.45          0.48          0.65          0.26     42%
+
+consistency of gesture starts (between-session spread / within-session spread; < 1 means sessions agree):
+  fist (5 sessions): prominence=1.77 (median 4.2), onset_to_peak_ms=0.88 (median 254.7), rise_slope=1.35 (median 23.4), max_slope=1.72 (median 27.5), peak_delay_ms=2.44 (median 292.6), fall_ms=1.13 (median 284.5)
+      share of starts that rise, per session: 9%, 12%, 6%, 22%, 80%
+  pinch (10 sessions): prominence=0.52 (median 3.6), onset_to_peak_ms=0.51 (median 212.6), rise_slope=0.21 (median 12.2), max_slope=0.63 (median 18.2), peak_delay_ms=0.66 (median 377.4), fall_ms=0.31 (median 263.9)
+      share of starts that rise, per session: 50%, 83%, 11%, 40%, 18%, 73%, 52%, 59%, 37%, 25%
+  thumbs_up (2 sessions): prominence=0.15 (median 3.9), onset_to_peak_ms=0.70 (median 268.1), rise_slope=0.97 (median 15.4), max_slope=0.69 (median 34.5), peak_delay_ms=0.85 (median 532.5), fall_ms=0.66 (median 305.0)
+      share of starts that rise, per session: 22%, 42%
+
+=== held-out sessions (train on the others, test on the one left out) ===
+gesture start vs rest, green only, logistic: AUC 0.50 (per session median 0.51, worst 0.23, best 0.85, 14 sessions)
+gesture start vs rest, green only, boosted trees: AUC 0.57 (per session median 0.60, worst 0.18, best 0.89, 14 sessions)
+gesture start vs rest, all three channels, logistic: AUC 0.67 (per session median 0.79, worst 0.25, best 1.00, 14 sessions)
+gesture start vs rest, all three channels, boosted trees: AUC 0.64 (per session median 0.77, worst 0.31, best 1.00, 14 sessions)
+pinch vs fist starts, a whole day held out (each session holds one gesture): AUC 0.60 (per day 0.53, 0.60)
+
+=== how often a 4-MAD excursion happens at rest (green), per minute ===
+5.1, nan, 0.0, 25.0, 0.0, 0.0, nan, nan, nan, nan, nan, nan, nan, nan, 0.0, 0.0, 0.0  (median 0.0/min)

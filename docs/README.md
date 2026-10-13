@@ -20,6 +20,12 @@
 - [Watch WebSocket protocol](protocols/watch-websocket-protocol.md): the message envelope and every message, shared by both transports; the Wi-Fi transport
 - [Watch Bluetooth LE transport](protocols/watch-ble-transport.md): the default transport, framing, trust model and failure states
 
+## Research
+
+- [PPG step across a gesture: findings, October 2026](research/ppg-step-findings-2026-10.md): whether the PPG change around a gesture is the same from session to session (yes for pinch), what was built from it, and what is next
+- [Slope and waveform-morphology features for PPG gesture-event detection](research/slope-morphology-event-detection.md): the research behind the idea, and the methods to compare
+- [PPG slope-event technique](architecture/ppg-slope-event-technique.md): the technique as specified, and its implemented first stage
+
 ## Decisions
 
 - [Dataset capture and recording contract](decisions/2026-09-dataset-capture-recording-contract.md)
