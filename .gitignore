@@ -32,6 +32,3 @@ graphify-out/
 
 # Downloaded third-party datasets: never committed (their licences differ from this project's)
 data/external/
-# Our own recordings: the wearer's pulse and motion (and sometimes camera hand landmarks). Kept here for analysis, not
-# committed while where they should live is undecided; data/recordings.manifest.json records exactly which files they are.
-data/recordings/

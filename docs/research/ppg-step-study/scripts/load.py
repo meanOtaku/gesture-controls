@@ -1,7 +1,7 @@
 """Loads the study's recordings as the trainer reads them, with unmarked rows as rest.
 
-They are read from data/recordings/2026-10-downloads/ in the repo (git-ignored; data/recordings.manifest.json lists them and
-`python3 scripts/recordings_manifest.py check` confirms a copy is the same), else from ~/Downloads where they were exported.
+They are read from data/recordings/2026-10-downloads/ in the repo (data/recordings.manifest.json lists them and
+`python3 scripts/recordings_manifest.py check` confirms they are unchanged), else from ~/Downloads where they were exported.
 """
 import glob, re, tempfile
 from pathlib import Path

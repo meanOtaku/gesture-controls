@@ -275,8 +275,7 @@ uv run --with matplotlib python -I ../../docs/research/ppg-step-study/scripts/tr
 uv run --with matplotlib python -I ../../docs/research/ppg-step-study/scripts/onset_eval.py ../../docs/research/ppg-step-study/scripts /tmp/ppg-study
 ```
 
-The recordings are in `data/recordings/2026-10-downloads/`, which is git-ignored: they are the wearer's pulse and motion,
-and where they should live is still to be decided. `data/recordings.manifest.json` (committed) lists every file with its
-size, SHA-256, labels and whether this study used it. `python3 scripts/recordings_manifest.py check` confirms a local
-copy is the same. The scripts fall back to `~/Downloads` when the repo copy is absent (see `load.py`). Rest moments are
+The recordings are in `data/recordings/2026-10-downloads/`. `data/recordings.manifest.json` lists every file with its size,
+SHA-256, labels and whether this study used it, and `python3 scripts/recordings_manifest.py check` confirms they are
+unchanged. The scripts fall back to `~/Downloads` when the repo copy is absent (see `load.py`). Rest moments are
 drawn with a fixed seed, so a rerun on the same files gives the same numbers.

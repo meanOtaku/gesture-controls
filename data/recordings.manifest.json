@@ -1,5 +1,5 @@
 {
- "about": "Our own recordings, kept in data/recordings/ (git-ignored). Regenerate with scripts/recordings_manifest.py write.",
+ "about": "Our own recordings, in data/recordings/. Regenerate with scripts/recordings_manifest.py write.",
  "recordings": [
   {
    "file": "2026-10-downloads/gesture-dataset-fist-2026-10-04T12-09-26.941Z.csv",

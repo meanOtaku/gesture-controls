@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Records exactly which recordings an analysis used, without committing them.
+"""Records exactly which recordings an analysis used.
 
-The recordings live in data/recordings/ (git-ignored: they are the wearer's pulse and motion). This writes
-data/recordings.manifest.json, which is committed: for every file its size, SHA-256, gesture, label counts and whether the
-PPG step study used it. `check` confirms a local copy is byte-for-byte the one the manifest describes, so an analysis rerun
-elsewhere can be trusted to be on the same data.
+The recordings live in data/recordings/. This writes data/recordings.manifest.json: for every file its size, SHA-256,
+gesture, label counts and whether the PPG step study used it. `check` confirms the files are byte-for-byte the ones the
+manifest describes, so an analysis rerun later, or elsewhere, can be trusted to be on the same data.
 
     python3 scripts/recordings_manifest.py write
     python3 scripts/recordings_manifest.py check
@@ -78,7 +77,7 @@ def files() -> list[Path]:
 def write() -> int:
     entries = [describe(p) for p in files()]
     MANIFEST.write_text(json.dumps({
-        "about": "Our own recordings, kept in data/recordings/ (git-ignored). Regenerate with scripts/recordings_manifest.py write.",
+        "about": "Our own recordings, in data/recordings/. Regenerate with scripts/recordings_manifest.py write.",
         "recordings": entries,
     }, indent=1) + "\n")
     used = sum(1 for e in entries if e["studies"].get(STUDY) == "used")
