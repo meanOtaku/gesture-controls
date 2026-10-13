@@ -7,7 +7,9 @@ is still a proposal.
 
 Before building the tracker, the idea was tested offline on 17 earlier recordings (10 pinch sessions over three days). In
 units of each session's recent past, the PPG steps up across a pinch's start in every pinch session, and a rule on that
-step told pinch starts from rest at about 0.83-0.90 AUC on sessions it never saw, where the raw level was at chance. Fist
+step told pinch starts from other moments at about 0.83-0.90 AUC on sessions it never saw, where the raw level was at
+chance. Those other moments were mostly the middle of held pinches, not rest (correction of 2026-10-13 in the findings);
+against clean rest the step is untested. Fist
 was not consistent between sessions; thumbs-up dipped in both of its two sessions.
 
 So the trainer and the live runtime now compute, for each channel, `rel_z_step`: the window's PPG through `pulse_z` against

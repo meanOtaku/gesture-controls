@@ -90,8 +90,9 @@ BASELINE_Z_STATS: tuple[str, ...] = ("rel_z_mean", "rel_z_max", "rel_z_min", "re
 BASELINE_Z_FEATURE_NAMES: tuple[str, ...] = tuple(f"{column}_{stat}" for stat in BASELINE_Z_STATS for column in PPG_COLUMNS)
 # The step through the window, in the same units (see `baseline_step_features`): the mean of its last part less the mean of
 # its first. A gesture's PPG deformation is a step, not a level: on 10 pinch sessions over three days, the step across a
-# pinch's start told it from rest at 0.83-0.90 AUC on sessions a model never saw, where the raw level was at chance
-# (docs/research/slope-morphology-event-detection.md). Needs a window long enough to hold the step (about 1.3 s).
+# pinch's start told it from other moments at 0.83-0.90 AUC on sessions a model never saw, where the raw level was at
+# chance. Those moments were mostly mid-hold; against clean rest it is untested (docs/research/ppg-step-findings-2026-10.md).
+# Needs a window long enough to hold the step (about 1.3 s).
 BASELINE_STEP_FEATURE_NAMES: tuple[str, ...] = tuple(f"{column}_rel_z_step" for column in PPG_COLUMNS)
 # The share of the window, from its start and from its end, whose samples are the "before" and the "after" of the step.
 STEP_EARLY_SHARE = 0.25

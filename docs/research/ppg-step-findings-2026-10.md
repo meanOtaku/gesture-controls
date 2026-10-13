@@ -5,10 +5,32 @@ the next, so that a model trained on some sessions works on a new one? The motiv
 recognition for gestures where the arm also moves, so that motion features cannot be relied on.
 
 **Short answer.** For pinch, yes: in units of each session's own recent past, the PPG *steps up* across the start of a
-pinch in every pinch session, on all three channels, and a rule on that step recognises pinch starts in sessions it never
-saw. Fist is not consistent between sessions. Thumbs-up dips, but only two sessions exist. The step is now a feature in
-the trainer and the live runtime (`ppg_{green,red,ir}_rel_z_step`). It marks the *start* of a gesture, so getting full
-value from it needs a "gesture just started" training target, which does not exist yet.
+pinch in every pinch session, on all three channels, and a rule on that step tells pinch starts from other moments in
+sessions it never saw. **Those other moments were mostly the middle of a held pinch, not rest** (see the correction
+below): against rest there is too little clean data to say. Fist is not consistent between sessions. Thumbs-up dips, but
+only two sessions exist. The step is now a feature in the trainer and the live runtime (`ppg_{green,red,ir}_rel_z_step`).
+It marks the *start* of a gesture, so getting full value from it needs a "gesture just started" training target, which
+does not exist yet.
+
+## Correction (2026-10-13): the "rest" controls were mostly inside gestures
+
+The label audit in [ppg-rgb-onset-follow-up-2026-10.md](ppg-rgb-onset-follow-up-2026-10.md) found that generated rest
+windows overlapped recorded pinch holds. The same flaw is in this study. Every script below picked "rest" moments as
+anything at least 1.5 s from a gesture's start or end, without checking that the moment lay outside a gesture, so the
+middle of any hold longer than 3 s qualified. Rechecked ([scripts/recheck_rest_controls.py](ppg-step-study/scripts/recheck_rest_controls.py)):
+
+- **84% of the candidate "rest" moments were inside a gesture** (1,645 of 1,958, all gestures).
+- **Pinch start vs the middle of a held pinch:** the step separates them very well. Median AUC 0.94, worst 0.73, over 7
+  sessions; mid-hold moments have no step (green median +0.02, half rising).
+- **Pinch start vs true rest** (time with no gesture marked): only 23 such moments, in 2 sessions. A median of 0.72
+  (worst 0.56) cannot support any claim.
+- **Unmarked time is not clean rest anyway.** The audit found every "rest" row is a blank label, not an explicit
+  non-pinch mark.
+
+So read every "rest" below as **"not a pinch start, mostly mid-hold"**. The step is a sound *onset* signal: it tells the
+start of a pinch from the rest of that pinch. Whether it tells a pinch start from ordinary non-pinch activity is
+**untested**, and needs recordings with explicitly labelled rest and non-pinch movement. The tables are kept as measured,
+because they are still what these comparisons produced.
 
 Related: [slope-morphology-event-detection.md](slope-morphology-event-detection.md) (the research behind the idea) and
 [../architecture/ppg-slope-event-technique.md](../architecture/ppg-slope-event-technique.md) (the technique and what is
@@ -47,8 +69,8 @@ How the data was read:
 spread (median absolute deviation × 1.4826). This cancels the session's arbitrary level (sessions sit hundreds of
 thousands of counts apart) and how far the signal swings, which depends on how the watch sits. Units below are "spreads".
 
-**Event-locked view.** Every marked gesture start, and random rest moments at least 1.5 s from any start or end, is a
-moment. The normalised signal is taken from 500 ms before each moment to 1500 ms after it.
+**Event-locked view.** Every marked gesture start, and random "rest" moments at least 1.5 s from any start or end, is a
+moment. (Not checked to lie outside a gesture: 84% were mid-gesture; see the correction above.) The normalised signal is taken from 500 ms before each moment to 1500 ms after it.
 
 **The step.** The mean of the normalised signal from 400 to 900 ms after the moment, less the mean from 400 to 100 ms
 before it. This is the "after minus before" form of the slope idea.
@@ -163,8 +185,8 @@ With 500 ms windows (10 recordings judged), the step lifted the boosted trees' w
 median from 0.75 to 0.78. Otherwise it added little. The middle of a held pinch has no step left in it.
 
 **"Did a pinch just start?"** A window is positive when a pinch began within 10–60% of it, and negative when no gesture
-began or ended within 1 s of it. Windows in the middle of a hold were left out. 1300 ms windows, 536 start and 477 quiet
-windows, 6 recordings judged:
+began or ended within 1 s of it. That left windows in the middle of long holds among the negatives, contrary to what this
+note first said (see the correction above). 1300 ms windows, 536 start and 477 other windows, 6 recordings judged:
 
 | Features | Logistic regression: pooled / median / worst | Boosted trees: pooled / median / worst |
 |---|---|---|
