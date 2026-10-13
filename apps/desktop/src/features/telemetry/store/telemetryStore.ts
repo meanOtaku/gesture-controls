@@ -138,6 +138,12 @@ const WATCH_PAUSE_QUIET_MS = 1500;
 /** A gap this long between two motion samples' own times means the watch clock restarted, not a pause. */
 const MOTION_CLOCK_JUMP_MS = 5_000;
 export const MAX_VISIBLE_SAMPLES = 600;
+/**
+ * The fast live charts show the same span of time, whatever their rate: 600 samples were 24 s of PPG at 25 Hz but a few
+ * seconds of motion. The slow ones (heart rate, temperature, about one value a second) keep their last 600 values.
+ */
+export const LIVE_WINDOW_MS = 6_000;
+const LIVE_WINDOW_SERIES: ReadonlySet<TelemetrySeries> = new Set(["head", "watchOrientation", "watchAcceleration", "ppg"]);
 export const MAX_CSV_ROWS = 200_000;
 export const ESTIMATED_BYTES_PER_CSV_ROW = 200;
 const DEFAULT_PUBLISH_INTERVAL_MS = 66;
@@ -310,7 +316,11 @@ class TelemetryStore {
   }
 
   getSeries(name: TelemetrySeries): SeriesPoint[] {
-    return this.series.get(name)?.toArray() ?? [];
+    const points = this.series.get(name)?.toArray() ?? [];
+    if (!LIVE_WINDOW_SERIES.has(name) || points.length === 0) return points;
+    const newest = points[points.length - 1].at;
+    const first = points.findIndex((point) => point.at >= newest - LIVE_WINDOW_MS);
+    return first <= 0 ? points : points.slice(first);
   }
 
   getRecording(): boolean {
