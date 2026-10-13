@@ -25,6 +25,7 @@
 - [PPG step across a gesture: findings, October 2026](research/ppg-step-findings-2026-10.md): whether the PPG change around a gesture is the same from session to session (yes for pinch), what was built from it, and what is next
 - [Green PPG pinch-onset experiments, October 2026](research/ppg-green-onset-experiments-2026-10.md): reproducible onset/duration experiments, results, limitations, and the candidate next pipeline
 - [RGB PPG pinch-onset follow-up experiments, October 2026](research/ppg-rgb-onset-follow-up-2026-10.md): preprocessing, feature, regularization, augmentation, and label-audit results; research-only candidate and evidence gaps
+- [PPG pinch onset: the open questions, tested, October 2026](research/ppg-onset-open-questions-2026-10.md): non-pinch negatives, decision delay, motion, days, intervals, mark timing and continuous detection on the current recordings: a real but weak, slow, non-specific onset cue
 - [Slope and waveform-morphology features for PPG gesture-event detection](research/slope-morphology-event-detection.md): the research behind the idea, and the methods to compare
 - [PPG slope-event technique](architecture/ppg-slope-event-technique.md): the technique as specified, and its implemented first stage
 - [Watch data path: findings, October 2026](research/watch-data-path-findings-2026-10.md): how samples reach the desktop now, why PPG went missing over Bluetooth and the graph lagged, what was measured and what is still open

@@ -1,0 +1,46 @@
+moments: pinch_start 145, pinch_mid 105, rest 84, other_start 92, other_mid 83
+recordings: 17 (10 pinch); 'rest' = unmarked time >= 1.5 s from any mark
+
+=== 1, 3, 6. Pinch start against each kind of other moment, by decision delay (PPG steps only) ===
+AUC [95% interval, resampling recordings]; 0.5 = chance
+other moment                         decide at +300 ms     decide at +500 ms     decide at +700 ms     decide at +900 ms
+mid-pinch                             0.47 [0.40-0.56]      0.63 [0.53-0.75]      0.66 [0.55-0.79]      0.68 [0.56-0.81]
+unmarked time (rest)                  0.18 [0.07-0.37]      0.55 [0.45-0.70]      0.71 [0.58-0.86]      0.74 [0.60-0.91]
+fist / thumbs-up starts               0.60 [0.37-0.85]      0.64 [0.42-0.91]      0.64 [0.44-0.89]      0.65 [0.45-0.86]
+fist / thumbs-up mid-gesture          0.60 [0.45-0.74]      0.78 [0.67-0.89]      0.87 [0.78-0.95]      0.88 [0.78-0.97]
+all non-start moments                 0.62 [0.55-0.71]      0.73 [0.66-0.81]      0.77 [0.70-0.85]      0.78 [0.70-0.87]
+
+=== 4. Is the PPG step just motion? (decide at +900 ms) ===
+other moment                                PPG only         motion only        PPG + motion
+mid-pinch                           0.68 [0.56-0.80]    0.40 [0.22-0.59]    0.65 [0.54-0.78]
+unmarked time (rest)                0.74 [0.60-0.90]    0.51 [0.19-0.74]    0.67 [0.28-0.96]
+fist / thumbs-up starts             0.65 [0.47-0.84]    0.69 [0.55-0.82]    0.75 [0.63-0.87]
+fist / thumbs-up mid-gesture        0.88 [0.78-0.97]    0.33 [0.06-0.60]    0.76 [0.42-0.98]
+all non-start moments               0.78 [0.70-0.87]    0.12 [0.05-0.22]    0.74 [0.64-0.84]
+PPG-only score, calmest half of pinch starts vs all non-start moments: 0.82 [0.74-0.91]
+PPG-only score, busiest half of pinch starts vs all non-start moments: 0.74 [0.64-0.84]
+Across pinch starts, green step vs gyroscope change: Spearman rho -0.03 (p=0.744, n=143)
+
+=== 5. Train on 2026-10-11, test on the other days (PPG only, +900 ms, against all non-start moments) ===
+  2026-09-23: AUC 0.37 (16 pinch starts, 24 others, 1 recordings)
+  2026-10-04: AUC 0.81 (24 pinch starts, 54 others, 2 recordings)
+
+=== 9. Fist and thumbs-up: start vs their own mid-gesture moments (PPG only, +900 ms) ===
+  fist: 0.64 [0.37-0.95] (65 starts, 57 mid, 5 recordings)
+  thumbs_up: 0.66 [0.62-0.73] (27 starts, 26 mid, 2 recordings)
+
+=== 8. Mark timing: marked pinch start vs the gyroscope showing the hand start to move ===
+  movement found for 44 of 145 pinch starts
+  gyroscope onset minus mark: median -34 ms, middle half -262 to +74 ms; within +/-200 ms: 50%
+
+=== 2. Continuous detection over whole held-out recordings (PPG only, decide at +900 ms) ===
+ threshold    pinch starts found   false/min, pinch recs   false/min, fist+thumbs recs    false/min in unmarked time
+       0.5          62/145 (43%)                     4.6                          17.3                           9.0
+       0.7          31/145 (21%)                     2.0                          10.8                           4.5
+       0.8          19/145 (13%)                     1.7                           6.9                           2.3
+       0.9           11/145 (8%)                     0.6                           4.5                           1.1
+(a detection claims a start 900 ms before it fires; it counts as found within +/-600 ms of a marked pinch start,
+ one detection per start; detections at least 1.5 s apart. Fist/thumbs-up recordings contain no pinch, so every
+ detection there is false. Unmarked time is short in these recordings, so its rate is rough.)
+
+7. A held-back set no one has analysed: not possible on this data; every recording has been used.
