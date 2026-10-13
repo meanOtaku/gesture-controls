@@ -195,6 +195,53 @@ Stage 1 of the [technique](../architecture/ppg-slope-event-technique.md), on bra
 - **Old models keep working:** the features are added after every existing one (feature count 107 → 110), so existing
   models' inputs stay in place. They are opt-in with the other baseline features, and Model Lab describes them.
 
+### 8. Smoothing keeps the features, if it is mild and causal
+
+The research document's process is to smooth before differentiating, using only causal smoothing for anything live. Ten
+smoothers were run over the raw PPG of the same sessions ([scripts/smoothing_check.py](ppg-step-study/scripts/smoothing_check.py)).
+For each, three things were checked against no smoothing:
+
+- **The step:** its size, the share of pinches that rise, and the unseen-session rule from finding 4 (8 pinch sessions
+  judged).
+- **The steepest rise:** the largest first derivative in the 900 ms after the start. How well it tells gesture starts from
+  rest, and how much of it is kept.
+- **Lag:** when the steepest rise happens, compared with a zero-phase filter (the "true" timing; offline only).
+
+| Smoother | Step kept | Pinches rising | Unseen-session AUC (worst) | Steepest-rise AUC | Steepest rise kept | Lag |
+|---|---|---|---|---|---|---|
+| none | 100% | 87% | 0.83 (0.51) | 0.65 | 100% | 0 ms |
+| moving average, 3 samples (120 ms) | 100% | 86% | 0.82 (0.52) | 0.65 | 96% | +40 ms |
+| moving average, 5 samples (200 ms) | 99% | 86% | 0.82 (0.55) | 0.65 | 91% | +80 ms |
+| moving average, 7 samples (280 ms) | 97% | 86% | 0.79 (0.55) | 0.65 | 86% | +120 ms |
+| exponential, a = 0.5 | 100% | 87% | 0.82 (0.53) | 0.63 | 92% | 0 ms |
+| exponential, a = 0.3 | 97% | 86% | 0.81 (0.49) | 0.64 | 84% | +40 ms |
+| Butterworth low-pass, 2nd order, 6 Hz | 100% | 87% | 0.82 (0.52) | 0.64 | 98% | 0 ms |
+| **Butterworth low-pass, 2nd order, 4 Hz** | **100%** | **87%** | **0.82 (0.55)** | **0.65** | **97%** | **+40 ms** |
+| Butterworth low-pass, 2nd order, 2.5 Hz | 99% | 86% | 0.82 (0.56) | 0.65 | 92% | +80 ms |
+| Savitzky-Golay, 7 samples, quadratic, causal | 82% | 83% | 0.74 (0.54) | 0.66 | 105% | +200 ms |
+
+![The average pinch start and its derivative through several smoothers](ppg-step-study/smoothing_pinch_start.png)
+
+- **Mild causal smoothing keeps the step.** Moving averages up to 5 samples, exponential smoothing and Butterworth
+  low-pass filters from 2.5 to 6 Hz keep 97–100% of it, the same share of rising pinches and the same unseen-session
+  score. The gesture lives below about 3 Hz (a 300–750 ms rise), so filters above that leave it alone. The step feature
+  averages over 300–500 ms stretches, so it barely needs smoothing at all.
+- **The cost is delay.** Each causal smoother delays the rise by 0–120 ms, more for stronger smoothing. At 25 Hz,
+  40 ms is one sample.
+- **Causal Savitzky–Golay is the one to avoid.** Estimating the newest sample from the past 7 extrapolates a polynomial
+  forward: it overshoots (105% of the slope), lags 200 ms, keeps only 82% of the step, and its unseen-session score drops
+  to 0.74.
+- **Smoothing did not make the slope more telling.** The steepest-rise score stays at 0.63–0.66 with or without
+  smoothing. Once slopes are taken on an even grid (next point), the derivative at 25 Hz is not dominated by sample noise,
+  so smoothing buys smoother curves, not more signal.
+- **The PPG timestamps jitter.** In every session 6–10% of the gaps between samples exceed 60 ms, and 0.1–6.7% are under
+  5 ms (a late sample followed closely by the next). A derivative over consecutive raw timestamps divides by those
+  near-zero gaps and explodes. Slopes have to be taken on an evenly resampled 25 Hz grid, or over at least two sample
+  periods, never sample to sample. This applies to the live tracker too.
+
+**Choice for the tracker:** a 2nd-order causal Butterworth low-pass at 4 Hz on the 25 Hz grid. It keeps 100% of the step
+and 97% of the steepest rise for 40 ms of delay. A 3-sample moving average is a simpler alternative with the same delay.
+
 ## Earlier experiments in the same line of work (2026-10-11 and 10-12)
 
 These were run with other set-ups and are listed for context, not compared directly with the tables above.
@@ -273,6 +320,7 @@ uv run --with matplotlib python -I ../../docs/research/ppg-step-study/scripts/st
 uv run --with matplotlib python -I ../../docs/research/ppg-step-study/scripts/compare_raw.py ../../docs/research/ppg-step-study/scripts /tmp/ppg-study
 uv run --with matplotlib python -I ../../docs/research/ppg-step-study/scripts/trainer_eval.py ../../docs/research/ppg-step-study/scripts
 uv run --with matplotlib python -I ../../docs/research/ppg-step-study/scripts/onset_eval.py ../../docs/research/ppg-step-study/scripts /tmp/ppg-study
+uv run --with matplotlib python -I ../../docs/research/ppg-step-study/scripts/smoothing_check.py ../../docs/research/ppg-step-study/scripts /tmp/ppg-study
 ```
 
 The recordings are in `data/recordings/2026-10-downloads/`. `data/recordings.manifest.json` lists every file with its size,
