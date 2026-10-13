@@ -43,7 +43,9 @@ All messages are UTF-8 JSON with the required envelope fields `type`, `version` 
 
 `deviceId` identifies the watch. Over **Bluetooth** the desktop assigns it from the peripheral it discovered (`ble-<platform peripheral id>`, e.g. `ble-aa-bb-cc-dd-ee-ff`) and replaces whatever the watch put in the envelope, so a watch cannot choose or spoof which device it is. Over **Wi-Fi** there is no peripheral, so the desktop uses the watch's own `deviceId`, which is a unique per-install value (`watch-<uuid>`) generated once and persisted on the watch. The `galaxy-watch-4` values in the examples below are illustrative only; the desktop's per-device state (the PPG ordering watermark, orientation/PPG fusion identity checks) is keyed on whichever id applies to the active transport.
 
-`watch.orientation` carries a quaternion and optional accelerometer and gyroscope vectors:
+`watch.orientation` carries one motion reading: a quaternion and optional accelerometer and gyroscope vectors. The current
+watch sends its motion readings in batches instead (`watch.sensor_batch`, below); the desktop still accepts single
+readings, which older watch builds send:
 
 ```json
 {"type":"watch.orientation","version":1,"deviceId":"galaxy-watch-4","sequence":1,"timestampNs":123,"payload":{"quaternion":[1,0,0,0],"accelerometer":[0,0,9.81],"gyroscope":[0,0,0]}}
@@ -66,7 +68,7 @@ sensor reports its current value on registration, and a watch with no such senso
 it on is reported at once.
 
 While `worn` is `false` the watch **stops its IMU, PPG and medical collection**, so no
-`watch.orientation` or `watch.ppg_batch` messages are expected, and over Bluetooth it releases
+motion (`watch.sensor_batch`, or `watch.orientation` from older builds) or `watch.ppg_batch` messages are expected, and over Bluetooth it releases
 its CPU wake lock and may sleep. The desktop therefore:
 
 - releases any held interaction (fail closed: the data that drove it has stopped),

@@ -257,7 +257,8 @@ Once connected, the desktop's Tauri dashboard ("Watch connection" card) should s
   pill going from `Disconnected` to `Streaming`.
 - **Battery** metric populated with the watch's battery percentage (from
   `watch.heartbeat`).
-- **Sequence** metric counting up (from `watch.orientation`).
+- **Sequence** metric counting up (from the motion batches, `watch.sensor_batch`; older builds
+  send one `watch.orientation` per reading).
 - **Clock offset** and **round trip** metrics populated after the first
   `desktop.time_sync` / `watch.time_sync` exchange (within ~5 seconds of connecting).
 - **Quaternion**, **Accelerometer**, and **Gyroscope** rows updating live as you move

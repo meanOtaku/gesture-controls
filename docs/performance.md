@@ -93,7 +93,7 @@ test on hardware (see "How to measure it" at the end of this section).
 | BLE advertising | Low-latency mode, and it kept running while a desktop was connected | Balanced mode, stopped while a desktop is connected, resumed on disconnect |
 | Orientation message encoding (up to 50 a second) | A `JSONObject`, two `JSONArray`s and a boxed `Double` per component: 3.2 us per message (JVM) | One `StringBuilder`: 0.4 us per message (JVM, 8x), output checked against the old encoder on 2,000 random readings |
 | Status text redraw | Orientation sequence redrawn at the sensor rate | At most twice a second |
-| **Off the wrist** | Sensors, PPG, the wake lock and the desktop's 5-second time-sync writes all continued | The standard off-body sensor pauses IMU, PPG and medical collection; over Bluetooth the CPU wake lock is released and the desktop stops time-sync writes (see [the protocol](protocols/watch-websocket-protocol.md#wear-state-on-or-off-the-wrist)). Not yet measured on a battery |
+| **Off the wrist** | Sensors, PPG, the wake lock and the desktop's 5-second time-sync writes all continued | The standard off-body sensor pauses IMU, PPG and medical collection; over Bluetooth the CPU wake lock is released and the desktop stops time-sync writes (see [the protocol](protocols/watch-websocket-protocol.md#wear-state-on-or-off-the-wrist)). Not yet measured on a battery (since 2026-10-12, only once no motion or pulse data arrives: a watch set to stream off the wrist still expects them) |
 
 Two behaviours changed on purpose: a reading with a non-finite component is now dropped (the old
 encoder threw inside the sensor callback), and streaming control no longer depends on the screen
@@ -115,6 +115,22 @@ being on, so a reconnect that lands with the display off now starts the sensors.
 session for a fixed time (and, separately, leave the app advertising with no desktop for the same time),
 then compare `adb shell dumpsys batterystats` (CPU, wake lock, sensor and Bluetooth time) and the battery
 percentage between builds `719c4f3` and later.
+
+### The Bluetooth link under load (2026-10-12/13)
+
+Measured on the watch and the Mac while the live graph lagged on sudden arm movements. The full
+investigation is in [research/watch-data-path-findings-2026-10.md](research/watch-data-path-findings-2026-10.md).
+
+| Cost | Before | After |
+| --- | --- | --- |
+| Notifications a second | ~61: every motion reading alone (50), PPG at 10 Hz, housekeeping | ~30: motion in its own 100 ms batches (~2 packets), PPG per flush (1 packet) |
+| Watch CPU at the old rate | App 21%, Bluetooth service 41% | Not re-measured |
+| Send queue when the link falls behind | Grew to 512 fragments (seconds of delay), then dropped whole (`dropped 512 queued fragments`) | Holds ~0.5 s (12 fragments); drops the oldest unsent messages, whole |
+| Data lost in 15 minutes of streaming | Not measured | 20 messages (~2 s), mostly right after connecting |
+| Fragment size at a 517-byte MTU | 514 bytes, refused by Android (over the 512-byte attribute limit): no PPG over Bluetooth | 512 bytes |
+
+The desktop was not the bottleneck: 10% CPU for the app and 13% for its web view while
+streaming, and about 0.2 ms per live inference window even in a debug build.
 
 ## Measured and left alone
 
