@@ -68,9 +68,8 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
     private var heartbeatJob: Job? = null
     private val ppgBuffer = mutableListOf<PpgSample>()
     private val imuBuffer = mutableListOf<ImuSample>()
-    private var imuHoldJob: Job? = null
+    private var imuFlushJob: Job? = null
     @Volatile private var lastPpgStatus: String? = null
-    @Volatile private var combinedMessages = true
     @Volatile private var lastWearState: Boolean? = null
     private var medicalFlushJob: Job? = null
     private val heartRateBuffer = mutableListOf<HeartRateSample>()
@@ -163,65 +162,45 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         link?.resume()
     }
 
+    /**
+     * Motion and pulse travel as separate streams, each at its own pace. A motion sample joins the current motion batch;
+     * the batch goes out [IMU_BATCH_INTERVAL_MS] after its first sample (about five samples at 50 Hz) as a
+     * `watch.sensor_batch` holding motion only. One message per sample would be fifty a second, more than the
+     * Bluetooth link reliably carries when an arm movement disturbs the radio.
+     */
     fun sendOrientation(
         quaternion: FloatArray,
         accelerometer: FloatArray?,
         gyroscope: FloatArray?,
         timestampNs: Long,
     ) {
-        val link = streamingLink() ?: return
-        if (combinedMessages && lastPpgStatus == PPG_STREAMING) {
-            // Pulse samples arrive in bursts; the motion samples ride along with each burst so
-            // the desktop gets both from the same moment in one message.
-            holdForNextFlush(ImuSample(timestampNs, quaternion.copyOf(), accelerometer?.copyOf(), gyroscope?.copyOf()))
-            return
+        if (streamingLink() == null) return
+        val sample = ImuSample(timestampNs, quaternion.copyOf(), accelerometer?.copyOf(), gyroscope?.copyOf())
+        synchronized(imuBuffer) {
+            val first = imuBuffer.isEmpty()
+            imuBuffer.add(sample)
+            // The first sample of a batch starts its timer; the batch goes out whole when it fires.
+            if (first) {
+                imuFlushJob = scope.launch {
+                    delay(IMU_BATCH_INTERVAL_MS)
+                    flushImuBuffer()
+                }
+            }
         }
-        val seq = sequence.incrementAndGet()
-        val message = WatchProtocol.orientationMessage(
-            wireDeviceId,
-            seq,
-            timestampNs,
-            quaternion,
-            accelerometer,
-            gyroscope,
-        ) ?: return
-        link.send(message)
-        _lastOrientationSequence.value = seq
     }
 
-    /** Buffers raw PPG samples for the next flush tick; dropped if not connected. */
+    /** Pulse samples arrive in bursts at the configured flush rate; each burst goes out on arrival as its own `watch.ppg_batch`. */
     fun enqueuePpgSamples(samples: List<PpgSample>) {
         if (samples.isEmpty()) return
         if (_state.value != ConnectionState.CONNECTED) return
         synchronized(ppgBuffer) { ppgBuffer.addAll(samples) }
-        // The Samsung SDK already delivers samples in bursts at the configured flush
-        // rate, so sending on arrival keeps the same batches without a 25 Hz timer
-        // that woke the CPU to find an empty buffer most of the time.
-        flushSensorBuffers()
-    }
-
-    /** Switches combined `watch.sensor_batch` messages on or off; turning them off sends what is held at once. */
-    fun setCombinedMessages(enabled: Boolean) {
-        combinedMessages = enabled
-        if (!enabled) flushSensorBuffers()
-    }
-
-    /** Keeps a motion sample for the next pulse burst; a timer sends it alone if the pulse sensor goes quiet. */
-    private fun holdForNextFlush(sample: ImuSample) {
-        synchronized(imuBuffer) { imuBuffer.add(sample) }
-        if (imuHoldJob?.isActive == true) return
-        imuHoldJob = scope.launch {
-            delay(IMU_MAX_HOLD_MS)
-            flushSensorBuffers()
-        }
+        flushPpgBuffer()
     }
 
     /** Reports [PpgState] to the desktop; independent of the PPG sample buffer. */
     fun sendPpgStatus(state: String) {
         if (state == lastPpgStatus) return
         lastPpgStatus = state
-        // Motion held for a pulse burst that will no longer come goes out now.
-        if (state != PPG_STREAMING) flushSensorBuffers()
         sendStoredPpgStatus()
     }
 
@@ -373,9 +352,11 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         medicalFlushJob?.cancel()
         medicalFlushJob = null
         synchronized(ppgBuffer) { ppgBuffer.clear() }
-        synchronized(imuBuffer) { imuBuffer.clear() }
-        imuHoldJob?.cancel()
-        imuHoldJob = null
+        synchronized(imuBuffer) {
+            imuBuffer.clear()
+            imuFlushJob?.cancel()
+            imuFlushJob = null
+        }
         synchronized(heartRateBuffer) { heartRateBuffer.clear() }
         synchronized(skinTemperatureBuffer) { skinTemperatureBuffer.clear() }
         synchronized(edaBuffer) { edaBuffer.clear() }
@@ -455,36 +436,31 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         }
     }
 
-    /** Sends everything buffered from both sensors, as combined messages with the pulse and motion of the same flush together. */
-    private fun flushSensorBuffers() {
-        imuHoldJob?.cancel()
-        imuHoldJob = null
-        val ppg = synchronized(ppgBuffer) {
-            val copy = ppgBuffer.toList()
-            ppgBuffer.clear()
-            copy
-        }
+    /** Sends the motion batch: one `watch.sensor_batch` with motion only, split if it holds more than [IMU_BATCH_MAX_SAMPLES]. */
+    private fun flushImuBuffer() {
         val imu = synchronized(imuBuffer) {
-            val copy = imuBuffer.toList()
-            imuBuffer.clear()
-            copy
+            imuFlushJob = null
+            imuBuffer.toList().also { imuBuffer.clear() }
         }
-        if (ppg.isEmpty() && imu.isEmpty()) return
+        if (imu.isEmpty()) return
         val link = streamingLink() ?: return
-        val ppgChunks = ppg.chunked(PPG_BATCH_MAX_SAMPLES)
-        val imuChunks = imu.chunked(IMU_BATCH_MAX_SAMPLES)
-        for (index in 0 until maxOf(ppgChunks.size, imuChunks.size)) {
-            val timestampNs = SystemClock.elapsedRealtimeNanos()
+        for (chunk in imu.chunked(IMU_BATCH_MAX_SAMPLES)) {
             val seq = sequence.incrementAndGet()
-            val message = WatchProtocol.sensorBatchMessage(
-                wireDeviceId,
-                seq,
-                timestampNs,
-                imuChunks.getOrElse(index) { emptyList() },
-                ppgChunks.getOrElse(index) { emptyList() },
-            ) ?: continue
+            val message = WatchProtocol.sensorBatchMessage(wireDeviceId, seq, SystemClock.elapsedRealtimeNanos(), chunk, emptyList())
+                ?: continue
             link.send(message)
-            if (index < imuChunks.size) _lastOrientationSequence.value = seq
+            _lastOrientationSequence.value = seq
+        }
+    }
+
+    /** Sends the pulse samples waiting, as `watch.ppg_batch` messages of at most [PPG_BATCH_MAX_SAMPLES]. */
+    private fun flushPpgBuffer() {
+        val ppg = synchronized(ppgBuffer) { ppgBuffer.toList().also { ppgBuffer.clear() } }
+        if (ppg.isEmpty()) return
+        val link = streamingLink() ?: return
+        for (chunk in ppg.chunked(PPG_BATCH_MAX_SAMPLES)) {
+            val seq = sequence.incrementAndGet()
+            link.send(WatchProtocol.ppgBatchMessage(wireDeviceId, seq, SystemClock.elapsedRealtimeNanos(), chunk))
         }
     }
 
@@ -543,7 +519,8 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         private const val PPG_BATCH_MAX_SAMPLES = 32
         private const val IMU_BATCH_MAX_SAMPLES = 16
         /** A held motion sample is sent alone after this long if no pulse burst has come to carry it. */
-        private const val IMU_MAX_HOLD_MS = 250L
+        /** How long a motion batch collects samples: about five at 50 Hz, two or three Bluetooth packets. */
+        private const val IMU_BATCH_INTERVAL_MS = 100L
         private const val PPG_STREAMING = "streaming"
         private const val MEDICAL_BATCH_MAX_SAMPLES = 32
     }

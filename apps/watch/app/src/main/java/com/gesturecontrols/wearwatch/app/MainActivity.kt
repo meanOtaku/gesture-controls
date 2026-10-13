@@ -219,7 +219,6 @@ class MainActivity : AppCompatActivity() {
         }
         watchLink.onSensorControlCommand = { sensor, enabled ->
             when (sensor) {
-                WatchProtocol.SENSOR_COMBINED_BATCH -> watchLink.setCombinedMessages(enabled)
                 SENSOR_ORIENTATION, SENSOR_ACCELERATION, SENSOR_GYROSCOPE -> {
                     sensorCollector.setSensorEnabled(sensor, enabled)
                     watchLink.sendSensorStatus(sensor, enabled)

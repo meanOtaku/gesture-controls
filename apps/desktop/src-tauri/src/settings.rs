@@ -6,9 +6,9 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use spatial_protocol::{
-    COMBINED_SENSOR_BATCH, CONTROLLABLE_SENSOR_IDS, MAX_PPG_FLUSH_RATE_HZ, MAX_SENSOR_RATE_HZ,
-    MIN_PPG_FLUSH_RATE_HZ, MIN_SENSOR_RATE_HZ, SENSOR_ACCELERATION, SENSOR_GYROSCOPE,
-    SENSOR_ORIENTATION, SENSOR_PPG_FLUSH,
+    CONTROLLABLE_SENSOR_IDS, MAX_PPG_FLUSH_RATE_HZ, MAX_SENSOR_RATE_HZ, MIN_PPG_FLUSH_RATE_HZ,
+    MIN_SENSOR_RATE_HZ, SENSOR_ACCELERATION, SENSOR_GYROSCOPE, SENSOR_ORIENTATION,
+    SENSOR_PPG_FLUSH,
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 use tracing::{debug, warn};
@@ -62,10 +62,6 @@ pub struct AppSettings {
         alias = "watchPpgAcceptanceRateHz"
     )]
     pub watch_ppg_flush_rate_hz: f64,
-    /// Whether the watch sends the motion and pulse samples of one flush as a single message (a little
-    /// delay on motion, fewer messages) or each motion reading on its own (see `COMBINED_SENSOR_BATCH`).
-    #[serde(default = "default_combined_sensor_messages")]
-    pub watch_combined_sensor_messages: bool,
     #[serde(default = "default_health_acceptance_rate_hz")]
     pub watch_heart_rate_acceptance_rate_hz: f64,
     #[serde(default = "default_health_acceptance_rate_hz")]
@@ -135,7 +131,6 @@ impl Default for AppSettings {
             // Samsung controls physical sampling/callback cadence. Defaults at
             // the acceptance ceiling preserve every callback sample.
             watch_ppg_flush_rate_hz: default_ppg_flush_rate_hz(),
-            watch_combined_sensor_messages: default_combined_sensor_messages(),
             watch_heart_rate_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
             watch_skin_temperature_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
             watch_eda_acceptance_rate_hz: MAX_HEALTH_ACCEPTANCE_RATE_HZ,
@@ -166,10 +161,6 @@ fn default_watch_sensors_enabled() -> HashMap<String, bool> {
 
 fn default_health_acceptance_rate_hz() -> f64 {
     MAX_HEALTH_ACCEPTANCE_RATE_HZ
-}
-
-fn default_combined_sensor_messages() -> bool {
-    true
 }
 
 fn default_ppg_flush_rate_hz() -> f64 {
@@ -495,14 +486,6 @@ pub fn apply_watch_settings(server: &WatchBridgeServer, settings: &AppSettings) 
         if let Err(error) = server.send_sensor_control_command(command) {
             debug!(%error, sensor, "skipped replaying sensor-enable state");
         }
-    }
-    let combined = if settings.watch_combined_sensor_messages {
-        SensorControlCommand::Enable(COMBINED_SENSOR_BATCH.to_string())
-    } else {
-        SensorControlCommand::Disable(COMBINED_SENSOR_BATCH.to_string())
-    };
-    if let Err(error) = server.send_sensor_control_command(combined) {
-        debug!(%error, "skipped replaying the combined-message setting");
     }
     let rates = [
         (SENSOR_ORIENTATION, settings.watch_orientation_rate_hz),
@@ -877,14 +860,13 @@ mod tests {
     }
 
     #[test]
-    fn combined_watch_messages_default_on_and_an_older_file_without_the_field_keeps_that() {
-        assert!(AppSettings::default().watch_combined_sensor_messages);
+    fn a_settings_file_from_when_motion_and_pulse_could_be_combined_still_loads() {
         let mut value = serde_json::to_value(AppSettings::default()).unwrap();
-        value
-            .as_object_mut()
-            .unwrap()
-            .remove("watchCombinedSensorMessages");
-        let migrated: AppSettings = serde_json::from_value(value).unwrap();
-        assert!(migrated.watch_combined_sensor_messages);
+        value.as_object_mut().unwrap().insert(
+            "watchCombinedSensorMessages".into(),
+            serde_json::json!(true),
+        );
+        let loaded: AppSettings = serde_json::from_value(value).unwrap();
+        assert_eq!(loaded, AppSettings::default());
     }
 }
