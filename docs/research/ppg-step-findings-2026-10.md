@@ -281,10 +281,13 @@ trusted for:
   (the attribute limit is 512) and the watch emptied its queue without a log line. Wi-Fi was unaffected. Any Bluetooth
   session recorded at that packet size before the fix has no PPG.
 - **At a 1 Hz PPG flush each batch is about 25 samples**, and live delivery adds up to a second of delay. The default is
-  now 10 Hz: 2–3 samples a batch, sent together with the motion samples of the same moment.
+  now 10 Hz: 2–3 samples a batch. Since 2026-10-13 motion and pulse travel as separate streams, each batched at its own
+  pace.
 - **Sudden arm movements can starve the Bluetooth link.** The watch now drops its oldest unsent messages after about half
   a second instead of queueing seconds of data, so a recording may contain short gaps where it used to contain long
   delays.
+
+The whole investigation is in [watch-data-path-findings-2026-10.md](watch-data-path-findings-2026-10.md).
 
 ## Limits
 

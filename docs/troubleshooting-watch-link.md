@@ -12,6 +12,7 @@ details** panel. Start there; each entry below says what you will see and what i
 | Connected for | Time since this session started |
 | Drops / sessions | Sessions that ended without the desktop asking, out of all sessions since the app started |
 | Write latency (last / worst) | How long a desktop-to-watch command took to be acknowledged. Anything over about a second means a busy radio |
+| Sample delay (typical / worst 5%) | How late motion samples arrive, by the watch's clock lined up through the time sync. A few hundred milliseconds or more means the link is behind. The desktop log repeats it every 30 s (`watch motion samples arrive this late`) |
 | Longest silence | The longest gap between two watch messages this session |
 | MTU | Negotiated Bluetooth packet size; 23 bytes means it was never raised and throughput will be poor |
 | Rejected | Messages dropped as unparseable or out of sequence |
@@ -60,11 +61,21 @@ details** panel. Start there; each entry below says what you will see and what i
   The Link health events say `the watch was already connected ... reusing that connection` when this happens.
 - **Bluetooth off.** The desktop keeps checking for an adapter every 3 s and the watch rebuilds its
   server when Bluetooth returns; the phase reads `Retrying` with `is Bluetooth on?` until then.
+- **No PPG over Bluetooth, while Wi-Fi works (builds before 2026-10-12).** Fragments were sized to the
+  MTU minus 3 (514 bytes at 517), one past the 512-byte attribute limit, so Android refused the first
+  fragment of every PPG message and the watch emptied its queue silently. Fragments are capped at 512
+  now, and a refusal is logged (`the stack refused a N-byte notification`).
+- **The live graph lags or jumps on sudden arm movements (builds before 2026-10-12).** The watch sent
+  about 60 notifications a second; a movement that disturbs the radio made its queue grow to 512
+  fragments (seconds) and then be dropped (`dropped 512 queued fragments`). Now the watch sends about
+  30 a second and keeps only half a second queued (`the link fell behind: dropped N old messages`,
+  a few at a time, mostly right after connecting). See
+  [the data path findings](research/watch-data-path-findings-2026-10.md).
 
 ## What the watch shows
 
 The Details panel lists the link's own events, newest first, for example `desktop …D7:37 connected`,
-`MTU 517 (514 bytes per notification)`, `desktop …D7:37 disconnected (status 19)`, `advertising:
+`MTU 517 (512 bytes per notification)`, `the link fell behind: dropped 2 old messages to keep the stream live`, `desktop …D7:37 disconnected (status 19)`, `advertising:
 waiting for a desktop to find this watch`, and on Wi-Fi `wifi: retrying in 4.0 s (attempt 3)`. The
 same lines go to logcat under `LinkLog`, so `adb logcat -s LinkLog` gives the full history.
 The Wi-Fi transport never gives up: it retries with a backoff capped at 30 s, and a ping every 15 s

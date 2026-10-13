@@ -25,6 +25,7 @@
 - [PPG step across a gesture: findings, October 2026](research/ppg-step-findings-2026-10.md): whether the PPG change around a gesture is the same from session to session (yes for pinch), what was built from it, and what is next
 - [Slope and waveform-morphology features for PPG gesture-event detection](research/slope-morphology-event-detection.md): the research behind the idea, and the methods to compare
 - [PPG slope-event technique](architecture/ppg-slope-event-technique.md): the technique as specified, and its implemented first stage
+- [Watch data path: findings, October 2026](research/watch-data-path-findings-2026-10.md): how samples reach the desktop now, why PPG went missing over Bluetooth and the graph lagged, what was measured and what is still open
 
 ## Decisions
 

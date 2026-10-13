@@ -109,11 +109,16 @@ to the watch's link log.
 ### Backpressure
 
 * **Watch → desktop:** BLE allows one outstanding notification per connection.
-  Fragments queue and drain on `onNotificationSent`. The queue is bounded
-  (512 fragments, ~2 s of 50 Hz orientation at the default MTU); past that the
-  oldest frames are dropped, because stale motion is worthless. A notification
-  the stack refuses discards the rest of that envelope rather than sending a
-  hole.
+  Fragments queue and drain on `onNotificationSent`. The queue keeps whole
+  messages and about half a second of data (12 fragments at a 517-byte MTU):
+  past that the *oldest messages not yet started* are dropped, whole, and the
+  newest is always kept (`OutboundQueue`), because stale motion is worthless. A
+  link that falls behind, as on a sudden arm movement that disturbs the radio,
+  loses a little old data instead of building seconds of delay. Drops are
+  logged at most every 5 s (`the link fell behind: dropped N old messages`). A
+  notification the stack refuses discards the rest of that envelope rather than
+  sending a hole. Motion and pulse travel as separate batched streams (about 30
+  packets a second; see the WebSocket protocol's motion batch).
 * **Desktop → Watch:** commands use write-*with-response*, so each fragment is
   acknowledged before the next is written.
 
