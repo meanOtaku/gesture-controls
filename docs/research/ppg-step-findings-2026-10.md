@@ -24,6 +24,10 @@ does not exist yet.
 
 The step is a component, not a detector.
 
+**Held-out test (2026-10-14), a new day with labelled non-pinch activity:** every October technique, this step included,
+scored about 0.60–0.64 against all non-pinch moments, did not tell fist starts from pinch starts, and was unusable as a
+continuous detector ([ppg-onset-heldout-test-2026-10-14.md](ppg-onset-heldout-test-2026-10-14.md)).
+
 ## Correction (2026-10-13): the "rest" controls were mostly inside gestures
 
 The label audit in [ppg-rgb-onset-follow-up-2026-10.md](ppg-rgb-onset-follow-up-2026-10.md) found that generated rest
@@ -343,7 +347,7 @@ The whole investigation is in [watch-data-path-findings-2026-10.md](watch-data-p
 
 Revised after the follow-up:
 
-1. **Test on the 2026-10-14 recordings, untouched.** 15 recordings from one new day: 9 pinch, 4 fist and 2 explicit
+1. **Done (see the held-out test above).** Planned as: **test on the 2026-10-14 recordings, untouched.** 15 recordings from one new day: 9 pinch, 4 fist and 2 explicit
    `everything_else`. They are the first labelled non-pinch data and the first set no analysis has seen. Run
    `followup_checks.py` on them once, as the test, before tuning anything on them (the study loader only reads them with
    `PPG_STUDY_FILES=all`).

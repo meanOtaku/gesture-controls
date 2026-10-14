@@ -114,7 +114,9 @@ No source labels were changed. The current AUC values are exploratory separation
 The same flaw was then found in the step study's controls, and each kind of negative was tested separately: mid-pinch,
 unmarked time, fist and thumbs-up starts, and their middles. See
 [ppg-onset-open-questions-2026-10.md](ppg-onset-open-questions-2026-10.md). Against other gestures' starts, a green/red/IR
-step scores only about 0.65.
+step scores only about 0.65. On an untouched new day the retained RGB candidate scored 0.62 [0.46–0.80] against all
+non-pinch moments, no better than the plain steps, and was unusable as a continuous detector
+([ppg-onset-heldout-test-2026-10-14.md](ppg-onset-heldout-test-2026-10-14.md)).
 
 ## Decision
 

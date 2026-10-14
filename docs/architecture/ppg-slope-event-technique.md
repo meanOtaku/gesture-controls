@@ -11,8 +11,14 @@ the step is a real onset cue, not wrist motion, but not a detector on its own:
 - **Uneven across days:** 0.81 and 0.37 on two other days.
 - **Run continuously:** under 10% of pinches found at about one false activation a minute.
 
-Stage 2 waits for a test on the untouched 2026-10-14 recordings (the first with labelled non-pinch activity), and for
-features that tell a pinch from other hand movement.
+That test was then run once on the 2026-10-14 recordings ([../research/ppg-onset-heldout-test-2026-10-14.md](../research/ppg-onset-heldout-test-2026-10-14.md)):
+
+- **Against labelled non-pinch activity:** about 0.60–0.64 for every October technique.
+- **Fist starts:** not told apart from pinch starts.
+- **As a continuous detector:** none usable.
+
+The causal event tracker (stage 2) is not worth building on this evidence. PPG is better used to support motion-based
+detection than as the detector.
 
 ## Stage 1: the step through the window (implemented)
 

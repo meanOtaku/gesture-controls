@@ -7,7 +7,8 @@
 > [ppg-step-findings-2026-10.md](ppg-step-findings-2026-10.md)). Read the AUCs below as "pinch start vs mostly mid-hold",
 > not "pinch vs rest". [ppg-rgb-onset-follow-up-2026-10.md](ppg-rgb-onset-follow-up-2026-10.md) found the same in its
 > label audit. [ppg-onset-open-questions-2026-10.md](ppg-onset-open-questions-2026-10.md) tests each kind of negative
-> separately.
+> separately. On an untouched new day ([ppg-onset-heldout-test-2026-10-14.md](ppg-onset-heldout-test-2026-10-14.md)),
+> both green methods scored about 0.60–0.62 against all non-pinch moments.
 
 ## Scope and data
 

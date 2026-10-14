@@ -149,7 +149,9 @@ Not possible: every current recording has been analysed. Only new recordings can
   - a day kept untouched until the final test.
 - **This script is the test to run on them:** the same tables, on new recordings.
 
-**New data (2026-10-14).** 15 recordings from a new day are now in `data/recordings/2026-10-downloads/`: 9 pinch, 4 fist
+**Done:** the held-out test was run once on 2026-10-14; see [ppg-onset-heldout-test-2026-10-14.md](ppg-onset-heldout-test-2026-10-14.md). Every technique scored about 0.60–0.64 against all non-pinch moments, and fist starts were not told apart.
+
+**New data (2026-10-14), as planned before the test.** 15 recordings from a new day are now in `data/recordings/2026-10-downloads/`: 9 pinch, 4 fist
 and 2 explicit `everything_else`. They provide the first labelled non-pinch activity and the first set no analysis has
 seen. Run this script on them once, as the held-back test, before tuning anything on them:
 
