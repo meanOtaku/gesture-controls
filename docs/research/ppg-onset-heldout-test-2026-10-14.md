@@ -108,6 +108,8 @@ These are options rather than a ranking; the evidence does not single one out.
 - **Move PPG to a supporting role.** PPG does show *a* hand gesture starting, so use it beside the motion sensors (for
   example, to confirm an onset the motion model proposes) rather than as the main signal.
 - **Use the 2026-10-14 recordings as training data now,** since they have been seen. Five days and labelled non-pinch
-  activity may change a learned model's picture; it would then need yet another untouched day to be judged.
+  activity may change a learned model's picture; it would then need yet another untouched day to be judged. The resulting
+  mixed-era session/strap study is recorded in
+  [ppg-mixed-era-robustness-2026-10.md](ppg-mixed-era-robustness-2026-10.md).
 - **Before more feature work, test the single most informative remaining question on a new untouched day:** a PPG-only
   model trained on all five days, judged against pinches made with the arm deliberately still.
