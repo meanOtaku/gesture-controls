@@ -110,3 +110,65 @@ describe("startCameraMarking", () => {
     expect(primary.listeners()).toBe(0);
   });
 });
+
+describe("startCameraMarking with several labels", () => {
+  const fist: GestureDefinition = { ...blankDefinition(), id: "g2", name: "Fist", labelId: "fist", conditions: [{ measure: "pinch.index", direction: "above", enter: 1.0, exit: 0.8 }], minHoldMs: 100, releaseGraceMs: 100 };
+  const run = () => {
+    const primary = fakeCamera();
+    const secondary = fakeCamera("off");
+    const { store, calls } = fakeStore();
+    const stop = startCameraMarking(["pinch", "fist"], [pinch, fist], store, (slot) => (slot === "primary" ? primary.camera : secondary.camera));
+    return { primary, calls, stop };
+  };
+
+  it("marks each label where its own gesture is held, one after the other", () => {
+    const { primary, calls } = run();
+    frames(primary.push, 1000, 8); // pinching
+    frames(primary.push, 1264, 10, open); // open hand holds the second gesture
+    expect(calls[0]).toBe("open pinch at 1000");
+    expect(calls.some((call) => call.startsWith("open fist"))).toBe(true);
+  });
+
+  it("ignores gestures whose label was not chosen", () => {
+    const primary = fakeCamera();
+    const secondary = fakeCamera("off");
+    const { store, calls } = fakeStore();
+    startCameraMarking(["fist"], [pinch, fist], store, (slot) => (slot === "primary" ? primary.camera : secondary.camera));
+    frames(primary.push, 1000, 8); // pinching only
+    expect(calls).toEqual([]);
+  });
+
+  it("does not close a mark it did not make", () => {
+    const primary = fakeCamera();
+    const secondary = fakeCamera("off");
+    const { store, calls } = fakeStore();
+    store.setTimelineLabel("other", "camera_proposal");
+    calls.length = 0;
+    startCameraMarking(["pinch", "fist"], [pinch, fist], store, (slot) => (slot === "primary" ? primary.camera : secondary.camera));
+    frames(primary.push, 1000, 3, open);
+    frames(primary.push, 1100, 10, [makeHand({ pinch: 0.6 })]);
+    expect(calls.filter((call) => call.startsWith("close other"))).toEqual([]);
+  });
+});
+
+describe("startCameraMarking when two labels' gestures overlap", () => {
+  const curl: GestureDefinition = { ...blankDefinition(), id: "g3", name: "Pinky curl", labelId: "pinky", conditions: [{ measure: "extension.pinky", direction: "below", enter: 0.5, exit: 0.7 }], minHoldMs: 100, releaseGraceMs: 100 };
+  const pinchOnly = [makeHand({ pinch: 0.1 })];
+  const both = [makeHand({ pinch: 0.1, curl: { pinky: 1 } })];
+
+  it("hands over to the label that began last, and back when it ends while the first is still held", () => {
+    const primary = fakeCamera();
+    const secondary = fakeCamera("off");
+    const { store, calls } = fakeStore();
+    startCameraMarking(["pinch", "pinky"], [pinch, curl], store, (slot) => (slot === "primary" ? primary.camera : secondary.camera));
+    frames(primary.push, 1000, 8, pinchOnly);
+    frames(primary.push, 1264, 8, both);
+    frames(primary.push, 1528, 8, pinchOnly);
+    frames(primary.push, 1792, 10, open);
+    const labelsInOrder = calls.map((call) => call.split(" ").slice(0, 2).join(" "));
+    expect(labelsInOrder).toEqual(["open pinch", "open pinky", "open pinch", "close pinch"]);
+    // The handed-back mark starts at or after the moment the pinky gesture ended, never earlier.
+    const resumedAt = Number(calls[2].split(" at ")[1]);
+    expect(resumedAt).toBeGreaterThanOrEqual(1264);
+  });
+});

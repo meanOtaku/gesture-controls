@@ -106,3 +106,33 @@ describe("camera marks written live into the session", () => {
     expect(labelsOf(telemetryStore.generateDatasetCsv())).toEqual(["", "snap", "snap"]);
   });
 });
+
+describe("several labels in one recording", () => {
+  it("keeps the selected label first, lets others be added and dropped, and never lists the selected one twice", () => {
+    telemetryStore.reset();
+    telemetryStore.selectDatasetLabel("pinch");
+    expect(telemetryStore.toggleExtraLabel("fist")).toBe(true);
+    expect(telemetryStore.getMarkLabels()).toEqual(["pinch", "fist"]);
+    expect(telemetryStore.toggleExtraLabel("pinch")).toBe(false);
+    telemetryStore.toggleExtraLabel("fist");
+    expect(telemetryStore.getMarkLabels()).toEqual(["pinch"]);
+    telemetryStore.toggleExtraLabel("fist");
+    telemetryStore.selectDatasetLabel("fist"); // choosing an extra as the main one moves it
+    expect(telemetryStore.getMarkLabels()).toEqual(["fist"]);
+  });
+
+  it("writes each label on its own rows, counted separately", () => {
+    rows(1, 2);
+    telemetryStore.setTimelineLabel("pinch", "camera_proposal");
+    rows(3, 4);
+    telemetryStore.setTimelineLabel("fist", "camera_proposal");
+    rows(5, 6);
+    telemetryStore.setTimelineLabel(null);
+    rows(7, 7);
+    telemetryStore.stopDatasetRecording();
+    expect(labelsOf(telemetryStore.generateDatasetCsv())).toEqual(["", "", "pinch", "pinch", "fist", "fist", ""]);
+    expect(telemetryStore.countCameraIntervals("pinch")).toBe(1);
+    expect(telemetryStore.countCameraIntervals("fist")).toBe(1);
+    expect(telemetryStore.countCameraIntervals()).toBe(2);
+  });
+});

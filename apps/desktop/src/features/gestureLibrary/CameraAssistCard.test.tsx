@@ -74,3 +74,35 @@ describe("CameraAssistCard readiness", () => {
     expect(cameraAssist.willMark("pinch")).toBe(false);
   });
 });
+
+describe("CameraAssistCard with several labels", () => {
+  const fist: GestureDefinition = { ...blankDefinition(), id: "g2", name: "Fist", labelId: "fist", conditions: [{ measure: "extension.pinky", direction: "below", enter: 0.5, exit: 0.7 }] };
+
+  it("offers the other labels that have a gesture, and reports a chosen one without a gesture", async () => {
+    library.listGestureDefinitions.mockResolvedValue([pinch, fist]);
+    cameraAssist.setEnabled(true);
+    const toggled: string[] = [];
+    const { rerender } = render(<CameraAssistCard selectedLabel="pinch" extraLabels={[]} onToggleExtraLabel={(l) => toggled.push(l)} recording={false} desktopAvailable />);
+    const fistButton = await screen.findByRole("button", { name: "fist" });
+    expect(screen.queryByRole("button", { name: "pinch" })).toBeNull(); // the selected label is not offered again
+    fireEvent.click(fistButton);
+    expect(toggled).toEqual(["fist"]);
+
+    rerender(<CameraAssistCard selectedLabel="pinch" extraLabels={["fist", "wave"]} onToggleExtraLabel={() => undefined} recording={false} desktopAvailable />);
+    expect(await screen.findByText(/No gesture in the Gesture library uses “wave”/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "fist" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("tells the Recorder it will mark all the labels together once each has a gesture and the camera is on", async () => {
+    library.listGestureDefinitions.mockResolvedValue([pinch, fist]);
+    cameraAssist.setEnabled(true);
+    render(<CameraAssistCard selectedLabel="pinch" extraLabels={["fist"]} onToggleExtraLabel={() => undefined} recording={false} desktopAvailable />);
+    expect(cameraAssist.willMark(["pinch", "fist"])).toBe(false); // camera off
+    hands = [makeHand({ pinch: 0.1 })];
+    fireEvent.click(await screen.findByRole("button", { name: "Turn camera on" }));
+    await vi.waitFor(() => expect(next).not.toBeNull());
+    await act(async () => { next?.(); });
+    await vi.waitFor(() => expect(cameraAssist.willMark(["pinch", "fist"])).toBe(true));
+    expect(cameraAssist.willMark(["pinch"])).toBe(false);
+  });
+});

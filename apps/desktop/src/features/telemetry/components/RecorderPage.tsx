@@ -19,6 +19,8 @@ export function RecorderPage() {
 
   const selectedLabel = telemetryStore.getSelectedLabel();
   const sessionLabels = telemetryStore.getSessionLabels();
+  const extraLabels = telemetryStore.getExtraLabels();
+  const markLabels = telemetryStore.getMarkLabels();
   const datasetRecording = telemetryStore.getDatasetRecording();
   const datasetRecordingState = telemetryStore.getDatasetRecordingState();
   const datasetSession = telemetryStore.getDatasetSession();
@@ -55,10 +57,10 @@ export function RecorderPage() {
         onMarkEnd={() => telemetryStore.setTimelineLabel(null)}
         onStart={(timelineDurationSeconds) => {
           // With camera marking on, the recording is a timeline with no manual marks; the camera marks it live while recording.
-          const assisted = cameraAssist.willMark(selectedLabel);
+          const assisted = cameraAssist.willMark(markLabels);
           if (assisted) telemetryStore.setDatasetCaptureMode("timeline");
           timedCapture.request(timelineDurationSeconds);
-          if (telemetryStore.startDatasetRecording() && assisted && selectedLabel) cameraAssist.arm(selectedLabel);
+          if (telemetryStore.startDatasetRecording() && assisted && markLabels.length > 0) cameraAssist.arm(markLabels);
         }}
         onStop={() => {
           telemetryStore.stopDatasetRecording();
@@ -70,7 +72,7 @@ export function RecorderPage() {
         getDatasetRows={() => telemetryStore.getDatasetRows()}
         timelineIntervals={telemetryStore.getTimelineIntervals()}
       />
-      <CameraAssistCard selectedLabel={selectedLabel} recording={datasetRecording} desktopAvailable={desktopAvailable} />
+      <CameraAssistCard selectedLabel={selectedLabel} extraLabels={extraLabels} onToggleExtraLabel={(label) => telemetryStore.toggleExtraLabel(label)} recording={datasetRecording} desktopAvailable={desktopAvailable} />
       <CameraCapturePanel />
     </div>
   </main>;

@@ -64,6 +64,11 @@ export function definitionsForLabel(definitions: GestureDefinition[], label: str
   return label === null ? [] : definitions.filter((d) => d.labelId === label);
 }
 
+/** The gestures a recording of any of `labels` is about. */
+export function definitionsForLabels(definitions: GestureDefinition[], labels: readonly string[]): GestureDefinition[] {
+  return labels.length === 0 ? [] : definitions.filter((d) => d.labelId !== null && labels.includes(d.labelId));
+}
+
 export const MAX_CONDITIONS = 4;
 export const MAX_NAME_CHARS = 40;
 export const MIN_HOLD_RANGE = [0, 2000] as const;

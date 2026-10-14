@@ -59,3 +59,29 @@ describe("cameraAssist defaults", () => {
     cameraAssist.setReady(null);
   });
 });
+
+describe("cameraAssist with several labels", () => {
+  it("marks only when exactly the checked labels are chosen, in any order", () => {
+    cameraAssist.setEnabled(true);
+    cameraAssist.setReady(["pinch", "fist"]);
+    expect(cameraAssist.willMark(["fist", "pinch"])).toBe(true);
+    expect(cameraAssist.willMark(["pinch"])).toBe(false);
+    expect(cameraAssist.willMark(["pinch", "fist", "wave"])).toBe(false);
+    cameraAssist.setReady(null);
+  });
+
+  it("reports what the camera marked for each label, and names the one it never saw", () => {
+    vi.spyOn(telemetryStore, "countCameraIntervals").mockImplementation((label) => (label === "pinch" ? 3 : 0));
+    cameraAssist.arm(["pinch", "wrist_flick"]);
+    expect(cameraAssist.armedForAll()).toEqual(["pinch", "wrist_flick"]);
+    cameraAssist.finish();
+    expect(feedback.warning).toHaveBeenCalledWith("Camera marking", expect.stringMatching(/Marked 3 pinch.*did not see wrist flick/));
+  });
+
+  it("is a success when every label was seen", () => {
+    vi.spyOn(telemetryStore, "countCameraIntervals").mockReturnValue(1);
+    cameraAssist.arm(["pinch", "fist"]);
+    cameraAssist.finish();
+    expect(feedback.success).toHaveBeenCalledWith("Camera marking", expect.stringContaining("Marked 1 pinch, 1 fist"));
+  });
+});

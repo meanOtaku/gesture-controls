@@ -250,6 +250,8 @@ class TelemetryStore {
   // accepted sample, carrying forward the other channel's last known values.
   private selectedLabel: GestureDatasetLabel | null = null;
   private readonly sessionLabels = new Set<GestureDatasetLabel>();
+  /** Labels besides `selectedLabel` that the camera should also mark in the next recording. */
+  private readonly extraLabels = new Set<GestureDatasetLabel>();
   private datasetRecordingState: DatasetRecordingState = "idle";
   /**
    * When recent rows arrived (browser clock) and each one's own timestamp, to place a camera mark where the gesture began
@@ -381,10 +383,29 @@ class TelemetryStore {
     return Array.from(this.sessionLabels);
   }
 
+  /** Every label the next camera-marked recording looks for: the selected one first, then the others added. */
+  getMarkLabels(): GestureDatasetLabel[] {
+    return this.selectedLabel === null ? [] : [this.selectedLabel, ...this.extraLabels];
+  }
+
+  getExtraLabels(): GestureDatasetLabel[] {
+    return Array.from(this.extraLabels);
+  }
+
+  /** Adds or drops `label` from the labels the camera marks besides the selected one. Not while recording; the selected label is not an extra. */
+  toggleExtraLabel(label: GestureDatasetLabel): boolean {
+    const normalized = normalizeDatasetLabel(label);
+    if (!normalized || this.datasetRecording || normalized === this.selectedLabel) return false;
+    if (!this.extraLabels.delete(normalized)) this.extraLabels.add(normalized);
+    this.publishNow();
+    return true;
+  }
+
   selectDatasetLabel(label: GestureDatasetLabel): boolean {
     const normalized = normalizeDatasetLabel(label);
     if (!normalized) return false;
     this.selectedLabel = normalized;
+    this.extraLabels.delete(normalized);
     this.sessionLabels.add(normalized);
     this.publishNow();
     return true;
@@ -696,8 +717,10 @@ class TelemetryStore {
   }
 
   /** How many intervals the camera has marked in this session. */
-  countCameraIntervals(): number {
-    return this.timelineIntervals.filter((interval) => interval.creationMechanism === "camera_proposal" && interval.endRawRow !== null).length;
+  countCameraIntervals(label?: GestureDatasetLabel): number {
+    return this.timelineIntervals.filter(
+      (interval) => interval.creationMechanism === "camera_proposal" && interval.endRawRow !== null && (label === undefined || interval.labelId === label),
+    ).length;
   }
 
   /** Stops accepting new rows but keeps the buffered session so it can still be exported. Transitions to Saved state. */
@@ -1165,6 +1188,7 @@ class TelemetryStore {
     this.lastRecordedAtByChannel.clear();
     this.lastAcceptedAtByChannel.clear();
     this.selectedLabel = null;
+    this.extraLabels.clear();
     this.sessionLabels.clear();
     this.datasetRecordingState = "idle";
     this.datasetRecording = false;

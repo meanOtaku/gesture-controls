@@ -26,8 +26,8 @@ interface Snapshot {
  */
 class CameraAssist {
   private enabled = readSaved();
-  private armedLabel: string | null = null;
-  private readyLabel: string | null = null;
+  private armedLabels: string[] = [];
+  private readyLabels: string[] = [];
   private readyDefinitions: GestureDefinition[] = [];
   private stopMarking: (() => void) | null = null;
   private listeners = new Set<() => void>();
@@ -58,31 +58,32 @@ class CameraAssist {
   }
 
   /**
-   * The Recorder card says which label it has checked can be marked right now (camera on, gesture present), or none,
-   * and that label's gestures from the library.
+   * The Recorder card says which labels it has checked can be marked right now (camera on, each with a gesture), or
+   * none, and those labels' gestures from the library.
    */
-  setReady(label: string | null, definitions: GestureDefinition[] = []): void {
-    this.readyLabel = label;
-    this.readyDefinitions = label === null ? [] : definitions;
+  setReady(labels: string | string[] | null, definitions: GestureDefinition[] = []): void {
+    this.readyLabels = labels === null ? [] : typeof labels === "string" ? [labels] : [...labels];
+    this.readyDefinitions = this.readyLabels.length === 0 ? [] : definitions;
   }
-  /** Whether a recording of `label` starting now will be marked: switched on, and the card has checked it can work. */
-  willMark(label: string | null): boolean {
-    return this.enabled && label !== null && this.readyLabel === label;
+  /** Whether a recording of exactly these labels starting now will be marked: switched on, and the card has checked it can work. */
+  willMark(labels: string | string[] | null): boolean {
+    const wanted = labels === null ? [] : typeof labels === "string" ? [labels] : labels;
+    return this.enabled && wanted.length > 0 && sameLabels(wanted, this.readyLabels);
   }
 
   /**
-   * Called as a recording starts: marks `label` with `definitions`, or with the gestures the card checked for it.
-   * Marking runs until `finish` or `disarm`, wherever the person goes in the app meanwhile.
+   * Called as a recording starts: marks `labels` (one or several) with `definitions`, or with the gestures the card
+   * checked for them. Marking runs until `finish` or `disarm`, wherever the person goes in the app meanwhile.
    */
-  arm(label: string, definitions?: GestureDefinition[]): void {
+  arm(labels: string | string[], definitions?: GestureDefinition[]): void {
     this.stop();
-    this.armedLabel = label;
-    const gestures = definitions ?? (this.readyLabel === label ? this.readyDefinitions : []);
-    this.stopMarking = startCameraMarking(label, gestures);
+    this.armedLabels = typeof labels === "string" ? [labels] : [...labels];
+    const gestures = definitions ?? (sameLabels(this.armedLabels, this.readyLabels) ? this.readyDefinitions : []);
+    this.stopMarking = startCameraMarking(this.armedLabels, gestures);
   }
   disarm(): void {
     this.stop();
-    this.armedLabel = null;
+    this.armedLabels = [];
   }
 
   private stop(): void {
@@ -90,25 +91,47 @@ class CameraAssist {
     this.stopMarking = null;
   }
 
-  /** The label being marked by the camera in the recording now under way, or null. */
+  /** The first label being marked by the camera in the recording now under way, or null. */
   armedFor(): string | null {
-    return this.armedLabel;
+    return this.armedLabels[0] ?? null;
+  }
+
+  /** Every label being marked by the camera in the recording now under way. */
+  armedForAll(): string[] {
+    return [...this.armedLabels];
   }
 
   /** Called once the recording is saved: says what the camera marked while it ran. */
   finish(): void {
     this.stop();
-    const label = this.armedLabel;
-    this.armedLabel = null;
-    if (!label) return;
+    const labels = this.armedLabels;
+    this.armedLabels = [];
+    if (labels.length === 0) return;
     const operation = "Camera marking";
-    const count = telemetryStore.countCameraIntervals();
-    if (count > 0) {
-      OperationFeedback.success(operation, `Marked ${count} ${label} interval${count === 1 ? "" : "s"} while recording (unreviewed). Review them in Recordings.`);
+    const name = (label: string) => label.replaceAll("_", " ");
+    const counts = labels.map((label) => ({ label, count: telemetryStore.countCameraIntervals(label) }));
+    const total = counts.reduce((sum, entry) => sum + entry.count, 0);
+    if (labels.length === 1) {
+      const [{ label }] = counts;
+      if (total > 0) {
+        OperationFeedback.success(operation, `Marked ${total} ${label} interval${total === 1 ? "" : "s"} while recording (unreviewed). Review them in Recordings.`);
+      } else {
+        OperationFeedback.warning(operation, `The camera did not see the ${label} gesture during this recording, so nothing was marked. The recording was kept.`);
+      }
+      return;
+    }
+    const seen = counts.filter((entry) => entry.count > 0).map((entry) => `${entry.count} ${name(entry.label)}`);
+    const missed = counts.filter((entry) => entry.count === 0).map((entry) => name(entry.label));
+    if (total === 0) {
+      OperationFeedback.warning(operation, `The camera did not see any of the ${labels.map(name).join(", ")} gestures during this recording, so nothing was marked. The recording was kept.`);
+    } else if (missed.length > 0) {
+      OperationFeedback.warning(operation, `Marked ${seen.join(", ")} (unreviewed). The camera did not see ${missed.join(", ")}. Review them in Recordings.`);
     } else {
-      OperationFeedback.warning(operation, `The camera did not see the ${label} gesture during this recording, so nothing was marked. The recording was kept.`);
+      OperationFeedback.success(operation, `Marked ${seen.join(", ")} (unreviewed). Review them in Recordings.`);
     }
   }
 }
+
+const sameLabels = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((label) => b.includes(label));
 
 export const cameraAssist = new CameraAssist();
