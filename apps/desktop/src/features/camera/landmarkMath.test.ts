@@ -71,7 +71,7 @@ describe("hand measures", () => {
   it("measures every finger at once", () => {
     const measures = measureHand(handOf(openHand()))!;
     expect(Object.keys(measures.pinch)).toEqual(["index", "middle", "ring", "pinky"]);
-    expect(Object.keys(measures.extension)).toEqual(["index", "middle", "ring", "pinky", "thumb"]);
+    expect(Object.keys(measures.extension)).toEqual(["index", "middle", "ring", "pinky", "thumb", "fingers"]);
     expect(measures.handSize).toBeCloseTo(Math.hypot(0.01, 0.09), 8);
   });
 });

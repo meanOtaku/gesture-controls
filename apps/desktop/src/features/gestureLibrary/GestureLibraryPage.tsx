@@ -15,6 +15,8 @@ import { CameraPair } from "./CameraPair";
 import { SecondCameraControls } from "./SecondCameraControls";
 import { HandSideCheck } from "./HandSideCheck";
 import { GestureEditor } from "./GestureEditor";
+import { LibraryCheckPanel } from "./LibraryCheckPanel";
+import { othersWithSamples } from "./sampleStore";
 import { useGestureLibrary } from "./useGestureLibrary";
 import { useLiveGestures } from "./useLiveGestures";
 
@@ -26,7 +28,7 @@ const percent = (value: number) => `${Math.round(value * 100)}%`;
  * watch.
  */
 export function GestureLibraryPage() {
-  const { definitions, labels, error, loaded, save, remove } = useGestureLibrary();
+  const { definitions, labels, samples, error, loaded, save, remove } = useGestureLibrary();
   const camera = getCameraController();
   const cam = useSyncExternalStore(camera.subscribe, camera.getSnapshot, camera.getSnapshot);
   const tracker = useRef(new AgreementTracker()).current;
@@ -54,8 +56,10 @@ export function GestureLibraryPage() {
             initial={editing}
             labels={labels}
             onCancel={() => setEditing(null)}
-            onSave={async (definition) => {
-              const problem = await save(definition);
+            others={othersWithSamples(definitions, samples, editing.id)}
+            unchecked={definitions.filter((d) => d.id !== editing.id && d.conditions.length > 0 && (samples[d.id]?.length ?? 0) === 0).map((d) => d.name)}
+            onSave={async (definition, frames) => {
+              const problem = await save(definition, frames);
               if (!problem) {
                 OperationFeedback.success("Save gesture", `Saved ${definition.name}.`);
                 setEditing(null);
@@ -136,6 +140,7 @@ export function GestureLibraryPage() {
           </ul>
         </CardContent>
       </Card>
+      <LibraryCheckPanel definitions={definitions} samples={samples} />
       <AgreementPanel tracker={tracker} definitions={definitions} status={status} cameraOn={on} />
     </main>
   );

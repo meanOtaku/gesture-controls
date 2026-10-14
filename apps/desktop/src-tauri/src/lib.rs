@@ -15,6 +15,7 @@ mod dataset_files;
 mod design_results;
 mod fine_tune_plans;
 mod gesture_library;
+mod gesture_samples;
 mod head_pose;
 mod label_registry;
 mod label_runtime;
@@ -159,6 +160,7 @@ pub fn run() {
         .manage(model_lab::ModelLabRuntime::default())
         .manage(label_registry::LabelRegistryRuntime::default())
         .manage(gesture_library::GestureLibraryRuntime::default())
+        .manage(gesture_samples::GestureSamplesRuntime::default())
         .manage(network_designs::NetworkDesignRuntime::default())
         .manage(fine_tune_plans::FineTunePlanRuntime::default())
         .manage(correction_rounds::CorrectionRoundRuntime::default())
@@ -249,6 +251,8 @@ pub fn run() {
             gesture_library::list_gesture_definitions,
             gesture_library::save_gesture_definition,
             gesture_library::delete_gesture_definition,
+            gesture_samples::list_gesture_samples,
+            gesture_samples::save_gesture_samples,
             label_registry::list_model_labels,
             label_registry::create_model_label,
             label_registry::update_model_label,

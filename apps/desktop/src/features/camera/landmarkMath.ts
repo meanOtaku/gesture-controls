@@ -42,13 +42,34 @@ export function fingerExtension(world: Point3[], finger: FingerName | "thumb"): 
   return Math.min(1, distance(world[chain[0]], world[chain[chain.length - 1]]) / bones);
 }
 
+/**
+ * Which way a part of the hand points, up or down: the vertical share of the straight line from `from` to `to`, +1 for
+ * straight up, -1 for straight down, 0 for level. World landmarks follow the picture's axes (y down), so this is up and
+ * down as the camera sees it, which is what tells a thumbs up from a thumbs down however the hand is turned. Null when
+ * the two points coincide.
+ */
+export function verticalDirection(world: Point3[], from: number, to: number): number | null {
+  const length = distance(world[from], world[to]);
+  if (!(length > 1e-6)) return null;
+  return -(world[to].y - world[from].y) / length;
+}
+
+/** How far the thumb tip is from the base of the index finger, in hand sizes: small with the thumb tucked against the palm (a fist), large with it held out. */
+export function thumbOut(world: Point3[]): number | null {
+  const size = handSize(world);
+  if (!(size > 1e-6)) return null;
+  return distance(world[THUMB.tip], world[FINGERS.index.mcp]) / size;
+}
+
 export interface HandMeasures {
   /** Metres. */
   handSize: number;
   /** Thumb tip to each fingertip, in hand sizes. */
   pinch: Record<FingerName, number | null>;
-  /** 0 to 1, 1 straight. */
-  extension: Record<FingerName | "thumb", number | null>;
+  /** 0 to 1, 1 straight. `fingers` is the average of the four fingers (not the thumb). */
+  extension: Record<FingerName | "thumb" | "fingers", number | null>;
+  /** Direction and position measures, by their full names (`thumb.up`, `thumb.out`, `index.up`, `hand.up`). */
+  extra: Record<string, number | null>;
 }
 
 /** The numbers a gesture rule is made of, computed from a hand's world landmarks. */
@@ -57,9 +78,17 @@ export function measureHand(hand: Pick<TrackedHand, "world">): HandMeasures | nu
   const size = handSize(hand.world);
   if (!(size > 1e-6)) return null;
   const names = Object.keys(FINGERS) as FingerName[];
+  const extension = Object.fromEntries([...names, "thumb" as const].map((name) => [name, fingerExtension(hand.world, name)])) as Record<FingerName | "thumb", number | null>;
+  const straight = names.map((name) => extension[name]).filter((value): value is number => value !== null);
   return {
     handSize: size,
     pinch: Object.fromEntries(names.map((name) => [name, pinchDistance(hand.world, name)])) as HandMeasures["pinch"],
-    extension: Object.fromEntries([...names, "thumb" as const].map((name) => [name, fingerExtension(hand.world, name)])) as HandMeasures["extension"],
+    extension: { ...extension, fingers: straight.length === names.length ? straight.reduce((sum, value) => sum + value, 0) / straight.length : null },
+    extra: {
+      "thumb.up": verticalDirection(hand.world, THUMB.mcp, THUMB.tip),
+      "thumb.out": thumbOut(hand.world),
+      "index.up": verticalDirection(hand.world, FINGERS.index.mcp, FINGERS.index.tip),
+      "hand.up": verticalDirection(hand.world, WRIST, FINGERS.middle.mcp),
+    },
   };
 }

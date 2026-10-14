@@ -7,7 +7,8 @@ import { Label } from "../../components/ui/label";
 import { CameraQuickControl } from "../camera/components/CameraQuickControl";
 import { getCameraController } from "../camera/cameraService";
 import type { DatasetLabel } from "../model-lab/types";
-import { analyse, scoreRule, MIN_FRAMES } from "./calibration";
+import { analyse, scoreRule, MIN_FRAMES, type MeasureSample, type NegativeGroup } from "./calibration";
+import { handsOverlap, type OtherGesture } from "./sampleStore";
 import { CameraPair } from "./CameraPair";
 import { SecondCameraControls } from "./SecondCameraControls";
 import { HandSideCheck } from "./HandSideCheck";
@@ -38,7 +39,7 @@ const STEP_TEXT: Record<SessionSnapshot["step"], string> = {
   getReady: "Get ready to make the gesture and hold it…",
   positive: "Hold the gesture. Move your hand a little: closer, further, turned slightly.",
   getReadyNegative: "Now relax your hand…",
-  negative: "Do anything but the gesture: open hand, fist, pointing, relaxing, moving about.",
+  negative: "Do anything but the gesture: open hand, pointing, relaxing, moving about. Gestures already in the library are checked separately, so spend this time on everything else.",
   done: "",
 };
 
@@ -54,8 +55,13 @@ function skippedWhy(skipped: SessionSnapshot["skipped"], hand: HandChoice): stri
 type EditorProps = {
   initial: GestureDefinition;
   labels: DatasetLabel[];
-  onSave: (definition: GestureDefinition) => Promise<string | null>;
+  /** `frames` are the frames of the gesture just recorded, to be kept so later gestures can be checked against this one. */
+  onSave: (definition: GestureDefinition, frames?: MeasureSample[]) => Promise<string | null>;
   onCancel: () => void;
+  /** The library's other gestures, with the frames they were recorded on (those without are listed in `unchecked`). */
+  others?: OtherGesture[];
+  /** Other gestures calibrated before their frames were kept: they cannot be checked against until recorded again. */
+  unchecked?: string[];
 };
 
 /**
@@ -63,7 +69,7 @@ type EditorProps = {
  * that tell the two apart become the rule. The thresholds can then be adjusted by hand, with their effect on the
  * recorded frames shown as they change.
  */
-export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps) {
+export function GestureEditor({ initial, labels, onSave, onCancel, others = [], unchecked = [] }: EditorProps) {
   const camera = getCameraController();
   const cam = useSyncExternalStore(camera.subscribe, camera.getSnapshot, camera.getSnapshot);
   const camera2 = getCameraController("secondary");
@@ -113,8 +119,10 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
     }
   }, [cam.status, running]);
 
-  const analysis = useMemo(() => (recorded ? analyse(recorded.positive, recorded.negative) : null), [recorded]);
-  const accuracy = recorded && draft.conditions.length > 0 ? scoreRule(draft.conditions, recorded.positive, recorded.negative) : null;
+  // Gestures the other hand makes can never be mistaken for this one, so only those on the same hand are checked against.
+  const groups = useMemo<NegativeGroup[]>(() => others.filter((other) => handsOverlap(draft.hand, other.hand)).map((other) => ({ name: other.name, samples: other.samples })), [others, draft.hand]);
+  const analysis = useMemo(() => (recorded ? analyse(recorded.positive, recorded.negative, groups) : null), [recorded, groups]);
+  const accuracy = recorded && draft.conditions.length > 0 ? scoreRule(draft.conditions, recorded.positive, recorded.negative, groups) : null;
   const problem = definitionProblem(draft);
 
   const changeLengths = (change: Partial<RecordLengths>) => {
@@ -150,7 +158,7 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
   };
   const save = async () => {
     setSaving(true);
-    const result = await onSave({ ...draft, name: draft.name.trim() });
+    const result = await onSave({ ...draft, name: draft.name.trim() }, recorded?.positive);
     setSaving(false);
     if (result) setError(result);
   };
@@ -211,6 +219,8 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
                 </select>
               </div>
             </div>
+            {groups.length > 0 && <p className="field-hint" role="status">The rule will also be checked against your other gestures ({groups.map((g) => g.name).join(", ")}), so it can be told apart from them.</p>}
+            {unchecked.length > 0 && <p className="field-hint" role="status">Not checked against {unchecked.join(", ")}: {unchecked.length === 1 ? "it was" : "they were"} calibrated before the frames were kept. Record {unchecked.length === 1 ? "it" : "them"} again to include {unchecked.length === 1 ? "it" : "them"}.</p>}
             <p className="field-hint">Longer recordings give the rule more to learn from. Move your hand about during both parts: closer, further, turned, in different light.</p>
             <div className="flex flex-wrap items-center gap-3">
               <Button type="button" onClick={start} disabled={running || (cam.frame?.hands.length === 0 && !(cam2.status === "on" && (cam2.frame?.hands.length ?? 0) > 0))}>
@@ -231,6 +241,13 @@ export function GestureEditor({ initial, labels, onSave, onCancel }: EditorProps
               {analysis.positiveFrames} gesture frames and {analysis.negativeFrames} other frames. {analysis.advice ?? ""}
               {recorded && analysis.verdict === "needsMoreFrames" && skippedWhy(recorded.skipped, draft.hand)}
               {analysis.conditions.length > 0 && <> Proposed rule: {describeRule({ conditions: analysis.conditions, hand: draft.hand })}.</>}
+              {analysis.confusions.length > 0 && (
+                <ul className="mt-2 list-disc pl-5" aria-label="Checked against your other gestures">
+                  {analysis.confusions.map((confusion) => (
+                    <li key={confusion.name}>Also fires on {percent(confusion.firesOn)} of the “{confusion.name}” frames{confusion.firesOn < 0.1 ? " (fine)" : ""}.</li>
+                  ))}
+                </ul>
+              )}
               {analysis.conditions.length > 0 && <div className="mt-2"><Button type="button" size="sm" onClick={useAnalysis}>Use this rule</Button></div>}
             </AlertDescription>
           </Alert>

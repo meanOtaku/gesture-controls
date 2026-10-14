@@ -9,6 +9,10 @@ export interface HandSpec {
   pinch?: number;
   /** 0 straight to 1 fully curled, per finger. */
   curl?: Partial<Record<"index" | "middle" | "ring" | "pinky", number>>;
+  /** Puts the thumb in a pose of its own (instead of reaching for the index tip): held out to the side, or tucked against the palm. */
+  thumb?: "out" | "tucked";
+  /** Turns the whole hand this many degrees in the picture (positive is clockwise as seen, since y points down). A hand held upright is 0. */
+  turnDeg?: number;
   /** MediaPipe's own label (the opposite of the physical hand in a raw picture). */
   modelHandedness?: "Left" | "Right";
 }
@@ -39,6 +43,25 @@ export function makeHand(spec: HandSpec = {}): TrackedHand {
   const index = world[8];
   const gap = (spec.pinch ?? 1.2) * size;
   world[4] = { x: index.x + gap, y: index.y, z: index.z };
+  if (spec.thumb === "out") {
+    world[1] = { x: 0.025, y: -0.01, z: 0 };
+    world[2] = { x: 0.04, y: -0.025, z: 0 };
+    world[3] = { x: 0.065, y: -0.03, z: 0 };
+    world[4] = { x: 0.09, y: -0.032, z: 0 };
+  } else if (spec.thumb === "tucked") {
+    world[1] = { x: 0.025, y: -0.01, z: 0 };
+    world[2] = { x: 0.04, y: -0.025, z: 0 };
+    world[3] = { x: 0.03, y: -0.05, z: 0.02 };
+    world[4] = { x: 0.0, y: -0.06, z: 0.03 };
+  }
+  if (spec.turnDeg) {
+    const turn = (spec.turnDeg * Math.PI) / 180;
+    const [cos, sin] = [Math.cos(turn), Math.sin(turn)];
+    for (let i = 0; i < world.length; i += 1) {
+      const { x, y, z } = world[i];
+      world[i] = { x: x * cos - y * sin, y: x * sin + y * cos, z };
+    }
+  }
   const image = world.map((p) => ({ x: 0.5 + p.x * 3, y: 0.5 + p.y * 3, z: p.z }));
   return { modelHandedness: spec.modelHandedness ?? "Left", score: 0.95, image, world };
 }

@@ -7,7 +7,9 @@ import type { HandMeasures } from "../camera/landmarkMath";
 
 export type MeasureName =
   | "pinch.index" | "pinch.middle" | "pinch.ring" | "pinch.pinky"
-  | "extension.thumb" | "extension.index" | "extension.middle" | "extension.ring" | "extension.pinky";
+  | "extension.thumb" | "extension.index" | "extension.middle" | "extension.ring" | "extension.pinky"
+  | "extension.fingers"
+  | "thumb.up" | "thumb.out" | "index.up" | "hand.up";
 
 export const MEASURES: ReadonlyArray<{ name: MeasureName; label: string; unit: string; hint: string }> = [
   { name: "pinch.index", label: "Thumb to index tip", unit: "hand sizes", hint: "About 0 is touching; an open hand is well over 1." },
@@ -19,6 +21,11 @@ export const MEASURES: ReadonlyArray<{ name: MeasureName; label: string; unit: s
   { name: "extension.middle", label: "Middle straightness", unit: "0 to 1", hint: "1 is straight; lower is curled." },
   { name: "extension.ring", label: "Ring straightness", unit: "0 to 1", hint: "1 is straight; lower is curled." },
   { name: "extension.pinky", label: "Little straightness", unit: "0 to 1", hint: "1 is straight; lower is curled." },
+  { name: "extension.fingers", label: "Four fingers straightness", unit: "0 to 1", hint: "The average of the index, middle, ring and little fingers: 1 is an open hand, low is a fist." },
+  { name: "thumb.up", label: "Thumb pointing up", unit: "-1 to 1", hint: "1 is the thumb straight up, -1 straight down, 0 level. Up and down as the camera sees it." },
+  { name: "thumb.out", label: "Thumb away from the palm", unit: "hand sizes", hint: "Thumb tip to the base of the index finger. Small with the thumb tucked in (a fist), large with it held out." },
+  { name: "index.up", label: "Index finger pointing up", unit: "-1 to 1", hint: "1 is the index finger straight up, -1 straight down, 0 level." },
+  { name: "hand.up", label: "Hand pointing up", unit: "-1 to 1", hint: "Wrist to the base of the middle finger: 1 is the hand upright, -1 upside down, 0 held level." },
 ];
 
 export const MEASURE_NAMES: readonly MeasureName[] = MEASURES.map((measure) => measure.name);
@@ -78,9 +85,9 @@ export const DEFAULT_RELEASE_GRACE_MS = 120;
 
 /** The reading of one measure, or null when it could not be measured. */
 export function measureValue(measures: HandMeasures, name: MeasureName): number | null {
-  const [group, key] = name.split(".") as ["pinch" | "extension", string];
-  const value = (measures[group] as Record<string, number | null>)[key];
-  return value ?? null;
+  const [group, key] = name.split(".") as ["pinch" | "extension" | "thumb" | "index" | "hand", string];
+  if (group === "pinch" || group === "extension") return (measures[group] as Record<string, number | null>)[key] ?? null;
+  return measures.extra?.[name] ?? null;
 }
 
 export function measureInfo(name: MeasureName) {

@@ -23,7 +23,7 @@ const MAX_MS: u32 = 2000;
 const MAX_LABEL_CHARS: usize = 48;
 
 /// Every measurement a condition may use. The webview computes them from the 21 hand landmarks.
-pub const MEASURES: [&str; 9] = [
+pub const MEASURES: [&str; 14] = [
     "pinch.index",
     "pinch.middle",
     "pinch.ring",
@@ -33,6 +33,11 @@ pub const MEASURES: [&str; 9] = [
     "extension.middle",
     "extension.ring",
     "extension.pinky",
+    "extension.fingers",
+    "thumb.up",
+    "thumb.out",
+    "index.up",
+    "hand.up",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -305,6 +310,7 @@ pub fn delete_gesture_definition(
         return Err("there is no such gesture".into());
     }
     write_definitions(&path, &definitions)?;
+    crate::gesture_samples::forget(&app, &id);
     Ok(definitions)
 }
 
@@ -488,7 +494,12 @@ mod tests {
                 "extension.index",
                 "extension.middle",
                 "extension.ring",
-                "extension.pinky"
+                "extension.pinky",
+                "extension.fingers",
+                "thumb.up",
+                "thumb.out",
+                "index.up",
+                "hand.up"
             ]
         );
     }
