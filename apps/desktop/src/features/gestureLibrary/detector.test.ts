@@ -107,3 +107,28 @@ describe("GestureDetector", () => {
     expect(detector.states().get("pinch")).toMatchObject({ held: false, count: 0 });
   });
 });
+
+describe("a gesture backed by the pretrained model", () => {
+  const thumbUp: GestureDefinition = { ...blankDefinition(), id: "tu", name: "Thumbs up", labelId: "thumbs_up", conditions: [], pretrained: "Thumb_Up", minHoldMs: 100, releaseGraceMs: 100 };
+  const seen = (gesture: "Thumb_Up" | "Thumb_Down" | "Closed_Fist", score: number) => ({ ...makeHand({ pinch: 1.2 }), pretrained: { gesture, score } });
+
+  it("starts only on the gesture it names, once the model is sure enough, and keeps going until it is clearly unsure", () => {
+    const detector = new GestureDetector([thumbUp]);
+    expect(handMatches(thumbUp, seen("Thumb_Down", 0.99), "enter")).toBe(false);
+    expect(handMatches(thumbUp, seen("Closed_Fist", 0.99), "enter")).toBe(false);
+    expect(handMatches(thumbUp, makeHand(), "enter")).toBe(false); // no reading at all
+    expect(handMatches(thumbUp, seen("Thumb_Up", 0.5), "enter")).toBe(false);
+    expect(handMatches(thumbUp, seen("Thumb_Up", 0.5), "exit")).toBe(true);
+    const events = [0, 50, 100, 150].flatMap((ms) => detector.update(ms, [seen("Thumb_Up", 0.9)]));
+    expect(events.map((e) => e.kind)).toEqual(["onset"]);
+    expect(detector.states().get("tu")?.held).toBe(true);
+    const ended = [200, 250, 300, 350].flatMap((ms) => detector.update(ms, [seen("Thumb_Down", 0.9)]));
+    expect(ended.map((e) => e.kind)).toEqual(["release"]);
+  });
+
+  it("also has to satisfy its own conditions when it has any", () => {
+    const strict: GestureDefinition = { ...thumbUp, conditions: [{ measure: "pinch.index", direction: "below", enter: 0.3, exit: 0.5 }] };
+    expect(handMatches(strict, seen("Thumb_Up", 0.9), "enter")).toBe(false); // the hand is open
+    expect(handMatches(strict, { ...makeHand({ pinch: 0.1 }), pretrained: { gesture: "Thumb_Up", score: 0.9 } }, "enter")).toBe(true);
+  });
+});

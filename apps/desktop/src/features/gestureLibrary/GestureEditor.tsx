@@ -9,6 +9,7 @@ import { getCameraController } from "../camera/cameraService";
 import type { DatasetLabel } from "../model-lab/types";
 import { analyse, scoreRule, MIN_FRAMES, type MeasureSample, type NegativeGroup } from "./calibration";
 import { handsOverlap, type OtherGesture } from "./sampleStore";
+import { PRETRAINED_GESTURES, type PretrainedGestureId } from "../camera/pretrained";
 import { CameraPair } from "./CameraPair";
 import { SecondCameraControls } from "./SecondCameraControls";
 import { HandSideCheck } from "./HandSideCheck";
@@ -81,7 +82,7 @@ export function GestureEditor({ initial, labels, onSave, onCancel, others = [], 
   const session = useRef(new CalibrationSession(initial.hand, lengths));
   const [snapshot, setSnapshot] = useState<SessionSnapshot>(() => session.current.snapshot(0));
   const [recorded, setRecorded] = useState<{ positive: SessionSnapshot["positive"]; negative: SessionSnapshot["negative"]; skipped: SessionSnapshot["skipped"] } | null>(null);
-  const ids = { name: useId(), label: useId(), hand: useId(), hold: useId(), release: useId(), positive: useId(), rest: useId() };
+  const ids = { pretrained: useId(), name: useId(), label: useId(), hand: useId(), hold: useId(), release: useId(), positive: useId(), rest: useId() };
 
   useEffect(() => {
     session.current = new CalibrationSession(draft.hand, lengths);
@@ -256,7 +257,15 @@ export function GestureEditor({ initial, labels, onSave, onCancel, others = [], 
 
       <section className="flex flex-col gap-3" aria-label="Rule">
         <h3 className="text-sm font-semibold">2. The rule <span className="required-mark" aria-hidden="true">*</span></h3>
-        {draft.conditions.length === 0 && <p className="hint">No rule yet. Record the gesture above, or add a condition yourself.</p>}
+        <div className="field">
+          <div className="field-head"><Label htmlFor={ids.pretrained}>Pretrained gesture (optional)</Label></div>
+          <select id={ids.pretrained} className={SELECT} value={draft.pretrained ?? ""} onChange={(e) => patch({ pretrained: (e.target.value || null) as PretrainedGestureId | null })}>
+            <option value="">None: only the rule below</option>
+            {PRETRAINED_GESTURES.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+          </select>
+          <p className="field-hint">MediaPipe's pretrained model, trained only on hand gestures, must also name this gesture (60% sure to start, 40% to keep). Use it alone for one of these seven, or together with a rule you calibrated to make it stricter.</p>
+        </div>
+        {draft.conditions.length === 0 && !draft.pretrained && <p className="hint">No rule yet. Record the gesture above, add a condition yourself, or choose a pretrained gesture.</p>}
         {draft.conditions.map((condition, index) => (
           <div key={condition.measure} className="grid items-end gap-2 sm:grid-cols-[1.4fr_.8fr_.7fr_.7fr_auto]" role="group" aria-label={`Condition ${index + 1}`}>
             <div className="field">
@@ -305,7 +314,7 @@ export function GestureEditor({ initial, labels, onSave, onCancel, others = [], 
         </div>
       </section>
 
-      <p className="required-note"><span aria-hidden="true">*</span> Required. A gesture needs a name and at least one condition.</p>
+      <p className="required-note"><span aria-hidden="true">*</span> Required. A gesture needs a name and at least one condition or a pretrained gesture.</p>
       {(error || (problem && draft.name !== "")) && <p className="field-error" role="alert">{error ?? problem}</p>}
       <div className="flex gap-2">
         <Button type="button" onClick={() => void save()} disabled={saving || problem !== null}>{saving ? "Saving…" : "Save gesture"}</Button>

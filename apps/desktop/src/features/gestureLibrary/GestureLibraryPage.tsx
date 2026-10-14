@@ -16,6 +16,7 @@ import { SecondCameraControls } from "./SecondCameraControls";
 import { HandSideCheck } from "./HandSideCheck";
 import { GestureEditor } from "./GestureEditor";
 import { LibraryCheckPanel } from "./LibraryCheckPanel";
+import { PretrainedLive } from "./PretrainedLive";
 import { othersWithSamples } from "./sampleStore";
 import { useGestureLibrary } from "./useGestureLibrary";
 import { useLiveGestures } from "./useLiveGestures";
@@ -106,6 +107,7 @@ export function GestureLibraryPage() {
             {!on && <span className="hint">Turn the camera on to see your gestures recognised live.</span>}
           </div>
           <CameraPair primary={camera} primaryState={cam} secondary={camera2} secondaryState={cam2} />
+          {on && <PretrainedLive />}
           {on && <HandSideCheck camera={cam} secondary={cam2} />}
           {on && <SecondCameraControls primary={camera} primaryState={cam} secondary={camera2} secondaryState={cam2} />}
           {loaded && definitions.length === 0 && <p className="hint">No gestures yet. Make one with “New gesture”.</p>}

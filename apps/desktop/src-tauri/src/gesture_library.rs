@@ -40,6 +40,17 @@ pub const MEASURES: [&str; 14] = [
     "hand.up",
 ];
 
+/// The gestures MediaPipe's pretrained Gesture Recognizer names (see `public/mediapipe/README.md`).
+pub const PRETRAINED: [&str; 7] = [
+    "Closed_Fist",
+    "Open_Palm",
+    "Pointing_Up",
+    "Thumb_Down",
+    "Thumb_Up",
+    "Victory",
+    "ILoveYou",
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum HandChoice {
@@ -81,6 +92,9 @@ pub struct GestureDefinition {
     pub label_id: Option<String>,
     pub hand: HandChoice,
     pub conditions: Vec<Condition>,
+    /// The pretrained recogniser must also name this gesture (one of [`PRETRAINED`]); with it, conditions are optional.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pretrained: Option<String>,
     pub min_hold_ms: u32,
     pub release_grace_ms: u32,
     pub calibration: Option<Calibration>,
@@ -112,8 +126,18 @@ pub fn validate(definition: &GestureDefinition) -> Result<(), String> {
                 .into(),
         );
     }
-    if definition.conditions.is_empty() || definition.conditions.len() > MAX_CONDITIONS {
-        return Err(format!("a gesture needs 1 to {MAX_CONDITIONS} conditions"));
+    if let Some(pretrained) = &definition.pretrained
+        && !PRETRAINED.contains(&pretrained.as_str())
+    {
+        return Err(format!("'{pretrained}' is not a pretrained gesture"));
+    }
+    let needs_condition = definition.pretrained.is_none();
+    if (needs_condition && definition.conditions.is_empty())
+        || definition.conditions.len() > MAX_CONDITIONS
+    {
+        return Err(format!(
+            "a gesture needs 1 to {MAX_CONDITIONS} conditions, or a pretrained gesture"
+        ));
     }
     let mut seen = Vec::new();
     for condition in &definition.conditions {
@@ -330,6 +354,7 @@ mod tests {
                 enter: 0.3,
                 exit: 0.5,
             }],
+            pretrained: None,
             min_hold_ms: 100,
             release_grace_ms: 120,
             calibration: Some(Calibration {
@@ -501,6 +526,56 @@ mod tests {
                 "index.up",
                 "hand.up"
             ]
+        );
+    }
+
+    #[test]
+    fn a_pretrained_gesture_can_stand_in_for_the_conditions() {
+        let thumb_up = GestureDefinition {
+            conditions: vec![],
+            pretrained: Some("Thumb_Up".into()),
+            calibration: None,
+            ..pinch()
+        };
+        assert!(validate(&thumb_up).is_ok());
+        // Without it, a gesture with no conditions is still refused.
+        assert!(
+            validate(&GestureDefinition {
+                pretrained: None,
+                ..thumb_up.clone()
+            })
+            .is_err()
+        );
+        // And a name the recogniser does not use is refused.
+        assert!(
+            validate(&GestureDefinition {
+                pretrained: Some("Thumbs_Sideways".into()),
+                ..thumb_up
+            })
+            .unwrap_err()
+            .contains("not a pretrained gesture")
+        );
+    }
+
+    #[test]
+    fn the_pretrained_field_round_trips_and_an_older_file_without_it_still_reads() {
+        let with = GestureDefinition {
+            pretrained: Some("Victory".into()),
+            ..pinch()
+        };
+        let json = serde_json::to_string(&with).unwrap();
+        assert!(json.contains("\"pretrained\":\"Victory\""));
+        assert_eq!(
+            serde_json::from_str::<GestureDefinition>(&json).unwrap(),
+            with
+        );
+        let without = serde_json::to_string(&pinch()).unwrap();
+        assert!(!without.contains("pretrained"));
+        assert_eq!(
+            serde_json::from_str::<GestureDefinition>(&without)
+                .unwrap()
+                .pretrained,
+            None
         );
     }
 }

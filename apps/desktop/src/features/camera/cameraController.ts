@@ -21,7 +21,7 @@ export function speedLabel(state: Pick<CameraSnapshot, "fps" | "detectMs">, wait
 
 /** Below this the picture is too slow for a gesture's start and end to be placed well. */
 export const SLOW_FPS = 15;
-export const MODEL_NAME = "hand_landmarker.task (float16)";
+export const MODEL_NAME = "MediaPipe hand landmarks (float16; gesture_recognizer.task, or hand_landmarker.task if that cannot load)";
 
 export type CameraStatus = "off" | "starting" | "on" | "error";
 export type RecordingPhase = "idle" | "arming" | "recording" | "saved" | "discarded";

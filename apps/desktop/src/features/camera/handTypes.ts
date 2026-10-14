@@ -7,6 +7,8 @@ export interface Point3 {
   z: number;
 }
 
+import type { PretrainedReading } from "./pretrained";
+
 export interface TrackedHand {
   /**
    * MediaPipe's own label, as reported for the raw camera picture. Use `physicalHand`, which can swap it if a camera
@@ -19,6 +21,8 @@ export interface TrackedHand {
   image: Point3[];
   /** Metres, with the origin at the middle of the hand: independent of how far the hand is from the camera. */
   world: Point3[];
+  /** The pretrained gesture recogniser's reading of this hand, when it has one (absent if only the landmarker could be loaded, or it saw no known gesture). */
+  pretrained?: PretrainedReading;
 }
 
 export interface HandFrame {

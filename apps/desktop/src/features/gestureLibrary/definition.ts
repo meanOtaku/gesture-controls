@@ -1,4 +1,5 @@
 import type { HandMeasures } from "../camera/landmarkMath";
+import { PRETRAINED_IDS, pretrainedLabel, type PretrainedGestureId } from "../camera/pretrained";
 
 /**
  * A gesture the camera can recognise: a hand pose described by a few measurements, with the thresholds that say when it
@@ -59,6 +60,8 @@ export interface GestureDefinition {
   hand: HandChoice;
   /** All of these must hold. */
   conditions: Condition[];
+  /** Optional: the pretrained gesture recogniser must also say this (it can replace the conditions, or sharpen them). */
+  pretrained?: PretrainedGestureId | null;
   /** The pose must hold this long before the gesture counts as started (its start time is still when it began). */
   minHoldMs: number;
   /** The pose may be lost this long without ending the gesture. */
@@ -103,10 +106,12 @@ export function describeCondition(condition: Condition): string {
   return `${info.label.toLowerCase()} ${word} ${trim(condition.enter)}${unit}`;
 }
 
-export function describeRule(definition: Pick<GestureDefinition, "conditions" | "hand">): string {
-  if (definition.conditions.length === 0) return "No rule yet";
+export function describeRule(definition: Pick<GestureDefinition, "conditions" | "hand" | "pretrained">): string {
+  if (definition.conditions.length === 0 && !definition.pretrained) return "No rule yet";
   const hand = definition.hand === "either" ? "" : ` (${definition.hand} hand only)`;
-  return definition.conditions.map(describeCondition).join(" and ") + hand;
+  const parts = definition.conditions.map(describeCondition);
+  if (definition.pretrained) parts.unshift(`the pretrained model says “${pretrainedLabel(definition.pretrained)}”`);
+  return parts.join(" and ") + hand;
 }
 
 /** Why a definition cannot be saved, in words, or null. The desktop checks the same things. */
@@ -114,7 +119,8 @@ export function definitionProblem(definition: GestureDefinition): string | null 
   const name = definition.name.trim();
   if (name === "") return "Give the gesture a name.";
   if ([...name].length > MAX_NAME_CHARS) return `The name can be at most ${MAX_NAME_CHARS} characters.`;
-  if (definition.conditions.length === 0) return "A gesture needs at least one condition. Calibrate it, or add one.";
+  if (definition.pretrained != null && !PRETRAINED_IDS.includes(definition.pretrained)) return "The pretrained gesture is not one the recogniser knows.";
+  if (definition.conditions.length === 0 && !definition.pretrained) return "A gesture needs at least one condition, or a pretrained gesture. Calibrate it, add a condition, or choose a pretrained gesture.";
   if (definition.conditions.length > MAX_CONDITIONS) return `A gesture can have at most ${MAX_CONDITIONS} conditions.`;
   const seen = new Set<string>();
   for (const condition of definition.conditions) {

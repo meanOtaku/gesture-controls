@@ -1,5 +1,6 @@
 import { physicalHand, type TrackedHand } from "../camera/handTypes";
 import { measureHand } from "../camera/landmarkMath";
+import { PRETRAINED_ENTER, PRETRAINED_EXIT } from "../camera/pretrained";
 import { type Condition, type GestureDefinition, measureValue } from "./definition";
 
 export interface GestureEvent {
@@ -25,6 +26,12 @@ const passes = (condition: Condition, value: number | null, threshold: number): 
 /** Does one hand satisfy the definition's conditions, using either the start or the end thresholds? */
 export function handMatches(definition: GestureDefinition, hand: TrackedHand, stage: "enter" | "exit"): boolean {
   if (definition.hand !== "either" && physicalHand(hand).toLowerCase() !== definition.hand) return false;
+  if (definition.pretrained) {
+    const reading = hand.pretrained;
+    const needed = stage === "enter" ? PRETRAINED_ENTER : PRETRAINED_EXIT;
+    if (!reading || reading.gesture !== definition.pretrained || reading.score < needed) return false;
+    if (definition.conditions.length === 0) return true;
+  }
   const measures = measureHand(hand);
   if (!measures || definition.conditions.length === 0) return false;
   return definition.conditions.every((condition) => passes(condition, measureValue(measures, condition.measure), condition[stage]));

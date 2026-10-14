@@ -37,3 +37,15 @@ describe("gesture definitions", () => {
     expect(bad({ releaseGraceMs: 5000 })).toMatch(/release time/);
   });
 });
+
+describe("a gesture with a pretrained gesture", () => {
+  it("needs no conditions, but still a name, and the pretrained name must be known", () => {
+    const base = { ...blankDefinition(), name: "Thumbs up" };
+    expect(definitionProblem(base)).toMatch(/at least one condition, or a pretrained gesture/);
+    expect(definitionProblem({ ...base, pretrained: "Thumb_Up" })).toBeNull();
+    expect(definitionProblem({ ...base, pretrained: "Thumbs_Sideways" as never })).toMatch(/not one the recogniser knows/);
+  });
+  it("is described by what the model says", () => {
+    expect(describeRule({ conditions: [], hand: "left", pretrained: "Thumb_Down" })).toBe("the pretrained model says “Thumb down” (left hand only)");
+  });
+});
