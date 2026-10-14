@@ -3,6 +3,17 @@
 **Status:** stage 1 implemented: the window-level step (`ppg_{green,red,ir}_rel_z_step`, below). The causal event tracker
 is still a proposal.
 
+Tested on the 2026-10 recordings ([../research/ppg-onset-open-questions-2026-10.md](../research/ppg-onset-open-questions-2026-10.md)),
+the step is a real onset cue, not wrist motion, but not a detector on its own:
+
+- **Not specific:** about 0.65 against fist and thumbs-up starts.
+- **Slow:** it needs about 700 ms after the start.
+- **Uneven across days:** 0.81 and 0.37 on two other days.
+- **Run continuously:** under 10% of pinches found at about one false activation a minute.
+
+Stage 2 waits for a test on the untouched 2026-10-14 recordings (the first with labelled non-pinch activity), and for
+features that tell a pinch from other hand movement.
+
 ## Stage 1: the step through the window (implemented)
 
 Before building the tracker, the idea was tested offline on 17 earlier recordings (10 pinch sessions over three days). In

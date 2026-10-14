@@ -12,6 +12,18 @@ only two sessions exist. The step is now a feature in the trainer and the live r
 It marks the *start* of a gesture, so getting full value from it needs a "gesture just started" training target, which
 does not exist yet.
 
+**Follow-up (2026-10-13), same recordings: weak on its own.** The open questions were then tested
+([ppg-onset-open-questions-2026-10.md](ppg-onset-open-questions-2026-10.md)):
+
+- **Not wrist motion:** calm pinches score higher, and the step is unrelated to gyroscope change.
+- **Not specific to pinch:** about 0.65 against fist and thumbs-up *starts*.
+- **Slow:** nothing at +300 ms; it needs about 700 ms.
+- **Not reliable across days:** 0.81 and 0.37 on the two other days.
+- **Uncertain:** 95% intervals 0.2–0.4 wide.
+- **Not a detector by itself:** run continuously, it finds under 10% of pinches at about one false activation a minute.
+
+The step is a component, not a detector.
+
 ## Correction (2026-10-13): the "rest" controls were mostly inside gestures
 
 The label audit in [ppg-rgb-onset-follow-up-2026-10.md](ppg-rgb-onset-follow-up-2026-10.md) found that generated rest
@@ -315,25 +327,35 @@ The whole investigation is in [watch-data-path-findings-2026-10.md](watch-data-p
 
 - **One wearer, one watch, few sessions.** Only 6 to 8 sessions had enough rest moments to be judged in the stricter
   tests. Per-session results swing by ±0.05 with a different draw of rest moments.
-- **Known boundaries.** Findings 3 to 5 used the marked start times. Whether a live detector can *find* these steps
-  without false alarms (Phase B in the research document) is untested.
-- **Motion was not separated.** Part of the step may be the arm's movement appearing in the PPG rather than pressure.
-  This matters for the PPG-only goal and is the next check: compare against the motion sensors over the same moments.
-- **Mark timing.** Camera and manual marks lag or lead the real start by up to a few hundred milliseconds; the
-  400–900 ms window absorbs most of that.
-- **Latency.** The step needs about 0.9 s after the start, so a live decision comes roughly a second after a pinch begins.
+- **Known boundaries.** Findings 3 to 5 used the marked start times. Run continuously over whole recordings (follow-up,
+  finding 2), the step found 8–43% of pinches at 0.6–4.6 false activations a minute in pinch recordings, and 4.5–17 a
+  minute in fist and thumbs-up recordings.
+- **Motion** was checked in the follow-up and does not explain the step: calm pinches score higher, the correlation with
+  gyroscope change is −0.03, and the gyroscope sees movement at only 44 of 145 pinch starts.
+- **Mark timing.** Where the gyroscope shows the hand starting to move, marks are within ±200 ms half the time (middle
+  half −262 to +74 ms). The 400–900 ms window absorbs most of that.
+- **Latency.** The step needs about 700 ms after the start; at 300 ms there is none. A live decision comes about
+  0.7–0.9 s after a pinch begins.
+- **Specificity and days.** Against other gestures' starts the step scores about 0.65. A model trained on 2026-10-11
+  scored 0.81 on 2026-10-04 and 0.37 on 2026-09-23.
 
 ## Next steps, in order
 
-1. **A "gesture just started" training target** (a trainer option, chosen in Model Lab): positives are windows where the
+Revised after the follow-up:
+
+1. **Test on the 2026-10-14 recordings, untouched.** 15 recordings from one new day: 9 pinch, 4 fist and 2 explicit
+   `everything_else`. They are the first labelled non-pinch data and the first set no analysis has seen. Run
+   `followup_checks.py` on them once, as the test, before tuning anything on them (the study loader only reads them with
+   `PPG_STUDY_FILES=all`).
+2. **Combine the step with features that tell a pinch from other hand movement.** On its own it marks "a gesture began".
+3. **A "gesture just started" training target** (a trainer option, chosen in Model Lab): positives are windows where the
    gesture begins, and windows inside a hold are left out. It goes with one-shot scoring live; the app already has
    one-shot recipe steps.
-2. **Recordings with rest between gestures**: pauses of 1–2 s between pinches. Only 6 of 17 recordings had enough quiet
-   time for the "just started" test.
-3. **The motion control check** (see Limits).
-4. **Fist on purpose**: several sessions with the strap deliberately tighter and looser, to see whether the flip follows
+4. **More days.** One new day is not enough to show the result carries across days; record pinches on several days with
+   the strap refitted.
+5. **Fist on purpose**: several sessions with the strap deliberately tighter and looser, to see whether the flip follows
    the fit.
-5. **Only then the causal event tracker** of the technique document, if stage 1 falls short.
+6. **Only then the causal event tracker** of the technique document.
 
 ## Reproducing
 
@@ -346,7 +368,12 @@ uv run --with matplotlib python -I ../../docs/research/ppg-step-study/scripts/co
 uv run --with matplotlib python -I ../../docs/research/ppg-step-study/scripts/trainer_eval.py ../../docs/research/ppg-step-study/scripts
 uv run --with matplotlib python -I ../../docs/research/ppg-step-study/scripts/onset_eval.py ../../docs/research/ppg-step-study/scripts /tmp/ppg-study
 uv run --with matplotlib python -I ../../docs/research/ppg-step-study/scripts/smoothing_check.py ../../docs/research/ppg-step-study/scripts /tmp/ppg-study
+uv run --with matplotlib python -I ../../docs/research/ppg-step-study/scripts/recheck_rest_controls.py ../../docs/research/ppg-step-study/scripts /tmp/ppg-study
+uv run --with matplotlib python -I ../../docs/research/ppg-step-study/scripts/followup_checks.py ../../docs/research/ppg-step-study/scripts /tmp/ppg-study
 ```
+
+The study loader reads only the 26 recordings in the manifest, so the 2026-10-14 recordings added to the same folder do
+not change these numbers. `PPG_STUDY_FILES=all` includes them.
 
 The recordings are in `data/recordings/2026-10-downloads/`. `data/recordings.manifest.json` lists every file with its size,
 SHA-256, labels and whether this study used it, and `python3 scripts/recordings_manifest.py check` confirms they are

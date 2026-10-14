@@ -148,3 +148,14 @@ Not possible: every current recording has been analysed. Only new recordings can
   - pinches on several different days, with a strap refitted between sessions;
   - a day kept untouched until the final test.
 - **This script is the test to run on them:** the same tables, on new recordings.
+
+**New data (2026-10-14).** 15 recordings from a new day are now in `data/recordings/2026-10-downloads/`: 9 pinch, 4 fist
+and 2 explicit `everything_else`. They provide the first labelled non-pinch activity and the first set no analysis has
+seen. Run this script on them once, as the held-back test, before tuning anything on them:
+
+```bash
+PPG_STUDY_FILES=all uv run --with matplotlib python -I ...
+```
+
+The study loader leaves them out unless `PPG_STUDY_FILES=all` is set, so the numbers above reproduce exactly. The script
+needs a small change to treat `everything_else` as its own kind of negative before that run.

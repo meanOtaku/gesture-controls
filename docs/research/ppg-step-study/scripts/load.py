@@ -2,8 +2,12 @@
 
 They are read from data/recordings/2026-10-downloads/ in the repo (data/recordings.manifest.json lists them and
 `python3 scripts/recordings_manifest.py check` confirms they are unchanged), else from ~/Downloads where they were exported.
+
+Only the recordings listed in the manifest are read: the 26 these studies were run on. Recordings added to the folder
+later (the 2026-10-14 session) are left alone, so every documented number reproduces exactly and the new recordings stay
+unseen until they are deliberately used as a test set. Set PPG_STUDY_FILES=all to read every file in the folder.
 """
-import glob, re, tempfile
+import glob, json, os, re, tempfile
 from pathlib import Path
 from label_trainer.csv_io import load_recording
 from label_trainer.label_train import repair_millisecond_ppg_timestamps
@@ -16,7 +20,13 @@ def recordings():
     tmp = Path(tempfile.mkdtemp())
     repo_copy = Path(__file__).resolve().parents[4] / "data" / "recordings" / "2026-10-downloads"
     source = repo_copy if repo_copy.is_dir() else Path.home() / "Downloads"
+    manifest = Path(__file__).resolve().parents[4] / "data" / "recordings.manifest.json"
+    listed = None
+    if os.environ.get("PPG_STUDY_FILES") != "all" and manifest.is_file():
+        listed = {Path(e["file"]).name for e in json.loads(manifest.read_text())["recordings"]}
     for f in sorted(glob.glob(str(source / "gesture-dataset-*.csv"))):
+        if listed is not None and Path(f).name not in listed:
+            continue
         name = Path(f).name[len("gesture-dataset-"):-len(".csv")]
         gesture = re.sub(r"-\d{4}-\d\d-\d\dT.*$", "", name)
         if gesture in SKIP:

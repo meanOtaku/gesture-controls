@@ -111,6 +111,11 @@ The audit found that the negative/rest class is not usable as an independently l
 
 No source labels were changed. The current AUC values are exploratory separation scores against generated rest controls, not acceptance evidence for pinch-vs-non-pinch deployment.
 
+The same flaw was then found in the step study's controls, and each kind of negative was tested separately: mid-pinch,
+unmarked time, fist and thumbs-up starts, and their middles. See
+[ppg-onset-open-questions-2026-10.md](ppg-onset-open-questions-2026-10.md). Against other gestures' starts, a green/red/IR
+step scores only about 0.65.
+
 ## Decision
 
 For future **research-only** comparisons on this corpus, retain this candidate:

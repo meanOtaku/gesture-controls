@@ -2,6 +2,13 @@
 
 **Status:** research only. No experiment in this note changes the app's live feature contract or establishes a production model.
 
+> **Caveat (2026-10-13).** The rest controls here were required only to be at least 1.5 s from every gesture start or end,
+> not to lie outside a gesture. Most were therefore the middle of long pinch holds (84% in the equivalent controls of
+> [ppg-step-findings-2026-10.md](ppg-step-findings-2026-10.md)). Read the AUCs below as "pinch start vs mostly mid-hold",
+> not "pinch vs rest". [ppg-rgb-onset-follow-up-2026-10.md](ppg-rgb-onset-follow-up-2026-10.md) found the same in its
+> label audit. [ppg-onset-open-questions-2026-10.md](ppg-onset-open-questions-2026-10.md) tests each kind of negative
+> separately.
+
 ## Scope and data
 
 The experiments use only the 26 recordings committed under `data/recordings/2026-10-downloads/`; `python3 scripts/recordings_manifest.py check` must pass before reproducing them. The loader repairs legacy millisecond PPG timestamps and preserves source sensor time. Arrival order and transport flush time are never used as signal time.
