@@ -82,7 +82,7 @@ describe("CorrectionSession", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Start recording a round" }));
     expect(telemetryStore.getDatasetRecording()).toBe(true);
     camera.snapshot = { status: "off", fps: 0, detectMs: 0 };
-    page.rerender(<CorrectionSession info={info} modelId="snap-1" models={models} labels={labels} status={{ ...status }} onSaved={() => undefined} />);
+    page.rerender(<CorrectionSession info={info} modelId="snap-1" models={models} labels={labels} status={status} onSaved={() => undefined} />);
     expect(await screen.findByText(/nothing is being marked now/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Stop and use it" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
