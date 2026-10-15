@@ -1,0 +1,147 @@
+/*
+ * Halftone theme. Applies only while <html data-theme="halftone"> (chosen in Settings → Appearance); without it nothing
+ * here matches. The app's own styling is already driven by colour tokens and one display-font token, so this re-points
+ * those: a near-black violet page printed with halftone dots, Eva-01 purple lines, NERV orange for emphasis and neon
+ * green for the main action. Headings, labels, buttons and the sidebar use a heavy Mincho (Japanese serif) face, the
+ * look of the Neon Genesis Evangelion title cards. The floating volume knob is never themed (see shared/theme/theme.ts).
+ *
+ * The title cards' own typeface, Matisse EB, is a commercial font and is not bundled. The stack names it first, so it is
+ * used on a computer that has it, and otherwise falls to the Mincho faces that ship with the system (Hiragino Mincho on
+ * macOS, Yu Mincho on Windows, Noto Serif JP elsewhere) and finally to a plain serif.
+ *
+ * Contrast: text is a pale lavender-white on near-black (above 12:1). The bright colours (orange, green, purple, red) are
+ * used as text only on the dark surfaces, where each is above 7:1, and the fills that carry them (primary button, badges)
+ * take near-black text.
+ */
+
+html[data-theme="halftone"] {
+  color-scheme: dark;
+  background: #0a0612;
+
+  --blue: #0a0612; /* the page */
+  --ink: #f1ecf8;
+  --yellow: #ff7a1a; /* NERV orange: emphasis and focus */
+  --green: #7dff3b; /* Eva-01 neon green */
+  --cyan: #b58cff; /* Eva-01 purple, lightened to read on dark */
+  --orange: #ff5d00;
+  --red: #ff6b6b;
+  --surface: #150a24;
+  --surface-2: #0f0719;
+  --frame: #6c32b0;
+  --ink-2: rgba(241, 236, 248, 0.86);
+  --ink-3: rgba(241, 236, 248, 0.72);
+  --line: rgba(181, 140, 255, 0.55);
+  --line-soft: rgba(181, 140, 255, 0.28);
+  --wash: rgba(181, 140, 255, 0.16);
+
+  --primary: var(--green);
+  --primary-foreground: #0a0612;
+  --secondary: rgba(181, 140, 255, 0.22);
+  --accent: var(--yellow);
+  --accent-foreground: #0a0612;
+  --ring: var(--yellow);
+  --sidebar-primary: var(--green);
+  --sidebar-primary-foreground: #0a0612;
+  --sidebar-ring: var(--yellow);
+  --chart-1: #ff7a1a;
+  --chart-2: #b58cff;
+  --chart-3: #ff5d00;
+  --chart-4: #7dff3b;
+  --chart-5: var(--ink);
+
+  --font-display: "Matisse EB", "Matisse Pro", "Matisse ProN", "Hiragino Mincho ProN", "Hiragino Mincho Pro", "YuMincho", "Yu Mincho", "Noto Serif JP", "Source Han Serif JP", "Shippori Mincho", "MS PMincho", Georgia, "Times New Roman", serif;
+}
+
+/* The page: halftone dots that fade out across it, printed in Eva-01 purple, with a second, coarser orange screen in the corner. */
+html[data-theme="halftone"] body { background: transparent; }
+html[data-theme="halftone"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle at center, rgba(255, 122, 26, 0.5) 0 1.6px, transparent 2.1px),
+    radial-gradient(circle at center, rgba(143, 82, 216, 0.55) 0 1.2px, transparent 1.7px);
+  background-size: 14px 14px, 7px 7px;
+  background-position: 0 0, 3px 3px;
+  -webkit-mask-image: linear-gradient(115deg, #000 0%, rgba(0, 0, 0, 0.55) 22%, rgba(0, 0, 0, 0.12) 55%, transparent 80%);
+  mask-image: linear-gradient(115deg, #000 0%, rgba(0, 0, 0, 0.55) 22%, rgba(0, 0, 0, 0.12) 55%, transparent 80%);
+}
+html[data-theme="halftone"] body::before { border-color: var(--frame); }
+html[data-theme="halftone"] ::selection { background: var(--yellow); color: #0a0612; }
+html[data-theme="halftone"] :focus-visible { outline: 2px solid var(--yellow); outline-offset: 3px; }
+
+/* Type: heavy Mincho, mixed case, tight, like the title cards. */
+html[data-theme="halftone"] h1,
+html[data-theme="halftone"] h2 { text-transform: none; font-weight: 900; letter-spacing: -0.015em; }
+html[data-theme="halftone"] h1 { line-height: 1.02; text-shadow: 3px 3px 0 rgba(108, 50, 176, 0.9); }
+html[data-theme="halftone"] .eyebrow { color: var(--yellow); font-weight: 700; text-transform: none; letter-spacing: 0.18em; }
+html[data-theme="halftone"] .label,
+html[data-theme="halftone"] .field-head label,
+html[data-theme="halftone"] .field-label { font-weight: 700; text-transform: none; letter-spacing: 0.06em; color: var(--ink); }
+html[data-theme="halftone"] .hint,
+html[data-theme="halftone"] .field-hint { color: var(--ink-3); }
+
+/* Surfaces: flat panels with a halftone screen, a purple outline and an orange top rule. */
+html[data-theme="halftone"] [data-slot="card"],
+html[data-theme="halftone"] .telemetry-chart,
+html[data-theme="halftone"] .metric,
+html[data-theme="halftone"] .gesture-card,
+html[data-theme="halftone"] .preview-notice,
+html[data-theme="halftone"] .vector-row {
+  background-color: var(--surface);
+  background-image: radial-gradient(circle at center, rgba(143, 82, 216, 0.3) 0 1px, transparent 1.5px);
+  background-size: 6px 6px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--yellow);
+  border-radius: 0;
+  box-shadow: none;
+}
+html[data-theme="halftone"] [data-slot="card"] { --tw-ring-shadow: 0 0 #0000; }
+/* Text sits on a plain panel, not on the dots. */
+html[data-theme="halftone"] [data-slot="card-content"],
+html[data-theme="halftone"] [data-slot="card-header"] { background: transparent; }
+html[data-theme="halftone"] .gesture-card--lit { background-color: #123a14; border-top-color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+
+/* Buttons: neon green primary, outlined purple others, all square. */
+html[data-theme="halftone"] [data-slot="button"] { font-weight: 700; text-transform: none; letter-spacing: 0.06em; }
+html[data-theme="halftone"] [data-slot="button"][class*="bg-primary"] { background: var(--green); color: #0a0612; }
+html[data-theme="halftone"] [data-slot="button"][class*="bg-primary"]:hover { background: #a2ff74; }
+html[data-theme="halftone"] [data-slot="button"][data-variant="outline"] { border-color: var(--cyan); color: var(--ink); background: transparent; }
+html[data-theme="halftone"] [data-slot="button"][data-variant="outline"]:hover { background: var(--wash); border-color: var(--yellow); }
+html[data-theme="halftone"] [data-slot="button"][class*="bg-destructive"] { background: color-mix(in srgb, var(--red) 24%, transparent); color: var(--red); border-color: var(--red); }
+
+/* Inputs, badges, switches. */
+html[data-theme="halftone"] [data-slot="input"],
+html[data-theme="halftone"] [data-slot="select-trigger"],
+html[data-theme="halftone"] select,
+html[data-theme="halftone"] input[type="text"],
+html[data-theme="halftone"] input[type="number"],
+html[data-theme="halftone"] .recipe-select { background: var(--surface-2); border: 1px solid var(--cyan); border-radius: 0; color: var(--ink); }
+html[data-theme="halftone"] [data-slot="badge"] { border-radius: 0; font-weight: 700; letter-spacing: 0.04em; }
+html[data-theme="halftone"] [data-slot="badge"][data-variant="default"] { background: var(--yellow); color: #0a0612; border-color: var(--yellow); }
+html[data-theme="halftone"] [data-slot="badge"][data-variant="secondary"] { background: var(--wash); color: var(--ink); border-color: var(--line); }
+html[data-theme="halftone"] [data-slot="switch"][data-checked] { background: var(--green); }
+html[data-theme="halftone"] [data-slot="checkbox"][data-checked] { background: var(--green); color: #0a0612; border-color: var(--green); }
+
+/* Segmented controls and the sidebar. */
+html[data-theme="halftone"] .segment { font-family: var(--font-display); font-weight: 700; text-transform: none; letter-spacing: 0.04em; }
+html[data-theme="halftone"] .segment:has([data-checked]),
+html[data-theme="halftone"] .segment:has([data-checked]):hover { background: var(--yellow); color: #0a0612; }
+html[data-theme="halftone"] [data-slot="sidebar-container"] { border-right: 3px solid var(--frame); }
+html[data-theme="halftone"] [data-sidebar="menu-button"],
+html[data-theme="halftone"] [data-slot="sidebar-menu-button"] { font-family: var(--font-display); font-weight: 700; text-transform: none; letter-spacing: 0.04em; }
+html[data-theme="halftone"] [data-sidebar="menu-button"][data-active]:not([data-active="false"]) { background: var(--yellow); color: #0a0612; }
+html[data-theme="halftone"] [data-sidebar="group-label"] { color: var(--yellow); font-weight: 700; letter-spacing: 0.14em; }
+html[data-theme="halftone"] .nav-brand-name { font-family: var(--font-display); font-weight: 900; text-transform: none; }
+
+/* Warnings read as NERV alerts: an orange hazard rule down the side. */
+html[data-theme="halftone"] [data-slot="alert"] { border: 1px solid var(--line); border-left: 6px solid var(--yellow); border-radius: 0; background: var(--surface-2); color: var(--ink); }
+html[data-theme="halftone"] [data-slot="alert"][data-variant="destructive"],
+html[data-theme="halftone"] [data-slot="alert"][class*="destructive"] { border-left-color: var(--red); }
+html[data-theme="halftone"] .calibration-warning { border-left: 6px solid var(--yellow); background: color-mix(in srgb, var(--yellow) 12%, transparent); color: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="halftone"] * { transition: none !important; }
+}

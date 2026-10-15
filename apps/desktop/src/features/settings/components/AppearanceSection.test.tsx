@@ -31,4 +31,13 @@ describe("AppearanceSection", () => {
     render(<AppearanceSection />);
     expect(within(screen.getByRole("radiogroup")).getByRole("radio", { name: /Electric/ })).toHaveAttribute("aria-checked", "true");
   });
+
+  it("offers Halftone, applies it at once and describes it", () => {
+    render(<AppearanceSection />);
+    const group = within(screen.getByRole("radiogroup"));
+    fireEvent.click(group.getByRole("radio", { name: /Halftone/ }));
+    expect(document.documentElement.getAttribute("data-theme")).toBe("halftone");
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("halftone");
+    expect(screen.getByText(/Neon Genesis Evangelion/)).toBeInTheDocument();
+  });
 });

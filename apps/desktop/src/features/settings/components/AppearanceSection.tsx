@@ -22,7 +22,7 @@ export function AppearanceSection() {
           description="How the app looks"
           help={{
             label: "About appearance",
-            content: "Changes the colours and outlines only. It applies immediately and is remembered on this computer. The floating volume knob keeps its own look.",
+            content: "Changes the colours, outlines and (for Halftone) the heading font only. It applies immediately and is remembered on this computer. The floating volume knob keeps its own look.",
           }}
         />
       </CardHeader>
