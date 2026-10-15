@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { THEME_STORAGE_KEY, applyTheme, readTheme, saveTheme } from "./theme";
+import { CRT_STORAGE_KEY, THEME_STORAGE_KEY, applyCrt, applyTheme, readCrt, readTheme, saveCrt, saveTheme } from "./theme";
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -68,5 +68,31 @@ describe("the halftone theme", () => {
     document.documentElement.setAttribute("data-theme", "halftone");
     expect(applyTheme("halftone")).toBe(false);
     expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
+  });
+});
+
+describe("the NERV theme and its CRT effects", () => {
+  afterEach(() => document.documentElement.removeAttribute("data-crt"));
+
+  it("is a theme that can be saved, read back and put on the page, with a black browser bar", () => {
+    saveTheme("nerv");
+    expect(readTheme()).toBe("nerv");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("nerv");
+    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute("content")).toBe("#000000");
+  });
+
+  it("has CRT effects on until switched off, remembers the choice, and survives a browser that will not remember", () => {
+    expect(readCrt()).toBe(true);
+    saveCrt(false);
+    expect(window.localStorage.getItem(CRT_STORAGE_KEY)).toBe("off");
+    expect(document.documentElement.getAttribute("data-crt")).toBe("off");
+    expect(readCrt()).toBe(false);
+    applyCrt(true);
+    expect(document.documentElement.hasAttribute("data-crt")).toBe(false);
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked"); });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
+    expect(readCrt()).toBe(true);
+    expect(() => saveCrt(false)).not.toThrow();
+    expect(document.documentElement.getAttribute("data-crt")).toBe("off");
   });
 });

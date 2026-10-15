@@ -1,11 +1,12 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { THEME_STORAGE_KEY } from "../../../shared/theme/theme";
+import { CRT_STORAGE_KEY, THEME_STORAGE_KEY } from "../../../shared/theme/theme";
 import { AppearanceSection } from "./AppearanceSection";
 
 beforeEach(() => {
   window.localStorage.clear();
   document.documentElement.removeAttribute("data-theme");
+  document.documentElement.removeAttribute("data-crt");
 });
 afterEach(() => {
   cleanup();
@@ -39,5 +40,19 @@ describe("AppearanceSection", () => {
     expect(document.documentElement.getAttribute("data-theme")).toBe("halftone");
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("halftone");
     expect(screen.getByText(/Neon Genesis Evangelion/)).toBeInTheDocument();
+  });
+
+  it("offers NERV, and only then a switch for the CRT effects, which is remembered", () => {
+    render(<AppearanceSection />);
+    expect(screen.queryByRole("switch", { name: "CRT effects" })).toBeNull();
+    fireEvent.click(within(screen.getByRole("radiogroup")).getByRole("radio", { name: /NERV/ }));
+    expect(document.documentElement.getAttribute("data-theme")).toBe("nerv");
+    const crt = screen.getByRole("switch", { name: "CRT effects" });
+    expect(crt).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(crt);
+    expect(document.documentElement.getAttribute("data-crt")).toBe("off");
+    expect(window.localStorage.getItem(CRT_STORAGE_KEY)).toBe("off");
+    fireEvent.click(crt);
+    expect(document.documentElement.hasAttribute("data-crt")).toBe(false);
   });
 });

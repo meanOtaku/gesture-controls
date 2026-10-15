@@ -1,0 +1,286 @@
+/*
+ * NERV theme. Applies only while <html data-theme="nerv"> (chosen in Settings → Appearance); without it nothing here
+ * matches. A command-terminal look after the Neon Genesis Evangelion interfaces: black panels with thin dark-green
+ * technical borders, square corners, orange for the interface itself (headings, labels, the main action), green for
+ * normal and active state, cyan for telemetry, amber for caution and red for critical. Colour always has a second
+ * signal: every status badge carries a symbol and its text. Numbers are monospace and glow faintly. Titles use the
+ * bundled heavy Mincho (a free stand-in for the show's title face, see public/fonts/README.md); headings and labels are
+ * condensed capitals; paragraphs stay mixed case in the normal sans-serif.
+ *
+ * CRT effects (faint scanlines, edge shading, a glow on numbers) can be switched off in Settings → Appearance and are
+ * off whenever the system asks for reduced motion or more contrast. The app works the same without them.
+ * The floating volume knob is never themed (see shared/theme/theme.ts).
+ *
+ * These are the design tokens of the spec this theme follows, not an official Evangelion palette. Contrast on black:
+ * off-white 16:1, orange 10:1, green 15:1, cyan 14:1, red 5.6:1, muted grey 5.9:1; black text on the orange, green,
+ * amber and red fills is 5.6:1 or better.
+ */
+
+html[data-theme="nerv"] {
+  color-scheme: dark;
+  background: #000000;
+
+  --eva-bg: #000000;
+  --eva-surface: #0a0a0a;
+  --eva-surface-alt: #111511;
+  --eva-orange: #ff9900;
+  --eva-green: #50ff50;
+  --eva-red: #ff3030;
+  --eva-cyan: #20f0ff;
+  --eva-purple: #6b3299;
+  --eva-amber: #ffcc00;
+  --eva-text: #e8e8e0;
+  --eva-text-muted: #9a9a94;
+  --eva-border: #365236;
+  --eva-motion-fast: 120ms;
+
+  /* The app's own tokens, re-pointed. */
+  --blue: var(--eva-bg);
+  --ink: var(--eva-text);
+  --yellow: var(--eva-amber);
+  --green: var(--eva-green);
+  --cyan: var(--eva-cyan);
+  --orange: var(--eva-orange);
+  --red: var(--eva-red);
+  --surface: var(--eva-surface);
+  --surface-2: #050505;
+  --frame: var(--eva-border);
+  --ink-2: rgba(232, 232, 224, 0.9);
+  --ink-3: var(--eva-text-muted);
+  --line: var(--eva-border);
+  --line-soft: rgba(80, 255, 80, 0.18);
+  --wash: rgba(80, 255, 80, 0.1);
+
+  --primary: var(--eva-orange);
+  --primary-foreground: #000000;
+  --secondary: rgba(80, 255, 80, 0.12);
+  --accent: var(--eva-orange);
+  --accent-foreground: #000000;
+  --ring: var(--eva-orange);
+  --destructive: var(--eva-red);
+  --destructive-foreground: #000000;
+  --sidebar: var(--eva-surface);
+  --sidebar-primary: var(--eva-orange);
+  --sidebar-primary-foreground: #000000;
+  --sidebar-ring: var(--eva-orange);
+  --chart-1: #50ff50;
+  --chart-2: #20f0ff;
+  --chart-3: #ff9900;
+  --chart-4: #ffcc00;
+  --chart-5: #e8e8e0;
+  --radius: 0rem;
+
+  /* Condensed capitals for headings and labels; the heavy Mincho for titles; the system monospace for data. */
+  --font-display: "Oswald", "DIN Condensed", "Bahnschrift SemiCondensed", "Bahnschrift", "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --font-title: "Noto Serif Display", "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+/* The heavy Mincho is only declared by the Halftone theme's stylesheet when it is in use; declare it here too. */
+@font-face {
+  font-family: "Shippori Mincho B1";
+  src: url("/fonts/ShipporiMinchoB1-ExtraBold-subset.woff2") format("woff2");
+  font-weight: 700 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* The page: black with a very faint technical grid. */
+html[data-theme="nerv"] body,
+html[data-theme="nerv"] [data-slot="sidebar-inset"] {
+  background-color: transparent;
+}
+html[data-theme="nerv"] [data-slot="sidebar-inset"] {
+  background-image:
+    linear-gradient(rgba(80, 255, 80, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(80, 255, 80, 0.045) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+html[data-theme="nerv"] body::before { border: 1px solid var(--eva-border); }
+html[data-theme="nerv"] ::selection { background: var(--eva-orange); color: #000; }
+html[data-theme="nerv"] :focus-visible { outline: 2px solid var(--eva-orange); outline-offset: 3px; }
+
+/* CRT: faint scanlines and edge shading over everything, never intercepting a click. */
+html[data-theme="nerv"]:not([data-crt="off"]) body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(to bottom, transparent 0, transparent 3px, rgba(0, 0, 0, 0.07) 4px),
+    radial-gradient(ellipse at center, transparent 62%, rgba(0, 0, 0, 0.38) 100%);
+}
+@media (prefers-reduced-motion: reduce), (prefers-contrast: more) {
+  html[data-theme="nerv"] body::after { display: none; }
+}
+
+/* Titles: the heavy Mincho in tight capitals, large. Headings: condensed bold capitals with wide spacing. */
+html[data-theme="nerv"] h1 {
+  font-family: var(--font-title);
+  font-weight: 900;
+  font-size: clamp(2.25rem, 5vw, 4.75rem);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+  color: var(--eva-text);
+}
+html[data-theme="nerv"] h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.375rem;
+  line-height: 1.1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--eva-orange);
+}
+html[data-theme="nerv"] .eyebrow { color: var(--eva-green); font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.2em; }
+html[data-theme="nerv"] .eyebrow::before { content: "// "; color: var(--eva-orange); }
+html[data-theme="nerv"] .label,
+html[data-theme="nerv"] .field-head label,
+html[data-theme="nerv"] .field-label { color: var(--eva-orange); font-family: var(--font-display); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+html[data-theme="nerv"] .hint,
+html[data-theme="nerv"] .field-hint { color: var(--eva-text-muted); }
+html[data-theme="nerv"] .hero { border-bottom: 1px solid var(--eva-border); padding-bottom: 1rem; }
+html[data-theme="nerv"] code,
+html[data-theme="nerv"] .vector-row code { font-family: var(--font-mono); color: var(--eva-cyan); }
+
+/* Data values: monospace, tabular, bold, green, with a restrained glow (only when CRT effects are on). */
+html[data-theme="nerv"] .metric strong,
+html[data-theme="nerv"] .text-numeric,
+html[data-theme="nerv"] .overview-grid [data-slot="card-content"] > strong {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--eva-green);
+  text-transform: uppercase;
+}
+html[data-theme="nerv"]:not([data-crt="off"]) .metric strong,
+html[data-theme="nerv"]:not([data-crt="off"]) .text-numeric,
+html[data-theme="nerv"]:not([data-crt="off"]) .overview-grid [data-slot="card-content"] > strong { text-shadow: 0 0 6px rgba(80, 255, 80, 0.25); }
+html[data-theme="nerv"] .chart-scale,
+html[data-theme="nerv"] .chart-time { font-family: var(--font-mono); color: var(--eva-cyan); }
+
+/* Panels: equipment modules. Square, thin dark-green border, an orange divider under the header, numbered 01, 02, ... */
+html[data-theme="nerv"] main { counter-reset: nerv-module; }
+html[data-theme="nerv"] [data-slot="card"],
+html[data-theme="nerv"] .telemetry-chart,
+html[data-theme="nerv"] .metric,
+html[data-theme="nerv"] .gesture-card,
+html[data-theme="nerv"] .preview-notice,
+html[data-theme="nerv"] .vector-row {
+  background: var(--eva-surface);
+  border: 1px solid var(--eva-border);
+  border-radius: 0;
+  box-shadow: none;
+}
+html[data-theme="nerv"] [data-slot="card"] { --tw-ring-shadow: 0 0 #0000; counter-increment: nerv-module; }
+html[data-theme="nerv"] [data-slot="card-header"] { border-bottom: 1px solid var(--eva-orange); padding-bottom: 0.75rem; margin-bottom: 0.25rem; }
+html[data-theme="nerv"] [data-slot="card-header"]::before {
+  content: counter(nerv-module, decimal-leading-zero) " / MODULE";
+  display: block;
+  margin-bottom: 0.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.2em;
+  color: var(--eva-green);
+}
+html[data-theme="nerv"] .gesture-card--lit { background: #0a1a0a; border-color: var(--eva-green); box-shadow: inset 0 0 0 1px var(--eva-green); }
+
+/* Buttons: command controls. Orange primary; green-outlined secondary; red destructive; flat grey when disabled. */
+html[data-theme="nerv"] [data-slot="button"] {
+  border-radius: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition: background-color var(--eva-motion-fast), color var(--eva-motion-fast), border-color var(--eva-motion-fast);
+}
+html[data-theme="nerv"] [data-slot="button"][class*="bg-primary"] { background: var(--eva-orange); color: #000; border: 1px solid var(--eva-orange); }
+html[data-theme="nerv"] [data-slot="button"][class*="bg-primary"]:hover { background: #000; color: var(--eva-orange); border-color: var(--eva-orange); }
+html[data-theme="nerv"] [data-slot="button"][data-variant="outline"] { background: #000; color: var(--eva-text); border: 1px solid var(--eva-green); }
+html[data-theme="nerv"] [data-slot="button"][data-variant="outline"]:hover { background: var(--eva-green); color: #000; }
+html[data-theme="nerv"] [data-slot="button"][class*="bg-secondary"] { background: #000; color: var(--eva-text); border: 1px solid var(--eva-orange); }
+html[data-theme="nerv"] [data-slot="button"][class*="bg-secondary"]:hover { background: var(--eva-orange); color: #000; }
+html[data-theme="nerv"] [data-slot="button"][class*="bg-destructive"] { background: var(--eva-red); color: #000; border: 1px solid var(--eva-red); }
+html[data-theme="nerv"] [data-slot="button"][class*="bg-destructive"]:hover { background: #000; color: var(--eva-red); }
+html[data-theme="nerv"] [data-slot="button"][data-variant="ghost"] { color: var(--eva-text); }
+html[data-theme="nerv"] [data-slot="button"][data-variant="ghost"]:hover { background: var(--wash); color: var(--eva-green); }
+html[data-theme="nerv"] [data-slot="button"]:disabled,
+html[data-theme="nerv"] [data-slot="button"][aria-disabled="true"] { background: #1a1a1a; color: var(--eva-text-muted); border-color: #2a2a2a; opacity: 1; transition: none; }
+
+/* Inputs: black, thin green border; orange on focus. */
+html[data-theme="nerv"] [data-slot="input"],
+html[data-theme="nerv"] [data-slot="select-trigger"],
+html[data-theme="nerv"] [data-slot="textarea"],
+html[data-theme="nerv"] select,
+html[data-theme="nerv"] input[type="text"],
+html[data-theme="nerv"] input[type="number"],
+html[data-theme="nerv"] .recipe-select {
+  background: #000;
+  color: var(--eva-green);
+  border: 1px solid rgba(80, 255, 80, 0.6);
+  border-radius: 0;
+  font-family: var(--font-mono);
+}
+html[data-theme="nerv"] [data-slot="input"]:focus-visible,
+html[data-theme="nerv"] [data-slot="select-trigger"]:focus-visible,
+html[data-theme="nerv"] select:focus-visible,
+html[data-theme="nerv"] input[type="text"]:focus-visible,
+html[data-theme="nerv"] input[type="number"]:focus-visible,
+html[data-theme="nerv"] .recipe-select:focus-visible { border-color: var(--eva-orange); outline: 2px solid var(--eva-orange); outline-offset: 1px; }
+html[data-theme="nerv"] .field[data-invalid] [data-slot="input"] { border-color: var(--eva-red); }
+html[data-theme="nerv"] .field-error { color: var(--eva-red); }
+html[data-theme="nerv"] [data-slot="select-content"],
+html[data-theme="nerv"] [data-slot="popover-content"],
+html[data-theme="nerv"] [data-slot="tooltip-content"] { background: #000; color: var(--eva-text); border: 1px solid var(--eva-orange); border-radius: 0; }
+
+/* Status badges: a symbol and the words as well as the colour. */
+html[data-theme="nerv"] [data-slot="badge"] {
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: #000;
+}
+html[data-theme="nerv"] [data-slot="badge"][data-variant="default"] { color: var(--eva-green); border: 1px solid var(--eva-green); }
+html[data-theme="nerv"] [data-slot="badge"][data-variant="default"]::before { content: "● "; }
+html[data-theme="nerv"] [data-slot="badge"][data-variant="secondary"] { color: var(--eva-text-muted); border: 1px solid #3a3a3a; }
+html[data-theme="nerv"] [data-slot="badge"][data-variant="secondary"]::before { content: "○ "; }
+html[data-theme="nerv"] [data-slot="badge"][data-variant="destructive"] { color: var(--eva-red); border: 1px solid var(--eva-red); }
+html[data-theme="nerv"] [data-slot="badge"][data-variant="destructive"]::before { content: "■ "; }
+html[data-theme="nerv"] [data-slot="badge"][data-variant="outline"] { color: var(--eva-orange); border: 1px solid var(--eva-orange); }
+html[data-theme="nerv"] .connection { background: #000; border: 1px solid var(--eva-border); border-radius: 0; font-family: var(--font-mono); letter-spacing: 0.1em; }
+html[data-theme="nerv"] .pulse { background: var(--eva-green); border-radius: 0; }
+html[data-theme="nerv"] .connection.offline .pulse { background: var(--eva-text-muted); }
+html[data-theme="nerv"] .nav-dot { border-radius: 0; }
+html[data-theme="nerv"] .nav-dot[data-tone="ok"] { background: var(--eva-green); }
+html[data-theme="nerv"] .nav-dot[data-tone="warn"] { background: var(--eva-amber); }
+html[data-theme="nerv"] .nav-dot[data-tone="live"] { background: var(--eva-cyan); }
+
+/* Switches, checkboxes, segmented controls. */
+html[data-theme="nerv"] [data-slot="switch"] { border-radius: 0; background: #1a1a1a; border: 1px solid var(--eva-border); }
+html[data-theme="nerv"] [data-slot="switch"][data-checked] { background: var(--eva-green); }
+html[data-theme="nerv"] [data-slot="switch-thumb"] { border-radius: 0; background: #000; }
+html[data-theme="nerv"] [data-slot="checkbox"] { border-radius: 0; border: 1px solid var(--eva-green); background: #000; }
+html[data-theme="nerv"] [data-slot="checkbox"][data-checked] { background: var(--eva-green); color: #000; }
+html[data-theme="nerv"] .segment { font-family: var(--font-display); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+html[data-theme="nerv"] .segment:has([data-checked]),
+html[data-theme="nerv"] .segment:has([data-checked]):hover { background: var(--eva-orange); color: #000; }
+
+/* Navigation: a technical terminal list; the open page is orange. */
+html[data-theme="nerv"] [data-slot="sidebar-container"] { border-right: 1px solid var(--eva-border); }
+html[data-theme="nerv"] [data-sidebar="menu-button"],
+html[data-theme="nerv"] [data-slot="sidebar-menu-button"] { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; border-radius: 0; }
+html[data-theme="nerv"] [data-sidebar="menu-button"][data-active]:not([data-active="false"]) { background: var(--eva-orange); color: #000; }
+html[data-theme="nerv"] [data-sidebar="menu-button"]:hover:not([data-active]):not([data-active="false"]) { background: var(--wash); color: var(--eva-green); }
+html[data-theme="nerv"] [data-sidebar="group-label"] { color: var(--eva-orange); font-family: var(--font-mono); font-weight: 700; letter-spacing: 0.2em; }
+html[data-theme="nerv"] [data-sidebar="group-label"]::before { content: "// "; color: var(--eva-green); }
+html[data-theme="nerv"] .nav-brand-name { font-family: var(--font-display); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--eva-orange); }
+
+/* Messages: a coloured bar down the side, with the words, never the colour alone. Red is for critical only. */
+html[data-theme="nerv"] [data-slot="alert"] { border: 1px solid var(--eva-border); border-left: 4px solid var(--eva-orange); border-radius: 0; background: var(--eva-surface); color: var(--eva-text); }
+html[data-theme="nerv"] [data-slot="alert"][data-variant="destructive"],
+html[data-theme="nerv"] [data-slot="alert"][class*="destructive"] { border-color: var(--eva-red); border-left-color: var(--eva-red); }
+html[data-theme="nerv"] .calibration-warning { border: 1px solid var(--eva-amber); border-left: 4px solid var(--eva-amber); border-radius: 0; background: rgba(255, 204, 0, 0.08); color: var(--eva-text); }
