@@ -1,13 +1,13 @@
 /**
  * The app's look. "neo" is neo-brutalism (cream, thick black outlines, hard shadows) and the default; "electric" is the
- * original deep-blue theme; "halftone" is dark violet printed with halftone dots, in Evangelion's colours and Mincho type.
+ * original deep-blue theme; "halftone" is black print with a halftone dot screen and grain, hot pink and acid yellow-green, with Mincho headings.
  */
 export type AppTheme = "electric" | "neo" | "halftone";
 
 export const THEMES: ReadonlyArray<{ value: AppTheme; label: string; summary: string }> = [
   { value: "neo", label: "Neo-brutalism", summary: "Cream paper, thick black outlines, hard offset shadows and vibrant colours." },
   { value: "electric", label: "Electric", summary: "Deep blue, flat and square, with bright accents." },
-  { value: "halftone", label: "Halftone", summary: "Near-black violet printed with halftone dots, Eva-01 purple, NERV orange and neon green, with heavy Mincho headings in the style of Neon Genesis Evangelion." },
+  { value: "halftone", label: "Halftone", summary: "Black print with a coarse halftone dot screen and film grain, hot pink and acid yellow-green, with heavy Mincho headings in the style of Neon Genesis Evangelion." },
 ];
 
 export const THEME_STORAGE_KEY = "appTheme";
@@ -27,7 +27,7 @@ export function readTheme(): AppTheme {
   }
 }
 
-const BROWSER_BAR_COLOUR: Record<AppTheme, string> = { electric: "#000066", neo: "#fbf3e4", halftone: "#0a0612" };
+const BROWSER_BAR_COLOUR: Record<AppTheme, string> = { electric: "#000066", neo: "#fbf3e4", halftone: "#0b0b0b" };
 
 /**
  * Puts a theme on the page. The floating volume knob is its own window with its own look and is never themed.

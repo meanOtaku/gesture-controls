@@ -61,7 +61,7 @@ describe("the halftone theme", () => {
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("halftone");
     expect(readTheme()).toBe("halftone");
     expect(document.documentElement.getAttribute("data-theme")).toBe("halftone");
-    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute("content")).toBe("#0a0612");
+    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute("content")).toBe("#0b0b0b");
   });
   it("is left off the floating volume knob's window like the others", () => {
     window.history.replaceState(null, "", "/?window=overlay");

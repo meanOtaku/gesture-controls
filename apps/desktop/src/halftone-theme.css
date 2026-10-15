@@ -1,81 +1,108 @@
 /*
  * Halftone theme. Applies only while <html data-theme="halftone"> (chosen in Settings → Appearance); without it nothing
- * here matches. The app's own styling is already driven by colour tokens and one display-font token, so this re-points
- * those: a near-black violet page printed with halftone dots, Eva-01 purple lines, NERV orange for emphasis and neon
- * green for the main action. Headings, labels, buttons and the sidebar use a heavy Mincho (Japanese serif) face, the
- * look of the Neon Genesis Evangelion title cards. The floating volume knob is never themed (see shared/theme/theme.ts).
+ * here matches. It is the halftone poster look: black and grey print with a coarse dot screen and film grain, hot pink
+ * for structure and acid yellow-green for the main action and emphasis, with heavy Mincho (Japanese serif) headings, the
+ * face of the Neon Genesis Evangelion title cards. The app's own styling is driven by colour tokens and one display-font
+ * token, so this re-points those and adds the dot and grain textures. The floating volume knob is never themed (see
+ * shared/theme/theme.ts).
  *
  * The title cards' own typeface, Matisse EB, is a commercial font and is not bundled. The stack names it first, so it is
  * used on a computer that has it, and otherwise falls to the Mincho faces that ship with the system (Hiragino Mincho on
  * macOS, Yu Mincho on Windows, Noto Serif JP elsewhere) and finally to a plain serif.
  *
- * Contrast: text is a pale lavender-white on near-black (above 12:1). The bright colours (orange, green, purple, red) are
- * used as text only on the dark surfaces, where each is above 7:1, and the fills that carry them (primary button, badges)
- * take near-black text.
+ * Contrast: text is off-white on near-black (above 15:1). Acid yellow-green and hot pink are used as text only on the dark
+ * surfaces (above 7:1 and 5:1), and the fills that carry them (primary button, badges, the active menu item) take
+ * near-black text. Textures sit behind the content and stay faint where text is.
  */
 
 html[data-theme="halftone"] {
   color-scheme: dark;
-  background: #0a0612;
+  background: #0b0b0b;
 
-  --blue: #0a0612; /* the page */
-  --ink: #f1ecf8;
-  --yellow: #ff7a1a; /* NERV orange: emphasis and focus */
-  --green: #7dff3b; /* Eva-01 neon green */
-  --cyan: #b58cff; /* Eva-01 purple, lightened to read on dark */
-  --orange: #ff5d00;
-  --red: #ff6b6b;
-  --surface: #150a24;
-  --surface-2: #0f0719;
-  --frame: #6c32b0;
-  --ink-2: rgba(241, 236, 248, 0.86);
-  --ink-3: rgba(241, 236, 248, 0.72);
-  --line: rgba(181, 140, 255, 0.55);
-  --line-soft: rgba(181, 140, 255, 0.28);
-  --wash: rgba(181, 140, 255, 0.16);
+  --blue: #0b0b0b; /* the page */
+  --ink: #f4f4ef;
+  --yellow: #dfff1a; /* acid yellow-green: emphasis and the main action */
+  --green: #a6ff3d;
+  --cyan: #ff4fa3; /* hot pink, lightened a little to read as a line on black */
+  --orange: #ff7a1a;
+  --red: #ff7a99;
+  --surface: #151515;
+  --surface-2: #101010;
+  --frame: #ff2e93;
+  --ink-2: rgba(244, 244, 239, 0.88);
+  --ink-3: rgba(244, 244, 239, 0.74);
+  --line: rgba(244, 244, 239, 0.38);
+  --line-soft: rgba(244, 244, 239, 0.2);
+  --wash: rgba(244, 244, 239, 0.14);
 
-  --primary: var(--green);
-  --primary-foreground: #0a0612;
-  --secondary: rgba(181, 140, 255, 0.22);
-  --accent: var(--yellow);
-  --accent-foreground: #0a0612;
-  --ring: var(--yellow);
-  --sidebar-primary: var(--green);
-  --sidebar-primary-foreground: #0a0612;
-  --sidebar-ring: var(--yellow);
-  --chart-1: #ff7a1a;
-  --chart-2: #b58cff;
-  --chart-3: #ff5d00;
-  --chart-4: #7dff3b;
+  --primary: var(--yellow);
+  --primary-foreground: #0b0b0b;
+  --secondary: rgba(244, 244, 239, 0.18);
+  --accent: var(--cyan);
+  --accent-foreground: #0b0b0b;
+  --ring: var(--cyan);
+  --sidebar-primary: var(--yellow);
+  --sidebar-primary-foreground: #0b0b0b;
+  --sidebar-ring: var(--cyan);
+  --chart-1: #dfff1a;
+  --chart-2: #ff4fa3;
+  --chart-3: #ff7a1a;
+  --chart-4: #a6ff3d;
   --chart-5: var(--ink);
 
   --font-display: "Matisse EB", "Matisse Pro", "Matisse ProN", "Hiragino Mincho ProN", "Hiragino Mincho Pro", "YuMincho", "Yu Mincho", "Noto Serif JP", "Source Han Serif JP", "Shippori Mincho", "MS PMincho", Georgia, "Times New Roman", serif;
+  /* Film grain: fractal noise as a tiny tiled image. */
+  --grain-soft: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.55 -0.25'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
+  --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1.1 -0.45'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
 }
 
-/* The page: halftone dots that fade out across it, printed in Eva-01 purple, with a second, coarser orange screen in the corner. */
-html[data-theme="halftone"] body { background: transparent; }
+/*
+ * The page: a true halftone screen. Dots on a grid are laid over a soft grey gradient and the whole layer is pushed to
+ * high contrast, so the dots swell where the gradient is bright and vanish where it is dark, like a printed photo. It
+ * is kept faint and fades out before the middle of the page, with grain over it.
+ */
+html[data-theme="halftone"] body,
+/* The content area paints its own background; without this the screen behind it would never show. */
+html[data-theme="halftone"] [data-slot="sidebar-inset"] { background: transparent; }
 html[data-theme="halftone"] body::after {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image:
-    radial-gradient(circle at center, rgba(255, 122, 26, 0.5) 0 1.6px, transparent 2.1px),
-    radial-gradient(circle at center, rgba(143, 82, 216, 0.55) 0 1.2px, transparent 1.7px);
-  background-size: 14px 14px, 7px 7px;
-  background-position: 0 0, 3px 3px;
-  -webkit-mask-image: linear-gradient(115deg, #000 0%, rgba(0, 0, 0, 0.55) 22%, rgba(0, 0, 0, 0.12) 55%, transparent 80%);
-  mask-image: linear-gradient(115deg, #000 0%, rgba(0, 0, 0, 0.55) 22%, rgba(0, 0, 0, 0.12) 55%, transparent 80%);
+  background:
+    var(--grain),
+    radial-gradient(circle at center, #000 0, #fff 85%) 0 0 / 9px 9px,
+    radial-gradient(ellipse at 100% 0%, #fff 0%, #777 30%, #000 70%),
+    #000;
+  background-blend-mode: normal, multiply, normal, normal;
+  filter: contrast(14);
+  opacity: 0.42;
+  -webkit-mask-image: radial-gradient(ellipse at 100% 0%, #000 0%, rgba(0, 0, 0, 0.5) 35%, transparent 70%);
+  mask-image: radial-gradient(ellipse at 100% 0%, #000 0%, rgba(0, 0, 0, 0.5) 35%, transparent 70%);
 }
+/* A pink screen bleeding in from the bottom left, as on the poster. */
 html[data-theme="halftone"] body::before { border-color: var(--frame); }
-html[data-theme="halftone"] ::selection { background: var(--yellow); color: #0a0612; }
-html[data-theme="halftone"] :focus-visible { outline: 2px solid var(--yellow); outline-offset: 3px; }
+html[data-theme="halftone"] .shell::before {
+  content: "";
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 38vw;
+  height: 38vh;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(circle at center, rgba(255, 46, 147, 0.55) 0 1.4px, transparent 2px) 0 0 / 8px 8px;
+  -webkit-mask-image: radial-gradient(ellipse at 0% 100%, #000 0%, transparent 70%);
+  mask-image: radial-gradient(ellipse at 0% 100%, #000 0%, transparent 70%);
+}
+html[data-theme="halftone"] ::selection { background: var(--yellow); color: #0b0b0b; }
+html[data-theme="halftone"] :focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 
-/* Type: heavy Mincho, mixed case, tight, like the title cards. */
+/* Type: heavy Mincho, mixed case, tight. The h1 gets a hot pink offset, like a misregistered print. */
 html[data-theme="halftone"] h1,
 html[data-theme="halftone"] h2 { text-transform: none; font-weight: 900; letter-spacing: -0.015em; }
-html[data-theme="halftone"] h1 { line-height: 1.02; text-shadow: 3px 3px 0 rgba(108, 50, 176, 0.9); }
+html[data-theme="halftone"] h1 { line-height: 1.02; text-shadow: 3px 3px 0 #ff2e93; }
 html[data-theme="halftone"] .eyebrow { color: var(--yellow); font-weight: 700; text-transform: none; letter-spacing: 0.18em; }
 html[data-theme="halftone"] .label,
 html[data-theme="halftone"] .field-head label,
@@ -83,7 +110,7 @@ html[data-theme="halftone"] .field-label { font-weight: 700; text-transform: non
 html[data-theme="halftone"] .hint,
 html[data-theme="halftone"] .field-hint { color: var(--ink-3); }
 
-/* Surfaces: flat panels with a halftone screen, a purple outline and an orange top rule. */
+/* Surfaces: near-black panels with a fine grey dot screen and grain, a thin grey outline and a hot pink top rule. */
 html[data-theme="halftone"] [data-slot="card"],
 html[data-theme="halftone"] .telemetry-chart,
 html[data-theme="halftone"] .metric,
@@ -91,25 +118,26 @@ html[data-theme="halftone"] .gesture-card,
 html[data-theme="halftone"] .preview-notice,
 html[data-theme="halftone"] .vector-row {
   background-color: var(--surface);
-  background-image: radial-gradient(circle at center, rgba(143, 82, 216, 0.3) 0 1px, transparent 1.5px);
-  background-size: 6px 6px;
+  background-image:
+    var(--grain-soft),
+    radial-gradient(circle at center, rgba(244, 244, 239, 0.16) 0 0.9px, transparent 1.4px);
+  background-size: 160px 160px, 5px 5px;
   border: 1px solid var(--line);
-  border-top: 3px solid var(--yellow);
+  border-top: 3px solid var(--frame);
   border-radius: 0;
   box-shadow: none;
 }
 html[data-theme="halftone"] [data-slot="card"] { --tw-ring-shadow: 0 0 #0000; }
-/* Text sits on a plain panel, not on the dots. */
 html[data-theme="halftone"] [data-slot="card-content"],
 html[data-theme="halftone"] [data-slot="card-header"] { background: transparent; }
-html[data-theme="halftone"] .gesture-card--lit { background-color: #123a14; border-top-color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+html[data-theme="halftone"] .gesture-card--lit { background-color: #1c2a00; border-top-color: var(--yellow); box-shadow: inset 0 0 0 1px var(--yellow); }
 
-/* Buttons: neon green primary, outlined purple others, all square. */
+/* Buttons: acid yellow-green primary, outlined others, all square. */
 html[data-theme="halftone"] [data-slot="button"] { font-weight: 700; text-transform: none; letter-spacing: 0.06em; }
-html[data-theme="halftone"] [data-slot="button"][class*="bg-primary"] { background: var(--green); color: #0a0612; }
-html[data-theme="halftone"] [data-slot="button"][class*="bg-primary"]:hover { background: #a2ff74; }
-html[data-theme="halftone"] [data-slot="button"][data-variant="outline"] { border-color: var(--cyan); color: var(--ink); background: transparent; }
-html[data-theme="halftone"] [data-slot="button"][data-variant="outline"]:hover { background: var(--wash); border-color: var(--yellow); }
+html[data-theme="halftone"] [data-slot="button"][class*="bg-primary"] { background: var(--yellow); color: #0b0b0b; }
+html[data-theme="halftone"] [data-slot="button"][class*="bg-primary"]:hover { background: #eaff66; }
+html[data-theme="halftone"] [data-slot="button"][data-variant="outline"] { border-color: var(--ink); color: var(--ink); background: transparent; }
+html[data-theme="halftone"] [data-slot="button"][data-variant="outline"]:hover { background: var(--cyan); border-color: var(--cyan); color: #0b0b0b; }
 html[data-theme="halftone"] [data-slot="button"][class*="bg-destructive"] { background: color-mix(in srgb, var(--red) 24%, transparent); color: var(--red); border-color: var(--red); }
 
 /* Inputs, badges, switches. */
@@ -118,29 +146,29 @@ html[data-theme="halftone"] [data-slot="select-trigger"],
 html[data-theme="halftone"] select,
 html[data-theme="halftone"] input[type="text"],
 html[data-theme="halftone"] input[type="number"],
-html[data-theme="halftone"] .recipe-select { background: var(--surface-2); border: 1px solid var(--cyan); border-radius: 0; color: var(--ink); }
+html[data-theme="halftone"] .recipe-select { background: #000; border: 1px solid var(--ink); border-radius: 0; color: var(--ink); }
 html[data-theme="halftone"] [data-slot="badge"] { border-radius: 0; font-weight: 700; letter-spacing: 0.04em; }
-html[data-theme="halftone"] [data-slot="badge"][data-variant="default"] { background: var(--yellow); color: #0a0612; border-color: var(--yellow); }
+html[data-theme="halftone"] [data-slot="badge"][data-variant="default"] { background: var(--yellow); color: #0b0b0b; border-color: var(--yellow); }
 html[data-theme="halftone"] [data-slot="badge"][data-variant="secondary"] { background: var(--wash); color: var(--ink); border-color: var(--line); }
-html[data-theme="halftone"] [data-slot="switch"][data-checked] { background: var(--green); }
-html[data-theme="halftone"] [data-slot="checkbox"][data-checked] { background: var(--green); color: #0a0612; border-color: var(--green); }
+html[data-theme="halftone"] [data-slot="switch"][data-checked] { background: var(--yellow); }
+html[data-theme="halftone"] [data-slot="checkbox"][data-checked] { background: var(--yellow); color: #0b0b0b; border-color: var(--yellow); }
 
 /* Segmented controls and the sidebar. */
 html[data-theme="halftone"] .segment { font-family: var(--font-display); font-weight: 700; text-transform: none; letter-spacing: 0.04em; }
 html[data-theme="halftone"] .segment:has([data-checked]),
-html[data-theme="halftone"] .segment:has([data-checked]):hover { background: var(--yellow); color: #0a0612; }
+html[data-theme="halftone"] .segment:has([data-checked]):hover { background: var(--yellow); color: #0b0b0b; }
 html[data-theme="halftone"] [data-slot="sidebar-container"] { border-right: 3px solid var(--frame); }
 html[data-theme="halftone"] [data-sidebar="menu-button"],
 html[data-theme="halftone"] [data-slot="sidebar-menu-button"] { font-family: var(--font-display); font-weight: 700; text-transform: none; letter-spacing: 0.04em; }
-html[data-theme="halftone"] [data-sidebar="menu-button"][data-active]:not([data-active="false"]) { background: var(--yellow); color: #0a0612; }
+html[data-theme="halftone"] [data-sidebar="menu-button"][data-active]:not([data-active="false"]) { background: var(--frame); color: #0b0b0b; }
 html[data-theme="halftone"] [data-sidebar="group-label"] { color: var(--yellow); font-weight: 700; letter-spacing: 0.14em; }
 html[data-theme="halftone"] .nav-brand-name { font-family: var(--font-display); font-weight: 900; text-transform: none; }
 
-/* Warnings read as NERV alerts: an orange hazard rule down the side. */
-html[data-theme="halftone"] [data-slot="alert"] { border: 1px solid var(--line); border-left: 6px solid var(--yellow); border-radius: 0; background: var(--surface-2); color: var(--ink); }
+/* Warnings: a hot pink rule down the side. */
+html[data-theme="halftone"] [data-slot="alert"] { border: 1px solid var(--line); border-left: 6px solid var(--frame); border-radius: 0; background: var(--surface-2); color: var(--ink); }
 html[data-theme="halftone"] [data-slot="alert"][data-variant="destructive"],
 html[data-theme="halftone"] [data-slot="alert"][class*="destructive"] { border-left-color: var(--red); }
-html[data-theme="halftone"] .calibration-warning { border-left: 6px solid var(--yellow); background: color-mix(in srgb, var(--yellow) 12%, transparent); color: var(--ink); }
+html[data-theme="halftone"] .calibration-warning { border-left: 6px solid var(--yellow); background: color-mix(in srgb, var(--yellow) 10%, transparent); color: var(--ink); }
 
 @media (prefers-reduced-motion: reduce) {
   html[data-theme="halftone"] * { transition: none !important; }
