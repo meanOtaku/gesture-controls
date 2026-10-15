@@ -7,13 +7,22 @@
  * shared/theme/theme.ts).
  *
  * The title cards' own typeface, Matisse EB, is a commercial font and is not bundled. The stack names it first, so it is
- * used on a computer that has it, and otherwise falls to the Mincho faces that ship with the system (Hiragino Mincho on
- * macOS, Yu Mincho on Windows, Noto Serif JP elsewhere) and finally to a plain serif.
+ * used on a computer that has it. Otherwise the bundled Shippori Mincho B1 Extra Bold (a free, similar face, subset to
+ * Latin and kana) is used, then the Mincho faces that ship with the system, then a plain serif.
  *
  * Contrast: text is off-white on near-black (above 15:1). Acid yellow-green and hot pink are used as text only on the dark
  * surfaces (above 7:1 and 5:1), and the fills that carry them (primary button, badges, the active menu item) take
  * near-black text. Textures sit behind the content and stay faint where text is.
  */
+
+/* Shippori Mincho B1 Extra Bold (SIL OFL 1.1), a free stand-in for the Evangelion title face; see public/fonts/README.md. */
+@font-face {
+  font-family: "Shippori Mincho B1";
+  src: url("/fonts/ShipporiMinchoB1-ExtraBold-subset.woff2") format("woff2");
+  font-weight: 700 900;
+  font-style: normal;
+  font-display: swap;
+}
 
 html[data-theme="halftone"] {
   color-scheme: dark;
@@ -50,7 +59,7 @@ html[data-theme="halftone"] {
   --chart-4: #a6ff3d;
   --chart-5: var(--ink);
 
-  --font-display: "Matisse EB", "Matisse Pro", "Matisse ProN", "Hiragino Mincho ProN", "Hiragino Mincho Pro", "YuMincho", "Yu Mincho", "Noto Serif JP", "Source Han Serif JP", "Shippori Mincho", "MS PMincho", Georgia, "Times New Roman", serif;
+  --font-display: "Matisse EB", "Matisse Pro", "Matisse ProN", "Shippori Mincho B1", "Hiragino Mincho ProN", "Hiragino Mincho Pro", "YuMincho", "Yu Mincho", "Noto Serif JP", "Source Han Serif JP", "Shippori Mincho", "MS PMincho", Georgia, "Times New Roman", serif;
   /* Film grain: fractal noise as a tiny tiled image. */
   --grain-soft: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.55 -0.25'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
   --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1.1 -0.45'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
