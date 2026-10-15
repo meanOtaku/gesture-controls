@@ -7,7 +7,7 @@ export type AppTheme = "electric" | "neo" | "halftone" | "nerv";
 export const THEMES: ReadonlyArray<{ value: AppTheme; label: string; summary: string }> = [
   { value: "neo", label: "Neo-brutalism", summary: "Cream paper, thick black outlines, hard offset shadows and vibrant colours." },
   { value: "electric", label: "Electric", summary: "Deep blue, flat and square, with bright accents." },
-  { value: "nerv", label: "NERV", summary: "A command terminal after the Evangelion interfaces: black panels with thin green borders, orange headings and actions, green for normal state, cyan data, condensed capitals, monospace numbers, and optional CRT scanlines." },
+  { value: "nerv", label: "NERV", summary: "A command terminal after the Evangelion interfaces: black panels in orange frames with corner brackets, hazard stripes, device hexagons, white Mincho title cards, green for normal state, cyan data, monospace numbers, and optional CRT scanlines." },
   { value: "halftone", label: "Halftone", summary: "Black print with a coarse halftone dot screen and film grain, white Mincho type with NERV red and orange, and tall squeezed title capitals in the style of Neon Genesis Evangelion." },
 ];
 

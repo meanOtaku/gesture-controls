@@ -69,6 +69,18 @@ describe("NervBars", () => {
     expect(value("CAMERA")).toBe("● ON");
   });
 
+  it("gives each device a triangle in the top bar that names its real state", () => {
+    const { rerender } = render(<NervBars {...base} headphonesConnected />);
+    const units = within(screen.getByRole("list", { name: "Devices" }));
+    expect(units.getByLabelText("HEAD: ONLINE")).toHaveAttribute("data-tone", "active");
+    expect(units.getByLabelText("WATCH: OFFLINE")).toHaveAttribute("data-tone", "offline");
+    expect(units.getByLabelText("CAM: OFF")).toHaveAttribute("data-tone", "offline");
+    rerender(<NervBars {...base} watchConnected watchWorn={false} />);
+    expect(units.getByLabelText("WATCH: OFF WRIST")).toHaveAttribute("data-tone", "caution");
+    act(() => { camera.status = "on"; camera.listeners.forEach((listener) => listener()); });
+    expect(units.getByLabelText("CAM: ON")).toHaveAttribute("data-tone", "active");
+  });
+
   it("keeps a real clock that moves on each second", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 9, 15, 19, 42, 8));
@@ -77,5 +89,18 @@ describe("NervBars", () => {
     expect(clock()).toBe("19:42:08");
     act(() => { vi.advanceTimersByTime(1000); });
     expect(clock()).toBe("19:42:09");
+  });
+
+  it("shows the same time in the top bar on a seven-segment display, lighting the segments of each digit", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 15, 19, 42, 8));
+    render(<NervBars {...base} />);
+    const header = within(screen.getByRole("banner"));
+    expect(header.getByText("19:42:08")).toBeInTheDocument();
+    const digits = document.querySelectorAll(".nerv-7seg-digit");
+    expect(digits).toHaveLength(6);
+    const lit = (digit: Element) => digit.querySelectorAll("polygon[data-on]").length;
+    expect([...digits].map(lit)).toEqual([2, 6, 4, 5, 6, 7]);
+    expect(document.querySelectorAll(".nerv-7seg-colon")).toHaveLength(2);
   });
 });

@@ -1,10 +1,13 @@
 /*
  * NERV theme. Applies only while <html data-theme="nerv"> (chosen in Settings → Appearance); without it nothing here
- * matches. A command-terminal look after the Neon Genesis Evangelion interfaces: black panels with thin dark-green
- * technical borders, square corners, orange for the interface itself (headings, labels, the main action), green for
- * normal and active state, cyan for telemetry, amber for caution and red for critical. Colour always has a second
+ * matches. A command-terminal look after the Neon Genesis Evangelion interfaces: black panels in thin orange frames
+ * with corner brackets, square corners, filled orange label plates, black-and-orange hazard stripes under the top
+ * bar and above the bottom bar, tall thin lettering, a menu of numbers and names with no icons, a caution-triangle mark, oversized device triangles cropped by the top bar, and big white Mincho titles squeezed like the title cards.
+ * Orange is the interface itself (frames, headings, labels, the main action), green normal and active state, cyan
+ * telemetry, amber caution and red critical: an error becomes a red WARNING plate with red stripes. Colour always has a second
  * signal: every status badge carries a symbol and its text. Numbers are monospace and glow faintly. Titles use bundled
- * Noto Serif Display Black, headings and labels Oswald, data JetBrains Mono (all SIL OFL, see public/fonts/README.md);
+ * Mincho (Matisse EB if installed, else the bundled Shippori Mincho B1 shared with the Halftone theme), headings, card titles and the
+ * menu League Gothic, buttons and small labels Oswald, data JetBrains Mono (all SIL OFL, see public/fonts/README.md);
  * paragraphs stay mixed case in the normal sans-serif.
  *
  * CRT effects (faint scanlines, edge shading, a glow on numbers) can be switched off in Settings → Appearance and are
@@ -32,6 +35,22 @@ html[data-theme="nerv"] {
   --eva-text: #e8e8e0;
   --eva-text-muted: #9a9a94;
   --eva-border: #365236;
+  /* Panel frames: a dim orange line, so the bright orange is left for the corner brackets, plates and headings. */
+  --eva-frame: #6b4100;
+  --eva-hazard: repeating-linear-gradient(-45deg, var(--eva-orange) 0 8px, #000 8px 16px);
+  --eva-hazard-red: repeating-linear-gradient(-45deg, var(--eva-red) 0 10px, #000 10px 20px);
+  /* Disabled controls: a dim orange-and-black hazard stripe, faint enough that the words on it stay readable. */
+  --eva-hazard-off: repeating-linear-gradient(-45deg, rgba(255, 153, 0, 0.2) 0 5px, rgba(0, 0, 0, 0) 5px 11px);
+  /* Orange L-shaped brackets on the four corners of a panel, drawn as backgrounds so they never take a click. */
+  --eva-brackets:
+    linear-gradient(var(--eva-orange), var(--eva-orange)) top left / 14px 2px no-repeat,
+    linear-gradient(var(--eva-orange), var(--eva-orange)) top left / 2px 14px no-repeat,
+    linear-gradient(var(--eva-orange), var(--eva-orange)) top right / 14px 2px no-repeat,
+    linear-gradient(var(--eva-orange), var(--eva-orange)) top right / 2px 14px no-repeat,
+    linear-gradient(var(--eva-orange), var(--eva-orange)) bottom left / 14px 2px no-repeat,
+    linear-gradient(var(--eva-orange), var(--eva-orange)) bottom left / 2px 14px no-repeat,
+    linear-gradient(var(--eva-orange), var(--eva-orange)) bottom right / 14px 2px no-repeat,
+    linear-gradient(var(--eva-orange), var(--eva-orange)) bottom right / 2px 14px no-repeat;
   --eva-motion-fast: 120ms;
 
   /* The app's own tokens, re-pointed. */
@@ -44,10 +63,10 @@ html[data-theme="nerv"] {
   --red: var(--eva-red);
   --surface: var(--eva-surface);
   --surface-2: #050505;
-  --frame: var(--eva-border);
+  --frame: var(--eva-frame);
   --ink-2: rgba(232, 232, 224, 0.9);
   --ink-3: var(--eva-text-muted);
-  --line: var(--eva-border);
+  --line: var(--eva-frame);
   --line-soft: rgba(80, 255, 80, 0.18);
   --wash: rgba(80, 255, 80, 0.1);
 
@@ -70,28 +89,74 @@ html[data-theme="nerv"] {
   --chart-5: #e8e8e0;
   --radius: 0rem;
 
-  /* Condensed capitals for headings and labels; the heavy Mincho for titles; the system monospace for data. */
+  /*
+   * Tall, thin capitals (League Gothic) for headings, card titles and the menu; condensed capitals (Oswald) for the
+   * small labels and buttons, where League Gothic would be too thin to read; the title cards' heavy Mincho for titles;
+   * monospace for data.
+   */
+  --font-tall: "League Gothic", "Oswald", "DIN Condensed", "Bahnschrift Condensed", "Arial Narrow", sans-serif;
   --font-display: "Oswald", "DIN Condensed", "Bahnschrift SemiCondensed", "Bahnschrift", "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
-  --font-title: "Noto Serif Display", "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", Georgia, "Times New Roman", serif;
+  --font-title: "Matisse EB", "Matisse Pro", "Matisse ProN", "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", Georgia, "Times New Roman", serif;
   --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
-/* Bundled fonts (SIL OFL; see public/fonts/README.md). Oswald and JetBrains Mono are variable in weight. */
+/* Bundled fonts (SIL OFL; see public/fonts/README.md). Oswald and JetBrains Mono are variable in weight, League Gothic in width. */
+@font-face { font-family: "League Gothic"; src: url("/fonts/LeagueGothic-subset.woff2") format("woff2"); font-weight: 400; font-stretch: 75% 100%; font-style: normal; font-display: swap; }
 @font-face { font-family: "Oswald"; src: url("/fonts/Oswald-subset.woff2") format("woff2"); font-weight: 200 700; font-style: normal; font-display: swap; }
 @font-face { font-family: "JetBrains Mono"; src: url("/fonts/JetBrainsMono-subset.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: swap; }
 @font-face { font-family: "Noto Serif Display"; src: url("/fonts/NotoSerifDisplay-subset.woff2") format("woff2"); font-weight: 700 900; font-style: normal; font-display: swap; }
 
-/* The page: black with a very faint technical grid. */
+/*
+ * The page: not flat black but a lit control room. Fixed to the window, so they stay put while the page scrolls: a
+ * honeycomb fading in towards the top right, a warm orange glow there and an EVA purple one at the bottom left. Moving
+ * with the page: a ruler of tick marks along the top and the orange technical grid (a fine one inside a coarse one).
+ * Panels keep their solid backs, so all of this shows only in the gaps between them.
+ */
 html[data-theme="nerv"] body,
 html[data-theme="nerv"] [data-slot="sidebar-inset"] {
   background-color: transparent;
 }
 html[data-theme="nerv"] [data-slot="sidebar-inset"] {
+  position: relative;
+  isolation: isolate;
   background-image:
-    linear-gradient(rgba(80, 255, 80, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(80, 255, 80, 0.045) 1px, transparent 1px);
-  background-size: 40px 40px;
+    repeating-linear-gradient(90deg, rgba(255, 153, 0, 0.55) 0 1px, transparent 1px 100px),
+    repeating-linear-gradient(90deg, rgba(255, 153, 0, 0.3) 0 1px, transparent 1px 20px),
+    linear-gradient(rgba(255, 153, 0, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 153, 0, 0.09) 1px, transparent 1px),
+    linear-gradient(rgba(255, 153, 0, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 153, 0, 0.035) 1px, transparent 1px);
+  background-size: 100% 10px, 100% 5px, 160px 160px, 160px 160px, 20px 20px, 20px 20px;
+  background-repeat: no-repeat, no-repeat, repeat, repeat, repeat, repeat;
 }
-html[data-theme="nerv"] body::before { border: 1px solid var(--eva-border); }
+/* The fixed layers cover the page area of the window: between the bars, and left of the telemetry panel when it shows. */
+html[data-theme="nerv"] { --nerv-telemetry-w: 288px; }
+html[data-theme="nerv"]:has(.nerv-telemetry[data-collapsed="true"]) { --nerv-telemetry-w: 36px; }
+@media (max-width: 1100px) { html[data-theme="nerv"] { --nerv-telemetry-w: 0px; } }
+html[data-theme="nerv"] [data-slot="sidebar-inset"]::before,
+html[data-theme="nerv"] [data-slot="sidebar-inset"]::after {
+  content: "";
+  position: fixed;
+  top: calc(var(--nerv-header-h) + var(--nerv-stripe-h));
+  bottom: calc(var(--nerv-footer-h) + var(--nerv-stripe-h));
+  left: 0;
+  right: var(--nerv-telemetry-w);
+  z-index: -1;
+  pointer-events: none;
+}
+html[data-theme="nerv"] [data-slot="sidebar-inset"]::before {
+  background:
+    radial-gradient(ellipse 70% 60% at 100% 0%, rgba(255, 110, 0, 0.13), transparent 70%),
+    radial-gradient(ellipse 60% 55% at 0% 100%, rgba(107, 50, 153, 0.2), transparent 70%);
+}
+html[data-theme="nerv"] [data-slot="sidebar-inset"]::after {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='84' height='48.5'%3E%3Cpath d='M28 0H56L70 24.25L56 48.5H28L14 24.25ZM0 24.25H14M70 24.25H84' fill='none' stroke='%23ff9900' stroke-width='1'/%3E%3C/svg%3E") right top;
+  opacity: 0.16;
+  -webkit-mask-image: radial-gradient(ellipse 55% 50% at 100% 0%, #000, transparent);
+  mask-image: radial-gradient(ellipse 55% 50% at 100% 0%, #000, transparent);
+}
+/* The menu: a faint purple rising from the bottom. */
+html[data-theme="nerv"] [data-slot="sidebar-inner"] { background: linear-gradient(to top, rgba(107, 50, 153, 0.18), transparent 45%), var(--eva-surface); }
+html[data-theme="nerv"] body::before { border: 1px solid var(--eva-frame); }
 html[data-theme="nerv"] ::selection { background: var(--eva-orange); color: #000; }
 html[data-theme="nerv"] :focus-visible { outline: 2px solid var(--eva-orange); outline-offset: 3px; }
 
@@ -110,33 +175,58 @@ html[data-theme="nerv"]:not([data-crt="off"]) body::after {
   html[data-theme="nerv"] body::after { display: none; }
 }
 
-/* Titles: the heavy Mincho in tight capitals, large. Headings: condensed bold capitals with wide spacing. */
-html[data-theme="nerv"] h1 {
-  font-family: var(--font-title);
-  font-weight: 900;
-  font-size: clamp(2.25rem, 5vw, 4.75rem);
-  line-height: 0.95;
-  letter-spacing: -0.04em;
-  text-transform: uppercase;
-  color: var(--eva-text);
+/*
+ * Titles and big readouts are set large and then squeezed sideways, so they stand tall and thin like the show's
+ * lettering (headings get the same from League Gothic itself). Each squeezed box is widened by the same factor, with a
+ * negative margin, which unlike a width does not count towards the size of the page around it, so lines still wrap at
+ * the visible edge. Both are full-width blocks, so a percentage margin measures the right thing.
+ */
+html[data-theme="nerv"] :where(h1, .metric strong, .overview-grid [data-slot="card-content"] > strong) {
+  min-width: 0;
+  margin-right: calc(-100% * (1 / var(--squeeze) - 1));
+  transform: scaleX(var(--squeeze));
+  transform-origin: left center;
 }
-html[data-theme="nerv"] h2 {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 1.375rem;
-  line-height: 1.1;
-  letter-spacing: 0.12em;
+/* The unsqueezed words of a title would otherwise set how narrow the page may get. */
+html[data-theme="nerv"] :has(> h1),
+html[data-theme="nerv"] [data-slot="sidebar-inset"] { min-width: 0; }
+/* Titles: a title card. White heavy Mincho capitals, squeezed hard, against a thick orange bar. */
+html[data-theme="nerv"] h1 {
+  --squeeze: 0.66;
+  font-family: var(--font-title);
+  font-weight: 800;
+  font-size: clamp(3rem, 7.5vw, 6.75rem);
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: #fff;
+  border-left: 12px solid var(--eva-orange);
+  padding-left: 0.3em;
+}
+html[data-theme="nerv"]:not([data-crt="off"]) h1 { text-shadow: 0 0 18px rgba(255, 255, 255, 0.18); }
+/* Headings and card titles: tall, thin orange capitals. */
+html[data-theme="nerv"] :is(h2, [data-slot="card-title"]) {
+  font-family: var(--font-tall);
+  font-weight: 400;
+  font-size: 2rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--eva-orange);
 }
-html[data-theme="nerv"] .eyebrow { color: var(--eva-green); font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.2em; }
-html[data-theme="nerv"] .eyebrow::before { content: "// "; color: var(--eva-orange); }
+/* Settings group headings: bigger, over a double orange rule instead of the plain white one. */
+html[data-theme="nerv"] .settings-group-head { border-top: 4px double var(--eva-orange); padding-top: 0.5rem; }
+html[data-theme="nerv"] .settings-group-head h2 { font-size: 2.75rem; color: var(--eva-text); }
+html[data-theme="nerv"] .eyebrow { display: inline-block; width: fit-content; padding: 1px 8px; background: var(--eva-orange); color: #000; font-family: var(--font-mono); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.2em; }
+html[data-theme="nerv"] .eyebrow::before { content: "// "; }
 html[data-theme="nerv"] .label,
 html[data-theme="nerv"] .field-head label,
-html[data-theme="nerv"] .field-label { color: var(--eva-orange); font-family: var(--font-display); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+html[data-theme="nerv"] .field-label { color: var(--eva-orange); font-family: var(--font-display); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
 html[data-theme="nerv"] .hint,
 html[data-theme="nerv"] .field-hint { color: var(--eva-text-muted); }
-html[data-theme="nerv"] .hero { border-bottom: 1px solid var(--eva-border); padding-bottom: 1rem; }
+html[data-theme="nerv"] .hero { border-bottom: 4px double var(--eva-orange); padding-bottom: 1rem; }
+/* The connection line under a page title normally tucks up under it; here it would sit on the double rule, so it gets room. */
+html[data-theme="nerv"] .stream-status { margin-top: 12px; font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; }
 html[data-theme="nerv"] code,
 html[data-theme="nerv"] .vector-row code { font-family: var(--font-mono); color: var(--eva-cyan); }
 
@@ -150,13 +240,34 @@ html[data-theme="nerv"] .overview-grid [data-slot="card-content"] > strong {
   color: var(--eva-green);
   text-transform: uppercase;
 }
+html[data-theme="nerv"] :is(.metric strong, .overview-grid [data-slot="card-content"] > strong) { --squeeze: 0.72; display: block; font-size: 2.6rem; line-height: 1.05; letter-spacing: -0.02em; }
 html[data-theme="nerv"]:not([data-crt="off"]) .metric strong,
 html[data-theme="nerv"]:not([data-crt="off"]) .text-numeric,
 html[data-theme="nerv"]:not([data-crt="off"]) .overview-grid [data-slot="card-content"] > strong { text-shadow: 0 0 6px rgba(80, 255, 80, 0.25); }
+/*
+ * Signal charts after the show's psychographic display: black, softly blurred green column lines with small green "+"
+ * marks between them, and an orange ruler along the bottom; the scale numbers in orange monospace; the chart's name in an outlined
+ * box with rounded corners.
+ */
 html[data-theme="nerv"] .chart-scale,
-html[data-theme="nerv"] .chart-time { font-family: var(--font-mono); color: var(--eva-cyan); }
+html[data-theme="nerv"] .chart-time { font-family: var(--font-mono); color: var(--eva-orange); }
+html[data-theme="nerv"] :is(.chart-plot, .telemetry-chart) > svg {
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(var(--eva-orange), var(--eva-orange)) bottom / 100% 2px no-repeat,
+    repeating-linear-gradient(90deg, var(--eva-orange) 0 1px, transparent 1px 9px) bottom / 100% 7px no-repeat,
+    repeating-linear-gradient(90deg, var(--eva-orange) 0 1px, transparent 1px 45px) bottom / 100% 12px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='42'%3E%3Cfilter id='b' x='-10%25' y='-10%25' width='120%25' height='120%25'%3E%3CfeGaussianBlur stdDeviation='.75'/%3E%3C/filter%3E%3Cg filter='url(%23b)' fill='none' stroke='%2350ff50'%3E%3Cpath d='M45 -2V44' stroke-opacity='.7' stroke-width='1.3'/%3E%3Cpath d='M22.5 17v8M18.5 21h8M67.5 17v8M63.5 21h8' stroke-opacity='.8' stroke-width='1.2'/%3E%3C/g%3E%3C/svg%3E") -45px 0 / 90px 42px,
+    #000;
+}
+/* The grid behind the traces is slightly soft, like a CRT; the traces themselves stay sharp. */
+html[data-theme="nerv"] :is(.chart-plot, .telemetry-chart) > svg .telemetry-grid-line { stroke: rgba(80, 255, 80, 0.35); filter: blur(0.7px); }
+html[data-theme="nerv"] .telemetry-chart-heading h2 { padding: 2px 12px; border: 2px solid var(--eva-orange); border-radius: 7px; }
+html[data-theme="nerv"] .chart-empty { background: radial-gradient(ellipse 45% 50% at center, rgba(0, 0, 0, 0.88) 40%, transparent 100%); }
+html[data-theme="nerv"] .chart-empty > span { color: var(--eva-orange); }
 
-/* Panels: equipment modules. Square, thin dark-green border, an orange divider under the header, numbered 01, 02, ... */
+/* Panels: equipment modules. Square, a thin dim-orange frame with bright corner brackets, numbered 01, 02, ... on an orange plate. */
 html[data-theme="nerv"] main { counter-reset: nerv-module; }
 html[data-theme="nerv"] [data-slot="card"],
 html[data-theme="nerv"] .telemetry-chart,
@@ -164,25 +275,34 @@ html[data-theme="nerv"] .metric,
 html[data-theme="nerv"] .gesture-card,
 html[data-theme="nerv"] .preview-notice,
 html[data-theme="nerv"] .vector-row {
-  background: var(--eva-surface);
-  border: 1px solid var(--eva-border);
+  background: var(--eva-brackets), var(--eva-surface);
+  border: 1px solid var(--eva-frame);
   border-radius: 0;
   box-shadow: none;
 }
-html[data-theme="nerv"] [data-slot="card"] { --tw-ring-shadow: 0 0 #0000; counter-increment: nerv-module; }
-html[data-theme="nerv"] [data-slot="card-header"] { border-bottom: 1px solid var(--eva-orange); padding-bottom: 0.75rem; margin-bottom: 0.25rem; }
-html[data-theme="nerv"] [data-slot="card-header"]::before {
+html[data-theme="nerv"] [data-slot="card"] { --tw-ring-shadow: 0 0 #0000; }
+/*
+ * The number plate is drawn by the card, before its header. The header is a size container, and a container scopes
+ * counters inside it (in WebKit, which the desktop app uses, as in Chrome), so a number drawn inside the header reads 00.
+ */
+html[data-theme="nerv"] [data-slot="card"]:has(> [data-slot="card-header"]) { counter-increment: nerv-module; }
+html[data-theme="nerv"] [data-slot="card"]:has(> [data-slot="card-header"])::before {
   content: counter(nerv-module, decimal-leading-zero) " / MODULE";
-  display: block;
-  margin-bottom: 0.2rem;
+  align-self: flex-start;
+  margin: 0 0 calc(6px - var(--card-spacing)) var(--card-spacing);
+  padding: 1px 16px 1px 6px;
+  background: var(--eva-orange);
+  color: #000;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 9px) 100%, 0 100%);
   font-family: var(--font-mono);
   font-size: 0.66rem;
+  font-weight: 700;
   letter-spacing: 0.2em;
-  color: var(--eva-green);
 }
-html[data-theme="nerv"] .gesture-card--lit { background: #0a1a0a; border-color: var(--eva-green); box-shadow: inset 0 0 0 1px var(--eva-green); }
+html[data-theme="nerv"] [data-slot="card-header"] { border-bottom: 4px double var(--eva-orange); padding-bottom: 0.75rem; margin-bottom: 0.25rem; }
+html[data-theme="nerv"] .gesture-card--lit { background: var(--eva-brackets), #0a1a0a; border-color: var(--eva-green); box-shadow: inset 0 0 0 1px var(--eva-green); }
 
-/* Buttons: command controls. Orange primary; green-outlined secondary; red destructive; flat grey when disabled. */
+/* Buttons: command controls. Orange primary; green-outlined secondary; red destructive; hazard-striped when disabled. */
 html[data-theme="nerv"] [data-slot="button"] {
   border-radius: 0;
   font-family: var(--font-display);
@@ -201,8 +321,24 @@ html[data-theme="nerv"] [data-slot="button"][class*="bg-destructive"] { backgrou
 html[data-theme="nerv"] [data-slot="button"][class*="bg-destructive"]:hover { background: #000; color: var(--eva-red); }
 html[data-theme="nerv"] [data-slot="button"][data-variant="ghost"] { color: var(--eva-text); }
 html[data-theme="nerv"] [data-slot="button"][data-variant="ghost"]:hover { background: var(--wash); color: var(--eva-green); }
-html[data-theme="nerv"] [data-slot="button"]:disabled,
-html[data-theme="nerv"] [data-slot="button"][aria-disabled="true"] { background: #1a1a1a; color: var(--eva-text-muted); border-color: #2a2a2a; opacity: 1; transition: none; }
+/*
+ * Anything switched off: dim hazard stripes behind it, a dashed frame and grey words with a black edge so they stay
+ * readable on the stripes. It never moves or lights up on hover.
+ */
+html[data-theme="nerv"] :is([data-slot="button"], [data-slot="input"], [data-slot="select-trigger"], [data-slot="textarea"], select, input, textarea, [data-slot="sidebar-menu-button"]):is(:disabled, [aria-disabled="true"]),
+html[data-theme="nerv"] :is([data-slot="switch"], [data-slot="checkbox"], [data-slot="radio-group-item"], [data-slot="slider"])[data-disabled],
+html[data-theme="nerv"] .segment:has([data-disabled]),
+html[data-theme="nerv"] fieldset:disabled :is(select, input, textarea, [data-slot="button"]) {
+  background: var(--eva-hazard-off), #0b0b0b !important;
+  border: 1px dashed rgba(255, 153, 0, 0.45) !important;
+  color: var(--eva-text-muted) !important;
+  text-shadow: 0 0 2px #000, 0 0 3px #000;
+  box-shadow: none;
+  opacity: 1;
+  cursor: not-allowed;
+  transition: none;
+}
+html[data-theme="nerv"] :is([data-slot="switch"], [data-slot="checkbox"])[data-disabled] > * { opacity: 0.5; }
 
 /* Inputs: black, thin green border; orange on focus. */
 html[data-theme="nerv"] [data-slot="input"],
@@ -266,19 +402,62 @@ html[data-theme="nerv"] .segment:has([data-checked]),
 html[data-theme="nerv"] .segment:has([data-checked]):hover { background: var(--eva-orange); color: #000; }
 
 /* Navigation: a technical terminal list; the open page is orange. */
-html[data-theme="nerv"] [data-slot="sidebar-container"] { border-right: 1px solid var(--eva-border); }
+html[data-theme="nerv"] [data-slot="sidebar-container"] { border-right: 1px solid var(--eva-frame); }
 html[data-theme="nerv"] [data-sidebar="menu-button"],
-html[data-theme="nerv"] [data-slot="sidebar-menu-button"] { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; border-radius: 0; }
-html[data-theme="nerv"] [data-sidebar="menu-button"][data-active]:not([data-active="false"]) { background: var(--eva-orange); color: #000; }
-html[data-theme="nerv"] [data-sidebar="menu-button"]:hover:not([data-active]):not([data-active="false"]) { background: var(--wash); color: var(--eva-green); }
+html[data-theme="nerv"] [data-slot="sidebar-menu-button"] { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; border-radius: 0; }
+/* Menu names: tall, thin capitals after the page number, with no icon (the numbers stand in for them when the menu is folded). */
+html[data-theme="nerv"] [data-sidebar="menu-button"] { gap: 10px; }
+html[data-theme="nerv"] [data-sidebar="menu-button"] > span { font-family: var(--font-tall); font-weight: 400; font-size: 1.3rem; line-height: 1; letter-spacing: 0.05em; }
+html[data-theme="nerv"] [data-sidebar="menu-button"] > svg { display: none; }
+/* Other icons: square line ends and sharp joins, a little heavier. */
+html[data-theme="nerv"] svg.lucide { stroke-linecap: square; stroke-linejoin: miter; stroke-width: 2.25; }
+html[data-theme="nerv"] :is([data-slot="card-header"], .metric, .nerv-module > header) svg.lucide { color: var(--eva-orange); }
+/* The open page and a hovered one use the same full-width bar: solid orange for the open page, a faint orange for hover. */
+html[data-theme="nerv"] [data-sidebar="menu-button"][data-active]:not([data-active="false"]) { background: var(--eva-orange); color: #000; box-shadow: none; }
+/* Every page numbered in order, as the top bar names it. */
+html[data-theme="nerv"] [data-slot="sidebar-content"] { counter-reset: nerv-nav; }
+html[data-theme="nerv"] [data-sidebar="menu-button"] { counter-increment: nerv-nav; }
+html[data-theme="nerv"] [data-sidebar="menu-button"]::before { content: counter(nerv-nav, decimal-leading-zero); flex: none; width: 1.3em; font-family: var(--font-mono); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.05em; color: var(--eva-text-muted); }
+html[data-theme="nerv"] [data-sidebar="menu-button"][data-active]:not([data-active="false"])::before { color: #000; }
+html[data-theme="nerv"] [data-sidebar="menu-button"]:hover:not([data-active]:not([data-active="false"])) { background: rgba(255, 153, 0, 0.16); color: var(--eva-orange); box-shadow: none; }
 html[data-theme="nerv"] [data-sidebar="group-label"] { color: var(--eva-orange); font-family: var(--font-mono); font-weight: 700; letter-spacing: 0.2em; }
 html[data-theme="nerv"] [data-sidebar="group-label"]::before { content: "// "; color: var(--eva-green); }
 html[data-theme="nerv"] .nav-brand-name { font-family: var(--font-display); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--eva-orange); }
 
 /* Messages: a coloured bar down the side, with the words, never the colour alone. Red is for critical only. */
 html[data-theme="nerv"] [data-slot="alert"] { border: 1px solid var(--eva-border); border-left: 4px solid var(--eva-orange); border-radius: 0; background: var(--eva-surface); color: var(--eva-text); }
-html[data-theme="nerv"] [data-slot="alert"][data-variant="destructive"],
-html[data-theme="nerv"] [data-slot="alert"][class*="destructive"] { border-color: var(--eva-red); border-left-color: var(--eva-red); }
+/*
+ * An error is the emergency state, after the show's EMERGENCY boards: black, bands of orange-and-black stripes along
+ * the top and bottom with a red rule inside each, the title in tall orange capitals behind a "警告 WARNING" plate
+ * (orange frame with red ends).
+ */
+html[data-theme="nerv"] [data-slot="alert"]:is([data-variant="destructive"], [class*="destructive"]) {
+  border: 0;
+  padding: 34px 20px;
+  background:
+    linear-gradient(var(--eva-red), var(--eva-red)) 0 19px / 100% 3px no-repeat,
+    linear-gradient(var(--eva-red), var(--eva-red)) 0 calc(100% - 19px) / 100% 3px no-repeat,
+    repeating-linear-gradient(-55deg, var(--eva-orange) 0 14px, #000 14px 30px) top / 100% 14px no-repeat,
+    repeating-linear-gradient(-55deg, var(--eva-orange) 0 14px, #000 14px 30px) bottom / 100% 14px no-repeat,
+    #000;
+  color: var(--eva-text);
+}
+html[data-theme="nerv"] [data-slot="alert"]:is([data-variant="destructive"], [class*="destructive"]) [data-slot="alert-title"] { font-family: var(--font-tall); font-weight: 400; font-size: 1.5rem; line-height: 1.1; letter-spacing: 0.06em; color: var(--eva-orange); }
+html[data-theme="nerv"] [data-slot="alert"]:is([data-variant="destructive"], [class*="destructive"]) [data-slot="alert-title"]::before {
+  content: "警告 WARNING";
+  display: inline-block;
+  margin-right: 12px;
+  padding: 0 10px;
+  border: 1px solid var(--eva-orange);
+  border-left: 5px solid var(--eva-red);
+  border-right: 5px solid var(--eva-red);
+  font-family: var(--font-title), var(--font-tall);
+  font-size: 0.85em;
+  letter-spacing: 0.12em;
+  vertical-align: 2px;
+}
+html[data-theme="nerv"] [data-slot="alert"]:is([data-variant="destructive"], [class*="destructive"]) svg.lucide { color: var(--eva-red); }
+html[data-theme="nerv"] [data-slot="alert-title"] { font-family: var(--font-display); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 html[data-theme="nerv"] .calibration-warning { border: 1px solid var(--eva-amber); border-left: 4px solid var(--eva-amber); border-radius: 0; background: rgba(255, 204, 0, 0.08); color: var(--eva-text); }
 
 /* The right-hand telemetry panel (see features/dashboard/components/NervTelemetryPanel.tsx). Hides on narrow windows. */
@@ -292,7 +471,7 @@ html[data-theme="nerv"] .nerv-telemetry {
   overflow-y: auto;
   padding: 16px 14px 24px;
   background: var(--eva-surface);
-  border-left: 1px solid var(--eva-border);
+  border-left: 1px solid var(--eva-frame);
 }
 html[data-theme="nerv"] .nerv-telemetry[data-collapsed="true"] { flex-basis: 36px; width: 36px; padding: 10px 0; overflow: hidden; }
 html[data-theme="nerv"] .nerv-telemetry[data-collapsed="true"] .nerv-telemetry-toggle { writing-mode: vertical-rl; padding: 12px 6px; }
@@ -300,8 +479,9 @@ html[data-theme="nerv"] .nerv-telemetry-head { display: flex; align-items: cente
 html[data-theme="nerv"] .nerv-telemetry-head h2 { margin: 0; font-size: 1.1rem; }
 html[data-theme="nerv"] .nerv-telemetry-toggle { background: transparent; border: 1px solid var(--eva-border); color: var(--eva-orange); font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.15em; padding: 2px 8px; cursor: pointer; }
 html[data-theme="nerv"] .nerv-telemetry-toggle:hover { background: var(--eva-orange); color: #000; }
-html[data-theme="nerv"] .nerv-module { border: 1px solid var(--eva-border); background: #000; margin-bottom: 12px; padding: 0 10px 10px; }
-html[data-theme="nerv"] .nerv-module > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 -10px 8px; padding: 6px 10px; border-bottom: 1px solid var(--eva-orange); font-family: var(--font-display); font-weight: 700; font-size: 0.78rem; letter-spacing: 0.12em; color: var(--eva-orange); }
+html[data-theme="nerv"] .nerv-module { border: 1px solid var(--eva-frame); background: var(--eva-brackets), #000; margin-bottom: 12px; padding: 0 10px 10px; }
+html[data-theme="nerv"] .nerv-module > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 -10px 8px; padding: 4px 10px; background: var(--eva-orange); font-family: var(--font-display); font-weight: 700; font-size: 0.78rem; letter-spacing: 0.12em; color: #000; }
+html[data-theme="nerv"] .nerv-module > header .nerv-tag { padding: 0 5px; background: #000; }
 html[data-theme="nerv"] .nerv-tag { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em; }
 html[data-theme="nerv"] .nerv-tag[data-tone="active"] { color: var(--eva-green); }
 html[data-theme="nerv"] .nerv-tag[data-tone="offline"] { color: var(--eva-text-muted); }
@@ -323,19 +503,93 @@ html[data-theme="nerv"] .nerv-log time { color: var(--eva-cyan); margin-right: 6
 @media (max-width: 1100px) { html[data-theme="nerv"] .nerv-telemetry { display: none; } }
 
 /* The top and bottom bars (see app/components/NervBars.tsx). They span the window; the sidebar, page and telemetry panel sit between them. */
-html[data-theme="nerv"] { --nerv-header-h: 64px; --nerv-footer-h: 34px; }
-html[data-theme="nerv"] [data-slot="sidebar-wrapper"] { padding-top: var(--nerv-header-h); padding-bottom: var(--nerv-footer-h); }
-html[data-theme="nerv"] [data-slot="sidebar-container"] { top: var(--nerv-header-h); bottom: var(--nerv-footer-h); height: auto; }
-html[data-theme="nerv"] [data-slot="sidebar-inset"] { min-height: calc(100svh - var(--nerv-header-h) - var(--nerv-footer-h)); }
-html[data-theme="nerv"] .nerv-telemetry { top: var(--nerv-header-h); height: calc(100svh - var(--nerv-header-h) - var(--nerv-footer-h)); }
+html[data-theme="nerv"] { --nerv-header-h: 84px; --nerv-stripe-h: 6px; --nerv-footer-h: 34px; }
+html[data-theme="nerv"] [data-slot="sidebar-wrapper"] { padding-top: calc(var(--nerv-header-h) + var(--nerv-stripe-h)); padding-bottom: calc(var(--nerv-footer-h) + var(--nerv-stripe-h)); }
+html[data-theme="nerv"] [data-slot="sidebar-container"] { top: calc(var(--nerv-header-h) + var(--nerv-stripe-h)); bottom: calc(var(--nerv-footer-h) + var(--nerv-stripe-h)); height: auto; }
+html[data-theme="nerv"] [data-slot="sidebar-inset"] { min-height: calc(100svh - var(--nerv-header-h) - var(--nerv-footer-h) - 2 * var(--nerv-stripe-h)); }
+html[data-theme="nerv"] .nerv-telemetry { top: calc(var(--nerv-header-h) + var(--nerv-stripe-h)); height: calc(100svh - var(--nerv-header-h) - var(--nerv-footer-h) - 2 * var(--nerv-stripe-h)); }
 html[data-theme="nerv"] .nerv-header,
 html[data-theme="nerv"] .nerv-footer { position: fixed; left: 0; right: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 20px; background: #000; }
 html[data-theme="nerv"] .nerv-header { top: 0; height: var(--nerv-header-h); border-bottom: 1px solid var(--eva-orange); }
-html[data-theme="nerv"] .nerv-footer { bottom: 0; height: var(--nerv-footer-h); border-top: 1px solid var(--eva-border); font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.1em; }
-html[data-theme="nerv"] .nerv-header-id { display: flex; flex-direction: column; line-height: 1.1; }
-html[data-theme="nerv"] .nerv-header-id strong { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; letter-spacing: 0.14em; color: var(--eva-orange); }
+/* Hazard stripes along the bottom of the top bar and the top of the bottom bar. */
+html[data-theme="nerv"] .nerv-header::after,
+html[data-theme="nerv"] .nerv-footer::before { content: ""; position: absolute; left: 0; right: 0; height: var(--nerv-stripe-h); background: var(--eva-hazard); pointer-events: none; }
+html[data-theme="nerv"] .nerv-header::after { bottom: calc(-1px - var(--nerv-stripe-h)); }
+html[data-theme="nerv"] .nerv-footer::before { top: calc(-1px - var(--nerv-stripe-h)); }
+html[data-theme="nerv"] .nerv-footer { bottom: 0; height: var(--nerv-footer-h); border-top: 1px solid var(--eva-orange); font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.1em; }
+html[data-theme="nerv"] .nerv-header-id { display: flex; align-items: center; gap: 12px; line-height: 1.1; min-width: 0; }
+html[data-theme="nerv"] .nerv-header-id > div { display: flex; flex-direction: column; min-width: 0; }
+html[data-theme="nerv"] .nerv-header-id [lang="ja"] { margin-left: 10px; font-family: var(--font-title); font-weight: 800; letter-spacing: 0.1em; color: var(--eva-text); }
+/* A caution triangle as the mark: orange, a black inside, and an orange "!" (bar and dot) drawn with gradients. */
+html[data-theme="nerv"] .nerv-header-mark { flex: none; width: 40px; height: 35px; background: var(--eva-orange); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+html[data-theme="nerv"] .nerv-header-mark::after {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 100%;
+  background:
+    linear-gradient(var(--eva-orange), var(--eva-orange)) 50% 44% / 4px 36% no-repeat,
+    linear-gradient(var(--eva-orange), var(--eva-orange)) 50% 84% / 4px 4px no-repeat,
+    #000;
+  clip-path: polygon(50% 20%, calc(100% - 7px) calc(100% - 4px), 7px calc(100% - 4px));
+}
+/*
+ * The devices as three oversized caution triangles locked edge to edge (pointing up, down, up), just right of the
+ * system name, running off the top and bottom of the bar and cropped at its edges. Each name and state sits in the
+ * wide part of its triangle. Outlined when off, filled when live.
+ */
+html[data-theme="nerv"] .nerv-units-frame {
+  --unit-w: 150px;
+  --unit-h: 100px;
+  --unit-gap: 4px;
+  position: relative;
+  flex: none;
+  align-self: stretch;
+  width: calc(var(--unit-w) * 2 + var(--unit-gap) * 2);
+  margin: 0 auto 0 8px;
+  overflow: hidden;
+}
+html[data-theme="nerv"] .nerv-units { position: absolute; inset: 0; margin: 0; padding: 0; list-style: none; }
+html[data-theme="nerv"] .nerv-unit {
+  --unit-c: #5a5a55;
+  position: absolute;
+  top: -8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  width: var(--unit-w);
+  height: var(--unit-h);
+  padding-bottom: 22px;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  background: var(--unit-c);
+  line-height: 1;
+}
+html[data-theme="nerv"] .nerv-unit::before { content: ""; position: absolute; inset: 0; background: #000; clip-path: polygon(50% 5px, calc(100% - 4px) calc(100% - 2px), 4px calc(100% - 2px)); }
+html[data-theme="nerv"] .nerv-unit:nth-child(1) { left: 0; }
+html[data-theme="nerv"] .nerv-unit:nth-child(3) { left: calc(var(--unit-w) + var(--unit-gap) * 2); }
+/* The middle one points down and fits between the other two. */
+html[data-theme="nerv"] .nerv-unit:nth-child(2) {
+  left: calc(var(--unit-w) / 2 + var(--unit-gap));
+  justify-content: flex-start;
+  padding: 20px 0 0;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+html[data-theme="nerv"] .nerv-unit:nth-child(2)::before { clip-path: polygon(4px 2px, calc(100% - 4px) 2px, 50% calc(100% - 5px)); }
+html[data-theme="nerv"] .nerv-unit > span { position: relative; color: var(--eva-text-muted); }
+html[data-theme="nerv"] .nerv-unit-name { font-family: var(--font-tall); font-size: 1.25rem; letter-spacing: 0.08em; }
+html[data-theme="nerv"] .nerv-unit-state { margin-top: 1px; font-family: var(--font-mono); font-size: 0.58rem; font-weight: 700; letter-spacing: 0.06em; }
+html[data-theme="nerv"] .nerv-unit[data-tone="active"] { --unit-c: var(--eva-green); }
+html[data-theme="nerv"] .nerv-unit[data-tone="caution"] { --unit-c: var(--eva-amber); }
+html[data-theme="nerv"] .nerv-unit:is([data-tone="active"], [data-tone="caution"])::before { background: var(--unit-c); }
+html[data-theme="nerv"] .nerv-unit:is([data-tone="active"], [data-tone="caution"]) > span { color: #000; }
+/* The name and page plate stay above the triangles; on a narrow bar there is no room for them. */
+html[data-theme="nerv"] .nerv-header-id,
+html[data-theme="nerv"] .nerv-header-section { position: relative; z-index: 1; }
+@media (max-width: 980px) { html[data-theme="nerv"] .nerv-units-frame { display: none; } }
+html[data-theme="nerv"] .nerv-header-id strong { font-family: var(--font-tall); font-weight: 400; font-size: 1.75rem; line-height: 1; letter-spacing: 0.08em; color: var(--eva-orange); }
 html[data-theme="nerv"] .nerv-header-id small { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.3em; color: var(--eva-green); }
-html[data-theme="nerv"] .nerv-header-section { font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; letter-spacing: 0.16em; color: var(--eva-text); text-align: right; }
+html[data-theme="nerv"] .nerv-header-section { flex: none; padding: 4px 14px 4px 24px; background: var(--eva-orange); color: #000; clip-path: polygon(14px 0, 100% 0, 100% 100%, 0 100%); font-family: var(--font-tall); font-weight: 400; font-size: 1.5rem; line-height: 1.1; letter-spacing: 0.1em; text-align: right; }
 html[data-theme="nerv"] .nerv-footer ul { display: flex; align-items: center; gap: 22px; margin: 0; padding: 0; list-style: none; overflow: hidden; white-space: nowrap; }
 html[data-theme="nerv"] .nerv-footer-label { color: var(--eva-text-muted); margin-right: 8px; }
 html[data-theme="nerv"] .nerv-footer-item[data-tone="active"] .nerv-footer-value { color: var(--eva-green); }
@@ -344,9 +598,144 @@ html[data-theme="nerv"] .nerv-footer-item[data-tone="caution"] .nerv-footer-valu
 html[data-theme="nerv"] .nerv-footer-clock { color: var(--eva-cyan); font-variant-numeric: tabular-nums; font-weight: 700; }
 @media (max-width: 700px) {
   html[data-theme="nerv"] { --nerv-header-h: 52px; }
+  html[data-theme="nerv"] .nerv-header { padding: 0 12px; }
+  html[data-theme="nerv"] .nerv-header-id strong { font-size: 1.3rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  html[data-theme="nerv"] .nerv-header-mark { width: 28px; height: 25px; }
+  html[data-theme="nerv"] .nerv-header-section { font-size: 1.15rem; padding: 3px 10px 3px 18px; }
   html[data-theme="nerv"] .nerv-header-id small,
   html[data-theme="nerv"] .nerv-footer-label { display: none; }
 }
 /* The top bar carries the system name, so the sidebar's own logo is left out, which gives the menu more room. */
 html[data-theme="nerv"] [data-slot="sidebar-header"],
 html[data-theme="nerv"] [data-sidebar="header"] { display: none; }
+
+/* Meters after the show's level displays: a row of cyan segments, lit up to the value, unlit ones faintly showing. */
+html[data-theme="nerv"] .gesture-meter {
+  height: 14px;
+  border-radius: 0;
+  background: repeating-linear-gradient(90deg, rgba(32, 240, 255, 0.13) 0 6px, transparent 6px 9px);
+}
+html[data-theme="nerv"] .gesture-meter-fill {
+  background: linear-gradient(90deg, #1aa6c8, var(--eva-cyan));
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 6px, transparent 6px 9px);
+  mask-image: repeating-linear-gradient(90deg, #000 0 6px, transparent 6px 9px);
+}
+html[data-theme="nerv"] .gesture-card--lit .gesture-meter-fill { background: linear-gradient(90deg, #2bbf2b, var(--eva-green)); }
+
+/*
+ * The top bar's clock, after the show's "active time" displays: orange seven-segment digits, slanted, with the unlit
+ * segments faintly showing, under a small label. On a window too narrow for it the bottom bar's clock shows instead.
+ */
+html[data-theme="nerv"] .nerv-clock { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; margin-right: 20px; }
+html[data-theme="nerv"] .nerv-clock-label { font-family: var(--font-mono); font-size: 0.56rem; font-weight: 700; letter-spacing: 0.14em; color: var(--eva-orange); }
+html[data-theme="nerv"] .nerv-7seg { display: flex; align-items: stretch; gap: 3px; height: 40px; transform: skewX(-8deg); }
+html[data-theme="nerv"] .nerv-7seg svg { height: 100%; width: auto; overflow: visible; }
+html[data-theme="nerv"] .nerv-7seg-digit polygon { fill: rgba(255, 153, 0, 0.1); }
+html[data-theme="nerv"] .nerv-7seg-digit polygon[data-on],
+html[data-theme="nerv"] .nerv-7seg-colon rect { fill: var(--eva-orange); }
+html[data-theme="nerv"]:not([data-crt="off"]) .nerv-7seg { filter: drop-shadow(0 0 4px rgba(255, 153, 0, 0.45)); }
+@media (max-width: 1240px) { html[data-theme="nerv"] .nerv-clock { display: none; } }
+@media (min-width: 1241px) { html[data-theme="nerv"] .nerv-footer-clock { display: none; } }
+
+/*
+ * Native dropdowns. The closed control loses the system's rounded look for a square box with an orange arrow, and its
+ * option list (which the system draws and no page can style) is replaced while open by the themed list from
+ * app/components/NervSelectMenu.tsx.
+ */
+html[data-theme="nerv"] select:not([multiple]):not([size]) {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2rem;
+  background-image: linear-gradient(45deg, transparent 50%, var(--eva-orange) 50%), linear-gradient(-45deg, transparent 50%, var(--eva-orange) 50%);
+  background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+html[data-theme="nerv"] select[aria-expanded="true"] { border-color: var(--eva-orange); }
+html[data-theme="nerv"] .nerv-select-menu {
+  position: fixed;
+  z-index: 60;
+  overflow-y: auto;
+  padding: 3px 0;
+  background: #000;
+  border: 1px solid var(--eva-orange);
+  box-shadow: 0 0 0 1px #000, 0 6px 0 -2px rgba(255, 153, 0, 0.35);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--eva-text);
+  scrollbar-color: var(--eva-orange) #000;
+  animation: nerv-unroll 160ms var(--eva-ease);
+}
+html[data-theme="nerv"] .nerv-select-menu[data-side="top"] { animation-name: nerv-unroll-up; }
+html[data-theme="nerv"] .nerv-select-group { padding: 6px 10px 2px; font-family: var(--font-display); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--eva-orange); }
+html[data-theme="nerv"] .nerv-select-option { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 4px 10px; cursor: default; }
+html[data-theme="nerv"] .nerv-select-option::before { content: ""; flex: none; width: 7px; height: 7px; border: 1px solid currentColor; opacity: 0.5; }
+html[data-theme="nerv"] .nerv-select-option[aria-selected="true"] { color: var(--eva-green); }
+html[data-theme="nerv"] .nerv-select-option[aria-selected="true"]::before { background: currentColor; opacity: 1; }
+html[data-theme="nerv"] .nerv-select-option[data-active] { background: var(--eva-orange); color: #000; }
+html[data-theme="nerv"] .nerv-select-option[aria-disabled="true"] { background: var(--eva-hazard-off); color: var(--eva-text-muted); text-shadow: 0 0 2px #000, 0 0 3px #000; cursor: not-allowed; }
+html[data-theme="nerv"] .nerv-select-option[aria-disabled="true"]::before { border-style: dashed; }
+@keyframes nerv-unroll-up { from { clip-path: inset(100% 0 0 0); opacity: 0.4; } to { clip-path: inset(0 0 0 0); opacity: 1; } }
+
+/*
+ * Motion: mechanical and quick, never bouncing. Switching pages wipes the new page in from the left behind a short
+ * flicker, and the page label in the top bar slides in with it. Lists, tooltips, menus and expanding sections unroll
+ * downwards; dialogs open out from a horizontal line, like an old monitor; side sheets wipe in from their edge. Only
+ * clip-path and opacity move, so nothing shifts the layout or fights a component's own positioning. All of it is off
+ * when the system asks for reduced motion.
+ */
+@keyframes nerv-page-in {
+  0% { clip-path: inset(0 100% 0 0); opacity: 0.35; }
+  55% { clip-path: inset(0 0 0 0); opacity: 1; }
+  68% { opacity: 0.55; }
+  80% { opacity: 1; }
+  100% { clip-path: inset(0 0 0 0); opacity: 1; }
+}
+@keyframes nerv-plate-in { from { clip-path: inset(0 0 0 100%); } to { clip-path: inset(0 0 0 0); } }
+@keyframes nerv-unroll { from { clip-path: inset(0 0 100% 0); opacity: 0.4; } to { clip-path: inset(0 0 0 0); opacity: 1; } }
+@keyframes nerv-roll-up { from { clip-path: inset(0 0 0 0); opacity: 1; } to { clip-path: inset(0 0 100% 0); opacity: 0; } }
+@keyframes nerv-open-line {
+  0% { clip-path: inset(50% 0 50% 0); opacity: 1; }
+  45% { clip-path: inset(calc(50% - 1px) 0 calc(50% - 1px) 0); }
+  100% { clip-path: inset(0 0 0 0); }
+}
+@keyframes nerv-close-line {
+  0% { clip-path: inset(0 0 0 0); }
+  100% { clip-path: inset(50% 0 50% 0); opacity: 0.6; }
+}
+@keyframes nerv-wipe-left { from { clip-path: inset(0 0 0 100%); } to { clip-path: inset(0 0 0 0); } }
+@keyframes nerv-wipe-right { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes nerv-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+html[data-theme="nerv"] { --eva-ease: cubic-bezier(0.3, 0, 0.1, 1); }
+/* Each page is mounted afresh when its tab is chosen, so this runs on every switch. */
+html[data-theme="nerv"] [data-slot="sidebar-inset"] > * { animation: nerv-page-in 260ms var(--eva-ease); }
+html[data-theme="nerv"] .nerv-header-section > span { display: inline-block; animation: nerv-plate-in 200ms var(--eva-ease); }
+html[data-theme="nerv"] [data-sidebar="menu-button"] { transition: background-color var(--eva-motion-fast) linear, color var(--eva-motion-fast) linear; }
+
+html[data-theme="nerv"] [data-slot="select-content"][data-open],
+html[data-theme="nerv"] [data-slot="tooltip-content"][data-open] { animation: nerv-unroll 160ms var(--eva-ease); }
+html[data-theme="nerv"] [data-slot="tooltip-content"][data-open] { animation-duration: 110ms; }
+html[data-theme="nerv"] [data-slot="select-content"][data-closed],
+html[data-theme="nerv"] [data-slot="tooltip-content"][data-closed] { animation: nerv-roll-up 100ms linear forwards; }
+html[data-theme="nerv"] [data-slot="alert-dialog-content"][data-open] { animation: nerv-open-line 240ms var(--eva-ease); }
+html[data-theme="nerv"] [data-slot="alert-dialog-content"][data-closed] { animation: nerv-close-line 140ms linear forwards; }
+html[data-theme="nerv"] [data-slot="alert-dialog-overlay"][data-open] { animation: nerv-fade-in 120ms linear; }
+html[data-theme="nerv"] [data-slot="sheet-content"][data-side="right"]:not([data-starting-style]):not([data-ending-style]) { animation: nerv-wipe-left 220ms var(--eva-ease); }
+html[data-theme="nerv"] [data-slot="sheet-content"][data-side="left"]:not([data-starting-style]):not([data-ending-style]) { animation: nerv-wipe-right 220ms var(--eva-ease); }
+html[data-theme="nerv"] [data-slot="collapsible-content"][data-open],
+html[data-theme="nerv"] details[open] > :not(summary) { animation: nerv-unroll 180ms var(--eva-ease); }
+html[data-theme="nerv"] details > summary::marker { color: var(--eva-orange); }
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="nerv"] [data-slot="sidebar-inset"] > *,
+  html[data-theme="nerv"] .nerv-select-menu,
+  html[data-theme="nerv"] .nerv-header-section > span,
+  html[data-theme="nerv"] [data-slot="select-content"],
+  html[data-theme="nerv"] [data-slot="tooltip-content"],
+  html[data-theme="nerv"] [data-slot="alert-dialog-content"],
+  html[data-theme="nerv"] [data-slot="alert-dialog-overlay"],
+  html[data-theme="nerv"] [data-slot="sheet-content"],
+  html[data-theme="nerv"] [data-slot="collapsible-content"],
+  html[data-theme="nerv"] details[open] > :not(summary) { animation: none; }
+}

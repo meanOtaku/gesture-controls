@@ -46,3 +46,16 @@ minus, comparison and degree signs. Subsets are modified versions under the same
 Noto Serif Display was first pinned with `fontTools.varLib.instancer` (`wdth=100`, `wght=700:900`) to drop the width axis,
 then subset with `pyftsubset --unicodes="U+0020-007E,U+00A0-00FF,U+2010-2027,U+2030-203A,U+2190-2193,U+2212,U+2264,U+2265,U+00B0" --flavor=woff2`
 (Oswald and JetBrains Mono: the same command without the pinning step).
+
+## League Gothic
+
+`LeagueGothic-subset.woff2` is **League Gothic** (variable in width, 75–100), used by the NERV theme for headings, card
+titles, the menu and the top bar: tall, thin capitals.
+
+- Source: `https://raw.githubusercontent.com/google/fonts/main/ofl/leaguegothic/LeagueGothic[wdth].ttf`
+  (SHA-256 of the original: `3b0e998c9a0034222394ffecdd383e6948259ad037b95555b139a217629ce1d0`, 65,972 bytes).
+- Licence: SIL Open Font License 1.1, copyright 2010 The League Gothic Project Authors
+  (<https://github.com/theleagueof/league-gothic>). The licence text is in `LeagueGothic-OFL.txt`. The font is a modified
+  (subset) version of the original, under the same licence.
+- Subset: 16,176 bytes, SHA-256 `93a2660ff696335c2c38faa37e690537ba68664c9cb7384e3dc4e785dea40456`, made with the same
+  `pyftsubset` command and character list as the other NERV fonts above (`--layout-features='*' --flavor=woff2`).
