@@ -108,10 +108,22 @@ html[data-theme="halftone"] .shell::before {
 html[data-theme="halftone"] ::selection { background: var(--yellow); color: #0b0b0b; }
 html[data-theme="halftone"] :focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 
-/* Type: heavy Mincho, mixed case, tight. The h1 gets a hot pink offset, like a misregistered print. */
+/* Type: heavy Mincho capitals, tight and squeezed like the title cards. The h1 gets a hot pink offset, like a misregistered print. */
 html[data-theme="halftone"] h1,
-html[data-theme="halftone"] h2 { text-transform: none; font-weight: 900; letter-spacing: -0.015em; }
-html[data-theme="halftone"] h1 { line-height: 1.02; text-shadow: 3px 3px 0 #ff2e93; }
+html[data-theme="halftone"] h2 {
+  text-transform: uppercase;
+  font-weight: 800;
+  letter-spacing: -0.045em; /* title-card tight: the letters nearly touch */
+  line-height: 0.95;
+  /* Squeezed sideways, so the letters stand tall like the show's titles. Anchored at the left, where headings start. */
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  transform: scaleX(0.78);
+  transform-origin: left center;
+  text-rendering: geometricPrecision;
+}
+html[data-theme="halftone"] h1 { font-size: clamp(2.6rem, 5.6vw, 5rem); text-shadow: 3px 3px 0 #ff2e93; }
 html[data-theme="halftone"] .eyebrow { color: var(--yellow); font-weight: 700; text-transform: none; letter-spacing: 0.18em; }
 html[data-theme="halftone"] .label,
 html[data-theme="halftone"] .field-head label,
