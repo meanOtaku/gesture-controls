@@ -321,3 +321,32 @@ html[data-theme="nerv"] .nerv-log { list-style: none; margin: 0; padding: 0; fon
 html[data-theme="nerv"] .nerv-log li { padding: 2px 0; }
 html[data-theme="nerv"] .nerv-log time { color: var(--eva-cyan); margin-right: 6px; }
 @media (max-width: 1100px) { html[data-theme="nerv"] .nerv-telemetry { display: none; } }
+
+/* The top and bottom bars (see app/components/NervBars.tsx). They span the window; the sidebar, page and telemetry panel sit between them. */
+html[data-theme="nerv"] { --nerv-header-h: 64px; --nerv-footer-h: 34px; }
+html[data-theme="nerv"] [data-slot="sidebar-wrapper"] { padding-top: var(--nerv-header-h); padding-bottom: var(--nerv-footer-h); }
+html[data-theme="nerv"] [data-slot="sidebar-container"] { top: var(--nerv-header-h); bottom: var(--nerv-footer-h); height: auto; }
+html[data-theme="nerv"] [data-slot="sidebar-inset"] { min-height: calc(100svh - var(--nerv-header-h) - var(--nerv-footer-h)); }
+html[data-theme="nerv"] .nerv-telemetry { top: var(--nerv-header-h); height: calc(100svh - var(--nerv-header-h) - var(--nerv-footer-h)); }
+html[data-theme="nerv"] .nerv-header,
+html[data-theme="nerv"] .nerv-footer { position: fixed; left: 0; right: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 20px; background: #000; }
+html[data-theme="nerv"] .nerv-header { top: 0; height: var(--nerv-header-h); border-bottom: 1px solid var(--eva-orange); }
+html[data-theme="nerv"] .nerv-footer { bottom: 0; height: var(--nerv-footer-h); border-top: 1px solid var(--eva-border); font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.1em; }
+html[data-theme="nerv"] .nerv-header-id { display: flex; flex-direction: column; line-height: 1.1; }
+html[data-theme="nerv"] .nerv-header-id strong { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; letter-spacing: 0.14em; color: var(--eva-orange); }
+html[data-theme="nerv"] .nerv-header-id small { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.3em; color: var(--eva-green); }
+html[data-theme="nerv"] .nerv-header-section { font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; letter-spacing: 0.16em; color: var(--eva-text); text-align: right; }
+html[data-theme="nerv"] .nerv-footer ul { display: flex; align-items: center; gap: 22px; margin: 0; padding: 0; list-style: none; overflow: hidden; white-space: nowrap; }
+html[data-theme="nerv"] .nerv-footer-label { color: var(--eva-text-muted); margin-right: 8px; }
+html[data-theme="nerv"] .nerv-footer-item[data-tone="active"] .nerv-footer-value { color: var(--eva-green); }
+html[data-theme="nerv"] .nerv-footer-item[data-tone="offline"] .nerv-footer-value { color: var(--eva-text-muted); }
+html[data-theme="nerv"] .nerv-footer-item[data-tone="caution"] .nerv-footer-value { color: var(--eva-amber); }
+html[data-theme="nerv"] .nerv-footer-clock { color: var(--eva-cyan); font-variant-numeric: tabular-nums; font-weight: 700; }
+@media (max-width: 700px) {
+  html[data-theme="nerv"] { --nerv-header-h: 52px; }
+  html[data-theme="nerv"] .nerv-header-id small,
+  html[data-theme="nerv"] .nerv-footer-label { display: none; }
+}
+/* The top bar carries the system name, so the sidebar's own logo is left out, which gives the menu more room. */
+html[data-theme="nerv"] [data-slot="sidebar-header"],
+html[data-theme="nerv"] [data-sidebar="header"] { display: none; }

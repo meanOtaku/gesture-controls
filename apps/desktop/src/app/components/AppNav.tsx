@@ -37,6 +37,11 @@ const LABELS: NavItem[] = [{ id: "labels", label: "Labels", icon: Tags }, { id: 
 const MODELS: NavItem[] = [{ id: "modelLab", label: "Model Lab", icon: Brain }, { id: "networkLab", label: "Network lab", icon: Network }];
 const SETTINGS: NavItem = { id: "settings", label: "Settings", icon: SettingsIcon };
 
+/** The name of every page, as the nav shows it. */
+export const NAV_LABELS: Record<AppTab, string> = Object.fromEntries(
+  [MAIN, ...DEVICES, ...LABELS, ...CAPTURE, ...MODELS, ...AUTOMATION, SETTINGS].map((item) => [item.id, item.label]),
+) as Record<AppTab, string>;
+
 /** Display order. Cmd/Ctrl+1..9 select the first nine; Settings is also Cmd/Ctrl+, (the usual place for it). */
 export const NAV_ORDER: AppTab[] = [MAIN, ...DEVICES, ...LABELS, ...CAPTURE, ...MODELS, ...AUTOMATION, SETTINGS].map((item) => item.id);
 

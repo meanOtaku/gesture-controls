@@ -1,3 +1,4 @@
+import { NervBars } from "./components/NervBars";
 import { NervTelemetryPanel } from "../features/dashboard/components/NervTelemetryPanel";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -746,5 +747,12 @@ function MainApp() {
     </Suspense>
     </SidebarInset>
     <NervTelemetryPanel headStatus={status} watchStatus={watchStatus} />
+    <NervBars
+      activeTab={activeTab}
+      headphonesConnected={status?.connected === true}
+      watchConnected={watchStatus?.connected === true}
+      watchWorn={watchStatus?.worn ?? null}
+      recordingState={telemetryStore.getDatasetRecordingState()}
+    />
   </SidebarProvider>;
 }
