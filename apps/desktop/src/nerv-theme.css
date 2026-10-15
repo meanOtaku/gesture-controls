@@ -3,9 +3,9 @@
  * matches. A command-terminal look after the Neon Genesis Evangelion interfaces: black panels with thin dark-green
  * technical borders, square corners, orange for the interface itself (headings, labels, the main action), green for
  * normal and active state, cyan for telemetry, amber for caution and red for critical. Colour always has a second
- * signal: every status badge carries a symbol and its text. Numbers are monospace and glow faintly. Titles use the
- * bundled heavy Mincho (a free stand-in for the show's title face, see public/fonts/README.md); headings and labels are
- * condensed capitals; paragraphs stay mixed case in the normal sans-serif.
+ * signal: every status badge carries a symbol and its text. Numbers are monospace and glow faintly. Titles use bundled
+ * Noto Serif Display Black, headings and labels Oswald, data JetBrains Mono (all SIL OFL, see public/fonts/README.md);
+ * paragraphs stay mixed case in the normal sans-serif.
  *
  * CRT effects (faint scanlines, edge shading, a glow on numbers) can be switched off in Settings → Appearance and are
  * off whenever the system asks for reduced motion or more contrast. The app works the same without them.
@@ -72,17 +72,13 @@ html[data-theme="nerv"] {
 
   /* Condensed capitals for headings and labels; the heavy Mincho for titles; the system monospace for data. */
   --font-display: "Oswald", "DIN Condensed", "Bahnschrift SemiCondensed", "Bahnschrift", "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
-  --font-title: "Noto Serif Display", "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", Georgia, "Times New Roman", serif;
+  --font-title: "Noto Serif Display", "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", Georgia, "Times New Roman", serif;
   --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
-/* The heavy Mincho is only declared by the Halftone theme's stylesheet when it is in use; declare it here too. */
-@font-face {
-  font-family: "Shippori Mincho B1";
-  src: url("/fonts/ShipporiMinchoB1-ExtraBold-subset.woff2") format("woff2");
-  font-weight: 700 900;
-  font-style: normal;
-  font-display: swap;
-}
+/* Bundled fonts (SIL OFL; see public/fonts/README.md). Oswald and JetBrains Mono are variable in weight. */
+@font-face { font-family: "Oswald"; src: url("/fonts/Oswald-subset.woff2") format("woff2"); font-weight: 200 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("/fonts/JetBrainsMono-subset.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: swap; }
+@font-face { font-family: "Noto Serif Display"; src: url("/fonts/NotoSerifDisplay-subset.woff2") format("woff2"); font-weight: 700 900; font-style: normal; font-display: swap; }
 
 /* The page: black with a very faint technical grid. */
 html[data-theme="nerv"] body,
@@ -284,3 +280,44 @@ html[data-theme="nerv"] [data-slot="alert"] { border: 1px solid var(--eva-border
 html[data-theme="nerv"] [data-slot="alert"][data-variant="destructive"],
 html[data-theme="nerv"] [data-slot="alert"][class*="destructive"] { border-color: var(--eva-red); border-left-color: var(--eva-red); }
 html[data-theme="nerv"] .calibration-warning { border: 1px solid var(--eva-amber); border-left: 4px solid var(--eva-amber); border-radius: 0; background: rgba(255, 204, 0, 0.08); color: var(--eva-text); }
+
+/* The right-hand telemetry panel (see features/dashboard/components/NervTelemetryPanel.tsx). Hides on narrow windows. */
+html[data-theme="nerv"] .nerv-telemetry {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  flex: 0 0 288px;
+  width: 288px;
+  height: 100svh;
+  overflow-y: auto;
+  padding: 16px 14px 24px;
+  background: var(--eva-surface);
+  border-left: 1px solid var(--eva-border);
+}
+html[data-theme="nerv"] .nerv-telemetry[data-collapsed="true"] { flex-basis: 36px; width: 36px; padding: 10px 0; overflow: hidden; }
+html[data-theme="nerv"] .nerv-telemetry[data-collapsed="true"] .nerv-telemetry-toggle { writing-mode: vertical-rl; padding: 12px 6px; }
+html[data-theme="nerv"] .nerv-telemetry-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--eva-orange); padding-bottom: 8px; margin-bottom: 12px; }
+html[data-theme="nerv"] .nerv-telemetry-head h2 { margin: 0; font-size: 1.1rem; }
+html[data-theme="nerv"] .nerv-telemetry-toggle { background: transparent; border: 1px solid var(--eva-border); color: var(--eva-orange); font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.15em; padding: 2px 8px; cursor: pointer; }
+html[data-theme="nerv"] .nerv-telemetry-toggle:hover { background: var(--eva-orange); color: #000; }
+html[data-theme="nerv"] .nerv-module { border: 1px solid var(--eva-border); background: #000; margin-bottom: 12px; padding: 0 10px 10px; }
+html[data-theme="nerv"] .nerv-module > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 -10px 8px; padding: 6px 10px; border-bottom: 1px solid var(--eva-orange); font-family: var(--font-display); font-weight: 700; font-size: 0.78rem; letter-spacing: 0.12em; color: var(--eva-orange); }
+html[data-theme="nerv"] .nerv-tag { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em; }
+html[data-theme="nerv"] .nerv-tag[data-tone="active"] { color: var(--eva-green); }
+html[data-theme="nerv"] .nerv-tag[data-tone="offline"] { color: var(--eva-text-muted); }
+html[data-theme="nerv"] .nerv-tag[data-tone="unknown"] { color: #b48cff; }
+html[data-theme="nerv"] .nerv-tag[data-tone="caution"] { color: var(--eva-amber); }
+html[data-theme="nerv"] .nerv-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px dotted rgba(80, 255, 80, 0.15); }
+html[data-theme="nerv"] .nerv-row-label { font-family: var(--font-display); font-size: 0.7rem; letter-spacing: 0.12em; color: var(--eva-text-muted); }
+html[data-theme="nerv"] .nerv-row-value { font-family: var(--font-mono); font-weight: 700; font-variant-numeric: tabular-nums; color: var(--eva-green); text-align: right; overflow-wrap: anywhere; }
+html[data-theme="nerv"]:not([data-crt="off"]) .nerv-row-value { text-shadow: 0 0 6px rgba(80, 255, 80, 0.25); }
+html[data-theme="nerv"] .nerv-row-value small { font-size: 0.7em; color: var(--eva-cyan); font-weight: 400; }
+html[data-theme="nerv"] .nerv-empty { margin: 8px 0 2px; font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.2em; color: var(--eva-text-muted); }
+html[data-theme="nerv"] .nerv-seg { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; padding: 4px 0 2px; }
+html[data-theme="nerv"] .nerv-seg span { height: 10px; background: #1a2a1a; }
+html[data-theme="nerv"] .nerv-seg span[data-on="true"] { background: var(--eva-green); }
+html[data-theme="nerv"] .nerv-seg span[data-on="true"][data-low="true"] { background: var(--eva-amber); }
+html[data-theme="nerv"] .nerv-log { list-style: none; margin: 0; padding: 0; font-family: var(--font-mono); font-size: 0.7rem; color: var(--eva-text); }
+html[data-theme="nerv"] .nerv-log li { padding: 2px 0; }
+html[data-theme="nerv"] .nerv-log time { color: var(--eva-cyan); margin-right: 6px; }
+@media (max-width: 1100px) { html[data-theme="nerv"] .nerv-telemetry { display: none; } }

@@ -1,3 +1,4 @@
+import { NervTelemetryPanel } from "../features/dashboard/components/NervTelemetryPanel";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -744,5 +745,6 @@ function MainApp() {
     )}
     </Suspense>
     </SidebarInset>
+    <NervTelemetryPanel headStatus={status} watchStatus={watchStatus} />
   </SidebarProvider>;
 }
