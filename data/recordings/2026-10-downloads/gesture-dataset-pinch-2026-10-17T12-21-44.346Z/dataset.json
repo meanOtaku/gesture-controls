@@ -1,0 +1,10 @@
+{
+  "formatVersion": 1,
+  "ppgRows": 1499,
+  "imuRows": 3005,
+  "labels": [
+    "fist",
+    "hand_open",
+    "pinch"
+  ]
+}
