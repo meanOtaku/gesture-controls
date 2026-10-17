@@ -1,21 +1,21 @@
 /**
  * The app's look. "neo" is neo-brutalism (cream, thick black outlines, hard shadows) and the default; "electric" is the
- * original deep-blue theme; "halftone" is black print with a halftone dot screen and grain, white type and NERV red and orange, in Mincho, after Neon Genesis Evangelion.
+ * original deep-blue theme; "nerv" is a command terminal after the Evangelion interfaces. A saved theme that no longer
+ * exists (such as the removed "halftone") reads as the default.
  */
-export type AppTheme = "electric" | "neo" | "halftone" | "nerv";
+export type AppTheme = "electric" | "neo" | "nerv";
 
 export const THEMES: ReadonlyArray<{ value: AppTheme; label: string; summary: string }> = [
   { value: "neo", label: "Neo-brutalism", summary: "Cream paper, thick black outlines, hard offset shadows and vibrant colours." },
   { value: "electric", label: "Electric", summary: "Deep blue, flat and square, with bright accents." },
   { value: "nerv", label: "NERV", summary: "A command terminal after the Evangelion interfaces: black panels in orange frames with corner brackets, hazard stripes, device hexagons, white Mincho title cards, green for normal state, cyan data, monospace numbers, and optional CRT scanlines." },
-  { value: "halftone", label: "Halftone", summary: "Black print with a coarse halftone dot screen and film grain, white Mincho type with NERV red and orange, and tall squeezed title capitals in the style of Neon Genesis Evangelion." },
 ];
 
 export const THEME_STORAGE_KEY = "appTheme";
 export const DEFAULT_THEME: AppTheme = "neo";
 
 export function isTheme(value: unknown): value is AppTheme {
-  return value === "electric" || value === "neo" || value === "halftone" || value === "nerv";
+  return value === "electric" || value === "neo" || value === "nerv";
 }
 
 /** The saved theme, or the default when nothing valid is saved or the browser will not say. */
@@ -28,7 +28,7 @@ export function readTheme(): AppTheme {
   }
 }
 
-const BROWSER_BAR_COLOUR: Record<AppTheme, string> = { electric: "#000066", neo: "#fbf3e4", halftone: "#080808", nerv: "#000000" };
+const BROWSER_BAR_COLOUR: Record<AppTheme, string> = { electric: "#000066", neo: "#fbf3e4", nerv: "#000000" };
 
 /**
  * Puts a theme on the page. The floating volume knob is its own window with its own look and is never themed.
@@ -41,7 +41,7 @@ export function applyTheme(theme: AppTheme): boolean {
     return false;
   }
   // "electric" is the page's own styling; the other themes are a mark on top of it.
-  if (theme === "neo" || theme === "halftone" || theme === "nerv") root.setAttribute("data-theme", theme);
+  if (theme === "neo" || theme === "nerv") root.setAttribute("data-theme", theme);
   else root.removeAttribute("data-theme");
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", BROWSER_BAR_COLOUR[theme]);
   return true;

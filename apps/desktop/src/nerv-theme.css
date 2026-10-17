@@ -6,7 +6,7 @@
  * Orange is the interface itself (frames, headings, labels, the main action), green normal and active state, cyan
  * telemetry, amber caution and red critical: an error becomes a red WARNING plate with red stripes. Colour always has a second
  * signal: every status badge carries a symbol and its text. Numbers are monospace and glow faintly. Titles use bundled
- * Mincho (Matisse EB if installed, else the bundled Shippori Mincho B1 shared with the Halftone theme), headings, card titles and the
+ * Mincho (Matisse EB if installed, else the bundled Shippori Mincho B1 Extra Bold), headings, card titles and the
  * menu League Gothic, buttons and small labels Oswald, data JetBrains Mono (all SIL OFL, see public/fonts/README.md);
  * paragraphs stay mixed case in the normal sans-serif.
  *
@@ -100,6 +100,7 @@ html[data-theme="nerv"] {
   --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 /* Bundled fonts (SIL OFL; see public/fonts/README.md). Oswald and JetBrains Mono are variable in weight, League Gothic in width. */
+@font-face { font-family: "Shippori Mincho B1"; src: url("/fonts/ShipporiMinchoB1-ExtraBold-subset.woff2") format("woff2"); font-weight: 700 900; font-style: normal; font-display: swap; }
 @font-face { font-family: "League Gothic"; src: url("/fonts/LeagueGothic-subset.woff2") format("woff2"); font-weight: 400; font-stretch: 75% 100%; font-style: normal; font-display: swap; }
 @font-face { font-family: "Oswald"; src: url("/fonts/Oswald-subset.woff2") format("woff2"); font-weight: 200 700; font-style: normal; font-display: swap; }
 @font-face { font-family: "JetBrains Mono"; src: url("/fonts/JetBrainsMono-subset.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: swap; }

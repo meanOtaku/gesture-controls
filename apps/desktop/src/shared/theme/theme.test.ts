@@ -55,19 +55,10 @@ describe("theme", () => {
   });
 });
 
-describe("the halftone theme", () => {
-  it("is a theme that can be saved, read back and put on the page", () => {
-    saveTheme("halftone");
-    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("halftone");
-    expect(readTheme()).toBe("halftone");
-    expect(document.documentElement.getAttribute("data-theme")).toBe("halftone");
-    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute("content")).toBe("#080808");
-  });
-  it("is left off the floating volume knob's window like the others", () => {
-    window.history.replaceState(null, "", "/?window=overlay");
-    document.documentElement.setAttribute("data-theme", "halftone");
-    expect(applyTheme("halftone")).toBe(false);
-    expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
+describe("the removed halftone theme", () => {
+  it("reads as the default when it is still saved", () => {
+    window.localStorage.setItem(THEME_STORAGE_KEY, "halftone");
+    expect(readTheme()).toBe("neo");
   });
 });
 

@@ -6,7 +6,6 @@ import { TooltipProvider } from "./components/ui/tooltip";
 import { applyCrt, applyTheme, readCrt, readTheme } from "./shared/theme/theme";
 import "./styles.css";
 import "./neo-theme.css";
-import "./halftone-theme.css";
 import "./nerv-theme.css";
 
 // Before the first render, so the page never flashes the wrong look.
