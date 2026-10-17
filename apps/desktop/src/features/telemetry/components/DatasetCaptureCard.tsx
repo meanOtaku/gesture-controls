@@ -22,6 +22,7 @@ import { parseNumber, type NumberSpec } from "../../../shared/forms/numberField"
 import type { FieldState } from "../../../shared/forms/useNumberDrafts";
 import { Label } from "../../../components/ui/label";
 import type { RecordingQualitySummary } from "../../../shared/tauri/recordingBundle";
+import { timedCapture } from "../recording/timedCapture";
 import type { LiveInterval } from "../annotations/timeline";
 import { computeLiveQualitySummary } from "../quality/computeLiveQualitySummary";
 import { RecordingQualitySummaryCard } from "./RecordingQualitySummaryCard";
@@ -96,6 +97,28 @@ function formatElapsed(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+/** Rounds up, so the counter reads 0:01 until the very end and 0:00 only when the capture stops. */
+function formatRemaining(ms: number): string {
+  return formatElapsed(Math.ceil(Math.max(0, ms) / 1000) * 1000);
+}
+
+/**
+ * How long the running timed capture has left, re-read four times a second while recording. It counts down to the stop
+ * time the timer actually armed (`timedCapture.running()`), so it ends when the capture does; before the timer is armed,
+ * or with no timer mounted, it falls back to the chosen duration less the time recorded so far.
+ */
+function useRemaining(recording: boolean, fallbackTotalSeconds: number, elapsedMs: number): { remainingMs: number; totalSeconds: number } {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!recording) return;
+    const timer = window.setInterval(() => tick((n) => n + 1), 250);
+    return () => window.clearInterval(timer);
+  }, [recording]);
+  const running = timedCapture.running();
+  if (running) return { remainingMs: Math.max(0, running.deadlineMs - Date.now()), totalSeconds: running.totalSeconds };
+  return { remainingMs: Math.max(0, fallbackTotalSeconds * 1000 - elapsedMs), totalSeconds: fallbackTotalSeconds };
+}
+
 /**
  * Timeline-oriented gesture-dataset recorder: pick or type a label, set a
  * duration, capture a timed session over the raw stream, mark which stretches
@@ -152,6 +175,7 @@ export function DatasetCaptureCard({
     ? "Start with a letter, then use letters, numbers or underscores, up to 64 characters."
     : null;
   const isRecording = datasetRecordingState === "recording";
+  const remaining = useRemaining(isRecording, timelineDurationSeconds, datasetElapsedMs);
   const isMarking = isRecording && activeMarkerLabel !== null && activeMarkerLabel === selectedLabel;
   const canMark = isRecording && !!selectedLabel;
 
@@ -240,7 +264,7 @@ export function DatasetCaptureCard({
         <CardDescription>
           {datasetRecordingState === "arming" && "Arming — waiting for the first sample"}
           {datasetRecordingState === "recording" && (
-            `Recording · ${formatElapsed(datasetElapsedMs)} of ${timelineDurationSeconds}s`
+            `Recording · ${formatRemaining(remaining.remainingMs)} left of ${remaining.totalSeconds}s`
             + (activeMarkerLabel ? ` · marking "${activeMarkerLabel.replaceAll("_", " ")}"` : "")
           )}
           {datasetRecordingState === "saved" && `Stopped — ${datasetRowCount.toLocaleString()} rows captured`}
@@ -249,6 +273,26 @@ export function DatasetCaptureCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        {isRecording && (
+          <div className="flex flex-col gap-1">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-xs text-muted-foreground">Time remaining</span>
+              <span role="timer" aria-label="Time remaining" aria-live="off" className="text-2xl font-semibold tabular-nums">
+                {formatRemaining(remaining.remainingMs)}
+              </span>
+            </div>
+            <div
+              className="gesture-meter"
+              role="progressbar"
+              aria-label="Recording progress"
+              aria-valuemin={0}
+              aria-valuemax={remaining.totalSeconds}
+              aria-valuenow={Math.round(remaining.totalSeconds - remaining.remainingMs / 1000)}
+            >
+              <div className="gesture-meter-fill" style={{ width: `${remaining.totalSeconds > 0 ? Math.min(100, 100 - (remaining.remainingMs / (remaining.totalSeconds * 10))) : 0}%` }} />
+            </div>
+          </div>
+        )}
         <p className="text-xs text-muted-foreground">{datasetRowCount.toLocaleString()} rows buffered</p>
         <div className="flex flex-col gap-3">
           <form className="field" noValidate onSubmit={applyCustomLabel} data-invalid={(labelTouched || customLabel !== "") && labelProblem ? true : undefined}>

@@ -21,6 +21,7 @@ vi.mock("../../../shared/tauri/exportCsv", () => ({
   chooseExportFolder: vi.fn(),
   isTauriDesktop: vi.fn(() => false),
 }));
+const { isTauriDesktop } = await import("../../../shared/tauri/exportCsv");
 
 function startTimelineCapture(durationSeconds: number) {
   fireEvent.change(screen.getByLabelText("Recording duration"), { target: { value: String(durationSeconds) } });
@@ -131,5 +132,38 @@ describe("Timeline Capture timed recording", () => {
     await vi.advanceTimersByTimeAsync(2_000);
     expect(telemetryStore.getDatasetRecordingState()).toBe("saved");
     expect(exportCsvToFolder).toHaveBeenCalledTimes(1);
+  });
+
+  it("auto-exports a dataset folder (ppg.csv and imu.csv) in the desktop app, not the older single CSV", async () => {
+    vi.mocked(isTauriDesktop).mockReturnValue(true);
+    exportFolderStore.set("/tmp/out");
+    invoke.mockImplementation(async (command: string) => (command === "export_dataset_folder" ? "/tmp/out/gesture-dataset-x" : { status: "saved", recordingId: "r", rowCount: 1 }));
+    try {
+      render(<><RecordingTimer /><RecorderPage /></>);
+      startTimelineCapture(5);
+      await ingestOneSample();
+      await vi.advanceTimersByTimeAsync(6_000);
+      expect(telemetryStore.getDatasetRecordingState()).toBe("saved");
+      expect(invoke).toHaveBeenCalledWith("export_dataset_folder", expect.objectContaining({ parent: "/tmp/out" }));
+      expect(exportCsvToFolder).not.toHaveBeenCalled();
+    } finally {
+      vi.mocked(isTauriDesktop).mockReturnValue(false);
+    }
+  });
+
+  it("counts down the time remaining while recording, to the moment the capture stops", async () => {
+    render(<><RecordingTimer /><RecorderPage /></>);
+    startTimelineCapture(10);
+    expect(screen.queryByRole("timer", { name: "Time remaining" })).toBeNull(); // only once recording, not while arming
+    await ingestOneSample();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(screen.getByRole("timer", { name: "Time remaining" })).toHaveTextContent("0:10");
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(screen.getByRole("timer", { name: "Time remaining" })).toHaveTextContent("0:07");
+    expect(screen.getByText(/Recording · 0:07 left of 10s/)).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Recording progress" })).toHaveAttribute("aria-valuenow", "3");
+    await vi.advanceTimersByTimeAsync(7_000);
+    expect(telemetryStore.getDatasetRecordingState()).toBe("saved");
+    expect(screen.queryByRole("timer", { name: "Time remaining" })).toBeNull();
   });
 });

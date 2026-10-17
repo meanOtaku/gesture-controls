@@ -16,12 +16,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { HelpTooltip } from "../../../components/app/HelpTooltip";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
+import { chooseExportFolder } from "../../../shared/tauri/exportCsv";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { Slider } from "../../../components/ui/slider";
 import {
   deleteRecordingBundle,
   getRecordingQualitySummary,
+  importRecordingFromFolder,
   importRecordingFromRawCsv,
   listRecordingBundles,
   loadRecordingBundle,
@@ -102,12 +104,22 @@ export function RawImageViewerPanel() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    await runImport(async () => importRecordingFromRawCsv(await file.text()));
+  };
+
+  /** Imports a dataset folder (ppg.csv and imu.csv), the Recorder's default export. */
+  const handleImportFolder = async () => {
+    const folder = await chooseExportFolder("Choose a dataset folder (it holds ppg.csv and imu.csv)");
+    if (!folder) return;
+    await runImport(() => importRecordingFromFolder(folder));
+  };
+
+  const runImport = async (importIt: () => Promise<Awaited<ReturnType<typeof importRecordingFromRawCsv>>>) => {
     setImporting(true);
     setImportError(null);
     setImportSuccessMessage(null);
     try {
-      const csvText = await file.text();
-      const result = await importRecordingFromRawCsv(csvText);
+      const result = await importIt();
       if (result.status === "error") {
         setImportError(result.message);
         return;
@@ -485,19 +497,30 @@ export function RawImageViewerPanel() {
           <div className="flex items-center gap-1">
             <Button
               type="button"
+              size="sm"
+              onClick={() => void handleImportFolder()}
+              disabled={importing}
+              aria-busy={importing}
+            >
+              {importing ? "Importing…" : "Import dataset folder"}
+            </Button>
+            <Button
+              type="button"
               variant="outline"
               size="sm"
               onClick={() => importFileInputRef.current?.click()}
               disabled={importing}
               aria-busy={importing}
             >
-              {importing ? "Importing…" : "Import raw.csv"}
+              Import CSV
             </Button>
-            <HelpTooltip label="About importing a raw.csv recording">
-              Imports a Timeline Capture <code>raw.csv</code> file (the app&apos;s exact 16-column export
-              schema) or a legacy dataset CSV export (the app&apos;s exact 17-column export schema, label
-              column included) as a new, read-only recording for inspection here. It creates no
-              annotations and is never used for training.
+            <HelpTooltip label="About importing a recording">
+              <strong>Import dataset folder</strong> takes a folder exported by the Recorder (it holds{" "}
+              <code>ppg.csv</code> and <code>imu.csv</code>); the two files are merged back by time.{" "}
+              <strong>Import CSV</strong> takes a Timeline Capture <code>raw.csv</code> file (the app&apos;s exact
+              16-column schema) or a single-file dataset export (the older 17-column format, label column
+              included). Either becomes a new, read-only recording for inspection here; labels in a dataset
+              become its label ranges. It is never used for training.
             </HelpTooltip>
           </div>
         </div>

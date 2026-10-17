@@ -461,6 +461,23 @@ export async function importRecordingFromRawCsv(csvText: string): Promise<Import
   }
 }
 
+/**
+ * Imports a dataset folder exported by the Recorder (`ppg.csv` and `imu.csv`) as a new recording. The desktop merges the
+ * two files back into the single-file dataset and imports it the same way, labels becoming annotations.
+ */
+export async function importRecordingFromFolder(path: string): Promise<ImportRawCsvResult> {
+  if (!isTauriDesktop()) {
+    return { status: "error", message: "Recording bundle persistence requires the desktop app" };
+  }
+  try {
+    const summary = await invoke<{ recordingId: string; rawRowCount: number }>("import_recording_from_folder", { path });
+    announceRecordingsChanged();
+    return { status: "imported", recordingId: summary.recordingId, rowCount: summary.rawRowCount };
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 /** Lists every saved recording bundle for curation review. */
 export async function listRecordingBundles(): Promise<RecordingBundleResult<RecordingBundleSummary[]>> {
   if (!isTauriDesktop()) {

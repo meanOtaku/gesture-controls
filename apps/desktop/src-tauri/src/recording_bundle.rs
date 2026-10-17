@@ -725,6 +725,46 @@ pub fn import_recording_from_raw_csv(
     csv_text: String,
     app: AppHandle,
 ) -> Result<RecordingBundleSummary, String> {
+    import_recording_text(csv_text, &app)
+}
+
+/// Imports a dataset folder exported by the Recorder (`ppg.csv` and `imu.csv`) as a new recording bundle. The two files
+/// are merged back by timestamp into the single-file dataset (`dataset_files::merge_to_legacy`) and imported exactly as
+/// that file would be, so the labels become annotations the same way.
+#[tauri::command]
+pub fn import_recording_from_folder(
+    path: String,
+    app: AppHandle,
+) -> Result<RecordingBundleSummary, String> {
+    let merged = merge_dataset_folder(std::path::Path::new(&path))?;
+    import_recording_text(merged, &app)
+}
+
+/// Reads a dataset folder's two files and merges them into the single-file dataset.
+fn merge_dataset_folder(folder: &std::path::Path) -> Result<String, String> {
+    if !folder.is_dir() {
+        return Err("choose the folder that holds ppg.csv and imu.csv".to_string());
+    }
+    let read = |file: &str| -> Result<String, String> {
+        let path = folder.join(file);
+        let meta = fs::metadata(&path).map_err(|_| {
+            format!("the folder has no {file}: a dataset folder holds ppg.csv and imu.csv")
+        })?;
+        if meta.len() as usize > MAX_RAW_CSV_BYTES {
+            return Err(format!("{file} exceeds the {MAX_RAW_CSV_BYTES}-byte limit"));
+        }
+        fs::read_to_string(&path).map_err(|error| format!("could not read {file}: {error}"))
+    };
+    crate::dataset_files::merge_to_legacy(
+        &read(crate::dataset_files::PPG_FILE)?,
+        &read(crate::dataset_files::IMU_FILE)?,
+    )
+}
+
+fn import_recording_text(
+    csv_text: String,
+    app: &AppHandle,
+) -> Result<RecordingBundleSummary, String> {
     if csv_text.trim().is_empty() {
         return Err("raw CSV must not be empty".to_string());
     }
@@ -3858,6 +3898,38 @@ mod tests {
     fn convert_legacy_dataset_csv_ignores_non_legacy_documents() {
         assert!(convert_legacy_dataset_csv(&RAW_CSV_HEADER.join(",")).is_none());
         assert!(convert_legacy_dataset_csv("not,a,header").is_none());
+    }
+
+    #[test]
+    fn a_dataset_folder_merges_into_a_valid_recording_with_its_labels_as_annotations() {
+        let dir = std::env::temp_dir().join(format!("recording-bundle-folder-{}", Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("ppg.csv"),
+            "timestamp_ns,sequence,ppg_green,ppg_red,ppg_ir,contact_quality,label\n100,1,10,11,12,0.9,pinch\n300,3,13,14,15,0.9,\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("imu.csv"),
+            "timestamp_ns,sequence,accel_x,accel_y,accel_z,gyro_x,gyro_y,gyro_z,quat_w,quat_x,quat_y,quat_z,label\n200,2,0.1,0.2,0.3,0.4,0.5,0.6,1,0,0,0,pinch\n",
+        )
+        .unwrap();
+        let merged = merge_dataset_folder(&dir).unwrap();
+        let (raw, runs) = convert_legacy_dataset_csv(&merged).unwrap().unwrap();
+        let (rows, first, last) = validate_raw_csv_full(&raw).unwrap();
+        assert_eq!((rows, first, last), (3, 100, 300));
+        assert_eq!(runs.len(), 1);
+        assert_eq!((runs[0].label.as_str(), runs[0].start_timestamp_ns, runs[0].end_timestamp_ns), ("pinch", 100, 200));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_folder_without_both_files_is_refused_in_words() {
+        let dir = std::env::temp_dir().join(format!("recording-bundle-folder-{}", Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let error = merge_dataset_folder(&dir).unwrap_err();
+        assert!(error.contains("ppg.csv"), "{error}");
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

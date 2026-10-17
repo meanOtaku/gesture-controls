@@ -3,6 +3,8 @@
  * is showing. The request is just a number waiting to be picked up when the first sample lands.
  */
 let pendingSeconds: number | null = null;
+/** The running capture's stop time (wall clock, ms) and length, while its timer is armed. */
+let running: { deadlineMs: number; totalSeconds: number } | null = null;
 
 export const timedCapture = {
   /** Asks for the next recording to stop by itself after `seconds`. */
@@ -15,8 +17,17 @@ export const timedCapture = {
     pendingSeconds = null;
     return seconds;
   },
+  /** Says when the running capture will stop, once its timer is armed; null once it has stopped or been cancelled. */
+  setRunning(next: { deadlineMs: number; totalSeconds: number } | null): void {
+    running = next;
+  },
+  /** When the running capture will stop, for the countdown; null when no timer is armed. */
+  running(): { deadlineMs: number; totalSeconds: number } | null {
+    return running;
+  },
   /** For tests. */
   reset(): void {
     pendingSeconds = null;
+    running = null;
   },
 };

@@ -15,6 +15,8 @@ import type {
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
+const { open } = vi.hoisted(() => ({ open: vi.fn() }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open, save: vi.fn() }));
 
 function summary(recordingId: string): RecordingBundleSummary {
   return {
@@ -205,6 +207,38 @@ afterEach(() => {
   // so every test starts from the same state regardless of run order.
   rawImageViewerStore.setViewMode("observedSamples");
   Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+});
+
+describe("RawImageViewerPanel importing", () => {
+  it("imports a dataset folder (ppg.csv and imu.csv) chosen in the folder picker, and selects the new recording", async () => {
+    mockInvoke({ recordings: [summary("rec-a")], detailByRecording: {} });
+    const listAndDetail = invoke.getMockImplementation()!;
+    invoke.mockImplementation((command: string, args?: Record<string, unknown>) =>
+      command === "import_recording_from_folder" ? Promise.resolve({ recordingId: "rec-new", rawRowCount: 1234 }) : listAndDetail(command, args));
+    open.mockResolvedValue("/data/gesture-dataset-pinch");
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: "Import dataset folder" }));
+    expect(await screen.findByText("Imported recording rec-new (1,234 rows).")).toBeInTheDocument();
+    expect(open).toHaveBeenCalledWith(expect.objectContaining({ directory: true }));
+    expect(invoke).toHaveBeenCalledWith("import_recording_from_folder", { path: "/data/gesture-dataset-pinch" });
+    expect(rawImageViewerStore.getRecordingId()).toBe("rec-new");
+  });
+
+  it("does nothing when the folder picker is cancelled, and shows the desktop's reason when a folder is refused", async () => {
+    mockInvoke({ recordings: [summary("rec-a")], detailByRecording: {} });
+    const listAndDetail = invoke.getMockImplementation()!;
+    invoke.mockImplementation((command: string, args?: Record<string, unknown>) =>
+      command === "import_recording_from_folder" ? Promise.reject(new Error("the folder has no ppg.csv")) : listAndDetail(command, args));
+    open.mockReset();
+    open.mockResolvedValueOnce(null);
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: "Import dataset folder" }));
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(1));
+    expect(invoke).not.toHaveBeenCalledWith("import_recording_from_folder", expect.anything());
+    open.mockResolvedValueOnce("/data/empty");
+    fireEvent.click(screen.getByRole("button", { name: "Import dataset folder" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("the folder has no ppg.csv");
+  });
 });
 
 describe("RawImageViewerPanel clearing the choice", () => {

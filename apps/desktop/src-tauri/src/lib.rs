@@ -236,6 +236,7 @@ pub fn run() {
             model_lab::delete_model_dataset,
             recording_bundle::save_recording_bundle,
             recording_bundle::import_recording_from_raw_csv,
+            recording_bundle::import_recording_from_folder,
             recording_bundle::list_recording_bundles,
             recording_bundle::load_recording_bundle,
             recording_bundle::delete_recording_bundle,

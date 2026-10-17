@@ -6,7 +6,7 @@
 //! This module is the format: the headers, validating a pair of files, splitting an older single file into a pair, merging a
 //! pair back, a hash of a pair, and a report of the gaps in each stream. It never touches the disk.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
@@ -351,11 +351,10 @@ pub fn split_legacy(legacy_csv: &str) -> Result<Pair, String> {
     )
 }
 
-#[cfg(test)]
 /// The pair merged back into the single-file dataset: every row of both, in timestamp order (a tie puts the pulse row first),
 /// with the other sensor's columns empty, except that a pulse row and a motion row with the same timestamp, sequence and
 /// label (one row of an older fused export, written to both files) become that one row again. What the trainer builds in
-/// memory (`csv_io._merge_folder`).
+/// memory (`csv_io._merge_folder`), and what a recording imported from a folder is stored as.
 pub fn merge_to_legacy(ppg_csv: &str, imu_csv: &str) -> Result<String, String> {
     let (ppg_head, imu_head) = (ppg_header(), imu_header());
     let ppg = read_rows(PPG_FILE, ppg_csv, &ppg_head, PPG_HEADER.len())?;
@@ -366,13 +365,15 @@ pub fn merge_to_legacy(ppg_csv: &str, imu_csv: &str) -> Result<String, String> {
         .map(|(_, line, _)| line.split(',').collect())
         .collect();
     let mut fused = vec![false; motion.len()];
+    // Motion rows by timestamp, sequence and label, earliest first, so each pulse row finds its partner without a scan.
+    let mut partners: HashMap<(&str, &str, &str), VecDeque<usize>> = HashMap::new();
+    for (i, m) in motion.iter().enumerate() {
+        partners.entry((m[0], m[1], m[12])).or_default().push_back(i);
+    }
     let mut merged: Vec<(i128, u8, String)> = Vec::new();
     for (stamp, line, _) in &ppg.rows {
         let f: Vec<&str> = line.split(',').collect();
-        let partner = motion
-            .iter()
-            .enumerate()
-            .position(|(i, m)| !fused[i] && m[0] == f[0] && m[1] == f[1] && m[12] == f[6]);
+        let partner = partners.get_mut(&(f[0], f[1], f[6])).and_then(VecDeque::pop_front);
         let middle = match partner {
             Some(i) => {
                 fused[i] = true;

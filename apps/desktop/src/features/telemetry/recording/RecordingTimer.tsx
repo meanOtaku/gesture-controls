@@ -1,5 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
+import { isTauriDesktop } from "../../../shared/tauri/exportCsv";
 import { useTelemetryExport } from "../hooks/useTelemetryExport";
 import { telemetryStore } from "../store/telemetryStore";
 import { timedCapture } from "./timedCapture";
@@ -9,19 +10,20 @@ import { timedCapture } from "./timedCapture";
  * the recorder to the live charts while a capture runs does not cancel the timer.
  *
  * Timeline Capture is a timed recorder: the timer starts once the first sample actually lands (recording state, not
- * arming), and at timeout stops the session once and, if any rows were captured, exports the CSV straight to the chosen
- * folder. The effect's own cleanup, which runs on every dependency change (including the state leaving "recording" by a
+ * arming), and at timeout stops the session once and, if any rows were captured, exports it straight to the chosen
+ * folder: as a dataset folder (ppg.csv and imu.csv), the same default as the Export button, or as one CSV in the browser
+ * preview, which cannot write a folder. The effect's own cleanup, which runs on every dependency change (including the state leaving "recording" by a
  * manual stop or a discard), cancels any pending timer, so it is never armed twice or left running past its session.
  */
 export function RecordingTimer() {
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
-  const { exportDatasetCsv, saveDatasetRecording } = useTelemetryExport();
+  const { exportDatasetCsv, exportDatasetFolder, saveDatasetRecording } = useTelemetryExport();
   const state = telemetryStore.getDatasetRecordingState();
   const mode = telemetryStore.getDatasetCaptureMode();
 
   // A ref, so the effect below does not re-run (and cancel its timer) each time the export closure is new.
-  const exportRef = useRef(exportDatasetCsv);
-  exportRef.current = exportDatasetCsv;
+  const exportRef = useRef(exportDatasetFolder);
+  exportRef.current = isTauriDesktop() ? exportDatasetFolder : exportDatasetCsv;
   const saveRef = useRef(saveDatasetRecording);
   saveRef.current = saveDatasetRecording;
 
@@ -29,14 +31,19 @@ export function RecordingTimer() {
     if (mode !== "timeline" || state !== "recording") return;
     const seconds = timedCapture.take();
     if (seconds === null) return;
+    timedCapture.setRunning({ deadlineMs: Date.now() + seconds * 1000, totalSeconds: seconds });
     const timer = setTimeout(() => {
+      timedCapture.setRunning(null);
       telemetryStore.stopDatasetRecording();
       // As with a manual stop, the session is also kept as a recording bundle (with the camera's landmarks, if any).
       void saveRef.current("timer_elapsed");
       if (telemetryStore.getDatasetRowCount() > 0) void exportRef.current();
-      else OperationFeedback.error("Export dataset CSV", "No samples were captured — nothing to export.");
+      else OperationFeedback.error("Export dataset", "No samples were captured — nothing to export.");
     }, seconds * 1000);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      timedCapture.setRunning(null);
+    };
   }, [mode, state]);
 
   return null;
