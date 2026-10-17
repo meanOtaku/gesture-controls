@@ -19,7 +19,8 @@ export function handSize(world: Point3[]): number {
 }
 
 /**
- * How far apart a fingertip and the thumb tip are, in hand sizes. About 0 is a firm pinch; an open hand is well over 1.
+ * How far apart a fingertip and the thumb tip are, in hand sizes. Touching tips read about 0.15 to 0.35 (the landmarks
+ * sit at the very tips, not the pads, so a pinch never reaches 0); an open hand is about 1 or more.
  * Null when the hand is too small to measure (a bad detection) rather than a number that looks real.
  */
 export function pinchDistance(world: Point3[], finger: FingerName = "index"): number | null {

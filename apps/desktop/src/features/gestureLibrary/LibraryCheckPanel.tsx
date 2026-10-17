@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { SectionHeader } from "../../components/app/SectionHeader";
 import { Badge } from "../../components/ui/badge";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
@@ -14,8 +15,9 @@ const percent = (value: number) => `${Math.round(value * 100)}%`;
  * take part.
  */
 export function LibraryCheckPanel({ definitions, samples }: { definitions: GestureDefinition[]; samples: Record<string, MeasureSample[]> }) {
+  // Only when the library changes, not on every camera update that re-renders the page.
+  const check = useMemo(() => checkLibrary(definitions, samples), [definitions, samples]);
   if (definitions.length < 2) return null;
-  const check = checkLibrary(definitions, samples);
   return (
     <Card role="region" aria-label="Library check">
       <CardHeader>

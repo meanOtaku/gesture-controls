@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MEASURE_NAMES, blankDefinition, definitionProblem, describeRule, measureValue, type GestureDefinition } from "./definition";
+import { MEASURE_NAMES, blankDefinition, defaultCondition, definitionProblem, describeRule, measureValue, type GestureDefinition } from "./definition";
 import { measureHand } from "../camera/landmarkMath";
 import { makeHand } from "./testHands";
 
@@ -47,5 +47,15 @@ describe("a gesture with a pretrained gesture", () => {
   });
   it("is described by what the model says", () => {
     expect(describeRule({ conditions: [], hand: "left", pretrained: "Thumb_Down" })).toBe("the pretrained model says “Thumb down” (left hand only)");
+  });
+});
+
+describe("defaultCondition", () => {
+  it("starts a hand-made pinch where real touching tips read (about 0.15 to 0.35), not near 0", () => {
+    expect(defaultCondition("pinch.index")).toEqual({ measure: "pinch.index", direction: "below", enter: 0.35, exit: 0.45 });
+    // Real pinch frames from a recording: most pass the default start threshold.
+    const realPinch = [0.145, 0.18, 0.24, 0.27, 0.29, 0.31, 0.33, 0.34, 0.36, 0.39];
+    expect(realPinch.filter((value) => value < defaultCondition("pinch.index").enter).length).toBeGreaterThanOrEqual(8);
+    expect(defaultCondition("extension.index")).toMatchObject({ direction: "below", enter: 0.3, exit: 0.4 });
   });
 });

@@ -13,10 +13,10 @@ export type MeasureName =
   | "thumb.up" | "thumb.out" | "index.up" | "hand.up";
 
 export const MEASURES: ReadonlyArray<{ name: MeasureName; label: string; unit: string; hint: string }> = [
-  { name: "pinch.index", label: "Thumb to index tip", unit: "hand sizes", hint: "About 0 is touching; an open hand is well over 1." },
-  { name: "pinch.middle", label: "Thumb to middle tip", unit: "hand sizes", hint: "About 0 is touching." },
-  { name: "pinch.ring", label: "Thumb to ring tip", unit: "hand sizes", hint: "About 0 is touching." },
-  { name: "pinch.pinky", label: "Thumb to little tip", unit: "hand sizes", hint: "About 0 is touching." },
+  { name: "pinch.index", label: "Thumb to index tip", unit: "hand sizes", hint: "About 0.15 to 0.35 when the tips touch (the camera marks the very tips, not the pads); an open hand is about 1 or more." },
+  { name: "pinch.middle", label: "Thumb to middle tip", unit: "hand sizes", hint: "About 0.15 to 0.35 when the tips touch (the camera marks the very tips, not the pads)." },
+  { name: "pinch.ring", label: "Thumb to ring tip", unit: "hand sizes", hint: "About 0.15 to 0.35 when the tips touch (the camera marks the very tips, not the pads)." },
+  { name: "pinch.pinky", label: "Thumb to little tip", unit: "hand sizes", hint: "About 0.15 to 0.35 when the tips touch (the camera marks the very tips, not the pads)." },
   { name: "extension.thumb", label: "Thumb straightness", unit: "0 to 1", hint: "1 is straight; lower is bent." },
   { name: "extension.index", label: "Index straightness", unit: "0 to 1", hint: "1 is straight; lower is curled." },
   { name: "extension.middle", label: "Middle straightness", unit: "0 to 1", hint: "1 is straight; lower is curled." },
@@ -85,6 +85,15 @@ export const MIN_HOLD_RANGE = [0, 2000] as const;
 export const RELEASE_GRACE_RANGE = [0, 2000] as const;
 export const DEFAULT_MIN_HOLD_MS = 100;
 export const DEFAULT_RELEASE_GRACE_MS = 120;
+
+/**
+ * A condition to start from when one is added by hand. A pinch starts under 0.35 hand sizes and ends over 0.45: real
+ * readings of touching tips sit around 0.15 to 0.35, never at 0, so a tighter start would miss many real pinches.
+ */
+export function defaultCondition(measure: MeasureName): Condition {
+  if (measure.startsWith("pinch.")) return { measure, direction: "below", enter: 0.35, exit: 0.45 };
+  return { measure, direction: "below", enter: 0.3, exit: 0.4 };
+}
 
 /** The reading of one measure, or null when it could not be measured. */
 export function measureValue(measures: HandMeasures, name: MeasureName): number | null {

@@ -80,3 +80,28 @@ describe("analyse", () => {
     expect(run(makeHand({ pinch: 1.1 }), 10, 800).map((e) => e.kind)).toEqual(["release"]);
   });
 });
+
+describe("analyse on a long recording", () => {
+  const long = (count: number, offset: number): MeasureSample[] =>
+    Array.from({ length: count }, (_, i) => Object.fromEntries(MEASURE_NAMES.map((name, k) => [name, Math.round(((Math.sin(i * 1.7 + k * 3.1 + offset) + 1) / 2) * 10_000) / 10_000])));
+
+  it("scores every measure's best cut exactly as scoreRule does", () => {
+    const positive = long(400, 0);
+    const negative = long(400, 1);
+    const others = [{ name: "Other", samples: long(200, 2) }, { name: "Empty", samples: [] }];
+    const result = analyse(positive, negative, others, { openHand: false });
+    expect(result.stats.length).toBe(MEASURE_NAMES.length);
+    for (const stat of result.stats) {
+      const rule = [{ measure: stat.measure, direction: stat.direction, enter: stat.threshold, exit: stat.threshold }];
+      expect(scoreRule(rule, positive, negative, others)).toBe(stat.balancedAccuracy);
+    }
+  });
+
+  it("takes well under a tenth of a second for 900 frames of each kind (it reran on every camera update and froze the editor)", () => {
+    const positive = long(900, 0);
+    const negative = long(900, 1);
+    const started = performance.now();
+    analyse(positive, negative, [{ name: "Other", samples: long(300, 2) }]);
+    expect(performance.now() - started).toBeLessThan(100);
+  });
+});

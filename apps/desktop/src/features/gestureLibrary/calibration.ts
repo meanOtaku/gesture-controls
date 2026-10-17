@@ -1,4 +1,5 @@
 import { type Condition, type MeasureName, MAX_CONDITIONS, MEASURE_NAMES } from "./definition";
+import { openHandGroup } from "./openHand";
 
 /** One recorded frame's measurements; a measure that could not be read is null. */
 export type MeasureSample = Partial<Record<MeasureName, number | null>>;
@@ -44,9 +45,18 @@ export interface Analysis {
   negativeFrames: number;
   /** How the rule does on each other gesture's frames, worst first; empty when there are none to check against. */
   confusions: Confusion[];
+  /** 0 to 1: the share of a relaxed open hand's frames the rule would fire on; null when not checked (no rule, or the gesture is an open hand). */
+  openHandFiresOn: number | null;
   verdict: "good" | "okay" | "weak" | "needsMoreFrames";
   /** In words: what to do about it, when it is not "good". */
   advice: string | null;
+}
+
+export interface AnalyseOptions {
+  /** Measurements the rule must use, in this order (the ones the person put in the rule before recording); calibration fits their thresholds and may add others. */
+  keep?: MeasureName[];
+  /** Check the rule against a relaxed open hand as well (on unless the gesture is itself an open hand). Default true. */
+  openHand?: boolean;
 }
 
 /** Fewest frames of each kind worth analysing. */
@@ -97,11 +107,36 @@ function candidates(a: number[], b: number[]): number[] {
   return out;
 }
 
+/** The first index in sorted `list` whose value is not below `value` (or, with `strict`, is above it). */
+function bound(list: number[], value: number, strict: boolean): number {
+  let low = 0;
+  let high = list.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (strict ? list[mid] <= value : list[mid] < value) low = mid + 1;
+    else high = mid;
+  }
+  return low;
+}
+
+/**
+ * The best threshold for one more measure on top of `base`. Scores exactly as `scoreGroups` would for each candidate,
+ * but the base rule is checked once per frame and each candidate is then counted by binary search over sorted values,
+ * so a calibration over thousands of frames takes milliseconds, not a large fraction of a second.
+ */
 function bestCut(positive: MeasureSample[], negative: MeasureSample[], others: NegativeGroup[], measure: MeasureName, direction: "below" | "above", base: Rule = []) {
   const cuts = candidates(values(positive, measure), [...values(negative, measure), ...others.flatMap((group) => values(group.samples, measure))]);
+  const groups = [positive, negative, ...others.map((group) => group.samples)].map((samples) => ({
+    total: samples.length,
+    sorted: values(samples.filter((sample) => base.every((part) => passes(sample[part.measure], part.direction, part.threshold))), measure).sort((a, b) => a - b),
+  }));
+  const rateAt = ({ total, sorted }: { total: number; sorted: number[] }, threshold: number) =>
+    total === 0 ? 0 : (direction === "below" ? bound(sorted, threshold, false) : sorted.length - bound(sorted, threshold, true)) / total;
   let best = { threshold: NaN, accuracy: -1 };
   for (const threshold of cuts) {
-    const accuracy = scoreGroups(positive, negative, others, [...base, { measure, direction, threshold }]);
+    const rejects = groups.slice(1).map((group) => 1 - rateAt(group, threshold));
+    const mean = rejects.reduce((sum, value) => sum + value, 0) / rejects.length;
+    const accuracy = (rateAt(groups[0], threshold) + 0.5 * mean + 0.5 * Math.min(...rejects)) / 2;
     if (accuracy > best.accuracy) best = { threshold, accuracy };
   }
   return best;
@@ -112,7 +147,11 @@ function bestCut(positive: MeasureSample[], negative: MeasureSample[], others: N
  * measurements that best tell them apart, each with a start and an end threshold. It is explainable: you can read every
  * number and change it.
  */
-export function analyse(positive: MeasureSample[], negative: MeasureSample[], others: NegativeGroup[] = []): Analysis {
+export function analyse(positive: MeasureSample[], negative: MeasureSample[], recordedOthers: NegativeGroup[] = [], options: AnalyseOptions = {}): Analysis {
+  // A relaxed open hand is checked too, whatever the "everything else" recording happened to show.
+  const reference = options.openHand === false ? [] : openHandGroup(positive);
+  const others = [...recordedOthers, ...reference];
+  const keep = [...new Set(options.keep ?? [])];
   const stats: MeasureStats[] = [];
   for (const measure of MEASURE_NAMES) {
     const p = values(positive, measure);
@@ -133,14 +172,26 @@ export function analyse(positive: MeasureSample[], negative: MeasureSample[], ot
   }
   stats.sort((a, b) => b.balancedAccuracy - a.balancedAccuracy);
 
-  // Add measurements one at a time while each makes the rule clearly better.
+  // The measurements the person chose come first, whatever else separates the recordings, with thresholds fitted to them.
+  // Then more are added one at a time while each makes the rule clearly better.
   const chosen: MeasureStats[] = [];
-  let rule: { measure: MeasureName; direction: "below" | "above"; threshold: number }[] = [];
+  let rule: Rule = [];
   let accuracy = 0.5;
+  for (const measure of keep) {
+    const stat = stats.find((s) => s.measure === measure);
+    if (!stat || chosen.length >= MAX_CONDITIONS) continue;
+    const cut = bestCut(positive, negative, others, measure, stat.direction, rule);
+    if (!Number.isFinite(cut.threshold)) continue;
+    chosen.push({ ...stat, threshold: cut.threshold });
+    rule = [...rule, { measure, direction: stat.direction, threshold: cut.threshold }];
+    accuracy = cut.accuracy;
+  }
   if (stats.length > 0) {
-    chosen.push(stats[0]);
-    rule = [{ measure: stats[0].measure, direction: stats[0].direction, threshold: stats[0].threshold }];
-    accuracy = stats[0].balancedAccuracy;
+    if (chosen.length === 0) {
+      chosen.push(stats[0]);
+      rule = [{ measure: stats[0].measure, direction: stats[0].direction, threshold: stats[0].threshold }];
+      accuracy = stats[0].balancedAccuracy;
+    }
     while (chosen.length < MAX_CONDITIONS) {
       let next: { stat: MeasureStats; threshold: number; accuracy: number } | null = null;
       for (const stat of stats) {
@@ -163,14 +214,18 @@ export function analyse(positive: MeasureSample[], negative: MeasureSample[], ot
   }));
 
   const startRule: Rule = conditions.map((c) => ({ measure: c.measure, direction: c.direction, threshold: c.enter }));
-  const confusions: Confusion[] = conditions.length === 0 ? [] : others.map((group) => ({ name: group.name, firesOn: rate(group.samples, startRule) })).sort((a, b) => b.firesOn - a.firesOn);
+  const confusions: Confusion[] = conditions.length === 0 ? [] : recordedOthers.map((group) => ({ name: group.name, firesOn: rate(group.samples, startRule) })).sort((a, b) => b.firesOn - a.firesOn);
   const worst = confusions[0];
+  const openHandFiresOn = conditions.length === 0 || reference.length === 0 ? null : rate(reference[0].samples, startRule);
 
   let verdict: Analysis["verdict"];
   let advice: string | null = null;
   if (positive.length < MIN_FRAMES || negative.length < MIN_FRAMES) {
     verdict = "needsMoreFrames";
     advice = `Record at least ${MIN_FRAMES} frames of the gesture and ${MIN_FRAMES} of everything else (about a second each). You have ${positive.length} and ${negative.length}.`;
+  } else if (openHandFiresOn !== null && openHandFiresOn >= CONFUSION_BAD) {
+    verdict = "weak";
+    advice = `The rule would also fire on ${percentText(openHandFiresOn)} of the frames of a relaxed open hand, so an open hand would set it off: it rests on something that only differed in this recording. Add the measurement that makes the gesture (for a pinch, thumb to index tip) to the rule and record again; calibration keeps it. Show an open hand during the “everything else” part too.`;
   } else if (conditions.length > 0 && worst && worst.firesOn >= CONFUSION_BAD) {
     verdict = "weak";
     advice = `The rule would also fire on ${percentText(worst.firesOn)} of the “${worst.name}” frames, so the two would be mixed up. Record this gesture again so it differs from “${worst.name}” more (a different thumb position or hand angle), or change one of the two.`;
@@ -186,7 +241,7 @@ export function analyse(positive: MeasureSample[], negative: MeasureSample[], ot
   } else {
     verdict = "good";
   }
-  return { stats, conditions, balancedAccuracy: accuracy, positiveFrames: positive.length, negativeFrames: negative.length, confusions, verdict, advice };
+  return { stats, conditions, balancedAccuracy: accuracy, positiveFrames: positive.length, negativeFrames: negative.length, confusions, openHandFiresOn, verdict, advice };
 }
 
 const percentText = (share: number) => `${Math.round(share * 100)}%`;

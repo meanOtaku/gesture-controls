@@ -1,4 +1,4 @@
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { SectionHeader } from "../../components/app/SectionHeader";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
@@ -38,6 +38,14 @@ export function GestureLibraryPage() {
   const states = useLiveGestures(definitions, cam, tracker, cam2);
   const { status } = useLabelModels("__TAURI_INTERNALS__" in window);
   const [editing, setEditing] = useState<GestureDefinition | null>(null);
+  // Kept the same between renders (the page re-renders on every camera update), so the editor does not redo its
+  // calibration analysis each time.
+  const editingId = editing?.id ?? null;
+  const others = useMemo(() => (editingId === null ? [] : othersWithSamples(definitions, samples, editingId)), [definitions, samples, editingId]);
+  const unchecked = useMemo(
+    () => definitions.filter((d) => d.id !== editingId && d.conditions.length > 0 && (samples[d.id]?.length ?? 0) === 0).map((d) => d.name),
+    [definitions, samples, editingId],
+  );
   const labelName = (id: string | null) => (id ? labels.find((l) => l.id === id)?.displayName ?? id : "no label");
 
   if (editing) {
@@ -57,8 +65,8 @@ export function GestureLibraryPage() {
             initial={editing}
             labels={labels}
             onCancel={() => setEditing(null)}
-            others={othersWithSamples(definitions, samples, editing.id)}
-            unchecked={definitions.filter((d) => d.id !== editing.id && d.conditions.length > 0 && (samples[d.id]?.length ?? 0) === 0).map((d) => d.name)}
+            others={others}
+            unchecked={unchecked}
             onSave={async (definition, frames) => {
               const problem = await save(definition, frames);
               if (!problem) {
