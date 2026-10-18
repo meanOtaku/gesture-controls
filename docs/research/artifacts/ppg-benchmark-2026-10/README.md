@@ -26,6 +26,29 @@ The component ablation establishes that causal 1-second z-score helped the leadi
 
 The MAD transition reduced mean AUC in all 20 paired held-out folds for both HGB and ExtraTrees. The current robust candidate is therefore `PPG → causal 1-second z-score → causal slope + curvature + jerk → ExtraTrees`.
 
+## Reproducing the component ablation
+
+The original study scripts were not versioned. `reproduce.py` is an independent reimplementation of the component ablation, written from this folder's archived specs (protocol, method ledger, feature schema, events, splits, inventory and mapped labels). It reads the recordings in `data/recordings/2026-10-downloads/`, rebuilds the four causal pipelines, fits HGB and ExtraTrees on the 20 splits, scores event AUCs and the continuous live-detection metrics, and compares every number with `ppg-preprocess-component-ablation/`. From the repository root (about 3 minutes):
+
+```sh
+uv run --project tools/label-trainer python docs/research/artifacts/ppg-benchmark-2026-10/reproduce.py [out_dir]
+```
+
+Result on 2026-10-18: the inputs match the archive exactly. That covers PPG row counts and timestamps for all 37 recordings, the eligible pinch starts in `mapped-labels.json`, the differentiator coefficients (to 8e-12), and the per-fold timeline minutes and start counts. HGB with z-score and sigmoid (stage C) reproduces bit-for-bit on all 20 folds, including activations and matches. The other results agree to within 0.001 mean AUC and 0.004 pooled recall:
+
+| Model | Stage | Mean AUC (archived → reproduced) | Min AUC | Pooled recall | False activations/min |
+|---|---|---:|---:|---:|---:|
+| HGB | A raw | 0.8105 → 0.8100 | 0.7402 → 0.7402 | 0.3358 → 0.3364 | 17.96 → 17.93 |
+| ExtraTrees | A raw | 0.8080 → 0.8081 | 0.7392 → 0.7386 | 0.3819 → 0.3784 | 15.62 → 15.69 |
+| HGB | B z-score | 0.8126 → 0.8125 | 0.7595 → 0.7595 | 0.3422 → 0.3413 | 18.09 → 18.11 |
+| ExtraTrees | B z-score | 0.8215 → 0.8213 | 0.7692 → 0.7689 | 0.3752 → 0.3770 | 15.02 → 15.02 |
+| HGB | C + sigmoid | 0.8116 → 0.8116 | 0.7307 → 0.7307 | 0.3217 → 0.3217 | 17.48 → 17.48 |
+| ExtraTrees | C + sigmoid | 0.8232 → 0.8231 | 0.7486 → 0.7479 | 0.3562 → 0.3589 | 14.37 → 14.35 |
+| HGB | D + MAD | 0.7565 → 0.7569 | 0.6832 → 0.6832 | 0.3892 → 0.3916 | 18.50 → 18.46 |
+| ExtraTrees | D + MAD | 0.7749 → 0.7748 | 0.7040 → 0.7040 | 0.3960 → 0.3998 | 14.90 → 14.94 |
+
+The conclusions hold: the MAD step lowers mean AUC in all 20 paired folds for both models, and z-score → derivatives → ExtraTrees has the best minimum AUC. The remaining differences come from summary statistics whose exact definitions the archive doesn't pin down (MAD and energy scaling, zero-crossing and peak conventions) and from float rounding. HGB, which bins on quantiles, is almost unaffected. ExtraTrees draws random split thresholds on the scaled values, so it shifts slightly. The other 24 methods and the label-lag audit are not reimplemented.
+
 ## Scope and limitations
 
 All results are grouped cross-validation progress evidence, not an untouched final generalization test. Source recordings, including the new 2026-10-17 datasets, are versioned under `data/recordings/`.
