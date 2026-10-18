@@ -1,0 +1,472 @@
+[
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-everything_else-2026-10-14T01-09-05.948Z.csv",
+    "date": "2026-10-14",
+    "session_id": "gesture-dataset-everything_else-2026-10-14T01-09-05.948Z",
+    "status": "included",
+    "events": 40,
+    "positives": 0,
+    "ppg_rows": 1501,
+    "start_ns": 1726178608212992,
+    "end_ns": 1726238708004864
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-everything_else-2026-10-14T01-14-16.596Z.csv",
+    "date": "2026-10-14",
+    "session_id": "gesture-dataset-everything_else-2026-10-14T01-14-16.596Z",
+    "status": "included",
+    "events": 40,
+    "positives": 0,
+    "ppg_rows": 1500,
+    "start_ns": 1726489407704576,
+    "end_ns": 1726549451607040
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-fist-2026-10-04T12-09-26.941Z.csv",
+    "date": "2026-10-04",
+    "session_id": "gesture-dataset-fist-2026-10-04T12-09-26.941Z",
+    "status": "included",
+    "events": 50,
+    "positives": 0,
+    "ppg_rows": 1506,
+    "start_ns": 901829904029502,
+    "end_ns": 901890174060960
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-fist-2026-10-11T03-26-47.633Z.csv",
+    "date": "2026-10-11",
+    "session_id": "gesture-dataset-fist-2026-10-11T03-26-47.633Z",
+    "status": "included",
+    "events": 7,
+    "positives": 0,
+    "ppg_rows": 751,
+    "start_ns": 1475278408716664,
+    "end_ns": 1475308386655607
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-fist-2026-10-11T09-11-54.466Z.csv",
+    "date": "2026-10-11",
+    "session_id": "gesture-dataset-fist-2026-10-11T09-11-54.466Z",
+    "status": "included",
+    "events": 35,
+    "positives": 0,
+    "ppg_rows": 1503,
+    "start_ns": 1495955295007974,
+    "end_ns": 1496015395140280
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-fist-2026-10-11T12-11-54.033Z.csv",
+    "date": "2026-10-11",
+    "session_id": "gesture-dataset-fist-2026-10-11T12-11-54.033Z",
+    "status": "included",
+    "events": 54,
+    "positives": 0,
+    "ppg_rows": 1501,
+    "start_ns": 1506753577570176,
+    "end_ns": 1506813623565597
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-fist-2026-10-11T12-13-10.266Z.csv",
+    "date": "2026-10-11",
+    "session_id": "gesture-dataset-fist-2026-10-11T12-13-10.266Z",
+    "status": "included",
+    "events": 35,
+    "positives": 0,
+    "ppg_rows": 1498,
+    "start_ns": 1506829850499814,
+    "end_ns": 1506889761197235
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-fist-2026-10-14T01-02-50.880Z.csv",
+    "date": "2026-10-14",
+    "session_id": "gesture-dataset-fist-2026-10-14T01-02-50.880Z",
+    "status": "included",
+    "events": 37,
+    "positives": 0,
+    "ppg_rows": 1502,
+    "start_ns": 1725803589227008,
+    "end_ns": 1725863755560704
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-fist-2026-10-14T01-06-46.525Z.csv",
+    "date": "2026-10-14",
+    "session_id": "gesture-dataset-fist-2026-10-14T01-06-46.525Z",
+    "status": "included",
+    "events": 42,
+    "positives": 0,
+    "ppg_rows": 1501,
+    "start_ns": 1726039274172672,
+    "end_ns": 1726099341392640
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-fist-2026-10-14T01-10-16.565Z.csv",
+    "date": "2026-10-14",
+    "session_id": "gesture-dataset-fist-2026-10-14T01-10-16.565Z",
+    "status": "included",
+    "events": 36,
+    "positives": 0,
+    "ppg_rows": 1499,
+    "start_ns": 1726249336004608,
+    "end_ns": 1726309358561792
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-fist-2026-10-14T01-11-31.499Z.csv",
+    "date": "2026-10-14",
+    "session_id": "gesture-dataset-fist-2026-10-14T01-11-31.499Z",
+    "status": "included",
+    "events": 38,
+    "positives": 0,
+    "ppg_rows": 1502,
+    "start_ns": 1726324250619904,
+    "end_ns": 1726384383576064
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-hand_twit_clockwise_and_anti_clockwise-2026-10-04T12-11-43.384Z.csv",
+    "date": "2026-10-04",
+    "session_id": "gesture-dataset-hand_twit_clockwise_and_anti_clockwise-2026-10-04T12-11-43.384Z",
+    "status": "excluded",
+    "reason": "Inherited study excluded gesture category"
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-09-22T13-39-36.998Z.csv",
+    "date": "2026-09-22",
+    "session_id": "gesture-dataset-pinch-2026-09-22T13-39-36.998Z",
+    "status": "excluded",
+    "reason": "Duration >= 1 hour (historical invalid clock)"
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-04T11-43-31.691Z.csv",
+    "date": "2026-10-04",
+    "session_id": "gesture-dataset-pinch-2026-10-04T11-43-31.691Z",
+    "status": "included",
+    "events": 30,
+    "positives": 24,
+    "ppg_rows": 1463,
+    "start_ns": 900274961735152,
+    "end_ns": 900334977811188
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-10T17-22-55.071Z.csv",
+    "date": "2026-10-10",
+    "session_id": "gesture-dataset-pinch-2026-10-10T17-22-55.071Z",
+    "status": "excluded",
+    "reason": "No marked events"
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-10T17-29-59.392Z.csv",
+    "date": "2026-10-10",
+    "session_id": "gesture-dataset-pinch-2026-10-10T17-29-59.392Z",
+    "status": "excluded",
+    "reason": "No marked events"
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-11T02-54-01.797Z.csv",
+    "date": "2026-10-11",
+    "session_id": "gesture-dataset-pinch-2026-10-11T02-54-01.797Z",
+    "status": "excluded",
+    "reason": "No marked events"
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-11T02-54-10.616Z.csv",
+    "date": "2026-10-11",
+    "session_id": "gesture-dataset-pinch-2026-10-11T02-54-10.616Z",
+    "status": "included",
+    "events": 25,
+    "positives": 5,
+    "ppg_rows": 754,
+    "start_ns": 1473312415951841,
+    "end_ns": 1473342538116244
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-11T03-23-55.502Z.csv",
+    "date": "2026-10-11",
+    "session_id": "gesture-dataset-pinch-2026-10-11T03-23-55.502Z",
+    "status": "included",
+    "events": 9,
+    "positives": 8,
+    "ppg_rows": 751,
+    "start_ns": 1475106226289748,
+    "end_ns": 1475136209466769
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-11T03-25-53.983Z.csv",
+    "date": "2026-10-11",
+    "session_id": "gesture-dataset-pinch-2026-10-11T03-25-53.983Z",
+    "status": "included",
+    "events": 9,
+    "positives": 9,
+    "ppg_rows": 750,
+    "start_ns": 1475224752211856,
+    "end_ns": 1475254664682530
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-11T08-25-29.427Z.csv",
+    "date": "2026-10-11",
+    "session_id": "gesture-dataset-pinch-2026-10-11T08-25-29.427Z",
+    "status": "included",
+    "events": 31,
+    "positives": 11,
+    "ppg_rows": 1498,
+    "start_ns": 1493169714197312,
+    "end_ns": 1493229648622079
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-11T08-35-42.008Z.csv",
+    "date": "2026-10-11",
+    "session_id": "gesture-dataset-pinch-2026-10-11T08-35-42.008Z",
+    "status": "included",
+    "events": 32,
+    "positives": 12,
+    "ppg_rows": 1501,
+    "start_ns": 1493782095858075,
+    "end_ns": 1493842088518035
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-11T08-53-30.484Z.csv",
+    "date": "2026-10-11",
+    "session_id": "gesture-dataset-pinch-2026-10-11T08-53-30.484Z",
+    "status": "included",
+    "events": 27,
+    "positives": 27,
+    "ppg_rows": 1499,
+    "start_ns": 1494851437766909,
+    "end_ns": 1494911347975216
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-11T12-05-39.593Z.csv",
+    "date": "2026-10-11",
+    "session_id": "gesture-dataset-pinch-2026-10-11T12-05-39.593Z",
+    "status": "included",
+    "events": 35,
+    "positives": 15,
+    "ppg_rows": 1500,
+    "start_ns": 1506379206372176,
+    "end_ns": 1506439203625058
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-11T12-08-32.241Z.csv",
+    "date": "2026-10-11",
+    "session_id": "gesture-dataset-pinch-2026-10-11T12-08-32.241Z",
+    "status": "included",
+    "events": 39,
+    "positives": 19,
+    "ppg_rows": 1500,
+    "start_ns": 1506551816479820,
+    "end_ns": 1506611793388357
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-14T00-54-06.988Z.csv",
+    "date": "2026-10-14",
+    "session_id": "gesture-dataset-pinch-2026-10-14T00-54-06.988Z",
+    "status": "included",
+    "events": 58,
+    "positives": 21,
+    "ppg_rows": 1500,
+    "start_ns": 1725279725102848,
+    "end_ns": 1725339792287232
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-14T00-55-38.245Z.csv",
+    "date": "2026-10-14",
+    "session_id": "gesture-dataset-pinch-2026-10-14T00-55-38.245Z",
+    "status": "included",
+    "events": 44,
+    "positives": 24,
+    "ppg_rows": 1504,
+    "start_ns": 1725370952526080,
+    "end_ns": 1725431102481920
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-14T00-57-01.701Z.csv",
+    "date": "2026-10-14",
+    "session_id": "gesture-dataset-pinch-2026-10-14T00-57-01.701Z",
+    "status": "included",
+    "events": 35,
+    "positives": 21,
+    "ppg_rows": 1502,
+    "start_ns": 1725454472968448,
+    "end_ns": 1725514551086080
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-14T00-58-20.761Z.csv",
+    "date": "2026-10-14",
+    "session_id": "gesture-dataset-pinch-2026-10-14T00-58-20.761Z",
+    "status": "included",
+    "events": 24,
+    "positives": 24,
+    "ppg_rows": 1499,
+    "start_ns": 1725533568086016,
+    "end_ns": 1725593571904512
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-14T00-59-37.623Z.csv",
+    "date": "2026-10-14",
+    "session_id": "gesture-dataset-pinch-2026-10-14T00-59-37.623Z",
+    "status": "included",
+    "events": 57,
+    "positives": 17,
+    "ppg_rows": 1504,
+    "start_ns": 1725610321959680,
+    "end_ns": 1725670486061056
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-14T01-00-54.801Z.csv",
+    "date": "2026-10-14",
+    "session_id": "gesture-dataset-pinch-2026-10-14T01-00-54.801Z",
+    "status": "included",
+    "events": 43,
+    "positives": 23,
+    "ppg_rows": 1501,
+    "start_ns": 1725687566007296,
+    "end_ns": 1725747644015616
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-14T01-04-14.013Z.csv",
+    "date": "2026-10-14",
+    "session_id": "gesture-dataset-pinch-2026-10-14T01-04-14.013Z",
+    "status": "included",
+    "events": 27,
+    "positives": 27,
+    "ppg_rows": 1500,
+    "start_ns": 1725886726009600,
+    "end_ns": 1725946794774784
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-14T01-05-31.133Z.csv",
+    "date": "2026-10-14",
+    "session_id": "gesture-dataset-pinch-2026-10-14T01-05-31.133Z",
+    "status": "included",
+    "events": 27,
+    "positives": 27,
+    "ppg_rows": 1501,
+    "start_ns": 1725963887547136,
+    "end_ns": 1726023960274944
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-14T01-13-08.108Z.csv",
+    "date": "2026-10-14",
+    "session_id": "gesture-dataset-pinch-2026-10-14T01-13-08.108Z",
+    "status": "included",
+    "events": 60,
+    "positives": 24,
+    "ppg_rows": 1499,
+    "start_ns": 1726420858143232,
+    "end_ns": 1726480860704768
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-17T12-21-44.346Z",
+    "date": "2026-10-17",
+    "session_id": "gesture-dataset-pinch-2026-10-17T12-21-44.346Z",
+    "status": "included",
+    "events": 50,
+    "positives": 14,
+    "ppg_rows": 1499,
+    "start_ns": 2025711844111360,
+    "end_ns": 2025771842626560
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-17T12-23-03.399Z.csv",
+    "date": "2026-10-17",
+    "session_id": "gesture-dataset-pinch-2026-10-17T12-23-03.399Z",
+    "status": "included",
+    "events": 51,
+    "positives": 14,
+    "ppg_rows": 1501,
+    "start_ns": 2025806453325056,
+    "end_ns": 2025866513999872
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-17T12-25-10.832Z.csv",
+    "date": "2026-10-17",
+    "session_id": "gesture-dataset-pinch-2026-10-17T12-25-10.832Z",
+    "status": "included",
+    "events": 49,
+    "positives": 13,
+    "ppg_rows": 1502,
+    "start_ns": 2025933813943808,
+    "end_ns": 2025993909976064
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-17T12-26-46.748Z.csv",
+    "date": "2026-10-17",
+    "session_id": "gesture-dataset-pinch-2026-10-17T12-26-46.748Z",
+    "status": "included",
+    "events": 63,
+    "positives": 20,
+    "ppg_rows": 1505,
+    "start_ns": 2026029706882816,
+    "end_ns": 2026089891904768
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch-2026-10-17T12-40-50.602Z",
+    "date": "2026-10-17",
+    "session_id": "gesture-dataset-pinch-2026-10-17T12-40-50.602Z",
+    "status": "included",
+    "events": 60,
+    "positives": 9,
+    "ppg_rows": 1500,
+    "start_ns": 2026873695031040,
+    "end_ns": 2026933738551040
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch_open-2026-10-10T17-07-46.069Z.csv",
+    "date": "2026-10-10",
+    "session_id": "gesture-dataset-pinch_open-2026-10-10T17-07-46.069Z",
+    "status": "excluded",
+    "reason": "Inherited study excluded gesture category"
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinch_open-2026-10-10T17-16-11.792Z.csv",
+    "date": "2026-10-10",
+    "session_id": "gesture-dataset-pinch_open-2026-10-10T17-16-11.792Z",
+    "status": "excluded",
+    "reason": "Inherited study excluded gesture category"
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-pinching-2026-09-23T02-26-28.273Z.csv",
+    "date": "2026-09-23",
+    "session_id": "gesture-dataset-pinching-2026-09-23T02-26-28.273Z",
+    "status": "included",
+    "events": 38,
+    "positives": 16,
+    "ppg_rows": 1505,
+    "start_ns": 5222810679536277,
+    "end_ns": 5222870876771199
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-thumbs_up-2026-10-11T03-28-55.957Z.csv",
+    "date": "2026-10-11",
+    "session_id": "gesture-dataset-thumbs_up-2026-10-11T03-28-55.957Z",
+    "status": "included",
+    "events": 14,
+    "positives": 0,
+    "ppg_rows": 748,
+    "start_ns": 1475406716941304,
+    "end_ns": 1475436659871092
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-thumbs_up-2026-10-11T09-13-46.511Z.csv",
+    "date": "2026-10-11",
+    "session_id": "gesture-dataset-thumbs_up-2026-10-11T09-13-46.511Z",
+    "status": "included",
+    "events": 39,
+    "positives": 0,
+    "ppg_rows": 1502,
+    "start_ns": 1496067416041701,
+    "end_ns": 1496127428491661
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-unlabeled-2026-10-10T17-40-15.951Z.csv",
+    "date": "2026-10-10",
+    "session_id": "gesture-dataset-unlabeled-2026-10-10T17-40-15.951Z",
+    "status": "excluded",
+    "reason": "Inherited study excluded gesture category"
+  },
+  {
+    "path": "/mnt/unraid/projects/hermes/gesture-controls/data/recordings/2026-10-downloads/gesture-dataset-unlabeled-2026-10-11T14-23-15.255Z.csv",
+    "date": "2026-10-11",
+    "session_id": "gesture-dataset-unlabeled-2026-10-11T14-23-15.255Z",
+    "status": "excluded",
+    "reason": "Inherited study excluded gesture category"
+  }
+]

@@ -1,0 +1,7 @@
+{
+  "passed": true,
+  "independent_scalar_transform": true,
+  "all_37_ppg_only_source_checks": true,
+  "cnn_tensor_and_hgb_all_orders": true,
+  "binary_target": true
+}

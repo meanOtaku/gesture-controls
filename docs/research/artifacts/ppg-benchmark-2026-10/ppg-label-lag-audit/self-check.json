@@ -1,0 +1,19 @@
+{
+  "passed": true,
+  "raw_events_reproduced": 1390,
+  "zero_shift_fold_session_metrics_reproduced": 300,
+  "zero_shift_aggregate_reproduced": true,
+  "aggregate": {
+    "shift_ms": 0,
+    "minutes": 259.852,
+    "pinch_starts": 3422,
+    "matched_starts": 894,
+    "activations": 5855,
+    "false_activations": 4961,
+    "recall": 0.26125073056691994,
+    "false_activations_per_minute": 19.091636777858167
+  },
+  "frozen_evaluator_compared": true,
+  "sources_unchanged": true,
+  "matching_boundary_checks": true
+}

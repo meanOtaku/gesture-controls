@@ -1,0 +1,12 @@
+[
+  {
+    "stage": "A",
+    "all_event_and_continuous_features_exact": true,
+    "source": "/tmp/ppg-derivatives-all-techniques"
+  },
+  {
+    "stage": "D",
+    "all_event_and_continuous_features_exact": true,
+    "source": "/tmp/ppg-zsig-mad-derivatives-all"
+  }
+]

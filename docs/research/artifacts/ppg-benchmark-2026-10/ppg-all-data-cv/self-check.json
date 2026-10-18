@@ -1,0 +1,19 @@
+{
+  "passed": true,
+  "checks": [
+    "audited parser int64/raw-label preservation and all preprocessing prefix checks",
+    "binary mapping: pinch_start=1 and all other event kinds=0",
+    "all feature families identical after label/session-name mutation; feature API accepts timestamp/PPG signals only; no IMU/contact fields loaded as predictors",
+    "all feature families identical for full recording and prefix ending at decision timestamp",
+    "CNN shape N,3,33 -> N binary logits",
+    "augmentation train-only copies and unchanged binary targets",
+    "actual split disjointness and every fitted transform immutability verified during full run"
+  ],
+  "all_520_fits_training_only": true,
+  "all_520_models_immutable_during_prediction": true,
+  "all_scores_oof": true,
+  "recording_disjoint": true,
+  "independent_verification_passed": true,
+  "inventory_and_events_regenerated": true,
+  "repository_data_git_hashes_unchanged": true
+}

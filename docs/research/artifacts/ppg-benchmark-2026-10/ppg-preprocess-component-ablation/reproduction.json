@@ -1,0 +1,46 @@
+[
+  {
+    "stage": "A",
+    "model": "hgb_morphology",
+    "original": "/tmp/ppg-derivatives-all-techniques",
+    "max_score_difference": 0,
+    "max_prediction_difference": {
+      "events": 0.0,
+      "continuous": 0.0
+    },
+    "passed": true
+  },
+  {
+    "stage": "A",
+    "model": "extra_trees",
+    "original": "/tmp/ppg-derivatives-all-techniques",
+    "max_score_difference": 0,
+    "max_prediction_difference": {
+      "events": 0.0,
+      "continuous": 0.0
+    },
+    "passed": true
+  },
+  {
+    "stage": "D",
+    "model": "hgb_morphology",
+    "original": "/tmp/ppg-zsig-mad-derivatives-all",
+    "max_score_difference": 0,
+    "max_prediction_difference": {
+      "events": 0.0,
+      "continuous": 0.0
+    },
+    "passed": true
+  },
+  {
+    "stage": "D",
+    "model": "extra_trees",
+    "original": "/tmp/ppg-zsig-mad-derivatives-all",
+    "max_score_difference": 0,
+    "max_prediction_difference": {
+      "events": 0.0,
+      "continuous": 0.0
+    },
+    "passed": true
+  }
+]

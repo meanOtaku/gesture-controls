@@ -1,0 +1,2242 @@
+[
+  {
+    "method": "A_lr",
+    "fold": 0,
+    "train_events": 730,
+    "test_events": 660,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 1,
+    "train_events": 752,
+    "test_events": 638,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 2,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 3,
+    "train_events": 899,
+    "test_events": 491,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 4,
+    "train_events": 813,
+    "test_events": 577,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 5,
+    "train_events": 839,
+    "test_events": 551,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 6,
+    "train_events": 833,
+    "test_events": 557,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 7,
+    "train_events": 891,
+    "test_events": 499,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 8,
+    "train_events": 871,
+    "test_events": 519,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 9,
+    "train_events": 834,
+    "test_events": 556,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 10,
+    "train_events": 859,
+    "test_events": 531,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 11,
+    "train_events": 784,
+    "test_events": 606,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 12,
+    "train_events": 863,
+    "test_events": 527,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 13,
+    "train_events": 823,
+    "test_events": 567,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 14,
+    "train_events": 811,
+    "test_events": 579,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 15,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 16,
+    "train_events": 830,
+    "test_events": 560,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 17,
+    "train_events": 868,
+    "test_events": 522,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 18,
+    "train_events": 853,
+    "test_events": 537,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_lr",
+    "fold": 19,
+    "train_events": 828,
+    "test_events": 562,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 0,
+    "train_events": 730,
+    "test_events": 660,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 1,
+    "train_events": 752,
+    "test_events": 638,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 2,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 3,
+    "train_events": 899,
+    "test_events": 491,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 4,
+    "train_events": 813,
+    "test_events": 577,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 5,
+    "train_events": 839,
+    "test_events": 551,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 6,
+    "train_events": 833,
+    "test_events": 557,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 7,
+    "train_events": 891,
+    "test_events": 499,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 8,
+    "train_events": 871,
+    "test_events": 519,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 9,
+    "train_events": 834,
+    "test_events": 556,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 10,
+    "train_events": 859,
+    "test_events": 531,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 11,
+    "train_events": 784,
+    "test_events": 606,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 12,
+    "train_events": 863,
+    "test_events": 527,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 13,
+    "train_events": 823,
+    "test_events": 567,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 14,
+    "train_events": 811,
+    "test_events": 579,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 15,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 16,
+    "train_events": 830,
+    "test_events": 560,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 17,
+    "train_events": 868,
+    "test_events": 522,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 18,
+    "train_events": 853,
+    "test_events": 537,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A_hgb",
+    "fold": 19,
+    "train_events": 828,
+    "test_events": 562,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 0,
+    "train_events": 730,
+    "test_events": 660,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 1,
+    "train_events": 752,
+    "test_events": 638,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 2,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 3,
+    "train_events": 899,
+    "test_events": 491,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 4,
+    "train_events": 813,
+    "test_events": 577,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 5,
+    "train_events": 839,
+    "test_events": 551,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 6,
+    "train_events": 833,
+    "test_events": 557,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 7,
+    "train_events": 891,
+    "test_events": 499,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 8,
+    "train_events": 871,
+    "test_events": 519,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 9,
+    "train_events": 834,
+    "test_events": 556,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 10,
+    "train_events": 859,
+    "test_events": 531,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 11,
+    "train_events": 784,
+    "test_events": 606,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 12,
+    "train_events": 863,
+    "test_events": 527,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 13,
+    "train_events": 823,
+    "test_events": 567,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 14,
+    "train_events": 811,
+    "test_events": 579,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 15,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 16,
+    "train_events": 830,
+    "test_events": 560,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 17,
+    "train_events": 868,
+    "test_events": 522,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 18,
+    "train_events": 853,
+    "test_events": 537,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_lr",
+    "fold": 19,
+    "train_events": 828,
+    "test_events": 562,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 0,
+    "train_events": 730,
+    "test_events": 660,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 1,
+    "train_events": 752,
+    "test_events": 638,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 2,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 3,
+    "train_events": 899,
+    "test_events": 491,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 4,
+    "train_events": 813,
+    "test_events": 577,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 5,
+    "train_events": 839,
+    "test_events": 551,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 6,
+    "train_events": 833,
+    "test_events": 557,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 7,
+    "train_events": 891,
+    "test_events": 499,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 8,
+    "train_events": 871,
+    "test_events": 519,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 9,
+    "train_events": 834,
+    "test_events": 556,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 10,
+    "train_events": 859,
+    "test_events": 531,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 11,
+    "train_events": 784,
+    "test_events": 606,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 12,
+    "train_events": 863,
+    "test_events": 527,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 13,
+    "train_events": 823,
+    "test_events": 567,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 14,
+    "train_events": 811,
+    "test_events": 579,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 15,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 16,
+    "train_events": 830,
+    "test_events": 560,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 17,
+    "train_events": 868,
+    "test_events": 522,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 18,
+    "train_events": 853,
+    "test_events": 537,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "B_hgb",
+    "fold": 19,
+    "train_events": 828,
+    "test_events": 562,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 0,
+    "train_events": 730,
+    "test_events": 660,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 1,
+    "train_events": 752,
+    "test_events": 638,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 2,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 3,
+    "train_events": 899,
+    "test_events": 491,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 4,
+    "train_events": 813,
+    "test_events": 577,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 5,
+    "train_events": 839,
+    "test_events": 551,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 6,
+    "train_events": 833,
+    "test_events": 557,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 7,
+    "train_events": 891,
+    "test_events": 499,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 8,
+    "train_events": 871,
+    "test_events": 519,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 9,
+    "train_events": 834,
+    "test_events": 556,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 10,
+    "train_events": 859,
+    "test_events": 531,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 11,
+    "train_events": 784,
+    "test_events": 606,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 12,
+    "train_events": 863,
+    "test_events": 527,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 13,
+    "train_events": 823,
+    "test_events": 567,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 14,
+    "train_events": 811,
+    "test_events": 579,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 15,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 16,
+    "train_events": 830,
+    "test_events": 560,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 17,
+    "train_events": 868,
+    "test_events": 522,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 18,
+    "train_events": 853,
+    "test_events": 537,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_lr",
+    "fold": 19,
+    "train_events": 828,
+    "test_events": 562,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 0,
+    "train_events": 730,
+    "test_events": 660,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 1,
+    "train_events": 752,
+    "test_events": 638,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 2,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 3,
+    "train_events": 899,
+    "test_events": 491,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 4,
+    "train_events": 813,
+    "test_events": 577,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 5,
+    "train_events": 839,
+    "test_events": 551,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 6,
+    "train_events": 833,
+    "test_events": 557,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 7,
+    "train_events": 891,
+    "test_events": 499,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 8,
+    "train_events": 871,
+    "test_events": 519,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 9,
+    "train_events": 834,
+    "test_events": 556,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 10,
+    "train_events": 859,
+    "test_events": 531,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 11,
+    "train_events": 784,
+    "test_events": 606,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 12,
+    "train_events": 863,
+    "test_events": 527,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 13,
+    "train_events": 823,
+    "test_events": 567,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 14,
+    "train_events": 811,
+    "test_events": 579,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 15,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 16,
+    "train_events": 830,
+    "test_events": 560,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 17,
+    "train_events": 868,
+    "test_events": 522,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 18,
+    "train_events": 853,
+    "test_events": 537,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "C_hgb",
+    "fold": 19,
+    "train_events": 828,
+    "test_events": 562,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 0,
+    "train_events": 730,
+    "test_events": 660,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 1,
+    "train_events": 752,
+    "test_events": 638,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 2,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 3,
+    "train_events": 899,
+    "test_events": 491,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 4,
+    "train_events": 813,
+    "test_events": 577,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 5,
+    "train_events": 839,
+    "test_events": 551,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 6,
+    "train_events": 833,
+    "test_events": 557,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 7,
+    "train_events": 891,
+    "test_events": 499,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 8,
+    "train_events": 871,
+    "test_events": 519,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 9,
+    "train_events": 834,
+    "test_events": 556,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 10,
+    "train_events": 859,
+    "test_events": 531,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 11,
+    "train_events": 784,
+    "test_events": 606,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 12,
+    "train_events": 863,
+    "test_events": 527,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 13,
+    "train_events": 823,
+    "test_events": 567,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 14,
+    "train_events": 811,
+    "test_events": 579,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 15,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 16,
+    "train_events": 830,
+    "test_events": 560,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 17,
+    "train_events": 868,
+    "test_events": 522,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 18,
+    "train_events": 853,
+    "test_events": 537,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_lr",
+    "fold": 19,
+    "train_events": 828,
+    "test_events": 562,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 0,
+    "train_events": 730,
+    "test_events": 660,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 1,
+    "train_events": 752,
+    "test_events": 638,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 2,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 3,
+    "train_events": 899,
+    "test_events": 491,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 4,
+    "train_events": 813,
+    "test_events": 577,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 5,
+    "train_events": 839,
+    "test_events": 551,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 6,
+    "train_events": 833,
+    "test_events": 557,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 7,
+    "train_events": 891,
+    "test_events": 499,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 8,
+    "train_events": 871,
+    "test_events": 519,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 9,
+    "train_events": 834,
+    "test_events": 556,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 10,
+    "train_events": 859,
+    "test_events": 531,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 11,
+    "train_events": 784,
+    "test_events": 606,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 12,
+    "train_events": 863,
+    "test_events": 527,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 13,
+    "train_events": 823,
+    "test_events": 567,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 14,
+    "train_events": 811,
+    "test_events": 579,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 15,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 16,
+    "train_events": 830,
+    "test_events": 560,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 17,
+    "train_events": 868,
+    "test_events": 522,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 18,
+    "train_events": 853,
+    "test_events": 537,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "D_hgb",
+    "fold": 19,
+    "train_events": 828,
+    "test_events": 562,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 0,
+    "train_events": 730,
+    "test_events": 660,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 1,
+    "train_events": 752,
+    "test_events": 638,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 2,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 3,
+    "train_events": 899,
+    "test_events": 491,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 4,
+    "train_events": 813,
+    "test_events": 577,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 5,
+    "train_events": 839,
+    "test_events": 551,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 6,
+    "train_events": 833,
+    "test_events": 557,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 7,
+    "train_events": 891,
+    "test_events": 499,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 8,
+    "train_events": 871,
+    "test_events": 519,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 9,
+    "train_events": 834,
+    "test_events": 556,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 10,
+    "train_events": 859,
+    "test_events": 531,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 11,
+    "train_events": 784,
+    "test_events": 606,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 12,
+    "train_events": 863,
+    "test_events": 527,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 13,
+    "train_events": 823,
+    "test_events": 567,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 14,
+    "train_events": 811,
+    "test_events": 579,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 15,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 16,
+    "train_events": 830,
+    "test_events": 560,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 17,
+    "train_events": 868,
+    "test_events": 522,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 18,
+    "train_events": 853,
+    "test_events": 537,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_lr",
+    "fold": 19,
+    "train_events": 828,
+    "test_events": 562,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 0,
+    "train_events": 730,
+    "test_events": 660,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 1,
+    "train_events": 752,
+    "test_events": 638,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 2,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 3,
+    "train_events": 899,
+    "test_events": 491,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 4,
+    "train_events": 813,
+    "test_events": 577,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 5,
+    "train_events": 839,
+    "test_events": 551,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 6,
+    "train_events": 833,
+    "test_events": 557,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 7,
+    "train_events": 891,
+    "test_events": 499,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 8,
+    "train_events": 871,
+    "test_events": 519,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 9,
+    "train_events": 834,
+    "test_events": 556,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 10,
+    "train_events": 859,
+    "test_events": 531,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 11,
+    "train_events": 784,
+    "test_events": 606,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 12,
+    "train_events": 863,
+    "test_events": 527,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 13,
+    "train_events": 823,
+    "test_events": 567,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 14,
+    "train_events": 811,
+    "test_events": 579,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 15,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 16,
+    "train_events": 830,
+    "test_events": 560,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 17,
+    "train_events": 868,
+    "test_events": 522,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 18,
+    "train_events": 853,
+    "test_events": 537,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+B_hgb",
+    "fold": 19,
+    "train_events": 828,
+    "test_events": 562,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 0,
+    "train_events": 730,
+    "test_events": 660,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 1,
+    "train_events": 752,
+    "test_events": 638,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 2,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 3,
+    "train_events": 899,
+    "test_events": 491,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 4,
+    "train_events": 813,
+    "test_events": 577,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 5,
+    "train_events": 839,
+    "test_events": 551,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 6,
+    "train_events": 833,
+    "test_events": 557,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 7,
+    "train_events": 891,
+    "test_events": 499,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 8,
+    "train_events": 871,
+    "test_events": 519,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 9,
+    "train_events": 834,
+    "test_events": 556,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 10,
+    "train_events": 859,
+    "test_events": 531,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 11,
+    "train_events": 784,
+    "test_events": 606,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 12,
+    "train_events": 863,
+    "test_events": 527,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 13,
+    "train_events": 823,
+    "test_events": 567,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 14,
+    "train_events": 811,
+    "test_events": 579,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 15,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 16,
+    "train_events": 830,
+    "test_events": 560,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 17,
+    "train_events": 868,
+    "test_events": 522,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 18,
+    "train_events": 853,
+    "test_events": 537,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_lr",
+    "fold": 19,
+    "train_events": 828,
+    "test_events": 562,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 0,
+    "train_events": 730,
+    "test_events": 660,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 1,
+    "train_events": 752,
+    "test_events": 638,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 2,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 3,
+    "train_events": 899,
+    "test_events": 491,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 4,
+    "train_events": 813,
+    "test_events": 577,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 5,
+    "train_events": 839,
+    "test_events": 551,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 6,
+    "train_events": 833,
+    "test_events": 557,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 7,
+    "train_events": 891,
+    "test_events": 499,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 8,
+    "train_events": 871,
+    "test_events": 519,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 9,
+    "train_events": 834,
+    "test_events": 556,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 10,
+    "train_events": 859,
+    "test_events": 531,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 11,
+    "train_events": 784,
+    "test_events": 606,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 12,
+    "train_events": 863,
+    "test_events": 527,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 13,
+    "train_events": 823,
+    "test_events": 567,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 14,
+    "train_events": 811,
+    "test_events": 579,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 15,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 16,
+    "train_events": 830,
+    "test_events": 560,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 17,
+    "train_events": 868,
+    "test_events": 522,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 18,
+    "train_events": 853,
+    "test_events": 537,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+C_hgb",
+    "fold": 19,
+    "train_events": 828,
+    "test_events": 562,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 0,
+    "train_events": 730,
+    "test_events": 660,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 1,
+    "train_events": 752,
+    "test_events": 638,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 2,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 3,
+    "train_events": 899,
+    "test_events": 491,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 4,
+    "train_events": 813,
+    "test_events": 577,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 5,
+    "train_events": 839,
+    "test_events": 551,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 6,
+    "train_events": 833,
+    "test_events": 557,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 7,
+    "train_events": 891,
+    "test_events": 499,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 8,
+    "train_events": 871,
+    "test_events": 519,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 9,
+    "train_events": 834,
+    "test_events": 556,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 10,
+    "train_events": 859,
+    "test_events": 531,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 11,
+    "train_events": 784,
+    "test_events": 606,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 12,
+    "train_events": 863,
+    "test_events": 527,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 13,
+    "train_events": 823,
+    "test_events": 567,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 14,
+    "train_events": 811,
+    "test_events": 579,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 15,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 16,
+    "train_events": 830,
+    "test_events": 560,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 17,
+    "train_events": 868,
+    "test_events": 522,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 18,
+    "train_events": 853,
+    "test_events": 537,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_lr",
+    "fold": 19,
+    "train_events": 828,
+    "test_events": 562,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 0,
+    "train_events": 730,
+    "test_events": 660,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 1,
+    "train_events": 752,
+    "test_events": 638,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 2,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 3,
+    "train_events": 899,
+    "test_events": 491,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 4,
+    "train_events": 813,
+    "test_events": 577,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 5,
+    "train_events": 839,
+    "test_events": 551,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 6,
+    "train_events": 833,
+    "test_events": 557,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 7,
+    "train_events": 891,
+    "test_events": 499,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 8,
+    "train_events": 871,
+    "test_events": 519,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 9,
+    "train_events": 834,
+    "test_events": 556,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 10,
+    "train_events": 859,
+    "test_events": 531,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 11,
+    "train_events": 784,
+    "test_events": 606,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 12,
+    "train_events": 863,
+    "test_events": 527,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 13,
+    "train_events": 823,
+    "test_events": 567,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 14,
+    "train_events": 811,
+    "test_events": 579,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 15,
+    "train_events": 838,
+    "test_events": 552,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 16,
+    "train_events": 830,
+    "test_events": 560,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 17,
+    "train_events": 868,
+    "test_events": 522,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 18,
+    "train_events": 853,
+    "test_events": 537,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  },
+  {
+    "method": "A+D_hgb",
+    "fold": 19,
+    "train_events": 828,
+    "test_events": 562,
+    "train_only_scaler": true,
+    "prediction_immutable": true
+  }
+]

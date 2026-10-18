@@ -1,0 +1,19 @@
+{
+  "time_utc": "2026-10-18T13:35:39Z",
+  "sha256": {
+    "study.py": "e4bb401c8d5cd9d9e9658a6d86478133114b113b04882a6bf5e2c37a8e9f546f",
+    "common.py": "421bd673df7ee9e48016c6e85a9b76389150c38f46a90f1d73589755976c76c0",
+    "features.py": "31f7c88f13fcebb345a07b7213c78f5dcf73f8c90c90a68cc786b5d13da8eda0",
+    "estimators.py": "be00acf991ccdf884322d78691ece573a95b6051a2e34fa29beb84ce0d854ae1",
+    "base.py": "ae4bae813e8c238cc7a45b1d170d266b14f1b3af2fe541a1b51ca4f4f44df991",
+    "ablation_source.py": "d1e0f052b22eb8a7c1f701cd27e59b2b2e3807e54dbb752d37d07547d742f0e6",
+    "estimator_source.py": "18806df495814cf5081ea3a622a27a24928996b5a503f3805c4833222befc13f",
+    "prior-ledger.json": "fb4e6d39d2b92494d1ec1bce0c058e04ff77846963bb3f1548dd9b06ac2dac72",
+    "method-ledger.json": "e822e9fcbb556e722b2c33db858284eef85fd6cd7bff9ce5e22eea5cc239386b",
+    "splits.json": "010149398d104858ea03a9e5fd1294f8e16453125f14d4eb29126494d5f83319",
+    "events.json": "994a94e84281406d001aaf9b162edc7ac018ea7ef4f31e1662f84009ae2bcd3f",
+    "inventory.json": "d3607da4abdf2b56e6532871d3846490e26d5aa23160c530c46cd9c9f140fa9d",
+    "protocol.json": "6bccc2be9bba31e168845f8213e306c44d3beb39b7f5e6ac8f6a97c9811e178e",
+    "verify.py": "984f5851098fa1b13a9d78b2cecd8c27ab1f12c53891b014f852cedf36152061"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "stages": {
+    "A": "raw",
+    "B": "past-only z",
+    "C": "past-only z -> unrounded expit",
+    "D": "past-only z -> unrounded expit -> past-only median/MAD"
+  },
+  "history_ticks": 25,
+  "min_history": 20,
+  "ddof": 0,
+  "mad_scale": 1.4826,
+  "zero_scale_output": 0,
+  "derivatives": "cubic fit strictly previous9 samples, evaluated current tick, orders1/2/3",
+  "features": 567,
+  "models": [
+    "hgb_morphology",
+    "extra_trees"
+  ],
+  "folds": 20,
+  "recordings": 37,
+  "events": 1390,
+  "positives": 424,
+  "threshold": 0.5,
+  "attributions": [
+    "A->B",
+    "B->C",
+    "C->D"
+  ],
+  "metrics": "min/mean/max fold and pooled event AUC; fold and pooled continuous recall/precision/false per minute/counts/latency; min/mean/pooled recall precision false/min; paired delta median and positive/zero/negative signs; exact zero sign rule",
+  "reproduction_tolerance": 1e-12,
+  "pooled": "repeated held-out appearances counted repeatedly",
+  "no_tuning": true
+}

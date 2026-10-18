@@ -1,0 +1,27 @@
+prior_method,prior_feature,status,adaptation,raw_input_exception
+retained_lr_00,green robust step,adapted,Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Late-minus-early mean for all nine derivative channels; replaces green-only step with joint input.,none
+retained_lr_01,two-stage green,adapted,Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Same joint derivative step statistics; sigmoid after training-only standardization replaces raw-PPG two-stage normalization.,none
+retained_lr_02,green + red/IR quality,adapted,Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Derivative variability/energy/absolute-peak/change summaries replace green step and red/IR quality.,none
+retained_lr_03,RGB robust steps,adapted,Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. End-minus-start and late-minus-early for every derivative/channel/window.,none
+retained_lr_04,RGB candidate + shape,adapted,Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Derivative shape/location/change subset from frozen summaries.,none
+retained_lr_05,RGB waveform + quality / LR,adapted,Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summary features replace raw waveform/quality.,none
+retained_lr_06,RGB rounded 1e-6 / LR,adapted,Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All summaries rounded to 1e-6 after training-only standardization.,none
+retained_lr_07,RGB zsig 1e-4 / LR,adapted,Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Sigmoid of train-standardized summaries rounded to 1e-4; no raw-PPG zsig.,none
+retained_lr_08,RGB zsig 1e-6 / LR,adapted,Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Sigmoid of train-standardized summaries rounded to 1e-6; no raw-PPG zsig.,none
+retained_lr_09,RGB + correlation / LR,adapted,Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All summaries plus within-order RGB correlations of derivative traces.,none
+retained_lr_10,RGB + shape + correlation / LR,adapted,Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Shape summary subset plus within-order RGB derivative correlations.,none
+haar_lr,haar,adapted,"Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen summaries plus 279 Haar block differences on nine derivative traces, scales 1/2/4/8/16, final32 samples.",none
+morphology_lr,morph,adapted,"Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained.",none
+multiscale_lr,multi,adapted,Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Frozen mean/std/end-minus-start/mean-absolute-change summaries at ablation windows 8/16/32 for all nine derivative channels (108 features); replaces prior 4/8/16/32 windows.,none
+hgb_morphology,combined,adapted,"Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained.",none
+extra_trees,combined,adapted,"Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained.",none
+robust_scaler_lr,combined,adapted,"Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained.",none
+anova32_lr,combined,adapted,"Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained.",none
+equal_session_lr,combined,adapted,"Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained.",none
+leave_session_out_ensemble,combined,adapted,"Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained.",none
+augmented_waveform_lr,wave,adapted,"Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Training-only derivative-trace augmentation, then recompute all 567 frozen summary statistics; inference summarizes unaugmented traces.",none
+dense_mlp,wave,adapted,"Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained.",none
+causal_cnn,wave,adapted,Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Real temporal causal CNN on derivative-major 9 channels x 33 chronological steps; first convolution 9->24; all other frozen neural settings retained.,none
+augmented_cnn,wave,adapted,Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Real temporal causal CNN on derivative-major 9 channels x 33 chronological steps; first convolution 9->24; all other frozen neural settings retained.,none
+group_dro_mlp,wave,adapted,"Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained.",none
+coral_training_mlp,wave,adapted,"Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained.",none

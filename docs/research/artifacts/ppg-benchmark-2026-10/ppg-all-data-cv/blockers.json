@@ -1,0 +1,9 @@
+{
+  "blockers": [],
+  "limitations": [
+    "Oct-17 incorporated; not an independent test",
+    "Repeated held-out appearances counted repeatedly; no confidence interval",
+    "Inherited exclusions, unverified unmarked controls and unrepaired compressed timestamps",
+    "No missing historical methods recovered"
+  ]
+}

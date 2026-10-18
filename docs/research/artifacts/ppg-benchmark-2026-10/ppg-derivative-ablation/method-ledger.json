@@ -1,0 +1,138 @@
+{
+  "label": "All methods are fresh derivative ablations; no historical recovery claim",
+  "evidence": "Repeated all-data CV progress evidence, not an untouched test",
+  "representations": {
+    "A": [
+      0
+    ],
+    "B": [
+      1
+    ],
+    "C": [
+      1,
+      2
+    ],
+    "D": [
+      1,
+      2,
+      3
+    ],
+    "A+B": [
+      0,
+      1
+    ],
+    "A+C": [
+      0,
+      1,
+      2
+    ],
+    "A+D": [
+      0,
+      1,
+      2,
+      3
+    ]
+  },
+  "channels": [
+    "ppg_green",
+    "ppg_red",
+    "ppg_ir"
+  ],
+  "grid": "25 Hz zero-order hold, recording origin, integer source timestamps; no clock repair",
+  "filter": "Cubic least squares on previous nine samples (current excluded), derivatives evaluated at current grid time",
+  "coefficients": [
+    [
+      -0.4444444444444372,
+      0.38888888888888856,
+      0.5079365079364946,
+      0.19047619047618522,
+      -0.2857142857142838,
+      -0.6428571428571372,
+      -0.6031746031745909,
+      0.11111111111111514,
+      1.777777777777766
+    ],
+    [
+      -12.710437710437603,
+      9.953703703703729,
+      14.29172679172654,
+      6.9534632034631185,
+      -5.4112554112553735,
+      -16.15259740259732,
+      -18.620731120730905,
+      -6.1658249158248495,
+      27.861952861952666
+    ],
+    [
+      -183.08080808080754,
+      119.94949494949564,
+      194.35425685425463,
+      119.04761904761854,
+      -27.056277056276667,
+      -165.04329004328963,
+      -215.99927849927676,
+      -101.01010101010058,
+      258.8383838383824
+    ],
+    [
+      -1104.7979797979795,
+      552.3989898989946,
+      1025.8838383838297,
+      710.2272727272718,
+      1.7728436137584378e-12,
+      -710.2272727272725,
+      -1025.8838383838324,
+      -552.3989898989889,
+      1104.7979797979756
+    ]
+  ],
+  "warmup": "First valid feature at grid index 40 = 1600 ms; no padding. Derivatives valid from index 9.",
+  "windows_samples": [
+    8,
+    16,
+    32
+  ],
+  "stats": [
+    "q10",
+    "q25",
+    "median",
+    "q75",
+    "q90",
+    "mad",
+    "mean",
+    "std",
+    "energy",
+    "min",
+    "max",
+    "positive_peak",
+    "negative_peak",
+    "absolute_peak",
+    "zero_crossings",
+    "max_age_seconds",
+    "min_age_seconds",
+    "absolute_peak_age_seconds",
+    "end_minus_start",
+    "late_minus_early_mean",
+    "mean_absolute_change"
+  ],
+  "baseline": "Fresh raw ZOH morphology using the same statistics and windows; not historical morphology recovery",
+  "normalization": "No recording-wide normalization; StandardScaler fit per training fold only",
+  "lr": {
+    "C": 1,
+    "max_iter": 5000,
+    "random_state": 17
+  },
+  "hgb": {
+    "max_iter": 150,
+    "learning_rate": 0.05,
+    "max_leaf_nodes": 15,
+    "l2_regularization": 1,
+    "min_samples_leaf": 20,
+    "early_stopping": false,
+    "random_state": 17
+  },
+  "ranking": "descending minimum, mean, maximum fold AUC",
+  "continuous": "Inherited 40ms anchors; decision anchor+880ms; threshold .5; rising edges; 1500ms refractory; one-to-one match onset+680..1280ms",
+  "pooled": "Concatenate held-out appearances; repeats counted repeatedly",
+  "selection": "No feature selection, tuning, neural models, calibration, or test adaptation"
+}

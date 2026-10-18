@@ -1,0 +1,13 @@
+{
+  "execution_blockers": [],
+  "method_exclusions": [],
+  "raw_input_exceptions": [],
+  "limitations": [
+    "Repeated all-data CV progress evidence; no untouched test",
+    "Correlated repeated held-out appearances",
+    "Uncalibrated fixed .5 threshold and delayed +880ms decisions",
+    "Legacy timestamp compression retained",
+    "Unmarked controls not verified non-pinch",
+    "No independent seed replicate or confidence intervals"
+  ]
+}

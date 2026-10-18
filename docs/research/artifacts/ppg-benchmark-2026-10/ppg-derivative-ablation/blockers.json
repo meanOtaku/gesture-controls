@@ -1,0 +1,4 @@
+{
+  "execution_blockers": [],
+  "limitations": "No execution blockers. Limitations: repeated CV is selection/progress evidence; correlated repeats are not independent observations. Legacy timestamp compression remains; unmarked controls are not verified non-pinch. Labels (including annotation timestamps in IMU files where inherited) are used only for unchanged event/metric definitions, never as predictors. Repository snapshot excludes dependency/build/cache directories (node_modules, .venv, __pycache__, target, .tools); all other repository/data/git files and all non-cache prior study artifacts were hashed before and after. No neural models or feature selection were used."
+}

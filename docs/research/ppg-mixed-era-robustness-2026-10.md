@@ -144,6 +144,75 @@ Accepted-window AUC is measured on a different population and is not an ordinary
 
 A causal trailing 160 ms derivative-energy gate before DA + multiscale reduced mean false activations from 11.91 to 5.73 per minute, but reduced recall from 42.22% to 21.37% and increased mean latency from 762.6 ms to 889.3 ms. Reject this gate configuration.
 
+## Post-screen architecture follow-ups
+
+### 1D CNN fusion
+
+A subsequent disposable study tested whether temporal convolution could replace or improve the engineered representation. All three candidates reused the exact 20 splits and PPG data:
+
+| Model | Min | Mean | Max | Result |
+|---|---:|---:|---:|---|
+| DA + multiscale reference | **0.72083** | **0.77017** | 0.82770 | Reference |
+| Normalized waveform-only 1D CNN | 0.57734 | 0.68954 | **0.84405** | Rejected |
+| Fused 1D CNN + static quality/morphology/multiscale features | 0.65996 | 0.74187 | 0.82563 | Rejected |
+| Fused 1D CNN + static features + DA | 0.66934 | 0.74361 | 0.81626 | Rejected |
+
+The fused CNN receives the 3-by-33 normalized waveform through a small convolutional branch and the remaining 254 static features through a dense branch. It did not preserve the DA + multiscale lower tail. The existing engineered 353-feature representation is retained.
+
+### Domain-adversarial strength
+
+The DA gradient-reversal maximum was swept without score-driven tuning. `0.100` is the inherited setting.
+
+| Maximum reversal strength | Min | Mean | Max |
+|---:|---:|---:|---:|
+| 0.000 | 0.71736 | **0.77616** | 0.82466 |
+| 0.025 | 0.71554 | 0.77438 | 0.82653 |
+| 0.050 | 0.71465 | 0.77331 | **0.82999** |
+| 0.100 | **0.72083** | 0.77017 | 0.82770 |
+| 0.200 | 0.70550 | 0.76180 | 0.80822 |
+| 0.400 | 0.67789 | 0.75456 | 0.81468 |
+
+The `0.100` setting remains the lower-tail choice. Removing DA marginally improved mean AUC but lowered the observed minimum. Stronger DA harmed both the fixed hard-session subset mean and the easy-session subset mean, so expanding this sweep is not warranted.
+
+### Structured-negative / multiclass supervision
+
+The fixed current labels support six event-state classes: `pinch_start` (353), `pinch_mid` (178), `other_start` (160), `other_mid` (122), `unmarked` (224), and `everything_else` (80). Every outer train and test partition contained all six classes.
+
+| Model | Binary pinch min | Binary pinch mean | Binary pinch max | Six-class macro-AUC mean |
+|---|---:|---:|---:|---:|
+| DA + multiscale binary reference | **0.72083** | 0.77017 | 0.82770 | N/A |
+| Six-way DA + multiscale | 0.66526 | 0.77036 | **0.84335** | 0.64771 |
+| Dual binary + six-way head | 0.69979 | **0.77098** | 0.82931 | **0.66072** |
+
+The auxiliary multiclass task made negligible binary-mean gains while reducing the minimum. The dual head was the better multiclass candidate, but it still had weak mean recall for `everything_else` (1.88%). These current state labels are useful as binary negatives, not a balanced gesture taxonomy; do not use either multiclass model as the detector.
+
+## Data collection is now the limiting factor
+
+Yes: improving data is more likely to improve the model than another unrestricted architecture search. The observed weakness is not simply too few windows; it is too little **independent, semantically specific, continuous negative data** across strap fits and operating conditions.
+
+The next collection should be planned as whole recordings, each assigned one session/strap identifier, with separate recordings for:
+
+1. pinch at varied speed, force, and arm posture;
+2. deliberate non-pinch finger movements that resemble pinch preparation/release;
+3. fist, hand open/close, wrist rotation, watch adjustment, and ordinary arm motion;
+4. neutral rest and daily activity without intentional gestures;
+5. tight, normal, loose, shifted, and refitted strap conditions;
+6. still, walking, and other motion contexts relevant to intended use.
+
+Every recording should preserve raw timestamps and carry explicit action spans or onset marks. Do not create extra train/test examples by randomly splitting one recording. Reserve a final, future refitted-strap/session collection before any next model-selection cycle; it must not be used to select preprocessing, models, thresholds, or class definitions.
+
+The most relevant newly located work reports that PPG sensor shifts can sharply change gesture-feature distributions and proposes calibration with a small amount of shifted-sensor data.[3] This supports testing an explicit **user-approved calibration workflow** after a capture protocol exists: train on prior recordings, collect a small labelled calibration set after refit, adapt only on that calibration set, then evaluate on a later untouched recording from that fit. It is a different product mode from zero-calibration detection and must be reported separately. The same study should not be mimicked by adapting on unlabeled test windows.
+
+A separate PPG gesture-recognition study reports PCA-based channel processing and reconstruction gains across 14 subjects and four motion states.[2] A leakage-safe future experiment is possible: fit PCA only on outer-training recordings, transform held-out recordings with that frozen transform, then run the existing classifiers. Do not fit PCA jointly across train and held-out recordings or use it as a reason to revisit raw, unnormalised models.
+
+Direct PPG gesture studies establish feasibility with commercial optical sensors and repeatable gesture-linked PPG artifacts, but their reported accuracy-style metrics and task definitions are not directly comparable with this project’s grouped onset AUC.[1][4]
+
+Broader smartwatch reviews catalogue temporal, classical, and neural methods across many sensor types.[5]
+
+A noninvasive-wearable review similarly identifies multimodal sensing and robust recognition as active challenges.[6]
+
+These sources support the collection and evaluation plan above, not another unconstrained replay of the already-tested raw-waveform model families.
+
 ## Current conclusion
 
 The expanded corpus provides meaningful evidence that PPG-only onset representations can transfer across the represented independent sessions and strap fits. It does **not** establish a production detector:
@@ -171,6 +240,20 @@ The temporary benchmark artifacts were retained locally under:
 - `/tmp/ppg-eight-points/`
 
 Every completed study independently recomputed its reported AUC summaries; the later studies also reproduced inherited baseline predictions. These artifacts are research evidence, not runtime assets.
+
+## Sources
+
+[1] https://doi.org/10.1145/3191788 — FinDroidHR
+
+[2] https://doi.org/10.3389/fnins.2022.1047070 — PCA of PPG signals for improved gesture recognition
+
+[3] https://doi.org/10.1109/tim.2023.3268469 — Sensor shifts in PPG-based gesture recognition and transfer learning
+
+[4] https://doi.org/10.1109/sose50414.2020.9130489 — Using Photoplethysmography for Simple Hand Gesture Recognition
+
+[5] https://doi.org/10.1145/3638067.3638082 — Gesture Recognition Methods Using Sensors Integrated into Smartwatches
+
+[6] https://doi.org/10.1002/aisy.202300207 — Review of Hand Gesture Recognition Systems Based on Noninvasive Wearable Sensors
 
 ## Primary-method references
 

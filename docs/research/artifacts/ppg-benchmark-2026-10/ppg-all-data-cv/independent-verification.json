@@ -1,0 +1,18 @@
+{
+  "passed": true,
+  "methods": 26,
+  "fold_auc_values": 520,
+  "continuous_fold_session_metrics": 7800,
+  "event_prediction_rows": 289718,
+  "continuous_prediction_rows": 10134228,
+  "checks": [
+    "byte-identical frozen definitions",
+    "deterministic group splits and class coverage",
+    "complete OOF prediction membership and binary targets",
+    "independent rank-sum AUC recomputation, aggregates, pooled OOF AUC and ranking",
+    "independent continuous activation matching and every reported metric",
+    "40ms grids and +880ms timestamps",
+    "520 training-only fit records and full-state prediction immutability",
+    "repository/data/git hashes unchanged"
+  ]
+}

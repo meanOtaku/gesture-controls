@@ -1,0 +1,8 @@
+{
+  "blockers": [],
+  "limitations": [
+    "Repeated grouped CV, not untouched validation",
+    "Order-dependent component contributions, not physiological causality",
+    "Verification uses independent implementation/process, same agent"
+  ]
+}

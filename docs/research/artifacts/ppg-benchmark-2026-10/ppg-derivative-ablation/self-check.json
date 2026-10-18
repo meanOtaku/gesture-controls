@@ -1,0 +1,224 @@
+[
+  {
+    "session": "gesture-dataset-everything_else-2026-10-14T01-09-05.948Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-everything_else-2026-10-14T01-14-16.596Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-fist-2026-10-04T12-09-26.941Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-fist-2026-10-11T03-26-47.633Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-fist-2026-10-11T09-11-54.466Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-fist-2026-10-11T12-11-54.033Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-fist-2026-10-11T12-13-10.266Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-fist-2026-10-14T01-02-50.880Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-fist-2026-10-14T01-06-46.525Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-fist-2026-10-14T01-10-16.565Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-fist-2026-10-14T01-11-31.499Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-04T11-43-31.691Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-11T02-54-10.616Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-11T03-23-55.502Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-11T03-25-53.983Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-11T08-25-29.427Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-11T08-35-42.008Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-11T08-53-30.484Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-11T12-05-39.593Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-11T12-08-32.241Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-14T00-54-06.988Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-14T00-55-38.245Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-14T00-57-01.701Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-14T00-58-20.761Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-14T00-59-37.623Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-14T01-00-54.801Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-14T01-04-14.013Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-14T01-05-31.133Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-14T01-13-08.108Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-17T12-21-44.346Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-17T12-23-03.399Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-17T12-25-10.832Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-17T12-26-46.748Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinch-2026-10-17T12-40-50.602Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-pinching-2026-09-23T02-26-28.273Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-thumbs_up-2026-10-11T03-28-55.957Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  },
+  {
+    "session": "gesture-dataset-thumbs_up-2026-10-11T09-13-46.511Z",
+    "prefix_exact": true,
+    "feature_prefix_exact": true,
+    "truncation_exact": true
+  }
+]

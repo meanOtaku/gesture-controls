@@ -1,0 +1,520 @@
+{
+  "naming": "All 26 are fresh derivative-input adaptations, not historical methods.",
+  "evidence": "Progress evidence only, not an untouched test.",
+  "methods": [
+    {
+      "id": "retained_lr_00",
+      "name": "retained_lr_00 \u2014 fresh derivative-input adaptation",
+      "family": "retained logistic PPG features",
+      "feature": "summary",
+      "estimator": "lr",
+      "prior_feature": "green robust step",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "stats": [
+        19
+      ],
+      "post": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Late-minus-early mean for all nine derivative channels; replaces green-only step with joint input."
+    },
+    {
+      "id": "retained_lr_01",
+      "name": "retained_lr_01 \u2014 fresh derivative-input adaptation",
+      "family": "retained logistic PPG features",
+      "feature": "summary",
+      "estimator": "lr",
+      "prior_feature": "two-stage green",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "stats": [
+        19
+      ],
+      "post": "sigmoid",
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Same joint derivative step statistics; sigmoid after training-only standardization replaces raw-PPG two-stage normalization."
+    },
+    {
+      "id": "retained_lr_02",
+      "name": "retained_lr_02 \u2014 fresh derivative-input adaptation",
+      "family": "retained logistic PPG features",
+      "feature": "summary",
+      "estimator": "lr",
+      "prior_feature": "green + red/IR quality",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "stats": [
+        7,
+        8,
+        13,
+        20
+      ],
+      "post": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Derivative variability/energy/absolute-peak/change summaries replace green step and red/IR quality."
+    },
+    {
+      "id": "retained_lr_03",
+      "name": "retained_lr_03 \u2014 fresh derivative-input adaptation",
+      "family": "retained logistic PPG features",
+      "feature": "summary",
+      "estimator": "lr",
+      "prior_feature": "RGB robust steps",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "stats": [
+        18,
+        19
+      ],
+      "post": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. End-minus-start and late-minus-early for every derivative/channel/window."
+    },
+    {
+      "id": "retained_lr_04",
+      "name": "retained_lr_04 \u2014 fresh derivative-input adaptation",
+      "family": "retained logistic PPG features",
+      "feature": "summary",
+      "estimator": "lr",
+      "prior_feature": "RGB candidate + shape",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "stats": [
+        6,
+        7,
+        13,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "post": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Derivative shape/location/change subset from frozen summaries."
+    },
+    {
+      "id": "retained_lr_05",
+      "name": "retained_lr_05 \u2014 fresh derivative-input adaptation",
+      "family": "retained logistic PPG features",
+      "feature": "summary",
+      "estimator": "lr",
+      "prior_feature": "RGB waveform + quality / LR",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "stats": null,
+      "post": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summary features replace raw waveform/quality."
+    },
+    {
+      "id": "retained_lr_06",
+      "name": "retained_lr_06 \u2014 fresh derivative-input adaptation",
+      "family": "retained logistic PPG features",
+      "feature": "summary",
+      "estimator": "lr",
+      "prior_feature": "RGB rounded 1e-6 / LR",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "stats": null,
+      "post": "round6",
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All summaries rounded to 1e-6 after training-only standardization."
+    },
+    {
+      "id": "retained_lr_07",
+      "name": "retained_lr_07 \u2014 fresh derivative-input adaptation",
+      "family": "retained logistic PPG features",
+      "feature": "summary",
+      "estimator": "lr",
+      "prior_feature": "RGB zsig 1e-4 / LR",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "stats": null,
+      "post": "sigmoid4",
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Sigmoid of train-standardized summaries rounded to 1e-4; no raw-PPG zsig."
+    },
+    {
+      "id": "retained_lr_08",
+      "name": "retained_lr_08 \u2014 fresh derivative-input adaptation",
+      "family": "retained logistic PPG features",
+      "feature": "summary",
+      "estimator": "lr",
+      "prior_feature": "RGB zsig 1e-6 / LR",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "stats": null,
+      "post": "sigmoid6",
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Sigmoid of train-standardized summaries rounded to 1e-6; no raw-PPG zsig."
+    },
+    {
+      "id": "retained_lr_09",
+      "name": "retained_lr_09 \u2014 fresh derivative-input adaptation",
+      "family": "retained logistic PPG features",
+      "feature": "summary",
+      "estimator": "lr",
+      "prior_feature": "RGB + correlation / LR",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "stats": null,
+      "post": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All summaries plus within-order RGB correlations of derivative traces.",
+      "corr": true
+    },
+    {
+      "id": "retained_lr_10",
+      "name": "retained_lr_10 \u2014 fresh derivative-input adaptation",
+      "family": "retained logistic PPG features",
+      "feature": "summary",
+      "estimator": "lr",
+      "prior_feature": "RGB + shape + correlation / LR",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "stats": [
+        6,
+        7,
+        13,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "post": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Shape summary subset plus within-order RGB derivative correlations.",
+      "corr": true
+    },
+    {
+      "id": "haar_lr",
+      "name": "haar_lr \u2014 fresh derivative-input adaptation",
+      "family": "causal multiscale Haar",
+      "feature": "summary",
+      "estimator": "lr",
+      "prior_feature": "haar",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen summaries plus 279 Haar block differences on nine derivative traces, scales 1/2/4/8/16, final32 samples.",
+      "haar": true
+    },
+    {
+      "id": "morphology_lr",
+      "name": "morphology_lr \u2014 fresh derivative-input adaptation",
+      "family": "causal morphology",
+      "feature": "summary",
+      "estimator": "lr",
+      "prior_feature": "morph",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained."
+    },
+    {
+      "id": "multiscale_lr",
+      "name": "multiscale_lr \u2014 fresh derivative-input adaptation",
+      "family": "causal multiscale summaries",
+      "feature": "summary",
+      "estimator": "lr",
+      "prior_feature": "multi",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Frozen mean/std/end-minus-start/mean-absolute-change summaries at ablation windows 8/16/32 for all nine derivative channels (108 features); replaces prior 4/8/16/32 windows.",
+      "stats": [
+        6,
+        7,
+        18,
+        20
+      ]
+    },
+    {
+      "id": "hgb_morphology",
+      "name": "hgb_morphology \u2014 fresh derivative-input adaptation",
+      "family": "histogram gradient boosting",
+      "feature": "summary",
+      "estimator": "hgb",
+      "prior_feature": "combined",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained."
+    },
+    {
+      "id": "extra_trees",
+      "name": "extra_trees \u2014 fresh derivative-input adaptation",
+      "family": "randomized tree ensemble",
+      "feature": "summary",
+      "estimator": "trees",
+      "prior_feature": "combined",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained."
+    },
+    {
+      "id": "robust_scaler_lr",
+      "name": "robust_scaler_lr \u2014 fresh derivative-input adaptation",
+      "family": "robust training-only standardization",
+      "feature": "summary",
+      "estimator": "lr",
+      "scaler": "robust",
+      "prior_feature": "combined",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained."
+    },
+    {
+      "id": "anova32_lr",
+      "name": "anova32_lr \u2014 fresh derivative-input adaptation",
+      "family": "training-only feature selection",
+      "feature": "summary",
+      "estimator": "lr",
+      "select": 32,
+      "prior_feature": "combined",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained."
+    },
+    {
+      "id": "equal_session_lr",
+      "name": "equal_session_lr \u2014 fresh derivative-input adaptation",
+      "family": "session-balanced training standardization and loss",
+      "feature": "summary",
+      "estimator": "lr",
+      "balanced": true,
+      "prior_feature": "combined",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained."
+    },
+    {
+      "id": "leave_session_out_ensemble",
+      "name": "leave_session_out_ensemble \u2014 fresh derivative-input adaptation",
+      "family": "non-transductive leave-training-session-out ensemble",
+      "feature": "summary",
+      "estimator": "loso",
+      "prior_feature": "combined",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained."
+    },
+    {
+      "id": "augmented_waveform_lr",
+      "name": "augmented_waveform_lr \u2014 fresh derivative-input adaptation",
+      "family": "training-only waveform augmentation",
+      "feature": "ordered",
+      "estimator": "lr",
+      "augment": true,
+      "prior_feature": "wave",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Training-only derivative-trace augmentation, then recompute all 567 frozen summary statistics; inference summarizes unaugmented traces.",
+      "summary_after_augment": true
+    },
+    {
+      "id": "dense_mlp",
+      "name": "dense_mlp \u2014 fresh derivative-input adaptation",
+      "family": "dense neural network",
+      "feature": "summary",
+      "estimator": "mlp",
+      "prior_feature": "wave",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained."
+    },
+    {
+      "id": "causal_cnn",
+      "name": "causal_cnn \u2014 fresh derivative-input adaptation",
+      "family": "1D channel-first causal CNN",
+      "feature": "ordered",
+      "estimator": "cnn",
+      "prior_feature": "wave",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Real temporal causal CNN on derivative-major 9 channels x 33 chronological steps; first convolution 9->24; all other frozen neural settings retained."
+    },
+    {
+      "id": "augmented_cnn",
+      "name": "augmented_cnn \u2014 fresh derivative-input adaptation",
+      "family": "training-only augmentation with causal CNN",
+      "feature": "ordered",
+      "estimator": "cnn",
+      "augment": true,
+      "prior_feature": "wave",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. Real temporal causal CNN on derivative-major 9 channels x 33 chronological steps; first convolution 9->24; all other frozen neural settings retained."
+    },
+    {
+      "id": "group_dro_mlp",
+      "name": "group_dro_mlp \u2014 fresh derivative-input adaptation",
+      "family": "non-transductive training-session group DRO",
+      "feature": "summary",
+      "estimator": "mlp",
+      "dg": "dro",
+      "prior_feature": "wave",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained."
+    },
+    {
+      "id": "coral_training_mlp",
+      "name": "coral_training_mlp \u2014 fresh derivative-input adaptation",
+      "family": "non-transductive training-domain covariance alignment",
+      "feature": "summary",
+      "estimator": "mlp",
+      "dg": "coral",
+      "prior_feature": "wave",
+      "status": "adapted",
+      "raw_input_exception": null,
+      "adaptation": "Fresh z-score -> unrounded sigmoid -> MAD -> joint derivatives. All 567 frozen derivative summaries; frozen estimator, seed and training settings retained."
+    }
+  ],
+  "method_exclusions": [],
+  "raw_input_exceptions": [],
+  "fixed": {
+    "seed": 17,
+    "lr": {
+      "C": 1,
+      "max_iter": 5000,
+      "solver": "lbfgs",
+      "class_weight": null
+    },
+    "hgb": {
+      "max_iter": 150,
+      "learning_rate": 0.05,
+      "max_leaf_nodes": 15,
+      "l2_regularization": 1,
+      "min_samples_leaf": 20,
+      "early_stopping": false
+    },
+    "trees": {
+      "n_estimators": 300,
+      "min_samples_leaf": 3,
+      "max_features": 0.7,
+      "n_jobs": 1
+    },
+    "standardization": "StandardScaler fitted on training examples only, except RobustScaler median/IQR variant; equal-session scaler weights 1/n_session",
+    "selection": "ANOVA F-score top 32 from training targets only",
+    "mlp": "567->64 ReLU->32 ReLU->1",
+    "cnn": "N,9,33; left-pad Conv1d9->24 kernel5; left-pad Conv1d24->32 kernel5 dilation2; temporal mean->linear1",
+    "neural": {
+      "epochs": 80,
+      "batch_size": 128,
+      "optimizer": "Adam",
+      "learning_rate": 0.001,
+      "weight_decay": 0.0001,
+      "loss": "binary cross entropy with logits",
+      "early_stopping": false
+    },
+    "augmentation": "Original +2 training copies; one gain uniform[.8,1.2] per physical PPG channel shared across its three derivatives; Gaussian noise SD .05 times training-only per-derivative/channel SD pooled over examples and time; probability .15 drops one physical channel across all orders. No raw PPG. Noise is a derivative-space perturbation, not a claim of an integrable raw signal.",
+    "loso": "one LR per excluded training session, independently training-fitted scaler; arithmetic probability mean",
+    "dro": "q uniform over training sessions; once/epoch q *= exp(0.05 * detached full-session BCE), renormalize; full-batch weighted session BCE",
+    "coral": "full-batch mean BCE + 0.1 * mean squared difference of per-training-session latent covariance from mean covariance; only groups with >=2 examples",
+    "multiscale": "per-channel tail lengths4,8,16,32: mean,std,end-minus-start,mean absolute difference",
+    "haar": "per-channel nonoverlapping block mean differences at scales1,2,4,8,16 on final32 samples",
+    "morph": "per-channel quantiles0,.1,.25,.5,.75,.9,1; mean,std,total variation,difference std,max rise,max fall,extrema positions/32,zero-crossing fraction; 3 pairwise correlations"
+  },
+  "input": {
+    "orders": [
+      1,
+      2,
+      3
+    ],
+    "channels": [
+      "green",
+      "red",
+      "IR"
+    ],
+    "grid": "25Hz source timestamp ZOH, recording-origin integer grid",
+    "differentiator": "exact ablation degree3 least squares previous9 samples; current excluded; evaluated at current grid time",
+    "coefficients": [
+      [
+        -0.4444444444444372,
+        0.38888888888888856,
+        0.5079365079364946,
+        0.19047619047618522,
+        -0.2857142857142838,
+        -0.6428571428571372,
+        -0.6031746031745909,
+        0.11111111111111514,
+        1.777777777777766
+      ],
+      [
+        -12.710437710437603,
+        9.953703703703729,
+        14.29172679172654,
+        6.9534632034631185,
+        -5.4112554112553735,
+        -16.15259740259732,
+        -18.620731120730905,
+        -6.1658249158248495,
+        27.861952861952666
+      ],
+      [
+        -183.08080808080754,
+        119.94949494949564,
+        194.35425685425463,
+        119.04761904761854,
+        -27.056277056276667,
+        -165.04329004328963,
+        -215.99927849927676,
+        -101.01010101010058,
+        258.8383838383824
+      ],
+      [
+        -1104.7979797979795,
+        552.3989898989946,
+        1025.8838383838297,
+        710.2272727272718,
+        1.7728436137584378e-12,
+        -710.2272727272725,
+        -1025.8838383838324,
+        -552.3989898989889,
+        1104.7979797979756
+      ]
+    ],
+    "stats": [
+      "q10",
+      "q25",
+      "median",
+      "q75",
+      "q90",
+      "mad",
+      "mean",
+      "std",
+      "energy",
+      "min",
+      "max",
+      "positive_peak",
+      "negative_peak",
+      "absolute_peak",
+      "zero_crossings",
+      "max_age_seconds",
+      "min_age_seconds",
+      "absolute_peak_age_seconds",
+      "end_minus_start",
+      "late_minus_early_mean",
+      "mean_absolute_change"
+    ],
+    "summary_windows": [
+      8,
+      16,
+      32
+    ],
+    "summary_features": 567,
+    "ordered_shape": [
+      9,
+      33
+    ],
+    "decision": "anchor+880ms",
+    "warmup": "First z/sigmoid tick20, MAD tick40, derivatives tick49, complete ordered input tick81 (3240ms); no padding or imputation.",
+    "preprocessing": "Per channel: previous25 ticks (1 second, current excluded), minimum20, population z-score; zero SD emits zero; scipy expit without rounding; previous25 sigmoid ticks, minimum20 finite values, median/MAD*1.4826; zero scale emits zero. Unavailable values stay NaN. Then previous9 cubic derivatives."
+  },
+  "adaptation_details": {
+    "augmentation": "Original +2 training copies; one gain uniform[.8,1.2] per physical PPG channel shared across its three derivatives; Gaussian noise SD .05 times training-only per-derivative/channel SD pooled over examples and time; probability .15 drops one physical channel across all orders. No raw PPG. Noise is a derivative-space perturbation, not a claim of an integrable raw signal.",
+    "normalization": "Causal per-channel z-score/sigmoid/MAD before derivatives; all estimator scalers remain training-only.",
+    "nonlinear_lr": "Sigmoid/rounding is applied after train-fitted standardization and is not refitted or standardized using test samples.",
+    "dense": "567->64->32->1; Group DRO and covariance alignment operate only on training sessions",
+    "haar": "567 frozen stats plus derivative Haar",
+    "morphology": "Exactly frozen ablation summary family",
+    "coverage": "All 26 estimators applicable without raw PPG; green-only feature variants expanded to all RGB orders to satisfy joint input"
+  },
+  "continuous": "Fixed threshold .5, rising edges, 1500ms refractory, decision onset+680..1280ms matching; 40ms anchors; no calibration",
+  "ranking": "Descending minimum then mean then maximum fold AUC",
+  "pooled": "Concatenate held-out appearances; repeated recordings/events counted repeatedly",
+  "preprocessing_exceptions": [
+    "Undefined zero-variance z-score emits zero, analogous to zero MAD; frozen before scoring.",
+    "Retained LR rounding variants round only train-standardized summary features; the preprocessing sigmoid is never rounded."
+  ]
+}

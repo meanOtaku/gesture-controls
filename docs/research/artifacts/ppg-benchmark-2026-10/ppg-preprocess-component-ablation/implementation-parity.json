@@ -1,0 +1,170 @@
+[
+  {
+    "stage": "A",
+    "original": "/tmp/ppg-derivatives-all-techniques",
+    "file": "estimators.py",
+    "symbol": "Model",
+    "identical": true
+  },
+  {
+    "stage": "A",
+    "original": "/tmp/ppg-derivatives-all-techniques",
+    "file": "features.py",
+    "symbol": "summary",
+    "identical": true
+  },
+  {
+    "stage": "A",
+    "original": "/tmp/ppg-derivatives-all-techniques",
+    "file": "features.py",
+    "symbol": "matrix",
+    "identical": true
+  },
+  {
+    "stage": "A",
+    "original": "/tmp/ppg-zsig-mad-derivatives-all",
+    "file": "estimators.py",
+    "symbol": "Model",
+    "identical": true
+  },
+  {
+    "stage": "A",
+    "original": "/tmp/ppg-zsig-mad-derivatives-all",
+    "file": "features.py",
+    "symbol": "summary",
+    "identical": true
+  },
+  {
+    "stage": "A",
+    "original": "/tmp/ppg-zsig-mad-derivatives-all",
+    "file": "features.py",
+    "symbol": "matrix",
+    "identical": true
+  },
+  {
+    "stage": "B",
+    "original": "/tmp/ppg-derivatives-all-techniques",
+    "file": "estimators.py",
+    "symbol": "Model",
+    "identical": true
+  },
+  {
+    "stage": "B",
+    "original": "/tmp/ppg-derivatives-all-techniques",
+    "file": "features.py",
+    "symbol": "summary",
+    "identical": true
+  },
+  {
+    "stage": "B",
+    "original": "/tmp/ppg-derivatives-all-techniques",
+    "file": "features.py",
+    "symbol": "matrix",
+    "identical": true
+  },
+  {
+    "stage": "B",
+    "original": "/tmp/ppg-zsig-mad-derivatives-all",
+    "file": "estimators.py",
+    "symbol": "Model",
+    "identical": true
+  },
+  {
+    "stage": "B",
+    "original": "/tmp/ppg-zsig-mad-derivatives-all",
+    "file": "features.py",
+    "symbol": "summary",
+    "identical": true
+  },
+  {
+    "stage": "B",
+    "original": "/tmp/ppg-zsig-mad-derivatives-all",
+    "file": "features.py",
+    "symbol": "matrix",
+    "identical": true
+  },
+  {
+    "stage": "C",
+    "original": "/tmp/ppg-derivatives-all-techniques",
+    "file": "estimators.py",
+    "symbol": "Model",
+    "identical": true
+  },
+  {
+    "stage": "C",
+    "original": "/tmp/ppg-derivatives-all-techniques",
+    "file": "features.py",
+    "symbol": "summary",
+    "identical": true
+  },
+  {
+    "stage": "C",
+    "original": "/tmp/ppg-derivatives-all-techniques",
+    "file": "features.py",
+    "symbol": "matrix",
+    "identical": true
+  },
+  {
+    "stage": "C",
+    "original": "/tmp/ppg-zsig-mad-derivatives-all",
+    "file": "estimators.py",
+    "symbol": "Model",
+    "identical": true
+  },
+  {
+    "stage": "C",
+    "original": "/tmp/ppg-zsig-mad-derivatives-all",
+    "file": "features.py",
+    "symbol": "summary",
+    "identical": true
+  },
+  {
+    "stage": "C",
+    "original": "/tmp/ppg-zsig-mad-derivatives-all",
+    "file": "features.py",
+    "symbol": "matrix",
+    "identical": true
+  },
+  {
+    "stage": "D",
+    "original": "/tmp/ppg-derivatives-all-techniques",
+    "file": "estimators.py",
+    "symbol": "Model",
+    "identical": true
+  },
+  {
+    "stage": "D",
+    "original": "/tmp/ppg-derivatives-all-techniques",
+    "file": "features.py",
+    "symbol": "summary",
+    "identical": true
+  },
+  {
+    "stage": "D",
+    "original": "/tmp/ppg-derivatives-all-techniques",
+    "file": "features.py",
+    "symbol": "matrix",
+    "identical": true
+  },
+  {
+    "stage": "D",
+    "original": "/tmp/ppg-zsig-mad-derivatives-all",
+    "file": "estimators.py",
+    "symbol": "Model",
+    "identical": true
+  },
+  {
+    "stage": "D",
+    "original": "/tmp/ppg-zsig-mad-derivatives-all",
+    "file": "features.py",
+    "symbol": "summary",
+    "identical": true
+  },
+  {
+    "stage": "D",
+    "original": "/tmp/ppg-zsig-mad-derivatives-all",
+    "file": "features.py",
+    "symbol": "matrix",
+    "identical": true
+  }
+]

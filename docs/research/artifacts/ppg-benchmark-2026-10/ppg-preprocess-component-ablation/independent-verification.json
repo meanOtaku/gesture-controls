@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "stages": 4,
+  "outer_fits": 160,
+  "stage_metrics_independently_recomputed": true,
+  "aggregate_rows": 8,
+  "fold_rows": 160,
+  "attribution_rows": 24,
+  "derived_tables_independently_verified": true,
+  "reproduction_tolerance": 1e-12,
+  "prior_files_unchanged": true,
+  "definition_freeze_unchanged": true,
+  "independence": "Independent implementation and process; same agent, not external reviewer"
+}

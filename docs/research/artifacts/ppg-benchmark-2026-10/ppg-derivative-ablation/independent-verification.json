@@ -1,0 +1,26 @@
+{
+  "passed": true,
+  "independence": "Separate process and independently written metric implementation; same agent, not an external reviewer",
+  "methods": [
+    "B_hgb",
+    "D_hgb",
+    "C_hgb",
+    "A+C_hgb",
+    "A+D_hgb",
+    "A+B_hgb",
+    "A_hgb",
+    "B_lr",
+    "C_lr",
+    "D_lr",
+    "A+B_lr",
+    "A+C_lr",
+    "A+D_lr",
+    "A_lr"
+  ],
+  "exact_splits_and_events": true,
+  "all_oof_rows_verified": true,
+  "continuous_metrics_recomputed": true,
+  "independent_polynomial_fit_check": true,
+  "feature_api_isolation": true,
+  "source_integrity": true
+}
