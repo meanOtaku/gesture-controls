@@ -49,6 +49,22 @@ Result on 2026-10-18: the inputs match the archive exactly. That covers PPG row 
 
 The conclusions hold: the MAD step lowers mean AUC in all 20 paired folds for both models, and z-score → derivatives → ExtraTrees has the best minimum AUC. The remaining differences come from summary statistics whose exact definitions the archive doesn't pin down (MAD and energy scaling, zero-crossing and peak conventions) and from float rounding. HGB, which bins on quantiles, is almost unaffected. ExtraTrees draws random split thresholds on the scaled values, so it shifts slightly. The other 24 methods and the label-lag audit are not reimplemented.
 
+## All 26 techniques without MAD
+
+`ppg-no-mad-all-techniques/` reruns all 26 methods with `benchmark_all.py`. Run against stages A and D, the reimplementation lands within 0.0006 AUC of the archive for 20 of the 26 methods, and within 0.008 for the rest. Removing MAD helps nearly across the board: with z-score + sigmoid, 25 of 26 methods beat their MAD-pipeline mean AUC, and the median method goes from 0.711 to 0.742. ExtraTrees stays first: z-score alone gives the best worst-split AUC (0.769), and adding the sigmoid gives the best mean (0.823). Live-detection recall at the fixed 0.5 threshold doesn't rise with AUC, so threshold choice is the next thing to test.
+
+```sh
+uv run --project tools/label-trainer --extra torch python docs/research/artifacts/ppg-benchmark-2026-10/benchmark_all.py --stages B C
+```
+
+## Multi-scale z-score
+
+`ppg-multiscale-zscore/` tackles the worst-split AUC. Z-scoring each channel against the previous 1, 2 and 4 s, with derivative summaries for each history, raises ExtraTrees' minimum AUC from 0.769 to 0.789 and its mean from 0.821 to 0.843. It beats the 1 s baseline on all 20 splits, and live recall rises from 0.377 to 0.413 with no extra false activations. No single history length helps on its own, and adding 8 s or a sigmoid makes it slightly worse. The current candidate is therefore `PPG → causal z-score (1 s + 2 s + 4 s) → causal slope + curvature + jerk → ExtraTrees`. It was picked on these same splits, so it needs new recordings to confirm.
+
+```sh
+uv run --project tools/label-trainer --extra torch python docs/research/artifacts/ppg-benchmark-2026-10/multiscale_zscore.py
+```
+
 ## Scope and limitations
 
 All results are grouped cross-validation progress evidence, not an untouched final generalization test. Source recordings, including the new 2026-10-17 datasets, are versioned under `data/recordings/`.
