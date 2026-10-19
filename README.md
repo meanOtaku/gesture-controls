@@ -138,7 +138,7 @@ apps/watch/                Wear OS (Galaxy Watch) client: Kotlin, standalone Gra
 crates/protocol/           Sony wire types, watch message types, and generic pose domain types
 crates/head-tracking/      Provider abstraction and strict UDP listener
 crates/interaction-engine/ Quaternion calibration, target dwell, wrist-rotation mapper, gesture policy
-crates/pinch-inference/    Telemetry fusion and feature extraction for the PPG and motion windows
+crates/pinch-inference/    The PPG pinch-start model's inputs (multi-scale z-score derivatives), shared with the trainer
 crates/volume-control/     Normalized controller trait; macOS, Windows, and Linux adapters
 crates/watch-bridge/       Galaxy Watch transports: Bluetooth LE central and Wi-Fi WebSocket server
 crates/native-head-tracking/ In-process macOS/Windows Sony provider (IOKit/IOBluetooth or HID/SetupAPI FFI + conversion)

@@ -29,6 +29,7 @@ pub use migrate::{
 };
 pub use project::{ExampleRole, LabelMapping, LabelProject, ProjectError};
 pub use registry::{
+    Purged,
     Activation, InferenceMode, REGISTRY_SCHEMA_VERSION, Registry, RegistryError, Rollback,
 };
 pub use run::{ArtifactRef, RunError, RunOutcome, RunStatus, TrainingRun};

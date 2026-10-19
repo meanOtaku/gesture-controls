@@ -1,3 +1,3 @@
-"""Offline training package for the pinch gesture classifier (Milestone 10, slice 1)."""
+"""Offline training of one label's PPG pinch-start model (see label_train.py)."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

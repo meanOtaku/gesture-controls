@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import dense from "../fixtures/inspection-dense.json";
+import trees from "../fixtures/inspection-trees.json";
 import { NetworkLab } from "./NetworkLab";
 
 const invokeMock = vi.fn();
@@ -35,8 +35,8 @@ beforeEach(() => {
       case "list_model_labels": return labels;
       case "check_label_trainer": return { available: true, detail: "uv" };
       case "get_label_training_status": return { running: null, last: null };
-      case "plan_label_training": return { train: ["d1"], evaluation: ["d2"], problem: null, available: ["accel_x_std"], features: ["accel_x_std"] };
-      case "inspect_label_model": return { id: args?.id, label: "snap", origin: "trained", manifest: {}, inspection: dense };
+      case "plan_label_training": return { train: ["d1"], evaluation: ["d2"], problem: null, inputs: 1701 };
+      case "inspect_label_model": return { id: args?.id, label: "snap", origin: "trained", manifest: {}, inspection: trees };
       default: return undefined;
     }
   });
@@ -47,10 +47,14 @@ afterEach(() => {
 });
 
 describe("NetworkLab", () => {
-  it("is the workbench for networks: the full training panel, and the models to look inside", async () => {
+  it("shows the one model's pipeline and research results, and the models to look inside", async () => {
     render(<Harness />);
     expect(screen.getByRole("heading", { name: "Network lab" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Network designs" })).toBeInTheDocument();
+    const pipeline = screen.getByRole("region", { name: "Model pipeline" });
+    expect(within(pipeline).getAllByRole("listitem")).toHaveLength(5);
+    expect(within(pipeline).getByRole("list", { name: "Pipeline stages" })).toHaveTextContent("ExtraTrees");
+    expect(within(pipeline).getByLabelText("Research results")).toHaveTextContent("0.789");
+    expect(screen.queryByRole("region", { name: "Network designs" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Your models" })).toBeInTheDocument();
     const list = await screen.findByRole("list", { name: "Models" });
     expect(within(list).getAllByRole("listitem")).toHaveLength(2);

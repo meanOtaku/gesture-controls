@@ -107,24 +107,24 @@ mod tests {
     }
 
     /// A registry with one project for the fixture's label and its model approved and active, as the model
-    /// directory `models/shake-v1`.
+    /// directory `models/pinch-v1`.
     fn registry_with_active_fixture() -> (Registry, tempfile::TempDir) {
         let root = tempfile::tempdir().unwrap();
-        let model_dir = root.path().join("models/shake-v1");
+        let model_dir = root.path().join("models/pinch-v1");
         fs::create_dir_all(&model_dir).unwrap();
-        for file in ["manifest.json", "model.onnx"] {
+        for file in ["manifest.json", "model.trees"] {
             fs::copy(fixture_dir().join(file), model_dir.join(file)).unwrap();
         }
         let bundle = validate_bundle(&model_dir, None).unwrap();
         let contract: InputContract = bundle.manifest.input_contract();
 
         let mut registry = Registry::default();
-        let target = label("shake_fixture");
-        let project_id = ProjectId::new("p-shake").unwrap();
+        let target = label("pinch");
+        let project_id = ProjectId::new("p-pinch").unwrap();
         registry
             .create_project(LabelProject {
                 id: project_id.clone(),
-                name: "shake fixture".into(),
+                name: "pinch fixture".into(),
                 target: target.clone(),
                 sessions: vec![],
                 mapping: LabelMapping {
@@ -182,13 +182,13 @@ mod tests {
         .unwrap();
         registry.add_snapshot(snapshot).unwrap();
         let version = ModelVersion::new(
-            ModelVersionId::new("shake-v1").unwrap(),
+            ModelVersionId::new("pinch-v1").unwrap(),
             project_id,
             target,
             ModelOrigin::Imported,
             true,
             Some(bundle.model_sha256.clone()),
-            "models/shake-v1".into(),
+            "models/pinch-v1".into(),
             contract,
             bundle.manifest.threshold_config(),
             bundle.manifest.quality,
@@ -222,14 +222,14 @@ mod tests {
         let (models, failures) = load_active_models(&registry, root.path());
         assert!(failures.is_empty(), "{failures:?}");
         assert_eq!(models.len(), 1);
-        assert_eq!(models[0].label.as_str(), "shake_fixture");
-        assert_eq!(models[0].version_id.as_str(), "shake-v1");
+        assert_eq!(models[0].label.as_str(), "pinch");
+        assert_eq!(models[0].version_id.as_str(), "pinch-v1");
     }
 
     #[test]
     fn a_registry_with_nothing_active_loads_nothing() {
         let (mut registry, root) = registry_with_active_fixture();
-        registry.deactivate(&label("shake_fixture"), T).unwrap();
+        registry.deactivate(&label("pinch"), T).unwrap();
         let (models, failures) = load_active_models(&registry, root.path());
         assert!(models.is_empty() && failures.is_empty());
     }
@@ -238,21 +238,21 @@ mod tests {
     fn an_altered_or_missing_model_is_reported_by_name_and_that_label_gets_no_model() {
         let (registry, root) = registry_with_active_fixture();
         // Alter the model file after it was approved.
-        let model = root.path().join("models/shake-v1/model.onnx");
+        let model = root.path().join("models/pinch-v1/model.trees");
         let mut bytes = fs::read(&model).unwrap();
         bytes[5] ^= 0xff;
         fs::write(&model, bytes).unwrap();
         let (models, failures) = load_active_models(&registry, root.path());
         assert!(models.is_empty());
         assert_eq!(failures.len(), 1);
-        assert_eq!(failures[0].version.as_str(), "shake-v1");
+        assert_eq!(failures[0].version.as_str(), "pinch-v1");
         assert!(
             failures[0].detail.contains("changed"),
             "{}",
             failures[0].detail
         );
 
-        fs::remove_dir_all(root.path().join("models/shake-v1")).unwrap();
+        fs::remove_dir_all(root.path().join("models/pinch-v1")).unwrap();
         let (models, failures) = load_active_models(&registry, root.path());
         assert!(models.is_empty() && failures.len() == 1);
     }
@@ -263,7 +263,7 @@ mod tests {
             let (mut registry, root) = registry_with_active_fixture();
             registry
                 .versions
-                .get_mut(&ModelVersionId::new("shake-v1").unwrap())
+                .get_mut(&ModelVersionId::new("pinch-v1").unwrap())
                 .unwrap()
                 .artifact_dir = bad.into();
             let (models, failures) = load_active_models(&registry, root.path());
@@ -278,7 +278,8 @@ mod tests {
 
     #[test]
     fn loaded_models_run_end_to_end_from_the_registry() {
-        use crate::pipeline::tests::orientation;
+        use crate::model::tests::expected;
+        use crate::pipeline::tests::batch;
         use crate::runtime::{LabelRuntime, RuntimeMode};
 
         let (registry, root) = registry_with_active_fixture();
@@ -286,16 +287,14 @@ mod tests {
         let mut runtime = LabelRuntime::default();
         runtime.set_models(models);
         runtime.set_mode(RuntimeMode::Live);
-        let rose = (0..80u64).any(|n| {
+        let (trace, _) = expected();
+        let rose = (0..300).any(|i| {
             runtime
-                .observe_orientation(&orientation(n, 5.0), n * 20_000_000)
+                .observe_ppg(&batch(&trace, i, i + 1), trace[i].ts_ns - trace[0].ts_ns + 10_000_000_000)
                 .actionable
                 .iter()
                 .any(|e| matches!(e, crate::DetectionEvent::Rising { .. }))
         });
-        assert!(
-            rose,
-            "a registry-approved model detects shaking in live mode"
-        );
+        assert!(rose, "a registry-approved model detects a pinch start in live mode");
     }
 }

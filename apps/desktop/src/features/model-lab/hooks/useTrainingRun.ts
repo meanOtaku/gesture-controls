@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
-import { parseCurveLine, type CurvePoint } from "../components/TrainingCurve";
 import { LABEL_TRAINING_EVENT, appendLog, type TrainingEvent, type TrainingStatus } from "../training";
 
 export type TrainingFinished = Extract<TrainingEvent, { kind: "finished" }>;
@@ -11,7 +10,6 @@ export type TrainingFinished = Extract<TrainingEvent, { kind: "finished" }>;
 export function useTrainingRun(desktopAvailable: boolean) {
   const [running, setRunning] = useState<string | null>(null);
   const [log, setLog] = useState<string[]>([]);
-  const [curve, setCurve] = useState<CurvePoint[]>([]);
   const [result, setResult] = useState<TrainingFinished | null>(null);
 
   useEffect(() => {
@@ -34,16 +32,14 @@ export function useTrainingRun(desktopAvailable: boolean) {
         if (payload.kind === "started") {
           setRunning(payload.runId);
           setLog([]);
-          setCurve([]);
           setResult(null);
         } else if (payload.kind === "log") {
-          const point = parseCurveLine(payload.message);
-          if (point) setCurve((previous) => [...previous, point]);
-          else setLog((previous) => appendLog(previous, payload.message));
+          setLog((previous) => appendLog(previous, payload.message));
         } else {
           setRunning(null);
           setResult(payload);
           if (payload.outcome === "deployable") OperationFeedback.success("Training", `A model for ${payload.label} was added as a draft.`);
+          else if (payload.outcome === "monitorOnly") OperationFeedback.success("Training", `A model for ${payload.label} was added as a draft that can only run in Monitor.`);
           else if (payload.outcome === "failed") OperationFeedback.error("Training", payload.message);
         }
       }),
@@ -62,9 +58,8 @@ export function useTrainingRun(desktopAvailable: boolean) {
   const reset = useCallback(() => {
     setResult(null);
     setLog([]);
-    setCurve([]);
   }, []);
   const clearResult = useCallback(() => setResult(null), []);
 
-  return { running, log, curve, result, reset, clearResult };
+  return { running, log, result, reset, clearResult };
 }

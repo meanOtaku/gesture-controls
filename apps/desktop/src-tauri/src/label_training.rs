@@ -1,10 +1,12 @@
-//! Trains a model for one label from recordings you imported.
+//! Trains a label's PPG pinch-start model from recordings you imported.
 //!
 //! Everything that has to be recorded and cannot change afterwards is decided here, in Rust, and sealed in the model
-//! registry before anything runs (see `label_inference::begin_run`): which recordings train and which test, what each
-//! label means, which streams the model may read, and the window. The trainer (`tools/label-trainer`, run with `uv`)
-//! is only told what to do, trains, tests on the recordings held out for it, and writes a bundle. The bundle then goes
-//! through the same validation as an imported one and is recorded as a Draft that came from this run. Nothing is
+//! registry before anything runs (see `label_inference::begin_run`): which recordings train and which test, and what each
+//! label means. The model itself is fixed: it reads the pulse sensor through the multi-scale z-score derivatives
+//! (`label_inference::ppg_onset_contract`) and is an ExtraTrees ensemble. The trainer (`tools/label-trainer`, run with
+//! `uv`) is only told what to do, trains, tests on the recordings held out for it, and writes a bundle. The bundle then goes
+//! through the same validation as an imported one and is recorded as a Draft that came from this run: a deployable one,
+//! or, when it did not pass the checks for going live, a monitor-only one, which can run but never act. Nothing is
 //! approved or activated by training.
 //!
 //! Training is a development workflow: it needs `uv` on the PATH and a repository checkout. Running a model needs
@@ -15,16 +17,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use crate::network_spec::NetworkSpec;
 use chrono::{SecondsFormat, Utc};
 use label_inference::{
-    MAX_GRID_STEPS, MIN_GRID_STEPS, PPG_CHANNELS, RecordingInfo, RunPlan, SpikeMethod, begin_run,
-    canonical_features_with_channels, complete_run, evaluation_only_run, fail_run,
-    grid_channels_for, plan_split_keeping, stage_bundle, trainer_backend,
+    RecordingInfo, RunPlan, begin_run, complete_run, fail_run, monitor_only_run,
+    plan_split, ppg_onset_contract, stage_bundle, trainer_backend,
 };
 use model_lab_core::{
     ArtifactRef, ExampleRole, InputContract, LabelId, LabelMapping, QualityRules, RecordingId,
-    RunId, StreamSource, TrainerConfig,
+    RunId, TrainerConfig,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -43,16 +43,12 @@ const RUNS_DIR: &str = "training-runs";
 const TRAINER_PROJECT_DIR: &str =
     concat!(env!("CARGO_MANIFEST_DIR"), "/../../../tools/label-trainer");
 const SPEC_VERSION: u32 = 1;
-/// The convolutional method's grid needs at least this many steps to slide over.
-const CNN_MIN_STEPS: u32 = 8;
-/// A dense model reading raw columns: one step (the latest reading) by default, and at most this many.
-const RAW_DEFAULT_STEPS: u32 = 1;
-const RAW_MAX_STEPS: u32 = 64;
 /// How far the labels may be moved in time, in milliseconds either way (the trainer's `MAX_LABEL_OFFSET_MS`).
 const MAX_LABEL_OFFSET_MS: i32 = 1500;
-
-/// The backends offered, which extra packages the trainer needs for each.
-pub(crate) const BACKENDS: [&str; 5] = ["logreg", "mlp", "torch-mlp", "cnn1d", "gbt"];
+/// The one model the app trains (the trainer's `BACKEND`).
+pub(crate) const BACKEND: &str = "ppg-onset-trees";
+/// The trees' seed (the research's).
+const SEED: u32 = 17;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -64,81 +60,13 @@ pub struct TrainRequest {
     pub negatives: Vec<String>,
     /// Labels in those recordings to leave out entirely.
     pub excludes: Vec<String>,
-    pub backend: String,
-    pub sources: Vec<StreamSource>,
-    #[serde(default = "default_window_ms")]
-    pub window_ms: u32,
-    #[serde(default = "default_stride_ms")]
-    pub stride_ms: u32,
-    #[serde(default = "default_max_gap_ms")]
-    pub max_gap_ms: u32,
-    #[serde(default = "default_min_samples")]
-    pub min_samples: u32,
-    #[serde(default)]
-    pub seed: Option<u32>,
-    /// Only features about how things change, not their absolute levels (see `is_movement_feature`).
-    #[serde(default)]
-    pub movement_only: bool,
-    /// How the pulse sensor's spikes are pulled out before the model reads their features (a `SpikeMethod` name), or
-    /// `none`. Only has an effect when the pulse sensor is one of the streams.
-    #[serde(default)]
-    pub spike_method: Option<String>,
-    /// How far back (milliseconds: 2000, 4000 or 8000) the pulse sensor's level features look for what a window is compared
-    /// with, or absent for none. Only for the statistics inputs, and only with the pulse sensor.
-    #[serde(default)]
-    pub baseline_ms: Option<u32>,
-    /// Which of the pulse sensor's light channels the model may read (`green`, `red`, `ir`). Absent means all three.
-    #[serde(default)]
-    pub ppg_channels: Option<Vec<String>>,
-    /// How many steps each column of the window is laid onto: for the convolutional method, or for a dense method reading
-    /// raw columns. Absent means 32 (convolutional) or 1 (raw columns).
-    #[serde(default)]
-    pub grid_steps: Option<u32>,
-    /// `statistics` (the default: averages, spreads and so on of each window) or `raw`: the dataset's own columns, each
-    /// at each step, one input neuron apiece. Raw is for the dense methods; the convolutional method always reads columns.
-    #[serde(default)]
-    pub input_mode: Option<String>,
-    /// Exactly which inputs the model reads, by name (statistics, or for the convolutional method channels), out of the
-    /// ones the chosen streams provide. Absent means all of them.
-    #[serde(default)]
-    pub features: Option<Vec<String>>,
-    /// The shape of a neural network and how it is trained; absent means the method's own default.
-    #[serde(default)]
-    pub network: Option<NetworkSpec>,
     /// Also retrain on less data and on all but one recording, to see how far the score can be trusted. Slower.
     #[serde(default)]
     pub research: bool,
-    /// Moves the labels later in time by this many milliseconds (earlier when negative) before windows are made, for when the
-    /// camera marked a hold a little before or after the signal showed it. From -1500 to 1500; absent or 0 leaves them.
+    /// Moves the labels later in time by this many milliseconds (earlier when negative), for when the camera marked a hold
+    /// a little before or after the signal showed it. From -1500 to 1500; absent or 0 leaves them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label_offset_ms: Option<i32>,
-    /// A saved network design to train with (see `network_designs`). When present, the design's choices replace the
-    /// request's own for the method, inputs, spike extraction, window and network; the label and recordings stay the request's.
-    #[serde(default)]
-    pub design_id: Option<String>,
-    /// A pre-trained motion encoder (by name, see `motion_encoders`) for a convolutional model to start its convolution
-    /// layers from, and whether to keep those layers as they are so only its head learns from the recordings.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pretrained: Option<String>,
-    #[serde(default)]
-    pub pretrained_freeze: bool,
-    /// Recordings (by id) that may train but never test: ones added to fine-tune a model on corrections. The rest are split
-    /// as they always were, so the held-out recordings, and the before and after scores, stay the same.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub train_only: Vec<String>,
-}
-
-fn default_window_ms() -> u32 {
-    500
-}
-fn default_stride_ms() -> u32 {
-    150
-}
-fn default_max_gap_ms() -> u32 {
-    250
-}
-fn default_min_samples() -> u32 {
-    3
 }
 
 /// A request checked against the recordings it names.
@@ -148,188 +76,12 @@ struct Checked {
     mapping: LabelMapping,
     input: InputContract,
     recordings: Vec<RecordingInfo>,
-    backend: String,
-    seed: u32,
-    movement_only: bool,
-    spike_method: Option<SpikeMethod>,
-    baseline_ms: Option<u32>,
-    ppg_channels: Vec<String>,
-    grid_steps: u32,
-    raw_columns: bool,
-    network: Option<NetworkSpec>,
-    explicit_features: Option<Vec<String>>,
     research: bool,
     label_offset_ms: i32,
-    /// The encoder file to start from (always one in the encoders folder), and whether its layers stay as they are.
-    pretrained: Option<PathBuf>,
-    pretrained_freeze: bool,
 }
 
 fn label_id(raw: &str) -> Result<LabelId, String> {
     LabelId::new(raw).map_err(|e| e.to_string())
-}
-
-/// What the model may read, worked out from the chosen streams and settings alone (no recordings needed), so the card can
-/// show every available input before anything is chosen.
-#[derive(Debug, Clone)]
-struct Inputs {
-    sources: Vec<StreamSource>,
-    spike_method: Option<SpikeMethod>,
-    baseline_ms: Option<u32>,
-    ppg_channels: Vec<String>,
-    grid_steps: u32,
-    raw_columns: bool,
-    /// Every input the chosen streams provide, in canonical order.
-    available: Vec<String>,
-    /// The ones the model will read: `available`, or the explicit subset asked for.
-    features: Vec<String>,
-}
-
-fn resolve_inputs(request: &TrainRequest) -> Result<Inputs, String> {
-    let mut sources = request.sources.clone();
-    sources.sort_by_key(|s| format!("{s:?}"));
-    sources.dedup();
-    if sources.is_empty() {
-        return Err("choose at least one data stream for the model to read".into());
-    }
-    let spike_method = match request.spike_method.as_deref() {
-        None | Some("none") | Some("") => None,
-        Some(name) => Some(
-            SpikeMethod::from_name(name)
-                .ok_or_else(|| format!("unknown spike extraction method '{name}'"))?,
-        ),
-    }
-    .filter(|_| sources.contains(&StreamSource::WatchPpg)); // nothing for it to read without the pulse sensor
-    let baseline_ms = match request.baseline_ms {
-        None | Some(0) => None,
-        Some(ms) if label_inference::BASELINE_CHOICES_MS.contains(&ms) => Some(ms),
-        Some(ms) => {
-            return Err(format!(
-                "the baseline must be one of {:?} milliseconds, got {ms}",
-                label_inference::BASELINE_CHOICES_MS
-            ));
-        }
-    }
-    .filter(|_| sources.contains(&StreamSource::WatchPpg));
-    let ppg_channels: Vec<String> = match &request.ppg_channels {
-        None => PPG_CHANNELS.iter().map(ToString::to_string).collect(),
-        Some(chosen) => {
-            if let Some(bad) = chosen.iter().find(|c| !PPG_CHANNELS.contains(&c.as_str())) {
-                return Err(format!(
-                    "unknown pulse sensor channel '{bad}'; choose from green, red, ir"
-                ));
-            }
-            // In the sensor's own order, once each.
-            PPG_CHANNELS
-                .iter()
-                .filter(|c| chosen.iter().any(|x| x == **c))
-                .map(ToString::to_string)
-                .collect()
-        }
-    };
-    if sources.contains(&StreamSource::WatchPpg) && ppg_channels.is_empty() {
-        return Err("choose at least one pulse sensor channel for the model to read".into());
-    }
-    let channel_refs: Vec<&str> = ppg_channels.iter().map(String::as_str).collect();
-    let raw_columns = match request.input_mode.as_deref() {
-        None | Some("statistics") | Some("") => false,
-        Some("raw") => true,
-        Some(other) => {
-            return Err(format!(
-                "unknown input mode '{other}'; choose statistics or raw"
-            ));
-        }
-    };
-    let convolutional = request.backend == "cnn1d";
-    let grid_steps =
-        request
-            .grid_steps
-            .unwrap_or(if convolutional { 32 } else { RAW_DEFAULT_STEPS });
-    let available = if convolutional || raw_columns {
-        // The convolutional method's grid, and a dense method's raw columns: the window's columns themselves, not statistics.
-        let (low, high) = if convolutional {
-            (CNN_MIN_STEPS, MAX_GRID_STEPS)
-        } else {
-            (MIN_GRID_STEPS, RAW_MAX_STEPS)
-        };
-        if !(low..=high).contains(&grid_steps) {
-            return Err(if convolutional {
-                format!("the window grid must have from {low} to {high} steps, got {grid_steps}")
-            } else {
-                format!("the samples per window must be from {low} to {high}, got {grid_steps}")
-            });
-        }
-        grid_channels_for(&sources, &channel_refs)
-    } else {
-        canonical_features_with_channels(
-            &sources,
-            request.movement_only,
-            spike_method.is_some(),
-            baseline_ms.is_some(),
-            &channel_refs,
-        )
-    };
-    if available.is_empty() {
-        return Err("none of the chosen data streams can feed a model (head pose is not available to trained models)".into());
-    }
-    let features = match &request.features {
-        None => available.clone(),
-        Some(wanted) => {
-            if let Some(bad) = wanted.iter().find(|name| !available.contains(name)) {
-                return Err(format!(
-                    "'{bad}' is not an input the chosen streams and settings provide"
-                ));
-            }
-            let chosen: Vec<String> = available
-                .iter()
-                .filter(|name| wanted.contains(name))
-                .cloned()
-                .collect();
-            if chosen.is_empty() {
-                return Err("choose at least one input for the model to read".into());
-            }
-            chosen
-        }
-    };
-    // A columns model (the convolutional one, or a dense one on raw columns) uses the baseline to read its pulse channels
-    // in units of their recent past (the grid's `pulse: "recentPast"`), so it keeps one only if it reads a pulse channel.
-    let baseline_ms = baseline_ms.filter(|_| {
-        !(convolutional || raw_columns) || features.iter().any(|f| f.starts_with("ppg_"))
-    });
-    Ok(Inputs {
-        sources,
-        spike_method,
-        baseline_ms,
-        ppg_channels,
-        grid_steps,
-        raw_columns,
-        available,
-        features,
-    })
-}
-
-/// What a request's inputs would be, from its streams and settings alone: every input available, the ones the model would
-/// read, and how many input neurons that makes (a dense method on raw columns has one for each column at each step; the
-/// convolutional method counts its channels, because it slides over the steps). For checking a saved network design.
-pub(crate) struct InputPreview {
-    pub available: Vec<String>,
-    pub inputs: Vec<String>,
-    pub neurons: u32,
-}
-
-pub(crate) fn preview_inputs(request: &TrainRequest) -> Result<InputPreview, String> {
-    let inputs = resolve_inputs(request)?;
-    let columns = inputs.raw_columns && request.backend != "cnn1d";
-    let neurons = if columns {
-        inputs.features.len() as u32 * inputs.grid_steps
-    } else {
-        inputs.features.len() as u32
-    };
-    Ok(InputPreview {
-        available: inputs.available,
-        inputs: inputs.features,
-        neurons,
-    })
 }
 
 /// Checks the request and turns it into the sealed decisions. `sha_of` reads a recording's SHA-256.
@@ -338,12 +90,6 @@ fn check_request(
     datasets: &[DatasetSummary],
     sha_of: &dyn Fn(&str) -> Result<String, String>,
 ) -> Result<Checked, String> {
-    if !BACKENDS.contains(&request.backend.as_str()) {
-        return Err(format!(
-            "unknown training method '{}'; choose one of {BACKENDS:?}",
-            request.backend
-        ));
-    }
     let target = label_id(&request.label)?;
     let negatives: Vec<LabelId> = request
         .negatives
@@ -392,73 +138,19 @@ fn check_request(
     if recordings.is_empty() {
         return Err("choose at least one recording".into());
     }
-    let resolved = resolve_inputs(request)?;
-    let Inputs {
-        sources,
-        spike_method,
-        baseline_ms,
-        ppg_channels,
-        grid_steps,
-        raw_columns,
-        features,
-        ..
-    } = resolved;
     let label_offset_ms = request.label_offset_ms.unwrap_or(0);
     if label_offset_ms.abs() > MAX_LABEL_OFFSET_MS {
         return Err(format!(
             "the label offset must be from -{MAX_LABEL_OFFSET_MS} to {MAX_LABEL_OFFSET_MS} milliseconds, got {label_offset_ms}"
         ));
     }
-    let network = match &request.network {
-        Some(network) => {
-            network.validate(&request.backend)?;
-            Some(network.clone())
-        }
-        None => None,
-    };
-    // A model starting from a pre-trained encoder must read what it read, and centres each window as it did.
-    let pretrained = match &request.pretrained {
-        Some(id) => Some(
-            crate::motion_encoders::check_encoder(
-                Path::new(crate::motion_encoders::ENCODERS_DIR),
-                id,
-                &request.backend,
-                &features,
-                request.window_ms,
-                grid_steps,
-            )?
-            .1,
-        ),
-        None => None,
-    };
-    let input = InputContract {
-        sources,
-        features,
-        window_ms: request.window_ms,
-        stride_ms: request.stride_ms,
-        max_gap_ms: request.max_gap_ms,
-        min_samples: request.min_samples,
-    };
-    input.validate().map_err(|e| e.to_string())?;
     Ok(Checked {
         target,
         mapping: LabelMapping { entries },
-        input,
+        input: ppg_onset_contract(),
         recordings,
-        backend: request.backend.clone(),
-        seed: request.seed.unwrap_or(7),
-        movement_only: request.movement_only || pretrained.is_some(),
-        spike_method,
-        baseline_ms,
-        ppg_channels,
-        grid_steps,
-        raw_columns,
-        network,
-        explicit_features: request.features.clone(),
         research: request.research,
         label_offset_ms,
-        pretrained_freeze: pretrained.is_some() && request.pretrained_freeze,
-        pretrained,
     })
 }
 
@@ -487,25 +179,9 @@ fn build_spec(
         "train": ids(&split.train),
         "evaluation": ids(&split.evaluation),
         "sources": checked.input.sources,
-        "window": {
-            "windowMs": checked.input.window_ms,
-            "strideMs": checked.input.stride_ms,
-            "maxGapMs": checked.input.max_gap_ms,
-            "minSamples": checked.input.min_samples,
-        },
-        "backend": checked.backend,
-        "seed": checked.seed,
-        "movementOnly": checked.movement_only,
-        "spikeMethod": checked.spike_method.map_or("none", SpikeMethod::name),
-        "baselineMs": checked.baseline_ms,
-        "ppgChannels": checked.ppg_channels,
-        "gridSteps": checked.grid_steps,
-        "inputMode": if checked.raw_columns { "raw" } else { "statistics" },
-        "features": checked.explicit_features,
-        "network": checked.network,
+        "backend": BACKEND,
+        "seed": SEED,
         "research": checked.research,
-        "pretrained": checked.pretrained.as_ref().map(|p| p.display().to_string()),
-        "pretrainedFreeze": checked.pretrained_freeze,
         "labelOffsetMs": checked.label_offset_ms,
     })
 }
@@ -524,9 +200,8 @@ pub struct PlanView {
     pub evaluation: Vec<String>,
     /// Why this cannot be trained, in words; `None` when it can.
     pub problem: Option<String>,
-    /// Every input the chosen streams and settings provide (for the card to list), and the ones the model will read.
-    pub available: Vec<String>,
-    pub features: Vec<String>,
+    /// How many inputs the model reads (always the PPG pinch-start features).
+    pub inputs: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -544,7 +219,7 @@ enum TrainingEvent {
     Finished {
         run_id: String,
         label: String,
-        /// `deployable`, `evaluationOnly` (trained, but not worth keeping), `failed` or `cancelled`.
+        /// `deployable`, `monitorOnly` (trained, but it may only run in Monitor), `failed` or `cancelled`.
         outcome: String,
         message: String,
         version_id: Option<String>,
@@ -585,7 +260,7 @@ pub struct RunningView {
     pub label: String,
 }
 
-fn runs_dir(app: &AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn runs_dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
         .map(|base| base.join(MODEL_LAB_DIR_NAME).join(RUNS_DIR))
@@ -607,7 +282,14 @@ fn recordings_for(app: &AppHandle, request: &TrainRequest) -> Result<Checked, St
     })
 }
 
-/// How well the recordings separate the gesture from the rest when the labels are moved to each of a range of offsets.
+fn trainer_command() -> Command {
+    let mut command = Command::new("uv");
+    command.args(["run", "--project", TRAINER_PROJECT_DIR, "label-classifier-train"]);
+    command
+}
+
+/// How well the recordings separate the gesture's starts from the rest when the labels are moved to each of a range of
+/// offsets.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct OffsetScore {
@@ -647,22 +329,16 @@ pub fn offsets_from(line: Option<&str>) -> Result<Vec<OffsetScore>, String> {
         .collect()
 }
 
-/// Tries moving the labels to a range of offsets and says how well the chosen recordings and inputs separate the gesture from
+/// Tries moving the labels to a range of offsets and says how well the chosen recordings separate the gesture's starts from
 /// the rest at each, judged on recordings left out. Nothing is recorded or trained.
 #[tauri::command]
 pub async fn suggest_label_offset(
     app: AppHandle,
     request: TrainRequest,
 ) -> Result<Vec<OffsetScore>, String> {
-    let request = crate::network_designs::resolve_design(&app, request)?;
     let checked = recordings_for(&app, &request)?;
-    let split = plan_split_keeping(
-        &checked.recordings,
-        &checked.mapping,
-        &checked.target,
-        &train_only_of(&request),
-    )
-    .map_err(|e| e.to_string())?;
+    let split = plan_split(&checked.recordings, &checked.mapping, &checked.target)
+        .map_err(|e| e.to_string())?;
     if !Path::new(TRAINER_PROJECT_DIR)
         .join("pyproject.toml")
         .is_file()
@@ -682,9 +358,7 @@ pub async fn suggest_label_offset(
     let spec_path = work.join("spec.json");
     let done = async {
         fs::write(&spec_path, serde_json::to_vec(&spec).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-        let output = Command::new("uv")
-            .args(["run", "--project", TRAINER_PROJECT_DIR, "--extra", "onnx"])
-            .arg("label-classifier-train")
+        let output = trainer_command()
             .arg("--suggest-offset")
             .arg("--spec")
             .arg(&spec_path)
@@ -700,62 +374,26 @@ pub async fn suggest_label_offset(
     done
 }
 
-fn train_only_of(request: &TrainRequest) -> Vec<RecordingId> {
-    request
-        .train_only
-        .iter()
-        .filter_map(|id| RecordingId::new(id.clone()).ok())
-        .collect()
-}
-
 /// Says how a request would be split, or why it cannot be, without recording or starting anything.
 #[tauri::command]
 pub fn plan_label_training(app: AppHandle, request: TrainRequest) -> PlanView {
-    let request = match crate::network_designs::resolve_design(&app, request) {
-        Ok(request) => request,
-        Err(problem) => {
-            return PlanView {
-                train: Vec::new(),
-                evaluation: Vec::new(),
-                problem: Some(problem),
-                available: Vec::new(),
-                features: Vec::new(),
-            };
-        }
-    };
+    let inputs = ppg_onset_contract().features.len();
     let result = recordings_for(&app, &request).and_then(|checked| {
-        plan_split_keeping(
-            &checked.recordings,
-            &checked.mapping,
-            &checked.target,
-            &train_only_of(&request),
-        )
-        .map_err(|e| e.to_string())
+        plan_split(&checked.recordings, &checked.mapping, &checked.target)
+            .map_err(|e| e.to_string())
     });
-    let inputs = resolve_inputs(&request);
-    let (available, features) = match &inputs {
-        Ok(inputs) => (inputs.available.clone(), inputs.features.clone()),
-        Err(_) => {
-            // An explicit choice that does not fit still lets the card list what is available.
-            let mut open = request.clone();
-            open.features = None;
-            resolve_inputs(&open).map_or((Vec::new(), Vec::new()), |i| (i.available, Vec::new()))
-        }
-    };
     match result {
         Ok(split) => PlanView {
             train: split.train.iter().map(ToString::to_string).collect(),
             evaluation: split.evaluation.iter().map(ToString::to_string).collect(),
             problem: None,
-            available,
-            features,
+            inputs,
         },
         Err(problem) => PlanView {
             train: Vec::new(),
             evaluation: Vec::new(),
             problem: Some(problem),
-            available,
-            features,
+            inputs,
         },
     }
 }
@@ -819,288 +457,6 @@ pub async fn start_label_training(
     host: State<'_, LabelRuntimeHost>,
     request: TrainRequest,
 ) -> Result<String, String> {
-    let request = crate::network_designs::resolve_design(&app, request)?;
-    start_run(app, runtime, host, request, None).await
-}
-
-/// A trained model's parameters, to be changed by hand (see `edits.py`): where they are, which model they are, and what to change.
-struct EditJob {
-    from_model: String,
-    from_dir: PathBuf,
-    edits: Vec<serde_json::Value>,
-    fine_tune: Option<serde_json::Value>,
-}
-
-/// The kinds of edit the trainer knows (see `KINDS` in `edits.py`).
-const EDIT_KINDS: [&str; 6] = [
-    "disableInput",
-    "scaleInput",
-    "setWeight",
-    "setBias",
-    "setFilterWeight",
-    "silenceNeuron",
-];
-const MAX_EDITS: usize = 200;
-
-/// The settings of fine-tuning the trainer knows (see `FINE_TUNE_KEYS` in `edits.py`).
-const FINE_TUNE_KEYS: [&str; 7] = [
-    "epochs",
-    "learningRate",
-    "freezeConv",
-    "freezeDense",
-    "freeze",
-    "extraRecordings",
-    "extraWeight",
-];
-
-/// Refuses a list of edits (with or without fine-tuning after them) that cannot be an edit at all; the trainer checks each
-/// against the model.
-fn check_edits(
-    edits: &[serde_json::Value],
-    fine_tune: Option<&serde_json::Value>,
-) -> Result<(), String> {
-    if let Some(settings) = fine_tune {
-        let object = settings
-            .as_object()
-            .ok_or("the fine-tuning settings must be an object")?;
-        if let Some(unknown) = object
-            .keys()
-            .find(|key| !FINE_TUNE_KEYS.contains(&key.as_str()))
-        {
-            return Err(format!("unknown fine-tuning setting '{unknown}'"));
-        }
-    } else if edits.is_empty() {
-        return Err("there is nothing to change".into());
-    }
-    if edits.len() > MAX_EDITS {
-        return Err(format!("at most {MAX_EDITS} edits at a time"));
-    }
-    for (number, edit) in edits.iter().enumerate() {
-        let kind = edit.get("kind").and_then(serde_json::Value::as_str);
-        if !kind.is_some_and(|kind| EDIT_KINDS.contains(&kind)) {
-            return Err(format!(
-                "edit {}: unknown kind; choose from {EDIT_KINDS:?}",
-                number + 1
-            ));
-        }
-    }
-    Ok(())
-}
-
-/// What a model was trained from, for choosing recordings to fine-tune it on.
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ModelTrainingInfo {
-    pub label: String,
-    pub backend: String,
-    pub negatives: Vec<String>,
-    pub excludes: Vec<String>,
-    /// Every recording it was trained or tested on.
-    pub dataset_ids: Vec<String>,
-    /// The ones added later to train on only (corrections).
-    pub train_only: Vec<String>,
-    pub design_id: Option<String>,
-}
-
-/// The request a trained model came from. An error for an imported model, or one trained before this was kept.
-#[tauri::command]
-pub fn get_model_training_info(
-    app: AppHandle,
-    host: State<'_, LabelRuntimeHost>,
-    id: String,
-) -> Result<ModelTrainingInfo, String> {
-    let (run_id, _) = host.trained_run_of(&id)?;
-    let request: TrainRequest = fs::read(runs_dir(&app)?.join(&run_id).join("request.json"))
-        .map_err(|_| {
-            "this model was trained before its recordings were kept: train it again".to_string()
-        })
-        .and_then(|bytes| serde_json::from_slice(&bytes).map_err(|e| e.to_string()))?;
-    Ok(ModelTrainingInfo {
-        label: request.label,
-        backend: request.backend,
-        negatives: request.negatives,
-        excludes: request.excludes,
-        dataset_ids: request.dataset_ids,
-        train_only: request.train_only,
-        design_id: request.design_id,
-    })
-}
-
-/// Carries on training a model with a saved fine-tune plan (see `fine_tune_plans`), without any hand edits. Recordings
-/// in `extras` are added to what it trains on (never to what it is tested on), and what the model gets wrong on them
-/// counts `weight` times as much (1 to 10; 1 when absent).
-#[tauri::command]
-pub async fn start_label_fine_tune(
-    app: AppHandle,
-    runtime: State<'_, LabelTrainingRuntime>,
-    host: State<'_, LabelRuntimeHost>,
-    id: String,
-    plan_id: String,
-    extras: Option<Extras>,
-) -> Result<String, String> {
-    let settings = crate::fine_tune_plans::settings_of(&app, &plan_id)?;
-    begin_edit(
-        app,
-        runtime,
-        host,
-        id,
-        Vec::new(),
-        Some(settings),
-        extras.unwrap_or_default(),
-    )
-    .await
-}
-
-/// Changes a trained model by hand and saves the result as a new Draft: the same recordings and split, the original
-/// untouched, the new model scored on the same held-out windows. Runs as a training run, with the same progress and
-/// result events.
-#[tauri::command]
-pub async fn start_label_edit(
-    app: AppHandle,
-    runtime: State<'_, LabelTrainingRuntime>,
-    host: State<'_, LabelRuntimeHost>,
-    id: String,
-    edits: Vec<serde_json::Value>,
-    fine_tune: Option<serde_json::Value>,
-) -> Result<String, String> {
-    begin_edit(app, runtime, host, id, edits, fine_tune, Extras::default()).await
-}
-
-const MAX_EXTRA_WEIGHT: f64 = 10.0;
-
-/// Recordings to fine-tune a model on besides the ones it was trained on.
-#[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct Extras {
-    ids: Vec<String>,
-    /// How much more what the model gets wrong on them counts (1 to 10; 1 when absent).
-    weight: Option<f64>,
-    /// What each label in them that the model has no role for means here: `negative` ("something else") or `exclude`.
-    roles: BTreeMap<String, String>,
-}
-
-/// The request a fine-tune is made from: the model's own, with the extra recordings added to those that may only train,
-/// and a role for each label in them the model did not have one for. Nothing is assumed: such a label with no role chosen
-/// refuses the fine-tune.
-fn with_extras(
-    mut request: TrainRequest,
-    extras: &Extras,
-    labels_of: &dyn Fn(&str) -> Option<Vec<String>>,
-    fine_tune: Option<serde_json::Value>,
-) -> Result<(TrainRequest, Option<serde_json::Value>), String> {
-    if let Some(weight) = extras.weight
-        && !(1.0..=MAX_EXTRA_WEIGHT).contains(&weight)
-    {
-        return Err(format!(
-            "the weight of the extra recordings must be from 1 to {MAX_EXTRA_WEIGHT}"
-        ));
-    }
-    // Only new extra recordings need a fine-tune; a model already trained with some (correction rounds, say) can still be
-    // edited by hand, which keeps its recordings and split as they are.
-    if !extras.ids.is_empty() && fine_tune.is_none() {
-        return Err("extra recordings are used by fine-tuning: choose a fine-tune plan".into());
-    }
-    for (label, role) in &extras.roles {
-        if !matches!(role.as_str(), "negative" | "exclude") {
-            return Err(format!(
-                "the role of '{label}' must be 'negative' (something else) or 'exclude'"
-            ));
-        }
-    }
-    for extra in &extras.ids {
-        if request.dataset_ids.contains(extra) {
-            return Err(format!(
-                "recording {extra} is already part of what this model was trained or tested on"
-            ));
-        }
-        let labels =
-            labels_of(extra).ok_or_else(|| format!("there is no recording with id '{extra}'"))?;
-        for label in labels {
-            let known = label == request.label
-                || request.negatives.contains(&label)
-                || request.excludes.contains(&label);
-            if known {
-                continue;
-            }
-            match extras.roles.get(&label).map(String::as_str) {
-                Some("negative") => request.negatives.push(label),
-                Some(_) => request.excludes.push(label),
-                None => {
-                    return Err(format!(
-                        "recording {extra} has the label '{label}', which this model has no role for: choose whether it means something else or is left out"
-                    ));
-                }
-            }
-        }
-        request.dataset_ids.push(extra.clone());
-        request.train_only.push(extra.clone());
-    }
-    let mut fine_tune = fine_tune;
-    if !request.train_only.is_empty()
-        && let Some(settings) = fine_tune.as_mut().and_then(|s| s.as_object_mut())
-    {
-        settings.insert(
-            "extraRecordings".into(),
-            serde_json::json!(request.train_only),
-        );
-        settings.insert(
-            "extraWeight".into(),
-            serde_json::json!(extras.weight.unwrap_or(1.0)),
-        );
-    }
-    Ok((request, fine_tune))
-}
-
-async fn begin_edit(
-    app: AppHandle,
-    runtime: State<'_, LabelTrainingRuntime>,
-    host: State<'_, LabelRuntimeHost>,
-    id: String,
-    edits: Vec<serde_json::Value>,
-    fine_tune: Option<serde_json::Value>,
-    extras: Extras,
-) -> Result<String, String> {
-    check_edits(&edits, fine_tune.as_ref())?;
-    let (run_id, _) = host.trained_run_of(&id)?;
-    let from_dir = runs_dir(&app)?.join(&run_id);
-    let request: TrainRequest = fs::read(from_dir.join("request.json"))
-        .map_err(|_| {
-            "this model was trained before editing was possible: train it again to edit it"
-                .to_string()
-        })
-        .and_then(|bytes| {
-            serde_json::from_slice(&bytes)
-                .map_err(|e| format!("the model's training request is unreadable: {e}"))
-        })?;
-    let index = load_index(&app);
-    let (request, fine_tune) = with_extras(
-        request,
-        &extras,
-        &|dataset| {
-            index
-                .datasets
-                .iter()
-                .find(|d| d.id == dataset)
-                .map(DatasetSummary::effective_labels)
-        },
-        fine_tune,
-    )?;
-    let job = EditJob {
-        from_model: id,
-        from_dir,
-        edits,
-        fine_tune,
-    };
-    start_run(app, runtime, host, request, Some(job)).await
-}
-
-async fn start_run(
-    app: AppHandle,
-    runtime: State<'_, LabelTrainingRuntime>,
-    host: State<'_, LabelRuntimeHost>,
-    request: TrainRequest,
-    edit: Option<EditJob>,
-) -> Result<String, String> {
     {
         let active = runtime
             .active
@@ -1123,23 +479,14 @@ async fn start_run(
         input: checked.input.clone(),
         quality: QualityRules::default(),
         trainer: TrainerConfig {
-            backend: trainer_backend(&checked.backend).ok_or("unknown training method")?,
-            params: {
-                let mut params = BTreeMap::from([(
-                    "method".to_string(),
-                    serde_json::Value::String(checked.backend.clone()),
-                )]);
-                if let Some(job) = &edit {
-                    params.insert(
-                        "editedFrom".into(),
-                        serde_json::Value::String(job.from_model.clone()),
-                    );
-                }
-                params
-            },
+            backend: trainer_backend(BACKEND).ok_or("unknown training method")?,
+            params: BTreeMap::from([(
+                "method".to_string(),
+                serde_json::Value::String(BACKEND.into()),
+            )]),
         },
         recordings: checked.recordings.clone(),
-        train_only: train_only_of(&request),
+        train_only: Vec::new(),
         unique,
     };
     let begun =
@@ -1157,16 +504,8 @@ async fn start_run(
             .iter()
             .map(|r| (r.id.to_string(), dataset_csv_path(&dir, r.id.as_str())))
             .collect();
-        let mut spec = build_spec(&checked, &begun.split, &paths);
-        if let Some(job) = &edit {
-            spec["edit"] = serde_json::json!({
-                "fromDir": job.from_dir,
-                "fromModel": job.from_model,
-                "edits": job.edits,
-                "fineTune": job.fine_tune,
-            });
-        }
-        // Kept so this model can be edited later: the same request rebuilds the same plan.
+        let spec = build_spec(&checked, &begun.split, &paths);
+        // Kept so this model can be trained again from the same recordings and roles.
         fs::write(
             out.join("request.json"),
             serde_json::to_vec_pretty(&request).map_err(|e| e.to_string())?,
@@ -1188,17 +527,8 @@ async fn start_run(
         }
     };
 
-    let mut command = Command::new("uv");
+    let mut command = trainer_command();
     command
-        .args(["run", "--project", TRAINER_PROJECT_DIR, "--extra", "onnx"])
-        .args(
-            if matches!(checked.backend.as_str(), "torch-mlp" | "cnn1d") {
-                vec!["--extra", "torch"]
-            } else {
-                vec![]
-            },
-        )
-        .arg("label-classifier-train")
         .arg("--spec")
         .arg(&spec_path)
         .arg("--out")
@@ -1231,7 +561,7 @@ async fn start_run(
         &TrainingEvent::Started {
             run_id: run_id.clone(),
             label: checked.target.to_string(),
-            backend: checked.backend.clone(),
+            backend: BACKEND.into(),
         },
     );
     if let Some(pipe) = stdout {
@@ -1324,48 +654,19 @@ fn finish(
             );
         }
     };
-    if result["outcome"] == "evaluationOnly" {
-        let message = result["message"]
-            .as_str()
-            .unwrap_or("the model was not good enough to keep")
-            .to_string();
-        let run_dir = format!("{RUNS_DIR}/{run_id}");
-        let artifacts: Vec<ArtifactRef> = [("evaluation", "evaluation.json")]
-            .iter()
-            .filter_map(|(kind, file)| {
-                sha256_of_file(&out.join(file))
-                    .ok()
-                    .map(|sha256| ArtifactRef {
-                        kind: (*kind).into(),
-                        path: format!("{run_dir}/{file}"),
-                        sha256,
-                    })
-            })
-            .collect();
-        let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
-        let host = app.state::<LabelRuntimeHost>();
-        if let Err(error) = host.with_store(|store| {
-            evaluation_only_run(store, run_id, &message, artifacts, &now).map_err(|e| e.to_string())
-        }) {
-            return failed("failed", error);
+    let deployable = match result["outcome"].as_str() {
+        Some("deployable") => true,
+        Some("evaluationOnly") => false,
+        _ => {
+            let message = result["message"]
+                .as_str()
+                .unwrap_or("the trainer gave no reason")
+                .to_string();
+            return failed("failed", message);
         }
-        return TrainingEvent::Finished {
-            run_id: id,
-            label,
-            outcome: "evaluationOnly".into(),
-            message,
-            version_id: None,
-            metrics: Some(result["metrics"].clone()),
-        };
-    }
-    if result["outcome"] != "deployable" {
-        let message = result["message"]
-            .as_str()
-            .unwrap_or("the trainer gave no reason")
-            .to_string();
-        return failed("failed", message);
-    }
-    let published = (|| -> Result<(String, serde_json::Value), String> {
+    };
+    let message = result["message"].as_str().unwrap_or_default().to_string();
+    let published = (|| -> Result<String, String> {
         let lab = model_lab_dir(app)?;
         let staged = stage_bundle(&out.join("bundle"), &lab).map_err(|e| e.to_string())?;
         if staged.label() != target {
@@ -1377,7 +678,7 @@ fn finish(
         let run_dir = format!("{RUNS_DIR}/{run_id}");
         let mut artifacts = vec![ArtifactRef {
             kind: "model".into(),
-            path: format!("{run_dir}/bundle/model.onnx"),
+            path: format!("{run_dir}/bundle/model.trees"),
             sha256: staged.model_sha256.clone(),
         }];
         for (kind, file) in [
@@ -1397,18 +698,23 @@ fn finish(
         let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
         let host = app.state::<LabelRuntimeHost>();
         let outcome = host.with_store(|store| {
-            complete_run(store, staged, &lab, run_id, artifacts, &now).map_err(|e| e.to_string())
+            if deployable {
+                complete_run(store, staged, &lab, run_id, artifacts, &now)
+            } else {
+                monitor_only_run(store, staged, &lab, run_id, &message, artifacts, &now)
+            }
+            .map_err(|e| e.to_string())
         })?;
-        Ok((outcome.version_id.to_string(), result["metrics"].clone()))
+        Ok(outcome.version_id.to_string())
     })();
     match published {
-        Ok((version, metrics)) => TrainingEvent::Finished {
+        Ok(version) => TrainingEvent::Finished {
             run_id: id,
             label,
-            outcome: "deployable".into(),
-            message: String::new(),
+            outcome: if deployable { "deployable" } else { "monitorOnly" }.into(),
+            message,
             version_id: Some(version),
-            metrics: Some(metrics),
+            metrics: Some(result["metrics"].clone()),
         },
         Err(message) => failed("failed", message),
     }
@@ -1447,7 +753,7 @@ pub fn get_label_training_status(runtime: State<'_, LabelTrainingRuntime>) -> Tr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use label_inference::plan_split;
+    use model_lab_core::StreamSource;
 
     fn dataset(id: &str, labels: &[&str]) -> DatasetSummary {
         DatasetSummary {
@@ -1466,44 +772,22 @@ mod tests {
 
     fn request() -> TrainRequest {
         TrainRequest {
-            label: "snap".into(),
+            label: "pinch".into(),
             dataset_ids: ["s1", "s2", "s3", "i1", "i2", "i3"]
                 .map(String::from)
                 .to_vec(),
-            negatives: vec!["idle".into()],
+            negatives: vec!["fist".into()],
             excludes: vec![],
-            backend: "logreg".into(),
-            sources: vec![
-                StreamSource::WatchGyroscope,
-                StreamSource::WatchAcceleration,
-            ],
-            window_ms: 500,
-            stride_ms: 150,
-            max_gap_ms: 250,
-            min_samples: 3,
-            seed: None,
-            movement_only: false,
-            spike_method: None,
-            baseline_ms: None,
-            ppg_channels: None,
-            grid_steps: None,
-            input_mode: None,
-            features: None,
-            network: None,
             research: false,
-            design_id: None,
-            pretrained: None,
-            pretrained_freeze: false,
             label_offset_ms: None,
-            train_only: Vec::new(),
         }
     }
 
     fn datasets() -> Vec<DatasetSummary> {
         ["s1", "s2", "s3"]
             .iter()
-            .map(|id| dataset(id, &["snap"]))
-            .chain(["i1", "i2", "i3"].iter().map(|id| dataset(id, &["idle"])))
+            .map(|id| dataset(id, &["pinch"]))
+            .chain(["i1", "i2", "i3"].iter().map(|id| dataset(id, &["fist"])))
             .collect()
     }
 
@@ -1512,33 +796,19 @@ mod tests {
     }
 
     #[test]
-    fn a_request_becomes_explicit_roles_ordered_streams_and_the_features_they_allow() {
+    fn a_request_becomes_explicit_roles_and_the_pulse_models_fixed_contract() {
         let checked = check_request(&request(), &datasets(), &sha).unwrap();
         assert_eq!(
-            checked.mapping.entries[&LabelId::new("snap").unwrap()],
+            checked.mapping.entries[&LabelId::new("pinch").unwrap()],
             ExampleRole::Positive
         );
         assert_eq!(
-            checked.mapping.entries[&LabelId::new("idle").unwrap()],
+            checked.mapping.entries[&LabelId::new("fist").unwrap()],
             ExampleRole::Negative
         );
-        // Streams are put in a fixed order, so the same choice always makes the same contract.
-        assert_eq!(
-            checked.input.sources,
-            vec![
-                StreamSource::WatchAcceleration,
-                StreamSource::WatchGyroscope
-            ]
-        );
-        assert!(
-            checked
-                .input
-                .features
-                .iter()
-                .all(|f| f.starts_with("accel_") || f.starts_with("gyro_"))
-        );
+        assert_eq!(checked.input, ppg_onset_contract());
+        assert_eq!(checked.input.sources, [StreamSource::WatchPpg]);
         assert_eq!(checked.recordings.len(), 6);
-        assert_eq!(checked.seed, 7);
     }
 
     #[test]
@@ -1549,667 +819,53 @@ mod tests {
             change(&mut r);
             check_request(&r, &data, &sha).unwrap_err()
         };
-        assert!(refuse(&|r| r.backend = "keras".into()).contains("unknown training method"));
         assert!(refuse(&|r| r.label = "Bad Label".into()).contains("label id"));
-        assert!(refuse(&|r| r.negatives.push("snap".into())).contains("more than one role"));
+        assert!(refuse(&|r| r.negatives.push("pinch".into())).contains("more than one role"));
         assert!(refuse(&|r| r.dataset_ids.push("nope".into())).contains("no recording"));
         assert!(refuse(&|r| r.dataset_ids.clear()).contains("at least one recording"));
-        assert!(refuse(&|r| r.sources.clear()).contains("at least one data stream"));
-        assert!(
-            refuse(&|r| r.sources = vec![StreamSource::HeadPose])
-                .contains("none of the chosen data streams")
-        );
-        // A recording that cannot be read is not silently skipped.
+        assert!(refuse(&|r| r.label_offset_ms = Some(1501)).contains("label offset"));
         let unreadable = check_request(&request(), &data, &|_| Err("gone".into())).unwrap_err();
         assert_eq!(unreadable, "gone");
-    }
-
-    #[test]
-    fn an_encoder_that_is_not_there_or_does_not_fit_is_refused_before_training() {
-        let mut r = request();
-        r.pretrained = Some("no-such-encoder".into());
-        r.backend = "cnn1d".into();
-        let error = check_request(&r, &datasets(), &sha).unwrap_err();
-        assert!(error.contains("no pre-trained encoder"), "{error}");
-        r.backend = "logreg".into();
-        let error = check_request(&r, &datasets(), &sha).unwrap_err();
-        assert!(error.contains("only the convolutional"), "{error}");
-        r.pretrained = Some("../../etc/passwd".into());
-        r.backend = "cnn1d".into();
-        assert!(check_request(&r, &datasets(), &sha).is_err());
-    }
-
-    #[test]
-    fn movement_only_narrows_the_features_the_contract_lists() {
-        let mut r = request();
-        r.movement_only = true;
-        let checked = check_request(&r, &datasets(), &sha).unwrap();
-        // The spreads, and how fast and often the motion changes: never a level.
-        assert!(
-            checked
-                .input
-                .features
-                .iter()
-                .all(|f| f.ends_with("_std") || label_inference::is_motion_dynamics_feature(f))
-        );
-        assert_eq!(checked.input.features.len(), 8 + 10);
-    }
-
-    #[test]
-    fn a_baseline_adds_the_level_features_only_with_the_pulse_sensor_and_statistics_and_reaches_the_trainer()
-     {
-        let mut r = request();
-        r.baseline_ms = Some(4000);
-        // Motion streams only: nothing for the level features to read, so the baseline is dropped.
-        let motion = check_request(&r, &datasets(), &sha).unwrap();
-        assert!(motion.baseline_ms.is_none());
-        assert!(!motion.input.features.iter().any(|f| f.contains("_rel_")));
-
-        r.sources.push(StreamSource::WatchPpg);
-        let with = check_request(&r, &datasets(), &sha).unwrap();
-        let mut plain = r.clone();
-        plain.baseline_ms = None;
-        let without = check_request(&plain, &datasets(), &sha).unwrap();
-        // The differences from the recent past, and the pulse in units of that past.
-        assert_eq!(with.input.features.len(), without.input.features.len() + 21);
-        assert!(with.input.features.contains(&"ppg_red_rel_low".to_string()));
-        assert!(
-            with.input
-                .features
-                .contains(&"ppg_red_rel_z_slope".to_string())
-        );
-        assert_eq!(with.baseline_ms, Some(4000));
-        // They are about change, so "only how things change" keeps them.
-        let mut change = r.clone();
-        change.movement_only = true;
-        let kept = check_request(&change, &datasets(), &sha).unwrap();
-        assert!(
-            kept.input
-                .features
-                .contains(&"ppg_green_rel_high".to_string())
-        );
-        // The trainer is told, so it builds the same features the same way.
-        let split = plan_split(&with.recordings, &with.mapping, &with.target).unwrap();
-        assert_eq!(
-            build_spec(&with, &split, &BTreeMap::new())["baselineMs"],
-            4000
-        );
-        let split = plan_split(&without.recordings, &without.mapping, &without.target).unwrap();
-        assert!(build_spec(&without, &split, &BTreeMap::new())["baselineMs"].is_null());
-        // A columns model keeps it to read its pulse channels against their recent past, and only then.
-        let mut raw = r.clone();
-        raw.input_mode = Some("raw".into());
-        raw.features = None;
-        assert_eq!(
-            check_request(&raw, &datasets(), &sha).unwrap().baseline_ms,
-            Some(4000)
-        );
-        raw.features = Some(vec!["accel_x".into()]);
-        assert!(
-            check_request(&raw, &datasets(), &sha)
-                .unwrap()
-                .baseline_ms
-                .is_none()
-        );
-        r.baseline_ms = Some(3000);
-        assert!(
-            check_request(&r, &datasets(), &sha)
-                .unwrap_err()
-                .contains("baseline")
-        );
-    }
-
-    #[test]
-    fn a_spike_method_adds_the_spike_features_only_with_the_pulse_sensor_and_reaches_the_trainer() {
-        let mut r = request();
-        r.spike_method = Some("rolling_median_residual".into());
-        // Motion streams only: nothing for the spike features to read, so the method is dropped.
-        let motion = check_request(&r, &datasets(), &sha).unwrap();
-        assert!(!motion.input.features.iter().any(|f| f.contains("_spike_")));
-        assert!(motion.spike_method.is_none());
-
-        r.sources.push(StreamSource::WatchPpg);
-        let without = {
-            let mut plain = r.clone();
-            plain.spike_method = Some("none".into());
-            check_request(&plain, &datasets(), &sha).unwrap()
-        };
-        let with = check_request(&r, &datasets(), &sha).unwrap();
-        assert_eq!(with.input.features.len(), without.input.features.len() + 24);
-        assert!(
-            with.input
-                .features
-                .contains(&"ppg_green_spike_height".to_string())
-        );
-        assert_eq!(with.spike_method, Some(SpikeMethod::RollingMedianResidual));
-        assert!(without.spike_method.is_none());
-
-        // The trainer is told which, so it builds the same feature list the same way.
-        let split = plan_split(&with.recordings, &with.mapping, &with.target).unwrap();
-        let spec = build_spec(&with, &split, &BTreeMap::new());
-        assert_eq!(spec["spikeMethod"], "rolling_median_residual");
-        let split = plan_split(&without.recordings, &without.mapping, &without.target).unwrap();
-        assert_eq!(
-            build_spec(&without, &split, &BTreeMap::new())["spikeMethod"],
-            "none"
-        );
-
-        r.spike_method = Some("soup".into());
-        assert!(
-            check_request(&r, &datasets(), &sha)
-                .unwrap_err()
-                .contains("unknown spike extraction method")
-        );
-    }
-
-    #[test]
-    fn the_model_reads_only_the_pulse_channels_chosen_and_the_trainer_is_told() {
-        let mut r = request();
-        r.sources.push(StreamSource::WatchPpg);
-        let all = check_request(&r, &datasets(), &sha).unwrap();
-        assert!(all.input.features.contains(&"ppg_red_mean".to_string()));
-
-        r.ppg_channels = Some(vec!["ir".into(), "green".into()]);
-        let some = check_request(&r, &datasets(), &sha).unwrap();
-        assert_eq!(some.ppg_channels, ["green", "ir"]); // the sensor's own order
-        assert!(some.input.features.contains(&"ppg_green_mean".to_string()));
-        assert!(some.input.features.contains(&"ppg_ir_mean".to_string()));
-        assert!(
-            !some
-                .input
-                .features
-                .iter()
-                .any(|f| f.starts_with("ppg_red_"))
-        );
-        // The window-level values that come with the pulse sensor stay.
-        assert!(some.input.features.contains(&"sample_count".to_string()));
-        assert!(some.input.features.len() < all.input.features.len());
-        let split = plan_split(&some.recordings, &some.mapping, &some.target).unwrap();
-        assert_eq!(
-            build_spec(&some, &split, &BTreeMap::new())["ppgChannels"],
-            serde_json::json!(["green", "ir"])
-        );
-
-        r.ppg_channels = Some(vec![]);
-        assert!(
-            check_request(&r, &datasets(), &sha)
-                .unwrap_err()
-                .contains("at least one pulse sensor channel")
-        );
-        r.ppg_channels = Some(vec!["blue".into()]);
-        assert!(
-            check_request(&r, &datasets(), &sha)
-                .unwrap_err()
-                .contains("unknown pulse sensor channel")
-        );
-    }
-
-    #[test]
-    fn a_convolutional_request_reads_channels_and_tells_the_trainer_the_grid() {
-        let mut r = request();
-        r.backend = "cnn1d".into();
-        r.window_ms = 1000;
-        r.sources.push(StreamSource::WatchPpg);
-        r.ppg_channels = Some(vec!["green".into()]);
-        let checked = check_request(&r, &datasets(), &sha).unwrap();
-        assert_eq!(
-            checked.input.features,
-            [
-                "ppg_green",
-                "accel_x",
-                "accel_y",
-                "accel_z",
-                "gyro_x",
-                "gyro_y",
-                "gyro_z"
-            ]
-        );
-        assert_eq!(checked.input.window_ms, 1000);
-        assert_eq!(checked.grid_steps, 32);
-        let split = plan_split(&checked.recordings, &checked.mapping, &checked.target).unwrap();
-        let spec = build_spec(&checked, &split, &BTreeMap::new());
-        assert_eq!(spec["backend"], "cnn1d");
-        assert_eq!(spec["gridSteps"], 32);
-        assert_eq!(spec["window"]["windowMs"], 1000);
-
-        r.grid_steps = Some(2);
-        assert!(
-            check_request(&r, &datasets(), &sha)
-                .unwrap_err()
-                .contains("window grid")
-        );
-    }
-
-    #[test]
-    fn a_chosen_subset_of_inputs_is_what_the_model_reads_and_the_trainer_is_told() {
-        let mut r = request();
-        let all = check_request(&r, &datasets(), &sha).unwrap();
-        r.features = Some(vec!["gyro_z_max".into(), "accel_x_std".into()]);
-        let some = check_request(&r, &datasets(), &sha).unwrap();
-        assert_eq!(some.input.features, ["accel_x_std", "gyro_z_max"]); // canonical order, whatever order they were asked in
-        assert!(some.input.features.len() < all.input.features.len());
-        let split = plan_split(&some.recordings, &some.mapping, &some.target).unwrap();
-        assert_eq!(
-            build_spec(&some, &split, &BTreeMap::new())["features"],
-            serde_json::json!(["gyro_z_max", "accel_x_std"])
-        );
-        // The card lists what is available however it is narrowed.
-        let inputs = resolve_inputs(&r).unwrap();
-        assert_eq!(inputs.available, all.input.features);
-        r.features = Some(vec!["ppg_green_mean".into()]);
-        assert!(
-            check_request(&r, &datasets(), &sha)
-                .unwrap_err()
-                .contains("not an input")
-        );
-        r.features = Some(vec![]);
-        assert!(
-            check_request(&r, &datasets(), &sha)
-                .unwrap_err()
-                .contains("at least one input")
-        );
-        // For the convolutional method the inputs are channels.
-        let mut c = request();
-        c.backend = "cnn1d".into();
-        c.features = Some(vec!["gyro_y".into(), "accel_x".into()]);
-        assert_eq!(
-            check_request(&c, &datasets(), &sha).unwrap().input.features,
-            ["accel_x", "gyro_y"]
-        );
-    }
-
-    #[test]
-    fn a_designed_network_is_checked_and_passed_to_the_trainer() {
-        let mut r = request();
-        r.backend = "torch-mlp".into();
-        r.network = Some(
-            serde_json::from_value(serde_json::json!({
-                "hidden": [{"units": 16, "activation": "tanh"}], "epochs": 50, "learningRate": 0.02
-            }))
-            .unwrap(),
-        );
-        let checked = check_request(&r, &datasets(), &sha).unwrap();
-        let split = plan_split(&checked.recordings, &checked.mapping, &checked.target).unwrap();
-        let spec = build_spec(&checked, &split, &BTreeMap::new());
-        assert_eq!(
-            spec["network"]["hidden"][0],
-            serde_json::json!({"units": 16, "activation": "tanh"})
-        );
-        assert_eq!(spec["network"]["epochs"], 50);
-        assert_eq!(spec["research"], false);
-        r.research = true;
-        let checked = check_request(&r, &datasets(), &sha).unwrap();
-        assert_eq!(
-            build_spec(&checked, &split, &BTreeMap::new())["research"],
-            true
-        );
-        r.research = false;
-        // No network settings: the trainer is told nothing and uses the method's own default.
-        r.network = None;
-        let checked = check_request(&r, &datasets(), &sha).unwrap();
-        assert!(build_spec(&checked, &split, &BTreeMap::new())["network"].is_null());
-        // Settings that cannot be trained are refused here, and settings for a method without a network are too.
-        r.network =
-            Some(serde_json::from_value(serde_json::json!({"hidden": [{"units": 0}]})).unwrap());
-        assert!(
-            check_request(&r, &datasets(), &sha)
-                .unwrap_err()
-                .contains("units")
-        );
-        r.backend = "logreg".into();
-        r.network = Some(NetworkSpec::default());
-        assert!(
-            check_request(&r, &datasets(), &sha)
-                .unwrap_err()
-                .contains("neural network methods")
-        );
-    }
-
-    #[test]
-    fn a_saved_request_rebuilds_the_same_plan_so_a_model_can_be_edited_later() {
-        let mut r = request();
-        r.backend = "torch-mlp".into();
-        r.sources.push(StreamSource::WatchPpg);
-        r.ppg_channels = Some(vec!["green".into()]);
-        r.spike_method = Some("morphological_top_hat".into());
-        r.features = Some(vec!["accel_x_std".into(), "ppg_green_spike_z".into()]);
-        r.network = Some(
-            serde_json::from_value(
-                serde_json::json!({"hidden": [{"units": 9, "activation": "tanh"}]}),
-            )
-            .unwrap(),
-        );
-        r.research = true;
-        let saved = serde_json::to_vec(&r).unwrap();
-        let back: TrainRequest = serde_json::from_slice(&saved).unwrap();
-        let (a, b) = (
-            check_request(&r, &datasets(), &sha).unwrap(),
-            check_request(&back, &datasets(), &sha).unwrap(),
-        );
-        assert_eq!(a.input, b.input);
-        assert_eq!(a.network, b.network);
-        assert_eq!((a.spike_method, a.research), (b.spike_method, b.research));
-        let split_a = plan_split(&a.recordings, &a.mapping, &a.target).unwrap();
-        let split_b = plan_split(&b.recordings, &b.mapping, &b.target).unwrap();
-        assert_eq!(split_a.train, split_b.train); // the split is the same, so the edited model is scored on the same held-out windows
-        assert_eq!(split_a.evaluation, split_b.evaluation);
-    }
-
-    #[test]
-    fn a_list_of_edits_is_checked_before_anything_is_started() {
-        let edit = |kind: &str| serde_json::json!({"kind": kind});
-        assert!(check_edits(&[edit("disableInput"), edit("setWeight")], None).is_ok());
-        assert!(
-            check_edits(&[], None)
-                .unwrap_err()
-                .contains("nothing to change")
-        );
-        assert!(
-            check_edits(&[edit("teleport")], None)
-                .unwrap_err()
-                .contains("edit 1: unknown kind")
-        );
-        assert!(
-            check_edits(&[edit("setBias"), serde_json::json!({"nope": 1})], None)
-                .unwrap_err()
-                .contains("edit 2")
-        );
-        let many: Vec<_> = (0..201).map(|_| edit("setBias")).collect();
-        assert!(
-            check_edits(&many, None)
-                .unwrap_err()
-                .contains("at most 200")
-        );
-        // Fine-tuning on its own is a change, and is checked for what it is.
-        let tune = serde_json::json!({"epochs": 20, "learningRate": 0.01, "freezeDense": [0]});
-        assert!(check_edits(&[], Some(&tune)).is_ok());
-        assert!(check_edits(&[edit("setBias")], Some(&tune)).is_ok());
-        assert!(
-            check_edits(&[], Some(&serde_json::json!({"momentum": 1})))
-                .unwrap_err()
-                .contains("unknown fine-tuning setting")
-        );
-        assert!(
-            check_edits(&[], Some(&serde_json::json!(5)))
-                .unwrap_err()
-                .contains("must be an object")
-        );
-    }
-
-    #[test]
-    fn a_dense_method_can_read_the_datasets_columns_themselves_one_neuron_each() {
-        let mut r = request();
-        r.backend = "torch-mlp".into();
-        r.input_mode = Some("raw".into());
-        r.sources = vec![
-            StreamSource::WatchPpg,
-            StreamSource::WatchAcceleration,
-            StreamSource::WatchGyroscope,
-            StreamSource::WatchOrientation,
-        ];
-        let checked = check_request(&r, &datasets(), &sha).unwrap();
-        // The thirteen columns of a dataset are thirteen inputs at the default of one step.
-        assert_eq!(checked.input.features.len(), 13);
-        assert_eq!(checked.input.features[0], "ppg_green");
-        assert_eq!(checked.input.features[12], "quat_z");
-        assert_eq!(checked.grid_steps, 1);
-        assert!(checked.raw_columns);
-        let split = plan_split(&checked.recordings, &checked.mapping, &checked.target).unwrap();
-        let spec = build_spec(&checked, &split, &BTreeMap::new());
-        assert_eq!(
-            (spec["inputMode"].as_str(), spec["gridSteps"].as_u64()),
-            (Some("raw"), Some(1))
-        );
-
-        // Chosen columns, and several steps: each column at each step is a neuron.
-        r.features = Some(vec!["accel_x".into(), "gyro_z".into()]);
-        r.grid_steps = Some(8);
-        let checked = check_request(&r, &datasets(), &sha).unwrap();
-        assert_eq!(checked.input.features, ["accel_x", "gyro_z"]);
-        assert_eq!(checked.grid_steps, 8);
-
-        // Limits, and a mode that does not exist.
-        r.grid_steps = Some(65);
-        assert!(
-            check_request(&r, &datasets(), &sha)
-                .unwrap_err()
-                .contains("samples per window")
-        );
-        r.grid_steps = Some(0);
-        assert!(
-            check_request(&r, &datasets(), &sha)
-                .unwrap_err()
-                .contains("samples per window")
-        );
-        r.grid_steps = None;
-        r.input_mode = Some("pixels".into());
-        assert!(
-            check_request(&r, &datasets(), &sha)
-                .unwrap_err()
-                .contains("unknown input mode")
-        );
-        // Statistics stay the default.
-        r.input_mode = None;
-        r.features = None;
-        assert!(!check_request(&r, &datasets(), &sha).unwrap().raw_columns);
     }
 
     #[test]
     fn a_recording_listed_twice_counts_once() {
         let mut r = request();
         r.dataset_ids.push("s1".into());
-        assert_eq!(
-            check_request(&r, &datasets(), &sha)
-                .unwrap()
-                .recordings
-                .len(),
-            6
-        );
+        assert_eq!(check_request(&r, &datasets(), &sha).unwrap().recordings.len(), 6);
     }
 
     #[test]
-    fn the_spec_carries_the_sealed_split_roles_and_window_for_the_trainer() {
-        let checked = check_request(&request(), &datasets(), &sha).unwrap();
+    fn the_spec_carries_the_sealed_split_roles_and_the_one_backend_for_the_trainer() {
+        let mut r = request();
+        r.label_offset_ms = Some(-250);
+        r.research = true;
+        let checked = check_request(&r, &datasets(), &sha).unwrap();
         let split = plan_split(&checked.recordings, &checked.mapping, &checked.target).unwrap();
         let paths: BTreeMap<String, PathBuf> = checked
             .recordings
             .iter()
-            .map(|r| {
-                (
-                    r.id.to_string(),
-                    PathBuf::from(format!("/data/{}.csv", r.id)),
-                )
-            })
+            .map(|r| (r.id.to_string(), PathBuf::from(format!("/data/{}.csv", r.id))))
             .collect();
         let spec = build_spec(&checked, &split, &paths);
         assert_eq!(spec["version"], 1);
-        assert_eq!(spec["target"], "snap");
-        assert_eq!(spec["negatives"], serde_json::json!(["idle"]));
-        assert_eq!(spec["excludes"], serde_json::json!([]));
-        assert_eq!(
-            spec["sources"],
-            serde_json::json!(["watchAcceleration", "watchGyroscope"])
-        );
-        assert_eq!(spec["window"]["windowMs"], 500);
-        assert_eq!(spec["backend"], "logreg");
-        assert_eq!(spec["movementOnly"], false);
+        assert_eq!(spec["target"], "pinch");
+        assert_eq!(spec["negatives"], serde_json::json!(["fist"]));
+        assert_eq!(spec["sources"], serde_json::json!(["watchPpg"]));
+        assert_eq!(spec["backend"], BACKEND);
+        assert_eq!((spec["labelOffsetMs"].as_i64(), spec["research"].as_bool()), (Some(-250), Some(true)));
         let listed = |key: &str| spec[key].as_array().unwrap().len();
         assert_eq!(listed("train") + listed("evaluation"), 6);
-        assert_eq!(spec["recordings"].as_object().unwrap().len(), 6);
         assert_eq!(spec["recordings"]["s1"], "/data/s1.csv");
-    }
-
-    fn labels_of(id: &str) -> Option<Vec<String>> {
-        match id {
-            "x1" => Some(vec!["snap".into(), "idle".into()]),
-            "x2" => Some(vec!["snap".into(), "mystery".into()]),
-            _ => None,
-        }
-    }
-
-    fn extras(ids: &[&str], weight: Option<f64>, roles: &[(&str, &str)]) -> Extras {
-        Extras {
-            ids: ids.iter().map(ToString::to_string).collect(),
-            weight,
-            roles: roles
-                .iter()
-                .map(|(l, r)| (l.to_string(), r.to_string()))
-                .collect(),
-        }
-    }
-
-    #[test]
-    fn extra_recordings_join_the_ones_that_may_only_train_and_are_weighted() {
-        let settings = || Some(serde_json::json!({ "epochs": 5 }));
-        let (extended, tuned) = with_extras(
-            request(),
-            &extras(&["x1"], Some(3.0), &[]),
-            &labels_of,
-            settings(),
-        )
-        .unwrap();
-        assert_eq!(extended.train_only, ["x1"]);
-        assert!(extended.dataset_ids.contains(&"x1".to_string()));
-        let tuned = tuned.unwrap();
-        assert_eq!(
-            (
-                tuned["extraRecordings"].clone(),
-                tuned["extraWeight"].clone()
-            ),
-            (serde_json::json!(["x1"]), serde_json::json!(3.0))
-        );
-        // A second fine-tune of that model keeps them, and a recording cannot be added twice.
-        let none = extras(&[], None, &[]);
-        let (again, _) = with_extras(extended.clone(), &none, &labels_of, settings()).unwrap();
-        assert_eq!(again.train_only, ["x1"]);
-        assert!(
-            with_extras(
-                extended.clone(),
-                &extras(&["x1"], None, &[]),
-                &labels_of,
-                settings()
-            )
-            .is_err()
-        );
-        assert!(
-            with_extras(
-                request(),
-                &extras(&["x1"], Some(11.0), &[]),
-                &labels_of,
-                settings()
-            )
-            .is_err()
-        );
-        assert!(with_extras(request(), &extras(&["x1"], None, &[]), &labels_of, None).is_err());
-        assert!(
-            with_extras(
-                request(),
-                &extras(&["nope"], None, &[]),
-                &labels_of,
-                settings()
-            )
-            .is_err()
-        );
-    }
-
-    #[test]
-    fn a_model_trained_with_extra_recordings_can_still_be_edited_by_hand() {
-        let tuned = Some(serde_json::json!({}));
-        let (with_corrections, _) =
-            with_extras(request(), &extras(&["x1"], None, &[]), &labels_of, tuned).unwrap();
-        // A hand edit: no new recordings and no fine-tune plan.
-        let (edited, settings) = with_extras(
-            with_corrections.clone(),
-            &extras(&[], None, &[]),
-            &labels_of,
-            None,
-        )
-        .unwrap();
-        assert_eq!(edited.train_only, ["x1"]);
-        assert!(settings.is_none());
-    }
-
-    #[test]
-    fn a_label_the_model_has_no_role_for_needs_one_chosen_and_then_joins_the_mapping() {
-        let settings = || Some(serde_json::json!({}));
-        let refused = with_extras(
-            request(),
-            &extras(&["x2"], None, &[]),
-            &labels_of,
-            settings(),
-        )
-        .unwrap_err();
-        assert!(refused.contains("'mystery'") && refused.contains("no role"));
-        assert!(
-            with_extras(
-                request(),
-                &extras(&["x2"], None, &[("mystery", "target")]),
-                &labels_of,
-                settings()
-            )
-            .is_err()
-        );
-        let (as_negative, _) = with_extras(
-            request(),
-            &extras(&["x2"], None, &[("mystery", "negative")]),
-            &labels_of,
-            settings(),
-        )
-        .unwrap();
-        assert!(as_negative.negatives.contains(&"mystery".to_string()));
-        let (as_excluded, _) = with_extras(
-            request(),
-            &extras(&["x2"], None, &[("mystery", "exclude")]),
-            &labels_of,
-            settings(),
-        )
-        .unwrap();
-        assert!(
-            as_excluded.excludes.contains(&"mystery".to_string())
-                && !as_excluded.negatives.contains(&"mystery".to_string())
-        );
-    }
-
-    #[test]
-    fn a_label_offset_reaches_the_trainer_and_must_stay_within_the_limit() {
-        let mut r = request();
-        let checked = check_request(&r, &datasets(), &sha).unwrap();
-        let split = plan_split(&checked.recordings, &checked.mapping, &checked.target).unwrap();
-        assert_eq!(
-            build_spec(&checked, &split, &BTreeMap::new())["labelOffsetMs"],
-            0
-        );
-        r.label_offset_ms = Some(-250);
-        let moved = check_request(&r, &datasets(), &sha).unwrap();
-        assert_eq!(
-            build_spec(&moved, &split, &BTreeMap::new())["labelOffsetMs"],
-            -250
-        );
-        for bad in [1501, -1501] {
-            r.label_offset_ms = Some(bad);
-            assert!(
-                check_request(&r, &datasets(), &sha)
-                    .unwrap_err()
-                    .contains("label offset")
-            );
-        }
-        r.label_offset_ms = Some(1500);
-        assert!(check_request(&r, &datasets(), &sha).is_ok());
     }
 
     #[test]
     fn the_trainers_timing_scores_become_the_numbers_shown_and_a_refusal_becomes_its_reason() {
         let line = r#"{"outcome":"ok","scores":[{"offsetMs":0,"auc":0.8,"windows":900,"positives":500},{"offsetMs":250,"auc":null,"windows":0,"positives":0}]}"#;
         let scores = offsets_from(Some(line)).unwrap();
-        assert_eq!(
-            (scores[0].offset_ms, scores[0].auc, scores[0].windows),
-            (0, Some(0.8), 900)
-        );
+        assert_eq!((scores[0].offset_ms, scores[0].auc, scores[0].windows), (0, Some(0.8), 900));
         assert_eq!(scores[1].auc, None);
-        let refused = offsets_from(Some(
-            r#"{"outcome":"refused","message":"too few recordings"}"#,
-        ))
-        .unwrap_err();
+        let refused = offsets_from(Some(r#"{"outcome":"refused","message":"too few recordings"}"#)).unwrap_err();
         assert_eq!(refused, "too few recordings");
         assert!(offsets_from(None).is_err() && offsets_from(Some("not json")).is_err());
     }

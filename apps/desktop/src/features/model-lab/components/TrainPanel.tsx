@@ -7,9 +7,8 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { Label } from "../../../components/ui/label";
-import { describeDesign, type DesignPreview, type NetworkDesign } from "../designs";
 import { useTrainingRun } from "../hooks/useTrainingRun";
-import { buildRequest, hasLabel, otherLabels, recordingsWithLabel, type OtherRole, type TrainPlan, type TrainerEnvironment } from "../training";
+import { PULSE_MODEL, buildRequest, hasLabel, otherLabels, recordingsWithLabel, type OtherRole, type TrainPlan, type TrainerEnvironment } from "../training";
 import { datasetLabels, inImportOrder, recordingNumber, type DatasetLabel, type DatasetSummary } from "../types";
 import { LabelTiming } from "./LabelTiming";
 import { TrainingRunView } from "./TrainingRunView";
@@ -18,16 +17,16 @@ type TrainPanelProps = {
   desktopAvailable: boolean;
   labels: DatasetLabel[];
   datasets: DatasetSummary[];
-  /** Opens the Network lab, where the designs are made. */
+  /** Opens the Network lab, where the model's pipeline is shown. */
   onOpenNetworkLab?: () => void;
 };
 
 const NATIVE_SELECT = "recipe-select";
 
 /**
- * Train a model for one label from your recordings. You choose the label, the recordings, what each other label means and a
- * network design (made in the Network lab); the app then picks which recordings train and which test (never the same one)
- * and shows you that before anything runs. The result is a Draft you review before it can do anything.
+ * Train a label's model from your recordings. You choose the label, the recordings and what each other label means; the
+ * model is always the PPG pinch-start model. The app picks which recordings train and which test (never the same one) and
+ * shows you that before anything runs. The result is a Draft you review before it can do anything.
  */
 export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLab }: TrainPanelProps) {
   const uid = useId();
@@ -36,9 +35,6 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
   const [target, setTarget] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [roles, setRoles] = useState<Record<string, OtherRole>>({});
-  const [designs, setDesigns] = useState<NetworkDesign[]>([]);
-  const [designId, setDesignId] = useState("");
-  const [summary, setSummary] = useState<DesignPreview | null>(null);
   const [research, setResearch] = useState(false);
   const [labelOffset, setLabelOffset] = useState(0);
   const [plan, setPlan] = useState<TrainPlan | null>(null);
@@ -48,37 +44,13 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
   const usable = labels.filter((label) => label.archivedAt === null);
   const candidates = inImportOrder(datasets.filter((dataset) => datasetLabels(dataset).length > 0));
   const others = otherLabels(datasets, selected, target);
-  const design = designs.find((d) => d.id === designId) ?? null;
-  // The design's own choices are filled in by the desktop; what is sent here is only its id (and the fields every request has).
-  const request = target === "" || design === null ? null : {
-    ...buildRequest({ label: target, datasetIds: [...selected], others, roles, method: design.method, sources: design.sources, research }),
-    designId: design.id,
-    ...(labelOffset !== 0 ? { labelOffsetMs: labelOffset } : {}),
-  };
+  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, research, labelOffsetMs: labelOffset });
   const requestKey = JSON.stringify(request);
 
   useEffect(() => {
     if (!desktopAvailable) return;
     void invoke<TrainerEnvironment>("check_label_trainer").then(setEnvironment).catch(() => undefined);
-    void invoke<NetworkDesign[]>("list_network_designs")
-      .then((list) => {
-        const all = Array.isArray(list) ? list : [];
-        setDesigns(all);
-        setDesignId((current) => current || all[0]?.id || "");
-      })
-      .catch(() => undefined);
   }, [desktopAvailable]);
-
-  // What the chosen design reads, in words.
-  useEffect(() => {
-    setSummary(null);
-    if (!desktopAvailable || design === null) return;
-    let stale = false;
-    void invoke<DesignPreview>("preview_network_design", { design })
-      .then((found) => { if (!stale) setSummary(found); })
-      .catch(() => undefined);
-    return () => { stale = true; };
-  }, [desktopAvailable, design]);
 
   // What the app would do with this choice, shown before anything runs.
   useEffect(() => {
@@ -89,7 +61,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
     let stale = false;
     void invoke<TrainPlan>("plan_label_training", { request })
       .then((next) => { if (!stale) setPlan(next); })
-      .catch((err) => { if (!stale) setPlan({ train: [], evaluation: [], problem: String(err), available: [], features: [] }); });
+      .catch((err) => { if (!stale) setPlan({ train: [], evaluation: [], problem: String(err), inputs: PULSE_MODEL.inputs }); });
     return () => { stale = true; };
     // `requestKey` stands for every part of `request`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -121,7 +93,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
     }
   };
 
-  const canStart = desktopAvailable && request !== null && plan !== null && plan.problem === null && summary?.problem == null && running === null && environment?.available !== false;
+  const canStart = desktopAvailable && request !== null && plan !== null && plan.problem === null && running === null && environment?.available !== false;
   const name = (id: string) => datasets.find((dataset) => dataset.id === id)?.originalFilename ?? id;
 
   return (
@@ -132,7 +104,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
           description="Teach the app a label from your recordings."
           help={{
             label: "About training",
-            content: "You choose the label, the recordings, what each other label means and what the model may read. The app decides which recordings train and which test, never the same one, so the score is about recordings the model has not seen. The result is a Draft: it does nothing until you approve and activate it. Training runs on this computer and needs uv; running a model does not.",
+            content: "You choose the label, the recordings and what each other label means. The app decides which recordings train and which test, never the same one, so the score is about recordings the model has not seen. The result is a Draft: it does nothing until you approve and activate it. A model that does not pass the checks for going live can still be activated, but it only runs in Monitor. Training runs on this computer and needs uv; running a model does not.",
           }}
         />
       </CardHeader>
@@ -144,6 +116,15 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
           </Alert>
         )}
         {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
+
+        <section aria-label="The model" className="rounded-md border p-3 text-sm">
+          <p><strong>{PULSE_MODEL.name}</strong> <Badge variant="secondary">pulse sensor only</Badge></p>
+          <p className="field-hint">{PULSE_MODEL.summary}</p>
+          <p className="field-hint">
+            In the research (37 recordings, 20 tests on recordings it never saw) it scored a worst-case AUC of {PULSE_MODEL.research.worstAuc} and caught about {Math.round(PULSE_MODEL.research.recall * 100)}% of gesture starts, with about {Math.round(PULSE_MODEL.research.falsePerMinute)} false alarms a minute.{" "}
+            {onOpenNetworkLab ? <Button type="button" variant="link" className="h-auto p-0" onClick={onOpenNetworkLab}>See its pipeline in the Network lab</Button> : null}
+          </p>
+        </section>
 
         <div className="field">
           <div className="field-head"><Label htmlFor={`${uid}-label`} required>Label to teach</Label></div>
@@ -177,7 +158,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
             {others.length > 0 && (
               <fieldset className="flex flex-col gap-2">
                 <legend className="label">What the other labels mean</legend>
-                <p className="field-hint">“Something else” teaches the model what is not the gesture. “Leave out” ignores that part of the recordings. Nothing is assumed: each label here has a role.</p>
+                <p className="field-hint">“Something else” teaches the model what is not the gesture: their starts are the hardest thing for it to tell apart. “Leave out” ignores that part of the recordings. Nothing is assumed: each label here has a role.</p>
                 <ul className="flex flex-col gap-2" aria-label="Roles of the other labels">
                   {others.map((other) => (
                     <li key={other} className="flex items-center gap-2 text-sm">
@@ -191,18 +172,6 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
                 </ul>
               </fieldset>
             )}
-
-            <div className="field">
-              <div className="field-head"><Label htmlFor={`${uid}-design`} required>Network design</Label></div>
-              <select id={`${uid}-design`} className={NATIVE_SELECT} value={designId} disabled={running !== null} onChange={(event) => setDesignId(event.target.value)}>
-                {designs.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
-              </select>
-              {design && <p className="field-hint">{design.description ? `${design.description} ` : ""}{describeDesign(design, summary)}</p>}
-              <p className="field-hint">
-                A design says what the model reads, how its pulse spikes are pulled out, the window length and the network. Make or change designs in the{" "}
-                {onOpenNetworkLab ? <Button type="button" variant="link" className="h-auto p-0" onClick={onOpenNetworkLab}>Network lab</Button> : "Network lab"}.
-              </p>
-            </div>
 
             <LabelTiming request={request} offset={labelOffset} onOffset={setLabelOffset} disabled={running !== null} />
 
@@ -234,7 +203,6 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
 
             <div className="flex flex-wrap items-center gap-2">
               {running === null && <Button type="button" disabled={!canStart} onClick={() => void start()}>Train model</Button>}
-              {design === null && <span className="field-error">Choose a network design.</span>}
             </div>
           </>
         )}

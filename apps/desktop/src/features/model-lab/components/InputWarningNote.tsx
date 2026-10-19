@@ -1,13 +1,12 @@
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
-import { describeInput, STREAM_TITLES } from "../featureInfo";
+import { describeInput } from "../inspection";
 import type { InputWarning } from "../labelModels";
 
 const number = (value: number) => Math.abs(value) >= 100 ? Math.round(value).toLocaleString("en-US") : value.toPrecision(3);
 
-/** How an input is named to a person: "Pulse sensor · Green signal". */
+/** How an input is named to a person: "Pulse sensor · green slope against the last 1 s: …". */
 export function inputTitle(name: string): string {
-  const info = describeInput(name);
-  return `${STREAM_TITLES[info.stream]} · ${info.group} ${info.short}`;
+  return `Pulse sensor · ${describeInput(name)}`;
 }
 
 /**
@@ -25,7 +24,7 @@ export function InputWarningNote({ warning }: { warning: InputWarning }) {
             <li key={input.name}><strong>{inputTitle(input.name)}</strong> is {number(input.value)}; in training it was {number(input.low)} to {number(input.high)}.</li>
           ))}
         </ul>
-        <p className="mt-1">Usually the watch sits differently, or the sensor&apos;s level has drifted since the training recordings. Train on recordings made now, or use inputs that do not depend on the absolute level (for example the pulse level against the recent past).</p>
+        <p className="mt-1">Usually the watch sits differently or touches the skin less well than in the training recordings, so the pulse moves in ways the model never saw. Check the fit, or train on recordings made the way you wear it now.</p>
       </AlertDescription>
     </Alert>
   );

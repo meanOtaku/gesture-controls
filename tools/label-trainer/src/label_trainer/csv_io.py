@@ -83,8 +83,7 @@ def _parse_rows_fast(
     """Parses a fully valid document in bulk, or returns None if anything is irregular.
 
     "Irregular" is anything the checked loop would reject: a row with the wrong number of
-    fields, a non-integer timestamp, a timestamp that goes backwards, a non-numeric value,
-    or an empty label. Returning None (never raising) keeps this an optimization only.
+    fields, a non-integer timestamp, a timestamp that goes backwards, or a non-numeric value. Returning None (never raising) keeps this an optimization only.
     """
     try:
         rows = list(csv.reader(data_rows))
@@ -100,8 +99,6 @@ def _parse_rows_fast(
             for column in NUMERIC_COLUMNS
         }
         labels = columns[header_index[LABEL_COLUMN]]
-        if not all(labels):
-            return None
         raw_labels = np.empty(len(labels), dtype=object)
         raw_labels[:] = labels
         return timestamps_ns, channel_values, raw_labels
@@ -254,10 +251,8 @@ def load_recording(path: str | Path) -> Recording:
                     f"{path}:{line_number}: malformed {column!r} value {raw_value!r}"
                 ) from exc
 
-        label = fields[header_index[LABEL_COLUMN]]
-        if not label:
-            raise CsvFormatError(f"{path}:{line_number}: missing {LABEL_COLUMN!r} value")
-        raw_labels[row_offset] = label
+        # An empty label is time between gestures: no gesture is held there.
+        raw_labels[row_offset] = fields[header_index[LABEL_COLUMN]]
 
     # Sequence numbers come from independent per-channel counters on the
     # recorder side (orientation vs. PPG batches), so they are not globally

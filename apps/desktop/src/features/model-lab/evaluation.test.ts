@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import linear from "./fixtures/inspection-linear.json";
-import conv from "./fixtures/inspection-conv.json";
+import trees from "./fixtures/inspection-trees.json";
 import { area, calibration, confusionAt, counts, curvesCsv, histogram, perRecording, prCurve, recordingsCsv, rocAuc, rocCurve, scoresCsv, thresholdSweep, toCsv } from "./evaluation";
 
 const p = [0.9, 0.8, 0.7, 0.6, 0.55, 0.4, 0.3, 0.2];
@@ -69,7 +68,7 @@ describe("curves and rates", () => {
 
 describe("what the trainer saved", () => {
   it("is reproduced by these functions: the AUC the trainer reported is the area under this ROC curve", () => {
-    for (const data of [linear, conv]) {
+    for (const data of [trees]) {
       const { probabilities, labels, metrics } = data.evaluation;
       expect(rocAuc(probabilities, labels)).toBeCloseTo(metrics.rocAuc as number, 3);
       const threshold = data.evaluation.threshold;

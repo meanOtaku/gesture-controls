@@ -1,93 +1,31 @@
-import { useMemo, useState } from "react";
-import { Button } from "../../../components/ui/button";
-import { Checkbox } from "../../../components/ui/checkbox";
-import { describeColumn, describeInput, STREAM_TITLES } from "../featureInfo";
-import { EMPHASIS_FACTORS } from "../edits";
-import type { Inspection } from "../inspection";
+import { describeInput, type Inspection } from "../inspection";
 
 /**
- * Every input of the model: what it is, what value it takes, what the model scales it by, how much it matters (how far the
- * held-out ROC AUC falls when it is shuffled between windows) and, for a linear model, its weight.
+ * The inputs the trees lean on most: how much each one's splits cut the trees' uncertainty, as a share of all of them
+ * (mean decrease in impurity). The model reads all 1,701; these are the ones that matter most.
  */
-export function InspectInputs({ inspection, spikeLabel, editing = false, switchedOff, onToggleInput, emphasis, onEmphasis }: { inspection: Inspection; spikeLabel?: string; /** Adds columns to switch an input off and to emphasise it. */ editing?: boolean; switchedOff?: Set<string>; onToggleInput?: (name: string) => void; /** The strength chosen for each input so far (absent means as the model has it). */ emphasis?: Map<string, number>; onEmphasis?: (name: string, factor: number) => void }) {
-  const [byImportance, setByImportance] = useState(true);
-  const importance = useMemo(() => new Map(inspection.importance.map((entry) => [entry.name, entry])), [inspection]);
-  const linear = inspection.network.kind === "linear";
-  const columns = inspection.inputKind === "columns";
-  const steps = inspection.gridSteps ?? 1;
-  const rows = useMemo(() => {
-    const list = inspection.inputs.map((input, index) => ({
-      input,
-      info: columns ? { ...describeInput(input.name, spikeLabel), text: describeColumn(input.name, steps) } : describeInput(input.name, spikeLabel),
-      importance: importance.get(input.name),
-      weight: linear ? (columns ? inspection.network.output.weights.slice(index * steps, (index + 1) * steps).reduce((sum, row) => sum + (row[0] ?? 0), 0) : inspection.network.output.weights[index]?.[0]) : undefined,
-    }));
-    return byImportance ? [...list].sort((a, b) => (b.importance?.aucDrop ?? 0) - (a.importance?.aucDrop ?? 0)) : list;
-  }, [inspection, importance, linear, spikeLabel, byImportance, columns, steps]);
-  const biggest = Math.max(0.0001, ...inspection.importance.map((entry) => Math.abs(entry.aucDrop)));
-  const channels = inspection.inputKind === "channels" || inspection.inputKind === "columns";
-
+export function InspectInputs({ inspection }: { inspection: Inspection }) {
+  const biggest = Math.max(1e-9, ...inspection.importance.map((entry) => entry.importance));
   return (
     <section aria-label="Inputs" className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-3">
-        <h3 className="text-base font-semibold">Inputs ({inspection.inputs.length})</h3>
-        <Button type="button" variant="outline" size="sm" onClick={() => setByImportance((value) => !value)}>
-          {byImportance ? "Show in the model's own order" : "Sort by importance"}
-        </Button>
-      </div>
+      <h3 className="text-base font-semibold">What it leans on</h3>
       <p className="field-hint">
-        Importance is how far the ROC AUC on the held-out windows falls when this {channels ? "channel" : "input"} is shuffled between windows, so the model cannot use it. Near zero means the model does without it (or another input says the same thing).
-        {channels ? " The model scales each channel by the average and spread shown, after taking the window's own average away if that was chosen." : " The model scales each input by the average and spread shown before it uses it."}
+        The model reads {inspection.inputCount.toLocaleString("en-US")} inputs, all from the pulse sensor, and {inspection.trees} trees vote on each moment. These are the {inspection.importance.length} inputs whose splits do the most to tell a gesture&apos;s start from the rest, as a share of everything the trees learn.
       </p>
-      {editing && <p className="field-hint">Emphasis multiplies everything that leaves an input for the first layer: above 1 the model leans on it more, below 1 less. It changes the model's answers straight away, so score it, and fine-tune it to let the rest of the model adjust (the emphasis itself is held where you set it).</p>}
       <div className="max-w-full overflow-auto">
-        <table className="w-full text-sm" aria-label="Inputs of the model">
-          <thead>
-            <tr className="text-left">
-              <th className="pr-3">Input</th>
-              <th className="pr-3">What it takes as its value</th>
-              {columns && <th className="pr-3">Neurons</th>}
-              <th className="pr-3">Scaled by (average, spread)</th>
-              <th className="pr-3">Importance</th>
-              {linear && <th className="pr-3">{columns ? "Weight (all its readings)" : "Weight"}</th>}
-              {editing && <th className="pr-3">Emphasis</th>}
-              {editing && <th className="pr-3">Switch off</th>}
-            </tr>
-          </thead>
+        <table className="w-full text-sm" aria-label="Most important inputs">
+          <thead><tr className="text-left"><th className="pr-3">Input</th><th className="pr-3">What it is</th><th className="pr-3">Share</th></tr></thead>
           <tbody>
-            {rows.map(({ input, info, importance: entry, weight }) => (
-              <tr key={input.name} className="align-top border-t border-input/40">
-                <th scope="row" className="pr-3 text-left font-medium">{STREAM_TITLES[info.stream]} · {info.group} · {info.short}</th>
-                <td className="pr-3 text-muted-foreground">{info.text}</td>
-                {columns && <td className="pr-3">{input.neurons ?? steps}</td>}
-                <td className="pr-3 whitespace-nowrap">{input.mean.toPrecision(4)}, {input.std.toPrecision(3)}</td>
-                <td className="pr-3 whitespace-nowrap">
-                  {entry ? (
-                    <span className="inline-flex items-center gap-2" title={`AUC falls by ${entry.aucDrop.toFixed(3)} (± ${entry.aucDropStd.toFixed(3)}) when shuffled`}>
-                      <span aria-hidden="true" className="inline-block h-2 rounded-sm" style={{ width: `${Math.max(2, (Math.abs(entry.aucDrop) / biggest) * 90)}px`, background: entry.aucDrop >= 0 ? "#ff6f91" : "#999" }} />
-                      {entry.aucDrop.toFixed(3)}
-                    </span>
-                  ) : "–"}
+            {inspection.importance.map((entry) => (
+              <tr key={entry.name} className="align-top border-t border-input/40">
+                <th scope="row" className="pr-3 text-left font-mono text-xs font-normal">{entry.name}</th>
+                <td className="pr-3">{describeInput(entry.name)}</td>
+                <td className="pr-3">
+                  <span className="inline-flex items-center gap-2">
+                    <span aria-hidden="true" className="inline-block h-2 rounded-sm" style={{ width: `${Math.max(2, (entry.importance / biggest) * 80)}px`, background: "#ff6f91" }} />
+                    {(entry.importance * 100).toFixed(1)}%
+                  </span>
                 </td>
-                {linear && <td className="pr-3 whitespace-nowrap">{weight === undefined ? "–" : weight.toFixed(3)}</td>}
-                {editing && (
-                  <td className="pr-3">
-                    <select
-                      className="recipe-select"
-                      aria-label={`Emphasis of ${STREAM_TITLES[info.stream]} ${info.group} ${info.short}`}
-                      value={emphasis?.get(input.name) ?? 1}
-                      disabled={switchedOff?.has(input.name) ?? false}
-                      onChange={(event) => onEmphasis?.(input.name, Number(event.target.value))}
-                    >
-                      {EMPHASIS_FACTORS.map((factor) => <option key={factor} value={factor}>{factor === 1 ? "As it is (1×)" : `${factor}×`}</option>)}
-                    </select>
-                  </td>
-                )}
-                {editing && (
-                  <td className="pr-3">
-                    <Checkbox checked={switchedOff?.has(input.name) ?? false} onCheckedChange={() => onToggleInput?.(input.name)} aria-label={`Switch off ${STREAM_TITLES[info.stream]} ${info.group} ${info.short}`} />
-                  </td>
-                )}
               </tr>
             ))}
           </tbody>
@@ -97,17 +35,13 @@ export function InspectInputs({ inspection, spikeLabel, editing = false, switche
   );
 }
 
-/** For a model that was imported or trained before inspections: the inputs it declares, in words. */
-export function DeclaredInputs({ names, spikeLabel }: { names: string[]; spikeLabel?: string }) {
+/** What a model without a saved inspection declares it reads. */
+export function DeclaredInputs({ names }: { names: string[] }) {
+  if (names.length === 0) return null;
   return (
-    <section aria-label="Inputs" className="flex flex-col gap-2">
+    <section aria-label="Declared inputs" className="flex flex-col gap-2">
       <h3 className="text-base font-semibold">Inputs ({names.length})</h3>
-      <ul className="flex flex-col gap-1 text-sm" aria-label="Inputs of the model">
-        {names.map((name) => {
-          const info = describeInput(name, spikeLabel);
-          return <li key={name}><strong>{STREAM_TITLES[info.stream]} · {info.group} · {info.short}</strong> <span className="text-muted-foreground">{info.text}</span></li>;
-        })}
-      </ul>
+      <p className="field-hint">What its manifest says it reads, for example {describeInput(names[0])}.</p>
     </section>
   );
 }

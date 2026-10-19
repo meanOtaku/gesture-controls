@@ -9,7 +9,7 @@
 //! that label without a model: it fails closed.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -130,6 +130,93 @@ impl From<&ModelLoadFailure> for LoadFailureView {
     }
 }
 
+/// Whether the bundle in `dir` is the kind of model this app runs (the PPG pinch-start trees), from its manifest alone.
+fn is_current_bundle(dir: &Path) -> bool {
+    std::fs::read(dir.join("manifest.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+        .is_some_and(|m| {
+            m["model"]["format"] == label_inference::MODEL_FORMAT
+                && m["preprocessing"]["kind"] == label_inference::PREPROCESSING_KIND
+        })
+}
+
+/// The files of the stores that belonged to the old kinds of model (network designs, fine-tune plans).
+const OLD_STORE_FILES: [&str; 2] = ["network-designs.json", "fine-tune-plans.json"];
+
+/// Removes every model this app can no longer run, with the training runs that made them, from the registry and then from
+/// disk: a version whose bundle is not the PPG pinch-start trees, a run sealed with other inputs, the legacy quarantined
+/// models, and the old network-design and fine-tune stores. Recordings and labels are never touched. Does nothing when there
+/// is nothing old, so it runs at every start.
+fn purge_old_models(store: &mut RegistryStore<FileStore>, dir: &Path) -> Result<(), String> {
+    let contract = label_inference::ppg_onset_contract();
+    let purged = store
+        .mutate(|registry| {
+            Ok(registry.purge(
+                |version| {
+                    label_inference::removable_model_dir(dir, version)
+                        .is_some_and(|path| is_current_bundle(&path))
+                },
+                |_, snapshot| snapshot.is_some_and(|s| s.input == contract),
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+    for version in &purged.versions {
+        if let Some(path) = label_inference::removable_model_dir(dir, version) {
+            let _ = std::fs::remove_dir_all(path);
+        }
+    }
+    for run in &purged.runs {
+        let _ = std::fs::remove_dir_all(dir.join("training-runs").join(run.as_str()));
+    }
+    // Run folders the registry no longer lists (their records were deleted before) whose spec names another backend.
+    let mut leftovers = 0;
+    let runs_dir = dir.join("training-runs");
+    if let Ok(entries) = std::fs::read_dir(&runs_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let listed = model_lab_core::RunId::new(name.clone())
+                .is_ok_and(|id| store.registry().runs.contains_key(&id));
+            if listed || !entry.path().is_dir() {
+                continue;
+            }
+            let backend = std::fs::read(entry.path().join("spec.json"))
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+                .and_then(|spec| spec["backend"].as_str().map(str::to_string));
+            if backend.is_some_and(|b| b != crate::label_training::BACKEND) {
+                let _ = std::fs::remove_dir_all(entry.path());
+                leftovers += 1;
+            }
+        }
+    }
+    for legacy in &purged.quarantined {
+        let plain = !legacy.id.is_empty()
+            && legacy.id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+        if plain {
+            let _ = std::fs::remove_dir_all(dir.join(&legacy.id));
+        }
+    }
+    let mut stores = 0;
+    for file in OLD_STORE_FILES {
+        if std::fs::remove_file(dir.join(file)).is_ok() {
+            stores += 1;
+        }
+    }
+    if !purged.is_empty() || stores > 0 || leftovers > 0 {
+        info!(
+            models = purged.versions.len(),
+            runs = purged.runs.len(),
+            leftover_runs = leftovers,
+            snapshots = purged.snapshots.len(),
+            legacy = purged.quarantined.len(),
+            stores,
+            "removed the models this app can no longer run"
+        );
+    }
+    Ok(())
+}
+
 /// One registered model, for the UI.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -138,6 +225,8 @@ pub struct LabelModelView {
     pub label: String,
     pub state: LifecycleState,
     pub deployable: bool,
+    /// It did not pass the checks for going live: it can be activated, but it only ever reports.
+    pub monitor_only: bool,
     pub imported: bool,
     pub model_sha256: Option<String>,
     pub created_at: String,
@@ -469,6 +558,9 @@ impl LabelRuntimeHost {
                 "migrated the old model registry"
             );
         }
+        if let Err(error) = purge_old_models(&mut store, &dir) {
+            warn!(%error, "could not remove the models this app can no longer run");
+        }
         // A remembered Live restarts as Monitor, and that is saved so the registry and the runtime agree.
         let startup_mode = store.registry().mode_at_startup();
         if startup_mode != store.registry().inference_mode
@@ -500,11 +592,6 @@ impl LabelRuntimeHost {
             };
             state.store = Some(store);
         }
-        self.reload_models(app);
-    }
-
-    /// Loads the active models again (after a manifest was changed on disk, for instance).
-    pub fn reload(&self, app: &AppHandle) {
         self.reload_models(app);
     }
 
@@ -576,44 +663,6 @@ impl LabelRuntimeHost {
             .as_ref()
             .and_then(|s| s.registry().versions.get(&id).cloned())
             .ok_or_else(|| "there is no such model".to_string())
-    }
-
-    /// Where the training runs are kept.
-    pub fn runs_dir_of(&self, app: &AppHandle) -> Result<PathBuf, String> {
-        Ok(Self::model_lab_dir(app)?.join("training-runs"))
-    }
-
-    /// Every model made in this app as (id, label, created at, run id).
-    pub fn trained_models(&self) -> Vec<(String, String, String, String)> {
-        let Ok(state) = self.state.lock() else {
-            return Vec::new();
-        };
-        let Some(store) = &state.store else {
-            return Vec::new();
-        };
-        store
-            .registry()
-            .versions
-            .values()
-            .filter_map(|v| match &v.origin {
-                model_lab_core::ModelOrigin::Trained { run_id } => Some((
-                    v.id.to_string(),
-                    v.label.to_string(),
-                    v.created_at.clone(),
-                    run_id.to_string(),
-                )),
-                model_lab_core::ModelOrigin::Imported => None,
-            })
-            .collect()
-    }
-
-    /// The run that trained a model, and its label; an error for an imported model, which has no run.
-    pub fn trained_run_of(&self, id: &str) -> Result<(String, String), String> {
-        let version = self.version_for(id)?;
-        match version.origin {
-            model_lab_core::ModelOrigin::Trained { run_id } => Ok((run_id.to_string(), version.label.to_string())),
-            model_lab_core::ModelOrigin::Imported => Err("an imported model cannot be edited here: only a model trained in this app keeps its parameters".into()),
-        }
     }
 
     /// What the Inspect view shows about a model (see `ModelInspectionView`).
@@ -750,6 +799,7 @@ impl LabelRuntimeHost {
                 label: v.label.to_string(),
                 state: v.state,
                 deployable: v.deployable,
+                monitor_only: v.monitor_only,
                 imported: matches!(v.origin, model_lab_core::ModelOrigin::Imported),
                 model_sha256: v.model_sha256.clone(),
                 created_at: v.created_at.clone(),
@@ -820,8 +870,8 @@ impl LabelRuntimeHost {
     /// is loaded and checked like an active one but nothing about the registry changes.
     pub fn start_shadow(&self, app: &AppHandle, id: &str) -> Result<(), String> {
         let version = self.version_for(id)?;
-        if !version.deployable {
-            return Err("this model cannot run (it did not pass its checks)".into());
+        if !version.runnable() {
+            return Err("this model cannot run (it has no model file that passed its checks)".into());
         }
         let dir = Self::model_lab_dir(app)?;
         let mut probe = version.clone();
@@ -1294,6 +1344,73 @@ pub fn set_label_runtime_mode(
 
 #[cfg(test)]
 mod tests {
+    /// A one-off look at what the cleanup does to a real store: point `PURGE_E2E_DIR` at a *copy* of a model-lab folder.
+    #[test]
+    #[ignore = "one-off: set PURGE_E2E_DIR to a copy of a model-lab folder"]
+    fn the_cleanup_on_a_copy_of_a_real_store() {
+        let dir = std::path::PathBuf::from(std::env::var("PURGE_E2E_DIR").expect("PURGE_E2E_DIR"));
+        let (mut store, _) = model_lab_core::open_registry(&dir, Some(&dir.join("registry.json"))).unwrap();
+        let before = (store.registry().versions.len(), store.registry().runs.len(), store.registry().snapshots.len(), store.registry().quarantined.len());
+        purge_old_models(&mut store, &dir).unwrap();
+        let r = store.registry();
+        println!("versions {} -> {}, runs {} -> {}, snapshots {} -> {}, quarantined {} -> {}", before.0, r.versions.len(), before.1, r.runs.len(), before.2, r.snapshots.len(), before.3, r.quarantined.len());
+        assert!(r.validate().is_ok());
+        assert!(dir.join("datasets").is_dir() && dir.join("labels.json").is_file(), "recordings and labels are kept");
+    }
+
+    #[test]
+    fn models_this_app_can_no_longer_run_are_removed_and_the_pulse_model_is_kept() {
+        use model_lab_core::{FileStore, ModelOrigin, ModelVersion, Registry, RegistryStore};
+        let lab = tempfile::tempdir().unwrap();
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../crates/label-inference/tests/fixtures/ppg_onset_bundle");
+        let mut store =
+            RegistryStore::new(Registry::default(), FileStore::new(lab.path().join("registry-v2.json"))).unwrap();
+        let kept = label_inference::import_bundle(&fixture, lab.path(), &mut store, "2026-10-19T00:00:00Z").unwrap();
+        // An older model of the same label, its ONNX bundle in its own folder.
+        let old_dir = lab.path().join("label-models/pinch-old");
+        std::fs::create_dir_all(&old_dir).unwrap();
+        std::fs::write(old_dir.join("manifest.json"), r#"{"model":{"format":"onnx"},"preprocessing":{"kind":"none"}}"#).unwrap();
+        let project = store.registry().versions[&kept.version_id].project_id.clone();
+        let contract = store.registry().versions[&kept.version_id].input.clone();
+        let old = ModelVersion::new(
+            ModelVersionId::new("pinch-old").unwrap(),
+            project,
+            label("pinch"),
+            ModelOrigin::Imported,
+            true,
+            Some(model_lab_core::sha256_hex(b"old")),
+            "label-models/pinch-old".into(),
+            contract,
+            model_lab_core::Thresholds::default(),
+            model_lab_core::QualityRules::default(),
+            "2026-10-01T00:00:00Z",
+        )
+        .unwrap();
+        store.mutate(|r| r.register_version(old)).unwrap();
+        std::fs::write(lab.path().join("network-designs.json"), "[]").unwrap();
+        std::fs::create_dir_all(lab.path().join("datasets")).unwrap();
+        // Run folders the registry no longer lists: an old backend's goes, the pulse model's stays.
+        for (run, backend) in [("run-old", "torch-mlp"), ("run-new", crate::label_training::BACKEND)] {
+            let folder = lab.path().join("training-runs").join(run);
+            std::fs::create_dir_all(&folder).unwrap();
+            std::fs::write(folder.join("spec.json"), format!(r#"{{"backend":"{backend}"}}"#)).unwrap();
+        }
+
+        purge_old_models(&mut store, lab.path()).unwrap();
+        let versions: Vec<String> = store.registry().versions.keys().map(ToString::to_string).collect();
+        assert_eq!(versions, [kept.version_id.to_string()]);
+        assert!(!old_dir.exists() && !lab.path().join("network-designs.json").exists());
+        assert!(lab.path().join("datasets").is_dir(), "recordings are never touched");
+        assert!(!lab.path().join("training-runs/run-old").exists() && lab.path().join("training-runs/run-new").exists());
+        let kept_dir = lab.path().join(&store.registry().versions[&kept.version_id].artifact_dir);
+        assert!(kept_dir.join("model.trees").is_file());
+        // Nothing old is left, so a second start changes nothing.
+        let before = store.registry().clone();
+        purge_old_models(&mut store, lab.path()).unwrap();
+        assert_eq!(*store.registry(), before);
+    }
+
     use super::*;
 
     #[test]

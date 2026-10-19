@@ -8,6 +8,8 @@ export interface LabelModel {
   label: string;
   state: LabelModelState;
   deployable: boolean;
+  /** It did not pass the checks for going live: it can be approved and activated, but it only ever reports (Monitor). */
+  monitorOnly?: boolean;
   imported: boolean;
   modelSha256: string | null;
   createdAt: string;
@@ -64,13 +66,13 @@ export type ModelAction =
   | { kind: "deactivate"; label: string };
 
 /** What a person can do next with a model in each state. Becoming active is only ever through activation. */
-export function actionsFor(model: Pick<LabelModel, "state" | "deployable">): ModelAction[] {
+export function actionsFor(model: Pick<LabelModel, "state" | "deployable" | "monitorOnly">): ModelAction[] {
   switch (model.state) {
     case "draft":
       return [{ kind: "state", to: "evaluated", label: "Mark as evaluated" }];
     case "evaluated":
       return [
-        ...(model.deployable ? [{ kind: "state", to: "approved", label: "Approve" } as const] : []),
+        ...(model.deployable || model.monitorOnly ? [{ kind: "state", to: "approved", label: model.deployable ? "Approve" : "Approve for Monitor" } as const] : []),
         { kind: "state", to: "archived", label: "Archive" },
       ];
     case "approved":

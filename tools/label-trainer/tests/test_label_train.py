@@ -1,4 +1,4 @@
-"""The per-label trainer: refusals, a real end-to-end run per backend, and what it writes."""
+"""Training a pinch-start model end to end on synthetic pulse recordings, and the checks around it."""
 
 from __future__ import annotations
 
@@ -9,431 +9,96 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-pytest.importorskip("onnxruntime")
+from label_trainer import label_train as lt
+from label_trainer import ppg_onset, trees
 
-from label_trainer import label_train as lt  # noqa: E402
-from label_trainer.features import (  # noqa: E402
-    ALL_BASELINE_FEATURE_NAMES,
-    BASE_FEATURE_COUNT,
-    FEATURE_NAMES,
-    MOTION_FEATURE_NAMES,
-    SPIKE_FEATURE_NAMES,
-)
-from label_trainer.schema import HEADER_COLUMNS  # noqa: E402
-
-INTERVAL_NS = 20_000_000
+from .pulse_data import spec_for, write_pulse_recording
 
 
-def write_recording(directory: Path, rid: str, label: str, *, seed: int, rows: int = 400) -> Path:
-    """One session of one label. The target ("snap") has vigorous acceleration; everything else is quiet."""
-    rng = np.random.default_rng(seed)
-    scale = 4.0 if label == "snap" else 0.3
-    lines = ["# gesture-dataset-export: 1", f"# label: {label}", ",".join(HEADER_COLUMNS)]
-    for row in range(rows):
-        accel = rng.normal(0.0, scale, 3)
-        gyro = rng.normal(0.0, scale / 4, 3)
-        fields = [str(row * INTERVAL_NS), str(row), "1000", "900", "800", *(f"{v:.4f}" for v in accel), *(f"{v:.4f}" for v in gyro), "1", "0", "0", "0", "3", label]
-        lines.append(",".join(fields))
-    path = directory / f"{rid}.csv"
-    path.write_text("\n".join(lines) + "\n")
-    return path
-
-
-def spec_for(tmp_path: Path, backend: str = "logreg", **over) -> dict:
-    plan = {"s1": "snap", "s2": "snap", "s3": "snap", "i1": "idle", "i2": "idle", "i3": "idle"}
-    recordings = {rid: str(write_recording(tmp_path, rid, label, seed=index)) for index, (rid, label) in enumerate(plan.items())}
-    spec = {
-        "version": 1,
-        "target": "snap",
-        "negatives": ["idle"],
-        "excludes": [],
-        "recordings": recordings,
-        "train": ["s1", "s2", "i1", "i2"],
-        "evaluation": ["s3", "i3"],
-        "sources": ["watchAcceleration", "watchGyroscope"],
-        "window": {"windowMs": 500, "strideMs": 150, "maxGapMs": 250, "minSamples": 3},
-        "backend": backend,
-        "seed": 7,
-    }
-    spec.update(over)
-    return spec
-
-
-def test_features_follow_the_chosen_streams_and_window_level_values_need_ppg() -> None:
-    motion = lt.features_for(["watchAcceleration", "watchGyroscope"])
-    assert motion and all(lt.source_of(name) in {"watchAcceleration", "watchGyroscope"} for name in motion)
-    assert "sample_count" not in motion and "duration_ms" not in motion
-    assert "sample_count" in lt.features_for(["watchPpg"])
-    everything = ["watchAcceleration", "watchGyroscope", "watchOrientation", "watchPpg"]
-    # Spikes and the level against the past are opt-in; the motion dynamics come with their sensors.
-    assert lt.features_for(everything) == [*FEATURE_NAMES[:BASE_FEATURE_COUNT], *MOTION_FEATURE_NAMES]
-    assert lt.features_for(everything, spikes=True, baseline=True) == list(FEATURE_NAMES)
-    assert not any(name in ALL_BASELINE_FEATURE_NAMES for name in lt.features_for(everything, spikes=True))  # opt-in too
-    assert [n for n in lt.features_for(everything, baseline=True) if n in ALL_BASELINE_FEATURE_NAMES] == list(ALL_BASELINE_FEATURE_NAMES)
-    assert all(name in lt.features_for(everything, movement_only=True, baseline=True) for name in ALL_BASELINE_FEATURE_NAMES)  # they are about change
-    assert not any(name in SPIKE_FEATURE_NAMES for name in lt.features_for(["watchAcceleration"], spikes=True))  # needs the pulse sensor
-    with pytest.raises(lt.TrainingRefused):
-        lt.features_for(["headPose"])
-
-
-@pytest.mark.parametrize("backend", ["logreg", "mlp"])
-def test_a_trained_model_is_exported_checked_and_described(tmp_path: Path, backend: str) -> None:
-    out = tmp_path / "run"
-    result = lt.run(spec_for(tmp_path, backend), out)
-    assert result["outcome"] == "deployable", result["message"]
-    assert result["metrics"]["f1"] > 0.9
-    assert result["metrics"]["falseActivationRate"] < 0.1
-    assert result["parityMaxAbsDifference"] <= lt.PARITY_TOLERANCE
-
-    manifest = json.loads((out / "bundle" / "manifest.json").read_text())
-    model_bytes = (out / "bundle" / "model.onnx").read_bytes()
-    assert manifest["model"]["sha256"] == hashlib.sha256(model_bytes).hexdigest() == result["modelSha256"]
-    assert manifest["targetLabel"] == "snap"
-    assert manifest["sources"] == ["watchAcceleration", "watchGyroscope"]
-    assert manifest["input"]["features"] == result["features"]
-    assert manifest["preprocessing"] == {"kind": "none"}
-    assert manifest["quality"] == {"maxContactQuality": 0.0, "minSampleCount": 3}
-    assert manifest["provenance"]["trainRecordings"] == ["i1", "i2", "s1", "s2"]
-    assert manifest["provenance"]["evaluationRecordings"] == ["i3", "s3"]
-    assert json.loads((out / "result.json").read_text())["outcome"] == "deployable"
-
-
-def test_the_exported_file_scores_windows_like_the_trained_model(tmp_path: Path) -> None:
-    spec = lt.parse_spec(spec_for(tmp_path))
-    x_train, y_train, x_eval, _ = lt.build_matrices(spec)
-    model = lt.fit(spec, x_train, y_train)
-    path = tmp_path / "m.onnx"
-    lt.export_onnx(spec, model, x_train, path)
-    assert np.allclose(lt.onnx_probabilities(path, x_eval)[:, 1], model.predict_proba(x_eval)[:, 1], atol=1e-4)
-
-
-def test_it_refuses_when_the_held_out_recordings_cannot_test_the_model(tmp_path: Path) -> None:
-    result = lt.run(spec_for(tmp_path, train=["s1", "s2", "s3", "i1", "i2"], evaluation=["i3"]), tmp_path / "run")
-    assert result["outcome"] == "failed"
-    assert "held-out" in result["message"]
-    assert not (tmp_path / "run" / "bundle").exists()
-
-
-def test_it_refuses_too_little_of_the_target(tmp_path: Path) -> None:
-    spec = spec_for(tmp_path)
-    for rid in ("s1", "s2"):
-        write_recording(tmp_path, rid, "snap", seed=1, rows=20)
-    result = lt.run(spec, tmp_path / "run")
-    assert result["outcome"] == "failed" and "Record more" in result["message"]
-
-
-@pytest.mark.parametrize(
-    "change, text",
-    [
-        ({"backend": "keras"}, "unknown backend"),
+def test_a_spec_for_anything_but_the_pulse_model_is_refused(tmp_path: Path) -> None:
+    spec = spec_for(tmp_path, train=1, evaluation=1)
+    for change, reason in [
         ({"version": 2}, "unsupported spec version"),
-        ({"train": ["s1", "s2", "i1", "i2", "s3"]}, "both the training and the evaluation"),
-        ({"train": ["s1", "i1"]}, "exactly one"),
-        ({"sources": ["watchAcceleration"], "features": ["gyro_x_std"]}, "not computed from the chosen streams"),
-        ({"target": ""}, "no target"),
-    ],
-)
-def test_a_bad_spec_is_refused_before_any_training(tmp_path: Path, change: dict, text: str) -> None:
-    result = lt.run(spec_for(tmp_path, **change), tmp_path / "run")
-    assert result["outcome"] == "failed" and text in result["message"], result["message"]
+        ({"backend": "logreg"}, "unknown backend"),
+        ({"sources": ["watchAcceleration"]}, "reads only the pulse sensor"),
+        ({"evaluation": spec["train"]}, "both the training and the evaluation"),
+        ({"labelOffsetMs": 2000}, "label offset"),
+        ({"target": ""}, "no target label"),
+    ]:
+        with pytest.raises(lt.TrainingRefused, match=reason):
+            lt.parse_spec({**spec, **change})
 
 
-def test_a_label_with_no_role_is_never_silently_treated_as_negative(tmp_path: Path) -> None:
-    spec = spec_for(tmp_path, negatives=[])
-    result = lt.run(spec, tmp_path / "run")
-    assert result["outcome"] == "failed"
-    assert "no explicit training role" in result["message"]
+def test_a_label_with_no_role_is_refused_rather_than_taken_as_negative(tmp_path: Path) -> None:
+    spec = lt.parse_spec({**spec_for(tmp_path, train=1, evaluation=1), "negatives": []})
+    with pytest.raises(lt.TrainingRefused, match="fist"):
+        lt.check_labels(spec, lt.load_spec_recordings(spec))
 
 
-def test_an_excluded_label_is_left_out(tmp_path: Path) -> None:
-    write_recording(tmp_path, "w1", "walking", seed=99)
-    spec = spec_for(tmp_path, excludes=["walking"])
-    spec["recordings"]["w1"] = str(tmp_path / "w1.csv")
-    spec["train"].append("w1")
-    result = lt.run(spec, tmp_path / "run")
+def test_a_trained_model_ships_as_trees_that_give_its_answers(tmp_path: Path) -> None:
+    result = lt.run(spec_for(tmp_path), tmp_path / "run")
     assert result["outcome"] == "deployable", result["message"]
-    assert result["trainWindows"] == lt.build_matrices(lt.parse_spec(spec_for(tmp_path)))[0].shape[0]
-
-
-def test_the_pytorch_backend_exports_a_model_that_matches_the_trained_one(tmp_path: Path) -> None:
-    pytest.importorskip("torch")
-    pytest.importorskip("onnxscript")
-    out = tmp_path / "run"
-    result = lt.run(spec_for(tmp_path, "torch-mlp", params={"epochs": 120}), out)
-    assert result["outcome"] == "deployable", result["message"]
-    assert result["metrics"]["f1"] > 0.9
-    manifest = json.loads((out / "bundle" / "manifest.json").read_text())
-    assert manifest["framework"]["name"] == "pytorch"
-    assert manifest["model"]["opset"] == lt.TORCH_OPSET
-
-
-def test_the_pytorch_backend_says_so_when_torch_is_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import builtins
-
-    real_import = builtins.__import__
-
-    def refuse_torch(name, *args, **kwargs):
-        if name == "torch":
-            raise ImportError("no torch")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", refuse_torch)
-    result = lt.run(spec_for(tmp_path, "torch-mlp"), tmp_path / "run")
-    assert result["outcome"] == "failed" and "PyTorch is not installed" in result["message"]
-
-
-def test_an_exported_file_using_an_operator_the_desktop_cannot_run_is_refused(tmp_path: Path) -> None:
-    import onnx
-    from onnx import TensorProto, helper
-
-    graph = helper.make_graph(
-        [helper.make_node("LinearClassifier", ["X"], ["Y", "P"], domain="ai.onnx.ml", coefficients=[1.0], intercepts=[0.0], classlabels_ints=[0, 1])],
-        "g", [helper.make_tensor_value_info("X", TensorProto.FLOAT, [None, 1])], [helper.make_tensor_value_info("P", TensorProto.FLOAT, [None, 2])],
-    )
-    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 15), helper.make_opsetid("ai.onnx.ml", 1)])
-    path = tmp_path / "bad.onnx"
-    path.write_bytes(model.SerializeToString())
-    with pytest.raises(lt.TrainingRefused, match="cannot run"):
-        lt.check_runnable(path)
-    assert onnx.load(str(path))  # the file itself is fine; the desktop just cannot run it
-
-
-def test_the_dense_export_folds_scaling_in_so_it_needs_no_preprocessing(tmp_path: Path) -> None:
-    spec = lt.parse_spec(spec_for(tmp_path, "mlp"))
-    x_train, y_train, x_eval, _ = lt.build_matrices(spec)
-    model = lt.fit(spec, x_train, y_train)
-    path = tmp_path / "m.onnx"
-    lt.export_onnx(spec, model, x_train, path)
-    import onnx
-
-    ops = {node.op_type for node in onnx.load(str(path)).graph.node}
-    assert ops <= {op for _, op in lt.RUNNABLE_OPERATORS} and "Scaler" not in ops
-    assert np.allclose(lt.onnx_probabilities(path, x_eval)[:, 1], model.predict_proba(x_eval)[:, 1], atol=1e-4)
-
-
-MOVEMENT_FEATURES = {
-    ("watchAcceleration", "watchGyroscope"): [
-        "accel_x_std", "accel_y_std", "accel_z_std", "accel_magnitude_std",
-        "gyro_x_std", "gyro_y_std", "gyro_z_std", "gyro_magnitude_std",
-        *MOTION_FEATURE_NAMES,  # how fast and how often the motion changes
-    ],
-    ("watchOrientation",): ["quat_w_std", "quat_x_std", "quat_y_std", "quat_z_std", "quat_delta_angle_deg"],
-    ("watchPpg",): ["ppg_green_std", "ppg_red_std", "ppg_ir_std", "ppg_green_slope", "ppg_red_slope", "ppg_ir_slope"],
-}
-
-
-@pytest.mark.parametrize("sources", list(MOVEMENT_FEATURES))
-def test_movement_only_keeps_how_things_change_and_drops_absolute_levels(sources: tuple[str, ...]) -> None:
-    # The desktop applies the same rule (label_inference::canonical_features_for); this list is repeated there.
-    assert lt.features_for(list(sources), movement_only=True) == MOVEMENT_FEATURES[sources]
-    assert set(MOVEMENT_FEATURES[sources]) < set(lt.features_for(list(sources)))
-
-
-def test_a_threshold_is_fitted_so_a_model_whose_scores_are_all_low_is_still_usable() -> None:
-    rng = np.random.default_rng(0)
-    y = np.array([0] * 100 + [1] * 100)
-    # Perfectly ranked, but every score is well under the default 0.8: what a session-to-session shift does. The cut-off
-    # is fitted on scores like these from the training recordings, then the held-out ones are judged at it.
-    scores = lambda: np.concatenate([rng.uniform(0.0, 0.15, 100), rng.uniform(0.25, 0.4, 100)])  # noqa: E731
-    threshold = lt.choose_threshold(scores(), y)
-    assert 0.15 < threshold <= 0.25
-    metrics = lt.evaluate(scores(), y, threshold, "trainingRecordings")
-    assert metrics["rocAuc"] == 1.0 and metrics["activationThreshold"] == threshold
-    assert metrics["f1"] == 1.0 and metrics["falseActivationRate"] == 0.0 and metrics["balancedAccuracy"] == 1.0
-    # At the default the same model would have found nothing: that is reported too.
-    assert metrics["atDefaultThreshold"]["recall"] == 0.0
-    assert metrics["thresholdChosenOnEvaluationRecordings"] is False
-    assert lt.verdict(metrics) is None
-
-
-def test_the_cut_off_is_not_pulled_down_by_a_mostly_gesture_set_of_windows() -> None:
-    """F1 would pick the lowest cut-off here (flagging all 20 other windows costs it little against 400 found gestures);
-    the cut-off that tells them apart sits between the two groups."""
-    rng = np.random.default_rng(4)
-    y = np.array([1] * 400 + [0] * 20)
-    probability = np.concatenate([rng.uniform(0.5, 1.0, 400), rng.uniform(0.1, 0.4, 20)])
-    threshold = lt.choose_threshold(probability, y)
-    assert 0.4 <= threshold <= 0.5
-    assert lt._rates(probability, y, threshold)["falseActivationRate"] == 0.0
-
-
-@pytest.mark.parametrize("auc_scores, text", [(0.2, "lower"), (0.6, "barely")])
-def test_a_model_that_cannot_tell_the_gesture_apart_is_not_kept(auc_scores: float, text: str) -> None:
-    y = np.array([0] * 50 + [1] * 50)
-    rng = np.random.default_rng(1)
-    probability = np.clip(rng.normal(0.5, 0.2, 100) + (y * (auc_scores - 0.5) * 1.2), 0, 1)
-    metrics = lt.evaluate(probability, y, 0.5, "trainingRecordings")
-    assert text in (lt.verdict(metrics) or "")
-
-
-def test_a_model_that_memorised_a_posture_is_refused_with_the_reason(tmp_path: Path) -> None:
-    """Trained where the target has a high average and tested where it has a low one, on a feature that is only posture."""
-    rng = np.random.default_rng(2)
-
-    def recording(rid: str, label: str, level: float) -> Path:
-        lines = ["# gesture-dataset-export: 1", f"# label: {label}", ",".join(HEADER_COLUMNS)]
-        for row in range(400):
-            accel = rng.normal(level, 0.2, 3)
-            fields = [str(row * INTERVAL_NS), str(row), "1000", "900", "800", *(f"{v:.4f}" for v in accel), "0", "0", "0", "1", "0", "0", "0", "3", label]
-            lines.append(",".join(fields))
-        path = tmp_path / f"{rid}.csv"
-        path.write_text("\n".join(lines) + "\n")
-        return path
-
-    plan = {"s1": ("snap", 3.0), "s2": ("snap", 3.0), "i1": ("idle", 0.0), "i2": ("idle", 0.0), "s3": ("snap", -3.0), "i3": ("idle", 0.0)}
-    spec = {
-        "version": 1, "target": "snap", "negatives": ["idle"], "excludes": [],
-        "recordings": {rid: str(recording(rid, label, level)) for rid, (label, level) in plan.items()},
-        "train": ["s1", "s2", "i1", "i2"], "evaluation": ["s3", "i3"],
-        "sources": ["watchAcceleration"], "features": ["accel_x_mean"],
-        "window": {"windowMs": 500, "strideMs": 150, "maxGapMs": 250, "minSamples": 3}, "backend": "logreg", "seed": 7,
-    }
-    out = tmp_path / "run"
-    result = lt.run(spec, out)
-    assert result["outcome"] == "evaluationOnly"
-    assert "memorised" in result["message"] and result["metrics"]["rocAuc"] < 0.5
-    assert not (out / "bundle").exists()
-    assert json.loads((out / "result.json").read_text())["outcome"] == "evaluationOnly"
-
-
-def test_the_manifest_carries_the_fitted_thresholds_and_says_where_they_came_from(tmp_path: Path) -> None:
-    out = tmp_path / "run"
-    result = lt.run(spec_for(tmp_path), out)
-    manifest = json.loads((out / "bundle" / "manifest.json").read_text())
-    act, rel = manifest["thresholds"]["activation"], manifest["thresholds"]["release"]
-    assert act == result["metrics"]["activationThreshold"] and 0 < rel <= act
-    assert manifest["provenance"]["thresholdSource"] == "trainingRecordings"
-    assert manifest["provenance"]["thresholdChosenOnEvaluationRecordings"] is False
-    assert manifest["provenance"]["movementOnly"] is False
-
-
-def test_movement_only_models_use_only_those_features(tmp_path: Path) -> None:
-    out = tmp_path / "run"
-    result = lt.run(spec_for(tmp_path, movementOnly=True), out)
-    assert result["outcome"] == "deployable", result["message"]
-    assert result["features"] == MOVEMENT_FEATURES[("watchAcceleration", "watchGyroscope")]
-
-
-def write_pulse_recording(directory: Path, rid: str, label: str, *, seed: int, rows: int = 400) -> Path:
-    """Every row a pulse-sensor sample on a wandering baseline. The target adds a sharp spike every 12 rows; the rest is drift only."""
-    rng = np.random.default_rng(seed)
-    lines = ["# gesture-dataset-export: 1", f"# label: {label}", ",".join(HEADER_COLUMNS)]
-    level = float(rng.uniform(40000, 60000))  # a different resting level in each session
-    for row in range(rows):
-        level += rng.normal(0.0, 20.0)
-        spike = 900.0 if label == "snap" and row % 12 == 6 else 0.0
-        value = level + spike + rng.normal(0.0, 15.0)
-        fields = [str(row * INTERVAL_NS), str(row), f"{value:.2f}", f"{value * 0.9:.2f}", f"{value * 0.8:.2f}", "", "", "", "", "", "", "", "", "", "", "3", label]
-        lines.append(",".join(fields))
-    path = directory / f"{rid}.csv"
-    path.write_text("\n".join(lines) + "\n")
-    return path
-
-
-def test_a_model_can_learn_from_the_pulse_sensor_spikes_alone(tmp_path: Path) -> None:
-    plan = {"s1": "snap", "s2": "snap", "s3": "snap", "i1": "idle", "i2": "idle", "i3": "idle"}
-    pulse = tmp_path / "pulse"
-    pulse.mkdir()
-    recordings = {rid: str(write_pulse_recording(pulse, rid, label, seed=index)) for index, (rid, label) in enumerate(plan.items())}
-    spec = spec_for(tmp_path, recordings=recordings, sources=["watchPpg"], movementOnly=True, spikeMethod="rolling_median_residual")
-    out = tmp_path / "run"
-    result = lt.run(spec, out)
-    assert result["outcome"] == "deployable", result["message"]
-    assert result["metrics"]["f1"] > 0.9
-    assert set(SPIKE_FEATURE_NAMES) <= set(result["features"])
-    manifest = json.loads((out / "bundle" / "manifest.json").read_text())
-    assert manifest["preprocessing"] == {"kind": "spike_extraction", "method": "rolling_median_residual"}
-    assert manifest["provenance"]["spikeMethod"] == "rolling_median_residual"
-    assert manifest["input"]["features"] == result["features"]
-
-
-def test_a_spike_method_without_the_pulse_sensor_changes_nothing_and_an_unknown_one_is_refused(tmp_path: Path) -> None:
-    motion = lt.parse_spec(spec_for(tmp_path, spikeMethod="butterworth_high_pass"))
-    assert motion.spike_method is None
-    with pytest.raises(lt.TrainingRefused, match="unknown spike extraction method"):
-        lt.parse_spec(spec_for(tmp_path, sources=["watchPpg"], spikeMethod="soup"))
-
-
-def test_only_the_chosen_pulse_channels_are_read_and_the_window_level_values_stay() -> None:
-    both = lt.features_for(["watchPpg"], spikes=True, ppg_channels=["green", "ir"])
-    assert not any(name.startswith("ppg_red_") for name in both)
-    assert {"ppg_green_mean", "ppg_ir_spike_height", "sample_count", "duration_ms", "contact_quality_mean"} <= set(both)
-    assert lt.features_for(["watchPpg"]) == lt.features_for(["watchPpg"], ppg_channels=["green", "red", "ir"])
-    motion = lt.features_for(["watchAcceleration"], ppg_channels=[])
-    assert motion == lt.features_for(["watchAcceleration"])  # the channels only matter to the pulse sensor
-
-
-def test_the_spec_checks_the_pulse_channels(tmp_path: Path) -> None:
-    spec = lt.parse_spec(spec_for(tmp_path, sources=["watchPpg"], ppgChannels=["ir", "green"]))
-    assert spec.ppg_channels == ["green", "ir"]
-    assert not any(name.startswith("ppg_red_") for name in spec.features)
-    with pytest.raises(lt.TrainingRefused, match="unknown pulse sensor channel"):
-        lt.parse_spec(spec_for(tmp_path, sources=["watchPpg"], ppgChannels=["blue"]))
-    with pytest.raises(lt.TrainingRefused, match="at least one pulse sensor channel"):
-        lt.parse_spec(spec_for(tmp_path, sources=["watchPpg"], ppgChannels=[]))
-    assert lt.parse_spec(spec_for(tmp_path)).ppg_channels == ["green", "red", "ir"]
-
-
-def test_a_convolutional_model_learns_trains_exports_and_describes_its_grid(tmp_path: Path) -> None:
-    pytest.importorskip("torch")
-    out = tmp_path / "run"
-    result = lt.run(spec_for(tmp_path, "cnn1d", gridSteps=16, params={"epochs": 40}), out)
-    assert result["outcome"] == "deployable", result["message"]
-    assert result["metrics"]["f1"] > 0.9
+    bundle = tmp_path / "run" / "bundle"
+    manifest = json.loads((bundle / "manifest.json").read_text())
+    data = (bundle / "model.trees").read_bytes()
+    assert manifest["model"] == {"file": "model.trees", "sha256": hashlib.sha256(data).hexdigest(), "format": "trees", "opset": 0}
+    assert manifest["input"]["features"] == list(ppg_onset.FEATURE_NAMES) and manifest["input"]["shape"] == [None, 1701]
+    assert manifest["sources"] == ["watchPpg"] and manifest["preprocessing"] == {"kind": "ppg_multiscale_onset"}
+    assert manifest["window"] == {"durationMs": 5640, "strideMs": 40, "maxGapMs": 250, "minSamples": 100}
+    assert manifest["thresholds"]["cooldownMs"] == 1500
+    assert len(manifest["input"]["trainingRange"]["low"]) == 1701
+    assert trees.read(data)[0] == 1701 and len(trees.read(data)[1]) == lt.TREES
     assert result["parityMaxAbsDifference"] <= lt.PARITY_TOLERANCE
-    assert result["features"] == ["accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z"]  # channels, not statistics
-    manifest = json.loads((out / "bundle" / "manifest.json").read_text())
-    assert manifest["input"]["features"] == result["features"]
-    assert manifest["input"]["shape"] == [None, 6 * 16]
-    assert manifest["input"]["grid"] == {"steps": 16, "timing": "time"}
-    assert manifest["framework"]["name"] == "pytorch"
-    assert manifest["provenance"]["backend"] == "cnn1d" and manifest["provenance"]["gridSteps"] == 16
+    metrics = result["metrics"]
+    assert metrics["rocAuc"] > 0.9  # a step up is easy to tell from a step down
+    events = metrics["events"]
+    assert events["gestures"] > 0 and events["caught"] / events["gestures"] >= 0.8
+    assert 680 <= events["medianLatencyMs"] <= 1280
+    inspection = json.loads((tmp_path / "run" / "inspection.json").read_text())
+    assert inspection["kind"] == "trees" and inspection["importance"][0]["name"] in ppg_onset.FEATURE_NAMES
+    held = inspection["evaluation"]
+    assert len(held["probabilities"]) == len(held["labels"]) == len(held["recordings"]) == metrics["windows"]
 
 
-def test_the_convolutional_model_can_read_the_window_without_its_level_and_checks_the_steps(tmp_path: Path) -> None:
-    pytest.importorskip("torch")
-    result = lt.run(spec_for(tmp_path, "cnn1d", gridSteps=16, movementOnly=True, params={"epochs": 30}), tmp_path / "run")
-    assert result["outcome"] == "deployable", result["message"]
-    with pytest.raises(lt.TrainingRefused, match="gridSteps"):
-        lt.parse_spec(spec_for(tmp_path, "cnn1d", gridSteps=2))
+@pytest.mark.strict_gate
+def test_a_model_that_cannot_go_live_is_still_written_so_it_can_run_in_monitor(tmp_path: Path) -> None:
+    # Two 20 s held-out recordings hold too little time without a pinch to trust a false-alarm rate.
+    result = lt.run(spec_for(tmp_path, seconds=20.0), tmp_path / "run")
+    assert result["outcome"] == "evaluationOnly"
+    assert "too little to tell how often it would fire by mistake" in result["message"]
+    assert result["bundleDir"] == "bundle" and (tmp_path / "run" / "bundle" / "model.trees").is_file()
 
 
-def test_calibration_says_whether_a_score_can_be_read_as_a_probability() -> None:
-    y = np.array([0] * 50 + [1] * 50)
-    honest = lt.calibration(np.where(y == 1, 0.95, 0.05), y)
-    assert honest["brierScore"] == pytest.approx(0.0025) and honest["expectedCalibrationError"] == pytest.approx(0.05)
-    # Ranked perfectly (AUC 1) but every score near the middle: right about which is which, wrong about how sure.
-    timid = lt.calibration(np.where(y == 1, 0.55, 0.45), y)
-    assert timid["expectedCalibrationError"] == pytest.approx(0.45) and timid["brierScore"] > 0.2
-    assert set(lt.evaluate(np.where(y == 1, 0.9, 0.1), y, 0.5, "trainingRecordings")) >= {"brierScore", "expectedCalibrationError"}
+def test_the_cut_off_is_chosen_on_the_training_recordings_only(tmp_path: Path) -> None:
+    spec = lt.parse_spec(spec_for(tmp_path, train=4, evaluation=1))
+    recordings = lt.load_spec_recordings(spec)
+    train = lt.examples(spec, recordings, spec.train)
+    threshold, source, cross_check = lt.out_of_fold_threshold(spec, train)
+    assert source == "trainingRecordings" and 0.05 <= threshold <= 0.95 and cross_check > 0.9
+    alone = lt.Examples(train.x, train.y, np.array(["r0"] * len(train.y)), train.kinds, train.decisions)
+    assert lt.out_of_fold_threshold(spec, alone) == (lt.ACTIVATION, "default", None)
 
 
-def test_boosted_trees_are_written_as_plain_onnx_that_reproduces_them(tmp_path: Path) -> None:
-    out = tmp_path / "run"
-    result = lt.run(spec_for(tmp_path, "gbt"), out)
-    assert result["outcome"] == "deployable", result["message"]
-    assert result["parityMaxAbsDifference"] <= 1e-5  # exact arithmetic: only the final sigmoid rounds
-    import onnx
-
-    operators = {node.op_type for node in onnx.load(str(out / "bundle" / "model.onnx")).graph.node}
-    assert "TreeEnsembleClassifier" not in operators and "LessOrEqual" in operators
-    manifest = json.loads((out / "bundle" / "manifest.json").read_text())
-    assert manifest["framework"]["name"] == "scikit-learn" and manifest["provenance"]["backend"] == "gbt"
+def test_too_few_starts_to_learn_from_is_refused(tmp_path: Path) -> None:
+    for i in range(2):
+        write_pulse_recording(tmp_path, f"q{i}", seed=i, seconds=12.0, gestures=("pinch",), every_s=20.0)
+    spec = {**spec_for(tmp_path, train=1, evaluation=1), "recordings": {f"q{i}": str(tmp_path / f"q{i}.csv") for i in range(2)}, "train": ["q0"], "evaluation": ["q1"]}
+    result = lt.run(spec, tmp_path / "run")
+    assert result["outcome"] == "failed" and "starts of the target label" in result["message"]
 
 
-def test_the_tree_compiler_matches_scikit_learn_on_awkward_inputs(tmp_path: Path) -> None:
-    """Values exactly on a split, far outside the training range, and a tree that never split."""
-    from sklearn.ensemble import GradientBoostingClassifier
+def test_a_model_whose_training_recordings_disagree_is_not_kept_however_it_did_on_the_test_ones() -> None:
+    rng = np.random.default_rng(5)
+    y = np.array([1] * 50 + [0] * 50)
+    metrics = lt.evaluate(np.concatenate([rng.uniform(0.6, 1, 50), rng.uniform(0, 0.4, 50)]), y, 0.5, "trainingRecordings")
+    metrics["crossCheckRocAuc"] = 0.55
+    assert "do not agree with each other" in (lt.verdict(metrics) or "")
 
-    rng = np.random.default_rng(6)
-    x = rng.normal(size=(300, 5)).astype(np.float32)
-    y = (x[:, 0] + 0.5 * x[:, 3] > 0).astype(int)
-    model = GradientBoostingClassifier(n_estimators=40, max_depth=3, random_state=0).fit(x, y)
-    thresholds = model.estimators_[0, 0].tree_.threshold
-    probe = np.vstack([x[:50], np.full((1, 5), np.float32(thresholds[0])), np.full((1, 5), 1e6, dtype=np.float32), -np.full((1, 5), 1e6, dtype=np.float32)])
-    lt.tree_ensemble_onnx(model, x, tmp_path / "m.onnx")
-    got = lt.onnx_probabilities(tmp_path / "m.onnx", probe)[:, 1]
-    assert np.max(np.abs(got - model.predict_proba(probe)[:, 1])) < 1e-5
-    stump = GradientBoostingClassifier(n_estimators=3, max_depth=1, min_samples_split=10_000, random_state=0).fit(x, y)
-    lt.tree_ensemble_onnx(stump, x, tmp_path / "stump.onnx")
-    assert np.allclose(lt.onnx_probabilities(tmp_path / "stump.onnx", x[:5])[:, 1], stump.predict_proba(x[:5])[:, 1], atol=1e-5)
+
+def test_a_model_that_flags_every_other_moment_is_not_kept_however_good_its_f1() -> None:
+    rng = np.random.default_rng(3)
+    y = np.array([1] * 342 + [0] * 6)
+    probability = np.concatenate([rng.uniform(0.2, 1.0, 342), rng.uniform(0.06, 0.3, 6)])
+    metrics = lt.evaluate(probability, y, 0.05, "trainingRecordings")
+    assert metrics["f1"] > 0.95 and metrics["falseActivationRate"] == 1.0
+    assert "wrongly flagged 100%" in (lt.verdict(metrics) or "")

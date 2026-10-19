@@ -13,8 +13,10 @@ pub enum VersionError {
     },
     #[error("this model is evaluation-only and cannot be approved or activated")]
     NotDeployable,
-    #[error("a deployable model needs the SHA-256 of its model file")]
+    #[error("a model that can run needs the SHA-256 of its model file")]
     MissingHash,
+    #[error("a deployable model cannot be marked monitor-only")]
+    DeployableNotMonitorOnly,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,8 +75,12 @@ pub struct ModelVersion {
     pub label: LabelId,
     pub origin: ModelOrigin,
     pub state: LifecycleState,
-    /// False for an evaluation-only model: it can be reviewed but never approved or activated.
+    /// False for an evaluation-only model: it did not pass the checks for going live.
     pub deployable: bool,
+    /// An evaluation-only model that still has a validated model file: it may be approved and activated, but it only ever
+    /// runs in Monitor (it reports what it detects and never acts). False for a deployable model.
+    #[serde(default)]
+    pub monitor_only: bool,
     /// SHA-256 of the model file. Required for a deployable model.
     pub model_sha256: Option<String>,
     /// The model's directory, relative to the model-lab directory.
@@ -112,6 +118,7 @@ impl ModelVersion {
             origin,
             state: LifecycleState::Draft,
             deployable,
+            monitor_only: false,
             model_sha256,
             artifact_dir,
             input,
@@ -124,6 +131,23 @@ impl ModelVersion {
                 at: at.to_string(),
             }],
         })
+    }
+
+    /// This evaluation-only version as one that may run in Monitor: it must carry its model file's hash.
+    pub fn for_monitor_only(mut self) -> Result<Self, VersionError> {
+        if self.deployable {
+            return Err(VersionError::DeployableNotMonitorOnly);
+        }
+        if !self.model_sha256.as_deref().is_some_and(crate::is_sha256_hex) {
+            return Err(VersionError::MissingHash);
+        }
+        self.monitor_only = true;
+        Ok(self)
+    }
+
+    /// Whether its model file may be loaded and run: a deployable model, or a monitor-only one.
+    pub fn runnable(&self) -> bool {
+        self.deployable || self.monitor_only
     }
 
     pub(crate) fn move_to(&mut self, to: LifecycleState, at: &str) {

@@ -14,7 +14,7 @@ const GREY = "#999999";
 const fixed = (value: number, digits = 3) => value.toFixed(digits);
 
 /**
- * How well the model does on the windows of the recordings it was tested on: ROC and precision-recall curves, what each
+ * How well the model does on the moments of the recordings it was tested on (each start of the gesture, and other moments): ROC and precision-recall curves, what each
  * cut-off would do, where its scores fall, whether they can be taken as probabilities, and how each recording went. With a
  * second model of the same label, the curves are drawn together. Everything can be saved for charting elsewhere.
  */
@@ -54,22 +54,20 @@ export function InspectEvaluation({ inspection, other, otherName }: { inspection
   };
   const stem = `${inspection.target}-held-out`;
   const report = () => JSON.stringify({
-    model: { target: inspection.target, backend: inspection.backend, inputs: inspection.inputs.map((i) => i.name), parameters: inspection.parameters, spikeMethod: inspection.spikeMethod, centreWindows: inspection.centreWindows, gridSteps: inspection.gridSteps },
+    model: { target: inspection.target, backend: inspection.backend, inputs: inspection.inputCount, trees: inspection.trees },
     heldOut: { windows: probabilities.length, gestureWindows: positives, otherWindows: negatives, recordings: [...new Set(recordings)] },
     trainerMetrics: inspection.evaluation.metrics,
     atCutOff: { cutOff: threshold, ...at },
     rocAuc: auc, averagePrecision: pr.averagePrecision,
     perRecording: recordingRows,
     importance: inspection.importance,
-    curve: inspection.curve,
-    forwardMaxAbsDifference: inspection.forwardMaxAbsDifference,
   }, null, 2);
 
   return (
     <section aria-label="How well it works" className="flex flex-col gap-3">
       <h3 className="text-base font-semibold">How well it works</h3>
       <p className="field-hint">
-        On {probabilities.length} windows from {new Set(recordings).size} recording{new Set(recordings).size === 1 ? "" : "s"} the model never trained on: {positives} of the gesture and {negatives} of something else. {inspection.evaluation.metrics.thresholdChosenOnEvaluationRecordings === false
+        On {probabilities.length} moments from {new Set(recordings).size} recording{new Set(recordings).size === 1 ? "" : "s"} the model never trained on: {positives} starts of the gesture and {negatives} other moments (other gestures&apos; starts, the middle of holds, and time with no gesture). {inspection.evaluation.metrics.thresholdChosenOnEvaluationRecordings === false
           ? "The model's own cut-off for “detected” was chosen on its training recordings, not on these windows, so the numbers at it are fair: move the cut-off to see what any other would do."
           : "The model's own cut-off for “detected” was chosen on these same windows, so the numbers at it are a little optimistic: move the cut-off to see what any other would do."}
       </p>

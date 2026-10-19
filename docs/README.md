@@ -38,7 +38,7 @@
 - [UI consistency contract](decisions/2026-09-ui-consistency-contract.md)
 - [Model Lab domain model](architecture/model-lab-domain.md) (per-label binary models; step 1, not yet wired into the app)
 - [Label inference: bundles, pipeline and detections](architecture/label-inference.md) (step 2; in-process runtime, nothing runs until a model is imported)
-- [Model format and inference runtime](decisions/2026-10-model-runtime-and-format.md) (ONNX, in-process `tract`, no Python at runtime)
+- [Model format and inference runtime](decisions/2026-10-model-runtime-and-format.md) (in-process, no Python at runtime; since 2026-10-19 the one model is ExtraTrees as a plain `model.trees` file, not ONNX)
 - [Wi-Fi vs BLE watch transport](decisions/2026-09-24-wifi-vs-ble-transport.md) (superseded: Bluetooth is now the default)
 
 ## Release

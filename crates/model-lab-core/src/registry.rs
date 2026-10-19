@@ -120,6 +120,24 @@ pub struct Registry {
     pub quarantined: Vec<QuarantinedModel>,
 }
 
+/// What [`Registry::purge`] removed.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Purged {
+    pub versions: Vec<ModelVersion>,
+    pub runs: Vec<RunId>,
+    pub snapshots: Vec<SnapshotId>,
+    pub quarantined: Vec<QuarantinedModel>,
+}
+
+impl Purged {
+    pub fn is_empty(&self) -> bool {
+        self.versions.is_empty()
+            && self.runs.is_empty()
+            && self.snapshots.is_empty()
+            && self.quarantined.is_empty()
+    }
+}
+
 impl Default for Registry {
     fn default() -> Self {
         Self {
@@ -288,7 +306,7 @@ impl Registry {
                 return Err(RegistryError::RunNotDeployable);
             }
         }
-        if version.deployable
+        if version.runnable()
             && !version
                 .model_sha256
                 .as_deref()
@@ -306,7 +324,7 @@ impl Registry {
             .ok_or_else(|| RegistryError::NoVersion(id.clone()))
     }
 
-    /// Draft, Evaluated, Approved and Archived moves. Approving an evaluation-only model is refused.
+    /// Draft, Evaluated, Approved and Archived moves. Approving an evaluation-only model is refused, unless it is monitor-only.
     pub fn transition(
         &mut self,
         id: &ModelVersionId,
@@ -321,7 +339,7 @@ impl Registry {
         if !legal_transition(from, to) {
             return Err(VersionError::IllegalTransition { from, to }.into());
         }
-        if to == LifecycleState::Approved && !version.deployable {
+        if to == LifecycleState::Approved && !version.runnable() {
             return Err(VersionError::NotDeployable.into());
         }
         version.move_to(to, at);
@@ -355,6 +373,57 @@ impl Registry {
             .ok_or_else(|| RegistryError::NoVersion(id.clone()))
     }
 
+    /// Removes, whatever their state, every version `keep_version` rejects and every run `keep_run` rejects (with the
+    /// versions they made and the snapshots no remaining run uses), and every quarantined legacy model. For clearing out
+    /// models of a kind this app can no longer run. Active and previous pointers to a removed version go with it, so the
+    /// caller must release any detection the label held. Returns what was removed, so the caller can delete its files.
+    pub fn purge(
+        &mut self,
+        keep_version: impl Fn(&ModelVersion) -> bool,
+        keep_run: impl Fn(&TrainingRun, Option<&DatasetSnapshot>) -> bool,
+    ) -> Purged {
+        let runs: Vec<RunId> = self
+            .runs
+            .values()
+            .filter(|run| !keep_run(run, self.snapshots.get(&run.snapshot_id)))
+            .map(|run| run.id.clone())
+            .collect();
+        let versions: Vec<ModelVersion> = self
+            .versions
+            .values()
+            .filter(|version| {
+                !keep_version(version)
+                    || matches!(&version.origin, ModelOrigin::Trained { run_id } if runs.contains(run_id))
+            })
+            .cloned()
+            .collect();
+        for version in &versions {
+            self.versions.remove(&version.id);
+            self.active_by_label.retain(|_, id| *id != version.id);
+            self.previous_by_label.retain(|_, id| *id != version.id);
+        }
+        for run in &runs {
+            self.runs.remove(run);
+        }
+        let used: std::collections::BTreeSet<SnapshotId> =
+            self.runs.values().map(|run| run.snapshot_id.clone()).collect();
+        let snapshots: Vec<SnapshotId> = self
+            .snapshots
+            .keys()
+            .filter(|id| !used.contains(*id))
+            .cloned()
+            .collect();
+        for id in &snapshots {
+            self.snapshots.remove(id);
+        }
+        Purged {
+            versions,
+            runs,
+            snapshots,
+            quarantined: std::mem::take(&mut self.quarantined),
+        }
+    }
+
     /// Makes an approved model the active one for its label. Whatever was active for *that label* is demoted to
     /// Approved and remembered for rollback; every other label is untouched.
     pub fn activate(&mut self, id: &ModelVersionId, at: &str) -> Result<Activation, RegistryError> {
@@ -372,7 +441,7 @@ impl Registry {
                 state: version.state,
             });
         }
-        if !version.deployable {
+        if !version.runnable() {
             return Err(VersionError::NotDeployable.into());
         }
         let replaced = self.active_by_label.get(&label).cloned();
@@ -504,15 +573,18 @@ impl Registry {
             {
                 return bad(format!("model '{id}' refers to a missing run '{run_id}'"));
             }
-            if version.deployable
+            if version.runnable()
                 && !version
                     .model_sha256
                     .as_deref()
                     .is_some_and(crate::is_sha256_hex)
             {
-                return bad(format!("deployable model '{id}' has no model hash"));
+                return bad(format!("runnable model '{id}' has no model hash"));
             }
-            if !version.deployable
+            if version.deployable && version.monitor_only {
+                return bad(format!("deployable model '{id}' is marked monitor-only"));
+            }
+            if !version.runnable()
                 && matches!(
                     version.state,
                     LifecycleState::Approved | LifecycleState::Active
@@ -851,6 +923,37 @@ pub(crate) mod tests {
             Err(RegistryError::Version(VersionError::NotDeployable))
         );
         assert!(r.activate(&mid("e1"), T).is_err());
+        // One that kept its model file may run in Monitor: it can be approved and activated.
+        let mut kept = version("m1", "pa", "pinch_start", "re", false);
+        assert_eq!(
+            kept.clone().for_monitor_only(),
+            Err(VersionError::MissingHash)
+        );
+        kept.model_sha256 = Some(sha256_hex(b"m1"));
+        r.register_version(kept.for_monitor_only().unwrap()).unwrap();
+        approve(&mut r, "m1");
+        r.activate(&mid("m1"), T).unwrap();
+        assert!(r.versions[&mid("m1")].monitor_only && !r.versions[&mid("m1")].deployable);
+        assert!(r.validate().is_ok());
+    }
+
+    #[test]
+    fn purging_removes_old_models_whatever_their_state_and_their_runs_and_snapshots() {
+        let mut r = two_label_registry();
+        r.activate(&mid("a1"), T).unwrap();
+        let before = r.versions.len();
+        let purged = r.purge(|v| v.id != mid("a1"), |_, _| true);
+        assert_eq!(purged.versions.len(), 1);
+        assert_eq!(r.versions.len(), before - 1);
+        assert!(!r.active_by_label.contains_key(&label("pinch_start")));
+        assert!(r.validate().is_ok());
+        // Removing every run removes the models they made and every snapshot.
+        let purged = r.purge(|_| true, |_, _| false);
+        assert!(r.runs.is_empty() && r.snapshots.is_empty());
+        assert!(r.versions.values().all(|v| !matches!(v.origin, ModelOrigin::Trained { .. })));
+        assert!(!purged.runs.is_empty());
+        assert!(r.validate().is_ok());
+        assert!(r.purge(|_| true, |_, _| true).is_empty(), "nothing more to remove");
     }
 
     #[test]

@@ -1,77 +1,32 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
-import { addEdit, type Edit, type FineTune, type Selection } from "../edits";
 import type { LabelModel } from "../labelModels";
-import type { ModelInspectionView } from "../inspection";
-import { SPIKE_METHODS } from "../training";
-import { EditPanel } from "./EditPanel";
+import { currentInspection, type ModelInspectionView } from "../inspection";
+import { PULSE_MODEL } from "../training";
 import { DeclaredInputs, InspectInputs } from "./InspectInputs";
 import { InspectEvaluation } from "./InspectEvaluation";
 import { InspectResearch } from "./InspectResearch";
-import { InspectWeights } from "./InspectWeights";
-import { InspectWindows } from "./InspectWindows";
-import { TrainingCurve } from "./TrainingCurve";
-
-const METHOD_NAMES: Record<string, string> = {
-  logreg: "Logistic regression",
-  mlp: "Small neural network (scikit-learn)",
-  "torch-mlp": "Small neural network (PyTorch)",
-  cnn1d: "1D convolutional network (PyTorch)",
-};
-
-/** What was changed to make this model, and how the changes moved its score on the same held-out windows. */
-function EditedFrom({ inspection }: { inspection: NonNullable<ModelInspectionView["inspection"]> }) {
-  const edit = inspection.edit;
-  if (!edit) return null;
-  const rate = (metrics: Record<string, unknown> | null | undefined, key: string) => (metrics && typeof metrics[key] === "number" ? (metrics[key] as number).toFixed(3) : "–");
-  return (
-    <section aria-label="Edited from another model" className="flex flex-col gap-2 rounded-lg border border-input p-3">
-      <h3 className="text-base font-semibold">Edited from {edit.fromModel ?? "another model"}</h3>
-      <ul className="flex flex-col gap-1 text-sm" aria-label="What was changed">
-        {edit.said.map((line) => <li key={line}>{line}</li>)}
-      </ul>
-      <table className="text-sm" aria-label="Before and after the changes">
-        <caption className="caption-top text-left text-xs text-muted-foreground">On the same held-out windows, each at its own cut-off</caption>
-        <thead><tr className="text-left"><th /><th className="px-2">ROC AUC</th><th className="px-2">F1</th><th className="px-2">Recall</th><th className="px-2">Precision</th><th className="px-2">False alarms</th></tr></thead>
-        <tbody>
-          {([["Before", edit.before], ["After", edit.after]] as const).map(([name, metrics]) => (
-            <tr key={name}><th scope="row" className="pr-2 text-left">{name}</th><td className="px-2">{rate(metrics, "rocAuc")}</td><td className="px-2">{rate(metrics, "f1")}</td><td className="px-2">{rate(metrics, "recall")}</td><td className="px-2">{rate(metrics, "precision")}</td><td className="px-2">{rate(metrics, "falseActivationRate")}</td></tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
-}
 
 const asStrings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
 
-/** Looks inside one model: its inputs, weights, what it does with real windows, and how it learned. */
+/** Looks inside one model: what it reads, what it leans on, and how well it works on recordings it never trained on. */
 export function ModelInspector({ id, onClose, models = [] }: { id: string; onClose: () => void; /** The registered models, to offer another of the same label to compare with. */ models?: LabelModel[] }) {
   const [view, setView] = useState<ModelInspectionView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [compareId, setCompareId] = useState("");
   const [compare, setCompare] = useState<ModelInspectionView | null>(null);
   const [compareError, setCompareError] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [edits, setEdits] = useState<Edit[]>([]);
-  const [selection, setSelection] = useState<Selection | null>(null);
-  // The model a save was started for: its answer only touches the editor if that model is still the one open.
-  const [savingFor, setSavingFor] = useState<string | null>(null);
-  const saving = savingFor === id;
-  const openId = useRef(id);
-  openId.current = id;
-  const [editMessage, setEditMessage] = useState<string | null>(null);
-  const [fineTune, setFineTune] = useState<FineTune | null>(null);
 
   useEffect(() => {
     let stale = false;
     setView(null);
     setError(null);
+    setCompareId("");
     void (async () => {
       try {
         const next = await invoke<ModelInspectionView>("inspect_label_model", { id });
@@ -83,14 +38,6 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
     return () => { stale = true; };
   }, [id]);
 
-  useEffect(() => {
-    setCompareId("");
-    setEditing(false);
-    setEdits([]);
-    setSelection(null);
-    setEditMessage(null);
-    setFineTune(null);
-  }, [id]);
   useEffect(() => {
     let stale = false;
     setCompare(null);
@@ -107,39 +54,11 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
     return () => { stale = true; };
   }, [compareId]);
 
-  const saveEdits = async () => {
-    const saved = id;
-    setSavingFor(saved);
-    setEditMessage(null);
-    let outcome: { ok: boolean; message: string };
-    try {
-      await invoke("start_label_edit", { id: saved, edits, ...(fineTune ? { fineTune } : {}) });
-      outcome = { ok: true, message: `Started. The ${fineTune ? "fine-tuned" : "edited"} model is being scored and will appear as a new draft under Label models when it is done; the progress is under Train a model.` };
-    } catch (err) {
-      outcome = { ok: false, message: String(err) };
-    }
-    setSavingFor((now) => (now === saved ? null : now));
-    // Another model was opened meanwhile: its edits are its own, so this answer leaves them alone.
-    if (openId.current !== saved) return;
-    setEditMessage(outcome.message);
-    if (outcome.ok) {
-      setEdits([]);
-      setFineTune(null);
-      setSelection(null);
-    }
-  };
-  const switchedOff = new Set(edits.flatMap((edit) => (edit.kind === "disableInput" ? [edit.input] : [])));
-  const toggleInput = (name: string) => setEdits((previous) => (switchedOff.has(name) ? previous.filter((edit) => !(edit.kind === "disableInput" && edit.input === name)) : addEdit(previous, { kind: "disableInput", input: name })));
-
-  const emphasis = new Map(edits.flatMap((edit) => (edit.kind === "scaleInput" ? [[edit.input, edit.factor] as [string, number]] : [])));
-  const emphasise = (name: string, factor: number) => setEdits((previous) => (factor === 1 ? previous.filter((edit) => !(edit.kind === "scaleInput" && edit.input === name)) : addEdit(previous, { kind: "scaleInput", input: name, factor })));
-
-  const inspection = view?.inspection ?? null;
+  const inspection = currentInspection(view?.inspection);
+  const other = currentInspection(compare?.inspection);
   const sameLabel = view ? models.filter((model) => model.label === view.label && model.id !== view.id) : [];
   const manifestInput = (view?.manifest?.input ?? {}) as { features?: unknown };
-  const spikeMethod = inspection?.spikeMethod ?? ((view?.manifest?.preprocessing as { method?: string } | undefined)?.method ?? null);
-  const spikeLabel = spikeMethod ? SPIKE_METHODS.find((option) => option.value === spikeMethod)?.label ?? spikeMethod : undefined;
-  const backend = inspection?.backend ?? (view?.manifest?.provenance as { backend?: string } | undefined)?.backend ?? "";
+  const monitorOnly = models.find((model) => model.id === id)?.monitorOnly ?? false;
   const auc = inspection?.evaluation.metrics.rocAuc;
 
   return (
@@ -148,19 +67,10 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
         <SectionHeader
           title={view ? `Inspect: ${view.label}` : "Inspect a model"}
           description={view ? `${view.id} · ${view.origin === "trained" ? "trained in this app" : "imported"}` : "Loading…"}
-          status={
-            <div className="flex items-center gap-2">
-              {inspection && view?.origin === "trained" && (
-                <Button type="button" variant={editing ? "default" : "outline"} aria-pressed={editing} onClick={() => setEditing((value) => !value)}>
-                  {editing ? "Stop editing" : "Edit this model"}
-                </Button>
-              )}
-              <Button type="button" variant="outline" onClick={onClose}>Close</Button>
-            </div>
-          }
+          status={<Button type="button" variant="outline" onClick={onClose}>Close</Button>}
           help={{
             label: "About inspecting a model",
-            content: "Everything here is what the model really does. The weights are read from the model, and every number computed from them was checked against the model itself. The windows and the importance come from the recordings the model was tested on, never the ones it trained on.",
+            content: "Everything here comes from the recordings the model was tested on, never the ones it trained on: every score is one the model gave a moment it had not seen.",
           }}
         />
       </CardHeader>
@@ -171,21 +81,20 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
           <>
             <Alert role="note"><AlertDescription>
               {view.origin === "imported"
-                ? "This model was imported, so the app has only what it declares: its inputs and settings. The weights and how it did on test windows are not available."
-                : "This model was trained before inspections were saved, or its inspection could not be made, so only what it declares is shown. Train it again to see its weights."}
+                ? "This model was imported, so the app has only what it declares: its inputs and settings. How it did on test recordings is not available."
+                : "This model's inspection could not be made, so only what it declares is shown."}
             </AlertDescription></Alert>
-            <DeclaredInputs names={asStrings(manifestInput.features)} spikeLabel={spikeLabel} />
+            <DeclaredInputs names={asStrings(manifestInput.features)} />
           </>
         )}
         {inspection && (
           <>
             <div className="flex flex-wrap items-center gap-2" role="status" aria-label="Model summary">
-              <Badge variant="outline">{METHOD_NAMES[backend] ?? backend}</Badge>
-              <Badge variant="outline">{inspection.inputKind === "columns" ? `${inspection.inputs.length} columns × ${inspection.gridSteps ?? 1} reading${(inspection.gridSteps ?? 1) === 1 ? "" : "s"} = ${inspection.inputs.length * (inspection.gridSteps ?? 1)} input neurons` : `${inspection.inputs.length} ${inspection.inputKind === "channels" ? "channels" : "inputs"}`}</Badge>
-              {inspection.parameters !== null && <Badge variant="outline">{inspection.parameters.toLocaleString("en-US")} parameters</Badge>}
+              <Badge variant="outline">{PULSE_MODEL.name}</Badge>
+              <Badge variant="outline">{inspection.inputCount.toLocaleString("en-US")} pulse inputs · {inspection.trees} trees</Badge>
+              <Badge variant="outline">Trained on {inspection.examples.trainStarts} starts among {inspection.examples.train.toLocaleString("en-US")} moments</Badge>
               {typeof auc === "number" && <Badge variant="outline">Held-out ROC AUC {auc.toFixed(2)}</Badge>}
-              {inspection.spikeMethod && <Badge variant="outline">Spikes: {spikeLabel}</Badge>}
-              {inspection.centreWindows && <Badge variant="outline">Window average taken away</Badge>}
+              {monitorOnly && <Badge variant="secondary">Monitor only</Badge>}
             </div>
             {sameLabel.length > 0 && (
               <div className="flex flex-wrap items-center gap-2">
@@ -197,31 +106,12 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
                   </select>
                 </label>
                 {compareError && <span className="field-error" role="alert">{compareError}</span>}
-                {compare && !compare.inspection && <span className="hint" role="status">{compare.id} has no saved inspection, so there is nothing to compare.</span>}
+                {compare && !other && <span className="hint" role="status">{compare.id} has no saved inspection, so there is nothing to compare.</span>}
               </div>
             )}
-            <InspectEvaluation inspection={inspection} other={compare?.inspection ?? null} otherName={compare?.id} />
-            {inspection.edit && <EditedFrom inspection={inspection} />}
+            <InspectEvaluation inspection={inspection} other={other} otherName={compare?.id} />
             <InspectResearch inspection={inspection} />
-            <InspectInputs inspection={inspection} spikeLabel={spikeLabel} editing={editing} switchedOff={switchedOff} onToggleInput={toggleInput} emphasis={emphasis} onEmphasis={emphasise} />
-            <InspectWeights inspection={inspection} editing={editing} selection={selection} onSelect={setSelection} />
-            {editing && (
-              <EditPanel
-                inspection={inspection} selection={selection} edits={edits} saving={saving} message={editMessage}
-                onAdd={(edit) => setEdits((previous) => addEdit(previous, edit))}
-                onRemove={(index) => setEdits((previous) => previous.filter((_, i) => i !== index))}
-                onClearAll={() => { setEdits([]); setSelection(null); setFineTune(null); }}
-                fineTune={fineTune} onFineTune={setFineTune}
-                onSave={() => void saveEdits()}
-              />
-            )}
-            <InspectWindows inspection={inspection} spikeLabel={spikeLabel} />
-            {inspection.curve.length > 0 && (
-              <section aria-label="How it learned" className="flex flex-col gap-2">
-                <h3 className="text-base font-semibold">How it learned</h3>
-                <TrainingCurve points={inspection.curve} />
-              </section>
-            )}
+            <InspectInputs inspection={inspection} />
           </>
         )}
       </CardContent>

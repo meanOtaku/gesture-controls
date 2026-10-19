@@ -58,11 +58,10 @@ def test_a_folder_loads_as_exactly_the_single_file_it_was_made_from(tmp_path: Pa
     assert b.session_id == "recording" and b.source_path == folder
 
 
-def test_a_converted_older_export_with_fused_rows_gives_the_same_features_as_the_file(tmp_path: Path) -> None:
+def test_a_converted_older_export_with_fused_rows_gives_the_same_pulse_as_the_file(tmp_path: Path) -> None:
     # Older exports put both sensors on one row; the conversion writes such a row into both files. Read back, it must be one
-    # row again, or carry-forward and orientation deltas change while the recording keeps the old file's identity.
-    from label_trainer.features import extract_features
-    from label_trainer.windowing import WindowConfig, build_windows
+    # row again, or the pulse samples change while the recording keeps the old file's identity.
+    from label_trainer.label_train import pulse_of
 
     rng = np.random.default_rng(3)
     lines = ["# gesture-dataset-export: 1", ",".join(HEADER_COLUMNS)]
@@ -84,11 +83,8 @@ def test_a_converted_older_export_with_fused_rows_gives_the_same_features_as_the
     assert np.array_equal(a.ppg_observed, b.ppg_observed) and np.array_equal(a.orient_observed, b.orient_observed)
     for column in a.channels:
         assert np.array_equal(a.channels[column], b.channels[column], equal_nan=True), column
-    config = WindowConfig(window_ms=200, stride_ms=100, min_samples_per_window=4)
-    windows_a, windows_b = build_windows(a, config), build_windows(b, config)
-    assert windows_a and len(windows_a) == len(windows_b)
-    for wa, wb in zip(windows_a, windows_b):
-        assert np.array_equal(extract_features(a, wa), extract_features(b, wb), equal_nan=True)
+    (ts_a, pulse_a), (ts_b, pulse_b) = pulse_of(a), pulse_of(b)
+    assert len(ts_a) == 40 and np.array_equal(ts_a, ts_b) and np.array_equal(pulse_a, pulse_b)
 
 
 def test_every_row_of_each_file_has_every_column_filled() -> None:

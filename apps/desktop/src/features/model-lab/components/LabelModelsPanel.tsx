@@ -20,10 +20,7 @@ import {
   type LabelRuntimeStatus,
   type ModelAction,
 } from "../labelModels";
-import type { DatasetLabel, DatasetSummary } from "../types";
-import { FineTuneModel } from "./FineTuneModel";
 import { InputWarningNote } from "./InputWarningNote";
-import { TrainingRangeBackfill } from "./TrainingRangeBackfill";
 
 const STATE_LABEL: Record<LabelModelState, string> = {
   draft: "Draft",
@@ -45,10 +42,6 @@ export function LabelModelsPanel({
   loadError,
   refresh,
   onInspect,
-  onOpenNetworkLab,
-  datasets,
-  labels,
-  onDatasetsChanged,
 }: {
   desktopAvailable: boolean;
   models: LabelModel[];
@@ -57,13 +50,6 @@ export function LabelModelsPanel({
   refresh: () => Promise<void>;
   /** Opens the Inspect view for a model. */
   onInspect?: (id: string) => void;
-  /** Opens the Network lab, where fine-tune plans are made. */
-  onOpenNetworkLab?: () => void;
-  /** The recordings in Model Lab, offered as extra recordings to fine-tune a model on. */
-  datasets?: DatasetSummary[];
-  labels?: DatasetLabel[];
-  /** Called when a recording was added to the training data from here. */
-  onDatasetsChanged?: () => void;
 }) {
   const modeId = useId();
   const [actionError, setActionError] = useState<string | null>(null);
@@ -71,7 +57,6 @@ export function LabelModelsPanel({
   const setError = setActionError;
   const [confirmLive, setConfirmLive] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
-  const [tuning, setTuning] = useState<string | null>(null);
   const { isPending, run } = usePendingActions();
 
   const attempt = (key: string, title: string, work: () => Promise<unknown>, success?: string) =>
@@ -136,7 +121,7 @@ export function LabelModelsPanel({
           }
           help={{
             label: "About label models",
-            content: "A model bundle is a folder with manifest.json and one ONNX model. Importing adds it as a Draft: you then mark it evaluated, approve it and activate it yourself. Models run inside this app; nothing else needs to be installed.",
+            content: "A model bundle is a folder with manifest.json and the PPG pinch-start model's trees (model.trees). Importing adds it as a Draft: you then mark it evaluated, approve it and activate it yourself. Models run inside this app; nothing else needs to be installed.",
           }}
         />
       </CardHeader>
@@ -185,8 +170,6 @@ export function LabelModelsPanel({
           </Alert>
         )}
 
-        <TrainingRangeBackfill desktopAvailable={desktopAvailable} refreshKey={models.map((m) => m.id).join(",")} />
-
         {groups.length === 0 ? (
           <p className="hint">No label models yet. Import a model folder, or train one from your recordings below.</p>
         ) : (
@@ -209,12 +192,13 @@ export function LabelModelsPanel({
                           <span className="text-sm">
                             {model.id} <Badge variant={model.state === "active" ? "default" : "secondary"}>{STATE_LABEL[model.state]}</Badge>{" "}
                             {model.imported && <Badge variant="outline">Imported</Badge>}
+                            {model.monitorOnly && <Badge variant="outline">Monitor only</Badge>}
                           </span>
                           <small className="text-xs text-muted-foreground">
                             Added {model.createdAt}
                             {model.imported ? ". Imported models are not evaluated by this app: review them before approving." : ""}
+                            {model.monitorOnly ? ". It did not pass the checks for going live: when active it scores and shows what it detects, but never starts a recipe, even in Live." : ""}
                           </small>
-                          {tuning === model.id && <FineTuneModel modelId={model.id} datasets={datasets} models={models} labels={labels} status={status} refreshKey={`${datasets?.length ?? 0}`} onDatasetsChanged={onDatasetsChanged} onClose={() => setTuning(null)} onOpenNetworkLab={onOpenNetworkLab} />}
                         </div>
                         <div className="recipe-item-actions">
                           {actionsFor(model).map((action) => (
@@ -255,11 +239,6 @@ export function LabelModelsPanel({
                               Inspect
                             </Button>
                           )}
-                          {!model.imported && model.state !== "archived" && (
-                            <Button type="button" variant="ghost" aria-label={`Fine-tune ${model.id}`} aria-pressed={tuning === model.id} onClick={() => setTuning(tuning === model.id ? null : model.id)}>
-                              Fine-tune…
-                            </Button>
-                          )}
                           {model.state === "active" && (
                             <Button type="button" variant="ghost" aria-label={`Roll back ${model.label}`} disabled={isPending(`${model.label}:rollback`)}
                               onClick={() => void attempt(`${model.label}:rollback`, "Roll back", () => invoke("rollback_label_model", { label: model.label }))}>
@@ -274,11 +253,6 @@ export function LabelModelsPanel({
               );
             })}
           </ul>
-        )}
-        {status && status.quarantined.length > 0 && (
-          <p className="field-hint">
-            {status.quarantined.length} model{status.quarantined.length === 1 ? "" : "s"} from the old three-class system could not be converted and are kept aside, not used.
-          </p>
         )}
       </CardContent>
     </Card>

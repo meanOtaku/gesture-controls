@@ -4,17 +4,15 @@ use crate::bundle::TrainingRange;
 use model_lab_core::{
     InputContract, LabelId, LifecycleState, ModelVersion, ModelVersionId, QualityRules, Thresholds,
 };
-use pinch_inference::{
-    FEATURE_COUNT, FEATURE_NAMES, GridChannel, GridPulse, GridTiming, SpikeMethod,
-};
+use pinch_inference::ppg_onset::FEATURE_COUNT;
 use thiserror::Error;
-use tract_onnx::prelude::*;
 
 use crate::bundle::ValidatedBundle;
+use crate::trees::TreeEnsemble;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ModelError {
-    #[error("model '{0}' is not an Active, deployable version, so it may not be loaded")]
+    #[error("model '{0}' is not an Active version that may run, so it may not be loaded")]
     NotRunnable(ModelVersionId),
     #[error("the bundle is for '{bundle}' but model '{version}' is for '{label}'")]
     LabelMismatch {
@@ -26,45 +24,35 @@ pub enum ModelError {
         "the bundle's model hash does not match the registered model's, so it is not the model that was approved"
     )]
     NotTheApprovedModel,
-    #[error("the model failed: {0}")]
-    Inference(String),
+    #[error("the model reads {expected} inputs but was given {actual}")]
+    WrongInputCount { expected: usize, actual: usize },
     #[error("the model produced {0}, which is not a probability in [0, 1]")]
     BadOutput(String),
     #[error("a feature value was not finite")]
     NonFiniteFeature,
 }
 
-/// A validated model, tied to the registry version that approved it, ready to score windows.
-/// The grid a convolutional model reads: these channels, each laid onto this many steps.
-#[derive(Debug, Clone, PartialEq)]
-pub struct GridPlan {
-    pub channels: Vec<GridChannel>,
-    pub steps: usize,
-    pub timing: GridTiming,
-    pub pulse: GridPulse,
-}
-
 /// How far past its training range an input may be before it counts as outside, as a share of that range's width.
 pub const RANGE_MARGIN: f64 = 0.25;
 /// An input this many range-widths past its range is far outside it: one such input is enough to say a window is unlike
-/// the training ones (it measured 5 to 6 widths out on the one pulse level that had drifted, and none in training).
+/// the training ones.
 pub const FAR_EXCESS: f64 = 2.0;
 /// The most inputs named when a window is unlike the training ones.
 const WORST_INPUTS: usize = 3;
 
-/// One input of a live window that is outside what the model was trained on.
+/// One input of a live decision that is outside what the model was trained on.
 #[derive(Debug, Clone, PartialEq)]
 pub struct OutsideInput {
     pub name: String,
     pub value: f64,
-    /// The usual low and high of this input in the training windows.
+    /// The usual low and high of this input in the training decisions.
     pub low: f64,
     pub high: f64,
     /// How far past the nearer end it is, as a share of the range's width (above `RANGE_MARGIN` it counts as outside).
     pub excess: f64,
 }
 
-/// How a live window's inputs compare with the windows the model was trained on.
+/// How a live decision's inputs compare with the ones the model was trained on.
 #[derive(Debug, Clone, PartialEq)]
 pub struct InputCheck {
     /// Inputs that could be judged (their training range had some width).
@@ -77,6 +65,7 @@ pub struct InputCheck {
     pub worst: Vec<OutsideInput>,
 }
 
+/// A validated model, tied to the registry version that approved it, ready to score decisions.
 pub struct LoadedModel {
     pub version_id: ModelVersionId,
     pub label: LabelId,
@@ -84,28 +73,20 @@ pub struct LoadedModel {
     pub thresholds: Thresholds,
     pub quality: QualityRules,
     pub model_sha256: String,
-    /// How this model's pulse-sensor spike features are made, if it reads any: the way it was trained.
-    pub spike_method: Option<SpikeMethod>,
-    /// How far back (milliseconds) its pulse-sensor level features look for their baseline, if it reads any.
-    pub baseline_ms: Option<u32>,
-    /// For a convolutional model: the channels and steps of the grid it reads, instead of canonical features.
-    pub grid: Option<GridPlan>,
-    /// Positions of this model's features within the canonical vector, in the order the model expects them.
-    feature_indices: Vec<usize>,
-    /// The inputs' names as the manifest lists them, and (for a grid) how many steps each channel has.
+    /// An evaluation-only model allowed to run: it reports what it detects, and nothing ever acts on it.
+    pub monitor_only: bool,
+    /// The inputs' names as the manifest lists them.
     input_names: Vec<String>,
-    grid_steps: usize,
-    /// What each input usually is in the training windows, when the manifest says.
+    /// What each input usually is in the training decisions, when the manifest says.
     pub training_range: Option<TrainingRange>,
-    plan: Arc<TypedRunnableModel<TypedModel>>,
-    output_index: usize,
-    positive_index: usize,
+    trees: Arc<TreeEnsemble>,
 }
 
 impl LoadedModel {
-    /// Only a version that is Active and deployable, whose model file is the one that was approved, can be loaded.
+    /// Only a version that is Active and may run (deployable, or monitor-only), whose model file is the one that was
+    /// approved, can be loaded.
     pub fn load(bundle: ValidatedBundle, version: &ModelVersion) -> Result<Self, ModelError> {
-        if version.state != LifecycleState::Active || !version.deployable {
+        if version.state != LifecycleState::Active || !version.runnable() {
             return Err(ModelError::NotRunnable(version.id.clone()));
         }
         if version.label != bundle.manifest.target_label {
@@ -118,24 +99,6 @@ impl LoadedModel {
         if version.model_sha256.as_deref() != Some(bundle.model_sha256.as_str()) {
             return Err(ModelError::NotTheApprovedModel);
         }
-        // The bundle validator already proved every feature name is canonical.
-        let grid = bundle.manifest.grid_channels().map(|channels| {
-            let spec = bundle.manifest.input.grid.as_ref();
-            GridPlan {
-                channels,
-                steps: spec.map_or(0, |g| g.steps as usize),
-                timing: spec.map_or(GridTiming::Samples, |g| g.timing.into()),
-                pulse: spec.map_or(GridPulse::Raw, |g| g.pulse.into()),
-            }
-        });
-        let feature_indices = bundle
-            .manifest
-            .input
-            .features
-            .iter()
-            .filter(|_| grid.is_none())
-            .filter_map(|name| FEATURE_NAMES.iter().position(|canonical| canonical == name))
-            .collect();
         Ok(Self {
             version_id: version.id.clone(),
             label: version.label.clone(),
@@ -144,42 +107,18 @@ impl LoadedModel {
             thresholds: version.thresholds,
             quality: version.quality,
             model_sha256: bundle.model_sha256.clone(),
-            spike_method: bundle.manifest.spike_method(),
-            baseline_ms: bundle.manifest.baseline_ms(),
-            grid,
-            feature_indices,
+            monitor_only: !version.deployable,
             input_names: bundle.manifest.input.features.clone(),
-            grid_steps: bundle
-                .manifest
-                .input
-                .grid
-                .as_ref()
-                .map_or(0, |g| g.steps as usize),
             training_range: bundle.manifest.input.training_range.clone(),
-            output_index: bundle.output_index,
-            positive_index: bundle.manifest.output.positive_index,
-            plan: bundle.plan,
+            trees: bundle.trees,
         })
     }
 
-    /// The numbers this model reads out of the canonical features of one window, in its own order.
-    pub fn select(&self, canonical: &[f32; FEATURE_COUNT]) -> Vec<f32> {
-        self.feature_indices.iter().map(|&i| canonical[i]).collect()
-    }
-
-    /// The probability that this model's label is present, from the canonical features of one window.
-    pub fn predict(&self, canonical: &[f32; FEATURE_COUNT]) -> Result<f64, ModelError> {
-        self.predict_input(self.select(canonical))
-    }
-
-    /// How the numbers this model is about to read compare with the windows it was trained on: `None` when the trainer
-    /// recorded no range (an older model, or one that takes the window's own level away). A grid's channel is judged by its
-    /// average over the steps, against the range of that channel's values.
-    pub fn check_input(&self, input: &[f32]) -> Option<InputCheck> {
+    /// How the inputs this model is about to read compare with the decisions it was trained on: `None` when the trainer
+    /// recorded no range, or the inputs are the wrong number to compare.
+    pub fn check_input(&self, input: &[f64]) -> Option<InputCheck> {
         let range = self.training_range.as_ref()?;
-        let names = self.input_names.len();
-        let steps = self.grid_steps.max(1);
-        if input.len() != names * steps || range.low.len() != names {
+        if input.len() != self.input_names.len() || range.low.len() != input.len() {
             return None;
         }
         let mut judged = 0;
@@ -191,8 +130,7 @@ impl LoadedModel {
                 continue; // it never varied in training: nothing to compare with
             }
             judged += 1;
-            let slice = &input[index * steps..(index + 1) * steps];
-            let value = slice.iter().map(|v| f64::from(*v)).sum::<f64>() / slice.len() as f64;
+            let value = input[index];
             let excess = if value < low {
                 (low - value) / width
             } else if value > high {
@@ -222,32 +160,22 @@ impl LoadedModel {
         })
     }
 
-    /// The probability that this model's label is present, from exactly the numbers the model reads: the selected
-    /// features, or for a convolutional model the flat grid.
-    pub fn predict_input(&self, selected: Vec<f32>) -> Result<f64, ModelError> {
-        if selected.iter().any(|v| !v.is_finite()) {
+    /// The probability that this model's label just started, from the [`FEATURE_COUNT`] features of one decision.
+    pub fn predict(&self, features: &[f64]) -> Result<f64, ModelError> {
+        if features.len() != FEATURE_COUNT {
+            return Err(ModelError::WrongInputCount {
+                expected: FEATURE_COUNT,
+                actual: features.len(),
+            });
+        }
+        if features.iter().any(|v| !v.is_finite()) {
             return Err(ModelError::NonFiniteFeature);
         }
-        let input = tract_ndarray::Array2::from_shape_vec((1, selected.len()), selected)
-            .map_err(|e| ModelError::Inference(e.to_string()))?;
-        let outputs = self
-            .plan
-            .run(tvec!(input.into_tensor().into()))
-            .map_err(|e| ModelError::Inference(e.to_string()))?;
-        let view = outputs
-            .get(self.output_index)
-            .ok_or_else(|| ModelError::Inference("the output is missing".into()))?
-            .to_array_view::<f32>()
-            .map_err(|e| ModelError::Inference(e.to_string()))?;
-        let value = view
-            .iter()
-            .nth(self.positive_index)
-            .copied()
-            .ok_or_else(|| ModelError::Inference("the positive output is missing".into()))?;
+        let value = self.trees.predict(features);
         if !value.is_finite() || !(0.0..=1.0).contains(&value) {
             return Err(ModelError::BadOutput(value.to_string()));
         }
-        Ok(f64::from(value))
+        Ok(value)
     }
 }
 
@@ -257,17 +185,18 @@ pub(crate) mod tests {
     use crate::bundle::tests::fixture_dir;
     use crate::bundle::validate_bundle;
     use model_lab_core::{ModelOrigin, ProjectId};
+    use pinch_inference::ppg_onset::{PpgSample, features};
 
     /// The registered version the fixture bundle was approved as.
     pub fn active_version(bundle: &ValidatedBundle) -> ModelVersion {
         let mut v = ModelVersion::new(
-            ModelVersionId::new("shake-v1").unwrap(),
-            ProjectId::new("p-shake").unwrap(),
+            ModelVersionId::new("pinch-v1").unwrap(),
+            ProjectId::new("p-pinch").unwrap(),
             bundle.manifest.target_label.clone(),
             ModelOrigin::Imported,
             true,
             Some(bundle.model_sha256.clone()),
-            "models/shake-v1".into(),
+            "models/pinch-v1".into(),
             bundle.manifest.input_contract(),
             bundle.manifest.threshold_config(),
             bundle.manifest.quality,
@@ -284,111 +213,103 @@ pub(crate) mod tests {
         LoadedModel::load(bundle, &version).unwrap()
     }
 
-    /// Canonical features with the four std features this fixture reads set to `level`.
-    pub fn features_at(level: f32) -> [f32; FEATURE_COUNT] {
-        let mut f = [0.0; FEATURE_COUNT];
-        for name in [
-            "accel_x_std",
-            "accel_y_std",
-            "accel_z_std",
-            "accel_magnitude_std",
-        ] {
-            f[FEATURE_NAMES.iter().position(|n| *n == name).unwrap()] = level;
+    /// The PPG trace in the fixture and the probability the trainer gives each of its samples (`None`: no features).
+    pub fn expected() -> (Vec<PpgSample>, Vec<Option<f64>>) {
+        let raw: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(fixture_dir().join("expected.json")).unwrap(),
+        )
+        .unwrap();
+        let samples = raw["samples"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| {
+                let r = row.as_array().unwrap();
+                PpgSample {
+                    ts_ns: r[0].as_u64().unwrap(),
+                    green: r[1].as_f64().unwrap(),
+                    red: r[2].as_f64().unwrap(),
+                    ir: r[3].as_f64().unwrap(),
+                }
+            })
+            .collect();
+        let probabilities = raw["probabilities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(serde_json::Value::as_f64)
+            .collect();
+        (samples, probabilities)
+    }
+
+    #[test]
+    fn the_runtime_scores_every_decision_as_the_trainer_did() {
+        let model = loaded();
+        let (samples, probabilities) = expected();
+        let mut scored = 0;
+        for (i, want) in probabilities.iter().enumerate() {
+            let got = features(&samples[..=i], samples[i].ts_ns);
+            match (got, want) {
+                (None, None) => {}
+                (Some(x), Some(want)) => {
+                    let p = model.predict(&x).unwrap();
+                    assert!((p - want).abs() < 1e-6, "sample {i}: {p} vs {want}");
+                    scored += 1;
+                }
+                (got, want) => panic!("sample {i}: runtime features {}, trainer {}", got.is_some(), want.is_some()),
+            }
         }
-        f
+        assert!(scored > 300);
+        // It tells the trace's pinch starts from the rest.
+        let high = probabilities.iter().flatten().filter(|p| **p >= model.thresholds.activation).count();
+        assert!(high > 0 && high < scored / 2);
     }
 
     #[test]
     fn inputs_far_outside_the_training_range_are_counted_and_the_furthest_named() {
         let mut model = loaded();
-        let n = model.input.features.len();
-        let quiet = vec![0.2f32; n];
-        assert!(
-            model.check_input(&quiet).is_none(),
-            "no range recorded, nothing to say"
-        );
-
+        let n = FEATURE_COUNT;
+        let quiet = vec![0.2f64; n];
         let mut low = vec![0.0; n];
         let mut high = vec![0.5; n];
-        low[0] = 0.0;
         high[0] = 0.0; // this one never varied in training: it cannot be judged
+        low[0] = 0.0;
         model.training_range = Some(TrainingRange { low, high });
         let at_home = model.check_input(&quiet).unwrap();
         assert_eq!((at_home.judged, at_home.outside), (n - 1, 0));
-        // A little past the end is allowed (up to a quarter of the range's width), a lot is not.
         let mut edge = quiet.clone();
-        edge[1] = 0.5 + 0.1; // 20% of the width past the high end
+        edge[1] = 0.5 + 0.1; // 20% of the width past the high end: allowed
         assert_eq!(model.check_input(&edge).unwrap().outside, 0);
         let mut far = quiet.clone();
         far[1] = 0.5 + 0.2; // 40% past
         far[2] = -3.0; // six widths below
         let found = model.check_input(&far).unwrap();
-        assert_eq!(found.outside, 2);
+        assert_eq!((found.outside, found.far), (2, 1));
         assert_eq!(found.worst[0].name, model.input_names[2]);
-        assert!((found.worst[0].excess - 6.0).abs() < 1e-6 && found.worst[0].value == -3.0);
-        assert_eq!(found.far, 1, "only the one six widths out is far outside");
-        // The wrong number of values cannot be compared.
         assert!(model.check_input(&quiet[..n - 1]).is_none());
     }
 
     #[test]
-    fn a_grid_channel_is_judged_by_its_average_over_the_steps() {
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/trained_cnn_bundle");
-        let bundle = validate_bundle(&dir, Some(&LabelId::new("snap").unwrap())).unwrap();
-        let version = active_version(&bundle);
-        let mut model = LoadedModel::load(bundle, &version).unwrap();
-        let channels = model.input.features.len();
-        let steps = model.grid.as_ref().unwrap().steps;
-        model.training_range = Some(TrainingRange {
-            low: vec![-1.0; channels],
-            high: vec![1.0; channels],
-        });
-        let mut flat = vec![0.0f32; channels * steps];
-        assert_eq!(model.check_input(&flat).unwrap().outside, 0);
-        // One channel's steps all far above its range: that channel, and only it, is outside.
-        for step in 0..steps {
-            flat[steps + step] = 5.0;
-        }
-        let found = model.check_input(&flat).unwrap();
-        assert_eq!((found.judged, found.outside), (channels, 1));
-        assert_eq!(found.worst[0].name, model.input_names[1]);
-    }
-
-    #[test]
-    fn a_loaded_model_scores_quiet_low_and_shaking_high_using_only_its_declared_features() {
+    fn a_non_finite_or_missing_input_is_refused_rather_than_guessed_at() {
         let model = loaded();
-        assert!(model.predict(&features_at(0.25)).unwrap() < 0.1);
-        assert!(model.predict(&features_at(5.0)).unwrap() > 0.9);
-        // Features it does not declare are ignored, however wild.
-        let mut noisy = features_at(0.25);
-        noisy[0] = 9999.0;
-        assert_eq!(
-            model.predict(&noisy).unwrap(),
-            model.predict(&features_at(0.25)).unwrap()
-        );
-    }
-
-    #[test]
-    fn a_non_finite_feature_is_refused_rather_than_guessed_at() {
-        let model = loaded();
-        let mut bad = features_at(1.0);
-        bad[FEATURE_NAMES
-            .iter()
-            .position(|n| *n == "accel_x_std")
-            .unwrap()] = f32::NAN;
+        let mut bad = vec![0.0; FEATURE_COUNT];
+        bad[7] = f64::NAN;
         assert_eq!(model.predict(&bad), Err(ModelError::NonFiniteFeature));
+        assert!(matches!(
+            model.predict(&[0.0; 10]),
+            Err(ModelError::WrongInputCount { .. })
+        ));
     }
 
     #[test]
-    fn only_an_active_deployable_version_whose_hash_matches_can_be_loaded() {
+    fn only_an_active_runnable_version_whose_hash_matches_can_be_loaded() {
         let load = |change: &dyn Fn(&mut ModelVersion)| {
             let bundle = validate_bundle(&fixture_dir(), None).unwrap();
             let mut version = active_version(&bundle);
             change(&mut version);
-            LoadedModel::load(bundle, &version).map(|_| ())
+            LoadedModel::load(bundle, &version).map(|m| m.monitor_only)
         };
-        assert!(load(&|_| {}).is_ok());
+        assert_eq!(load(&|_| {}), Ok(false));
         assert!(matches!(
             load(&|v| v.state = LifecycleState::Approved),
             Err(ModelError::NotRunnable(_))
@@ -397,6 +318,14 @@ pub(crate) mod tests {
             load(&|v| v.deployable = false),
             Err(ModelError::NotRunnable(_))
         ));
+        // An evaluation-only model that kept its file runs, but only in Monitor.
+        assert_eq!(
+            load(&|v| {
+                v.deployable = false;
+                v.monitor_only = true;
+            }),
+            Ok(true)
+        );
         assert!(matches!(
             load(&|v| v.label = LabelId::new("swipe_left").unwrap()),
             Err(ModelError::LabelMismatch { .. })
@@ -405,106 +334,5 @@ pub(crate) mod tests {
             load(&|v| v.model_sha256 = Some("0".repeat(64))),
             Err(ModelError::NotTheApprovedModel)
         ));
-    }
-
-    /// A convolutional model from the real trainer reads the window as a flat grid: the validator accepts it, the
-    /// runtime scores the trainer's grids the way the exported file does, and the grid it expects is the one declared.
-    #[test]
-    fn a_convolutional_bundle_validates_and_scores_the_trainers_grids() {
-        // The default convolutional network, and a designed one (tanh and ReLU convolutions, max pooling, a dense layer).
-        // And a dense network reading the raw columns themselves: six columns at four steps are twenty-four input neurons.
-        for (name, steps) in [
-            ("trained_cnn_bundle", 16usize),
-            ("trained_designed_cnn_bundle", 16),
-            ("trained_raw_columns_bundle", 4),
-        ] {
-            let channels_expected = 6;
-            let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("tests/fixtures")
-                .join(name);
-            let bundle = validate_bundle(&dir, Some(&LabelId::new("snap").unwrap()))
-                .unwrap_or_else(|e| panic!("{name}: {e}"));
-            let version = active_version(&bundle);
-            let channels = bundle.manifest.grid_channels().expect("a grid model");
-            assert_eq!(channels.len(), channels_expected);
-            assert_eq!(
-                bundle.manifest.input.grid.as_ref().unwrap().steps as usize,
-                steps
-            );
-            let model = LoadedModel::load(bundle, &version).unwrap();
-            let plan = model.grid.clone().expect("the model reads a grid");
-            assert_eq!((plan.channels.len(), plan.steps), (6, steps));
-            let expected: serde_json::Value =
-                serde_json::from_slice(&std::fs::read(dir.join("expected.json")).unwrap()).unwrap();
-            let rows = expected["inputs"].as_array().unwrap();
-            let want = expected["positive_probability"].as_array().unwrap();
-            assert!(!rows.is_empty());
-            for (row, want) in rows.iter().zip(want) {
-                let input: Vec<f32> = row
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|v| v.as_f64().unwrap() as f32)
-                    .collect();
-                assert_eq!(input.len(), 6 * steps);
-                let got = model.predict_input(input).unwrap();
-                assert!(
-                    (got - want.as_f64().unwrap()).abs() < 1e-4,
-                    "{name}: {got} vs {want}"
-                );
-            }
-            let first = want.first().unwrap().as_f64().unwrap();
-            let last = want.last().unwrap().as_f64().unwrap();
-            assert!(
-                first < last,
-                "{name}: the negative rows score below the positive ones: {first} {last}"
-            );
-        }
-    }
-
-    /// Bundles written by the real per-label trainer (`tools/model-bundle-fixture/make_trained_fixtures.py`), one per
-    /// backend (scikit-learn logistic regression and MLP, and PyTorch): they must pass the validator and score the same windows as the model the trainer fitted.
-    #[test]
-    fn bundles_from_the_real_trainer_validate_and_score_like_the_trained_model() {
-        for name in [
-            "trained_logreg_bundle",
-            "trained_mlp_bundle",
-            "trained_torch_bundle",
-            // Designed networks: tanh, leaky ReLU and sigmoid layers, three hidden layers, dropout.
-            "trained_designed_dense_bundle",
-            // Gradient-boosted trees, written as matrix arithmetic and comparisons (no tree operator).
-            "trained_gbt_bundle",
-        ] {
-            let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("tests/fixtures")
-                .join(name);
-            let bundle = validate_bundle(&dir, Some(&LabelId::new("snap").unwrap()))
-                .unwrap_or_else(|e| panic!("{name}: {e}"));
-            let version = active_version(&bundle);
-            let features = bundle.manifest.input.features.clone();
-            let model = LoadedModel::load(bundle, &version).unwrap();
-            let expected: serde_json::Value =
-                serde_json::from_slice(&std::fs::read(dir.join("expected.json")).unwrap()).unwrap();
-            let rows = expected["inputs"].as_array().unwrap();
-            let want = expected["positive_probability"].as_array().unwrap();
-            assert!(!rows.is_empty());
-            for (row, want) in rows.iter().zip(want) {
-                // The trainer's feature order is the manifest's; the runtime reads them out of the canonical 55.
-                let mut canonical = [0.0f32; FEATURE_COUNT];
-                for (feature, value) in features.iter().zip(row.as_array().unwrap()) {
-                    let at = FEATURE_NAMES.iter().position(|n| n == feature).unwrap();
-                    canonical[at] = value.as_f64().unwrap() as f32;
-                }
-                let got = model.predict(&canonical).unwrap();
-                assert!(
-                    (got - want.as_f64().unwrap()).abs() < 1e-4,
-                    "{name}: {got} vs {want}"
-                );
-            }
-            // The negative rows come first, then the positive ones: the exported model still tells them apart.
-            let first = want.first().unwrap().as_f64().unwrap();
-            let last = want.last().unwrap().as_f64().unwrap();
-            assert!(first < last, "{name}: {first} {last}");
-        }
     }
 }

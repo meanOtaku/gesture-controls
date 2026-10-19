@@ -230,13 +230,15 @@ pub fn gaps_of(stamps: &[i128]) -> StreamGaps {
 
 /// Validates a pair of files and returns them as they will be stored. Each must carry its exact header and rows of the right
 /// width with timestamps that never go backwards. Labels work as in a single file: a `# label: X` line says every row is X;
-/// otherwise rows with no label are the gaps between marked intervals and are dropped. At least one labelled row must remain.
+/// otherwise rows with no label are the time between marked intervals and are kept, with no label (the pulse model compares
+/// each moment with the seconds before it, so the recording must stay continuous). At least one row must be labelled.
 pub fn parse_pair(ppg_text: &str, imu_text: &str) -> Result<Pair, String> {
     let (ppg_head, imu_head) = (ppg_header(), imu_header());
     let ppg = read_rows(PPG_FILE, ppg_text, &ppg_head, PPG_HEADER.len())?;
     let imu = read_rows(IMU_FILE, imu_text, &imu_head, IMU_HEADER.len())?;
     let mut labels = BTreeSet::new();
     let mut kept = Vec::new();
+    let mut labelled = 0usize;
     for (name, rows) in [(PPG_FILE, &ppg), (IMU_FILE, &imu)] {
         let declared = declared_label(&rows.comments);
         let mut lines: Vec<&str> = Vec::new();
@@ -255,16 +257,18 @@ pub fn parse_pair(ppg_text: &str, imu_text: &str) -> Result<Pair, String> {
                         index + 1
                     ));
                 }
-                (None, true) => continue, // between marked intervals
                 _ => {}
             }
-            labels.insert((*label).to_string());
+            if !label.is_empty() {
+                labels.insert((*label).to_string());
+                labelled += 1;
+            }
             lines.push(line);
             stamps.push(*stamp);
         }
         kept.push((lines, stamps));
     }
-    if kept.iter().all(|(lines, _)| lines.is_empty()) {
+    if labelled == 0 {
         return Err("no labeled rows in either file: add a '# label: <value>' line for a single-label session, or label the rows".into());
     }
     let build = |rows: &Rows, lines: &[&str]| {
@@ -485,13 +489,13 @@ mod tests {
     }
 
     #[test]
-    fn rows_with_no_label_are_the_gaps_between_marked_intervals_and_are_dropped() {
+    fn rows_with_no_label_are_the_time_between_marked_intervals_and_are_kept() {
         let pair = parse_pair(
             &format!("{}\n100,1,1,2,3,0,pinch\n200,2,1,2,3,0,\n", ppg_header()),
             &format!("{}\n150,1,0,0,0,0,0,0,1,0,0,0,\n", imu_header()),
         )
         .unwrap();
-        assert_eq!((pair.ppg_rows, pair.imu_rows), (1, 0));
+        assert_eq!((pair.ppg_rows, pair.imu_rows), (2, 1));
         assert_eq!(pair.labels, ["pinch"]);
         let nothing = parse_pair(
             &format!("{}\n100,1,1,2,3,0,\n", ppg_header()),

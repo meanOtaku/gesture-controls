@@ -10,10 +10,7 @@ use watch_bridge::{WatchBridgeServer, WatchEvent};
 mod actuators;
 mod automation;
 mod calibration;
-mod correction_rounds;
 mod dataset_files;
-mod design_results;
-mod fine_tune_plans;
 mod gesture_library;
 mod gesture_samples;
 mod head_pose;
@@ -22,11 +19,7 @@ mod label_runtime;
 mod label_training;
 mod latest_write;
 mod model_lab;
-mod motion_encoders;
-mod network_designs;
-mod network_spec;
 mod overlay;
-mod range_backfill;
 mod recording_bundle;
 mod recording_sequence;
 mod settings;
@@ -161,9 +154,6 @@ pub fn run() {
         .manage(label_registry::LabelRegistryRuntime::default())
         .manage(gesture_library::GestureLibraryRuntime::default())
         .manage(gesture_samples::GestureSamplesRuntime::default())
-        .manage(network_designs::NetworkDesignRuntime::default())
-        .manage(fine_tune_plans::FineTunePlanRuntime::default())
-        .manage(correction_rounds::CorrectionRoundRuntime::default())
         .manage(recording_bundle::RawColumnCache::default())
         .invoke_handler(tauri::generate_handler![
             calibration::get_calibration_state,
@@ -185,24 +175,8 @@ pub fn run() {
             label_runtime::get_shadow_model,
             label_training::plan_label_training,
             label_training::check_label_trainer,
-            motion_encoders::list_motion_encoders,
-            network_designs::list_network_designs,
-            network_designs::save_network_design,
-            network_designs::delete_network_design,
-            network_designs::preview_network_design,
-            design_results::list_design_results,
-            range_backfill::list_models_without_range,
-            range_backfill::backfill_model_ranges,
-            correction_rounds::save_correction_round,
-            correction_rounds::list_correction_rounds,
-            fine_tune_plans::list_fine_tune_plans,
-            fine_tune_plans::save_fine_tune_plan,
-            fine_tune_plans::delete_fine_tune_plan,
-            label_training::start_label_fine_tune,
             label_training::suggest_label_offset,
-            label_training::get_model_training_info,
             label_training::start_label_training,
-            label_training::start_label_edit,
             label_training::cancel_label_training,
             label_training::get_label_training_status,
             automation::get_automation_state,

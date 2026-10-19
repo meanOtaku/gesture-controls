@@ -48,19 +48,17 @@ describe("LabelModelsPanel", () => {
     expect(onInspect).toHaveBeenLastCalledWith("snap-abc");
   });
 
-  it("offers Fine-tune… on models trained here, not imported or archived ones, and opens the plan chooser", async () => {
-    const trained = { ...draft, id: "snap-own", imported: false };
-    setup([draft, trained, { ...trained, id: "snap-old", state: "archived" }]);
-    await screen.findByRole("button", { name: "Fine-tune snap-own" });
-    expect(screen.queryByRole("button", { name: "Fine-tune snap-abc" })).toBeNull(); // imported
-    expect(screen.queryByRole("button", { name: "Fine-tune snap-old" })).toBeNull(); // archived
-    fireEvent.click(screen.getByRole("button", { name: "Fine-tune snap-own" }));
-    expect(await screen.findByRole("region", { name: "Fine-tune snap-own" })).toBeInTheDocument();
+  it("marks a model that may only run in Monitor, and lets it be approved for Monitor", async () => {
+    setup([{ ...draft, imported: false, deployable: false, monitorOnly: true, state: "evaluated" }]);
+    expect(await screen.findByText("Monitor only")).toBeInTheDocument();
+    expect(screen.getByText(/never starts a recipe, even in Live/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve for Monitor snap-abc" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Fine-tune/ })).toBeNull();
   });
 
   it("shows a warning under a label whose model is being given inputs it was never trained on, and not for another label", async () => {
     setup([{ ...draft, state: "active", active: true }, { ...draft, id: "fist-1", label: "fist", state: "active", active: true }], {
-      inputWarnings: [{ label: "snap", modelId: "snap-abc", unfamiliarShare: 0.8, worst: [{ name: "ppg_green", value: 5000, low: 90000, high: 210000 }] }],
+      inputWarnings: [{ label: "snap", modelId: "snap-abc", unfamiliarShare: 0.8, worst: [{ name: "ppg_z1000ms_d1_green_n8_mean", value: 5000, low: 90000, high: 210000 }] }],
     });
     const warning = await screen.findByRole("alert", { name: "Inputs outside training for snap-abc" });
     const snap = screen.getByRole("list", { name: "snap models" });

@@ -24,7 +24,8 @@ use model_lab_core::{
 use thiserror::Error;
 
 use crate::bundle::{
-    BundleError, MANIFEST_FILE, MAX_MANIFEST_BYTES, MAX_MODEL_BYTES, Manifest, validate_bundle,
+    BundleError, MANIFEST_FILE, MAX_MANIFEST_BYTES, MAX_MODEL_BYTES, Manifest, safe_model_name,
+    validate_bundle,
 };
 
 pub const STAGING_DIR: &str = "staging";
@@ -154,12 +155,7 @@ pub fn stage_bundle(source: &Path, model_lab_dir: &Path) -> Result<StagedBundle,
     let manifest: Manifest = serde_json::from_slice(&manifest_bytes)
         .map_err(|e| ImportError::BadManifest(e.to_string()))?;
     let name = &manifest.model.file;
-    if name.is_empty()
-        || name.contains(['/', '\\', '\0'])
-        || name == "."
-        || name == ".."
-        || name.starts_with('.')
-    {
+    if !safe_model_name(name) {
         return Err(ImportError::UnsafeModelName(name.clone()));
     }
     let model_bytes = read_plain_file(&source.join(name), "the model", MAX_MODEL_BYTES)?;
@@ -199,19 +195,22 @@ pub fn publish_staged<P: Persist>(
         store,
         now,
         ModelOrigin::Imported,
+        true,
         |_| Ok(()),
     )
 }
 
-/// As [`publish_staged`], for a model that came from somewhere else: `origin` says where, and `with_version` makes any
-/// further registry change in the same saved step as the new Draft (a training run being marked finished, say), so the
-/// run and the model it produced are recorded together or not at all.
+/// As [`publish_staged`], for a model that came from somewhere else: `origin` says where, `deployable` whether it passed
+/// the checks for going live (one that did not is published as monitor-only), and `with_version` makes any further
+/// registry change in the same saved step as the new Draft (a training run being marked finished, say), so the run and
+/// the model it produced are recorded together or not at all.
 pub fn publish_staged_with<P: Persist>(
     mut staged: StagedBundle,
     model_lab_dir: &Path,
     store: &mut RegistryStore<P>,
     now: &str,
     origin: ModelOrigin,
+    deployable: bool,
     with_version: impl FnOnce(&mut model_lab_core::Registry) -> Result<(), RegistryError>,
 ) -> Result<ImportOutcome, ImportError> {
     let label = staged.manifest.target_label.clone();
@@ -249,7 +248,7 @@ pub fn publish_staged_with<P: Persist>(
         ProjectId::new(format!("import-{label}"))?,
         label.clone(),
         origin,
-        true,
+        deployable,
         Some(sha.clone()),
         relative,
         contract.clone(),
@@ -257,6 +256,11 @@ pub fn publish_staged_with<P: Persist>(
         staged.manifest.quality,
         now,
     )?;
+    let version = if deployable {
+        version
+    } else {
+        version.for_monitor_only()?
+    };
 
     // The project the version belongs to: the label's own if it has one, else a minimal one for imported models.
     let existing_project = store
@@ -388,7 +392,7 @@ mod tests {
         assert_eq!(registry.projects.len(), 1);
         assert!(registry.active_by_label.is_empty());
         let dir = lab.path().join(&version.artifact_dir);
-        assert!(dir.join("manifest.json").is_file() && dir.join("model.onnx").is_file());
+        assert!(dir.join("manifest.json").is_file() && dir.join("model.trees").is_file());
         assert!(staging_is_empty(lab.path()));
     }
 
@@ -433,7 +437,7 @@ mod tests {
             .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
             .collect();
         names.sort();
-        assert_eq!(names, ["manifest.json", "model.onnx"]);
+        assert_eq!(names, ["manifest.json", "model.trees"]);
     }
 
     #[test]
@@ -457,10 +461,10 @@ mod tests {
         let lab = tempfile::tempdir().unwrap();
         let mut store = store();
         let source = copy_fixture();
-        let mut bytes = fs::read(source.path().join("model.onnx")).unwrap();
+        let mut bytes = fs::read(source.path().join("model.trees")).unwrap();
         let last = bytes.len() - 1;
         bytes[last] ^= 0xff;
-        fs::write(source.path().join("model.onnx"), bytes).unwrap();
+        fs::write(source.path().join("model.trees"), bytes).unwrap();
         let result = import_bundle(source.path(), lab.path(), &mut store, NOW);
         assert!(matches!(result, Err(ImportError::Bundle(_))), "{result:?}");
         assert!(store.registry().versions.is_empty() && store.registry().projects.is_empty());
@@ -472,7 +476,7 @@ mod tests {
             import_bundle(missing.path(), lab.path(), &mut store, NOW),
             Err(ImportError::MissingFile(_))
         ));
-        let file = source.path().join("model.onnx");
+        let file = source.path().join("model.trees");
         assert!(matches!(
             import_bundle(&file, lab.path(), &mut store, NOW),
             Err(ImportError::NotAFolder(_))
@@ -500,7 +504,7 @@ mod tests {
     #[test]
     fn a_linked_model_file_or_folder_is_refused() {
         let source = copy_fixture();
-        let real = source.path().join("model.onnx");
+        let real = source.path().join("model.trees");
         let hidden = source.path().join("real.bin");
         fs::rename(&real, &hidden).unwrap();
         std::os::unix::fs::symlink(&hidden, &real).unwrap();
@@ -563,7 +567,7 @@ mod tests {
         clean_staging(lab.path());
         assert!(!lab.path().join(STAGING_DIR).exists());
         let dir = &store.registry().versions[&outcome.version_id].artifact_dir;
-        assert!(lab.path().join(dir).join("model.onnx").is_file());
+        assert!(lab.path().join(dir).join("model.trees").is_file());
     }
 
     #[test]
@@ -574,7 +578,7 @@ mod tests {
         let outcome = import_bundle(source.path(), lab.path(), &mut store, NOW).unwrap();
         let version = store.registry().versions[&outcome.version_id].clone();
         assert_eq!(crate::check_loadable(&version, lab.path()), Ok(()));
-        let model = lab.path().join(&version.artifact_dir).join("model.onnx");
+        let model = lab.path().join(&version.artifact_dir).join("model.trees");
         let mut bytes = fs::read(&model).unwrap();
         bytes[0] ^= 0xff;
         fs::write(&model, bytes).unwrap();
@@ -591,7 +595,7 @@ mod tests {
         let version = store.registry().versions[&id].clone();
         let dir = crate::removable_model_dir(lab.path(), &version)
             .expect("an imported model is removable");
-        assert!(dir.join("model.onnx").is_file());
+        assert!(dir.join("model.trees").is_file());
         // Not until it is archived.
         assert!(store.mutate(|r| r.remove_version(&id).map(|_| ())).is_err());
         store

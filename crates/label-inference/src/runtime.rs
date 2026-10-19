@@ -1,13 +1,14 @@
 //! Ties the pipeline, the loaded models and the detection hub together, and applies the safety rules.
 //!
 //! * **Off** does nothing at all. **Monitor** scores and reports but never lets a *start* through. **Live** forwards
-//!   detections from the models that are loaded, and only validated, approved, active ones can be.
+//!   detections from the models that are loaded, and only validated, approved, active ones can be. A monitor-only model
+//!   (one that did not pass the checks for going live) is treated as in Monitor even in Live.
 //! * A falling edge always gets through in every mode: releasing is the safe direction, so it is never withheld.
 //! * A model replaced, removed or rolled back is released *before* the new one is used.
 //! * A stale or bad stream, a failed window, a model error, a mode change or a lost runtime clears the affected
 //!   labels and reports a falling edge for each, so anything depending on them lets go.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use model_lab_core::{InferenceMode, LabelId, ModelVersionId, StreamSource};
 use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
@@ -139,10 +140,20 @@ impl Default for LabelRuntime {
     }
 }
 
-fn allow(mode: RuntimeMode, events: &[DetectionEvent]) -> Vec<DetectionEvent> {
+/// What may be acted on: a falling edge always; anything else only in Live, and never from a monitor-only model.
+fn allow(
+    mode: RuntimeMode,
+    monitor_only: &BTreeSet<LabelId>,
+    events: &[DetectionEvent],
+) -> Vec<DetectionEvent> {
     events
         .iter()
-        .filter(|e| mode == RuntimeMode::Live || matches!(e, DetectionEvent::Falling { .. }))
+        .filter(|e| match e {
+            DetectionEvent::Falling { .. } => true,
+            DetectionEvent::Rising { label, .. } | DetectionEvent::Active { label, .. } => {
+                mode == RuntimeMode::Live && !monitor_only.contains(label)
+            }
+        })
         .cloned()
         .collect()
 }
@@ -272,27 +283,20 @@ impl LabelRuntime {
         self.fail("the watch disconnected")
     }
 
+    /// The labels whose models read `source` (every model reads the pulse sensor, none the motion sensors).
     fn depends_on(&self, source: StreamSource) -> Vec<LabelId> {
-        // The orientation stream carries acceleration and gyroscope too, so a fault in it affects all three.
-        let from_orientation = |s: &StreamSource| {
-            matches!(
-                s,
-                StreamSource::WatchOrientation
-                    | StreamSource::WatchAcceleration
-                    | StreamSource::WatchGyroscope
-            )
-        };
         self.models
             .values()
-            .filter(|m| {
-                m.input.sources.iter().any(|s| {
-                    if source == StreamSource::WatchPpg {
-                        *s == source
-                    } else {
-                        from_orientation(s)
-                    }
-                })
-            })
+            .filter(|m| m.input.sources.contains(&source))
+            .map(|m| m.label.clone())
+            .collect()
+    }
+
+    /// The labels whose models may only report.
+    fn monitor_only(&self) -> BTreeSet<LabelId> {
+        self.models
+            .values()
+            .filter(|m| m.monitor_only)
             .map(|m| m.label.clone())
             .collect()
     }
@@ -371,7 +375,7 @@ impl LabelRuntime {
         }
         let input_warnings = self.warnings_changed(now_ns, true);
         RuntimeOutput {
-            actionable: allow(self.mode, &events),
+            actionable: allow(self.mode, &self.monitor_only(), &events),
             scores,
             rejections,
             events,
@@ -384,8 +388,11 @@ impl LabelRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::tests::loaded;
-    use crate::pipeline::tests::{feed, orientation};
+    use crate::model::tests::{expected, loaded};
+    use crate::pipeline::tests::batch;
+    use pinch_inference::ppg_onset::PpgSample;
+
+    const BASE_NS: u64 = 10_000_000_000;
 
     fn runtime(mode: RuntimeMode) -> LabelRuntime {
         let mut rt = LabelRuntime::default();
@@ -394,381 +401,258 @@ mod tests {
         rt
     }
 
-    fn shake_label() -> LabelId {
-        LabelId::new("shake_fixture").unwrap()
+    fn pinch() -> LabelId {
+        LabelId::new("pinch").unwrap()
     }
 
-    /// Drives the runtime through the real path: samples in, detections out.
-    fn drive(rt: &mut LabelRuntime, from_n: u64, count: u64, amplitude: f64) -> Vec<RuntimeOutput> {
-        (from_n..from_n + count)
-            .map(|n| rt.observe_orientation(&orientation(n, amplitude), n * 20_000_000))
+    /// The fixture's trace (pinches and fists for 15 s, then quiet), its timestamps moved `shift_ns` later.
+    fn trace(shift_ns: u64) -> Vec<PpgSample> {
+        expected()
+            .0
+            .into_iter()
+            .map(|s| PpgSample { ts_ns: s.ts_ns + shift_ns, ..s })
             .collect()
+    }
+
+    /// Drives the runtime through the real path, one pulse sample at a time, each received 5 ms after it was taken.
+    fn drive(rt: &mut LabelRuntime, trace: &[PpgSample], from: usize, to: usize) -> Vec<RuntimeOutput> {
+        let origin = expected().0[0].ts_ns;
+        (from..to)
+            .map(|i| rt.observe_ppg(&batch(trace, i, i + 1), trace[i].ts_ns - origin + BASE_NS + 5_000_000))
+            .collect()
+    }
+
+    /// Drives until the label is active, returning the index of the sample after which it was.
+    fn until_active(rt: &mut LabelRuntime, trace: &[PpgSample]) -> usize {
+        (0..trace.len())
+            .find(|&i| {
+                drive(rt, trace, i, i + 1);
+                rt.is_active(&pinch())
+            })
+            .expect("the trace's second pinch is detected")
     }
 
     fn events(outputs: &[RuntimeOutput]) -> Vec<&DetectionEvent> {
         outputs.iter().flat_map(|o| o.events.iter()).collect()
     }
 
-    #[test]
-    fn live_shaking_rises_stays_active_and_falls_when_it_stops_and_everything_is_actionable() {
-        let mut rt = runtime(RuntimeMode::Live);
-        let shaking = drive(&mut rt, 0, 80, 5.0);
-        let rising: Vec<_> = events(&shaking)
-            .into_iter()
+    fn rises(outputs: &[RuntimeOutput], actionable: bool) -> usize {
+        outputs
+            .iter()
+            .flat_map(|o| if actionable { o.actionable.iter() } else { o.events.iter() })
             .filter(|e| matches!(e, DetectionEvent::Rising { .. }))
-            .collect();
-        assert_eq!(rising.len(), 1, "one rising edge");
-        assert!(rt.is_active(&shake_label()));
-        assert!(shaking.iter().any(|o| {
-            o.actionable
-                .iter()
-                .any(|e| matches!(e, DetectionEvent::Rising { .. }))
-        }));
-        let still = drive(&mut rt, 80, 120, 0.0);
-        assert!(events(&still).iter().any(|e| matches!(
+            .count()
+    }
+
+    #[test]
+    fn live_a_pinch_start_rises_and_falls_and_is_actionable() {
+        let mut rt = runtime(RuntimeMode::Live);
+        let t = trace(0);
+        let out = drive(&mut rt, &t, 0, 300); // to 12 s: the second pinch, at 9 s, is detected near 9.9 s
+        assert_eq!(rises(&out, false), 1);
+        assert_eq!(rises(&out, true), 1);
+        assert!(events(&out).iter().any(|e| matches!(
             e,
-            DetectionEvent::Falling {
-                reason: ClearReason::ScoreBelowRelease,
-                ..
-            }
+            DetectionEvent::Falling { reason: ClearReason::ScoreBelowRelease, .. }
         )));
-        assert!(!rt.is_active(&shake_label()));
     }
 
     #[test]
     fn monitor_reports_everything_but_only_lets_a_release_through() {
         let mut rt = runtime(RuntimeMode::Monitor);
-        let shaking = drive(&mut rt, 0, 80, 5.0);
-        assert!(
-            events(&shaking)
-                .iter()
-                .any(|e| matches!(e, DetectionEvent::Rising { .. })),
-            "it is reported"
-        );
-        assert!(
-            shaking.iter().all(|o| o.actionable.is_empty()),
-            "but nothing may start anything"
-        );
-        let still = drive(&mut rt, 80, 120, 0.0);
-        assert!(
-            still.iter().any(|o| o
-                .actionable
-                .iter()
-                .any(|e| matches!(e, DetectionEvent::Falling { .. }))),
-            "a release always gets through"
-        );
+        let out = drive(&mut rt, &trace(0), 0, 300);
+        assert_eq!(rises(&out, false), 1, "it is reported");
+        assert_eq!(rises(&out, true), 0, "but nothing may start anything");
+        assert!(out.iter().any(|o| o.actionable.iter().any(|e| matches!(e, DetectionEvent::Falling { .. }))));
+    }
+
+    #[test]
+    fn a_monitor_only_model_never_starts_anything_even_in_live() {
+        let mut model = loaded();
+        model.monitor_only = true;
+        let mut rt = LabelRuntime::default();
+        rt.set_models(vec![model]);
+        rt.set_mode(RuntimeMode::Live);
+        let out = drive(&mut rt, &trace(0), 0, 300);
+        assert_eq!((rises(&out, false), rises(&out, true)), (1, 0));
     }
 
     #[test]
     fn off_does_nothing() {
         let mut rt = runtime(RuntimeMode::Off);
-        let out = drive(&mut rt, 0, 80, 5.0);
-        assert!(out.iter().all(|o| *o == RuntimeOutput::default()));
-        assert!(!rt.is_active(&shake_label()));
+        assert!(drive(&mut rt, &trace(0), 0, 300).iter().all(|o| *o == RuntimeOutput::default()));
     }
 
     #[test]
     fn a_mode_change_ends_a_detection_in_progress() {
         let mut rt = runtime(RuntimeMode::Live);
-        drive(&mut rt, 0, 80, 5.0);
-        assert!(rt.is_active(&shake_label()));
+        until_active(&mut rt, &trace(0));
         let out = rt.set_mode(RuntimeMode::Monitor);
         assert!(matches!(
             out.actionable.as_slice(),
-            [DetectionEvent::Falling {
-                reason: ClearReason::Runtime(_),
-                ..
-            }]
+            [DetectionEvent::Falling { reason: ClearReason::Runtime(_), .. }]
         ));
-        assert!(!rt.is_active(&shake_label()));
-        assert_eq!(
-            rt.set_mode(RuntimeMode::Monitor),
-            RuntimeOutput::default(),
-            "no change, no event"
-        );
+        assert!(!rt.is_active(&pinch()));
+        assert_eq!(rt.set_mode(RuntimeMode::Monitor), RuntimeOutput::default(), "no change, no event");
     }
 
     #[test]
     fn replacing_or_removing_a_model_releases_its_detection_before_anything_else() {
         let mut rt = runtime(RuntimeMode::Live);
-        drive(&mut rt, 0, 80, 5.0);
+        until_active(&mut rt, &trace(0));
         let mut replacement = loaded();
-        replacement.version_id = model_lab_core::ModelVersionId::new("shake-v2").unwrap();
+        replacement.version_id = ModelVersionId::new("pinch-v2").unwrap();
         let out = rt.set_models(vec![replacement]);
         assert!(matches!(
             out.actionable.as_slice(),
-            [DetectionEvent::Falling {
-                reason: ClearReason::ModelChanged,
-                ..
-            }]
+            [DetectionEvent::Falling { reason: ClearReason::ModelChanged, .. }]
         ));
-        assert!(
-            !rt.is_active(&shake_label()),
-            "the new model starts with a clean state"
-        );
-
-        drive(&mut rt, 200, 80, 5.0);
-        assert!(rt.is_active(&shake_label()));
-        let out = rt.set_models(vec![]);
-        assert!(matches!(
-            out.actionable.as_slice(),
-            [DetectionEvent::Falling {
-                reason: ClearReason::ModelChanged,
-                ..
-            }]
-        ));
+        assert!(!rt.is_active(&pinch()), "the new model starts with a clean state");
+        assert!(rt.set_models(vec![]).events.is_empty(), "nothing was held");
         assert!(rt.loaded_labels().is_empty());
     }
 
-    /// Switching to another model and back must leave no trace: the model scores the same live data exactly as it would have
-    /// had it never been switched away from, and starts with a clean detection each time.
+    /// Switching to another model and back must leave no trace: the model scores the same live data exactly as it would
+    /// have had it never been switched away from.
     #[test]
     fn switching_to_another_model_and_back_scores_exactly_as_if_it_had_never_been_switched() {
-        let amplitude = |n: u64| if (n / 40).is_multiple_of(2) { 5.0 } else { 0.0 }; // shake for 0.8 s, then be still, and so on
-        let drive_pattern = |rt: &mut LabelRuntime, from: u64, to: u64| -> Vec<(u64, f64)> {
-            (from..to)
-                .flat_map(|n| {
-                    rt.observe_orientation(&orientation(n, amplitude(n)), n * 20_000_000)
-                        .scores
-                        .into_iter()
-                        .map(move |s| (n, s.confidence))
-                })
-                .collect()
+        let t = trace(0);
+        let scores = |out: Vec<RuntimeOutput>| -> Vec<(u64, f64)> {
+            out.into_iter().flat_map(|o| o.scores).map(|s| (s.timestamp_ns, s.confidence)).collect()
         };
         let other = || {
             let mut model = loaded();
-            model.version_id = model_lab_core::ModelVersionId::new("shake-v2").unwrap();
+            model.version_id = ModelVersionId::new("pinch-v2").unwrap();
             model
         };
-
-        // Re-adopting the same model at the same moment only restarts the scoring schedule, which a switch does too, so the
-        // two runs score at the same instants.
         let mut straight = runtime(RuntimeMode::Monitor);
-        let mut never_switched = drive_pattern(&mut straight, 0, 200);
+        drive(&mut straight, &t, 0, 300);
         straight.set_models(vec![loaded()]);
-        never_switched.extend(drive_pattern(&mut straight, 200, 400));
+        let want = scores(drive(&mut straight, &t, 300, 500));
 
         let mut switched = runtime(RuntimeMode::Monitor);
-        drive_pattern(&mut switched, 0, 100);
+        drive(&mut switched, &t, 0, 200);
         switched.set_models(vec![other()]);
-        drive_pattern(&mut switched, 100, 200);
-        switched.set_models(vec![loaded()]); // back to the first model
-        let after = drive_pattern(&mut switched, 200, 400);
+        drive(&mut switched, &t, 200, 300);
+        switched.set_models(vec![loaded()]);
+        let got = scores(drive(&mut switched, &t, 300, 500));
+        assert!(!got.is_empty());
+        assert_eq!(got, want);
+    }
 
-        let expected: Vec<&(u64, f64)> = never_switched.iter().filter(|(n, _)| *n >= 200).collect();
-        assert!(!after.is_empty());
-        assert_eq!(after.len(), expected.len(), "the same windows are scored");
-        for (got, want) in after.iter().zip(expected) {
-            assert_eq!(got.0, want.0);
-            assert!(
-                (got.1 - want.1).abs() < 1e-12,
-                "sample {}: {} vs {}",
-                got.0,
-                got.1,
-                want.1
-            );
+    #[test]
+    fn a_warning_goes_up_when_most_decisions_are_unlike_the_training_ones_and_comes_down_when_they_are_back() {
+        let mut f = Familiarity::default();
+        let s = 1_000_000_000;
+        for i in 0..10 {
+            f.see(i * s / 4, true, &[]);
         }
-    }
-
-    /// The fixture model with a training range that only quiet windows fit: every input usually between 0 and 0.5.
-    fn with_a_quiet_training_range() -> LoadedModel {
-        let mut model = loaded();
-        let n = model.input.features.len();
-        model.training_range = Some(crate::bundle::TrainingRange {
-            low: vec![0.0; n],
-            high: vec![0.5; n],
-        });
-        model
+        assert!(f.raised, "most of the last 3 s were unfamiliar");
+        for i in 10..30 {
+            f.see(i * s / 4, false, &[]);
+        }
+        assert!(!f.raised, "they are back");
     }
 
     #[test]
-    fn a_warning_goes_up_when_most_windows_are_unlike_the_training_ones_and_comes_down_when_they_are_back()
-     {
-        let mut rt = LabelRuntime::default();
-        rt.set_models(vec![with_a_quiet_training_range()]);
-        rt.set_mode(RuntimeMode::Monitor);
-        let warnings = |outputs: &[RuntimeOutput]| -> Vec<Vec<InputWarning>> {
-            outputs
-                .iter()
-                .filter_map(|o| o.input_warnings.clone())
-                .collect()
+    fn a_model_whose_range_every_decision_fits_is_never_warned_about_and_changing_the_model_clears_a_warning() {
+        let ranged = |low: f64, high: f64| {
+            let mut model = loaded();
+            let n = model.input.features.len();
+            model.training_range = Some(crate::bundle::TrainingRange { low: vec![low; n], high: vec![high; n] });
+            model
         };
-
-        // Quiet windows are what it trained on: nothing is said.
-        let quiet = drive(&mut rt, 0, 150, 0.0);
-        assert!(warnings(&quiet).is_empty());
-
-        // Vigorous shaking is far outside that range, in every input.
-        let shaking = drive(&mut rt, 150, 250, 5.0);
-        let raised = warnings(&shaking);
-        let first = raised.first().expect("a warning went up");
-        assert_eq!(first.len(), 1);
-        assert_eq!(first[0].label, shake_label());
-        assert!(first[0].unfamiliar_share >= 0.7);
-        assert!(!first[0].worst.is_empty() && first[0].worst[0].value > first[0].worst[0].high);
-        // Once up it is refreshed now and then, not on every window.
-        assert!(
-            raised.len() < shaking.len() / 4,
-            "{} of {}",
-            raised.len(),
-            shaking.len()
-        );
-
-        // Back to quiet: it comes down, and says so.
-        let calm = drive(&mut rt, 250, 450, 0.0);
-        assert!(
-            warnings(&calm).last().is_some_and(Vec::is_empty),
-            "{:?}",
-            warnings(&calm).last()
-        );
-    }
-
-    #[test]
-    fn one_input_far_outside_its_range_is_enough_when_the_rest_are_at_home() {
-        let mut model = loaded();
-        let n = model.input.features.len();
-        // Every input may range widely, except the first, which is usually between 0 and 0.5.
-        let mut low = vec![-100.0; n];
-        let mut high = vec![100.0; n];
-        low[0] = 0.0;
-        high[0] = 0.5;
-        model.training_range = Some(crate::bundle::TrainingRange { low, high });
         let mut rt = LabelRuntime::default();
-        rt.set_models(vec![model]);
+        rt.set_models(vec![ranged(-1e12, 1e12)]);
         rt.set_mode(RuntimeMode::Monitor);
-        // Shaking makes the std inputs about 5: far outside the first one's range, well inside all the others'.
-        let shaking = drive(&mut rt, 0, 200, 5.0);
-        let up = shaking
-            .iter()
-            .find_map(|o| o.input_warnings.clone())
-            .expect("a warning went up");
-        assert_eq!(up.len(), 1);
-        assert!(
-            up[0].worst.iter().all(|w| w.name == up[0].worst[0].name),
-            "only that input is named"
-        );
-    }
+        assert!(drive(&mut rt, &trace(0), 0, 300).iter().all(|o| o.input_warnings.is_none()));
 
-    #[test]
-    fn a_model_with_no_recorded_range_is_never_warned_about_and_changing_the_model_clears_a_warning()
-     {
-        let mut rt = runtime(RuntimeMode::Monitor); // the fixture records no range
-        assert!(
-            drive(&mut rt, 0, 200, 5.0)
-                .iter()
-                .all(|o| o.input_warnings.is_none())
-        );
-
+        // A range nothing fits: every input is far outside it, and the warning goes up.
         let mut rt = LabelRuntime::default();
-        rt.set_models(vec![with_a_quiet_training_range()]);
+        rt.set_models(vec![ranged(1e9, 1e9 + 1.0)]);
         rt.set_mode(RuntimeMode::Monitor);
-        drive(&mut rt, 0, 150, 5.0);
-        let mut replacement = with_a_quiet_training_range();
-        replacement.version_id = model_lab_core::ModelVersionId::new("shake-v2").unwrap();
-        let out = rt.set_models(vec![replacement]);
-        assert_eq!(
-            out.input_warnings,
-            Some(Vec::new()),
-            "the new model starts with a clean slate"
-        );
-        let out = rt.set_mode(RuntimeMode::Off);
-        assert!(out.input_warnings.is_none(), "nothing was standing");
+        let out = drive(&mut rt, &trace(0), 0, 300);
+        let up = out.iter().find_map(|o| o.input_warnings.clone()).expect("a warning went up");
+        assert_eq!(up[0].label, pinch());
+        let mut replacement = ranged(1e9, 1e9 + 1.0);
+        replacement.version_id = ModelVersionId::new("pinch-v2").unwrap();
+        assert_eq!(rt.set_models(vec![replacement]).input_warnings, Some(Vec::new()), "a clean slate");
     }
 
     #[test]
     fn keeping_the_same_model_does_not_disturb_a_running_detection() {
         let mut rt = runtime(RuntimeMode::Live);
-        drive(&mut rt, 0, 80, 5.0);
+        until_active(&mut rt, &trace(0));
         assert!(rt.set_models(vec![loaded()]).events.is_empty());
-        assert!(rt.is_active(&shake_label()));
+        assert!(rt.is_active(&pinch()));
     }
 
     #[test]
     fn a_bad_sample_a_stalled_stream_or_a_lost_watch_each_release_the_detection() {
-        // An out-of-order sample.
+        let t = trace(0);
+        let released = |out: &RuntimeOutput| {
+            matches!(out.actionable.as_slice(), [DetectionEvent::Falling { .. }])
+        };
+        // An out-of-order batch.
         let mut rt = runtime(RuntimeMode::Live);
-        drive(&mut rt, 0, 80, 5.0);
-        let out = rt.observe_orientation(&orientation(10, 5.0), 90 * 20_000_000);
-        assert!(matches!(
-            out.actionable.as_slice(),
-            [DetectionEvent::Falling {
-                reason: ClearReason::Rejected(_),
-                ..
-            }]
-        ));
-        assert!(!rt.is_active(&shake_label()));
-
+        let at = until_active(&mut rt, &t);
+        let out = rt.observe_ppg(&batch(&t, 10, 11), BASE_NS + 60_000_000_000);
+        assert!(released(&out) && !rt.is_active(&pinch()));
         // A stream that stops: the timer tick notices.
         let mut rt = runtime(RuntimeMode::Live);
-        drive(&mut rt, 0, 80, 5.0);
-        let out = rt.tick(79 * 20_000_000 + 2_000_000_000);
-        assert!(matches!(
-            out.actionable.as_slice(),
-            [DetectionEvent::Falling {
-                reason: ClearReason::Rejected(_),
-                ..
-            }]
-        ));
+        until_active(&mut rt, &t);
+        let out = rt.tick(t[at].ts_ns - t[0].ts_ns + BASE_NS + 2_000_000_000);
+        assert!(released(&out));
         assert_eq!(out.rejections.len(), 1);
-
         // The watch disconnecting, and the runtime itself failing.
         let mut rt = runtime(RuntimeMode::Live);
-        drive(&mut rt, 0, 80, 5.0);
-        assert!(matches!(
-            rt.watch_lost().actionable.as_slice(),
-            [DetectionEvent::Falling { .. }]
-        ));
+        until_active(&mut rt, &t);
+        assert!(released(&rt.watch_lost()));
         let mut rt = runtime(RuntimeMode::Live);
-        drive(&mut rt, 0, 80, 5.0);
+        until_active(&mut rt, &t);
         assert!(matches!(
             rt.fail("backend crashed").actionable.as_slice(),
-            [DetectionEvent::Falling {
-                reason: ClearReason::Runtime(_),
-                ..
-            }]
+            [DetectionEvent::Falling { reason: ClearReason::Runtime(_), .. }]
         ));
-        // After a loss the buffers are empty, so nothing is scored from stale data.
-        assert!(rt.tick(1_000_000_000_000).scores.is_empty());
+        assert!(rt.tick(1_000_000_000_000).scores.is_empty(), "nothing is scored from stale data");
+        // A bad motion sample releases nothing: no model reads motion.
+        let mut rt = runtime(RuntimeMode::Live);
+        until_active(&mut rt, &t);
+        let motion = WatchOrientationSample {
+            device_id: "watch-1".into(),
+            sequence: 1,
+            timestamp_ns: 1,
+            quaternion: [f64::NAN, 0.0, 0.0, 0.0],
+            accelerometer: None,
+            gyroscope: None,
+        };
+        assert!(rt.observe_orientation(&motion, BASE_NS).actionable.is_empty());
+        assert!(rt.is_active(&pinch()));
     }
 
     #[test]
     fn after_a_fault_the_label_can_be_detected_again_from_fresh_data() {
         let mut rt = runtime(RuntimeMode::Live);
-        drive(&mut rt, 0, 80, 5.0);
+        until_active(&mut rt, &trace(0));
         rt.watch_lost();
-        let again = drive(&mut rt, 1000, 90, 5.0);
-        assert!(
-            events(&again)
-                .iter()
-                .any(|e| matches!(e, DetectionEvent::Rising { .. }))
-        );
+        let again = drive(&mut rt, &trace(100_000_000_000), 0, 300);
+        assert_eq!(rises(&again, true), 1);
     }
 
     #[test]
     fn two_exclusive_labels_cannot_both_be_acted_on() {
-        // Two models for two labels reading the same data would both fire; declare them exclusive and neither does.
         let mut rt = LabelRuntime::default();
         let first = loaded();
         let mut second = loaded();
-        second.label = LabelId::new("shake_twin").unwrap();
-        second.version_id = model_lab_core::ModelVersionId::new("twin-v1").unwrap();
+        second.label = LabelId::new("pinch_twin").unwrap();
+        second.version_id = ModelVersionId::new("twin-v1").unwrap();
         rt.set_models(vec![first, second]);
         rt.set_exclusivity(vec![ExclusivityGroup {
-            labels: [shake_label(), LabelId::new("shake_twin").unwrap()].into(),
+            labels: [pinch(), LabelId::new("pinch_twin").unwrap()].into(),
         }]);
         rt.set_mode(RuntimeMode::Live);
-        let out = drive(&mut rt, 0, 90, 5.0);
-        assert!(
-            out.iter().any(|o| !o.conflicts.is_empty()),
-            "the clash is reported"
-        );
-        assert!(
-            out.iter().all(|o| o
-                .actionable
-                .iter()
-                .all(|e| !matches!(e, DetectionEvent::Rising { .. }))),
-            "and neither starts"
-        );
-        let _ = feed;
+        let out = drive(&mut rt, &trace(0), 0, 300);
+        assert!(out.iter().any(|o| !o.conflicts.is_empty()), "the clash is reported");
+        assert_eq!(rises(&out, true), 0, "and neither starts");
     }
 }

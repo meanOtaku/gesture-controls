@@ -1,8 +1,8 @@
-//! Runs per-label binary models: validates their bundles, loads them into an in-process ONNX runtime, feeds them from
+//! Runs per-label binary models (the PPG pinch-start model): validates their bundles, loads their trees, feeds them from
 //! one shared telemetry pipeline, and turns their scores into rising, active and falling detections.
 //!
-//! The path is, in order: raw telemetry -> ordering and freshness checks -> per-model quality gates -> window
-//! construction -> canonical feature extraction -> each model's declared feature subset -> inference -> label scores
+//! The path is, in order: raw telemetry -> ordering and freshness checks -> per-model quality gates -> the pulse
+//! history of each decision -> the model's features (`pinch_inference::ppg_onset`) -> its trees -> label scores
 //! -> temporal policy (thresholds, hysteresis, debounce, cooldown, exclusivity) -> detections.
 //!
 //! A model only ever produces evidence about its own label. Nothing here knows about volume, scrolling or any other
@@ -20,9 +20,11 @@ mod model;
 mod pipeline;
 mod runtime;
 mod training;
+mod trees;
 
 pub use bundle::{
-    BASELINE_CHOICES_MS, BundleError, Manifest, TrainingRange, ValidatedBundle, validate_bundle,
+    BundleError, MODEL_FORMAT, Manifest, PREPROCESSING_KIND, STRIDE_MS, TrainingRange,
+    ValidatedBundle, WINDOW_MS, validate_bundle,
 };
 pub use detection::{
     ClearReason, Conflict, DetectionEvent, DetectionHub, ExclusivityGroup, TemporalDetector,
@@ -34,15 +36,13 @@ pub use import::{
 pub use loader::{
     ModelLoadFailure, check_loadable, load_active_models, load_version, removable_model_dir,
 };
-pub use model::{
-    FAR_EXCESS, GridPlan, InputCheck, LoadedModel, ModelError, OutsideInput, RANGE_MARGIN,
-};
-pub use pinch_inference::{GridChannel, MAX_GRID_STEPS, MIN_GRID_STEPS, SpikeMethod};
+pub use model::{FAR_EXCESS, InputCheck, LoadedModel, ModelError, OutsideInput, RANGE_MARGIN};
+pub use pinch_inference::ppg_onset::{FEATURE_COUNT, FEATURE_NAMES};
 pub use pipeline::{LabelPipeline, LabelScore, Rejection, WindowRejection};
 pub use runtime::{InputWarning, LabelRuntime, RuntimeMode, RuntimeOutput};
 pub use training::{
-    BegunRun, PPG_CHANNELS, RecordingInfo, RunPlan, TrainingError, begin_run,
-    canonical_features_for, canonical_features_with_channels, complete_run, evaluation_only_run,
-    fail_run, grid_channels_for, is_baseline_feature, is_motion_dynamics_feature,
-    is_movement_feature, is_spike_feature, plan_split, plan_split_keeping, trainer_backend,
+    BegunRun, MIN_WINDOW_SAMPLES, RecordingInfo, RunPlan, TrainingError, begin_run, complete_run,
+    evaluation_only_run, fail_run, monitor_only_run, plan_split, plan_split_keeping,
+    ppg_onset_contract, trainer_backend,
 };
+pub use trees::{TreeEnsemble, TreesError};

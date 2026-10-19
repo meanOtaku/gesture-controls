@@ -162,8 +162,7 @@ struct ParsedDataset {
     /// authoritative: they are what the trainer resolves.
     labels: Vec<String>,
     row_count: usize,
-    /// The CSV to persist: `content` unchanged, or, for a multi-label
-    /// (Timeline Capture) export, with its unlabeled gap rows removed.
+    /// The CSV to persist: `content` unchanged.
     csv: String,
 }
 
@@ -175,10 +174,10 @@ struct ParsedDataset {
 /// - A single-label session (Quick Capture): `# label: <value>` is present, so
 ///   every row must carry exactly that label.
 /// - A multi-label session (Timeline Capture), whose `# label:` line is empty
-///   because its labels live on the rows: rows with no label are the
-///   unannotated gaps between intervals and are dropped, and the remaining
-///   rows' labels are what the dataset is attributed to. Rows are never
-///   relabeled; at least one labeled row is required.
+///   because its labels live on the rows: rows with no label are the time
+///   between intervals and are kept (with no label), and the labelled rows'
+///   labels are what the dataset is attributed to. Rows are never relabeled;
+///   at least one labeled row is required.
 fn parse_csv(content: &str) -> Result<ParsedDataset, String> {
     let lines: Vec<&str> = content.lines().collect();
     if lines.iter().all(|line| line.trim().is_empty()) {
@@ -258,18 +257,8 @@ fn parse_csv(content: &str) -> Result<ParsedDataset, String> {
         });
     }
 
-    let kept: Vec<&str> = data_lines
-        .iter()
-        .zip(&row_labels)
-        .filter(|(_, label)| !label.is_empty())
-        .map(|(line, _)| *line)
-        .collect();
-    if kept.is_empty() {
-        return Err(
-            "no labeled rows: add a '# label: <value>' line for a single-label session, or label the rows"
-                .to_string(),
-        );
-    }
+    // Rows with no label are the time between gestures. They are kept: the pulse model compares each moment with the
+    // seconds before it, so the recording must stay continuous.
     let labels: Vec<String> = row_labels
         .iter()
         .filter(|label| !label.is_empty())
@@ -277,18 +266,16 @@ fn parse_csv(content: &str) -> Result<ParsedDataset, String> {
         .collect::<std::collections::BTreeSet<_>>()
         .into_iter()
         .collect();
-    let csv = if kept.len() == data_lines.len() {
-        content.to_string()
-    } else {
-        let mut out: Vec<&str> = comment_lines.clone();
-        out.push(header_line);
-        out.extend(kept.iter().copied());
-        out.join("\n") + "\n"
-    };
+    if labels.is_empty() {
+        return Err(
+            "no labeled rows: add a '# label: <value>' line for a single-label session, or label the rows"
+                .to_string(),
+        );
+    }
     Ok(ParsedDataset {
         labels,
-        row_count: kept.len(),
-        csv,
+        row_count: data_lines.len(),
+        csv: content.to_string(),
     })
 }
 
@@ -907,28 +894,19 @@ mod tests {
     }
 
     #[test]
-    fn a_timeline_capture_export_is_accepted_with_its_gap_rows_dropped() {
+    fn a_timeline_capture_export_is_accepted_with_its_gap_rows_kept_unlabelled() {
         let parsed = parse_csv(&timeline_csv()).expect("timeline export must import");
         assert_eq!(
             parsed.labels,
             vec!["idle".to_string(), "pinch_start".to_string()]
         );
-        assert_eq!(parsed.row_count, 3);
+        // The time between intervals stays, with no label: the pulse model needs the recording continuous.
+        assert_eq!(parsed.row_count, 6);
         let stored: Vec<&str> = parsed.csv.lines().collect();
-        assert_eq!(stored.iter().filter(|l| l.starts_with("1,")).count(), 0);
-        assert_eq!(
-            stored.last().unwrap().split(',').next_back(),
-            Some("pinch_start")
-        );
-        // Every stored data row carries a label, which the trainer requires.
-        assert!(
-            stored
-                .iter()
-                .skip(3)
-                .all(|line| !line.split(',').next_back().unwrap().is_empty())
-        );
+        assert_eq!(stored.iter().filter(|l| l.starts_with("1,")).count(), 1);
+        assert_eq!(stored.last().unwrap().split(',').next_back(), Some(""));
         // And the stored file is itself a valid dataset.
-        assert_eq!(parse_csv(&parsed.csv).unwrap().row_count, 3);
+        assert_eq!(parse_csv(&parsed.csv).unwrap().row_count, 6);
     }
 
     #[test]

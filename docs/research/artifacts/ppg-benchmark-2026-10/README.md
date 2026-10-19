@@ -61,6 +61,8 @@ uv run --project tools/label-trainer --extra torch python docs/research/artifact
 
 `ppg-multiscale-zscore/` tackles the worst-split AUC. Z-scoring each channel against the previous 1, 2 and 4 s, with derivative summaries for each history, raises ExtraTrees' minimum AUC from 0.769 to 0.789 and its mean from 0.821 to 0.843. It beats the 1 s baseline on all 20 splits, and live recall rises from 0.377 to 0.413 with no extra false activations. No single history length helps on its own, and adding 8 s or a sigmoid makes it slightly worse. The current candidate is therefore `PPG → causal z-score (1 s + 2 s + 4 s) → causal slope + curvature + jerk → ExtraTrees`. It was picked on these same splits, so it needs new recordings to confirm.
 
+**It is now the app's only model** (2026-10-19): `tools/label-trainer/src/label_trainer/ppg_onset.py` and `crates/pinch-inference/src/ppg_onset.rs` compute its inputs (kept equal by a shared fixture), and `app_definition_check.py` confirms the app's version, whose grid ends at each decision and which samples its own training moments, matches the research: worst-split AUC 0.7886, mean 0.848, recall 0.457, 14.0 false activations a minute on the same 20 splits (`ppg-multiscale-zscore/app-definition-check.json`).
+
 ```sh
 uv run --project tools/label-trainer --extra torch python docs/research/artifacts/ppg-benchmark-2026-10/multiscale_zscore.py
 ```

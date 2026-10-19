@@ -1,22 +1,21 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import research from "../fixtures/inspection-research.json";
-import linear from "../fixtures/inspection-linear.json";
+import trees from "../fixtures/inspection-trees.json";
 import type { Inspection } from "../inspection";
 import { InspectResearch } from "./InspectResearch";
 
 afterEach(cleanup);
 
-const withResearch = (value: Inspection["research"]): Inspection => ({ ...(linear as unknown as Inspection), research: value });
+const withResearch = (value: Inspection["research"]): Inspection => ({ ...(trees as unknown as Inspection), research: value });
 
 describe("InspectResearch", () => {
   it("shows nothing unless the checks were run", () => {
-    const { container } = render(<InspectResearch inspection={linear as unknown as Inspection} />);
+    const { container } = render(<InspectResearch inspection={withResearch(null)} />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it("reads the real research the trainer wrote: the learning curve and every recording left out in turn", () => {
-    render(<InspectResearch inspection={research as unknown as Inspection} />);
+    render(<InspectResearch inspection={trees as unknown as Inspection} />);
     expect(screen.getByRole("img", { name: /^Does more data help\?/ })).toBeInTheDocument();
     const table = screen.getByRole("table", { name: "Leave one recording out" });
     expect(within(table).getAllByRole("row").length).toBe(7); // header + the six recordings

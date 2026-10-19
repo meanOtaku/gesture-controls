@@ -55,12 +55,12 @@ def test_accepts_non_legacy_custom_label(tmp_path):
     assert (recording.raw_labels == "my_custom_label").all()
 
 
-def test_rejects_blank_label(tmp_path):
+def test_a_blank_label_is_time_between_gestures(tmp_path):
     path = make_dataset_csv(tmp_path, "session_d2.csv", "idle", row_count=3)
-    text = path.read_text(encoding="utf-8").replace(",idle", ",")
+    text = path.read_text(encoding="utf-8").replace("# label: idle", "# label: ").replace(",idle", ",")
     path.write_text(text, encoding="utf-8")
-    with pytest.raises(CsvFormatError, match="missing 'label' value"):
-        load_recording(path)
+    recording = load_recording(path)
+    assert recording.raw_labels.tolist() == ["", "", ""]
 
 
 def test_carry_forward_fills_missing_values_causally(tmp_path):

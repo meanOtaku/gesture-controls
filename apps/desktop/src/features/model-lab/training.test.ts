@@ -19,15 +19,15 @@ describe("otherLabels", () => {
 });
 
 describe("buildRequest", () => {
-  it("asks for movement-only features only when told to", () => {
-    const base = { label: "snap", datasetIds: ["a"], others: [], roles: {}, method: "mlp" as const, sources: ["watchPpg" as const] };
-    expect(buildRequest(base).movementOnly).toBe(false);
-    expect(buildRequest({ ...base, movementOnly: true, spikeMethod: "none", ppgChannels: ["green", "red", "ir"], windowMs: 500 }).movementOnly).toBe(true);
+  it("makes every other label a negative unless it was set aside", () => {
+    const request = buildRequest({ label: "snap", datasetIds: ["a", "b"], others: ["idle", "walking"], roles: { walking: "exclude" } });
+    expect(request).toEqual({ label: "snap", datasetIds: ["a", "b"], negatives: ["idle"], excludes: ["walking"] });
   });
 
-  it("makes every other label a negative unless it was set aside", () => {
-    const request = buildRequest({ label: "snap", datasetIds: ["a", "b"], others: ["idle", "walking"], roles: { walking: "exclude" }, method: "logreg", sources: ["watchAcceleration"] });
-    expect(request).toEqual({ label: "snap", datasetIds: ["a", "b"], negatives: ["idle"], excludes: ["walking"], backend: "logreg", sources: ["watchAcceleration"], movementOnly: false, spikeMethod: "none", ppgChannels: ["green", "red", "ir"], windowMs: 500 });
+  it("asks for the research checks and a label offset only when chosen", () => {
+    const request = buildRequest({ label: "snap", datasetIds: ["a"], others: [], roles: {}, research: true, labelOffsetMs: -250 });
+    expect(request).toMatchObject({ research: true, labelOffsetMs: -250 });
+    expect(buildRequest({ label: "snap", datasetIds: ["a"], others: [], roles: {}, labelOffsetMs: 0 })).not.toHaveProperty("labelOffsetMs");
   });
 });
 
@@ -42,9 +42,9 @@ describe("recordingsWithLabel", () => {
 describe("describeMetrics", () => {
   it("says what was found, what was right and how often it was wrong", () => {
     const text = describeMetrics({ windows: 100, positiveWindows: 40, negativeWindows: 60, precision: 0.9, recall: 0.8, f1: 0.85, falseActivationRate: 0.05, rocAuc: 0.97, activationThreshold: 0.6 });
-    expect(text).toContain("80% of the 40 windows");
+    expect(text).toContain("80% of the 40 gesture starts");
     expect(text).toContain("90% of what it flagged");
-    expect(text).toContain("5% of the 60 windows");
+    expect(text).toContain("5% of the 60 other moments");
   });
 });
 

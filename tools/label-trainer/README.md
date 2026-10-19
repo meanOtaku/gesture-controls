@@ -1,84 +1,55 @@
 # label-trainer
 
-Offline training of **one model for one label**. The desktop app runs it when you train a model in Model Lab, and imports the
-ONNX bundle it writes. The folder keeps its original name; it no longer contains any three-class pinch tooling.
+Offline training of **one model for one label**: the PPG pinch-start model. The desktop app runs it when you train a model
+in Model Lab, and imports the bundle it writes.
+
+The model, chosen by the October 2026 PPG research
+([`docs/research/artifacts/ppg-benchmark-2026-10/ppg-multiscale-zscore`](../../docs/research/artifacts/ppg-benchmark-2026-10/ppg-multiscale-zscore/report.md)):
+
+```text
+PPG (green, red, IR) -> causal z-score against the previous 1, 2 and 4 s -> causal cubic slope, curvature, jerk
+-> 21 statistics over the last 8, 16 and 32 ticks (1,701 inputs) -> ExtraTrees (300 trees)
+```
+
+It reads only the pulse sensor and fires about 0.9 s after a gesture starts. Every label is trained this way; there are no
+other methods.
 
 The desktop decides everything that must be recorded and cannot change afterwards: which recordings train and which
-evaluate (never the same one), what each label in the data means (the target is positive, everything else is negative or left
-out), the streams the model may read, and the window. It hands them to this trainer in a `spec.json`.
+evaluate (never the same one) and what each label in the data means (the target, negatives, or left out). It hands them to
+this trainer in a `spec.json`.
 
 ## What it does
 
-1. Reads the recordings named in the spec (Model Lab datasets, CSV with a `label` column).
-2. Builds windows (sliding across label changes, each labelled by how much of it the gesture covers) and the canonical features (55 statistics and 10 motion dynamics; 24 pulse-sensor spike features when a `spikeMethod` is set, one of `features.SPIKE_METHODS`; 21 features against the recent past when a `baselineMs` is: 6 levels, 12 in units of the past, `rel_z_*`, and 3 steps through the window, `rel_z_step`, all in `tests/fixtures/baseline_cases.json`), limited to the streams the model is allowed to read. The spike features are defined in `features.spike_features` and mirrored in `crates/pinch-inference`; `tests/fixtures/spike_cases.json` keeps the two equal (regenerate with `SPIKE_FIXTURE_REGENERATE=1 uv run pytest tests/test_spike_features.py` after an intended change).
-3. Trains logistic regression, a small multilayer perceptron, a PyTorch network, or (`cnn1d`) a small 1D convolutional network over the window's grid of channels x steps (`grid.py`, parity-checked against the runtime by `tests/fixtures/grid_cases.json`; regenerate with `GRID_FIXTURE_REGENERATE=1 uv run pytest tests/test_grid.py`).
-4. Fits the decision threshold on the training recordings (each scored by a model trained without it), then evaluates on
-   the held-out recordings: per window, and replayed as a detector over each whole recording through the runtime's own
-   detection rule (`events.py`), counting gestures caught, delay, and false activations per hour.
-5. Exports ONNX built from plain dense layers, and checks the ONNX file reproduces the trained model to 1e-3.
-6. Writes `bundle/` (manifest and model), `evaluation.json` and `result.json`. A model whose scores are not good enough is
-   written as **evaluation only**: it can be reviewed but never activated.
+1. Reads the recordings named in the spec (Model Lab datasets, CSV with a `label` column; an empty label is time between
+   gestures).
+2. Picks the moments to learn from in each recording (`ppg_onset.sample_decisions`, the rules the research's events
+   follow): a positive about 880 ms after each start of the target label, and as negatives the same moment after every other
+   label's start, points inside holds, and unlabelled time at least 1.5 s from any hold.
+3. Computes the 1,701 inputs of each moment (`ppg_onset.features`). `crates/pinch-inference/src/ppg_onset.rs` computes the
+   same live; `tests/fixtures/ppg_onset_cases.json` keeps the two equal (regenerate with
+   `uv run python tests/make_ppg_onset_cases.py` after an intended change).
+4. Trains ExtraTrees with the research's settings (300 trees, at least 3 samples a leaf, 70% of the inputs per split).
+5. Fits the decision threshold on the training recordings (each scored by a model trained without it), then evaluates on
+   the held-out recordings: per moment, and replayed as a detector over each whole recording, at every pulse sample, through
+   the runtime's own detection rule (`events.py`, kept equal to the runtime by `tests/fixtures/detection_cases.json`),
+   counting starts caught (680 to 1,280 ms after they began), delay, and false activations per hour.
+6. Writes the trees as `model.trees` (`trees.py`: plain node arrays, read by `crates/label-inference/src/trees.rs`), and
+   checks the file reproduces the trained model to 1e-6.
+7. Writes `bundle/` (manifest and model), `evaluation.json`, `inspection.json` and `result.json`. A model that does not pass
+   the checks for going live is still written, as **evaluation only**: the desktop keeps it as monitor-only, so it can be
+   activated but only ever reports.
+
+`tests/make_runtime_bundle.py` writes the bundle the runtime's tests load, with a pulse trace and the probability the
+trainer gives each of its samples.
 
 ## Running it
 
-The desktop starts it for you (`uv run --project tools/label-trainer --extra onnx label-classifier-train`, plus
-`--extra torch` for the PyTorch backend). By hand:
+The desktop starts it for you (`uv run --project tools/label-trainer label-classifier-train`). By hand:
 
 ```bash
 cd tools/label-trainer
-uv run --extra onnx label-classifier-train --spec spec.json --out run-dir
+uv run label-classifier-train --spec spec.json --out run-dir
 ```
 
-## Comparing methods
-
-```bash
-uv run --extra onnx --extra torch label-classifier-train --compare --spec spec.json --out compare-dir
-```
-
-Trains every method (logistic regression, boosted trees, both neural networks, the convolutional network) on the spec's
-recordings, split and settings, each with its own default inputs, and prints the numbers that matter side by side: AUC on
-the test recordings, the cross-check AUC (how well the training recordings agree with each other), balanced accuracy,
-false-alarm rate, Brier score, gestures caught and false activations per hour. Each run is kept in `compare-dir/<method>`
-and the table in `compare-dir/compare.json`.
-
-## Starting from a pre-trained motion encoder
-
-A convolutional model can start its convolution layers from an encoder pre-trained on many people instead of from
-nothing, then learn its head (and, unless frozen, adjust the layers) on your recordings. The encoder is trained on
-[MicroDPad](https://huggingface.co/datasets/eth-siplab/microdpad) (65 people, 11 wrist micro-gestures and "nothing"),
-read into the same grid of the six motion channels, in the watch's units, with the same augmentation; half its sessions
-are smoothed the way watch builds before October 2026 smoothed motion.
-
-```bash
-uv run --extra onnx --extra torch --extra pretrain label-classifier-train \
-    --pretrain-microdpad ../../data/external/microdpad --out ../../data/external/microdpad/encoders/motion-encoder.pt
-```
-
-Then add `"pretrained": "<that file>"` (and `"pretrainedFreeze": true` to keep its layers as they are) to a `cnn1d` spec
-that reads acceleration and gyroscope only, with the encoder's window and steps (1000 ms, 32). Such a model always centres
-each window on its own mean, as the encoder did.
-
-**Licence.** MicroDPad is CC BY-NC-ND 4.0: non-commercial use, no derivatives distributed. Weights trained on it may count
-as a derivative, so the encoder stays in `data/external` (git ignores it) and must not be committed, shared or shipped
-with the app; a model fine-tuned from it is for use on this computer.
-
-## Layout
-
-| Module | Purpose |
-|---|---|
-| `label_train.py` | The trainer and its command line |
-| `csv_io.py`, `schema.py` | Reading a recording's CSV and its exact column contract |
-| `windowing.py`, `features.py` | Windows and the canonical features (the desktop computes the same ones while running) |
-| `dataset.py`, `labels.py` | Turning recordings and a label mapping into training data |
-| `pretrain.py` | Pre-training a motion encoder on MicroDPad (`--pretrain-microdpad`) |
-| `compare.py` | Every method on the same recordings and split, side by side (`--compare`) |
-| `events.py` | Replaying held-out recordings through the runtime's detection rule (`tests/fixtures/detection_cases.json` keeps it equal to `TemporalDetector`) |
-
-The feature definitions are mirrored in `crates/pinch-inference` and `crates/label-inference`; the tests on each side keep
-the two in step.
-
-## Tests
-
-```bash
-uv run --extra dev --extra onnx pytest -q          # add --extra torch to include the PyTorch backend test
-```
+`--suggest-offset` instead tries a range of label offsets and says how well the recordings separate the gesture's starts
+at each, judged on recordings left out.

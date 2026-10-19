@@ -19,21 +19,12 @@ const dataset = (id: string, labels: string[]): DatasetSummary => ({ id, origina
 const labels = [label("snap", "Snap"), label("idle", "Idle"), label("old", "Old", "2026-01-01")];
 const datasets = [dataset("s1", ["snap"]), dataset("s2", ["snap"]), dataset("i1", ["idle", "walking"]), dataset("i2", ["idle"])];
 
-const MOTION = ["accel_x_mean", "accel_x_std", "accel_y_mean", "accel_y_std", "gyro_x_mean", "gyro_x_std"];
-const okPlan: TrainPlan = { train: ["s1", "i1"], evaluation: ["s2", "i2"], problem: null, available: MOTION, features: MOTION };
+const okPlan: TrainPlan = { train: ["s1", "i1"], evaluation: ["s2", "i2"], problem: null, inputs: 1701 };
 
-const design = (id: string, name: string, method: string) => ({
-  id, name, description: "", method, inputMode: "statistics", sources: ["watchAcceleration", "watchGyroscope"], ppgChannels: null, movementOnly: false,
-  features: null, columns: [], readings: 1, spikeMethod: "none", windowMs: 500, network: null, builtIn: true,
-});
-const designs = [design("builtin-logreg", "Straight line", "logreg"), design("builtin-mlp", "Small network", "mlp")];
-
-function setup(over: { plan?: TrainPlan; environment?: TrainerEnvironment; status?: TrainingStatus; preview?: unknown; onOpenNetworkLab?: () => void } = {}) {
+function setup(over: { plan?: TrainPlan; environment?: TrainerEnvironment; status?: TrainingStatus; onOpenNetworkLab?: () => void } = {}) {
   invokeMock.mockImplementation(async (command: string) => {
     if (command === "check_label_trainer") return over.environment ?? { available: true, detail: "uv 0.12" };
     if (command === "get_label_training_status") return over.status ?? { running: null, last: null };
-    if (command === "list_network_designs") return designs;
-    if (command === "preview_network_design") return over.preview ?? { problem: null, available: MOTION, inputs: MOTION, neurons: 6 };
     if (command === "plan_label_training") return over.plan ?? okPlan;
     if (command === "start_label_training") return "run-1";
     return undefined;
@@ -64,43 +55,33 @@ describe("TrainPanel", () => {
     expect(screen.getByLabelText("Role of walking")).toBeInTheDocument();
     expect(await screen.findByText(/train on 2 recordings \(s1.csv, i1.csv\) and test on 2/)).toBeInTheDocument();
     expect(calls("plan_label_training").at(-1)?.[1]).toEqual({
-      request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["idle", "walking"], excludes: [], backend: "logreg", sources: ["watchAcceleration", "watchGyroscope"], movementOnly: false, spikeMethod: "none", ppgChannels: ["green", "red", "ir"], windowMs: 500, designId: "builtin-logreg" },
+      request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["idle", "walking"], excludes: [] },
     });
   });
 
-  it("sends the roles, the recordings and the chosen design, and nothing else about the network", async () => {
+  it("sends the roles and the recordings, and nothing about the model, which is always the pulse model", async () => {
     setup();
     choose("snap");
     await screen.findByText(/It will train on/);
+    expect(screen.getByRole("region", { name: "The model" })).toHaveTextContent("PPG pinch-start model");
     fireEvent.change(screen.getByLabelText("Role of walking"), { target: { value: "exclude" } });
-    fireEvent.change(await screen.findByLabelText("Network design"), { target: { value: "builtin-mlp" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Use i2.csv" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Train model" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Train model" }));
     await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
     expect(calls("start_label_training")[0][1]).toEqual({
-      request: { label: "snap", datasetIds: ["s1", "s2", "i1"], negatives: ["idle"], excludes: ["walking"], backend: "mlp", sources: ["watchAcceleration", "watchGyroscope"], movementOnly: false, spikeMethod: "none", ppgChannels: ["green", "red", "ir"], windowMs: 500, designId: "builtin-mlp" },
+      request: { label: "snap", datasetIds: ["s1", "s2", "i1"], negatives: ["idle"], excludes: ["walking"] },
     });
   });
 
   it("will not train when the plan says it cannot, and says why", async () => {
-    setup({ plan: { train: [], evaluation: [], problem: "there must be at least two recordings with 'snap'", available: [], features: [] } });
+    setup({ plan: { train: [], evaluation: [], problem: "there must be at least two recordings with 'snap'", inputs: 1701 } });
     choose("snap");
     expect(await screen.findByText(/at least two recordings with 'snap'/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Train model" })).toBeDisabled();
   });
 
-  it("will not train with a design that cannot be used, or without the trainer", async () => {
-    setup();
-    choose("snap");
-    await screen.findByText(/It will train on/);
-    cleanup();
-    setup({ preview: { problem: "No data.", available: [], inputs: [], neurons: 0 } });
-    choose("snap");
-    expect(await screen.findByText(/No data\./)).toBeInTheDocument();
-    await screen.findByText(/It will train on/);
-    expect(screen.getByRole("button", { name: "Train model" })).toBeDisabled();
-    cleanup();
+  it("will not train without the trainer", async () => {
     setup({ environment: { available: false, detail: "Training needs uv on the PATH." } });
     expect(await screen.findByText("Training is not available here")).toBeInTheDocument();
     choose("snap");
@@ -115,7 +96,7 @@ describe("TrainPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Train model" }));
     await vi.waitFor(() => expect(handlers.has("label-training-event")).toBe(true));
     const send = (payload: unknown) => act(() => handlers.get("label-training-event")?.({ payload }));
-    send({ kind: "started", runId: "run-1", label: "snap", backend: "logreg" });
+    send({ kind: "started", runId: "run-1", label: "snap", backend: "ppg-onset-trees" });
     send({ kind: "log", runId: "run-1", message: "downloading scikit-learn" });
     expect(await screen.findByLabelText("Training log")).toHaveTextContent("downloading scikit-learn");
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -123,7 +104,7 @@ describe("TrainPanel", () => {
     send({ kind: "finished", runId: "run-1", label: "snap", outcome: "deployable", message: "", versionId: "snap-abc", metrics: { windows: 50, positiveWindows: 20, negativeWindows: 30, precision: 0.9, recall: 0.8, f1: 0.85, falseActivationRate: 0.04, rocAuc: 0.95, activationThreshold: 0.6 } });
     const result = await screen.findByRole("status", { name: "Training result" });
     expect(result).toHaveTextContent("A model for snap was added as a draft");
-    expect(result).toHaveTextContent("80% of the 20 windows");
+    expect(result).toHaveTextContent("80% of the 20 gesture starts");
     expect(result).toHaveTextContent("chosen using those same test recordings");
     expect(result).toHaveTextContent("Review it under Label models");
     expect(screen.getByRole("button", { name: "Train model" })).toBeInTheDocument();
@@ -143,43 +124,21 @@ describe("TrainPanel", () => {
     expect(calls("start_label_training")[1][1].request.research).toBe(true);
   });
 
-  it("points to the Network lab for making designs", async () => {
+  it("points to the Network lab for the model's pipeline", async () => {
     const onOpen = vi.fn();
     setup({ onOpenNetworkLab: onOpen });
-    choose("snap");
-    fireEvent.click(await screen.findByRole("button", { name: "Network lab" }));
+    fireEvent.click(await screen.findByRole("button", { name: "See its pipeline in the Network lab" }));
     expect(onOpen).toHaveBeenCalled();
   });
 
-  it("draws the trainer's progress reports as a chart and keeps them out of the log", async () => {
-    setup();
-    choose("snap");
-    await screen.findByText(/It will train on/);
-    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
-    await vi.waitFor(() => expect(handlers.has("label-training-event")).toBe(true));
-    const send = (payload: unknown) => act(() => handlers.get("label-training-event")?.({ payload }));
-    send({ kind: "started", runId: "run-1", label: "snap", backend: "torch-mlp" });
-    send({ kind: "log", runId: "run-1", message: "loading the recordings" });
-    for (let epoch = 1; epoch <= 3; epoch += 1) {
-      send({ kind: "log", runId: "run-1", message: `@curve ${JSON.stringify({ epoch, epochs: 3, trainLoss: 1 / epoch, evalLoss: 1.1 / epoch, evalAuc: 0.5 + epoch / 10 })}` });
-    }
-    const progress = await screen.findByRole("region", { name: "Training progress" });
-    expect(progress).toHaveTextContent("Round 3 of 3: training loss 0.3333, held-out loss 0.3667");
-    expect(screen.getByLabelText("Training log")).toHaveTextContent("loading the recordings");
-    expect(screen.getByLabelText("Training log")).not.toHaveTextContent("@curve");
-    send({ kind: "started", runId: "run-2", label: "snap", backend: "torch-mlp" }); // a new run starts clean
-    expect(screen.queryByRole("region", { name: "Training progress" })).not.toBeInTheDocument();
-  });
-
-  it("says a model that was trained but is not good enough was not kept, and what to try", async () => {
+  it("says a model that did not pass the checks for going live was kept to run in Monitor only", async () => {
     setup();
     await vi.waitFor(() => expect(handlers.has("label-training-event")).toBe(true));
-    act(() => handlers.get("label-training-event")?.({ payload: { kind: "finished", runId: "r", label: "snap", outcome: "evaluationOnly", message: "It scored the gesture's windows lower than the others (AUC 0.05)", versionId: null, metrics: { windows: 300, positiveWindows: 135, negativeWindows: 165, precision: 0.4, recall: 1, f1: 0.6, falseActivationRate: 0.99, rocAuc: 0.05, activationThreshold: 0.05 } } }));
+    act(() => handlers.get("label-training-event")?.({ payload: { kind: "finished", runId: "r", label: "snap", outcome: "monitorOnly", message: "Replayed over the held-out recordings it fired 40 times without the gesture", versionId: "snap-abc", metrics: { windows: 300, positiveWindows: 40, negativeWindows: 260, precision: 0.4, recall: 0.7, f1: 0.5, falseActivationRate: 0.08, rocAuc: 0.84, activationThreshold: 0.6 } } }));
     const result = await screen.findByRole("status", { name: "Training result" });
-    expect(result).toHaveTextContent("not good enough to keep");
-    expect(result).toHaveTextContent("AUC) was 0.05");
-    expect(result).toHaveTextContent("Nothing was added to your models");
-    expect(result).toHaveTextContent("pulse sensor for finger gestures");
+    expect(result).toHaveTextContent("can only run in Monitor");
+    expect(result).toHaveTextContent("fired 40 times without the gesture");
+    expect(result).toHaveTextContent("never start a recipe");
   });
 
   it("warns when only one recording of the gesture would be trained on", async () => {

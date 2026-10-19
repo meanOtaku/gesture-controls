@@ -18,10 +18,10 @@ use model_lab_core::{
     RunOutcome, SnapshotDraft, SnapshotId, Split, StreamSource, Thresholds, TrainerBackend,
     TrainerConfig, TrainingRun,
 };
-use pinch_inference::{FEATURE_NAMES, GridChannel, MOTION_FEATURE_START, MOTION_STATS};
+use pinch_inference::ppg_onset::{FEATURE_NAMES, MAX_GAP_MS};
 use thiserror::Error;
 
-use crate::bundle::{source_of_channel, source_of_feature};
+use crate::bundle::{STRIDE_MS, WINDOW_MS};
 use crate::import::{ImportError, ImportOutcome, StagedBundle, publish_staged_with};
 
 #[derive(Debug, Error)]
@@ -56,97 +56,21 @@ pub struct RecordingInfo {
     pub labels: BTreeSet<LabelId>,
 }
 
-/// A feature about how a signal changes rather than its absolute level: spread, change over the window, and the PPG
-/// slope. Absolute levels carry how the watch was held or how well it touched the skin in one session, which a model can
-/// memorise. The trainer applies the same rule (`is_movement_feature` in `label_train.py`); both are tested against the
-/// same list.
-pub fn is_movement_feature(name: &str) -> bool {
-    name.ends_with("_std")
-        || name == "quat_delta_angle_deg"
-        || (name.starts_with("ppg_") && name.ends_with("_slope"))
-        || is_spike_feature(name)
-        || is_baseline_feature(name)
-        || is_motion_dynamics_feature(name)
+/// What every model this app trains reads: the pulse sensor only, the PPG pinch-start features, a decision every 40 ms
+/// from the last 5.6 s (see [`pinch_inference::ppg_onset`]). The trainer's manifest must declare exactly this.
+pub fn ppg_onset_contract() -> InputContract {
+    InputContract {
+        sources: vec![StreamSource::WatchPpg],
+        features: FEATURE_NAMES.to_vec(),
+        window_ms: WINDOW_MS,
+        stride_ms: STRIDE_MS,
+        max_gap_ms: MAX_GAP_MS as u32,
+        min_samples: MIN_WINDOW_SAMPLES,
+    }
 }
 
-/// How fast and how often a motion sensor changes inside the window (jerk, peak-to-peak and peakedness of its length,
-/// crossings of its mean): all about change, never posture.
-pub fn is_motion_dynamics_feature(name: &str) -> bool {
-    FEATURE_NAMES[MOTION_FEATURE_START..MOTION_FEATURE_START + 2 * MOTION_STATS].contains(&name)
-}
-
-/// A pulse-sensor level feature against the recent past (its average minus the median of the pulse just before the
-/// window). They come after the spike features and are only used when asked for with a baseline length.
-pub fn is_baseline_feature(name: &str) -> bool {
-    name.starts_with("ppg_") && name.contains("_rel_")
-}
-
-/// A pulse-sensor spike feature: what is left of a PPG channel once its baseline is taken away (its biggest spike and
-/// its steepest rise and fall). These come after the 55 base features and are only used when asked for.
-pub fn is_spike_feature(name: &str) -> bool {
-    name.starts_with("ppg_") && (name.contains("_spike_") || name.contains("_deriv_"))
-}
-
-/// Every canonical feature computed from the given streams, in canonical order, optionally only the movement ones. A
-/// window-level value (sample count, duration, contact quality) comes with the PPG stream. The pulse-sensor spike
-/// features are left out unless `spikes` asks for them (and the PPG stream is chosen), and the level-against-the-past
-/// features unless `baseline` does.
-pub fn canonical_features_for(
-    sources: &[StreamSource],
-    movement_only: bool,
-    spikes: bool,
-) -> Vec<String> {
-    canonical_features_with_channels(sources, movement_only, spikes, false, &PPG_CHANNELS)
-}
-
-/// The three light channels of the watch's pulse sensor, as they appear in feature names (`ppg_green_std`).
-pub const PPG_CHANNELS: [&str; 3] = ["green", "red", "ir"];
-
-/// [`canonical_features_for`] limited to some of the pulse sensor's channels. A feature of a channel that is not listed is
-/// left out; the window-level values that come with the pulse sensor (sample count, duration, contact quality) stay.
-pub fn canonical_features_with_channels(
-    sources: &[StreamSource],
-    movement_only: bool,
-    spikes: bool,
-    baseline: bool,
-    ppg_channels: &[&str],
-) -> Vec<String> {
-    let wanted = |name: &str| {
-        let channel = name
-            .strip_prefix("ppg_")
-            .and_then(|rest| rest.split('_').next());
-        match channel {
-            Some(channel) if PPG_CHANNELS.contains(&channel) => ppg_channels.contains(&channel),
-            _ => true,
-        }
-    };
-    FEATURE_NAMES
-        .iter()
-        .filter(|name| wanted(name))
-        .filter(|name| spikes || !is_spike_feature(name))
-        .filter(|name| baseline || !is_baseline_feature(name))
-        .filter(|name| source_of_feature(name).is_some_and(|s| sources.contains(&s)))
-        .filter(|name| !movement_only || is_movement_feature(name))
-        .map(ToString::to_string)
-        .collect()
-}
-
-/// The grid channels a convolutional model reads from the chosen streams, in canonical order: for the pulse sensor only
-/// the lights in `ppg_channels`. Mirrors `channels_for` in the trainer's `grid.py`.
-pub fn grid_channels_for(sources: &[StreamSource], ppg_channels: &[&str]) -> Vec<String> {
-    GridChannel::ALL
-        .into_iter()
-        .filter(|channel| sources.contains(&source_of_channel(*channel)))
-        .filter(|channel| {
-            !channel.is_ppg()
-                || channel
-                    .name()
-                    .strip_prefix("ppg_")
-                    .is_some_and(|light| ppg_channels.contains(&light))
-        })
-        .map(|channel| channel.name().to_string())
-        .collect()
-}
+/// The fewest pulse samples a decision's 5.6 s may hold (about 18 per second; the watch sends 25).
+pub const MIN_WINDOW_SAMPLES: u32 = 100;
 
 /// Splits the recordings into those a model trains on and those that test it. Deterministic (the same recordings always
 /// split the same way), about 30% held out, and never leaving either side without both the target and something else.
@@ -438,8 +362,38 @@ pub fn complete_run<P: Persist>(
         ModelOrigin::Trained {
             run_id: run_id.clone(),
         },
+        true,
         move |registry| {
             registry.finish_run(&finished, RunOutcome::Deployable, None, artifacts, now)
+        },
+    )?)
+}
+
+/// Publishes the model of a run that did not pass the checks for going live as a monitor-only Draft, and marks the run
+/// finished as evaluation-only with the reason, in one saved registry change. The model can be approved and activated,
+/// but it only ever runs in Monitor: it reports what it detects and nothing acts on it.
+pub fn monitor_only_run<P: Persist>(
+    store: &mut RegistryStore<P>,
+    staged: StagedBundle,
+    model_lab_dir: &Path,
+    run_id: &RunId,
+    message: &str,
+    artifacts: Vec<ArtifactRef>,
+    now: &str,
+) -> Result<ImportOutcome, TrainingError> {
+    let finished = run_id.clone();
+    let message = message.to_string();
+    Ok(publish_staged_with(
+        staged,
+        model_lab_dir,
+        store,
+        now,
+        ModelOrigin::Trained {
+            run_id: run_id.clone(),
+        },
+        false,
+        move |registry| {
+            registry.finish_run(&finished, RunOutcome::EvaluationOnly, Some(message), artifacts, now)
         },
     )?)
 }
@@ -447,8 +401,7 @@ pub fn complete_run<P: Persist>(
 /// The trainer backends this app offers, as the registry records them.
 pub fn trainer_backend(name: &str) -> Option<TrainerBackend> {
     match name {
-        "logreg" | "mlp" | "gbt" => Some(TrainerBackend::ScikitLearn),
-        "torch-mlp" | "cnn1d" => Some(TrainerBackend::PyTorch),
+        "ppg-onset-trees" => Some(TrainerBackend::ScikitLearn),
         _ => None,
     }
 }
@@ -489,7 +442,7 @@ mod tests {
     fn mapping() -> LabelMapping {
         LabelMapping {
             entries: [
-                (label("snap"), ExampleRole::Positive),
+                (label("pinch"), ExampleRole::Positive),
                 (label("idle"), ExampleRole::Negative),
                 (label("walking"), ExampleRole::Exclude),
             ]
@@ -499,9 +452,9 @@ mod tests {
 
     fn sessions() -> Vec<RecordingInfo> {
         vec![
-            info("s1", &["snap"]),
-            info("s2", &["snap"]),
-            info("s3", &["snap"]),
+            info("s1", &["pinch"]),
+            info("s2", &["pinch"]),
+            info("s3", &["pinch"]),
             info("i1", &["idle"]),
             info("i2", &["idle"]),
             info("i3", &["idle"]),
@@ -510,26 +463,9 @@ mod tests {
     }
 
     fn plan(recordings: Vec<RecordingInfo>) -> RunPlan {
-        let input = InputContract {
-            sources: vec![
-                StreamSource::WatchAcceleration,
-                StreamSource::WatchGyroscope,
-            ],
-            features: canonical_features_for(
-                &[
-                    StreamSource::WatchAcceleration,
-                    StreamSource::WatchGyroscope,
-                ],
-                false,
-                false,
-            ),
-            window_ms: 500,
-            stride_ms: 150,
-            max_gap_ms: 250,
-            min_samples: 3,
-        };
+        let input = ppg_onset_contract();
         RunPlan {
-            target: label("snap"),
+            target: label("pinch"),
             mapping: mapping(),
             input,
             quality: QualityRules::default(),
@@ -544,7 +480,7 @@ mod tests {
     }
 
     fn known() -> BTreeSet<LabelId> {
-        ["snap", "idle", "walking"]
+        ["pinch", "idle", "walking"]
             .iter()
             .map(|l| label(l))
             .collect()
@@ -557,7 +493,7 @@ mod tests {
     #[test]
     fn the_split_never_shares_a_recording_and_leaves_both_kinds_on_both_sides() {
         let recordings = sessions();
-        let split = plan_split(&recordings, &mapping(), &label("snap")).unwrap();
+        let split = plan_split(&recordings, &mapping(), &label("pinch")).unwrap();
         let set =
             |ids: &[RecordingId]| ids.iter().map(ToString::to_string).collect::<BTreeSet<_>>();
         let (train, eval) = (set(&split.train), set(&split.evaluation));
@@ -571,34 +507,34 @@ mod tests {
         assert_eq!(eval.len(), 2);
         assert_eq!(
             split,
-            plan_split(&recordings, &mapping(), &label("snap")).unwrap()
+            plan_split(&recordings, &mapping(), &label("pinch")).unwrap()
         );
         // The order they are given in makes no difference.
         let mut reversed = recordings.clone();
         reversed.reverse();
-        let again = plan_split(&reversed, &mapping(), &label("snap")).unwrap();
+        let again = plan_split(&reversed, &mapping(), &label("pinch")).unwrap();
         assert_eq!(set(&again.evaluation), eval);
     }
 
     #[test]
     fn a_timeline_recording_with_both_kinds_can_stand_for_each() {
-        let recordings = vec![info("a", &["snap", "idle"]), info("b", &["snap", "idle"])];
-        let split = plan_split(&recordings, &mapping(), &label("snap")).unwrap();
+        let recordings = vec![info("a", &["pinch", "idle"]), info("b", &["pinch", "idle"])];
+        let split = plan_split(&recordings, &mapping(), &label("pinch")).unwrap();
         assert_eq!((split.train.len(), split.evaluation.len()), (1, 1));
     }
 
     #[test]
     fn it_refuses_when_there_is_nothing_to_test_on_or_learn_the_difference_from() {
         for recordings in [
-            vec![info("s1", &["snap"]), info("i1", &["idle"])],
+            vec![info("s1", &["pinch"]), info("i1", &["idle"])],
             vec![
-                info("s1", &["snap"]),
-                info("s2", &["snap"]),
+                info("s1", &["pinch"]),
+                info("s2", &["pinch"]),
                 info("i1", &["idle"]),
             ],
             vec![
-                info("s1", &["snap"]),
-                info("s2", &["snap"]),
+                info("s1", &["pinch"]),
+                info("s2", &["pinch"]),
                 info("w1", &["walking"]),
             ],
             vec![info("i1", &["idle"]), info("i2", &["idle"])],
@@ -606,105 +542,12 @@ mod tests {
         ] {
             assert!(
                 matches!(
-                    plan_split(&recordings, &mapping(), &label("snap")),
+                    plan_split(&recordings, &mapping(), &label("pinch")),
                     Err(TrainingError::NotEnoughRecordings { .. })
                 ),
                 "{recordings:?}"
             );
         }
-    }
-
-    #[test]
-    fn the_features_follow_the_streams() {
-        let motion = canonical_features_for(&[StreamSource::WatchAcceleration], false, false);
-        assert!(!motion.is_empty() && motion.iter().all(|f| f.starts_with("accel_")));
-        let all = canonical_features_for(
-            &[
-                StreamSource::WatchOrientation,
-                StreamSource::WatchAcceleration,
-                StreamSource::WatchGyroscope,
-                StreamSource::WatchPpg,
-            ],
-            false,
-            false,
-        );
-        assert_eq!(all.len(), FEATURE_NAMES.len() - 24 - 21); // the spike and the level features are opt-in
-        let with_spikes = canonical_features_for(
-            &[
-                StreamSource::WatchOrientation,
-                StreamSource::WatchAcceleration,
-                StreamSource::WatchGyroscope,
-                StreamSource::WatchPpg,
-            ],
-            false,
-            true,
-        );
-        assert_eq!(with_spikes.len(), FEATURE_NAMES.len() - 21);
-        let with_both = canonical_features_with_channels(
-            &[StreamSource::WatchPpg],
-            false,
-            true,
-            true,
-            &PPG_CHANNELS,
-        );
-        assert_eq!(
-            with_both.iter().filter(|f| is_baseline_feature(f)).count(),
-            21
-        );
-        // They are about change, so "only how things change" keeps them.
-        let moving = canonical_features_with_channels(
-            &[StreamSource::WatchPpg],
-            true,
-            false,
-            true,
-            &PPG_CHANNELS,
-        );
-        assert!(moving.contains(&"ppg_red_rel_low".to_string()));
-        assert!(moving.contains(&"ppg_red_rel_z_mean".to_string()));
-        assert!(moving.contains(&"ppg_red_rel_z_step".to_string()));
-        // The motion dynamics are about change too; they come with their sensor.
-        let shaking = canonical_features_for(&[StreamSource::WatchGyroscope], true, false);
-        assert!(shaking.contains(&"gyro_jerk_rms".to_string()));
-        assert!(!shaking.iter().any(|f| f.starts_with("accel_")));
-        // Without the pulse sensor there is nothing for them to read.
-        assert_eq!(
-            canonical_features_for(&[StreamSource::WatchAcceleration], false, true),
-            canonical_features_for(&[StreamSource::WatchAcceleration], false, false)
-        );
-        assert!(canonical_features_for(&[StreamSource::HeadPose], false, true).is_empty());
-    }
-
-    #[test]
-    fn a_convolutional_model_reads_channels_not_statistics() {
-        use StreamSource::*;
-        let all = ["green", "red", "ir"];
-        assert_eq!(
-            grid_channels_for(&[WatchAcceleration], &all),
-            ["accel_x", "accel_y", "accel_z"]
-        );
-        assert_eq!(
-            grid_channels_for(&[WatchPpg], &["ir", "green"]),
-            ["ppg_green", "ppg_ir"]
-        );
-        assert_eq!(
-            grid_channels_for(&[WatchPpg, WatchOrientation], &["red"]),
-            ["ppg_red", "quat_w", "quat_x", "quat_y", "quat_z"]
-        );
-        assert_eq!(
-            grid_channels_for(
-                &[
-                    WatchPpg,
-                    WatchGyroscope,
-                    WatchAcceleration,
-                    WatchOrientation
-                ],
-                &all
-            )
-            .len(),
-            13
-        );
-        assert!(grid_channels_for(&[HeadPose], &all).is_empty());
-        assert_eq!(trainer_backend("cnn1d"), Some(TrainerBackend::PyTorch));
     }
 
     #[test]
@@ -718,7 +561,7 @@ mod tests {
         assert_eq!(snapshot.split, begun.split);
         assert_eq!(snapshot.mapping, mapping());
         assert_eq!(snapshot.recordings.len(), 7);
-        assert_eq!(registry.projects[&begun.project_id].target, label("snap"));
+        assert_eq!(registry.projects[&begun.project_id].target, label("pinch"));
         assert!(registry.versions.is_empty());
     }
 
@@ -737,21 +580,21 @@ mod tests {
         assert!(
             begin_run(
                 &mut store,
-                &plan(vec![info("s1", &["snap"])]),
+                &plan(vec![info("s1", &["pinch"])]),
                 &known(),
                 NOW
             )
             .is_err()
         );
         // A label that is not in the catalogue.
-        let unknown: BTreeSet<LabelId> = [label("snap"), label("idle")].into();
+        let unknown: BTreeSet<LabelId> = [label("pinch"), label("idle")].into();
         assert!(begin_run(&mut store, &plan(sessions()), &unknown, NOW).is_err());
         // The target not marked as the target.
         let mut wrong = plan(sessions());
         wrong
             .mapping
             .entries
-            .insert(label("snap"), ExampleRole::Negative);
+            .insert(label("pinch"), ExampleRole::Negative);
         assert!(matches!(
             begin_run(&mut store, &wrong, &known(), NOW),
             Err(TrainingError::TargetNotPositive(_))
@@ -785,9 +628,8 @@ mod tests {
 
     fn trained_bundle() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
-        let from = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/trained_logreg_bundle");
-        for file in ["manifest.json", "model.onnx"] {
+        let from = fixture_dir();
+        for file in ["manifest.json", "model.trees"] {
             fs::copy(from.join(file), dir.path().join(file)).unwrap();
         }
         dir
@@ -803,7 +645,7 @@ mod tests {
         let sha = staged.model_sha256.clone();
         let artifacts = vec![ArtifactRef {
             kind: "model".into(),
-            path: "label-models/x/model.onnx".into(),
+            path: "label-models/x/model.trees".into(),
             sha256: sha.clone(),
         }];
         let outcome = complete_run(
@@ -876,96 +718,44 @@ mod tests {
         assert!(evaluation_only_run(&mut store, &begun.run_id, "again", Vec::new(), NOW).is_err());
     }
 
-    /// The same lists are in `tools/label-trainer/tests/test_label_train.py`: the two sides must choose the same features.
     #[test]
-    fn movement_only_keeps_how_things_change_and_matches_the_trainer() {
-        use StreamSource::*;
-        let strs = |v: Vec<String>| {
-            v.iter()
-                .map(String::as_str)
-                .map(str::to_owned)
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(
-            strs(canonical_features_for(
-                &[WatchAcceleration, WatchGyroscope],
-                true,
-                false
-            )),
-            [
-                "accel_x_std",
-                "accel_y_std",
-                "accel_z_std",
-                "accel_magnitude_std",
-                "gyro_x_std",
-                "gyro_y_std",
-                "gyro_z_std",
-                "gyro_magnitude_std",
-                "accel_jerk_rms",
-                "accel_jerk_max",
-                "accel_magnitude_ptp",
-                "accel_magnitude_kurtosis",
-                "accel_crossing_rate",
-                "gyro_jerk_rms",
-                "gyro_jerk_max",
-                "gyro_magnitude_ptp",
-                "gyro_magnitude_kurtosis",
-                "gyro_crossing_rate"
-            ]
-        );
-        assert_eq!(
-            strs(canonical_features_for(&[WatchOrientation], true, false)),
-            [
-                "quat_w_std",
-                "quat_x_std",
-                "quat_y_std",
-                "quat_z_std",
-                "quat_delta_angle_deg"
-            ]
-        );
-        assert_eq!(
-            strs(canonical_features_for(&[WatchPpg], true, false)),
-            [
-                "ppg_green_std",
-                "ppg_red_std",
-                "ppg_ir_std",
-                "ppg_green_slope",
-                "ppg_red_slope",
-                "ppg_ir_slope"
-            ]
-        );
-        assert!(
-            canonical_features_for(&[WatchAcceleration], true, false).len()
-                < canonical_features_for(&[WatchAcceleration], false, false).len()
-        );
-        // The spike features are all about change, so "only how things change" keeps them.
-        let ppg_spikes = strs(canonical_features_for(&[WatchPpg], true, true));
-        assert_eq!(ppg_spikes.len(), 6 + 24);
-        assert!(ppg_spikes.iter().skip(6).all(|n| is_spike_feature(n)));
+    fn the_only_backend_is_the_pulse_model_and_its_contract_is_sound() {
+        assert_eq!(trainer_backend("ppg-onset-trees"), Some(TrainerBackend::ScikitLearn));
+        assert_eq!(trainer_backend("logreg"), None);
+        let contract = ppg_onset_contract();
+        contract.validate().unwrap();
+        let bundle = crate::bundle::validate_bundle(&fixture_dir(), None).unwrap();
+        assert_eq!(bundle.manifest.input_contract(), contract, "the trainer declares exactly this");
     }
 
     #[test]
-    fn the_offered_backends_map_to_the_registry_ones() {
-        assert_eq!(trainer_backend("logreg"), Some(TrainerBackend::ScikitLearn));
-        assert_eq!(trainer_backend("gbt"), Some(TrainerBackend::ScikitLearn));
-        assert_eq!(trainer_backend("mlp"), Some(TrainerBackend::ScikitLearn));
-        assert_eq!(trainer_backend("torch-mlp"), Some(TrainerBackend::PyTorch));
-        assert_eq!(trainer_backend("keras"), None);
-        let _ = fixture_dir();
+    fn a_run_that_cannot_go_live_publishes_a_model_that_can_only_run_in_monitor() {
+        let lab = tempfile::tempdir().unwrap();
+        let mut store = store();
+        let begun = begin_run(&mut store, &plan(sessions()), &known(), NOW).unwrap();
+        let bundle = trained_bundle();
+        let staged = stage_bundle(bundle.path(), lab.path()).unwrap();
+        let outcome = monitor_only_run(&mut store, staged, lab.path(), &begun.run_id, "it fired too often", Vec::new(), NOW).unwrap();
+        let registry = store.registry();
+        let version = &registry.versions[&outcome.version_id];
+        assert!(version.monitor_only && !version.deployable && version.runnable());
+        let run = &registry.runs[&begun.run_id];
+        assert_eq!(run.outcome, Some(RunOutcome::EvaluationOnly));
+        assert_eq!(run.failure.as_deref(), Some("it fired too often"));
     }
 
     #[test]
     fn recordings_that_can_only_train_never_change_which_ones_test() {
         let base = sessions();
-        let original = plan_split(&base, &mapping(), &label("snap")).unwrap();
+        let original = plan_split(&base, &mapping(), &label("pinch")).unwrap();
         let mut more = base.clone();
-        more.push(info("extra1", &["snap", "idle"]));
-        more.push(info("extra2", &["snap", "idle"]));
+        more.push(info("extra1", &["pinch", "idle"]));
+        more.push(info("extra2", &["pinch", "idle"]));
         let keep = [
             RecordingId::new("extra1").unwrap(),
             RecordingId::new("extra2").unwrap(),
         ];
-        let split = plan_split_keeping(&more, &mapping(), &label("snap"), &keep).unwrap();
+        let split = plan_split_keeping(&more, &mapping(), &label("pinch"), &keep).unwrap();
         assert_eq!(split.evaluation, original.evaluation);
         assert_eq!(split.train.len(), original.train.len() + 2);
         assert!(
@@ -973,7 +763,7 @@ mod tests {
                 .all(|id| split.train.contains(id) && !split.evaluation.contains(id))
         );
         assert_eq!(
-            plan_split_keeping(&base, &mapping(), &label("snap"), &[]).unwrap(),
+            plan_split_keeping(&base, &mapping(), &label("pinch"), &[]).unwrap(),
             original
         );
     }
