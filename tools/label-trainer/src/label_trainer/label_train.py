@@ -29,6 +29,7 @@ import hashlib
 import json
 import os
 import sys
+import warnings
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,10 @@ import numpy as np
 from . import ppg_onset, trees
 from .csv_io import Recording, load_recording, repair_millisecond_ppg_timestamps, shift_labels
 from .events import Policy, detect, summarise
+
+# scikit-learn 1.9 warns once per parallel task while ExtraTrees trains and scores its trees on every core: harmless, and it
+# buries the progress lines the desktop shows.
+warnings.filterwarnings("ignore", message=r".*sklearn\.utils\.parallel\.delayed.* should be used with .*", category=UserWarning)
 
 SPEC_VERSION = 1
 BACKEND = "ppg-onset-trees"
