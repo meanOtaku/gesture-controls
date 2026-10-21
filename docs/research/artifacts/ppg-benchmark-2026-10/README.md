@@ -67,6 +67,18 @@ uv run --project tools/label-trainer --extra torch python docs/research/artifact
 uv run --project tools/label-trainer --extra torch python docs/research/artifacts/ppg-benchmark-2026-10/multiscale_zscore.py
 ```
 
+## IMU fusion, trigger rules and label shifts
+
+Three follow-up studies on 2026-10-21, written up in [`../../ppg-imu-fusion-and-triggers-2026-10.md`](../../ppg-imu-fusion-and-triggers-2026-10.md):
+
+- `ppg-imu-fusion/` (`imu_fusion.py`): adding 1,032 causal IMU features to the app's model raises worst-split AUC from 0.789 to 0.837 (19/20 splits better) and cuts false activations on the no-pinch recordings at 0.5 from 19.0 to 12.0 a minute.
+- `ppg-trigger-rules/` (`trigger_rules.py`): the frozen rising-edge rule fires early and its lockout blocks the right fire; firing one tick after the probability's peak (or on a 3-tick mean) adds 4–12 points of recall at the same false-activation budget with PPG + IMU.
+- `ppg-label-shift/` (`label_shift.py`): re-scoring with the labels moved shows that at budgets of 2 a minute or fewer the remaining false activations are not near any pinch.
+
+```sh
+uv run --project tools/label-trainer python docs/research/artifacts/ppg-benchmark-2026-10/imu_fusion.py
+```
+
 ## Scope and limitations
 
 All results are grouped cross-validation progress evidence, not an untouched final generalization test. Source recordings, including the new 2026-10-17 datasets, are versioned under `data/recordings/`.

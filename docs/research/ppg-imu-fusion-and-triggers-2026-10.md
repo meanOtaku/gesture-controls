@@ -1,0 +1,145 @@
+# Pinch start: adding the IMU, trigger rules and label shifts, October 2026
+
+The app's PPG-only pinch-start model fires on hand movement in general, not on pinches: on the 13 recordings with no pinch (fist, thumbs-up, everything else) it fires about 19–25 times a minute. These three studies, run on 2026-10-21, ask what the recordings we already have can say about fixing that, before collecting more:
+
+1. Does adding the watch's IMU help?
+2. Does a better trigger rule help?
+3. How many false activations are really pinches scored against late labels?
+
+All three use the frozen benchmark of `artifacts/ppg-benchmark-2026-10/`:
+
+- 37 recordings and 1,390 events, split 20 ways so that no recording is in both training and test;
+- ExtraTrees with the frozen settings;
+- the same live-detection matching: a fire counts if it lands 680–1,280 ms after a labelled pinch start.
+
+They are cross-validation progress evidence on data every earlier study has seen, not an untouched test.
+
+## Summary
+
+- **The IMU is the most useful thing we can add.** On its own it already beats PPG. Combined with PPG it raises worst-split AUC from 0.789 to 0.837 (better on 19 of 20 splits). It mostly helps tell a pinch from the start of another gesture: 0.70 → 0.79–0.81 AUC on that pair.
+- **It halves the false activations on no-pinch recordings at the frozen 0.5 threshold:** 19.0 → 12.0 a minute fused, 9.8 with the IMU alone. That is better, not usable.
+- **The frozen trigger rule loses pinches.** It fires when the probability first crosses the threshold. At low thresholds that is often before the scoring window, and the fire's 1.5 s lockout then blocks the right one. That is why lowering the threshold catches fewer pinches.
+- **Firing just after the probability's peak fixes that.** With PPG + IMU it adds 4–12 points of recall at the same false-activation budget, for 35–90 ms more delay. With PPG alone, no rule helps.
+- **Moving the labels earlier doesn't uncover a hidden win.** At the 0.5 threshold a 200–350 ms shift turns about 3 false activations a minute into caught pinches. At budgets of 2 a minute or fewer, recall barely moves, and the peak rule already gets the same gain without moving labels. The false activations that are left are real: the model reacting to other movement.
+- **The next step is data, not more re-scoring of these recordings:**
+  - everyday-movement sessions as negatives;
+  - camera-timed pinch labels, because each recording has its own label lag, up to 1.3 s;
+  - possibly a higher IMU rate.
+
+## The data
+
+Every recording stores the watch's IMU alongside the PPG:
+
+- accelerometer x/y/z, gyroscope x/y/z and orientation;
+- 50 Hz (20 ms apart);
+- the same clock as the PPG: the IMU starts and ends within about 130 ms of the PPG in every recording.
+
+One recording (2026-10-14T00-54-06) was captured at 100 Hz.
+
+## 1. Adding the IMU
+
+[`imu_fusion.py`](artifacts/ppg-benchmark-2026-10/imu_fusion.py), results in [`ppg-imu-fusion/`](artifacts/ppg-benchmark-2026-10/ppg-imu-fusion/results.md).
+
+**What was compared.** Three inputs, fixed before any was scored, each into the same ExtraTrees:
+
+- **ppg:** the app's model. PPG z-scored against the previous 1, 2 and 4 s → slope, curvature, jerk → 1,701 summaries.
+- **imu:** 1,032 causal features ending at the decision tick. The channels are the accelerometer and gyroscope axes plus the two magnitudes, held on a 50 Hz grid. For each channel and each of the last 320, 640 and 1,280 ms there are:
+  - the same 21 summaries, on the signal and on its sample-to-sample change;
+  - the log ratio of the window's spread to the 3 s before it.
+- **ppg+imu:** both blocks side by side.
+
+| Input | Worst-split AUC | Mean AUC | Splits better than ppg | Pinch vs other gestures' starts (mean AUC) | False/min at 0.5, no-pinch recordings |
+|---|---:|---:|---:|---:|---:|
+| ppg (app) | 0.789 | 0.843 | – | 0.695 | 19.0 |
+| imu | 0.807 | 0.882 | 18/20 | **0.807** | **9.8** |
+| ppg+imu | **0.837** | **0.892** | 19/20 | 0.794 | 12.0 |
+
+Mean held-out score by event kind:
+
+| Input | Pinch start | Other gesture start | Everything else | Pinch hold | Other hold | Unmarked |
+|---|---:|---:|---:|---:|---:|---:|
+| ppg | 0.546 | 0.393 | 0.298 | 0.172 | 0.157 | 0.179 |
+| imu | 0.595 | 0.300 | 0.327 | 0.162 | 0.163 | 0.182 |
+| ppg+imu | 0.601 | 0.342 | 0.296 | 0.154 | 0.146 | 0.176 |
+
+- **The IMU separates pinches from other gestures' starts.** That was the main confusion in the multi-scale study's diagnosis.
+- **The IMU alone scores "everything else" (free movement) higher than PPG does.** This is the expected risk: arm movement dominates the IMU. Fusing pulls it back, which argues for fusing the two rather than replacing PPG.
+- **Even fused, live detection is far from usable.** At about 2 false activations a minute it catches 34% of pinches, against 29% for PPG alone. At about 1 a minute it catches 21%, against 15%. These thresholds were read off the held-out predictions, so the figures compare the inputs fairly but are optimistic.
+
+## 2. Trigger rules
+
+[`trigger_rules.py`](artifacts/ppg-benchmark-2026-10/trigger_rules.py), results in [`ppg-trigger-rules/`](artifacts/ppg-benchmark-2026-10/ppg-trigger-rules/results.md).
+
+**Why the frozen rule loses pinches.** At the 0.5 threshold:
+
+- 31% (ppg) and 43% (ppg+imu) of false fires land up to 1 s before a labelled pinch's scoring window;
+- 62% and 57% of missed pinches had such an early fire, whose lockout blocked the right one.
+
+At 0.7 the shares of missed pinches fall to 24% and 23%, because a higher threshold is crossed later in the probability's rise.
+
+**Rules compared.** Four causal rules, fixed before scoring, on the same held-out predictions. Each fires at most once per run above the threshold and shares the 1.5 s lockout:
+
+- **edge:** the frozen rule; fires on the first tick above the threshold.
+- **debounce:** fires on the third consecutive tick above the threshold.
+- **smooth:** the edge rule on the mean of the last three probabilities.
+- **peak:** fires on the first tick the probability falls, one tick after its peak.
+
+The edge rule at 0.5 reproduces the multi-scale study's 41.3% recall and 15.09 false activations a minute exactly.
+
+Most pinches caught within a false-activation budget (thresholds swept 0.20–0.95):
+
+| Input | Rule | ≤ 0.5/min | ≤ 1/min | ≤ 2/min | ≤ 5/min | Latency at ≤ 2/min |
+|---|---|---:|---:|---:|---:|---:|
+| ppg | edge | 0.067 | 0.149 | 0.230 | 0.343 | 845 ms |
+| ppg | best of debounce, smooth, peak | 0.043 | 0.124 | 0.249 | 0.383 | 880–910 ms |
+| ppg+imu | edge | 0.115 | 0.209 | 0.340 | 0.385 | 820 ms |
+| ppg+imu | debounce | 0.160 | 0.241 | 0.368 | 0.466 | 865 ms |
+| ppg+imu | smooth | **0.183** | **0.271** | 0.335 | 0.431 | 855 ms |
+| ppg+imu | peak | 0.162 | 0.245 | **0.378** | **0.509** | 910 ms |
+
+- **With PPG + IMU, peak or smooth is worth taking.** Peak is best at looser budgets and smooth at the strictest ones, for under 100 ms more delay.
+- **With PPG alone, no rule clearly helps.** Its probabilities are too noisy for the rule to matter.
+
+## 3. Label shifts
+
+[`label_shift.py`](artifacts/ppg-benchmark-2026-10/label_shift.py), results in [`ppg-label-shift/`](artifacts/ppg-benchmark-2026-10/ppg-label-shift/results.md).
+
+**What was done.** The held-out predictions were re-scored with every pinch start moved by one common shift, from 700 ms earlier to 350 ms later. Nothing was retrained. Later shifts are the control: if an earlier window only caught stray fires, a later one would too.
+
+PPG + IMU:
+
+| Label shift | Rule | Recall at 0.5 | False/min at 0.5 | ≤ 1/min | ≤ 2/min | ≤ 5/min |
+|---|---|---:|---:|---:|---:|---:|
+| 0 | edge | 0.350 | 11.25 | 0.209 | 0.340 | 0.385 |
+| 0 | peak | 0.560 | 6.82 | 0.245 | 0.378 | 0.509 |
+| −200 ms | edge | 0.578 | 8.24 | **0.306** | 0.379 | 0.529 |
+| −200 ms | peak | 0.604 | 6.25 | 0.243 | 0.379 | **0.571** |
+| −350 ms | edge | 0.600 | 7.95 | 0.199 | 0.357 | 0.513 |
+| −500 ms | edge | 0.479 | 9.54 | – | 0.020 | 0.240 |
+| +200 ms (control) | peak | 0.312 | 10.08 | 0.115 | 0.167 | 0.266 |
+
+PPG alone shows the same pattern: edge at 0.5 goes from 0.413 and 15.09 a minute at zero shift to 0.572 and 13.00 at −200 ms.
+
+- **At the 0.5 threshold, some false activations are early fires on real pinches.** A 200–350 ms earlier shift turns about 3 a minute of them into caught pinches, for both inputs. Later shifts get worse, so this isn't chance.
+- **This is mostly how the edge rule behaves, not late labels.** A low threshold is crossed while the probability is still rising. The peak rule at zero shift does as well as the edge rule shifted −200 ms.
+- **At budgets of 2 a minute or fewer, no shift moves recall much** (about 0.38 throughout). The false activations left there are not near any pinch.
+- **Scores collapse about 300 ms either side of the best shift.** The 600 ms scoring window is narrow next to how uncertain the label timing is. The label-lag audit found each recording's best shift anywhere from −1,400 to +850 ms (the 10-17 recordings −700 to −1,300 ms). One common shift cannot correct that, so it still distorts training. Camera-timed labels are the fix.
+
+## What this means
+
+1. **The model should use PPG + IMU, and fire on the peak (or smoothed) probability.** That is the best we can get from these recordings. Still expect only about a quarter to a third of pinches at 1–2 false activations a minute, and less on a new day.
+2. **The false activations left are real reactions to other movement.** The fix is training data: long everyday-movement sessions as negatives, with hard-negative mining.
+3. **Label timing needs an independent reference.** Camera contact timing at 60 fps or more, so each recording's lag is measured instead of guessed.
+4. **The 50 Hz IMU may be too slow** to capture the brief vibration of fingertip contact. Recording at 100–200 Hz is worth testing alongside the new data.
+
+## Reproducing
+
+From the repository root, each run takes about 2–3 minutes:
+
+```sh
+uv run --project tools/label-trainer python docs/research/artifacts/ppg-benchmark-2026-10/imu_fusion.py [out_dir]
+uv run --project tools/label-trainer python docs/research/artifacts/ppg-benchmark-2026-10/trigger_rules.py [out_dir]
+uv run --project tools/label-trainer python docs/research/artifacts/ppg-benchmark-2026-10/label_shift.py [out_dir]
+```
+
+`trigger_rules.py` and `label_shift.py` reuse `imu_fusion.py`'s inputs. All three reuse `multiscale_zscore.py` and `reproduce.py`.
