@@ -22,6 +22,7 @@
 
 ## Research
 
+- [PPG gesture-recognition literature, benchmark position, and acquisition priorities, October 2026](research/ppg-gesture-literature-2026-10.md): smartwatch/custom-hardware research, why reported metrics differ, the valid closure-label result, and the next data-collection protocol.
 - [PPG step across a gesture: findings, October 2026](research/ppg-step-findings-2026-10.md): whether the PPG change around a gesture is the same from session to session (yes for pinch), what was built from it, and what is next
 - [Green PPG pinch-onset experiments, October 2026](research/ppg-green-onset-experiments-2026-10.md): reproducible onset/duration experiments, results, limitations, and the candidate next pipeline
 - [RGB PPG pinch-onset follow-up experiments, October 2026](research/ppg-rgb-onset-follow-up-2026-10.md): preprocessing, feature, regularization, augmentation, and label-audit results; research-only candidate and evidence gaps
