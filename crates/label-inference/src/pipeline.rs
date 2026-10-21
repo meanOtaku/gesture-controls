@@ -1,19 +1,22 @@
 //! The one shared path from raw telemetry to label scores.
 //!
-//! Telemetry is validated and buffered **once**, whatever number of models are running. Every model reads the pulse
-//! sensor and decides once for each new pulse sample, as the trainer decides at every sample of a recording; between
-//! samples (a timer tick) only the stream's health is checked. Motion samples are still
-//! validated, so a broken stream is reported, but no model reads them.
+//! Telemetry is validated and buffered **once**, whatever number of models are running. Every model decides once for each
+//! new pulse sample, in order, as the trainer decides at every sample of a recording; between samples (a timer tick) only
+//! the streams' health is checked. A PPG + IMU model also reads the motion samples, and decides on a pulse sample only once
+//! the motion up to it has arrived (the two streams are sent separately), so it sees the history the trainer saw.
 //!
-//! Time. Windows are cut on the desktop's receive clock, the only one the watch's streams share. Pulse samples are placed
-//! on it by their own timestamps through a [`ClockMap`], so samples that arrive together keep their real spacing. The
-//! model's inputs are computed from the samples' raw timestamps, as the trainer computes them from a recording: the
-//! decision is the newest pulse sample (see [`pinch_inference::ppg_onset`]). Raw timestamps are never altered; a score
-//! is stamped with the newest sample's.
+//! Time. Windows are cut on the desktop's receive clock. Pulse samples are placed on it by their own timestamps through a
+//! [`ClockMap`], so samples that arrive together keep their real spacing. The pulse features are computed from the
+//! samples' raw timestamps, as the trainer computes them from a recording (see [`pinch_inference::ppg_onset`]). The pulse
+//! sensor's clock is not the one the motion samples are stamped with, so each pulse sample is also placed on the watch's
+//! clock, from the time its batch was sent, exactly as the recorder does (`SourceClockMap`); the motion features of a
+//! decision end there (see [`pinch_inference::imu_onset`]). Raw timestamps are never altered; a score is stamped with its
+//! pulse sample's.
 
 use std::collections::{BTreeMap, VecDeque};
 
 use model_lab_core::{LabelId, ModelVersionId, StreamSource};
+use pinch_inference::imu_onset::{self, MotionSample};
 use pinch_inference::ppg_onset::{PpgSample as Sample, features};
 use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
 
@@ -22,6 +25,10 @@ use crate::model::{InputCheck, LoadedModel};
 
 const NS_PER_MS: u64 = 1_000_000;
 const MAX_BUFFERED_SAMPLES: usize = 20_000;
+/// The most pulse samples one model decides on in one evaluation; older ones waiting longer are skipped.
+const MAX_DECISIONS_PER_ROUND: usize = 50;
+/// The motion stream is stale when nothing has arrived for this long (it is sent every 100 ms).
+const MOTION_STALE_MS: u64 = 1_000;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LabelScore {
@@ -114,15 +121,28 @@ struct PpgSample {
     ir: f64,
     /// The worst of the three channels' status codes (0 = valid, higher is worse).
     quality: f64,
+    /// When it was taken on the watch's clock (the motion samples'), or `None` before any batch placed the pulse clock.
+    watch_ns: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+struct MotionEntry {
+    /// When it arrived, on the receive clock (for freshness only).
+    received_ns: u64,
+    sample: MotionSample,
 }
 
 #[derive(Debug, Default)]
 pub struct LabelPipeline {
     ppg: VecDeque<PpgSample>,
+    /// Motion samples with an accelerometer and gyroscope reading, in the watch's time order.
+    motion: VecDeque<MotionEntry>,
     device_id: Option<String>,
     last_orientation_raw: Option<u64>,
     last_ppg_raw: Option<u64>,
     ppg_clock: ClockMap,
+    /// The pulse sensor's clock onto the watch's, from each batch's send time.
+    ppg_to_watch: ClockMap,
     /// The longest history any loaded model needs, so the buffer is bounded by what is used.
     retention_ns: u64,
     /// The newest sample each model has decided on, so it decides on each sample once.
@@ -151,10 +171,12 @@ impl LabelPipeline {
     /// Forgets all buffered telemetry and the ordering state (the watch went away, or the runtime was reset).
     pub fn reset(&mut self) {
         self.ppg.clear();
+        self.motion.clear();
         self.device_id = None;
         self.last_orientation_raw = None;
         self.last_ppg_raw = None;
         self.ppg_clock.reset();
+        self.ppg_to_watch.reset();
         self.last_decided_raw.clear();
         self.quiet_until_ns.clear();
     }
@@ -174,14 +196,19 @@ impl LabelPipeline {
         {
             self.ppg.pop_front();
         }
+        while self.motion.front().is_some_and(|m| m.received_ns < oldest)
+            || self.motion.len() > MAX_BUFFERED_SAMPLES
+        {
+            self.motion.pop_front();
+        }
     }
 
-    /// Validates one orientation sample. No model reads motion, so nothing is kept, but an out-of-order, repeated or
-    /// non-finite sample is still refused, and the caller must treat that as a fault.
+    /// Validates one orientation sample and keeps its accelerometer and gyroscope reading for the models that read motion.
+    /// An out-of-order, repeated or non-finite sample is refused, and the caller must treat that as a fault.
     pub fn observe_orientation(
         &mut self,
         sample: &WatchOrientationSample,
-        _received_ns: u64,
+        received_ns: u64,
     ) -> Result<(), Rejection> {
         self.adopt_device(&sample.device_id);
         let bad = |detail: &str| Rejection::BadStream {
@@ -201,6 +228,17 @@ impl LabelPipeline {
             return Err(bad("timestamps did not increase"));
         }
         self.last_orientation_raw = Some(sample.timestamp_ns);
+        if let (Some(accel), Some(gyro)) = (sample.accelerometer, sample.gyroscope) {
+            self.motion.push_back(MotionEntry {
+                received_ns,
+                sample: MotionSample {
+                    ts_ns: sample.timestamp_ns,
+                    accel,
+                    gyro,
+                },
+            });
+            self.prune(received_ns);
+        }
         Ok(())
     }
 
@@ -238,6 +276,7 @@ impl LabelPipeline {
         self.last_ppg_raw = Some(last_raw);
         // The batch left the watch just after its newest sample was taken; the others are placed by their own times.
         self.ppg_clock.observe(last_raw, received_ns);
+        self.ppg_to_watch.observe(last_raw, batch.timestamp_ns);
         for i in 0..n {
             let age = last_raw - batch.timestamps_ns[i];
             self.ppg.push_back(PpgSample {
@@ -254,13 +293,14 @@ impl LabelPipeline {
                         .max(batch.red_status[i])
                         .max(batch.ir_status[i]),
                 ),
+                watch_ns: self.ppg_to_watch.map(batch.timestamps_ns[i]),
             });
         }
         self.prune(received_ns);
         Ok(())
     }
 
-    /// Scores every model on the newest pulse sample, if it has not decided on it yet, and checks every model's stream is
+    /// Scores every model on each pulse sample it has not decided on yet, in order, and checks every model's streams are
     /// healthy. A window that cannot be scored is reported (at most once a stride), never guessed at.
     pub fn evaluate(
         &mut self,
@@ -279,12 +319,12 @@ impl LabelPipeline {
             }
             let last = self.last_decided_raw.get(&model.label).copied();
             match self.score(model, now_ns, last) {
-                Ok(Some(score)) => {
-                    self.last_decided_raw
-                        .insert(model.label.clone(), score.timestamp_ns);
-                    scores.push(score);
+                Ok((decided, through)) => {
+                    if let Some(through) = through {
+                        self.last_decided_raw.insert(model.label.clone(), through);
+                    }
+                    scores.extend(decided);
                 }
-                Ok(None) => {} // warming up, or nothing new to decide on
                 Err(reason) => {
                     self.quiet_until_ns.insert(
                         model.label.clone(),
@@ -301,29 +341,33 @@ impl LabelPipeline {
         (scores, rejections)
     }
 
-    /// `Ok(None)`: the buffer does not yet hold the model's history (it is warming up), or the newest sample is
-    /// `last_decided`, which the model has already scored.
+    /// The scores of the pulse samples after `last_decided` (only the newest, the first time), oldest first, and the raw
+    /// timestamp of the last one decided on, whether or not it had inputs. Nothing while the buffer does not yet hold the
+    /// model's history (it is warming up). A PPG + IMU model stops at the first sample whose motion has not all arrived.
     fn score(
         &self,
         model: &LoadedModel,
         now_ns: u64,
         last_decided: Option<u64>,
-    ) -> Result<Option<LabelScore>, Rejection> {
+    ) -> Result<(Vec<LabelScore>, Option<u64>), Rejection> {
         let source = StreamSource::WatchPpg;
-        if model.input.sources != [source] {
-            return Err(Rejection::Model(
-                "the model reads something other than the pulse sensor".into(),
-            ));
+        if model.input.sources != model.kind.sources() {
+            return Err(Rejection::Model(format!(
+                "the model's contract reads {:?}, but a model of its kind reads {:?}",
+                model.input.sources,
+                model.kind.sources()
+            )));
         }
         let window_ns = u64::from(model.input.window_ms) * NS_PER_MS;
         let max_gap_ns = u64::from(model.input.max_gap_ms) * NS_PER_MS;
         let start = now_ns.saturating_sub(window_ns);
+        let nothing = Ok((Vec::new(), None));
         let Some(first) = self.ppg.front() else {
-            return Ok(None);
+            return nothing;
         };
         // Not enough history to cover the window yet (allowing for one gap at its start). Not an error.
         if now_ns.saturating_sub(first.at_ns) + max_gap_ns < window_ns {
-            return Ok(None);
+            return nothing;
         }
         let newest = self.ppg.back().expect("non-empty");
         if now_ns.saturating_sub(newest.at_ns) > max_gap_ns {
@@ -369,11 +413,45 @@ impl LabelPipeline {
                 max_allowed: model.quality.max_contact_quality,
             });
         }
+        let motion_through = if model.kind.reads_motion() {
+            let Some(latest) = self.motion.back() else {
+                return nothing; // no motion yet: warming up
+            };
+            let age = now_ns.saturating_sub(latest.received_ns);
+            if age > MOTION_STALE_MS * NS_PER_MS {
+                return Err(Rejection::SourceStale {
+                    source: StreamSource::WatchOrientation,
+                    age_ms: age / NS_PER_MS,
+                });
+            }
+            Some(latest.sample.ts_ns)
+        } else {
+            None
+        };
 
-        if last_decided == Some(newest.raw_ts_ns) {
-            return Ok(None);
-        }
-        // The model's inputs, from the samples' own timestamps, for a decision at the newest one: what the trainer computes.
+        // A sample can be decided on once all its inputs have arrived: for a motion model, the motion up to it.
+        let ready = |s: &PpgSample| match motion_through {
+            None => true,
+            Some(through) => s.watch_ns.is_some_and(|at| at <= through),
+        };
+        // The samples to decide on: those after the last one decided that are ready, oldest first (the newest ready one
+        // alone, the first time).
+        let pending: Vec<&PpgSample> = match last_decided {
+            Some(last) => self
+                .ppg
+                .iter()
+                .filter(|s| s.raw_ts_ns > last)
+                .take_while(|s| ready(s))
+                .collect(),
+            None => self
+                .ppg
+                .iter()
+                .rev()
+                .find(|s| ready(s))
+                .into_iter()
+                .collect(),
+        };
+        let pending = &pending[pending.len().saturating_sub(MAX_DECISIONS_PER_ROUND)..];
         let samples: Vec<Sample> = self
             .ppg
             .iter()
@@ -384,28 +462,49 @@ impl LabelPipeline {
                 ir: s.ir,
             })
             .collect();
-        let Some(inputs) = features(&samples, newest.raw_ts_ns) else {
-            return Ok(None);
+        let motion: Vec<MotionSample> = if motion_through.is_some() {
+            self.motion.iter().map(|m| m.sample).collect()
+        } else {
+            Vec::new()
         };
-        let input_check = model.check_input(&inputs);
-        let confidence = model
-            .predict(&inputs)
-            .map_err(|e| Rejection::Model(e.to_string()))?;
-        Ok(Some(LabelScore {
-            label: model.label.clone(),
-            model_version: model.version_id.clone(),
-            confidence,
-            timestamp_ns: newest.raw_ts_ns,
-            received_ns: now_ns,
-            input_check,
-        }))
+        let mut scores = Vec::new();
+        let mut through = None;
+        for sample in pending {
+            // The model's inputs, from the samples' own timestamps, for a decision at this sample: what the trainer computes.
+            let inputs = match (motion_through, sample.watch_ns) {
+                (Some(_), Some(at)) => {
+                    features(&samples, sample.raw_ts_ns).and_then(|mut pulse| {
+                        pulse.extend(imu_onset::features(&motion, at)?);
+                        Some(pulse)
+                    })
+                }
+                _ => features(&samples, sample.raw_ts_ns),
+            };
+            through = Some(sample.raw_ts_ns);
+            let Some(inputs) = inputs else {
+                continue;
+            };
+            let input_check = model.check_input(&inputs);
+            let confidence = model
+                .predict(&inputs)
+                .map_err(|e| Rejection::Model(e.to_string()))?;
+            scores.push(LabelScore {
+                label: model.label.clone(),
+                model_version: model.version_id.clone(),
+                confidence,
+                timestamp_ns: sample.raw_ts_ns,
+                received_ns: now_ns,
+                input_check,
+            });
+        }
+        Ok((scores, through))
     }
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::model::tests::{expected, loaded};
+    use crate::model::tests::{expected, expected_motion, loaded, loaded_motion};
 
     /// One PPG batch of the samples `from..to` of `trace` (statuses all valid).
     pub fn batch(trace: &[Sample], from: usize, to: usize) -> WatchPpgBatchSample {
@@ -464,7 +563,9 @@ pub(crate) mod tests {
     }
 
     /// A one-off check of a model the trainer made from real recordings: `PPG_E2E_BUNDLE` (a bundle folder) and
-    /// `PPG_E2E_TRACE` (a recording's pulse samples and the trainer's probability for each, as `expected.json` holds them).
+    /// `PPG_E2E_TRACE` (a recording's pulse samples, the trainer's probability for each, and for a PPG + IMU model its motion
+    /// samples, as `expected.json` holds them). The streams arrive as the watch sends them: each pulse sample 5 ms after it
+    /// was taken, each motion sample 60 ms after.
     #[test]
     #[ignore = "one-off: set PPG_E2E_BUNDLE and PPG_E2E_TRACE"]
     fn a_real_bundle_scores_a_real_recording_as_the_trainer_did() {
@@ -486,6 +587,18 @@ pub(crate) mod tests {
             })
             .collect();
         let want: Vec<Option<f64>> = raw["probabilities"].as_array().unwrap().iter().map(serde_json::Value::as_f64).collect();
+        let motion: Vec<MotionSample> = raw["motion"]
+            .as_array()
+            .map(|rows| {
+                rows.iter()
+                    .map(|r| {
+                        let v = |i: usize| r[i].as_f64().unwrap();
+                        MotionSample { ts_ns: r[0].as_u64().unwrap(), accel: [v(1), v(2), v(3)], gyro: [v(4), v(5), v(6)] }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert_eq!(model.kind.reads_motion(), !motion.is_empty(), "a PPG + IMU model needs the motion samples, and only it");
         // A recording can repeat a timestamp, which the watch never sends live: keep the last sample at each, as the
         // trainer's zero-order hold does (both decide the same at that time).
         let keep: Vec<usize> = (0..trace.len())
@@ -494,22 +607,173 @@ pub(crate) mod tests {
         let repeated = trace.len() - keep.len();
         let trace: Vec<Sample> = keep.iter().map(|&i| trace[i]).collect();
         let want: Vec<Option<f64>> = keep.iter().map(|&i| want[i]).collect();
+        let motion: Vec<MotionSample> = (0..motion.len())
+            .filter(|&j| j + 1 == motion.len() || motion[j + 1].ts_ns > motion[j].ts_ns)
+            .map(|j| motion[j])
+            .collect();
+        let origin = trace[0].ts_ns.min(motion.first().map_or(u64::MAX, |m| m.ts_ns));
+        let received = |ts: u64, delay_ms: u64| ts - origin + 10_000_000_000 + delay_ms * NS_PER_MS;
+        let mut arrivals: Vec<(u64, bool, usize)> = (0..trace.len()).map(|i| (received(trace[i].ts_ns, 5), true, i)).collect();
+        arrivals.extend((0..motion.len()).map(|j| (received(motion[j].ts_ns, 60), false, j)));
+        arrivals.sort();
         let mut p = LabelPipeline::default();
         p.configure(&[&model]);
         let (mut scored, mut worst, mut rejected) = (0, 0.0f64, 0);
-        for i in 0..trace.len() {
-            let received = trace[i].ts_ns - trace[0].ts_ns + 10_000_000_000 + 5 * NS_PER_MS;
-            p.observe_ppg(&batch(&trace, i, i + 1), received).unwrap();
-            let (scores, rejections) = p.evaluate(&[&model], received);
+        for (at, pulse, i) in arrivals {
+            if pulse {
+                let mut b = batch(&trace, i, i + 1);
+                b.timestamp_ns = trace[i].ts_ns;
+                p.observe_ppg(&b, at).unwrap();
+            } else {
+                p.observe_orientation(&motion_sample(&motion[i], i as u64), at).unwrap();
+            }
+            let (scores, rejections) = p.evaluate(&[&model], at);
             rejected += rejections.len();
             for score in scores {
-                let expected = want[i].expect("the trainer scored this decision too");
+                let index = trace.iter().position(|s| s.ts_ns == score.timestamp_ns).unwrap();
+                let expected = want[index].expect("the trainer scored this decision too");
                 worst = worst.max((score.confidence - expected).abs());
                 scored += 1;
             }
         }
         println!("scored {scored} decisions live ({repeated} repeated timestamps dropped), largest difference from the trainer {worst:e}, {rejected} rejected");
         assert!(scored > 1000 && worst < 1e-6);
+    }
+
+    /// The pulse sensor's clock runs this far behind the watch's in the motion tests.
+    const SDK_BEHIND_NS: u64 = 7_000_000_000;
+
+    /// One motion sample as the watch sends it.
+    pub fn motion_sample(m: &MotionSample, sequence: u64) -> WatchOrientationSample {
+        WatchOrientationSample {
+            device_id: "watch-1".into(),
+            sequence,
+            timestamp_ns: m.ts_ns,
+            quaternion: [1.0, 0.0, 0.0, 0.0],
+            accelerometer: Some(m.accel),
+            gyroscope: Some(m.gyro),
+        }
+    }
+
+    /// Feeds the motion fixture's trace as the watch sends it: each pulse sample in a batch of its own, stamped on the pulse
+    /// sensor's clock and sent the moment it was taken, and each motion sample `motion_delay_ms` after it was taken (the
+    /// streams are sent separately). Evaluates after each arrival.
+    fn replay_motion(motion_delay_ms: u64) -> (Vec<LabelScore>, Vec<WindowRejection>) {
+        let model = loaded_motion();
+        let mut p = LabelPipeline::default();
+        p.configure(&[&model]);
+        let (trace, motion, _) = expected_motion();
+        let origin = trace[0].ts_ns;
+        let received = |ts: u64, delay_ms: u64| ts - origin + 10_000_000_000 + delay_ms * NS_PER_MS;
+        let mut arrivals: Vec<(u64, bool, usize)> = (0..trace.len())
+            .map(|i| (received(trace[i].ts_ns, 5), true, i))
+            .collect();
+        arrivals.extend(
+            (0..motion.len()).map(|j| (received(motion[j].ts_ns, motion_delay_ms), false, j)),
+        );
+        arrivals.sort();
+        let (mut scores, mut rejected) = (Vec::new(), Vec::new());
+        for (at, pulse, i) in arrivals {
+            if pulse {
+                let mut b = batch(&trace, i, i + 1);
+                b.timestamp_ns = trace[i].ts_ns; // sent on the watch's clock
+                b.timestamps_ns = vec![trace[i].ts_ns - SDK_BEHIND_NS];
+                p.observe_ppg(&b, at).unwrap();
+            } else {
+                p.observe_orientation(&motion_sample(&motion[i], i as u64), at)
+                    .unwrap();
+            }
+            let (s, r) = p.evaluate(&[&model], at);
+            scores.extend(s);
+            rejected.extend(r);
+        }
+        (scores, rejected)
+    }
+
+    #[test]
+    fn a_motion_model_scores_the_live_streams_as_the_trainer_did() {
+        let (trace, _, probabilities) = expected_motion();
+        // Motion arriving 60 ms after it was taken, later than the pulse: each decision waits for its motion.
+        let (scores, rejected) = replay_motion(60);
+        assert!(rejected.is_empty(), "{rejected:?}");
+        assert!(scores.len() > 300, "{}", scores.len());
+        for pair in scores.windows(2) {
+            assert!(
+                pair[1].timestamp_ns > pair[0].timestamp_ns,
+                "each sample once, in order"
+            );
+        }
+        for score in &scores {
+            let i = trace
+                .iter()
+                .position(|s| s.ts_ns - SDK_BEHIND_NS == score.timestamp_ns)
+                .unwrap();
+            let want = probabilities[i].expect("the trainer scored it too");
+            assert!(
+                (score.confidence - want).abs() < 1e-6,
+                "sample {i}: {} vs {want}",
+                score.confidence
+            );
+        }
+        // From the first live decision (once the buffer held a window), every decision the trainer made was made live.
+        let first = trace
+            .iter()
+            .position(|s| s.ts_ns - SDK_BEHIND_NS == scores[0].timestamp_ns)
+            .unwrap();
+        let made = probabilities[first..]
+            .iter()
+            .filter(|p| p.is_some())
+            .count();
+        assert_eq!(scores.len(), made);
+    }
+
+    #[test]
+    fn a_motion_model_waits_for_motion_and_reports_a_stalled_motion_stream() {
+        let model = loaded_motion();
+        let (trace, motion, _) = expected_motion();
+        let origin = trace[0].ts_ns;
+        let at = |ts: u64| ts - origin + 10_000_000_000;
+        let mut p = LabelPipeline::default();
+        p.configure(&[&model]);
+        let mut b = batch(&trace, 0, 250);
+        b.timestamp_ns = trace[249].ts_ns;
+        // The pulse for 10 s, but motion only for the first 8: the newest pulse sample's motion has not arrived.
+        // The pulse for 10 s, but the motion (arriving now) only for its first 8: the newest pulse samples wait for theirs.
+        let now = at(trace[249].ts_ns);
+        let cut = motion
+            .iter()
+            .position(|m| m.ts_ns > trace[199].ts_ns)
+            .unwrap();
+        for (j, m) in motion[..cut].iter().enumerate() {
+            p.observe_orientation(&motion_sample(m, j as u64), now)
+                .unwrap();
+        }
+        p.observe_ppg(&b, now).unwrap();
+        let (scores, rejected) = p.evaluate(&[&model], now);
+        assert!(rejected.is_empty(), "{rejected:?}");
+        assert_eq!(scores.len(), 1, "the newest sample whose motion is in");
+        assert!(
+            scores[0].timestamp_ns <= trace[199].ts_ns
+                && scores[0].timestamp_ns >= trace[198].ts_ns
+        );
+        let (scores, _) = p.evaluate(&[&model], now + 10 * NS_PER_MS);
+        assert!(scores.is_empty(), "nothing new is ready");
+        // The pulse goes on, but motion silent for over a second is a stale stream.
+        let later = now + 1_100 * NS_PER_MS;
+        let mut more = batch(&trace, 250, 278);
+        more.timestamp_ns = trace[277].ts_ns;
+        p.observe_ppg(&more, later).unwrap();
+        let (_, rejected) = p.evaluate(&[&model], later);
+        assert!(
+            matches!(
+                rejected[0].reason,
+                Rejection::SourceStale {
+                    source: StreamSource::WatchOrientation,
+                    ..
+                }
+            ),
+            "{rejected:?}"
+        );
     }
 
     #[test]

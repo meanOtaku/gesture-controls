@@ -1,9 +1,10 @@
-//! Trains a label's PPG pinch-start model from recordings you imported.
+//! Trains a label's PPG + IMU pinch-start model from recordings you imported.
 //!
 //! Everything that has to be recorded and cannot change afterwards is decided here, in Rust, and sealed in the model
 //! registry before anything runs (see `label_inference::begin_run`): which recordings train and which test, and what each
-//! label means. The model itself is fixed: it reads the pulse sensor through the multi-scale z-score derivatives
-//! (`label_inference::ppg_onset_contract`) and is an ExtraTrees ensemble. The trainer (`tools/label-trainer`, run with
+//! label means. The model itself is fixed: it reads the pulse sensor through the multi-scale z-score derivatives and the
+//! motion sensors through window summaries (`label_inference::pinch_start_contract`), is an ExtraTrees ensemble, and
+//! detects on the top of its score's climb (the peak trigger). The trainer (`tools/label-trainer`, run with
 //! `uv`) is only told what to do, trains, tests on the recordings held out for it, and writes a bundle. The bundle then goes
 //! through the same validation as an imported one and is recorded as a Draft that came from this run: a deployable one,
 //! or, when it did not pass the checks for going live, a monitor-only one, which can run but never act. Nothing is
@@ -20,7 +21,7 @@ use std::sync::Mutex;
 use chrono::{SecondsFormat, Utc};
 use label_inference::{
     RecordingInfo, RunPlan, begin_run, complete_run, fail_run, monitor_only_run,
-    plan_split, ppg_onset_contract, stage_bundle, trainer_backend,
+    pinch_start_contract, plan_split, stage_bundle, trainer_backend,
 };
 use model_lab_core::{
     ArtifactRef, ExampleRole, InputContract, LabelId, LabelMapping, QualityRules, RecordingId,
@@ -147,7 +148,7 @@ fn check_request(
     Ok(Checked {
         target,
         mapping: LabelMapping { entries },
-        input: ppg_onset_contract(),
+        input: pinch_start_contract(),
         recordings,
         research: request.research,
         label_offset_ms,
@@ -377,7 +378,7 @@ pub async fn suggest_label_offset(
 /// Says how a request would be split, or why it cannot be, without recording or starting anything.
 #[tauri::command]
 pub fn plan_label_training(app: AppHandle, request: TrainRequest) -> PlanView {
-    let inputs = ppg_onset_contract().features.len();
+    let inputs = pinch_start_contract().features.len();
     let result = recordings_for(&app, &request).and_then(|checked| {
         plan_split(&checked.recordings, &checked.mapping, &checked.target)
             .map_err(|e| e.to_string())
@@ -806,8 +807,11 @@ mod tests {
             checked.mapping.entries[&LabelId::new("fist").unwrap()],
             ExampleRole::Negative
         );
-        assert_eq!(checked.input, ppg_onset_contract());
-        assert_eq!(checked.input.sources, [StreamSource::WatchPpg]);
+        assert_eq!(checked.input, pinch_start_contract());
+        assert_eq!(
+            checked.input.sources,
+            [StreamSource::WatchPpg, StreamSource::WatchOrientation]
+        );
         assert_eq!(checked.recordings.len(), 6);
     }
 
@@ -851,7 +855,10 @@ mod tests {
         assert_eq!(spec["version"], 1);
         assert_eq!(spec["target"], "pinch");
         assert_eq!(spec["negatives"], serde_json::json!(["fist"]));
-        assert_eq!(spec["sources"], serde_json::json!(["watchPpg"]));
+        assert_eq!(
+            spec["sources"],
+            serde_json::json!(["watchPpg", "watchOrientation"])
+        );
         assert_eq!(spec["backend"], BACKEND);
         assert_eq!((spec["labelOffsetMs"].as_i64(), spec["research"].as_bool()), (Some(-250), Some(true)));
         let listed = |key: &str| spec[key].as_array().unwrap().len();

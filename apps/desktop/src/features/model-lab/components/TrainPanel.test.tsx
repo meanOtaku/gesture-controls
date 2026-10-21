@@ -63,7 +63,7 @@ describe("TrainPanel", () => {
     setup();
     choose("snap");
     await screen.findByText(/It will train on/);
-    expect(screen.getByRole("region", { name: "The model" })).toHaveTextContent("PPG pinch-start model");
+    expect(screen.getByRole("region", { name: "The model" })).toHaveTextContent("PPG + IMU pinch-start model");
     fireEvent.change(screen.getByLabelText("Role of walking"), { target: { value: "exclude" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Use i2.csv" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Train model" })).toBeEnabled());

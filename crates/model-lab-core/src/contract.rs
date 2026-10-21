@@ -87,9 +87,9 @@ impl InputContract {
     }
 }
 
-/// When a score turns into a detection: it starts when it reaches `activation`, ends when it falls to `release`
-/// (never above activation, which gives the hysteresis), and `debounce_ms` and `cooldown_ms` bound how fast it can
-/// flip and how soon it can start again.
+/// When a score turns into a detection: it starts when it reaches `activation` (see [`Trigger`]), ends when it falls to
+/// `release` (never above activation, which gives the hysteresis), and `debounce_ms` and `cooldown_ms` bound how fast it
+/// can flip and how soon it can start again.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Thresholds {
@@ -97,6 +97,21 @@ pub struct Thresholds {
     pub release: f64,
     pub debounce_ms: u32,
     pub cooldown_ms: u32,
+    /// Versions registered before triggers existed start on the edge.
+    #[serde(default)]
+    pub trigger: Trigger,
+}
+
+/// Which score starts a detection.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Trigger {
+    /// The first score at or above the activation threshold (held for the debounce time).
+    #[default]
+    Edge,
+    /// The first score lower than the one before it while both are at or above the activation threshold: the top of the
+    /// score's climb. The debounce time is not used.
+    Peak,
 }
 
 impl Default for Thresholds {
@@ -106,6 +121,7 @@ impl Default for Thresholds {
             release: 0.6,
             debounce_ms: 0,
             cooldown_ms: 0,
+            trigger: Trigger::Edge,
         }
     }
 }

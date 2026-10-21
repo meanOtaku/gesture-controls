@@ -79,6 +79,12 @@ Three follow-up studies on 2026-10-21, written up in [`../../ppg-imu-fusion-and-
 uv run --project tools/label-trainer python docs/research/artifacts/ppg-benchmark-2026-10/imu_fusion.py
 ```
 
+**PPG + IMU with the peak trigger is now the model the app trains** (2026-10-21): `tools/label-trainer/src/label_trainer/imu_onset.py` and `crates/pinch-inference/src/imu_onset.rs` compute the motion inputs (kept equal by a shared fixture). `app_fusion_check.py` confirms the app's version, which decides at every PPG sample, trains on its own sample of moments and runs the runtime's peak rule, matches the research on the same 20 splits: worst-split AUC 0.853 and mean 0.898, and 0.236 / 0.373 of pinches caught within 1 / 2 false activations a minute (research 0.245 / 0.378; `ppg-imu-fusion/app-definition-check.json`).
+
+```sh
+uv run --project tools/label-trainer python docs/research/artifacts/ppg-benchmark-2026-10/app_fusion_check.py
+```
+
 ## Scope and limitations
 
 All results are grouped cross-validation progress evidence, not an untouched final generalization test. Source recordings, including the new 2026-10-17 datasets, are versioned under `data/recordings/`.

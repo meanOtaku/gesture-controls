@@ -1,9 +1,15 @@
-"""Trains one label's pinch-start model from PPG and writes a bundle the desktop can import.
+"""Trains one label's pinch-start model from PPG and motion and writes a bundle the desktop can import.
 
-The model (research: `docs/research/artifacts/ppg-benchmark-2026-10/ppg-multiscale-zscore/`):
+The model (research: `docs/research/ppg-imu-fusion-and-triggers-2026-10.md`):
 
     PPG (green, red, IR) -> causal z-score against the previous 1, 2 and 4 s -> causal slope, curvature and jerk
-    -> 1,701 window summaries (`ppg_onset.py`) -> ExtraTrees (300 trees)
+    -> 1,701 window summaries (`ppg_onset.py`)
+    + accelerometer and gyroscope -> 1,032 window summaries of the last 0.3-1.3 s (`imu_onset.py`)
+    -> ExtraTrees (300 trees) -> a detection at the top of the score's climb (the peak trigger)
+
+The cut-off is the one that, replayed over training recordings the model did not see, catches the most starts while firing
+by mistake at most `TARGET_FALSE_ACTIVATIONS_PER_HOUR`. A spec whose sources are the pulse sensor alone trains the earlier
+PPG-only model instead (its cut-off from Youden's J, the edge trigger), so its runs can be repeated.
 
 It fires about 0.9 s after a gesture starts. The desktop owns the decisions that must be recorded and cannot change
 afterwards, so this script does not make them: which recordings train and which evaluate (never the same one), and what
@@ -36,7 +42,7 @@ from typing import Any
 
 import numpy as np
 
-from . import ppg_onset, trees
+from . import imu_onset, ppg_onset, trees
 from .csv_io import Recording, load_recording, repair_millisecond_ppg_timestamps, shift_labels
 from .events import Policy, detect, summarise
 
@@ -47,7 +53,10 @@ warnings.filterwarnings("ignore", message=r".*sklearn\.utils\.parallel\.delayed.
 SPEC_VERSION = 1
 BACKEND = "ppg-onset-trees"
 BACKENDS = (BACKEND,)
-SOURCES = ("watchPpg",)
+PPG_SOURCES = ("watchPpg",)
+MOTION_SOURCES = ("watchPpg", "watchOrientation")
+SOURCES = MOTION_SOURCES                # what a spec that names none trains
+PREPROCESSING = {PPG_SOURCES: "ppg_multiscale_onset", MOTION_SOURCES: "ppg_imu_onset"}
 # The trees: frozen in the research and not tuned here.
 TREES = 300
 MIN_SAMPLES_LEAF = 3
@@ -68,6 +77,10 @@ COOLDOWN_MS = ppg_onset.COOLDOWN_MS
 WINDOW_MS = ppg_onset.GRID_TICKS * ppg_onset.TICK_NS // 1_000_000
 STRIDE_MS = ppg_onset.TICK_NS // 1_000_000
 MIN_WINDOW_SAMPLES = 100
+# The PPG + IMU model's cut-off: the most starts caught, replayed over training recordings each scored by a model that did not
+# see it, while firing by mistake at most this often (2 a minute: the operating point the research compared rules at).
+TARGET_FALSE_ACTIVATIONS_PER_HOUR = 120.0
+THRESHOLD_CANDIDATES = tuple(round(t, 2) for t in np.arange(0.30, 0.951, 0.05))
 
 
 class TrainingRefused(Exception):
@@ -85,6 +98,20 @@ class Spec:
     research: bool
     seed: int
     label_offset_ms: int = 0
+    sources: tuple[str, ...] = SOURCES
+
+    @property
+    def motion(self) -> bool:
+        """Whether the model reads motion as well as the pulse."""
+        return self.sources == MOTION_SOURCES
+
+    @property
+    def feature_names(self) -> tuple[str, ...]:
+        return ppg_onset.FEATURE_NAMES + imu_onset.FEATURE_NAMES if self.motion else ppg_onset.FEATURE_NAMES
+
+    @property
+    def trigger(self) -> str:
+        return "peak" if self.motion else "edge"
 
 
 def parse_spec(raw: dict[str, Any]) -> Spec:
@@ -93,9 +120,9 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
     backend = raw.get("backend", BACKEND)
     if backend not in BACKENDS:
         raise TrainingRefused(f"unknown backend {backend!r}; this trainer makes only {BACKEND!r}")
-    sources = list(raw.get("sources", SOURCES))
-    if sources != list(SOURCES):
-        raise TrainingRefused(f"the model reads only the pulse sensor (watchPpg), not {sources}")
+    sources = tuple(raw.get("sources", SOURCES))
+    if sources not in PREPROCESSING:
+        raise TrainingRefused(f"the model reads the pulse sensor and motion {list(MOTION_SOURCES)}, or the pulse sensor alone {list(PPG_SOURCES)}, not {list(sources)}")
     recordings = {rid: Path(path) for rid, path in raw.get("recordings", {}).items()}
     train, evaluation = list(raw.get("train", [])), list(raw.get("evaluation", []))
     if set(train) & set(evaluation):
@@ -118,6 +145,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         research=bool(raw.get("research", False)),
         seed=int(raw.get("seed", 17)),
         label_offset_ms=int(label_offset_ms),
+        sources=sources,
     )
 
 
@@ -134,6 +162,24 @@ def pulse_of(recording: Recording) -> tuple[np.ndarray, np.ndarray]:
     rows = recording.ppg_observed if recording.ppg_observed is not None else np.ones(len(recording.timestamps_ns), dtype=bool)
     values = np.stack([recording.channels[c][rows] for c in ("ppg_green", "ppg_red", "ppg_ir")], axis=1)
     return recording.timestamps_ns[rows].astype(np.int64), values
+
+
+def motion_of(recording: Recording) -> tuple[np.ndarray, np.ndarray]:
+    """The recording's real motion samples: their timestamps and (accelerometer x/y/z, gyroscope x/y/z)."""
+    rows = recording.orient_observed if recording.orient_observed is not None else np.ones(len(recording.timestamps_ns), dtype=bool)
+    values = np.stack([recording.channels[c][rows] for c in imu_onset.AXES], axis=1)
+    return recording.timestamps_ns[rows].astype(np.int64), values
+
+
+def inputs(spec: Spec, recording: Recording, decisions_ns: np.ndarray) -> np.ndarray:
+    """The model's inputs at each decision: the PPG features, then (for a motion model) the motion features; a row of NaN
+    where either has none."""
+    ts, values = pulse_of(recording)
+    x = ppg_onset.features(ts, values, decisions_ns)
+    if not spec.motion:
+        return x
+    motion_ts, axes = motion_of(recording)
+    return np.concatenate([x, imu_onset.features(motion_ts, axes, decisions_ns)], axis=1)
 
 
 def check_labels(spec: Spec, recordings: dict[str, Recording]) -> None:
@@ -165,11 +211,11 @@ def examples(spec: Spec, recordings: dict[str, Recording], ids: list[str]) -> Ex
         ts, values = pulse_of(recording)
         held = ppg_onset.holds(recording.timestamps_ns, recording.raw_labels)
         d, y, k = ppg_onset.sample_decisions(ts, held, spec.target, set(spec.excludes))
-        x = ppg_onset.features(ts, values, d)
+        x = inputs(spec, recording, d)
         ok = np.isfinite(x).all(axis=1)
         xs.append(x[ok]); ys.append(y[ok]); groups += [rid] * int(ok.sum())
         kinds += [kind for kind, keep in zip(k, ok.tolist()) if keep]; decisions.append(d[ok])
-    width = ppg_onset.FEATURE_COUNT
+    width = len(spec.feature_names)
     return Examples(
         np.concatenate(xs) if xs else np.zeros((0, width)), np.concatenate(ys) if ys else np.zeros(0, dtype=np.int64),
         np.array(groups), kinds, np.concatenate(decisions) if decisions else np.zeros(0, dtype=np.int64),
@@ -228,31 +274,63 @@ def choose_threshold(probability: np.ndarray, y: np.ndarray) -> float:
     return best[2]
 
 
-def out_of_fold_threshold(spec: Spec, train: Examples, say=lambda _: None) -> tuple[float, str, float | None]:
+def out_of_fold_threshold(spec: Spec, train: Examples, recordings: dict[str, Recording], say=lambda _: None) -> tuple[float, str, float | None, dict[str, Any] | None]:
     """The cut-off, chosen without looking at the held-out recordings: models trained on all but a group of the training
-    recordings score the group left out, and the cut-off is chosen on those scores. Returns it, where it came from
-    ("trainingRecordings", or "default" when the training recordings are too few to judge each other), and the ROC AUC
-    of those scores."""
+    recordings score the group left out, and the cut-off is chosen on those scores. For a motion model, those models also
+    replay the recordings they left out as the runtime would, and the cut-off is the one that catches the most starts while
+    firing by mistake at most TARGET_FALSE_ACTIVATIONS_PER_HOUR (`budget_threshold`); for a PPG-only model it is Youden's J
+    on the left-out decisions. Returns it, where it came from ("trainingRecordings", or "default" when the training
+    recordings are too few to judge each other), the ROC AUC of the left-out decisions, and (motion) the replay at the
+    chosen cut-off."""
     from sklearn.metrics import roc_auc_score
 
     groups = sorted(set(train.groups.tolist()))
     if len(groups) < 2:
-        return ACTIVATION, "default", None
+        return ACTIVATION, "default", None, None
     folds = min(MAX_THRESHOLD_FOLDS, len(groups))
     fold_of = {group: index % folds for index, group in enumerate(groups)}
     fold = np.array([fold_of[g] for g in train.groups.tolist()])
     held_out = np.full(train.y.shape[0], np.nan)
+    timelines: list[tuple[Recording, np.ndarray, np.ndarray]] = []
     say(f"Choosing the cut-off on the training recordings: training {folds} more times, each without some of them")
     for k in range(folds):
         test = fold == k
         if int(train.y[~test].sum()) < MIN_POSITIVE_TRAIN or int((train.y[~test] == 0).sum()) < MIN_POSITIVE_TRAIN:
             continue
-        held_out[test] = fit(train.x[~test], train.y[~test], spec.seed).predict_proba(train.x[test])[:, 1]
+        model = fit(train.x[~test], train.y[~test], spec.seed)
+        held_out[test] = model.predict_proba(train.x[test])[:, 1]
+        if spec.motion:
+            for group in (g for g in groups if fold_of[g] == k):
+                scored = timeline(spec, recordings[group], lambda x: model.predict_proba(x)[:, 1])
+                if scored is not None:
+                    timelines.append((recordings[group], *scored))
     judged = ~np.isnan(held_out)
     if not judged.any() or not 0 < int(train.y[judged].sum()) < int(judged.sum()):
-        return ACTIVATION, "default", None
+        return ACTIVATION, "default", None, None
     scores, truth = held_out[judged], train.y[judged]
-    return choose_threshold(scores, truth), "trainingRecordings", float(roc_auc_score(truth, scores))
+    auc = float(roc_auc_score(truth, scores))
+    if not spec.motion:
+        return choose_threshold(scores, truth), "trainingRecordings", auc, None
+    if not timelines:
+        return ACTIVATION, "default", auc, None
+    threshold, events = budget_threshold(spec, timelines)
+    return threshold, "trainingRecordings", auc, events
+
+
+def budget_threshold(spec: Spec, timelines: list[tuple[Recording, np.ndarray, np.ndarray]]) -> tuple[float, dict[str, Any]]:
+    """Of THRESHOLD_CANDIDATES, the cut-off whose replay of `timelines` (each recording's decision times and the scores a
+    model that did not see it gave them) catches the most starts with at most TARGET_FALSE_ACTIVATIONS_PER_HOUR false
+    activations (ties: the higher cut-off); when none stays within it, the one with the fewest. Returns it and its replay."""
+    replays = {t: summarise([detections(spec, r, times, scores, policy_for(t, spec.trigger)) for r, times, scores in timelines])
+               for t in THRESHOLD_CANDIDATES}
+    per_hour = lambda e: e["falseActivationsPerHour"] if e["falseActivationsPerHour"] is not None else 0.0  # noqa: E731
+    within = [t for t, e in replays.items() if per_hour(e) <= TARGET_FALSE_ACTIVATIONS_PER_HOUR]
+    if within:
+        best = max(within, key=lambda t: (replays[t]["caught"], t))
+    else:
+        best = min(replays, key=lambda t: (per_hour(replays[t]), -t))
+    return float(best), {**replays[best], "targetFalseActivationsPerHour": TARGET_FALSE_ACTIVATIONS_PER_HOUR,
+                         "withinTarget": bool(within)}
 
 
 CALIBRATION_BINS = 10
@@ -289,43 +367,56 @@ def evaluate(probability: np.ndarray, y: np.ndarray, threshold: float, threshold
     }
 
 
-def policy_for(threshold: float) -> Policy:
-    """What the manifest gives the runtime: release a little under activation, and the cooldown after a detection."""
-    return Policy(activation=threshold, release=round(max(MIN_RELEASE, threshold - RELEASE_GAP), 2), cooldown_ms=COOLDOWN_MS)
+def policy_for(threshold: float, trigger: str = "edge") -> Policy:
+    """What the manifest gives the runtime: release a little under activation, the cooldown after a detection, and the
+    trigger."""
+    return Policy(activation=threshold, release=round(max(MIN_RELEASE, threshold - RELEASE_GAP), 2), cooldown_ms=COOLDOWN_MS,
+                  trigger=trigger)
+
+
+def timeline(spec: Spec, recording: Recording, predict) -> tuple[np.ndarray, np.ndarray] | None:
+    """Every PPG sample of the recording the runtime would decide on (those with inputs), and `predict`'s score for each;
+    None when it has none."""
+    ts, _ = pulse_of(recording)
+    x = inputs(spec, recording, ts)
+    ok = np.isfinite(x).all(axis=1)
+    if not ok.any():
+        return None
+    return ts[ok], predict(x[ok])
+
+
+def detections(spec: Spec, recording: Recording, times: np.ndarray, scores: np.ndarray, policy: Policy) -> dict[str, Any]:
+    """One recording's scores through the runtime's detection rule (`events.detect`). A detection catches a start of the
+    target label when it rises ppg_onset.MATCH_EARLIEST_MS..MATCH_LATEST_MS after it (`ppg_onset.match`); any other is a
+    false activation, unless it is inside an excluded label's hold. Time inside the target's holds, and an excluded
+    label's, cannot hold one."""
+    held = ppg_onset.holds(recording.timestamps_ns, recording.raw_labels)
+    starts = [s for s, _, label in held if label == spec.target and times[0] <= s + ppg_onset.MATCH_EARLIEST_MS * 1_000_000 <= times[-1]]
+    ignored = [(s, e) for s, e, label in held if label in set(spec.excludes)]
+    rises = [rise for rise, _ in detect(times, scores, policy) if not any(s <= rise <= e for s, e in ignored)]
+    caught, latencies = ppg_onset.match(rises, starts)
+    busy = [(s, e + ppg_onset.MATCH_LATEST_MS * 1_000_000) for s, e, label in held if label == spec.target or label in set(spec.excludes)]
+    observed = int(times[-1] - times[0])
+    covered = sum(max(0, min(e, times[-1]) - max(s, times[0])) for s, e in busy)
+    return {
+        "gestures": len(starts), "caught": caught, "repeats": 0,
+        "falseActivations": len(rises) - caught,
+        "latenciesMs": [latency / 1e6 for latency in latencies],
+        "negativeNs": max(observed - covered, 0),
+    }
 
 
 def replay(spec: Spec, model, recordings: dict[str, Recording], threshold: float) -> dict[str, Any]:
     """The model as a detector over each held-out recording, as the runtime runs it: scored at every PPG sample, through the
-    runtime's detection rule (`events.detect`). A detection catches a start of the target label when it rises
-    ppg_onset.MATCH_EARLIEST_MS..MATCH_LATEST_MS after it (`ppg_onset.match`); any other is a false activation, unless it
-    is inside an excluded label's hold. Time inside the target's holds, and an excluded label's, cannot hold one."""
-    policy = policy_for(threshold)
+    runtime's detection rule (see `detections`)."""
+    policy = policy_for(threshold, spec.trigger)
     per_recording = []
     for rid in sorted(spec.evaluation):
-        recording = recordings[rid]
-        ts, values = pulse_of(recording)
-        x = ppg_onset.features(ts, values, ts)
-        ok = np.isfinite(x).all(axis=1)
-        if not ok.any():
-            continue
-        scores = np.zeros(len(ts))
-        scores[ok] = model.predict_proba(x[ok])[:, 1]
-        scored = ts[ok]
-        held = ppg_onset.holds(recording.timestamps_ns, recording.raw_labels)
-        starts = [s for s, _, label in held if label == spec.target and scored[0] <= s + ppg_onset.MATCH_EARLIEST_MS * 1_000_000 <= scored[-1]]
-        ignored = [(s, e) for s, e, label in held if label in set(spec.excludes)]
-        rises = [rise for rise, _ in detect(ts[ok], scores[ok], policy) if not any(s <= rise <= e for s, e in ignored)]
-        caught, latencies = ppg_onset.match(rises, starts)
-        busy = [(s, e + ppg_onset.MATCH_LATEST_MS * 1_000_000) for s, e, label in held if label == spec.target or label in set(spec.excludes)]
-        observed = int(scored[-1] - scored[0])
-        covered = sum(max(0, min(e, scored[-1]) - max(s, scored[0])) for s, e in busy)
-        per_recording.append({
-            "gestures": len(starts), "caught": caught, "repeats": 0,
-            "falseActivations": len(rises) - caught,
-            "latenciesMs": [latency / 1e6 for latency in latencies],
-            "negativeNs": max(observed - covered, 0),
-        })
-    return {**summarise(per_recording), "policy": {"activation": policy.activation, "release": policy.release, "cooldownMs": COOLDOWN_MS}}
+        scored = timeline(spec, recordings[rid], lambda x: model.predict_proba(x)[:, 1])
+        if scored is not None:
+            per_recording.append(detections(spec, recordings[rid], *scored, policy))
+    return {**summarise(per_recording), "policy": {"activation": policy.activation, "release": policy.release,
+                                                   "cooldownMs": COOLDOWN_MS, "trigger": policy.trigger}}
 
 
 MIN_AUC = 0.7
@@ -408,23 +499,27 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
     bundle.mkdir(parents=True, exist_ok=True)
     (bundle / "model.trees").write_bytes(model_bytes)
     sha = hashlib.sha256(model_bytes).hexdigest()
-    policy = policy_for(metrics["activationThreshold"])
+    policy = policy_for(metrics["activationThreshold"], spec.trigger)
+    names = list(spec.feature_names)
+    pipeline = ("PPG -> causal z-score (1 s, 2 s, 4 s) -> causal cubic slope, curvature, jerk -> 1701 summaries"
+                + (" + accelerometer and gyroscope -> 1032 summaries (0.3-1.3 s) -> ExtraTrees -> peak trigger" if spec.motion else " -> ExtraTrees"))
     manifest = {
         "schemaVersion": 1,
         "modelId": f"{spec.target}-{sha[:8]}",
         "targetLabel": spec.target,
         "model": {"file": "model.trees", "sha256": sha, "format": "trees", "opset": 0},
         "framework": {"name": "scikit-learn", "version": sklearn.__version__},
-        "input": {"name": "X", "shape": [None, ppg_onset.FEATURE_COUNT], "dtype": "float32", "features": list(ppg_onset.FEATURE_NAMES)},
+        "input": {"name": "X", "shape": [None, len(names)], "dtype": "float32", "features": names},
         "output": {"name": "probabilities", "shape": [None, 2], "dtype": "float32", "positiveIndex": 1},
-        "sources": list(SOURCES),
+        "sources": list(spec.sources),
         "window": {"durationMs": WINDOW_MS, "strideMs": STRIDE_MS, "maxGapMs": ppg_onset.MAX_GAP_MS, "minSamples": MIN_WINDOW_SAMPLES},
         "quality": {"maxContactQuality": 0.0, "minSampleCount": 3},
-        "thresholds": {"activation": policy.activation, "release": policy.release, "cooldownMs": COOLDOWN_MS},
-        "preprocessing": {"kind": "ppg_multiscale_onset"},
+        "thresholds": {"activation": policy.activation, "release": policy.release, "cooldownMs": COOLDOWN_MS,
+                       **({"trigger": policy.trigger} if spec.motion else {})},
+        "preprocessing": {"kind": PREPROCESSING[spec.sources]},
         "provenance": {
             "backend": BACKEND,
-            "pipeline": "PPG -> causal z-score (1 s, 2 s, 4 s) -> causal cubic slope, curvature, jerk -> 1701 summaries -> ExtraTrees",
+            "pipeline": pipeline,
             "trees": TREES, "minSamplesLeaf": MIN_SAMPLES_LEAF, "maxFeatures": MAX_FEATURES,
             "trainRecordings": sorted(spec.train),
             "evaluationRecordings": sorted(spec.evaluation),
@@ -437,6 +532,7 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
             "evaluationGestureRecall": (metrics.get("events") or {}).get("gestureRecall"),
             "thresholdSource": metrics["thresholdSource"],
             "thresholdChosenOnEvaluationRecordings": metrics["thresholdChosenOnEvaluationRecordings"],
+            **({"targetFalseActivationsPerHour": TARGET_FALSE_ACTIVATIONS_PER_HOUR} if spec.motion else {}),
             "labelOffsetMs": spec.label_offset_ms,
         },
     }
@@ -461,10 +557,10 @@ def run_research_checks(spec: Spec, recordings: dict[str, Recording]) -> dict[st
         return None
 
 
-def feature_importance(model, top: int = 25) -> list[dict[str, Any]]:
+def feature_importance(model, names: tuple[str, ...], top: int = 25) -> list[dict[str, Any]]:
     """The inputs the trees lean on most (mean decrease in impurity), for the Inspect view."""
     order = np.argsort(model.feature_importances_)[::-1][:top]
-    return [{"name": ppg_onset.FEATURE_NAMES[i], "importance": float(model.feature_importances_[i])} for i in order]
+    return [{"name": names[i], "importance": float(model.feature_importances_[i])} for i in order]
 
 
 def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
@@ -481,15 +577,18 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
         check_enough(train, held_out)
         say(f"Training {TREES} trees on {train.y.shape[0]} moments ({int(train.y.sum())} starts) from {len(spec.train)} recordings")
         model = fit(train.x, train.y, spec.seed)
-        threshold, source, cross_check = out_of_fold_threshold(spec, train, say)
+        threshold, source, cross_check, cross_events = out_of_fold_threshold(spec, train, recordings, say)
         probability = model.predict_proba(held_out.x)[:, 1]
         metrics = evaluate(probability, held_out.y, threshold, source)
         metrics["crossCheckRocAuc"] = cross_check
+        if cross_events is not None:
+            # The replay the cut-off was chosen on: training recordings, each scored by a model that had not seen it.
+            metrics["crossCheckEvents"] = cross_events
         say("Replaying the held-out recordings as the runtime would")
         metrics["events"] = replay(spec, model, recordings, threshold)
         (out / "evaluation.json").write_text(json.dumps(metrics, indent=2) + "\n")
 
-        model_bytes = trees.to_bytes(model, ppg_onset.FEATURE_COUNT)
+        model_bytes = trees.to_bytes(model, len(spec.feature_names))
         exported = trees.predict(model_bytes, held_out.x)
         parity = float(np.max(np.abs(exported - probability))) if probability.size else 0.0
         (out / "parity.json").write_text(json.dumps({"maxAbsDifference": parity, "tolerance": PARITY_TOLERANCE, "windows": int(held_out.y.shape[0])}, indent=2) + "\n")
@@ -499,8 +598,8 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
         research = run_research_checks(spec, recordings) if spec.research else None
         inspection = {
             "version": 2, "kind": "trees", "backend": BACKEND, "target": spec.target,
-            "inputCount": ppg_onset.FEATURE_COUNT, "trees": TREES,
-            "importance": feature_importance(model),
+            "inputCount": len(spec.feature_names), "trees": TREES, "sources": list(spec.sources), "trigger": spec.trigger,
+            "importance": feature_importance(model, spec.feature_names),
             # Every held-out decision's score, for the Inspect view's curves: its recording, whether it is a start, the score.
             "evaluation": {"threshold": threshold, "recordings": held_out.groups.tolist(), "labels": held_out.y.tolist(),
                            "probabilities": [round(float(p), 6) for p in probability], "kinds": held_out.kinds, "metrics": metrics},
@@ -516,7 +615,7 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
             "bundleDir": "bundle",
             "modelSha256": sha,
             "backend": BACKEND,
-            "features": list(ppg_onset.FEATURE_NAMES),
+            "features": list(spec.feature_names),
             "trainWindows": int(train.y.shape[0]),
             "evaluationWindows": int(held_out.y.shape[0]),
             "metrics": metrics,

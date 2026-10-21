@@ -118,10 +118,10 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
         {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
 
         <section aria-label="The model" className="rounded-md border p-3 text-sm">
-          <p><strong>{PULSE_MODEL.name}</strong> <Badge variant="secondary">pulse sensor only</Badge></p>
+          <p><strong>{PULSE_MODEL.name}</strong> <Badge variant="secondary">pulse sensor and motion</Badge></p>
           <p className="field-hint">{PULSE_MODEL.summary}</p>
           <p className="field-hint">
-            In the research (37 recordings, 20 tests on recordings it never saw) it scored a worst-case AUC of {PULSE_MODEL.research.worstAuc} and caught about {Math.round(PULSE_MODEL.research.recall * 100)}% of gesture starts, with about {Math.round(PULSE_MODEL.research.falsePerMinute)} false alarms a minute.{" "}
+            In the research (37 recordings, 20 tests on recordings it never saw) it scored a worst-case AUC of {PULSE_MODEL.research.worstAuc} and caught about {Math.round(PULSE_MODEL.research.recall * 100)}% of gesture starts, with about {PULSE_MODEL.research.falsePerMinute.toFixed(1)} false alarms a minute.{" "}
             {onOpenNetworkLab ? <Button type="button" variant="link" className="h-auto p-0" onClick={onOpenNetworkLab}>See its pipeline in the Network lab</Button> : null}
           </p>
         </section>

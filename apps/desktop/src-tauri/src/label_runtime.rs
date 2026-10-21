@@ -130,14 +130,17 @@ impl From<&ModelLoadFailure> for LoadFailureView {
     }
 }
 
-/// Whether the bundle in `dir` is the kind of model this app runs (the PPG pinch-start trees), from its manifest alone.
+/// Whether the bundle in `dir` is a kind of model this app runs (the PPG + IMU or the PPG-only pinch-start trees), from its
+/// manifest alone.
 fn is_current_bundle(dir: &Path) -> bool {
     std::fs::read(dir.join("manifest.json"))
         .ok()
         .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
         .is_some_and(|m| {
             m["model"]["format"] == label_inference::MODEL_FORMAT
-                && m["preprocessing"]["kind"] == label_inference::PREPROCESSING_KIND
+                && m["preprocessing"]["kind"].as_str().is_some_and(|kind| {
+                    label_inference::ModelKind::from_preprocessing(kind).is_some()
+                })
         })
 }
 
@@ -149,7 +152,10 @@ const OLD_STORE_FILES: [&str; 2] = ["network-designs.json", "fine-tune-plans.jso
 /// models, and the old network-design and fine-tune stores. Recordings and labels are never touched. Does nothing when there
 /// is nothing old, so it runs at every start.
 fn purge_old_models(store: &mut RegistryStore<FileStore>, dir: &Path) -> Result<(), String> {
-    let contract = label_inference::ppg_onset_contract();
+    let contracts = [
+        label_inference::pinch_start_contract(),
+        label_inference::ppg_onset_contract(),
+    ];
     let purged = store
         .mutate(|registry| {
             Ok(registry.purge(
@@ -157,7 +163,7 @@ fn purge_old_models(store: &mut RegistryStore<FileStore>, dir: &Path) -> Result<
                     label_inference::removable_model_dir(dir, version)
                         .is_some_and(|path| is_current_bundle(&path))
                 },
-                |_, snapshot| snapshot.is_some_and(|s| s.input == contract),
+                |_, snapshot| snapshot.is_some_and(|s| contracts.contains(&s.input)),
             ))
         })
         .map_err(|e| e.to_string())?;

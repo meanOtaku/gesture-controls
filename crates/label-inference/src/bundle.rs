@@ -7,17 +7,19 @@
 //! ```
 //!
 //! A bundle is data, never code: the model is a plain list of trees (see [`crate::trees`]), not a pickle, joblib, torch or
-//! other serialisation that could run arbitrary code. The one model this app runs is the PPG pinch-start model: its inputs
-//! are the 1,701 features of [`pinch_inference::ppg_onset`], read from the pulse sensor only. Validation reads the
-//! manifest, checks it declares exactly that contract, hashes the model file, parses every tree, and runs the model on a
-//! few bounded inputs to prove it produces probabilities. Only a bundle that passes all of it can be loaded.
+//! other serialisation that could run arbitrary code. The models this app runs are the pinch-start models of
+//! [`crate::inputs::ModelKind`]: the PPG + IMU model Model Lab trains, and the earlier PPG-only one. Validation reads the
+//! manifest, checks it declares exactly its kind's contract, hashes the model file, parses every tree, and runs the model
+//! on a few bounded inputs to prove it produces probabilities. Only a bundle that passes all of it can be loaded.
 
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
-use model_lab_core::{InputContract, LabelId, QualityRules, StreamSource, Thresholds};
-use pinch_inference::ppg_onset::{FEATURE_COUNT, FEATURE_NAMES, GRID_TICKS, MAX_GAP_MS, TICK_NS};
+use model_lab_core::{InputContract, LabelId, QualityRules, StreamSource, Thresholds, Trigger};
+use pinch_inference::ppg_onset::{GRID_TICKS, MAX_GAP_MS, TICK_NS};
+
+use crate::inputs::{ModelKind, PPG_IMU_PREPROCESSING, PPG_ONLY_PREPROCESSING};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -28,9 +30,8 @@ pub const MANIFEST_FILE: &str = "manifest.json";
 pub const SUPPORTED_SCHEMA_VERSION: u32 = 1;
 pub(crate) const MAX_MANIFEST_BYTES: u64 = 512 * 1024;
 pub(crate) const MAX_MODEL_BYTES: u64 = 64 * 1024 * 1024;
-/// The only model format and preprocessing this app runs.
+/// The only model format this app runs.
 pub const MODEL_FORMAT: &str = "trees";
-pub const PREPROCESSING_KIND: &str = "ppg_multiscale_onset";
 /// The pulse history a decision reads (its grid of ticks), and how often a model decides.
 pub const WINDOW_MS: u32 = (GRID_TICKS as u64 * TICK_NS / 1_000_000) as u32;
 pub const STRIDE_MS: u32 = (TICK_NS / 1_000_000) as u32;
@@ -58,7 +59,7 @@ pub enum BundleError {
     )]
     UnsupportedFormat(String),
     #[error(
-        "unsupported preprocessing '{0}': this app's models read '{PREPROCESSING_KIND}' (multi-scale z-score derivatives of the pulse)"
+        "unsupported preprocessing '{0}': this app's models read '{PPG_IMU_PREPROCESSING}' (the pulse and motion) or '{PPG_ONLY_PREPROCESSING}' (the pulse alone)"
     )]
     UnsupportedPreprocessing(String),
     #[error(
@@ -102,7 +103,7 @@ pub struct InputSpec {
     /// `[null, features]`: any batch size, then one value per feature.
     pub shape: Vec<Option<u32>>,
     pub dtype: String,
-    /// Ordered: position n is input n of the model. Always [`FEATURE_NAMES`].
+    /// Ordered: position n is input n of the model. Always its kind's [`ModelKind::feature_names`].
     pub features: Vec<String>,
     /// The values each input usually takes in the decisions the model was trained on: one low and one high per input. Lets
     /// the app tell when live data is unlike anything the model trained on.
@@ -145,12 +146,15 @@ pub struct ThresholdSpec {
     /// After a detection ends, the next one waits this long.
     #[serde(default)]
     pub cooldown_ms: u32,
+    /// Which score starts a detection; bundles from before triggers existed start on the edge.
+    #[serde(default)]
+    pub trigger: Trigger,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Preprocessing {
-    /// Always [`PREPROCESSING_KIND`].
+    /// One of [`ModelKind::preprocessing`].
     pub kind: String,
 }
 
@@ -191,6 +195,7 @@ impl Manifest {
             activation: self.thresholds.activation,
             release: self.thresholds.release,
             cooldown_ms: self.thresholds.cooldown_ms,
+            trigger: self.thresholds.trigger,
             ..Thresholds::default()
         }
     }
@@ -199,6 +204,8 @@ impl Manifest {
 /// A bundle that passed every check. Holds the verified model, ready to run.
 pub struct ValidatedBundle {
     pub manifest: Manifest,
+    /// Which pinch-start model it is, from its preprocessing.
+    pub kind: ModelKind,
     pub(crate) trees: Arc<TreeEnsemble>,
     /// The model's SHA-256, as hashed from the very bytes that were parsed.
     pub model_sha256: String,
@@ -265,32 +272,29 @@ pub fn validate_bundle(
     if manifest.model.format != MODEL_FORMAT {
         return Err(BundleError::UnsupportedFormat(manifest.model.format.clone()));
     }
-    if manifest.preprocessing.kind != PREPROCESSING_KIND {
+    let Some(kind) = ModelKind::from_preprocessing(&manifest.preprocessing.kind) else {
         return Err(BundleError::UnsupportedPreprocessing(
             manifest.preprocessing.kind.clone(),
         ));
-    }
+    };
     let mismatch = |what: String| Err(BundleError::ContractMismatch(what));
-    if manifest.sources != [StreamSource::WatchPpg] {
+    if manifest.sources != kind.sources() {
         return mismatch(format!(
-            "the model must read the pulse sensor only, not {:?}",
+            "a '{}' model must read {:?}, not {:?}",
+            kind.preprocessing(),
+            kind.sources(),
             manifest.sources
         ));
     }
-    if manifest.input.features.len() != FEATURE_COUNT
-        || manifest
-            .input
-            .features
-            .iter()
-            .zip(FEATURE_NAMES.iter())
-            .any(|(a, b)| a != b)
-    {
+    let feature_count = kind.feature_count();
+    if manifest.input.features != kind.feature_names() {
         return mismatch(format!(
-            "the model must read the {FEATURE_COUNT} PPG features in this app's order"
+            "the model must read the {feature_count} features of a '{}' model in this app's order",
+            kind.preprocessing()
         ));
     }
-    if manifest.input.shape != [None, Some(FEATURE_COUNT as u32)] {
-        return mismatch(format!("the input shape must be [batch, {FEATURE_COUNT}]"));
+    if manifest.input.shape != [None, Some(feature_count as u32)] {
+        return mismatch(format!("the input shape must be [batch, {feature_count}]"));
     }
     if manifest.input.dtype != "float32" || manifest.output.dtype != "float32" {
         return mismatch("inputs and outputs must be float32".into());
@@ -307,8 +311,8 @@ pub fn validate_bundle(
         ));
     }
     if let Some(usual) = &manifest.input.training_range {
-        let sound = usual.low.len() == FEATURE_COUNT
-            && usual.high.len() == FEATURE_COUNT
+        let sound = usual.low.len() == feature_count
+            && usual.high.len() == feature_count
             && usual
                 .low
                 .iter()
@@ -316,7 +320,7 @@ pub fn validate_bundle(
                 .all(|(low, high)| low.is_finite() && high.is_finite() && low <= high);
         if !sound {
             return mismatch(format!(
-                "the training range must give a finite low and high, low not above high, for each of the {FEATURE_COUNT} inputs"
+                "the training range must give a finite low and high, low not above high, for each of the {feature_count} inputs"
             ));
         }
     }
@@ -343,15 +347,15 @@ pub fn validate_bundle(
         });
     }
     let trees = TreeEnsemble::parse(&model_bytes)?;
-    if trees.features() != FEATURE_COUNT {
+    if trees.features() != feature_count {
         return mismatch(format!(
-            "the model file reads {} features, the manifest lists {FEATURE_COUNT}",
+            "the model file reads {} features, the manifest lists {feature_count}",
             trees.features()
         ));
     }
     // A model that answers anything but a probability on ordinary inputs cannot be trusted on live ones.
     for value in [0.0, 1.0, -1.0, 1e6] {
-        let p = trees.predict(&vec![value; FEATURE_COUNT]);
+        let p = trees.predict(&vec![value; feature_count]);
         if !(0.0..=1.0).contains(&p) {
             return Err(BundleError::BadTestOutput(format!(
                 "{p} for every input at {value}"
@@ -360,6 +364,7 @@ pub fn validate_bundle(
     }
     Ok(ValidatedBundle {
         manifest,
+        kind,
         trees: Arc::new(trees),
         model_sha256: actual,
     })
@@ -372,6 +377,33 @@ pub(crate) mod tests {
     /// The bundle the trainer made for the runtime's tests (see `tools/label-trainer/tests/make_runtime_bundle.py`).
     pub fn fixture_dir() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ppg_onset_bundle")
+    }
+
+    /// The PPG + IMU bundle the trainer made for the runtime's tests.
+    pub fn motion_fixture_dir() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ppg_imu_onset_bundle")
+    }
+
+    #[test]
+    fn the_trainers_motion_bundle_is_valid_and_peaks() {
+        let bundle = validate_bundle(&motion_fixture_dir(), None).unwrap();
+        assert_eq!(bundle.kind, ModelKind::PpgImu);
+        assert_eq!(
+            bundle.manifest.sources,
+            [StreamSource::WatchPpg, StreamSource::WatchOrientation]
+        );
+        assert_eq!(bundle.manifest.input.features.len(), 2733);
+        assert_eq!(bundle.manifest.threshold_config().trigger, Trigger::Peak);
+        assert_eq!(
+            bundle.manifest.input_contract(),
+            ModelKind::PpgImu.contract()
+        );
+    }
+
+    #[test]
+    fn a_bundle_from_before_triggers_starts_on_the_edge() {
+        let bundle = validate_bundle(&fixture_dir(), None).unwrap();
+        assert_eq!(bundle.manifest.threshold_config().trigger, Trigger::Edge);
     }
 
     /// A copy of the fixture, unchanged.
@@ -404,7 +436,11 @@ pub(crate) mod tests {
     #[test]
     fn the_trainers_bundle_is_valid_and_reads_the_ppg_features() {
         let bundle = validate_bundle(&fixture_dir(), None).unwrap();
-        assert_eq!(bundle.manifest.input.features.len(), FEATURE_COUNT);
+        assert_eq!(bundle.kind, ModelKind::PpgOnly);
+        assert_eq!(
+            bundle.manifest.input.features.len(),
+            pinch_inference::ppg_onset::FEATURE_COUNT
+        );
         assert_eq!(bundle.manifest.sources, [StreamSource::WatchPpg]);
         assert_eq!(bundle.manifest.input_contract().window_ms, WINDOW_MS);
         assert_eq!(bundle.manifest.threshold_config().cooldown_ms, 1500);
@@ -424,7 +460,9 @@ pub(crate) mod tests {
 
     #[test]
     fn a_bundle_that_does_not_read_exactly_the_ppg_features_is_refused() {
-        assert!(refused(|m| m["sources"] = serde_json::json!(["watchPpg", "watchAcceleration"])).contains("pulse sensor only"));
+        assert!(refused(|m| m["sources"] = serde_json::json!(["watchPpg", "watchAcceleration"])).contains("must read [WatchPpg]"));
+        // A PPG-only model's features under the PPG + IMU kind's name are not that model.
+        assert!(refused(|m| m["preprocessing"]["kind"] = "ppg_imu_onset".into()).contains("must read [WatchPpg, WatchOrientation]"));
         assert!(refused(|m| {
             m["input"]["features"].as_array_mut().unwrap().swap(0, 1);
         })

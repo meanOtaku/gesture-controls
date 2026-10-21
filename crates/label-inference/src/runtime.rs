@@ -283,7 +283,7 @@ impl LabelRuntime {
         self.fail("the watch disconnected")
     }
 
-    /// The labels whose models read `source` (every model reads the pulse sensor, none the motion sensors).
+    /// The labels whose models read `source` (every model reads the pulse sensor, a PPG + IMU model also the motion).
     fn depends_on(&self, source: StreamSource) -> Vec<LabelId> {
         self.models
             .values()
@@ -351,12 +351,20 @@ impl LabelRuntime {
                     .clear_label(&r.label, ClearReason::Rejected(r.reason.to_string()))
             })
             .collect();
-        let batch: Vec<(LabelId, f64, u64)> = scores
-            .iter()
-            .map(|s| (s.label.clone(), s.confidence, s.timestamp_ns))
-            .collect();
-        let (changes, conflicts) = self.hub.process(&batch);
-        events.extend(changes);
+        // A model can score several pulse samples in one round: they go through the detectors in time order, the scores of
+        // one sample together, so labels that cannot coexist are judged on the same moment.
+        let mut order: Vec<&LabelScore> = scores.iter().collect();
+        order.sort_by_key(|s| s.timestamp_ns);
+        let mut conflicts = Vec::new();
+        for moment in order.chunk_by(|a, b| a.timestamp_ns == b.timestamp_ns) {
+            let batch: Vec<(LabelId, f64, u64)> = moment
+                .iter()
+                .map(|s| (s.label.clone(), s.confidence, s.timestamp_ns))
+                .collect();
+            let (changes, clashes) = self.hub.process(&batch);
+            events.extend(changes);
+            conflicts.extend(clashes);
+        }
         for score in &scores {
             let Some(check) = &score.input_check else {
                 continue;
@@ -442,6 +450,53 @@ mod tests {
             .flat_map(|o| if actionable { o.actionable.iter() } else { o.events.iter() })
             .filter(|e| matches!(e, DetectionEvent::Rising { .. }))
             .count()
+    }
+
+    #[test]
+    fn live_a_motion_model_detects_the_pinches_on_their_peak_and_ignores_the_fists() {
+        use crate::model::tests::{expected_motion, loaded_motion};
+        use crate::pipeline::tests::motion_sample;
+        let mut rt = LabelRuntime::default();
+        let model = loaded_motion();
+        assert_eq!(model.thresholds.trigger, model_lab_core::Trigger::Peak);
+        rt.set_models(vec![model]);
+        rt.set_mode(RuntimeMode::Live);
+        let (pulse, motion, _) = expected_motion();
+        let origin = pulse[0].ts_ns;
+        // Pulse samples arrive 5 ms after they are taken, motion 60 ms after, each stream on its own.
+        let mut arrivals: Vec<(u64, bool, usize)> = (0..pulse.len())
+            .map(|i| (pulse[i].ts_ns - origin + 5_000_000, true, i))
+            .collect();
+        arrivals
+            .extend((0..motion.len()).map(|j| (motion[j].ts_ns - origin + 60_000_000, false, j)));
+        arrivals.sort();
+        let mut rose = Vec::new();
+        for (at, is_pulse, i) in arrivals {
+            let out = if is_pulse {
+                let mut b = batch(&pulse, i, i + 1);
+                b.timestamp_ns = pulse[i].ts_ns;
+                rt.observe_ppg(&b, BASE_NS + at)
+            } else {
+                rt.observe_orientation(&motion_sample(&motion[i], i as u64), BASE_NS + at)
+            };
+            assert!(out.rejections.is_empty(), "{:?}", out.rejections);
+            rose.extend(out.actionable.iter().filter_map(|e| match e {
+                DetectionEvent::Rising { timestamp_ns, .. } => {
+                    Some((timestamp_ns - origin) / 1_000_000)
+                }
+                _ => None,
+            }));
+        }
+        // Gestures start every 3 s from 3 s, a pinch then a fist, until 12 s: the pinch at 9 s is the one after the warm-up.
+        // A detection comes about 0.7-1.4 s after a pinch's start, and none after a fist's.
+        assert!(!rose.is_empty());
+        for ms in &rose {
+            let since = ms.saturating_sub(3_000) % 6_000;
+            assert!(
+                (680..=1_400).contains(&since),
+                "a detection {ms} ms in is not just after a pinch"
+            );
+        }
     }
 
     #[test]

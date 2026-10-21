@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from label_trainer import label_train as lt
+from label_trainer import imu_onset, label_train as lt
 from label_trainer import ppg_onset, trees
 
 from .pulse_data import spec_for, write_pulse_recording
@@ -20,13 +20,64 @@ def test_a_spec_for_anything_but_the_pulse_model_is_refused(tmp_path: Path) -> N
     for change, reason in [
         ({"version": 2}, "unsupported spec version"),
         ({"backend": "logreg"}, "unknown backend"),
-        ({"sources": ["watchAcceleration"]}, "reads only the pulse sensor"),
+        ({"sources": ["watchAcceleration"]}, "reads the pulse sensor and motion"),
         ({"evaluation": spec["train"]}, "both the training and the evaluation"),
         ({"labelOffsetMs": 2000}, "label offset"),
         ({"target": ""}, "no target label"),
     ]:
         with pytest.raises(lt.TrainingRefused, match=reason):
             lt.parse_spec({**spec, **change})
+
+
+def test_a_motion_model_reads_the_pulse_and_motion_and_detects_on_the_peak(tmp_path: Path) -> None:
+    result = lt.run(spec_for(tmp_path, motion=True, every_s=5.0), tmp_path / "run")
+    assert result["outcome"] in ("deployable", "evaluationOnly"), result["message"]
+    bundle = tmp_path / "run" / "bundle"
+    manifest = json.loads((bundle / "manifest.json").read_text())
+    names = list(ppg_onset.FEATURE_NAMES) + list(imu_onset.FEATURE_NAMES)
+    assert manifest["input"]["features"] == names and manifest["input"]["shape"] == [None, 2733]
+    assert manifest["sources"] == ["watchPpg", "watchOrientation"] and manifest["preprocessing"] == {"kind": "ppg_imu_onset"}
+    assert manifest["thresholds"]["trigger"] == "peak" and manifest["thresholds"]["cooldownMs"] == 1500
+    assert manifest["thresholds"]["activation"] in lt.THRESHOLD_CANDIDATES
+    assert trees.read((bundle / "model.trees").read_bytes())[0] == 2733
+    assert result["parityMaxAbsDifference"] <= lt.PARITY_TOLERANCE
+    metrics = result["metrics"]
+    assert metrics["rocAuc"] > 0.9 and metrics["thresholdSource"] == "trainingRecordings"
+    # The cut-off was chosen on a replay of the training recordings, each scored by a model that had not seen it.
+    cross = metrics["crossCheckEvents"]
+    assert cross["gestures"] > 0 and cross["targetFalseActivationsPerHour"] == lt.TARGET_FALSE_ACTIVATIONS_PER_HOUR
+    events = metrics["events"]
+    assert events["policy"]["trigger"] == "peak"
+    assert events["gestures"] > 0 and events["caught"] / events["gestures"] >= 0.5
+    assert 680 <= events["medianLatencyMs"] <= 1280
+
+
+def test_the_cut_off_catches_the_most_starts_within_the_false_activation_target() -> None:
+    def summary(caught: int, false: int) -> dict:
+        return {"recordings": 1, "gestures": 10, "caught": caught, "gestureRecall": caught / 10, "repeats": 0, "medianLatencyMs": 900.0,
+                "falseActivations": false, "negativeSeconds": 3600.0, "falseActivationsPerHour": float(false)}
+    table = {t: summary(caught, false) for t, caught, false in [(0.3, 9, 400), (0.5, 8, 150), (0.6, 7, 110), (0.7, 7, 60), (0.8, 4, 20)]}
+    original = lt.summarise
+    try:
+        lt.summarise = lambda per_recording: per_recording[0]
+        spec = lt.Spec("pinch", [], [], {}, [], [], False, 17)
+        pick = lambda t: lt.budget_threshold(spec, [(None, None, t)])  # noqa: E731
+        lt_detections, lt.detections = lt.detections, lambda spec, r, times, scores, policy: table.get(policy.activation, summary(0, 0))
+        candidates, lt.THRESHOLD_CANDIDATES = lt.THRESHOLD_CANDIDATES, tuple(table)
+        threshold, events = pick(None)
+        # 0.6 and 0.7 both catch 7 within 120 an hour: the higher cut-off wins the tie.
+        assert threshold == 0.7 and events["withinTarget"]
+        table.update({t: summary(9, 500) for t in table})
+        threshold, events = pick(None)
+        assert threshold == 0.8 and not events["withinTarget"]      # none within it: the fewest false activations
+    finally:
+        lt.summarise, lt.detections, lt.THRESHOLD_CANDIDATES = original, lt_detections, candidates
+
+
+def test_a_motion_model_without_motion_samples_has_nothing_to_learn_from(tmp_path: Path) -> None:
+    spec = {**spec_for(tmp_path), "sources": ["watchPpg", "watchOrientation"]}           # pulse-only recordings
+    result = lt.run(spec, tmp_path / "run")
+    assert result["outcome"] == "failed" and "starts of the target label" in result["message"]
 
 
 def test_a_label_with_no_role_is_refused_rather_than_taken_as_negative(tmp_path: Path) -> None:
@@ -73,10 +124,10 @@ def test_the_cut_off_is_chosen_on_the_training_recordings_only(tmp_path: Path) -
     spec = lt.parse_spec(spec_for(tmp_path, train=4, evaluation=1))
     recordings = lt.load_spec_recordings(spec)
     train = lt.examples(spec, recordings, spec.train)
-    threshold, source, cross_check = lt.out_of_fold_threshold(spec, train)
-    assert source == "trainingRecordings" and 0.05 <= threshold <= 0.95 and cross_check > 0.9
+    threshold, source, cross_check, events = lt.out_of_fold_threshold(spec, train, recordings)
+    assert source == "trainingRecordings" and 0.05 <= threshold <= 0.95 and cross_check > 0.9 and events is None
     alone = lt.Examples(train.x, train.y, np.array(["r0"] * len(train.y)), train.kinds, train.decisions)
-    assert lt.out_of_fold_threshold(spec, alone) == (lt.ACTIVATION, "default", None)
+    assert lt.out_of_fold_threshold(spec, alone, recordings) == (lt.ACTIVATION, "default", None, None)
 
 
 def test_too_few_starts_to_learn_from_is_refused(tmp_path: Path) -> None:

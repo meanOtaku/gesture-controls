@@ -115,10 +115,9 @@ def _zero_crossings(w: np.ndarray) -> np.ndarray:
     return count
 
 
-def summarize(w: np.ndarray) -> np.ndarray:
-    """(rows, 21): the statistics of each row of `w`, in `STATS` order."""
+def summarize(w: np.ndarray, dt: float = TICK_NS / 1e9) -> np.ndarray:
+    """(rows, 21): the statistics of each row of `w`, in `STATS` order; `dt` is the seconds between its columns (the ages)."""
     n = w.shape[1]
-    dt = TICK_NS / 1e9
     half = n // 2
     rows = np.arange(len(w))
     q = np.quantile(w, [0.1, 0.25, 0.5, 0.75, 0.9], axis=1)

@@ -51,9 +51,9 @@ describe("NetworkLab", () => {
     render(<Harness />);
     expect(screen.getByRole("heading", { name: "Network lab" })).toBeInTheDocument();
     const pipeline = screen.getByRole("region", { name: "Model pipeline" });
-    expect(within(pipeline).getAllByRole("listitem")).toHaveLength(5);
+    expect(within(pipeline).getAllByRole("listitem")).toHaveLength(6);
     expect(within(pipeline).getByRole("list", { name: "Pipeline stages" })).toHaveTextContent("ExtraTrees");
-    expect(within(pipeline).getByLabelText("Research results")).toHaveTextContent("0.789");
+    expect(within(pipeline).getByLabelText("Research results")).toHaveTextContent("0.853");
     expect(screen.queryByRole("region", { name: "Network designs" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Your models" })).toBeInTheDocument();
     const list = await screen.findByRole("list", { name: "Models" });

@@ -132,6 +132,27 @@ PPG alone shows the same pattern: edge at 0.5 goes from 0.413 and 15.09 a minute
 3. **Label timing needs an independent reference.** Camera contact timing at 60 fps or more, so each recording's lag is measured instead of guessed.
 4. **The 50 Hz IMU may be too slow** to capture the brief vibration of fingertip contact. Recording at 100–200 Hz is worth testing alongside the new data.
 
+## In the app (2026-10-21)
+
+Point 1 is built: Model Lab now trains the PPG + IMU model and the runtime fires it on the peak.
+
+- **Inputs.** The 1,701 PPG features, then 1,032 motion features (`imu_onset.py`, mirrored by `crates/pinch-inference/src/imu_onset.rs`), with both grids ending at the decision's PPG sample. Live, each pulse sample is placed on the watch clock the motion is stamped with, as the recorder does. A decision waits until the motion up to it has arrived.
+- **Trigger and cut-off.** The trigger is peak. The cut-off is the one that, replayed over training recordings each scored by a model that had not seen it, catches the most starts with at most 120 false activations an hour.
+- **Earlier models.** PPG-only models trained before this keep running unchanged.
+
+**Checks:**
+
+- [`app_fusion_check.py`](artifacts/ppg-benchmark-2026-10/app_fusion_check.py) puts the app's version on the same 20 splits:
+  - worst-split AUC 0.853 and mean 0.898 (research 0.837 / 0.892);
+  - 0.236 of pinches caught within 1 false activation a minute (research 0.245);
+  - 0.373 within 2 a minute (research 0.378).
+- The Rust live path scores two real held-out recordings exactly as the trainer does (largest difference 6e-17), with motion arriving 60 ms after the pulse.
+- **A model trained in the app on these recordings,** holding out the five 10-17 recordings:
+  - The cut-off came out at 0.85.
+  - Its replay of the training recordings caught 22% of pinches at 1.6 false activations a minute.
+  - On the 10-17 recordings it caught 10% of pinches. Those recordings' labels run 0.7–1.3 s late, so this is expected.
+  - It is kept as Monitor-only.
+
 ## Reproducing
 
 From the repository root, each run takes about 2–3 minutes:

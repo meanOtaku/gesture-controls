@@ -4,10 +4,10 @@ use crate::bundle::TrainingRange;
 use model_lab_core::{
     InputContract, LabelId, LifecycleState, ModelVersion, ModelVersionId, QualityRules, Thresholds,
 };
-use pinch_inference::ppg_onset::FEATURE_COUNT;
 use thiserror::Error;
 
 use crate::bundle::ValidatedBundle;
+use crate::inputs::ModelKind;
 use crate::trees::TreeEnsemble;
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -69,6 +69,8 @@ pub struct InputCheck {
 pub struct LoadedModel {
     pub version_id: ModelVersionId,
     pub label: LabelId,
+    /// Which pinch-start model it is: what its inputs are computed from.
+    pub kind: ModelKind,
     pub input: InputContract,
     pub thresholds: Thresholds,
     pub quality: QualityRules,
@@ -102,6 +104,7 @@ impl LoadedModel {
         Ok(Self {
             version_id: version.id.clone(),
             label: version.label.clone(),
+            kind: bundle.kind,
             // The registry is authoritative for the contract and thresholds the model runs under.
             input: version.input.clone(),
             thresholds: version.thresholds,
@@ -160,11 +163,11 @@ impl LoadedModel {
         })
     }
 
-    /// The probability that this model's label just started, from the [`FEATURE_COUNT`] features of one decision.
+    /// The probability that this model's label just started, from its kind's features of one decision.
     pub fn predict(&self, features: &[f64]) -> Result<f64, ModelError> {
-        if features.len() != FEATURE_COUNT {
+        if features.len() != self.kind.feature_count() {
             return Err(ModelError::WrongInputCount {
-                expected: FEATURE_COUNT,
+                expected: self.kind.feature_count(),
                 actual: features.len(),
             });
         }
@@ -182,10 +185,11 @@ impl LoadedModel {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::bundle::tests::fixture_dir;
+    use crate::bundle::tests::{fixture_dir, motion_fixture_dir};
     use crate::bundle::validate_bundle;
     use model_lab_core::{ModelOrigin, ProjectId};
-    use pinch_inference::ppg_onset::{PpgSample, features};
+    use pinch_inference::imu_onset::MotionSample;
+    use pinch_inference::ppg_onset::{FEATURE_COUNT, PpgSample, features};
 
     /// The registered version the fixture bundle was approved as.
     pub fn active_version(bundle: &ValidatedBundle) -> ModelVersion {
@@ -211,6 +215,87 @@ pub(crate) mod tests {
         let bundle = validate_bundle(&fixture_dir(), None).unwrap();
         let version = active_version(&bundle);
         LoadedModel::load(bundle, &version).unwrap()
+    }
+
+    /// The PPG + IMU fixture model, approved and active.
+    pub fn loaded_motion() -> LoadedModel {
+        let bundle = validate_bundle(&motion_fixture_dir(), None).unwrap();
+        let version = active_version(&bundle);
+        LoadedModel::load(bundle, &version).unwrap()
+    }
+
+    /// The PPG + IMU fixture's trace: its pulse samples, its motion samples, and the probability the trainer gives each
+    /// pulse sample (`None`: no features).
+    pub fn expected_motion() -> (Vec<PpgSample>, Vec<MotionSample>, Vec<Option<f64>>) {
+        let raw: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(motion_fixture_dir().join("expected.json")).unwrap(),
+        )
+        .unwrap();
+        let samples = raw["samples"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| PpgSample {
+                ts_ns: r[0].as_u64().unwrap(),
+                green: r[1].as_f64().unwrap(),
+                red: r[2].as_f64().unwrap(),
+                ir: r[3].as_f64().unwrap(),
+            })
+            .collect();
+        let motion = raw["motion"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| {
+                let v = |i: usize| r[i].as_f64().unwrap();
+                MotionSample {
+                    ts_ns: r[0].as_u64().unwrap(),
+                    accel: [v(1), v(2), v(3)],
+                    gyro: [v(4), v(5), v(6)],
+                }
+            })
+            .collect();
+        let probabilities = raw["probabilities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(serde_json::Value::as_f64)
+            .collect();
+        (samples, motion, probabilities)
+    }
+
+    #[test]
+    fn the_runtime_scores_every_motion_decision_as_the_trainer_did() {
+        let model = loaded_motion();
+        assert_eq!(model.kind, ModelKind::PpgImu);
+        let (samples, motion, probabilities) = expected_motion();
+        let mut scored = 0;
+        for (i, want) in probabilities.iter().enumerate() {
+            let at = samples[i].ts_ns;
+            let got = features(&samples[..=i], at).and_then(|mut x| {
+                x.extend(pinch_inference::imu_onset::features(&motion, at)?);
+                Some(x)
+            });
+            match (got, want) {
+                (None, None) => {}
+                (Some(x), Some(want)) => {
+                    let p = model.predict(&x).unwrap();
+                    assert!((p - want).abs() < 1e-6, "sample {i}: {p} vs {want}");
+                    scored += 1;
+                }
+                (got, want) => panic!(
+                    "sample {i}: runtime features {}, trainer {}",
+                    got.is_some(),
+                    want.is_some()
+                ),
+            }
+        }
+        assert!(scored > 300);
+        // The wrong number of inputs for its kind is refused.
+        assert!(matches!(
+            model.predict(&vec![0.0; FEATURE_COUNT]),
+            Err(ModelError::WrongInputCount { expected: 2733, .. })
+        ));
     }
 
     /// The PPG trace in the fixture and the probability the trainer gives each of its samples (`None`: no features).

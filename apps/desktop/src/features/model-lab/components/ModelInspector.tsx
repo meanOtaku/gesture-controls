@@ -60,6 +60,8 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
   const manifestInput = (view?.manifest?.input ?? {}) as { features?: unknown };
   const monitorOnly = models.find((model) => model.id === id)?.monitorOnly ?? false;
   const auc = inspection?.evaluation.metrics.rocAuc;
+  // Models trained before motion read the pulse alone.
+  const readsMotion = inspection?.sources?.includes("watchOrientation") ?? false;
 
   return (
     <Card id="lab-inspect" role="region" aria-label={`Inspect ${id}`} className="min-w-0">
@@ -90,8 +92,8 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
         {inspection && (
           <>
             <div className="flex flex-wrap items-center gap-2" role="status" aria-label="Model summary">
-              <Badge variant="outline">{PULSE_MODEL.name}</Badge>
-              <Badge variant="outline">{inspection.inputCount.toLocaleString("en-US")} pulse inputs · {inspection.trees} trees</Badge>
+              <Badge variant="outline">{readsMotion ? PULSE_MODEL.name : "PPG pinch-start model"}</Badge>
+              <Badge variant="outline">{inspection.inputCount.toLocaleString("en-US")} {readsMotion ? "pulse and motion" : "pulse"} inputs · {inspection.trees} trees{readsMotion ? " · fires on the peak" : ""}</Badge>
               <Badge variant="outline">Trained on {inspection.examples.trainStarts} starts among {inspection.examples.train.toLocaleString("en-US")} moments</Badge>
               {typeof auc === "number" && <Badge variant="outline">Held-out ROC AUC {auc.toFixed(2)}</Badge>}
               {monitorOnly && <Badge variant="secondary">Monitor only</Badge>}

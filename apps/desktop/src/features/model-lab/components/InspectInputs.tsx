@@ -2,7 +2,7 @@ import { describeInput, type Inspection } from "../inspection";
 
 /**
  * The inputs the trees lean on most: how much each one's splits cut the trees' uncertainty, as a share of all of them
- * (mean decrease in impurity). The model reads all 1,701; these are the ones that matter most.
+ * (mean decrease in impurity). The model reads all of them; these are the ones that matter most.
  */
 export function InspectInputs({ inspection }: { inspection: Inspection }) {
   const biggest = Math.max(1e-9, ...inspection.importance.map((entry) => entry.importance));
@@ -10,7 +10,7 @@ export function InspectInputs({ inspection }: { inspection: Inspection }) {
     <section aria-label="Inputs" className="flex flex-col gap-2">
       <h3 className="text-base font-semibold">What it leans on</h3>
       <p className="field-hint">
-        The model reads {inspection.inputCount.toLocaleString("en-US")} inputs, all from the pulse sensor, and {inspection.trees} trees vote on each moment. These are the {inspection.importance.length} inputs whose splits do the most to tell a gesture&apos;s start from the rest, as a share of everything the trees learn.
+        The model reads {inspection.inputCount.toLocaleString("en-US")} inputs, {inspection.sources?.includes("watchOrientation") ? "from the pulse sensor and the motion sensors" : "all from the pulse sensor"}, and {inspection.trees} trees vote on each moment. These are the {inspection.importance.length} inputs whose splits do the most to tell a gesture&apos;s start from the rest, as a share of everything the trees learn.
       </p>
       <div className="max-w-full overflow-auto">
         <table className="w-full text-sm" aria-label="Most important inputs">

@@ -58,7 +58,35 @@ def _detection_cases() -> list[dict]:
             "scores": scores,
             "detections": [[rise, fall] for rise, fall in found],
         })
+    # The peak trigger, on scores that climb and fall back as a model's do around a gesture.
+    rng = random.Random(20261021)
+    for index in range(10):
+        activation = rng.choice([0.5, 0.7, 0.8])
+        policy = Policy(activation, round(activation - rng.choice([0.0, 0.15, 0.3]), 2), 0, rng.choice([0, 300, 1500]), trigger="peak")
+        times, scores, at, level = [], [], 1_000 * MS, rng.random()
+        for _ in range(rng.choice([40, 120])):
+            at += rng.choice([40, 40, 80]) * MS
+            level = min(1.0, max(0.0, level + rng.gauss(0, 0.12)))
+            times.append(at)
+            scores.append(round(level, 4))
+        found = detect(times, scores, policy)
+        cases.append({
+            "name": f"peak_{index}",
+            "policy": {"activation": policy.activation, "release": policy.release, "debounceMs": 0, "cooldownMs": policy.cooldown_ms, "trigger": "peak"},
+            "timesNs": times,
+            "scores": scores,
+            "detections": [[rise, fall] for rise, fall in found],
+        })
     return cases
+
+
+def test_the_peak_trigger_rises_on_the_first_fall_back_above_the_threshold() -> None:
+    times = [i * 40 * MS for i in range(10)]
+    scores = [0.2, 0.6, 0.7, 0.9, 0.85, 0.6, 0.3, 0.75, 0.5, 0.1]
+    policy = Policy(0.7, 0.55, trigger="peak")
+    # 0.7 and 0.9 climb; 0.85 is the first fall back while above 0.7, so it rises there, and falls at 0.3 (below 0.55).
+    # 0.75 then stands alone above the threshold, never followed by a lower score above it, so it does not rise.
+    assert detect(times, scores, policy) == [(4 * 40 * MS, 6 * 40 * MS)]
 
 
 def test_the_shared_detection_cases_still_hold() -> None:

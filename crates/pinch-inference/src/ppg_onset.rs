@@ -207,11 +207,10 @@ fn first_index_of(values: &[f64], better: impl Fn(f64, f64) -> bool) -> usize {
     best
 }
 
-/// The 21 statistics of one window of derivative values, in [`STATS`] order.
-fn summarize(w: &[f64]) -> [f64; 21] {
+/// The 21 statistics of one window of values, in [`STATS`] order; `dt` is the seconds between them (for the ages).
+pub(crate) fn summarize(w: &[f64], dt: f64) -> [f64; 21] {
     let n = w.len();
     let nf = n as f64;
-    let dt = TICK_NS as f64 / 1e9;
     let s = sorted(w);
     let q = [0.1, 0.25, 0.5, 0.75, 0.9].map(|p| quantile(&s, p));
     let deviations = sorted(&w.iter().map(|v| (v - q[2]).abs()).collect::<Vec<_>>());
@@ -327,7 +326,9 @@ pub fn features(samples: &[PpgSample], decision_ns: u64) -> Option<Vec<f64>> {
             for window in WINDOWS {
                 let per_channel: Vec<[f64; 21]> = order
                     .iter()
-                    .map(|series| summarize(&series[LONGEST_WINDOW - window..]))
+                    .map(|series| {
+                        summarize(&series[LONGEST_WINDOW - window..], TICK_NS as f64 / 1e9)
+                    })
                     .collect();
                 for stat in 0..STATS.len() {
                     for channel in &per_channel {

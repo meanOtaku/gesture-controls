@@ -15,14 +15,13 @@ use std::path::Path;
 use model_lab_core::{
     ArtifactRef, DatasetSnapshot, ExampleRole, InputContract, LabelId, LabelMapping, LabelProject,
     ModelOrigin, Persist, ProjectId, QualityRules, RecordingId, RecordingRef, RegistryStore, RunId,
-    RunOutcome, SnapshotDraft, SnapshotId, Split, StreamSource, Thresholds, TrainerBackend,
-    TrainerConfig, TrainingRun,
+    RunOutcome, SnapshotDraft, SnapshotId, Split, Thresholds, TrainerBackend, TrainerConfig,
+    TrainingRun,
 };
-use pinch_inference::ppg_onset::{FEATURE_NAMES, MAX_GAP_MS};
 use thiserror::Error;
 
-use crate::bundle::{STRIDE_MS, WINDOW_MS};
 use crate::import::{ImportError, ImportOutcome, StagedBundle, publish_staged_with};
+use crate::inputs::ModelKind;
 
 #[derive(Debug, Error)]
 pub enum TrainingError {
@@ -56,17 +55,15 @@ pub struct RecordingInfo {
     pub labels: BTreeSet<LabelId>,
 }
 
-/// What every model this app trains reads: the pulse sensor only, the PPG pinch-start features, a decision every 40 ms
-/// from the last 5.6 s (see [`pinch_inference::ppg_onset`]). The trainer's manifest must declare exactly this.
+/// What every model this app trains now reads: the pulse sensor and motion, the PPG + IMU pinch-start features, a decision
+/// every 40 ms (see [`ModelKind::PpgImu`]). The trainer's manifest must declare exactly this.
+pub fn pinch_start_contract() -> InputContract {
+    ModelKind::PpgImu.contract()
+}
+
+/// What the earlier PPG-only pinch-start model reads (see [`ModelKind::PpgOnly`]); its versions and runs are kept.
 pub fn ppg_onset_contract() -> InputContract {
-    InputContract {
-        sources: vec![StreamSource::WatchPpg],
-        features: FEATURE_NAMES.to_vec(),
-        window_ms: WINDOW_MS,
-        stride_ms: STRIDE_MS,
-        max_gap_ms: MAX_GAP_MS as u32,
-        min_samples: MIN_WINDOW_SAMPLES,
-    }
+    ModelKind::PpgOnly.contract()
 }
 
 /// The fewest pulse samples a decision's 5.6 s may hold (about 18 per second; the watch sends 25).

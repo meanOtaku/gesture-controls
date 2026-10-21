@@ -20,7 +20,7 @@ mod version;
 
 pub use contract::{
     ContractError, InputContract, QualityRules, StreamSource, Thresholds, TrainerBackend,
-    TrainerConfig,
+    TrainerConfig, Trigger,
 };
 pub use ids::{IdError, LabelId, ModelVersionId, ProjectId, RecordingId, RunId, SnapshotId};
 pub use migrate::{
@@ -29,8 +29,7 @@ pub use migrate::{
 };
 pub use project::{ExampleRole, LabelMapping, LabelProject, ProjectError};
 pub use registry::{
-    Purged,
-    Activation, InferenceMode, REGISTRY_SCHEMA_VERSION, Registry, RegistryError, Rollback,
+    Activation, InferenceMode, Purged, REGISTRY_SCHEMA_VERSION, Registry, RegistryError, Rollback,
 };
 pub use run::{ArtifactRef, RunError, RunOutcome, RunStatus, TrainingRun};
 pub use snapshot::{DatasetSnapshot, RecordingRef, SnapshotDraft, SnapshotError, Split};

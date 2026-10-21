@@ -1,7 +1,7 @@
 import type { DatasetSummary } from "./types";
 import { datasetLabels } from "./types";
 
-/** Training a label's model (see `label_training.rs`). There is one kind of model: the PPG pinch-start model. */
+/** Training a label's model (see `label_training.rs`). There is one kind of model to train: the PPG + IMU pinch-start model. */
 
 export type OtherRole = "negative" | "exclude";
 
@@ -9,19 +9,21 @@ export const LABEL_TRAINING_EVENT = "label-training-event";
 
 /** The one model the app trains: what it reads, the steps it takes, and what the research measured for it. */
 export const PULSE_MODEL = {
-  name: "PPG pinch-start model",
+  name: "PPG + IMU pinch-start model",
   summary:
-    "Reads only the watch's pulse sensor and fires about 0.9 s after a gesture starts. Each moment is compared with the 1, 2 and 4 seconds before it, and 300 randomised decision trees decide whether a gesture has just begun.",
+    "Reads the watch's pulse sensor and its accelerometer and gyroscope, and fires about 0.9 s after a gesture starts. The pulse is compared with the 1, 2 and 4 seconds before it, the motion is summarised over the last 0.3 to 1.3 s, and 300 randomised decision trees decide whether a gesture has just begun. It fires at the top of the trees' rising vote, at a cut-off that keeps false alarms under about 2 a minute on training recordings it did not see.",
   stages: [
     { title: "Pulse sensor", detail: "Green, red and infrared light, 25 times a second" },
     { title: "Compared with the recent past", detail: "Each channel z-scored against the previous 1 s, 2 s and 4 s" },
-    { title: "How it changes", detail: "Slope, curvature and jerk of each, from the previous 9 samples" },
-    { title: "Summaries", detail: "21 statistics over the last 0.3, 0.6 and 1.3 s: 1,701 inputs" },
+    { title: "How it changes", detail: "Slope, curvature and jerk of each, from the previous 9 samples: 1,701 inputs" },
+    { title: "Motion", detail: "Accelerometer and gyroscope, 50 times a second, summarised over 0.3, 0.6 and 1.3 s: 1,032 inputs" },
     { title: "ExtraTrees", detail: "300 randomised trees vote on “a gesture just started”" },
+    { title: "Peak trigger", detail: "Fires when the vote stops rising above the cut-off" },
   ],
-  inputs: 1701,
-  /** The research result on 37 recordings and 20 recording-disjoint splits (docs/research/artifacts/ppg-benchmark-2026-10/ppg-multiscale-zscore). */
-  research: { worstAuc: 0.789, meanAuc: 0.843, recall: 0.413, falsePerMinute: 15.1 },
+  inputs: 2733,
+  /** What the app's model scored on 37 recordings and 20 recording-disjoint splits, firing on the peak at a cut-off of 0.75
+   * (docs/research/artifacts/ppg-benchmark-2026-10/ppg-imu-fusion/app-definition-check.json). */
+  research: { worstAuc: 0.853, meanAuc: 0.898, recall: 0.373, falsePerMinute: 1.7 },
 } as const;
 
 export interface TrainRequest {

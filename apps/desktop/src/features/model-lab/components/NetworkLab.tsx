@@ -36,7 +36,7 @@ export function ModelPipeline() {
           description="The one model the app trains, for every label."
           help={{
             label: "About this model",
-            content: "Chosen by the October 2026 PPG research: of 26 methods and several ways of preparing the pulse signal, multi-scale z-scored derivatives with ExtraTrees had the best worst-case score on recordings the model never saw. The research is in docs/research/artifacts/ppg-benchmark-2026-10/ppg-multiscale-zscore.",
+            content: "Chosen by the October 2026 research: of 26 methods and several ways of preparing the pulse signal, multi-scale z-scored derivatives with ExtraTrees had the best worst-case score on recordings the model never saw; adding the watch's motion raised it again and halved the false alarms on recordings without the gesture, and firing at the top of the score's climb caught more starts for the same false alarms. The research is in docs/research/ppg-imu-fusion-and-triggers-2026-10.md.",
           }}
         />
       </CardHeader>
@@ -57,10 +57,10 @@ export function ModelPipeline() {
           <div><dt className="text-muted-foreground">Worst-case AUC</dt><dd className="text-numeric">{research.worstAuc.toFixed(3)}</dd></div>
           <div><dt className="text-muted-foreground">Mean AUC</dt><dd className="text-numeric">{research.meanAuc.toFixed(3)}</dd></div>
           <div><dt className="text-muted-foreground">Gesture starts caught</dt><dd className="text-numeric">{Math.round(research.recall * 100)}%</dd></div>
-          <div><dt className="text-muted-foreground">False alarms</dt><dd className="text-numeric">≈{Math.round(research.falsePerMinute)} / min</dd></div>
+          <div><dt className="text-muted-foreground">False alarms</dt><dd className="text-numeric">≈{research.falsePerMinute.toFixed(1)} / min</dd></div>
         </dl>
         <p className="field-hint">
-          Measured on 37 recordings, testing 20 times on recordings the model never trained on, at a fixed cut-off of 0.5. Your models choose their own cut-off. One that does not pass the checks for going live can be activated, but it only runs in Monitor.
+          Measured on 37 recordings, testing 20 times on recordings the model never trained on, firing on the peak at a cut-off of 0.75 (picked on those same tests, so a little optimistic). Your models choose their own cut-off, on their training recordings. One that does not pass the checks for going live can be activated, but it only runs in Monitor.
         </p>
       </CardContent>
     </Card>

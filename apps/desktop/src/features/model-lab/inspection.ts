@@ -26,9 +26,13 @@ export interface Inspection {
   kind: "trees";
   backend: string;
   target: string;
-  /** How many inputs the model reads (the PPG pinch-start features). */
+  /** How many inputs the model reads (the pinch-start features). */
   inputCount: number;
   trees: number;
+  /** What it reads (absent from models trained before motion: the pulse sensor alone). */
+  sources?: string[];
+  /** Which score starts a detection (absent before triggers: the edge). */
+  trigger?: "edge" | "peak";
   /** The inputs the trees lean on most (mean decrease in impurity), most first. */
   importance: { name: string; importance: number }[];
   /** Every held-out decision: its recording, whether it is a start of the gesture (1), and the model's score. */
@@ -71,10 +75,29 @@ const STAT: Record<string, string> = {
 };
 const ORDER: Record<string, string> = { d1: "slope", d2: "curvature", d3: "jerk" };
 
-/** One input's name (`ppg_z1000ms_d1_green_n8_q10`) in words: "green slope against the last 1 s, 10th percentile over 0.32 s". */
+const MOTION: Record<string, string> = {
+  accel_x: "acceleration x", accel_y: "acceleration y", accel_z: "acceleration z", accel_mag: "acceleration size",
+  gyro_x: "rotation x", gyro_y: "rotation y", gyro_z: "rotation z", gyro_mag: "rotation size",
+};
+
+/**
+ * One input's name in words: a pulse input (`ppg_z1000ms_d1_green_n8_q10`: "green slope against the last 1 s: 10th
+ * percentile over 0.32 s") or a motion one (`imu_accel_x_diff_n320ms_std`: "change in acceleration x: spread over 0.32 s").
+ */
 export function describeInput(name: string): string {
-  const match = /^ppg_z(\d+)ms_(d[123])_(green|red|ir)_n(\d+)_(.+)$/.exec(name);
-  if (!match) return name;
-  const [, history, order, channel, window, stat] = match;
-  return `${PART[channel]} ${ORDER[order]} against the last ${Number(history) / 1000} s: ${STAT[stat] ?? stat} over ${(Number(window) * 0.04).toFixed(2)} s`;
+  const pulse = /^ppg_z(\d+)ms_(d[123])_(green|red|ir)_n(\d+)_(.+)$/.exec(name);
+  if (pulse) {
+    const [, history, order, channel, window, stat] = pulse;
+    return `${PART[channel]} ${ORDER[order]} against the last ${Number(history) / 1000} s: ${STAT[stat] ?? stat} over ${(Number(window) * 0.04).toFixed(2)} s`;
+  }
+  const spread = /^imu_([a-z]+_[a-z]+)_spread_vs_3s_n(\d+)ms$/.exec(name);
+  if (spread && MOTION[spread[1]]) {
+    return `${MOTION[spread[1]]}: spread over ${(Number(spread[2]) / 1000).toFixed(2)} s against the 3 s before`;
+  }
+  const motion = /^imu_([a-z]+_[a-z]+)_(raw|diff)_n(\d+)ms_(.+)$/.exec(name);
+  if (motion && MOTION[motion[1]]) {
+    const [, channel, signal, window, stat] = motion;
+    return `${signal === "diff" ? "change in " : ""}${MOTION[channel]}: ${STAT[stat] ?? stat} over ${(Number(window) / 1000).toFixed(2)} s`;
+  }
+  return name;
 }

@@ -1,7 +1,8 @@
 //! Turns a label's stream of probabilities into detections: a rising edge, an active state and a falling edge.
 //!
-//! A score starts a detection when it reaches the activation threshold (held for the debounce time, and not within the
-//! cooldown after the last detection ended). It keeps the detection active until the score falls *below the release
+//! A score starts a detection when it reaches the activation threshold (held for the debounce time; or, with the peak
+//! trigger, when it first falls back while still at or above it), and not within the cooldown after the last detection
+//! ended. It keeps the detection active until the score falls *below the release
 //! threshold*, which is at or under the activation threshold, so a score wobbling between the two does not flicker.
 //!
 //! Labels that cannot both be true (a swipe left and a swipe right) are declared as an [`ExclusivityGroup`], separately
@@ -10,7 +11,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use model_lab_core::{LabelId, Thresholds};
+use model_lab_core::{LabelId, Thresholds, Trigger};
 
 /// Why a detection ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,6 +84,8 @@ pub struct TemporalDetector {
     active: bool,
     /// When the score first reached the activation threshold in the current run, while debouncing.
     pending_since_ns: Option<u64>,
+    /// The peak trigger's last score in the current run at or above the activation threshold.
+    previous: Option<f64>,
     last_fall_ns: Option<u64>,
 }
 
@@ -94,6 +97,7 @@ impl TemporalDetector {
             thresholds,
             active: false,
             pending_since_ns: None,
+            previous: None,
             last_fall_ns: None,
         }
     }
@@ -113,6 +117,7 @@ impl TemporalDetector {
         }
         if score < self.thresholds.activation {
             self.pending_since_ns = None;
+            self.previous = None;
             return Step::Quiet;
         }
         let cooling = self.last_fall_ns.is_some_and(|fell| {
@@ -120,6 +125,16 @@ impl TemporalDetector {
         });
         if cooling {
             self.pending_since_ns = None;
+            self.previous = None;
+            return Step::Quiet;
+        }
+        if self.thresholds.trigger == Trigger::Peak {
+            if self.previous.is_some_and(|before| score < before) {
+                self.active = true;
+                self.previous = None;
+                return Step::Rising;
+            }
+            self.previous = Some(score);
             return Step::Quiet;
         }
         let since = *self.pending_since_ns.get_or_insert(timestamp_ns);
@@ -135,6 +150,7 @@ impl TemporalDetector {
     /// Ends any detection without a score and without starting a cooldown. Returns whether one was active.
     fn clear(&mut self) -> bool {
         self.pending_since_ns = None;
+        self.previous = None;
         std::mem::replace(&mut self.active, false)
     }
 }
@@ -299,6 +315,7 @@ mod tests {
             release,
             debounce_ms,
             cooldown_ms,
+            trigger: Trigger::Edge,
         }
     }
 
@@ -315,12 +332,19 @@ mod tests {
         .unwrap();
         for case in fixture["cases"].as_array().unwrap() {
             let policy = &case["policy"];
-            let mut detector = TemporalDetector::new(thresholds(
-                policy["activation"].as_f64().unwrap(),
-                policy["release"].as_f64().unwrap(),
-                policy["debounceMs"].as_u64().unwrap() as u32,
-                policy["cooldownMs"].as_u64().unwrap() as u32,
-            ));
+            let mut detector = TemporalDetector::new(Thresholds {
+                trigger: match policy["trigger"].as_str() {
+                    None | Some("edge") => Trigger::Edge,
+                    Some("peak") => Trigger::Peak,
+                    Some(other) => panic!("unknown trigger {other}"),
+                },
+                ..thresholds(
+                    policy["activation"].as_f64().unwrap(),
+                    policy["release"].as_f64().unwrap(),
+                    policy["debounceMs"].as_u64().unwrap() as u32,
+                    policy["cooldownMs"].as_u64().unwrap() as u32,
+                )
+            });
             let times = case["timesNs"].as_array().unwrap();
             let scores = case["scores"].as_array().unwrap();
             let mut found: Vec<(u64, Option<u64>)> = Vec::new();
@@ -411,6 +435,44 @@ mod tests {
                 Step::Quiet,
                 Step::Quiet,
                 Step::Rising
+            ]
+        );
+    }
+
+    #[test]
+    fn the_peak_trigger_rises_on_the_first_fall_back_above_the_threshold() {
+        let mut d = TemporalDetector::new(Thresholds {
+            trigger: Trigger::Peak,
+            ..thresholds(0.7, 0.55, 0, 0)
+        });
+        let steps = run(
+            &mut d,
+            &[
+                (0.2, 0),
+                (0.6, 40),
+                (0.7, 80),
+                (0.9, 120),
+                (0.85, 160),
+                (0.6, 200),
+                (0.3, 240),
+                (0.75, 280),
+                (0.5, 320),
+            ],
+        );
+        // It climbs to 0.9 and rises at 0.85, the first score lower than the one before it while both are above 0.7. A
+        // lone 0.75 is followed by nothing lower above the threshold, so it never rises.
+        assert_eq!(
+            steps,
+            [
+                Step::Quiet,
+                Step::Quiet,
+                Step::Quiet,
+                Step::Quiet,
+                Step::Rising,
+                Step::Active,
+                Step::Falling,
+                Step::Quiet,
+                Step::Quiet
             ]
         );
     }
