@@ -1,57 +1,127 @@
 # Label inference: bundles, shared pipeline and detections
 
-**Status:** step 2 of the Model Lab refactor. Delivered as the crate `crates/label-inference` and a host in `apps/desktop/src-tauri/src/label_runtime.rs`. Models run **in-process** with `tract` (see [the decision record](../decisions/2026-10-model-runtime-and-format.md)); there is no Python at run time and no sidecar. The runtime stays **Off** until the per-label registry says otherwise, and the registry has no models in it yet, so nothing runs on an installed app today. Importing a model, the recipe connection and the UI come in later steps.
+**Status (2026-10-21):** the crate `crates/label-inference` and its host `apps/desktop/src-tauri/src/label_runtime.rs` run per-label binary models **in-process**, with no Python at run time (see [the decision record](../decisions/2026-10-model-runtime-and-format.md)). The models are tree ensembles of two kinds:
+
+- the **PPG + IMU pinch-start model**, which Model Lab trains;
+- the earlier **PPG-only** one, which still runs.
+
+The research behind them is in [IMU fusion, trigger rules and label shifts](../research/ppg-imu-fusion-and-triggers-2026-10.md) and the [PPG benchmark artifacts](../research/artifacts/ppg-benchmark-2026-10/README.md).
 
 ## The model bundle
 
-A directory with two files: `manifest.json` and one ONNX model. Only ONNX is accepted (never pickle, joblib, torch or SavedModel, which can run code or depend on a framework version).
+A directory with `manifest.json` and `model.trees`. The model file is plain node arrays the runtime walks (`trees.rs`): data, never code.
 
 ```json
 {
   "schemaVersion": 1,
-  "modelId": "...", "targetLabel": "swipe_left",
-  "model": { "file": "model.onnx", "sha256": "...", "format": "onnx", "opset": 15 },
+  "modelId": "pinch-1a2b3c4d", "targetLabel": "pinch",
+  "model": { "file": "model.trees", "sha256": "...", "format": "trees", "opset": 0 },
   "framework": { "name": "scikit-learn", "version": "1.x" },
-  "input":  { "name": "X", "shape": [null, 4], "dtype": "float32", "features": ["accel_x_std", "..."] },
+  "input":  { "name": "X", "shape": [null, 2733], "dtype": "float32", "features": ["ppg_z1000ms_d1_green_n8_q10", "...", "imu_gyro_mag_spread_vs_3s_n1280ms"], "trainingRange": { "low": [], "high": [] } },
   "output": { "name": "probabilities", "shape": [null, 2], "dtype": "float32", "positiveIndex": 1 },
-  "sources": ["watchAcceleration"],
-  "window": { "durationMs": 1000, "strideMs": 200, "maxGapMs": 300, "minSamples": 5 },
+  "sources": ["watchPpg", "watchOrientation"],
+  "window": { "durationMs": 5640, "strideMs": 40, "maxGapMs": 250, "minSamples": 100 },
   "quality": { "maxContactQuality": 0.0, "minSampleCount": 3 },
-  "thresholds": { "activation": 0.8, "release": 0.5 },
-  "preprocessing": { "kind": "none" },   // or { "kind": "spike_extraction", "method": "…" }, and/or "baselineMs": 2000 | 4000 | 8000
+  "thresholds": { "activation": 0.85, "release": 0.7, "cooldownMs": 1500, "trigger": "peak" },
+  "preprocessing": { "kind": "ppg_imu_onset" },
   "provenance": { }
 }
 ```
 
-Validation refuses a bundle for any of: a missing, oversized (manifest over 256 KB, model over 16 MB) or malformed manifest; an unknown schema version or an unknown field; a model file name that is not a plain file name (no separators, `..`, hidden names); any format but ONNX; an opset outside 9 to 21; any preprocessing but `none` or `spike_extraction` with a known `method` (a model that reads spike features must name its method, because the runtime makes those features the way the model was trained); a `baselineMs` other than 2000, 4000 or 8000, or a model that reads the pulse-sensor level features against the recent past (`ppg_*_rel_low`, `ppg_*_rel_high` and `ppg_*_rel_z_*`) without a `baselineMs` (the runtime keeps that much past, and does not score until it has it, so the features are made the way the model was trained); non-float32 tensors; a feature that is not one of the canonical features (the 55 statistics, the 24 pulse-sensor spike features, the 6 level-against-the-recent-past features, the 10 motion-dynamics features and the 12 pulse features in units of the recent past; later blocks come after earlier ones, so no feature ever moves), or, for a convolutional model, a channel that is not one of the 13 grid channels; a convolutional model's `input.grid.steps` outside 8 to 256 or an input shape that is not channels x steps; a feature whose stream is not listed in `sources`; a head-pose source (no canonical head-pose features exist yet); an unsound window or thresholds; a model hash that differs from the manifest's; a wrong target label (when one is expected); an input or output name that is not in the model; a feature count (or, for a convolutional model, channels x steps) that does not match the input shape; a `trainingRange` (the usual low and high of each input in the training windows) that does not give a finite low not above high for each listed input; a positive index outside the output; a model the runtime cannot load (an unsupported operator is the usual cause); and a model that does not return finite probabilities in [0, 1] on three bounded test inputs. The hash is taken from the same bytes that are then loaded.
+**The preprocessing kind decides the model kind** (`inputs::ModelKind`):
 
-A model is loaded only for a registry version that is **Active** and deployable and whose model hash is the approved one.
+| Kind | Sources | Inputs |
+|---|---|---|
+| `ppg_imu_onset` | `watchPpg`, `watchOrientation` | 2,733: the 1,701 pulse features, then the 1,032 motion features |
+| `ppg_multiscale_onset` | `watchPpg` | 1,701 |
+
+The bundle must declare exactly its kind's sources, features (names and order), input shape and window. `thresholds.trigger` is `"edge"` when absent, which is what bundles made before triggers say.
+
+**Validation refuses:**
+
+- a missing, oversized (manifest over 512 KB, model over 64 MB) or malformed manifest, an unknown schema version or field, or an unsafe model file name;
+- any format but `trees`, or any other preprocessing;
+- a contract that does not match its kind;
+- a training range that is not a finite low-not-above-high per input;
+- unsound thresholds or quality rules;
+- a model whose hash differs from the manifest's;
+- a tree file that reads a different number of features;
+- a model that does not answer a probability on four constant test inputs.
+
+The hash is taken from the same bytes that are parsed. A model is loaded only for a registry version that is **Active** and may run (deployable, or Monitor-only) and whose hash is the approved one.
+
+## The inputs
+
+Both halves are computed by `crates/pinch-inference` and, identically, by the trainer (`tools/label-trainer/src/label_trainer/ppg_onset.py`, `imu_onset.py`). Shared fixtures keep them equal (`ppg_onset_cases.json`, `imu_onset_cases.json`).
+
+- **Pulse** (`ppg_onset`). For a decision at a pulse sample:
+  - a 25 Hz grid of 141 ticks (5.6 s) ends at it;
+  - each channel is z-scored against the previous 1, 2 and 4 s;
+  - each z-series gets slope, curvature and jerk from a least-squares cubic over the nine ticks before each tick;
+  - 21 statistics summarise the last 8, 16 and 32 ticks: 1,701 features.
+  - A gap over 250 ms in the span, or too little history, gives none.
+- **Motion** (`imu_onset`). For the same moment on the watch clock:
+  - a 50 Hz grid of 214 ticks (4.26 s) ends at it;
+  - the channels are the accelerometer and gyroscope axes and their magnitudes, raw and as tick-to-tick change;
+  - over the last 16, 32 and 64 ticks (0.32, 0.64, 1.28 s), the same 21 statistics, plus each channel's spread against the 3 s before: 1,032 features.
+  - A gap over 250 ms, or a tick before the first sample, gives none.
 
 ## The shared pipeline
 
 ```
-raw telemetry -> order/finite checks -> per-model gates -> window -> 55 canonical features
-              -> the model's declared subset -> inference -> label score
-              -> temporal policy -> detections
+pulse batches  -> order/finite checks -> buffer (receive clock + watch clock)  \
+motion samples -> order/finite checks -> buffer (watch clock)                    -> per-model gates
+  -> each pending pulse sample, once its motion has arrived -> its kind's features -> trees -> score
+  -> detector (trigger, hysteresis, cooldown, exclusivity) -> detections
 ```
 
-- Telemetry is validated and buffered **once** for all models. Each model has its own window and stride, evaluated on its own schedule against the shared buffers.
-- Windows are cut on the desktop's receive clock, the only one the watch's streams share. Each stream's samples are placed on it by their own timestamps plus one offset per stream, the smallest `received - taken` seen in the last 30 s (`clock.rs`), so samples that arrive together in one message keep their real spacing, as in the recordings the trainer reads. Raw timestamps are never altered: they are checked for strict order and carried through, and a score is stamped with the raw timestamp of the newest sample of the model's first listed stream.
-- Each sensor's statistics are taken over that sensor's own samples in the window, in the runtime and in the trainer alike; `tools/label-trainer/tests/fixtures/base_feature_cases.json` keeps the two equal.
-- Besides the spreads, each motion sensor has five **motion dynamics** (`accel_*`/`gyro_*`: `jerk_rms` and `jerk_max`, how fast the vector changes per second between readings, using their timestamps; `magnitude_ptp`; `magnitude_kurtosis`, high when one burst stands out of a quiet window; `crossing_rate`, how often an axis crosses its mean per second). They come with their sensor and count as "how things change". With a baseline, each pulse channel is also measured **in units of its recent past** (`pulse_z`: minus the baseline's median, over its spread, the median absolute deviation scaled to a standard deviation and at least 1 count, clipped to ±20), giving its mean, peak, dip and slope per second in the window (`ppg_*_rel_z_*`), and its **step** through the window: the mean of the window's last 40% less the mean of its first 25% (`ppg_*_rel_z_step`, the last three of the 110 canonical features; it marks a gesture's start, see `docs/research/ppg-step-findings-2026-10.md`). The baseline is the pulse in the `baselineMs` before the window's **first sample** of any stream, as the trainer anchors it on the window's first row, not before the window's nominal start; the two choose different samples whenever the start falls between samples. The sensor's level is arbitrary (one session at −250,000 counts, another at +310,000) and how far it swings depends on how the watch sits; measured this way neither matters. A model that reads columns (the convolutional one, or a dense one on raw columns) uses its baseline the same way: its manifest says `input.grid.pulse: "recentPast"` and each pulse channel goes through `pulse_z` before anything else. Without a baseline it reads the counts, as before. On 18 recordings over five days, pulse-only models went from 0.19–0.45 to 0.30–0.66 AUC across training recordings (pinch against everything, fist included).
-- A model reads only the streams it declares (watch orientation, acceleration, gyroscope, PPG). Nothing else is windowed for it.
-- Per-model gates: a stream quiet for longer than `maxGapMs`, a gap longer than that inside the window, fewer than `minSamples`, too few PPG samples or degraded PPG contact quality all **reject the window**, and a rejection ends that label's detection.
-- A model with a baseline is quiet, not rejected, while it warms up. Once it has scored, losing its baseline (a gap in the pulse stream) is a rejection, `BaselineUnavailable`, reported once so that what it held is released; it then warms up quietly again until the past is back.
-- Out-of-order, repeated, malformed or non-finite samples are refused and not buffered, and end the detection of every model that reads that stream. A different watch's samples never mix into a window.
-- Buffers are bounded by the longest window loaded.
+**Buffering:**
 
-Features reuse `pinch-inference`'s canonical extraction, so a model trained offline sees the same features live.
+- Telemetry is validated and buffered **once** for all models, bounded by the longest window loaded.
+- Out-of-order, repeated, malformed or non-finite samples are refused, not buffered, and end the detection of every model that reads that stream.
+- A different watch's samples never mix in.
+- Motion samples are kept only when they carry both an accelerometer and a gyroscope reading.
+
+**Three clocks** (`clock.rs`):
+
+- Pulse samples are placed on the desktop's receive clock, through the smallest `received - taken` seen in the last 30 s. The window gates (staleness, gaps, sample counts, contact quality) use this clock.
+- The pulse sensor stamps its samples with the Samsung SDK's clock. The motion samples use the watch's `elapsedRealtimeNanos`, a different clock.
+- So each pulse sample is also placed on the watch clock, by the smallest offset between a batch's send time (on the watch clock) and its newest sample. This is exactly what the recorder does (`SourceClockMap`), so live inputs line up as the recordings do. The motion features of a decision end there.
+- The pulse features are computed from the pulse samples' raw timestamps, as the trainer computes them. A score is stamped with its pulse sample's raw timestamp.
+
+**Deciding:**
+
+- A model decides on **every pulse sample**, in order, as the trainer replays a recording.
+- The first time, it decides on the newest ready sample. After that, on each one after the last it decided on, at most 50 per round.
+- A PPG + IMU model decides on a sample only when motion at or after its moment has arrived. The streams are sent separately, about every 100 ms each. Deciding earlier would hold stale motion over the missing samples.
+- **Rejections:**
+  - Motion silent for over 1 s is `SourceStale` on `WatchOrientation`.
+  - Pulse quiet longer than `maxGapMs`, a gap inside the window, fewer than `minSamples`, or degraded contact quality reject the window.
+  - A rejection ends that label's detection.
+- Until the buffer holds the window (5.6 s of pulse, plus motion), the model is quiet, not rejected.
+
+`check_input` compares each decision's inputs with the training range and raises a warning when most decisions are unlike the training ones. It never changes a score.
 
 ## Detections
 
-A label's score becomes a detection: it **rises** when the score reaches the activation threshold (held for the debounce time, and not within the cooldown after the last one ended), stays **active** until the score falls **below the release threshold** (never above activation, which gives the hysteresis), then **falls**.
+A label's scores become detections in `TemporalDetector`. The release threshold is never above activation, which gives the hysteresis.
 
-Labels that cannot both be true are declared as an exclusivity group, separately from any model. If two are detected together, **both are held off**, a conflict is reported once, and a label that had been detected is released. No label wins by being first or stronger.
+**Rising:**
+
+- **Edge trigger:** the score reaches the activation threshold and stays there for the debounce time.
+- **Peak trigger:** the first score lower than the one before it while both are at or above the activation threshold, that is, the top of the score's climb. The debounce is not used. A run that drops below the threshold without falling back first never rises.
+
+In both cases a detection cannot rise within the cooldown after the last one fell.
+
+**Active and falling:** a detection stays active until the score falls below the release threshold, then falls.
+
+The trainer's replay uses a copy of this rule (`events.detect`). `tests/fixtures/detection_cases.json`, edge and peak cases, keeps the two equal.
+
+**Exclusivity:**
+
+- Several scores of one label in a round go through its detector in time order.
+- Scores of the same moment go through together, so labels declared exclusive are judged on the same moment.
+- If two exclusive labels are detected together, **both are held off**, a conflict is reported once, and a label that had been detected is released. No label wins by being first or stronger.
 
 ## Modes and safety
 
@@ -71,7 +141,7 @@ Labels that cannot both be true are declared as an exclusivity group, separately
 
 `import_label_model(path)` takes a folder holding `manifest.json` and the one model file it names, and adds the model as a **Draft**. It never approves or activates anything.
 
-1. **Stage.** Only those two files are copied, into a private `model-lab/staging/<unique>` folder; every other file in the folder is ignored. A link (symlink) as the folder or either file is refused, as is a model name with a path in it, a manifest over 256 KB or a model over 16 MB. The full bundle validation then runs **on the staged copy**, so what was checked is exactly what is stored. This happens without holding the registry, so detection is not stalled.
+1. **Stage.** Only those two files are copied, into a private `model-lab/staging/<unique>` folder; every other file in the folder is ignored. A link (symlink) as the folder or either file is refused, as is a model name with a path in it, a manifest over 512 KB or a model over 64 MB. The full bundle validation then runs **on the staged copy**, so what was checked is exactly what is stored. This happens without holding the registry, so detection is not stalled.
 2. **Publish.** Refused if the same model bytes were already imported for that label. The staged folder is moved to `model-lab/label-models/<label>-<hash prefix>` with one rename, then the Draft is recorded; the label's project is created (trainer "external import") if it has none, and reused if it has. If the registry cannot be saved, the moved folder is removed again, so disk and registry agree.
 3. **Startup** deletes anything left in staging. A published folder the registry does not know (a crash between the rename and the save) is never trusted or deleted: importing the same bytes again reports it and asks you to move it aside.
 
@@ -79,21 +149,40 @@ Later moves (Draft → Evaluated → Approved → Active) are explicit and go th
 
 ## Training
 
-Training lives in two places with a clean line between them (`apps/desktop/src-tauri/src/label_training.rs`, `crates/label-inference/src/training.rs`, `tools/label-trainer/src/label_trainer/label_train.py`).
+The desktop decides and records; the trainer only trains (`apps/desktop/src-tauri/src/label_training.rs`, `crates/label-inference/src/training.rs`, `tools/label-trainer/src/label_trainer/label_train.py`).
 
-**The desktop decides and records; the trainer only trains.** Before anything runs, `begin_run` fixes and seals, in one saved registry change: the label's project (created if there is none), a **dataset snapshot** (the recordings by content hash, the label roles, the streams and window, and the train/evaluation split) and a started **run**. It refuses, recording nothing, if a label has no role, the target is not marked as the target, a recording is not what it was, or the data cannot be split fairly. The split is deterministic (ordered by the hash of the recording id), holds out about 30%, never shares a recording, and leaves both the target and "something else" on both sides.
+**The desktop.** Before anything runs, `begin_run` seals, in one saved registry change:
 
-The trainer gets a `spec.json` (target, negatives, excludes, recordings, train, evaluation, streams, window, method, seed) and runs `uv run --project tools/label-trainer --extra onnx [--extra torch] label-classifier-train`. It computes the same 55 canonical features the runtime computes, restricted to the streams the model may read; trains; scores the held-out recordings; exports ONNX; checks the file reproduces the trained model (within 1e-3) and uses only operators the runtime can run; and writes `bundle/` (manifest and model), `evaluation.json`, `parity.json` and `result.json`.
+- the label's project;
+- a dataset snapshot: recordings by content hash, label roles, and the PPG + IMU contract (`pinch_start_contract`);
+- a deterministic train/evaluation split by recording, holding out about 30% and leaving both the target and something else on both sides;
+- a started run.
 
-**Training windows slide across label changes, as live ones do** (`windowing: "continuous"`, the default; `"segments"` keeps the older windows that never cross a label). Each window is labelled by how much of it the gesture covers (`windowing.label_by_overlap`): the gesture if it fills half the window or the window holds 80% of it (a quick tap can never fill half a long window), something else if none of it is the gesture, and left out in between, since neither answer is right at a gesture's edge. A window touching a label left out of training is dropped.
+**The trainer** gets a `spec.json` and runs `uv run --project tools/label-trainer label-classifier-train`:
 
-**A model is only kept if it works on recordings it never saw.** The trainer fits the activation threshold (release is 0.15 below it) because scores shift between sessions and a fixed 0.8 can sit above every score of a model that ranks perfectly. It fits it on the **training** recordings, never the held-out ones: they are split by recording into up to five folds, each fold is scored by a model trained on the others, and the threshold that best separates the two kinds of window on those scores (recall minus false-alarm rate, Youden's J, which unlike F1 does not reward flagging everything when most windows are the gesture) is taken (`out_of_fold_threshold`; an edited model keeps its source's threshold, and with a single training recording the default 0.8 is used). The ROC AUC of those out-of-fold scores (`crossCheckRocAuc`) says whether the training recordings agree with each other: under 0.7, a model that did well on the test recordings did so by luck, and it is not kept. `evaluation.json` and the manifest's provenance record where it came from (`thresholdSource`), and the default threshold's numbers are reported too. The held-out recordings are then also **replayed as the runtime would see them** (`events.py`): windows slide across each whole recording regardless of labels, every score goes through a copy of `TemporalDetector` (`tests/fixtures/detection_cases.json` keeps the two equal), and the detections are matched with the labelled gestures, giving gestures caught, the delay, repeats, and false activations per hour of time without the gesture (`evaluation.json`'s `events`). The outcome is `evaluationOnly` (no bundle, the run is finished as EvaluationOnly with the reason, and nothing is registered) if AUC is under 0.7, balanced accuracy under 0.7, more than 10% of other windows are flagged, the held-out recordings hold under 60 s without the gesture, the replay fires more than 30 times an hour without it, or it catches under half the gestures. F1 is no longer a gate: on held-out recordings that are mostly the gesture it looks good for a model that fires on everything (a real run passed with F1 0.98 while flagging every one of its six other windows). A first real run (two pinch recordings, acceleration and gyroscope) produced AUC 0.05, a model that had memorised the training session's posture; with the pulse sensor the same recordings gave AUC 0.99. `movementOnly` (spread and change, not absolute levels) is the defence against posture memorisation; the desktop and the trainer share the rule and are tested against the same list.
+- **Samples.** In each recording it takes:
+  - a positive 880 ms after each start of the target;
+  - as negatives, the same moment after other labels' starts;
+  - points inside holds and quiet time, at least 1.5 s from any hold edge.
+- **Model.** It computes their inputs and fits ExtraTrees: 300 trees, minimum leaf 3, 70% of features per split.
+- **Cut-off.** For a PPG + IMU model:
+  - the training recordings are split into up to five folds, each scored by a model trained without it;
+  - each left-out recording is **replayed as the runtime would run it**: every pulse sample, the peak trigger;
+  - the cut-off taken is the one of 0.30–0.95 that catches the most starts with at most 120 false activations an hour (none within it: the fewest).
+  - A PPG-only spec keeps Youden's J on the left-out moments and the edge trigger.
+- **Testing.** It replays the held-out recordings the same way. A detection 680–1,280 ms after a start catches it.
+- **Bundle.** It writes the bundle and checks the tree file reproduces the trained model (within 1e-6).
+- **Gates.** A model that misses a go-live gate is still written, as Monitor-only:
+  - AUC and balanced accuracy at least 0.7, and the cross-check AUC at least 0.7;
+  - at most 10% of other moments flagged;
+  - at least 60 s without the gesture in the held-out recordings;
+  - at most 30 false activations an hour;
+  - at least half the gestures caught.
+- **Files.** It also writes `evaluation.json` (with `crossCheckEvents`, the replay the cut-off was chosen on), `parity.json`, `inspection.json` (the inputs the trees lean on, every held-out moment's score, and with `research` the learning curve and leave-one-recording-out) and `result.json`.
 
-**Finishing is one saved change too.** The bundle is staged and fully validated like an import, and its features must be exactly those planned. `complete_run` then marks the run finished (with the hashes of its artifacts) and records the model as a Draft whose origin is that run, together or not at all. `fail_run` records why a run produced nothing. A finished run is immutable. Nothing is approved or activated by training.
+**Finishing is one saved change too.** The bundle is staged and validated like an import, its contract must be the one planned, and `complete_run` records the run and the model as a Draft together, or neither. Nothing is approved or activated by training.
 
-**What the runtime can run constrains the exporters.** tract has no scikit-learn `Scaler` or `LinearClassifier`, and could not load the `TreeEnsembleClassifier` that scikit-learn's converter writes. So logistic regression and the scikit-learn MLP are written as plain ONNX by hand (`MatMul`, `Add`, `Relu`, `Sigmoid`, `Sub`, `Concat`), with the feature scaling folded into the first layer so the manifest's preprocessing is always "none"; the PyTorch network bakes its normalisation in and exports with the legacy exporter. Gradient-boosted trees (`gbt`, scikit-learn's `GradientBoostingClassifier`, 150 trees of depth 3, classes balanced by sample weight) are written as matrix arithmetic too (`tree_ensemble_onnx`): each split's feature picked by a one-hot `MatMul` and compared with `LessOrEqual`, the reached leaf of each tree found with one more `MatMul` and a `Relu` (the counts are exact small integers), the leaf values summed and put through a sigmoid. `trained_gbt_bundle` proves the runtime runs it and matches scikit-learn. Real bundles from all three methods are checked into `crates/label-inference/tests/fixtures/trained_*_bundle` (regenerate with `tools/model-bundle-fixture/make_trained_fixtures.py`) and a Rust test validates and scores them against the trainer's own predictions. Writing that test found two real incompatibilities, both fixed.
-
-Known limits: the runtime places samples on the receive clock with an offset estimated from the fastest recent delivery, while a recording keeps the watch's own times, so live windows can sit a few milliseconds off the training ones while that estimate settles after a connection; the runtime's PPG and orientation fusion is shared with it, not re-derived. Recordings made before the watch sent the pulse sensor's timestamps in nanoseconds (October 2026) are repaired when they are read for training (`csv_io.repair_millisecond_ppg_timestamps`); their batches keep the delivery jitter of the time (pulse samples 20 to 70 ms apart instead of a steady 40), which newer recordings do not have. Nothing here has been run against recordings from a real watch, so the scores are only as meaningful as your recordings.
+**Startup clean-up.** Models and runs of any other kind (the earlier ONNX models) are removed from the store on startup. Both pinch-start kinds and their runs are kept.
 
 ## Recipes use detections
 
@@ -104,36 +193,21 @@ A recipe step `{ "kind": "model", "label": "snap_fingers", "hold": "held" | "one
 - Resource conflicts work as before: two enabled recipes on the same action are both paused, whatever labels they use. Labels declared mutually exclusive are already both held off inside the runtime.
 - A recipe naming a label that is not loaded cannot start; the Recipes tab shows "Waiting for model" once the runtime has said what it loaded. Nothing is reported before that, and the label name is validated as a slug either way, so a recipe can be written ahead of the model.
 
-## Tests, and what has not been checked
+## Tests
 
-`crates/label-inference` has 43 tests, including a real scikit-learn model exported with `skl2onnx` (`tools/model-bundle-fixture/make_fixture.py` regenerates it) that is validated, matches scikit-learn's output, and runs the whole way from a registry through the pipeline to a rising edge in Live mode.
+- `crates/label-inference`: 88 tests (one ignored, run by hand).
+- `crates/pinch-inference`: 6 tests, against the trainer's shared cases.
+- `tools/label-trainer`: 51 tests.
 
-Not yet done or checked:
+Among them:
 
-- Windows and Linux builds of the crate (see the decision record's correction).
-- Any model from Keras or PyTorch exporters; any model trained on real recordings; behaviour on a real watch's streams.
-- Head-pose input, standardisation preprocessing, and quantised variants.
-- Training on real watch recordings (only synthetic data has been run). Import, review, approval, activation, rollback and the Off/Monitor/Live switch are in the Model Lab's **Label models** card.
-- Importing on a real machine with a bundle from a real exporter other than the scikit-learn fixture.
+- Bundles the trainer made, of each kind, are validated and scored by the live pipeline exactly as the trainer scored them (`tests/fixtures/ppg_onset_bundle`, `ppg_imu_onset_bundle`; regenerate with `tools/label-trainer/tests/make_runtime_bundle.py`).
+- The motion model is fed with motion arriving 60 ms behind the pulse and a pulse clock 7 s behind the watch's.
+- It detects the synthetic trace's pinch and not its fists.
+- **On real recordings:** `a_real_bundle_scores_a_real_recording_as_the_trainer_did` (ignored; set `PPG_E2E_BUNDLE` and `PPG_E2E_TRACE`) was run on a model trained from the real recordings and two held-out 10-17 recordings. It scored about 1,365 decisions each, with a largest difference of 6e-17.
 
-## Convolutional models
+**Not yet checked:**
 
-A model can read the window itself instead of statistics of it. Its manifest has `input.grid = {steps}` and `input.features` lists channels (`ppg_green`, `accel_x`, ...). The model's input is one flat row of `channels x steps` numbers, channel after channel, which its first operation folds back into rows; the per-channel scaling and any centring on the window's own mean are inside the model. The runtime builds that row with `pinch_inference::build_grid` from the same shared buffers (only the samples that arrived in the window; a pulse channel optionally through the manifest's spike extraction method; the samples laid onto the steps by linear interpolation, at their own timestamps when the manifest's `input.grid.timing` is `"time"`, what the trainer now writes, or taken as evenly spaced when it is `"samples"` or absent, as for every model trained before; a channel with no samples is zeros). The trainer builds it with `label_trainer.grid.build_grid`, and `tools/label-trainer/tests/fixtures/grid_cases.json` keeps the two equal. The windows' length is the model's own `window.durationMs`, as for every model. The operators a convolutional export may use are `Conv`, `ReduceMean` and `ReduceMax` on top of the dense ones.
-
-## Designing a network, and watching it train
-
-A training request can carry `network` (hidden layers with units and activation, convolution layers with filters, width and activation, pooling, dropout, learning rate, rounds, batch size, weight decay, class balancing, augmentation) and `features` (an explicit subset of the inputs). The desktop checks `network` in `network_spec.rs` and the trainer again in `network.py`, with the same limits; anything left out takes the method's own default, which is what the method trained with before it could be set. Every activation and layer a design can produce is an operator the runtime runs (`Relu`, `Tanh`, `Sigmoid`, `LeakyRelu`, `Conv`, `ReduceMean`, `ReduceMax`, plus the dense ones), and `trained_designed_dense_bundle` and `trained_designed_cnn_bundle` in `crates/label-inference/tests/fixtures` prove the runtime scores them the way the exported file does. While training, the PyTorch networks print `@curve {json}` lines (loss on the training windows, and, for display only, loss and ROC AUC on the held-out ones); the desktop draws them and the trainer saves them as `training_curve.json` and in the manifest's provenance (`network`, `parameters`).
-
-## Inspecting a model
-
-After a deployable model is written, the trainer also writes `inspection.json` next to its other run files (`training-runs/<run>/`; recorded as an `inspection` artifact of the run). `label_trainer/inspection.py` extracts the weights of any of the methods, re-runs the model's forward pass in numpy and refuses to write the file if that differs from the model by more than 1e-3 on the held-out windows (`forwardMaxAbsDifference`). It contains the inputs' scaling, every layer's weights, permutation importance on the held-out windows, a few chosen held-out windows with each input's value, each layer's output and per-input contributions (or, for a convolutional model, an occlusion map), the training curve, and the score of every held-out window with its recording. `inspect_label_model` returns that with the model's manifest; an imported model, or one trained before this existed, has the manifest only. Writing it is an extra: if it fails, the model is still shipped. Real examples are kept in `apps/desktop/src/features/model-lab/fixtures` (regenerate with `tools/model-bundle-fixture/make_inspection_fixtures.py`), and the Inspect view's tests parse them, so the trainer's and the view's idea of the format cannot drift apart.
-
-The inspection's `evaluation` carries the score and true label of every held-out window with its recording, which is all the Inspect view's charts need: ROC and precision-recall curves, the cut-off sweep, calibration and the per-recording table are plain functions of those scores (`evaluation.ts`), and a test pins them to the trainer's own metrics on the real fixtures. With `research: true` in the spec the trainer also retrains the model (`research.py`) on shares of the training windows and leaving each recording out in turn, and adds `research` to the inspection; it is an extra like the inspection itself.
-
-## Editing a trained model
-
-The trainer keeps each trained model's parameters next to its results (`model.pkl` for scikit-learn, `model.pt` for PyTorch) and the desktop keeps the training request (`request.json`). `start_label_edit` rebuilds the same plan from that request (same recordings, so the same split), adds `edit: {fromDir, fromModel, edits}` to the spec and starts the trainer, which restores the model, applies the edits (`edits.py`: switch an input off, set a weight or bias, set a filter weight, silence a neuron or filter; each checked against the model, and nothing is applied if any one does not fit), exports it with the same ONNX export and parity check, scores it on the same held-out windows, and writes the bundle and an inspection whose `edit` section carries the edits in words and the metrics before and after. From there it is an ordinary training run: it is recorded, staged and registered as a new Draft whose manifest provenance names the model it came from (`editedFrom`, `edits`); the original is never modified. An imported model has no parameters here and is refused.
-
-## Raw columns and fine-tuning
-
-A dense method (logistic regression, either neural network) can read the dataset's own columns instead of statistics: the spec's `inputMode: "raw"` makes the trainer build each window with `grid.build_grid` (the same builder and parity cases as the convolutional method, with 1 to 64 steps; one step is the latest reading of each column) and feed the flat row of `columns x steps` numbers to the model, whose scaling is per input neuron. The manifest then carries `input.grid = {steps}` and the runtime reads such a model through the same grid path as a convolutional one; `trained_raw_columns_bundle` proves it scores the way the exported file does. The inspection lists the inputs per column (with their neuron count), measures importance and per-window contributions per column, and keeps the first layer's weights per neuron. Fine-tuning (`fineTune` in an edit job, PyTorch methods only) restores the model, applies the edits, notes which weights the edits changed and pins them (`pins_from`), then trains further with the chosen conv/dense layers frozen and the pins put back after every optimiser step, with the scaling kept as it was.
+- the motion model on a real watch's live streams;
+- Windows and Linux builds;
+- any recording with the IMU above 50 Hz.

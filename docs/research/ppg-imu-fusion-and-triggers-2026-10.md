@@ -138,7 +138,7 @@ Point 1 is built: Model Lab now trains the PPG + IMU model and the runtime fires
 
 - **Inputs.** The 1,701 PPG features, then 1,032 motion features (`imu_onset.py`, mirrored by `crates/pinch-inference/src/imu_onset.rs`), with both grids ending at the decision's PPG sample. Live, each pulse sample is placed on the watch clock the motion is stamped with, as the recorder does. A decision waits until the motion up to it has arrived.
 - **Trigger and cut-off.** The trigger is peak. The cut-off is the one that, replayed over training recordings each scored by a model that had not seen it, catches the most starts with at most 120 false activations an hour.
-- **Earlier models.** PPG-only models trained before this keep running unchanged.
+- **Earlier models.** PPG-only models trained before this keep running, with the same inputs and edge trigger. Like every model, they now decide on every pulse sample (see below).
 
 **Checks:**
 
@@ -152,6 +152,46 @@ Point 1 is built: Model Lab now trains the PPG + IMU model and the runtime fires
   - Its replay of the training recordings caught 22% of pinches at 1.6 false activations a minute.
   - On the 10-17 recordings it caught 10% of pinches. Those recordings' labels run 0.7–1.3 s late, so this is expected.
   - It is kept as Monitor-only.
+
+## Findings from building it
+
+Building the model into the app turned up these, beyond the studies above.
+
+1. **Live, the pulse and the motion are on different clocks.**
+   - The pulse sensor stamps its samples with the Samsung SDK's clock. The motion samples, and every watch message, use the watch's `elapsedRealtimeNanos`.
+   - The recorder already maps each pulse sample onto the watch clock with the smallest send-time minus newest-sample offset seen in the last 30 s (`SourceClockMap`), so the recordings line up within about 130 ms.
+   - The runtime did not need this while models read the pulse alone. A model that reads both does, so the runtime now applies the same rule from each batch's send time.
+   - With that, the live path scores real held-out recordings exactly as the trainer does.
+2. **The two streams arrive separately, so a decision has to wait.**
+   - Motion comes in batches every 100 ms and the pulse every 100 ms (10 Hz flush), independently.
+   - A decision made as soon as its pulse sample arrives would hold the last motion sample over the missing ones, a window the trainer never saw. A decision therefore waits until the motion up to its moment has arrived, about 0.1 s of extra delay at most.
+   - If the motion stops for more than 1 s, the model reports a stale stream instead of deciding without it.
+3. **The runtime only decided on the newest pulse sample of each batch.**
+   - That is about 10 decisions a second where the trainer replays 25.
+   - It now decides on every sample, in order. Up to 50 waiting samples are handled per round, older ones are skipped.
+   - Scores from the same moment go through the detectors together, so labels that cannot coexist are still judged on the same moment.
+   - Old PPG-only models' detections can shift slightly because of this.
+4. **The training sample leaves no negatives just after a start, so the score rises early.**
+   - Positives are taken 880 ms after each start. Negatives inside holds are taken at least 1.5 s from either edge.
+   - Nothing in training tells a moment 200 ms after a pinch's start from one 880 ms after. On synthetic recordings the score sat at 1.0 from about +200 ms to +1.4 s.
+   - There, the edge rule fired at +200 ms, before the scoring window. The peak rule fired at the end of the plateau, after it. Both missed.
+   - On real recordings the score peaks nearer +900 ms (median latency 900–918 ms in the checks), so the peak rule works there. But this is also why the edge rule fires early on real pinches (study 2).
+   - Taking negatives from the first 0.5 s of each hold should sharpen the timing for both rules. It is untested.
+5. **The startup clean-up would have deleted the old models.**
+   - On startup the app removes every model and training run that is not of a kind it runs.
+   - Changing the training contract alone would have purged every PPG-only model and its runs. Both kinds are now recognised.
+6. **The IMU is recorded at 50 Hz, not 100.** One recording (2026-10-14T00-54-06) is at 100 Hz. That is too slow to see the brief vibration of fingertip contact (see point 4 of *What this means*).
+7. **The cost is small.** A decision, 2,733 features and 300 trees, takes about 0.25 ms in a release build, so 25 a second per model is negligible.
+
+## Where this leaves the project
+
+- **The best model these recordings support is now in the app.** It catches about a quarter to a third of pinches at 1–2 false activations a minute on recordings it did not see. Every model trained on the current recordings will be Monitor-only, which is right.
+- **Nothing here is an untouched test.** All 37 recordings were used to choose the method. The one-shot test on a new day (2026-10-14, [held-out test](ppg-onset-heldout-test-2026-10-14.md)) gave 0.60–0.64 AUC with the earlier PPG techniques. Expect the same kind of drop for this model on new recordings.
+- **The next gains come from data, in this order:**
+  1. long everyday-movement sessions as negatives, with hard-negative mining from this model's Monitor detections;
+  2. camera-timed pinch labels, so each recording's label lag (−1.4 to +0.85 s in the audit) is measured rather than guessed;
+  3. a higher IMU rate;
+  4. one or two new days kept sealed for a final test.
 
 ## Reproducing
 

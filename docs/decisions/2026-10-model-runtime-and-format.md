@@ -5,6 +5,8 @@
 
 **Update, 2026-10-19:** the app now trains and runs one model, the PPG pinch-start model (multi-scale z-score derivatives into ExtraTrees). ONNX could not carry it: `tract` has no tree-ensemble operator, and writing hundreds of deep trees as matrix arithmetic needs gigabytes. A bundle's model is now `model.trees`, plain node arrays the runtime walks (`crates/label-inference/src/trees.rs`), still data and never code, hashed and validated as before. The rest of this decision (in-process, no Python at runtime, the bundle contract and lifecycle) stands; the sections below about ONNX and `tract` describe the earlier models.
 
+**Update, 2026-10-21:** Model Lab now trains the PPG + IMU pinch-start model: the pulse features plus 1,032 motion features, with the peak trigger. The bundle names its kind by its preprocessing (`ppg_imu_onset`, or `ppg_multiscale_onset` for the PPG-only model, which still runs); see [label inference](../architecture/label-inference.md).
+
 ## Context
 
 Model Lab is moving from one three-class pinch model to **one binary model per label** (output 0 = absent, 1 = present), several of them active at once, trained by interchangeable backends, and fed from inputs the user chooses.
