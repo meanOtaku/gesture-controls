@@ -139,11 +139,12 @@ const WATCH_PAUSE_QUIET_MS = 1500;
 const MOTION_CLOCK_JUMP_MS = 5_000;
 export const MAX_VISIBLE_SAMPLES = 600;
 /**
- * The fast live charts show the same span of time, whatever their rate: 600 samples were 24 s of PPG at 25 Hz but a few
- * seconds of motion. The slow ones (heart rate, temperature, about one value a second) keep their last 600 values.
+ * The fast motion charts show the last 6 s, whatever their rate (600 samples would be only a few seconds of motion). The
+ * PPG chart keeps its last 600 samples (24 s at 25 Hz), long enough to see the pulse's slower changes, and the slow ones
+ * (heart rate, temperature, about one value a second) their last 600 values.
  */
 export const LIVE_WINDOW_MS = 6_000;
-const LIVE_WINDOW_SERIES: ReadonlySet<TelemetrySeries> = new Set(["head", "watchOrientation", "watchAcceleration", "ppg"]);
+const LIVE_WINDOW_SERIES: ReadonlySet<TelemetrySeries> = new Set(["head", "watchOrientation", "watchAcceleration"]);
 export const MAX_CSV_ROWS = 200_000;
 export const ESTIMATED_BYTES_PER_CSV_ROW = 200;
 const DEFAULT_PUBLISH_INTERVAL_MS = 66;

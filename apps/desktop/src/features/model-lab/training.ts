@@ -18,12 +18,12 @@ export const PULSE_MODEL = {
     { title: "How it changes", detail: "Slope, curvature and jerk of each, from the previous 9 samples: 1,701 inputs" },
     { title: "Motion", detail: "Accelerometer and gyroscope, 50 times a second, summarised over 0.3, 0.6 and 1.3 s: 1,032 inputs" },
     { title: "ExtraTrees", detail: "300 randomised trees vote on “a gesture just started”" },
-    { title: "Peak trigger", detail: "Fires when the vote stops rising above the cut-off" },
+    { title: "Peak trigger", detail: "Fires when the vote falls back after reaching the cut-off" },
   ],
   inputs: 2733,
-  /** What the app's model scored on 37 recordings and 20 recording-disjoint splits, firing on the peak at a cut-off of 0.75
+  /** What the app's model scored on 37 recordings and 20 recording-disjoint splits, firing on the peak at a cut-off of 0.8
    * (docs/research/artifacts/ppg-benchmark-2026-10/ppg-imu-fusion/app-definition-check.json). */
-  research: { worstAuc: 0.853, meanAuc: 0.898, recall: 0.373, falsePerMinute: 1.7 },
+  research: { worstAuc: 0.853, meanAuc: 0.898, recall: 0.372, falsePerMinute: 1.5 },
 } as const;
 
 export interface TrainRequest {

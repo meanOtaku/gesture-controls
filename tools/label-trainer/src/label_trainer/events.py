@@ -23,8 +23,8 @@ class Policy:
     debounce_ms: int = 0
     cooldown_ms: int = 0
     # "edge": rise when the score reaches the activation threshold (held for the debounce time). "peak": rise on the first
-    # score that is lower than the one before it, while both are at or above the activation threshold, so a detection
-    # comes at the top of the score's climb rather than on its way up (the debounce is not used).
+    # score lower than the one before it once the score has reached the activation threshold (wherever the fall lands), so
+    # a detection comes at the top of the score's climb rather than on its way up (the debounce is not used).
     trigger: str = "edge"
 
 
@@ -32,8 +32,8 @@ def detect(times_ns: list[int] | np.ndarray, scores: list[float] | np.ndarray, p
     """The detections in a stream of scores, as (rising time, falling time or None if still on at the end).
 
     A detection rises when the score has stayed at or above the activation threshold for the debounce time (or, with the
-    peak trigger, when it first falls back while still at or above it), and not within the cooldown after the last one
-    fell; it falls when the score drops below the release threshold."""
+    peak trigger, when it first falls back after reaching it), and not within the cooldown after the last one fell; it
+    falls when the score drops below the release threshold."""
     if policy.trigger not in ("edge", "peak"):
         raise ValueError(f"unknown trigger {policy.trigger!r}")
     detections: list[tuple[int, int | None]] = []
@@ -49,17 +49,18 @@ def detect(times_ns: list[int] | np.ndarray, scores: list[float] | np.ndarray, p
                 detections.append((active_since, at))
                 active_since, last_fall = None, at
             continue
-        if score < policy.activation:
-            pending_since = previous = None
-            continue
         if last_fall is not None and at - last_fall < cooldown_ns:
             pending_since = previous = None
             continue
         if policy.trigger == "peak":
+            # `previous` is the last score while the climb is at or above the threshold.
             if previous is not None and score < previous:
                 active_since, previous = at, None
             else:
-                previous = score
+                previous = score if score >= policy.activation else None
+            continue
+        if score < policy.activation:
+            pending_since = None
             continue
         if pending_since is None:
             pending_since = at

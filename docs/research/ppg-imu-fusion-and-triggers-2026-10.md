@@ -137,7 +137,7 @@ PPG alone shows the same pattern: edge at 0.5 goes from 0.413 and 15.09 a minute
 Point 1 is built: Model Lab now trains the PPG + IMU model and the runtime fires it on the peak.
 
 - **Inputs.** The 1,701 PPG features, then 1,032 motion features (`imu_onset.py`, mirrored by `crates/pinch-inference/src/imu_onset.rs`), with both grids ending at the decision's PPG sample. Live, each pulse sample is placed on the watch clock the motion is stamped with, as the recorder does. A decision waits until the motion up to it has arrived.
-- **Trigger and cut-off.** The trigger is peak. The cut-off is the one that, replayed over training recordings each scored by a model that had not seen it, catches the most starts with at most 120 false activations an hour.
+- **Trigger and cut-off.** The trigger is peak. The cut-off is the one that, replayed over training recordings each scored by a model that had not seen it, catches the most starts with at most 2 false activations per minute of recording. When none stays within that, it is the one that catches the most starts less its false activations. (Revised 2026-10-22; see below.)
 - **Earlier models.** PPG-only models trained before this keep running, with the same inputs and edge trigger. Like every model, they now decide on every pulse sample (see below).
 
 **Checks:**
@@ -146,6 +146,7 @@ Point 1 is built: Model Lab now trains the PPG + IMU model and the runtime fires
   - worst-split AUC 0.853 and mean 0.898 (research 0.837 / 0.892);
   - 0.236 of pinches caught within 1 false activation a minute (research 0.245);
   - 0.373 within 2 a minute (research 0.378).
+  - With the revised peak trigger (2026-10-22): 0.213 / 0.301 / 0.372 within 0.5 / 1 / 2 a minute.
 - The Rust live path scores two real held-out recordings exactly as the trainer does (largest difference 6e-17), with motion arriving 60 ms after the pulse.
 - **A model trained in the app on these recordings,** holding out the five 10-17 recordings:
   - The cut-off came out at 0.85.
@@ -182,6 +183,43 @@ Building the model into the app turned up these, beyond the studies above.
    - Changing the training contract alone would have purged every PPG-only model and its runs. Both kinds are now recognised.
 6. **The IMU is recorded at 50 Hz, not 100.** One recording (2026-10-14T00-54-06) is at 100 Hz. That is too slow to see the brief vibration of fingertip contact (see point 4 of *What this means*).
 7. **The cost is small.** A decision, 2,733 features and 300 trees, takes about 0.25 ms in a release build, so 25 a second per model is negligible.
+
+## Fix: the first models caught almost nothing live (2026-10-22)
+
+The first PPG + IMU model trained in the app (15 training and 6 held-out recordings, pinch against fist and hand-open) detected almost no pinches.
+
+**The model was fine:**
+
+- Held-out AUC was 0.996.
+- On the 6 held-out recordings, 94% of pinches pushed the score to 0.5 or more and 79% to 0.8, peaking a median 880 ms after the start, exactly where it is trained to.
+
+**The cut-off was the problem.** Two rules combined to push it to 0.95, where the peak trigger caught 17% (14 of 84):
+
+1. **The budget was counted per hour without a gesture.**
+   - These recordings are packed with gestures, so the 15 training recordings held only 3 minutes without one.
+   - 10 false activations there count as 197 an hour, over the 120 allowed, at every cut-off.
+   - Nothing met the budget, and the fallback took the cut-off with the fewest false activations: the highest on offer.
+   - The research counts false activations per minute of the whole recording. The budget now does too (2 a minute).
+   - The fallback is now the cut-off that catches the most starts less its false activations, never simply the highest.
+2. **The peak trigger needed the fall to stay above the cut-off.**
+   - A score that just touched 0.95 and fell straight back below it never fired.
+   - It now fires on the first fall after the score has reached the cut-off, wherever the fall lands.
+
+**Results.** Replayed on the 6 held-out recordings with the same model:
+
+| Cut-off | Old peak rule | New peak rule | Edge rule |
+|---:|---:|---:|---:|
+| 0.95 | 14/84 (17%), 1.1 false/min | 30/84 (36%), 1.4 false/min | 29/84 (35%), 1.6 false/min |
+| 0.90 | 34/84 (40%), 1.4 false/min | 42/84 (50%), 2.3 false/min | 35/84 (42%), 3.6 false/min |
+| 0.70 | 43/84 (51%), 3.2 false/min | 47/84 (56%), 3.2 false/min | 24/84 (29%), 7.3 false/min |
+
+**Retrained with both fixes:**
+
+- The cut-off came out at 0.9: 57 of 224 training starts caught at 1.5 false activations a minute.
+- On the held-out recordings it caught 42 of 84 pinches (50%, up from 17%) with 13 false activations (2.3 a minute).
+- It is still Monitor-only: the go-live gate counts false activations per hour without a gesture, and these recordings have 66 s of that.
+
+**On the benchmark.** The new peak rule raised the pinches caught within 0.5 and 1 false activation a minute from 0.156 / 0.236 to 0.213 / 0.301. Within 2 a minute it stayed at 0.37 (`app_fusion_check.py`).
 
 ## Where this leaves the project
 

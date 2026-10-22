@@ -8,7 +8,7 @@ The model (research: `docs/research/ppg-imu-fusion-and-triggers-2026-10.md`):
     -> ExtraTrees (300 trees) -> a detection at the top of the score's climb (the peak trigger)
 
 The cut-off is the one that, replayed over training recordings the model did not see, catches the most starts while firing
-by mistake at most `TARGET_FALSE_ACTIVATIONS_PER_HOUR`. A spec whose sources are the pulse sensor alone trains the earlier
+by mistake at most `TARGET_FALSE_ACTIVATIONS_PER_MINUTE`. A spec whose sources are the pulse sensor alone trains the earlier
 PPG-only model instead (its cut-off from Youden's J, the edge trigger), so its runs can be repeated.
 
 It fires about 0.9 s after a gesture starts. The desktop owns the decisions that must be recorded and cannot change
@@ -78,8 +78,9 @@ WINDOW_MS = ppg_onset.GRID_TICKS * ppg_onset.TICK_NS // 1_000_000
 STRIDE_MS = ppg_onset.TICK_NS // 1_000_000
 MIN_WINDOW_SAMPLES = 100
 # The PPG + IMU model's cut-off: the most starts caught, replayed over training recordings each scored by a model that did not
-# see it, while firing by mistake at most this often (2 a minute: the operating point the research compared rules at).
-TARGET_FALSE_ACTIVATIONS_PER_HOUR = 120.0
+# see it, while firing by mistake at most this often per minute of recording (the operating point the research compared
+# rules at, counted as it counts them).
+TARGET_FALSE_ACTIVATIONS_PER_MINUTE = 2.0
 THRESHOLD_CANDIDATES = tuple(round(t, 2) for t in np.arange(0.30, 0.951, 0.05))
 
 
@@ -278,7 +279,7 @@ def out_of_fold_threshold(spec: Spec, train: Examples, recordings: dict[str, Rec
     """The cut-off, chosen without looking at the held-out recordings: models trained on all but a group of the training
     recordings score the group left out, and the cut-off is chosen on those scores. For a motion model, those models also
     replay the recordings they left out as the runtime would, and the cut-off is the one that catches the most starts while
-    firing by mistake at most TARGET_FALSE_ACTIVATIONS_PER_HOUR (`budget_threshold`); for a PPG-only model it is Youden's J
+    firing by mistake at most TARGET_FALSE_ACTIVATIONS_PER_MINUTE (`budget_threshold`); for a PPG-only model it is Youden's J
     on the left-out decisions. Returns it, where it came from ("trainingRecordings", or "default" when the training
     recordings are too few to judge each other), the ROC AUC of the left-out decisions, and (motion) the replay at the
     chosen cut-off."""
@@ -319,17 +320,22 @@ def out_of_fold_threshold(spec: Spec, train: Examples, recordings: dict[str, Rec
 
 def budget_threshold(spec: Spec, timelines: list[tuple[Recording, np.ndarray, np.ndarray]]) -> tuple[float, dict[str, Any]]:
     """Of THRESHOLD_CANDIDATES, the cut-off whose replay of `timelines` (each recording's decision times and the scores a
-    model that did not see it gave them) catches the most starts with at most TARGET_FALSE_ACTIVATIONS_PER_HOUR false
-    activations (ties: the higher cut-off); when none stays within it, the one with the fewest. Returns it and its replay."""
-    replays = {t: summarise([detections(spec, r, times, scores, policy_for(t, spec.trigger)) for r, times, scores in timelines])
-               for t in THRESHOLD_CANDIDATES}
-    per_hour = lambda e: e["falseActivationsPerHour"] if e["falseActivationsPerHour"] is not None else 0.0  # noqa: E731
-    within = [t for t, e in replays.items() if per_hour(e) <= TARGET_FALSE_ACTIVATIONS_PER_HOUR]
+    model that did not see it gave them) catches the most starts with at most TARGET_FALSE_ACTIVATIONS_PER_MINUTE false
+    activations per minute of recording, as the research counts them (ties: the higher cut-off). When none stays within
+    it, the one that catches the most starts for its false activations (caught less false; ties: the higher cut-off), never
+    simply the highest: on recordings packed with gestures that would catch almost none. Returns it and its replay."""
+    minutes = sum((times[-1] - times[0]) / 60e9 for _, times, _ in timelines)
+    replays = {}
+    for t in THRESHOLD_CANDIDATES:
+        replay_ = summarise([detections(spec, r, times, scores, policy_for(t, spec.trigger)) for r, times, scores in timelines])
+        replays[t] = {**replay_, "recordingMinutes": minutes,
+                      "falseActivationsPerMinute": replay_["falseActivations"] / minutes if minutes > 0 else 0.0}
+    within = [t for t, e in replays.items() if e["falseActivationsPerMinute"] <= TARGET_FALSE_ACTIVATIONS_PER_MINUTE]
     if within:
         best = max(within, key=lambda t: (replays[t]["caught"], t))
     else:
-        best = min(replays, key=lambda t: (per_hour(replays[t]), -t))
-    return float(best), {**replays[best], "targetFalseActivationsPerHour": TARGET_FALSE_ACTIVATIONS_PER_HOUR,
+        best = max(replays, key=lambda t: (replays[t]["caught"] - replays[t]["falseActivations"], t))
+    return float(best), {**replays[best], "targetFalseActivationsPerMinute": TARGET_FALSE_ACTIVATIONS_PER_MINUTE,
                          "withinTarget": bool(within)}
 
 
@@ -532,7 +538,7 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
             "evaluationGestureRecall": (metrics.get("events") or {}).get("gestureRecall"),
             "thresholdSource": metrics["thresholdSource"],
             "thresholdChosenOnEvaluationRecordings": metrics["thresholdChosenOnEvaluationRecordings"],
-            **({"targetFalseActivationsPerHour": TARGET_FALSE_ACTIVATIONS_PER_HOUR} if spec.motion else {}),
+            **({"targetFalseActivationsPerMinute": TARGET_FALSE_ACTIVATIONS_PER_MINUTE} if spec.motion else {}),
             "labelOffsetMs": spec.label_offset_ms,
         },
     }

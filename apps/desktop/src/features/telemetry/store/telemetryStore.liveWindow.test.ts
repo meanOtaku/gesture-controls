@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LIVE_WINDOW_MS, telemetryStore } from "./telemetryStore";
+import { LIVE_WINDOW_MS, MAX_VISIBLE_SAMPLES, telemetryStore } from "./telemetryStore";
 
 let now = 0;
 beforeEach(() => {
@@ -19,15 +19,14 @@ function ppg(sequence: number, endNs: number, n: number) {
 }
 
 describe("the live charts' span", () => {
-  it("shows the last 6 s of PPG, not the last 600 samples (24 s at 25 Hz)", () => {
-    for (let second = 1; second <= 20; second += 1) {
+  it("keeps the last 600 PPG samples (24 s at 25 Hz), not just the last 6 s", () => {
+    for (let second = 1; second <= 30; second += 1) {
       now += 1000;
       telemetryStore.ingestPpgBatch(ppg(second, 5_000_000_000 + second * 1_000_000_000, 25) as never);
     }
     const at = telemetryStore.getSeries("ppg").map((p) => p.at);
-    expect(at.length).toBeGreaterThan(140);
-    expect(at.length).toBeLessThan(160);
-    expect(at[at.length - 1] - at[0]).toBeLessThanOrEqual(LIVE_WINDOW_MS);
+    expect(at).toHaveLength(MAX_VISIBLE_SAMPLES);
+    expect(at[at.length - 1] - at[0]).toBeGreaterThan(LIVE_WINDOW_MS);
   });
 
   it("keeps every value of a slow series such as heart rate", () => {

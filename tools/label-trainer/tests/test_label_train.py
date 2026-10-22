@@ -45,7 +45,7 @@ def test_a_motion_model_reads_the_pulse_and_motion_and_detects_on_the_peak(tmp_p
     assert metrics["rocAuc"] > 0.9 and metrics["thresholdSource"] == "trainingRecordings"
     # The cut-off was chosen on a replay of the training recordings, each scored by a model that had not seen it.
     cross = metrics["crossCheckEvents"]
-    assert cross["gestures"] > 0 and cross["targetFalseActivationsPerHour"] == lt.TARGET_FALSE_ACTIVATIONS_PER_HOUR
+    assert cross["gestures"] > 0 and cross["targetFalseActivationsPerMinute"] == lt.TARGET_FALSE_ACTIVATIONS_PER_MINUTE
     events = metrics["events"]
     assert events["policy"]["trigger"] == "peak"
     assert events["gestures"] > 0 and events["caught"] / events["gestures"] >= 0.5
@@ -55,23 +55,28 @@ def test_a_motion_model_reads_the_pulse_and_motion_and_detects_on_the_peak(tmp_p
 def test_the_cut_off_catches_the_most_starts_within_the_false_activation_target() -> None:
     def summary(caught: int, false: int) -> dict:
         return {"recordings": 1, "gestures": 10, "caught": caught, "gestureRecall": caught / 10, "repeats": 0, "medianLatencyMs": 900.0,
-                "falseActivations": false, "negativeSeconds": 3600.0, "falseActivationsPerHour": float(false)}
-    table = {t: summary(caught, false) for t, caught, false in [(0.3, 9, 400), (0.5, 8, 150), (0.6, 7, 110), (0.7, 7, 60), (0.8, 4, 20)]}
-    original = lt.summarise
+                "falseActivations": false, "negativeSeconds": 60.0, "falseActivationsPerHour": float(false) * 60}
+    # Ten minutes of recording: the target is 20 false activations.
+    table = {t: summary(caught, false) for t, caught, false in [(0.3, 9, 40), (0.5, 8, 25), (0.6, 7, 20), (0.7, 7, 12), (0.8, 4, 5)]}
+    ten_minutes = np.array([0, 600 * 10**9])
+    original = (lt.summarise, lt.detections, lt.THRESHOLD_CANDIDATES)
     try:
         lt.summarise = lambda per_recording: per_recording[0]
+        lt.detections = lambda spec, r, times, scores, policy: table[policy.activation]
+        lt.THRESHOLD_CANDIDATES = tuple(table)
         spec = lt.Spec("pinch", [], [], {}, [], [], False, 17)
-        pick = lambda t: lt.budget_threshold(spec, [(None, None, t)])  # noqa: E731
-        lt_detections, lt.detections = lt.detections, lambda spec, r, times, scores, policy: table.get(policy.activation, summary(0, 0))
-        candidates, lt.THRESHOLD_CANDIDATES = lt.THRESHOLD_CANDIDATES, tuple(table)
-        threshold, events = pick(None)
-        # 0.6 and 0.7 both catch 7 within 120 an hour: the higher cut-off wins the tie.
-        assert threshold == 0.7 and events["withinTarget"]
-        table.update({t: summary(9, 500) for t in table})
-        threshold, events = pick(None)
-        assert threshold == 0.8 and not events["withinTarget"]      # none within it: the fewest false activations
+        threshold, events = lt.budget_threshold(spec, [(None, ten_minutes, None)])
+        # 0.6 and 0.7 both catch 7 within 2 a minute: the higher cut-off wins the tie.
+        assert threshold == 0.7 and events["withinTarget"] and events["falseActivationsPerMinute"] == 1.2
+        # None within it: the most caught less false (0.8: 6 - 25 = -19 beats 0.7: 7 - 30 = -23).
+        table.update({0.3: summary(9, 60), 0.5: summary(8, 50), 0.6: summary(7, 40), 0.7: summary(7, 30), 0.8: summary(6, 25)})
+        threshold, events = lt.budget_threshold(spec, [(None, ten_minutes, None)])
+        assert threshold == 0.8 and not events["withinTarget"]
+        # Never simply the highest cut-off when a lower one catches far more for its false activations.
+        table.update({0.7: summary(9, 25), 0.8: summary(1, 21)})
+        assert lt.budget_threshold(spec, [(None, ten_minutes, None)])[0] == 0.7
     finally:
-        lt.summarise, lt.detections, lt.THRESHOLD_CANDIDATES = original, lt_detections, candidates
+        lt.summarise, lt.detections, lt.THRESHOLD_CANDIDATES = original
 
 
 def test_a_motion_model_without_motion_samples_has_nothing_to_learn_from(tmp_path: Path) -> None:

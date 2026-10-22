@@ -80,13 +80,14 @@ def _detection_cases() -> list[dict]:
     return cases
 
 
-def test_the_peak_trigger_rises_on_the_first_fall_back_above_the_threshold() -> None:
-    times = [i * 40 * MS for i in range(10)]
-    scores = [0.2, 0.6, 0.7, 0.9, 0.85, 0.6, 0.3, 0.75, 0.5, 0.1]
+def test_the_peak_trigger_rises_on_the_first_fall_back_after_reaching_the_threshold() -> None:
+    times = [i * 40 * MS for i in range(12)]
+    scores = [0.2, 0.6, 0.7, 0.9, 0.85, 0.6, 0.3, 0.75, 0.5, 0.1, 0.65, 0.6]
     policy = Policy(0.7, 0.55, trigger="peak")
-    # 0.7 and 0.9 climb; 0.85 is the first fall back while above 0.7, so it rises there, and falls at 0.3 (below 0.55).
-    # 0.75 then stands alone above the threshold, never followed by a lower score above it, so it does not rise.
-    assert detect(times, scores, policy) == [(4 * 40 * MS, 6 * 40 * MS)]
+    # 0.7 and 0.9 climb; 0.85 is the first fall back, so it rises there, and falls at 0.3 (below 0.55). A peak that only
+    # touches the threshold counts too: 0.75 falls straight to 0.5, which rises there (and falls at 0.1). 0.65 never
+    # reached the threshold, so its fall to 0.6 is nothing.
+    assert detect(times, scores, policy) == [(4 * 40 * MS, 6 * 40 * MS), (8 * 40 * MS, 9 * 40 * MS)]
 
 
 def test_the_shared_detection_cases_still_hold() -> None:

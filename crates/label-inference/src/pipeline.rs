@@ -27,8 +27,10 @@ const NS_PER_MS: u64 = 1_000_000;
 const MAX_BUFFERED_SAMPLES: usize = 20_000;
 /// The most pulse samples one model decides on in one evaluation; older ones waiting longer are skipped.
 const MAX_DECISIONS_PER_ROUND: usize = 50;
-/// The motion stream is stale when nothing has arrived for this long (it is sent every 100 ms).
-const MOTION_STALE_MS: u64 = 1_000;
+/// A stream is stale when its newest sample is this old. Decisions are made at the samples' own times, so a batch that
+/// arrives late (Bluetooth delivers the pulse's 10 Hz batches up to a few hundred ms apart) is waited for, not refused;
+/// only a stream that has stopped is. A gap between samples is still judged by the model's `maxGapMs`.
+const STREAM_STALE_MS: u64 = 1_000;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LabelScore {
@@ -370,7 +372,7 @@ impl LabelPipeline {
             return nothing;
         }
         let newest = self.ppg.back().expect("non-empty");
-        if now_ns.saturating_sub(newest.at_ns) > max_gap_ns {
+        if now_ns.saturating_sub(newest.at_ns) > STREAM_STALE_MS * NS_PER_MS {
             return Err(Rejection::SourceStale {
                 source,
                 age_ms: now_ns.saturating_sub(newest.at_ns) / NS_PER_MS,
@@ -390,7 +392,7 @@ impl LabelPipeline {
             });
         }
         let mut previous = start;
-        for at in inside.iter().map(|s| s.at_ns).chain(std::iter::once(now_ns)) {
+        for at in inside.iter().map(|s| s.at_ns) {
             if at.saturating_sub(previous) > max_gap_ns {
                 return Err(Rejection::Gap {
                     source,
@@ -418,7 +420,7 @@ impl LabelPipeline {
                 return nothing; // no motion yet: warming up
             };
             let age = now_ns.saturating_sub(latest.received_ns);
-            if age > MOTION_STALE_MS * NS_PER_MS {
+            if age > STREAM_STALE_MS * NS_PER_MS {
                 return Err(Rejection::SourceStale {
                     source: StreamSource::WatchOrientation,
                     age_ms: age / NS_PER_MS,
@@ -796,7 +798,7 @@ pub(crate) mod tests {
         p.observe_ppg(&batch(&trace, 200, 201), at(199) + 30 * NS_PER_MS).unwrap();
         assert_eq!(p.evaluate(&[&model], at(199) + 30 * NS_PER_MS).0.len(), 1);
         // A stalled stream is reported, then not again until a stride has passed.
-        let late = at(200) + 600 * NS_PER_MS;
+        let late = at(200) + 1_100 * NS_PER_MS;
         assert_eq!(p.evaluate(&[&model], late).1.len(), 1);
         assert!(p.evaluate(&[&model], late + 10 * NS_PER_MS).1.is_empty());
         assert_eq!(p.evaluate(&[&model], late + 40 * NS_PER_MS).1.len(), 1);
@@ -809,7 +811,10 @@ pub(crate) mod tests {
         let origin = trace[0].ts_ns;
         let at = |i: usize| trace[i].ts_ns - origin + 10_000_000_000;
         p.observe_ppg(&batch(&trace, 0, 200), at(199)).unwrap();
-        let (_, stale) = p.evaluate(&[&model], at(199) + 600 * NS_PER_MS);
+        // A batch 600 ms late is waited for; a stream silent for over a second has stopped.
+        let (_, waiting) = p.evaluate(&[&model], at(199) + 600 * NS_PER_MS);
+        assert!(waiting.is_empty(), "{waiting:?}");
+        let (_, stale) = p.evaluate(&[&model], at(199) + 1_100 * NS_PER_MS);
         assert!(matches!(stale[0].reason, Rejection::SourceStale { .. }));
         // 400 ms without samples, then the stream resumes: the window holds a gap.
         let (mut p, _) = configured();

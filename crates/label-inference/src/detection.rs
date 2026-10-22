@@ -1,8 +1,7 @@
 //! Turns a label's stream of probabilities into detections: a rising edge, an active state and a falling edge.
 //!
 //! A score starts a detection when it reaches the activation threshold (held for the debounce time; or, with the peak
-//! trigger, when it first falls back while still at or above it), and not within the cooldown after the last detection
-//! ended. It keeps the detection active until the score falls *below the release
+//! trigger, when it first falls back after reaching it), and not within the cooldown after the last detection ended. It keeps the detection active until the score falls *below the release
 //! threshold*, which is at or under the activation threshold, so a score wobbling between the two does not flicker.
 //!
 //! Labels that cannot both be true (a swipe left and a swipe right) are declared as an [`ExclusivityGroup`], separately
@@ -84,7 +83,7 @@ pub struct TemporalDetector {
     active: bool,
     /// When the score first reached the activation threshold in the current run, while debouncing.
     pending_since_ns: Option<u64>,
-    /// The peak trigger's last score in the current run at or above the activation threshold.
+    /// The peak trigger's last score while the climb is at or above the activation threshold.
     previous: Option<f64>,
     last_fall_ns: Option<u64>,
 }
@@ -115,11 +114,6 @@ impl TemporalDetector {
             }
             return Step::Active;
         }
-        if score < self.thresholds.activation {
-            self.pending_since_ns = None;
-            self.previous = None;
-            return Step::Quiet;
-        }
         let cooling = self.last_fall_ns.is_some_and(|fell| {
             timestamp_ns.saturating_sub(fell) < u64::from(self.thresholds.cooldown_ms) * NS_PER_MS
         });
@@ -129,12 +123,18 @@ impl TemporalDetector {
             return Step::Quiet;
         }
         if self.thresholds.trigger == Trigger::Peak {
+            // `previous` is the last score while the climb is at or above the threshold; the first fall from it rises,
+            // wherever it lands.
             if self.previous.is_some_and(|before| score < before) {
                 self.active = true;
                 self.previous = None;
                 return Step::Rising;
             }
-            self.previous = Some(score);
+            self.previous = (score >= self.thresholds.activation).then_some(score);
+            return Step::Quiet;
+        }
+        if score < self.thresholds.activation {
+            self.pending_since_ns = None;
             return Step::Quiet;
         }
         let since = *self.pending_since_ns.get_or_insert(timestamp_ns);
@@ -440,27 +440,17 @@ mod tests {
     }
 
     #[test]
-    fn the_peak_trigger_rises_on_the_first_fall_back_above_the_threshold() {
+    fn the_peak_trigger_rises_on_the_first_fall_back_after_reaching_the_threshold() {
         let mut d = TemporalDetector::new(Thresholds {
             trigger: Trigger::Peak,
             ..thresholds(0.7, 0.55, 0, 0)
         });
         let steps = run(
             &mut d,
-            &[
-                (0.2, 0),
-                (0.6, 40),
-                (0.7, 80),
-                (0.9, 120),
-                (0.85, 160),
-                (0.6, 200),
-                (0.3, 240),
-                (0.75, 280),
-                (0.5, 320),
-            ],
+            &[(0.2, 0), (0.6, 40), (0.7, 80), (0.9, 120), (0.85, 160), (0.6, 200), (0.3, 240), (0.75, 280), (0.5, 320), (0.1, 360), (0.65, 400), (0.6, 440)],
         );
-        // It climbs to 0.9 and rises at 0.85, the first score lower than the one before it while both are above 0.7. A
-        // lone 0.75 is followed by nothing lower above the threshold, so it never rises.
+        // It climbs to 0.9 and rises at 0.85, its first fall. A peak that only touches the threshold counts too: 0.75
+        // falls straight to 0.5, which rises. 0.65 never reached 0.7, so its fall to 0.6 is nothing.
         assert_eq!(
             steps,
             [
@@ -470,6 +460,9 @@ mod tests {
                 Step::Quiet,
                 Step::Rising,
                 Step::Active,
+                Step::Falling,
+                Step::Quiet,
+                Step::Rising,
                 Step::Falling,
                 Step::Quiet,
                 Step::Quiet

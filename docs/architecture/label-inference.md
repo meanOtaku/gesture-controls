@@ -95,8 +95,8 @@ motion samples -> order/finite checks -> buffer (watch clock)                   
 - The first time, it decides on the newest ready sample. After that, on each one after the last it decided on, at most 50 per round.
 - A PPG + IMU model decides on a sample only when motion at or after its moment has arrived. The streams are sent separately, about every 100 ms each. Deciding earlier would hold stale motion over the missing samples.
 - **Rejections:**
-  - Motion silent for over 1 s is `SourceStale` on `WatchOrientation`.
-  - Pulse quiet longer than `maxGapMs`, a gap inside the window, fewer than `minSamples`, or degraded contact quality reject the window.
+  - A stream silent for over 1 s is `SourceStale` (`WatchPpg` or `WatchOrientation`). A late batch is waited for, not refused: decisions are made at the samples' own times, and Bluetooth delivers the pulse's 10 Hz batches up to a few hundred ms apart.
+  - A gap longer than `maxGapMs` between pulse samples in the window, fewer than `minSamples`, or degraded contact quality reject the window.
   - A rejection ends that label's detection.
 - Until the buffer holds the window (5.6 s of pulse, plus motion), the model is quiet, not rejected.
 
@@ -109,7 +109,7 @@ A label's scores become detections in `TemporalDetector`. The release threshold 
 **Rising:**
 
 - **Edge trigger:** the score reaches the activation threshold and stays there for the debounce time.
-- **Peak trigger:** the first score lower than the one before it while both are at or above the activation threshold, that is, the top of the score's climb. The debounce is not used. A run that drops below the threshold without falling back first never rises.
+- **Peak trigger:** the first score lower than the one before it once the score has reached the activation threshold, wherever that fall lands, that is, the top of the score's climb. The debounce is not used. A peak that only touches the threshold still fires.
 
 In both cases a detection cannot rise within the cooldown after the last one fell.
 
@@ -168,7 +168,7 @@ The desktop decides and records; the trainer only trains (`apps/desktop/src-taur
 - **Cut-off.** For a PPG + IMU model:
   - the training recordings are split into up to five folds, each scored by a model trained without it;
   - each left-out recording is **replayed as the runtime would run it**: every pulse sample, the peak trigger;
-  - the cut-off taken is the one of 0.30–0.95 that catches the most starts with at most 120 false activations an hour (none within it: the fewest).
+  - the cut-off taken is the one of 0.30–0.95 that catches the most starts with at most 2 false activations per minute of recording (none within it: the most starts caught less false activations, never simply the highest).
   - A PPG-only spec keeps Youden's J on the left-out moments and the edge trigger.
 - **Testing.** It replays the held-out recordings the same way. A detection 680–1,280 ms after a start catches it.
 - **Bundle.** It writes the bundle and checks the tree file reproduces the trained model (within 1e-6).

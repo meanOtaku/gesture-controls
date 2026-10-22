@@ -4,9 +4,9 @@ import type { InputWarning } from "../labelModels";
 
 const number = (value: number) => Math.abs(value) >= 100 ? Math.round(value).toLocaleString("en-US") : value.toPrecision(3);
 
-/** How an input is named to a person: "Pulse sensor · green slope against the last 1 s: …". */
+/** How an input is named to a person: "Pulse sensor · green slope against the last 1 s: …" or "Motion · rotation y: …". */
 export function inputTitle(name: string): string {
-  return `Pulse sensor · ${describeInput(name)}`;
+  return `${name.startsWith("imu_") ? "Motion" : "Pulse sensor"} · ${describeInput(name)}`;
 }
 
 /**
