@@ -4,6 +4,9 @@ import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Switch } from "../../../components/ui/switch";
 import { CONTROLLABLE_SENSORS, IMU_SENSOR_IDS, type WatchStatus } from "../../../shared/protocol/events";
 
+/** The pulse sensor's id; its on/off shows in the Watch's pulse status, not a sensor status of its own. */
+const PULSE_SENSOR_ID = "ppg_continuous";
+
 type WatchSensorControlsProps = {
   watchStatus: WatchStatus | null;
   isPending: (key: string) => boolean;
@@ -20,7 +23,9 @@ export function WatchSensorControls({ watchStatus, isPending, onSetSensorEnabled
           <HelpTooltip label="About sensor controls">
             Disabling a sensor stops the Watch from sampling and sending that stream, which can help save
             battery. IMU sensors (orientation, accelerometer, gyroscope) resume immediately when re-enabled;
-            continuous medical trackers may take a moment to reconnect.
+            the pulse sensor and continuous medical trackers may take a moment to reconnect. Gesture models read
+            the pulse sensor and the motion sensors: with either off they cannot score. A switch here lasts until
+            the Watch reconnects; the Settings page keeps it.
           </HelpTooltip>
         </div>
       </CardHeader>
@@ -29,7 +34,9 @@ export function WatchSensorControls({ watchStatus, isPending, onSetSensorEnabled
           {CONTROLLABLE_SENSORS.map(({ id, label }) => {
             const enabled = IMU_SENSOR_IDS.has(id)
               ? watchStatus?.sensorStatus?.[id] ?? true
-              : watchStatus?.medicalStatus?.[id] !== "idle";
+              : id === PULSE_SENSOR_ID
+                ? watchStatus?.ppgState !== "idle"
+                : watchStatus?.medicalStatus?.[id] !== "idle";
             const pending = isPending(`sensor:${id}`);
             return (
               <div className="vector-row flex items-center justify-between gap-3" key={id}>

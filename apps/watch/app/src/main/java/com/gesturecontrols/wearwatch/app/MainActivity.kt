@@ -245,6 +245,8 @@ class MainActivity : AppCompatActivity() {
                 }
                 TRACKER_HEART_RATE_CONTINUOUS, TRACKER_SKIN_TEMPERATURE_CONTINUOUS, TRACKER_EDA_CONTINUOUS ->
                     medicalCollector.setTrackerEnabled(sensor, enabled)
+                // The pulse sensor is driven from the main thread, like its start and stop.
+                TRACKER_PPG_CONTINUOUS -> runOnUiThread { ppgCollector.setEnabled(enabled) }
             }
         }
         watchLink.onSensorRateCommand = { sensor, rateHz ->

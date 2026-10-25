@@ -355,6 +355,7 @@ export const CONTROLLABLE_SENSORS: Array<{ id: string; label: string }> = [
   { id: "orientation", label: "Orientation (rotation vector)" },
   { id: "acceleration", label: "Accelerometer" },
   { id: "gyroscope", label: "Gyroscope" },
+  { id: "ppg_continuous", label: "Pulse (PPG)" },
   { id: "heart_rate_continuous", label: "Heart rate" },
   { id: "skin_temperature_continuous", label: "Skin temperature" },
   { id: "eda_continuous", label: "EDA" },

@@ -134,7 +134,30 @@ class PpgCollector(
             PackageManager.PERMISSION_GRANTED
 
     /** No-op if already started. Reports [PpgState.PERMISSION_REQUIRED] without connecting if BODY_SENSORS is missing. */
+    // The desktop can switch the pulse sensor off (`desktop.set_sensor` for `ppg_continuous`). [wanted] is whether the
+    // app wants it running, so switching it back on resumes it only where it would have been running anyway.
+    private var enabled = true
+    private var wanted = false
+
+    /** Switches the pulse sensor off or back on. Off, it stays off whatever [start] is asked; on, it resumes if wanted. */
+    fun setEnabled(on: Boolean) {
+        if (enabled == on) return
+        enabled = on
+        if (!on) {
+            val keep = wanted
+            stop()
+            wanted = keep
+            _diagnostic.value = "Switched off from the desktop."
+        } else if (wanted) {
+            start()
+        } else {
+            _diagnostic.value = null
+        }
+    }
+
     fun start() {
+        wanted = true
+        if (!enabled) return
         if (started) return
         if (!hasBodySensorsPermission()) {
             _diagnostic.value = "Android BODY_SENSORS permission is required."
@@ -153,6 +176,7 @@ class PpgCollector(
     }
 
     fun stop() {
+        wanted = false
         mainHandler.removeCallbacks(connectionTimeout)
         mainHandler.removeCallbacks(flushTick)
         mainHandler.removeCallbacks(retryRunnable)

@@ -134,7 +134,9 @@ The **Watch** tab is the Watch connection and sensor-control dashboard.
 - Identifies the Watch by the Bluetooth peripheral the desktop discovered (over Wi-Fi, by the Watch's own per-install id), so two Watches are never confused for one another.
 - Shows raw orientation and PPG status when those streams are available.
 - Shows available Samsung health-sensor telemetry, such as heart rate, skin temperature, or EDA, when supported by the device and permissions.
-- Provides immediate enable/disable controls for supported Watch sensor streams.
+- Provides immediate enable/disable controls for supported Watch sensor streams, the pulse sensor (PPG) included. Gesture
+  models read the pulse and motion sensors, so with either off they cannot score. A switch on the Watch tab lasts until the
+  Watch reconnects; the same switches in Settings are kept.
 - The **Watch power** card shows what streaming costs the watch, from counters a watch app from October 2026 on reports
   every few seconds: average current drawn (from the battery's charge counter) and battery percent an hour, the app's CPU
   share, **sensor wakes** (how often motion events reached the app, which hardware batching would cut), each motion

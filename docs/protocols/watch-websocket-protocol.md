@@ -136,7 +136,10 @@ The watch should also handle the initial `desktop.connected` acknowledgement, wh
 
 The desktop can change active Watch inputs without reconnecting. `desktop.set_sensor`
 enables or disables one of `orientation`, `acceleration`, `gyroscope`,
-`heart_rate_continuous`, `skin_temperature_continuous`, or `eda_continuous`.
+`ppg_continuous` (the pulse sensor), `heart_rate_continuous`,
+`skin_temperature_continuous`, or `eda_continuous`. Off, the pulse sensor stays off
+until it is switched back on, and resumes then only if the watch is streaming; its
+status goes to `idle`. A watch build that predates a sensor id ignores the command.
 
 The desktop can request an independent Android sampling rate for each IMU input
 with `desktop.set_sensor_rate`:

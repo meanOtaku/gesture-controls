@@ -840,23 +840,28 @@ mod tests {
     }
 
     #[test]
-    fn ppg_flush_rate_is_independent_of_motion_sensor_enable_state() {
-        // PPG isn't in `watch_sensors_enabled`/`CONTROLLABLE_SENSOR_IDS` at
-        // all (it's controlled purely by rate, see `SENSOR_PPG_FLUSH`), so
-        // disabling every motion sensor must leave its rate untouched.
+    fn ppg_flush_rate_is_independent_of_the_sensors_on_and_off_switches() {
+        // The pulse sensor can be switched off like the others, but switching it (or every motion sensor) off leaves
+        // its flush rate as it was, and a settings file from before it had a switch leaves it on.
         let settings = AppSettings {
             watch_sensors_enabled: HashMap::from([
                 (SENSOR_ORIENTATION.to_string(), false),
                 (SENSOR_ACCELERATION.to_string(), false),
                 (SENSOR_GYROSCOPE.to_string(), false),
+                (SENSOR_PPG_FLUSH.to_string(), false),
             ]),
             ..Default::default()
         };
-        assert!(!CONTROLLABLE_SENSOR_IDS.contains(&SENSOR_PPG_FLUSH));
+        assert!(CONTROLLABLE_SENSOR_IDS.contains(&SENSOR_PPG_FLUSH));
         assert_eq!(
             settings.watch_ppg_flush_rate_hz,
             default_ppg_flush_rate_hz()
         );
+        let older = AppSettings {
+            watch_sensors_enabled: HashMap::from([(SENSOR_ORIENTATION.to_string(), true)]),
+            ..Default::default()
+        };
+        assert!(effective_sensor_enabled(&older, SENSOR_PPG_FLUSH));
     }
 
     #[test]

@@ -175,7 +175,10 @@ pub const RATE_CONTROLLABLE_SENSOR_IDS: &[&str] = &[
 ];
 
 /// Every sensor controllable via the generic `desktop.set_sensor` command:
-/// the three IMU inputs plus the continuously-accessible medical trackers.
+/// the three IMU inputs, the pulse sensor ([`SENSOR_PPG_FLUSH`], whose rate
+/// command sets how often it hands samples over) and the
+/// continuously-accessible medical trackers. A watch build that predates a
+/// sensor here ignores the command for it.
 /// On-demand trackers are excluded — they use bounded
 /// `desktop.start_measurement`/`desktop.stop_measurement` sessions instead
 /// (see [`ON_DEMAND_MEDICAL_TRACKER_IDS`]).
@@ -183,6 +186,7 @@ pub const CONTROLLABLE_SENSOR_IDS: &[&str] = &[
     SENSOR_ORIENTATION,
     SENSOR_ACCELERATION,
     SENSOR_GYROSCOPE,
+    SENSOR_PPG_FLUSH,
     TRACKER_HEART_RATE_CONTINUOUS,
     TRACKER_SKIN_TEMPERATURE_CONTINUOUS,
     TRACKER_EDA_CONTINUOUS,
