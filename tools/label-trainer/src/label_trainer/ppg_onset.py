@@ -169,6 +169,11 @@ ONSET_DELAY_MS = 880          # a decision this long after a hold starts is that
 NEAREST_SAMPLE_MS = 60        # the PPG sample taken for it must be this close
 EDGE_CLEARANCE_MS = 1500      # a mid-hold or unlabelled decision is at least this far from a hold's edges
 PER_KIND = 20                 # the most mid-hold, and unlabelled, decisions taken from one recording, of each kind
+# Moments just after a start of the target, taken as negatives when asked (the PPG + IMU model): nothing else tells the model
+# that 0-400 ms after a start is not yet the moment, so its score rose early and its detections came before the window. On
+# the 37 research recordings these raised the starts caught within 2 false activations a minute from 0.37 to 0.46
+# (docs/research/artifacts/ppg-benchmark-2026-10/timing-negatives/).
+EARLY_OFFSETS_MS = (0, 200, 400)
 UNLABELLED_ONLY = 40          # the most from a recording with no holds at all
 MATCH_EARLIEST_MS = 680       # a detection this long after a start, up to MATCH_LATEST_MS, catches it
 MATCH_LATEST_MS = 1280
@@ -205,7 +210,8 @@ def _evenly(items: list[int], most: int) -> list[int]:
     return [items[i] for i in sorted(set(np.linspace(0, len(items) - 1, most).round().astype(int).tolist()))]
 
 
-def sample_decisions(ppg_ts_ns: np.ndarray, all_holds: list[tuple[int, int, str]], target: str, excluded: set[str]) -> tuple[np.ndarray, np.ndarray, list[str]]:
+def sample_decisions(ppg_ts_ns: np.ndarray, all_holds: list[tuple[int, int, str]], target: str, excluded: set[str],
+                     early_offsets_ms: tuple[int, ...] = ()) -> tuple[np.ndarray, np.ndarray, list[str]]:
     """The decisions a model trains on in one recording, whether each is a start of `target` (1) or not (0), and what each is.
 
     Decisions are PPG sample times, as the runtime scores them. Every hold of a label that is not excluded gives a
@@ -213,8 +219,9 @@ def sample_decisions(ppg_ts_ns: np.ndarray, all_holds: list[tuple[int, int, str]
     target; `other_start`, a negative, for another label. The hard part is telling a pinch's start from another gesture's,
     so every one of those is kept. Then, as negatives, up to PER_KIND decisions inside holds (`target_mid`, `other_mid`)
     and up to PER_KIND with no hold near (`unlabelled`; UNLABELLED_ONLY in a recording with no holds), each at least
-    EDGE_CLEARANCE_MS from every hold edge, measured from the decision less ONSET_DELAY_MS, spread evenly. A decision whose
-    span touches an excluded hold is left out."""
+    EDGE_CLEARANCE_MS from every hold edge, measured from the decision less ONSET_DELAY_MS, spread evenly. With
+    `early_offsets_ms`, also a negative at each of those offsets after every start of the target (`target_early`). A
+    decision whose span touches an excluded hold is left out."""
     ts = np.asarray(ppg_ts_ns, dtype=np.int64)
     if ts.size == 0:
         return ts, np.zeros(0, dtype=np.int64), []
@@ -232,6 +239,14 @@ def sample_decisions(ppg_ts_ns: np.ndarray, all_holds: list[tuple[int, int, str]
         i = int(np.argmin(np.abs(ts - want)))
         if abs(int(ts[i]) - want) <= NEAREST_SAMPLE_MS * ms and allowed[i]:
             picked.append((int(ts[i]), int(label == target), "start" if label == target else "other_start"))
+    for start, _, label in kept_holds:
+        if label != target:
+            continue
+        for offset in early_offsets_ms:
+            want = start + offset * ms
+            i = int(np.argmin(np.abs(ts - want)))
+            if abs(int(ts[i]) - want) <= NEAREST_SAMPLE_MS * ms and allowed[i]:
+                picked.append((int(ts[i]), 0, "target_early"))
     anchors = ts - delay
     for kind, wanted in (("target_mid", lambda label: label == target), ("other_mid", lambda label: label != target)):
         inside = np.zeros(ts.size, dtype=bool)

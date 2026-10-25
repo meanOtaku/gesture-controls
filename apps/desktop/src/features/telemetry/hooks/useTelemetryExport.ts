@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { lastRecording } from "../recording/lastRecording";
 import { useSyncExternalStore } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { chooseExportFolder, exportCsvToFolder, isTauriDesktop, type ExportCsvResult } from "../../../shared/tauri/exportCsv";
@@ -80,7 +81,7 @@ export function useTelemetryExport() {
     const name = `gesture-dataset-${label}-${new Date().toISOString().replaceAll(":", "-")}`;
     const files = telemetryStore.generateDatasetFolderFiles();
     try {
-      const written = await invoke<string>("export_dataset_folder", { parent: datasetExportFolder, name, ppgCsv: files.ppgCsv, imuCsv: files.imuCsv });
+      const written = await invoke<string>("export_dataset_folder", { parent: datasetExportFolder, name, ppgCsv: files.ppgCsv, imuCsv: files.imuCsv, ppgClockCsv: files.ppgClockCsv });
       OperationFeedback.success(operation, `Saved ${basename(written)} (${files.ppgRows.toLocaleString()} pulse rows, ${files.imuRows.toLocaleString()} motion rows)`);
     } catch (error) {
       OperationFeedback.error(operation, `Could not save: ${String(error)}`);
@@ -101,7 +102,10 @@ export function useTelemetryExport() {
     if (!payload) return cameraAssist.disarm();
     const result = await saveRecordingBundle(payload);
     reportRecordingBundleOutcome(result);
-    if (result.status === "saved") cameraAssist.finish();
+    if (result.status === "saved") {
+      cameraAssist.finish();
+      lastRecording.set({ recordingId: result.recordingId, rowCount: result.rowCount, intervalCount: result.intervalCount, savedAt: Date.now() });
+    }
     else cameraAssist.disarm();
     return result;
   };

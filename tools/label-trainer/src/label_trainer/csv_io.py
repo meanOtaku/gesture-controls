@@ -18,14 +18,19 @@ import numpy as np
 from .schema import (
     CONTACT_QUALITY_COLUMN,
     HEADER_COLUMNS,
+    HEADER_COLUMNS_V2,
     IMU_FILE,
     IMU_FILE_COLUMNS,
+    IMU_FILE_COLUMNS_V2,
     LABEL_COLUMN,
+    MANUAL_LABEL_COLUMN,
     METADATA_COMMENT_PREFIX,
     NUMERIC_COLUMNS,
     PPG_COLUMNS,
     PPG_FILE,
+    NO_LABEL,
     PPG_FILE_COLUMNS,
+    PPG_FILE_COLUMNS_V2,
     TIMESTAMP_COLUMN,
 )
 
@@ -73,6 +78,21 @@ def _strip_leading_comments(lines: list[str]) -> tuple[list[str], int]:
     return lines[index:], index
 
 
+def effective_label(label: str, manual: str) -> str:
+    """The label a row trains on: its manual label where it has one (`NO_LABEL` meaning none), otherwise its `label`. The
+    desktop's `dataset_files::effective_label` is the same rule."""
+    manual = manual.strip()
+    if manual == "":
+        return label.strip()
+    return "" if manual == NO_LABEL else manual
+
+
+def _row_labels(fields_label: list[str] | tuple[str, ...], fields_manual: list[str] | tuple[str, ...] | None) -> np.ndarray:
+    labels = np.empty(len(fields_label), dtype=object)
+    labels[:] = list(fields_label) if fields_manual is None else [effective_label(a, b) for a, b in zip(fields_label, fields_manual)]
+    return labels
+
+
 def _float_or_nan(raw_value: str) -> float:
     return float("nan") if raw_value == "" else float(raw_value)
 
@@ -87,7 +107,7 @@ def _parse_rows_fast(
     """
     try:
         rows = list(csv.reader(data_rows))
-        width = len(HEADER_COLUMNS)
+        width = len(header_index)
         if any(len(fields) != width for fields in rows):
             return None
         columns = list(zip(*rows))
@@ -98,30 +118,31 @@ def _parse_rows_fast(
             column: np.array(list(map(_float_or_nan, columns[header_index[column]])), dtype=np.float64)
             for column in NUMERIC_COLUMNS
         }
-        labels = columns[header_index[LABEL_COLUMN]]
-        raw_labels = np.empty(len(labels), dtype=object)
-        raw_labels[:] = labels
-        return timestamps_ns, channel_values, raw_labels
+        manual = columns[header_index[MANUAL_LABEL_COLUMN]] if MANUAL_LABEL_COLUMN in header_index else None
+        return timestamps_ns, channel_values, _row_labels(columns[header_index[LABEL_COLUMN]], manual)
     except (ValueError, OverflowError):
         return None
 
 
-def _file_rows(path: Path, expected: tuple[str, ...]) -> list[tuple[int, int, list[str]]]:
-    """The data rows of one of a folder's files as (timestamp, which file, fields), after checking its header."""
+def _file_rows(path: Path, expected: tuple[str, ...], before_manual: tuple[str, ...]) -> list[tuple[int, int, list[str]]]:
+    """The data rows of one of a folder's files as (timestamp, which file, fields with the manual label), after checking its
+    header (`expected`, or `before_manual` from before manual labels, whose rows get an empty one)."""
     if not path.is_file():
         raise CsvFormatError(f"{path.parent}: the folder has no {path.name}: a recording folder holds {PPG_FILE} and {IMU_FILE}")
     lines = path.read_text(encoding="utf-8").splitlines()
     body, comments = _strip_leading_comments(lines)
     if not body:
         raise CsvFormatError(f"{path}: no header found")
-    header = next(csv.reader([body[0]]))
-    if tuple(header) != expected:
+    header = tuple(next(csv.reader([body[0]])))
+    if header not in (expected, before_manual):
         raise CsvFormatError(f"{path}: header is not the one this file must have.\n  expected: {','.join(expected)}\n  actual:   {body[0]}")
     which = 0 if path.name == PPG_FILE else 1
     rows = []
     for offset, fields in enumerate(csv.reader(body[1:])):
-        if len(fields) != len(expected):
-            raise CsvFormatError(f"{path}:{comments + 2 + offset}: expected {len(expected)} columns, got {len(fields)}")
+        if len(fields) != len(header):
+            raise CsvFormatError(f"{path}:{comments + 2 + offset}: expected {len(header)} columns, got {len(fields)}")
+        if header == before_manual:
+            fields = [*fields, ""]
         try:
             stamp = int(fields[0])
         except ValueError as exc:
@@ -131,37 +152,37 @@ def _file_rows(path: Path, expected: tuple[str, ...]) -> list[tuple[int, int, li
 
 
 def _merge_folder(folder: Path) -> str:
-    """A recording folder (`ppg.csv` and `imu.csv`) as the text of the single-file dataset it stands for: every row of both,
-    in timestamp order (a tie puts the pulse row first), each with the other sensor's columns empty.
+    """A recording folder (`ppg.csv` and `imu.csv`) as the text of the single-file dataset it stands for, with the manual
+    label: every row of both, in timestamp order (a tie puts the pulse row first), each with the other sensor's columns empty.
 
     A pulse row and a motion row with the same timestamp, sequence and label are one row of an older fused export, which
     the desktop's conversion put in both files; they become that one row again, so a converted recording reads exactly as
     the file it was made from (and keeps that file's identity truthfully). Rows the watch sent separately never share a
     sequence."""
-    ppg = _file_rows(folder / PPG_FILE, PPG_FILE_COLUMNS)
-    imu = _file_rows(folder / IMU_FILE, IMU_FILE_COLUMNS)
+    ppg = _file_rows(folder / PPG_FILE, PPG_FILE_COLUMNS_V2, PPG_FILE_COLUMNS)
+    imu = _file_rows(folder / IMU_FILE, IMU_FILE_COLUMNS_V2, IMU_FILE_COLUMNS)
     for rows, name in ((ppg, PPG_FILE), (imu, IMU_FILE)):
         for before, after in zip(rows, rows[1:]):
             if after[0] < before[0]:
                 raise CsvFormatError(f"{folder / name}: out-of-order timestamp {after[0]} follows {before[0]}")
-    motion_by_key: dict[tuple[str, str, str], list[int]] = {}
+    motion_by_key: dict[tuple[str, str, str, str], list[int]] = {}
     for index, (_, _, f) in enumerate(imu):
-        motion_by_key.setdefault((f[0], f[1], f[12]), []).append(index)
+        motion_by_key.setdefault((f[0], f[1], f[12], f[13]), []).append(index)
     fused: set[int] = set()
     merged: list[tuple[int, int, str]] = []
     for stamp, _, f in ppg:
-        partners = motion_by_key.get((f[0], f[1], f[6]))
+        partners = motion_by_key.get((f[0], f[1], f[6], f[7]))
         if partners:
             partner = partners.pop(0)
             fused.add(partner)
-            merged.append((stamp, 0, ",".join([f[0], f[1], f[2], f[3], f[4], *imu[partner][2][2:12], f[5], f[6]])))
+            merged.append((stamp, 0, ",".join([f[0], f[1], f[2], f[3], f[4], *imu[partner][2][2:12], f[5], f[6], f[7]])))
         else:
-            merged.append((stamp, 0, ",".join([f[0], f[1], f[2], f[3], f[4], *([""] * 10), f[5], f[6]])))
+            merged.append((stamp, 0, ",".join([f[0], f[1], f[2], f[3], f[4], *([""] * 10), f[5], f[6], f[7]])))
     for index, (stamp, _, f) in enumerate(imu):
         if index not in fused:
-            merged.append((stamp, 1, ",".join([f[0], f[1], "", "", "", *f[2:12], "", f[12]])))
+            merged.append((stamp, 1, ",".join([f[0], f[1], "", "", "", *f[2:12], "", f[12], f[13]])))
     merged.sort(key=lambda row: (row[0], row[1]))
-    return "\n".join([",".join(HEADER_COLUMNS), *(line for _, _, line in merged)]) + "\n"
+    return "\n".join([",".join(HEADER_COLUMNS_V2), *(line for _, _, line in merged)]) + "\n"
 
 
 def load_recording(path: str | Path) -> Recording:
@@ -177,10 +198,10 @@ def load_recording(path: str | Path) -> Recording:
 
     header_line = body_lines[0]
     header = next(csv.reader([header_line]))
-    if tuple(header) != HEADER_COLUMNS:
+    if tuple(header) not in (HEADER_COLUMNS_V2, HEADER_COLUMNS):
         raise CsvFormatError(
             f"{path}: header does not match the Milestone 9 dataset export contract.\n"
-            f"  expected: {','.join(HEADER_COLUMNS)}\n"
+            f"  expected: {','.join(HEADER_COLUMNS_V2)}\n"
             f"  actual:   {header_line}"
         )
 
@@ -218,9 +239,9 @@ def load_recording(path: str | Path) -> Recording:
     reader = csv.reader(data_rows)
     for row_offset, fields in enumerate(reader):
         line_number = comment_count + 2 + row_offset  # +1 header, +1 for 1-indexing
-        if len(fields) != len(HEADER_COLUMNS):
+        if len(fields) != len(header):
             raise CsvFormatError(
-                f"{path}:{line_number}: expected {len(HEADER_COLUMNS)} columns, got {len(fields)}"
+                f"{path}:{line_number}: expected {len(header)} columns, got {len(fields)}"
             )
 
         timestamp_field = fields[header_index[TIMESTAMP_COLUMN]]
@@ -251,8 +272,9 @@ def load_recording(path: str | Path) -> Recording:
                     f"{path}:{line_number}: malformed {column!r} value {raw_value!r}"
                 ) from exc
 
-        # An empty label is time between gestures: no gesture is held there.
-        raw_labels[row_offset] = fields[header_index[LABEL_COLUMN]]
+        # An empty label is time between gestures: no gesture is held there. A manual label wins.
+        manual = fields[header_index[MANUAL_LABEL_COLUMN]] if MANUAL_LABEL_COLUMN in header_index else ""
+        raw_labels[row_offset] = effective_label(fields[header_index[LABEL_COLUMN]], manual)
 
     # Sequence numbers come from independent per-channel counters on the
     # recorder side (orientation vs. PPG batches), so they are not globally

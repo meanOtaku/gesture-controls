@@ -19,7 +19,7 @@ describe("camera evidence in a recording bundle", () => {
 
   it("is a plain watch recording when there is no camera evidence", () => {
     const payload = record()!;
-    expect(payload.extraFiles).toBeUndefined();
+    expect(Object.keys(payload.extraFiles ?? {})).toEqual(["ppg_clock.csv"]); // only how the pulse timestamps were mapped
     expect(payload.recording.sources.map((s) => s.source_id)).toEqual(["watch"]);
   });
 
@@ -30,7 +30,7 @@ describe("camera evidence in a recording bundle", () => {
     }));
     telemetryStore.setEvidenceProvider(provider);
     const payload = record()!;
-    expect(payload.extraFiles).toEqual({ "hand_landmarks.csv": "h\n1", "clock_sync.csv": "c\n1" });
+    expect(payload.extraFiles).toEqual({ "hand_landmarks.csv": "h\n1", "clock_sync.csv": "c\n1", "ppg_clock.csv": expect.any(String) });
     expect(payload.recording.sources.map((s) => s.source_id)).toEqual(["watch", "camera_hand_landmarks"]);
     expect(Object.keys(payload.recording.raw_source_row_counts)).toEqual(["watch"]);
     // It is asked for the recording's own window, on the browser's monotonic clock in milliseconds.
@@ -46,14 +46,14 @@ describe("camera evidence in a recording bundle", () => {
       sources: [{ source_id: "camera_hand_landmarks", configuration: {} }, { source_id: "camera_hand_landmarks_2", configuration: {} }],
     }));
     const payload = record()!;
-    expect(Object.keys(payload.extraFiles!).sort()).toEqual(["clock_sync.csv", "hand_landmarks.csv", "hand_landmarks_2.csv"]);
+    expect(Object.keys(payload.extraFiles!).sort()).toEqual(["clock_sync.csv", "hand_landmarks.csv", "hand_landmarks_2.csv", "ppg_clock.csv"]);
     expect(payload.recording.sources.map((s) => s.source_id)).toEqual(["watch", "camera_hand_landmarks", "camera_hand_landmarks_2"]);
     expect(Object.keys(payload.recording.raw_source_row_counts)).toEqual(["watch"]);
   });
 
   it("is a plain watch recording when the provider has nothing", () => {
     telemetryStore.setEvidenceProvider(() => null);
-    expect(record()!.extraFiles).toBeUndefined();
+    expect(Object.keys(record()!.extraFiles ?? {})).toEqual(["ppg_clock.csv"]);
   });
 
   it("tells the camera when the recording's first sample was accepted", () => {

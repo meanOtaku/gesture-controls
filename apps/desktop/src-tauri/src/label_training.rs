@@ -34,6 +34,7 @@ use tokio::process::Command;
 use tracing::warn;
 use uuid::Uuid;
 
+use crate::dataset_files;
 use crate::label_runtime::LabelRuntimeHost;
 use crate::model_lab::{
     DatasetSummary, MODEL_LAB_DIR_NAME, dataset_csv_path, dataset_sha, datasets_dir, load_index,
@@ -126,6 +127,12 @@ fn check_request(
             .iter()
             .find(|d| &d.id == id)
             .ok_or_else(|| format!("there is no recording with id '{id}'"))?;
+        if dataset.sealed {
+            return Err(format!(
+                "'{}' is sealed for the final test, so it cannot be trained on. Leave it out, or unseal it in Model Lab (it then stops being an untouched test)",
+                dataset.original_filename
+            ));
+        }
         recordings.push(RecordingInfo {
             id: RecordingId::new(id.clone()).map_err(|e| e.to_string())?,
             sha256: sha_of(id)?,
@@ -136,8 +143,28 @@ fn check_request(
                 .collect::<Result<_, _>>()?,
         });
     }
+    // Two copies of the same data could land one in training and one in the test, which then measures nothing.
+    let chosen: Vec<&DatasetSummary> = seen.iter().filter_map(|id| datasets.iter().find(|d| &d.id == id)).collect();
+    for (i, a) in chosen.iter().enumerate() {
+        if let Some(b) = chosen[i + 1..].iter().find(|b| a.content_sha.is_some() && b.content_sha == a.content_sha) {
+            return Err(format!(
+                "'{}' and '{}' hold the same data: leave one out (or delete it in Model Lab), or one could be trained on and the other tested on",
+                a.original_filename, b.original_filename
+            ));
+        }
+    }
     if recordings.is_empty() {
         return Err("choose at least one recording".into());
+    }
+    // A stretch left out on the Labelling page is never trained on, whatever the request says of it.
+    let left_out = label_id(dataset_files::LEFT_OUT_LABEL)?;
+    if recordings.iter().any(|r| r.labels.contains(&left_out)) {
+        match entries.get(&left_out) {
+            None | Some(ExampleRole::Exclude) => {
+                entries.insert(left_out, ExampleRole::Exclude);
+            }
+            Some(_) => return Err(format!("'{}' marks stretches left out, so it can only be excluded", dataset_files::LEFT_OUT_LABEL)),
+        }
     }
     let label_offset_ms = request.label_offset_ms.unwrap_or(0);
     if label_offset_ms.abs() > MAX_LABEL_OFFSET_MS {
@@ -481,10 +508,12 @@ pub async fn start_label_training(
         quality: QualityRules::default(),
         trainer: TrainerConfig {
             backend: trainer_backend(BACKEND).ok_or("unknown training method")?,
-            params: BTreeMap::from([(
-                "method".to_string(),
-                serde_json::Value::String(BACKEND.into()),
-            )]),
+            // What else shaped the run, so the training history can say what changed from one run to the next.
+            params: BTreeMap::from([
+                ("method".to_string(), serde_json::Value::String(BACKEND.into())),
+                ("labelOffsetMs".to_string(), serde_json::Value::from(checked.label_offset_ms)),
+                ("research".to_string(), serde_json::Value::Bool(checked.research)),
+            ]),
         },
         recordings: checked.recordings.clone(),
         train_only: Vec::new(),
@@ -768,6 +797,12 @@ mod tests {
             two_files: false,
             gaps: None,
             source_recording_id: None,
+            derived_from: None,
+            context: Default::default(),
+            sealed: false,
+            content_sha: None,
+            quality: None,
+            review: None,
         }
     }
 
@@ -830,6 +865,36 @@ mod tests {
         assert!(refuse(&|r| r.label_offset_ms = Some(1501)).contains("label offset"));
         let unreadable = check_request(&request(), &data, &|_| Err("gone".into())).unwrap_err();
         assert_eq!(unreadable, "gone");
+    }
+
+    #[test]
+    fn a_sealed_recording_is_never_trained_on() {
+        let mut data = datasets();
+        data[0].sealed = true;
+        let refused = check_request(&request(), &data, &sha).unwrap_err();
+        assert!(refused.contains("sealed for the final test"), "{refused}");
+    }
+
+    #[test]
+    fn two_recordings_with_the_same_data_are_not_trained_on_together() {
+        let mut data = datasets();
+        data[0].content_sha = Some("same".into());
+        data[1].content_sha = Some("same".into());
+        let refused = check_request(&request(), &data, &sha).unwrap_err();
+        assert!(refused.contains("hold the same data"), "{refused}");
+    }
+
+    #[test]
+    fn stretches_left_out_are_always_excluded() {
+        let mut data = datasets();
+        data[0].labels.push(dataset_files::LEFT_OUT_LABEL.into());
+        let checked = check_request(&request(), &data, &sha).unwrap();
+        assert_eq!(checked.mapping.entries[&LabelId::new("left_out").unwrap()], ExampleRole::Exclude);
+        let mut r = request();
+        r.negatives.push("left_out".into());
+        assert!(check_request(&r, &data, &sha).unwrap_err().contains("can only be excluded"));
+        // With none left out, nothing is added.
+        assert!(!check_request(&request(), &datasets(), &sha).unwrap().mapping.entries.contains_key(&LabelId::new("left_out").unwrap()));
     }
 
     #[test]

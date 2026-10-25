@@ -150,9 +150,31 @@ arm movement disturbs the radio; the batch keeps it to about ten.
 {"type":"watch.sensor_batch","version":1,"deviceId":"galaxy-watch-4","sequence":9,"timestampNs":900,"payload":{"imu":{"count":2,"timestampsNs":[100,120],"quaternion":[[1,0,0,0],[1,0,0,0]],"accelerometer":[[0,0,9.8],null],"gyroscope":[null,[0.1,0,0]]}}}
 ```
 
-In `imu`, every array has `count` entries (1 to 64; the watch sends at most 16); an accelerometer or gyroscope entry is
-`null` when that sensor gave nothing for that reading. The desktop turns a batch back into one orientation event per
-reading, each with its own timestamp; one `sequence` covers the whole batch.
+In `imu`, every array has `count` entries (1 to 64); an accelerometer or gyroscope entry is `null` when that sensor gave
+nothing for that reading. The desktop turns a batch back into one orientation event per reading, each with its own
+timestamp; one `sequence` covers the whole batch.
+
+**Packed motion (`imuPacked`).** Since 2026-10-24 the watch sends the readings packed as binary instead of the `imu`
+arrays: about 60 bytes a reading against about 140 as JSON numbers, which leaves room on a Bluetooth link for the motion
+sensors at up to 200 Hz (Settings → Watch rates). It holds up to 40 readings, a 100 ms batch at 200 Hz.
+
+`imuPacked` is standard base64 of, little-endian:
+
+| Field | Type |
+|---|---|
+| version | u8, 1 |
+| count | u16, 1 to 64 |
+| first timestamp | i64, ns, watch clock |
+| then per reading: time after the first | u32, ns |
+| sensors present | u8: bit 0 accelerometer, bit 1 gyroscope |
+| quaternion w, x, y, z | 4 × f32 |
+| accelerometer x, y, z | 3 × f32 (0 when absent) |
+| gyroscope x, y, z | 3 × f32 (0 when absent) |
+
+- The values are the sensors' own single-precision floats, so nothing is lost against the JSON numbers.
+- A batch spanning more time than a u32 of nanoseconds holds (over 4 s, after a stall) goes as `imu` arrays.
+- The desktop reads either form.
+- `WatchProtocol.packImu` (watch) and `decode_packed_imu` (`crates/protocol`) are tested against the same example.
 
 The payload may also hold a `ppg` member (the `watch.ppg_batch` payload): watch builds from 2026-10-11 to 2026-10-12 sent
 the motion of each PPG flush together with its pulse samples. The desktop still accepts that, and `imu` and `ppg` are each

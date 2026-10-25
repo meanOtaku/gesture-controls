@@ -21,6 +21,26 @@ export const OperationFeedback = {
   error: (operation: string, detail: string) => notifyFeedback("error", operation, detail),
 };
 
+/** How long an undoable action can be taken back. */
+export const UNDO_MS = 8000;
+
+/** A done (or about to be done) action, with Undo on its message. */
+export function feedbackWithUndo(operation: string, detail: string, onUndo: () => void): void {
+  toast.success(operation, { description: detail, duration: UNDO_MS, action: { label: "Undo", onClick: onUndo } });
+}
+
+/**
+ * Does `run` after `UNDO_MS`, unless Undo on its message is pressed first, which calls `onUndo` instead. For what cannot be
+ * taken back once done, such as deleting: it waits, so it can still be stopped.
+ */
+export function afterUndoWindow(operation: string, detail: string, run: () => void, onUndo: () => void): void {
+  const timer = setTimeout(run, UNDO_MS);
+  feedbackWithUndo(operation, detail, () => {
+    clearTimeout(timer);
+    onUndo();
+  });
+}
+
 export function resetFeedbackForTests(): void {
   toast.dismiss();
 }

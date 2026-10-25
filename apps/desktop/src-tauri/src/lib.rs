@@ -17,11 +17,14 @@ mod head_pose;
 mod label_registry;
 mod label_runtime;
 mod label_training;
+mod labelling;
 mod latest_write;
 mod model_lab;
 mod overlay;
 mod recording_bundle;
 mod recording_sequence;
+mod mistakes;
+mod sealed_test;
 mod settings;
 mod watch;
 
@@ -198,6 +201,7 @@ pub fn run() {
             watch::start_measurement,
             watch::stop_measurement,
             watch::set_sensor_enabled,
+            watch::buzz_watch,
             settings::get_settings,
             settings::update_settings,
             settings::reset_settings,
@@ -205,6 +209,17 @@ pub fn run() {
             model_lab::import_model_dataset,
             model_lab::import_model_dataset_folder,
             model_lab::export_dataset_folder,
+            labelling::open_labelling_recording,
+            labelling::save_labelling_version,
+            labelling::export_labelling_recording,
+            labelling::labelling_model_replay,
+            model_lab::set_datasets_sealed,
+            model_lab::set_dataset_review,
+            sealed_test::test_model_on_sealed,
+            sealed_test::list_sealed_tests,
+            mistakes::model_mistakes,
+            mistakes::threshold_sweep,
+            mistakes::compare_models,
             model_lab::convert_datasets_to_folders,
             model_lab::list_model_datasets,
             model_lab::delete_model_dataset,

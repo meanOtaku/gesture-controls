@@ -59,6 +59,17 @@ The sidebar is laid out in the order you use it. Work down it:
 
 Buttons that trigger a desktop-side operation (training, activation, rollback, inference-mode changes, wellness measurements, CSV saves, and similar) show a pending state while the request is in flight — the button's label changes (for example to "Saving…" or "Updating…") and it disables itself so a second click cannot fire a duplicate request. When the operation finishes, the outcome is reported as a toast notification: **success**, **info** (for example, a cancelled save), **warning**, or **error**, each auto-dismissing after a few seconds. Treat these toasts, not silent completion, as confirmation that an action actually happened.
 
+### Undo
+
+Deleting recordings, sealing or unsealing them, and moving a recording's labels to the camera or the model each show a message
+with **Undo** for 8 seconds. A delete waits out those seconds before it happens, with the recordings hidden meanwhile, so
+Undo brings them back untouched; closing the app in that time leaves them undeleted.
+
+### Keyboard shortcuts
+
+Press **?** anywhere outside a text field for every keyboard shortcut, grouped by where it works. Press it again, or Esc, to
+close the list.
+
 ### Contextual help
 
 A small "?" icon next to some section headings and controls opens an accessible help tooltip on hover, keyboard focus, or click. It is used where a control's behavior is not obvious from its label alone — for example, the difference between recording rate and graph refresh rate, what a safe intent binding can and cannot do, or what each inference mode is allowed to do. Not every control has one; obvious controls intentionally do not.
@@ -77,6 +88,9 @@ The **Main** tab is the at-a-glance control center.
 - Shows the current calibration/target state.
 - Provides the primary calibration actions when available.
 - Surfaces application errors, such as tracker, calibration, overlay, or sensor-control failures.
+- **Making a model** lists the steps from recording to the final test (Record, Label, Clean, Train, Final test), where each
+  stands from what the app holds, and the next one to do. **Label the next →** opens the first recording nobody has
+  reviewed on the Labelling page.
 
 Use it to confirm that the system is connected before moving into calibration, recording, or model work.
 
@@ -193,6 +207,75 @@ Two capture modes share this same Arming/timer behavior and the same immutable-r
 5. Capture more than one session (separate Start/Stop recordings) rather than one very long one — training holds out whole sessions, so one session can't cover evaluation by itself.
 6. Before exporting, check the quality summary and timeline intervals — fix mislabeled or too-short intervals, then export.
 
+#### Session details (Recorder)
+
+The **Session details** card says how the next recording is made:
+
+- which wrist the watch is on;
+- where the arm is: resting on a surface, raised and held still, moving, or walking;
+- what you are doing;
+- how the strap sits;
+- whether you pinch with a light touch or a firm press;
+- any notes.
+
+A model only learns the conditions it was shown: one trained only on pinches with the arm resting does not recognise them
+when the wrist moves. So vary these across sessions, and record ordinary activity without the gesture too.
+
+- The details are saved with the recording: as `# context.<field>: <value>` lines at the top of its files and in its
+  `recording.json`.
+- They go with it into Model Lab, which shows them under each recording as "Recorded: …". The Labelling page shows them for
+  the recording that is open.
+- The last details you used are kept for the next session. A recording under way keeps the details it started with.
+- A field left as "Not said" is not recorded.
+
+**The pulse sensor's clock.** The pulse sensor stamps its samples with its own clock, which the Recorder puts on the watch's
+clock before saving them. So that this can be redone later if the mapping ever turns out wrong, every saved recording and
+exported folder also holds `ppg_clock.csv`.
+
+- It has one row per pulse batch: its `sequence` (as on its rows), when the watch sent it (`sent_ns`), its newest sample's
+  own timestamp (`newest_sensor_ns`), and the offset added to put its samples on the watch clock (`offset_ns`).
+- A pulse row's own timestamp is its `timestamp_ns` less its batch's offset.
+
+#### Guided session (Recorder)
+
+A **guided session** tells you when to make the gesture and labels it at that moment, so there is no key to hold and every
+label starts the same way.
+
+- Choose the **gesture**, **how many times**, how long to **hold each**, and how long to **rest** between cues (each rest is
+  picked at random between the shortest and longest, so the cues cannot be anticipated).
+- Then come stretches of **everyday activity** (typing, using the mouse, moving the arm by default; add or remove them). They
+  are labelled with the **everyday label** you choose (a label with the everyday-activity role), or left unlabelled.
+- **Start guided session** starts a timeline recording. After a 5 s lead-in, each cue counts down ("Get ready… 3"), then
+  shows "*Gesture* now" in large type, and the watch buzzes. The label is on for the hold time.
+- The recording stops by itself at the end, and is saved and exported like any timed recording. **Stop and save** ends it
+  early; stopping or discarding it on the recorder ends the session too. Switching tabs does not.
+- Each label starts at the cue, so it trails the gesture by your reaction time (about 0.3 s). That lag is steady, and Label
+  timing on the Labelling page measures and removes it.
+- If the watch cannot be buzzed (not connected, or the browser preview), the card says so and the cues are on screen only.
+- The labels it makes are recorded as made by a guided cue.
+
+#### Signal health (Recorder)
+
+Under the connection status, a strip shows the watch's streams live: the **motion** and **pulse** rates over the last 5 s and
+the **pulse contact** (how much of it the sensor flagged).
+
+- A stream silent for more than a second, or contact flagged on more than 30% of samples, shows red. Under 20 Hz, or contact
+  flagged on more than 10%, shows yellow.
+- While recording, anything red is also said in a warning above everything else, so a broken session is stopped in seconds
+  rather than found afterwards.
+
+#### What you have recorded (Recorder)
+
+The **What you have recorded** card counts the holds of a label in Model Lab's recordings by the session details they were
+recorded with: a grid of arm by wrist, and lines for activity, strap and pinch. Empty conditions say "none" and thin ones
+(under 10 holds) are marked: those are what to record next. Choose the label at the top; the most recorded one is shown first.
+
+#### Review it right away (Recorder)
+
+After a recording is saved, a card offers **Review it in Labelling**: it adds the recording to Model Lab (as **From the
+Recorder** would, with unreviewed intervals counted) and opens it on the Labelling page. A recording already added is just
+opened. **Not now** hides the card.
+
 #### Let the camera mark it (Recorder)
 
 Wherever a page needs the camera (the Recorder's camera marking, the Gestures tab's check against the camera, the arm switch, the gesture editor and the correction panel in Model Lab), the same small camera control is there: **Turn camera on**, then a badge with the frame rate, **Show preview** / **Hide preview** for a small live picture with the hand drawn on it, and **Turn camera off**. It is the same camera as everywhere else, so turning it off here turns it off for the whole app; it cannot be turned off in the middle of a recording, because the recording would lose its hand landmarks. Under the recorder, **Let the camera mark it** labels a recording for you, and it is **on by default**. It takes effect whenever the camera is on, hand landmarks are being saved, and the label you chose has a gesture in the Gesture library; until then recordings are made as usual with no camera marks. A badge shows live whether the camera sees the gesture, so you can check it before you start. Record as usual with the watch on the hand the camera sees. With marking in effect the recording is made as a timeline, and **while you record** the camera writes the label straight into the watch data, just like holding the **Mark label** button: the label is on while the camera sees the gesture and off when you let go, starting where the gesture began rather than where the camera noticed it. Those intervals are **unreviewed**, and the PPG and motion rows carry the label in the saved recording and in **Export Dataset CSV**, the moment you stop. When you stop, a message says how many were marked, or that the camera never saw the gesture (the recording is kept either way). The tick box is a choice you can switch off, and it is remembered. Review the intervals in Recordings like any others.
@@ -277,6 +360,61 @@ The **Label models** card in Model Lab is the per-label model system: one binary
 - **Model runtime** is **Off**, **Monitor** (models run and show a score and a "Detected" badge, nothing acts) or **Live** (a detection can start recipes that use that label, see *Model label* below). Switching to Live asks first, and a restart always comes back in Monitor.
 - A label whose active model cannot be loaded (for example its file was changed) is named in a red alert and has no running model.
 
+#### Duplicates and quality (Model Lab)
+
+Each recording under **Recordings** shows what training can use: its holds of each label (of at least 200 ms), holds too
+short to train on (which training ignores), and how often the pulse sensor flagged its contact.
+
+- It is shown in red when there are short holds, when no hold is long enough, or when contact was flagged on more than a
+  tenth of the samples.
+- A recording whose rows are the same as another's is marked "Same data as …", whatever its `#` lines say: a recording
+  imported once as a single CSV and once as a folder is one recording twice.
+- Delete one copy. Otherwise it counts twice, and one copy can be trained on while the other is tested on, which makes the
+  test look far better than it is.
+- Importing a recording Model Lab already holds is refused, and training refuses a request that includes two copies.
+- Recordings imported before these checks get them the first time the list is shown.
+
+**Find and act on recordings.** Above the list:
+
+- search by name, label or session details; filter by day, by label, and by what is wrong (**With something to fix**,
+  **Copies**, sealed or not, **Labels not reviewed**, **Labels need work**); sort by number, day, name, worst contact or most
+  holds;
+- tick recordings (or **Choose every recording listed**) to seal, unseal or delete them together;
+- when there are copies, **Keep one of each** deletes all but one of each set: the sealed copy if there is one, else the
+  oldest;
+- **Label** on a recording opens it on the Labelling page. Each recording also shows whether its labels were reviewed there.
+
+Each label is shown in its colour from the Labels tab, here, on the Train card, in the Recorder's label buttons and on the
+Labelling page.
+
+#### Final test (Model Lab)
+
+Every score Model Lab shows comes from recordings that also shaped the model, its threshold or the method. The **final test**
+is the honest one: a model run over recordings that took no part in any of that.
+
+**Seal a test set:**
+
+- Under **Recordings**, **Seal a day…** seals every recording of a day (the day in a Recorder export's name, else the day it
+  was imported). **Seal** and **Unseal** on each recording do one at a time.
+- Seal a whole day you have not trained on: a new day is what the model will meet.
+- A sealed recording is marked **Sealed for the final test**.
+- Training leaves it out: it is not in the list of recordings to use, and a request that names it is refused.
+- Unsealing makes it ordinary training data again, and it then stops being an untouched test.
+
+**Run the final test:**
+
+- On the **Final test** card, choose a model (any version, active or not) and press **Run the final test**.
+- It runs over every sealed recording exactly as the app runs it live, in Monitor, so nothing acts and nothing about the
+  model changes.
+- It reports, overall and per recording:
+  - how many of the gesture's starts it caught (a detection 0.68 to 1.28 s after a start);
+  - how many times a minute it fired with no start;
+  - the median delay.
+- Starts are counted as training counts them, by hand labels where you gave them.
+- Every test is logged, and the card says how many times the sealed recordings were tested before. Test sparingly: each look
+  makes them a little less untouched. Once you have changed the model because of what the final test said, seal a new day
+  for the next one.
+
 #### Train a model
 
 The **Train a model** card teaches the app one label from your recordings. Every label is trained as the same model, the **PPG + IMU pinch-start model**, chosen by the October 2026 research (see [IMU fusion, trigger rules and label shifts](research/ppg-imu-fusion-and-triggers-2026-10.md)):
@@ -285,7 +423,7 @@ The **Train a model** card teaches the app one label from your recordings. Every
 - and the **motion sensors** (accelerometer and gyroscope, 50 times a second): the same 21 statistics of each axis, its size and its change over the last 0.3, 0.6 and 1.3 s, and how much it moved against the 3 s before, make 1,032 more;
 - 300 randomised decision trees (ExtraTrees) vote on whether the gesture **has just started**, and it fires at the **top of the vote's climb** (the first moment the vote falls back after reaching the cut-off), not the moment it first crosses it.
 
-It fires about 0.9 s after a gesture begins. Tested 20 times on recordings it never saw (37 recordings), its worst-case AUC was 0.85 (0.79 for the earlier PPG-only model), and at a cut-off that kept false alarms under 2 a minute it caught about 37% of gesture starts (with about 1.5 false alarms a minute; 30% with about 1): better than the pulse alone, mostly because the motion tells a pinch from the start of another gesture, but not yet reliable as a live trigger. It needs about 5.6 s of pulse data before it scores, so it is quiet for the first seconds after the watch connects; it also needs the motion stream, and says so if that stops. A recording's time between gestures (rows with no label) is kept when it is imported, because the model compares each moment with the seconds before it.
+It fires about 0.9 s after a gesture begins. Tested 20 times on recordings it never saw (37 recordings), its worst-case AUC was 0.87 (0.79 for the earlier PPG-only model), and at a cut-off that kept false alarms under 2 a minute it caught about 46% of gesture starts (with about 1.9 false alarms a minute; 35% with at most 1): better than the pulse alone, mostly because the motion tells a pinch from the start of another gesture, but not yet reliable as a live trigger. It needs about 5.6 s of pulse data before it scores, so it is quiet for the first seconds after the watch connects; it also needs the motion stream, and says so if that stops. A recording's time between gestures (rows with no label) is kept when it is imported, because the model compares each moment with the seconds before it.
 
 1. Choose the **label to teach**. Every recording starts selected; untick any you do not want.
 2. Give every other label in those recordings a role: **Something else** (it teaches the model what is *not* the gesture; their starts are the hardest thing for it to tell apart) or **Leave out**. Nothing is assumed.
@@ -293,7 +431,11 @@ It fires about 0.9 s after a gesture begins. Tested 20 times on recordings it ne
 
 Before anything runs, the card shows which recordings it will **train on** and which it will **test on**. The app decides this, deterministically, and a recording is never in both, so the score is about recordings the model has not seen. It refuses, and says why, if there are not at least two recordings with the label and two with something else (a recording with both kinds counts for each). The card warns if only one recording of the gesture would be trained on: a model trained on a single session usually memorises it.
 
-The trainer learns from moments it picks in each recording: about 880 ms after each start of the label (the positives), and as negatives the same moment after every other label's start, points inside holds, and quiet time at least 1.5 s from any hold.
+The plan also has a table of the label's holds on each side, by arm and wrist, from the recordings' session details. It
+points out a condition only the test has (its score there is about something new to the model) and one only training has
+(the score says nothing of it). Stretches left out on the Labelling page need no role: they are always left out.
+
+The trainer learns from moments it picks in each recording: about 880 ms after each start of the label (the positives), and as negatives the same moment after every other label's start, moments 0, 200 and 400 ms after each start of the label (so it does not fire before the moment), points inside holds, and quiet time at least 1.5 s from any hold.
 
 When training finishes you see, in words, how many of the gesture's starts it found, how much of what it flagged was right, and how often it wrongly flagged another moment, all measured on the recordings it never trained on. **The cut-off for "detected" is fitted on the training recordings**: each is scored by a model trained without it and played through as it would run live, and the cut-off that catches the most gestures while going off without one at most 2 times per minute of recording is used (if none manages that, the one that catches the most gestures for its false alarms), so the numbers on the test recordings are fair. The card also says what the model does **played through the test recordings as it would run live**: how many gestures it caught (a detection 680 to 1,280 ms after a start catches it), how soon, and how often it went off with no gesture.
 
@@ -342,9 +484,45 @@ Every model under **Label models** has an **Inspect** button, which opens it in 
 
 Everything shown comes only from recordings the model never trained on. An imported model shows only the inputs it declares.
 
+#### Mistakes (Model Lab)
+
+**Mistakes** lists every start a model missed and every time it fired when it should not, on the recordings it was tested on
+(tick **Also the recordings it trained on** for those too: a mistake there usually means a wrong label).
+
+- Each model is run over the recordings as the app runs it live, and its detections are matched to the starts as in the
+  final test.
+- A miss says how high the score got (short of the threshold, or high enough but at the wrong time). A false detection says
+  whether it was too early or too late for a start nearby, a second detection of a start already caught, or nowhere near one,
+  and which label was on at the moment it was judging (0.88 s before it).
+- Above the list, the false detections are counted by what was going on, so you can see that, say, most came while typing.
+- **Open** shows the moment on the Labelling page. For a false detection, the stretch that makes it a training example is
+  selected, ready to label as everyday activity.
+- A detection judging a stretch left out on the Labelling page is not counted.
+
+#### Threshold (Model Lab)
+
+**Threshold** shows what a model's threshold trades: at each threshold from 0.30 to 0.95, the share of starts it catches on
+its test recordings against its false alarms a minute, as a curve with its own threshold ringed. The slider shows the
+numbers at any one, beside those at its own. The curve comes from one run of the model's scores through its detection rule at
+each threshold. The threshold is part of a trained model: to use another, train again.
+
+#### Compare models (Model Lab)
+
+**Compare models** puts two to four models of one label side by side on the same recordings: ones that none of them trained
+on. Each model was tested on its own recordings when it was trained, so those scores cannot be compared; these can.
+
+- A table gives each recording's starts and, for each model, how many it caught and how many false alarms it made, at its own
+  threshold, with totals.
+- Their threshold curves are drawn together, and any final tests of them are listed.
+- If no recording is new to all of them, it says so: compare them on a sealed day with the final test instead.
+
 #### Training history (Model Lab)
 
 **Training history** lists, for each label you have trained, what the model registry remembers: the project, every run and how it ended (ready to use, scored only, or failed), the sealed snapshots of exactly which recordings were used, and how many models exist now. It also shows which labels a project was trained against (for example "not the gesture") and which other labels' history mentions this one.
+
+Under **Runs**, each run shows the model it made, how many recordings it trained and tested on, and how far the labels were
+moved, and says what changed from the run before: recordings added or dropped, labels newly taught as not the gesture or left
+out, a different label timing, research checks on or off. Runs from before this was kept show less.
 
 A deleted model leaves this record behind. **Delete history** removes it (after a confirmation) and never touches a recording. It is disabled, with the reason, while the label still has models (delete them under Label models first) or while another label's history mentions it (that history is sealed; delete it first). This is also what has to be cleared before a label can be deleted from the Labels tab.
 
@@ -363,6 +541,147 @@ Importing a CSV file still works for recordings made elsewhere.
 Record a labelled session on the **Recorder** tab (Quick Capture is one label; Timeline Capture keeps the label of each interval), export the dataset folder, then **Import a recording folder** here: choose the folder and both files are imported together (the check covers each file's exact header, rows of the right width, timestamps that never go backwards, consistent labels and that every label is already in the catalogue). **Import a single CSV (older format)** still takes a one-file export, and stores it as two files too. Recordings are kept in the app as a folder of two dense files, and the trainer merges them by timestamp when it reads them, which gives it exactly the samples a single file held, so nothing about training or running a model changes. Each recording shows how dense its streams are: how many times the pulse or motion stream went quiet for more than a quarter of a second, the longest gap and the share of the recording spent in gaps, with a warning when it is more than a tenth (the watch stream stalls together for both sensors, and a model cannot score while it does). Recordings imported before this are in the older single-file format; **Convert to two files** converts them one at a time, checks that no row was lost, removes the old file only after the new folder is saved and the list says so, and keeps the recording's identity, so models trained on it stay tied to the same data. The import is all-or-nothing: the file is checked in full (size limit, exact header, consistent labels, every label already in the catalogue) before anything is written, a failure says exactly why, and nothing is changed on disk. It is a compatibility path independent of the newer recording-bundle format and never touches those bundles. Labels keep stable ids; archiving one hides it from new selection but never changes old recordings.
 
 The older three-class training, LiteRT readiness, intent-binding, replay and legacy inference panels were removed from this page; a model from the old system that could not be converted is kept aside and counted on the Label models card.
+
+#### Labelling
+
+The **Labelling** page (under Model Lab in the sidebar) is where you mark gestures by hand on a recording's signals. It is
+for fixing labels the recorder or the camera put in the wrong place (they are often a few hundred milliseconds late), and for
+marking recordings that have none.
+
+**Open a recording:**
+
+- **Model Lab recording** opens one of Model Lab's recordings.
+- **Open CSV…** opens a single-file dataset.
+- **Open folder…** opens a dataset folder (`ppg.csv` and `imu.csv`), as the Recorder exports it.
+- A recording with no labels at all opens too.
+- If you have unsaved hand labels, opening another recording asks first. The work on the page is kept while you visit other
+  pages.
+
+**The graphs:**
+
+- Every column of the recording is drawn on one shared timeline: PPG green, red and infrared, acceleration and rotation.
+  Contact quality and orientation are hidden at first; tick them under the graphs to show them.
+- Above the graphs, **Recorded** shows the labels the recorder or the camera gave, and **By hand** shows yours.
+- **Ctrl/⌘+scroll** or a trackpad pinch zooms in or out where the cursor is; plain up-and-down scrolling scrolls the page.
+  **Shift+scroll** or a sideways swipe moves along.
+- **Zoom in**, **Zoom out**, **Whole recording** and **Zoom to selection** do the same with buttons.
+- A long recording draws quickly: each pixel shows the lowest and highest value of the samples it covers, so no spike is
+  hidden.
+- Each graph's scale is fixed to its column's range over the whole recording, so moving or zooming never rescales it.
+  **Scale: Fit to view** scales each graph to what is in view instead, for a close look at small changes.
+- **Graph height** makes every graph Compact, Normal or Tall.
+
+**Camera contact.** If the open recording was made in the Recorder with the camera on, the page draws the camera's view of the
+hand. This includes Model Lab recordings added from the Recorder, and new versions of them.
+
+- **Camera: thumb to index** is a graph of the distance between thumb and index fingertip. When two hands are in view, it
+  shows whichever pair is closer. The dashed line is where a pinch closes: the threshold of your Gesture library's pinch, or
+  0.35 without one.
+- **Camera contact** is a rail with a yellow mark at each moment the distance falls past that line.
+- Click a mark to start the selection exactly there. This is the most exact start you have; labels from the recorder or
+  camera marking are often a few hundred milliseconds late.
+- Camera and watch are lined up from clock samples saved with the recording. The page says how closely, typically about
+  100 ms on a Bluetooth link.
+
+**Label a stretch:**
+
+1. Drag across any graph to select it. The selection shows on every graph, with its start, end and length below the buttons.
+2. The arrow keys move the selection's end by 20 ms; with **Alt** they move its start, and with **Shift** five times as far.
+3. Choose a label: a catalogue label (keys **1–9** pick the first nine), or **Nothing here** (key **0**). Nothing here marks
+   the stretch as no gesture at all, whatever the recorder said; that is how to mark everyday movement as a negative.
+4. Press **Label selection** (or **Enter**). **Erase hand label** (or **Backspace**) takes your label off the stretch, so it
+   trains on the recorded label again.
+5. **Undo** and **Redo** (⌘Z, ⇧⌘Z) step through your edits.
+
+**How hand labels are used:**
+
+- Recordings now carry a **`manual_label`** column, after `label`, in `ppg.csv`, `imu.csv` and the single CSV.
+- Wherever a row has a manual label, training uses it instead of `label`. "-" (Nothing here) means the row has no label.
+- The Recorder writes the column empty.
+- A file from before the column existed is read as it always was, and gets the column, empty, when it is imported or opened
+  here.
+
+**Check the model against the recording:**
+
+- **Run the active models** replays the recording through your active models exactly as the app runs them live, in Monitor,
+  so nothing acts. Nothing about the models or the recording changes.
+- Each model's score is drawn as a graph above the signals, with its threshold dashed, and its detections go on a
+  **Model** rail:
+  - green ("caught") where a detection comes 0.68 to 1.28 s after a labelled start of its gesture;
+  - red ("false?") where it does not.
+- A summary counts the starts it caught and the detections elsewhere, and says if some stretches could not be scored.
+- **Click a red detection** to select the stretch that turns it into a training example of what is not the gesture. The
+  stretch starts 0.88 s before the detection, because training takes each labelled start's moment 0.88 s in. The page also
+  picks your everyday-activity label (a label with that role on the Labels page).
+- Press **Enter** to label it, then **Save as new version**. Retraining on the new version teaches the model that moment
+  was not the gesture. A missed start shows as a labelled start with no green detection after it.
+- This is the quickest way to collect the hard negatives the model needs. Record ordinary activity (typing, using the mouse,
+  drinking, talking with your hands), run the model over it, and label what it fires on.
+
+**Label timing.** The page estimates how late the open recording's labels start, for the label most of its spans have:
+
+- **Camera:** the median gap between the label starts and the nearest camera contact (within 1.5 s), when the recording has
+  camera data and at least three starts have a contact near them.
+- **Model:** after **Run the active models**, the shift (−1.5 s to +1 s, in 50 ms steps) under which its detections catch the
+  most starts. A model trained on late labels learns their lateness, so where there is a camera, prefer the camera.
+- **Move the labels to the camera** (or **to the model**) moves every recorded span of this recording by that amount, as hand
+  labels: the span is painted where it now goes, and where it was is marked Nothing here. Undo takes it back.
+- Each recording gets its own correction: one shared offset cannot fix lags that differ from recording to recording.
+
+**Find your way:**
+
+- The **overview** strip above the rails is the whole recording: recorded labels on top, yours below, orange marks at places to
+  check, grey at suggestions and green and red at model detections, and a box over what is in view. Click or drag it to look
+  elsewhere; ← and → step along when it has focus.
+- Hovering a graph shows each graph's value at the cursor. With camera data, a small picture beside the overview draws the
+  hands the camera saw at that moment.
+- A selection's edges **snap** to camera contacts and releases, sharp wrist moves and label edges, when within 8 pixels of one.
+  Hold **Alt** while dragging not to, or untick **Snap** under the graphs.
+
+**Places to check.** A bar above the rails counts the places worth a second look and steps through them with **[** and **]**
+(or **Previous** and **Next**), saying what each is:
+
+- suspect data, also drawn on a **Data** rail: a stream that stopped for more than a quarter of a second, a clock that jumped
+  back, a pulse signal flat for a second, a column stuck at its highest or lowest value for ten samples or more (out of the
+  sensor's range), and pulse contact flagged for half a second or more. Click one on the rail to select it, with Leave out
+  chosen;
+- a hold under 200 ms, which training ignores;
+- a gesture labelled where the camera saw no contact within 1.5 s, and a contact with no gesture labelled near it;
+- after **Run the active models**: a detection with no start of its gesture 0.68 to 1.28 s before it, and a labelled start it
+  missed.
+
+**Suggestions.** The page suggests unlabelled stretches worth a look, on a **Suggested** rail:
+
+- where the camera saw the fingers close, likely the pinch;
+- where a model fired with nothing labelled (after **Run the active models**), likely everyday activity: the stretch that
+  makes it a training example;
+- where the wrist turned sharply, which only you can tell.
+
+Where two point at the same moment, the camera wins, then the model. **Review them** selects each in turn, with its likely
+label chosen: **Enter** labels it, **X** skips it, **N** and **P** move on and back. A stretch you have labelled, or marked
+Nothing here, is never suggested.
+
+**Leave out (key L).** For a stretch of bad data (strap loose, poor contact, the watch knocked). It stays in the recording but
+is never trained on, nor counted in a model's mistakes or final test. It is saved as the label `left_out` in `manual_label`,
+which needs no entry on the Labels tab.
+
+**Try another threshold.** After running the models, a slider under each model's summary shows its detections at another
+threshold, on the rail, in the summary and among the places to check. It changes only what is shown, never the model.
+
+**Keep it:**
+
+- **Save as new version** adds the recording, with your labels, to Model Lab as a new recording named "… (labelled)", and
+  opens it so you can go on.
+  - The recording you started from is left exactly as it was, so models trained on it stay tied to the data they learned
+    from.
+  - As for any recording added to Model Lab, its labels must be in the catalogue and at least one row must have one.
+- **Export…** writes the recording with your labels. It is a **folder of two files** by default (`ppg.csv`, `imu.csv` and
+  `dataset.json`, numbered if the name is taken), or **one CSV** with both `label` and `manual_label`. Either can be opened
+  here again or imported into Model Lab.
+
+**Review.** Once you have looked through a recording, say where its labels stand: **Labels are right**, or **Needs work** with
+what still needs doing. Save your labels first: the review is of the recording as saved. Model Lab shows it beside the
+recording, can list those nobody has reviewed, and the Main tab counts them.
 
 ### Gestures
 

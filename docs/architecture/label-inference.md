@@ -115,6 +115,11 @@ In both cases a detection cannot rise within the cooldown after the last one fel
 
 **Active and falling:** a detection stays active until the score falls below the release threshold, then falls.
 
+`TemporalDetector::observe` feeds it one score at a time outside the runtime: the desktop's replay (`labelling::replay`)
+runs each model's recorded scores through it at thresholds from 0.30 to 0.95 (`ModelReplay::sweep`), for the Threshold and
+Compare cards and the Labelling page's slider. It skips the runtime's clears on a rejected window, so it is close to a run at
+that threshold rather than exact.
+
 The trainer's replay uses a copy of this rule (`events.detect`). `tests/fixtures/detection_cases.json`, edge and peak cases, keeps the two equal.
 
 **Exclusivity:**
@@ -163,7 +168,8 @@ The desktop decides and records; the trainer only trains (`apps/desktop/src-taur
 - **Samples.** In each recording it takes:
   - a positive 880 ms after each start of the target;
   - as negatives, the same moment after other labels' starts;
-  - points inside holds and quiet time, at least 1.5 s from any hold edge.
+  - points inside holds and quiet time, at least 1.5 s from any hold edge;
+  - for the PPG + IMU model, moments 0, 200 and 400 ms after each start of the target, so it does not fire before the moment.
 - **Model.** It computes their inputs and fits ExtraTrees: 300 trees, minimum leaf 3, 70% of features per split.
 - **Cut-off.** For a PPG + IMU model:
   - the training recordings are split into up to five folds, each scored by a model trained without it;
@@ -172,6 +178,12 @@ The desktop decides and records; the trainer only trains (`apps/desktop/src-taur
   - A PPG-only spec keeps Youden's J on the left-out moments and the edge trigger.
 - **Testing.** It replays the held-out recordings the same way. A detection 680–1,280 ms after a start catches it.
 - **Bundle.** It writes the bundle and checks the tree file reproduces the trained model (within 1e-6).
+- **Left out.** A stretch marked on the Labelling page with the label `left_out` (`dataset_files::LEFT_OUT_LABEL`) is
+  always given the Exclude role, whatever the request says, so no decision touching it is trained on; it needs no catalogue
+  entry. The final test, the mistakes list and the threshold sweep do not count a detection judging a moment inside one
+  (`sealed_test::outside_left_out`).
+- **Refusals.** A sealed recording (kept for the final test, `sealed_test.rs`) or two recordings with the same rows
+  (`dataset_files::rows_sha`) are refused before anything runs.
 - **Gates.** A model that misses a go-live gate is still written, as Monitor-only:
   - AUC and balanced accuracy at least 0.7, and the cross-check AUC at least 0.7;
   - at most 10% of other moments flagged;

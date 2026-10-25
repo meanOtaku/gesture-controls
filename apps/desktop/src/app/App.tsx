@@ -3,6 +3,8 @@ import { NervSelectMenu } from "./components/NervSelectMenu";
 import { NervTelemetryPanel } from "../features/dashboard/components/NervTelemetryPanel";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { appNavigation } from "../shared/navigation/appNavigation";
+import { ShortcutsSheet } from "./components/ShortcutsSheet";
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { DeviceKind } from "../features/recipes/recipeModel";
 import { AppNav, navStatuses, type AppTab } from "./components/AppNav";
@@ -85,6 +87,7 @@ const Dashboard = lazy(() => import("../features/dashboard/components/Dashboard"
 const LiveSignalsPage = memo(lazy(() => import("../features/telemetry/components/LiveSignalsPage").then((m) => ({ default: m.LiveSignalsPage }))));
 const RecorderPage = memo(lazy(() => import("../features/telemetry/components/RecorderPage").then((m) => ({ default: m.RecorderPage }))));
 const RecordingsPage = memo(lazy(() => import("../features/telemetry/components/RecordingsPage").then((m) => ({ default: m.RecordingsPage }))));
+const LabellingPage = memo(lazy(() => import("../features/labelling/LabellingPage").then((m) => ({ default: m.LabellingPage }))));
 const NetworkLab = memo(lazy(() => import("../features/model-lab/components/NetworkLab").then((m) => ({ default: m.NetworkLab }))));
 const ModelLab = memo(lazy(() => import("../features/model-lab/components/ModelLab").then((m) => ({ default: m.ModelLab }))));
 const RecipesPage = memo(lazy(() => import("../features/recipes/components/RecipesPage").then((m) => ({ default: m.RecipesPage }))));
@@ -593,6 +596,8 @@ function MainApp() {
   const stableSaveRecipe = useStableCallback(saveRecipe);
   const stableDeleteRecipe = useStableCallback((id: string) => { void deleteRecipe(id); });
   const clearStartWithDevice = useCallback(() => setStartWithDevice(null), []);
+  // Another page asking to send you somewhere (the Labelling page, from a model's mistakes).
+  useEffect(() => appNavigation.onOpen((tab) => setActiveTab(tab as AppTab)), []);
   const openModelLab = useCallback(() => setActiveTab("modelLab"), []);
   const openLabels = useCallback(() => setActiveTab("labels"), []);
   const [networkLabModel, setNetworkLabModel] = useState<string | null>(null);
@@ -618,6 +623,7 @@ function MainApp() {
   return <SidebarProvider>
     <RecordingTimer />
     <CameraGestureBridge />
+    <ShortcutsSheet />
     <AppNav
       activeTab={activeTab}
       onSelect={setActiveTab}
@@ -723,6 +729,7 @@ function MainApp() {
     {activeTab === "signals" && <LiveSignalsPage />}
     {activeTab === "recorder" && <RecorderPage />}
     {activeTab === "recordings" && <RecordingsPage />}
+    {activeTab === "labelling" && <LabellingPage />}
     {activeTab === "labels" && <LabelsPage onOpen={setActiveTab} />}
     {activeTab === "gestureLibrary" && <GestureLibraryPage />}
     {activeTab === "modelLab" && (

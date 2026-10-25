@@ -221,6 +221,52 @@ The first PPG + IMU model trained in the app (15 training and 6 held-out recordi
 
 **On the benchmark.** The new peak rule raised the pinches caught within 0.5 and 1 false activation a minute from 0.156 / 0.236 to 0.213 / 0.301. Within 2 a minute it stayed at 0.37 (`app_fusion_check.py`).
 
+## Training on moments just after a start (2026-10-24)
+
+[`timing_negatives_check.py`](artifacts/ppg-benchmark-2026-10/timing_negatives_check.py), results in
+[`timing-negatives/`](artifacts/ppg-benchmark-2026-10/timing-negatives/results.md).
+
+**The idea.** Finding 4 above: training had no negatives just after a start, so the score rose early. This study adds, for
+every pinch start, negatives at fixed offsets after it, and compares with the app's own sample. The setup is otherwise the
+same:
+
+- the same 20 splits;
+- the app's features and trees;
+- the runtime's peak rule;
+- false activations per minute of recording.
+
+The offsets were fixed before any were scored.
+
+| Negatives added | Worst-split AUC | Mean AUC | Splits better | Recall ≤ 0.5/min | ≤ 1/min | ≤ 2/min | ≤ 5/min |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| none (the app's sample) | 0.853 | 0.898 | – | 0.213 | 0.301 | 0.372 | 0.479 |
+| **0, 200, 400 ms after the start** | **0.873** | **0.906** | 12/20 | **0.281** | 0.347 | **0.462** | **0.614** |
+| 1.5, 1.8 s after the start | 0.854 | 0.900 | 8/20 | 0.226 | 0.302 | 0.427 | 0.569 |
+| both | 0.865 | 0.899 | 8/20 | 0.237 | 0.367 | 0.427 | 0.592 |
+
+**What it shows:**
+
+- **The early negatives help at every budget.** About 9 more pinches in 100 are caught within 2 false activations a minute,
+  at the same delay (about 910 ms).
+- **The gain is not uniform:** they are better on 12 of the 20 splits. They were also picked from three variants on these
+  splits, so the gain is a little optimistic.
+- **Late negatives add little,** and adding them to the early ones does not beat the early ones alone.
+
+**Now in the trainer** for the PPG + IMU model (`ppg_onset.EARLY_OFFSETS_MS`, kind `target_early`). A PPG-only spec
+samples as before.
+
+## A duplicate inflated the app's held-out test (2026-10-24)
+
+The first PPG + IMU model trained in the app scored a held-out AUC of 0.996. Part of that was not real:
+
+- Two of the app's recordings were each stored two or three times: once imported as a single CSV, again as a folder, with
+  identical rows and different `#` lines.
+- The split put copies on both sides: ee1f8363 and 62564c89 trained, while their copies 001cc3e2, dad6565c and e04bf86c were
+  tested.
+- So the test included recordings the model had trained on.
+
+Model Lab now identifies recordings by their rows, flags copies, refuses to import one, and refuses to train on two.
+
 ## Where this leaves the project
 
 - **The best model these recordings support is now in the app.** It catches about a quarter to a third of pinches at 1–2 false activations a minute on recordings it did not see. Every model trained on the current recordings will be Monitor-only, which is right.

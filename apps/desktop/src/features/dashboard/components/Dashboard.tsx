@@ -13,6 +13,7 @@ import type {
 import { CalibrationPanel } from "./CalibrationPanel";
 import { RecipesCard } from "./RecipesCard";
 import { HeadphoneTelemetryPanel } from "./HeadphoneTelemetryPanel";
+import { ModelWorkflowCard } from "./ModelWorkflowCard";
 import { OverviewSection } from "./OverviewSection";
 import { WatchSensorControls } from "./WatchSensorControls";
 import { LinkHealthCard } from "./LinkHealthCard";
@@ -108,6 +109,8 @@ export function Dashboard({
           onNavigate={onNavigate}
         />
       )}
+
+      {view === "main" && <ModelWorkflowCard />}
 
       {view === "headphone" && !connected && headDiagnostic && (
         <aside className="connection-help" aria-label="Headphone connection help">

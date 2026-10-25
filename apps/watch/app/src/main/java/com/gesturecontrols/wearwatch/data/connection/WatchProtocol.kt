@@ -226,10 +226,11 @@ object WatchProtocol {
     }
 
     /**
-     * One flush of both sensors in a single envelope: `imu` carries the motion samples as per-sample
-     * arrays (each accelerometer/gyroscope entry null when that sensor gave nothing), `ppg` the same
-     * arrays as [ppgBatchMessage] or null. A motion reading with a non-finite component is left out,
-     * as JSON cannot carry it. Returns null when nothing is left to send.
+     * One flush of both sensors in a single envelope: `imuPacked` carries the motion samples packed as
+     * binary ([packImu]; the desktop's `decode_packed_imu` reads it), `ppg` the same arrays as
+     * [ppgBatchMessage] or null. A batch spanning more time than a packed offset holds (over 4 s, after a
+     * stall) goes as `imu`, per-sample arrays, instead. A motion reading with a non-finite component is
+     * left out. Returns null when nothing is left to send.
      */
     fun sensorBatchMessage(
         deviceId: String,
@@ -241,7 +242,10 @@ object WatchProtocol {
         val motion = imu.filter { allFinite(it.quaternion) && allFinite(it.accelerometer) && allFinite(it.gyroscope) }
         if (motion.isEmpty() && ppg.isEmpty()) return null
         val payload = JSONObject()
-        if (motion.isNotEmpty()) {
+        val packed = packImu(motion)
+        if (packed != null) {
+            payload.put("imuPacked", packed)
+        } else if (motion.isNotEmpty()) {
             val block = JSONObject()
             block.put("count", motion.size)
             block.put("timestampsNs", JSONArray(motion.map { it.timestampNs }))
@@ -252,6 +256,36 @@ object WatchProtocol {
         }
         if (ppg.isNotEmpty()) payload.put("ppg", ppgPayload(ppg))
         return envelope(TYPE_SENSOR_BATCH, deviceId, sequence, timestampNs, payload)
+    }
+
+    /** The packed motion layout's version, as the desktop's `PACKED_IMU_VERSION`. */
+    private const val PACKED_IMU_VERSION: Byte = 1
+
+    /**
+     * Motion samples packed as the desktop's `decode_packed_imu` reads them: standard base64 of, little-endian,
+     * u8 version, u16 count, i64 first timestamp (ns); then per sample u32 ns after the first, u8 flags (bit 0
+     * accelerometer, bit 1 gyroscope), and the quaternion, accelerometer and gyroscope as f32 (an absent sensor's
+     * are 0). The sensors' own floats go as they are, so nothing is lost; it is about 60 bytes a sample against
+     * about 140 as JSON numbers. Null with no sample, or when the samples span more than a u32 of nanoseconds.
+     */
+    fun packImu(samples: List<ImuSample>): String? {
+        if (samples.isEmpty()) return null
+        val first = samples.minOf { it.timestampNs }
+        if (samples.any { it.timestampNs - first > 0xFFFF_FFFFL }) return null
+        val buffer = java.nio.ByteBuffer.allocate(11 + samples.size * 45).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        buffer.put(PACKED_IMU_VERSION)
+        buffer.putShort(samples.size.toShort())
+        buffer.putLong(first)
+        for (sample in samples) {
+            buffer.putInt((sample.timestampNs - first).toInt())
+            val flags = (if (sample.accelerometer != null) 1 else 0) or (if (sample.gyroscope != null) 2 else 0)
+            buffer.put(flags.toByte())
+            for (i in 0 until 4) buffer.putFloat(sample.quaternion.getOrElse(i) { 0f })
+            for (values in listOf(sample.accelerometer, sample.gyroscope)) {
+                for (i in 0 until 3) buffer.putFloat(values?.getOrElse(i) { 0f } ?: 0f)
+            }
+        }
+        return java.util.Base64.getEncoder().encodeToString(buffer.array())
     }
 
     private fun ppgPayload(samples: List<PpgSample>): JSONObject {

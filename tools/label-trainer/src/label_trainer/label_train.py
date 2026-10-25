@@ -7,6 +7,9 @@ The model (research: `docs/research/ppg-imu-fusion-and-triggers-2026-10.md`):
     + accelerometer and gyroscope -> 1,032 window summaries of the last 0.3-1.3 s (`imu_onset.py`)
     -> ExtraTrees (300 trees) -> a detection at the top of the score's climb (the peak trigger)
 
+It learns from a positive 880 ms after each start of the gesture and, as negatives, other labels' starts, moments inside
+holds, quiet time, and moments 0, 200 and 400 ms after each start (so it does not fire before the moment).
+
 The cut-off is the one that, replayed over training recordings the model did not see, catches the most starts while firing
 by mistake at most `TARGET_FALSE_ACTIVATIONS_PER_MINUTE`. A spec whose sources are the pulse sensor alone trains the earlier
 PPG-only model instead (its cut-off from Youden's J, the edge trigger), so its runs can be repeated.
@@ -211,7 +214,8 @@ def examples(spec: Spec, recordings: dict[str, Recording], ids: list[str]) -> Ex
         recording = recordings[rid]
         ts, values = pulse_of(recording)
         held = ppg_onset.holds(recording.timestamps_ns, recording.raw_labels)
-        d, y, k = ppg_onset.sample_decisions(ts, held, spec.target, set(spec.excludes))
+        early = ppg_onset.EARLY_OFFSETS_MS if spec.motion else ()
+        d, y, k = ppg_onset.sample_decisions(ts, held, spec.target, set(spec.excludes), early)
         x = inputs(spec, recording, d)
         ok = np.isfinite(x).all(axis=1)
         xs.append(x[ok]); ys.append(y[ok]); groups += [rid] * int(ok.sum())

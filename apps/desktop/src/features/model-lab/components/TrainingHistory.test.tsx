@@ -5,7 +5,7 @@ import type { DatasetLabel } from "../types";
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-import { TrainingHistory, deleteBlocker, type TrainingHistoryProject } from "./TrainingHistory";
+import { TrainingHistory, deleteBlocker, runChanges, type TrainingHistoryProject } from "./TrainingHistory";
 
 const project = (label: string, over: Partial<TrainingHistoryProject> = {}): TrainingHistoryProject => ({
   id: `p-${label}`, label, name: label, createdAt: "2026-10-01T00:00:00Z",
@@ -80,5 +80,15 @@ describe("TrainingHistory", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete history of pinch" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("refused: busy");
     expect(within(screen.getByRole("region", { name: "Training history" })).getByRole("button", { name: "Delete history of pinch" })).toBeInTheDocument();
+  });
+});
+
+describe("runChanges", () => {
+  it("says what changed from the run before", () => {
+    const base = { id: "r", status: "finished", outcome: "deployable", queuedAt: "", finishedAt: null, failure: null };
+    const before = { ...base, train: ["a", "b"], test: ["c"], negatives: ["fist"], excludes: [], labelOffsetMs: 0, research: false };
+    const now = { ...base, train: ["a", "b", "d"], test: ["c"], negatives: ["fist", "typing"], excludes: [], labelOffsetMs: -250, research: false };
+    expect(runChanges(now, before, (id) => id, (id) => `#${id}`)).toEqual(["added #d", "typing now taught as not the gesture", "labels moved -250 ms (was 0)"]);
+    expect(runChanges(now, undefined, (id) => id, (id) => id)).toEqual([]);
   });
 });

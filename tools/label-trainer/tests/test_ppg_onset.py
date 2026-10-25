@@ -86,6 +86,16 @@ def test_decisions_are_starts_other_starts_mid_holds_and_quiet_time() -> None:
     assert not ((d >= 30_000 * MS) & (d - 5_600 * MS <= 31_000 * MS)).any()
 
 
+def test_moments_just_after_a_start_of_the_target_are_negatives_when_asked() -> None:
+    ts = np.arange(0, 1500, dtype=np.int64) * 40 * MS
+    holds = [(10_000 * MS, 14_000 * MS, "pinch"), (20_000 * MS, 21_000 * MS, "fist")]
+    d, y, kinds = P.sample_decisions(ts, holds, "pinch", set(), P.EARLY_OFFSETS_MS)
+    early = d[[k == "target_early" for k in kinds]]
+    assert early.tolist() == [10_000 * MS, 10_200 * MS, 10_400 * MS], "only after the target's start, not the fist's"
+    assert not y[[k == "target_early" for k in kinds]].any()
+    assert "target_early" not in P.sample_decisions(ts, holds, "pinch", set())[2], "only when asked"
+
+
 def test_a_recording_with_no_holds_gives_more_quiet_time() -> None:
     ts = np.arange(0, 1500, dtype=np.int64) * 40 * MS
     _, y, kinds = P.sample_decisions(ts, [], "pinch", set())

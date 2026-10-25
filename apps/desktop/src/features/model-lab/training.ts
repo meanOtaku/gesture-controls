@@ -1,3 +1,4 @@
+import { LEFT_OUT } from "../labelling/labellingModel";
 import type { DatasetSummary } from "./types";
 import { datasetLabels } from "./types";
 
@@ -21,9 +22,9 @@ export const PULSE_MODEL = {
     { title: "Peak trigger", detail: "Fires when the vote falls back after reaching the cut-off" },
   ],
   inputs: 2733,
-  /** What the app's model scored on 37 recordings and 20 recording-disjoint splits, firing on the peak at a cut-off of 0.8
-   * (docs/research/artifacts/ppg-benchmark-2026-10/ppg-imu-fusion/app-definition-check.json). */
-  research: { worstAuc: 0.853, meanAuc: 0.898, recall: 0.372, falsePerMinute: 1.5 },
+  /** What the app's model scored on 37 recordings and 20 recording-disjoint splits, trained with moments just after each
+   * start as negatives and firing on the peak at a cut-off of 0.65 (docs/research/artifacts/ppg-benchmark-2026-10/timing-negatives). */
+  research: { worstAuc: 0.873, meanAuc: 0.906, recall: 0.462, falsePerMinute: 1.9 },
 } as const;
 
 export interface TrainRequest {
@@ -112,7 +113,8 @@ export function otherLabels(datasets: DatasetSummary[], selectedIds: ReadonlySet
   const labels = new Set<string>();
   for (const dataset of datasets) {
     if (!selectedIds.has(dataset.id)) continue;
-    for (const label of datasetLabels(dataset)) if (label !== target) labels.add(label);
+    // Stretches left out on the Labelling page are always excluded (the desktop sees to it), so they need no role.
+    for (const label of datasetLabels(dataset)) if (label !== target && label !== LEFT_OUT) labels.add(label);
   }
   return [...labels].sort();
 }

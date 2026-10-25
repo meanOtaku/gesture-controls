@@ -517,7 +517,8 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         private const val HEARTBEAT_INTERVAL_MS = 1000L
         private const val MEDICAL_BATCH_INTERVAL_MS = 100L
         private const val PPG_BATCH_MAX_SAMPLES = 32
-        private const val IMU_BATCH_MAX_SAMPLES = 16
+        // A 100 ms batch at 200 Hz is 20 samples; packed (about 60 bytes each) that is one message of a few Bluetooth fragments.
+        private const val IMU_BATCH_MAX_SAMPLES = 40
         /** A held motion sample is sent alone after this long if no pulse burst has come to carry it. */
         /** How long a motion batch collects samples: about five at 50 Hz, two or three Bluetooth packets. */
         private const val IMU_BATCH_INTERVAL_MS = 100L

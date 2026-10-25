@@ -1,4 +1,4 @@
-import { Activity, Brain, CircleDot, Network, FolderOpen, Hand, Headphones, Shapes, Tags, Radar, LayoutDashboard, Settings as SettingsIcon, SlidersHorizontal, Watch, Workflow } from "lucide-react";
+import { Activity, Brain, CircleDot, Highlighter, Network, FolderOpen, Hand, Headphones, Shapes, Tags, Radar, LayoutDashboard, Settings as SettingsIcon, SlidersHorizontal, Watch, Workflow } from "lucide-react";
 import { useEffect } from "react";
 import {
   Sidebar,
@@ -14,7 +14,7 @@ import {
   SidebarRail,
 } from "../../components/ui/sidebar";
 
-export type AppTab = "main" | "headphone" | "watch" | "recipes" | "devices" | "gestures" | "signals" | "recorder" | "recordings" | "labels" | "gestureLibrary" | "modelLab" | "networkLab" | "settings";
+export type AppTab = "main" | "headphone" | "watch" | "recipes" | "devices" | "gestures" | "signals" | "recorder" | "recordings" | "labelling" | "labels" | "gestureLibrary" | "modelLab" | "networkLab" | "settings";
 
 type NavItem = { id: AppTab; label: string; icon: typeof LayoutDashboard };
 
@@ -34,7 +34,11 @@ const CAPTURE: NavItem[] = [
   { id: "recordings", label: "Recordings", icon: FolderOpen },
 ];
 const LABELS: NavItem[] = [{ id: "labels", label: "Labels", icon: Tags }, { id: "gestureLibrary", label: "Gesture library", icon: Shapes }];
-const MODELS: NavItem[] = [{ id: "modelLab", label: "Model Lab", icon: Brain }, { id: "networkLab", label: "Network lab", icon: Network }];
+const MODELS: NavItem[] = [
+  { id: "modelLab", label: "Model Lab", icon: Brain },
+  { id: "labelling", label: "Labelling", icon: Highlighter },
+  { id: "networkLab", label: "Network lab", icon: Network },
+];
 const SETTINGS: NavItem = { id: "settings", label: "Settings", icon: SettingsIcon };
 
 /** The name of every page, as the nav shows it. */

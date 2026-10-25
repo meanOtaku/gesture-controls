@@ -1,13 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useState } from "react";
-import { OperationFeedback } from "../../../components/app/OperationFeedback";
+import { feedbackWithUndo, OperationFeedback } from "../../../components/app/OperationFeedback";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
 import { useLabelModels } from "../hooks/useLabelModels";
 import { useModelLabData } from "../hooks/useModelLabData";
 import { datasetLabels, describeGaps, type DatasetSummary } from "../types";
 import { DatasetManager } from "./DatasetManager";
+import { CompareCard } from "./CompareCard";
+import { MistakesCard } from "./MistakesCard";
+import { ThresholdCard } from "./ThresholdCard";
+import { SealedTestCard } from "./SealedTestCard";
 import { DetectionActivity } from "./DetectionActivity";
 import { LabelModelsPanel } from "./LabelModelsPanel";
 import { RecorderRecordings } from "./RecorderRecordings";
@@ -127,6 +131,7 @@ export function ModelLab({ onOpenLabels, onInspectModel, onOpenNetworkLab }: { o
         <RecorderRecordings desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} onAdded={() => void refreshDatasets()} />
         <DatasetManager
           desktopAvailable={desktopAvailable}
+          labels={labels}
           datasets={datasets}
           loading={loading}
           importing={importing}
@@ -136,6 +141,22 @@ export function ModelLab({ onOpenLabels, onInspectModel, onOpenNetworkLab }: { o
           onImportFolder={handleImportFolder}
           onConverted={() => void refreshDatasets()}
           onDelete={handleDelete}
+          onSeal={async (ids, sealed) => {
+            const seal = async (which: boolean) => {
+              await invoke("set_datasets_sealed", { ids, sealed: which });
+              await refreshDatasets();
+            };
+            try {
+              await seal(sealed);
+              feedbackWithUndo(
+                sealed ? "Sealed for the final test" : "Unsealed",
+                `${ids.length} recording${ids.length === 1 ? "" : "s"}.`,
+                () => void seal(!sealed).catch((err) => setError(String(err))),
+              );
+            } catch (err) {
+              setError(String(err));
+            }
+          }}
         />
         <Card id="lab-coverage" role="region" aria-label="Labels">
           <CardContent className="flex flex-wrap items-center justify-between gap-3">
@@ -144,8 +165,12 @@ export function ModelLab({ onOpenLabels, onInspectModel, onOpenNetworkLab }: { o
           </CardContent>
         </Card>
         <TrainPanel desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} onOpenNetworkLab={onOpenNetworkLab} />
-        <TrainingHistory desktopAvailable={desktopAvailable} labels={labels} refreshKey={models.map((model) => `${model.id}:${model.state}`).join(",")} />
+        <TrainingHistory desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} refreshKey={models.map((model) => `${model.id}:${model.state}`).join(",")} />
         <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} onInspect={onInspectModel} />
+        <MistakesCard desktopAvailable={desktopAvailable} models={models} />
+        <ThresholdCard desktopAvailable={desktopAvailable} models={models} />
+        <CompareCard desktopAvailable={desktopAvailable} models={models} />
+        <SealedTestCard desktopAvailable={desktopAvailable} models={models} datasets={datasets} />
         <DetectionActivity desktopAvailable={desktopAvailable} />
       </fieldset>
     </main>

@@ -333,11 +333,11 @@ describe("telemetryStore", () => {
       expect(commentLines.some((line) => line.includes("label: standing"))).toBe(true);
       expect(commentLines.some((line) => line.includes("row_count: 1"))).toBe(true);
       expect(headerLine).toBe(
-        "timestamp_ns,sequence,ppg_green,ppg_red,ppg_ir,accel_x,accel_y,accel_z,gyro_x,gyro_y,gyro_z,quat_w,quat_x,quat_y,quat_z,contact_quality,label",
+        "timestamp_ns,sequence,ppg_green,ppg_red,ppg_ir,accel_x,accel_y,accel_z,gyro_x,gyro_y,gyro_z,quat_w,quat_x,quat_y,quat_z,contact_quality,label,manual_label",
       );
 
       const dataLine = lines[lines.length - 1];
-      expect(dataLine).toBe("500,3,,,,0.1,0.2,0.3,,,,1,0,0,0,,standing");
+      expect(dataLine).toBe("500,3,,,,0.1,0.2,0.3,,,,1,0,0,0,,standing,");
     });
 
     it("removes an unreferenced label but blocks removal of a label a timeline interval still references", () => {

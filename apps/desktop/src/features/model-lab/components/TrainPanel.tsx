@@ -11,6 +11,8 @@ import { useTrainingRun } from "../hooks/useTrainingRun";
 import { PULSE_MODEL, buildRequest, hasLabel, otherLabels, recordingsWithLabel, type OtherRole, type TrainPlan, type TrainerEnvironment } from "../training";
 import { datasetLabels, inImportOrder, recordingNumber, type DatasetLabel, type DatasetSummary } from "../types";
 import { LabelTiming } from "./LabelTiming";
+import { LabelSwatch } from "../../labels/labelColor";
+import { splitCoverage, valueTitle, type SplitCondition } from "../../telemetry/coverage";
 import { TrainingRunView } from "./TrainingRunView";
 
 type TrainPanelProps = {
@@ -42,7 +44,9 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
   const [error, setError] = useState<string | null>(null);
 
   const usable = labels.filter((label) => label.archivedAt === null);
-  const candidates = inImportOrder(datasets.filter((dataset) => datasetLabels(dataset).length > 0));
+  // Sealed recordings are kept for the final test: never trained on, nor used to choose anything.
+  const candidates = inImportOrder(datasets.filter((dataset) => datasetLabels(dataset).length > 0 && !dataset.sealed));
+  const sealedCount = datasets.filter((dataset) => dataset.sealed).length;
   const others = otherLabels(datasets, selected, target);
   const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, research, labelOffsetMs: labelOffset });
   const requestKey = JSON.stringify(request);
@@ -147,12 +151,13 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
                     <li key={dataset.id} className="flex items-center gap-2 text-sm">
                       <Checkbox checked={selected.has(dataset.id)} disabled={running !== null} onCheckedChange={() => toggleRecording(dataset.id)} aria-label={`Use ${dataset.originalFilename}`} />
                       <span>{dataset.sequence ? <strong className="mr-2 font-mono">{recordingNumber(dataset)}</strong> : null}{dataset.originalFilename}</span>
-                      <small className="text-muted-foreground">{datasetLabels(dataset).join(", ")}</small>
+                      <small className="text-muted-foreground">{datasetLabels(dataset).map((label) => <LabelSwatch key={label} label={label} catalogue={labels} />)}{datasetLabels(dataset).join(", ")}</small>
                       {hasLabel(dataset, target) && <Badge variant="secondary">has {target}</Badge>}
                     </li>
                   ))}
                 </ul>
               )}
+              {sealedCount > 0 && <p className="field-hint">{sealedCount} sealed recording{sealedCount === 1 ? " is" : "s are"} kept out for the final test.</p>}
             </fieldset>
 
             {others.length > 0 && (
@@ -162,7 +167,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
                 <ul className="flex flex-col gap-2" aria-label="Roles of the other labels">
                   {others.map((other) => (
                     <li key={other} className="flex items-center gap-2 text-sm">
-                      <span className="min-w-32"><code>{other}</code></span>
+                      <span className="min-w-32"><LabelSwatch label={other} catalogue={labels} /><code>{other}</code></span>
                       <select aria-label={`Role of ${other}`} className={NATIVE_SELECT} value={roles[other] ?? "negative"} disabled={running !== null} onChange={(event) => setRoles((previous) => ({ ...previous, [other]: event.target.value as OtherRole }))}>
                         <option value="negative">Something else (not {target})</option>
                         <option value="exclude">Leave out</option>
@@ -184,6 +189,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
                     <p className="field-hint">
                       It will train on {plan.train.length} recording{plan.train.length === 1 ? "" : "s"} ({plan.train.map(name).join(", ")}) and test on {plan.evaluation.length} it never trains on ({plan.evaluation.map(name).join(", ")}).
                     </p>
+                    <SplitCoverageTable rows={splitCoverage(datasets, plan.train, plan.evaluation, target)} label={target} />
                     {recordingsWithLabel(datasets, plan.train, target) < 2 && (
                       <Alert role="note">
                         <AlertDescription>
@@ -210,5 +216,33 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
         <TrainingRunView run={run} />
       </CardContent>
     </Card>
+  );
+}
+
+/** Holds of the label by arm and wrist on each side of the split, with what only one side has called out. */
+function SplitCoverageTable({ rows, label }: { rows: SplitCondition[]; label: string }) {
+  if (rows.length === 0) return null;
+  const onlyTested = rows.filter((row) => row.train === 0);
+  const onlyTrained = rows.filter((row) => row.test === 0);
+  const name = (row: SplitCondition) => `${valueTitle("arm", row.arm)}, ${valueTitle("wrist", row.wrist)}`;
+  return (
+    <div className="flex flex-col gap-1">
+      <table className="coverage-grid" aria-label={`Holds of ${label} on each side, by arm and wrist`}>
+        <thead>
+          <tr><th>Arm, wrist</th><th>Trains on</th><th>Tests on</th></tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={`${row.arm}-${row.wrist}`}>
+              <th>{name(row)}</th>
+              <td className={row.train === 0 ? "coverage-none" : undefined}>{row.train}</td>
+              <td className={row.test === 0 ? "coverage-thin" : undefined}>{row.test}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {onlyTested.length > 0 && <p className="field-hint">The test has {onlyTested.map(name).join("; ")}, which it never trains on: its score there is about something new to it.</p>}
+      {onlyTrained.length > 0 && <p className="field-hint">It trains on {onlyTrained.map(name).join("; ")}, which the test lacks: the score says nothing of how it does there.</p>}
+    </div>
   );
 }

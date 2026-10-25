@@ -1098,6 +1098,17 @@ pub struct TrainingHistoryRun {
     pub queued_at: String,
     pub finished_at: Option<String>,
     pub failure: Option<String>,
+    /// The recordings it trained on and was tested on (by id), from its sealed snapshot.
+    pub train: Vec<String>,
+    pub test: Vec<String>,
+    /// The other labels it treated as not the gesture, and those it left out.
+    pub negatives: Vec<String>,
+    pub excludes: Vec<String>,
+    /// How far the labels were moved (ms), and whether research checks ran; None for a run from before these were kept.
+    pub label_offset_ms: Option<i64>,
+    pub research: Option<bool>,
+    /// The model it made, if it made one and it still exists.
+    pub model: Option<String>,
 }
 
 /// What the registry keeps for one label's training project, for the Model Lab history list.
@@ -1125,6 +1136,36 @@ fn text_of<T: Serialize>(value: &T) -> Option<String> {
         .and_then(|v| v.as_str().map(str::to_string))
 }
 
+/// A run's data and settings, from its snapshot and its trainer's parameters.
+fn history_details(registry: &model_lab_core::Registry, run: &model_lab_core::TrainingRun) -> TrainingHistoryRun {
+    let snapshot = registry.snapshots.get(&run.snapshot_id);
+    let ids = |list: &[model_lab_core::RecordingId]| list.iter().map(ToString::to_string).collect::<Vec<_>>();
+    let with_role = |role: model_lab_core::ExampleRole| {
+        snapshot
+            .map(|s| s.mapping.entries.iter().filter(|(_, r)| **r == role).map(|(l, _)| l.to_string()).collect())
+            .unwrap_or_default()
+    };
+    TrainingHistoryRun {
+        id: String::new(),
+        status: String::new(),
+        outcome: None,
+        queued_at: String::new(),
+        finished_at: None,
+        failure: None,
+        train: snapshot.map(|s| ids(&s.split.train)).unwrap_or_default(),
+        test: snapshot.map(|s| ids(&s.split.evaluation)).unwrap_or_default(),
+        negatives: with_role(model_lab_core::ExampleRole::Negative),
+        excludes: with_role(model_lab_core::ExampleRole::Exclude),
+        label_offset_ms: run.trainer.params.get("labelOffsetMs").and_then(serde_json::Value::as_i64),
+        research: run.trainer.params.get("research").and_then(serde_json::Value::as_bool),
+        model: registry
+            .versions
+            .values()
+            .find(|v| matches!(&v.origin, model_lab_core::ModelOrigin::Trained { run_id } if *run_id == run.id))
+            .map(|v| v.id.to_string()),
+    }
+}
+
 /// Every training project in the registry, by label, with its runs, snapshots and cross-references.
 pub(crate) fn training_history_of(
     registry: &model_lab_core::Registry,
@@ -1145,6 +1186,7 @@ pub(crate) fn training_history_of(
                     queued_at: run.queued_at.clone(),
                     finished_at: run.finished_at.clone(),
                     failure: run.failure.clone(),
+                    ..history_details(registry, run)
                 })
                 .collect();
             runs.sort_by(|a, b| b.queued_at.cmp(&a.queued_at));

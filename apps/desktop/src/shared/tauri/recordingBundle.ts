@@ -21,10 +21,12 @@ export type RecordingMetadataPayload = {
   sources: RecordingSource[];
   raw_row_count: number;
   raw_source_row_counts: Record<string, number>;
+  /** How the session was recorded (see `sessionContext.ts`); absent when none was given. */
+  context?: Record<string, string>;
 };
 
 export type ResolvedBoundary = { raw_row: number; source_timestamp_ns: number };
-export type CreationMechanism = "quick_capture" | "hotkey_hold" | "hotkey_toggle" | "timeline_edit" | "camera_proposal";
+export type CreationMechanism = "quick_capture" | "hotkey_hold" | "hotkey_toggle" | "timeline_edit" | "camera_proposal" | "guided_cue";
 export type CurationStatus = "unreviewed" | "approved" | "excluded";
 
 /** Mirrors `recording_bundle::AnnotationInterval` and the ADR's `annotations.json` fixture. */
@@ -404,6 +406,9 @@ export const RECORDINGS_CHANGED = "recordings-changed";
 function announceRecordingsChanged(): void {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(RECORDINGS_CHANGED));
 }
+
+/** Tells every list of recordings that one was added elsewhere (a new version saved on the Labelling page). */
+export const notifyRecordingsChanged = announceRecordingsChanged;
 
 /** Calls `listener` whenever recordings are saved, imported, deleted or gain intervals. Returns the way to stop. */
 export function onRecordingsChanged(listener: () => void): () => void {

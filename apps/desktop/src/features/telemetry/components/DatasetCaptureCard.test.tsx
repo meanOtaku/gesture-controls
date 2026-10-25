@@ -121,7 +121,7 @@ describe("DatasetCaptureCard", () => {
   });
 
   it("disables label editing while a dataset session is recording", () => {
-    renderCard({ datasetRecording: true, datasetSession: { label: "", startedAtIso: new Date().toISOString() } });
+    renderCard({ datasetRecording: true, datasetSession: { label: "", startedAtIso: new Date().toISOString(), context: {} } });
     expect(screen.getByLabelText("Dataset label")).toBeDisabled();
 
     expect(screen.getByRole("button", { name: "Stop dataset capture" })).toBeInTheDocument();
@@ -153,7 +153,7 @@ describe("DatasetCaptureCard", () => {
     const onDiscard = vi.fn();
     renderCard({
       onDiscard,
-      datasetSession: { label: "", startedAtIso: new Date().toISOString() },
+      datasetSession: { label: "", startedAtIso: new Date().toISOString(), context: {} },
       datasetRowCount: 42,
     });
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
@@ -167,7 +167,7 @@ describe("DatasetCaptureCard", () => {
     const onDiscard = vi.fn();
     renderCard({
       onDiscard,
-      datasetSession: { label: "", startedAtIso: new Date().toISOString() },
+      datasetSession: { label: "", startedAtIso: new Date().toISOString(), context: {} },
       datasetRowCount: 42,
     });
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
@@ -405,7 +405,7 @@ describe("DatasetCaptureCard", () => {
               onChooseExportFolder: vi.fn().mockResolvedValue(undefined),
               datasetRecording: true,
               datasetRecordingState: "recording",
-              datasetSession: { label: "", startedAtIso: new Date().toISOString() },
+              datasetSession: { label: "", startedAtIso: new Date().toISOString(), context: {} },
               datasetRowCount: 3,
               onSelectLabel: vi.fn(() => true),
               activeMarkerLabel: null,
@@ -437,7 +437,7 @@ describe("DatasetCaptureCard", () => {
               onChooseExportFolder: vi.fn().mockResolvedValue(undefined),
               datasetRecording: true,
               datasetRecordingState: "recording",
-              datasetSession: { label: "", startedAtIso: new Date().toISOString() },
+              datasetSession: { label: "", startedAtIso: new Date().toISOString(), context: {} },
               datasetRowCount: 3,
               onSelectLabel: vi.fn(() => true),
               activeMarkerLabel: null,

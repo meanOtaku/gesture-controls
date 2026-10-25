@@ -7,8 +7,8 @@ this file in sync if that contract changes.
 
 from __future__ import annotations
 
-# Exact column order written by generateDatasetCsv(). A header line must match
-# this exactly (case-sensitive, same order) or the file is rejected.
+# The single file's columns before manual labels existed. Still read: a header line must match this or
+# `HEADER_COLUMNS_V2` exactly (case-sensitive, same order) or the file is rejected.
 HEADER_COLUMNS: tuple[str, ...] = (
     "timestamp_ns",
     "sequence",
@@ -29,6 +29,14 @@ HEADER_COLUMNS: tuple[str, ...] = (
     "label",
 )
 
+# A label given by hand on the desktop's Labelling page. Where a row has one, it is the row's label whatever `label` (from
+# the recorder or the camera) says, and `NO_LABEL` there means the row has no label (see `csv_io.effective_label`).
+MANUAL_LABEL_COLUMN = "manual_label"
+NO_LABEL = "-"
+# Exact column order the desktop writes now (`generateDatasetCsv()`, the Labelling page's export): the above, then the manual
+# label.
+HEADER_COLUMNS_V2: tuple[str, ...] = (*HEADER_COLUMNS, MANUAL_LABEL_COLUMN)
+
 # A recording can also be a folder of two dense files, one for each sensor, with a row only where that sensor had a sample
 # (see `csv_io.load_recording`). The columns are the single file's, without the other sensor's.
 PPG_FILE = "ppg.csv"
@@ -39,6 +47,9 @@ IMU_FILE_COLUMNS: tuple[str, ...] = (
     "timestamp_ns", "sequence", "accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z",
     "quat_w", "quat_x", "quat_y", "quat_z", "label",
 )
+# The same with the manual label, as the desktop writes them now.
+PPG_FILE_COLUMNS_V2: tuple[str, ...] = (*PPG_FILE_COLUMNS, MANUAL_LABEL_COLUMN)
+IMU_FILE_COLUMNS_V2: tuple[str, ...] = (*IMU_FILE_COLUMNS, MANUAL_LABEL_COLUMN)
 
 TIMESTAMP_COLUMN = "timestamp_ns"
 SEQUENCE_COLUMN = "sequence"

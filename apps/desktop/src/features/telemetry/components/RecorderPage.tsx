@@ -2,7 +2,12 @@ import { useSyncExternalStore } from "react";
 import { CameraCapturePanel } from "../../camera/components/CameraCapturePanel";
 import { CameraAssistCard } from "../../gestureLibrary/CameraAssistCard";
 import { cameraAssist } from "../../gestureLibrary/cameraAssist";
+import { CoverageCard } from "./CoverageCard";
 import { DatasetCaptureCard } from "./DatasetCaptureCard";
+import { GuidedSessionCard } from "./GuidedSessionCard";
+import { JustRecordedCard } from "./JustRecordedCard";
+import { SessionDetailsCard } from "./SessionDetailsCard";
+import { SignalHealthStrip } from "./SignalHealthStrip";
 import { StreamStatus } from "./StreamStatus";
 import { useTelemetryExport } from "../hooks/useTelemetryExport";
 import { timedCapture } from "../recording/timedCapture";
@@ -34,7 +39,9 @@ export function RecorderPage() {
       <div className={`connection ${datasetRecording ? "online" : "offline"}`}><span className="pulse" />{datasetRecording ? "Recording" : "Not recording"}</div>
     </header>
     <StreamStatus />
+    <SignalHealthStrip recording={datasetRecording} />
     <div className="card-stack">
+      <JustRecordedCard recording={datasetRecording} />
       <DatasetCaptureCard
         selectedLabel={selectedLabel}
         sessionLabels={sessionLabels}
@@ -72,6 +79,15 @@ export function RecorderPage() {
         getDatasetRows={() => telemetryStore.getDatasetRows()}
         timelineIntervals={telemetryStore.getTimelineIntervals()}
       />
+      <GuidedSessionCard
+        recording={datasetRecording}
+        onStop={() => {
+          telemetryStore.stopDatasetRecording();
+          void saveDatasetRecording();
+        }}
+      />
+      <SessionDetailsCard context={telemetryStore.getSessionContext()} onChange={(context) => telemetryStore.setSessionContext(context)} recording={datasetRecording} />
+      <CoverageCard />
       <CameraAssistCard selectedLabel={selectedLabel} extraLabels={extraLabels} onToggleExtraLabel={(label) => telemetryStore.toggleExtraLabel(label)} recording={datasetRecording} desktopAvailable={desktopAvailable} />
       <CameraCapturePanel />
     </div>

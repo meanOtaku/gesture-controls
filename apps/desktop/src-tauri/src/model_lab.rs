@@ -17,10 +17,8 @@ const MAX_DATASET_CSV_BYTES: usize = 20 * 1024 * 1024;
 const MAX_FILENAME_LEN: usize = 255;
 const METADATA_COMMENT_PREFIX: char = '#';
 
-/// Exact column order the Milestone 9 dataset recorder writes. Mirrors
-/// `DATASET_CSV_COLUMNS` in telemetryStore.ts and `HEADER_COLUMNS` in
-/// tools/label-trainer/src/label_trainer/schema.py. A dataset whose
-/// header does not match this exactly is rejected on import.
+/// The single-file dataset's columns before manual labels existed (what the Recorder's older exports and the Recordings
+/// tab's bundles use). Still imported; stored with `manual_label` added. See [`DATASET_CSV_HEADER_V2`].
 pub(crate) const DATASET_CSV_HEADER: [&str; 17] = [
     "timestamp_ns",
     "sequence",
@@ -39,6 +37,30 @@ pub(crate) const DATASET_CSV_HEADER: [&str; 17] = [
     "quat_z",
     "contact_quality",
     "label",
+];
+
+/// Exact column order of the single-file dataset the Recorder and the Labelling page write: [`DATASET_CSV_HEADER`] and then
+/// `manual_label`. Mirrors `DATASET_CSV_COLUMNS` in telemetryStore.ts and `HEADER_COLUMNS` in
+/// tools/label-trainer/src/label_trainer/schema.py. A dataset headed by neither is rejected on import.
+pub(crate) const DATASET_CSV_HEADER_V2: [&str; 18] = [
+    "timestamp_ns",
+    "sequence",
+    "ppg_green",
+    "ppg_red",
+    "ppg_ir",
+    "accel_x",
+    "accel_y",
+    "accel_z",
+    "gyro_x",
+    "gyro_y",
+    "gyro_z",
+    "quat_w",
+    "quat_x",
+    "quat_y",
+    "quat_z",
+    "contact_quality",
+    "label",
+    dataset_files::MANUAL_LABEL_COLUMN,
 ];
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -70,6 +92,37 @@ pub struct DatasetSummary {
     /// The saved Recorder recording this was made from, when it was added straight from one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_recording_id: Option<String>,
+    /// The recording this one is a new version of, when it was saved from the Labelling page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub derived_from: Option<String>,
+    /// How the session was recorded: the Recorder's session details (`dataset_files::CONTEXT_PREFIX`).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub context: std::collections::BTreeMap<String, String>,
+    /// Kept for the final test (`sealed_test.rs`): never trained on, nor used to choose anything.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sealed: bool,
+    /// What the recording holds (`dataset_files::rows_sha`: its rows, whatever its `#` lines): two recordings with the same one
+    /// hold the same data. Worked out when it is added, or the first time it is listed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_sha: Option<String>,
+    /// What to know about its data before training on it (worked out like `content_sha`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quality: Option<dataset_files::Quality>,
+    /// Whether its labels were checked on the Labelling page; None while nobody has.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<DatasetReview>,
+}
+
+/// Where a recording's labels stand after a look on the Labelling page.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatasetReview {
+    /// "reviewed" or "needs_work".
+    pub status: String,
+    /// What still needs doing, for "needs_work".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub note: String,
+    pub at: String,
 }
 
 impl DatasetSummary {
@@ -167,8 +220,10 @@ struct ParsedDataset {
 }
 
 /// Validates a dataset CSV against the Milestone 9 export contract: optional
-/// leading `#` metadata lines, then the exact header row, then data rows with
-/// the right column count, each carrying its own `label`.
+/// leading `#` metadata lines, then the exact header row (with or without
+/// `manual_label`), then data rows with the right column count, each carrying
+/// its own `label`. A row trains on its manual label where it has one
+/// (`dataset_files::effective_label`).
 ///
 /// Two shapes are accepted:
 /// - A single-label session (Quick Capture): `# label: <value>` is present, so
@@ -202,12 +257,16 @@ fn parse_csv(content: &str) -> Result<ParsedDataset, String> {
         ));
     };
 
-    let expected_header = DATASET_CSV_HEADER.join(",");
-    if *header_line != expected_header {
+    let expected_header = DATASET_CSV_HEADER_V2.join(",");
+    let columns = if *header_line == expected_header {
+        DATASET_CSV_HEADER_V2.len()
+    } else if *header_line == DATASET_CSV_HEADER.join(",") {
+        DATASET_CSV_HEADER.len()
+    } else {
         return Err(format!(
             "header does not match the Milestone 9 dataset export contract\n  expected: {expected_header}\n  actual:   {header_line}"
         ));
-    }
+    };
 
     let data_lines: Vec<&str> = lines[index + 1..]
         .iter()
@@ -219,17 +278,22 @@ fn parse_csv(content: &str) -> Result<ParsedDataset, String> {
     }
 
     let mut row_labels: Vec<&str> = Vec::with_capacity(data_lines.len());
+    let mut trains_on: Vec<&str> = Vec::with_capacity(data_lines.len());
     for (offset, line) in data_lines.iter().enumerate() {
         let fields: Vec<&str> = line.split(',').collect();
-        if fields.len() != DATASET_CSV_HEADER.len() {
+        if fields.len() != columns {
             return Err(format!(
-                "row {}: expected {} columns, got {}",
+                "row {}: expected {columns} columns, got {}",
                 offset + 1,
-                DATASET_CSV_HEADER.len(),
                 fields.len()
             ));
         }
-        row_labels.push(fields[fields.len() - 1].trim());
+        let label = fields[DATASET_CSV_HEADER.len() - 1].trim();
+        row_labels.push(label);
+        trains_on.push(dataset_files::effective_label(
+            label,
+            fields.get(DATASET_CSV_HEADER.len()).copied().unwrap_or(""),
+        ));
     }
 
     let comment_label = extract_label(&comment_lines);
@@ -250,16 +314,11 @@ fn parse_csv(content: &str) -> Result<ParsedDataset, String> {
                 offset + 1
             ));
         }
-        return Ok(ParsedDataset {
-            labels: vec![comment_label.clone()],
-            row_count: data_lines.len(),
-            csv: content.to_string(),
-        });
     }
 
     // Rows with no label are the time between gestures. They are kept: the pulse model compares each moment with the
     // seconds before it, so the recording must stay continuous.
-    let labels: Vec<String> = row_labels
+    let labels: Vec<String> = trains_on
         .iter()
         .filter(|label| !label.is_empty())
         .map(|label| label.to_string())
@@ -408,6 +467,7 @@ pub(crate) fn ingest_dataset(
         pair,
         source_recording_id,
         Some(&parsed.csv),
+        None,
     )
 }
 
@@ -442,7 +502,7 @@ pub(crate) fn ingest_folder(
         &read(dataset_files::PPG_FILE)?,
         &read(dataset_files::IMU_FILE)?,
     )?;
-    store_pair(app, runtime, name, pair, None, None)
+    store_pair(app, runtime, name, pair, None, None, None)
 }
 
 /// Whether a recording already stored holds exactly this data (so adding it again would only duplicate it). Compares like
@@ -453,9 +513,11 @@ fn already_holds(dir: &std::path::Path, id: &str, pair: &Pair, legacy_text: Opti
     let incoming = dataset_files::pair_sha(&pair.ppg_csv, &pair.imu_csv);
     if path.is_dir() {
         let read = |name: &str| fs::read_to_string(path.join(name)).ok();
+        // Compared as stored now: a folder from before manual labels gets the column, as the incoming pair has it.
         let same_files = read(dataset_files::PPG_FILE)
             .zip(read(dataset_files::IMU_FILE))
-            .is_some_and(|(ppg, imu)| dataset_files::pair_sha(&ppg, &imu) == incoming);
+            .and_then(|(ppg, imu)| dataset_files::parse_pair_with(&ppg, &imu, false).ok())
+            .is_some_and(|stored| dataset_files::pair_sha(&stored.ppg_csv, &stored.imu_csv) == incoming);
         // A folder converted from a single file also holds that file's data.
         let same_original = legacy_text.is_some_and(|text| {
             read(dataset_files::META_FILE)
@@ -475,17 +537,19 @@ fn already_holds(dir: &std::path::Path, id: &str, pair: &Pair, legacy_text: Opti
 }
 
 /// Stores a validated pair as a new recording: its labels must exist, it is written whole or not at all, and it takes the next
-/// import number.
-fn store_pair(
+/// import number. `derived_from` names the recording it is a new version of, when the Labelling page saved it.
+pub(crate) fn store_pair(
     app: &AppHandle,
     runtime: &ModelLabRuntime,
     filename: String,
     pair: Pair,
     source_recording_id: Option<String>,
     legacy_text: Option<&str>,
+    derived_from: Option<String>,
 ) -> Result<DatasetSummary, String> {
     for label in &pair.labels {
-        if !crate::label_registry::contains_label(app, label) {
+        // A stretch left out needs no label of its own: it is never trained on.
+        if label != dataset_files::LEFT_OUT_LABEL && !crate::label_registry::contains_label(app, label) {
             return Err(format!(
                 "unknown label '{label}'; create it on the Labels tab before adding recordings"
             ));
@@ -511,6 +575,18 @@ fn store_pair(
         );
     }
 
+    // The same data twice would count twice, in training and in every test.
+    let incoming = dataset_files::rows_sha(&pair.ppg_csv, &pair.imu_csv);
+    if fill_identities(&dir, &mut index) {
+        write_index_atomic(app, &index)?;
+    }
+    if let Some(existing) = index.datasets.iter().find(|d| d.content_sha.as_deref() == Some(incoming.as_str())) {
+        return Err(format!(
+            "this recording is already in Model Lab as #{} {}, so nothing was added",
+            existing.sequence, existing.original_filename
+        ));
+    }
+
     let id = loop {
         let candidate = Uuid::new_v4().to_string();
         if !dataset_exists(&dir, &candidate) {
@@ -531,6 +607,12 @@ fn store_pair(
         two_files: true,
         gaps: Some(pair.gaps.clone()),
         source_recording_id,
+        derived_from,
+        context: pair.context.clone(),
+        sealed: false,
+        content_sha: Some(incoming),
+        quality: dataset_files::quality_of(&pair).ok(),
+        review: None,
     };
 
     index.next_sequence += 1;
@@ -564,6 +646,7 @@ fn write_folder(
             imu_rows: pair.imu_rows,
             labels: pair.labels.clone(),
             original_sha256,
+            context: pair.context.clone(),
         };
         fs::write(
             staging.join(dataset_files::META_FILE),
@@ -596,6 +679,7 @@ pub fn export_dataset_folder(
     name: String,
     ppg_csv: String,
     imu_csv: String,
+    ppg_clock_csv: Option<String>,
 ) -> Result<String, String> {
     validate_filename(&name)?;
     let parent = PathBuf::from(&parent);
@@ -614,23 +698,17 @@ pub fn export_dataset_folder(
             .count()
             .saturating_sub(1)
     };
-    let labels: std::collections::BTreeSet<String> = [&ppg_csv, &imu_csv]
-        .iter()
-        .flat_map(|text| {
-            text.lines()
-                .filter(|l| !l.trim().is_empty() && !l.trim_start().starts_with('#'))
-                .skip(1)
-        })
-        .filter_map(|line| line.rsplit(',').next())
-        .map(|label| label.trim().to_string())
-        .filter(|label| !label.is_empty())
-        .collect();
+    // The labels the rows train on (their manual label where they have one); nothing more is required of them here.
+    let (labels, context) = dataset_files::parse_pair_with(&ppg_csv, &imu_csv, false)
+        .map(|pair| (pair.labels, pair.context))
+        .unwrap_or_default();
     let meta = Meta {
         format_version: dataset_files::FORMAT_VERSION,
         ppg_rows: rows(&ppg_csv),
         imu_rows: rows(&imu_csv),
-        labels: labels.into_iter().collect(),
+        labels,
         original_sha256: None,
+        context,
     };
     let staging = parent.join(format!(
         ".{}.exporting",
@@ -644,6 +722,10 @@ pub fn export_dataset_folder(
     let written = (|| -> Result<(), String> {
         fs::write(staging.join(dataset_files::PPG_FILE), &ppg_csv).map_err(|e| e.to_string())?;
         fs::write(staging.join(dataset_files::IMU_FILE), &imu_csv).map_err(|e| e.to_string())?;
+        // How the pulse timestamps were mapped, so it can be redone (see `recording_bundle::PPG_CLOCK_HEADER`).
+        if let Some(clock) = &ppg_clock_csv {
+            fs::write(staging.join(crate::recording_bundle::PPG_CLOCK_FILE_NAME), clock).map_err(|e| e.to_string())?;
+        }
         fs::write(
             staging.join(dataset_files::META_FILE),
             serde_json::to_vec_pretty(&meta).map_err(|e| e.to_string())?,
@@ -740,7 +822,7 @@ fn convert_one(dir: &std::path::Path, id: &str) -> Result<GapReport, String> {
         .skip(1)
     {
         let fields: Vec<&str> = line.split(',').collect();
-        if fields.len() == 17 {
+        if fields.len() >= DATASET_CSV_HEADER.len() {
             ppg_rows += usize::from(fields[2..5].iter().any(|v| !v.trim().is_empty()));
             imu_rows += usize::from(fields[5..15].iter().any(|v| !v.trim().is_empty()));
         }
@@ -795,7 +877,94 @@ pub fn list_model_datasets(
         .lock
         .lock()
         .map_err(|_| "model lab lock was poisoned".to_string())?;
-    Ok(load_index(&app).datasets)
+    let mut index = load_index(&app);
+    if let Ok(dir) = datasets_dir(&app)
+        && fill_identities(&dir, &mut index)
+    {
+        // Recordings added before identities and quality were kept get them once.
+        if let Err(error) = write_index_atomic(&app, &index) {
+            warn!(%error, "could not save the recordings' identities");
+        }
+    }
+    Ok(index.datasets)
+}
+
+/// Works out the content identity and quality report of every recording that lacks them. Returns whether any changed.
+pub(crate) fn fill_identities(dir: &std::path::Path, index: &mut DatasetIndex) -> bool {
+    let mut changed = false;
+    for dataset in index.datasets.iter_mut().filter(|d| d.content_sha.is_none() || d.quality.is_none()) {
+        let Ok(pair) = crate::labelling::pair_at(&dataset_csv_path(dir, &dataset.id)) else {
+            continue;
+        };
+        dataset.content_sha = Some(dataset_files::rows_sha(&pair.ppg_csv, &pair.imu_csv));
+        dataset.quality = dataset_files::quality_of(&pair).ok();
+        changed = true;
+    }
+    changed
+}
+
+/// Seals or unseals recordings for the final test. A sealed recording cannot be trained on; unsealing one makes it ordinary
+/// training data again, after which it is no longer an untouched test.
+#[tauri::command]
+pub fn set_datasets_sealed(
+    ids: Vec<String>,
+    sealed: bool,
+    app: AppHandle,
+    runtime: State<'_, ModelLabRuntime>,
+) -> Result<Vec<DatasetSummary>, String> {
+    for id in &ids {
+        validate_dataset_id(id)?;
+    }
+    let _guard = runtime
+        .lock
+        .lock()
+        .map_err(|_| "model lab lock was poisoned".to_string())?;
+    let mut index = load_index(&app);
+    for id in &ids {
+        let dataset = index
+            .datasets
+            .iter_mut()
+            .find(|dataset| &dataset.id == id)
+            .ok_or_else(|| format!("no dataset with id '{id}'"))?;
+        dataset.sealed = sealed;
+    }
+    write_index_atomic(&app, &index)?;
+    Ok(index.datasets)
+}
+
+/// Marks a recording's labels as reviewed or as needing work (with a note), or clears that (`status` None).
+#[tauri::command]
+pub fn set_dataset_review(
+    id: String,
+    status: Option<String>,
+    note: Option<String>,
+    app: AppHandle,
+    runtime: State<'_, ModelLabRuntime>,
+) -> Result<DatasetSummary, String> {
+    validate_dataset_id(&id)?;
+    let review = match status.as_deref() {
+        None => None,
+        Some(status @ ("reviewed" | "needs_work")) => Some(DatasetReview {
+            status: status.to_string(),
+            note: note.unwrap_or_default().trim().chars().take(500).collect(),
+            at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        }),
+        Some(other) => return Err(format!("unknown review status '{other}'")),
+    };
+    let _guard = runtime
+        .lock
+        .lock()
+        .map_err(|_| "model lab lock was poisoned".to_string())?;
+    let mut index = load_index(&app);
+    let dataset = index
+        .datasets
+        .iter_mut()
+        .find(|dataset| dataset.id == id)
+        .ok_or_else(|| format!("no dataset with id '{id}'"))?;
+    dataset.review = review;
+    let updated = dataset.clone();
+    write_index_atomic(&app, &index)?;
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -936,6 +1105,12 @@ mod tests {
             two_files: false,
             gaps: None,
             source_recording_id: None,
+            derived_from: None,
+            context: Default::default(),
+            sealed: false,
+            content_sha: None,
+            quality: None,
+            review: None,
         };
         assert_eq!(dataset.effective_labels(), vec!["idle", "pinch_start"]);
         // An index written before multi-label datasets existed has no `labels`.
@@ -1012,6 +1187,27 @@ mod tests {
         validate_dataset_id(&id).expect("generated id must validate");
         let path = dataset_csv_path(&dir, &id);
         assert!(path.starts_with(&dir));
+    }
+
+    /// A one-off, read-only check on a real datasets folder: `MODEL_LAB_E2E_DATASETS`.
+    #[test]
+    #[ignore = "one-off: set MODEL_LAB_E2E_DATASETS"]
+    fn identities_and_quality_of_a_real_datasets_folder() {
+        let dir = PathBuf::from(std::env::var("MODEL_LAB_E2E_DATASETS").unwrap());
+        let mut index: DatasetIndex = serde_json::from_slice(&fs::read(dir.join(INDEX_FILE_NAME)).unwrap()).unwrap();
+        for dataset in &mut index.datasets {
+            dataset.content_sha = None;
+            dataset.quality = None;
+        }
+        assert!(fill_identities(&dir, &mut index));
+        let mut by_sha: std::collections::BTreeMap<&str, Vec<&str>> = Default::default();
+        for dataset in &index.datasets {
+            by_sha.entry(dataset.content_sha.as_deref().unwrap()).or_default().push(&dataset.id[..8]);
+            let q = dataset.quality.as_ref().unwrap();
+            println!("{} holds {:?} short {} poor contact {:.1}%", &dataset.id[..8], q.holds, q.short_holds, q.poor_contact_share * 100.0);
+        }
+        let twins: Vec<&Vec<&str>> = by_sha.values().filter(|ids| ids.len() > 1).collect();
+        println!("same data: {twins:?}");
     }
 
     #[test]
@@ -1099,7 +1295,8 @@ mod tests {
                 .lines()
                 .last()
                 .unwrap(),
-            "140,3,11,21,31,0,pinch"
+            "140,3,11,21,31,0,pinch,",
+            "stored with the manual_label column, empty"
         );
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1193,6 +1390,7 @@ mod tests {
             "session".into(),
             pair.ppg_csv.clone(),
             pair.imu_csv.clone(),
+            None,
         )
         .unwrap();
         let second = export_dataset_folder(
@@ -1200,6 +1398,7 @@ mod tests {
             "session".into(),
             pair.ppg_csv.clone(),
             pair.imu_csv.clone(),
+            None,
         )
         .unwrap();
         assert!(first.ends_with("session") && second.ends_with("session-2"));
@@ -1230,7 +1429,8 @@ mod tests {
                 parent.display().to_string(),
                 "../escape".into(),
                 String::new(),
-                String::new()
+                String::new(),
+                None
             )
             .is_err()
         );
@@ -1239,7 +1439,8 @@ mod tests {
                 "/no/such/folder".into(),
                 "x".into(),
                 String::new(),
-                String::new()
+                String::new(),
+                None
             )
             .is_err()
         );
@@ -1264,6 +1465,12 @@ mod tests {
             two_files: false,
             gaps: None,
             source_recording_id: None,
+            derived_from: None,
+            context: Default::default(),
+            sealed: false,
+            content_sha: None,
+            quality: None,
+            review: None,
         };
         let mut index = DatasetIndex {
             datasets: ids.iter().map(entry).collect(),

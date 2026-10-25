@@ -369,7 +369,9 @@ impl WatchEnvelope {
                 let payload: WatchSensorBatchPayload = serde_json::from_value(self.payload)
                     .map_err(WatchPacketError::InvalidPayload)?;
                 let mut orientations = Vec::new();
-                if let Some(imu) = payload.imu {
+                if let Some(packed) = &payload.imu_packed {
+                    orientations = decode_packed_imu(packed, &self.device_id, self.sequence)?;
+                } else if let Some(imu) = payload.imu {
                     let count = imu.count as usize;
                     if count == 0 || count > MAX_IMU_BATCH_SAMPLES {
                         return Err(WatchPacketError::InvalidSensorBatch(format!(
@@ -790,8 +792,93 @@ pub struct WatchImuBatchPayload {
 pub struct WatchSensorBatchPayload {
     #[serde(default)]
     pub imu: Option<WatchImuBatchPayload>,
+    /// The motion samples packed as binary (see [`decode_packed_imu`]), in place of `imu`: about 60 bytes a sample against
+    /// about 140 as JSON numbers, which leaves room on a Bluetooth link for the motion sensors at up to 200 Hz.
+    #[serde(default)]
+    pub imu_packed: Option<String>,
     #[serde(default)]
     pub ppg: Option<WatchPpgBatchPayload>,
+}
+
+/// The version of the packed motion layout this desktop reads.
+pub const PACKED_IMU_VERSION: u8 = 1;
+const PACKED_IMU_HEADER: usize = 1 + 2 + 8;
+const PACKED_IMU_SAMPLE: usize = 4 + 1 + 10 * 4;
+
+/// Decodes `imuPacked`: standard base64 of, little-endian,
+///
+/// ```text
+/// u8 version (1)  u16 count  i64 first timestamp (ns, watch clock)
+/// per sample:  u32 ns after the first  u8 flags (bit 0 accelerometer, bit 1 gyroscope)
+///              f32 quaternion w x y z  f32 accelerometer x y z  f32 gyroscope x y z  (an absent sensor's are 0)
+/// ```
+///
+/// The values are the sensors' own single-precision floats, so nothing is lost against the JSON numbers.
+pub fn decode_packed_imu(
+    text: &str,
+    device_id: &str,
+    sequence: u64,
+) -> Result<Vec<WatchOrientationSample>, WatchPacketError> {
+    let bad = |detail: &str| WatchPacketError::InvalidSensorBatch(format!("packed motion: {detail}"));
+    let bytes = base64_decode(text).ok_or_else(|| bad("not base64"))?;
+    if bytes.len() < PACKED_IMU_HEADER || bytes[0] != PACKED_IMU_VERSION {
+        return Err(bad("unknown layout"));
+    }
+    let count = u16::from_le_bytes([bytes[1], bytes[2]]) as usize;
+    if count == 0 || count > MAX_IMU_BATCH_SAMPLES {
+        return Err(bad(&format!("sampleCount {count} is outside 1..={MAX_IMU_BATCH_SAMPLES}")));
+    }
+    if bytes.len() != PACKED_IMU_HEADER + count * PACKED_IMU_SAMPLE {
+        return Err(bad("its length does not match its sample count"));
+    }
+    let first = i64::from_le_bytes(bytes[3..11].try_into().expect("8 bytes"));
+    let first = u64::try_from(first).map_err(|_| bad("a negative timestamp"))?;
+    let f32_at = |at: usize| f64::from(f32::from_le_bytes(bytes[at..at + 4].try_into().expect("4 bytes")));
+    let mut out = Vec::with_capacity(count);
+    for index in 0..count {
+        let at = PACKED_IMU_HEADER + index * PACKED_IMU_SAMPLE;
+        let offset = u32::from_le_bytes(bytes[at..at + 4].try_into().expect("4 bytes"));
+        let flags = bytes[at + 4];
+        let value = |k: usize| f32_at(at + 5 + k * 4);
+        let three = |from: usize| [value(from), value(from + 1), value(from + 2)];
+        out.push(WatchOrientationSample {
+            device_id: device_id.to_string(),
+            sequence,
+            timestamp_ns: first + u64::from(offset),
+            quaternion: [value(0), value(1), value(2), value(3)],
+            accelerometer: (flags & 1 != 0).then(|| three(4)),
+            gyroscope: (flags & 2 != 0).then(|| three(7)),
+        });
+    }
+    Ok(out)
+}
+
+/// Standard base64 (with or without padding); `None` for anything else.
+fn base64_decode(text: &str) -> Option<Vec<u8>> {
+    let value = |c: u8| -> Option<u32> {
+        Some(match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            _ => return None,
+        } as u32)
+    };
+    let digits: Vec<u8> = text.trim_end_matches('=').bytes().collect();
+    if digits.len() % 4 == 1 {
+        return None;
+    }
+    let mut out = Vec::with_capacity(digits.len() * 3 / 4);
+    for chunk in digits.chunks(4) {
+        let mut word = 0u32;
+        for (i, &c) in chunk.iter().enumerate() {
+            word |= value(c)? << (18 - 6 * i);
+        }
+        let bytes = word.to_be_bytes();
+        out.extend_from_slice(&bytes[1..chunk.len()]);
+    }
+    Some(out)
 }
 
 /// A decoded `watch.sensor_batch`: each motion sample as the orientation sample it would have been on its
@@ -1255,6 +1342,47 @@ pub struct DesktopHapticPayload {
 #[cfg(test)]
 mod sensor_batch_tests {
     use super::*;
+
+    /// Two motion samples packed as the watch packs them (`WatchProtocol.packImu`; its test checks it gives exactly this):
+    /// 20 ms apart, the second without a gyroscope reading.
+    pub(crate) const PACKED_IMU_EXAMPLE: &str = "AQIAAM+YTm4zBwAAAAAAA87CVj9OmHC+PPQdvQuW+r4K6Jw8CuicOw9c6zx5IqA6eSIgPHkioDsALTEBAQAAgD8AAAAAAAAAAAAAAADNzMw9zcxMPpqZmT4AAAAAAAAAAAAAAAA=";
+
+    #[test]
+    fn packed_motion_reads_as_the_samples_it_holds() {
+        let samples = decode_packed_imu(PACKED_IMU_EXAMPLE, "w", 9).unwrap();
+        assert_eq!(samples.len(), 2);
+        assert_eq!(samples[0].timestamp_ns, 2_026_873_695_031_040);
+        assert_eq!(samples[1].timestamp_ns, 2_026_873_715_031_040, "20 ms after the first");
+        assert_eq!(samples[0].quaternion[0], f64::from(0.83891f32), "the sensor's own float, exactly");
+        assert_eq!(samples[0].accelerometer.unwrap()[1], f64::from(0.0047884034f32));
+        assert_eq!(samples[0].gyroscope.unwrap()[2], f64::from(0.004886922f32));
+        assert_eq!(samples[1].accelerometer, Some([0.1f32, 0.2, 0.3].map(f64::from)));
+        assert_eq!(samples[1].gyroscope, None, "a sensor that gave nothing is absent");
+        assert_eq!((samples[1].device_id.as_str(), samples[1].sequence), ("w", 9));
+    }
+
+    #[test]
+    fn a_sensor_batch_carries_packed_motion_in_place_of_the_json_lists() {
+        let datagram = format!(
+            r#"{{"type":"watch.sensor_batch","version":1,"deviceId":"w","sequence":4,"timestampNs":5,"payload":{{"imuPacked":"{PACKED_IMU_EXAMPLE}"}}}}"#
+        );
+        match decode(&datagram).unwrap() {
+            WatchInboundMessage::SensorBatch(batch) => {
+                assert_eq!(batch.orientations.len(), 2);
+                assert!(batch.ppg.is_none());
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn packed_motion_that_is_cut_short_or_not_base64_is_refused() {
+        let bytes = base64_decode(PACKED_IMU_EXAMPLE).unwrap();
+        assert_eq!(bytes.len(), 11 + 2 * 45);
+        assert!(decode_packed_imu("not base64!", "w", 1).is_err());
+        let short: String = PACKED_IMU_EXAMPLE.chars().take(40).collect();
+        assert!(decode_packed_imu(&short, "w", 1).is_err());
+    }
 
     fn decode(json: &str) -> Result<WatchInboundMessage, WatchPacketError> {
         WatchEnvelope::from_json(json.as_bytes())?.decode()

@@ -40,11 +40,19 @@ pub(crate) const HAND_LANDMARKS_FILE_NAME: &str = "hand_landmarks.csv";
 /// The second camera's landmarks, when a recording used two cameras. Same format as the first's.
 pub(crate) const HAND_LANDMARKS_SECOND_FILE_NAME: &str = "hand_landmarks_2.csv";
 pub(crate) const CLOCK_SYNC_FILE_NAME: &str = "clock_sync.csv";
+/// How the pulse sensor's own timestamps were placed on the watch clock, batch by batch (see `PPG_CLOCK_HEADER`).
+pub(crate) const PPG_CLOCK_FILE_NAME: &str = "ppg_clock.csv";
+/// One row per pulse batch: its `sequence` (as on its rows), when the watch sent it (`sent_ns`, watch clock), its newest
+/// sample's own timestamp (`newest_sensor_ns`, the sensor's clock) and the offset added to every sample's own timestamp to
+/// put it on the watch clock (`offset_ns`). A row's own timestamp is its `timestamp_ns` less its batch's offset, so the
+/// mapping can be redone later.
+pub(crate) const PPG_CLOCK_HEADER: &str = "sequence,sent_ns,newest_sensor_ns,offset_ns";
 /// The optional evidence files a webview may add to a bundle, and nothing else.
-const EXTRA_FILE_NAMES: [&str; 3] = [
+const EXTRA_FILE_NAMES: [&str; 4] = [
     HAND_LANDMARKS_FILE_NAME,
     HAND_LANDMARKS_SECOND_FILE_NAME,
     CLOCK_SYNC_FILE_NAME,
+    PPG_CLOCK_FILE_NAME,
 ];
 const MAX_EXTRA_FILE_BYTES: usize = 64 * 1024 * 1024;
 const LANDMARKS_PER_HAND: usize = 21;
@@ -157,6 +165,10 @@ pub struct RecordingMetadata {
     pub sources: Vec<RecordingSource>,
     pub raw_row_count: usize,
     pub raw_source_row_counts: BTreeMap<String, usize>,
+    /// How the session was recorded: the Recorder's session details (wrist, arm, activity, strap, pinch style, notes). Absent
+    /// from recordings made before they existed.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub context: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -174,6 +186,8 @@ pub enum CreationMechanism {
     TimelineEdit,
     /// Found by running a calibrated camera gesture over the saved hand landmarks; awaits review like any other.
     CameraProposal,
+    /// Opened by a guided session's cue: the label starts when the app said to make the gesture.
+    GuidedCue,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -367,6 +381,8 @@ fn validate_extra_file(name: &str, content: &str) -> Result<(), String> {
     }
     let expected = if name == HAND_LANDMARKS_FILE_NAME || name == HAND_LANDMARKS_SECOND_FILE_NAME {
         hand_landmarks_header()
+    } else if name == PPG_CLOCK_FILE_NAME {
+        PPG_CLOCK_HEADER.to_string()
     } else {
         CLOCK_SYNC_HEADER.to_string()
     };
@@ -649,9 +665,14 @@ fn convert_legacy_dataset_csv(
         index += 1;
     }
     let header_line = lines.get(index)?;
-    if *header_line != DATASET_CSV_HEADER.join(",") {
+    // The header with `manual_label` too: a row's label is then the one it trains on (its manual label where it has one).
+    let columns = if *header_line == DATASET_CSV_HEADER.join(",") {
+        DATASET_CSV_HEADER.len()
+    } else if *header_line == crate::model_lab::DATASET_CSV_HEADER_V2.join(",") {
+        crate::model_lab::DATASET_CSV_HEADER_V2.len()
+    } else {
         return None;
-    }
+    };
 
     let mut converted_lines = vec![RAW_CSV_HEADER.join(",")];
     let mut runs: Vec<LegacyLabelRun> = Vec::new();
@@ -662,12 +683,11 @@ fn convert_legacy_dataset_csv(
             continue;
         }
         let fields: Vec<&str> = line.split(',').collect();
-        if fields.len() != DATASET_CSV_HEADER.len() {
+        if fields.len() != columns {
             return Some(Err(format!(
-                "malformed legacy dataset CSV: row {} has {} fields, expected {}",
+                "malformed legacy dataset CSV: row {} has {} fields, expected {columns}",
                 offset + 1,
-                fields.len(),
-                DATASET_CSV_HEADER.len()
+                fields.len()
             )));
         }
         converted_lines.push(fields[..RAW_CSV_HEADER.len()].join(","));
@@ -675,7 +695,10 @@ fn convert_legacy_dataset_csv(
         // A malformed timestamp fails `validate_raw_csv_full` right after this
         // function returns, so a 0 placeholder here is never actually surfaced.
         let timestamp_ns: i64 = fields[0].trim().parse().unwrap_or(0);
-        let label = fields[label_column].trim();
+        let label = crate::dataset_files::effective_label(
+            fields[label_column],
+            fields.get(label_column + 1).copied().unwrap_or(""),
+        );
 
         if label.is_empty() {
             if let Some(run) = current_run.take() {
@@ -806,6 +829,7 @@ fn import_recording_text(
         }],
         raw_row_count: row_count,
         raw_source_row_counts: BTreeMap::from([(IMPORTED_SOURCE_ID.to_string(), row_count)]),
+        context: BTreeMap::new(),
     };
     let intervals = legacy_label_runs
         .into_iter()
@@ -2868,10 +2892,14 @@ pub fn add_recording_to_training_data(
 ) -> Result<crate::model_lab::DatasetSummary, String> {
     validate_recording_id(&recording_id)?;
     let dir = recording_bundles_dir(&app)?.join(&recording_id);
-    let (_, annotations) = load_bundle_pair(&dir)?;
+    let (recording, annotations) = load_bundle_pair(&dir)?;
     let raw = fs::read_to_string(dir.join(RAW_CSV_FILE_NAME)).map_err(|error| error.to_string())?;
     let (csv, _, intervals) =
         dataset_csv_from_bundle(&raw, &annotations, filter, rest_label.as_deref())?;
+    // The session details go with the rows into Model Lab.
+    let mut lines = crate::dataset_files::context_lines(&recording.context);
+    lines.push(csv);
+    let csv = lines.join("\n");
     let filename = format!(
         "recorder-{}-{}-intervals.csv",
         &recording_id[..recording_id.len().min(8)],
@@ -3018,6 +3046,7 @@ mod tests {
             }],
             raw_row_count: 2,
             raw_source_row_counts: BTreeMap::from([("watch".to_string(), 2)]),
+            context: BTreeMap::new(),
         }
     }
 

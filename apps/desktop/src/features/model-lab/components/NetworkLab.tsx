@@ -60,7 +60,7 @@ export function ModelPipeline() {
           <div><dt className="text-muted-foreground">False alarms</dt><dd className="text-numeric">≈{research.falsePerMinute.toFixed(1)} / min</dd></div>
         </dl>
         <p className="field-hint">
-          Measured on 37 recordings, testing 20 times on recordings the model never trained on, firing on the peak at a cut-off of 0.8 (picked on those same tests, so a little optimistic). Your models choose their own cut-off, on their training recordings. One that does not pass the checks for going live can be activated, but it only runs in Monitor.
+          Measured on 37 recordings, testing 20 times on recordings the model never trained on, firing on the peak at a cut-off of 0.65 (picked on those same tests, so a little optimistic). Your models choose their own cut-off, on their training recordings. One that does not pass the checks for going live can be activated, but it only runs in Monitor.
         </p>
       </CardContent>
     </Card>

@@ -105,6 +105,12 @@ impl TemporalDetector {
         self.active
     }
 
+    /// Feeds one score, as the runtime does; true when it starts a detection. For replaying a run's scores at another
+    /// threshold.
+    pub fn observe(&mut self, score: f64, timestamp_ns: u64) -> bool {
+        self.step(score, timestamp_ns) == Step::Rising
+    }
+
     fn step(&mut self, score: f64, timestamp_ns: u64) -> Step {
         if self.active {
             if score < self.thresholds.release {

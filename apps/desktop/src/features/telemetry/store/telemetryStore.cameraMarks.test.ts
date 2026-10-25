@@ -8,7 +8,7 @@ function sample(sequence: number) {
     accelerometer: [0, 0, 0] as [number, number, number], gyroscope: [0, 0, 0] as [number, number, number],
   };
 }
-const labelsOf = (csv: string) => csv.split("\n").filter((line) => !line.startsWith("#")).slice(1).map((line) => line.split(",").pop());
+const labelsOf = (csv: string) => csv.split("\n").filter((line) => !line.startsWith("#")).slice(1).map((line) => line.split(",").at(-2)); // the label; the manual label after it is empty
 
 let clock = 0;
 beforeEach(() => {

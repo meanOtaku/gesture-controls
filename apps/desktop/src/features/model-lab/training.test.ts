@@ -12,6 +12,10 @@ describe("otherLabels", () => {
     expect(otherLabels(data, new Set(), "snap")).toEqual([]);
   });
 
+  it("leaves out stretches left out on the Labelling page: they are always excluded, so need no role", () => {
+    expect(otherLabels([dataset("d", ["snap", "left_out", "idle"])], new Set(["d"]), "snap")).toEqual(["idle"]);
+  });
+
   it("knows which recordings have a label", () => {
     expect(hasLabel(data[1], "walking")).toBe(true);
     expect(hasLabel(data[0], "idle")).toBe(false);

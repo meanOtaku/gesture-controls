@@ -7,7 +7,7 @@ use spatial_protocol::{WatchBiaResultSample, WatchHeartbeatSample, WatchOrientat
 use tauri::{AppHandle, Emitter, Manager, State};
 use watch_bridge::{
     ClockOffsetEstimate, LinkDiagnostics, MeasurementCommand, SensorControlCommand,
-    WatchBridgeServer, WatchEvent, WatchTransport, ble::BleStatus,
+    HapticCommand, WatchBridgeServer, WatchEvent, WatchTransport, ble::BleStatus,
 };
 
 pub const WATCH_STATUS_EVENT: &str = "watch-status";
@@ -490,6 +490,17 @@ pub fn stop_measurement(
 ) -> Result<(), String> {
     server
         .send_measurement_command(MeasurementCommand::Stop(tracker))
+        .map_err(|error| error.to_string())
+}
+
+/// A short buzz on the watch, such as a guided session's cue. The watch keeps it between 10 and 200 ms.
+#[tauri::command]
+pub fn buzz_watch(
+    server: State<'_, std::sync::Arc<WatchBridgeServer>>,
+    duration_ms: u32,
+) -> Result<(), String> {
+    server
+        .send_haptic_command(HapticCommand { duration_ms })
         .map_err(|error| error.to_string())
 }
 

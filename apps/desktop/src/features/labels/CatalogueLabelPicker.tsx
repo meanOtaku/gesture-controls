@@ -4,6 +4,7 @@ import { OperationFeedback } from "../../components/app/OperationFeedback";
 import { Button } from "../../components/ui/button";
 import { Label } from "../../components/ui/label";
 import type { DatasetLabel } from "../model-lab/types";
+import { LabelSwatch } from "./labelColor";
 
 type Props = {
   /** The label chosen for the next recording, if any. */
@@ -58,6 +59,7 @@ export function CatalogueLabelPicker({ selectedLabel, onSelect, disabled }: Prop
         <div className="flex flex-wrap gap-2">
           {live.map((label) => (
             <Button key={label.id} type="button" size="sm" className="text-xs" disabled={disabled} variant={selectedLabel === label.id ? "default" : "outline"} onClick={() => onSelect(label.id)}>
+              <LabelSwatch label={label.id} catalogue={live} />
               {label.displayName}
             </Button>
           ))}

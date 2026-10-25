@@ -23,6 +23,8 @@ import {
   type LiveInterval,
 } from "../annotations/timeline";
 import { RingBuffer } from "./ringBuffer";
+import { SignalHealthTracker, type SignalHealthSnapshot } from "../quality/signalHealth";
+import { cleanContext, contextCommentLines, loadSessionContext, saveSessionContext, type SessionContext } from "../sessionContext";
 import { SourceClockMap } from "./sourceClock";
 
 export type SeriesPoint = { at: number; values: number[] };
@@ -62,6 +64,8 @@ export type DatasetCaptureMode = "quick" | "timeline";
 export type DatasetSessionMetadata = {
   label: GestureDatasetLabel;
   startedAtIso: string;
+  /** How the session was recorded, as set when it started (see `sessionContext.ts`). */
+  context: SessionContext;
 };
 
 export type DatasetRow = {
@@ -84,23 +88,32 @@ export type DatasetRow = {
   label: GestureDatasetLabel;
 };
 
+/**
+ * The single-file dataset's columns. `manual_label` is a label given by hand on the Labelling page; where a row has one it
+ * is the label the row trains on. The Recorder writes it empty.
+ */
 export const DATASET_CSV_COLUMNS = [
   "timestamp_ns", "sequence", "ppg_green", "ppg_red", "ppg_ir",
   "accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z",
-  "quat_w", "quat_x", "quat_y", "quat_z", "contact_quality", "label",
+  "quat_w", "quat_x", "quat_y", "quat_z", "contact_quality", "label", "manual_label",
 ] as const;
 
 /** The columns of `ppg.csv` and `imu.csv` in an exported dataset folder: the single file's, without the other sensor's. */
-export const PPG_FILE_COLUMNS = ["timestamp_ns", "sequence", "ppg_green", "ppg_red", "ppg_ir", "contact_quality", "label"] as const;
+export const PPG_FILE_COLUMNS = ["timestamp_ns", "sequence", "ppg_green", "ppg_red", "ppg_ir", "contact_quality", "label", "manual_label"] as const;
+/** `ppg_clock.csv` in a saved recording or exported folder (mirrors `recording_bundle::PPG_CLOCK_HEADER`). */
+export const PPG_CLOCK_FILE = "ppg_clock.csv";
+export const PPG_CLOCK_COLUMNS = ["sequence", "sent_ns", "newest_sensor_ns", "offset_ns"] as const;
 export const IMU_FILE_COLUMNS = [
   "timestamp_ns", "sequence", "accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z",
-  "quat_w", "quat_x", "quat_y", "quat_z", "label",
+  "quat_w", "quat_x", "quat_y", "quat_z", "label", "manual_label",
 ] as const;
 
 /** The two dense files of an exported dataset folder (see `dataset_files.rs`). */
 export interface DatasetFolderFiles {
   ppgCsv: string;
   imuCsv: string;
+  /** How the pulse timestamps were placed on the watch clock, batch by batch (`ppg_clock.csv`; see `recording_bundle.rs`). */
+  ppgClockCsv: string;
   ppgRows: number;
   imuRows: number;
 }
@@ -111,7 +124,7 @@ export interface DatasetFolderFiles {
  * fused sample shape as `DATASET_CSV_COLUMNS` minus `label`, since raw
  * capture evidence carries no label — labels live only in `annotations.json`.
  */
-export const RAW_RECORDING_CSV_COLUMNS = DATASET_CSV_COLUMNS.filter((column) => column !== "label");
+export const RAW_RECORDING_CSV_COLUMNS = DATASET_CSV_COLUMNS.filter((column) => column !== "label" && column !== "manual_label");
 
 /** Resolution rule fixed by the ADR: start resolves to the first accepted sample, end to the last. */
 const INTERVAL_RESOLUTION_RULE_VERSION = 1;
@@ -259,8 +272,13 @@ class TelemetryStore {
    * or ended. A row index would go stale: a delayed sample is inserted in time order and moves every later row.
    */
   private arrivalTrail: { ms: number; timestampNs: number }[] = [];
+  private readonly health = new SignalHealthTracker();
   private datasetRecording = false;
   private datasetSession: DatasetSessionMetadata | null = null;
+  /** Each pulse batch of the recording under way: how its samples' own timestamps were put on the watch clock. */
+  private datasetPpgClock: { sequence: number; sentNs: number; newestSensorNs: number; offsetNs: number }[] = [];
+  /** The session details the next recording gets; kept between sessions. */
+  private sessionContext: SessionContext = loadSessionContext();
   private datasetRecordingStartedAtMs: number | null = null;
   // Recording-bundle timing: `requestedStartAtIso` is captured on Start
   // (Arming); the monotonic/wall-clock pair is captured on the first
@@ -454,6 +472,11 @@ class TelemetryStore {
     return this.datasetRows.toArray();
   }
 
+  /** How the watch's streams are doing right now (see `signalHealth.ts`). */
+  getSignalHealth(): SignalHealthSnapshot {
+    return this.health.snapshot(performance.now());
+  }
+
   getDatasetCaptureMode(): DatasetCaptureMode {
     return this.datasetCaptureMode;
   }
@@ -488,9 +511,11 @@ class TelemetryStore {
     if (this.datasetCaptureMode === "quick" && !this.selectedLabel) return false;
     this.datasetRows.clear();
     this.arrivalTrail = [];
+    this.datasetPpgClock = [];
     this.datasetSession = {
       label: this.datasetCaptureMode === "quick" ? (this.selectedLabel as GestureDatasetLabel) : "",
       startedAtIso: new Date().toISOString(),
+      context: cleanContext(this.sessionContext),
     };
     this.datasetRecordingState = "arming";
     this.datasetRecording = true;
@@ -511,7 +536,7 @@ class TelemetryStore {
    * stays `unannotated`. Only valid while a timeline session is `recording`.
    * `mechanism` distinguishes hold-to-label from press-to-toggle for audit.
    */
-  setTimelineLabel(label: GestureDatasetLabel | null, mechanism: "hotkey_hold" | "hotkey_toggle" | "camera_proposal" = "hotkey_toggle", sinceMs?: number): boolean {
+  setTimelineLabel(label: GestureDatasetLabel | null, mechanism: "hotkey_hold" | "hotkey_toggle" | "camera_proposal" | "guided_cue" = "hotkey_toggle", sinceMs?: number): boolean {
     if (this.datasetCaptureMode !== "timeline") return false;
     if (this.datasetRecordingState !== "recording") return false;
     const normalized = label === null ? null : normalizeDatasetLabel(label);
@@ -771,6 +796,7 @@ class TelemetryStore {
       datasetCsvValue(row.quatZ),
       datasetCsvValue(row.contactQuality),
       labels[rowIndex],
+      "",
     ].join(","));
     return [...this.datasetMetadataLines(rows.length), DATASET_CSV_COLUMNS.join(","), ...dataLines].join("\n");
   }
@@ -788,17 +814,18 @@ class TelemetryStore {
     const imu: string[] = [];
     rows.forEach((row, index) => {
       if (row.ppgGreen != null || row.ppgRed != null || row.ppgIr != null) {
-        ppg.push([row.timestampNs, row.sequence, datasetCsvValue(row.ppgGreen), datasetCsvValue(row.ppgRed), datasetCsvValue(row.ppgIr), datasetCsvValue(row.contactQuality), labels[index]].join(","));
+        ppg.push([row.timestampNs, row.sequence, datasetCsvValue(row.ppgGreen), datasetCsvValue(row.ppgRed), datasetCsvValue(row.ppgIr), datasetCsvValue(row.contactQuality), labels[index], ""].join(","));
       }
       const motion = [row.accelX, row.accelY, row.accelZ, row.gyroX, row.gyroY, row.gyroZ, row.quatW, row.quatX, row.quatY, row.quatZ];
       if (motion.some((value) => value != null)) {
-        imu.push([row.timestampNs, row.sequence, ...motion.map(datasetCsvValue), labels[index]].join(","));
+        imu.push([row.timestampNs, row.sequence, ...motion.map(datasetCsvValue), labels[index], ""].join(","));
       }
     });
     const comments = this.datasetMetadataLines(rows.length);
     return {
       ppgCsv: [...comments, PPG_FILE_COLUMNS.join(","), ...ppg].join("\n") + "\n",
       imuCsv: [...comments, IMU_FILE_COLUMNS.join(","), ...imu].join("\n") + "\n",
+      ppgClockCsv: this.ppgClockCsv(),
       ppgRows: ppg.length,
       imuRows: imu.length,
     };
@@ -811,7 +838,26 @@ class TelemetryStore {
       `# label: ${session?.label ?? ""}`,
       `# started_at: ${session?.startedAtIso ?? ""}`,
       `# row_count: ${rowCount}`,
+      ...contextCommentLines(session?.context ?? {}),
     ];
+  }
+
+  /** `ppg_clock.csv`: each pulse batch's send time, newest own timestamp and the offset that placed it on the watch clock. */
+  private ppgClockCsv(): string {
+    const rows = this.datasetPpgClock.map((entry) => [entry.sequence, entry.sentNs, entry.newestSensorNs, entry.offsetNs].join(","));
+    return [PPG_CLOCK_COLUMNS.join(","), ...rows].join("\n") + "\n";
+  }
+
+  /** The session details the next recording gets. */
+  getSessionContext(): SessionContext {
+    return this.sessionContext;
+  }
+
+  /** Sets the session details for the next recording (a recording under way keeps those it started with). */
+  setSessionContext(context: SessionContext): void {
+    this.sessionContext = context;
+    saveSessionContext(context);
+    this.publishNow();
   }
 
   /**
@@ -882,7 +928,8 @@ class TelemetryStore {
 
     return {
       rawCsv,
-      ...(evidence ? { extraFiles: evidence.files } : {}),
+      // The camera's evidence, and how the pulse timestamps were mapped (so it can be redone).
+      extraFiles: { ...(evidence?.files ?? {}), [PPG_CLOCK_FILE]: this.ppgClockCsv() },
       recording: {
         format_version: RECORDING_BUNDLE_FORMAT_VERSION,
         recording_id: recordingId,
@@ -896,6 +943,7 @@ class TelemetryStore {
         sources: [{ source_id: "watch", configuration: {} }, ...(evidence ? evidence.sources : [])],
         raw_row_count: rows.length,
         raw_source_row_counts: { watch: rows.length },
+        ...(Object.keys(session.context).length > 0 ? { context: session.context as Record<string, string> } : {}),
       },
       annotations: {
         format_version: RECORDING_BUNDLE_FORMAT_VERSION,
@@ -1003,6 +1051,7 @@ class TelemetryStore {
     if (key === this.lastWatchOrientationKey) return;
     this.lastWatchOrientationKey = key;
     this.noteWatchSample();
+    this.health.noteMotion(performance.now());
     // Lines the watch's clock up with the browser's, which camera frames are stamped with.
     clockSync.observe(orientation.timestampNs, performance.now());
     const at = Date.now();
@@ -1083,6 +1132,10 @@ class TelemetryStore {
     // orientation rows use. Put them on that clock before they reach row ordering or timing (see `SourceClockMap`).
     this.ppgClock.observe(batch.timestampsNs[batch.timestampsNs.length - 1], batch.timestampNs);
     const canonicalTimestampsNs = batch.timestampsNs.map((sdkTimestampNs) => this.ppgClock.map(sdkTimestampNs) ?? Number.NaN);
+    const offsetNs = this.ppgClock.offsetNs();
+    if (this.datasetRecording && offsetNs !== null && batch.timestampsNs.length > 0) {
+      this.datasetPpgClock.push({ sequence: batch.sequence, sentNs: batch.timestampNs, newestSensorNs: batch.timestampsNs[batch.timestampsNs.length - 1], offsetNs });
+    }
     this.ingestTimestampedBatch(canonicalTimestampsNs, (timestampNs, index, at) => {
       this.series.get("ppg")?.push({ at, values: [batch.green[index] ?? 0, batch.red[index] ?? 0, batch.ir[index] ?? 0] });
       if (this.canRecord("ppg", at)) this.rows.push({
@@ -1098,6 +1151,7 @@ class TelemetryStore {
         batch.redStatus?.[index] ?? 0,
         batch.irStatus?.[index] ?? 0,
       );
+      this.health.notePulse(performance.now(), contactQuality > 0);
       if (this.datasetRecording && this.datasetSession) {
         this.transitionDatasetFromArmingIfNeeded();
         // Genuine PPG-channel sample: orientation columns are left `null`
@@ -1171,6 +1225,7 @@ class TelemetryStore {
     this.series.forEach((buffer) => buffer.clear());
     this.headUnwrap.reset();
     this.watchUnwrap.reset();
+    this.health.reset();
     this.rows.clear();
     this.headStatus = null;
     this.headDiagnostic = null;
