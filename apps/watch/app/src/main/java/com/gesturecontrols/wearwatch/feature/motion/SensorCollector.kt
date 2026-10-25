@@ -7,6 +7,7 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.SystemClock
 import android.util.Log
+import com.gesturecontrols.wearwatch.feature.power.WatchStats
 
 /**
  * Wraps SensorManager for the three IMU inputs the protocol cares about.
@@ -57,6 +58,14 @@ class SensorCollector(
     private var orientationRateUs: Int? = null
     private var accelerationRateUs: Int? = null
     private var gyroscopeRateUs: Int? = null
+
+    // The rate each sensor was last registered at (a SENSOR_DELAY_* constant or µs), for the stats report.
+    private var orientationActiveRate: Int? = null
+    private var accelerationActiveRate: Int? = null
+    private var gyroscopeActiveRate: Int? = null
+
+    /** Counts each sensor event as it arrives, when set; see [WatchStats]. */
+    @Volatile var stats: WatchStats? = null
 
     var isRegistered = false
         private set
@@ -159,6 +168,22 @@ class SensorCollector(
         }
     }
 
+    /** How each motion sensor is set up right now, for the stats report. */
+    fun sensorInfo(): List<WatchStats.SensorInfo> = listOfNotNull(
+        rotationVectorSensor?.let { info(SENSOR_ORIENTATION, it, orientationRegistered, orientationActiveRate) },
+        accelerometerSensor?.let { info(SENSOR_ACCELERATION, it, accelerationRegistered, accelerationActiveRate) },
+        gyroscopeSensor?.let { info(SENSOR_GYROSCOPE, it, gyroscopeRegistered, gyroscopeActiveRate) },
+    )
+
+    private fun info(id: String, sensor: Sensor, registered: Boolean, rate: Int?) = WatchStats.SensorInfo(
+        id = id,
+        name = sensor.name,
+        registered = registered,
+        requestedPeriodUs = rate?.let(WatchStats::nominalPeriodUs),
+        fifoMaxEvents = sensor.fifoMaxEventCount,
+        fifoReservedEvents = sensor.fifoReservedEventCount,
+    )
+
     private fun unregisterAll() {
         sensorManager.unregisterListener(this)
         orientationRegistered = false
@@ -185,6 +210,7 @@ class SensorCollector(
             sensorManager.unregisterListener(this, sensor)
             sensorManager.registerListener(this, sensor, rate)
             orientationRegistered = true
+            orientationActiveRate = rate
         } else if (orientationRegistered) {
             sensorManager.unregisterListener(this, sensor)
             orientationRegistered = false
@@ -198,6 +224,7 @@ class SensorCollector(
             sensorManager.unregisterListener(this, sensor)
             sensorManager.registerListener(this, sensor, rate)
             accelerationRegistered = true
+            accelerationActiveRate = rate
         } else if (accelerationRegistered) {
             sensorManager.unregisterListener(this, sensor)
             accelerationRegistered = false
@@ -212,6 +239,7 @@ class SensorCollector(
             sensorManager.unregisterListener(this, sensor)
             sensorManager.registerListener(this, sensor, rate)
             gyroscopeRegistered = true
+            gyroscopeActiveRate = rate
         } else if (gyroscopeRegistered) {
             sensorManager.unregisterListener(this, sensor)
             gyroscopeRegistered = false
@@ -221,6 +249,15 @@ class SensorCollector(
     }
 
     override fun onSensorChanged(event: SensorEvent) {
+        stats?.let { counter ->
+            val id = when (event.sensor.type) {
+                Sensor.TYPE_LINEAR_ACCELERATION, Sensor.TYPE_ACCELEROMETER -> SENSOR_ACCELERATION
+                Sensor.TYPE_GYROSCOPE -> SENSOR_GYROSCOPE
+                Sensor.TYPE_ROTATION_VECTOR -> SENSOR_ORIENTATION
+                else -> null
+            }
+            if (id != null) counter.onSensorEvent(id, SystemClock.elapsedRealtimeNanos())
+        }
         val row = when (event.sensor.type) {
             Sensor.TYPE_LINEAR_ACCELERATION, Sensor.TYPE_ACCELEROMETER -> rows.onAccelerometer(event.values, event.timestamp)
             Sensor.TYPE_GYROSCOPE -> rows.onGyroscope(event.values, event.timestamp)

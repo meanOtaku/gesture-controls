@@ -53,6 +53,23 @@ readings, which older watch builds send:
 
 `watch.heartbeat` carries an optional `batteryPercent` value. Send it at least once every three seconds, including while no IMU samples are available.
 
+Every fifth heartbeat (about every 5 s) also carries an optional `stats` object: the watch's running counters of what
+streaming costs. Every counter only grows from when the watch app started, so the desktop works out rates from the
+difference between two reports, and a lost report loses nothing. A desktop that does not know `stats` ignores it; a
+watch that does not send it is treated as not reporting. All fields are optional on the desktop side (missing counters
+read as 0):
+
+| Field | Meaning |
+|---|---|
+| `elapsedMs` | The watch's elapsed realtime when the report was made. |
+| `cpuMs` | CPU time the watch app has used (`Process.getElapsedCpuTime`). |
+| `battery` | `percent`, `charging`, `chargeUah` (charge counter, µAh), `currentUa` (µA; its sign differs between watches), `temperatureC`. A property the watch does not support is null. |
+| `sensorDeliveries` | Times motion events reached the app; events within 2 ms of each other count once. Each is a wake that hardware batching would save. |
+| `sensors` | For each motion sensor: `id`, `name`, `registered`, `requestedPeriodUs` (a `SENSOR_DELAY_*` constant reported as its nominal period), `fifoMaxEvents` and `fifoReservedEvents` (the sensor hub's batching buffer; 0 means it cannot batch), and `events`. |
+| `ppgSamples`, `ppgDeliveries` | Pulse samples, and the deliveries they came in. |
+| `messages`, `bytes`, `refusedSends` | Messages handed to the link, their size, and those it refused. |
+| `droppedMessages` | Messages the link accepted and later dropped to stay live (Bluetooth, when it falls behind). |
+
 ## Wear state (on or off the wrist)
 
 `watch.wear_state` reports the watch's off-body detector (the standard

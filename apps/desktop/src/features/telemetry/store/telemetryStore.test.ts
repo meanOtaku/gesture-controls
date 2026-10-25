@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { watchPower } from "../../../shared/tauri/watchPower";
 import { EMPTY_WATCH_STATUS, MAX_VISIBLE_SAMPLES, telemetryStore } from "./telemetryStore";
 
 describe("telemetryStore", () => {
@@ -434,6 +435,19 @@ describe("telemetryStore", () => {
       expect(interval.endRawRow).toBe(3);
       expect(rows[interval.startRawRow].timestampNs).toBe("2000");
       expect(rows[(interval.endRawRow as number) - 1].timestampNs).toBe("2000");
+    });
+
+    it("keeps the watch's own account of its sensors and link with the recording, when it reports one", () => {
+      const sample = { deviceId: "watch-test", sequence: 1, timestampNs: 5_000, quaternion: [1, 0, 0, 0] as [number, number, number, number], accelerometer: null, gyroscope: null };
+      telemetryStore.ingestWatchOrientation(sample);
+      expect(telemetryStore.buildRecordingBundlePayload()?.recording.watch_power).toBeUndefined();
+      const live = { seconds: 60, batteryPercentPerHour: null, averageDrawMa: 58, cpuPercent: 3, sensorDeliveriesPerSecond: 150, sensors: [], ppgHz: 25, ppgDeliveriesPerSecond: 10, messagesPerSecond: 20, bytesPerSecond: 4000, droppedMessages: 2, refusedSends: 0, charging: false, temperatureC: null };
+      watchPower.set({ live, reporting: true, run: null });
+      try {
+        expect(telemetryStore.buildRecordingBundlePayload()?.recording.watch_power).toEqual(live);
+      } finally {
+        watchPower.reset();
+      }
     });
 
     it("persists raw.csv rows in chronological order after an out-of-order live capture", () => {

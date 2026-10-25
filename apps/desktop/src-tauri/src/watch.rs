@@ -212,8 +212,12 @@ impl WatchRuntime {
                 let _ = app.emit(WATCH_ORIENTATION_EVENT, &sample);
                 state.last_orientation = Some(sample);
             }
-            WatchEvent::Heartbeat(sample) => {
+            WatchEvent::Heartbeat(mut sample) => {
                 state.connected = true;
+                // The stats go to the power meter; the status (sent many times a second) stays small without them.
+                if let Some(report) = sample.stats.take() {
+                    crate::watch_power::on_report(app, report);
+                }
                 state.last_heartbeat = Some(sample);
             }
             WatchEvent::ClockOffsetUpdated(ClockOffsetEstimate {

@@ -135,6 +135,15 @@ The **Watch** tab is the Watch connection and sensor-control dashboard.
 - Shows raw orientation and PPG status when those streams are available.
 - Shows available Samsung health-sensor telemetry, such as heart rate, skin temperature, or EDA, when supported by the device and permissions.
 - Provides immediate enable/disable controls for supported Watch sensor streams.
+- The **Watch power** card shows what streaming costs the watch, from counters a watch app from October 2026 on reports
+  every few seconds: average current drawn (from the battery's charge counter) and battery percent an hour, the app's CPU
+  share, **sensor wakes** (how often motion events reached the app, which hardware batching would cut), each motion
+  sensor's achieved rate against what was asked and its batching buffer (0 means it cannot batch), the pulse rate, and
+  messages, bytes and drops on the link. The figures cover about the last minute. **Measure** runs a named measurement:
+  take the watch off its charger, start it, leave the watch streaming for 30 minutes or more (on the desk is fine: on the watch,
+  set **Off-wrist streaming: on**), then stop it. Its result (draw, battery, CPU, wakes, and the median motion delay through the
+  run) is kept in a table to compare with the next, with a note when the watch was charging, restarted, or the run was
+  under 10 minutes. Each recording also keeps the watch's figures from the minute before it stopped.
 - The **Link health** card shows how the link is doing: its phase, how long it has been connected, drops, the packet size, and **Sample delay**, how late motion samples arrive (typical and worst 5%). A few hundred milliseconds or more means the Bluetooth link is behind. See [Troubleshooting the watch link](troubleshooting-watch-link.md).
 
 If a sensor is unavailable, treat that as a device capability or permission state—not a successful inference input. Low-quality, stale, malformed, or disconnected sensor data fails closed and releases any active interaction.

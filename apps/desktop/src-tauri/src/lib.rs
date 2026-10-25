@@ -24,6 +24,7 @@ mod overlay;
 mod recording_bundle;
 mod recording_sequence;
 mod mistakes;
+mod watch_power;
 mod sealed_test;
 mod settings;
 mod watch;
@@ -153,6 +154,7 @@ pub fn run() {
         .manage(overlay::OverlayRuntime::default())
         .manage(overlay::VolumeRuntime::default())
         .manage(watch::WatchRuntime::default())
+        .manage(watch_power::WatchPower::default())
         .manage(model_lab::ModelLabRuntime::default())
         .manage(label_registry::LabelRegistryRuntime::default())
         .manage(gesture_library::GestureLibraryRuntime::default())
@@ -202,6 +204,11 @@ pub fn run() {
             watch::stop_measurement,
             watch::set_sensor_enabled,
             watch::buzz_watch,
+            watch_power::get_watch_power,
+            watch_power::start_watch_measurement,
+            watch_power::stop_watch_measurement,
+            watch_power::list_watch_measurements,
+            watch_power::delete_watch_measurement,
             settings::get_settings,
             settings::update_settings,
             settings::reset_settings,

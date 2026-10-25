@@ -89,6 +89,8 @@ class BleGattTransport(
     private var notificationInFlight = false
     /** Old messages dropped to keep the stream live, not yet reported, and when that was last reported. */
     private var unreportedDrops = 0
+    @Volatile private var totalDrops = 0L
+    override val droppedMessages: Long get() = totalDrops
     private var lastDropReportMs = 0L
     private var refusedNotifications = 0
 
@@ -210,7 +212,9 @@ class BleGattTransport(
             // Telemetry is only useful fresh: when the link falls behind, the oldest whole messages that have not
             // started sending give way (see OutboundQueue), instead of a backlog growing for seconds and then going
             // all at once.
-            unreportedDrops += outbound.add(fragments)
+            val dropped = outbound.add(fragments)
+            unreportedDrops += dropped
+            totalDrops += dropped
             val now = SystemClock.elapsedRealtime()
             if (unreportedDrops > 0 && now - lastDropReportMs >= DROP_REPORT_INTERVAL_MS) {
                 LinkLog.add("the link fell behind: dropped $unreportedDrops old messages to keep the stream live (MTU $mtu)")

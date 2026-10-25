@@ -80,6 +80,13 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
     /** Supplies battery percent for outgoing heartbeats; wired by MainActivity. */
     var batteryPercentProvider: (() -> Int?)? = null
 
+    /** Counts what the watch sends, when set; see [com.gesturecontrols.wearwatch.feature.power.WatchStats]. */
+    @Volatile var stats: com.gesturecontrols.wearwatch.feature.power.WatchStats? = null
+
+    /** Supplies the stats report attached to every [STATS_EVERY_HEARTBEATS]th heartbeat; wired by MainActivity. */
+    var statsProvider: (() -> org.json.JSONObject?)? = null
+    private var heartbeatsSinceStats = 0
+
     /** Forwards a `desktop.start_measurement`/`desktop.stop_measurement` command; wired by MainActivity to [OnDemandMedicalSampler]. */
     var onMeasurementCommand: ((tracker: String, start: Boolean) -> Unit)? = null
 
@@ -209,7 +216,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         val link = streamingLink() ?: return
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        link.send(WatchProtocol.ppgStatusMessage(wireDeviceId, seq, timestampNs, state))
+        sendCounted(link, WatchProtocol.ppgStatusMessage(wireDeviceId, seq, timestampNs, state))
     }
 
     /**
@@ -224,7 +231,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         lastWearState = worn
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        link.send(WatchProtocol.wearStateMessage(wireDeviceId, seq, timestampNs, worn))
+        sendCounted(link, WatchProtocol.wearStateMessage(wireDeviceId, seq, timestampNs, worn))
     }
 
     /** Sends a STEM button press/release, grabbing or releasing the desktop's volume overlay. */
@@ -233,7 +240,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
         val buttonState = if (pressed) WatchProtocol.BUTTON_STATE_DOWN else WatchProtocol.BUTTON_STATE_UP
-        link.send(WatchProtocol.buttonMessage(wireDeviceId, seq, timestampNs, buttonState))
+        sendCounted(link, WatchProtocol.buttonMessage(wireDeviceId, seq, timestampNs, buttonState))
     }
 
     /** Buffers HEART_RATE_CONTINUOUS samples for the next medical flush tick; dropped if not connected. */
@@ -267,7 +274,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         for (chunk in samples.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
             val timestampNs = SystemClock.elapsedRealtimeNanos()
             val seq = sequence.incrementAndGet()
-            link.send(WatchProtocol.spo2BatchMessage(wireDeviceId, seq, timestampNs, chunk))
+            sendCounted(link, WatchProtocol.spo2BatchMessage(wireDeviceId, seq, timestampNs, chunk))
         }
     }
 
@@ -278,7 +285,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         for (chunk in samples.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
             val timestampNs = SystemClock.elapsedRealtimeNanos()
             val seq = sequence.incrementAndGet()
-            link.send(WatchProtocol.ecgBatchMessage(wireDeviceId, seq, timestampNs, chunk))
+            sendCounted(link, WatchProtocol.ecgBatchMessage(wireDeviceId, seq, timestampNs, chunk))
         }
     }
 
@@ -289,7 +296,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         for (chunk in samples.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
             val timestampNs = SystemClock.elapsedRealtimeNanos()
             val seq = sequence.incrementAndGet()
-            link.send(WatchProtocol.sweatLossBatchMessage(wireDeviceId, seq, timestampNs, chunk))
+            sendCounted(link, WatchProtocol.sweatLossBatchMessage(wireDeviceId, seq, timestampNs, chunk))
         }
     }
 
@@ -298,7 +305,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         val link = streamingLink() ?: return
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        link.send(WatchProtocol.biaResultMessage(wireDeviceId, seq, timestampNs, result))
+        sendCounted(link, WatchProtocol.biaResultMessage(wireDeviceId, seq, timestampNs, result))
     }
 
     /** Reports a medical tracker's [MedicalTrackerState.wireValue], continuous or on-demand, supported or not. */
@@ -306,7 +313,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         val link = streamingLink() ?: return
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        link.send(WatchProtocol.medicalStatusMessage(wireDeviceId, seq, timestampNs, tracker, state))
+        sendCounted(link, WatchProtocol.medicalStatusMessage(wireDeviceId, seq, timestampNs, tracker, state))
     }
 
     /** Reports an IMU sensor's current enabled state ([SENSOR_ORIENTATION] etc.). */
@@ -314,7 +321,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         val link = streamingLink() ?: return
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        link.send(WatchProtocol.sensorStatusMessage(wireDeviceId, seq, timestampNs, sensor, enabled))
+        sendCounted(link, WatchProtocol.sensorStatusMessage(wireDeviceId, seq, timestampNs, sensor, enabled))
     }
 
     /** The active link, but only while it is actually carrying traffic. */
@@ -380,7 +387,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         val link = streamingLink() ?: return
         val watchTimeNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        link.send(WatchProtocol.timeSyncMessage(wireDeviceId, seq, watchTimeNs, desktopTimeNs, watchTimeNs))
+        sendCounted(link, WatchProtocol.timeSyncMessage(wireDeviceId, seq, watchTimeNs, desktopTimeNs, watchTimeNs))
     }
 
     /** Forwards a `desktop.start_measurement`/`desktop.stop_measurement` command to [onMeasurementCommand]; ignored if `tracker` is missing. */
@@ -422,12 +429,19 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
                 if (link != null) {
                     val timestampNs = SystemClock.elapsedRealtimeNanos()
                     val seq = sequence.incrementAndGet()
-                    link.send(
+                    // The stats ride on every few heartbeats: often enough to see a change within a minute, rarely
+                    // enough to add almost nothing to the link.
+                    heartbeatsSinceStats = (heartbeatsSinceStats + 1) % STATS_EVERY_HEARTBEATS
+                    // A report that cannot be made is left out: it must never stop the heartbeat, which keeps the link up.
+                    val report = if (heartbeatsSinceStats == 1) runCatching { statsProvider?.invoke() }.getOrNull() else null
+                    sendCounted(
+                        link,
                         WatchProtocol.heartbeatMessage(
                             wireDeviceId,
                             seq,
                             timestampNs,
                             batteryPercentProvider?.invoke(),
+                            report,
                         )
                     )
                 }
@@ -435,6 +449,16 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
             }
         }
     }
+
+    /** Hands one message to the link, counting it (and whether the link took it) in [stats]. */
+    private fun sendCounted(link: WatchTransportLink, message: String): Boolean {
+        val accepted = link.send(message)
+        stats?.onSend(message.length, accepted)
+        return accepted
+    }
+
+    /** Messages the current link dropped to keep the stream live, since it started. */
+    fun droppedMessages(): Long = streamingLink()?.droppedMessages ?: 0L
 
     /** Sends the motion batch: one `watch.sensor_batch` with motion only, split if it holds more than [IMU_BATCH_MAX_SAMPLES]. */
     private fun flushImuBuffer() {
@@ -448,7 +472,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
             val seq = sequence.incrementAndGet()
             val message = WatchProtocol.sensorBatchMessage(wireDeviceId, seq, SystemClock.elapsedRealtimeNanos(), chunk, emptyList())
                 ?: continue
-            link.send(message)
+            sendCounted(link, message)
             _lastOrientationSequence.value = seq
         }
     }
@@ -460,7 +484,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         val link = streamingLink() ?: return
         for (chunk in ppg.chunked(PPG_BATCH_MAX_SAMPLES)) {
             val seq = sequence.incrementAndGet()
-            link.send(WatchProtocol.ppgBatchMessage(wireDeviceId, seq, SystemClock.elapsedRealtimeNanos(), chunk))
+            sendCounted(link, WatchProtocol.ppgBatchMessage(wireDeviceId, seq, SystemClock.elapsedRealtimeNanos(), chunk))
         }
     }
 
@@ -482,7 +506,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
             for (chunk in batch.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
                 val timestampNs = SystemClock.elapsedRealtimeNanos()
                 val seq = sequence.incrementAndGet()
-                link.send(WatchProtocol.heartRateBatchMessage(wireDeviceId, seq, timestampNs, chunk))
+                sendCounted(link, WatchProtocol.heartRateBatchMessage(wireDeviceId, seq, timestampNs, chunk))
             }
         }
 
@@ -497,7 +521,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
             for (chunk in batch.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
                 val timestampNs = SystemClock.elapsedRealtimeNanos()
                 val seq = sequence.incrementAndGet()
-                link.send(WatchProtocol.skinTemperatureBatchMessage(wireDeviceId, seq, timestampNs, chunk))
+                sendCounted(link, WatchProtocol.skinTemperatureBatchMessage(wireDeviceId, seq, timestampNs, chunk))
             }
         }
 
@@ -508,13 +532,14 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
             for (chunk in batch.chunked(MEDICAL_BATCH_MAX_SAMPLES)) {
                 val timestampNs = SystemClock.elapsedRealtimeNanos()
                 val seq = sequence.incrementAndGet()
-                link.send(WatchProtocol.edaBatchMessage(wireDeviceId, seq, timestampNs, chunk))
+                sendCounted(link, WatchProtocol.edaBatchMessage(wireDeviceId, seq, timestampNs, chunk))
             }
         }
     }
 
     companion object {
         private const val HEARTBEAT_INTERVAL_MS = 1000L
+        private const val STATS_EVERY_HEARTBEATS = 5
         private const val MEDICAL_BATCH_INTERVAL_MS = 100L
         private const val PPG_BATCH_MAX_SAMPLES = 32
         // A 100 ms batch at 200 Hz is 20 samples; packed (about 60 bytes each) that is one message of a few Bluetooth fragments.

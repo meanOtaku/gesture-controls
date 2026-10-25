@@ -1,3 +1,4 @@
+import type { PowerRates } from "./watchPower";
 import { invoke } from "@tauri-apps/api/core";
 
 export type MonotonicWallClock = { monotonic_ns: number; wall_clock_at: string };
@@ -23,6 +24,8 @@ export type RecordingMetadataPayload = {
   raw_source_row_counts: Record<string, number>;
   /** How the session was recorded (see `sessionContext.ts`); absent when none was given. */
   context?: Record<string, string>;
+  /** What the watch reported over the minute before the recording stopped (see `watchPower.ts`); absent when it did not report. */
+  watch_power?: PowerRates;
 };
 
 export type ResolvedBoundary = { raw_row: number; source_timestamp_ns: number };

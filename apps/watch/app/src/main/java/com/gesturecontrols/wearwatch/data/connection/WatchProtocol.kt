@@ -195,9 +195,12 @@ object WatchProtocol {
         sequence: Long,
         timestampNs: Long,
         batteryPercent: Int?,
+        /** What the watch spent its battery on (see `WatchStats`); a desktop that does not know it ignores it. */
+        stats: JSONObject? = null,
     ): String {
         val payload = JSONObject()
         payload.put("batteryPercent", batteryPercent ?: JSONObject.NULL)
+        if (stats != null) payload.put("stats", stats)
         return envelope(TYPE_HEARTBEAT, deviceId, sequence, timestampNs, payload)
     }
 

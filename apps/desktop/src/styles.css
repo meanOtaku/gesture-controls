@@ -496,3 +496,9 @@ html.overlay-document body::before { display:none; }
 .shortcut-list > div { display:grid; grid-template-columns:minmax(8rem, 45%) 1fr; gap:.75rem; align-items:baseline; }
 .shortcut-list dd { margin:0; color:var(--ink-2); }
 .shortcut-list kbd { font-family:var(--font-mono); font-size:.78rem; border:1px solid var(--line); padding:0 .3rem; }
+
+/* Watch power */
+.power-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(13rem, 1fr)); gap:.5rem 1rem; margin:0; }
+.power-grid > div { border-left:2px solid var(--line); padding-left:.5rem; }
+.power-grid dt { font-size:.75rem; color:var(--ink-3); }
+.power-grid dd { margin:0; font-family:var(--font-mono); }

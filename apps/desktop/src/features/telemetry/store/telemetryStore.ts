@@ -23,6 +23,7 @@ import {
   type LiveInterval,
 } from "../annotations/timeline";
 import { RingBuffer } from "./ringBuffer";
+import { watchPower, type PowerRates } from "../../../shared/tauri/watchPower";
 import { SignalHealthTracker, type SignalHealthSnapshot } from "../quality/signalHealth";
 import { cleanContext, contextCommentLines, loadSessionContext, saveSessionContext, type SessionContext } from "../sessionContext";
 import { SourceClockMap } from "./sourceClock";
@@ -944,6 +945,8 @@ class TelemetryStore {
         raw_row_count: rows.length,
         raw_source_row_counts: { watch: rows.length },
         ...(Object.keys(session.context).length > 0 ? { context: session.context as Record<string, string> } : {}),
+        // The watch's own account of its sensors and link as the recording ended, when it reports one.
+        ...(watchPower.get().live ? { watch_power: watchPower.get().live as PowerRates } : {}),
       },
       annotations: {
         format_version: RECORDING_BUNDLE_FORMAT_VERSION,

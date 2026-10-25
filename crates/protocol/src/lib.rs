@@ -334,6 +334,7 @@ impl WatchEnvelope {
                     sequence: self.sequence,
                     timestamp_ns: self.timestamp_ns,
                     battery_percent: payload.battery_percent,
+                    stats: payload.stats,
                 }))
             }
             WATCH_TIME_SYNC_TYPE => {
@@ -742,10 +743,59 @@ pub struct WatchOrientationPayload {
     pub gyroscope: Option<[f64; 3]>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct WatchHeartbeatPayload {
     pub battery_percent: Option<u8>,
+    /// What the watch spent its battery on, on every few heartbeats (absent from a watch that does not report it).
+    #[serde(default)]
+    pub stats: Option<WatchStatsReport>,
+}
+
+/// The watch's running counters of what streaming costs (`WatchStats` on the watch). Every counter only grows, so the
+/// desktop works out rates from two reports, and a lost report loses nothing.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WatchStatsReport {
+    /// The watch's elapsed realtime when the report was made.
+    pub elapsed_ms: u64,
+    /// CPU time the watch app has used.
+    pub cpu_ms: Option<u64>,
+    pub battery: Option<WatchBatteryReport>,
+    /// Times the motion sensors' events reached the app (events arriving within 2 ms of each other count once).
+    pub sensor_deliveries: u64,
+    pub sensors: Vec<WatchSensorReport>,
+    pub ppg_samples: u64,
+    pub ppg_deliveries: u64,
+    pub messages: u64,
+    pub bytes: u64,
+    pub refused_sends: u64,
+    pub dropped_messages: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WatchBatteryReport {
+    pub percent: Option<u8>,
+    pub charging: Option<bool>,
+    /// Remaining charge in µAh, finer than the percentage.
+    pub charge_uah: Option<i64>,
+    /// Current in µA; its sign differs between watches.
+    pub current_ua: Option<i64>,
+    pub temperature_c: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WatchSensorReport {
+    pub id: String,
+    pub name: String,
+    pub registered: bool,
+    pub requested_period_us: Option<u32>,
+    /// How many events the sensor hub can hold for batching; 0 means it cannot batch.
+    pub fifo_max_events: u32,
+    pub fifo_reserved_events: u32,
+    pub events: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -1230,6 +1280,8 @@ pub struct WatchHeartbeatSample {
     pub sequence: u64,
     pub timestamp_ns: u64,
     pub battery_percent: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stats: Option<WatchStatsReport>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1434,5 +1486,42 @@ mod sensor_batch_tests {
         ));
         let zero = r#"{"imu":{"count":0,"timestampsNs":[],"quaternion":[],"accelerometer":[],"gyroscope":[]}}"#;
         assert!(decode(&envelope(zero)).is_err());
+    }
+}
+
+#[cfg(test)]
+mod heartbeat_tests {
+    use super::*;
+
+    fn decode(payload: &str) -> WatchHeartbeatSample {
+        let json = format!(r#"{{"version":1,"type":"watch.heartbeat","deviceId":"w","sequence":3,"timestampNs":7,"payload":{payload}}}"#);
+        match WatchEnvelope::from_json(json.as_bytes()).unwrap().decode().unwrap() {
+            WatchInboundMessage::Heartbeat(sample) => sample,
+            other => panic!("not a heartbeat: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_heartbeat_from_a_watch_without_stats_reads_as_before() {
+        let sample = decode(r#"{"batteryPercent":80}"#);
+        assert_eq!(sample.battery_percent, Some(80));
+        assert_eq!(sample.stats, None);
+    }
+
+    #[test]
+    fn the_watchs_stats_are_read_and_unknown_or_missing_fields_are_tolerated() {
+        let sample = decode(
+            r#"{"batteryPercent":null,"stats":{"elapsedMs":60000,"cpuMs":1200,"sensorDeliveries":3000,
+            "battery":{"percent":87,"charging":false,"chargeUah":250000,"currentUa":-120000,"temperatureC":31.5},
+            "sensors":[{"id":"acceleration","name":"Accel","registered":true,"requestedPeriodUs":20000,"fifoMaxEvents":450,"fifoReservedEvents":0,"events":3000}],
+            "ppgSamples":1500,"messages":900,"bytes":120000,"droppedMessages":2,"somethingNew":true}}"#,
+        );
+        let stats = sample.stats.expect("stats");
+        assert_eq!(stats.elapsed_ms, 60_000);
+        assert_eq!(stats.cpu_ms, Some(1200));
+        assert_eq!(stats.battery.unwrap().charge_uah, Some(250_000));
+        assert_eq!(stats.sensors[0].fifo_max_events, 450);
+        assert_eq!(stats.ppg_deliveries, 0, "absent counters read as 0");
+        assert_eq!(stats.dropped_messages, 2);
     }
 }

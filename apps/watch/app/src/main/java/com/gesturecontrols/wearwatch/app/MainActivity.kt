@@ -7,14 +7,18 @@ import com.gesturecontrols.wearwatch.data.discovery.*
 import com.gesturecontrols.wearwatch.data.preferences.*
 import com.gesturecontrols.wearwatch.feature.health.*
 import com.gesturecontrols.wearwatch.feature.motion.*
+import com.gesturecontrols.wearwatch.feature.power.WatchStats
 import com.gesturecontrols.wearwatch.feature.wear.*
 import com.gesturecontrols.wearwatch.platform.service.*
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -114,6 +118,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sensorCollector: SensorCollector
     private lateinit var ppgCollector: PpgCollector
     private lateinit var medicalCollector: MedicalContinuousCollector
+    private val watchStats = WatchStats()
     private lateinit var onDemandSampler: OnDemandMedicalSampler
 
     // Tracks whether we've sent a button-down without a matching button-up yet,
@@ -179,6 +184,17 @@ class MainActivity : AppCompatActivity() {
         renderEndpointSource()
 
         watchLink.batteryPercentProvider = { readBatteryPercent() }
+        // Counts what streaming costs, reported with the heartbeat; it changes nothing the watch does.
+        watchLink.stats = watchStats
+        watchLink.statsProvider = {
+            watchStats.toJson(
+                elapsedMs = SystemClock.elapsedRealtime(),
+                cpuMs = android.os.Process.getElapsedCpuTime(),
+                battery = readBattery(),
+                sensors = if (::sensorCollector.isInitialized) sensorCollector.sensorInfo() else emptyList(),
+                droppedMessages = watchLink.droppedMessages(),
+            )
+        }
         desktopDiscovery = DesktopDiscovery(
             this,
             onEndpoint = { endpoint ->
@@ -200,7 +216,11 @@ class MainActivity : AppCompatActivity() {
         sensorCollector = SensorCollector(this) { quaternion, accelerometer, gyroscope, timestampNs ->
             watchLink.sendOrientation(quaternion, accelerometer, gyroscope, timestampNs)
         }
-        ppgCollector = PpgCollector(this) { samples -> watchLink.enqueuePpgSamples(samples) }
+        sensorCollector.stats = watchStats
+        ppgCollector = PpgCollector(this) { samples ->
+            watchStats.onPpgDelivery(samples.size)
+            watchLink.enqueuePpgSamples(samples)
+        }
         medicalCollector = MedicalContinuousCollector(
             this,
             onHeartRate = { samples -> watchLink.enqueueHeartRateSamples(samples) },
@@ -794,6 +814,24 @@ class MainActivity : AppCompatActivity() {
         val device = vibrator ?: return
         if (!device.hasVibrator()) return
         device.vibrate(VibrationEffect.createOneShot(durationMs.toLong(), VibrationEffect.DEFAULT_AMPLITUDE))
+    }
+
+    /** The battery as the stats report it; a property the watch does not support is null. */
+    private fun readBattery(): WatchStats.Battery? {
+        val batteryManager = getSystemService(Context.BATTERY_SERVICE) as? BatteryManager ?: return null
+        val chargeUah = batteryManager.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
+        val currentUa = batteryManager.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
+        // ACTION_BATTERY_CHANGED is sticky: registering with no receiver just reads the last one.
+        val sticky = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val tenths = sticky?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE) ?: Int.MIN_VALUE
+        val supported = { value: Long -> value.takeIf { it != Long.MIN_VALUE && it != Int.MIN_VALUE.toLong() && it != 0L } }
+        return WatchStats.Battery(
+            percent = readBatteryPercent(),
+            charging = batteryManager.isCharging,
+            chargeUah = supported(chargeUah),
+            currentUa = supported(currentUa),
+            temperatureC = if (tenths == Int.MIN_VALUE) null else tenths / 10.0,
+        )
     }
 
     private fun readBatteryPercent(): Int? {

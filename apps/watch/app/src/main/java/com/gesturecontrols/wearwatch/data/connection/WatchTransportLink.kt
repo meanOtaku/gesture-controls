@@ -66,4 +66,7 @@ interface WatchTransportLink {
 
     /** Sends one serialized envelope. `false` means it was dropped. */
     fun send(message: String): Boolean
+
+    /** Messages dropped after [send] accepted them (to keep a lagging link live), since this link was made. */
+    val droppedMessages: Long get() = 0L
 }

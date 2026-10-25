@@ -14,6 +14,7 @@ import { CalibrationPanel } from "./CalibrationPanel";
 import { RecipesCard } from "./RecipesCard";
 import { HeadphoneTelemetryPanel } from "./HeadphoneTelemetryPanel";
 import { ModelWorkflowCard } from "./ModelWorkflowCard";
+import { WatchPowerCard } from "./WatchPowerCard";
 import { OverviewSection } from "./OverviewSection";
 import { WatchSensorControls } from "./WatchSensorControls";
 import { LinkHealthCard } from "./LinkHealthCard";
@@ -171,6 +172,7 @@ export function Dashboard({
         <>
           <WatchTelemetryPanel watchStatus={watchStatus ?? null} />
           <LinkHealthCard />
+          <WatchPowerCard />
         </>
       )}
       {view === "watch" && <WatchWellnessPanel watchStatus={watchStatus ?? null} />}

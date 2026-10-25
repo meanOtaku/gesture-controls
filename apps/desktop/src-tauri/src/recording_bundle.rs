@@ -169,6 +169,10 @@ pub struct RecordingMetadata {
     /// from recordings made before they existed.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub context: BTreeMap<String, String>,
+    /// What the watch reported over the minute before the recording stopped (`watch_power::PowerRates`): its sensors'
+    /// achieved rates, wakes, link traffic and drops, battery draw. Absent when the watch did not report it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub watch_power: Option<crate::watch_power::PowerRates>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -830,6 +834,7 @@ fn import_recording_text(
         raw_row_count: row_count,
         raw_source_row_counts: BTreeMap::from([(IMPORTED_SOURCE_ID.to_string(), row_count)]),
         context: BTreeMap::new(),
+        watch_power: None,
     };
     let intervals = legacy_label_runs
         .into_iter()
@@ -3047,6 +3052,7 @@ mod tests {
             raw_row_count: 2,
             raw_source_row_counts: BTreeMap::from([("watch".to_string(), 2)]),
             context: BTreeMap::new(),
+            watch_power: None,
         }
     }
 
