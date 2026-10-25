@@ -42,6 +42,7 @@ export function RecorderPage() {
     <SignalHealthStrip recording={datasetRecording} />
     <div className="card-stack">
       <JustRecordedCard recording={datasetRecording} />
+      <SessionDetailsCard context={telemetryStore.getSessionContext()} onChange={(context) => telemetryStore.setSessionContext(context)} recording={datasetRecording} />
       <DatasetCaptureCard
         selectedLabel={selectedLabel}
         sessionLabels={sessionLabels}
@@ -86,7 +87,6 @@ export function RecorderPage() {
           void saveDatasetRecording();
         }}
       />
-      <SessionDetailsCard context={telemetryStore.getSessionContext()} onChange={(context) => telemetryStore.setSessionContext(context)} recording={datasetRecording} />
       <CoverageCard />
       <CameraAssistCard selectedLabel={selectedLabel} extraLabels={extraLabels} onToggleExtraLabel={(label) => telemetryStore.toggleExtraLabel(label)} recording={datasetRecording} desktopAvailable={desktopAvailable} />
       <CameraCapturePanel />

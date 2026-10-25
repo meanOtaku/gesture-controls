@@ -96,7 +96,12 @@ export function SealedTestCard({ desktopAvailable, models, datasets }: { desktop
             <div className="flex flex-wrap items-center gap-2">
               <Select value={version} onValueChange={(value) => setVersion(value ?? "")}>
                 <SelectTrigger aria-label="Model to test" className="min-w-64">
-                  <SelectValue placeholder="Choose a model" />
+                  <SelectValue placeholder="Choose a model">
+                    {(id: string) => {
+                      const model = testable.find((entry) => entry.id === id);
+                      return model ? `${model.label}: ${model.id} (${model.state})` : id;
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {testable.map((model) => (

@@ -25,7 +25,8 @@ export function SessionDetailsCard({ context, onChange, recording }: SessionDeta
         <CardTitle>Session details</CardTitle>
         <CardDescription>
           How this session is recorded. A model only learns the conditions it was shown, so vary them across sessions: arm
-          resting, raised, moving and walking. Saved with the recording; the last ones you used are kept.
+          resting, raised, moving and walking. Set them before you start: they are saved with the recording when it starts,
+          and the last ones you used are kept.
           {recording ? " The recording under way keeps the details it started with." : ""}
         </CardDescription>
       </CardHeader>
@@ -36,7 +37,7 @@ export function SessionDetailsCard({ context, onChange, recording }: SessionDeta
             {options ? (
               <Select value={context[field] ?? NOT_SAID} onValueChange={(value) => set(field, value === NOT_SAID || value === null ? "" : value)} disabled={recording}>
                 <SelectTrigger id={`session-${field}`} aria-label={title}>
-                  <SelectValue />
+                  <SelectValue>{(value: string) => (value === NOT_SAID || !value ? "Not said" : options.find((option) => option.value === value)?.title ?? value)}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NOT_SAID}>Not said</SelectItem>
