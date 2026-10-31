@@ -1,0 +1,189 @@
+{
+ "recordings": 47,
+ "skipped": [
+  "gesture-dataset-pinch-2026-09-22T13-39-36.998Z.csv"
+ ],
+ "thresholds": {
+  "2.0": {
+   "pinch_found": 0.9489795918367347,
+   "pinch_found_squared": 0.9005622657226157,
+   "chance_found": 0.6590351594439902,
+   "pairs_both_found": 0.916267942583732,
+   "pairs": 418,
+   "single_pinches_triggering": 0.17959183673469387,
+   "everyday_minutes": 11.227000000000002,
+   "everyday_false_per_minute": 1.336064843680413,
+   "everyday_false": 15,
+   "other_gestures_triggering": {
+    "fist": {
+     "holds": 151,
+     "share": 0.19205298013245034
+    },
+    "hand_twit_clockwise_and_anti_clockwise": {
+     "holds": 16,
+     "share": 0.0
+    },
+    "hand_open": {
+     "holds": 78,
+     "share": 0.08974358974358974
+    },
+    "thumbs_up": {
+     "holds": 29,
+     "share": 0.10344827586206896
+    }
+   },
+   "pinches": 490
+  },
+  "3.0": {
+   "pinch_found": 0.8489795918367347,
+   "pinch_found_squared": 0.7207663473552686,
+   "chance_found": 0.5600981193785772,
+   "pairs_both_found": 0.7583732057416268,
+   "pairs": 418,
+   "single_pinches_triggering": 0.15918367346938775,
+   "everyday_minutes": 11.227000000000002,
+   "everyday_false_per_minute": 1.781419791573884,
+   "everyday_false": 20,
+   "other_gestures_triggering": {
+    "fist": {
+     "holds": 151,
+     "share": 0.1986754966887417
+    },
+    "hand_twit_clockwise_and_anti_clockwise": {
+     "holds": 16,
+     "share": 0.0
+    },
+    "hand_open": {
+     "holds": 78,
+     "share": 0.10256410256410256
+    },
+    "thumbs_up": {
+     "holds": 29,
+     "share": 0.0
+    }
+   },
+   "pinches": 490
+  },
+  "4.0": {
+   "pinch_found": 0.763265306122449,
+   "pinch_found_squared": 0.5825739275301959,
+   "chance_found": 0.48160261651676206,
+   "pairs_both_found": 0.6435406698564593,
+   "pairs": 418,
+   "single_pinches_triggering": 0.11836734693877551,
+   "everyday_minutes": 11.227000000000002,
+   "everyday_false_per_minute": 1.781419791573884,
+   "everyday_false": 20,
+   "other_gestures_triggering": {
+    "fist": {
+     "holds": 151,
+     "share": 0.152317880794702
+    },
+    "hand_twit_clockwise_and_anti_clockwise": {
+     "holds": 16,
+     "share": 0.125
+    },
+    "hand_open": {
+     "holds": 78,
+     "share": 0.0641025641025641
+    },
+    "thumbs_up": {
+     "holds": 29,
+     "share": 0.06896551724137931
+    }
+   },
+   "pinches": 490
+  },
+  "5.0": {
+   "pinch_found": 0.6755102040816326,
+   "pinch_found_squared": 0.456314035818409,
+   "chance_found": 0.4186426819296811,
+   "pairs_both_found": 0.5287081339712919,
+   "pairs": 418,
+   "single_pinches_triggering": 0.12244897959183673,
+   "everyday_minutes": 11.227000000000002,
+   "everyday_false_per_minute": 1.4251358332591073,
+   "everyday_false": 16,
+   "other_gestures_triggering": {
+    "fist": {
+     "holds": 151,
+     "share": 0.15894039735099338
+    },
+    "hand_twit_clockwise_and_anti_clockwise": {
+     "holds": 16,
+     "share": 0.125
+    },
+    "hand_open": {
+     "holds": 78,
+     "share": 0.11538461538461539
+    },
+    "thumbs_up": {
+     "holds": 29,
+     "share": 0.10344827586206896
+    }
+   },
+   "pinches": 490
+  },
+  "6.0": {
+   "pinch_found": 0.5816326530612245,
+   "pinch_found_squared": 0.3382965431070387,
+   "chance_found": 0.33605887162714637,
+   "pairs_both_found": 0.43779904306220097,
+   "pairs": 418,
+   "single_pinches_triggering": 0.07959183673469387,
+   "everyday_minutes": 11.227000000000002,
+   "everyday_false_per_minute": 1.8704907811525782,
+   "everyday_false": 21,
+   "other_gestures_triggering": {
+    "fist": {
+     "holds": 151,
+     "share": 0.12582781456953643
+    },
+    "hand_twit_clockwise_and_anti_clockwise": {
+     "holds": 16,
+     "share": 0.125
+    },
+    "hand_open": {
+     "holds": 78,
+     "share": 0.0641025641025641
+    },
+    "thumbs_up": {
+     "holds": 29,
+     "share": 0.13793103448275862
+    }
+   },
+   "pinches": 490
+  },
+  "8.0": {
+   "pinch_found": 0.46122448979591835,
+   "pinch_found_squared": 0.21272802998750517,
+   "chance_found": 0.2518397383483238,
+   "pairs_both_found": 0.3038277511961722,
+   "pairs": 418,
+   "single_pinches_triggering": 0.053061224489795916,
+   "everyday_minutes": 11.227000000000002,
+   "everyday_false_per_minute": 1.246993854101719,
+   "everyday_false": 14,
+   "other_gestures_triggering": {
+    "fist": {
+     "holds": 151,
+     "share": 0.11258278145695365
+    },
+    "hand_twit_clockwise_and_anti_clockwise": {
+     "holds": 16,
+     "share": 0.1875
+    },
+    "hand_open": {
+     "holds": 78,
+     "share": 0.0641025641025641
+    },
+    "thumbs_up": {
+     "holds": 29,
+     "share": 0.06896551724137931
+    }
+   },
+   "pinches": 490
+  }
+ },
+ "seconds": 2.1
+}
