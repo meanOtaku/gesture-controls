@@ -2989,6 +2989,31 @@ fn write_bundle_with_evidence(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// One-off tool: writes a saved recording out as a dataset folder, as the Recorder exports one (`ppg.csv`, `imu.csv`,
+    /// `dataset.json`, `ppg_clock.csv`), every row kept and labelled from its intervals (the excluded ones left out).
+    /// `EXPORT_BUNDLE` is the recording's folder, `EXPORT_PARENT` where the dataset folder goes, `EXPORT_NAME` its name.
+    #[test]
+    #[ignore = "a tool: needs EXPORT_BUNDLE, EXPORT_PARENT and EXPORT_NAME"]
+    fn export_a_saved_recording_as_a_dataset_folder() {
+        let dir = std::path::PathBuf::from(std::env::var("EXPORT_BUNDLE").expect("EXPORT_BUNDLE"));
+        let (recording, annotations) = load_bundle_pair(&dir).unwrap();
+        let raw = fs::read_to_string(dir.join(RAW_CSV_FILE_NAME)).unwrap();
+        let (csv, labelled, intervals) = dataset_csv_from_bundle(&raw, &annotations, IntervalFilter::NotExcluded, None).unwrap();
+        let mut lines = crate::dataset_files::context_lines(&recording.context);
+        lines.push(csv);
+        let pair = crate::dataset_files::split_legacy(&lines.join("\n")).unwrap();
+        let clock = fs::read_to_string(dir.join(PPG_CLOCK_FILE_NAME)).ok();
+        let written = crate::model_lab::export_dataset_folder(
+            std::env::var("EXPORT_PARENT").expect("EXPORT_PARENT"),
+            std::env::var("EXPORT_NAME").expect("EXPORT_NAME"),
+            pair.ppg_csv,
+            pair.imu_csv,
+            clock,
+        )
+        .unwrap();
+        println!("wrote {written}: {labelled} labelled rows from {intervals} intervals");
+    }
     use uuid::Uuid;
 
     #[test]
