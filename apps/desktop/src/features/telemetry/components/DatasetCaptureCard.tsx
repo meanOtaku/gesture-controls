@@ -58,8 +58,8 @@ type DatasetCaptureCardProps = {
   getLabelRemovalBlockedReason: (label: GestureDatasetLabel) => string | null;
   /** True in the desktop app; false in browser preview, where there is no native folder picker. */
   desktopAvailable: boolean;
+  /** The export folder chosen on the Exports card; Export waits for one in the desktop app. */
   datasetExportFolder: string | null;
-  onChooseExportFolder: () => Promise<void>;
   datasetRecording: boolean;
   datasetRecordingState?: DatasetRecordingState;
   datasetSession: DatasetSessionMetadata | null;
@@ -75,9 +75,8 @@ type DatasetCaptureCardProps = {
   onStart: (timelineDurationSeconds: number) => void;
   onStop: () => void;
   onDiscard: () => void;
+  /** Exports the session as the Exports card says: a folder of two files, or one CSV. */
   onExport: () => Promise<void>;
-  /** Exports the session as one CSV file with blank cells (the older format), as a secondary choice. */
-  onExportSingleCsv?: () => Promise<void>;
   /** Buffered session rows/intervals, for the pre-export data-quality review gate. Empty when there is nothing buffered yet. */
   datasetRows?: DatasetRow[];
   /**
@@ -132,7 +131,6 @@ export function DatasetCaptureCard({
   getLabelRemovalBlockedReason,
   desktopAvailable,
   datasetExportFolder,
-  onChooseExportFolder,
   datasetRecording,
   datasetRecordingState = "idle",
   datasetSession,
@@ -146,7 +144,6 @@ export function DatasetCaptureCard({
   onStop,
   onDiscard,
   onExport,
-  onExportSingleCsv,
   datasetRows = [],
   getDatasetRows,
   timelineIntervals = [],
@@ -390,21 +387,6 @@ export function DatasetCaptureCard({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Label className="text-xs text-muted-foreground">Export folder:</Label>
-          {desktopAvailable ? (
-            <>
-              <span className="text-xs text-foreground truncate max-w-[16rem]" title={datasetExportFolder ?? undefined}>
-                {datasetExportFolder ?? "Not set"}
-              </span>
-              <Button type="button" variant="outline" size="sm" onClick={() => void onChooseExportFolder()}>
-                {datasetExportFolder ? "Change…" : "Browse…"}
-              </Button>
-            </>
-          ) : (
-            <span className="text-xs text-muted-foreground">Browser preview downloads the CSV directly.</span>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
             variant={datasetRecording ? "destructive" : "default"}
@@ -486,23 +468,14 @@ export function DatasetCaptureCard({
             onPress={handleExportPress}
             pendingLabel="Exporting…"
           >
-            Export dataset folder
+            Export
           </AsyncActionButton>
           <HelpTooltip label="About exporting the dataset">
             {desktopAvailable
-              ? "Saves the buffered labeled rows as a folder of two files, ppg.csv and imu.csv, in the export folder above, under an auto-generated timestamped name. Each file has a row only where its own sensor had a sample, so neither has blank cells. Import the folder in Model Lab. Choose a folder first, then Export writes there directly with no save dialog."
-              : "Browser preview has no native folder picker, so it can only download one CSV file."}
+              ? "Saves the buffered labelled rows, as the Exports card at the top of the page says (a folder of two files, ppg.csv and imu.csv, or one CSV), in its export folder, under a timestamped name, with no save dialog. Import the folder in Model Lab."
+              : "Browser preview has no native folder picker, so it downloads one CSV file."}
           </HelpTooltip>
-          {onExportSingleCsv && (
-            <AsyncActionButton
-              variant="outline"
-              disabled={datasetRowCount === 0 || (desktopAvailable && !datasetExportFolder)}
-              onPress={onExportSingleCsv}
-              pendingLabel="Exporting…"
-            >
-              Export one CSV (older format)
-            </AsyncActionButton>
-          )}
+          {desktopAvailable && !datasetExportFolder && <span className="field-hint">Choose an export folder on the Exports card first.</span>}
 
           <AlertDialog open={exportReviewOpen} onOpenChange={setExportReviewOpen}>
             <AlertDialogContent>

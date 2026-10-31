@@ -4,6 +4,7 @@ import { CameraAssistCard } from "../../gestureLibrary/CameraAssistCard";
 import { cameraAssist } from "../../gestureLibrary/cameraAssist";
 import { CoverageCard } from "./CoverageCard";
 import { DatasetCaptureCard } from "./DatasetCaptureCard";
+import { ExportSettingsCard } from "./ExportSettingsCard";
 import { GuidedSessionCard } from "./GuidedSessionCard";
 import { JustRecordedCard } from "./JustRecordedCard";
 import { SessionDetailsCard } from "./SessionDetailsCard";
@@ -20,7 +21,7 @@ import { telemetryStore } from "../store/telemetryStore";
 export function RecorderPage() {
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
-  const { exportDatasetCsv, exportDatasetFolder, saveDatasetRecording, datasetExportFolder, chooseDatasetExportFolder } = useTelemetryExport();
+  const { exportDataset, saveDatasetRecording, datasetExportFolder } = useTelemetryExport();
 
   const selectedLabel = telemetryStore.getSelectedLabel();
   const sessionLabels = telemetryStore.getSessionLabels();
@@ -41,6 +42,7 @@ export function RecorderPage() {
     <StreamStatus />
     <SignalHealthStrip recording={datasetRecording} />
     <div className="card-stack">
+      <ExportSettingsCard />
       <JustRecordedCard recording={datasetRecording} />
       <SessionDetailsCard context={telemetryStore.getSessionContext()} onChange={(context) => telemetryStore.setSessionContext(context)} recording={datasetRecording} />
       <DatasetCaptureCard
@@ -50,7 +52,6 @@ export function RecorderPage() {
         getLabelRemovalBlockedReason={(label) => telemetryStore.labelRemovalBlockedReason(label)}
         desktopAvailable={desktopAvailable}
         datasetExportFolder={datasetExportFolder}
-        onChooseExportFolder={async () => { await chooseDatasetExportFolder(); }}
         datasetRecording={datasetRecording}
         datasetRecordingState={datasetRecordingState}
         datasetSession={datasetSession}
@@ -75,8 +76,7 @@ export function RecorderPage() {
           void saveDatasetRecording();
         }}
         onDiscard={() => { cameraAssist.disarm(); telemetryStore.discardDatasetRecording(); }}
-        onExport={exportDatasetFolder}
-        onExportSingleCsv={exportDatasetCsv}
+        onExport={exportDataset}
         getDatasetRows={() => telemetryStore.getDatasetRows()}
         timelineIntervals={telemetryStore.getTimelineIntervals()}
       />

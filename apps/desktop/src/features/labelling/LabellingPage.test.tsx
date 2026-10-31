@@ -18,6 +18,7 @@ vi.mock("./cameraTrack", async (actual) => ({
 }));
 
 import { appNavigation } from "../../shared/navigation/appNavigation";
+import { exportFolderStore } from "../telemetry/store/exportFolderStore";
 import { forgetLabellingWork, LabellingPage } from "./LabellingPage";
 
 const recording: LabellingRecording = {
@@ -83,6 +84,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   forgetLabellingWork();
+  exportFolderStore.reset();
   invoke.mockReset();
   vi.restoreAllMocks();
 });
@@ -177,19 +179,24 @@ describe("LabellingPage", () => {
     expect(screen.getByText(/Selected 0\.700 s to 1\.700 s/)).toBeInTheDocument();
   });
 
-  it("exports as a folder by default, and as one CSV when chosen", async () => {
+  it("exports as the shared Exports setting says: asking for the folder only when none is chosen", async () => {
     await openRecording();
     openDialog.mockResolvedValue("/exports");
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Export…" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Export" })));
     expect(invoke).toHaveBeenCalledWith("export_labelling_recording", {
       source: { kind: "dataset", id: "d1" },
       intervals: [],
       target: { kind: "folder", parent: "/exports", name: "pinch-session-labelled" },
     });
+    expect(exportFolderStore.get()).toBe("/exports");
+    openDialog.mockClear();
     fireEvent.click(screen.getByRole("radio", { name: /One CSV/ }));
-    saveDialog.mockResolvedValue("/exports/one.csv");
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Export…" })));
-    expect(invoke).toHaveBeenCalledWith("export_labelling_recording", expect.objectContaining({ target: { kind: "csv", path: "/exports/one.csv" } }));
+    expect(exportFolderStore.getFormat()).toBe("csv");
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Export" })));
+    expect(openDialog).not.toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalledWith("export_labelling_recording", expect.objectContaining({
+      target: { kind: "csv", path: expect.stringMatching(/^\/exports\/pinch-session-labelled-\d{4}-\d{2}-\d{2}T[\d-]+\.\d+Z\.csv$/) },
+    }));
   });
 
   it("opens the recording another page asks for, at the moment it asks, with its stretch selected", async () => {

@@ -37,8 +37,9 @@ function reportRecordingBundleOutcome(result: SaveRecordingBundleResult): void {
  * trigger these actions.
  */
 export function useTelemetryExport() {
-  // Session-only (the user re-picks it each launch), but shared, so it is the same wherever it is read.
+  // One setting for every export, shared and remembered (see `exportFolderStore`).
   const datasetExportFolder = useSyncExternalStore(exportFolderStore.subscribe, exportFolderStore.get, exportFolderStore.get);
+  const datasetExportFormat = useSyncExternalStore(exportFolderStore.subscribe, exportFolderStore.getFormat, exportFolderStore.getFormat);
 
   const chooseDatasetExportFolder = async () => {
     const folder = await chooseExportFolder("Choose dataset export folder");
@@ -89,6 +90,15 @@ export function useTelemetryExport() {
   };
 
   /**
+   * Exports the session as the export setting says: a folder of two files, or one CSV. The browser preview, which cannot
+   * write a folder, always downloads one CSV.
+   */
+  const exportDataset = async () => {
+    if (!isTauriDesktop() || exportFolderStore.getFormat() === "csv") return exportDatasetCsv();
+    return exportDatasetFolder();
+  };
+
+  /**
    * Persists the recorded session as an immutable recording bundle (raw.csv +
    * recording.json + annotations.json) in the app's own data directory,
    * independent of the manual "Export Dataset CSV" folder export above.
@@ -110,5 +120,5 @@ export function useTelemetryExport() {
     return result;
   };
 
-  return { exportDatasetCsv, exportDatasetFolder, saveDatasetRecording, datasetExportFolder, chooseDatasetExportFolder };
+  return { exportDataset, exportDatasetCsv, exportDatasetFolder, saveDatasetRecording, datasetExportFolder, datasetExportFormat, chooseDatasetExportFolder };
 }

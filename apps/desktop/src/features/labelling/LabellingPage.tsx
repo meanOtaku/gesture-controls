@@ -1,7 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { feedbackWithUndo, OperationFeedback } from "../../components/app/OperationFeedback";
-import { open, save } from "@tauri-apps/plugin-dialog";
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
+import { ExportSettingsCard } from "../telemetry/components/ExportSettingsCard";
+import { exportFolderStore } from "../telemetry/store/exportFolderStore";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,7 +20,6 @@ import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Label } from "../../components/ui/label";
-import { RadioGroup, RadioGroupItem } from "../../components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { SectionHeader } from "../../components/app/SectionHeader";
 import { chooseExportFolder } from "../../shared/tauri/exportCsv";
@@ -54,7 +55,6 @@ type LaneSize = keyof typeof LANE_HEIGHTS;
 /** How far an arrow key moves an edge of the selection; with Shift, five times as far. */
 const NUDGE_MS = 20;
 
-type ExportFormat = "folder" | "csv";
 
 /** The work on the page, kept while you visit other pages (the page itself is unmounted). */
 interface Kept {
@@ -101,7 +101,6 @@ export function LabellingPage() {
   const [selection, setSelection] = useState<View | null>(null);
   const [hoverMs, setHoverMs] = useState<number | null>(null);
   const [chosen, setChosen] = useState<string>(NO_LABEL);
-  const [exportFormat, setExportFormat] = useState<ExportFormat>("folder");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [pendingSource, setPendingSource] = useState<{ source: LabellingSource; focus?: Omit<LabellingFocus, "datasetId"> } | null>(null);
@@ -327,20 +326,24 @@ export function LabellingPage() {
     }
   };
 
+  // Exports go where, and in the form, the shared Exports setting says (the Recorder's Exports card).
+  const exportFolder = useSyncExternalStore(exportFolderStore.subscribe, exportFolderStore.get, exportFolderStore.get);
+  const exportFormat = useSyncExternalStore(exportFolderStore.subscribe, exportFolderStore.getFormat, exportFolderStore.getFormat);
   const exportIt = async () => {
     if (!recording) return;
     const base = `${recording.name.replace(/[^\w.-]+/g, "-")}-labelled`;
     try {
-      let target: { kind: "folder"; parent: string; name: string } | { kind: "csv"; path: string };
-      if (exportFormat === "folder") {
-        const parent = await chooseExportFolder("Choose where to put the recording folder");
+      let parent = exportFolder;
+      if (!parent) {
+        parent = await chooseExportFolder("Choose where exports go");
         if (!parent) return;
-        target = { kind: "folder", parent, name: base };
-      } else {
-        const path = await save({ title: "Export as one CSV", defaultPath: `${base}.csv`, filters: [{ name: "CSV", extensions: ["csv"] }] });
-        if (!path) return;
-        target = { kind: "csv", path };
+        exportFolderStore.set(parent);
       }
+      const target: { kind: "folder"; parent: string; name: string } | { kind: "csv"; path: string } =
+        exportFormat === "folder"
+          ? { kind: "folder", parent, name: base }
+          : // Stamped like the Recorder's exports, so an earlier one is never overwritten.
+            { kind: "csv", path: `${parent.replace(/[\\/]+$/, "")}/${base}-${new Date().toISOString().replaceAll(":", "-")}.csv` };
       setBusy(true);
       const where = await exportLabellingRecording(recording.source, spans, target);
       OperationFeedback.success("Exported", where);
@@ -1022,11 +1025,11 @@ export function LabellingPage() {
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-4">
             <Button onClick={() => void saveVersion()} disabled={busy || !dirty}>Save as new version</Button>
-            <RadioGroup value={exportFormat} onValueChange={(value) => setExportFormat(value as ExportFormat)} className="flex gap-4" aria-label="Export as">
-              <label className="flex items-center gap-2 text-sm"><RadioGroupItem value="folder" /> Folder of two files (ppg.csv, imu.csv)</label>
-              <label className="flex items-center gap-2 text-sm"><RadioGroupItem value="csv" /> One CSV</label>
-            </RadioGroup>
-            <Button variant="outline" onClick={() => void exportIt()} disabled={busy}>Export…</Button>
+            <Button variant="outline" onClick={() => void exportIt()} disabled={busy}>Export</Button>
+            <div className="basis-full">
+              <ExportSettingsCard compact />
+              <p className="hint">The same export setting as the Recorder&apos;s: change it here or there.</p>
+            </div>
           </CardContent>
         </Card>
       )}

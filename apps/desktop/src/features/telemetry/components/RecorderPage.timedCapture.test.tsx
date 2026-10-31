@@ -151,6 +151,24 @@ describe("Timeline Capture timed recording", () => {
     }
   });
 
+  it("auto-exports one CSV in the desktop app when the Exports card says so", async () => {
+    vi.mocked(isTauriDesktop).mockReturnValue(true);
+    exportFolderStore.set("/tmp/out");
+    exportFolderStore.setFormat("csv");
+    invoke.mockImplementation(async () => ({ status: "saved", recordingId: "r", rowCount: 1 }));
+    try {
+      render(<><RecordingTimer /><RecorderPage /></>);
+      startTimelineCapture(5);
+      await ingestOneSample();
+      await vi.advanceTimersByTimeAsync(6_000);
+      expect(telemetryStore.getDatasetRecordingState()).toBe("saved");
+      expect(exportCsvToFolder).toHaveBeenCalledWith(expect.objectContaining({ folder: "/tmp/out" }));
+      expect(invoke).not.toHaveBeenCalledWith("export_dataset_folder", expect.anything());
+    } finally {
+      vi.mocked(isTauriDesktop).mockReturnValue(false);
+    }
+  });
+
   it("counts down the time remaining while recording, to the moment the capture stops", async () => {
     render(<><RecordingTimer /><RecorderPage /></>);
     startTimelineCapture(10);

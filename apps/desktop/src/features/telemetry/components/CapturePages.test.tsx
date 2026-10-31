@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveSignalsPage } from "./LiveSignalsPage";
 import { RecorderPage } from "./RecorderPage";
@@ -60,10 +60,11 @@ describe("Live telemetry", () => {
     exportCsvToFolder.mockResolvedValue({ status: "error", message: "disk full" });
     render(<><Toaster /><RecorderPage /></>);
 
-    fireEvent.click(screen.getByRole("button", { name: "Export one CSV (older format)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Export anyway" })); // one row trips the quality review
 
     expect(await screen.findByText("Could not save: disk full")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Export one CSV (older format)" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Export" })).toBeEnabled());
   });
 
   it("exports the dataset as a folder of two files, and reports a failed one via toast", async () => {
@@ -79,11 +80,33 @@ describe("Live telemetry", () => {
     });
     render(<><Toaster /><RecorderPage /></>);
 
-    fireEvent.click(screen.getByRole("button", { name: "Export dataset folder" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
     fireEvent.click(await screen.findByRole("button", { name: "Export anyway" })); // one row trips the quality review
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("export_dataset_folder", expect.objectContaining({ parent: "/exports", ppgCsv: expect.stringContaining("ppg_green"), imuCsv: expect.stringContaining("quat_w") })));
     expect(await screen.findByText("Could not save: disk full")).toBeInTheDocument();
     isTauriDesktop.mockReturnValue(false);
     exportFolderStore.set(null);
+  });
+
+  it("exports one CSV into the export folder when the Exports card says so", async () => {
+    isTauriDesktop.mockReturnValue(true);
+    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+    const { exportFolderStore } = await import("../store/exportFolderStore");
+    exportFolderStore.set("/exports");
+    telemetryStore.startDatasetRecording();
+    telemetryStore.ingestWatchOrientation({ deviceId: "watch-test", sequence: 1, timestampNs: 123, quaternion: [1, 0, 0, 0], accelerometer: [0, 0, 0], gyroscope: [0, 0, 0] });
+    exportCsvToFolder.mockResolvedValue({ status: "saved", path: "/exports/x.csv" });
+    invoke.mockReset();
+    invoke.mockResolvedValue([]);
+    render(<><Toaster /><RecorderPage /></>);
+    const card = screen.getByRole("region", { name: "Exports" });
+    expect(within(card).getByText("/exports")).toBeInTheDocument();
+    fireEvent.click(within(card).getByRole("radio", { name: "One CSV" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Export anyway" }));
+    await waitFor(() => expect(exportCsvToFolder).toHaveBeenCalledWith(expect.objectContaining({ folder: "/exports" })));
+    expect(invoke).not.toHaveBeenCalledWith("export_dataset_folder", expect.anything());
+    isTauriDesktop.mockReturnValue(false);
+    exportFolderStore.reset();
   });
 });

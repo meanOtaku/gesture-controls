@@ -1,6 +1,5 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
-import { isTauriDesktop } from "../../../shared/tauri/exportCsv";
 import { useTelemetryExport } from "../hooks/useTelemetryExport";
 import { telemetryStore } from "../store/telemetryStore";
 import { timedCapture } from "./timedCapture";
@@ -11,19 +10,19 @@ import { timedCapture } from "./timedCapture";
  *
  * Timeline Capture is a timed recorder: the timer starts once the first sample actually lands (recording state, not
  * arming), and at timeout stops the session once and, if any rows were captured, exports it straight to the chosen
- * folder: as a dataset folder (ppg.csv and imu.csv), the same default as the Export button, or as one CSV in the browser
- * preview, which cannot write a folder. The effect's own cleanup, which runs on every dependency change (including the state leaving "recording" by a
+ * folder in the form the Exports card says, as the Export button does (one CSV in the browser preview, which cannot write
+ * a folder). The effect's own cleanup, which runs on every dependency change (including the state leaving "recording" by a
  * manual stop or a discard), cancels any pending timer, so it is never armed twice or left running past its session.
  */
 export function RecordingTimer() {
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
-  const { exportDatasetCsv, exportDatasetFolder, saveDatasetRecording } = useTelemetryExport();
+  const { exportDataset, saveDatasetRecording } = useTelemetryExport();
   const state = telemetryStore.getDatasetRecordingState();
   const mode = telemetryStore.getDatasetCaptureMode();
 
   // A ref, so the effect below does not re-run (and cancel its timer) each time the export closure is new.
-  const exportRef = useRef(exportDatasetFolder);
-  exportRef.current = isTauriDesktop() ? exportDatasetFolder : exportDatasetCsv;
+  const exportRef = useRef(exportDataset);
+  exportRef.current = exportDataset;
   const saveRef = useRef(saveDatasetRecording);
   saveRef.current = saveDatasetRecording;
 
