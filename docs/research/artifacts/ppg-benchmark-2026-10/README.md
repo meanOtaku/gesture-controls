@@ -90,3 +90,16 @@ uv run --project tools/label-trainer python docs/research/artifacts/ppg-benchmar
 All results are grouped cross-validation progress evidence, not an untouched final generalization test. Source recordings, including the new 2026-10-17 datasets, are versioned under `data/recordings/`.
 
 The local studies also produced re-generable prepared feature caches and exhaustive per-window continuous prediction exports. Those are deliberately not versioned here: together they exceed 2 GB, duplicate derivable results, and would bloat the Git history. The compact artifacts retained here provide frozen configurations, splits, event-level scores, aggregate continuous metrics, and independent verification for every reported finding.
+
+## The pinch's mark in the pulse signal (2026-10-31)
+
+- `cardiac_residual_check.py` → `cardiac-residual/`: around 407 labelled pinch starts in 36 recordings, all three colours
+  rise to a peak 0.4-0.5 s after the start, the same shape in 83% of recordings (median leave-one-out r 0.76), while random
+  moments average flat and other gestures' starts dip in red and infrared. Removing the heart beat does not make single
+  pinches easier to see (template-match AUC 0.736 vs 0.725 for green): the heart beat is only about a quarter of its band's
+  power in these recordings.
+- `shape_features_check.py` → `shape-features/`: adding the window's match with the average pinch shape (and other-gesture
+  shape), built per split from training recordings only, to the PPG + IMU model on the same 20 splits changes little:
+  worst-split AUC 0.868-0.869 against 0.873, mean 0.908 against 0.906, better on 12-14 of 20 splits, and fewer pinches
+  caught at 0.5 and 1 false alarm a minute (0.246-0.254 against 0.281). The shape features alone reach 0.667 worst / 0.760
+  mean. The model's existing pulse features already carry what the shape holds; neither technique goes into the app.
