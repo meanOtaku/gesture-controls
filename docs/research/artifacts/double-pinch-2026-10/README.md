@@ -36,3 +36,17 @@ target of one or fewer. The jolt is there, but so are many like it. A detector n
 together, learned from real double pinches against real everyday activity. These recordings can't supply that: they
 have no double pinches, and their everyday time is mostly resting between cues. Recording double pinches (step 2) is
 still needed; these recordings remain useful as negatives.
+
+## Step 2b: is the jolt sharper in one arm pose? (2026-10-31)
+
+`orientation_check.py` → `orientation/`. The watch's rotation vector gives the direction of "up" in its axes at each of
+the 490 pinches. Over all pinches, those with the forearm upright have a much smaller jolt (accelerometer 0.14 m/s²,
+4× the stillness before) than those with the arm flat, face up (0.74 m/s², 7×) or on its side (0.77 m/s², 7×). But all 74
+upright pinches come from seven recordings made on 11 October, when pinches were weak in every pose. Within the five
+recordings that hold pinches in two poses, neither pose is consistently stronger (accelerometer 0.076 against 0.087 and
+0.182 against 0.175 upright against flat; 0.51-0.86 against 0.69-0.75 on its side against flat). So the difference over
+all pinches follows the session (strap, pinch firmness, day), not the pose; a smaller pose effect is not ruled out.
+
+To settle it, a guided session should change pose within the session (flat on the desk, hanging, raised) with the same
+strap and pinch. If pose matters, the model can take the orientation as an input, or scale each jolt to the recent motion
+rather than to a fixed threshold.

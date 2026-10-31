@@ -1,0 +1,215 @@
+{
+ "pinches": 490,
+ "by_pose": {
+  "y down (arm on its side)": {
+   "pinches": 198,
+   "recordings": 15,
+   "accelerometer": {
+    "peak": 0.7663894533522868,
+    "width_s": 0.04,
+    "over_stillness": 6.982945361891838
+   },
+   "gyroscope": {
+    "peak": 0.17004906754314753,
+    "width_s": 0.04,
+    "over_stillness": 8.301416642214328
+   }
+  },
+  "face up (arm flat)": {
+   "pinches": 218,
+   "recordings": 15,
+   "accelerometer": {
+    "peak": 0.7346269064708111,
+    "width_s": 0.04,
+    "over_stillness": 7.234905517400577
+   },
+   "gyroscope": {
+    "peak": 0.3317290754701845,
+    "width_s": 0.06,
+    "over_stillness": 11.987165749922447
+   }
+  },
+  "x up (forearm upright)": {
+   "pinches": 74,
+   "recordings": 7,
+   "accelerometer": {
+    "peak": 0.13533502968824823,
+    "width_s": 0.06,
+    "over_stillness": 4.291291871624027
+   },
+   "gyroscope": {
+    "peak": 0.05539208393931956,
+    "width_s": 0.08,
+    "over_stillness": 5.881310806285029
+   }
+  }
+ },
+ "within_recordings": [
+  {
+   "recording": "gesture-dataset-pinch-2026-10-11T08-35-42.008Z.csv",
+   "poses": {
+    "face up (arm flat)": {
+     "pinches": 8,
+     "recordings": 1,
+     "accelerometer": {
+      "peak": 0.08737492108164596,
+      "width_s": 0.05,
+      "over_stillness": 3.294601792015903
+     },
+     "gyroscope": {
+      "peak": 0.022693981716996048,
+      "width_s": 0.06,
+      "over_stillness": 4.226463132818795
+     }
+    },
+    "x up (forearm upright)": {
+     "pinches": 5,
+     "recordings": 1,
+     "accelerometer": {
+      "peak": 0.07597353575308288,
+      "width_s": 0.04,
+      "over_stillness": 3.659634003791509
+     },
+     "gyroscope": {
+      "peak": 0.031085106467818327,
+      "width_s": 0.08,
+      "over_stillness": 9.12360991794127
+     }
+    }
+   }
+  },
+  {
+   "recording": "gesture-dataset-pinch-2026-10-11T08-53-30.484Z.csv",
+   "poses": {
+    "x up (forearm upright)": {
+     "pinches": 8,
+     "recordings": 1,
+     "accelerometer": {
+      "peak": 0.18150926524992705,
+      "width_s": 0.06,
+      "over_stillness": 6.398556342791127
+     },
+     "gyroscope": {
+      "peak": 0.06234482416559886,
+      "width_s": 0.06,
+      "over_stillness": 7.800027518528738
+     }
+    },
+    "face up (arm flat)": {
+     "pinches": 21,
+     "recordings": 1,
+     "accelerometer": {
+      "peak": 0.17486344233528742,
+      "width_s": 0.06,
+      "over_stillness": 3.956819758518944
+     },
+     "gyroscope": {
+      "peak": 0.07370660365540527,
+      "width_s": 0.08,
+      "over_stillness": 4.823556712719636
+     }
+    }
+   }
+  },
+  {
+   "recording": "gesture-dataset-pinch-2026-10-14T01-00-54.801Z.csv",
+   "poses": {
+    "y down (arm on its side)": {
+     "pinches": 4,
+     "recordings": 1,
+     "accelerometer": {
+      "peak": 0.5107861938657173,
+      "width_s": 0.04,
+      "over_stillness": 5.598819424988765
+     },
+     "gyroscope": {
+      "peak": 0.15145193868538182,
+      "width_s": 0.04,
+      "over_stillness": 7.247691841705946
+     }
+    },
+    "face up (arm flat)": {
+     "pinches": 20,
+     "recordings": 1,
+     "accelerometer": {
+      "peak": 0.7065471781742838,
+      "width_s": 0.04,
+      "over_stillness": 6.62843805838061
+     },
+     "gyroscope": {
+      "peak": 1.7069850024301711,
+      "width_s": 0.08,
+      "over_stillness": 23.200720951987048
+     }
+    }
+   }
+  },
+  {
+   "recording": "gesture-dataset-pinch-2026-10-14T01-04-14.013Z.csv",
+   "poses": {
+    "face up (arm flat)": {
+     "pinches": 14,
+     "recordings": 1,
+     "accelerometer": {
+      "peak": 0.6856489894566297,
+      "width_s": 0.04,
+      "over_stillness": 7.458292893139827
+     },
+     "gyroscope": {
+      "peak": 0.17721838459251377,
+      "width_s": 0.05,
+      "over_stillness": 7.487436706197406
+     }
+    },
+    "y down (arm on its side)": {
+     "pinches": 15,
+     "recordings": 1,
+     "accelerometer": {
+      "peak": 0.8639560791072787,
+      "width_s": 0.02,
+      "over_stillness": 6.019026531767563
+     },
+     "gyroscope": {
+      "peak": 0.38428270634023937,
+      "width_s": 0.06,
+      "over_stillness": 6.498561814516591
+     }
+    }
+   }
+  },
+  {
+   "recording": "gesture-dataset-pinch-2026-10-17T12-23-03.399Z.csv",
+   "poses": {
+    "y down (arm on its side)": {
+     "pinches": 3,
+     "recordings": 1,
+     "accelerometer": {
+      "peak": 0.632017758157,
+      "width_s": 0.04,
+      "over_stillness": 6.766458276360159
+     },
+     "gyroscope": {
+      "peak": 1.3391666980695045,
+      "width_s": 0.12,
+      "over_stillness": 78.80198523218547
+     }
+    },
+    "face up (arm flat)": {
+     "pinches": 12,
+     "recordings": 1,
+     "accelerometer": {
+      "peak": 0.7496049903733484,
+      "width_s": 0.04,
+      "over_stillness": 10.24547309606565
+     },
+     "gyroscope": {
+      "peak": 0.7604257407206536,
+      "width_s": 0.07,
+      "over_stillness": 11.715861908262795
+     }
+    }
+   }
+  }
+ ],
+ "seconds": 0.7
+}
