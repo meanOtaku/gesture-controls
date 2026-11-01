@@ -10,6 +10,11 @@
 //! * **tilt change**: world up moved at most [`MAX_TILT_DEG`] in the watch's axes between the window's first and last
 //!   samples.
 //!
+//! And once the gesture is under way, the wrist must not **turn** much: from [`TURN_FROM_NS`] before the gesture's
+//! estimated start to [`TURN_TO_NS`] after it, the watch's orientation may move at most [`MAX_TURN_DEG`] from where it was
+//! ([`Steadiness::turned_during`]). A pinch hardly turns the watch; turning the hand does, and a turn that begins just
+//! before the model decides is too late for the window before the gesture to see.
+//!
 //! None of these depends on how the arm is posed. The limits are the research's starting values: on the recorded pinches,
 //! requiring them shut out most arm movement, wrist turning and typing while keeping the pinches made from a still hand.
 //!
@@ -40,6 +45,14 @@ pub const MAX_TILT_DEG: f64 = 10.0;
 pub const WINDOW_FROM_NS: u64 = 1_500_000_000;
 /// ...and ends this long before it.
 pub const WINDOW_TO_NS: u64 = 500_000_000;
+/// Largest turn of the watch in the gesture's first moments that still counts, in degrees. Of the camera-timed pinches made
+/// from a still hand (`data/recordings/pinch-relabelled`), half turned it under 2° and 97% of pinch ins and 96% of pinch
+/// outs under 30°; turning the hand goes well past it.
+pub const MAX_TURN_DEG: f64 = 30.0;
+/// The turn is measured from this long before the gesture's estimated start...
+pub const TURN_FROM_NS: u64 = 250_000_000;
+/// ...to this long after it, or the decision, if that is sooner.
+pub const TURN_TO_NS: u64 = 400_000_000;
 /// The decision delay of a model whose bundle does not give one: the trainer's positive moment, 880 ms after a gesture's
 /// labelled start (`ppg_onset.ONSET_DELAY_MS`).
 pub const DEFAULT_DECISION_DELAY_MS: u32 = 880;
@@ -146,6 +159,8 @@ struct Motion {
     gyro: [f64; 3],
     /// World up in the watch's axes, from the rotation vector.
     up: [f64; 3],
+    /// The rotation vector, normalised (`[w, x, y, z]`).
+    rotation: [f64; 4],
 }
 
 /// The recent motion, on the watch's clock.
@@ -181,7 +196,9 @@ impl Steadiness {
         if self.motion.back().is_some_and(|m| sample.timestamp_ns <= m.ts_ns) {
             return;
         }
-        self.motion.push_back(Motion { ts_ns: sample.timestamp_ns, accel, gyro, up });
+        let norm = sample.quaternion.iter().map(|c| c * c).sum::<f64>().sqrt();
+        let rotation = sample.quaternion.map(|c| c / norm);
+        self.motion.push_back(Motion { ts_ns: sample.timestamp_ns, accel, gyro, up, rotation });
         let oldest = sample.timestamp_ns.saturating_sub(KEEP_NS);
         while self.motion.front().is_some_and(|m| m.ts_ns < oldest) {
             self.motion.pop_front();
@@ -220,6 +237,31 @@ impl Steadiness {
         };
         let start = at.saturating_sub(u64::from(decision_delay_ms) * 1_000_000);
         self.verdict(start.saturating_sub(WINDOW_FROM_NS), start.saturating_sub(WINDOW_TO_NS))
+    }
+
+    /// The largest turn of the watch, in degrees, from its orientation at the first sample from `from_ns` to that at any
+    /// later sample up to `to_ns` (watch clock), or `None` with too few samples.
+    pub fn turn(&self, from_ns: u64, to_ns: u64) -> Option<f64> {
+        let inside: Vec<&Motion> = self.motion.iter().filter(|m| m.ts_ns >= from_ns && m.ts_ns <= to_ns).collect();
+        if inside.len() < MIN_JOLT_SAMPLES {
+            return None;
+        }
+        let first = inside[0].rotation;
+        Some(inside.iter().fold(0.0, |largest: f64, m| {
+            let dot = first.iter().zip(&m.rotation).map(|(a, b)| a * b).sum::<f64>().abs().min(1.0);
+            largest.max((2.0 * dot.acos()).to_degrees())
+        }))
+    }
+
+    /// Why a gesture decided at `decision_watch_ns`, by a model that decides `decision_delay_ms` after a gesture starts,
+    /// may not start because the wrist turned in its first moments; `None` if it did not, or with too little motion to
+    /// tell (the window before the gesture already fails closed on that).
+    pub fn turned_during(&self, decision_watch_ns: Option<u64>, decision_delay_ms: u32) -> Option<String> {
+        let at = decision_watch_ns?;
+        let start = at.saturating_sub(u64::from(decision_delay_ms) * 1_000_000);
+        let turned = self.turn(start.saturating_sub(TURN_FROM_NS), (start + TURN_TO_NS).min(at))?;
+        (turned > MAX_TURN_DEG)
+            .then(|| format!("the wrist turned during the gesture ({turned:.0}°, at most {MAX_TURN_DEG:.0}°)"))
     }
 
     /// The largest jolt from `from_ns` to `to_ns` (watch clock), or `None` with too few samples. Each sample's mean is
@@ -412,5 +454,28 @@ mod tests {
         assert_eq!(s.jolt_near(None, 900), Jolt::Unknown);
         assert_eq!(s.jolt_near(Some(END + 10_000_000_000), 900), Jolt::Unknown);
         assert_eq!(Jolt::Unknown.refusal(), None);
+    }
+
+    #[test]
+    fn turning_the_wrist_as_the_gesture_starts_is_refused_and_a_pinch_s_wobble_is_not() {
+        // Still, then the wrist turns about z at 3 rad/s (as when rotating the hand) from 0.1 s before the estimated start
+        // (0.9 s before the decision).
+        let turning = feed(|i| {
+            let angle = if i >= 100 { 3.0 * (i - 100) as f64 / 100.0 } else { 0.0 };
+            let half = angle.min(std::f64::consts::PI) / 2.0;
+            sample(i, [0.0; 3], [0.0, 0.0, if i >= 100 { 3.0 } else { 0.0 }], [half.cos(), 0.0, 0.0, half.sin()])
+        });
+        assert!(turning.before(Some(END), 900).is_steady(), "the second before the gesture was still");
+        let why = turning.turned_during(Some(END), 900).expect("the turn is refused");
+        assert!(why.contains("turned during the gesture"), "{why}");
+        // A pinch: the watch wobbles by a few degrees and back.
+        let pinch = feed(|i| {
+            let half = if (110..120).contains(&i) { 3f64.to_radians() / 2.0 } else { 0.0 };
+            sample(i, [0.0; 3], [0.0; 3], [half.cos(), half.sin(), 0.0, 0.0])
+        });
+        assert_eq!(pinch.turned_during(Some(END), 900), None);
+        // Nothing to judge: left to the window before the gesture.
+        assert_eq!(Steadiness::default().turned_during(Some(END), 900), None);
+        assert_eq!(pinch.turned_during(None, 900), None);
     }
 }

@@ -140,7 +140,9 @@ The trainer's replay uses a copy of this rule (`events.detect`). `tests/fixtures
   through only if the watch's motion was still from 1.5 to 0.5 s before the gesture's estimated start: the decision (on
   the watch's clock, `LabelScore::watch_ns`) less the model's decision delay (`thresholds.decisionDelayMs` in its
   manifest; 880 ms, the trainer's positive moment, for a bundle that does not say). Still is acceleration spread at most
-  0.4 m/s², gyroscope RMS at most 0.5 rad/s, tilt change at most 10°. Otherwise it is withheld: never announced or
+  0.4 m/s², gyroscope RMS at most 0.5 rad/s, tilt change at most 10°; and from 0.25 s before the estimated start to
+  0.4 s after it (or the decision) the watch's orientation may turn at most 30° from where it was
+  (`Steadiness::turned_during`; with too little motion to judge, that part is left to the window before). Otherwise it is withheld: never announced or
   actionable, the detector cleared so the next start is judged afresh, and a `Rejection::HandNotStill` reported. Too few
   motion samples, or no decision time on the watch's clock, is not still (it fails closed). Held detections and releases
   are never touched by it.

@@ -418,7 +418,7 @@ impl LabelRuntime {
             let (changes, clashes) = self.hub.process(&batch);
             for change in changes {
                 // A start only counts if something moved around it (always) and, with the still-hand rule, if the hand
-                // was still before it; otherwise it is withheld, never announced, and the detector is cleared so the
+                // was still before it and the wrist did not turn as it began; otherwise it is withheld, never announced, and the detector is cleared so the
                 // next start is judged afresh. Held detections and releases pass.
                 if let DetectionEvent::Rising { label, .. } = &change {
                     let score = moment.iter().find(|s| &s.label == label);
@@ -426,7 +426,13 @@ impl LabelRuntime {
                     let watch_ns = score.and_then(|s| s.watch_ns);
                     let refusal = self.steadiness.jolt_near(watch_ns, delay).refusal().map(Rejection::NoMovement).or_else(|| {
                         self.steady_starts
-                            .then(|| self.steadiness.before(watch_ns, delay).refusal().map(Rejection::HandNotStill))
+                            .then(|| {
+                                self.steadiness
+                                    .before(watch_ns, delay)
+                                    .refusal()
+                                    .or_else(|| self.steadiness.turned_during(watch_ns, delay))
+                                    .map(Rejection::HandNotStill)
+                            })
                             .flatten()
                     });
                     if let Some(reason) = refusal {
