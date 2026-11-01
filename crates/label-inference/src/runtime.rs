@@ -16,6 +16,7 @@ use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
 use crate::detection::{ClearReason, Conflict, DetectionEvent, DetectionHub, ExclusivityGroup};
 use crate::model::{LoadedModel, OutsideInput};
 use crate::pipeline::{LabelPipeline, LabelScore, Rejection, WindowRejection};
+use crate::steadiness::{Steadiness, Verdict};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuntimeMode {
@@ -124,6 +125,11 @@ pub struct LabelRuntime {
     /// What was last sent as the warnings, and when.
     warned: Vec<InputWarning>,
     warned_at_ns: u64,
+    /// The recent motion, for the steadiness gate and the "hand still" display.
+    steadiness: Steadiness,
+    /// Whether a start needs the hand to have been still before it (`steadiness`). Off by default here; the app turns it
+    /// on (`label_runtime.rs`).
+    steady_starts: bool,
 }
 
 impl Default for LabelRuntime {
@@ -136,6 +142,8 @@ impl Default for LabelRuntime {
             familiarity: BTreeMap::new(),
             warned: Vec::new(),
             warned_at_ns: 0,
+            steadiness: Steadiness::default(),
+            steady_starts: false,
         }
     }
 }
@@ -173,6 +181,17 @@ impl LabelRuntime {
 
     pub fn set_exclusivity(&mut self, groups: Vec<ExclusivityGroup>) {
         self.hub.set_exclusivity(groups);
+    }
+
+    /// Requires (or stops requiring) the hand to have been still before a detection may start.
+    pub fn set_steadiness_gate(&mut self, on: bool) {
+        self.steady_starts = on;
+    }
+
+    /// Whether the hand is still right now, from the last second of motion (for display; the gate judges each start on
+    /// the window before it).
+    pub fn hand_steadiness(&self) -> Verdict {
+        self.steadiness.now()
     }
 
     fn release(&mut self, events: Vec<DetectionEvent>) -> RuntimeOutput {
@@ -280,6 +299,7 @@ impl LabelRuntime {
 
     /// The watch went away.
     pub fn watch_lost(&mut self) -> RuntimeOutput {
+        self.steadiness.reset();
         self.fail("the watch disconnected")
     }
 
@@ -318,6 +338,8 @@ impl LabelRuntime {
         sample: &WatchOrientationSample,
         received_ns: u64,
     ) -> RuntimeOutput {
+        // Kept whatever the mode, so whether the hand is still can be shown before anything runs.
+        self.steadiness.observe(sample);
         if self.mode == RuntimeMode::Off || self.models.is_empty() {
             return RuntimeOutput::default();
         }
@@ -356,13 +378,32 @@ impl LabelRuntime {
         let mut order: Vec<&LabelScore> = scores.iter().collect();
         order.sort_by_key(|s| s.timestamp_ns);
         let mut conflicts = Vec::new();
+        let mut rejections = rejections;
         for moment in order.chunk_by(|a, b| a.timestamp_ns == b.timestamp_ns) {
             let batch: Vec<(LabelId, f64, u64)> = moment
                 .iter()
                 .map(|s| (s.label.clone(), s.confidence, s.timestamp_ns))
                 .collect();
             let (changes, clashes) = self.hub.process(&batch);
-            events.extend(changes);
+            for change in changes {
+                // A start only counts if the hand was still before it; otherwise it is withheld, never announced, and
+                // the detector is cleared so the next start is judged afresh. Held detections and releases pass.
+                if let (true, DetectionEvent::Rising { label, .. }) = (self.steady_starts, &change) {
+                    let score = moment.iter().find(|s| &s.label == label);
+                    if let Some(why) = self.steadiness.before(score.and_then(|s| s.watch_ns)).refusal() {
+                        let _ = self.hub.clear_label(label, ClearReason::Rejected(why.clone()));
+                        if let Some(score) = score {
+                            rejections.push(WindowRejection {
+                                label: label.clone(),
+                                model_version: score.model_version.clone(),
+                                reason: Rejection::HandNotStill(why),
+                            });
+                        }
+                        continue;
+                    }
+                }
+                events.push(change);
+            }
             conflicts.extend(clashes);
         }
         for score in &scores {
@@ -709,5 +750,120 @@ mod tests {
         let out = drive(&mut rt, &trace(0), 0, 300);
         assert!(out.iter().any(|o| !o.conflicts.is_empty()), "the clash is reported");
         assert_eq!(rises(&out, true), 0, "and neither starts");
+    }
+
+    /// Drives like [`drive`], with a motion sample every 20 ms (watch clock) up to each pulse sample, from `motion`.
+    fn drive_with_motion(
+        rt: &mut LabelRuntime,
+        trace: &[PpgSample],
+        motion: impl Fn(u64) -> ([f64; 3], [f64; 3]),
+    ) -> Vec<RuntimeOutput> {
+        drive_with_motion_until(rt, trace, motion, |_| false).0
+    }
+
+    /// [`drive_with_motion`], stopping after the first pulse sample at which `stop` holds; and how many were driven.
+    fn drive_with_motion_until(
+        rt: &mut LabelRuntime,
+        trace: &[PpgSample],
+        motion: impl Fn(u64) -> ([f64; 3], [f64; 3]),
+        stop: impl Fn(&LabelRuntime) -> bool,
+    ) -> (Vec<RuntimeOutput>, usize) {
+        let origin = expected().0[0].ts_ns;
+        let mut next = trace[0].ts_ns.saturating_sub(2_000_000_000);
+        let mut out = Vec::new();
+        for (i, pulse) in trace.iter().enumerate() {
+            while next <= pulse.ts_ns {
+                let (accel, gyro) = motion(next);
+                let sample = WatchOrientationSample {
+                    device_id: "watch-1".into(),
+                    sequence: next / 20_000_000,
+                    timestamp_ns: next,
+                    quaternion: [1.0, 0.0, 0.0, 0.0],
+                    accelerometer: Some(accel),
+                    gyroscope: Some(gyro),
+                };
+                out.push(rt.observe_orientation(&sample, next.saturating_sub(origin) + BASE_NS + 5_000_000));
+                next += 20_000_000;
+            }
+            out.push(rt.observe_ppg(&batch(trace, i, i + 1), pulse.ts_ns - origin + BASE_NS + 5_000_000));
+            if stop(rt) {
+                return (out, i + 1);
+            }
+        }
+        let driven = trace.len();
+        (out, driven)
+    }
+
+    fn not_still(outputs: &[RuntimeOutput]) -> Vec<String> {
+        outputs
+            .iter()
+            .flat_map(|o| &o.rejections)
+            .filter_map(|r| match &r.reason {
+                Rejection::HandNotStill(why) => Some(why.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    const STILL: fn(u64) -> ([f64; 3], [f64; 3]) = |_| ([0.05, 0.0, 0.02], [0.02, 0.0, 0.0]);
+    const TURNING: fn(u64) -> ([f64; 3], [f64; 3]) = |_| ([0.0; 3], [0.0, 0.0, 1.0]);
+
+    #[test]
+    fn with_the_gate_a_still_hand_starts_as_without_it_and_a_turning_wrist_starts_nothing() {
+        let t = trace(0);
+        let mut free = runtime(RuntimeMode::Live);
+        let baseline = rises(&drive_with_motion(&mut free, &t, STILL), true);
+        assert!(baseline >= 1, "the trace's pinches are detected");
+
+        let mut still = runtime(RuntimeMode::Live);
+        still.set_steadiness_gate(true);
+        let out = drive_with_motion(&mut still, &t, STILL);
+        assert_eq!(rises(&out, true), baseline, "a still hand loses nothing");
+        assert!(not_still(&out).is_empty());
+        assert!(still.hand_steadiness().is_steady());
+
+        let mut turning = runtime(RuntimeMode::Live);
+        turning.set_steadiness_gate(true);
+        let out = drive_with_motion(&mut turning, &t, TURNING);
+        assert_eq!(rises(&out, false), 0, "a withheld start is never announced, not even for display");
+        assert!(out.iter().all(|o| o.events.iter().all(|e| !matches!(e, DetectionEvent::Falling { .. }))));
+        let why = not_still(&out);
+        assert!(!why.is_empty() && why[0].contains("turning"), "{why:?}");
+        assert!(!turning.hand_steadiness().is_steady());
+    }
+
+    #[test]
+    fn with_the_gate_no_motion_at_all_starts_nothing() {
+        let mut rt = runtime(RuntimeMode::Live);
+        rt.set_steadiness_gate(true);
+        let out = drive(&mut rt, &trace(0), 0, trace(0).len());
+        assert_eq!(rises(&out, true), 0);
+        assert!(not_still(&out).iter().any(|why| why.contains("no motion data")));
+    }
+
+    #[test]
+    fn the_gate_never_ends_a_detection_under_way() {
+        let t = trace(0);
+        let mut rt = runtime(RuntimeMode::Live);
+        rt.set_steadiness_gate(true);
+        let (_, at) = drive_with_motion_until(&mut rt, &t, STILL, |rt| rt.is_active(&pinch()));
+        assert!(rt.is_active(&pinch()), "a still pinch is detected");
+        // The wrist turns while the gesture is held (as when turning a volume knob): the detection stays.
+        let origin = expected().0[0].ts_ns;
+        let last = t[at - 1].ts_ns;
+        for k in 1..=10 {
+            let ts = last + k * 20_000_000;
+            let sample = WatchOrientationSample {
+                device_id: "watch-1".into(),
+                sequence: 1_000_000 + k,
+                timestamp_ns: ts,
+                quaternion: [1.0, 0.0, 0.0, 0.0],
+                accelerometer: Some([0.0; 3]),
+                gyroscope: Some([0.0, 0.0, 2.0]),
+            };
+            let out = rt.observe_orientation(&sample, ts - origin + BASE_NS + 5_000_000);
+            assert!(out.events.iter().all(|e| !matches!(e, DetectionEvent::Falling { .. })));
+        }
+        assert!(rt.is_active(&pinch()));
     }
 }

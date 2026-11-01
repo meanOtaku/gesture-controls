@@ -163,6 +163,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             calibration::get_calibration_state,
             label_runtime::get_label_runtime_status,
+            label_runtime::get_hand_steadiness,
             label_runtime::get_label_registry_usage,
             label_runtime::list_training_history,
             label_runtime::delete_label_history,

@@ -42,6 +42,9 @@ pub struct LabelScore {
     pub timestamp_ns: u64,
     /// When the desktop scored it, on the desktop's receive clock.
     pub received_ns: u64,
+    /// When the decision's pulse sample was taken on the watch's clock (the motion samples'), or `None` before any batch
+    /// placed the pulse clock. The steadiness gate measures the motion before it (`steadiness`).
+    pub watch_ns: Option<u64>,
     /// How this decision's inputs compare with what the model was trained on, when the model's manifest says.
     pub input_check: Option<InputCheck>,
 }
@@ -78,6 +81,9 @@ pub enum Rejection {
         max_allowed: f64,
     },
     Model(String),
+    /// A start was withheld because the hand was not still before it (`steadiness`). Only a start: it never ends a
+    /// detection already under way.
+    HandNotStill(String),
 }
 
 impl std::fmt::Display for Rejection {
@@ -102,6 +108,7 @@ impl std::fmt::Display for Rejection {
                 )
             }
             Self::Model(detail) => write!(f, "model error: {detail}"),
+            Self::HandNotStill(why) => write!(f, "{why}"),
         }
     }
 }
@@ -496,6 +503,7 @@ impl LabelPipeline {
                 confidence,
                 timestamp_ns: sample.raw_ts_ns,
                 received_ns: now_ns,
+                watch_ns: sample.watch_ns,
                 input_check,
             });
         }

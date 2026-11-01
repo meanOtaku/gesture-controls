@@ -409,6 +409,48 @@ fn validate_extra_file(name: &str, content: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// The first column `hand_landmarks.csv` gets in an exported dataset folder: each frame's time on the watch's clock, so
+/// the landmarks line up with the rows of `imu.csv` and `ppg.csv`.
+pub(crate) const WATCH_TIME_COLUMN: &str = "watch_timestamp_ns";
+
+/// A landmarks file (`hand_landmarks.csv` or `hand_landmarks_2.csv`) with each frame's capture time, which is on the
+/// browser's clock, also put on the watch's clock as a new first column. The offset between the clocks is the smallest
+/// `browser_arrival_ms - watch time` among the clock pairs: the watch sample that travelled fastest, as the camera
+/// estimates it live (`clockSync.ts`). Without a usable pair the column is left empty. Both files are checked first.
+pub(crate) fn landmarks_on_watch_clock(
+    name: &str,
+    landmarks: &str,
+    clock_sync: &str,
+) -> Result<String, String> {
+    if name != HAND_LANDMARKS_FILE_NAME && name != HAND_LANDMARKS_SECOND_FILE_NAME {
+        return Err(format!("'{name}' is not a landmarks file"));
+    }
+    validate_extra_file(name, landmarks)?;
+    validate_extra_file(CLOCK_SYNC_FILE_NAME, clock_sync)?;
+    let offset_ms = clock_sync
+        .lines()
+        .skip(1)
+        .filter_map(|line| {
+            let (watch, arrival) = line.split_once(',')?;
+            let watch: f64 = watch.trim().parse().ok()?;
+            let arrival: f64 = arrival.trim().parse().ok()?;
+            Some(arrival - watch / 1e6).filter(|delay| delay.is_finite())
+        })
+        .reduce(f64::min);
+    let mut lines = landmarks.lines().filter(|line| !line.trim().is_empty());
+    let header = lines.next().unwrap_or_default();
+    let mut out = vec![format!("{WATCH_TIME_COLUMN},{header}")];
+    for line in lines {
+        let capture_ms = line.split(',').nth(1).and_then(|field| field.trim().parse::<f64>().ok());
+        let watch_ns = match (capture_ms, offset_ms) {
+            (Some(capture), Some(offset)) => format!("{}", ((capture - offset) * 1e6).round() as i64),
+            _ => String::new(),
+        };
+        out.push(format!("{watch_ns},{line}"));
+    }
+    Ok(out.join("\n") + "\n")
+}
+
 /// Checks everything in a webview-supplied save request that can be verified
 /// against the `raw.csv` it ships with, so the persisted "immutable evidence"
 /// bundle is never internally inconsistent: the CSV must satisfy the same
@@ -3010,6 +3052,13 @@ mod tests {
             pair.ppg_csv,
             pair.imu_csv,
             clock,
+            camera_evidence_in(&dir).unwrap().map(|evidence| {
+                let mut files = std::collections::BTreeMap::new();
+                files.extend(evidence.hand_landmarks.map(|text| (HAND_LANDMARKS_FILE_NAME.to_string(), text)));
+                files.extend(evidence.hand_landmarks_second.map(|text| (HAND_LANDMARKS_SECOND_FILE_NAME.to_string(), text)));
+                files.insert(CLOCK_SYNC_FILE_NAME.to_string(), evidence.clock_sync);
+                files
+            }),
         )
         .unwrap();
         println!("wrote {written}: {labelled} labelled rows from {intervals} intervals");
@@ -4971,6 +5020,28 @@ mod tests {
         ));
         assert!(header.ends_with(",wx20,wy20,wz20"));
         assert_eq!(&header[header.find("wx0").unwrap()..][..11], "wx0,wy0,wz0");
+    }
+
+    #[test]
+    fn exported_landmarks_get_each_frame_on_the_watch_clock_from_the_fastest_clock_pair() {
+        let header = hand_landmarks_header();
+        let frame = |capture: &str| format!("7,{capture}{}", ",".repeat(header.matches(',').count() - 1));
+        let landmarks = format!("{header}\n{}\n{}", frame("1000.000"), frame("1033.500"));
+        // Arrival minus watch time: 1010 - 5000 = -3990 ms and 2030 - 6000 = -3970 ms. The first travelled faster.
+        let sync = format!("{CLOCK_SYNC_HEADER}\n5000000000,1010.000\n6000000000,2030.000\n");
+        let out = landmarks_on_watch_clock(HAND_LANDMARKS_FILE_NAME, &landmarks, &sync).unwrap();
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines[0], format!("{WATCH_TIME_COLUMN},{header}"));
+        assert!(lines[1].starts_with("4990000000,7,1000.000,"));
+        assert!(lines[2].starts_with("5023500000,7,1033.500,"));
+        assert_eq!(lines.len(), 3);
+        // Without a clock pair the time is left empty rather than guessed; the rest of the row is kept as it was.
+        let none = landmarks_on_watch_clock(HAND_LANDMARKS_SECOND_FILE_NAME, &landmarks, CLOCK_SYNC_HEADER).unwrap();
+        assert!(none.lines().nth(1).unwrap().starts_with(",7,1000.000,"));
+        // Only landmark files, and only well-formed ones.
+        assert!(landmarks_on_watch_clock(CLOCK_SYNC_FILE_NAME, &landmarks, &sync).is_err());
+        assert!(landmarks_on_watch_clock(HAND_LANDMARKS_FILE_NAME, "frame,time\n1,2", &sync).is_err());
+        assert!(landmarks_on_watch_clock(HAND_LANDMARKS_FILE_NAME, &landmarks, "watch,arrival\n1,2").is_err());
     }
 
     #[test]

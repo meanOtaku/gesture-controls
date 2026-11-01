@@ -81,9 +81,12 @@ export function useTelemetryExport() {
     const label = telemetryStore.getDatasetSession()?.label || telemetryStore.getSelectedLabel() || "unlabeled";
     const name = `gesture-dataset-${label}-${new Date().toISOString().replaceAll(":", "-")}`;
     const files = telemetryStore.generateDatasetFolderFiles();
+    // The camera's landmarks go too when it recorded; the desktop puts them on the watch clock.
+    const cameraFiles = Object.keys(files.cameraFiles).length > 0 ? files.cameraFiles : null;
     try {
-      const written = await invoke<string>("export_dataset_folder", { parent: datasetExportFolder, name, ppgCsv: files.ppgCsv, imuCsv: files.imuCsv, ppgClockCsv: files.ppgClockCsv });
-      OperationFeedback.success(operation, `Saved ${basename(written)} (${files.ppgRows.toLocaleString()} pulse rows, ${files.imuRows.toLocaleString()} motion rows)`);
+      const written = await invoke<string>("export_dataset_folder", { parent: datasetExportFolder, name, ppgCsv: files.ppgCsv, imuCsv: files.imuCsv, ppgClockCsv: files.ppgClockCsv, cameraFiles });
+      const camera = cameraFiles ? ", hand landmarks" : "";
+      OperationFeedback.success(operation, `Saved ${basename(written)} (${files.ppgRows.toLocaleString()} pulse rows, ${files.imuRows.toLocaleString()} motion rows${camera})`);
     } catch (error) {
       OperationFeedback.error(operation, `Could not save: ${String(error)}`);
     }

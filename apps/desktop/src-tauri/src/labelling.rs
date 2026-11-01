@@ -307,7 +307,7 @@ pub fn export_labelling_recording(
     let (pair, _) = load(&app, &source)?;
     let (ppg_csv, imu_csv) = with_manual(&pair, &intervals)?;
     match target {
-        ExportTarget::Folder { parent, name } => model_lab::export_dataset_folder(parent, name, ppg_csv, imu_csv, None),
+        ExportTarget::Folder { parent, name } => model_lab::export_dataset_folder(parent, name, ppg_csv, imu_csv, None, None),
         ExportTarget::Csv { path } => {
             let single = dataset_files::merge_to_single(&ppg_csv, &imu_csv)?;
             fs::write(&path, single).map_err(|e| format!("could not write {path}: {e}"))?;

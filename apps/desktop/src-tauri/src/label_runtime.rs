@@ -34,7 +34,45 @@ pub const LABEL_DETECTIONS_EVENT: &str = "label-detections";
 pub const LABEL_SHADOW_EVENT: &str = "label-shadow-detections";
 /// Sent when the set of registered models changes (an import).
 pub const LABEL_MODELS_EVENT: &str = "label-models-changed";
+/// Sent when the hand goes from still to moving or back (see [`HandSteadinessView`]).
+pub const HAND_STEADINESS_EVENT: &str = "hand-steadiness";
 const TICK_INTERVAL: Duration = Duration::from_millis(100);
+
+/// Whether the hand is still right now, from the last second of the watch's motion (`label_inference::steadiness`). A
+/// gesture may only start when it was still just before; this is for showing it.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct HandSteadinessView {
+    /// `still`, `moving`, or `unknown` (not enough motion to tell, as when the watch is not streaming).
+    pub state: String,
+    pub accel_spread: Option<f64>,
+    pub turning: Option<f64>,
+    pub tilt_change_deg: Option<f64>,
+}
+
+impl From<label_inference::steadiness::Verdict> for HandSteadinessView {
+    fn from(verdict: label_inference::steadiness::Verdict) -> Self {
+        use label_inference::steadiness::Verdict;
+        let (state, measures) = match verdict {
+            Verdict::Steady(m) => ("still", Some(m)),
+            Verdict::Moving(m) => ("moving", Some(m)),
+            Verdict::Unknown => ("unknown", None),
+        };
+        Self {
+            state: state.into(),
+            accel_spread: measures.map(|m| m.accel_spread),
+            turning: measures.map(|m| m.turning),
+            tilt_change_deg: measures.map(|m| m.tilt_change_deg),
+        }
+    }
+}
+
+/// A runtime that only lets a gesture start when the hand was still before it.
+fn gated_runtime() -> LabelRuntime {
+    let mut runtime = LabelRuntime::default();
+    runtime.set_steadiness_gate(true);
+    runtime
+}
 
 /// What the UI and the recipe engine are told when detections change.
 #[derive(Debug, Clone, Serialize)]
@@ -387,6 +425,8 @@ pub struct LabelRuntimeHost {
     runtime: Mutex<LabelRuntime>,
     state: Mutex<HostState>,
     started_at: Instant,
+    /// The hand's state last sent to the UI, so it is only sent when it changes.
+    steadiness_shown: Mutex<Option<String>>,
 }
 
 impl Default for LabelRuntimeHost {
@@ -394,9 +434,10 @@ impl Default for LabelRuntimeHost {
         Self {
             push_gate: Mutex::new(PushGate::default()),
             shadow: Mutex::new(None),
-            runtime: Mutex::new(LabelRuntime::default()),
+            runtime: Mutex::new(gated_runtime()),
             state: Mutex::new(HostState::default()),
             started_at: Instant::now(),
+            steadiness_shown: Mutex::new(None),
         }
     }
 }
@@ -848,6 +889,21 @@ impl LabelRuntimeHost {
         let now = self.now_ns();
         self.with_runtime(app, |runtime| runtime.tick(now));
         self.with_shadow(app, |runtime| runtime.tick(now));
+        let view = self.hand_steadiness();
+        if let Ok(mut shown) = self.steadiness_shown.lock()
+            && shown.as_deref() != Some(view.state.as_str())
+        {
+            *shown = Some(view.state.clone());
+            let _ = app.emit(HAND_STEADINESS_EVENT, view);
+        }
+    }
+
+    /// Whether the hand is still right now.
+    pub fn hand_steadiness(&self) -> HandSteadinessView {
+        self.runtime
+            .lock()
+            .map(|runtime| runtime.hand_steadiness().into())
+            .unwrap_or_else(|_| label_inference::steadiness::Verdict::Unknown.into())
     }
 
     /// Feeds the model being compared (if there is one) and tells the display what it detected. Nothing here touches the
@@ -883,7 +939,8 @@ impl LabelRuntimeHost {
         let mut probe = version.clone();
         probe.state = LifecycleState::Active;
         let model = label_inference::load_version(&probe, &dir)?;
-        let mut runtime = LabelRuntime::default();
+        // Judged as the active models are, gate included, so the comparison is fair.
+        let mut runtime = gated_runtime();
         runtime.set_models(vec![model]);
         runtime.set_mode(RuntimeMode::Monitor);
         *self
@@ -1315,6 +1372,11 @@ pub fn inspect_label_model(
 }
 
 #[tauri::command]
+pub fn get_hand_steadiness(host: State<'_, LabelRuntimeHost>) -> HandSteadinessView {
+    host.hand_steadiness()
+}
+
+#[tauri::command]
 pub fn get_label_runtime_status(host: State<'_, LabelRuntimeHost>) -> LabelRuntimeStatus {
     host.status()
 }
@@ -1650,6 +1712,19 @@ mod tests {
     }
 
     #[test]
+    fn the_hand_state_is_shown_in_plain_words_with_its_measures() {
+        use label_inference::steadiness::{Measures, Verdict};
+        let m = Measures { accel_spread: 0.1, turning: 0.2, tilt_change_deg: 3.0 };
+        let still = HandSteadinessView::from(Verdict::Steady(m));
+        assert_eq!((still.state.as_str(), still.turning), ("still", Some(0.2)));
+        assert_eq!(HandSteadinessView::from(Verdict::Moving(m)).state, "moving");
+        let unknown = HandSteadinessView::from(Verdict::Unknown);
+        assert_eq!((unknown.state.as_str(), unknown.accel_spread), ("unknown", None));
+        // Before the watch streams anything there is nothing to tell.
+        assert_eq!(LabelRuntimeHost::default().hand_steadiness().state, "unknown");
+    }
+
+    #[test]
     fn the_latest_score_per_label_is_kept_for_the_status() {
         let mut state = HostState::default();
         let score = |c: f64| LabelScore {
@@ -1658,6 +1733,7 @@ mod tests {
             confidence: c,
             timestamp_ns: 5,
             received_ns: 6,
+            watch_ns: None,
             input_check: None,
         };
         record(

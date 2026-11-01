@@ -240,6 +240,13 @@ when the wrist moves. So vary these across sessions, and record ordinary activit
 - The last details you used are kept for the next session. A recording under way keeps the details it started with.
 - A field left as "Not said" is not recorded.
 
+**Hand landmarks in the export.** When the camera recorded the session (camera on, **Save hand landmarks with
+recordings** ticked), an exported folder also holds the camera's points: `hand_landmarks.csv` (all 21 MediaPipe points of
+each frame, in image and 3D coordinates, as saved with the recording) with a first column `watch_timestamp_ns` that puts
+each frame on the watch's clock, so it lines up with `imu.csv` and `ppg.csv`, and `clock_sync.csv`, the clock pairs that
+conversion came from. The export message says "hand landmarks" when they are included. Only the points are saved, never
+the picture.
+
 **The pulse sensor's clock.** The pulse sensor stamps its samples with its own clock, which the Recorder puts on the watch's
 clock before saving them. So that this can be redone later if the mapping ever turns out wrong, every saved recording and
 exported folder also holds `ppg_clock.csv`.
@@ -448,7 +455,7 @@ The plan also has a table of the label's holds on each side, by arm and wrist, f
 points out a condition only the test has (its score there is about something new to the model) and one only training has
 (the score says nothing of it). Stretches left out on the Labelling page need no role: they are always left out.
 
-The trainer learns from moments it picks in each recording: about 880 ms after each start of the label (the positives), and as negatives the same moment after every other label's start, moments 0, 200 and 400 ms after each start of the label (so it does not fire before the moment), points inside holds, and quiet time at least 1.5 s from any hold.
+The trainer learns only from moments the hand was still before (the same test the live models use, see Activity below), so a model is trained and tested on the moments it will be asked about; gestures made while moving are not counted, and the replay counts only the detections that would be allowed to start. If too few of the gesture's starts were made with the hand still, the card says so. The trainer learns from moments it picks in each recording: about 880 ms after each start of the label (the positives), and as negatives the same moment after every other label's start, moments 0, 200 and 400 ms after each start of the label (so it does not fire before the moment), points inside holds, and quiet time at least 1.5 s from any hold.
 
 When training finishes you see, in words, how many of the gesture's starts it found, how much of what it flagged was right, and how often it wrongly flagged another moment, all measured on the recordings it never trained on. **The cut-off for "detected" is fitted on the training recordings**: each is scored by a model trained without it and played through as it would run live, and the cut-off that catches the most gestures while going off without one at most 2 times per minute of recording is used (if none manages that, the one that catches the most gestures for its false alarms), so the numbers on the test recordings are fair. The card also says what the model does **played through the test recordings as it would run live**: how many gestures it caught (a detection 680 to 1,280 ms after a start catches it), how soon, and how often it went off with no gesture.
 
@@ -464,7 +471,9 @@ The camera marks a hold when it sees it, which can be a little before or after t
 
 #### Activity
 
-A list of what the active models have done this session, newest first: **Detected** (with the model's confidence), **Released**, and **Attention** for a skipped window, a model that was swapped out, or two labels that cannot coexist being detected together (both are then held off). An identical line repeating is shown once with a count. The card can be **collapsed** (the button shows how many entries are inside, and it stays as you left it). In Monitor this is what the models would have done; in Live the same detections can start recipes. A release always shows, in every mode. The list has a fixed height and scrolls, so a long session does not make the page longer, and **Clear** empties it (new detections keep arriving afterwards; nothing about the models changes).
+A list of what the active models have done this session, newest first: **Detected** (with the model's confidence), **Released**, and **Attention** for a skipped window, a model that was swapped out, two labels that cannot coexist being detected together (both are then held off), or a gesture **not started** because the hand was moving just before it. An identical line repeating is shown once with a count. The card can be **collapsed** (the button shows how many entries are inside, and it stays as you left it). In Monitor this is what the models would have done; in Live the same detections can start recipes. A release always shows, in every mode. The list has a fixed height and scrolls, so a long session does not make the page longer, and **Clear** empties it (new detections keep arriving afterwards; nothing about the models changes).
+
+**A gesture only starts when the hand was still.** Moving the arm, turning the wrist or typing buries the small jolt of a pinch, and shifts the pulse sensor's level as the strap pressure changes. So a model's detection may only *start* if the watch was still for the second before it: from 1.5 to 0.5 s before the decision, the motion's spread is at most 0.4 m/s², the wrist turns at most 0.5 rad/s, and the watch tilts at most 10°. Otherwise the start is not announced, nothing acts on it, and the list says "*label* not started" with what moved. A gesture already under way is never ended by this, so turning the wrist while holding a gesture (as for volume) still works. Without the motion stream nothing can be judged still, so nothing starts. The badge at the top of the card says **Hand still**, **Hand moving** or **No motion data** right now. Hold your hand still for a moment before the gesture. The limits come from the double-pinch research (its rule B0), measured on the recorded pinches and everyday activity.
 
 #### Labels
 

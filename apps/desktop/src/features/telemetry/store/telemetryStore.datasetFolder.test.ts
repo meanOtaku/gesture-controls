@@ -60,4 +60,21 @@ describe("the dataset as two dense files", () => {
     expect(files.ppgCsv.split("\n")[0]).toBe("# gesture-dataset-export: 1");
     expect(files.ppgCsv.split("\n")[1]).toBe(files.imuCsv.split("\n")[1]);
   });
+
+  it("carries the camera's evidence from the first accepted sample to the stop, and nothing when the camera was off", () => {
+    const asked: [number, number][] = [];
+    telemetryStore.setEvidenceProvider((startMs, endMs) => {
+      asked.push([startMs, endMs]);
+      return { files: { "hand_landmarks.csv": "landmarks", "clock_sync.csv": "pairs" }, sources: [] };
+    });
+    clock += 20; telemetryStore.ingestWatchOrientation(motion(1)); // the first accepted sample, at 1020
+    clock += 500; telemetryStore.ingestWatchOrientation(motion(2));
+    clock += 100; telemetryStore.stopDatasetRecording(); // stopped at 1620
+    clock += 5_000; // exported much later: the window is still the recording's own
+    expect(telemetryStore.generateDatasetFolderFiles().cameraFiles).toEqual({ "hand_landmarks.csv": "landmarks", "clock_sync.csv": "pairs" });
+    expect(asked).toEqual([[1020, 1620]]);
+    telemetryStore.setEvidenceProvider(() => null);
+    expect(telemetryStore.generateDatasetFolderFiles().cameraFiles).toEqual({});
+    telemetryStore.setEvidenceProvider(null);
+  });
 });

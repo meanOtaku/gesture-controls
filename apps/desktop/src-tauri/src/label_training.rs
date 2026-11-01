@@ -211,6 +211,8 @@ fn build_spec(
         "seed": SEED,
         "research": checked.research,
         "labelOffsetMs": checked.label_offset_ms,
+        // Train and test only on moments the runtime's steadiness gate would let a gesture start at (`steadiness.py`).
+        "steadyStarts": true,
     })
 }
 
@@ -920,6 +922,7 @@ mod tests {
         assert_eq!(spec["version"], 1);
         assert_eq!(spec["target"], "pinch");
         assert_eq!(spec["negatives"], serde_json::json!(["fist"]));
+        assert_eq!(spec["steadyStarts"], serde_json::json!(true));
         assert_eq!(
             spec["sources"],
             serde_json::json!(["watchPpg", "watchOrientation"])

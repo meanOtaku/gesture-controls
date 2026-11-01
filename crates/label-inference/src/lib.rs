@@ -21,6 +21,7 @@ mod loader;
 mod model;
 mod pipeline;
 mod runtime;
+pub mod steadiness;
 mod training;
 mod trees;
 
