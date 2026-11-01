@@ -1486,6 +1486,22 @@ pub fn set_label_runtime_mode(
 #[cfg(test)]
 mod tests {
     /// A one-off look at what the cleanup does to a real store: point `PURGE_E2E_DIR` at a *copy* of a model-lab folder.
+    /// One-off tool: imports model bundles into the app's registry while the app is closed (it keeps the registry in memory
+    /// while it runs), exactly as Import model does: each is staged, validated and published as a Draft. `MODEL_LAB_DIR` is
+    /// the app's `model-lab` folder, `IMPORT_BUNDLES` the bundle folders, separated by `;`.
+    #[test]
+    #[ignore = "a tool: needs MODEL_LAB_DIR and IMPORT_BUNDLES, with the app closed"]
+    fn import_model_bundles_while_the_app_is_closed() {
+        let dir = std::path::PathBuf::from(std::env::var("MODEL_LAB_DIR").expect("MODEL_LAB_DIR"));
+        let (mut store, _) = open_registry(&dir, Some(&dir.join("registry.json"))).unwrap();
+        for source in std::env::var("IMPORT_BUNDLES").expect("IMPORT_BUNDLES").split(';').filter(|s| !s.is_empty()) {
+            let staged = stage_bundle(std::path::Path::new(source), &dir).unwrap();
+            let outcome = publish_staged(staged, &dir, &mut store, &LabelRuntimeHost::now_rfc3339()).unwrap();
+            println!("imported {} as draft {} (model {})", outcome.label, outcome.version_id, outcome.model_sha256);
+        }
+        assert!(store.registry().validate().is_ok());
+    }
+
     #[test]
     #[ignore = "one-off: set PURGE_E2E_DIR to a copy of a model-lab folder"]
     fn the_cleanup_on_a_copy_of_a_real_store() {
