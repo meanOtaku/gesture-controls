@@ -504,3 +504,15 @@ html.overlay-document body::before { display:none; }
 .power-grid > div { border-left:2px solid var(--line); padding-left:.5rem; }
 .power-grid dt { font-size:.75rem; color:var(--ink-3); }
 .power-grid dd { margin:0; font-family:var(--font-mono); }
+
+/* A page's less-used tools, folded away (`AdvancedSection`). */
+.advanced-section { border-top:1px solid var(--line); padding-top:.5rem; }
+.advanced-section > summary { display:flex; align-items:baseline; gap:.6rem; cursor:pointer; list-style:none; padding:.75rem .25rem; color:var(--ink); }
+.advanced-section > summary::-webkit-details-marker { display:none; }
+.advanced-section > summary:focus-visible { outline:2px solid var(--ring, currentColor); outline-offset:2px; }
+.advanced-chevron { align-self:center; transition:transform .15s ease; }
+.advanced-section[open] .advanced-chevron { transform:rotate(90deg); }
+.advanced-title { font-weight:700; }
+.advanced-summary { color:var(--ink-2); font-size:.875rem; }
+.advanced-body { margin-top:.5rem; }
+@media (prefers-reduced-motion: reduce) { .advanced-chevron { transition:none; } }

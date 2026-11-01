@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { AdvancedSection } from "../../../components/app/AdvancedSection";
 import { CameraCapturePanel } from "../../camera/components/CameraCapturePanel";
 import { CameraAssistCard } from "../../gestureLibrary/CameraAssistCard";
 import { cameraAssist } from "../../gestureLibrary/cameraAssist";
@@ -52,9 +53,6 @@ export function RecorderPage() {
           void saveDatasetRecording();
         }}
       />
-      <ExportSettingsCard />
-      <JustRecordedCard recording={datasetRecording} />
-      <SessionDetailsCard context={telemetryStore.getSessionContext()} onChange={(context) => telemetryStore.setSessionContext(context)} recording={datasetRecording} />
       <DatasetCaptureCard
         selectedLabel={selectedLabel}
         sessionLabels={sessionLabels}
@@ -90,16 +88,21 @@ export function RecorderPage() {
         getDatasetRows={() => telemetryStore.getDatasetRows()}
         timelineIntervals={telemetryStore.getTimelineIntervals()}
       />
-      <GuidedSessionCard
-        recording={datasetRecording}
-        onStop={() => {
-          telemetryStore.stopDatasetRecording();
-          void saveDatasetRecording();
-        }}
-      />
-      <CoverageCard />
+      <JustRecordedCard recording={datasetRecording} />
       <CameraAssistCard selectedLabel={selectedLabel} extraLabels={extraLabels} onToggleExtraLabel={(label) => telemetryStore.toggleExtraLabel(label)} recording={datasetRecording} desktopAvailable={desktopAvailable} />
       <CameraCapturePanel />
+      <SessionDetailsCard context={telemetryStore.getSessionContext()} onChange={(context) => telemetryStore.setSessionContext(context)} recording={datasetRecording} />
+      <ExportSettingsCard />
+      <AdvancedSection storageKey="recorder" summary="Guided sessions for other gestures, and how much of each label you have">
+        <GuidedSessionCard
+          recording={datasetRecording}
+          onStop={() => {
+            telemetryStore.stopDatasetRecording();
+            void saveDatasetRecording();
+          }}
+        />
+        <CoverageCard />
+      </AdvancedSection>
     </div>
   </main>;
 }

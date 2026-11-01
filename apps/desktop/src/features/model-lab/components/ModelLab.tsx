@@ -13,6 +13,7 @@ import { MistakesCard } from "./MistakesCard";
 import { ThresholdCard } from "./ThresholdCard";
 import { SealedTestCard } from "./SealedTestCard";
 import { DetectionActivity } from "./DetectionActivity";
+import { AdvancedSection } from "../../../components/app/AdvancedSection";
 import { LabelModelsPanel } from "./LabelModelsPanel";
 import { RecorderRecordings } from "./RecorderRecordings";
 import { TrainingHistory } from "./TrainingHistory";
@@ -124,7 +125,7 @@ export function ModelLab({ onOpenLabels, onInspectModel, onOpenNetworkLab }: { o
       </section>
 
       <nav className="lab-workflow" aria-label="Model Lab sections">
-        <a href="#lab-recorder">From the Recorder</a><a href="#lab-dataset">Recordings</a><a href="#lab-coverage">Labels</a><a href="#lab-train">Train</a><a href="#lab-history">History</a><a href="#lab-labels">Models</a><a href="#lab-activity">Activity</a>
+        <a href="#lab-recorder">From the Recorder</a><a href="#lab-dataset">Recordings</a><a href="#lab-train">Train</a><a href="#lab-labels">Models</a><a href="#lab-activity">Activity</a><a href="#lab-advanced">Advanced</a>
       </nav>
 
       <fieldset className="lab-workspace card-stack" disabled={!desktopAvailable} aria-label="Desktop model tools">
@@ -158,20 +159,22 @@ export function ModelLab({ onOpenLabels, onInspectModel, onOpenNetworkLab }: { o
             }
           }}
         />
-        <Card id="lab-coverage" role="region" aria-label="Labels">
-          <CardContent className="flex flex-wrap items-center justify-between gap-3">
-            <span><strong>Labels</strong> <small className="text-muted-foreground">Add, rename and archive labels on the Labels tab. {labels.filter((label) => label.archivedAt === null).length} in use here.</small></span>
-            {onOpenLabels && <Button type="button" variant="outline" onClick={onOpenLabels}>Open Labels</Button>}
-          </CardContent>
-        </Card>
         <TrainPanel desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} onOpenNetworkLab={onOpenNetworkLab} />
-        <TrainingHistory desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} refreshKey={models.map((model) => `${model.id}:${model.state}`).join(",")} />
         <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} onInspect={onInspectModel} />
-        <MistakesCard desktopAvailable={desktopAvailable} models={models} />
-        <ThresholdCard desktopAvailable={desktopAvailable} models={models} />
-        <CompareCard desktopAvailable={desktopAvailable} models={models} />
-        <SealedTestCard desktopAvailable={desktopAvailable} models={models} datasets={datasets} />
         <DetectionActivity desktopAvailable={desktopAvailable} />
+        <AdvancedSection id="lab-advanced" storageKey="modelLab" summary="Training history, mistakes, threshold, comparing models, the final test, and labels">
+          <TrainingHistory desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} refreshKey={models.map((model) => `${model.id}:${model.state}`).join(",")} />
+          <MistakesCard desktopAvailable={desktopAvailable} models={models} />
+          <ThresholdCard desktopAvailable={desktopAvailable} models={models} />
+          <CompareCard desktopAvailable={desktopAvailable} models={models} />
+          <SealedTestCard desktopAvailable={desktopAvailable} models={models} datasets={datasets} />
+          <Card id="lab-coverage" role="region" aria-label="Labels">
+            <CardContent className="flex flex-wrap items-center justify-between gap-3">
+              <span><strong>Labels</strong> <small className="text-muted-foreground">Add, rename and archive labels on the Labels tab. {labels.filter((label) => label.archivedAt === null).length} in use here.</small></span>
+              {onOpenLabels && <Button type="button" variant="outline" onClick={onOpenLabels}>Open Labels</Button>}
+            </CardContent>
+          </Card>
+        </AdvancedSection>
       </fieldset>
     </main>
   );

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ModelLab } from "./ModelLab";
 
@@ -39,9 +39,13 @@ describe("ModelLab", () => {
     await waitFor(() => expect(overview.getByText("monitor")).toBeInTheDocument());
     expect(overview.getByText("1 registered")).toBeInTheDocument();
     expect(overview.getByText("1 label covered")).toBeInTheDocument();
-    for (const name of ["Label models", "Train a model", "Detection activity", "Labels", "Recordings"]) {
+    for (const name of ["Label models", "Train a model", "Detection activity", "Recordings"]) {
       expect(screen.getByRole("region", { name })).toBeInTheDocument();
     }
+    // The less-used tools are folded under Advanced until it is opened.
+    expect(screen.queryByRole("region", { name: "Labels" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Advanced", { selector: ".advanced-title" }));
+    expect(await screen.findByRole("region", { name: "Labels" })).toBeInTheDocument();
     for (const gone of [/LiteRT/i, /training role/i, /safe intent/i, /Start training/i]) {
       expect(screen.queryByText(gone)).not.toBeInTheDocument();
     }

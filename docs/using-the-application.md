@@ -69,6 +69,10 @@ Undo brings them back untouched; closing the app in that time leaves them undele
 Press **?** anywhere outside a text field for every keyboard shortcut, grouped by where it works. Press it again, or Esc, to
 close the list.
 
+### Advanced sections
+
+Pages with many tools show their main flow first and fold the rest under **Advanced** at the bottom: on the Recorder, guided sessions for other gestures and label coverage; in Model Lab, training history, mistakes, threshold, comparing models, the final test and the link to Labels. Click **Advanced** to open it; each page remembers whether you left it open.
+
 ### Contextual help
 
 A small "?" icon next to some section headings and controls opens an accessible help tooltip on hover, keyboard focus, or click. It is used where a control's behavior is not obvious from its label alone — for example, the difference between recording rate and graph refresh rate, what a safe intent binding can and cannot do, or what each inference mode is allowed to do. Not every control has one; obvious controls intentionally do not.

@@ -1,4 +1,5 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
+import { Card, CardContent, CardHeader } from "../../../components/ui/card";
+import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
@@ -22,13 +23,14 @@ export function SessionDetailsCard({ context, onChange, recording }: SessionDeta
   return (
     <Card role="region" aria-label="Session details" className="min-w-0">
       <CardHeader>
-        <CardTitle>Session details</CardTitle>
-        <CardDescription>
-          How this session is recorded. A model only learns the conditions it was shown, so vary them across sessions: arm
-          resting, raised, moving and walking. Set them before you start: they are saved with the recording when it starts,
-          and the last ones you used are kept.
-          {recording ? " The recording under way keeps the details it started with." : ""}
-        </CardDescription>
+        <SectionHeader
+          title="Session details"
+          description={recording ? "The recording under way keeps the details it started with." : "Wrist, arm and strap for this session, saved with the recording."}
+          help={{
+            label: "About session details",
+            content: "A model only learns the conditions it was shown, so vary them across sessions: arm resting, raised, moving and walking. Set them before you start: they are saved with the recording when it starts, and the last ones you used are kept.",
+          }}
+        />
       </CardHeader>
       <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {SESSION_FIELDS.map(({ field, title, options, placeholder }) => (

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { SectionHeader } from "../../../components/app/SectionHeader";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
@@ -64,13 +65,14 @@ export function GuidedSessionCard({ recording, onStop }: GuidedSessionCardProps)
   return (
     <Card role="region" aria-label="Guided session" className="min-w-0">
       <CardHeader>
-        <CardTitle>Guided session</CardTitle>
-        <CardDescription>
-          The app tells you when to make the gesture, on screen and with a buzz on the watch, and labels it as it tells you,
-          at random moments so you cannot anticipate them. Then it asks for some everyday activity, labelled as not the
-          gesture. Each label starts at the cue, about your reaction time before the gesture: Label timing on the Labelling
-          page measures that and moves them.
-        </CardDescription>
+        <SectionHeader
+          title="Guided session"
+          description="The app cues a gesture at random moments and labels it as it cues."
+          help={{
+            label: "About guided sessions",
+            content: "The app tells you when to make the gesture, on screen and with a buzz on the watch, and labels it as it tells you, at random moments so you cannot anticipate them. Then it asks for some everyday activity, labelled as not the gesture. Each label starts at the cue, about your reaction time before the gesture: Label timing on the Labelling page measures that and moves them. For pinch in and pinch out, use the Pinch in / out session at the top of the page instead: the camera marks those.",
+          }}
+        />
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
