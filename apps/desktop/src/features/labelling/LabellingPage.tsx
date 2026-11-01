@@ -625,7 +625,8 @@ export function LabellingPage() {
             <Select value={currentSource} onValueChange={(id) => id && request({ kind: "dataset", id })}>
               <SelectTrigger id="labelling-dataset" aria-label="Model Lab recording">
                 <SelectValue placeholder="Choose a recording">
-                  {(id: string) => {
+                  {(id: string | null) => {
+                    if (!id) return datasets.length > 0 ? "Choose a recording" : "No recordings in Model Lab yet";
                     const dataset = datasets.find((entry) => entry.id === id);
                     return dataset ? `#${dataset.sequence ?? "?"} ${dataset.originalFilename}` : id;
                   }}

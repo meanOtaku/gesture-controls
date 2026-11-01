@@ -215,7 +215,7 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
                     </small>
                     {usageFor && usageCount(usageFor(row.id)) > 0 && <UsageList usage={usageFor(row.id)} onOpenTab={onOpenTab} label={row.id} />}
                   </div>
-                  <div className="recipe-item-actions">
+                  <div className="recipe-item-actions label-actions">
                     {row.managed && onUpdate && full && (
                       <Button type="button" variant="ghost" aria-label={`Edit ${row.id}`} onClick={() => { setEditError(null); setEditing({ id: full.id, displayName: full.displayName, description: full.description, role: full.role }); }}>Edit</Button>
                     )}
