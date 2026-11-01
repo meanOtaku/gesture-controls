@@ -84,6 +84,8 @@ pub enum Rejection {
     /// A start was withheld because the hand was not still before it (`steadiness`). Only a start: it never ends a
     /// detection already under way.
     HandNotStill(String),
+    /// A start was withheld because nothing moved around it (`steadiness::Jolt`): sensor noise or a hand at rest.
+    NoMovement(String),
 }
 
 impl std::fmt::Display for Rejection {
@@ -109,6 +111,7 @@ impl std::fmt::Display for Rejection {
             }
             Self::Model(detail) => write!(f, "model error: {detail}"),
             Self::HandNotStill(why) => write!(f, "{why}"),
+            Self::NoMovement(why) => write!(f, "{why}"),
         }
     }
 }

@@ -144,6 +144,14 @@ The trainer's replay uses a copy of this rule (`events.detect`). `tests/fixtures
   actionable, the detector cleared so the next start is judged afresh, and a `Rejection::HandNotStill` reported. Too few
   motion samples, or no decision time on the watch's clock, is not still (it fails closed). Held detections and releases
   are never touched by it.
+- **A start always needs a jolt** (`Steadiness::jolt_near`), whatever the gate: some sample's linear acceleration, less
+  the mean of the samples within 150 ms of it, must reach 0.04 m/s² from 0.25 s before the estimated start to 0.6 s after
+  it (or the decision, if sooner). Otherwise the start is withheld as above with a `Rejection::NoMovement`. It catches
+  models firing on sensor noise or a resting arm; with too little motion to judge it lets the start through. It is
+  checked before the still-hand gate.
+- **Off the wrist nothing is scored** (`LabelRuntime::set_worn`, from the watch's `watch.wear_state`): every detection is
+  released with a falling edge and ticks score nothing until the watch says it is worn again. Losing the watch forgets
+  the state, since a watch that comes back reports it again.
 - A model that cannot be loaded (altered or missing file, unsafe directory) is reported by name and that label has no model; it never falls back to another.
 - The host fails closed: if the registry cannot be opened the runtime is Off and the status says why.
 

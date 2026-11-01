@@ -18,6 +18,13 @@
 //! runs from [`WINDOW_FROM_NS`] to [`WINDOW_TO_NS`] before it. It so ends before the gesture's own movement whatever the
 //! model's delay. Too few motion samples in it, or no decision time on the watch's clock, is **not** steady: the gate
 //! fails closed.
+//!
+//! Separately, and always (not only with the still-hand rule), a start needs a **jolt**: some real movement around the
+//! gesture's estimated start ([`Steadiness::jolt_near`]). Every gesture moves the wrist, if only a little; sensor noise and
+//! a hand at rest do not, so a model that fires on them is refused. The jolt is the linear acceleration less its 0.3 s
+//! moving mean (as in the double-pinch research), its largest size from [`JOLT_FROM_NS`] before the estimated start to
+//! [`JOLT_TO_NS`] after it. The limit, [`MIN_JOLT`], is well below every pinch measured; with no motion to judge, this
+//! check lets the start through (the still-hand rule is the one that fails closed).
 
 use std::collections::VecDeque;
 
@@ -36,6 +43,19 @@ pub const WINDOW_TO_NS: u64 = 500_000_000;
 /// The decision delay of a model whose bundle does not give one: the trainer's positive moment, 880 ms after a gesture's
 /// labelled start (`ppg_onset.ONSET_DELAY_MS`).
 pub const DEFAULT_DECISION_DELAY_MS: u32 = 880;
+/// The smallest jolt a start needs, in m/s². Over the 560 button-labelled pinches in `data/recordings/old` the smallest
+/// was 0.048 m/s² (the weak 11 October sessions; 5% under 0.086), and the camera-timed ones in
+/// `data/recordings/pinch-relabelled` were all 0.26 or more. A still hand on the wrist stayed under it only now and then
+/// (its smallest was 0.026), and a watch lying still gives sensor noise of about a hundredth.
+pub const MIN_JOLT: f64 = 0.04;
+/// The jolt is looked for from this long before the gesture's estimated start (a decision delay is an estimate)...
+pub const JOLT_FROM_NS: u64 = 250_000_000;
+/// ...to this long after it (the contact's jolt peaks 0.1-0.15 s in), or the decision, if that is sooner.
+pub const JOLT_TO_NS: u64 = 600_000_000;
+/// Each sample's jolt is its acceleration less the mean of the samples within this of it.
+const JOLT_HALF_SPAN_NS: u64 = 150_000_000;
+/// Fewer motion samples than this in the jolt's stretch and it cannot be judged.
+const MIN_JOLT_SAMPLES: usize = 10;
 /// Fewer motion samples than this in the window and nothing can be said (25 Hz over the second).
 const MIN_SAMPLES: usize = 25;
 /// How much motion is kept: the window, and some slack for decisions made a little late.
@@ -92,6 +112,29 @@ impl Verdict {
                 Some(format!("the hand was not still before the gesture: {}", why.join(", ")))
             }
             Self::Unknown => Some("no motion data to tell whether the hand was still".into()),
+        }
+    }
+}
+
+/// Whether there was movement around a gesture's start.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Jolt {
+    /// The largest jolt, in m/s², at least [`MIN_JOLT`].
+    Felt(f64),
+    /// The largest jolt, in m/s², under [`MIN_JOLT`]: nothing moved.
+    TooSmall(f64),
+    /// Too little motion to tell: let through.
+    Unknown,
+}
+
+impl Jolt {
+    /// Why a start was withheld, in words for the detections list; `None` when it may start.
+    pub fn refusal(&self) -> Option<String> {
+        match self {
+            Self::TooSmall(size) => {
+                Some(format!("nothing moved at the gesture (jolt {size:.2} m/s², at least {MIN_JOLT})"))
+            }
+            Self::Felt(_) | Self::Unknown => None,
         }
     }
 }
@@ -177,6 +220,47 @@ impl Steadiness {
         };
         let start = at.saturating_sub(u64::from(decision_delay_ms) * 1_000_000);
         self.verdict(start.saturating_sub(WINDOW_FROM_NS), start.saturating_sub(WINDOW_TO_NS))
+    }
+
+    /// The largest jolt from `from_ns` to `to_ns` (watch clock), or `None` with too few samples. Each sample's mean is
+    /// taken over the samples kept within [`JOLT_HALF_SPAN_NS`] of it, so samples just outside the stretch count too.
+    pub fn jolt(&self, from_ns: u64, to_ns: u64) -> Option<f64> {
+        let near: Vec<&Motion> = self
+            .motion
+            .iter()
+            .filter(|m| m.ts_ns + JOLT_HALF_SPAN_NS >= from_ns && m.ts_ns <= to_ns + JOLT_HALF_SPAN_NS)
+            .collect();
+        let mut largest: Option<f64> = None;
+        let mut judged = 0;
+        for m in near.iter().filter(|m| m.ts_ns >= from_ns && m.ts_ns <= to_ns) {
+            let around: Vec<&&Motion> =
+                near.iter().filter(|o| o.ts_ns.abs_diff(m.ts_ns) <= JOLT_HALF_SPAN_NS).collect();
+            let n = around.len() as f64;
+            let size = (0..3)
+                .map(|axis| (m.accel[axis] - around.iter().map(|o| o.accel[axis]).sum::<f64>() / n).powi(2))
+                .sum::<f64>()
+                .sqrt();
+            largest = Some(largest.map_or(size, |l: f64| l.max(size)));
+            judged += 1;
+        }
+        if judged < MIN_JOLT_SAMPLES {
+            return None;
+        }
+        largest
+    }
+
+    /// Whether a gesture decided at `decision_watch_ns`, by a model that decides `decision_delay_ms` after a gesture
+    /// starts, moved the wrist at all around its estimated start.
+    pub fn jolt_near(&self, decision_watch_ns: Option<u64>, decision_delay_ms: u32) -> Jolt {
+        let Some(at) = decision_watch_ns else {
+            return Jolt::Unknown;
+        };
+        let start = at.saturating_sub(u64::from(decision_delay_ms) * 1_000_000);
+        match self.jolt(start.saturating_sub(JOLT_FROM_NS), (start + JOLT_TO_NS).min(at)) {
+            Some(size) if size >= MIN_JOLT => Jolt::Felt(size),
+            Some(size) => Jolt::TooSmall(size),
+            None => Jolt::Unknown,
+        }
     }
 
     /// The hand's state right now: the second of motion up to the newest sample (for display).
@@ -299,5 +383,34 @@ mod tests {
         });
         assert!(s.before(Some(END), 900).is_steady(), "the second before the gesture was still");
         assert!(!s.before(Some(END), 0).is_steady(), "judged as a model with no delay, the gesture itself is in the window");
+    }
+
+    #[test]
+    fn a_start_needs_a_jolt_around_it_and_sensor_noise_is_not_one() {
+        // A watch lying still: only sensor noise of ±0.01 m/s².
+        let lying = feed(|i| sample(i, [if i % 2 == 0 { 0.01 } else { -0.01 }, 0.0, 0.0], [0.0; 3], LEVEL));
+        let v = lying.jolt_near(Some(END), 900);
+        assert!(matches!(v, Jolt::TooSmall(size) if size < 0.02), "{v:?}");
+        assert!(v.refusal().unwrap().contains("nothing moved"));
+        // The same, with a pinch's small jolt 0.1 s after the estimated start (0.9 s before the decision).
+        let pinched = feed(|i| {
+            let jolt = if (110..113).contains(&i) { 0.07 } else { 0.0 };
+            sample(i, [0.01 * if i % 2 == 0 { 1.0 } else { -1.0 } + jolt, 0.0, 0.0], [0.0; 3], LEVEL)
+        });
+        let v = pinched.jolt_near(Some(END), 900);
+        assert!(matches!(v, Jolt::Felt(size) if size >= MIN_JOLT), "{v:?}");
+        assert_eq!(v.refusal(), None);
+        // A jolt long before the gesture does not count for it.
+        let earlier = feed(|i| sample(i, [if (20..23).contains(&i) { 0.3 } else { 0.0 }, 0.0, 0.0], [0.0; 3], LEVEL));
+        assert!(matches!(earlier.jolt_near(Some(END), 900), Jolt::TooSmall(_)));
+    }
+
+    #[test]
+    fn with_too_little_motion_or_no_watch_time_the_jolt_check_lets_a_start_through() {
+        assert_eq!(Steadiness::default().jolt_near(Some(END), 900), Jolt::Unknown);
+        let s = feed(|i| sample(i, [0.0; 3], [0.0; 3], LEVEL));
+        assert_eq!(s.jolt_near(None, 900), Jolt::Unknown);
+        assert_eq!(s.jolt_near(Some(END + 10_000_000_000), 900), Jolt::Unknown);
+        assert_eq!(Jolt::Unknown.refusal(), None);
     }
 }

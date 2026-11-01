@@ -417,18 +417,25 @@ impl LabelRuntime {
                 .collect();
             let (changes, clashes) = self.hub.process(&batch);
             for change in changes {
-                // A start only counts if the hand was still before it; otherwise it is withheld, never announced, and
-                // the detector is cleared so the next start is judged afresh. Held detections and releases pass.
-                if let (true, DetectionEvent::Rising { label, .. }) = (self.steady_starts, &change) {
+                // A start only counts if something moved around it (always) and, with the still-hand rule, if the hand
+                // was still before it; otherwise it is withheld, never announced, and the detector is cleared so the
+                // next start is judged afresh. Held detections and releases pass.
+                if let DetectionEvent::Rising { label, .. } = &change {
                     let score = moment.iter().find(|s| &s.label == label);
                     let delay = self.models.get(label).map_or(crate::steadiness::DEFAULT_DECISION_DELAY_MS, |m| m.decision_delay_ms);
-                    if let Some(why) = self.steadiness.before(score.and_then(|s| s.watch_ns), delay).refusal() {
-                        let _ = self.hub.clear_label(label, ClearReason::Rejected(why.clone()));
+                    let watch_ns = score.and_then(|s| s.watch_ns);
+                    let refusal = self.steadiness.jolt_near(watch_ns, delay).refusal().map(Rejection::NoMovement).or_else(|| {
+                        self.steady_starts
+                            .then(|| self.steadiness.before(watch_ns, delay).refusal().map(Rejection::HandNotStill))
+                            .flatten()
+                    });
+                    if let Some(reason) = refusal {
+                        let _ = self.hub.clear_label(label, ClearReason::Rejected(reason.to_string()));
                         if let Some(score) = score {
                             rejections.push(WindowRejection {
                                 label: label.clone(),
                                 model_version: score.model_version.clone(),
-                                reason: Rejection::HandNotStill(why),
+                                reason,
                             });
                         }
                         continue;
@@ -837,8 +844,12 @@ mod tests {
             .collect()
     }
 
-    const STILL: fn(u64) -> ([f64; 3], [f64; 3]) = |_| ([0.05, 0.0, 0.02], [0.02, 0.0, 0.0]);
-    const TURNING: fn(u64) -> ([f64; 3], [f64; 3]) = |_| ([0.0; 3], [0.0, 0.0, 1.0]);
+    /// A still hand on the wrist: a small tremor (a jolt of about 0.15 m/s², spread well under the still-hand limit).
+    const STILL: fn(u64) -> ([f64; 3], [f64; 3]) =
+        |ns| ([if (ns / 20_000_000) % 2 == 0 { 0.2 } else { -0.1 }, 0.0, 0.02], [0.02, 0.0, 0.0]);
+    /// A watch lying on a table: only sensor noise.
+    const LYING: fn(u64) -> ([f64; 3], [f64; 3]) = |ns| ([if (ns / 20_000_000) % 2 == 0 { 0.01 } else { -0.01 }, 0.0, 0.0], [0.0; 3]);
+    const TURNING: fn(u64) -> ([f64; 3], [f64; 3]) = |ns| (STILL(ns).0, [0.0, 0.0, 1.0]);
 
     #[test]
     fn with_the_gate_a_still_hand_starts_as_without_it_and_a_turning_wrist_starts_nothing() {
@@ -862,6 +873,26 @@ mod tests {
         let why = not_still(&out);
         assert!(!why.is_empty() && why[0].contains("turning"), "{why:?}");
         assert!(!turning.hand_steadiness().is_steady());
+    }
+
+    #[test]
+    fn with_or_without_the_gate_a_start_with_nothing_moving_is_withheld() {
+        let t = trace(0);
+        for gate in [false, true] {
+            let mut rt = runtime(RuntimeMode::Live);
+            rt.set_steadiness_gate(gate);
+            let out = drive_with_motion(&mut rt, &t, LYING);
+            assert_eq!(rises(&out, false), 0, "gate {gate}: nothing is announced");
+            let why: Vec<String> = out
+                .iter()
+                .flat_map(|o| &o.rejections)
+                .filter_map(|r| match &r.reason {
+                    Rejection::NoMovement(why) => Some(why.clone()),
+                    _ => None,
+                })
+                .collect();
+            assert!(!why.is_empty() && why[0].contains("nothing moved"), "gate {gate}: {why:?}");
+        }
     }
 
     #[test]
