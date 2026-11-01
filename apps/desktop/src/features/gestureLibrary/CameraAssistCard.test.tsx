@@ -133,6 +133,6 @@ describe("CameraAssistCard with pinch in and pinch out", () => {
   it("asks to drop other labels from a pinch in and out recording", async () => {
     cameraAssist.setEnabled(true);
     render(<CameraAssistCard selectedLabel="pinch_in" extraLabels={["pinch_out", "pinch"]} onToggleExtraLabel={() => undefined} recording={false} desktopAvailable />);
-    expect(await screen.findByText(/Pinch in and pinch out are marked on their own/)).toBeInTheDocument();
+    expect(await screen.findByText(/Pinch in, pinch hold and pinch out are marked on their own/)).toBeInTheDocument();
   });
 });

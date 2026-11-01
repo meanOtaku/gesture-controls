@@ -11,7 +11,7 @@ import { measureHand } from "../camera/landmarkMath";
 import type { HandFrame } from "../camera/handTypes";
 import { contactThreshold } from "../labelling/cameraTrack";
 import { cameraAssist } from "./cameraAssist";
-import { PINCH_IN, PINCH_OUT, wantsPinchEdges } from "./pinchEdgeMarker";
+import { PINCH_IN, PINCH_LABELS, wantsPinchEdges } from "./pinchEdgeMarker";
 import { definitionsForLabels, type GestureDefinition } from "./definition";
 import { listGestureDefinitions } from "./gestureLibraryApi";
 import { useLiveGestures } from "./useLiveGestures";
@@ -51,14 +51,14 @@ export function CameraAssistCard({
   const mine = useMemo(() => definitionsForLabels(definitions, markLabels), [definitions, markLabels]);
   // Pinch in and pinch out together are marked from the finger distance itself, with no library gesture needed.
   const edges = wantsPinchEdges(markLabels);
-  const pairOf = selectedLabel === PINCH_IN ? PINCH_OUT : selectedLabel === PINCH_OUT ? PINCH_IN : null;
-  // Labels the library has a gesture for, to offer as additions to the selected one (and pinch in's partner).
+  const partners = selectedLabel !== null && PINCH_LABELS.includes(selectedLabel) ? PINCH_LABELS.filter((label) => label !== selectedLabel) : [];
+  // Labels the library has a gesture for, to offer as additions to the selected one (and the other pinch labels).
   const offered = useMemo(
-    () => Array.from(new Set([...definitions.map((d) => d.labelId).filter((id): id is string => id !== null), ...(pairOf ? [pairOf] : [])])).filter((id) => id !== selectedLabel).sort(),
-    [definitions, selectedLabel, pairOf],
+    () => Array.from(new Set([...definitions.map((d) => d.labelId).filter((id): id is string => id !== null), ...partners])).filter((id) => id !== selectedLabel).sort(),
+    [definitions, selectedLabel, partners.join(",")], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const withoutGesture = edges ? [] : markLabels.filter((label) => !mine.some((d) => d.labelId === label));
-  const othersWithEdges = edges ? markLabels.filter((label) => label !== PINCH_IN && label !== PINCH_OUT) : [];
+  const othersWithEdges = edges ? markLabels.filter((label) => !PINCH_LABELS.includes(label)) : [];
   const contact = contactThreshold(definitions, PINCH_IN);
   const camera2 = getCameraController("secondary");
   const cam2 = useSyncExternalStore(camera2.subscribe, camera2.getSnapshot, camera2.getSnapshot);
@@ -84,7 +84,7 @@ export function CameraAssistCard({
     : selectedLabel === null
       ? "Choose a label above first."
       : othersWithEdges.length > 0
-        ? `Pinch in and pinch out are marked on their own, from the finger distance. Drop ${othersWithEdges.map((label) => `“${label.replaceAll("_", " ")}”`).join(", ")} from this recording.`
+        ? `Pinch in, pinch hold and pinch out are marked on their own, from the finger distance. Drop ${othersWithEdges.map((label) => `“${label.replaceAll("_", " ")}”`).join(", ")} from this recording.`
         : withoutGesture.length > 0
         ? `No gesture in the Gesture library uses ${withoutGesture.map((label) => `“${label.replaceAll("_", " ")}”`).join(", ")}. Make one there first, or drop ${withoutGesture.length === 1 ? "that label" : "those labels"}.`
         : !camOn
@@ -107,7 +107,7 @@ export function CameraAssistCard({
           description="Mark the gesture in your recording automatically, using the camera."
           help={{
             label: "About camera marking",
-            content: "Record as usual with the watch worn on the hand the camera sees. For pinch in and pinch out, pick “pinch in” above and add “pinch out” here: the camera marks a short pinch in where thumb and index meet and a short pinch out where they part, from their distance, with no library gesture needed. You can mark several labels in one recording: pick one above, then add others here. Only one label is on at a time; if two gestures are held together the one that began last is marked, and the other takes over if it is still held when that ends. While you record, the label is switched on in the watch data whenever the camera sees the label's gesture from the Gesture library, and off when you let go, just like holding the Mark label button. The PPG and motion rows in between carry the label, in the recording and in the exported CSV. Everything it marks starts unreviewed, and nothing is marked if the camera never sees the gesture.",
+            content: "Record as usual with the watch worn on the hand the camera sees. For pinch in and pinch out, pick “pinch in” above and add “pinch out” here: the camera marks a short pinch in where thumb and index meet and a short pinch out where they part, from their distance, with no library gesture needed. Add “pinch hold” too to label the time in between, while the fingers stay together. You can mark several labels in one recording: pick one above, then add others here. Only one label is on at a time; if two gestures are held together the one that began last is marked, and the other takes over if it is still held when that ends. While you record, the label is switched on in the watch data whenever the camera sees the label's gesture from the Gesture library, and off when you let go, just like holding the Mark label button. The PPG and motion rows in between carry the label, in the recording and in the exported CSV. Everything it marks starts unreviewed, and nothing is marked if the camera never sees the gesture.",
           }}
         />
       </CardHeader>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { HandFrame } from "../camera/handTypes";
 import type { MarkingCamera, MarkingTarget } from "./cameraMarker";
-import { MARK_MS, PINCH_IN, PINCH_OUT, PinchEdges, startPinchEdgeMarking, wantsPinchEdges } from "./pinchEdgeMarker";
+import { MARK_MS, PINCH_HOLD, PINCH_IN, PINCH_OUT, PinchEdges, startPinchEdgeMarking, wantsPinchEdges } from "./pinchEdgeMarker";
 import { makeHand } from "./testHands";
 
 /** A camera whose frames the test pushes by hand, at a chosen thumb-to-index distance (null: no hand). */
@@ -83,6 +83,38 @@ describe("startPinchEdgeMarking", () => {
       `open ${PINCH_OUT} at 1495`,
       `close ${PINCH_OUT} at ${1495 + MARK_MS}`,
     ]);
+  });
+
+  it("with the hold, labels the time between pinch in and pinch out as pinch hold", () => {
+    const primary = fakeCamera();
+    const secondary = fakeCamera();
+    const { store, calls } = fakeStore();
+    startPinchEdgeMarking(0.35, store, (slot) => (slot === "primary" ? primary.camera : secondary.camera), true);
+    play(primary.push, 1000, [1.0, 0.8, 0.2, ...Array(12).fill(0.1), 0.4, 0.7, 1.0, ...Array(12).fill(1.0)]);
+    expect(calls).toEqual([
+      `open ${PINCH_IN} at 1066`,
+      `close ${PINCH_IN} at ${1066 + MARK_MS}`,
+      `open ${PINCH_HOLD} at ${1066 + MARK_MS}`,
+      `close ${PINCH_HOLD} at 1495`,
+      `open ${PINCH_OUT} at 1495`,
+      `close ${PINCH_OUT} at ${1495 + MARK_MS}`,
+    ]);
+  });
+
+  it("with the hold, a pinch shorter than pinch in has no hold, and a hand lost mid-hold ends it where last seen", () => {
+    const primary = fakeCamera();
+    const secondary = fakeCamera();
+    const short = fakeStore();
+    startPinchEdgeMarking(0.35, short.store, (slot) => (slot === "primary" ? primary.camera : secondary.camera), true);
+    play(primary.push, 0, [1.0, 0.1, 0.1, 0.5, 1.0, ...Array(12).fill(1.0)]);
+    expect(short.calls.some((call) => call.includes(PINCH_HOLD))).toBe(false);
+
+    const lost = fakeStore();
+    const camera = fakeCamera();
+    const other = fakeCamera();
+    startPinchEdgeMarking(0.35, lost.store, (slot) => (slot === "primary" ? camera.camera : other.camera), true);
+    play(camera.push, 0, [1.0, 0.1, ...Array(12).fill(0.1), ...Array(20).fill(null)]);
+    expect(lost.calls).toEqual([`open ${PINCH_IN} at 33`, `close ${PINCH_IN} at ${33 + MARK_MS}`, `open ${PINCH_HOLD} at ${33 + MARK_MS}`, `close ${PINCH_HOLD} at ${13 * 33}`]);
   });
 
   it("cuts pinch in short when the release comes sooner, and stops listening when stopped", () => {

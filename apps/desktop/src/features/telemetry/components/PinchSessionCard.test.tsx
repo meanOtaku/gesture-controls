@@ -42,17 +42,18 @@ describe("PinchSessionCard", () => {
   it("lists what is missing with a fix for each, and starts only when everything is ready", async () => {
     tauri.invoke.mockImplementation(async (command: string) => (command === "list_model_labels" ? [] : undefined));
     const { rerender } = render(<PinchSessionCard recording={false} watchConnected={false} desktopAvailable onStop={() => undefined} />);
-    expect(await screen.findByText("Add the labels pinch in and pinch out")).toBeInTheDocument();
+    expect(await screen.findByText("Add the labels pinch in, pinch hold and pinch out")).toBeInTheDocument();
     expect(screen.getByText("Connect the watch (Watch page)")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start pinch session" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Add them" }));
-    await vi.waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("create_model_label", { input: expect.objectContaining({ id: "pinch_in", role: "positiveGesture" }) }));
-    expect(tauri.invoke).toHaveBeenCalledWith("create_model_label", { input: expect.objectContaining({ id: "pinch_out" }) });
+    await vi.waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("create_model_label", { input: expect.objectContaining({ id: "pinch_out" }) }));
+    expect(tauri.invoke).toHaveBeenCalledWith("create_model_label", { input: expect.objectContaining({ id: "pinch_in", role: "positiveGesture" }) });
+    expect(tauri.invoke).toHaveBeenCalledWith("create_model_label", { input: expect.objectContaining({ id: "pinch_hold" }) });
     fireEvent.click(screen.getAllByRole("button", { name: "Turn on" })[0]);
     expect(camera.enable).toHaveBeenCalled();
 
-    tauri.invoke.mockImplementation(async (command: string) => (command === "list_model_labels" ? [label("pinch_in"), label("pinch_out")] : undefined));
+    tauri.invoke.mockImplementation(async (command: string) => (command === "list_model_labels" ? [label("pinch_in"), label("pinch_hold"), label("pinch_out")] : undefined));
     camera.snapshot = { status: "on", recordLandmarks: true };
     cameraAssist.setEnabled(true);
     rerender(<PinchSessionCard recording={false} watchConnected desktopAvailable={false} onStop={() => undefined} />);
@@ -65,8 +66,8 @@ describe("PinchSessionCard", () => {
     telemetryStore.toggleExtraLabel("pinch");
     fireEvent.click(screen.getByRole("button", { name: "Start pinch session" }));
     expect(start).toHaveBeenCalledWith(expect.objectContaining({ label: "pinch_in", labelCues: false }), Math.random, "pinch");
-    expect(arm).toHaveBeenCalledWith(["pinch_in", "pinch_out"], []);
+    expect(arm).toHaveBeenCalledWith(["pinch_in", "pinch_hold", "pinch_out"], []);
     expect(telemetryStore.getSelectedLabel()).toBe("pinch_in");
-    expect(telemetryStore.getExtraLabels()).toEqual(["pinch_out"]);
+    expect(telemetryStore.getExtraLabels()).toEqual(["pinch_hold", "pinch_out"]);
   });
 });

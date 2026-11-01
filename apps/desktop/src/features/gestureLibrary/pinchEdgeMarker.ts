@@ -10,6 +10,8 @@ import type { MarkingCamera, MarkingTarget } from "./cameraMarker";
 export const PINCH_IN = "pinch_in";
 /** The label marked where they separate again. */
 export const PINCH_OUT = "pinch_out";
+/** The label on while they stay together, between pinch in and pinch out (optional). */
+export const PINCH_HOLD = "pinch_hold";
 /** How long each mark lasts: a short stretch at the moment, not the hold. */
 export const MARK_MS = 300;
 /** How far past the contact level the fingers must open before a release counts, so a distance hovering at the level does not mark a flurry. */
@@ -19,10 +21,13 @@ const FRESH_MS = 200;
 /** With no hand seen for this long, the next reading starts afresh rather than being taken as a touch or a release. */
 const LOST_MS = 400;
 
-/** Whether `labels` asks for pinch-in and pinch-out marking: both of them. */
+/** Whether `labels` asks for pinch-in and pinch-out marking: both of them (with `pinch_hold`, the hold is labelled too). */
 export function wantsPinchEdges(labels: readonly string[]): boolean {
   return labels.includes(PINCH_IN) && labels.includes(PINCH_OUT);
 }
+
+/** The labels pinch marking writes, which no other label may share a recording with. */
+export const PINCH_LABELS: readonly string[] = [PINCH_IN, PINCH_HOLD, PINCH_OUT];
 
 export type PinchEdge = { kind: "in" | "out"; atMs: number };
 
@@ -94,19 +99,25 @@ const SLOTS: CameraSlot[] = ["primary", "secondary"];
 /**
  * Marks the recording under way with `pinch_in` where the camera sees thumb and index meet and `pinch_out` where they
  * separate, each as a short unreviewed interval of `MARK_MS` from that moment (cut short if the next one comes sooner),
- * until the returned stop function runs. It reads the cameras' frames directly, like `startCameraMarking`, so it keeps
- * marking whichever page is open; with both cameras on, the hand closer to a pinch in either counts. `contact` is the
- * distance, in hand sizes, below which the fingers touch.
+ * until the returned stop function runs. With `withHold`, `pinch_hold` is on for the rest of the time they stay together,
+ * from the end of pinch in to pinch out (only one label is on at a time, so the three follow each other); if the hand is
+ * lost mid-hold, the hold ends at the last frame that saw it. It reads the cameras' frames directly, like
+ * `startCameraMarking`, so it keeps marking whichever page is open; with both cameras on, the hand closer to a pinch in
+ * either counts. `contact` is the distance, in hand sizes, below which the fingers touch.
  */
 export function startPinchEdgeMarking(
   contact = DEFAULT_CONTACT_THRESHOLD,
   target: MarkingTarget = telemetryStore,
   cameraFor: (slot: CameraSlot) => MarkingCamera = getCameraController,
+  withHold = false,
 ): () => void {
   const edges = new PinchEdges(contact);
   const latest = new Map<CameraSlot, { atMs: number; distance: number | null }>();
-  // The mark now open, and where it is to end.
+  // The mark now open, and where it is to end (never, for the hold, until the fingers part).
   let open: { label: string; untilMs: number } | null = null;
+  // Whether the fingers are together, and when a hand was last seen.
+  let holding = false;
+  let lastSeenMs = -Infinity;
 
   const closeOpen = (atMs: number) => {
     if (open && target.closeTimelineLabelAt(open.label, Math.min(atMs, open.untilMs))) open = null;
@@ -116,11 +127,26 @@ export function startPinchEdgeMarking(
 
   const onFrame = (slot: CameraSlot, frame: HandFrame) => {
     latest.set(slot, { atMs: frame.captureMs, distance: closestPinch(frame) });
-    if (open && frame.captureMs >= open.untilMs) closeOpen(open.untilMs);
+    if (open && frame.captureMs >= open.untilMs) {
+      const endedAt = open.untilMs;
+      const ended = open.label;
+      closeOpen(endedAt);
+      // Pinch in is over and the fingers are still together: the hold takes over from there.
+      if (withHold && holding && ended === PINCH_IN && open === null && target.setTimelineLabel(PINCH_HOLD, "camera_proposal", endedAt)) {
+        open = { label: PINCH_HOLD, untilMs: Infinity };
+      }
+    }
     const fresh = [...latest.values()].filter((reading) => frame.captureMs - reading.atMs <= FRESH_MS && reading.distance !== null);
     const distance = fresh.length === 0 ? null : Math.min(...fresh.map((reading) => reading.distance as number));
+    if (distance !== null) lastSeenMs = frame.captureMs;
+    else if (open?.label === PINCH_HOLD && frame.captureMs - lastSeenMs > LOST_MS) {
+      // The hand left mid-hold: end the hold where it was last seen, not at whatever comes next.
+      closeOpen(lastSeenMs);
+      holding = false;
+    }
     const edge = edges.update(frame.captureMs, distance);
     if (!edge) return;
+    holding = edge.kind === "in";
     if (open) closeOpen(edge.atMs);
     const label = edge.kind === "in" ? PINCH_IN : PINCH_OUT;
     // Refused while the recording is still arming: that moment is not marked.

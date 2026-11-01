@@ -9,7 +9,7 @@ import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { getCameraController } from "../../camera/cameraService";
 import { cameraAssist } from "../../gestureLibrary/cameraAssist";
-import { PINCH_IN, PINCH_OUT } from "../../gestureLibrary/pinchEdgeMarker";
+import { PINCH_HOLD, PINCH_IN, PINCH_OUT } from "../../gestureLibrary/pinchEdgeMarker";
 import type { DatasetLabel } from "../../model-lab/types";
 import { guidedRunner } from "../recording/guidedRunner";
 import { planProblem, planSteps, totalMs, type GuidedPlan } from "../recording/guidedSession";
@@ -106,6 +106,7 @@ export function PinchSessionCard({ recording, watchConnected, desktopAvailable, 
     try {
       for (const [id, displayName, description] of [
         [PINCH_IN, "Pinch in", "The moment thumb and index finger meet."],
+        [PINCH_HOLD, "Pinch hold", "Thumb and index finger held together, between pinch in and pinch out."],
         [PINCH_OUT, "Pinch out", "The moment thumb and index finger part again."],
       ] as const) {
         if (!labels?.some((label) => label.id === id)) {
@@ -123,8 +124,8 @@ export function PinchSessionCard({ recording, watchConnected, desktopAvailable, 
     { id: "watch", done: watchConnected, text: watchConnected ? "Watch connected" : "Connect the watch (Watch page)" },
     {
       id: "labels",
-      done: live(PINCH_IN) && live(PINCH_OUT),
-      text: live(PINCH_IN) && live(PINCH_OUT) ? "Labels pinch in and pinch out" : "Add the labels pinch in and pinch out",
+      done: live(PINCH_IN) && live(PINCH_HOLD) && live(PINCH_OUT),
+      text: live(PINCH_IN) && live(PINCH_HOLD) && live(PINCH_OUT) ? "Labels pinch in, pinch hold and pinch out" : "Add the labels pinch in, pinch hold and pinch out",
       fix: desktopAvailable ? { label: "Add them", run: createLabels } : undefined,
     },
     {
@@ -144,15 +145,15 @@ export function PinchSessionCard({ recording, watchConnected, desktopAvailable, 
 
   const start = () => {
     setError(null);
-    // The recording's labels: pinch in, with pinch out beside it, and nothing else.
+    // The recording's labels: pinch in, with pinch hold and pinch out beside it, and nothing else.
     telemetryStore.selectDatasetLabel(PINCH_IN);
-    for (const extra of telemetryStore.getExtraLabels()) if (extra !== PINCH_OUT) telemetryStore.toggleExtraLabel(extra);
-    if (!telemetryStore.getExtraLabels().includes(PINCH_OUT)) telemetryStore.toggleExtraLabel(PINCH_OUT);
+    for (const extra of telemetryStore.getExtraLabels()) if (extra !== PINCH_OUT && extra !== PINCH_HOLD) telemetryStore.toggleExtraLabel(extra);
+    for (const wanted of [PINCH_HOLD, PINCH_OUT]) if (!telemetryStore.getExtraLabels().includes(wanted)) telemetryStore.toggleExtraLabel(wanted);
     if (!guidedRunner.start(plan, Math.random, "pinch")) {
       setError("Could not start: stop the recording under way first.");
       return;
     }
-    cameraAssist.arm([PINCH_IN, PINCH_OUT], []);
+    cameraAssist.arm([PINCH_IN, PINCH_HOLD, PINCH_OUT], []);
   };
 
   if (session?.source === "pinch") {
@@ -162,7 +163,7 @@ export function PinchSessionCard({ recording, watchConnected, desktopAvailable, 
         nameOf={() => "Pinch"}
         onStop={onStop}
         title="Pinch in / out session"
-        description="Pinch at each cue, hold, and let go; keep your hand still in between. The camera marks pinch in and pinch out. The recording stops and is saved by itself at the end."
+        description="Pinch at each cue, hold, and let go; keep your hand still in between. The camera marks pinch in, the hold and pinch out. The recording stops and is saved by itself at the end."
       />
     );
   }
@@ -172,11 +173,11 @@ export function PinchSessionCard({ recording, watchConnected, desktopAvailable, 
       <CardHeader>
         <SectionHeader
           title="Pinch in / out session"
-          description="Record pinch in and pinch out, marked by the camera, in one go."
+          description="Record pinch in, pinch hold and pinch out, marked by the camera, in one go."
           help={{
             label: "About the pinch in / out session",
             content:
-              "The app cues each pinch on screen and with a buzz on the watch, at random moments, with a still rest between. Touch thumb and index at the cue, hold, and let go when it says. The camera marks a short pinch in where the fingers meet and a short pinch out where they part, from their distance, so the labels sit on the real moments rather than on your reaction to the cue. Keep the hand still in the rests: models trained with the still-hand rule learn only from pinches made from a still hand. Train one model for pinch in and one for pinch out afterwards in Model Lab.",
+              "The app cues each pinch on screen and with a buzz on the watch, at random moments, with a still rest between. Touch thumb and index at the cue, hold, and let go when it says. The camera marks a short pinch in where the fingers meet, pinch hold while they stay together, and a short pinch out where they part, from their distance, so the labels sit on the real moments rather than on your reaction to the cue. Keep the hand still in the rests: models trained with the still-hand rule learn only from pinches made from a still hand. Train a model for each label you want detected afterwards in Model Lab.",
           }}
         />
       </CardHeader>
