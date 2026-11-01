@@ -1502,6 +1502,40 @@ mod tests {
         assert!(store.registry().validate().is_ok());
     }
 
+    /// One-off tool: with the app closed, makes models active in Monitor only: each is marked monitor-only (it may never
+    /// start a recipe), approved, checked that it loads, and activated, as Approve and Activate do; the runtime mode is set
+    /// to Monitor. `MODEL_LAB_DIR` is the app's `model-lab` folder, `ACTIVATE_MODELS` the version ids, separated by `;`.
+    #[test]
+    #[ignore = "a tool: needs MODEL_LAB_DIR and ACTIVATE_MODELS, with the app closed"]
+    fn activate_models_in_monitor_while_the_app_is_closed() {
+        let dir = std::path::PathBuf::from(std::env::var("MODEL_LAB_DIR").expect("MODEL_LAB_DIR"));
+        let (mut store, _) = open_registry(&dir, Some(&dir.join("registry.json"))).unwrap();
+        let now = LabelRuntimeHost::now_rfc3339();
+        for raw in std::env::var("ACTIVATE_MODELS").expect("ACTIVATE_MODELS").split(';').filter(|s| !s.is_empty()) {
+            let id = ModelVersionId::new(raw).unwrap();
+            store
+                .mutate(|r| {
+                    let version = r.versions.get_mut(&id).expect("no such model");
+                    version.deployable = false;
+                    version.monitor_only = true;
+                    if version.state == LifecycleState::Draft {
+                        r.transition(&id, LifecycleState::Evaluated, &now)?;
+                    }
+                    if r.versions[&id].state == LifecycleState::Evaluated {
+                        r.transition(&id, LifecycleState::Approved, &now)?;
+                    }
+                    Ok(())
+                })
+                .unwrap();
+            label_inference::check_loadable(&store.registry().versions[&id], &dir).unwrap();
+            store.mutate(|r| r.activate(&id, &now).map(|_| ())).unwrap();
+            println!("{raw}: active, monitor only");
+        }
+        store.mutate(|r| { r.set_inference_mode(model_lab_core::InferenceMode::Monitor); Ok(()) }).unwrap();
+        assert!(store.registry().validate().is_ok());
+        println!("runtime mode: {:?}", store.registry().inference_mode);
+    }
+
     #[test]
     #[ignore = "one-off: set PURGE_E2E_DIR to a copy of a model-lab folder"]
     fn the_cleanup_on_a_copy_of_a_real_store() {
