@@ -234,3 +234,29 @@ Both methods work on these recordings once their segments sit on the gesture. Th
 in ViWatch still adds nothing here: with one training day there is nothing for it to align across. The comparison with
 the papers' figures is not like for like: one person, 50 Hz, and two gestures for the held-out-day tests, against
 their many users, 100-4000 Hz, and 4-17 gestures.
+
+## Step 12: the app's trees model against the CNN, on the same recordings (2026-11-01)
+
+`cnn_vs_trees_check.py` → `cnn-vs-trees/`. The app's trainer (its features, ExtraTrees and peak trigger) and step 9's
+CNN (motion and pulse, z-score + sigmoid, run as a sliding 1.0 s window), trained on the same camera-timed `pinch_in`
+recordings (`data/recordings/pinch-relabelled`) and scored at the same moments through the same detection rule. A
+detection catches a pinch from its start to 1.3 s after. Pinch ins caught at the best threshold within each budget, with
+still hand (the app's setting):
+
+| Split | Model | ≤1 false alarm/min | ≤0.5/min | ≤0.2/min | Delay |
+|---|---|---:|---:|---:|---:|
+| the app's split (10 / 4 recordings) | trees | 27/42 (64%) | 11/42 (26%) | 11/42 (26%) | 873 ms |
+| | CNN | 29/42 (69%) | 28/42 (67%) | 27/42 (64%) | 497 ms |
+| train 10-14, test 10-17 | trees | 11/21 (52%) | 2/21 (10%) | 1/21 (5%) | 869 ms |
+| | CNN | 11/21 (52%) | — (10/21 at 0.6/min) | — | 494 ms |
+| train 10-17, test 10-14 | trees | 70/150 (47%) | 63/150 (42%) | 29/150 (19%) | 923 ms |
+| | CNN | 95/150 (63%) | 79/150 (53%) | 25/150 (17%) | 498 ms |
+
+* With still hand, the CNN catches as many pinches or more at 1 false alarm a minute, and at about half the delay
+  (0.5 s against 0.9 s after the pinch starts). At stricter budgets it is far ahead on the app's split, ahead on 10-14,
+  and on 10-17 it never got under 0.6 a minute (2 false alarms), where trees caught almost nothing.
+* Without the still-hand rule the CNN is worse: on two splits it never got under 1 false alarm a minute (on the app's
+  split, 32/73 at 1.8 a minute against trees' 11/73 with none), and on 10-14 it caught 32% against 45%. It fires on
+  jolts in movement; it relies on the rule to keep those out.
+* The test time a false alarm could happen in is short (2-4 minutes a split), so below 1 a minute each figure rests on
+  one or two false alarms. Three seeds a model, scores averaged.
