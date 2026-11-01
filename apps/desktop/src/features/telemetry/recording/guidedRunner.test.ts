@@ -65,6 +65,14 @@ describe("the guided session runner", () => {
     expect(first.endRawRow! - first.startRawRow).toBeLessThanOrEqual(400 / 20 + 2);
   });
 
+  it("only cues, labelling nothing, when the camera marks the recording, and says who started it", () => {
+    const plan = { ...DEFAULT_PLAN, label: "pinch_in", cues: 2, holdMs: 400, minGapSeconds: 2, maxGapSeconds: 2, activities: [], labelCues: false };
+    expect(guidedRunner.start(plan, () => 0.5, "pinch")).toBe(true);
+    expect(guidedRunner.snapshot()?.source).toBe("pinch");
+    run(LEAD_IN_MS + 400 + 2000 + 400 + 1000);
+    expect(telemetryStore.getTimelineIntervals()).toEqual([]);
+  });
+
   it("will not start over a recording already under way", () => {
     telemetryStore.setDatasetCaptureMode("timeline");
     telemetryStore.startDatasetRecording();

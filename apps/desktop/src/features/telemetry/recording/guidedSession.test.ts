@@ -37,6 +37,14 @@ describe("a guided session's plan", () => {
     expect(prompt(steps, totalMs(steps)).tone).toBe("done");
   });
 
+  it("says to let go just after each hold, and can say its own cue", () => {
+    const steps = planSteps(plan, () => 0.5);
+    const afterFirst = LEAD_IN_MS + 800;
+    expect(prompt(steps, afterFirst + 10)).toMatchObject({ title: "Let go", tone: "release" });
+    expect(prompt(steps, afterFirst + 1500).tone).not.toBe("release");
+    expect(prompt(steps, LEAD_IN_MS + 10, () => "Pinch in", "Pinch")).toMatchObject({ title: "Pinch", tone: "cue" });
+  });
+
   it("says what is wrong with a plan", () => {
     expect(planProblem(plan)).toBeNull();
     expect(planProblem({ ...plan, label: "" })).toMatch(/gesture/);

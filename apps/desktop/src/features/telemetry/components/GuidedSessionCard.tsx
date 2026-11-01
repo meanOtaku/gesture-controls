@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import type { DatasetLabel } from "../../model-lab/types";
-import { guidedRunner } from "../recording/guidedRunner";
+import { guidedRunner, type GuidedSnapshot } from "../recording/guidedRunner";
 import { loadPlan, planProblem, planSteps, prompt, savePlan, totalMs, type GuidedPlan } from "../recording/guidedSession";
 
 const minutes = (ms: number) => `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} s`;
@@ -53,35 +53,9 @@ export function GuidedSessionCard({ recording, onStop }: GuidedSessionCardProps)
     if (!guidedRunner.start(plan)) setError("Could not start: stop the recording under way first.");
   };
 
-  if (session) {
-    const elapsed = session.elapsedMs;
-    const shown = elapsed === null ? { title: "Waiting for the watch…", detail: "The session starts with the first sample.", tone: "rest" as const } : prompt(session.steps, elapsed, nameOf);
-    const total = totalMs(session.steps);
-    return (
-      <Card role="region" aria-label="Guided session" className="min-w-0">
-        <CardHeader>
-          <CardTitle>Guided session</CardTitle>
-          <CardDescription>Follow the prompts. The recording stops and is saved by itself at the end.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <div className={`guided-prompt guided-${shown.tone}`} role="status" aria-live="assertive">
-            <strong>{shown.title}</strong>
-            <span>{shown.detail}</span>
-          </div>
-          <div className="guided-progress" aria-label="Session progress">
-            <div style={{ width: `${Math.min(100, ((elapsed ?? 0) / total) * 100)}%` }} />
-          </div>
-          <p className="hint">
-            {elapsed === null ? minutes(total) : `${minutes(Math.max(0, total - elapsed))} left`}
-            {session.buzzFailed ? ". The watch could not be buzzed: follow the screen." : ""}
-          </p>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={() => { guidedRunner.stop(); onStop(); }}>Stop and save</Button>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  // A session the pinch in / out card started shows its prompts there.
+  if (session?.source === "pinch") return null;
+  if (session) return <GuidedRunningView session={session} nameOf={nameOf} onStop={onStop} title="Guided session" />;
 
   const activities = plan.activities;
   const setActivity = (index: number, next: Partial<GuidedPlan["activities"][number]>) =>
@@ -150,6 +124,45 @@ export function GuidedSessionCard({ recording, onStop }: GuidedSessionCardProps)
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" disabled={recording || problem !== null} onClick={start}>Start guided session</Button>
           <span className="hint">{problem ?? `About ${minutes(length)}.`}{recording && !problem ? " A recording is under way." : ""}</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** The prompts of a guided session under way: what to do now, the progress, and Stop and save. */
+export function GuidedRunningView({ session, nameOf, onStop, title, description = "Follow the prompts. The recording stops and is saved by itself at the end." }: {
+  session: GuidedSnapshot;
+  nameOf: (label: string) => string;
+  onStop: () => void;
+  title: string;
+  description?: string;
+}) {
+  const elapsed = session.elapsedMs;
+  const shown = elapsed === null
+    ? { title: "Waiting for the watch…", detail: "The session starts with the first sample.", tone: "rest" as const }
+    : prompt(session.steps, elapsed, nameOf, session.plan.cueText);
+  const total = totalMs(session.steps);
+  return (
+    <Card role="region" aria-label={title} className="min-w-0">
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className={`guided-prompt guided-${shown.tone}`} role="status" aria-live="assertive">
+          <strong>{shown.title}</strong>
+          <span>{shown.detail}</span>
+        </div>
+        <div className="guided-progress" aria-label="Session progress">
+          <div style={{ width: `${Math.min(100, ((elapsed ?? 0) / total) * 100)}%` }} />
+        </div>
+        <p className="hint">
+          {elapsed === null ? minutes(total) : `${minutes(Math.max(0, total - elapsed))} left`}
+          {session.buzzFailed ? ". The watch could not be buzzed: follow the screen." : ""}
+        </p>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" onClick={() => { guidedRunner.stop(); onStop(); }}>Stop and save</Button>
         </div>
       </CardContent>
     </Card>

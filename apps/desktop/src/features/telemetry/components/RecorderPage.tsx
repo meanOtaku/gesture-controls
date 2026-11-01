@@ -7,6 +7,7 @@ import { DatasetCaptureCard } from "./DatasetCaptureCard";
 import { ExportSettingsCard } from "./ExportSettingsCard";
 import { GuidedSessionCard } from "./GuidedSessionCard";
 import { JustRecordedCard } from "./JustRecordedCard";
+import { PinchSessionCard } from "./PinchSessionCard";
 import { SessionDetailsCard } from "./SessionDetailsCard";
 import { SignalHealthStrip } from "./SignalHealthStrip";
 import { StreamStatus } from "./StreamStatus";
@@ -42,6 +43,15 @@ export function RecorderPage() {
     <StreamStatus />
     <SignalHealthStrip recording={datasetRecording} />
     <div className="card-stack">
+      <PinchSessionCard
+        recording={datasetRecording}
+        watchConnected={telemetryStore.getWatchStatus()?.connected === true}
+        desktopAvailable={desktopAvailable}
+        onStop={() => {
+          telemetryStore.stopDatasetRecording();
+          void saveDatasetRecording();
+        }}
+      />
       <ExportSettingsCard />
       <JustRecordedCard recording={datasetRecording} />
       <SessionDetailsCard context={telemetryStore.getSessionContext()} onChange={(context) => telemetryStore.setSessionContext(context)} recording={datasetRecording} />

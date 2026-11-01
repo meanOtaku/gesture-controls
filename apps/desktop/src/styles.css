@@ -440,6 +440,8 @@ html.overlay-document body::before { display:none; }
 .guided-cue span { color:var(--blue); }
 .guided-ready { border-color:var(--yellow); }
 .guided-ready strong { color:var(--yellow); }
+.guided-release { border-color:var(--cyan); }
+.guided-release strong { color:var(--cyan); }
 .guided-activity { border-color:var(--cyan); }
 .guided-activity strong { color:var(--cyan); }
 .guided-progress { height:6px; background:var(--wash); }
