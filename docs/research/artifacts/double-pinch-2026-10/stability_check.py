@@ -21,7 +21,7 @@ all three must hold.
     uv run --project tools/label-trainer python docs/research/artifacts/double-pinch-2026-10/stability_check.py
 
 Run from the repository root (under a minute). Writes stability/results.json and results.md. With `--without-31oct`,
-the recordings in data/recordings/31oct (the 2026-10-31 guided sessions) are left out, and the results go to
+the recordings in data/recordings/old/31oct (the 2026-10-31 guided sessions) are left out, and the results go to
 stability-without-31oct/. Typing, mouse and arm movement exist only in those sessions, so those activities drop out.
 """
 import importlib.util, json, sys, time
@@ -85,7 +85,7 @@ def main():
     out_dir = HERE / ("stability-without-31oct" if without else "stability"); out_dir.mkdir(exist_ok=True)
     recs = M.load_all()
     if without:
-        left_out = {p.name for p in (M.ROOT / "data/recordings/31oct").iterdir()}
+        left_out = {p.name for p in (M.ROOT / "data/recordings/old/31oct").iterdir()}
         print("leaving out:", [(r["name"], r["kind"]) for r in recs if r["name"] in left_out])
         recs = [r for r in recs if r["name"] not in left_out]
     for r in recs:

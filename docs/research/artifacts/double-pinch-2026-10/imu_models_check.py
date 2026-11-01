@@ -63,7 +63,7 @@ from label_trainer.csv_io import load_recording  # noqa: E402
 _spec = importlib.util.spec_from_file_location("contact", HERE / "imu_contact_check.py")
 C = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(C)
 
-FOLDERS = ("data/recordings/2026-10-downloads", "data/recordings/31oct")
+FOLDERS = ("data/recordings/old/2026-10-downloads", "data/recordings/old/31oct")
 NEGATIVE_GESTURES = ("fist", "thumbs_up", "hand_twit", "everything_else")
 HZ = 50.0
 WIN = 50                          # 1.0 s

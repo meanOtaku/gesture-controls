@@ -33,7 +33,7 @@ sys.path.insert(0, str(ROOT / "tools/label-trainer/src"))
 from label_trainer import label_train as lt, ppg_onset as P  # noqa: E402
 from label_trainer.csv_io import load_recording  # noqa: E402
 
-FOLDERS = ("data/recordings/2026-10-downloads", "data/recordings/31oct")
+FOLDERS = ("data/recordings/old/2026-10-downloads", "data/recordings/old/31oct")
 GRID_HZ = 50.0
 HIGHPASS_S = 0.3
 AROUND_S = (-0.5, 1.0)           # where a pinch's peak is looked for, from its labelled start
