@@ -26,6 +26,10 @@ export interface GuidedPlan {
   /** The label for the everyday stretches; with none, they are recorded unlabelled. */
   everydayLabel: string | null;
   activities: GuidedActivity[];
+  /** Whether the session labels each cue itself (the default); false when the camera marks the recording instead. */
+  labelCues?: boolean;
+  /** What a cue says, in place of "<label> now". */
+  cueText?: string;
 }
 
 export type GuidedStep =
@@ -41,6 +45,8 @@ export const COUNTDOWN_MS = 3000;
 export const CUE_BUZZ_MS = 120;
 /** A short pause between activities, to change what you are doing. */
 const ACTIVITY_CHANGE_MS = 3000;
+/** The start of the rest after a hold says to let go. */
+export const LET_GO_MS = 1000;
 
 export const DEFAULT_PLAN: GuidedPlan = {
   label: "",
@@ -110,15 +116,24 @@ export function stepAt(steps: GuidedStep[], elapsedMs: number): { step: GuidedSt
 }
 
 /** What to show for a step: the cue to act on, or what to do while waiting. */
-export function prompt(steps: GuidedStep[], elapsedMs: number, nameOf: (label: string) => string = (label) => label): { title: string; detail: string; tone: "cue" | "ready" | "rest" | "activity" | "done" } {
+export function prompt(
+  steps: GuidedStep[],
+  elapsedMs: number,
+  nameOf: (label: string) => string = (label) => label,
+  cueText?: string,
+): { title: string; detail: string; tone: "cue" | "release" | "ready" | "rest" | "activity" | "done" } {
   const now = stepAt(steps, elapsedMs);
   if (!now) return { title: "Done", detail: "The session is over and being saved.", tone: "done" };
   const { step, index, remainingMs } = now;
-  if (step.kind === "cue") return { title: `${nameOf(step.label)} now`, detail: `Hold it… (${step.number} of ${step.of})`, tone: "cue" };
+  if (step.kind === "cue") return { title: cueText ?? `${nameOf(step.label)} now`, detail: `Hold it… (${step.number} of ${step.of})`, tone: "cue" };
   if (step.kind === "activity") {
     return { title: step.activity, detail: `${Math.ceil(remainingMs / 1000)} s left. Do it naturally; no gesture.`, tone: "activity" };
   }
   const next = steps[index + 1];
+  const previous = steps[index - 1];
+  if (previous?.kind === "cue" && elapsedMs - step.atMs < LET_GO_MS) {
+    return { title: "Let go", detail: "Then keep your hand still until the next cue.", tone: "release" };
+  }
   if (next?.kind === "cue" && remainingMs <= COUNTDOWN_MS) {
     return { title: `Get ready… ${Math.ceil(remainingMs / 1000)}`, detail: `Cue ${next.number} of ${next.of}`, tone: "ready" };
   }

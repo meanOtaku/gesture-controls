@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ChevronDownIcon, ChevronRightIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
@@ -6,12 +7,15 @@ import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import {
+  HAND_STEADINESS_EVENT,
   LABEL_DETECTIONS_EVENT,
   appendActivity,
   describeReport,
+  describeSteadiness,
   type ActivityEntry,
   type ActivityTone,
   type DetectionReport,
+  type HandSteadiness,
 } from "../labelModels";
 
 const OPEN_KEY = "labActivityOpen";
@@ -30,6 +34,33 @@ const TONE: Record<ActivityTone, { label: string; variant: "default" | "secondar
   released: { label: "Released", variant: "secondary" },
   warning: { label: "Attention", variant: "destructive" },
 };
+
+/** Whether the hand is still right now. A gesture may only start when it was still just before, so this says why one did not. */
+function HandSteadinessBadge({ desktopAvailable }: { desktopAvailable: boolean }) {
+  const [steadiness, setSteadiness] = useState<HandSteadiness | null>(null);
+  useEffect(() => {
+    if (!desktopAvailable) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void Promise.resolve()
+      .then(() => invoke<HandSteadiness>("get_hand_steadiness"))
+      .then((now) => { if (!disposed) setSteadiness(now); })
+      .catch(() => undefined);
+    void Promise.resolve(listen<HandSteadiness>(HAND_STEADINESS_EVENT, ({ payload }) => { if (!disposed) setSteadiness(payload); }))
+      .then((fn) => {
+        if (disposed) fn?.();
+        else unlisten = fn;
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [desktopAvailable]);
+  if (!desktopAvailable) return null;
+  const { text, variant } = describeSteadiness(steadiness);
+  return <Badge variant={variant} aria-live="polite">{text}</Badge>;
+}
 
 /** What the models have been doing this session: detections, releases, and anything that held one off. */
 export function DetectionActivity({ desktopAvailable }: { desktopAvailable: boolean }) {
@@ -78,6 +109,7 @@ export function DetectionActivity({ desktopAvailable }: { desktopAvailable: bool
           description="Detections and releases from active models, newest first."
           status={
             <div className="flex items-center gap-2">
+              <HandSteadinessBadge desktopAvailable={desktopAvailable} />
               <Button type="button" variant="ghost" disabled={entries.length === 0} onClick={() => setEntries([])}>
                 <Trash2Icon aria-hidden="true" />
                 Clear
@@ -90,7 +122,7 @@ export function DetectionActivity({ desktopAvailable }: { desktopAvailable: bool
           }
           help={{
             label: "About activity",
-            content: "In Monitor you see what the models would have done; in Live the same detections can start recipes. A release is always shown, in every mode. A line marked Attention means a window was skipped or two labels that cannot coexist were both detected.",
+            content: "In Monitor you see what the models would have done; in Live the same detections can start recipes. A release is always shown, in every mode. A line marked Attention means a window was skipped, two labels that cannot coexist were both detected, or a gesture was not started because the hand was moving just before it. The badge says whether the hand is still right now: a gesture only starts when the watch was still for the second before it.",
           }}
         />
       </CardHeader>

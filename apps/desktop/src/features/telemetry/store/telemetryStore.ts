@@ -117,6 +117,12 @@ export interface DatasetFolderFiles {
   ppgClockCsv: string;
   ppgRows: number;
   imuRows: number;
+  /**
+   * The camera's evidence for the session, as the recording bundle saves it (`hand_landmarks.csv`, `clock_sync.csv`, and
+   * `hand_landmarks_2.csv` with a second camera); empty when the camera was off. The export puts the landmarks on the watch
+   * clock (`model_lab::export_dataset_folder`).
+   */
+  cameraFiles: Record<string, string>;
 }
 
 /**
@@ -289,6 +295,8 @@ class TelemetryStore {
   private datasetRequestedStartAtIso: string | null = null;
   private datasetActualStartAtIso: string | null = null;
   private datasetActualStartMonotonicMs: number | null = null;
+  /** When the current recording stopped, on the same clock; null while it runs (or before it starts). */
+  private datasetActualEndMonotonicMs: number | null = null;
   /** Adds optional evidence (such as camera landmarks) to a recording bundle; null when there is none. */
   private evidenceProvider: ((startMs: number, endMs: number) => RecordingEvidence | null) | null = null;
   private readonly datasetRows = new RingBuffer<DatasetRow>(MAX_CSV_ROWS);
@@ -524,6 +532,7 @@ class TelemetryStore {
     this.datasetRequestedStartAtIso = new Date().toISOString();
     this.datasetActualStartAtIso = null;
     this.datasetActualStartMonotonicMs = null;
+    this.datasetActualEndMonotonicMs = null;
     this.timelineIntervals = [];
     this.activeTimelineIntervalId = null;
     this.publishNow();
@@ -758,6 +767,7 @@ class TelemetryStore {
     }
     this.datasetRecording = false;
     this.datasetRecordingState = "saved";
+    this.datasetActualEndMonotonicMs = performance.now();
     this.publishNow();
   }
 
@@ -769,6 +779,7 @@ class TelemetryStore {
     this.datasetRequestedStartAtIso = null;
     this.datasetActualStartAtIso = null;
     this.datasetActualStartMonotonicMs = null;
+    this.datasetActualEndMonotonicMs = null;
     this.datasetRows.clear();
     this.timelineIntervals = [];
     this.activeTimelineIntervalId = null;
@@ -829,7 +840,15 @@ class TelemetryStore {
       ppgClockCsv: this.ppgClockCsv(),
       ppgRows: ppg.length,
       imuRows: imu.length,
+      cameraFiles: this.datasetCameraFiles(),
     };
+  }
+
+  /** The camera evidence between the session's first accepted sample and its stop (now, while it still runs). */
+  private datasetCameraFiles(): Record<string, string> {
+    if (this.datasetActualStartMonotonicMs === null) return {};
+    const endMs = this.datasetActualEndMonotonicMs ?? performance.now();
+    return this.evidenceProvider?.(this.datasetActualStartMonotonicMs, endMs)?.files ?? {};
   }
 
   private datasetMetadataLines(rowCount: number): string[] {
@@ -1256,6 +1275,7 @@ class TelemetryStore {
     this.datasetRequestedStartAtIso = null;
     this.datasetActualStartAtIso = null;
     this.datasetActualStartMonotonicMs = null;
+    this.datasetActualEndMonotonicMs = null;
     this.datasetRows.clear();
     this.datasetCaptureMode = "timeline";
     this.timelineIntervals = [];

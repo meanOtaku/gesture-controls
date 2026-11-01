@@ -8,6 +8,8 @@ const TICK_MS = 25;
 
 interface Running {
   steps: GuidedStep[];
+  plan: GuidedPlan;
+  source: GuidedSource;
   /** When the first sample landed (performance clock); the session's time counts from here. */
   startedAtMs: number | null;
   applied: string | null;
@@ -16,8 +18,13 @@ interface Running {
   timer: ReturnType<typeof setInterval>;
 }
 
+/** Which card started the session, so only that one shows its prompts. */
+export type GuidedSource = "guided" | "pinch";
+
 export interface GuidedSnapshot {
   steps: GuidedStep[];
+  plan: GuidedPlan;
+  source: GuidedSource;
   /** Null until the first sample lands. */
   elapsedMs: number | null;
   /** The watch could not be buzzed (not connected, or the browser preview): the cues are on screen only. */
@@ -30,7 +37,7 @@ let snapshot: GuidedSnapshot | null = null;
 
 function publish() {
   snapshot = running
-    ? { steps: running.steps, elapsedMs: running.startedAtMs === null ? null : performance.now() - running.startedAtMs, buzzFailed: running.buzzFailed }
+    ? { steps: running.steps, plan: running.plan, source: running.source, elapsedMs: running.startedAtMs === null ? null : performance.now() - running.startedAtMs, buzzFailed: running.buzzFailed }
     : null;
   listeners.forEach((listener) => listener());
 }
@@ -58,8 +65,11 @@ function tick() {
     session.lastCueIndex = now.index;
     buzz(session);
   }
-  const wanted = labelAt(session.steps, elapsed);
-  if (wanted !== session.applied && telemetryStore.setTimelineLabel(wanted, "guided_cue")) session.applied = wanted;
+  // With the camera marking the recording, the session only cues.
+  if (session.plan.labelCues !== false) {
+    const wanted = labelAt(session.steps, elapsed);
+    if (wanted !== session.applied && telemetryStore.setTimelineLabel(wanted, "guided_cue")) session.applied = wanted;
+  }
   publish();
 }
 
@@ -76,7 +86,7 @@ function finish() {
  * recording); stopping or discarding it by hand ends the session too.
  */
 export const guidedRunner = {
-  start(plan: GuidedPlan, random: () => number = Math.random): boolean {
+  start(plan: GuidedPlan, random: () => number = Math.random, source: GuidedSource = "guided"): boolean {
     if (running || telemetryStore.getDatasetRecording()) return false;
     const steps = planSteps(plan, random);
     if (!telemetryStore.setDatasetCaptureMode("timeline")) return false;
@@ -85,7 +95,7 @@ export const guidedRunner = {
       timedCapture.take();
       return false;
     }
-    running = { steps, startedAtMs: null, applied: null, lastCueIndex: -1, buzzFailed: false, timer: setInterval(tick, TICK_MS) };
+    running = { steps, plan, source, startedAtMs: null, applied: null, lastCueIndex: -1, buzzFailed: false, timer: setInterval(tick, TICK_MS) };
     publish();
     return true;
   },

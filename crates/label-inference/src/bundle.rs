@@ -149,6 +149,11 @@ pub struct ThresholdSpec {
     /// Which score starts a detection; bundles from before triggers existed start on the edge.
     #[serde(default)]
     pub trigger: Trigger,
+    /// How long after a gesture starts the model decides it has (the trainer's positive moment). The steadiness gate
+    /// judges the motion before that estimated start (`steadiness`). Bundles from before it say nothing: see
+    /// [`crate::steadiness::DEFAULT_DECISION_DELAY_MS`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_delay_ms: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

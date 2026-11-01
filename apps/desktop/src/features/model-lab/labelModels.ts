@@ -98,6 +98,27 @@ export function groupByLabel(models: LabelModel[]): { label: string; models: Lab
 }
 
 export const LABEL_DETECTIONS_EVENT = "label-detections";
+export const HAND_STEADINESS_EVENT = "hand-steadiness";
+
+/** Mirrors `HandSteadinessView` in `label_runtime.rs`: whether the hand is still right now, from the watch's motion. */
+export interface HandSteadiness {
+  state: "still" | "moving" | "unknown";
+  accelSpread: number | null;
+  turning: number | null;
+  tiltChangeDeg: number | null;
+}
+
+/** The badge for the hand's state: a gesture may only start while the hand was still just before it. */
+export function describeSteadiness(steadiness: HandSteadiness | null): { text: string; variant: "default" | "secondary" | "outline" } {
+  if (steadiness?.state === "still") return { text: "Hand still", variant: "default" };
+  if (steadiness?.state === "moving") return { text: "Hand moving", variant: "secondary" };
+  return { text: "No motion data", variant: "outline" };
+}
+
+/** Whether a rejection is a start held back because the hand was moving (or could not be judged), not a skipped window. */
+function isNotStill(reason: string): boolean {
+  return reason.startsWith("the hand was not still") || reason.startsWith("no motion data to tell");
+}
 
 /** Mirrors `DetectionReport` in `label_runtime.rs`. */
 export type DetectionEvent =
@@ -143,7 +164,13 @@ export function describeReport(report: DetectionReport): Omit<ActivityEntry, "id
   for (const labels of report.conflicts) {
     lines.push({ tone: "warning", text: `${labels.join(" and ")} were detected together, so both were held off` });
   }
-  for (const rejection of report.rejections) lines.push({ tone: "warning", text: `Skipped a window for ${rejection}` });
+  for (const rejection of report.rejections) {
+    // Each is "label: reason" (`label_runtime.rs`).
+    const split = rejection.indexOf(": ");
+    const label = split > 0 ? rejection.slice(0, split) : "";
+    const reason = split > 0 ? rejection.slice(split + 2) : rejection;
+    lines.push({ tone: "warning", text: isNotStill(reason) ? `${label} not started: ${reason}` : `Skipped a window for ${rejection}` });
+  }
   return lines;
 }
 

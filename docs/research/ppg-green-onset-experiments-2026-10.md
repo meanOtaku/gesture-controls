@@ -12,7 +12,7 @@
 
 ## Scope and data
 
-The experiments use only the 26 recordings committed under `data/recordings/2026-10-downloads/`; `python3 scripts/recordings_manifest.py check` must pass before reproducing them. The loader repairs legacy millisecond PPG timestamps and preserves source sensor time. Arrival order and transport flush time are never used as signal time.
+The experiments use only the 26 recordings committed under `data/recordings/old/2026-10-downloads/`; `python3 scripts/recordings_manifest.py check` must pass before reproducing them. The loader repairs legacy millisecond PPG timestamps and preserves source sensor time. Arrival order and transport flush time are never used as signal time.
 
 The target is **"did a pinch just start?"**, not "is a pinch held?":
 

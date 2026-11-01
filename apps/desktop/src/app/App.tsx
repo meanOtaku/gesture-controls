@@ -8,6 +8,7 @@ import { ShortcutsSheet } from "./components/ShortcutsSheet";
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { DeviceKind } from "../features/recipes/recipeModel";
 import { AppNav, navStatuses, type AppTab } from "./components/AppNav";
+import { useCameraOn } from "../features/camera/useCameraOn";
 import { OperationFeedback } from "../components/app/OperationFeedback";
 import { Skeleton } from "../components/ui/skeleton";
 import { SidebarInset, SidebarProvider } from "../components/ui/sidebar";
@@ -175,6 +176,7 @@ function OverlayApp() {
 }
 
 function MainApp() {
+  const cameraOn = useCameraOn();
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
   const status = telemetryStore.getHeadStatus();
   const headDiagnostic = telemetryStore.getHeadDiagnostic();
@@ -632,6 +634,7 @@ function MainApp() {
         watchConnected: watchStatus?.connected === true,
         watchWorn: watchStatus?.worn ?? null,
         recordingState: telemetryStore.getDatasetRecordingState(),
+        cameraOn,
       })}
     />
     <SidebarInset>

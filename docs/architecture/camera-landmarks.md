@@ -21,6 +21,21 @@ Two optional files in the recording bundle, written once with the bundle and nev
 
 `model_handedness` is MediaPipe's label as reported for the raw picture, and is saved as reported. The first version assumed it was the opposite of the physical hand and swapped it; on a real MacBook camera that mislabelled a left hand, so `physicalHand()` now takes the label as the physical hand. Because cameras and the model may differ, the Gesture library shows which hand the app sees and has a "Left and right are swapped" switch (stored per computer) that `physicalHand()` honours. Saved landmarks are never altered by it.
 
+## In an exported dataset folder
+
+The Recorder's **Export** (folder format) writes the session's camera evidence beside `ppg.csv` and `imu.csv`
+(`model_lab::export_dataset_folder`):
+
+- `hand_landmarks.csv` (and `hand_landmarks_2.csv` with a second camera) with one extra **first** column,
+  `watch_timestamp_ns`: each frame's `capture_ms` put on the watch's clock, the clock of the rows of `imu.csv` and
+  `ppg.csv`. It uses the offset described below, computed once over the recording's clock pairs (the smallest
+  `browser_arrival_ms - watch time`), by `recording_bundle::landmarks_on_watch_clock`. Without a usable pair the column is
+  empty. Every other column is as in the bundle.
+- `clock_sync.csv`, unchanged, so the conversion can be redone.
+
+Landmarks without `clock_sync.csv`, or any other file, are refused and nothing is written. Model Lab's folder import reads
+only `ppg.csv` and `imu.csv`, so the camera files do not change what it imports.
+
 ## Lining the camera up with the watch
 
 Watch samples carry the watch's own clock. For each one the browser records when it arrived. `arrival - watch time` is the offset between the clocks plus the delivery delay, and the delay is never negative, so the smallest recent value is the best offset estimate (the fastest sample), and the spread above it is the link's jitter (`ClockSync`). The raw pairs are saved so the alignment can be redone better later. The estimate is shown in the Recorder. What remains uncertain is the camera's own pipeline delay (tens of milliseconds); WebKit supplied a capture time for the frames in the test below, and the source records how many frames had one. A calibration movement to measure that delay is not built yet.

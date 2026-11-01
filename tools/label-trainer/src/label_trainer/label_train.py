@@ -45,7 +45,7 @@ from typing import Any
 
 import numpy as np
 
-from . import imu_onset, ppg_onset, trees
+from . import imu_onset, ppg_onset, steadiness, trees
 from .csv_io import Recording, load_recording, repair_millisecond_ppg_timestamps, shift_labels
 from .events import Policy, detect, summarise
 
@@ -103,6 +103,9 @@ class Spec:
     seed: int
     label_offset_ms: int = 0
     sources: tuple[str, ...] = SOURCES
+    # Keep only the decisions the live runtime's steadiness gate would let start (`steadiness`), in training, testing and
+    # the replay. Off in a spec that does not say; the desktop asks for it.
+    steady_starts: bool = False
 
     @property
     def motion(self) -> bool:
@@ -139,6 +142,9 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
     target = raw.get("target")
     if not target:
         raise TrainingRefused("the spec has no target label")
+    steady_starts = raw.get("steadyStarts", False)
+    if not isinstance(steady_starts, bool):
+        raise TrainingRefused(f"steadyStarts must be true or false, got {steady_starts!r}")
     return Spec(
         target=target,
         negatives=list(raw.get("negatives", [])),
@@ -150,6 +156,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         seed=int(raw.get("seed", 17)),
         label_offset_ms=int(label_offset_ms),
         sources=sources,
+        steady_starts=steady_starts,
     )
 
 
@@ -173,6 +180,21 @@ def motion_of(recording: Recording) -> tuple[np.ndarray, np.ndarray]:
     rows = recording.orient_observed if recording.orient_observed is not None else np.ones(len(recording.timestamps_ns), dtype=bool)
     values = np.stack([recording.channels[c][rows] for c in imu_onset.AXES], axis=1)
     return recording.timestamps_ns[rows].astype(np.int64), values
+
+
+def still_mask(recording: Recording, decisions_ns: np.ndarray) -> np.ndarray:
+    """Whether the hand was still before each decision's gesture, as the runtime's gate judges it (`steadiness`), for this
+    trainer's models, which decide `ppg_onset.ONSET_DELAY_MS` after a gesture starts."""
+    rows = recording.orient_observed if recording.orient_observed is not None else np.ones(len(recording.timestamps_ns), dtype=bool)
+    channel = lambda name: recording.channels[name][rows]  # noqa: E731
+    return steadiness.still_before(
+        recording.timestamps_ns[rows].astype(np.int64),
+        np.stack([channel(c) for c in imu_onset.AXES[:3]], axis=1),
+        np.stack([channel(c) for c in imu_onset.AXES[3:]], axis=1),
+        np.stack([channel(c) for c in ("quat_w", "quat_x", "quat_y", "quat_z")], axis=1),
+        np.asarray(decisions_ns, dtype=np.int64),
+        ppg_onset.ONSET_DELAY_MS * 1_000_000,
+    )
 
 
 def inputs(spec: Spec, recording: Recording, decisions_ns: np.ndarray) -> np.ndarray:
@@ -218,6 +240,8 @@ def examples(spec: Spec, recordings: dict[str, Recording], ids: list[str]) -> Ex
         d, y, k = ppg_onset.sample_decisions(ts, held, spec.target, set(spec.excludes), early)
         x = inputs(spec, recording, d)
         ok = np.isfinite(x).all(axis=1)
+        if spec.steady_starts:
+            ok &= still_mask(recording, d)
         xs.append(x[ok]); ys.append(y[ok]); groups += [rid] * int(ok.sum())
         kinds += [kind for kind, keep in zip(k, ok.tolist()) if keep]; decisions.append(d[ok])
     width = len(spec.feature_names)
@@ -227,10 +251,11 @@ def examples(spec: Spec, recordings: dict[str, Recording], ids: list[str]) -> Ex
     )
 
 
-def check_enough(train: Examples, held_out: Examples) -> None:
+def check_enough(train: Examples, held_out: Examples, steady_starts: bool = False) -> None:
+    still = " made with the hand still (only those count)" if steady_starts else ""
     if int(train.y.sum()) < MIN_POSITIVE_TRAIN:
         raise TrainingRefused(
-            f"only {int(train.y.sum())} starts of the target label are in the training recordings "
+            f"only {int(train.y.sum())} starts of the target label{still} are in the training recordings "
             f"(at least {MIN_POSITIVE_TRAIN} are needed). Record more of it"
         )
     if int((train.y == 0).sum()) < MIN_POSITIVE_TRAIN:
@@ -404,6 +429,9 @@ def detections(spec: Spec, recording: Recording, times: np.ndarray, scores: np.n
     starts = [s for s, _, label in held if label == spec.target and times[0] <= s + ppg_onset.MATCH_EARLIEST_MS * 1_000_000 <= times[-1]]
     ignored = [(s, e) for s, e, label in held if label in set(spec.excludes)]
     rises = [rise for rise, _ in detect(times, scores, policy) if not any(s <= rise <= e for s, e in ignored)]
+    if spec.steady_starts and rises:
+        # The runtime withholds a start the hand was not still before.
+        rises = [rise for rise, still in zip(rises, still_mask(recording, np.array(rises, dtype=np.int64)).tolist()) if still]
     caught, latencies = ppg_onset.match(rises, starts)
     busy = [(s, e + ppg_onset.MATCH_LATEST_MS * 1_000_000) for s, e, label in held if label == spec.target or label in set(spec.excludes)]
     observed = int(times[-1] - times[0])
@@ -525,7 +553,9 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
         "window": {"durationMs": WINDOW_MS, "strideMs": STRIDE_MS, "maxGapMs": ppg_onset.MAX_GAP_MS, "minSamples": MIN_WINDOW_SAMPLES},
         "quality": {"maxContactQuality": 0.0, "minSampleCount": 3},
         "thresholds": {"activation": policy.activation, "release": policy.release, "cooldownMs": COOLDOWN_MS,
-                       **({"trigger": policy.trigger} if spec.motion else {})},
+                       **({"trigger": policy.trigger} if spec.motion else {}),
+                       # How long after a gesture starts the model decides: the runtime's still-hand gate looks before that.
+                       "decisionDelayMs": ppg_onset.ONSET_DELAY_MS},
         "preprocessing": {"kind": PREPROCESSING[spec.sources]},
         "provenance": {
             "backend": BACKEND,
@@ -584,7 +614,7 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
         say = lambda line: print(line, flush=True)  # noqa: E731
         train = examples(spec, recordings, spec.train)
         held_out = examples(spec, recordings, spec.evaluation)
-        check_enough(train, held_out)
+        check_enough(train, held_out, spec.steady_starts)
         say(f"Training {TREES} trees on {train.y.shape[0]} moments ({int(train.y.sum())} starts) from {len(spec.train)} recordings")
         model = fit(train.x, train.y, spec.seed)
         threshold, source, cross_check, cross_events = out_of_fold_threshold(spec, train, recordings, say)
@@ -596,6 +626,7 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
             metrics["crossCheckEvents"] = cross_events
         say("Replaying the held-out recordings as the runtime would")
         metrics["events"] = replay(spec, model, recordings, threshold)
+        metrics["steadyStarts"] = spec.steady_starts
         (out / "evaluation.json").write_text(json.dumps(metrics, indent=2) + "\n")
 
         model_bytes = trees.to_bytes(model, len(spec.feature_names))

@@ -673,6 +673,10 @@ pub fn import_model_dataset_folder(
 /// Writes a dataset exported from the Recorder as a folder of two dense files in `parent`, named after the session. A name that
 /// is taken gets a number after it, so an export never overwrites another. Nothing is required of the labels here: an export
 /// is for keeping and sharing, and Model Lab checks them when the folder is imported. Returns where it was written.
+///
+/// `camera_files` is the session's camera evidence as the recording bundle saves it (`hand_landmarks.csv`, optionally
+/// `hand_landmarks_2.csv`, and `clock_sync.csv`). Each landmarks file is written with its frames also on the watch's clock
+/// (`recording_bundle::landmarks_on_watch_clock`), and `clock_sync.csv` beside them, so the conversion can be redone.
 #[tauri::command]
 pub fn export_dataset_folder(
     parent: String,
@@ -680,8 +684,10 @@ pub fn export_dataset_folder(
     ppg_csv: String,
     imu_csv: String,
     ppg_clock_csv: Option<String>,
+    camera_files: Option<std::collections::BTreeMap<String, String>>,
 ) -> Result<String, String> {
     validate_filename(&name)?;
+    let camera = camera_export(camera_files.unwrap_or_default())?;
     let parent = PathBuf::from(&parent);
     if !parent.is_dir() {
         return Err("the export folder does not exist: choose another".into());
@@ -726,6 +732,9 @@ pub fn export_dataset_folder(
         if let Some(clock) = &ppg_clock_csv {
             fs::write(staging.join(crate::recording_bundle::PPG_CLOCK_FILE_NAME), clock).map_err(|e| e.to_string())?;
         }
+        for (file, content) in &camera {
+            fs::write(staging.join(file), content).map_err(|e| e.to_string())?;
+        }
         fs::write(
             staging.join(dataset_files::META_FILE),
             serde_json::to_vec_pretty(&meta).map_err(|e| e.to_string())?,
@@ -738,6 +747,26 @@ pub fn export_dataset_folder(
         return Err(error);
     }
     Ok(target.display().to_string())
+}
+
+/// The camera files an exported folder gets: each landmarks file on the watch's clock, then `clock_sync.csv` itself.
+/// Anything else is refused, and so is a landmarks file without the clock pairs that place it.
+fn camera_export(files: std::collections::BTreeMap<String, String>) -> Result<Vec<(String, String)>, String> {
+    use crate::recording_bundle::{CLOCK_SYNC_FILE_NAME, landmarks_on_watch_clock};
+    if files.is_empty() {
+        return Ok(Vec::new());
+    }
+    let sync = files
+        .get(CLOCK_SYNC_FILE_NAME)
+        .ok_or_else(|| format!("the camera's landmarks came without {CLOCK_SYNC_FILE_NAME}, so they cannot be placed on the watch clock"))?;
+    let mut out = Vec::new();
+    for (name, content) in &files {
+        if name != CLOCK_SYNC_FILE_NAME {
+            out.push((name.clone(), landmarks_on_watch_clock(name, content, sync)?));
+        }
+    }
+    out.push((CLOCK_SYNC_FILE_NAME.to_string(), sync.clone()));
+    Ok(out)
 }
 
 /// What happened to one recording when converting older recordings to the two-file format.
@@ -1391,6 +1420,7 @@ mod tests {
             pair.ppg_csv.clone(),
             pair.imu_csv.clone(),
             None,
+            None,
         )
         .unwrap();
         let second = export_dataset_folder(
@@ -1398,6 +1428,7 @@ mod tests {
             "session".into(),
             pair.ppg_csv.clone(),
             pair.imu_csv.clone(),
+            None,
             None,
         )
         .unwrap();
@@ -1430,6 +1461,7 @@ mod tests {
                 "../escape".into(),
                 String::new(),
                 String::new(),
+                None,
                 None
             )
             .is_err()
@@ -1440,10 +1472,61 @@ mod tests {
                 "x".into(),
                 String::new(),
                 String::new(),
+                None,
                 None
             )
             .is_err()
         );
+        let _ = fs::remove_dir_all(&parent);
+    }
+
+    #[test]
+    fn an_exported_folder_carries_the_camera_landmarks_on_the_watch_clock() {
+        use crate::recording_bundle::{CLOCK_SYNC_FILE_NAME, HAND_LANDMARKS_FILE_NAME, hand_landmarks_header};
+        let parent = temp_dir("export-camera");
+        let pair = dataset_files::split_legacy(LEGACY).unwrap();
+        let header = hand_landmarks_header();
+        let landmarks = format!("{header}\n0,1000.000{}", ",".repeat(header.matches(',').count() - 1));
+        let sync = "watch_timestamp_ns,browser_arrival_ms\n5000000000,1010.000".to_string();
+        let files = |entries: &[(&str, &str)]| {
+            Some(entries.iter().map(|(name, text)| (name.to_string(), text.to_string())).collect())
+        };
+        let written = export_dataset_folder(
+            parent.display().to_string(),
+            "session".into(),
+            pair.ppg_csv.clone(),
+            pair.imu_csv.clone(),
+            None,
+            files(&[(HAND_LANDMARKS_FILE_NAME, &landmarks), (CLOCK_SYNC_FILE_NAME, &sync)]),
+        )
+        .unwrap();
+        let folder = PathBuf::from(&written);
+        let saved = fs::read_to_string(folder.join(HAND_LANDMARKS_FILE_NAME)).unwrap();
+        assert!(saved.lines().next().unwrap().starts_with("watch_timestamp_ns,frame_index,capture_ms,"));
+        assert!(saved.lines().nth(1).unwrap().starts_with("4990000000,0,1000.000,"));
+        assert_eq!(fs::read_to_string(folder.join(CLOCK_SYNC_FILE_NAME)).unwrap(), sync);
+        // The pair still reads back exactly as before: the camera files sit beside it.
+        assert!(dataset_files::parse_pair(
+            &fs::read_to_string(folder.join("ppg.csv")).unwrap(),
+            &fs::read_to_string(folder.join("imu.csv")).unwrap(),
+        )
+        .is_ok());
+        // Landmarks without the clock pairs, or a file that is not camera evidence, are refused and nothing is written.
+        for bad in [
+            files(&[(HAND_LANDMARKS_FILE_NAME, &landmarks)]),
+            files(&[("notes.txt", "hello"), (CLOCK_SYNC_FILE_NAME, &sync)]),
+        ] {
+            assert!(export_dataset_folder(
+                parent.display().to_string(),
+                "refused".into(),
+                pair.ppg_csv.clone(),
+                pair.imu_csv.clone(),
+                None,
+                bad,
+            )
+            .is_err());
+        }
+        assert!(!parent.join("refused").exists());
         let _ = fs::remove_dir_all(&parent);
     }
 

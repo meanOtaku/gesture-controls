@@ -24,6 +24,7 @@ def test_a_spec_for_anything_but_the_pulse_model_is_refused(tmp_path: Path) -> N
         ({"evaluation": spec["train"]}, "both the training and the evaluation"),
         ({"labelOffsetMs": 2000}, "label offset"),
         ({"target": ""}, "no target label"),
+        ({"steadyStarts": "yes"}, "steadyStarts must be true or false"),
     ]:
         with pytest.raises(lt.TrainingRefused, match=reason):
             lt.parse_spec({**spec, **change})
@@ -38,6 +39,7 @@ def test_a_motion_model_reads_the_pulse_and_motion_and_detects_on_the_peak(tmp_p
     assert manifest["input"]["features"] == names and manifest["input"]["shape"] == [None, 2733]
     assert manifest["sources"] == ["watchPpg", "watchOrientation"] and manifest["preprocessing"] == {"kind": "ppg_imu_onset"}
     assert manifest["thresholds"]["trigger"] == "peak" and manifest["thresholds"]["cooldownMs"] == 1500
+    assert manifest["thresholds"]["decisionDelayMs"] == ppg_onset.ONSET_DELAY_MS
     assert manifest["thresholds"]["activation"] in lt.THRESHOLD_CANDIDATES
     assert trees.read((bundle / "model.trees").read_bytes())[0] == 2733
     assert result["parityMaxAbsDifference"] <= lt.PARITY_TOLERANCE
@@ -50,6 +52,24 @@ def test_a_motion_model_reads_the_pulse_and_motion_and_detects_on_the_peak(tmp_p
     assert events["policy"]["trigger"] == "peak"
     assert events["gestures"] > 0 and events["caught"] / events["gestures"] >= 0.5
     assert 680 <= events["medianLatencyMs"] <= 1280
+
+
+def test_with_steady_starts_only_moments_with_the_hand_still_count(tmp_path: Path) -> None:
+    # The synthetic motion is a still hand, so a motion model trains as before, on all but the first moments (no window yet).
+    (tmp_path / "motion").mkdir()
+    (tmp_path / "pulse").mkdir()
+    spec = spec_for(tmp_path / "motion", motion=True, every_s=5.0)
+    recordings = lt.load_spec_recordings(lt.parse_spec(spec))
+    every = lt.examples(lt.parse_spec(spec), recordings, spec["train"])
+    still = lt.examples(lt.parse_spec({**spec, "steadyStarts": True}), recordings, spec["train"])
+    assert 0 < still.y.shape[0] <= every.y.shape[0] and int(still.y.sum()) == int(every.y.sum())
+    result = lt.run({**spec, "steadyStarts": True}, tmp_path / "run")
+    assert result["outcome"] in ("deployable", "evaluationOnly"), result["message"]
+    assert result["metrics"]["steadyStarts"] is True
+    # Without motion samples nothing can be judged still, so nothing counts, and the refusal says why.
+    pulse_only = spec_for(tmp_path / "pulse", motion=False)
+    refused = lt.run({**pulse_only, "steadyStarts": True}, tmp_path / "refused")
+    assert refused["outcome"] == "failed" and "made with the hand still" in refused["message"]
 
 
 def test_the_cut_off_catches_the_most_starts_within_the_false_activation_target() -> None:

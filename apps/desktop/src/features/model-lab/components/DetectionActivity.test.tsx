@@ -3,16 +3,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DetectionActivity } from "./DetectionActivity";
 
 let handler: ((event: { payload: unknown }) => void) | undefined;
+let steadinessHandler: ((event: { payload: unknown }) => void) | undefined;
 const unlisten = vi.fn();
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: (_name: string, fn: (event: { payload: unknown }) => void) => {
-    handler = fn;
+  listen: (name: string, fn: (event: { payload: unknown }) => void) => {
+    if (name === "hand-steadiness") steadinessHandler = fn;
+    else handler = fn;
     return Promise.resolve(unlisten);
   },
 }));
+const invoke = vi.fn(async (_command: string) => ({ state: "unknown", accelSpread: null, turning: null, tiltChangeDeg: null }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: (command: string) => invoke(command) }));
 
 beforeEach(() => { window.localStorage.clear(); });
-afterEach(() => { cleanup(); handler = undefined; unlisten.mockClear(); });
+afterEach(() => { cleanup(); handler = undefined; steadinessHandler = undefined; unlisten.mockClear(); });
 
 describe("DetectionActivity", () => {
   it("starts empty and shows detections and releases as they arrive, newest first", async () => {
@@ -94,5 +98,22 @@ describe("DetectionActivity", () => {
     expect(screen.getByRole("button", { name: "Expand" })).toBeInTheDocument();
     get.mockRestore();
     set.mockRestore();
+  });
+
+  it("shows whether the hand is still, from the desktop's state now and each change after", async () => {
+    render(<DetectionActivity desktopAvailable />);
+    expect(await screen.findByText("No motion data")).toBeInTheDocument();
+    expect(invoke).toHaveBeenCalledWith("get_hand_steadiness");
+    act(() => steadinessHandler?.({ payload: { state: "still", accelSpread: 0.1, turning: 0.05, tiltChangeDeg: 1 } }));
+    expect(screen.getByText("Hand still")).toBeInTheDocument();
+    act(() => steadinessHandler?.({ payload: { state: "moving", accelSpread: 1.2, turning: 0.9, tiltChangeDeg: 14 } }));
+    expect(screen.getByText("Hand moving")).toBeInTheDocument();
+  });
+
+  it("says a gesture was not started because the hand was moving, rather than that a window was skipped", () => {
+    render(<DetectionActivity desktopAvailable />);
+    act(() => handler?.({ payload: { events: [], conflicts: [], rejections: ["pinch: the hand was not still before the gesture: turning (0.90 rad/s, at most 0.5)", "pinch: PPG has a 300 ms gap"] } }));
+    expect(screen.getByText("pinch not started: the hand was not still before the gesture: turning (0.90 rad/s, at most 0.5)")).toBeInTheDocument();
+    expect(screen.getByText("Skipped a window for pinch: PPG has a 300 ms gap")).toBeInTheDocument();
   });
 });

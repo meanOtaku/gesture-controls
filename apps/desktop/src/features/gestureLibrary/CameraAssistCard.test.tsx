@@ -106,3 +106,33 @@ describe("CameraAssistCard with several labels", () => {
     expect(cameraAssist.willMark(["pinch"])).toBe(false);
   });
 });
+
+describe("CameraAssistCard with pinch in and pinch out", () => {
+  it("offers pinch out beside pinch in, marks the pair with no library gesture, and shows whether the fingers are together", async () => {
+    cameraAssist.setEnabled(true);
+    library.listGestureDefinitions.mockResolvedValue([]);
+    const toggled: string[] = [];
+    const { rerender } = render(<CameraAssistCard selectedLabel="pinch_in" extraLabels={[]} onToggleExtraLabel={(label) => toggled.push(label)} recording={false} desktopAvailable />);
+    fireEvent.click(await screen.findByRole("button", { name: "pinch out" }));
+    expect(toggled).toEqual(["pinch_out"]);
+
+    rerender(<CameraAssistCard selectedLabel="pinch_in" extraLabels={["pinch_out"]} onToggleExtraLabel={() => undefined} recording={false} desktopAvailable />);
+    expect(await screen.findByText(/Turn the camera on \(below\)/)).toBeInTheDocument();
+    expect(screen.queryByText(/No gesture in the Gesture library/)).toBeNull();
+    hands = [makeHand({ pinch: 0.1 })];
+    fireEvent.click(screen.getByRole("button", { name: "Turn camera on" }));
+    await vi.waitFor(() => expect(next).not.toBeNull());
+    for (let i = 0; i < 4; i++) await act(async () => { next?.(); });
+    expect(await screen.findByText("Fingers together")).toBeInTheDocument();
+    await vi.waitFor(() => expect(cameraAssist.willMark(["pinch_in", "pinch_out"])).toBe(true));
+    hands = [makeHand({ pinch: 1.2 })];
+    for (let i = 0; i < 4; i++) await act(async () => { next?.(); });
+    expect(await screen.findByText("Fingers apart")).toBeInTheDocument();
+  });
+
+  it("asks to drop other labels from a pinch in and out recording", async () => {
+    cameraAssist.setEnabled(true);
+    render(<CameraAssistCard selectedLabel="pinch_in" extraLabels={["pinch_out", "pinch"]} onToggleExtraLabel={() => undefined} recording={false} desktopAvailable />);
+    expect(await screen.findByText(/Pinch in and pinch out are marked on their own/)).toBeInTheDocument();
+  });
+});

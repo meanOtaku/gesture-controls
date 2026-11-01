@@ -27,6 +27,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   wristMaxVolumePointsPerSecond: 30,
   watchSensorsEnabled: Object.fromEntries(CONTROLLABLE_SENSORS.map(({ id }) => [id, true])),
   watchTransport: "bluetooth",
+  steadyStartsOnly: false,
 };
 
 export type NumericSettingKey =

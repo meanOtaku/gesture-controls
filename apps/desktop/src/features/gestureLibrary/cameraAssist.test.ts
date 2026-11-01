@@ -2,12 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const feedback = vi.hoisted(() => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() }));
 vi.mock("../../components/app/OperationFeedback", () => ({ OperationFeedback: feedback }));
+const markers = vi.hoisted(() => ({ edges: vi.fn(() => () => undefined), gestures: vi.fn(() => () => undefined) }));
+vi.mock("./pinchEdgeMarker", async (original) => ({ ...(await original<typeof import("./pinchEdgeMarker")>()), startPinchEdgeMarking: markers.edges }));
+vi.mock("./cameraMarker", () => ({ startCameraMarking: markers.gestures }));
 
 import { telemetryStore } from "../telemetry/store/telemetryStore";
 import { cameraAssist } from "./cameraAssist";
 
 beforeEach(() => {
   Object.values(feedback).forEach((fn) => fn.mockReset());
+  markers.edges.mockClear();
+  markers.gestures.mockClear();
   cameraAssist.disarm();
   telemetryStore.reset();
 });
@@ -83,5 +88,13 @@ describe("cameraAssist with several labels", () => {
     cameraAssist.arm(["pinch", "fist"]);
     cameraAssist.finish();
     expect(feedback.success).toHaveBeenCalledWith("Camera marking", expect.stringContaining("Marked 1 pinch, 1 fist"));
+  });
+
+  it("marks pinch in and pinch out from the finger distance, and any other labels from their library gestures", () => {
+    cameraAssist.arm(["pinch_in", "pinch_out"], []);
+    expect(markers.edges).toHaveBeenCalledWith(0.35);
+    expect(markers.gestures).not.toHaveBeenCalled();
+    cameraAssist.arm(["pinch"], []);
+    expect(markers.gestures).toHaveBeenCalledWith(["pinch"], []);
   });
 });

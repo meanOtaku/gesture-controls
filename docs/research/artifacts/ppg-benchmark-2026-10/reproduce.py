@@ -19,7 +19,7 @@ from sklearn.preprocessing import StandardScaler
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
-RECORDINGS = ROOT / "data/recordings/2026-10-downloads"
+RECORDINGS = ROOT / "data/recordings/old/2026-10-downloads"
 ABL = HERE / "ppg-derivative-ablation"
 CMP = HERE / "ppg-preprocess-component-ablation"
 OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(tempfile.mkdtemp(prefix="ppg-repro-"))

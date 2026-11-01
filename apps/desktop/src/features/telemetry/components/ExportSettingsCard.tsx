@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
+import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Button } from "../../../components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
+import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
 import { chooseExportFolder, isTauriDesktop } from "../../../shared/tauri/exportCsv";
 import { exportFolderStore, type ExportFormat } from "../store/exportFolderStore";
@@ -46,12 +47,14 @@ export function ExportSettingsCard({ compact = false }: { compact?: boolean }) {
   return (
     <Card role="region" aria-label="Exports" className="min-w-0">
       <CardHeader>
-        <CardTitle>Exports</CardTitle>
-        <CardDescription>
-          Where every export goes, and in what form: the Export button, the export when a timed or guided recording ends, and
-          the Labelling page&apos;s Export. A folder of two files is what Model Lab imports; one CSV is the older format.
-          Recordings are also saved in the app either way.
-        </CardDescription>
+        <SectionHeader
+          title="Exports"
+          description="Where exports go, and as a folder or one CSV."
+          help={{
+            label: "About exports",
+            content: "One setting for every export: the Export button, the export when a timed or guided recording ends, and the Labelling page's Export. A folder of two files is what Model Lab imports; one CSV is the older format. Recordings are also saved in the app either way.",
+          }}
+        />
       </CardHeader>
       <CardContent>{controls}</CardContent>
     </Card>

@@ -1,6 +1,6 @@
 """Loads the study's recordings as the trainer reads them, with unmarked rows as rest.
 
-They are read from data/recordings/2026-10-downloads/ in the repo (data/recordings.manifest.json lists them and
+They are read from data/recordings/old/2026-10-downloads/ in the repo (data/recordings.manifest.json lists them and
 `python3 scripts/recordings_manifest.py check` confirms they are unchanged), else from ~/Downloads where they were exported.
 
 Only the recordings listed in the manifest are read: the 26 these studies were run on. Recordings added to the folder
@@ -18,7 +18,7 @@ SKIP = {"unlabeled", "hand_twit_clockwise_and_anti_clockwise", "pinch_open"}
 def recordings():
     out = []
     tmp = Path(tempfile.mkdtemp())
-    repo_copy = Path(__file__).resolve().parents[4] / "data" / "recordings" / "2026-10-downloads"
+    repo_copy = Path(__file__).resolve().parents[4] / "data" / "recordings" / "old" / "2026-10-downloads"
     source = repo_copy if repo_copy.is_dir() else Path.home() / "Downloads"
     manifest = Path(__file__).resolve().parents[4] / "data" / "recordings.manifest.json"
     listed = None

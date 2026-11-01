@@ -7,7 +7,11 @@ import { Checkbox } from "../../components/ui/checkbox";
 import { NOT_SLOW, nextSlowState, type SlowState } from "../camera/slowWarning";
 import { CameraQuickControl } from "../camera/components/CameraQuickControl";
 import { getCameraController } from "../camera/cameraService";
+import { measureHand } from "../camera/landmarkMath";
+import type { HandFrame } from "../camera/handTypes";
+import { contactThreshold } from "../labelling/cameraTrack";
 import { cameraAssist } from "./cameraAssist";
+import { PINCH_IN, PINCH_OUT, wantsPinchEdges } from "./pinchEdgeMarker";
 import { definitionsForLabels, type GestureDefinition } from "./definition";
 import { listGestureDefinitions } from "./gestureLibraryApi";
 import { useLiveGestures } from "./useLiveGestures";
@@ -45,9 +49,17 @@ export function CameraAssistCard({
   const labelKey = [selectedLabel, ...extraLabels].join("\u0000");
   const markLabels = useMemo(() => (selectedLabel === null ? [] : [selectedLabel, ...extraLabels]), [labelKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const mine = useMemo(() => definitionsForLabels(definitions, markLabels), [definitions, markLabels]);
-  // Labels the library has a gesture for, to offer as additions to the selected one.
-  const offered = useMemo(() => Array.from(new Set(definitions.map((d) => d.labelId).filter((id): id is string => id !== null))).filter((id) => id !== selectedLabel).sort(), [definitions, selectedLabel]);
-  const withoutGesture = markLabels.filter((label) => !mine.some((d) => d.labelId === label));
+  // Pinch in and pinch out together are marked from the finger distance itself, with no library gesture needed.
+  const edges = wantsPinchEdges(markLabels);
+  const pairOf = selectedLabel === PINCH_IN ? PINCH_OUT : selectedLabel === PINCH_OUT ? PINCH_IN : null;
+  // Labels the library has a gesture for, to offer as additions to the selected one (and pinch in's partner).
+  const offered = useMemo(
+    () => Array.from(new Set([...definitions.map((d) => d.labelId).filter((id): id is string => id !== null), ...(pairOf ? [pairOf] : [])])).filter((id) => id !== selectedLabel).sort(),
+    [definitions, selectedLabel, pairOf],
+  );
+  const withoutGesture = edges ? [] : markLabels.filter((label) => !mine.some((d) => d.labelId === label));
+  const othersWithEdges = edges ? markLabels.filter((label) => label !== PINCH_IN && label !== PINCH_OUT) : [];
+  const contact = contactThreshold(definitions, PINCH_IN);
   const camera2 = getCameraController("secondary");
   const cam2 = useSyncExternalStore(camera2.subscribe, camera2.getSnapshot, camera2.getSnapshot);
   const states = useLiveGestures(mine, cam, undefined, cam2);
@@ -71,7 +83,9 @@ export function CameraAssistCard({
     ? "Needs the desktop app."
     : selectedLabel === null
       ? "Choose a label above first."
-      : withoutGesture.length > 0
+      : othersWithEdges.length > 0
+        ? `Pinch in and pinch out are marked on their own, from the finger distance. Drop ${othersWithEdges.map((label) => `“${label.replaceAll("_", " ")}”`).join(", ")} from this recording.`
+        : withoutGesture.length > 0
         ? `No gesture in the Gesture library uses ${withoutGesture.map((label) => `“${label.replaceAll("_", " ")}”`).join(", ")}. Make one there first, or drop ${withoutGesture.length === 1 ? "that label" : "those labels"}.`
         : !camOn
           ? "Turn the camera on (below) so it can see your hand."
@@ -93,7 +107,7 @@ export function CameraAssistCard({
           description="Mark the gesture in your recording automatically, using the camera."
           help={{
             label: "About camera marking",
-            content: "Record as usual with the watch worn on the hand the camera sees. You can mark several labels in one recording: pick one above, then add others here. Only one label is on at a time; if two gestures are held together the one that began last is marked, and the other takes over if it is still held when that ends. While you record, the label is switched on in the watch data whenever the camera sees the label's gesture from the Gesture library, and off when you let go, just like holding the Mark label button. The PPG and motion rows in between carry the label, in the recording and in the exported CSV. Everything it marks starts unreviewed, and nothing is marked if the camera never sees the gesture.",
+            content: "Record as usual with the watch worn on the hand the camera sees. For pinch in and pinch out, pick “pinch in” above and add “pinch out” here: the camera marks a short pinch in where thumb and index meet and a short pinch out where they part, from their distance, with no library gesture needed. You can mark several labels in one recording: pick one above, then add others here. Only one label is on at a time; if two gestures are held together the one that began last is marked, and the other takes over if it is still held when that ends. While you record, the label is switched on in the watch data whenever the camera sees the label's gesture from the Gesture library, and off when you let go, just like holding the Mark label button. The PPG and motion rows in between carry the label, in the recording and in the exported CSV. Everything it marks starts unreviewed, and nothing is marked if the camera never sees the gesture.",
           }}
         />
       </CardHeader>
@@ -121,7 +135,13 @@ export function CameraAssistCard({
         {enabled && !blocker && recording && slow && slowest && (
           <p className="hint" role="status">The camera is running slowly ({slowest.fps.toFixed(0)} frames a second{slowest.detectMs > 0 ? `, ${slowest.detectMs.toFixed(0)} ms for each hand-tracking pass` : ""}), so the start and end of marks may be a little off. Close other apps using the camera or the processor, or turn the second camera off.</p>
         )}
-        {enabled && !blocker && (
+        {enabled && !blocker && edges && (
+          <div className="flex flex-wrap items-center gap-3" role="status">
+            <FingerBadge frames={[cam.frame, cam2.frame]} contact={contact} />
+            <span className="hint">{recording ? "Recording. Touch thumb and index, hold, and let go, with a few still seconds between." : "Touch thumb and index now to check, then start recording."}</span>
+          </div>
+        )}
+        {enabled && !blocker && !edges && (
           <div className="flex flex-wrap items-center gap-3" role="status">
             <Badge variant={seen ? "default" : "secondary"}>
               {seen
@@ -137,4 +157,17 @@ export function CameraAssistCard({
       </CardContent>
     </Card>
   );
+}
+
+/** Whether thumb and index are together right now, in the newest frame of either camera. */
+function FingerBadge({ frames, contact }: { frames: (HandFrame | null)[]; contact: number }) {
+  let closest: number | null = null;
+  for (const frame of frames) {
+    for (const hand of frame?.hands ?? []) {
+      const distance = measureHand(hand)?.pinch.index ?? null;
+      if (distance !== null && (closest === null || distance < closest)) closest = distance;
+    }
+  }
+  const text = closest === null ? "No hand in view" : closest < contact ? "Fingers together" : "Fingers apart";
+  return <Badge variant={closest !== null && closest < contact ? "default" : "secondary"}>{text}</Badge>;
 }

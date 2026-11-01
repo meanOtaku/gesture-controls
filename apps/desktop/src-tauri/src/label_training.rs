@@ -182,6 +182,13 @@ fn check_request(
     })
 }
 
+/// Whether new models train only on moments the hand was still before, as the `steadyStartsOnly` setting asks.
+fn steady_starts(app: &AppHandle) -> bool {
+    app.try_state::<crate::settings::SettingsRuntime>()
+        .and_then(|settings| settings.get().ok())
+        .is_some_and(|settings| settings.steady_starts_only)
+}
+
 /// The spec the trainer reads. Everything in it was decided (and, for the split, sealed) before the trainer started.
 fn build_spec(
     checked: &Checked,
@@ -211,6 +218,9 @@ fn build_spec(
         "seed": SEED,
         "research": checked.research,
         "labelOffsetMs": checked.label_offset_ms,
+        // Train and test only on moments the runtime's steadiness gate would let a gesture start at (`steadiness.py`),
+        // when the setting asks for the gate (`steady_starts_only`, set by the caller).
+        "steadyStarts": false,
     })
 }
 
@@ -381,6 +391,7 @@ pub async fn suggest_label_offset(
         .collect();
     let mut spec = build_spec(&checked, &split, &paths);
     spec["labelOffsetMs"] = serde_json::json!(0);
+    spec["steadyStarts"] = serde_json::json!(steady_starts(&app));
     let work = runs_dir(&app)?.join(format!(".timing-{}", Uuid::new_v4().simple()));
     fs::create_dir_all(&work).map_err(|e| e.to_string())?;
     let spec_path = work.join("spec.json");
@@ -534,7 +545,8 @@ pub async fn start_label_training(
             .iter()
             .map(|r| (r.id.to_string(), dataset_csv_path(&dir, r.id.as_str())))
             .collect();
-        let spec = build_spec(&checked, &begun.split, &paths);
+        let mut spec = build_spec(&checked, &begun.split, &paths);
+        spec["steadyStarts"] = serde_json::json!(steady_starts(&app));
         // Kept so this model can be trained again from the same recordings and roles.
         fs::write(
             out.join("request.json"),
@@ -920,6 +932,7 @@ mod tests {
         assert_eq!(spec["version"], 1);
         assert_eq!(spec["target"], "pinch");
         assert_eq!(spec["negatives"], serde_json::json!(["fist"]));
+        assert_eq!(spec["steadyStarts"], serde_json::json!(false), "the caller sets it from the setting");
         assert_eq!(
             spec["sources"],
             serde_json::json!(["watchPpg", "watchOrientation"])

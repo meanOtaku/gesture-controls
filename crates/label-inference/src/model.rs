@@ -81,6 +81,8 @@ pub struct LoadedModel {
     input_names: Vec<String>,
     /// What each input usually is in the training decisions, when the manifest says.
     pub training_range: Option<TrainingRange>,
+    /// How long after a gesture starts the model decides it has, from the manifest (or the trainer's default).
+    pub decision_delay_ms: u32,
     trees: Arc<TreeEnsemble>,
 }
 
@@ -113,6 +115,11 @@ impl LoadedModel {
             monitor_only: !version.deployable,
             input_names: bundle.manifest.input.features.clone(),
             training_range: bundle.manifest.input.training_range.clone(),
+            decision_delay_ms: bundle
+                .manifest
+                .thresholds
+                .decision_delay_ms
+                .unwrap_or(crate::steadiness::DEFAULT_DECISION_DELAY_MS),
             trees: bundle.trees,
         })
     }
@@ -262,6 +269,11 @@ pub(crate) mod tests {
             .map(serde_json::Value::as_f64)
             .collect();
         (samples, motion, probabilities)
+    }
+
+    #[test]
+    fn a_bundle_that_does_not_say_its_decision_delay_gets_the_trainer_s() {
+        assert_eq!(loaded().decision_delay_ms, crate::steadiness::DEFAULT_DECISION_DELAY_MS);
     }
 
     #[test]

@@ -1,7 +1,9 @@
 import { OperationFeedback } from "../../components/app/OperationFeedback";
 import { telemetryStore } from "../telemetry/store/telemetryStore";
+import { contactThreshold } from "../labelling/cameraTrack";
 import { startCameraMarking } from "./cameraMarker";
 import type { GestureDefinition } from "./definition";
+import { PINCH_IN, startPinchEdgeMarking, wantsPinchEdges } from "./pinchEdgeMarker";
 
 const KEY = "cameraMarkingOn";
 const readSaved = (): boolean => {
@@ -20,7 +22,8 @@ interface Snapshot {
  * Camera marking. It is on by default and the choice is remembered, but it only takes effect when it can work: the camera
  * is on and the chosen label has a gesture in the library (the Recorder card checks that and says which label it has
  * verified, see `setReady`). Then the recording is a timeline, and while it runs the camera opens and closes unreviewed
- * intervals of that label in the session itself, the way the Mark label button does (see `startCameraMarking`), so the
+ * intervals of that label in the session itself, the way the Mark label button does (see `startCameraMarking`; for the
+ * labels `pinch_in` and `pinch_out` together, short marks where the fingers meet and part, `startPinchEdgeMarking`), so the
  * rows, the saved recording and the CSV export all carry them. The label and its gestures are fixed when the recording
  * starts, and the marking runs until the recording is saved or discarded, whichever page is open.
  */
@@ -79,7 +82,10 @@ class CameraAssist {
     this.stop();
     this.armedLabels = typeof labels === "string" ? [labels] : [...labels];
     const gestures = definitions ?? (sameLabels(this.armedLabels, this.readyLabels) ? this.readyDefinitions : []);
-    this.stopMarking = startCameraMarking(this.armedLabels, gestures);
+    // Pinch in and pinch out are the moments the fingers meet and part, from the camera's thumb-to-index distance.
+    this.stopMarking = wantsPinchEdges(this.armedLabels)
+      ? startPinchEdgeMarking(contactThreshold(gestures, PINCH_IN))
+      : startCameraMarking(this.armedLabels, gestures);
   }
   disarm(): void {
     this.stop();

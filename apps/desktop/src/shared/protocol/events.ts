@@ -328,6 +328,8 @@ export interface AppSettings {
   watchSensorsEnabled: Record<string, boolean>;
   /** Which link reaches the Watch. Defaults to Bluetooth, including for settings files written before the field existed. */
   watchTransport: WatchTransport;
+  /** Only let a trained model's gesture start when the hand was still just before it, and train new models on such moments. Off by default. */
+  steadyStartsOnly: boolean;
 }
 
 /** Mirrors `watch_bridge::WatchTransport`. */
