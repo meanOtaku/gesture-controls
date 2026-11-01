@@ -1,0 +1,215 @@
+{
+ "candidates": {
+  "pinch": 241,
+  "other": 316,
+  "min_height": 0.18338784757890025,
+  "contacts": 278,
+  "contacts_with_candidate": 246,
+  "contacts_passing_rules": 187
+ },
+ "minutes": {
+  "everything_else recordings": 2.004666666666667,
+  "fist": 6.825925389666667,
+  "wrist twist": 0.7053362800166667,
+  "rest (pinch sessions)": 0.09886516846666667,
+  "thumbs up": 1.3742582097,
+  "typing": 1.0,
+  "mouse": 0.75,
+  "arm movement": 0.75
+ },
+ "variants": {
+  "high-passed, \u00b10.1 s (spike only)": {
+   "recordings_split": {
+    "False": {
+     "1.0": 0.45323741007194246,
+     "0.5": 0.2517985611510791,
+     "0.2": 0.1366906474820144
+    },
+    "True": {
+     "1.0": 0.44244604316546765,
+     "0.5": 0.3057553956834532,
+     "0.2": 0.1079136690647482
+    }
+   },
+   "day_split": {
+    "False": {
+     "1.0": 0.13309352517985612,
+     "0.5": 0.08273381294964029,
+     "0.2": 0.039568345323741004
+    },
+    "True": {
+     "1.0": 0.12589928057553956,
+     "0.5": 0.07553956834532374,
+     "0.2": 0.039568345323741004
+    }
+   },
+   "activities_per_minute": {
+    "False": {
+     "everything_else recordings": 9.976720984369802,
+     "fist": 0.7325014140308626,
+     "wrist twist": 0.0,
+     "rest (pinch sessions)": 0.0,
+     "thumbs up": 0.0,
+     "typing": 5.0,
+     "mouse": 1.3333333333333333,
+     "arm movement": 10.666666666666666
+    },
+    "True": {
+     "everything_else recordings": 7.4825407382773514,
+     "fist": 1.0255019796432077,
+     "wrist twist": 0.0,
+     "rest (pinch sessions)": 0.0,
+     "thumbs up": 0.0,
+     "typing": 2.0,
+     "mouse": 1.3333333333333333,
+     "arm movement": 0.0
+    }
+   }
+  },
+  "high-passed, \u00b10.2 s (spike and around)": {
+   "recordings_split": {
+    "False": {
+     "1.0": 0.5143884892086331,
+     "0.5": 0.28776978417266186,
+     "0.2": 0.14028776978417265
+    },
+    "True": {
+     "1.0": 0.49280575539568344,
+     "0.5": 0.3237410071942446,
+     "0.2": 0.15827338129496402
+    }
+   },
+   "day_split": {
+    "False": {
+     "1.0": 0.1366906474820144,
+     "0.5": 0.07913669064748201,
+     "0.2": 0.0539568345323741
+    },
+    "True": {
+     "1.0": 0.08992805755395683,
+     "0.5": 0.0539568345323741,
+     "0.2": 0.03237410071942446
+    }
+   },
+   "activities_per_minute": {
+    "False": {
+     "everything_else recordings": 8.480212836714331,
+     "fist": 0.7325014140308626,
+     "wrist twist": 0.0,
+     "rest (pinch sessions)": 0.0,
+     "thumbs up": 0.0,
+     "typing": 1.0,
+     "mouse": 0.0,
+     "arm movement": 5.333333333333333
+    },
+    "True": {
+     "everything_else recordings": 6.983704689058861,
+     "fist": 1.1720022624493802,
+     "wrist twist": 0.0,
+     "rest (pinch sessions)": 0.0,
+     "thumbs up": 0.0,
+     "typing": 0.0,
+     "mouse": 0.0,
+     "arm movement": 0.0
+    }
+   }
+  },
+  "high-passed, \u00b10.5 s": {
+   "recordings_split": {
+    "False": {
+     "1.0": 0.4748201438848921,
+     "0.5": 0.34532374100719426,
+     "0.2": 0.19424460431654678
+    },
+    "True": {
+     "1.0": 0.4676258992805755,
+     "0.5": 0.3129496402877698,
+     "0.2": 0.2517985611510791
+    }
+   },
+   "day_split": {
+    "False": {
+     "1.0": 0.13309352517985612,
+     "0.5": 0.09352517985611511,
+     "0.2": 0.0539568345323741
+    },
+    "True": {
+     "1.0": 0.07913669064748201,
+     "0.5": 0.0683453237410072,
+     "0.2": 0.03597122302158273
+    }
+   },
+   "activities_per_minute": {
+    "False": {
+     "everything_else recordings": 6.983704689058861,
+     "fist": 1.1720022624493802,
+     "wrist twist": 0.0,
+     "rest (pinch sessions)": 0.0,
+     "thumbs up": 0.0,
+     "typing": 0.0,
+     "mouse": 0.0,
+     "arm movement": 4.0
+    },
+    "True": {
+     "everything_else recordings": 5.986032590621881,
+     "fist": 1.3185025452555525,
+     "wrist twist": 0.0,
+     "rest (pinch sessions)": 0.0,
+     "thumbs up": 0.0,
+     "typing": 0.0,
+     "mouse": 0.0,
+     "arm movement": 0.0
+    }
+   }
+  },
+  "unfiltered, \u00b10.2 s": {
+   "recordings_split": {
+    "False": {
+     "1.0": 0.7194244604316546,
+     "0.5": 0.5287769784172662,
+     "0.2": 0.17266187050359713
+    },
+    "True": {
+     "1.0": 0.5683453237410072,
+     "0.5": 0.49640287769784175,
+     "0.2": 0.2302158273381295
+    }
+   },
+   "day_split": {
+    "False": {
+     "1.0": 0.24100719424460432,
+     "0.5": 0.17625899280575538,
+     "0.2": 0.12589928057553956
+    },
+    "True": {
+     "1.0": 0.15467625899280577,
+     "0.5": 0.09712230215827339,
+     "0.2": 0.06115107913669065
+    }
+   },
+   "activities_per_minute": {
+    "False": {
+     "everything_else recordings": 8.979048885932821,
+     "fist": 0.43950084841851755,
+     "wrist twist": 0.0,
+     "rest (pinch sessions)": 0.0,
+     "thumbs up": 0.7276652909487072,
+     "typing": 0.0,
+     "mouse": 2.6666666666666665,
+     "arm movement": 1.3333333333333333
+    },
+    "True": {
+     "everything_else recordings": 7.981376787495842,
+     "fist": 1.0255019796432077,
+     "wrist twist": 0.0,
+     "rest (pinch sessions)": 0.0,
+     "thumbs up": 0.7276652909487072,
+     "typing": 0.0,
+     "mouse": 2.6666666666666665,
+     "arm movement": 0.0
+    }
+   }
+  }
+ },
+ "seconds": 422.3
+}

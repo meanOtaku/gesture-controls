@@ -1,0 +1,762 @@
+{
+ "pinches": 278,
+ "candidate_min_height": 0.3601042982216786,
+ "minutes": {
+  "everything_else recordings": 2.004666666666667,
+  "fist": 6.825925389666665,
+  "wrist twist": 0.7053362800166667,
+  "rest (pinch sessions)": 0.09886516846666667,
+  "thumbs up": 1.3742582097,
+  "typing": 1.0,
+  "mouse": 0.75,
+  "arm movement": 0.75
+ },
+ "context": {
+  "arm movement (accel RMS, m/s\u00b2)": {
+   "pinch_median": 0.2586802780495674,
+   "side": "high",
+   "activities": {
+    "everything_else recordings": {
+     "median": 0.2981428495082612,
+     "removed": 0.20444444444444446
+    },
+    "fist": {
+     "median": 0.16901690157133611,
+     "removed": 0.055450535601764335
+    },
+    "wrist twist": {
+     "median": 0.49432080142949875,
+     "removed": 0.4032258064516129
+    },
+    "rest (pinch sessions)": {
+     "median": 0.3912660361111321,
+     "removed": 0.0
+    },
+    "thumbs up": {
+     "median": 0.17615234897642013,
+     "removed": 0.009615384615384616
+    },
+    "typing": {
+     "median": 0.5290767080181189,
+     "removed": 0.2875
+    },
+    "mouse": {
+     "median": 0.4139294208009555,
+     "removed": 0.26666666666666666
+    },
+    "arm movement": {
+     "median": 3.707773579642044,
+     "removed": 0.8777777777777778
+    }
+   },
+   "threshold": 0.6187120096089166
+  },
+  "wrist turning (gyro RMS, rad/s)": {
+   "pinch_median": 0.10426552247524752,
+   "side": "high",
+   "activities": {
+    "everything_else recordings": {
+     "median": 0.15408750321822987,
+     "removed": 0.18222222222222223
+    },
+    "fist": {
+     "median": 0.07556526060562067,
+     "removed": 0.004410838059231254
+    },
+    "wrist twist": {
+     "median": 1.1489175676270316,
+     "removed": 0.47580645161290325
+    },
+    "rest (pinch sessions)": {
+     "median": 0.5957097693062008,
+     "removed": 0.0
+    },
+    "thumbs up": {
+     "median": 0.01807879734593132,
+     "removed": 0.0
+    },
+    "typing": {
+     "median": 0.14384677393564532,
+     "removed": 0.0
+    },
+    "mouse": {
+     "median": 0.12488362566338027,
+     "removed": 0.0
+    },
+    "arm movement": {
+     "median": 1.7661356249578513,
+     "removed": 0.6888888888888889
+    }
+   },
+   "threshold": 1.2716615577402444
+  },
+  "stillness just before (jolt, m/s\u00b2)": {
+   "pinch_median": 0.11520687397894629,
+   "side": "high",
+   "activities": {
+    "everything_else recordings": {
+     "median": 0.197867843253763,
+     "removed": 0.14
+    },
+    "fist": {
+     "median": 0.097677139745335,
+     "removed": 0.08254568367989919
+    },
+    "wrist twist": {
+     "median": 0.19563209077658728,
+     "removed": 0.25
+    },
+    "rest (pinch sessions)": {
+     "median": 0.17495168242472708,
+     "removed": 0.041666666666666664
+    },
+    "thumbs up": {
+     "median": 0.044212755984443776,
+     "removed": 0.00641025641025641
+    },
+    "typing": {
+     "median": 0.43120939088618826,
+     "removed": 0.43333333333333335
+    },
+    "mouse": {
+     "median": 0.30406724100350174,
+     "removed": 0.31666666666666665
+    },
+    "arm movement": {
+     "median": 3.0320937877247776,
+     "removed": 0.8777777777777778
+    }
+   },
+   "threshold": 0.45018403433907916
+  },
+  "jolts in the last 3 s": {
+   "pinch_median": 2.0,
+   "side": "high",
+   "activities": {
+    "everything_else recordings": {
+     "median": 2.0,
+     "removed": 0.07777777777777778
+    },
+    "fist": {
+     "median": 1.0,
+     "removed": 0.0
+    },
+    "wrist twist": {
+     "median": 1.0,
+     "removed": 0.0
+    },
+    "rest (pinch sessions)": {
+     "median": 1.0,
+     "removed": 0.0
+    },
+    "thumbs up": {
+     "median": 0.0,
+     "removed": 0.0
+    },
+    "typing": {
+     "median": 4.0,
+     "removed": 0.42916666666666664
+    },
+    "mouse": {
+     "median": 3.0,
+     "removed": 0.17777777777777778
+    },
+    "arm movement": {
+     "median": 4.0,
+     "removed": 0.26666666666666666
+    }
+   },
+   "threshold": 4.0
+  },
+  "rhythm (autocorrelation 0.3-1.2 s)": {
+   "pinch_median": 0.17074814981383973,
+   "side": "high",
+   "activities": {
+    "everything_else recordings": {
+     "median": 0.2552724871616503,
+     "removed": 0.29333333333333333
+    },
+    "fist": {
+     "median": 0.13052532660971888,
+     "removed": 0.01638311279143037
+    },
+    "wrist twist": {
+     "median": 0.24793863760192214,
+     "removed": 0.23387096774193547
+    },
+    "rest (pinch sessions)": {
+     "median": 0.2547674090738084,
+     "removed": 0.041666666666666664
+    },
+    "thumbs up": {
+     "median": 0.2285815516339207,
+     "removed": 0.08012820512820513
+    },
+    "typing": {
+     "median": 0.1637771683180577,
+     "removed": 0.058333333333333334
+    },
+    "mouse": {
+     "median": 0.1911578943060252,
+     "removed": 0.05
+    },
+    "arm movement": {
+     "median": 0.1791480660442013,
+     "removed": 0.03888888888888889
+    }
+   },
+   "threshold": 0.4203878044400319
+  },
+  "face tilt from level (\u00b0)": {
+   "pinch_median": 55.869581105154346,
+   "side": null,
+   "activities": {
+    "everything_else recordings": {
+     "median": 47.26442677140356
+    },
+    "fist": {
+     "median": 47.70697519015861
+    },
+    "wrist twist": {
+     "median": 60.7698043709597
+    },
+    "rest (pinch sessions)": {
+     "median": 66.72784812798497
+    },
+    "thumbs up": {
+     "median": 81.84969309579182
+    },
+    "typing": {
+     "median": 37.68083084783241
+    },
+    "mouse": {
+     "median": 42.191657354099945
+    },
+    "arm movement": {
+     "median": 43.00053612516909
+    }
+   }
+  }
+ },
+ "candidates": {
+  "size (jolt peak, m/s\u00b2)": {
+   "pinch_median": 0.8133959290885651,
+   "side": "high",
+   "activities": {
+    "everything_else recordings": {
+     "median": 0.7054295722930173,
+     "removed": 0.04672897196261682,
+     "candidates_per_minute": 53.37545726637844
+    },
+    "fist": {
+     "median": 1.0611357642733226,
+     "removed": 0.09345794392523364,
+     "candidates_per_minute": 31.351060520520928
+    },
+    "wrist twist": {
+     "median": 0.9207003191853529,
+     "removed": 0.0,
+     "candidates_per_minute": 39.6973766886603
+    },
+    "rest (pinch sessions)": {
+     "median": 0.6322530687476777,
+     "removed": 0.0,
+     "candidates_per_minute": 40.459143114176136
+    },
+    "thumbs up": {
+     "median": 0.5149462488122634,
+     "removed": 0.0,
+     "candidates_per_minute": 10.914979364230609
+    },
+    "typing": {
+     "median": 0.9603514249927736,
+     "removed": 0.022222222222222223,
+     "candidates_per_minute": 90.0
+    },
+    "mouse": {
+     "median": 0.8679950389434834,
+     "removed": 0.037037037037037035,
+     "candidates_per_minute": 72.0
+    },
+    "arm movement": {
+     "median": 7.034012708355473,
+     "removed": 0.8771929824561403,
+     "candidates_per_minute": 76.0
+    }
+   },
+   "threshold": 2.3076728266680195
+  },
+  "width at half height (ms)": {
+   "pinch_median": 40.0,
+   "side": "high",
+   "activities": {
+    "everything_else recordings": {
+     "median": 40.0,
+     "removed": 0.037383177570093455,
+     "candidates_per_minute": 53.37545726637844
+    },
+    "fist": {
+     "median": 60.0,
+     "removed": 0.014018691588785047,
+     "candidates_per_minute": 31.351060520520928
+    },
+    "wrist twist": {
+     "median": 120.0,
+     "removed": 0.39285714285714285,
+     "candidates_per_minute": 39.6973766886603
+    },
+    "rest (pinch sessions)": {
+     "median": 90.0,
+     "removed": 0.0,
+     "candidates_per_minute": 40.459143114176136
+    },
+    "thumbs up": {
+     "median": 100.0,
+     "removed": 0.0,
+     "candidates_per_minute": 10.914979364230609
+    },
+    "typing": {
+     "median": 40.0,
+     "removed": 0.011111111111111112,
+     "candidates_per_minute": 90.0
+    },
+    "mouse": {
+     "median": 40.0,
+     "removed": 0.0,
+     "candidates_per_minute": 72.0
+    },
+    "arm movement": {
+     "median": 40.0,
+     "removed": 0.017543859649122806,
+     "candidates_per_minute": 76.0
+    }
+   },
+   "threshold": 140.0
+  },
+  "accel-gyro lag (ms, absolute)": {
+   "pinch_median": 60.0,
+   "side": "high",
+   "activities": {
+    "everything_else recordings": {
+     "median": 100.0,
+     "removed": 0.0,
+     "candidates_per_minute": 53.37545726637844
+    },
+    "fist": {
+     "median": 40.0,
+     "removed": 0.0,
+     "candidates_per_minute": 31.351060520520928
+    },
+    "wrist twist": {
+     "median": 70.0,
+     "removed": 0.0,
+     "candidates_per_minute": 39.6973766886603
+    },
+    "rest (pinch sessions)": {
+     "median": 110.0,
+     "removed": 0.0,
+     "candidates_per_minute": 40.459143114176136
+    },
+    "thumbs up": {
+     "median": 60.0,
+     "removed": 0.0,
+     "candidates_per_minute": 10.914979364230609
+    },
+    "typing": {
+     "median": 80.0,
+     "removed": 0.0,
+     "candidates_per_minute": 90.0
+    },
+    "mouse": {
+     "median": 60.0,
+     "removed": 0.0,
+     "candidates_per_minute": 72.0
+    },
+    "arm movement": {
+     "median": 140.0,
+     "removed": 0.0,
+     "candidates_per_minute": 76.0
+    }
+   },
+   "threshold": 240.0
+  },
+  "gyro jolt with it (rad/s)": {
+   "pinch_median": 0.2844452098034108,
+   "side": "low",
+   "activities": {
+    "everything_else recordings": {
+     "median": 0.5095173312386884,
+     "removed": 0.0,
+     "candidates_per_minute": 53.37545726637844
+    },
+    "fist": {
+     "median": 0.3163161909345347,
+     "removed": 0.018691588785046728,
+     "candidates_per_minute": 31.351060520520928
+    },
+    "wrist twist": {
+     "median": 2.0786998188797474,
+     "removed": 0.03571428571428571,
+     "candidates_per_minute": 39.6973766886603
+    },
+    "rest (pinch sessions)": {
+     "median": 0.9136816383264141,
+     "removed": 0.0,
+     "candidates_per_minute": 40.459143114176136
+    },
+    "thumbs up": {
+     "median": 0.13547712717257138,
+     "removed": 0.06666666666666667,
+     "candidates_per_minute": 10.914979364230609
+    },
+    "typing": {
+     "median": 0.25373704770275407,
+     "removed": 0.0,
+     "candidates_per_minute": 90.0
+    },
+    "mouse": {
+     "median": 0.18368297996802424,
+     "removed": 0.018518518518518517,
+     "candidates_per_minute": 72.0
+    },
+    "arm movement": {
+     "median": 2.6773141945886008,
+     "removed": 0.0,
+     "candidates_per_minute": 76.0
+    }
+   },
+   "threshold": 0.074020392089046
+  },
+  "sharpness (60 ms part / jolt)": {
+   "pinch_median": 0.7443439935215879,
+   "side": "low",
+   "activities": {
+    "everything_else recordings": {
+     "median": 0.6544690057864603,
+     "removed": 0.24299065420560748,
+     "candidates_per_minute": 53.37545726637844
+    },
+    "fist": {
+     "median": 0.7252823339255994,
+     "removed": 0.0514018691588785,
+     "candidates_per_minute": 31.351060520520928
+    },
+    "wrist twist": {
+     "median": 0.26917492188773995,
+     "removed": 0.8928571428571429,
+     "candidates_per_minute": 39.6973766886603
+    },
+    "rest (pinch sessions)": {
+     "median": 0.38676973811572246,
+     "removed": 0.75,
+     "candidates_per_minute": 40.459143114176136
+    },
+    "thumbs up": {
+     "median": 0.4724373345169293,
+     "removed": 0.13333333333333333,
+     "candidates_per_minute": 10.914979364230609
+    },
+    "typing": {
+     "median": 0.6806689331073253,
+     "removed": 0.03333333333333333,
+     "candidates_per_minute": 90.0
+    },
+    "mouse": {
+     "median": 0.6645325914023944,
+     "removed": 0.05555555555555555,
+     "candidates_per_minute": 72.0
+    },
+    "arm movement": {
+     "median": 0.5492146845171758,
+     "removed": 0.2631578947368421,
+     "candidates_per_minute": 76.0
+    }
+   },
+   "threshold": 0.4114589082540591
+  },
+  "accel direction match (|cos|)": {
+   "pinch_median": 0.8743477634022776,
+   "side": "low",
+   "activities": {
+    "everything_else recordings": {
+     "median": 0.7637180932153387,
+     "removed": 0.028037383177570093,
+     "candidates_per_minute": 53.37545726637844
+    },
+    "fist": {
+     "median": 0.6050405789373856,
+     "removed": 0.03271028037383177,
+     "candidates_per_minute": 31.351060520520928
+    },
+    "wrist twist": {
+     "median": 0.8335418499813493,
+     "removed": 0.0,
+     "candidates_per_minute": 39.6973766886603
+    },
+    "rest (pinch sessions)": {
+     "median": 0.6025240190992447,
+     "removed": 0.0,
+     "candidates_per_minute": 40.459143114176136
+    },
+    "thumbs up": {
+     "median": 0.37489927312947957,
+     "removed": 0.2,
+     "candidates_per_minute": 10.914979364230609
+    },
+    "typing": {
+     "median": 0.39149195940953757,
+     "removed": 0.05555555555555555,
+     "candidates_per_minute": 90.0
+    },
+    "mouse": {
+     "median": 0.9235640332223974,
+     "removed": 0.018518518518518517,
+     "candidates_per_minute": 72.0
+    },
+    "arm movement": {
+     "median": 0.6105975334903433,
+     "removed": 0.05263157894736842,
+     "candidates_per_minute": 76.0
+    }
+   },
+   "threshold": 0.053702297211410566
+  },
+  "gyro direction match (|cos|)": {
+   "pinch_median": 0.9838136035448415,
+   "side": "low",
+   "activities": {
+    "everything_else recordings": {
+     "median": 0.9771019155817697,
+     "removed": 0.04672897196261682,
+     "candidates_per_minute": 53.37545726637844
+    },
+    "fist": {
+     "median": 0.894288592533844,
+     "removed": 0.21495327102803738,
+     "candidates_per_minute": 31.351060520520928
+    },
+    "wrist twist": {
+     "median": 0.9950989260632943,
+     "removed": 0.0,
+     "candidates_per_minute": 39.6973766886603
+    },
+    "rest (pinch sessions)": {
+     "median": 0.9859179405680427,
+     "removed": 0.0,
+     "candidates_per_minute": 40.459143114176136
+    },
+    "thumbs up": {
+     "median": 0.8252316092310575,
+     "removed": 0.3333333333333333,
+     "candidates_per_minute": 10.914979364230609
+    },
+    "typing": {
+     "median": 0.8855581168754766,
+     "removed": 0.18888888888888888,
+     "candidates_per_minute": 90.0
+    },
+    "mouse": {
+     "median": 0.5866468251617696,
+     "removed": 0.5,
+     "candidates_per_minute": 72.0
+    },
+    "arm movement": {
+     "median": 0.7764021340969229,
+     "removed": 0.2631578947368421,
+     "candidates_per_minute": 76.0
+    }
+   },
+   "threshold": 0.5804157680664903
+  }
+ },
+ "combined": {
+  "pinches_kept_context": 0.9130434782608695,
+  "pinches_kept_candidate": 0.8920863309352518,
+  "activities": {
+   "everything_else recordings": {
+    "time_open": 0.5288888888888889,
+    "candidates_per_minute_before": 53.37545726637844,
+    "candidates_per_minute_after_checks": 36.91386764216827,
+    "after_checks_and_gates": 19.523334441857884
+   },
+   "fist": {
+    "time_open": 0.8790170132325141,
+    "candidates_per_minute_before": 31.351060520520928,
+    "candidates_per_minute_after_checks": 19.48453761322095,
+    "after_checks_and_gates": 17.12724005699006
+   },
+   "wrist twist": {
+    "time_open": 0.31451612903225806,
+    "candidates_per_minute_before": 39.6973766886603,
+    "candidates_per_minute_after_checks": 1.4177634531664394,
+    "after_checks_and_gates": 0.4459094731733156
+   },
+   "rest (pinch sessions)": {
+    "time_open": 0.9166666666666666,
+    "candidates_per_minute_before": 40.459143114176136,
+    "candidates_per_minute_after_checks": 10.114785778544034,
+    "after_checks_and_gates": 9.271886963665365
+   },
+   "thumbs up": {
+    "time_open": 0.9102564102564102,
+    "candidates_per_minute_before": 10.914979364230609,
+    "candidates_per_minute_after_checks": 5.821322327589658,
+    "after_checks_and_gates": 5.298895964857253
+   },
+   "typing": {
+    "time_open": 0.3375,
+    "candidates_per_minute_before": 90.0,
+    "candidates_per_minute_after_checks": 68.0,
+    "after_checks_and_gates": 22.950000000000003
+   },
+   "mouse": {
+    "time_open": 0.55,
+    "candidates_per_minute_before": 72.0,
+    "candidates_per_minute_after_checks": 30.666666666666668,
+    "after_checks_and_gates": 16.866666666666667
+   },
+   "arm movement": {
+    "time_open": 0.11666666666666667,
+    "candidates_per_minute_before": 76.0,
+    "candidates_per_minute_after_checks": 5.333333333333333,
+    "after_checks_and_gates": 0.6222222222222222
+   }
+  }
+ },
+ "cue_buzz": {
+  "cues": 40,
+  "baseline": 0.060639989556868924,
+  "peak_0_160ms": 0.12360598259211442,
+  "at_ms": 159.99999999999991,
+  "peak_160_1200ms": 1.2303960517772279,
+  "late_at_ms": 320.00000000000006,
+  "average": [
+   0.071,
+   0.0584,
+   0.0516,
+   0.0589,
+   0.0606,
+   0.0705,
+   0.0566,
+   0.059,
+   0.0722,
+   0.0677,
+   0.0709,
+   0.0769,
+   0.0666,
+   0.0905,
+   0.0847,
+   0.0764,
+   0.0701,
+   0.0642,
+   0.0643,
+   0.0679,
+   0.0715,
+   0.0618,
+   0.059,
+   0.0624,
+   0.06,
+   0.0599,
+   0.0534,
+   0.047,
+   0.0524,
+   0.0512,
+   0.055,
+   0.0602,
+   0.0537,
+   0.0578,
+   0.0607,
+   0.0532,
+   0.056,
+   0.0543,
+   0.054,
+   0.0563,
+   0.059,
+   0.0625,
+   0.0538,
+   0.0556,
+   0.0573,
+   0.054,
+   0.0554,
+   0.0562,
+   0.0623,
+   0.0621,
+   0.0644,
+   0.07,
+   0.0651,
+   0.079,
+   0.075,
+   0.0758,
+   0.0989,
+   0.0945,
+   0.1236,
+   0.2378,
+   0.4779,
+   0.4043,
+   0.5141,
+   0.8742,
+   1.0913,
+   0.9052,
+   1.2304,
+   0.9153,
+   0.7325,
+   0.8681,
+   1.1937,
+   0.8346,
+   0.841,
+   0.849,
+   0.8581,
+   0.8469,
+   0.8695,
+   0.6921,
+   0.609,
+   0.5777,
+   0.477,
+   0.4334,
+   0.4116,
+   0.3454,
+   0.2997,
+   0.2696,
+   0.2882,
+   0.2462,
+   0.1814,
+   0.1833,
+   0.1662,
+   0.1516,
+   0.1403,
+   0.1149,
+   0.1051,
+   0.1008,
+   0.0934,
+   0.1051,
+   0.0906,
+   0.0797,
+   0.0726,
+   0.0731,
+   0.0885,
+   0.1114,
+   0.1176,
+   0.1817,
+   0.3118,
+   0.33,
+   0.3146,
+   0.3443,
+   0.33,
+   0.4392,
+   0.4247,
+   0.4191,
+   0.4728,
+   0.3485,
+   0.3553,
+   0.3015,
+   0.3154,
+   0.352,
+   0.2706,
+   0.306,
+   0.233,
+   0.2263,
+   0.2345
+  ]
+ },
+ "seconds": 1.4
+}

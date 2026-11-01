@@ -1,0 +1,529 @@
+{
+ "pinches": 277,
+ "minutes": {
+  "everything_else recordings": 2.004666666666667,
+  "fist": 6.825925389666667,
+  "wrist twist": 0.7053362800166667,
+  "rest (pinch sessions)": 0.09886516846666667,
+  "thumbs up": 1.3742582097,
+  "typing": 1.0,
+  "mouse": 0.75,
+  "arm movement": 0.75
+ },
+ "band_power": {
+  "pinch contacts": {
+   "0-2 Hz": 6.699508111449185,
+   "2-5 Hz": 8.592724355921467,
+   "5-10 Hz": 8.843509733818902,
+   "10-15 Hz": 7.016087544357937,
+   "15-25 Hz": 5.045523535681969
+  },
+  "everything_else recordings": {
+   "0-2 Hz": 18.035142780132418,
+   "2-5 Hz": 11.691110514916303,
+   "5-10 Hz": 6.183642894234302,
+   "10-15 Hz": 2.595868064937072,
+   "15-25 Hz": 1.0911838830061134
+  },
+  "fist": {
+   "0-2 Hz": 1.7670655096320034,
+   "2-5 Hz": 3.390032512207478,
+   "5-10 Hz": 4.641684111191159,
+   "10-15 Hz": 2.678002518138207,
+   "15-25 Hz": 1.9623730185222983
+  },
+  "wrist twist": {
+   "0-2 Hz": 20.888202275383897,
+   "2-5 Hz": 7.9636976056402995,
+   "5-10 Hz": 0.5489385527622396,
+   "10-15 Hz": 0.14991602185923217,
+   "15-25 Hz": 0.016143530764424745
+  },
+  "rest (pinch sessions)": {
+   "0-2 Hz": 5.352988213134004,
+   "2-5 Hz": 3.7631498698218735,
+   "5-10 Hz": 2.0332836408338997,
+   "10-15 Hz": 0.6795891314775461,
+   "15-25 Hz": 0.22405401904617647
+  },
+  "thumbs up": {
+   "0-2 Hz": 1.1599132844293145,
+   "2-5 Hz": 0.8446852583928594,
+   "5-10 Hz": 0.2676280359508195,
+   "10-15 Hz": 0.05534185847593542,
+   "15-25 Hz": 0.013522481895884652
+  },
+  "typing": {
+   "0-2 Hz": 10.016278603982315,
+   "2-5 Hz": 24.715307420302786,
+   "5-10 Hz": 16.130715627270042,
+   "10-15 Hz": 4.098655804312295,
+   "15-25 Hz": 2.6625446108860804
+  },
+  "mouse": {
+   "0-2 Hz": 10.279222800184643,
+   "2-5 Hz": 24.13185158699399,
+   "5-10 Hz": 10.940015872189008,
+   "10-15 Hz": 3.341774396882503,
+   "15-25 Hz": 1.5107336942289356
+  },
+  "arm movement": {
+   "0-2 Hz": 1171.481106511983,
+   "2-5 Hz": 1368.6853501212124,
+   "5-10 Hz": 446.88796461678896,
+   "10-15 Hz": 190.29115630149732,
+   "15-25 Hz": 79.36393254809974
+  }
+ },
+ "filters": {
+  "trailing 0.3 s mean subtracted": {
+   "accelerometer": {
+    "pinch_peak_median": 0.813059391398039,
+    "over_floor_median": 5.895659808450776,
+    "threshold": 0.3600241937439874,
+    "candidates_per_minute": {
+     "everything_else recordings": 53.37545726637844,
+     "fist": 31.351060520520917,
+     "wrist twist": 39.6973766886603,
+     "rest (pinch sessions)": 40.459143114176136,
+     "thumbs up": 10.914979364230609,
+     "typing": 90.0,
+     "mouse": 72.0,
+     "arm movement": 76.0
+    }
+   },
+   "gyroscope": {
+    "pinch_peak_median": 0.2756780867258123,
+    "over_floor_median": 5.8766932324974155,
+    "threshold": 0.08904811466659834,
+    "candidates_per_minute": {
+     "everything_else recordings": 65.8463584968407,
+     "fist": 37.94357324679868,
+     "wrist twist": 43.95066704815962,
+     "rest (pinch sessions)": 70.80350044980823,
+     "thumbs up": 12.370309946128023,
+     "typing": 89.0,
+     "mouse": 69.33333333333333,
+     "arm movement": 77.33333333333333
+    }
+   }
+  },
+  "first difference": {
+   "accelerometer": {
+    "pinch_peak_median": 0.8297585002135636,
+    "over_floor_median": 7.091498845947592,
+    "threshold": 0.36959837207554846,
+    "candidates_per_minute": {
+     "everything_else recordings": 48.38709677419354,
+     "fist": 24.758547794243157,
+     "wrist twist": 15.595397984830832,
+     "rest (pinch sessions)": 30.3443573356321,
+     "thumbs up": 2.910661163794829,
+     "typing": 88.0,
+     "mouse": 72.0,
+     "arm movement": 80.0
+    }
+   },
+   "gyroscope": {
+    "pinch_peak_median": 0.24000835991447653,
+    "over_floor_median": 9.128993868122178,
+    "threshold": 0.0763286363657788,
+    "candidates_per_minute": {
+     "everything_else recordings": 61.35683405387428,
+     "fist": 24.905048077049326,
+     "wrist twist": 36.861849782327425,
+     "rest (pinch sessions)": 60.6887146712642,
+     "thumbs up": 6.548987618538365,
+     "typing": 90.0,
+     "mouse": 61.333333333333336,
+     "arm movement": 80.0
+    }
+   }
+  },
+  "Butterworth order 2, 1 Hz": {
+   "accelerometer": {
+    "pinch_peak_median": 0.8021018289752649,
+    "over_floor_median": 6.0096537307682505,
+    "threshold": 0.3575451061866537,
+    "candidates_per_minute": {
+     "everything_else recordings": 49.88360492184901,
+     "fist": 30.032557975265366,
+     "wrist twist": 38.27961323549386,
+     "rest (pinch sessions)": 50.57392889272017,
+     "thumbs up": 9.459648782333193,
+     "typing": 90.0,
+     "mouse": 68.0,
+     "arm movement": 80.0
+    }
+   },
+   "gyroscope": {
+    "pinch_peak_median": 0.2775089021910029,
+    "over_floor_median": 6.102109103743474,
+    "threshold": 0.08147526909523098,
+    "candidates_per_minute": {
+     "everything_else recordings": 63.352178250748246,
+     "fist": 35.746069004706094,
+     "wrist twist": 52.45724776715826,
+     "rest (pinch sessions)": 60.6887146712642,
+     "thumbs up": 12.370309946128023,
+     "typing": 88.0,
+     "mouse": 76.0,
+     "arm movement": 85.33333333333333
+    }
+   }
+  },
+  "Butterworth order 2, 3 Hz": {
+   "accelerometer": {
+    "pinch_peak_median": 0.6595812350506765,
+    "over_floor_median": 6.714108853406788,
+    "threshold": 0.3169283238142743,
+    "candidates_per_minute": {
+     "everything_else recordings": 44.89524442966411,
+     "fist": 27.688553450366605,
+     "wrist twist": 21.26645179749659,
+     "rest (pinch sessions)": 30.3443573356321,
+     "thumbs up": 6.548987618538365,
+     "typing": 90.0,
+     "mouse": 66.66666666666667,
+     "arm movement": 77.33333333333333
+    }
+   },
+   "gyroscope": {
+    "pinch_peak_median": 0.2432720421077037,
+    "over_floor_median": 8.351644190396751,
+    "threshold": 0.07401047905120994,
+    "candidates_per_minute": {
+     "everything_else recordings": 62.35450615231126,
+     "fist": 26.95605203633574,
+     "wrist twist": 35.44408632916098,
+     "rest (pinch sessions)": 60.6887146712642,
+     "thumbs up": 8.731983491384486,
+     "typing": 84.0,
+     "mouse": 64.0,
+     "arm movement": 85.33333333333333
+    }
+   }
+  },
+  "Butterworth order 2, 5 Hz": {
+   "accelerometer": {
+    "pinch_peak_median": 0.6098198950158323,
+    "over_floor_median": 6.97208733609826,
+    "threshold": 0.2834234948197853,
+    "candidates_per_minute": {
+     "everything_else recordings": 44.39640838044562,
+     "fist": 26.516551187917226,
+     "wrist twist": 17.013161437997272,
+     "rest (pinch sessions)": 40.459143114176136,
+     "thumbs up": 5.09365703664095,
+     "typing": 90.0,
+     "mouse": 69.33333333333333,
+     "arm movement": 80.0
+    }
+   },
+   "gyroscope": {
+    "pinch_peak_median": 0.19298594836104385,
+    "over_floor_median": 8.726316388062367,
+    "threshold": 0.060446579351725684,
+    "candidates_per_minute": {
+     "everything_else recordings": 59.36148985700032,
+     "fist": 25.63754949108019,
+     "wrist twist": 35.44408632916098,
+     "rest (pinch sessions)": 70.80350044980823,
+     "thumbs up": 8.00431820043578,
+     "typing": 89.0,
+     "mouse": 60.0,
+     "arm movement": 74.66666666666667
+    }
+   }
+  },
+  "Butterworth order 2, 8 Hz": {
+   "accelerometer": {
+    "pinch_peak_median": 0.5245328018290044,
+    "over_floor_median": 7.372757334615949,
+    "threshold": 0.22424649514695585,
+    "candidates_per_minute": {
+     "everything_else recordings": 46.39175257731958,
+     "fist": 25.491049208274017,
+     "wrist twist": 4.253290359499318,
+     "rest (pinch sessions)": 20.229571557088068,
+     "thumbs up": 2.910661163794829,
+     "typing": 89.0,
+     "mouse": 73.33333333333333,
+     "arm movement": 77.33333333333333
+    }
+   },
+   "gyroscope": {
+    "pinch_peak_median": 0.13338964475555146,
+    "over_floor_median": 8.747311731794413,
+    "threshold": 0.045951959115704676,
+    "candidates_per_minute": {
+     "everything_else recordings": 63.352178250748246,
+     "fist": 25.19804864266167,
+     "wrist twist": 32.60855942282811,
+     "rest (pinch sessions)": 70.80350044980823,
+     "thumbs up": 5.821322327589658,
+     "typing": 92.0,
+     "mouse": 57.333333333333336,
+     "arm movement": 82.66666666666667
+    }
+   }
+  },
+  "Butterworth order 2, 12 Hz": {
+   "accelerometer": {
+    "pinch_peak_median": 0.37580760053079765,
+    "over_floor_median": 7.314322159798252,
+    "threshold": 0.15887825360926452,
+    "candidates_per_minute": {
+     "everything_else recordings": 44.39640838044562,
+     "fist": 23.586545531793774,
+     "wrist twist": 2.8355269063328787,
+     "rest (pinch sessions)": 20.229571557088068,
+     "thumbs up": 0.7276652909487072,
+     "typing": 93.0,
+     "mouse": 69.33333333333333,
+     "arm movement": 77.33333333333333
+    }
+   },
+   "gyroscope": {
+    "pinch_peak_median": 0.08374993177698839,
+    "over_floor_median": 8.799110829022156,
+    "threshold": 0.03365968664624245,
+    "candidates_per_minute": {
+     "everything_else recordings": 54.87196541403391,
+     "fist": 23.29354496618143,
+     "wrist twist": 28.355269063328787,
+     "rest (pinch sessions)": 70.80350044980823,
+     "thumbs up": 1.4553305818974145,
+     "typing": 86.0,
+     "mouse": 49.333333333333336,
+     "arm movement": 74.66666666666667
+    }
+   }
+  },
+  "Butterworth order 2, 16 Hz": {
+   "accelerometer": {
+    "pinch_peak_median": 0.2512681580913403,
+    "over_floor_median": 7.156666471482016,
+    "threshold": 0.10489939885128578,
+    "candidates_per_minute": {
+     "everything_else recordings": 46.39175257731958,
+     "fist": 23.87954609740612,
+     "wrist twist": 0.0,
+     "rest (pinch sessions)": 10.114785778544034,
+     "thumbs up": 0.7276652909487072,
+     "typing": 85.0,
+     "mouse": 64.0,
+     "arm movement": 81.33333333333333
+    }
+   },
+   "gyroscope": {
+    "pinch_peak_median": 0.047947452078864174,
+    "over_floor_median": 9.63329271101852,
+    "threshold": 0.020197823027921044,
+    "candidates_per_minute": {
+     "everything_else recordings": 54.37312936481542,
+     "fist": 23.147044683375256,
+     "wrist twist": 19.84868834433015,
+     "rest (pinch sessions)": 70.80350044980823,
+     "thumbs up": 0.7276652909487072,
+     "typing": 85.0,
+     "mouse": 45.333333333333336,
+     "arm movement": 77.33333333333333
+    }
+   }
+  },
+  "Butterworth order 4, 1 Hz": {
+   "accelerometer": {
+    "pinch_peak_median": 0.7678651895848502,
+    "over_floor_median": 5.670307998910538,
+    "threshold": 0.35916015243109445,
+    "candidates_per_minute": {
+     "everything_else recordings": 51.87894911872297,
+     "fist": 28.860555712815984,
+     "wrist twist": 39.6973766886603,
+     "rest (pinch sessions)": 40.459143114176136,
+     "thumbs up": 9.459648782333193,
+     "typing": 91.0,
+     "mouse": 70.66666666666667,
+     "arm movement": 76.0
+    }
+   },
+   "gyroscope": {
+    "pinch_peak_median": 0.2755059427595693,
+    "over_floor_median": 4.794048438165255,
+    "threshold": 0.07868106255595607,
+    "candidates_per_minute": {
+     "everything_else recordings": 69.83704689058861,
+     "fist": 37.06457154996165,
+     "wrist twist": 63.79935539248977,
+     "rest (pinch sessions)": 50.57392889272017,
+     "thumbs up": 15.280971109922852,
+     "typing": 85.0,
+     "mouse": 76.0,
+     "arm movement": 85.33333333333333
+    }
+   }
+  },
+  "Butterworth order 4, 3 Hz": {
+   "accelerometer": {
+    "pinch_peak_median": 0.671321674844632,
+    "over_floor_median": 6.071204488168198,
+    "threshold": 0.32921897754112806,
+    "candidates_per_minute": {
+     "everything_else recordings": 44.39640838044562,
+     "fist": 27.102552319141914,
+     "wrist twist": 19.84868834433015,
+     "rest (pinch sessions)": 30.3443573356321,
+     "thumbs up": 5.09365703664095,
+     "typing": 85.0,
+     "mouse": 70.66666666666667,
+     "arm movement": 73.33333333333333
+    }
+   },
+   "gyroscope": {
+    "pinch_peak_median": 0.23240041268204545,
+    "over_floor_median": 7.432130831738086,
+    "threshold": 0.07096991009870074,
+    "candidates_per_minute": {
+     "everything_else recordings": 62.35450615231126,
+     "fist": 26.370050905111054,
+     "wrist twist": 31.190795969661664,
+     "rest (pinch sessions)": 50.57392889272017,
+     "thumbs up": 7.276652909487072,
+     "typing": 83.0,
+     "mouse": 60.0,
+     "arm movement": 77.33333333333333
+    }
+   }
+  },
+  "Butterworth order 4, 5 Hz": {
+   "accelerometer": {
+    "pinch_peak_median": 0.6135418476719882,
+    "over_floor_median": 6.482962571519559,
+    "threshold": 0.27189960415314013,
+    "candidates_per_minute": {
+     "everything_else recordings": 47.88826072497505,
+     "fist": 25.19804864266167,
+     "wrist twist": 11.342107625331515,
+     "rest (pinch sessions)": 40.459143114176136,
+     "thumbs up": 4.365991745692243,
+     "typing": 86.0,
+     "mouse": 76.0,
+     "arm movement": 74.66666666666667
+    }
+   },
+   "gyroscope": {
+    "pinch_peak_median": 0.17582329107516495,
+    "over_floor_median": 7.753809164097309,
+    "threshold": 0.05285892442971398,
+    "candidates_per_minute": {
+     "everything_else recordings": 61.85567010309277,
+     "fist": 25.344548925467844,
+     "wrist twist": 34.026322875994545,
+     "rest (pinch sessions)": 70.80350044980823,
+     "thumbs up": 6.548987618538365,
+     "typing": 85.0,
+     "mouse": 61.333333333333336,
+     "arm movement": 81.33333333333333
+    }
+   }
+  },
+  "Butterworth order 4, 8 Hz": {
+   "accelerometer": {
+    "pinch_peak_median": 0.48546825192746745,
+    "over_floor_median": 6.557770407196741,
+    "threshold": 0.21572456150460928,
+    "candidates_per_minute": {
+     "everything_else recordings": 47.88826072497505,
+     "fist": 24.026046380212293,
+     "wrist twist": 2.8355269063328787,
+     "rest (pinch sessions)": 30.3443573356321,
+     "thumbs up": 1.4553305818974145,
+     "typing": 89.0,
+     "mouse": 74.66666666666667,
+     "arm movement": 81.33333333333333
+    }
+   },
+   "gyroscope": {
+    "pinch_peak_median": 0.11783342585600896,
+    "over_floor_median": 7.254607453317428,
+    "threshold": 0.0463142854541,
+    "candidates_per_minute": {
+     "everything_else recordings": 58.36381775856334,
+     "fist": 23.733045814599947,
+     "wrist twist": 22.68421525066303,
+     "rest (pinch sessions)": 60.6887146712642,
+     "thumbs up": 2.1829958728461216,
+     "typing": 87.0,
+     "mouse": 49.333333333333336,
+     "arm movement": 76.0
+    }
+   }
+  },
+  "Butterworth order 4, 12 Hz": {
+   "accelerometer": {
+    "pinch_peak_median": 0.35257784981847634,
+    "over_floor_median": 6.821043977055225,
+    "threshold": 0.1421101326173927,
+    "candidates_per_minute": {
+     "everything_else recordings": 47.88826072497505,
+     "fist": 24.026046380212293,
+     "wrist twist": 1.4177634531664394,
+     "rest (pinch sessions)": 20.229571557088068,
+     "thumbs up": 0.7276652909487072,
+     "typing": 89.0,
+     "mouse": 69.33333333333333,
+     "arm movement": 77.33333333333333
+    }
+   },
+   "gyroscope": {
+    "pinch_peak_median": 0.06548064546566901,
+    "over_floor_median": 8.565936020367612,
+    "threshold": 0.027419696647094018,
+    "candidates_per_minute": {
+     "everything_else recordings": 55.86963751247089,
+     "fist": 23.4400452489876,
+     "wrist twist": 11.342107625331515,
+     "rest (pinch sessions)": 80.91828622835227,
+     "thumbs up": 0.7276652909487072,
+     "typing": 86.0,
+     "mouse": 46.666666666666664,
+     "arm movement": 78.66666666666667
+    }
+   }
+  },
+  "Butterworth order 4, 16 Hz": {
+   "accelerometer": {
+    "pinch_peak_median": 0.21372350573829454,
+    "over_floor_median": 6.3751946462271585,
+    "threshold": 0.07636817799462589,
+    "candidates_per_minute": {
+     "everything_else recordings": 55.3708014632524,
+     "fist": 26.95605203633574,
+     "wrist twist": 0.0,
+     "rest (pinch sessions)": 10.114785778544034,
+     "thumbs up": 0.0,
+     "typing": 90.0,
+     "mouse": 72.0,
+     "arm movement": 82.66666666666667
+    }
+   },
+   "gyroscope": {
+    "pinch_peak_median": 0.033519937964227094,
+    "over_floor_median": 9.007605126048931,
+    "threshold": 0.012519716171158003,
+    "candidates_per_minute": {
+     "everything_else recordings": 56.867309610907874,
+     "fist": 24.31904694582464,
+     "wrist twist": 9.924344172165075,
+     "rest (pinch sessions)": 60.6887146712642,
+     "thumbs up": 0.0,
+     "typing": 85.0,
+     "mouse": 49.333333333333336,
+     "arm movement": 78.66666666666667
+    }
+   }
+  }
+ },
+ "seconds": 1.5
+}

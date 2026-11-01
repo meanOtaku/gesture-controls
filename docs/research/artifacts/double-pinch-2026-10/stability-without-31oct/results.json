@@ -1,0 +1,342 @@
+{
+ "pinches": 266,
+ "pinch_medians": {
+  "before": {
+   "acceleration spread (m/s\u00b2)": 0.22438128286624087,
+   "turning (gyro RMS, rad/s)": 0.0927710563690691,
+   "tilt change (\u00b0)": 1.0606193835027349
+  },
+  "after": {
+   "acceleration spread (m/s\u00b2)": 0.23478508272469756,
+   "turning (gyro RMS, rad/s)": 0.09223325770994062,
+   "tilt change (\u00b0)": 1.1648631587528326
+  }
+ },
+ "activity_medians": {
+  "everything_else recordings": {
+   "acceleration spread (m/s\u00b2)": 0.2746908071023781,
+   "turning (gyro RMS, rad/s)": 0.18350361130037007,
+   "tilt change (\u00b0)": 3.411487178339957
+  },
+  "fist": {
+   "acceleration spread (m/s\u00b2)": 0.13638835491927745,
+   "turning (gyro RMS, rad/s)": 0.07507158342026664,
+   "tilt change (\u00b0)": 1.1626927683128827
+  },
+  "wrist twist": {
+   "acceleration spread (m/s\u00b2)": 0.33214257141662135,
+   "turning (gyro RMS, rad/s)": 0.7617873089345478,
+   "tilt change (\u00b0)": 11.776621593360533
+  },
+  "rest (pinch sessions)": {
+   "acceleration spread (m/s\u00b2)": 0.2771598775898189,
+   "turning (gyro RMS, rad/s)": 0.5913693487622341,
+   "tilt change (\u00b0)": 9.195317175691684
+  },
+  "thumbs up": {
+   "acceleration spread (m/s\u00b2)": 0.04889893070543838,
+   "turning (gyro RMS, rad/s)": 0.01925875245493196,
+   "tilt change (\u00b0)": 0.3857907247017931
+  }
+ },
+ "levels": {
+  "80% of pinches: 0.372, 0.478, 9.22": {
+   "kind": "80% of pinches",
+   "limits": {
+    "acceleration spread (m/s\u00b2)": 0.3720268136336999,
+    "turning (gyro RMS, rad/s)": 0.4783736997969716,
+    "tilt change (\u00b0)": 9.217310006441965
+   },
+   "steady_before": 0.7481203007518797,
+   "settles_after": 0.7180451127819549,
+   "both": 0.6165413533834586,
+   "activities": {
+    "everything_else recordings": {
+     "open": 0.5296610169491526,
+     "bracketed": 0.3792372881355932
+    },
+    "fist": {
+     "open": 0.7809354647720544,
+     "bracketed": 0.6607460035523979
+    },
+    "wrist twist": {
+     "open": 0.44360902255639095,
+     "bracketed": 0.07518796992481203
+    },
+    "rest (pinch sessions)": {
+     "open": 0.4166666666666667,
+     "bracketed": 0.041666666666666664
+    },
+    "thumbs up": {
+     "open": 0.9882005899705014,
+     "bracketed": 0.9498525073746312
+    }
+   }
+  },
+  "90% of pinches: 0.455, 0.893, 20.2": {
+   "kind": "90% of pinches",
+   "limits": {
+    "acceleration spread (m/s\u00b2)": 0.45495722403294814,
+    "turning (gyro RMS, rad/s)": 0.8931548825831821,
+    "tilt change (\u00b0)": 20.170459107237818
+   },
+   "steady_before": 0.8721804511278195,
+   "settles_after": 0.8270676691729323,
+   "both": 0.7593984962406015,
+   "activities": {
+    "everything_else recordings": {
+     "open": 0.6398305084745762,
+     "bracketed": 0.4639830508474576
+    },
+    "fist": {
+     "open": 0.8395500296033156,
+     "bracketed": 0.7406749555950266
+    },
+    "wrist twist": {
+     "open": 0.49624060150375937,
+     "bracketed": 0.07518796992481203
+    },
+    "rest (pinch sessions)": {
+     "open": 0.5416666666666666,
+     "bracketed": 0.125
+    },
+    "thumbs up": {
+     "open": 0.9882005899705014,
+     "bracketed": 0.9528023598820059
+    }
+   }
+  },
+  "95% of pinches: 0.536, 1.12, 28.3": {
+   "kind": "95% of pinches",
+   "limits": {
+    "acceleration spread (m/s\u00b2)": 0.5361117122108044,
+    "turning (gyro RMS, rad/s)": 1.1171335194406213,
+    "tilt change (\u00b0)": 28.30628722467003
+   },
+   "steady_before": 0.9285714285714286,
+   "settles_after": 0.9022556390977443,
+   "both": 0.849624060150376,
+   "activities": {
+    "everything_else recordings": {
+     "open": 0.6949152542372882,
+     "bracketed": 0.5063559322033898
+    },
+    "fist": {
+     "open": 0.8875074008288928,
+     "bracketed": 0.8016577856719953
+    },
+    "wrist twist": {
+     "open": 0.5112781954887218,
+     "bracketed": 0.09022556390977443
+    },
+    "rest (pinch sessions)": {
+     "open": 0.75,
+     "bracketed": 0.4166666666666667
+    },
+    "thumbs up": {
+     "open": 0.9911504424778761,
+     "bracketed": 0.9557522123893806
+    }
+   }
+  },
+  "98% of pinches: 0.62, 1.51, 34.4": {
+   "kind": "98% of pinches",
+   "limits": {
+    "acceleration spread (m/s\u00b2)": 0.6202779214698684,
+    "turning (gyro RMS, rad/s)": 1.5099617098588851,
+    "tilt change (\u00b0)": 34.42411108718198
+   },
+   "steady_before": 0.9661654135338346,
+   "settles_after": 0.9548872180451128,
+   "both": 0.9323308270676691,
+   "activities": {
+    "everything_else recordings": {
+     "open": 0.7372881355932204,
+     "bracketed": 0.5614406779661016
+    },
+    "fist": {
+     "open": 0.9378330373001776,
+     "bracketed": 0.881586737714624
+    },
+    "wrist twist": {
+     "open": 0.5338345864661654,
+     "bracketed": 0.11278195488721804
+    },
+    "rest (pinch sessions)": {
+     "open": 0.875,
+     "bracketed": 0.5
+    },
+    "thumbs up": {
+     "open": 0.9941002949852508,
+     "bracketed": 0.9587020648967551
+    }
+   }
+  },
+  "fixed: 0.3, 0.3, 5": {
+   "kind": "fixed",
+   "limits": {
+    "acceleration spread (m/s\u00b2)": 0.3,
+    "turning (gyro RMS, rad/s)": 0.3,
+    "tilt change (\u00b0)": 5.0
+   },
+   "steady_before": 0.6278195488721805,
+   "settles_after": 0.5676691729323309,
+   "both": 0.4774436090225564,
+   "activities": {
+    "everything_else recordings": {
+     "open": 0.4110169491525424,
+     "bracketed": 0.2457627118644068
+    },
+    "fist": {
+     "open": 0.7051509769094139,
+     "bracketed": 0.5754884547069272
+    },
+    "wrist twist": {
+     "open": 0.3684210526315789,
+     "bracketed": 0.03007518796992481
+    },
+    "rest (pinch sessions)": {
+     "open": 0.375,
+     "bracketed": 0.0
+    },
+    "thumbs up": {
+     "open": 0.9557522123893806,
+     "bracketed": 0.8997050147492626
+    }
+   }
+  },
+  "fixed: 0.4, 0.3, 5": {
+   "kind": "fixed",
+   "limits": {
+    "acceleration spread (m/s\u00b2)": 0.4,
+    "turning (gyro RMS, rad/s)": 0.3,
+    "tilt change (\u00b0)": 5.0
+   },
+   "steady_before": 0.6917293233082706,
+   "settles_after": 0.6654135338345865,
+   "both": 0.575187969924812,
+   "activities": {
+    "everything_else recordings": {
+     "open": 0.5,
+     "bracketed": 0.3665254237288136
+    },
+    "fist": {
+     "open": 0.7779751332149201,
+     "bracketed": 0.6583777383066903
+    },
+    "wrist twist": {
+     "open": 0.38345864661654133,
+     "bracketed": 0.05263157894736842
+    },
+    "rest (pinch sessions)": {
+     "open": 0.375,
+     "bracketed": 0.0
+    },
+    "thumbs up": {
+     "open": 0.9557522123893806,
+     "bracketed": 0.9026548672566371
+    }
+   }
+  },
+  "fixed: 0.4, 0.5, 10": {
+   "kind": "fixed",
+   "limits": {
+    "acceleration spread (m/s\u00b2)": 0.4,
+    "turning (gyro RMS, rad/s)": 0.5,
+    "tilt change (\u00b0)": 10.0
+   },
+   "steady_before": 0.7706766917293233,
+   "settles_after": 0.7255639097744361,
+   "both": 0.6390977443609023,
+   "activities": {
+    "everything_else recordings": {
+     "open": 0.5402542372881356,
+     "bracketed": 0.3919491525423729
+    },
+    "fist": {
+     "open": 0.7963291888691534,
+     "bracketed": 0.6802841918294849
+    },
+    "wrist twist": {
+     "open": 0.44360902255639095,
+     "bracketed": 0.07518796992481203
+    },
+    "rest (pinch sessions)": {
+     "open": 0.4583333333333333,
+     "bracketed": 0.041666666666666664
+    },
+    "thumbs up": {
+     "open": 0.9882005899705014,
+     "bracketed": 0.9498525073746312
+    }
+   }
+  },
+  "fixed: 0.5, 0.5, 10": {
+   "kind": "fixed",
+   "limits": {
+    "acceleration spread (m/s\u00b2)": 0.5,
+    "turning (gyro RMS, rad/s)": 0.5,
+    "tilt change (\u00b0)": 10.0
+   },
+   "steady_before": 0.7857142857142857,
+   "settles_after": 0.7593984962406015,
+   "both": 0.6729323308270677,
+   "activities": {
+    "everything_else recordings": {
+     "open": 0.5635593220338984,
+     "bracketed": 0.413135593220339
+    },
+    "fist": {
+     "open": 0.857312018946122,
+     "bracketed": 0.7637655417406749
+    },
+    "wrist twist": {
+     "open": 0.44360902255639095,
+     "bracketed": 0.07518796992481203
+    },
+    "rest (pinch sessions)": {
+     "open": 0.4583333333333333,
+     "bracketed": 0.041666666666666664
+    },
+    "thumbs up": {
+     "open": 0.9911504424778761,
+     "bracketed": 0.9528023598820059
+    }
+   }
+  },
+  "fixed: 0.6, 0.5, 10": {
+   "kind": "fixed",
+   "limits": {
+    "acceleration spread (m/s\u00b2)": 0.6,
+    "turning (gyro RMS, rad/s)": 0.5,
+    "tilt change (\u00b0)": 10.0
+   },
+   "steady_before": 0.793233082706767,
+   "settles_after": 0.7706766917293233,
+   "both": 0.6804511278195489,
+   "activities": {
+    "everything_else recordings": {
+     "open": 0.5783898305084746,
+     "bracketed": 0.4216101694915254
+    },
+    "fist": {
+     "open": 0.9224393132030787,
+     "bracketed": 0.8549437537004144
+    },
+    "wrist twist": {
+     "open": 0.44360902255639095,
+     "bracketed": 0.07518796992481203
+    },
+    "rest (pinch sessions)": {
+     "open": 0.4583333333333333,
+     "bracketed": 0.041666666666666664
+    },
+    "thumbs up": {
+     "open": 0.9911504424778761,
+     "bracketed": 0.9528023598820059
+    }
+   }
+  }
+ },
+ "seconds": 1.3
+}
