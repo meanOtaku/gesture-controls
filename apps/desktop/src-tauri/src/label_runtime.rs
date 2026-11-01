@@ -67,10 +67,24 @@ impl From<label_inference::steadiness::Verdict> for HandSteadinessView {
     }
 }
 
+/// Labels that are two moments of one gesture and can never both be acted on at once: if both models fire together,
+/// both are held off rather than one being guessed (the Recorder's camera marks them, `pinchEdgeMarker.ts`).
+const EXCLUSIVE_LABELS: &[&[&str]] = &[&["pinch_in", "pinch_out"]];
+
+fn exclusivity_groups() -> Vec<label_inference::ExclusivityGroup> {
+    EXCLUSIVE_LABELS
+        .iter()
+        .map(|labels| label_inference::ExclusivityGroup {
+            labels: labels.iter().filter_map(|label| LabelId::new(*label).ok()).collect(),
+        })
+        .collect()
+}
+
 /// A runtime that, with `steady_starts`, only lets a gesture start when the hand was still before it.
 fn runtime_with_gate(steady_starts: bool) -> LabelRuntime {
     let mut runtime = LabelRuntime::default();
     runtime.set_steadiness_gate(steady_starts);
+    runtime.set_exclusivity(exclusivity_groups());
     runtime
 }
 
@@ -1739,6 +1753,16 @@ mod tests {
         assert_eq!((unknown.state.as_str(), unknown.accel_spread), ("unknown", None));
         // Before the watch streams anything there is nothing to tell.
         assert_eq!(LabelRuntimeHost::default().hand_steadiness().state, "unknown");
+    }
+
+    #[test]
+    fn pinch_in_and_pinch_out_can_never_both_be_acted_on() {
+        let groups = exclusivity_groups();
+        assert_eq!(groups.len(), 1);
+        assert_eq!(
+            groups[0].labels.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            vec!["pinch_in".to_string(), "pinch_out".to_string()]
+        );
     }
 
     #[test]

@@ -54,7 +54,7 @@ built). Scripts, the figure and raw output: [ppg-step-study/](ppg-step-study/).
 
 ## Data
 
-The `gesture-dataset-*.csv` recordings exported between 2026-09-22 and 2026-10-11 (now in `data/recordings/2026-10-downloads/`,
+The `gesture-dataset-*.csv` recordings exported between 2026-09-22 and 2026-10-11 (now in `data/recordings/old/2026-10-downloads/`,
 listed in `data/recordings.manifest.json`), one wearer, one watch.
 
 | Used | Sessions | Days | Gesture starts (after merging) |
@@ -379,7 +379,7 @@ uv run --with matplotlib python -I ../../docs/research/ppg-step-study/scripts/fo
 The study loader reads only the 26 recordings in the manifest, so the 2026-10-14 recordings added to the same folder do
 not change these numbers. `PPG_STUDY_FILES=all` includes them.
 
-The recordings are in `data/recordings/2026-10-downloads/`. `data/recordings.manifest.json` lists every file with its size,
+The recordings are in `data/recordings/old/2026-10-downloads/`. `data/recordings.manifest.json` lists every file with its size,
 SHA-256, labels and whether this study used it, and `python3 scripts/recordings_manifest.py check` confirms they are
 unchanged. The scripts fall back to `~/Downloads` when the repo copy is absent (see `load.py`). Rest moments are
 drawn with a fixed seed, so a rerun on the same files gives the same numbers.

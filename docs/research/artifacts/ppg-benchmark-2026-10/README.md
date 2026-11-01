@@ -28,7 +28,7 @@ The MAD transition reduced mean AUC in all 20 paired held-out folds for both HGB
 
 ## Reproducing the component ablation
 
-The original study scripts were not versioned. `reproduce.py` is an independent reimplementation of the component ablation, written from this folder's archived specs (protocol, method ledger, feature schema, events, splits, inventory and mapped labels). It reads the recordings in `data/recordings/2026-10-downloads/`, rebuilds the four causal pipelines, fits HGB and ExtraTrees on the 20 splits, scores event AUCs and the continuous live-detection metrics, and compares every number with `ppg-preprocess-component-ablation/`. From the repository root (about 3 minutes):
+The original study scripts were not versioned. `reproduce.py` is an independent reimplementation of the component ablation, written from this folder's archived specs (protocol, method ledger, feature schema, events, splits, inventory and mapped labels). It reads the recordings in `data/recordings/old/2026-10-downloads/`, rebuilds the four causal pipelines, fits HGB and ExtraTrees on the 20 splits, scores event AUCs and the continuous live-detection metrics, and compares every number with `ppg-preprocess-component-ablation/`. From the repository root (about 3 minutes):
 
 ```sh
 uv run --project tools/label-trainer python docs/research/artifacts/ppg-benchmark-2026-10/reproduce.py [out_dir]
