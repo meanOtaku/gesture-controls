@@ -381,6 +381,48 @@ pub(crate) fn contains_label(app: &AppHandle, id: &str) -> bool {
     load_index(app).labels.iter().any(|label| label.id == id)
 }
 
+/// The ids in the catalogue file at `path` (the app's `model-lab/labels.json`), for the import tool.
+#[cfg(test)]
+pub(crate) fn label_ids_at(path: &std::path::Path) -> BTreeSet<String> {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|text| serde_json::from_str::<LabelIndex>(&text).ok())
+        .map(|index| index.labels.into_iter().map(|label| label.id).collect())
+        .unwrap_or_default()
+}
+
+/// Adds each `(id, display name, description)` missing from the catalogue file at `path`, as a gesture to detect, and
+/// returns the ids it added. The file is written atomically, as the app writes it.
+#[cfg(test)]
+pub(crate) fn add_gesture_labels_at(path: &std::path::Path, labels: &[(&str, &str, &str)]) -> Result<Vec<String>, String> {
+    let mut index: LabelIndex = match fs::read_to_string(path) {
+        Ok(text) => serde_json::from_str(&text).map_err(|e| format!("could not read {}: {e}", path.display()))?,
+        Err(_) => LabelIndex::default(),
+    };
+    let mut added = Vec::new();
+    for (id, display_name, description) in labels {
+        if index.labels.iter().any(|label| label.id == *id) {
+            continue;
+        }
+        index.labels.push(LabelRecord {
+            id: id.to_string(),
+            display_name: display_name.to_string(),
+            description: description.to_string(),
+            color: "#65e6ff".into(),
+            role: LabelRole::PositiveGesture,
+            built_in: false,
+            archived_at: None,
+            archive_log: None,
+        });
+        added.push(id.to_string());
+    }
+    index.labels.sort_by(|a, b| a.id.cmp(&b.id));
+    let temporary = path.with_extension("json.tmp");
+    fs::write(&temporary, serde_json::to_string_pretty(&index).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    fs::rename(temporary, path).map_err(|e| e.to_string())?;
+    Ok(added)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -398,7 +398,12 @@ pub(crate) fn load_index(app: &AppHandle) -> DatasetIndex {
             return DatasetIndex::default();
         }
     };
-    let Ok(contents) = fs::read_to_string(&path) else {
+    load_index_file(&path)
+}
+
+/// Reads an `index.json`; a missing or unreadable one is an empty index.
+fn load_index_file(path: &std::path::Path) -> DatasetIndex {
+    let Ok(contents) = fs::read_to_string(path) else {
         return DatasetIndex::default();
     };
     match serde_json::from_str::<DatasetIndex>(&contents) {
@@ -547,26 +552,51 @@ pub(crate) fn store_pair(
     legacy_text: Option<&str>,
     derived_from: Option<String>,
 ) -> Result<DatasetSummary, String> {
+    let dir = datasets_dir(app)?;
+    store_pair_in(
+        &dir,
+        |label| crate::label_registry::contains_label(app, label),
+        &runtime.lock,
+        filename,
+        pair,
+        source_recording_id,
+        legacy_text,
+        derived_from,
+    )
+}
+
+/// `store_pair` for the datasets folder `dir`, with `known_label` saying which labels the catalogue has. The app calls it
+/// through `store_pair`; the import tool below calls it with the app's data folder.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn store_pair_in(
+    dir: &std::path::Path,
+    known_label: impl Fn(&str) -> bool,
+    lock: &Mutex<()>,
+    filename: String,
+    pair: Pair,
+    source_recording_id: Option<String>,
+    legacy_text: Option<&str>,
+    derived_from: Option<String>,
+) -> Result<DatasetSummary, String> {
     for label in &pair.labels {
         // A stretch left out needs no label of its own: it is never trained on.
-        if label != dataset_files::LEFT_OUT_LABEL && !crate::label_registry::contains_label(app, label) {
+        if label != dataset_files::LEFT_OUT_LABEL && !known_label(label) {
             return Err(format!(
                 "unknown label '{label}'; create it on the Labels tab before adding recordings"
             ));
         }
     }
-    let _guard = runtime
-        .lock
+    let _guard = lock
         .lock()
         .map_err(|_| "model lab lock was poisoned".to_string())?;
 
-    let dir = datasets_dir(app)?;
-    fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
-    let mut index = load_index(app);
+    fs::create_dir_all(dir).map_err(|error| error.to_string())?;
+    let index_file = dir.join(INDEX_FILE_NAME);
+    let mut index = load_index_file(&index_file);
     if let Some(source) = &source_recording_id
         && index.datasets.iter().any(|existing| {
             existing.source_recording_id.as_ref() == Some(source)
-                && already_holds(&dir, &existing.id, &pair, legacy_text)
+                && already_holds(dir, &existing.id, &pair, legacy_text)
         })
     {
         return Err(
@@ -577,8 +607,8 @@ pub(crate) fn store_pair(
 
     // The same data twice would count twice, in training and in every test.
     let incoming = dataset_files::rows_sha(&pair.ppg_csv, &pair.imu_csv);
-    if fill_identities(&dir, &mut index) {
-        write_index_atomic(app, &index)?;
+    if fill_identities(dir, &mut index) {
+        write_index_file(&index_file, &index)?;
     }
     if let Some(existing) = index.datasets.iter().find(|d| d.content_sha.as_deref() == Some(incoming.as_str())) {
         return Err(format!(
@@ -589,11 +619,11 @@ pub(crate) fn store_pair(
 
     let id = loop {
         let candidate = Uuid::new_v4().to_string();
-        if !dataset_exists(&dir, &candidate) {
+        if !dataset_exists(dir, &candidate) {
             break candidate;
         }
     };
-    write_folder(&dir, &id, &pair, None)?;
+    write_folder(dir, &id, &pair, None)?;
     let folder = dir.join(&id);
 
     let summary = DatasetSummary {
@@ -617,7 +647,7 @@ pub(crate) fn store_pair(
 
     index.next_sequence += 1;
     index.datasets.push(summary.clone());
-    if let Err(error) = write_index_atomic(app, &index) {
+    if let Err(error) = write_index_file(&index_file, &index) {
         let _ = fs::remove_dir_all(&folder);
         return Err(error);
     }
@@ -1030,6 +1060,57 @@ pub fn delete_model_dataset(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// One-off tool: adds recordings to Model Lab in the app's own data folder, through the same checks as Import (headers,
+    /// labels in the catalogue, no duplicate, the next number). `APP_DATA` is the app's data folder (on macOS
+    /// `~/Library/Application Support/dev.meanotaku.spatial-gesture-control`), `IMPORT_DIR` a folder of recording folders
+    /// (`ppg.csv` and `imu.csv`) and single-file CSVs, and `ADD_LABELS` (optional) `id:Display name:description` entries
+    /// separated by `;` to add to the catalogue first, as gestures. The app reads both files afresh on each action.
+    #[test]
+    #[ignore = "a tool: needs APP_DATA and IMPORT_DIR"]
+    fn import_recordings_into_the_app() {
+        let app_data = PathBuf::from(std::env::var("APP_DATA").expect("APP_DATA"));
+        let import = PathBuf::from(std::env::var("IMPORT_DIR").expect("IMPORT_DIR"));
+        let labels_file = app_data.join(MODEL_LAB_DIR_NAME).join("labels.json");
+        let wanted: Vec<(String, String, String)> = std::env::var("ADD_LABELS")
+            .unwrap_or_default()
+            .split(';')
+            .filter(|entry| !entry.trim().is_empty())
+            .map(|entry| {
+                let mut parts = entry.splitn(3, ':');
+                let id = parts.next().unwrap_or_default().trim().to_string();
+                let name = parts.next().unwrap_or(&id).trim().to_string();
+                (id, name, parts.next().unwrap_or_default().trim().to_string())
+            })
+            .collect();
+        let refs: Vec<(&str, &str, &str)> = wanted.iter().map(|(a, b, c)| (a.as_str(), b.as_str(), c.as_str())).collect();
+        println!("labels added: {:?}", crate::label_registry::add_gesture_labels_at(&labels_file, &refs).unwrap());
+        let known = crate::label_registry::label_ids_at(&labels_file);
+        let dir = app_data.join(MODEL_LAB_DIR_NAME).join(DATASETS_DIR_NAME);
+        let lock = Mutex::new(());
+        let mut entries: Vec<PathBuf> = fs::read_dir(&import).unwrap().map(|e| e.unwrap().path()).collect();
+        entries.sort();
+        for path in entries {
+            let name = path.file_name().unwrap().to_string_lossy().to_string();
+            let outcome = if path.is_dir() && path.join(dataset_files::IMU_FILE).is_file() {
+                let read = |file: &str| fs::read_to_string(path.join(file)).unwrap();
+                dataset_files::parse_pair(&read(dataset_files::PPG_FILE), &read(dataset_files::IMU_FILE))
+                    .and_then(|pair| store_pair_in(&dir, |label| known.contains(label), &lock, name.clone(), pair, None, None, None))
+            } else if path.extension().is_some_and(|ext| ext == "csv") {
+                let text = fs::read_to_string(&path).unwrap();
+                parse_csv(&text).and_then(|parsed| {
+                    let pair = dataset_files::split_legacy(&parsed.csv)?;
+                    store_pair_in(&dir, |label| known.contains(label), &lock, name.clone(), pair, None, Some(&parsed.csv), None)
+                })
+            } else {
+                continue;
+            };
+            match outcome {
+                Ok(summary) => println!("added #{} {} ({})", summary.sequence, name, summary.labels.join(", ")),
+                Err(error) => println!("not added: {name}: {error}"),
+            }
+        }
+    }
 
     fn valid_csv() -> String {
         [
