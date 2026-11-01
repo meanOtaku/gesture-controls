@@ -2,7 +2,7 @@ import { LEFT_OUT } from "../labelling/labellingModel";
 import type { DatasetSummary } from "./types";
 import { datasetLabels } from "./types";
 
-/** Training a label's model (see `label_training.rs`). There is one kind of model to train: the PPG + IMU pinch-start model. */
+/** Training a label's model (see `label_training.rs`): the PPG + IMU pinch-start trees, or the CNN. */
 
 export type OtherRole = "negative" | "exclude";
 
@@ -27,6 +27,29 @@ export const PULSE_MODEL = {
   research: { worstAuc: 0.873, meanAuc: 0.906, recall: 0.462, falsePerMinute: 1.9 },
 } as const;
 
+/** The trainer backend: the trees (the default) or the CNN. */
+export type TrainMethod = "ppg-onset-trees" | "ppg-imu-cnn";
+export const TREES_METHOD: TrainMethod = "ppg-onset-trees";
+export const CNN_METHOD: TrainMethod = "ppg-imu-cnn";
+
+/** The CNN the app can train instead of the trees: what it reads, the steps it takes, and what the research measured. */
+export const CNN_MODEL = {
+  name: "CNN pinch-start model",
+  summary:
+    "Reads the last second of the watch's accelerometer, gyroscope and pulse sensor, each scaled by its own last 10 seconds, and fires about 0.5 s after a gesture starts, about 0.4 s sooner than the trees. Three small convolutional networks look at the shape of that second and their votes are averaged. Use it with Settings → Gestures → Still hand on: it learned the jolt of a gesture from a still hand, and fires on jolts in other movement. Training it needs PyTorch, which the trainer installs the first time (a large download).",
+  stages: [
+    { title: "Motion and pulse", detail: "Accelerometer and gyroscope, and green, red and infrared light, on one 50 Hz grid" },
+    { title: "Scaled to its recent level", detail: "Each tick z-scored against the 10 s before it, then squashed to 0-1" },
+    { title: "The last second", detail: "9 channels x 50 ticks: 450 inputs" },
+    { title: "CNN", detail: "Three dilated convolutions, max and mean over time, two dense layers; three networks averaged" },
+    { title: "Peak trigger", detail: "Fires when the vote falls back after reaching the cut-off" },
+  ],
+  inputs: 450,
+  /** Pinch ins caught with still hand, at most 1 false alarm a minute, on the current pinch model's split
+   * (docs/research/artifacts/double-pinch-2026-10/cnn-vs-trees): against 64% for the trees. */
+  research: { recall: 0.69, falsePerMinute: 1.0, delayMs: 500 },
+} as const;
+
 export interface TrainRequest {
   label: string;
   datasetIds: string[];
@@ -36,6 +59,8 @@ export interface TrainRequest {
   research?: boolean;
   /** Moves every label later in time by this many milliseconds (earlier when negative); absent leaves them as recorded. */
   labelOffsetMs?: number;
+  /** Which model to train; absent trains the trees. */
+  method?: TrainMethod;
 }
 
 /** The most the labels may be moved in time, either way (the desktop's limit). */
@@ -131,6 +156,7 @@ export function buildRequest(input: {
   roles: Record<string, OtherRole>;
   research?: boolean;
   labelOffsetMs?: number;
+  method?: TrainMethod;
 }): TrainRequest {
   const role = (label: string): OtherRole => input.roles[label] ?? "negative";
   return {
@@ -140,6 +166,7 @@ export function buildRequest(input: {
     excludes: input.others.filter((label) => role(label) === "exclude"),
     ...(input.research ? { research: true } : {}),
     ...(input.labelOffsetMs ? { labelOffsetMs: input.labelOffsetMs } : {}),
+    ...(input.method === CNN_METHOD ? { method: CNN_METHOD } : {}),
   };
 }
 

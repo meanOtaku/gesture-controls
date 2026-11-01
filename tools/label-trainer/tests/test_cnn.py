@@ -1,0 +1,81 @@
+import json
+
+import numpy as np
+import pytest
+
+from label_trainer import cnn, cnn_input, label_train as lt
+from tests.make_cnn_input_cases import FIXTURE, build
+from tests.pulse_data import spec_for
+
+torch = pytest.importorskip("torch")  # the `cnn` extra
+
+
+def test_the_shared_cases_are_what_the_inputs_give_now():
+    # Keeps the Rust runtime's cases (`crates/pinch-inference/src/cnn_input.rs`) equal to this module's inputs.
+    stored, now = json.loads(FIXTURE.read_text()), json.loads(json.dumps(build()))
+    assert stored["feature_names"] == now["feature_names"]
+    for a, b in zip(stored["cases"], now["cases"], strict=True):
+        assert a["decisions"] == b["decisions"]
+        for row_a, row_b in zip(a["expected"], b["expected"], strict=True):
+            assert (row_a is None) == (row_b is None)
+            if row_a is not None:
+                assert np.allclose(row_a, row_b, rtol=0, atol=1e-12)
+
+
+def test_each_input_is_in_zero_to_one_and_a_gap_or_too_little_history_gives_none():
+    ms = 1_000_000
+    t = 1_000_000_000_000 + np.arange(1200) * 10 * ms
+    motion = np.column_stack([np.sin(np.arange(1200) / 7.0)] * 6)
+    pulse_t = t[::4]
+    pulse = np.column_stack([200_000 + 100 * np.sin(np.arange(len(pulse_t)) / 3.0)] * 3)
+    x = cnn_input.inputs(t, motion, pulse_t, pulse, np.array([t[-1], t[500]]))
+    assert np.isfinite(x[0]).all() and ((x[0] > 0) & (x[0] < 1)).all()
+    assert not np.isfinite(x[1]).any(), "5 s of history, less than the 10.98 s it reads"
+    keep = (pulse_t < t[1100]) | (pulse_t > t[1140])
+    assert not np.isfinite(cnn_input.inputs(t, motion, pulse_t[keep], pulse[keep], np.array([t[-1]]))).any()
+
+
+def test_labels_mark_the_moments_after_a_start_and_leave_out_those_around_it():
+    ms = 1_000_000
+    d = np.arange(0, 4000, 40, dtype=np.int64) * ms
+    y = cnn.labels(d, [1000 * ms], [(3000 * ms, 3100 * ms)])
+    at = lambda t: y[t // 40]  # noqa: E731
+    assert at(1400) == 1 and at(1600) == 1
+    assert at(1200) == -1 and at(800) == -1 and at(2200) == -1, "around the start, but not its moment"
+    assert at(760) == 0 and at(2240) == 0, "clear of the start"
+    assert at(3050) == -1 and at(3600) == -1, "inside an excluded hold, and just after"
+
+
+def test_the_exported_file_reproduces_the_trained_networks(monkeypatch):
+    monkeypatch.setattr(cnn, "EPOCHS", 2)
+    rng = np.random.default_rng(0)
+    x = rng.random((300, cnn_input.FEATURE_COUNT))
+    y = (x[:, :50].mean(axis=1) > 0.5).astype(int)
+    model = cnn.fit(x, y, 1)
+    assert len(model.nets) == cnn.MEMBERS
+    exported = cnn.predict(cnn.to_bytes(model), x[:40])
+    assert np.max(np.abs(exported - model.predict_proba(x[:40])[:, 1])) < cnn.PARITY_TOLERANCE
+
+
+def test_a_cnn_spec_trains_a_cnn_bundle(tmp_path, monkeypatch):
+    monkeypatch.setattr(cnn, "EPOCHS", 3)
+    monkeypatch.setattr(cnn, "MEMBERS", 1)
+    for name, value in (("MIN_NEGATIVE_SECONDS", 0.0), ("MAX_FALSE_ACTIVATIONS_PER_HOUR", float("inf")), ("MIN_GESTURE_RECALL", 0.0)):
+        monkeypatch.setattr(lt, name, value)
+    raw = spec_for(tmp_path, seconds=40.0, every_s=5.0, motion=True)
+    raw["backend"] = lt.CNN_BACKEND
+    result = lt.run(raw, tmp_path / "run")
+    assert result["outcome"] in ("deployable", "evaluationOnly"), result["message"]
+    assert result["backend"] == lt.CNN_BACKEND
+    manifest = json.loads((tmp_path / "run" / "bundle" / "manifest.json").read_text())
+    assert manifest["model"]["format"] == "cnn" and manifest["preprocessing"]["kind"] == "ppg_imu_cnn"
+    assert manifest["window"]["durationMs"] == 11_000 and manifest["thresholds"]["decisionDelayMs"] == cnn.DECISION_DELAY_MS
+    assert manifest["input"]["features"] == list(cnn_input.FEATURE_NAMES)
+    assert (tmp_path / "run" / "bundle" / "model.cnn").exists()
+
+
+def test_a_cnn_reads_the_pulse_and_motion_only():
+    raw = {"version": 1, "target": "pinch", "recordings": {}, "train": [], "evaluation": [], "backend": lt.CNN_BACKEND,
+           "sources": ["watchPpg"]}
+    with pytest.raises(lt.TrainingRefused, match="the CNN reads the pulse sensor and motion"):
+        lt.parse_spec(raw)

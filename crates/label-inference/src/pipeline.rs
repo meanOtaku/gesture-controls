@@ -16,11 +16,13 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use model_lab_core::{LabelId, ModelVersionId, StreamSource};
+use pinch_inference::cnn_input;
 use pinch_inference::imu_onset::{self, MotionSample};
 use pinch_inference::ppg_onset::{PpgSample as Sample, features};
 use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
 
 use crate::clock::ClockMap;
+use crate::inputs::ModelKind;
 use crate::model::{InputCheck, LoadedModel};
 
 const NS_PER_MS: u64 = 1_000_000;
@@ -479,11 +481,30 @@ impl LabelPipeline {
         } else {
             Vec::new()
         };
+        // The CNN reads the pulse on the watch's clock, as the motion is (the trainer's recordings share one clock).
+        let pulse_on_watch: Vec<Sample> = if model.kind == ModelKind::Cnn {
+            self.ppg
+                .iter()
+                .filter_map(|s| {
+                    s.watch_ns.map(|ts_ns| Sample {
+                        ts_ns,
+                        green: s.green,
+                        red: s.red,
+                        ir: s.ir,
+                    })
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         let mut scores = Vec::new();
         let mut through = None;
         for sample in pending {
             // The model's inputs, from the samples' own timestamps, for a decision at this sample: what the trainer computes.
             let inputs = match (motion_through, sample.watch_ns) {
+                (Some(_), Some(at)) if model.kind == ModelKind::Cnn => {
+                    cnn_input::inputs(&motion, &pulse_on_watch, at)
+                }
                 (Some(_), Some(at)) => {
                     features(&samples, sample.raw_ts_ns).and_then(|mut pulse| {
                         pulse.extend(imu_onset::features(&motion, at)?);
@@ -517,7 +538,7 @@ impl LabelPipeline {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::model::tests::{expected, expected_motion, loaded, loaded_motion};
+    use crate::model::tests::{expected, expected_cnn, expected_motion, loaded, loaded_cnn, loaded_motion};
 
     /// One PPG batch of the samples `from..to` of `trace` (statuses all valid).
     pub fn batch(trace: &[Sample], from: usize, to: usize) -> WatchPpgBatchSample {
@@ -672,10 +693,18 @@ pub(crate) mod tests {
     /// sensor's clock and sent the moment it was taken, and each motion sample `motion_delay_ms` after it was taken (the
     /// streams are sent separately). Evaluates after each arrival.
     fn replay_motion(motion_delay_ms: u64) -> (Vec<LabelScore>, Vec<WindowRejection>) {
-        let model = loaded_motion();
+        replay_streams(&loaded_motion(), expected_motion(), motion_delay_ms)
+    }
+
+    /// Feeds a fixture's pulse (on its own clock, 7 s behind the watch's) and motion through the pipeline as they would
+    /// arrive, the motion `motion_delay_ms` after it was taken, evaluating after each.
+    fn replay_streams(
+        model: &LoadedModel,
+        (trace, motion, _): (Vec<Sample>, Vec<MotionSample>, Vec<Option<f64>>),
+        motion_delay_ms: u64,
+    ) -> (Vec<LabelScore>, Vec<WindowRejection>) {
         let mut p = LabelPipeline::default();
-        p.configure(&[&model]);
-        let (trace, motion, _) = expected_motion();
+        p.configure(&[model]);
         let origin = trace[0].ts_ns;
         let received = |ts: u64, delay_ms: u64| ts - origin + 10_000_000_000 + delay_ms * NS_PER_MS;
         let mut arrivals: Vec<(u64, bool, usize)> = (0..trace.len())
@@ -696,11 +725,33 @@ pub(crate) mod tests {
                 p.observe_orientation(&motion_sample(&motion[i], i as u64), at)
                     .unwrap();
             }
-            let (s, r) = p.evaluate(&[&model], at);
+            let (s, r) = p.evaluate(&[model], at);
             scores.extend(s);
             rejected.extend(r);
         }
         (scores, rejected)
+    }
+
+    #[test]
+    fn a_cnn_scores_the_live_streams_as_the_trainer_did() {
+        // The pulse arrives on its own clock: the CNN must place it on the watch's, as the trainer's recordings have it.
+        let (trace, _, probabilities) = expected_cnn();
+        let (scores, rejected) = replay_streams(&loaded_cnn(), expected_cnn(), 60);
+        assert!(rejected.is_empty(), "{rejected:?}");
+        assert!(scores.len() > 250, "{}", scores.len());
+        for score in &scores {
+            let i = trace
+                .iter()
+                .position(|s| s.ts_ns - SDK_BEHIND_NS == score.timestamp_ns)
+                .unwrap();
+            let want = probabilities[i].expect("the trainer scored it too");
+            assert!((score.confidence - want).abs() < 1e-6, "sample {i}: {} vs {want}", score.confidence);
+        }
+        let first = trace
+            .iter()
+            .position(|s| s.ts_ns - SDK_BEHIND_NS == scores[0].timestamp_ns)
+            .unwrap();
+        assert_eq!(scores.len(), probabilities[first..].iter().filter(|p| p.is_some()).count());
     }
 
     #[test]

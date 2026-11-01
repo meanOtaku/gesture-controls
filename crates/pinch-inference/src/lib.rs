@@ -2,6 +2,7 @@
 //! summaries of the motion sensors (see [`imu_onset`]). The per-label models in `label-inference` read their inputs through
 //! this crate. It is pure and synchronous, with no dependency on watch-bridge or any Tauri type.
 
+pub mod cnn_input;
 pub mod imu_onset;
 pub mod ppg_onset;
 

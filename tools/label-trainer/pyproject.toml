@@ -14,6 +14,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+# The CNN backend (`cnn.py`) trains with PyTorch.
+cnn = ["torch>=2.2"]
 
 [project.scripts]
 label-classifier-train = "label_trainer.label_train:cli"

@@ -182,17 +182,17 @@ impl From<&ModelLoadFailure> for LoadFailureView {
     }
 }
 
-/// Whether the bundle in `dir` is a kind of model this app runs (the PPG + IMU or the PPG-only pinch-start trees), from its
-/// manifest alone.
+/// Whether the bundle in `dir` is a kind of model this app runs (the PPG + IMU or the PPG-only pinch-start trees, or the
+/// CNN), in its kind's file format, from its manifest alone.
 fn is_current_bundle(dir: &Path) -> bool {
     std::fs::read(dir.join("manifest.json"))
         .ok()
         .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
         .is_some_and(|m| {
-            m["model"]["format"] == label_inference::MODEL_FORMAT
-                && m["preprocessing"]["kind"].as_str().is_some_and(|kind| {
-                    label_inference::ModelKind::from_preprocessing(kind).is_some()
-                })
+            m["preprocessing"]["kind"]
+                .as_str()
+                .and_then(label_inference::ModelKind::from_preprocessing)
+                .is_some_and(|kind| m["model"]["format"] == kind.model_format())
         })
 }
 
@@ -207,6 +207,7 @@ fn purge_old_models(store: &mut RegistryStore<FileStore>, dir: &Path) -> Result<
     let contracts = [
         label_inference::pinch_start_contract(),
         label_inference::ppg_onset_contract(),
+        label_inference::cnn_contract(),
     ];
     let purged = store
         .mutate(|registry| {
@@ -242,7 +243,7 @@ fn purge_old_models(store: &mut RegistryStore<FileStore>, dir: &Path) -> Result<
                 .ok()
                 .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
                 .and_then(|spec| spec["backend"].as_str().map(str::to_string));
-            if backend.is_some_and(|b| b != crate::label_training::BACKEND) {
+            if backend.is_some_and(|b| b != crate::label_training::BACKEND && b != crate::label_training::CNN_BACKEND) {
                 let _ = std::fs::remove_dir_all(entry.path());
                 leftovers += 1;
             }
@@ -1571,6 +1572,10 @@ mod tests {
         let mut store =
             RegistryStore::new(Registry::default(), FileStore::new(lab.path().join("registry-v2.json"))).unwrap();
         let kept = label_inference::import_bundle(&fixture, lab.path(), &mut store, "2026-10-19T00:00:00Z").unwrap();
+        // A CNN, which this app runs too.
+        let cnn_fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../crates/label-inference/tests/fixtures/ppg_imu_cnn_bundle");
+        let cnn = label_inference::import_bundle(&cnn_fixture, lab.path(), &mut store, "2026-10-19T00:00:00Z").unwrap();
         // An older model of the same label, its ONNX bundle in its own folder.
         let old_dir = lab.path().join("label-models/pinch-old");
         std::fs::create_dir_all(&old_dir).unwrap();
@@ -1595,15 +1600,24 @@ mod tests {
         std::fs::write(lab.path().join("network-designs.json"), "[]").unwrap();
         std::fs::create_dir_all(lab.path().join("datasets")).unwrap();
         // Run folders the registry no longer lists: an old backend's goes, the pulse model's stays.
-        for (run, backend) in [("run-old", "torch-mlp"), ("run-new", crate::label_training::BACKEND)] {
+        for (run, backend) in [
+            ("run-old", "torch-mlp"),
+            ("run-new", crate::label_training::BACKEND),
+            ("run-cnn", crate::label_training::CNN_BACKEND),
+        ] {
             let folder = lab.path().join("training-runs").join(run);
             std::fs::create_dir_all(&folder).unwrap();
             std::fs::write(folder.join("spec.json"), format!(r#"{{"backend":"{backend}"}}"#)).unwrap();
         }
 
         purge_old_models(&mut store, lab.path()).unwrap();
-        let versions: Vec<String> = store.registry().versions.keys().map(ToString::to_string).collect();
-        assert_eq!(versions, [kept.version_id.to_string()]);
+        let mut versions: Vec<String> = store.registry().versions.keys().map(ToString::to_string).collect();
+        versions.sort();
+        let mut expected = vec![kept.version_id.to_string(), cnn.version_id.to_string()];
+        expected.sort();
+        assert_eq!(versions, expected, "the trees and the CNN are kept");
+        assert!(lab.path().join("training-runs/run-cnn").exists());
+        assert!(lab.path().join(&store.registry().versions[&cnn.version_id].artifact_dir).join("model.cnn").is_file());
         assert!(!old_dir.exists() && !lab.path().join("network-designs.json").exists());
         assert!(lab.path().join("datasets").is_dir(), "recordings are never touched");
         assert!(!lab.path().join("training-runs/run-old").exists() && lab.path().join("training-runs/run-new").exists());

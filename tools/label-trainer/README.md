@@ -11,8 +11,14 @@ PPG (green, red, IR) -> causal z-score against the previous 1, 2 and 4 s -> caus
 -> 21 statistics over the last 8, 16 and 32 ticks (1,701 inputs) -> ExtraTrees (300 trees)
 ```
 
-It reads only the pulse sensor and fires about 0.9 s after a gesture starts. Every label is trained this way; there are no
-other methods.
+It reads only the pulse sensor and fires about 0.9 s after a gesture starts.
+
+A spec with `"backend": "ppg-imu-cnn"` trains the **CNN** instead (`cnn.py`, research
+[`double-pinch-2026-10`](../../docs/research/artifacts/double-pinch-2026-10/README.md) step 12): the last second of
+motion and pulse on a 50 Hz grid, each channel z-scored against its last 10 s and put through a sigmoid (`cnn_input.py`,
+450 inputs, mirrored by `crates/pinch-inference/src/cnn_input.rs` and kept equal by `tests/fixtures/cnn_input_cases.json`),
+into three small dilated CNNs whose votes are averaged. It fires about 0.5 s after a gesture starts and is written as
+`model.cnn` (JSON weights, read by `crates/label-inference/src/cnn.rs`). It needs PyTorch: `uv run --extra cnn ...`.
 
 The desktop decides everything that must be recorded and cannot change afterwards: which recordings train and which
 evaluate (never the same one) and what each label in the data means (the target, negatives, or left out). It hands them to
@@ -44,7 +50,8 @@ trainer gives each of its samples.
 
 ## Running it
 
-The desktop starts it for you (`uv run --project tools/label-trainer label-classifier-train`). By hand:
+The desktop starts it for you (`uv run --project tools/label-trainer label-classifier-train`, with `--extra cnn` for the
+CNN). By hand:
 
 ```bash
 cd tools/label-trainer

@@ -44,3 +44,11 @@ uuid = { version = "1", features = ["v4"] }
 # would save ~2 MB more but adds ~1.5 minutes per OS to every CI package job, with no measured
 # runtime gain; see docs/performance.md.
 strip = "symbols"
+
+# The gesture models run on every pulse sample (25 a second) even in `tauri dev`: unoptimised, a CNN decision takes
+# 15 ms of the 40 ms between them. Optimising just these two crates keeps dev builds live at little compile cost.
+[profile.dev.package.label-inference]
+opt-level = 3
+
+[profile.dev.package.pinch-inference]
+opt-level = 3

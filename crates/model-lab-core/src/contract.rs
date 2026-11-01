@@ -74,7 +74,8 @@ impl InputContract {
                 )))
             }
         };
-        in_range("windowMs", self.window_ms, 50, 10_000)?;
+        // Up to 15 s: the CNN pinch-start model scales each tick by the 10 s before it.
+        in_range("windowMs", self.window_ms, 50, 15_000)?;
         in_range("strideMs", self.stride_ms, 10, 10_000)?;
         in_range("maxGapMs", self.max_gap_ms, 1, 10_000)?;
         in_range("minSamples", self.min_samples, 1, 10_000)?;

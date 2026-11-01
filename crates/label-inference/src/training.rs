@@ -61,6 +61,12 @@ pub fn pinch_start_contract() -> InputContract {
     ModelKind::PpgImu.contract()
 }
 
+/// What the CNN pinch-start model reads: the last 11 s of the pulse sensor and motion, a decision every 40 ms (see
+/// [`ModelKind::Cnn`]).
+pub fn cnn_contract() -> InputContract {
+    ModelKind::Cnn.contract()
+}
+
 /// What the earlier PPG-only pinch-start model reads (see [`ModelKind::PpgOnly`]); its versions and runs are kept.
 pub fn ppg_onset_contract() -> InputContract {
     ModelKind::PpgOnly.contract()
@@ -399,6 +405,7 @@ pub fn monitor_only_run<P: Persist>(
 pub fn trainer_backend(name: &str) -> Option<TrainerBackend> {
     match name {
         "ppg-onset-trees" => Some(TrainerBackend::ScikitLearn),
+        "ppg-imu-cnn" => Some(TrainerBackend::PyTorch),
         _ => None,
     }
 }

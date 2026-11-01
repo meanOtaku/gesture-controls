@@ -1,9 +1,9 @@
-"""Writes crates/label-inference/tests/fixtures/ppg_onset_bundle and ppg_imu_onset_bundle: a bundle of each kind this
-trainer made, and what it must answer.
+"""Writes crates/label-inference/tests/fixtures/ppg_onset_bundle, ppg_imu_onset_bundle and ppg_imu_cnn_bundle: a bundle
+of each kind this trainer made, and what it must answer.
 
 The runtime's tests load each bundle through the full validation and feed `expected.json`'s trace (pinches and fists for
-15 s, then 9 s of quiet: the PPG, and for the PPG + IMU model the motion too) through the live pipeline; every score must
-be the probability the trainer gives the same decision. Regenerate after changing the models or their inputs on purpose:
+15 s, then 9 s of quiet: the PPG, and for the PPG + IMU models the motion too) through the live pipeline; every score
+must be the probability the trainer gives the same decision. The CNN needs the `cnn` extra (PyTorch). Regenerate after changing the models or their inputs on purpose:
 
     uv run --project tools/label-trainer python tools/label-trainer/tests/make_runtime_bundle.py
 """
@@ -16,14 +16,14 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from label_trainer import label_train as lt, ppg_onset, trees  # noqa: E402
+from label_trainer import cnn, label_train as lt, ppg_onset, trees  # noqa: E402
 from label_trainer.csv_io import load_recording  # noqa: E402
 from tests.pulse_data import spec_for, write_pulse_recording  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parents[3] / "crates/label-inference/tests/fixtures"
 
 
-def write(name: str, motion: bool) -> None:
+def write(name: str, motion: bool, backend: str = lt.BACKEND) -> None:
     out = FIXTURES / name
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -31,20 +31,22 @@ def write(name: str, motion: bool) -> None:
         lt.MIN_BALANCED_ACCURACY, lt.MAX_FALSE_ACTIVATION_RATE = 0.0, 1.0
         # Gestures 5 s apart leave quiet time between them, so the model learns that quiet is not a start.
         raw = spec_for(tmp, seconds=60.0, every_s=5.0, motion=motion)
+        raw["backend"] = backend
         result = lt.run(raw, tmp / "run")
         assert result["outcome"] == "deployable", result["message"]
         if out.exists():
             shutil.rmtree(out)
         out.mkdir(parents=True)
-        for file in ("manifest.json", "model.trees"):
+        model_file = "model.cnn" if backend == lt.CNN_BACKEND else "model.trees"
+        for file in ("manifest.json", model_file):
             shutil.copy(tmp / "run" / "bundle" / file, out / file)
-        data = (out / "model.trees").read_bytes()
+        data = (out / model_file).read_bytes()
         trace = load_recording(write_pulse_recording(tmp, "live", seed=99, seconds=24.0, gestures_until_s=15.0, motion=motion))
         ts, values = lt.pulse_of(trace)
         x = lt.inputs(lt.parse_spec(raw), trace, ts)
         ok = np.isfinite(x).all(axis=1)
         probability = np.full(len(ts), np.nan)
-        probability[ok] = trees.predict(data, x[ok])
+        probability[ok] = (cnn if backend == lt.CNN_BACKEND else trees).predict(data, x[ok])
         expected = {
             "samples": [[int(t), float(g), float(r), float(i)] for t, (g, r, i) in zip(ts, values)],
             "probabilities": [None if np.isnan(p) else float(p) for p in probability],
@@ -59,7 +61,11 @@ def write(name: str, motion: bool) -> None:
 def main() -> None:
     write("ppg_onset_bundle", motion=False)
     write("ppg_imu_onset_bundle", motion=True)
+    write("ppg_imu_cnn_bundle", motion=True, backend=lt.CNN_BACKEND)
 
 
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:] == ["cnn"]:
+        write("ppg_imu_cnn_bundle", motion=True, backend=lt.CNN_BACKEND)
+    else:
+        main()

@@ -59,7 +59,7 @@ describe("TrainPanel", () => {
     });
   });
 
-  it("sends the roles and the recordings, and nothing about the model, which is always the pulse model", async () => {
+  it("sends the roles and the recordings, and nothing about the model when it is the default trees", async () => {
     setup();
     choose("snap");
     await screen.findByText(/It will train on/);
@@ -108,6 +108,20 @@ describe("TrainPanel", () => {
     expect(result).toHaveTextContent("chosen using those same test recordings");
     expect(result).toHaveTextContent("Review it under Label models");
     expect(screen.getByRole("button", { name: "Train model" })).toBeInTheDocument();
+  });
+
+  it("trains the CNN when it is chosen, and describes it", async () => {
+    setup();
+    choose("snap");
+    await screen.findByText(/It will train on/);
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn" } });
+    expect(screen.getByRole("region", { name: "The model" })).toHaveTextContent("CNN pinch-start model");
+    expect(screen.getByRole("region", { name: "The model" })).toHaveTextContent(/Still hand on/);
+    await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1].request.method).toBe("ppg-imu-cnn"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Train model" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
+    await waitFor(() => expect(calls("start_label_training")).toHaveLength(1));
+    expect(calls("start_label_training")[0][1].request.method).toBe("ppg-imu-cnn");
   });
 
   it("asks for research checks only when ticked", async () => {

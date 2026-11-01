@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { Label } from "../../../components/ui/label";
 import { useTrainingRun } from "../hooks/useTrainingRun";
-import { PULSE_MODEL, buildRequest, hasLabel, otherLabels, recordingsWithLabel, type OtherRole, type TrainPlan, type TrainerEnvironment } from "../training";
+import { CNN_METHOD, CNN_MODEL, PULSE_MODEL, TREES_METHOD, buildRequest, hasLabel, otherLabels, recordingsWithLabel, type OtherRole, type TrainMethod, type TrainPlan, type TrainerEnvironment } from "../training";
 import { datasetLabels, inImportOrder, recordingNumber, type DatasetLabel, type DatasetSummary } from "../types";
 import { LabelTiming } from "./LabelTiming";
 import { LabelSwatch } from "../../labels/labelColor";
@@ -26,8 +26,8 @@ type TrainPanelProps = {
 const NATIVE_SELECT = "recipe-select";
 
 /**
- * Train a label's model from your recordings. You choose the label, the recordings and what each other label means; the
- * model is always the PPG pinch-start model. The app picks which recordings train and which test (never the same one) and
+ * Train a label's model from your recordings. You choose the model (the PPG + IMU trees, or the CNN), the label, the
+ * recordings and what each other label means. The app picks which recordings train and which test (never the same one) and
  * shows you that before anything runs. The result is a Draft you review before it can do anything.
  */
 export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLab }: TrainPanelProps) {
@@ -39,6 +39,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
   const [roles, setRoles] = useState<Record<string, OtherRole>>({});
   const [research, setResearch] = useState(false);
   const [labelOffset, setLabelOffset] = useState(0);
+  const [method, setMethod] = useState<TrainMethod>(TREES_METHOD);
   const [plan, setPlan] = useState<TrainPlan | null>(null);
   const [environment, setEnvironment] = useState<TrainerEnvironment | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +49,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
   const candidates = inImportOrder(datasets.filter((dataset) => datasetLabels(dataset).length > 0 && !dataset.sealed));
   const sealedCount = datasets.filter((dataset) => dataset.sealed).length;
   const others = otherLabels(datasets, selected, target);
-  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, research, labelOffsetMs: labelOffset });
+  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, research, labelOffsetMs: labelOffset, method });
   const requestKey = JSON.stringify(request);
 
   useEffect(() => {
@@ -65,7 +66,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
     let stale = false;
     void invoke<TrainPlan>("plan_label_training", { request })
       .then((next) => { if (!stale) setPlan(next); })
-      .catch((err) => { if (!stale) setPlan({ train: [], evaluation: [], problem: String(err), inputs: PULSE_MODEL.inputs }); });
+      .catch((err) => { if (!stale) setPlan({ train: [], evaluation: [], problem: String(err), inputs: method === CNN_METHOD ? CNN_MODEL.inputs : PULSE_MODEL.inputs }); });
     return () => { stale = true; };
     // `requestKey` stands for every part of `request`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -121,13 +122,32 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
         )}
         {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
 
-        <section aria-label="The model" className="rounded-md border p-3 text-sm">
-          <p><strong>{PULSE_MODEL.name}</strong> <Badge variant="secondary">pulse sensor and motion</Badge></p>
-          <p className="field-hint">{PULSE_MODEL.summary}</p>
-          <p className="field-hint">
-            In the research (37 recordings, 20 tests on recordings it never saw) it scored a worst-case AUC of {PULSE_MODEL.research.worstAuc} and caught about {Math.round(PULSE_MODEL.research.recall * 100)}% of gesture starts, with about {PULSE_MODEL.research.falsePerMinute.toFixed(1)} false alarms a minute.{" "}
-            {onOpenNetworkLab ? <Button type="button" variant="link" className="h-auto p-0" onClick={onOpenNetworkLab}>See its pipeline in the Network lab</Button> : null}
-          </p>
+        <section aria-label="The model" className="flex flex-col gap-2 rounded-md border p-3 text-sm">
+          <div className="field">
+            <div className="field-head"><Label htmlFor={`${uid}-method`}>Model</Label></div>
+            <select id={`${uid}-method`} className={NATIVE_SELECT} value={method} disabled={running !== null} onChange={(event) => setMethod(event.target.value as TrainMethod)}>
+              <option value={TREES_METHOD}>{PULSE_MODEL.name} (trees)</option>
+              <option value={CNN_METHOD}>{CNN_MODEL.name}</option>
+            </select>
+          </div>
+          {method === CNN_METHOD ? (
+            <>
+              <p><strong>{CNN_MODEL.name}</strong> <Badge variant="secondary">pulse sensor and motion</Badge></p>
+              <p className="field-hint">{CNN_MODEL.summary}</p>
+              <p className="field-hint">
+                Compared with the trees on the same pinch recordings, with the hand still before each pinch, it caught about {Math.round(CNN_MODEL.research.recall * 100)}% of pinch starts at {CNN_MODEL.research.falsePerMinute.toFixed(0)} false alarm a minute or fewer (the trees: 64%), about {CNN_MODEL.research.delayMs} ms after the pinch began.
+              </p>
+            </>
+          ) : (
+            <>
+              <p><strong>{PULSE_MODEL.name}</strong> <Badge variant="secondary">pulse sensor and motion</Badge></p>
+              <p className="field-hint">{PULSE_MODEL.summary}</p>
+              <p className="field-hint">
+                In the research (37 recordings, 20 tests on recordings it never saw) it scored a worst-case AUC of {PULSE_MODEL.research.worstAuc} and caught about {Math.round(PULSE_MODEL.research.recall * 100)}% of gesture starts, with about {PULSE_MODEL.research.falsePerMinute.toFixed(1)} false alarms a minute.{" "}
+                {onOpenNetworkLab ? <Button type="button" variant="link" className="h-auto p-0" onClick={onOpenNetworkLab}>See its pipeline in the Network lab</Button> : null}
+              </p>
+            </>
+          )}
         </section>
 
         <div className="field">

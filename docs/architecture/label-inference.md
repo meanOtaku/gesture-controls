@@ -9,7 +9,7 @@ The research behind them is in [IMU fusion, trigger rules and label shifts](../r
 
 ## The model bundle
 
-A directory with `manifest.json` and `model.trees`. The model file is plain node arrays the runtime walks (`trees.rs`): data, never code.
+A directory with `manifest.json` and one model file: `model.trees`, plain node arrays the runtime walks (`trees.rs`), or for the CNN `model.cnn`, JSON weights the runtime evaluates (`cnn.rs`: one to five networks of dilated 1-D convolutions with batch normalisation folded in, max and mean pooling and dense layers, their sigmoid outputs averaged). Either is data, never code.
 
 ```json
 {
@@ -34,25 +34,26 @@ A directory with `manifest.json` and `model.trees`. The model file is plain node
 |---|---|---|
 | `ppg_imu_onset` | `watchPpg`, `watchOrientation` | 2,733: the 1,701 pulse features, then the 1,032 motion features |
 | `ppg_multiscale_onset` | `watchPpg` | 1,701 |
+| `ppg_imu_cnn` | `watchPpg`, `watchOrientation` | 450: 9 channels x the last 50 ticks (`cnn_input`); format `cnn`, window 11,000 ms |
 
-The bundle must declare exactly its kind's sources, features (names and order), input shape and window. `thresholds.trigger` is `"edge"` when absent, which is what bundles made before triggers say.
+The bundle must declare exactly its kind's sources, features (names and order), input shape, window and file format (`trees`, or `cnn` for the CNN). `thresholds.trigger` is `"edge"` when absent, which is what bundles made before triggers say.
 
 **Validation refuses:**
 
 - a missing, oversized (manifest over 512 KB, model over 64 MB) or malformed manifest, an unknown schema version or field, or an unsafe model file name;
-- any format but `trees`, or any other preprocessing;
+- any format but `trees` or `cnn`, a format that is not its kind's, or any other preprocessing;
 - a contract that does not match its kind;
 - a training range that is not a finite low-not-above-high per input;
 - unsound thresholds or quality rules;
 - a model whose hash differs from the manifest's;
-- a tree file that reads a different number of features;
+- a tree or CNN file that reads a different number of features, or a CNN whose layers do not chain or whose weights are not finite;
 - a model that does not answer a probability on four constant test inputs.
 
 The hash is taken from the same bytes that are parsed. A model is loaded only for a registry version that is **Active** and may run (deployable, or Monitor-only) and whose hash is the approved one.
 
 ## The inputs
 
-Both halves are computed by `crates/pinch-inference` and, identically, by the trainer (`tools/label-trainer/src/label_trainer/ppg_onset.py`, `imu_onset.py`). Shared fixtures keep them equal (`ppg_onset_cases.json`, `imu_onset_cases.json`).
+All are computed by `crates/pinch-inference` and, identically, by the trainer (`tools/label-trainer/src/label_trainer/ppg_onset.py`, `imu_onset.py`, `cnn_input.py`). Shared fixtures keep them equal (`ppg_onset_cases.json`, `imu_onset_cases.json`, `cnn_input_cases.json`).
 
 - **Pulse** (`ppg_onset`). For a decision at a pulse sample:
   - a 25 Hz grid of 141 ticks (5.6 s) ends at it;
@@ -65,6 +66,13 @@ Both halves are computed by `crates/pinch-inference` and, identically, by the tr
   - the channels are the accelerometer and gyroscope axes and their magnitudes, raw and as tick-to-tick change;
   - over the last 16, 32 and 64 ticks (0.32, 0.64, 1.28 s), the same 21 statistics, plus each channel's spread against the 3 s before: 1,032 features.
   - A gap over 250 ms, or a tick before the first sample, gives none.
+- **CNN** (`cnn_input`). For a decision at a pulse sample, on the watch clock (the pulse is placed on it by the pipeline's
+  clock map, as the recordings have it):
+  - a 50 Hz grid of 549 ticks (10.96 s) ends at it, each tick holding each stream's last sample;
+  - the channels are the accelerometer and gyroscope axes and the pulse's green, red and infrared;
+  - each of the last 50 ticks is z-scored against the 500 ticks ending at it (floors 0.02 m/s², 0.01 rad/s, and for the
+    pulse 0.001 x (|mean| + 1)) and put through a sigmoid: 450 inputs, channel by channel.
+  - A gap over 250 ms in either stream, or a tick before either's first sample, gives none.
 
 ## The shared pipeline
 
@@ -178,11 +186,13 @@ The desktop decides and records; the trainer only trains (`apps/desktop/src-taur
 **The desktop.** Before anything runs, `begin_run` seals, in one saved registry change:
 
 - the label's project;
-- a dataset snapshot: recordings by content hash, label roles, and the PPG + IMU contract (`pinch_start_contract`);
+- a dataset snapshot: recordings by content hash, label roles, and the model's contract (`pinch_start_contract`, or
+  `cnn_contract` when the request's `method` is `ppg-imu-cnn`);
 - a deterministic train/evaluation split by recording, holding out about 30% and leaving both the target and something else on both sides;
 - a started run.
 
-**The trainer** gets a `spec.json` and runs `uv run --project tools/label-trainer label-classifier-train`:
+**The trainer** gets a `spec.json` and runs `uv run --project tools/label-trainer label-classifier-train` (with
+`--extra cnn` for the CNN, which installs PyTorch). The trees:
 
 - **Samples.** In each recording it takes:
   - a positive 880 ms after each start of the target;
@@ -201,6 +211,12 @@ The desktop decides and records; the trainer only trains (`apps/desktop/src-taur
   880 ms decision delay) is left out of training and testing, and the replays count only the detections the gate would
   let start. `evaluation.json` records `steadyStarts`, and the manifest's thresholds carry `decisionDelayMs`.
 - **Bundle.** It writes the bundle and checks the tree file reproduces the trained model (within 1e-6).
+- **The CNN** (`backend: ppg-imu-cnn`, `cnn.py`) differs only where it must: every pulse sample is a decision, those
+  400-600 ms after a start of the target are positives and those with no start from 200 ms before to 1.2 s after are
+  negatives (the rest left out); three networks are trained from different seeds (12 epochs, up to 40,000 negatives) and
+  averaged; the cut-off may also be 0.96-0.99, as its scores crowd towards 1; it decides 500 ms after a start, so the
+  replay's catch window, the still-hand test and `decisionDelayMs` use 500 ms; and the exported file must reproduce the
+  networks within 1e-4.
 - **Left out.** A stretch marked on the Labelling page with the label `left_out` (`dataset_files::LEFT_OUT_LABEL`) is
   always given the Exclude role, whatever the request says, so no decision touching it is trained on; it needs no catalogue
   entry. The final test, the mistakes list and the threshold sweep do not count a detection judging a moment inside one
@@ -217,7 +233,7 @@ The desktop decides and records; the trainer only trains (`apps/desktop/src-taur
 
 **Finishing is one saved change too.** The bundle is staged and validated like an import, its contract must be the one planned, and `complete_run` records the run and the model as a Draft together, or neither. Nothing is approved or activated by training.
 
-**Startup clean-up.** Models and runs of any other kind (the earlier ONNX models) are removed from the store on startup. Both pinch-start kinds and their runs are kept.
+**Startup clean-up.** Models and runs of any other kind (the earlier ONNX models) are removed from the store on startup. The pinch-start trees and the CNN, and their runs, are kept.
 
 ## Recipes use detections
 

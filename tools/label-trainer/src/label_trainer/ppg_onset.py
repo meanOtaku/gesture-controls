@@ -277,12 +277,19 @@ def detect(decisions_ns: np.ndarray, scores: np.ndarray, threshold: float) -> li
     return out
 
 
-def match(detections_ns: list[int], onsets_ns: list[int]) -> tuple[int, list[int]]:
+def match_window_ms(delay_ms: int = ONSET_DELAY_MS) -> tuple[int, int]:
+    """How long after a start a detection by a model that decides `delay_ms` after it may come and still catch it:
+    MATCH_EARLIEST_MS..MATCH_LATEST_MS for this module's models, moved with the delay for others."""
+    return MATCH_EARLIEST_MS - ONSET_DELAY_MS + delay_ms, MATCH_LATEST_MS - ONSET_DELAY_MS + delay_ms
+
+
+def match(detections_ns: list[int], onsets_ns: list[int], delay_ms: int = ONSET_DELAY_MS) -> tuple[int, list[int]]:
     """(caught starts, latency in ns of each catch): each detection, in order, takes the unmatched start it is
-    MATCH_EARLIEST_MS..MATCH_LATEST_MS after, the one closest to ONSET_DELAY_MS (then the earliest)."""
+    `match_window_ms(delay_ms)` after, the one closest to `delay_ms` (then the earliest)."""
     used: set[int] = set()
     latencies: list[int] = []
-    lo, hi, target = MATCH_EARLIEST_MS * 1_000_000, MATCH_LATEST_MS * 1_000_000, ONSET_DELAY_MS * 1_000_000
+    earliest, latest = match_window_ms(delay_ms)
+    lo, hi, target = earliest * 1_000_000, latest * 1_000_000, delay_ms * 1_000_000
     for d in detections_ns:
         candidates = [(abs(d - s - target), j) for j, s in enumerate(onsets_ns) if j not in used and lo <= d - s <= hi]
         if candidates:

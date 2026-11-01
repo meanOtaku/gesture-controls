@@ -20,7 +20,7 @@ use std::sync::Mutex;
 
 use chrono::{SecondsFormat, Utc};
 use label_inference::{
-    RecordingInfo, RunPlan, begin_run, complete_run, fail_run, monitor_only_run,
+    RecordingInfo, RunPlan, begin_run, cnn_contract, complete_run, fail_run, monitor_only_run,
     pinch_start_contract, plan_split, stage_bundle, trainer_backend,
 };
 use model_lab_core::{
@@ -47,8 +47,11 @@ const TRAINER_PROJECT_DIR: &str =
 const SPEC_VERSION: u32 = 1;
 /// How far the labels may be moved in time, in milliseconds either way (the trainer's `MAX_LABEL_OFFSET_MS`).
 const MAX_LABEL_OFFSET_MS: i32 = 1500;
-/// The one model the app trains (the trainer's `BACKEND`).
+/// The model the app trains unless asked for another (the trainer's `BACKEND`): trees on PPG and motion summaries.
 pub(crate) const BACKEND: &str = "ppg-onset-trees";
+/// The CNN on the last second of motion and pulse (the trainer's `CNN_BACKEND`). Training it needs PyTorch, which the
+/// trainer's `cnn` extra installs.
+pub(crate) const CNN_BACKEND: &str = "ppg-imu-cnn";
 /// The trees' seed (the research's).
 const SEED: u32 = 17;
 
@@ -69,6 +72,18 @@ pub struct TrainRequest {
     /// a little before or after the signal showed it. From -1500 to 1500; absent or 0 leaves them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label_offset_ms: Option<i32>,
+    /// Which model to train: [`BACKEND`] (absent) or [`CNN_BACKEND`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+}
+
+/// The trainer backend a request asks for, and what its model reads.
+fn method_of(request: &TrainRequest) -> Result<(&'static str, InputContract), String> {
+    match request.method.as_deref() {
+        None | Some(BACKEND) => Ok((BACKEND, pinch_start_contract())),
+        Some(CNN_BACKEND) => Ok((CNN_BACKEND, cnn_contract())),
+        Some(other) => Err(format!("there is no training method '{other}'")),
+    }
 }
 
 /// A request checked against the recordings it names.
@@ -76,6 +91,8 @@ pub struct TrainRequest {
 struct Checked {
     target: LabelId,
     mapping: LabelMapping,
+    /// The trainer backend.
+    backend: &'static str,
     input: InputContract,
     recordings: Vec<RecordingInfo>,
     research: bool,
@@ -172,10 +189,12 @@ fn check_request(
             "the label offset must be from -{MAX_LABEL_OFFSET_MS} to {MAX_LABEL_OFFSET_MS} milliseconds, got {label_offset_ms}"
         ));
     }
+    let (backend, input) = method_of(request)?;
     Ok(Checked {
         target,
         mapping: LabelMapping { entries },
-        input: pinch_start_contract(),
+        backend,
+        input,
         recordings,
         research: request.research,
         label_offset_ms,
@@ -214,7 +233,7 @@ fn build_spec(
         "train": ids(&split.train),
         "evaluation": ids(&split.evaluation),
         "sources": checked.input.sources,
-        "backend": BACKEND,
+        "backend": checked.backend,
         "seed": SEED,
         "research": checked.research,
         "labelOffsetMs": checked.label_offset_ms,
@@ -320,9 +339,14 @@ fn recordings_for(app: &AppHandle, request: &TrainRequest) -> Result<Checked, St
     })
 }
 
-fn trainer_command() -> Command {
+/// The trainer, with PyTorch installed for the CNN.
+fn trainer_command(backend: &str) -> Command {
     let mut command = Command::new("uv");
-    command.args(["run", "--project", TRAINER_PROJECT_DIR, "label-classifier-train"]);
+    command.args(["run", "--project", TRAINER_PROJECT_DIR]);
+    if backend == CNN_BACKEND {
+        command.args(["--extra", "cnn"]);
+    }
+    command.arg("label-classifier-train");
     command
 }
 
@@ -391,13 +415,15 @@ pub async fn suggest_label_offset(
         .collect();
     let mut spec = build_spec(&checked, &split, &paths);
     spec["labelOffsetMs"] = serde_json::json!(0);
+    // The timing check always uses quick trees, whichever model will be trained.
+    spec["backend"] = serde_json::json!(BACKEND);
     spec["steadyStarts"] = serde_json::json!(steady_starts(&app));
     let work = runs_dir(&app)?.join(format!(".timing-{}", Uuid::new_v4().simple()));
     fs::create_dir_all(&work).map_err(|e| e.to_string())?;
     let spec_path = work.join("spec.json");
     let done = async {
         fs::write(&spec_path, serde_json::to_vec(&spec).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-        let output = trainer_command()
+        let output = trainer_command(BACKEND)
             .arg("--suggest-offset")
             .arg("--spec")
             .arg(&spec_path)
@@ -416,7 +442,7 @@ pub async fn suggest_label_offset(
 /// Says how a request would be split, or why it cannot be, without recording or starting anything.
 #[tauri::command]
 pub fn plan_label_training(app: AppHandle, request: TrainRequest) -> PlanView {
-    let inputs = pinch_start_contract().features.len();
+    let inputs = method_of(&request).map_or(pinch_start_contract().features.len(), |(_, contract)| contract.features.len());
     let result = recordings_for(&app, &request).and_then(|checked| {
         plan_split(&checked.recordings, &checked.mapping, &checked.target)
             .map_err(|e| e.to_string())
@@ -518,10 +544,10 @@ pub async fn start_label_training(
         input: checked.input.clone(),
         quality: QualityRules::default(),
         trainer: TrainerConfig {
-            backend: trainer_backend(BACKEND).ok_or("unknown training method")?,
+            backend: trainer_backend(checked.backend).ok_or("unknown training method")?,
             // What else shaped the run, so the training history can say what changed from one run to the next.
             params: BTreeMap::from([
-                ("method".to_string(), serde_json::Value::String(BACKEND.into())),
+                ("method".to_string(), serde_json::Value::String(checked.backend.into())),
                 ("labelOffsetMs".to_string(), serde_json::Value::from(checked.label_offset_ms)),
                 ("research".to_string(), serde_json::Value::Bool(checked.research)),
             ]),
@@ -569,7 +595,7 @@ pub async fn start_label_training(
         }
     };
 
-    let mut command = trainer_command();
+    let mut command = trainer_command(checked.backend);
     command
         .arg("--spec")
         .arg(&spec_path)
@@ -603,7 +629,7 @@ pub async fn start_label_training(
         &TrainingEvent::Started {
             run_id: run_id.clone(),
             label: checked.target.to_string(),
-            backend: BACKEND.into(),
+            backend: checked.backend.into(),
         },
     );
     if let Some(pipe) = stdout {
@@ -720,7 +746,7 @@ fn finish(
         let run_dir = format!("{RUNS_DIR}/{run_id}");
         let mut artifacts = vec![ArtifactRef {
             kind: "model".into(),
-            path: format!("{run_dir}/bundle/model.trees"),
+            path: format!("{run_dir}/bundle/{}", staged.manifest.model.file),
             sha256: staged.model_sha256.clone(),
         }];
         for (kind, file) in [
@@ -828,6 +854,7 @@ mod tests {
             excludes: vec![],
             research: false,
             label_offset_ms: None,
+            method: None,
         }
     }
 
@@ -942,6 +969,23 @@ mod tests {
         let listed = |key: &str| spec[key].as_array().unwrap().len();
         assert_eq!(listed("train") + listed("evaluation"), 6);
         assert_eq!(spec["recordings"]["s1"], "/data/s1.csv");
+    }
+
+    #[test]
+    fn a_request_for_the_cnn_reads_the_cnn_s_inputs_and_tells_the_trainer() {
+        let mut r = request();
+        r.method = Some(CNN_BACKEND.into());
+        let checked = check_request(&r, &datasets(), &sha).unwrap();
+        assert_eq!(checked.backend, CNN_BACKEND);
+        assert_eq!(checked.input, cnn_contract());
+        let split = plan_split(&checked.recordings, &checked.mapping, &checked.target).unwrap();
+        assert_eq!(build_spec(&checked, &split, &BTreeMap::new())["backend"], CNN_BACKEND);
+        assert_eq!(trainer_backend(CNN_BACKEND), Some(model_lab_core::TrainerBackend::PyTorch));
+        let args: Vec<String> = trainer_command(CNN_BACKEND).as_std().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        assert!(args.windows(2).any(|w| w == ["--extra", "cnn"]), "{args:?}");
+        assert!(!trainer_command(BACKEND).as_std().get_args().any(|a| a == "--extra"));
+        r.method = Some("svm".into());
+        assert!(check_request(&r, &datasets(), &sha).unwrap_err().contains("no training method 'svm'"));
     }
 
     #[test]

@@ -45,7 +45,7 @@ from typing import Any
 
 import numpy as np
 
-from . import imu_onset, ppg_onset, steadiness, trees
+from . import cnn_input, imu_onset, ppg_onset, steadiness, trees
 from .csv_io import Recording, load_recording, repair_millisecond_ppg_timestamps, shift_labels
 from .events import Policy, detect, summarise
 
@@ -55,7 +55,11 @@ warnings.filterwarnings("ignore", message=r".*sklearn\.utils\.parallel\.delayed.
 
 SPEC_VERSION = 1
 BACKEND = "ppg-onset-trees"
-BACKENDS = (BACKEND,)
+# The CNN (`cnn.py`): the last second of motion and pulse into a small convolutional network. It needs PyTorch.
+CNN_BACKEND = "ppg-imu-cnn"
+BACKENDS = (BACKEND, CNN_BACKEND)
+CNN_PREPROCESSING = "ppg_imu_cnn"
+CNN_WINDOW_MS = 11_000
 PPG_SOURCES = ("watchPpg",)
 MOTION_SOURCES = ("watchPpg", "watchOrientation")
 SOURCES = MOTION_SOURCES                # what a spec that names none trains
@@ -85,6 +89,8 @@ MIN_WINDOW_SAMPLES = 100
 # rules at, counted as it counts them).
 TARGET_FALSE_ACTIVATIONS_PER_MINUTE = 2.0
 THRESHOLD_CANDIDATES = tuple(round(t, 2) for t in np.arange(0.30, 0.951, 0.05))
+# The CNN's scores crowd towards 1 (its sigmoid saturates), so its cut-off may also be one of these.
+CNN_THRESHOLD_CANDIDATES = THRESHOLD_CANDIDATES + (0.96, 0.97, 0.98, 0.99)
 
 
 class TrainingRefused(Exception):
@@ -106,6 +112,12 @@ class Spec:
     # Keep only the decisions the live runtime's steadiness gate would let start (`steadiness`), in training, testing and
     # the replay. Off in a spec that does not say; the desktop asks for it.
     steady_starts: bool = False
+    backend: str = BACKEND
+
+    @property
+    def cnn(self) -> bool:
+        """Whether this is the CNN rather than the trees."""
+        return self.backend == CNN_BACKEND
 
     @property
     def motion(self) -> bool:
@@ -113,7 +125,16 @@ class Spec:
         return self.sources == MOTION_SOURCES
 
     @property
+    def decision_delay_ms(self) -> int:
+        """How long after a gesture starts the model decides it has."""
+        from . import cnn
+
+        return cnn.DECISION_DELAY_MS if self.cnn else ppg_onset.ONSET_DELAY_MS
+
+    @property
     def feature_names(self) -> tuple[str, ...]:
+        if self.cnn:
+            return cnn_input.FEATURE_NAMES
         return ppg_onset.FEATURE_NAMES + imu_onset.FEATURE_NAMES if self.motion else ppg_onset.FEATURE_NAMES
 
     @property
@@ -126,10 +147,12 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         raise TrainingRefused(f"unsupported spec version {raw.get('version')!r}; expected {SPEC_VERSION}")
     backend = raw.get("backend", BACKEND)
     if backend not in BACKENDS:
-        raise TrainingRefused(f"unknown backend {backend!r}; this trainer makes only {BACKEND!r}")
+        raise TrainingRefused(f"unknown backend {backend!r}; this trainer makes {' or '.join(repr(b) for b in BACKENDS)}")
     sources = tuple(raw.get("sources", SOURCES))
     if sources not in PREPROCESSING:
         raise TrainingRefused(f"the model reads the pulse sensor and motion {list(MOTION_SOURCES)}, or the pulse sensor alone {list(PPG_SOURCES)}, not {list(sources)}")
+    if backend == CNN_BACKEND and sources != MOTION_SOURCES:
+        raise TrainingRefused(f"the CNN reads the pulse sensor and motion {list(MOTION_SOURCES)}, not {list(sources)}")
     recordings = {rid: Path(path) for rid, path in raw.get("recordings", {}).items()}
     train, evaluation = list(raw.get("train", [])), list(raw.get("evaluation", []))
     if set(train) & set(evaluation):
@@ -157,6 +180,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         label_offset_ms=int(label_offset_ms),
         sources=sources,
         steady_starts=steady_starts,
+        backend=backend,
     )
 
 
@@ -182,9 +206,9 @@ def motion_of(recording: Recording) -> tuple[np.ndarray, np.ndarray]:
     return recording.timestamps_ns[rows].astype(np.int64), values
 
 
-def still_mask(recording: Recording, decisions_ns: np.ndarray) -> np.ndarray:
-    """Whether the hand was still before each decision's gesture, as the runtime's gate judges it (`steadiness`), for this
-    trainer's models, which decide `ppg_onset.ONSET_DELAY_MS` after a gesture starts."""
+def still_mask(recording: Recording, decisions_ns: np.ndarray, delay_ms: int = ppg_onset.ONSET_DELAY_MS) -> np.ndarray:
+    """Whether the hand was still before each decision's gesture, as the runtime's gate judges it (`steadiness`), for a
+    model that decides `delay_ms` after a gesture starts."""
     rows = recording.orient_observed if recording.orient_observed is not None else np.ones(len(recording.timestamps_ns), dtype=bool)
     channel = lambda name: recording.channels[name][rows]  # noqa: E731
     return steadiness.still_before(
@@ -193,14 +217,17 @@ def still_mask(recording: Recording, decisions_ns: np.ndarray) -> np.ndarray:
         np.stack([channel(c) for c in imu_onset.AXES[3:]], axis=1),
         np.stack([channel(c) for c in ("quat_w", "quat_x", "quat_y", "quat_z")], axis=1),
         np.asarray(decisions_ns, dtype=np.int64),
-        ppg_onset.ONSET_DELAY_MS * 1_000_000,
+        delay_ms * 1_000_000,
     )
 
 
 def inputs(spec: Spec, recording: Recording, decisions_ns: np.ndarray) -> np.ndarray:
     """The model's inputs at each decision: the PPG features, then (for a motion model) the motion features; a row of NaN
-    where either has none."""
+    where either has none. The CNN's inputs (`cnn_input`) instead."""
     ts, values = pulse_of(recording)
+    if spec.cnn:
+        motion_ts, axes = motion_of(recording)
+        return cnn_input.inputs(motion_ts, axes, ts, values, decisions_ns)
     x = ppg_onset.features(ts, values, decisions_ns)
     if not spec.motion:
         return x
@@ -228,11 +255,33 @@ class Examples:
     decisions: np.ndarray
 
 
+def cnn_examples(spec: Spec, recording: Recording) -> tuple[np.ndarray, np.ndarray, list[str]]:
+    """The CNN's decisions in a recording: every pulse sample, labelled by `cnn.labels` (those it leaves out dropped)."""
+    from . import cnn
+
+    ts, _ = pulse_of(recording)
+    held = ppg_onset.holds(recording.timestamps_ns, recording.raw_labels)
+    starts = [s for s, _, label in held if label == spec.target]
+    excluded = [(s, e) for s, e, label in held if label in set(spec.excludes)]
+    y = cnn.labels(ts, starts, excluded)
+    keep = y >= 0
+    return ts[keep], y[keep], ["start" if v == 1 else "other" for v in y[keep].tolist()]
+
+
 def examples(spec: Spec, recordings: dict[str, Recording], ids: list[str]) -> Examples:
-    """The decisions each recording gives (`ppg_onset.sample_decisions`) and their features; one without features (a gap
-    or too little history before it) is left out, as the runtime would not score it."""
+    """The decisions each recording gives (`ppg_onset.sample_decisions`, or for the CNN `cnn_examples`) and their features;
+    one without features (a gap or too little history before it) is left out, as the runtime would not score it."""
     xs, ys, groups, kinds, decisions = [], [], [], [], []
     for rid in ids:
+        if spec.cnn:
+            d, y, k = cnn_examples(spec, recordings[rid])
+            x = inputs(spec, recordings[rid], d)
+            ok = np.isfinite(x).all(axis=1)
+            if spec.steady_starts:
+                ok &= still_mask(recordings[rid], d, spec.decision_delay_ms)
+            xs.append(x[ok]); ys.append(y[ok]); groups += [rid] * int(ok.sum())
+            kinds += [kind for kind, keep in zip(k, ok.tolist()) if keep]; decisions.append(d[ok])
+            continue
         recording = recordings[rid]
         ts, values = pulse_of(recording)
         held = ppg_onset.holds(recording.timestamps_ns, recording.raw_labels)
@@ -268,7 +317,11 @@ def check_enough(train: Examples, held_out: Examples, steady_starts: bool = Fals
         )
 
 
-def fit(x: np.ndarray, y: np.ndarray, seed: int, n_trees: int = TREES):
+def fit(x: np.ndarray, y: np.ndarray, seed: int, n_trees: int = TREES, backend: str = BACKEND):
+    if backend == CNN_BACKEND:
+        from . import cnn
+
+        return cnn.fit(x, y, seed)
     from sklearn.ensemble import ExtraTreesClassifier
 
     return ExtraTreesClassifier(n_estimators=n_trees, min_samples_leaf=MIN_SAMPLES_LEAF, max_features=MAX_FEATURES,
@@ -327,7 +380,7 @@ def out_of_fold_threshold(spec: Spec, train: Examples, recordings: dict[str, Rec
         test = fold == k
         if int(train.y[~test].sum()) < MIN_POSITIVE_TRAIN or int((train.y[~test] == 0).sum()) < MIN_POSITIVE_TRAIN:
             continue
-        model = fit(train.x[~test], train.y[~test], spec.seed)
+        model = fit(train.x[~test], train.y[~test], spec.seed, backend=spec.backend)
         held_out[test] = model.predict_proba(train.x[test])[:, 1]
         if spec.motion:
             for group in (g for g in groups if fold_of[g] == k):
@@ -355,7 +408,7 @@ def budget_threshold(spec: Spec, timelines: list[tuple[Recording, np.ndarray, np
     simply the highest: on recordings packed with gestures that would catch almost none. Returns it and its replay."""
     minutes = sum((times[-1] - times[0]) / 60e9 for _, times, _ in timelines)
     replays = {}
-    for t in THRESHOLD_CANDIDATES:
+    for t in CNN_THRESHOLD_CANDIDATES if spec.cnn else THRESHOLD_CANDIDATES:
         replay_ = summarise([detections(spec, r, times, scores, policy_for(t, spec.trigger)) for r, times, scores in timelines])
         replays[t] = {**replay_, "recordingMinutes": minutes,
                       "falseActivationsPerMinute": replay_["falseActivations"] / minutes if minutes > 0 else 0.0}
@@ -422,18 +475,20 @@ def timeline(spec: Spec, recording: Recording, predict) -> tuple[np.ndarray, np.
 
 def detections(spec: Spec, recording: Recording, times: np.ndarray, scores: np.ndarray, policy: Policy) -> dict[str, Any]:
     """One recording's scores through the runtime's detection rule (`events.detect`). A detection catches a start of the
-    target label when it rises ppg_onset.MATCH_EARLIEST_MS..MATCH_LATEST_MS after it (`ppg_onset.match`); any other is a
+    target label when it rises `ppg_onset.match_window_ms` after it (for the model's delay; `ppg_onset.match`); any other is a
     false activation, unless it is inside an excluded label's hold. Time inside the target's holds, and an excluded
     label's, cannot hold one."""
     held = ppg_onset.holds(recording.timestamps_ns, recording.raw_labels)
-    starts = [s for s, _, label in held if label == spec.target and times[0] <= s + ppg_onset.MATCH_EARLIEST_MS * 1_000_000 <= times[-1]]
+    earliest_ms, latest_ms = ppg_onset.match_window_ms(spec.decision_delay_ms)
+    starts = [s for s, _, label in held if label == spec.target and times[0] <= s + earliest_ms * 1_000_000 <= times[-1]]
     ignored = [(s, e) for s, e, label in held if label in set(spec.excludes)]
     rises = [rise for rise, _ in detect(times, scores, policy) if not any(s <= rise <= e for s, e in ignored)]
     if spec.steady_starts and rises:
         # The runtime withholds a start the hand was not still before.
-        rises = [rise for rise, still in zip(rises, still_mask(recording, np.array(rises, dtype=np.int64)).tolist()) if still]
-    caught, latencies = ppg_onset.match(rises, starts)
-    busy = [(s, e + ppg_onset.MATCH_LATEST_MS * 1_000_000) for s, e, label in held if label == spec.target or label in set(spec.excludes)]
+        still = still_mask(recording, np.array(rises, dtype=np.int64), spec.decision_delay_ms).tolist()
+        rises = [rise for rise, ok in zip(rises, still) if ok]
+    caught, latencies = ppg_onset.match(rises, starts, spec.decision_delay_ms)
+    busy = [(s, e + latest_ms * 1_000_000) for s, e, label in held if label == spec.target or label in set(spec.excludes)]
     observed = int(times[-1] - times[0])
     covered = sum(max(0, min(e, times[-1]) - max(s, times[0])) for s, e in busy)
     return {
@@ -531,36 +586,50 @@ def training_range(x_train: np.ndarray) -> dict[str, list[float]] | None:
 
 
 def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, Any], x_train: np.ndarray) -> str:
-    import sklearn
-
     bundle = out / "bundle"
     bundle.mkdir(parents=True, exist_ok=True)
-    (bundle / "model.trees").write_bytes(model_bytes)
+    file, format_ = ("model.cnn", "cnn") if spec.cnn else ("model.trees", "trees")
+    (bundle / file).write_bytes(model_bytes)
     sha = hashlib.sha256(model_bytes).hexdigest()
     policy = policy_for(metrics["activationThreshold"], spec.trigger)
     names = list(spec.feature_names)
-    pipeline = ("PPG -> causal z-score (1 s, 2 s, 4 s) -> causal cubic slope, curvature, jerk -> 1701 summaries"
-                + (" + accelerometer and gyroscope -> 1032 summaries (0.3-1.3 s) -> ExtraTrees -> peak trigger" if spec.motion else " -> ExtraTrees"))
+    if spec.cnn:
+        import torch
+
+        framework = {"name": "pytorch", "version": torch.__version__.split("+")[0]}
+        pipeline = ("accelerometer, gyroscope and PPG on a 50 Hz grid -> each tick z-scored against the 10 s before it, sigmoid"
+                    " -> the last 1 s (9 x 50) -> CNN (3 dilated convolutions, max and mean pooling, 2 dense) -> peak trigger")
+        from . import cnn
+
+        details = {"convolutions": [c for c, _ in cnn.CONVOLUTIONS], "kernel": cnn.KERNEL, "epochs": cnn.EPOCHS}
+    else:
+        import sklearn
+
+        framework = {"name": "scikit-learn", "version": sklearn.__version__}
+        pipeline = ("PPG -> causal z-score (1 s, 2 s, 4 s) -> causal cubic slope, curvature, jerk -> 1701 summaries"
+                    + (" + accelerometer and gyroscope -> 1032 summaries (0.3-1.3 s) -> ExtraTrees -> peak trigger" if spec.motion else " -> ExtraTrees"))
+        details = {"trees": TREES, "minSamplesLeaf": MIN_SAMPLES_LEAF, "maxFeatures": MAX_FEATURES}
     manifest = {
         "schemaVersion": 1,
         "modelId": f"{spec.target}-{sha[:8]}",
         "targetLabel": spec.target,
-        "model": {"file": "model.trees", "sha256": sha, "format": "trees", "opset": 0},
-        "framework": {"name": "scikit-learn", "version": sklearn.__version__},
+        "model": {"file": file, "sha256": sha, "format": format_, "opset": 0},
+        "framework": framework,
         "input": {"name": "X", "shape": [None, len(names)], "dtype": "float32", "features": names},
         "output": {"name": "probabilities", "shape": [None, 2], "dtype": "float32", "positiveIndex": 1},
         "sources": list(spec.sources),
-        "window": {"durationMs": WINDOW_MS, "strideMs": STRIDE_MS, "maxGapMs": ppg_onset.MAX_GAP_MS, "minSamples": MIN_WINDOW_SAMPLES},
+        "window": {"durationMs": CNN_WINDOW_MS if spec.cnn else WINDOW_MS, "strideMs": STRIDE_MS, "maxGapMs": ppg_onset.MAX_GAP_MS,
+                   "minSamples": MIN_WINDOW_SAMPLES},
         "quality": {"maxContactQuality": 0.0, "minSampleCount": 3},
         "thresholds": {"activation": policy.activation, "release": policy.release, "cooldownMs": COOLDOWN_MS,
                        **({"trigger": policy.trigger} if spec.motion else {}),
                        # How long after a gesture starts the model decides: the runtime's still-hand gate looks before that.
-                       "decisionDelayMs": ppg_onset.ONSET_DELAY_MS},
-        "preprocessing": {"kind": PREPROCESSING[spec.sources]},
+                       "decisionDelayMs": spec.decision_delay_ms},
+        "preprocessing": {"kind": CNN_PREPROCESSING if spec.cnn else PREPROCESSING[spec.sources]},
         "provenance": {
-            "backend": BACKEND,
+            "backend": spec.backend,
             "pipeline": pipeline,
-            "trees": TREES, "minSamplesLeaf": MIN_SAMPLES_LEAF, "maxFeatures": MAX_FEATURES,
+            **details,
             "trainRecordings": sorted(spec.train),
             "evaluationRecordings": sorted(spec.evaluation),
             "seed": spec.seed,
@@ -590,7 +659,7 @@ def run_research_checks(spec: Spec, recordings: dict[str, Recording]) -> dict[st
 
         everything = examples(spec, recordings, sorted(spec.recordings))
         print("Running the research checks: they retrain the model several times, so this takes a while", flush=True)
-        return run_research(lambda xs, ys: fit(xs, ys, spec.seed), everything.x, everything.y, everything.groups,
+        return run_research(lambda xs, ys: fit(xs, ys, spec.seed, backend=spec.backend), everything.x, everything.y, everything.groups,
                             spec.train, spec.evaluation, spec.seed, lambda line: print(line, flush=True))
     except Exception as error:  # noqa: BLE001 - an extra must never stop a model being shipped
         print(f"could not run the research checks: {type(error).__name__}: {error}", flush=True)
@@ -615,8 +684,9 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
         train = examples(spec, recordings, spec.train)
         held_out = examples(spec, recordings, spec.evaluation)
         check_enough(train, held_out, spec.steady_starts)
-        say(f"Training {TREES} trees on {train.y.shape[0]} moments ({int(train.y.sum())} starts) from {len(spec.train)} recordings")
-        model = fit(train.x, train.y, spec.seed)
+        what = "the CNN" if spec.cnn else f"{TREES} trees"
+        say(f"Training {what} on {train.y.shape[0]} moments ({int(train.y.sum())} starts) from {len(spec.train)} recordings")
+        model = fit(train.x, train.y, spec.seed, backend=spec.backend)
         threshold, source, cross_check, cross_events = out_of_fold_threshold(spec, train, recordings, say)
         probability = model.predict_proba(held_out.x)[:, 1]
         metrics = evaluate(probability, held_out.y, threshold, source)
@@ -629,18 +699,24 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
         metrics["steadyStarts"] = spec.steady_starts
         (out / "evaluation.json").write_text(json.dumps(metrics, indent=2) + "\n")
 
-        model_bytes = trees.to_bytes(model, len(spec.feature_names))
-        exported = trees.predict(model_bytes, held_out.x)
+        if spec.cnn:
+            from . import cnn
+
+            model_bytes, tolerance = cnn.to_bytes(model), cnn.PARITY_TOLERANCE
+            exported = cnn.predict(model_bytes, held_out.x)
+        else:
+            model_bytes, tolerance = trees.to_bytes(model, len(spec.feature_names)), PARITY_TOLERANCE
+            exported = trees.predict(model_bytes, held_out.x)
         parity = float(np.max(np.abs(exported - probability))) if probability.size else 0.0
-        (out / "parity.json").write_text(json.dumps({"maxAbsDifference": parity, "tolerance": PARITY_TOLERANCE, "windows": int(held_out.y.shape[0])}, indent=2) + "\n")
-        if parity > PARITY_TOLERANCE:
-            raise TrainingRefused(f"the exported model differs from the trained one by {parity:.2e} (the limit is {PARITY_TOLERANCE}), so it is not shipped")
+        (out / "parity.json").write_text(json.dumps({"maxAbsDifference": parity, "tolerance": tolerance, "windows": int(held_out.y.shape[0])}, indent=2) + "\n")
+        if parity > tolerance:
+            raise TrainingRefused(f"the exported model differs from the trained one by {parity:.2e} (the limit is {tolerance}), so it is not shipped")
         sha = write_bundle(spec, out, model_bytes, metrics, train.x)
         research = run_research_checks(spec, recordings) if spec.research else None
         inspection = {
-            "version": 2, "kind": "trees", "backend": BACKEND, "target": spec.target,
-            "inputCount": len(spec.feature_names), "trees": TREES, "sources": list(spec.sources), "trigger": spec.trigger,
-            "importance": feature_importance(model, spec.feature_names),
+            "version": 2, "kind": "cnn" if spec.cnn else "trees", "backend": spec.backend, "target": spec.target,
+            "inputCount": len(spec.feature_names), "trees": 0 if spec.cnn else TREES, "sources": list(spec.sources), "trigger": spec.trigger,
+            "importance": [] if spec.cnn else feature_importance(model, spec.feature_names),
             # Every held-out decision's score, for the Inspect view's curves: its recording, whether it is a start, the score.
             "evaluation": {"threshold": threshold, "recordings": held_out.groups.tolist(), "labels": held_out.y.tolist(),
                            "probabilities": [round(float(p), 6) for p in probability], "kinds": held_out.kinds, "metrics": metrics},
@@ -655,7 +731,7 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
             "message": poor or "",
             "bundleDir": "bundle",
             "modelSha256": sha,
-            "backend": BACKEND,
+            "backend": spec.backend,
             "features": list(spec.feature_names),
             "trainWindows": int(train.y.shape[0]),
             "evaluationWindows": int(held_out.y.shape[0]),

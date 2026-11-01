@@ -14,6 +14,7 @@
 
 mod bundle;
 mod clock;
+mod cnn;
 mod detection;
 mod import;
 mod inputs;
@@ -26,8 +27,8 @@ mod training;
 mod trees;
 
 pub use bundle::{
-    BundleError, MODEL_FORMAT, Manifest, STRIDE_MS, TrainingRange, ValidatedBundle, WINDOW_MS,
-    validate_bundle,
+    BundleError, CNN_MODEL_FORMAT, MODEL_FORMAT, Manifest, STRIDE_MS, TrainingRange,
+    ValidatedBundle, WINDOW_MS, validate_bundle,
 };
 pub use detection::{
     ClearReason, Conflict, DetectionEvent, DetectionHub, ExclusivityGroup, TemporalDetector,
@@ -36,7 +37,7 @@ pub use import::{
     IMPORTED_MODELS_DIR, ImportError, ImportOutcome, STAGING_DIR, StagedBundle, clean_staging,
     import_bundle, publish_staged, publish_staged_with, stage_bundle,
 };
-pub use inputs::{ModelKind, PPG_IMU_PREPROCESSING, PPG_ONLY_PREPROCESSING};
+pub use inputs::{CNN_PREPROCESSING, ModelKind, PPG_IMU_PREPROCESSING, PPG_ONLY_PREPROCESSING};
 pub use loader::{
     ModelLoadFailure, check_loadable, load_active_models, load_version, removable_model_dir,
 };
@@ -44,8 +45,8 @@ pub use model::{FAR_EXCESS, InputCheck, LoadedModel, ModelError, OutsideInput, R
 pub use pipeline::{LabelPipeline, LabelScore, Rejection, WindowRejection};
 pub use runtime::{InputWarning, LabelRuntime, RuntimeMode, RuntimeOutput};
 pub use training::{
-    BegunRun, MIN_WINDOW_SAMPLES, RecordingInfo, RunPlan, TrainingError, begin_run, complete_run,
-    evaluation_only_run, fail_run, monitor_only_run, pinch_start_contract, plan_split,
-    plan_split_keeping, ppg_onset_contract, trainer_backend,
+    BegunRun, MIN_WINDOW_SAMPLES, RecordingInfo, RunPlan, TrainingError, begin_run, cnn_contract,
+    complete_run, evaluation_only_run, fail_run, monitor_only_run, pinch_start_contract,
+    plan_split, plan_split_keeping, ppg_onset_contract, trainer_backend,
 };
 pub use trees::{TreeEnsemble, TreesError};

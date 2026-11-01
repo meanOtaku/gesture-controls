@@ -1,16 +1,17 @@
-//! The model bundle: a directory with `manifest.json` and one tree-ensemble model file.
+//! The model bundle: a directory with `manifest.json` and one model file, a tree ensemble or a small CNN.
 //!
 //! ```text
 //! model-bundle/
 //! |-- manifest.json
-//! `-- model.trees
+//! `-- model.trees   (or model.cnn)
 //! ```
 //!
-//! A bundle is data, never code: the model is a plain list of trees (see [`crate::trees`]), not a pickle, joblib, torch or
-//! other serialisation that could run arbitrary code. The models this app runs are the pinch-start models of
-//! [`crate::inputs::ModelKind`]: the PPG + IMU model Model Lab trains, and the earlier PPG-only one. Validation reads the
-//! manifest, checks it declares exactly its kind's contract, hashes the model file, parses every tree, and runs the model
-//! on a few bounded inputs to prove it produces probabilities. Only a bundle that passes all of it can be loaded.
+//! A bundle is data, never code: the model is a plain list of trees (see [`crate::trees`]) or a CNN's weights (see
+//! [`crate::cnn`]), not a pickle, joblib, torch or other serialisation that could run arbitrary code. The models this app
+//! runs are the pinch-start models of [`crate::inputs::ModelKind`]: the PPG + IMU trees and CNN Model Lab trains, and the
+//! earlier PPG-only trees. Validation reads the manifest, checks it declares exactly its kind's contract and file format,
+//! hashes the model file, parses it, and runs the model on a few bounded inputs to prove it produces probabilities. Only a
+//! bundle that passes all of it can be loaded.
 
 use std::fs;
 use std::path::Path;
@@ -19,7 +20,8 @@ use std::sync::Arc;
 use model_lab_core::{InputContract, LabelId, QualityRules, StreamSource, Thresholds, Trigger};
 use pinch_inference::ppg_onset::{GRID_TICKS, MAX_GAP_MS, TICK_NS};
 
-use crate::inputs::{ModelKind, PPG_IMU_PREPROCESSING, PPG_ONLY_PREPROCESSING};
+use crate::cnn::{Cnn, CnnError};
+use crate::inputs::{CNN_PREPROCESSING, ModelKind, PPG_IMU_PREPROCESSING, PPG_ONLY_PREPROCESSING};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -30,8 +32,10 @@ pub const MANIFEST_FILE: &str = "manifest.json";
 pub const SUPPORTED_SCHEMA_VERSION: u32 = 1;
 pub(crate) const MAX_MANIFEST_BYTES: u64 = 512 * 1024;
 pub(crate) const MAX_MODEL_BYTES: u64 = 64 * 1024 * 1024;
-/// The only model format this app runs.
+/// The tree models' file format.
 pub const MODEL_FORMAT: &str = "trees";
+/// The CNN's file format.
+pub const CNN_MODEL_FORMAT: &str = "cnn";
 /// The pulse history a decision reads (its grid of ticks), and how often a model decides.
 pub const WINDOW_MS: u32 = (GRID_TICKS as u64 * TICK_NS / 1_000_000) as u32;
 pub const STRIDE_MS: u32 = (TICK_NS / 1_000_000) as u32;
@@ -55,11 +59,11 @@ pub enum BundleError {
     #[error("the model file name '{0}' must be a plain file name inside the bundle")]
     UnsafePath(String),
     #[error(
-        "only the PPG pinch-start model (a '{MODEL_FORMAT}' file) can run in this app, not a '{0}' model: train a new one in Model Lab"
+        "only the pinch-start models ('{MODEL_FORMAT}' or '{CNN_MODEL_FORMAT}' files) can run in this app, not a '{0}' model: train a new one in Model Lab"
     )]
     UnsupportedFormat(String),
     #[error(
-        "unsupported preprocessing '{0}': this app's models read '{PPG_IMU_PREPROCESSING}' (the pulse and motion) or '{PPG_ONLY_PREPROCESSING}' (the pulse alone)"
+        "unsupported preprocessing '{0}': this app's models read '{PPG_IMU_PREPROCESSING}' (the pulse and motion), '{CNN_PREPROCESSING}' (the pulse and motion, for a CNN) or '{PPG_ONLY_PREPROCESSING}' (the pulse alone)"
     )]
     UnsupportedPreprocessing(String),
     #[error(
@@ -72,6 +76,8 @@ pub enum BundleError {
     ContractMismatch(String),
     #[error(transparent)]
     Trees(#[from] TreesError),
+    #[error(transparent)]
+    Cnn(#[from] CnnError),
     #[error("the model gave a bad answer on a test input: {0}")]
     BadTestOutput(String),
     #[error("{0}")]
@@ -206,12 +212,44 @@ impl Manifest {
     }
 }
 
+/// A parsed model file of either format.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Network {
+    Trees(TreeEnsemble),
+    Cnn(Cnn),
+}
+
+impl Network {
+    fn parse(format: &str, bytes: &[u8]) -> Result<Self, BundleError> {
+        Ok(if format == CNN_MODEL_FORMAT {
+            Self::Cnn(Cnn::parse(bytes)?)
+        } else {
+            Self::Trees(TreeEnsemble::parse(bytes)?)
+        })
+    }
+
+    pub(crate) fn features(&self) -> usize {
+        match self {
+            Self::Trees(trees) => trees.features(),
+            Self::Cnn(cnn) => cnn.features(),
+        }
+    }
+
+    /// The positive class's probability; `input` must have [`Network::features`] values.
+    pub(crate) fn predict(&self, input: &[f64]) -> f64 {
+        match self {
+            Self::Trees(trees) => trees.predict(input),
+            Self::Cnn(cnn) => cnn.predict(input),
+        }
+    }
+}
+
 /// A bundle that passed every check. Holds the verified model, ready to run.
 pub struct ValidatedBundle {
     pub manifest: Manifest,
     /// Which pinch-start model it is, from its preprocessing.
     pub kind: ModelKind,
-    pub(crate) trees: Arc<TreeEnsemble>,
+    pub(crate) network: Arc<Network>,
     /// The model's SHA-256, as hashed from the very bytes that were parsed.
     pub model_sha256: String,
 }
@@ -274,7 +312,7 @@ pub fn validate_bundle(
     if !safe_model_name(name) {
         return Err(BundleError::UnsafePath(name.clone()));
     }
-    if manifest.model.format != MODEL_FORMAT {
+    if manifest.model.format != MODEL_FORMAT && manifest.model.format != CNN_MODEL_FORMAT {
         return Err(BundleError::UnsupportedFormat(manifest.model.format.clone()));
     }
     let Some(kind) = ModelKind::from_preprocessing(&manifest.preprocessing.kind) else {
@@ -283,6 +321,14 @@ pub fn validate_bundle(
         ));
     };
     let mismatch = |what: String| Err(BundleError::ContractMismatch(what));
+    if manifest.model.format != kind.model_format() {
+        return mismatch(format!(
+            "a '{}' model is a '{}' file, not a '{}' one",
+            kind.preprocessing(),
+            kind.model_format(),
+            manifest.model.format
+        ));
+    }
     if manifest.sources != kind.sources() {
         return mismatch(format!(
             "a '{}' model must read {:?}, not {:?}",
@@ -307,12 +353,13 @@ pub fn validate_bundle(
     if manifest.output.positive_index != 1 {
         return mismatch("the positive class must be output 1".into());
     }
-    if manifest.window.duration_ms != WINDOW_MS
+    if manifest.window.duration_ms != kind.window_ms()
         || manifest.window.stride_ms != STRIDE_MS
         || u64::from(manifest.window.max_gap_ms) != MAX_GAP_MS
     {
         return mismatch(format!(
-            "the window must be {WINDOW_MS} ms long, every {STRIDE_MS} ms, with gaps of at most {MAX_GAP_MS} ms"
+            "the window must be {} ms long, every {STRIDE_MS} ms, with gaps of at most {MAX_GAP_MS} ms",
+            kind.window_ms()
         ));
     }
     if let Some(usual) = &manifest.input.training_range {
@@ -351,16 +398,16 @@ pub fn validate_bundle(
             actual,
         });
     }
-    let trees = TreeEnsemble::parse(&model_bytes)?;
-    if trees.features() != feature_count {
+    let network = Network::parse(&manifest.model.format, &model_bytes)?;
+    if network.features() != feature_count {
         return mismatch(format!(
             "the model file reads {} features, the manifest lists {feature_count}",
-            trees.features()
+            network.features()
         ));
     }
     // A model that answers anything but a probability on ordinary inputs cannot be trusted on live ones.
     for value in [0.0, 1.0, -1.0, 1e6] {
-        let p = trees.predict(&vec![value; feature_count]);
+        let p = network.predict(&vec![value; feature_count]);
         if !(0.0..=1.0).contains(&p) {
             return Err(BundleError::BadTestOutput(format!(
                 "{p} for every input at {value}"
@@ -370,7 +417,7 @@ pub fn validate_bundle(
     Ok(ValidatedBundle {
         manifest,
         kind,
-        trees: Arc::new(trees),
+        network: Arc::new(network),
         model_sha256: actual,
     })
 }
@@ -387,6 +434,36 @@ pub(crate) mod tests {
     /// The PPG + IMU bundle the trainer made for the runtime's tests.
     pub fn motion_fixture_dir() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ppg_imu_onset_bundle")
+    }
+
+    /// The CNN bundle the trainer made for the runtime's tests.
+    pub fn cnn_fixture_dir() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ppg_imu_cnn_bundle")
+    }
+
+    #[test]
+    fn the_trainers_cnn_bundle_is_valid_and_reads_its_own_contract() {
+        let bundle = validate_bundle(&cnn_fixture_dir(), None).unwrap();
+        assert_eq!(bundle.kind, ModelKind::Cnn);
+        assert_eq!(bundle.manifest.model.format, CNN_MODEL_FORMAT);
+        assert_eq!(bundle.manifest.input.features.len(), 450);
+        assert_eq!(bundle.manifest.input_contract(), ModelKind::Cnn.contract());
+        assert_eq!(bundle.manifest.threshold_config().trigger, Trigger::Peak);
+        assert_eq!(bundle.manifest.thresholds.decision_delay_ms, Some(500));
+    }
+
+    #[test]
+    fn a_model_file_of_the_other_kind_s_format_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        for file in ["manifest.json", "model.cnn"] {
+            fs::copy(cnn_fixture_dir().join(file), dir.path().join(file)).unwrap();
+        }
+        let path = dir.path().join(MANIFEST_FILE);
+        let mut manifest: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        manifest["model"]["format"] = "trees".into();
+        fs::write(&path, manifest.to_string()).unwrap();
+        let refused = validate_bundle(dir.path(), None).err().unwrap().to_string();
+        assert!(refused.contains("is a 'cnn' file"), "{refused}");
     }
 
     #[test]
