@@ -1,0 +1,66 @@
+{
+ "camera_timed": {
+  "2026-10-14": {
+   "pinch": 209,
+   "fist": 73,
+   "hand_open": 0
+  },
+  "2026-10-17": {
+   "pinch": 69,
+   "fist": 9,
+   "hand_open": 69
+  }
+ },
+ "viwatch": {
+  "within": {
+   "matched_share": 0.7599067599067599,
+   "segments": 326,
+   "per_class": {
+    "pinch": 203,
+    "fist": 67,
+    "hand_open": 56
+   },
+   "majority": 0.6226993865030674,
+   "accuracy": 0.7666666666666666,
+   "balanced": 0.739152692226014
+  },
+  "2026-10-14": {
+   "matched_share_train": 0.7346938775510204,
+   "train": 56,
+   "test_pinch": 148,
+   "test_fist": 63,
+   "majority": 0.7014218009478673,
+   "backbone": {
+    "accuracy": 0.7150943396226416,
+    "balanced": 0.6444981423548837
+   },
+   "DANN": {
+    "accuracy": 0.7320754716981132,
+    "balanced": 0.6363521347415148
+   },
+   "Siamese DANN": {
+    "accuracy": 0.7358490566037736,
+    "balanced": 0.6486043197089388
+   }
+  },
+  "2026-10-17": {
+   "matched_share_train": 0.7801418439716312,
+   "train": 220,
+   "test_pinch": 43,
+   "test_fist": 6,
+   "majority": 0.8775510204081632,
+   "backbone": {
+    "accuracy": 0.9039999999999999,
+    "balanced": 0.943939393939394
+   },
+   "DANN": {
+    "accuracy": 0.9039999999999999,
+    "balanced": 0.9237012987012987
+   },
+   "Siamese DANN": {
+    "accuracy": 0.8959999999999999,
+    "balanced": 0.9391774891774892
+   }
+  }
+ }
+}

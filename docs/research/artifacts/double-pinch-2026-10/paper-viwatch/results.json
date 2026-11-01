@@ -1,0 +1,95 @@
+{
+ "within": {
+  "segments": 674,
+  "gestures": 764,
+  "per_class": {
+   "pinch": 416,
+   "fist": 147,
+   "hand_open": 77,
+   "thumbs_up": 20,
+   "hand_twit_clockwise_and_anti_clockwise": 14
+  },
+  "accuracy": 0.6622222222222223,
+  "balanced": 0.3057760932727226,
+  "majority": 0.6172106824925816
+ },
+ "leave_one_day_out": {
+  "2026-10-04": {
+   "train_segments": 487,
+   "test_segments": 19,
+   "test_pinch": 8,
+   "test_fist": 11,
+   "majority": 0.5789473684210527,
+   "backbone": {
+    "accuracy": 0.44000000000000006,
+    "balanced": 0.45999999999999996
+   },
+   "DANN": {
+    "accuracy": 0.42000000000000004,
+    "balanced": 0.42833333333333334
+   },
+   "Siamese DANN": {
+    "accuracy": 0.44000000000000006,
+    "balanced": 0.4483333333333334
+   }
+  },
+  "2026-10-11": {
+   "train_segments": 368,
+   "test_segments": 64,
+   "test_pinch": 27,
+   "test_fist": 37,
+   "majority": 0.578125,
+   "backbone": {
+    "accuracy": 0.675,
+    "balanced": 0.7002145972512105
+   },
+   "DANN": {
+    "accuracy": 0.66875,
+    "balanced": 0.7015206494497113
+   },
+   "Siamese DANN": {
+    "accuracy": 0.675,
+    "balanced": 0.7035590788565618
+   }
+  },
+  "2026-10-14": {
+   "train_segments": 253,
+   "test_segments": 259,
+   "test_pinch": 198,
+   "test_fist": 61,
+   "majority": 0.7644787644787645,
+   "backbone": {
+    "accuracy": 0.7676923076923077,
+    "balanced": 0.5818589798040708
+   },
+   "DANN": {
+    "accuracy": 0.7476923076923077,
+    "balanced": 0.5963920037313978
+   },
+   "Siamese DANN": {
+    "accuracy": 0.7507692307692307,
+    "balanced": 0.5830765556938431
+   }
+  },
+  "2026-10-17": {
+   "train_segments": 434,
+   "test_segments": 81,
+   "test_pinch": 72,
+   "test_fist": 9,
+   "majority": 0.8888888888888888,
+   "backbone": {
+    "accuracy": 0.751219512195122,
+    "balanced": 0.5932732732732733
+   },
+   "DANN": {
+    "accuracy": 0.7609756097560976,
+    "balanced": 0.5593843843843844
+   },
+   "Siamese DANN": {
+    "accuracy": 0.7219512195121951,
+    "balanced": 0.5543093093093093
+   }
+  }
+ },
+ "seconds": 2882.8
+}

@@ -1,0 +1,135 @@
+{
+ "variants": {
+  "as published": {
+   "2026-10-04": {
+    "accuracy": 0.43333333333333335,
+    "balanced": 0.43333333333333335,
+    "test_pinch": 8,
+    "test_fist": 11
+   },
+   "2026-10-11": {
+    "accuracy": 0.6458333333333334,
+    "balanced": 0.6741430871865655,
+    "test_pinch": 27,
+    "test_fist": 37
+   },
+   "2026-10-14": {
+    "accuracy": 0.7717948717948717,
+    "balanced": 0.6179763342206034,
+    "test_pinch": 198,
+    "test_fist": 61
+   },
+   "2026-10-17": {
+    "accuracy": 0.8048780487804877,
+    "balanced": 0.5906406406406406,
+    "test_pinch": 72,
+    "test_fist": 9
+   }
+  },
+  "no 20 Hz high-pass": {
+   "2026-10-04": {
+    "accuracy": 0.4666666666666666,
+    "balanced": 0.4666666666666666,
+    "test_pinch": 8,
+    "test_fist": 11
+   },
+   "2026-10-11": {
+    "accuracy": 0.59375,
+    "balanced": 0.5789625028755463,
+    "test_pinch": 27,
+    "test_fist": 37
+   },
+   "2026-10-14": {
+    "accuracy": 0.7512820512820513,
+    "balanced": 0.5965868668925843,
+    "test_pinch": 198,
+    "test_fist": 61
+   },
+   "2026-10-17": {
+    "accuracy": 0.7398373983739837,
+    "balanced": 0.5831831831831832,
+    "test_pinch": 72,
+    "test_fist": 9
+   }
+  },
+  "no per-segment z-score": {
+   "2026-10-04": {
+    "accuracy": 0.5666666666666668,
+    "balanced": 0.5666666666666668,
+    "test_pinch": 8,
+    "test_fist": 11
+   },
+   "2026-10-11": {
+    "accuracy": 0.5833333333333334,
+    "balanced": 0.5862663906142168,
+    "test_pinch": 27,
+    "test_fist": 37
+   },
+   "2026-10-14": {
+    "accuracy": 0.7333333333333334,
+    "balanced": 0.5434844500629081,
+    "test_pinch": 198,
+    "test_fist": 61
+   },
+   "2026-10-17": {
+    "accuracy": 0.8292682926829268,
+    "balanced": 0.5958208208208208,
+    "test_pinch": 72,
+    "test_fist": 9
+   }
+  },
+  "neither": {
+   "2026-10-04": {
+    "accuracy": 0.5333333333333333,
+    "balanced": 0.5333333333333333,
+    "test_pinch": 8,
+    "test_fist": 11
+   },
+   "2026-10-11": {
+    "accuracy": 0.4166666666666667,
+    "balanced": 0.4734299516908213,
+    "test_pinch": 27,
+    "test_fist": 37
+   },
+   "2026-10-14": {
+    "accuracy": 0.7128205128205128,
+    "balanced": 0.615273633122393,
+    "test_pinch": 198,
+    "test_fist": 61
+   },
+   "2026-10-17": {
+    "accuracy": 0.8780487804878049,
+    "balanced": 0.6225975975975976,
+    "test_pinch": 72,
+    "test_fist": 9
+   }
+  },
+  "class weights": {
+   "2026-10-04": {
+    "accuracy": 0.3666666666666667,
+    "balanced": 0.3666666666666667,
+    "test_pinch": 8,
+    "test_fist": 11
+   },
+   "2026-10-11": {
+    "accuracy": 0.6666666666666666,
+    "balanced": 0.670807453416149,
+    "test_pinch": 27,
+    "test_fist": 37
+   },
+   "2026-10-14": {
+    "accuracy": 0.7384615384615385,
+    "balanced": 0.6216854825572148,
+    "test_pinch": 198,
+    "test_fist": 61
+   },
+   "2026-10-17": {
+    "accuracy": 0.7642276422764228,
+    "balanced": 0.5221221221221222,
+    "test_pinch": 72,
+    "test_fist": 9
+   }
+  }
+ },
+ "seconds": 3575.2
+}

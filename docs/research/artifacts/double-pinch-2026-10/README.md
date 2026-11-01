@@ -183,3 +183,54 @@ scored after each held-out day's first 10 pinches for every variant. Contacts fo
 
 There are only two held-out days (209 and 69 pinches), and the model held out on 14 October trains on 69 pinches, so
 differences of a few points are noise.
+
+## Step 10: the papers' own methods on these recordings (2026-11-01)
+
+Two published methods, replicated as their papers describe them, with nothing from the earlier steps. Each script lists
+every detail its paper leaves out and the value used. There is one person, so a recording day stands in for a new user
+or session. Only pinch and fist were recorded on more than one day, so the held-out-day tests are pinch against fist.
+
+* `paper_viwatch_check.py` → `paper-viwatch/`: ViWatch (UIST 2023). Its segmentation, 20 Hz high-pass, z-score, GCC
+  alignment, its CNN from figure 6, and its DANN and Siamese DANN from figures 7 and 8.
+* `paper_tsunoda_check.py` → `paper-tsunoda/`: Tsunoda et al. (MUM 2024). Its rate-of-change detector, frequency bands,
+  self-supervised pre-training on 5,106 unlabelled segments, and linear SVM. The representation model is not published;
+  CPC, the method Kimura's poster cites, stands in.
+* `paper_viwatch_diagnostic.py` → `paper-viwatch-diagnostic/`: not part of the replication. ViWatch's model, changing one
+  step at a time.
+
+Balanced accuracy (50% is chance), the mean over the four held-out days:
+
+| Method | Balanced accuracy | Paper's figure |
+|---|---:|---|
+| ViWatch backbone | 58% | 45% for an unseen person |
+| ViWatch + DANN | 57% | |
+| ViWatch + Siamese DANN | 57% | about 97% after adaptation |
+| Tsunoda, SVM on all training gestures | 50% | 90.2% leave-one-session-out, 11 gestures |
+| Tsunoda, 5 / 10 labelled a gesture | 46% / 48% | |
+| ViWatch, no high-pass / no z-score / neither / class weights | 56% / 57% / 56% / 55% | (diagnostic) |
+
+Within the pooled data (random 3:1:1 split, five gestures), ViWatch reached 66% accuracy against 62% for always
+guessing pinch, and 31% balanced accuracy against 20% chance.
+
+With the unpublished thresholds set so 90% of labelled gestures reach them, neither method worked, and every
+diagnostic variant stayed at 55-58%. The cause was the segmentation, not the recordings: against the camera, those
+segments started a median 0.65 s before the fingers met (11% within 0.15 s), so most of ViWatch's 0.43 s windows ended
+before the gesture.
+
+`paper_camera_check.py` → `paper-camera/` sets the same thresholds empirically against the camera instead (both papers
+say only that theirs were set empirically). The camera times every pinch and fist on 2026-10-14 and 2026-10-17, and
+every hand opening on 10-17. Everything else is unchanged. Balanced accuracy:
+
+| Method | Within the two days (3 gestures; chance 33%) | 10-14 held out (pinch / fist) | 10-17 held out (pinch / fist) |
+|---|---:|---:|---:|
+| ViWatch backbone | 74% | 64% | 94% |
+| ViWatch + DANN | | 64% | 92% |
+| ViWatch + Siamese DANN | | 65% | 94% |
+| Tsunoda, SVM on all training gestures | | 75% | 85% |
+| Tsunoda, 5 labelled a gesture | | 59% | 71% |
+
+Both methods work on these recordings once their segments sit on the gesture. The model held out on 10-14 trains on
+10-17's few gestures (9 fists), and the 10-17 test has only 6-9 fists, so the per-day figures are rough. The adaptation
+in ViWatch still adds nothing here: with one training day there is nothing for it to align across. The comparison with
+the papers' figures is not like for like: one person, 50 Hz, and two gestures for the held-out-day tests, against
+their many users, 100-4000 Hz, and 4-17 gestures.
