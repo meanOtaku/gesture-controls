@@ -135,12 +135,15 @@ The trainer's replay uses a copy of this rule (`events.detect`). `tests/fixtures
 - Changing the mode ends every detection. A remembered Live restarts as Monitor.
 - Replacing, removing or rolling back a model releases its detection **before** the new model is used.
 - A stale or bad stream, a failed window, a model error, the watch disconnecting or a malformed watch message clears the affected labels and reports a falling edge for each, so whatever depends on them lets go. After a loss the buffers are emptied, so nothing is scored from stale data.
-- **A start needs a still hand** (`steadiness.rs`). With the gate on (the host turns it on, for the active models and the
-  one being compared), a rising edge is let through only if the watch's motion from 1.5 to 0.5 s before the decision
-  (on the watch's clock: `LabelScore::watch_ns`) was still: acceleration spread at most 0.4 m/s², gyroscope RMS at most
-  0.5 rad/s, tilt change at most 10°. Otherwise it is withheld: never announced or actionable, the detector cleared so
-  the next start is judged afresh, and a `Rejection::HandNotStill` reported. Too few motion samples, or no decision time
-  on the watch's clock, is not still (it fails closed). Held detections and releases are never touched by it.
+- **A start can be made to need a still hand** (`steadiness.rs`). With the gate on (the host follows the
+  `steadyStartsOnly` setting, off by default, for the active models and the one being compared), a rising edge is let
+  through only if the watch's motion was still from 1.5 to 0.5 s before the gesture's estimated start: the decision (on
+  the watch's clock, `LabelScore::watch_ns`) less the model's decision delay (`thresholds.decisionDelayMs` in its
+  manifest; 880 ms, the trainer's positive moment, for a bundle that does not say). Still is acceleration spread at most
+  0.4 m/s², gyroscope RMS at most 0.5 rad/s, tilt change at most 10°. Otherwise it is withheld: never announced or
+  actionable, the detector cleared so the next start is judged afresh, and a `Rejection::HandNotStill` reported. Too few
+  motion samples, or no decision time on the watch's clock, is not still (it fails closed). Held detections and releases
+  are never touched by it.
 - A model that cannot be loaded (altered or missing file, unsafe directory) is reported by name and that label has no model; it never falls back to another.
 - The host fails closed: if the registry cannot be opened the runtime is Off and the status says why.
 
@@ -183,9 +186,10 @@ The desktop decides and records; the trainer only trains (`apps/desktop/src-taur
   - the cut-off taken is the one of 0.30–0.95 that catches the most starts with at most 2 false activations per minute of recording (none within it: the most starts caught less false activations, never simply the highest).
   - A PPG-only spec keeps Youden's J on the left-out moments and the edge trigger.
 - **Testing.** It replays the held-out recordings the same way. A detection 680–1,280 ms after a start catches it.
-- **Still hand.** The desktop's spec asks for `steadyStarts`: every decision whose preceding motion was not still
-  (`steadiness.py`, the same test as the runtime's gate) is left out of training and testing, and the replays count only
-  the detections the gate would let start. `evaluation.json` records `steadyStarts`.
+- **Still hand.** With the `steadyStartsOnly` setting on, the desktop's spec asks for `steadyStarts`: every decision
+  whose gesture was not preceded by still motion (`steadiness.py`, the same test as the runtime's gate, with the trainer's
+  880 ms decision delay) is left out of training and testing, and the replays count only the detections the gate would
+  let start. `evaluation.json` records `steadyStarts`, and the manifest's thresholds carry `decisionDelayMs`.
 - **Bundle.** It writes the bundle and checks the tree file reproduces the trained model (within 1e-6).
 - **Left out.** A stretch marked on the Labelling page with the label `left_out` (`dataset_files::LEFT_OUT_LABEL`) is
   always given the Exclude role, whatever the request says, so no decision touching it is trained on; it needs no catalogue

@@ -183,7 +183,8 @@ def motion_of(recording: Recording) -> tuple[np.ndarray, np.ndarray]:
 
 
 def still_mask(recording: Recording, decisions_ns: np.ndarray) -> np.ndarray:
-    """Whether the hand was still before each decision, as the runtime's gate judges it (`steadiness`)."""
+    """Whether the hand was still before each decision's gesture, as the runtime's gate judges it (`steadiness`), for this
+    trainer's models, which decide `ppg_onset.ONSET_DELAY_MS` after a gesture starts."""
     rows = recording.orient_observed if recording.orient_observed is not None else np.ones(len(recording.timestamps_ns), dtype=bool)
     channel = lambda name: recording.channels[name][rows]  # noqa: E731
     return steadiness.still_before(
@@ -192,6 +193,7 @@ def still_mask(recording: Recording, decisions_ns: np.ndarray) -> np.ndarray:
         np.stack([channel(c) for c in imu_onset.AXES[3:]], axis=1),
         np.stack([channel(c) for c in ("quat_w", "quat_x", "quat_y", "quat_z")], axis=1),
         np.asarray(decisions_ns, dtype=np.int64),
+        ppg_onset.ONSET_DELAY_MS * 1_000_000,
     )
 
 
@@ -551,7 +553,9 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
         "window": {"durationMs": WINDOW_MS, "strideMs": STRIDE_MS, "maxGapMs": ppg_onset.MAX_GAP_MS, "minSamples": MIN_WINDOW_SAMPLES},
         "quality": {"maxContactQuality": 0.0, "minSampleCount": 3},
         "thresholds": {"activation": policy.activation, "release": policy.release, "cooldownMs": COOLDOWN_MS,
-                       **({"trigger": policy.trigger} if spec.motion else {})},
+                       **({"trigger": policy.trigger} if spec.motion else {}),
+                       # How long after a gesture starts the model decides: the runtime's still-hand gate looks before that.
+                       "decisionDelayMs": ppg_onset.ONSET_DELAY_MS},
         "preprocessing": {"kind": PREPROCESSING[spec.sources]},
         "provenance": {
             "backend": BACKEND,

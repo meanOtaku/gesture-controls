@@ -30,6 +30,7 @@ const settings: AppSettings = {
   wristMaxVolumePointsPerSecond: 30,
   watchSensorsEnabled: { orientation: true, acceleration: true, gyroscope: true },
   watchTransport: "bluetooth",
+  steadyStartsOnly: false,
 };
 
 describe("Settings page layout", () => {
@@ -41,7 +42,7 @@ describe("Settings page layout", () => {
     expect(groups.map((group) => group.id)).toEqual(["settings-group-watch", "settings-group-gestures", "settings-group-headphones", "settings-group-recording", "settings-group-appearance"]);
     const sectionsIn = (group: string) => within(screen.getByRole("region", { name: group })).getAllByRole("region").map((region) => region.getAttribute("aria-label"));
     expect(sectionsIn("Watch")).toEqual(["Watch transport", "Watch orientation", "Watch sensor enable switches", "Watch sensor rates", "Samsung health delivery controls"]);
-    expect(sectionsIn("Gestures")).toEqual(["Built-in gestures", "Shake sensitivity", "Swipe sensitivity", "Tap sensitivity", "Roll sensitivity", "Pitch sensitivity", "Wrist rotation controls"]);
+    expect(sectionsIn("Gestures")).toEqual(["Built-in gestures", "Still hand", "Shake sensitivity", "Swipe sensitivity", "Tap sensitivity", "Roll sensitivity", "Pitch sensitivity", "Wrist rotation controls"]);
     expect(sectionsIn("Display")).toEqual(["Appearance"]);
   });
 
@@ -314,5 +315,16 @@ describe("Settings", () => {
     const applyButton = screen.getByRole("button", { name: "Applying…" });
     expect(applyButton).toBeDisabled();
     expect(screen.getByRole("button", { name: "Reset to defaults" })).toBeDisabled();
+  });
+
+  it("switches the still-hand rule on and off, off by default", () => {
+    const updates: AppSettings[] = [];
+    render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
+    fireEvent.click(screen.getByRole("switch", { name: "Only start gestures from a still hand off" }));
+    expect(updates.at(-1)?.steadyStartsOnly).toBe(true);
+    cleanup();
+    render(<Settings settings={{ ...settings, steadyStartsOnly: true }} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
+    fireEvent.click(screen.getByRole("switch", { name: "Only start gestures from a still hand on" }));
+    expect(updates.at(-1)?.steadyStartsOnly).toBe(false);
   });
 });

@@ -5,6 +5,7 @@ import type { AppSettings, HeuristicGesture, OverlayState, PitchDirection, RollD
 import { ApplySettingsFooter } from "./ApplySettingsFooter";
 import { AppearanceSection } from "./AppearanceSection";
 import { BuiltInGesturesSection } from "./BuiltInGesturesSection";
+import { SteadyStartsSection } from "./SteadyStartsSection";
 import { HeadphonesSettingsSection } from "./HeadphonesSettingsSection";
 import { RecordingGraphSettingsSection } from "./RecordingGraphSettingsSection";
 import { SettingsGroup, SettingsNav } from "./SettingsGroups";
@@ -128,6 +129,7 @@ export function Settings({
 
           <SettingsGroup id="gestures">
             <BuiltInGesturesSection gestures={current.heuristicGestures} onToggle={toggleBuiltInGesture} />
+            <SteadyStartsSection enabled={current.steadyStartsOnly} onToggle={() => onUpdate({ ...current, steadyStartsOnly: !current.steadyStartsOnly })} />
             <ShakeSettings detections={shakeDetections} />
             <SwipeSettings lastSwipe={lastSwipe} />
             <TapSettings lastTap={lastTap} />

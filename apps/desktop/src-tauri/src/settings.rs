@@ -116,6 +116,10 @@ pub struct AppSettings {
     /// live: see `lib.rs`'s `apply_watch_transport`.
     #[serde(default)]
     pub watch_transport: WatchTransport,
+    /// Only let a trained model's gesture start when the hand was still just before it (`label_inference::steadiness`),
+    /// and train new models on such moments only. Off by default, and for settings files from before it existed.
+    #[serde(default)]
+    pub steady_starts_only: bool,
 }
 
 impl Default for AppSettings {
@@ -148,6 +152,7 @@ impl Default for AppSettings {
             wrist_max_volume_points_per_second: default_wrist_max_volume_points_per_second(),
             watch_sensors_enabled: default_watch_sensors_enabled(),
             watch_transport: WatchTransport::default(),
+            steady_starts_only: false,
         }
     }
 }
@@ -569,6 +574,8 @@ pub fn update_settings(
     let applied = runtime.update(&app, settings)?;
     app.state::<crate::automation::AutomationRuntime>()
         .apply_settings(&app, &applied);
+    app.state::<crate::label_runtime::LabelRuntimeHost>()
+        .set_steadiness_gate(applied.steady_starts_only);
     if let Some(server) = app.try_state::<std::sync::Arc<WatchBridgeServer>>() {
         apply_watch_settings(&server, &applied);
     }
@@ -595,6 +602,8 @@ pub fn reset_settings(
     let applied = runtime.reset_to_defaults(&app)?;
     app.state::<crate::automation::AutomationRuntime>()
         .apply_settings(&app, &applied);
+    app.state::<crate::label_runtime::LabelRuntimeHost>()
+        .set_steadiness_gate(applied.steady_starts_only);
     if let Some(server) = app.try_state::<std::sync::Arc<WatchBridgeServer>>() {
         apply_watch_settings(&server, &applied);
     }
@@ -757,6 +766,8 @@ mod tests {
             .validate()
             .expect("migrated settings must be valid");
         assert_eq!(settings.watch_transport, WatchTransport::Bluetooth);
+        // A settings file from before the still-hand rule existed leaves it off.
+        assert!(!settings.steady_starts_only);
     }
 
     #[test]

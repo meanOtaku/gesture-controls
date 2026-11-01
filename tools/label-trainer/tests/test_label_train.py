@@ -39,6 +39,7 @@ def test_a_motion_model_reads_the_pulse_and_motion_and_detects_on_the_peak(tmp_p
     assert manifest["input"]["features"] == names and manifest["input"]["shape"] == [None, 2733]
     assert manifest["sources"] == ["watchPpg", "watchOrientation"] and manifest["preprocessing"] == {"kind": "ppg_imu_onset"}
     assert manifest["thresholds"]["trigger"] == "peak" and manifest["thresholds"]["cooldownMs"] == 1500
+    assert manifest["thresholds"]["decisionDelayMs"] == ppg_onset.ONSET_DELAY_MS
     assert manifest["thresholds"]["activation"] in lt.THRESHOLD_CANDIDATES
     assert trees.read((bundle / "model.trees").read_bytes())[0] == 2733
     assert result["parityMaxAbsDifference"] <= lt.PARITY_TOLERANCE

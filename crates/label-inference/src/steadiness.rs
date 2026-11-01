@@ -13,9 +13,11 @@
 //! None of these depends on how the arm is posed. The limits are the research's starting values: on the recorded pinches,
 //! requiring them shut out most arm movement, wrist turning and typing while keeping the pinches made from a still hand.
 //!
-//! The window is measured back from the decision, on the watch's clock: from [`WINDOW_FROM_NS`] to [`WINDOW_TO_NS`] before
-//! it, so it ends before the gesture's own jolt (a model decides a little after the fingers meet). Too few motion samples
-//! in it, or no decision time on the watch's clock, is **not** steady: the gate fails closed.
+//! The window is measured back from the gesture's estimated start, on the watch's clock: a model decides some time after a
+//! gesture begins (its decision delay, from its bundle), so the start is put that long before the decision, and the window
+//! runs from [`WINDOW_FROM_NS`] to [`WINDOW_TO_NS`] before it. It so ends before the gesture's own movement whatever the
+//! model's delay. Too few motion samples in it, or no decision time on the watch's clock, is **not** steady: the gate
+//! fails closed.
 
 use std::collections::VecDeque;
 
@@ -27,10 +29,13 @@ pub const MAX_ACCEL_SPREAD: f64 = 0.4;
 pub const MAX_TURNING: f64 = 0.5;
 /// Largest change in tilt across the window that still counts as still, in degrees.
 pub const MAX_TILT_DEG: f64 = 10.0;
-/// The window starts this long before the decision...
+/// The window starts this long before the gesture's estimated start...
 pub const WINDOW_FROM_NS: u64 = 1_500_000_000;
 /// ...and ends this long before it.
 pub const WINDOW_TO_NS: u64 = 500_000_000;
+/// The decision delay of a model whose bundle does not give one: the trainer's positive moment, 880 ms after a gesture's
+/// labelled start (`ppg_onset.ONSET_DELAY_MS`).
+pub const DEFAULT_DECISION_DELAY_MS: u32 = 880;
 /// Fewer motion samples than this in the window and nothing can be said (25 Hz over the second).
 const MIN_SAMPLES: usize = 25;
 /// How much motion is kept: the window, and some slack for decisions made a little late.
@@ -164,12 +169,14 @@ impl Steadiness {
         Some(Measures { accel_spread: spread.sqrt(), turning, tilt_change_deg: tilt })
     }
 
-    /// Whether a gesture deciding at `decision_watch_ns` may start: the window before it was steady.
-    pub fn before(&self, decision_watch_ns: Option<u64>) -> Verdict {
+    /// Whether a gesture decided at `decision_watch_ns`, by a model that decides `decision_delay_ms` after a gesture
+    /// starts, may start: the window before the gesture's estimated start was steady.
+    pub fn before(&self, decision_watch_ns: Option<u64>, decision_delay_ms: u32) -> Verdict {
         let Some(at) = decision_watch_ns else {
             return Verdict::Unknown;
         };
-        self.verdict(at.saturating_sub(WINDOW_FROM_NS), at.saturating_sub(WINDOW_TO_NS))
+        let start = at.saturating_sub(u64::from(decision_delay_ms) * 1_000_000);
+        self.verdict(start.saturating_sub(WINDOW_FROM_NS), start.saturating_sub(WINDOW_TO_NS))
     }
 
     /// The hand's state right now: the second of motion up to the newest sample (for display).
@@ -223,7 +230,7 @@ mod tests {
             let wobble = if i % 2 == 0 { 0.1 } else { -0.1 };
             sample(i, [wobble, 0.0, 0.05], [0.05, -0.05, 0.0], LEVEL)
         });
-        let v = s.before(Some(END));
+        let v = s.before(Some(END), 0);
         assert!(v.is_steady(), "{v:?}");
         assert_eq!(v.refusal(), None);
         assert!(s.now().is_steady());
@@ -241,7 +248,7 @@ mod tests {
             sample(i, [0.0; 3], [0.0; 3], [half.cos(), half.sin(), 0.0, 0.0])
         });
         for (name, s, word) in [("moving", moving, "moving"), ("turning", turning, "turning"), ("tilting", tilting, "tilting")] {
-            let v = s.before(Some(END));
+            let v = s.before(Some(END), 0);
             assert!(matches!(v, Verdict::Moving(_)), "{name}: {v:?}");
             assert!(v.refusal().unwrap().contains(word), "{name}: {:?}", v.refusal());
         }
@@ -254,20 +261,20 @@ mod tests {
             let jolt = if i >= 170 { 3.0 } else { 0.0 };
             sample(i, [jolt, 0.0, 0.0], [jolt, 0.0, 0.0], LEVEL)
         });
-        assert!(s.before(Some(END)).is_steady());
+        assert!(s.before(Some(END), 0).is_steady());
         assert!(!s.now().is_steady(), "the jolt is in the last second, so the hand is moving right now");
     }
 
     #[test]
     fn too_little_motion_or_no_watch_time_fails_closed() {
         let empty = Steadiness::default();
-        assert_eq!(empty.before(Some(END)), Verdict::Unknown);
+        assert_eq!(empty.before(Some(END), 0), Verdict::Unknown);
         assert_eq!(empty.now(), Verdict::Unknown);
         let s = feed(|i| sample(i, [0.0; 3], [0.0; 3], LEVEL));
-        assert_eq!(s.before(None), Verdict::Unknown);
+        assert_eq!(s.before(None, 0), Verdict::Unknown);
         assert!(Verdict::Unknown.refusal().unwrap().contains("no motion data"));
         // A decision far later than the motion: nothing in its window.
-        assert_eq!(s.before(Some(END + 10_000_000_000)), Verdict::Unknown);
+        assert_eq!(s.before(Some(END + 10_000_000_000), 0), Verdict::Unknown);
     }
 
     #[test]
@@ -281,5 +288,16 @@ mod tests {
         s.observe(&sample(5, [0.0; 3], [0.0; 3], LEVEL));
         s.observe(&sample(4, [0.0; 3], [0.0; 3], LEVEL)); // older than the last kept
         assert_eq!(s.motion.len(), 1);
+    }
+
+    #[test]
+    fn the_window_sits_before_the_gesture_s_estimated_start_whatever_the_model_s_delay() {
+        // Still, then the gesture's movement for the last 0.9 s: a model that decides 0.9 s after a gesture starts.
+        let s = feed(|i| {
+            let moving = if i >= 110 { 3.0 } else { 0.0 };
+            sample(i, [moving, 0.0, 0.0], [moving, 0.0, 0.0], LEVEL)
+        });
+        assert!(s.before(Some(END), 900).is_steady(), "the second before the gesture was still");
+        assert!(!s.before(Some(END), 0).is_steady(), "judged as a model with no delay, the gesture itself is in the window");
     }
 }

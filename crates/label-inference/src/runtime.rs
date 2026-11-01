@@ -127,8 +127,8 @@ pub struct LabelRuntime {
     warned_at_ns: u64,
     /// The recent motion, for the steadiness gate and the "hand still" display.
     steadiness: Steadiness,
-    /// Whether a start needs the hand to have been still before it (`steadiness`). Off by default here; the app turns it
-    /// on (`label_runtime.rs`).
+    /// Whether a start needs the hand to have been still before it (`steadiness`). Off by default; the app follows its
+    /// `steadyStartsOnly` setting (`label_runtime.rs`).
     steady_starts: bool,
 }
 
@@ -186,6 +186,11 @@ impl LabelRuntime {
     /// Requires (or stops requiring) the hand to have been still before a detection may start.
     pub fn set_steadiness_gate(&mut self, on: bool) {
         self.steady_starts = on;
+    }
+
+    /// Whether a start needs the hand to have been still before it.
+    pub fn steadiness_gate(&self) -> bool {
+        self.steady_starts
     }
 
     /// Whether the hand is still right now, from the last second of motion (for display; the gate judges each start on
@@ -390,7 +395,8 @@ impl LabelRuntime {
                 // the detector is cleared so the next start is judged afresh. Held detections and releases pass.
                 if let (true, DetectionEvent::Rising { label, .. }) = (self.steady_starts, &change) {
                     let score = moment.iter().find(|s| &s.label == label);
-                    if let Some(why) = self.steadiness.before(score.and_then(|s| s.watch_ns)).refusal() {
+                    let delay = self.models.get(label).map_or(crate::steadiness::DEFAULT_DECISION_DELAY_MS, |m| m.decision_delay_ms);
+                    if let Some(why) = self.steadiness.before(score.and_then(|s| s.watch_ns), delay).refusal() {
                         let _ = self.hub.clear_label(label, ClearReason::Rejected(why.clone()));
                         if let Some(score) = score {
                             rejections.push(WindowRejection {

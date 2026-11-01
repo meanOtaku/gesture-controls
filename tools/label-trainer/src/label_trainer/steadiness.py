@@ -4,8 +4,9 @@ Mirrors `crates/label-inference/src/steadiness.rs` (the gate the desktop applies
 `steadyStarts`, the trainer keeps only the decisions the gate would let through, so a model is trained and tested on the
 moments it will be asked about live, and the replay counts only the starts the runtime would allow.
 
-Over the watch's motion from `WINDOW_FROM_NS` to `WINDOW_TO_NS` before a decision (on the watch clock both share), the hand
-was still when all three hold:
+A model decides some time after a gesture starts (its decision delay), so the gesture's start is put that long before the
+decision, and over the watch's motion from `WINDOW_FROM_NS` to `WINDOW_TO_NS` before that start (on the watch clock both
+share), the hand was still when all three hold:
 
 * acceleration spread (each linear acceleration axis's standard deviation, as one magnitude) at most `MAX_ACCEL_SPREAD`;
 * gyroscope RMS at most `MAX_TURNING`;
@@ -36,14 +37,15 @@ def up_vectors(quaternions: np.ndarray) -> np.ndarray:
 
 
 def still_before(motion_ts: np.ndarray, accel: np.ndarray, gyro: np.ndarray, quaternions: np.ndarray,
-                 decisions_ns: np.ndarray) -> np.ndarray:
-    """For each decision, whether the hand was still over the window before it. Samples with any value that is not finite
-    are left out, as the runtime leaves them out; the samples must be in time order."""
+                 decisions_ns: np.ndarray, decision_delay_ns: int = 0) -> np.ndarray:
+    """For each decision, by a model deciding `decision_delay_ns` after a gesture starts, whether the hand was still over
+    the window before that start. Samples with any value that is not finite are left out, as the runtime leaves them out;
+    the samples must be in time order."""
     accel, gyro = np.asarray(accel, dtype=float), np.asarray(gyro, dtype=float)
     up = up_vectors(quaternions)
     keep = np.isfinite(accel).all(1) & np.isfinite(gyro).all(1) & np.isfinite(up).all(1)
     ts, accel, gyro, up = np.asarray(motion_ts)[keep], accel[keep], gyro[keep], up[keep]
-    decisions_ns = np.asarray(decisions_ns, dtype=np.int64)
+    decisions_ns = np.asarray(decisions_ns, dtype=np.int64) - int(decision_delay_ns)
     out = np.zeros(len(decisions_ns), dtype=bool)
     if len(ts) == 0:
         return out

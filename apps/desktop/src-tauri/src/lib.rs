@@ -275,6 +275,11 @@ pub fn run() {
             handle.state::<calibration::CalibrationRuntime>().load(&handle);
             handle.state::<automation::AutomationRuntime>().load(&handle);
             handle.state::<label_runtime::LabelRuntimeHost>().load(&handle);
+            if let Ok(settings) = handle.state::<settings::SettingsRuntime>().get() {
+                handle
+                    .state::<label_runtime::LabelRuntimeHost>()
+                    .set_steadiness_gate(settings.steady_starts_only);
+            }
             label_registry::prune_legacy_builtins(&handle);
             label_runtime::spawn_timer(handle.clone());
             overlay::prepare_window(&handle).map_err(std::io::Error::other)?;

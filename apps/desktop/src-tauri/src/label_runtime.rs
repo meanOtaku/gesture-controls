@@ -67,10 +67,10 @@ impl From<label_inference::steadiness::Verdict> for HandSteadinessView {
     }
 }
 
-/// A runtime that only lets a gesture start when the hand was still before it.
-fn gated_runtime() -> LabelRuntime {
+/// A runtime that, with `steady_starts`, only lets a gesture start when the hand was still before it.
+fn runtime_with_gate(steady_starts: bool) -> LabelRuntime {
     let mut runtime = LabelRuntime::default();
-    runtime.set_steadiness_gate(true);
+    runtime.set_steadiness_gate(steady_starts);
     runtime
 }
 
@@ -427,6 +427,8 @@ pub struct LabelRuntimeHost {
     started_at: Instant,
     /// The hand's state last sent to the UI, so it is only sent when it changes.
     steadiness_shown: Mutex<Option<String>>,
+    /// Whether a gesture may only start from a still hand (the `steadyStartsOnly` setting).
+    steady_starts: std::sync::atomic::AtomicBool,
 }
 
 impl Default for LabelRuntimeHost {
@@ -434,10 +436,11 @@ impl Default for LabelRuntimeHost {
         Self {
             push_gate: Mutex::new(PushGate::default()),
             shadow: Mutex::new(None),
-            runtime: Mutex::new(gated_runtime()),
+            runtime: Mutex::new(runtime_with_gate(false)),
             state: Mutex::new(HostState::default()),
             started_at: Instant::now(),
             steadiness_shown: Mutex::new(None),
+            steady_starts: std::sync::atomic::AtomicBool::new(false),
         }
     }
 }
@@ -898,6 +901,20 @@ impl LabelRuntimeHost {
         }
     }
 
+    /// Requires (or stops requiring) the hand to have been still before a gesture starts, for the active models and the
+    /// one being compared. A detection under way is not affected.
+    pub fn set_steadiness_gate(&self, on: bool) {
+        self.steady_starts.store(on, std::sync::atomic::Ordering::Relaxed);
+        if let Ok(mut runtime) = self.runtime.lock() {
+            runtime.set_steadiness_gate(on);
+        }
+        if let Ok(mut slot) = self.shadow.lock()
+            && let Some(shadow) = slot.as_mut()
+        {
+            shadow.runtime.set_steadiness_gate(on);
+        }
+    }
+
     /// Whether the hand is still right now.
     pub fn hand_steadiness(&self) -> HandSteadinessView {
         self.runtime
@@ -940,7 +957,7 @@ impl LabelRuntimeHost {
         probe.state = LifecycleState::Active;
         let model = label_inference::load_version(&probe, &dir)?;
         // Judged as the active models are, gate included, so the comparison is fair.
-        let mut runtime = gated_runtime();
+        let mut runtime = runtime_with_gate(self.steady_starts.load(std::sync::atomic::Ordering::Relaxed));
         runtime.set_models(vec![model]);
         runtime.set_mode(RuntimeMode::Monitor);
         *self
@@ -1722,6 +1739,16 @@ mod tests {
         assert_eq!((unknown.state.as_str(), unknown.accel_spread), ("unknown", None));
         // Before the watch streams anything there is nothing to tell.
         assert_eq!(LabelRuntimeHost::default().hand_steadiness().state, "unknown");
+    }
+
+    #[test]
+    fn the_still_hand_rule_is_off_until_the_setting_turns_it_on_and_follows_it_after() {
+        let host = LabelRuntimeHost::default();
+        assert!(!host.runtime.lock().unwrap().steadiness_gate());
+        host.set_steadiness_gate(true);
+        assert!(host.runtime.lock().unwrap().steadiness_gate());
+        host.set_steadiness_gate(false);
+        assert!(!host.runtime.lock().unwrap().steadiness_gate());
     }
 
     #[test]

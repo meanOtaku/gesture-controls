@@ -51,3 +51,11 @@ def test_too_little_motion_is_not_still_and_unusable_samples_are_left_out() -> N
     quaternions[1::2] = 0.0
     assert judge(broken, still, quaternions).tolist() == [False]
     assert steadiness.still_before(np.array([], dtype=np.int64), np.zeros((0, 3)), np.zeros((0, 3)), np.zeros((0, 4)), np.array([END])).tolist() == [False]
+
+
+def test_the_window_sits_before_the_gesture_s_estimated_start_whatever_the_model_s_delay() -> None:
+    moving = np.where(np.arange(200) >= 110, 3.0, 0.0)
+    motion = np.stack([moving, np.zeros(200), np.zeros(200)], axis=1)
+    quaternions = np.tile(LEVEL, (200, 1))
+    assert steadiness.still_before(TS, motion, motion, quaternions, np.array([END]), 900_000_000).tolist() == [True]
+    assert steadiness.still_before(TS, motion, motion, quaternions, np.array([END]), 0).tolist() == [False]
