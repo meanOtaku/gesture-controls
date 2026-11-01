@@ -43,7 +43,7 @@ const TICK_INTERVAL: Duration = Duration::from_millis(100);
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct HandSteadinessView {
-    /// `still`, `moving`, or `unknown` (not enough motion to tell, as when the watch is not streaming).
+    /// `still`, `moving`, `unknown` (not enough motion to tell, as when the watch is not streaming), or `offWrist`.
     pub state: String,
     pub accel_spread: Option<f64>,
     pub turning: Option<f64>,
@@ -929,12 +929,25 @@ impl LabelRuntimeHost {
         }
     }
 
-    /// Whether the hand is still right now.
+    /// Whether the hand is still right now, or that the watch is off the wrist.
     pub fn hand_steadiness(&self) -> HandSteadinessView {
         self.runtime
             .lock()
-            .map(|runtime| runtime.hand_steadiness().into())
+            .map(|runtime| {
+                if runtime.is_off_wrist() {
+                    HandSteadinessView { state: "offWrist".into(), accel_spread: None, turning: None, tilt_change_deg: None }
+                } else {
+                    runtime.hand_steadiness().into()
+                }
+            })
             .unwrap_or_else(|_| label_inference::steadiness::Verdict::Unknown.into())
+    }
+
+    /// The watch's off-body detector said it was put on or taken off: off the wrist, every detection is released and the
+    /// models score nothing until it is worn again.
+    pub fn set_worn(&self, app: &AppHandle, worn: bool) {
+        self.with_runtime(app, |runtime| runtime.set_worn(worn));
+        self.with_shadow(app, |runtime| runtime.set_worn(worn));
     }
 
     /// Feeds the model being compared (if there is one) and tells the display what it detected. Nothing here touches the

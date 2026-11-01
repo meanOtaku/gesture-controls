@@ -387,11 +387,18 @@ pub fn run() {
                                 }
                                 WatchEvent::WearStateUpdated(sample) if sample.worn => {
                                     debug!("watch wear state: worn");
+                                    watch_handle
+                                        .state::<label_runtime::LabelRuntimeHost>()
+                                        .set_worn(&watch_handle, true);
                                 }
                                 WatchEvent::WearStateUpdated(sample) if !sample.worn => {
                                     // Off the wrist the watch stops streaming on purpose; a held
-                                    // grab must not outlive the data that was driving it.
+                                    // grab must not outlive the data that was driving it, and the
+                                    // gesture models must not score a watch lying on a table.
                                     info!("watch taken off the wrist; releasing any interaction");
+                                    watch_handle
+                                        .state::<label_runtime::LabelRuntimeHost>()
+                                        .set_worn(&watch_handle, false);
                                     watch_handle.state::<automation::AutomationRuntime>().cancel(&watch_handle);
                                 }
                                 WatchEvent::PpgStatusUpdated(sample)

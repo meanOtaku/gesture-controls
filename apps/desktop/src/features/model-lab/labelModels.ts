@@ -102,7 +102,7 @@ export const HAND_STEADINESS_EVENT = "hand-steadiness";
 
 /** Mirrors `HandSteadinessView` in `label_runtime.rs`: whether the hand is still right now, from the watch's motion. */
 export interface HandSteadiness {
-  state: "still" | "moving" | "unknown";
+  state: "still" | "moving" | "unknown" | "offWrist";
   accelSpread: number | null;
   turning: number | null;
   tiltChangeDeg: number | null;
@@ -112,6 +112,7 @@ export interface HandSteadiness {
 export function describeSteadiness(steadiness: HandSteadiness | null): { text: string; variant: "default" | "secondary" | "outline" } {
   if (steadiness?.state === "still") return { text: "Hand still", variant: "default" };
   if (steadiness?.state === "moving") return { text: "Hand moving", variant: "secondary" };
+  if (steadiness?.state === "offWrist") return { text: "Watch off wrist", variant: "outline" };
   return { text: "No motion data", variant: "outline" };
 }
 

@@ -108,6 +108,8 @@ describe("DetectionActivity", () => {
     expect(screen.getByText("Hand still")).toBeInTheDocument();
     act(() => steadinessHandler?.({ payload: { state: "moving", accelSpread: 1.2, turning: 0.9, tiltChangeDeg: 14 } }));
     expect(screen.getByText("Hand moving")).toBeInTheDocument();
+    act(() => steadinessHandler?.({ payload: { state: "offWrist", accelSpread: null, turning: null, tiltChangeDeg: null } }));
+    expect(screen.getByText("Watch off wrist")).toBeInTheDocument();
   });
 
   it("says a gesture was not started because the hand was moving, rather than that a window was skipped", () => {

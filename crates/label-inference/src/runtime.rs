@@ -130,6 +130,8 @@ pub struct LabelRuntime {
     /// Whether a start needs the hand to have been still before it (`steadiness`). Off by default; the app follows its
     /// `steadyStartsOnly` setting (`label_runtime.rs`).
     steady_starts: bool,
+    /// The watch said it is off the wrist (its off-body detector): nothing is scored until it says it is worn again.
+    off_wrist: bool,
 }
 
 impl Default for LabelRuntime {
@@ -144,6 +146,7 @@ impl Default for LabelRuntime {
             warned_at_ns: 0,
             steadiness: Steadiness::default(),
             steady_starts: false,
+            off_wrist: false,
         }
     }
 }
@@ -191,6 +194,27 @@ impl LabelRuntime {
     /// Whether a start needs the hand to have been still before it.
     pub fn steadiness_gate(&self) -> bool {
         self.steady_starts
+    }
+
+    /// The watch's off-body detector. Off the wrist, every detection is released and nothing is scored until it is worn
+    /// again: a watch lying on a table is perfectly still and its pulse sensor reads stray light, so a model could
+    /// otherwise fire on nothing. A watch that never says leaves detection as it is.
+    pub fn set_worn(&mut self, worn: bool) -> RuntimeOutput {
+        self.off_wrist = !worn;
+        if worn {
+            return RuntimeOutput::default();
+        }
+        let events: Vec<DetectionEvent> = self
+            .loaded_labels()
+            .iter()
+            .filter_map(|label| self.hub.clear_label(label, ClearReason::Rejected("the watch is off the wrist".into())))
+            .collect();
+        self.release(events)
+    }
+
+    /// Whether the watch said it is off the wrist.
+    pub fn is_off_wrist(&self) -> bool {
+        self.off_wrist
     }
 
     /// Whether the hand is still right now, from the last second of motion (for display; the gate judges each start on
@@ -305,6 +329,8 @@ impl LabelRuntime {
     /// The watch went away.
     pub fn watch_lost(&mut self) -> RuntimeOutput {
         self.steadiness.reset();
+        // A watch that comes back says again whether it is worn.
+        self.off_wrist = false;
         self.fail("the watch disconnected")
     }
 
@@ -366,7 +392,7 @@ impl LabelRuntime {
 
     /// Scores whatever is due. Call it after each sample and on a timer, so a stream that stops is noticed.
     pub fn tick(&mut self, now_ns: u64) -> RuntimeOutput {
-        if self.mode == RuntimeMode::Off || self.models.is_empty() {
+        if self.mode == RuntimeMode::Off || self.models.is_empty() || self.off_wrist {
             return RuntimeOutput::default();
         }
         let refs: Vec<&LoadedModel> = self.models.values().collect();
@@ -871,5 +897,27 @@ mod tests {
             assert!(out.events.iter().all(|e| !matches!(e, DetectionEvent::Falling { .. })));
         }
         assert!(rt.is_active(&pinch()));
+    }
+
+    #[test]
+    fn off_the_wrist_a_detection_is_released_and_nothing_is_scored_until_it_is_worn_again() {
+        let t = trace(0);
+        let mut rt = runtime(RuntimeMode::Live);
+        let at = until_active(&mut rt, &t);
+        let out = rt.set_worn(false);
+        assert!(matches!(
+            out.actionable.as_slice(),
+            [DetectionEvent::Falling { reason: ClearReason::Rejected(why), .. }] if why.contains("off the wrist")
+        ));
+        assert!(rt.is_off_wrist() && !rt.is_active(&pinch()));
+        // The rest of the trace holds more pinches: none is scored or detected while off.
+        let later = drive(&mut rt, &t, at, t.len());
+        assert!(later.iter().all(|o| o.scores.is_empty() && o.events.is_empty()));
+        assert!(rt.set_worn(true).events.is_empty());
+        assert!(!rt.is_off_wrist());
+        // Losing the watch forgets it, since a watch that comes back says again.
+        rt.set_worn(false);
+        rt.watch_lost();
+        assert!(!rt.is_off_wrist());
     }
 }
