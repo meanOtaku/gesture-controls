@@ -108,7 +108,7 @@ class SpikeCnn:
         # Every shift of up to two samples, picked per example at each epoch.
         Ws = [np.concatenate([windows(r, self.source, self.half, s) for r in recs])[keep] for s in range(-2, 3)]
         self.scale = Ws[2].std(axis=(0, 2), keepdims=True) + 1e-6
-        self.net = M.Net(6)
+        self.net = M.Net(Ws[0].shape[1])
         opt = torch.optim.Adam(self.net.parameters(), lr=1e-3, weight_decay=1e-4)
         pos = max(1.0, y.sum())
         loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(min(20.0, (len(y) - pos) / pos)))

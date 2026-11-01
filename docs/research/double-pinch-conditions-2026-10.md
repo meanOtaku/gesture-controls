@@ -223,7 +223,7 @@ timing, to be replaced by the measured distribution.
 | F1 | Detect only when the gesture mode is Live | The user decides when gestures act | The app's gesture policy (Off / Monitor / Live) |
 | F2 | Mirror the axes for the right wrist | C4 and the model's shapes are in the watch's frame; the session details record the wrist | All data so far is the left wrist |
 | F3 | Scale to the recent motion level | Sessions differ in strap and pinch force more than in pose | Step 2b; step 3 (a new day: 64% → 27%). Step 8: z-scoring each axis over its trailing 10 s, then a sigmoid, raised the spike CNN on a held-out day from 24% to 42% |
-| F4 | A short calibration | Five double pinches at the start set the person's size and interval for C7, D1 and D4 | Session-to-session difference is the biggest failure (step 3); the weak 11 October sessions defeated every model |
+| F4 | A short calibration | Five double pinches at the start set the person's size and interval for C7, D1 and D4, and fine-tune the model | Session-to-session difference is the biggest failure (step 3); the weak 11 October sessions defeated every model. Step 9: with the pulse channels, fine-tuning on the first 10 pinches raised a held-out day from 45% to 52% |
 | F5 | A firm, consistent strap | A loose strap damps the jolt | Session details record the strap; untested |
 
 ## G. Constraints on the training data
@@ -306,8 +306,10 @@ Sources: [Tsunoda et al. 2024](https://www.iplab.cs.tsukuba.ac.jp/paper/internat
 1. Record the double-pinch guided sessions under G1-G8, on two or more days, with the instruction to hold the hand still
    before and after each double pinch (B0). Then measure how many double pinches meet B0.
 2. From them, measure D1-D7 and re-measure every threshold in B and C at 100 Hz.
-3. Add the adaptation ViWatch used: a short calibration (F4), or adaptation to each new session from its unlabelled
-   data. Then add the 25 Hz raw PPG stream as a model input, and score both against step 8 on a held-out day.
+3. Adaptation and the pulse were tried in step 9. Unlabelled adaptation (AdaBN, ViWatch's domain-adversarial training)
+   did not help, and calibration alone did not help the motion-only model. The pulse channels with a ±0.5 s window, plus
+   calibration with 10 pinches (F4), gave the best held-out-day result: 52% of contacts at 1 false alarm a minute,
+   against 41%. Re-test on the double-pinch sessions, which will have more days.
 4. Build the rule layer in front of the model: A, then B0 (steadiness), B4 and B7, then the C0 filter, C1, C3, C4 and C7. Score the model with the
    layer on and off, as contacts found at a false-alarm rate (step 3's measure) and as double pinches found per false
    double pinch an hour.

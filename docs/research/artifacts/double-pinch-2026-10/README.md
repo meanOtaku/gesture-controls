@@ -157,3 +157,29 @@ The Galaxy Watch4 offers apps at most 100 Hz on every motion sensor, and the app
 with the highest pinch accuracy sampled at 400-4000 Hz. The closest match at 100 Hz, ViWatch, reached its accuracy by
 adapting to each new user. Both are written up in the
 [conditions document](../../double-pinch-conditions-2026-10.md#the-watchs-limits-and-what-published-systems-did).
+
+## Step 9: adapting to a new session, and adding the pulse sensor (2026-11-01)
+
+`adapt_ppg_check.py` → `adapt-ppg/`. Step 8's pipeline (z-score + sigmoid, spike CNN) with each recording day held out,
+scored after each held-out day's first 10 pinches for every variant. Contacts found:
+
+| Variant | 1 false alarm/min | 0.5/min | 0.2/min |
+|---|---:|---:|---:|
+| motion, ±0.2 s (step 8) | 41% | 26% | 15% |
+| + AdaBN (normalisation statistics from the new day) | 37% | 22% | 12% |
+| + domain-adversarial training (ViWatch) | 41% | 27% | 15% |
+| + calibration with the first 10 pinches | 35% | 28% | 12% |
+| motion + pulse, ±0.2 s | 39% | 27% | 10% |
+| motion, ±0.5 s | 43% | 29% | 16% |
+| motion + pulse, ±0.5 s | 45% | 38% | 24% |
+| **motion + pulse, ±0.5 s, calibration with 10 pinches** | **52%** | **43%** | **28%** |
+
+* None of the adaptation methods helped the motion-only model on its own.
+* The pulse helps only with the wider window: the blood-flow change is slower than the jolt. With ±0.5 s it lifts the
+  stricter settings most (0.2 false alarms a minute: 16% → 24%, and 13% → 29% behind the context rules). With whole
+  recordings held out, it lifts the same setting behind the rules from 33% to 44%.
+* Calibration helps once the pulse is in: the pulse's level varies between sessions more than the motion's does.
+  Together they give the best held-out-day result so far.
+
+There are only two held-out days (209 and 69 pinches), and the model held out on 14 October trains on 69 pinches, so
+differences of a few points are noise.
