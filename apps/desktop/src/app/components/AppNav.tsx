@@ -18,36 +18,45 @@ export type AppTab = "main" | "headphone" | "watch" | "recipes" | "devices" | "g
 
 type NavItem = { id: AppTab; label: string; icon: typeof LayoutDashboard };
 
-const MAIN: NavItem = { id: "main", label: "Main", icon: LayoutDashboard };
-const DEVICES: NavItem[] = [
-  { id: "headphone", label: "Headphones", icon: Headphones },
-  { id: "watch", label: "Watch", icon: Watch },
-];
-const AUTOMATION: NavItem[] = [
-  { id: "gestures", label: "Gestures", icon: Radar },
-  { id: "recipes", label: "Recipes", icon: Workflow },
-  { id: "devices", label: "Virtual devices", icon: SlidersHorizontal },
-];
-const CAPTURE: NavItem[] = [
-  { id: "signals", label: "Live signals", icon: Activity },
-  { id: "recorder", label: "Recorder", icon: CircleDot },
-  { id: "recordings", label: "Recordings", icon: FolderOpen },
-];
-const LABELS: NavItem[] = [{ id: "labels", label: "Labels", icon: Tags }, { id: "gestureLibrary", label: "Gesture library", icon: Shapes }];
-const MODELS: NavItem[] = [
-  { id: "modelLab", label: "Model Lab", icon: Brain },
-  { id: "labelling", label: "Labelling", icon: Highlighter },
-  { id: "networkLab", label: "Network lab", icon: Network },
+const MAIN: NavItem = { id: "main", label: "Overview", icon: LayoutDashboard };
+
+/** The groups, in the order the app is used: connect the devices, record, label, train, then automate. */
+const GROUPS: { title: string; items: NavItem[] }[] = [
+  { title: "Devices", items: [{ id: "watch", label: "Watch", icon: Watch }, { id: "headphone", label: "Headphones", icon: Headphones }] },
+  {
+    title: "Record",
+    items: [
+      { id: "signals", label: "Live signals", icon: Activity },
+      { id: "recorder", label: "Recorder", icon: CircleDot },
+      { id: "recordings", label: "Recordings", icon: FolderOpen },
+    ],
+  },
+  {
+    title: "Label",
+    items: [
+      { id: "labelling", label: "Labelling", icon: Highlighter },
+      { id: "labels", label: "Labels", icon: Tags },
+      { id: "gestureLibrary", label: "Gesture library", icon: Shapes },
+    ],
+  },
+  { title: "Train", items: [{ id: "modelLab", label: "Model Lab", icon: Brain }, { id: "networkLab", label: "Network lab", icon: Network }] },
+  {
+    title: "Automate",
+    items: [
+      { id: "gestures", label: "Gestures", icon: Radar },
+      { id: "recipes", label: "Recipes", icon: Workflow },
+      { id: "devices", label: "Virtual devices", icon: SlidersHorizontal },
+    ],
+  },
 ];
 const SETTINGS: NavItem = { id: "settings", label: "Settings", icon: SettingsIcon };
+const ALL: NavItem[] = [MAIN, ...GROUPS.flatMap((group) => group.items), SETTINGS];
 
 /** The name of every page, as the nav shows it. */
-export const NAV_LABELS: Record<AppTab, string> = Object.fromEntries(
-  [MAIN, ...DEVICES, ...LABELS, ...CAPTURE, ...MODELS, ...AUTOMATION, SETTINGS].map((item) => [item.id, item.label]),
-) as Record<AppTab, string>;
+export const NAV_LABELS: Record<AppTab, string> = Object.fromEntries(ALL.map((item) => [item.id, item.label])) as Record<AppTab, string>;
 
-/** Display order. Cmd/Ctrl+1..9 select the first nine; Settings is also Cmd/Ctrl+, (the usual place for it). */
-export const NAV_ORDER: AppTab[] = [MAIN, ...DEVICES, ...LABELS, ...CAPTURE, ...MODELS, ...AUTOMATION, SETTINGS].map((item) => item.id);
+/** Display order. Cmd/Ctrl+1..9 select the first nine and Cmd/Ctrl+0 the tenth; Settings is also Cmd/Ctrl+, (the usual place for it). */
+export const NAV_ORDER: AppTab[] = ALL.map((item) => item.id);
 
 export type NavTone = "ok" | "warn" | "live" | "idle";
 export interface NavStatus { tone: NavTone; label: string }
@@ -58,6 +67,8 @@ export interface NavStatusInput {
   /** Watch off-body detector: false when taken off, null until it reports. */
   watchWorn: boolean | null;
   recordingState: "idle" | "arming" | "recording" | "saved" | "discarded";
+  /** Whether a camera is on (hand tracking for the Recorder's marking). */
+  cameraOn?: boolean;
 }
 
 /** What each tab's marker says, from the app's live state. Tabs with nothing to report are absent. */
@@ -71,15 +82,21 @@ export function navStatuses(input: NavStatusInput): Partial<Record<AppTab, NavSt
   return {
     headphone: input.headphonesConnected ? { tone: "ok", label: "connected" } : { tone: "idle", label: "not connected" },
     watch,
-    ...(recording ? { recorder: { tone: "live", label: "recording" } as NavStatus } : {}),
+    ...(recording
+      ? { recorder: { tone: "live", label: "recording" } as NavStatus }
+      : input.cameraOn
+        ? { recorder: { tone: "ok", label: "camera on" } as NavStatus }
+        : {}),
   };
 }
 
 const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
-const SHORTCUT_COUNT = 9;
-/** The shortcut for a tab, or null when it has none (only the first nine are numbered; Settings has its own). */
+const SHORTCUT_COUNT = 10;
+/** The digit that selects the page at `index` in display order: 1 to 9, then 0 for the tenth. */
+const digitFor = (index: number): string | null => (index < 0 || index >= SHORTCUT_COUNT ? null : String((index + 1) % 10));
+/** The shortcut for a tab, or null when it has none (only the first ten are numbered; Settings has its own). */
 export function shortcutFor(tab: AppTab): string | null {
-  const key = tab === "settings" ? "," : NAV_ORDER.indexOf(tab) < SHORTCUT_COUNT ? String(NAV_ORDER.indexOf(tab) + 1) : null;
+  const key = tab === "settings" ? "," : digitFor(NAV_ORDER.indexOf(tab));
   return key === null ? null : `${isMac() ? "⌘" : "Ctrl+"}${key}`;
 }
 
@@ -89,7 +106,7 @@ type AppNavProps = {
   statuses?: Partial<Record<AppTab, NavStatus>>;
 };
 
-/** Primary navigation in the order the app is used: connect devices, define labels, capture, train, then automate, with Settings pinned at the bottom. */
+/** Primary navigation in the order the app is used: connect the devices, record, label, train, then automate, with Settings pinned at the bottom. */
 export function AppNav({ activeTab, onSelect, statuses = {} }: AppNavProps) {
   // Cmd/Ctrl + 1..9 jumps to a tab, and Cmd/Ctrl + , to Settings. A modified key is never text, so it is safe inside a field too.
   useEffect(() => {
@@ -100,8 +117,9 @@ export function AppNav({ activeTab, onSelect, statuses = {} }: AppNavProps) {
         onSelect("settings");
         return;
       }
-      const index = Number(event.key) - 1;
-      if (Number.isInteger(index) && index >= 0 && index < Math.min(SHORTCUT_COUNT, NAV_ORDER.length)) {
+      const digit = Number(event.key);
+      const index = digit === 0 ? 9 : digit - 1;
+      if (/^[0-9]$/.test(event.key) && index < Math.min(SHORTCUT_COUNT, NAV_ORDER.length)) {
         event.preventDefault();
         onSelect(NAV_ORDER[index]);
       }
@@ -149,36 +167,14 @@ export function AppNav({ activeTab, onSelect, statuses = {} }: AppNavProps) {
             <SidebarMenu>{entry(MAIN)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>Devices</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>{DEVICES.map(entry)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>Labels</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>{LABELS.map(entry)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>Capture</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>{CAPTURE.map(entry)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>Models</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>{MODELS.map(entry)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>Automation</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>{AUTOMATION.map(entry)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {GROUPS.map((group) => (
+          <SidebarGroup key={group.title}>
+            <SidebarGroupLabel>{group.title}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>{group.items.map(entry)}</SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>{entry(SETTINGS)}</SidebarMenu>

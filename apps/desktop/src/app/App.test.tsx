@@ -96,7 +96,7 @@ describe("App overlay integration", () => {
       { timeout: 5000 },
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Main" }));
+    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
     await act(async () => listeners.get(WATCH_PPG_BATCH_EVENT)?.({
       payload: {
         sampleCount: 1,

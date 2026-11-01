@@ -28,6 +28,11 @@ describe("navStatuses", () => {
     expect(navStatuses({ ...idle, watchConnected: false, watchWorn: false }).watch?.tone).toBe("idle");
   });
 
+  it("shows the camera on at the Recorder, unless a recording takes the marker", () => {
+    expect(navStatuses({ ...idle, cameraOn: true }).recorder).toEqual({ tone: "ok", label: "camera on" });
+    expect(navStatuses({ ...idle, cameraOn: true, recordingState: "recording" }).recorder?.label).toBe("recording");
+  });
+
   it("flags the Recorder while a recording is arming or running, and only then", () => {
     expect(navStatuses({ ...idle, recordingState: "recording" }).recorder).toEqual({ tone: "live", label: "recording" });
     expect(navStatuses({ ...idle, recordingState: "arming" }).recorder?.tone).toBe("live");
@@ -48,14 +53,18 @@ const renderNav = (props: Partial<Parameters<typeof AppNav>[0]> = {}) => {
 };
 
 describe("AppNav", () => {
+  it("orders the pages as the app is used: devices, record, label, train, automate, then settings", () => {
+    expect(NAV_ORDER).toEqual(["main", "watch", "headphone", "signals", "recorder", "recordings", "labelling", "labels", "gestureLibrary", "modelLab", "networkLab", "gestures", "recipes", "devices", "settings"]);
+  });
+
   it("lists every destination, grouped, with the current page marked", () => {
     renderNav({ activeTab: "recorder" });
-    for (const name of ["Main", "Headphones", "Watch", "Live signals", "Recorder", "Recordings", "Model Lab", "Settings"]) {
+    for (const name of ["Overview", "Headphones", "Watch", "Live signals", "Recorder", "Recordings", "Model Lab", "Settings"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
     expect(screen.queryByRole("button", { name: "Live data" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Recorder" })).toHaveAttribute("aria-current", "page");
-    for (const group of ["Devices", "Automation", "Capture", "Models"]) expect(screen.getByText(group)).toBeInTheDocument();
+    for (const group of ["Devices", "Record", "Label", "Train", "Automate"]) expect(screen.getByText(group)).toBeInTheDocument();
   });
 
   it("says each device's state to screen readers as well as by colour, without changing the button's name", () => {
@@ -65,7 +74,7 @@ describe("AppNav", () => {
     expect(screen.getByRole("button", { name: "Headphones" })).toHaveAccessibleDescription("connected");
     expect(screen.getByRole("button", { name: "Watch" })).toHaveAccessibleDescription("connected, off wrist");
     expect(screen.getByRole("button", { name: "Recorder" })).toHaveAccessibleDescription("recording");
-    expect(screen.getByRole("button", { name: "Main" })).not.toHaveAccessibleDescription();
+    expect(screen.getByRole("button", { name: "Overview" })).not.toHaveAccessibleDescription();
   });
 
   it("selects a tab on click", () => {
@@ -74,16 +83,16 @@ describe("AppNav", () => {
     expect(onSelect).toHaveBeenCalledWith("modelLab");
   });
 
-  it("jumps to the first nine tabs with Ctrl+digit in display order, including from inside a text field", () => {
+  it("jumps to the first ten tabs with Ctrl+1..9 and Ctrl+0 in display order, including from inside a text field", () => {
     const onSelect = renderNav();
-    NAV_ORDER.slice(0, 9).forEach((tab, index) => {
-      fireEvent.keyDown(window, { key: String(index + 1), ctrlKey: true });
+    NAV_ORDER.slice(0, 10).forEach((tab, index) => {
+      fireEvent.keyDown(window, { key: String((index + 1) % 10), ctrlKey: true });
       expect(onSelect).toHaveBeenLastCalledWith(tab);
     });
-    expect(NAV_ORDER).toEqual(["main", "headphone", "watch", "labels", "gestureLibrary", "signals", "recorder", "recordings", "modelLab", "labelling", "networkLab", "gestures", "recipes", "devices", "settings"]);
+    expect(onSelect).toHaveBeenLastCalledWith("modelLab");
   });
 
-  it("opens Settings with Ctrl+comma, since the tenth and later tabs have no number", () => {
+  it("opens Settings with Ctrl+comma, since the eleventh and later tabs have no number", () => {
     const onSelect = renderNav();
     fireEvent.keyDown(window, { key: ",", ctrlKey: true });
     expect(onSelect).toHaveBeenLastCalledWith("settings");
@@ -95,7 +104,8 @@ describe("AppNav", () => {
     const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
     const prefix = isMac ? "⌘" : "Ctrl+";
     expect(shortcutFor("main")).toBe(`${prefix}1`);
-    expect(shortcutFor("modelLab")).toBe(`${prefix}9`);
+    expect(shortcutFor("gestureLibrary")).toBe(`${prefix}9`);
+    expect(shortcutFor("modelLab")).toBe(`${prefix}0`);
     expect(shortcutFor("recipes")).toBeNull();
     expect(shortcutFor("settings")).toBe(`${prefix},`);
   });
@@ -105,7 +115,7 @@ describe("AppNav", () => {
     fireEvent.keyDown(window, { key: "2" });
     fireEvent.keyDown(window, { key: "2", ctrlKey: true, shiftKey: true });
     fireEvent.keyDown(window, { key: "2", ctrlKey: true, altKey: true });
-    fireEvent.keyDown(window, { key: "0", ctrlKey: true });
+    fireEvent.keyDown(window, { key: "0" });
     fireEvent.keyDown(window, { key: ",", ctrlKey: true, shiftKey: true });
     expect(onSelect).not.toHaveBeenCalled();
   });
