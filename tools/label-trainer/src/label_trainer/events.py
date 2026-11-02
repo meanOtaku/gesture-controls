@@ -78,6 +78,10 @@ def summarise(per_recording: list[dict]) -> dict:
     false_activations = sum(r["falseActivations"] for r in per_recording)
     negative_seconds = sum(r["negativeNs"] for r in per_recording) / 1e9
     latencies = [latency for r in per_recording for latency in r["latenciesMs"]]
+    false_on: dict[str, int] = {}
+    for r in per_recording:
+        for label, n in r.get("falseOn", {}).items():
+            false_on[label] = false_on.get(label, 0) + n
     return {
         "recordings": len(per_recording),
         "gestures": gestures,
@@ -88,4 +92,5 @@ def summarise(per_recording: list[dict]) -> dict:
         "falseActivations": false_activations,
         "negativeSeconds": negative_seconds,
         "falseActivationsPerHour": false_activations / (negative_seconds / 3600.0) if negative_seconds > 0 else None,
+        **({"falseOn": false_on} if any("falseOn" in r for r in per_recording) else {}),
     }

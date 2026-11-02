@@ -14,6 +14,7 @@ import {
   MAX_MODEL_NAME,
   MODE_OPTIONS,
   actionsFor,
+  formatTime,
   groupByLabel,
   modelName,
   type ImportedLabelModel,
@@ -227,7 +228,7 @@ export function LabelModelsPanel({
                             {model.monitorOnly && <Badge variant="outline">Monitor only</Badge>}
                           </span>
                           <small className="text-xs text-muted-foreground">
-                            Added {model.createdAt}
+                            Added {formatTime(model.createdAt)}
                             {model.imported ? ". Imported models are not evaluated by this app: review them before approving." : ""}
                             {model.monitorOnly ? ". It did not pass the checks for going live: when active it scores and shows what it detects, but never starts a recipe, even in Live." : ""}
                           </small>

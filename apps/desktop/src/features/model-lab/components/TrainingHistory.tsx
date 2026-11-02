@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
+import { formatTime } from "../labelModels";
 import type { DatasetLabel, DatasetSummary } from "../types";
 
 /** Mirrors `TrainingHistoryProject` in label_runtime.rs. */
@@ -67,7 +68,7 @@ type Props = {
 };
 
 const OUTCOMES: Record<string, string> = { deployable: "ready to use", evaluationOnly: "scored only", failed: "failed" };
-const day = (iso: string) => iso.slice(0, 10);
+const day = formatTime;
 
 /** Why a project's history cannot be deleted right now, in words, or null. */
 export function deleteBlocker(project: Pick<TrainingHistoryProject, "label" | "models" | "mentionedBy">): string | null {

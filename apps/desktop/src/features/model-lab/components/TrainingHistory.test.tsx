@@ -6,6 +6,7 @@ const invoke = vi.hoisted(() => vi.fn());
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
 import { TrainingHistory, deleteBlocker, runChanges, type TrainingHistoryProject } from "./TrainingHistory";
+import { formatTime } from "../labelModels";
 
 const project = (label: string, over: Partial<TrainingHistoryProject> = {}): TrainingHistoryProject => ({
   id: `p-${label}`, label, name: label, createdAt: "2026-10-01T00:00:00Z",
@@ -40,7 +41,7 @@ describe("TrainingHistory", () => {
     const rows = await screen.findAllByRole("listitem", { name: "" }).catch(() => []);
     expect(rows).toBeDefined();
     const pinch = (await screen.findByText("pinch", { selector: "code" })).closest("li") as HTMLElement;
-    expect(pinch.textContent).toContain("1 run · 1 sealed snapshot · latest 2026-10-02: ready to use");
+    expect(pinch.textContent).toContain(`1 run · 1 sealed snapshot · latest ${formatTime("2026-10-02T10:00:00Z")}: ready to use`);
     expect(pinch.textContent).toContain("Trained against: fist");
     const fist = screen.getByText("fist", { selector: "code" }).closest("li") as HTMLElement;
     expect(fist.textContent).toContain("Mentioned in the history of: Pinch");

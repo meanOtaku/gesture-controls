@@ -4,7 +4,7 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { useLabelModels } from "../hooks/useLabelModels";
-import type { LabelModel } from "../labelModels";
+import { formatTime, modelName, newestFirst, type LabelModel } from "../labelModels";
 import { PULSE_MODEL } from "../training";
 import { ModelInspector } from "./ModelInspector";
 
@@ -15,8 +15,9 @@ function ModelRow({ model, chosen, onChoose }: { model: LabelModel; chosen: bool
   return (
     <li className="flex flex-wrap items-center gap-3 text-sm">
       <strong>{model.label}</strong>
+      {model.name && <span>{modelName(model)}</span>}
       <code>{model.id}</code>
-      <span className="text-muted-foreground">{STATE_TEXT[model.state] ?? model.state}{model.imported ? " · imported" : ""}</span>
+      <span className="text-muted-foreground">{STATE_TEXT[model.state] ?? model.state}{model.imported ? " · imported" : ""} · {formatTime(model.createdAt)}</span>
       {model.monitorOnly && <Badge variant="outline">Monitor only</Badge>}
       <Button type="button" size="sm" variant={chosen ? "default" : "outline"} aria-pressed={chosen} aria-label={`Look inside ${model.id}`} onClick={onChoose}>
         {chosen ? "Looking inside" : "Look inside"}
@@ -120,7 +121,7 @@ export function NetworkLab({ modelId, onModelChange }: { modelId: string | null;
               <p className="hint">No models yet. Train one in Model Lab, or import one there.</p>
             ) : (
               <ul className="flex flex-col gap-2" aria-label="Models">
-                {models.map((model) => <ModelRow key={model.id} model={model} chosen={model.id === modelId} onChoose={() => onModelChange(model.id)} />)}
+                {newestFirst(models).map((model) => <ModelRow key={model.id} model={model} chosen={model.id === modelId} onChoose={() => onModelChange(model.id)} />)}
               </ul>
             )}
           </CardContent>

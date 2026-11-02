@@ -21,6 +21,21 @@ export interface LabelModel {
 /** The longest name a model may be given (the registry's `MAX_MODEL_NAME_CHARS`). */
 export const MAX_MODEL_NAME = 60;
 
+/** A moment as this computer's local time, day first with a 12-hour clock: "02/11/2026 07:36 PM". Text that is not a
+ * date is returned as it is. */
+export function formatTime(iso: string): string {
+  const at = new Date(iso);
+  if (!iso || Number.isNaN(at.getTime())) return iso;
+  const two = (n: number) => String(n).padStart(2, "0");
+  const hour = at.getHours() % 12 || 12;
+  return `${two(at.getDate())}/${two(at.getMonth() + 1)}/${at.getFullYear()} ${two(hour)}:${two(at.getMinutes())} ${at.getHours() < 12 ? "AM" : "PM"}`;
+}
+
+/** The models, the most recently added first. */
+export function newestFirst<T extends Pick<LabelModel, "createdAt">>(models: T[]): T[] {
+  return [...models].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || b.createdAt.localeCompare(a.createdAt));
+}
+
 /** What to call a model: the name the user gave it, or else its id. */
 export function modelName(model: Pick<LabelModel, "id" | "name">): string {
   return model.name?.trim() || model.id;
@@ -99,12 +114,12 @@ export function actionsFor(model: Pick<LabelModel, "state" | "deployable" | "mon
 }
 
 /** Models grouped by label, labels in order, newest model first within each. */
+/** The models by label, newest first: the label with the most recently added model leads, and each label's models go
+ * from newest to oldest. */
 export function groupByLabel(models: LabelModel[]): { label: string; models: LabelModel[] }[] {
   const groups = new Map<string, LabelModel[]>();
-  for (const model of models) groups.set(model.label, [...(groups.get(model.label) ?? []), model]);
-  return [...groups.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([label, list]) => ({ label, models: list.sort((a, b) => b.createdAt.localeCompare(a.createdAt)) }));
+  for (const model of newestFirst(models)) groups.set(model.label, [...(groups.get(model.label) ?? []), model]);
+  return [...groups.entries()].map(([label, list]) => ({ label, models: list }));
 }
 
 export const LABEL_DETECTIONS_EVENT = "label-detections";

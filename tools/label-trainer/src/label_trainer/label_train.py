@@ -477,7 +477,8 @@ def detections(spec: Spec, recording: Recording, times: np.ndarray, scores: np.n
     """One recording's scores through the runtime's detection rule (`events.detect`). A detection catches a start of the
     target label when it rises `ppg_onset.match_window_ms` after it (for the model's delay; `ppg_onset.match`); any other is a
     false activation, unless it is inside an excluded label's hold. Time inside the target's holds, and an excluded
-    label's, cannot hold one."""
+    label's, cannot hold one. `falseOn` counts the false activations by the label held where the start it fired for would
+    be (`decision_delay_ms` before it), "unlabelled" where none is."""
     held = ppg_onset.holds(recording.timestamps_ns, recording.raw_labels)
     earliest_ms, latest_ms = ppg_onset.match_window_ms(spec.decision_delay_ms)
     starts = [s for s, _, label in held if label == spec.target and times[0] <= s + earliest_ms * 1_000_000 <= times[-1]]
@@ -488,6 +489,13 @@ def detections(spec: Spec, recording: Recording, times: np.ndarray, scores: np.n
         still = still_mask(recording, np.array(rises, dtype=np.int64), spec.decision_delay_ms).tolist()
         rises = [rise for rise, ok in zip(rises, still) if ok]
     caught, latencies = ppg_onset.match(rises, starts, spec.decision_delay_ms)
+    false_on: dict[str, int] = {}
+    for rise in rises:
+        if not any(earliest_ms <= (rise - s) / 1e6 <= latest_ms for s in starts):
+            at = rise - spec.decision_delay_ms * 1_000_000
+            label = next((label for s, e, label in held if s <= at <= e), None) or next(
+                (label for s, e, label in held if s <= rise <= e), "unlabelled")
+            false_on[label] = false_on.get(label, 0) + 1
     busy = [(s, e + latest_ms * 1_000_000) for s, e, label in held if label == spec.target or label in set(spec.excludes)]
     observed = int(times[-1] - times[0])
     covered = sum(max(0, min(e, times[-1]) - max(s, times[0])) for s, e in busy)
@@ -496,6 +504,7 @@ def detections(spec: Spec, recording: Recording, times: np.ndarray, scores: np.n
         "falseActivations": len(rises) - caught,
         "latenciesMs": [latency / 1e6 for latency in latencies],
         "negativeNs": max(observed - covered, 0),
+        "falseOn": false_on,
     }
 
 
@@ -521,6 +530,30 @@ MIN_GESTURE_RECALL = 0.5
 MORE_DATA = ". Record more sessions of the gesture (at least three, in different positions)"
 
 
+def cross_check_advice(metrics: dict[str, Any]) -> str | None:
+    """Why it failed when, trained on some training recordings and replayed over the others, no cut-off kept its false
+    activations within TARGET_FALSE_ACTIVATIONS_PER_MINUTE: the cut-off then had to be a poor one. Names the label most of
+    those false activations fell on, since that label often holds the gesture itself (recordings labelled before the
+    gesture was split up). None when the cut-off was found within it, or there was no replay."""
+    events = metrics.get("crossCheckEvents")
+    if not events or events.get("withinTarget", True):
+        return None
+    advice = (
+        f". No cut-off kept it to {TARGET_FALSE_ACTIVATIONS_PER_MINUTE:.0f} false alarms a minute on the training "
+        f"recordings: at the best one ({metrics['activationThreshold']:.2f}) it caught {events['caught']} of "
+        f"{events['gestures']} starts there and fired {events['falseActivations']} times without one"
+    )
+    false_on = {label: n for label, n in (events.get("falseOn") or {}).items() if label != "unlabelled"}
+    if false_on:
+        label, n = max(false_on.items(), key=lambda item: (item[1], item[0]))
+        return advice + (
+            f". {n} of those were during '{label}'. If '{label}' stretches hold the gesture too (recordings labelled "
+            f"before it was split into parts), leave those recordings out or relabel them on the Labelling page; "
+            f"otherwise record more '{label}' so it learns to ignore it"
+        )
+    return advice + ". Record more ordinary activity and other gestures, so it learns what to ignore"
+
+
 def verdict(metrics: dict[str, Any]) -> str | None:
     """Why a model may not go live, in words; None when it is good enough to review. A model that fails can still run
     in Monitor, where it only reports."""
@@ -541,7 +574,8 @@ def verdict(metrics: dict[str, Any]) -> str | None:
         return (
             f"At its cut-off ({threshold:.2f}) it found {metrics['recall']:.0%} of the starts and wrongly flagged "
             f"{metrics['falseActivationRate']:.0%} of the other moments on recordings it had not seen (balanced accuracy "
-            f"{metrics['balancedAccuracy']:.2f}; at least {MIN_BALANCED_ACCURACY} is needed)" + MORE_DATA
+            f"{metrics['balancedAccuracy']:.2f}; at least {MIN_BALANCED_ACCURACY} is needed)"
+            + (cross_check_advice(metrics) or MORE_DATA)
         )
     if metrics["falseActivationRate"] > MAX_FALSE_ACTIVATION_RATE:
         return (
@@ -566,7 +600,8 @@ def verdict(metrics: dict[str, Any]) -> str | None:
         )
     recall = events["gestureRecall"]
     if recall is not None and recall < MIN_GESTURE_RECALL:
-        return f"Replayed over the held-out recordings it caught {events['caught']} of {events['gestures']} starts (at least {MIN_GESTURE_RECALL:.0%} is needed)" + MORE_DATA
+        return (f"Replayed over the held-out recordings it caught {events['caught']} of {events['gestures']} starts (at least "
+                f"{MIN_GESTURE_RECALL:.0%} is needed)" + (cross_check_advice(metrics) or MORE_DATA))
     return None
 
 

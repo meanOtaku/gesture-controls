@@ -515,7 +515,7 @@ The **Network lab** tab (under Train in the sidebar) shows the model the app tra
 
 #### Name a model (Model Lab)
 
-Each model under **Label models** is known by an id such as `pinch_in-c0cb37c1273a`. **Rename** gives it a name of your own (one line, at most 60 characters), shown above the id there and in the Inspect view. Save an empty name to go back to the id. Only the name changes: the model's id, files and state stay as they are, and an active model keeps running.
+Each model under **Label models** is known by an id such as `pinch_in-c0cb37c1273a`. **Rename** gives it a name of your own (one line, at most 60 characters), shown above the id there and in the Inspect view. Save an empty name to go back to the id. Models are listed newest first (the label with the most recent model at the top), each with when it was added as day/month/year and a 12-hour time, such as 02/11/2026 07:36 PM. Only the name changes: the model's id, files and state stay as they are, and an active model keeps running.
 
 #### Inspect a model (Model Lab)
 

@@ -171,6 +171,38 @@ def test_a_model_whose_training_recordings_disagree_is_not_kept_however_it_did_o
     assert "do not agree with each other" in (lt.verdict(metrics) or "")
 
 
+def test_when_no_cut_off_kept_the_false_alarms_down_the_message_names_the_label_they_fell_on() -> None:
+    y = np.array([1] * 50 + [0] * 500)
+    metrics = lt.evaluate(np.concatenate([np.full(50, 0.5), np.full(500, 0.1)]), y, 0.99, "trainingRecordings")
+    assert metrics["balancedAccuracy"] < lt.MIN_BALANCED_ACCURACY
+    assert "Record more sessions" in lt.verdict(metrics)
+    metrics["crossCheckEvents"] = {"gestures": 140, "caught": 0, "falseActivations": 50, "withinTarget": False,
+                                   "falseOn": {"pinch": 38, "unlabelled": 9, "fist": 3}}
+    message = lt.verdict(metrics)
+    assert "caught 0 of 140 starts there and fired 50 times" in message and "38 of those were during 'pinch'" in message
+    assert "Record more sessions" not in message
+    metrics["crossCheckEvents"]["falseOn"] = {"unlabelled": 50}
+    assert "Record more ordinary activity" in lt.verdict(metrics)
+    metrics["crossCheckEvents"]["withinTarget"] = True
+    assert "Record more sessions" in lt.verdict(metrics)
+
+
+def test_a_false_activation_is_counted_by_the_label_it_fell_on() -> None:
+    ms = 1_000_000
+    t = np.arange(0, 20_000, 10, dtype=np.int64) * ms
+    labels = np.array([""] * len(t), dtype=object)
+    labels[(t >= 2_000 * ms) & (t < 2_400 * ms)] = "pinch_in"
+    labels[(t >= 8_000 * ms) & (t < 10_000 * ms)] = "pinch"
+    recording = type("R", (), {"timestamps_ns": t, "raw_labels": labels})()
+    spec = type("S", (), {"target": "pinch_in", "excludes": (), "decision_delay_ms": 500, "steady_starts": False})()
+    scores = np.zeros(len(t))
+    for at_ms in (2_500, 8_600, 15_000):  # a catch, one during 'pinch', one in nothing
+        scores[(t >= at_ms * ms) & (t < (at_ms + 60) * ms)] = 1.0
+    out = lt.detections(spec, recording, t, scores, lt.policy_for(0.5, "peak"))
+    assert out["caught"] == 1 and out["falseActivations"] == 2
+    assert out["falseOn"] == {"pinch": 1, "unlabelled": 1}
+
+
 def test_a_model_that_flags_every_other_moment_is_not_kept_however_good_its_f1() -> None:
     rng = np.random.default_rng(3)
     y = np.array([1] * 342 + [0] * 6)

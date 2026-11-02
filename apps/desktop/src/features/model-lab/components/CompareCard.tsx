@@ -5,7 +5,7 @@ import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Checkbox } from "../../../components/ui/checkbox";
-import type { LabelModel } from "../labelModels";
+import { formatTime, modelName, newestFirst, type LabelModel } from "../labelModels";
 import type { SealedTestLog } from "./SealedTestCard";
 import { caughtShare, falsePerMinute, pointAt, seriesColor, TradeOff, type ThresholdSweep } from "./ThresholdCard";
 
@@ -27,7 +27,7 @@ export function CompareCard({ desktopAvailable, models }: { desktopAvailable: bo
   const [finals, setFinals] = useState<SealedTestLog[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const trained = models.filter((model) => !model.imported && model.state !== "archived");
+  const trained = newestFirst(models.filter((model) => !model.imported && model.state !== "archived"));
   const label = picked.length > 0 ? trained.find((model) => model.id === picked[0])?.label : undefined;
 
   const toggle = (id: string) => setPicked((current) => (current.includes(id) ? current.filter((entry) => entry !== id) : current.length >= 4 ? current : [...current, id]));
@@ -75,7 +75,7 @@ export function CompareCard({ desktopAvailable, models }: { desktopAvailable: bo
                 onCheckedChange={() => toggle(model.id)}
                 aria-label={`Compare ${model.id}`}
               />
-              <span>{model.label}: <span className="font-mono">{model.id}</span> <small className="text-muted-foreground">({model.state}, {model.createdAt.slice(0, 10)})</small></span>
+              <span>{model.label}: {model.name ? <>{modelName(model)} </> : null}<span className="font-mono">{model.id}</span> <small className="text-muted-foreground">({model.state}, {formatTime(model.createdAt)})</small></span>
             </li>
           ))}
         </ul>

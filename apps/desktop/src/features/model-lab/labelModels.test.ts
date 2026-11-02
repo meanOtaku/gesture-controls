@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_ACTIVITY, actionsFor, labelIdFromName, appendActivity, bestState, describeReport, groupByLabel, type DetectionReport, type LabelModel } from "./labelModels";
+import { MAX_ACTIVITY, actionsFor, labelIdFromName, appendActivity, bestState, describeReport, formatTime, groupByLabel, type DetectionReport, type LabelModel } from "./labelModels";
 
 const model = (over: Partial<LabelModel>): LabelModel => ({
   id: "m", label: "snap", state: "draft", deployable: true, imported: true, modelSha256: null, createdAt: "2026-10-01T00:00:00Z", active: false, ...over,
@@ -22,14 +22,24 @@ describe("actionsFor", () => {
 });
 
 describe("groupByLabel", () => {
-  it("groups by label alphabetically, newest first", () => {
+  it("groups by label, the label with the newest model first, and each label's models newest first", () => {
     const groups = groupByLabel([
-      model({ id: "b1", label: "b", createdAt: "2026-10-01" }),
-      model({ id: "a-old", label: "a", createdAt: "2026-09-01" }),
-      model({ id: "a-new", label: "a", createdAt: "2026-10-02" }),
+      model({ id: "b1", label: "b", createdAt: "2026-10-01T00:00:00Z" }),
+      model({ id: "a-old", label: "a", createdAt: "2026-09-01T00:00:00Z" }),
+      model({ id: "a-new", label: "a", createdAt: "2026-10-02T00:00:00Z" }),
+      model({ id: "c1", label: "c", createdAt: "2026-11-02T13:36:00Z" }),
     ]);
-    expect(groups.map((g) => g.label)).toEqual(["a", "b"]);
-    expect(groups[0].models.map((m) => m.id)).toEqual(["a-new", "a-old"]);
+    expect(groups.map((g) => g.label)).toEqual(["c", "a", "b"]);
+    expect(groups[1].models.map((m) => m.id)).toEqual(["a-new", "a-old"]);
+  });
+});
+
+describe("formatTime", () => {
+  it("is the local day first, then a 12-hour clock", () => {
+    expect(formatTime(new Date(2026, 10, 2, 19, 36).toISOString())).toBe("02/11/2026 07:36 PM");
+    expect(formatTime(new Date(2026, 0, 9, 0, 5).toISOString())).toBe("09/01/2026 12:05 AM");
+    expect(formatTime(new Date(2026, 0, 9, 12, 0).toISOString())).toBe("09/01/2026 12:00 PM");
+    expect(formatTime("not a date")).toBe("not a date");
   });
 });
 
