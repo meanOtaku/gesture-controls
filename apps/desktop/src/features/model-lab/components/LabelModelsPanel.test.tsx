@@ -48,6 +48,36 @@ describe("LabelModelsPanel", () => {
     expect(onInspect).toHaveBeenLastCalledWith("snap-abc");
   });
 
+  it("renames a model, shows its name above its id, and clears it when the name is emptied", async () => {
+    const { set } = setup([draft]);
+    fireEvent.click(await screen.findByRole("button", { name: "Rename snap-abc" }));
+    const box = screen.getByRole("textbox", { name: "Name for snap-abc" });
+    fireEvent.change(box, { target: { value: "  Snap, CNN  " } });
+    set([{ ...draft, name: "Snap, CNN" }]);
+    fireEvent.click(screen.getByRole("button", { name: "Save name" }));
+    await waitFor(() => expect(calls("rename_label_model")).toEqual([["rename_label_model", { id: "snap-abc", name: "Snap, CNN" }]]));
+    expect(await screen.findByText("Snap, CNN")).toBeInTheDocument();
+    expect(screen.getByText("snap-abc")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Rename snap-abc" }));
+    expect(screen.getByRole("textbox", { name: "Name for snap-abc" })).toHaveValue("Snap, CNN");
+    fireEvent.change(screen.getByRole("textbox", { name: "Name for snap-abc" }), { target: { value: " " } });
+    fireEvent.submit(screen.getByRole("textbox", { name: "Name for snap-abc" }));
+    await waitFor(() => expect(calls("rename_label_model").at(-1)).toEqual(["rename_label_model", { id: "snap-abc", name: null }]));
+  });
+
+  it("leaves the name alone when renaming is cancelled or nothing changed", async () => {
+    setup([{ ...draft, name: "Snap" }]);
+    fireEvent.click(await screen.findByRole("button", { name: "Rename snap-abc" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Name for snap-abc" }), { target: { value: "Other" } });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Name for snap-abc" }), { key: "Escape" });
+    expect(screen.queryByRole("textbox")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Rename snap-abc" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save name" }));
+    expect(calls("rename_label_model")).toEqual([]);
+    expect(screen.getByText("Snap")).toBeInTheDocument();
+  });
+
   it("marks a model that may only run in Monitor, and lets it be approved for Monitor", async () => {
     setup([{ ...draft, imported: false, deployable: false, monitorOnly: true, state: "evaluated" }]);
     expect(await screen.findByText("Monitor only")).toBeInTheDocument();

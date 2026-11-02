@@ -8,11 +8,14 @@ import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/aler
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
+import { Input } from "../../../components/ui/input";
 import { usePendingActions } from "../hooks/usePendingActions";
 import {
+  MAX_MODEL_NAME,
   MODE_OPTIONS,
   actionsFor,
   groupByLabel,
+  modelName,
   type ImportedLabelModel,
   type LabelModel,
   type LabelModelState,
@@ -57,6 +60,7 @@ export function LabelModelsPanel({
   const setError = setActionError;
   const [confirmLive, setConfirmLive] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
   const { isPending, run } = usePendingActions();
 
   const attempt = (key: string, title: string, work: () => Promise<unknown>, success?: string) =>
@@ -94,6 +98,13 @@ export function LabelModelsPanel({
       return attempt(key, "Activate", () => invoke("activate_label_model", { id: model.id }), `${model.label} is now active.`);
     }
     return attempt(key, "Deactivate", () => invoke("deactivate_label_model", { label: model.label }));
+  };
+
+  const saveName = (model: LabelModel, draft: string) => {
+    setRenaming(null);
+    const name = draft.trim();
+    if (name === (model.name ?? "")) return;
+    void attempt(`${model.id}:rename`, "Rename model", () => invoke("rename_label_model", { id: model.id, name: name || null }));
   };
 
   const setMode = (mode: LabelRuntimeMode) => {
@@ -189,8 +200,29 @@ export function LabelModelsPanel({
                     {group.models.map((model) => (
                       <li key={model.id} className="recipe-item">
                         <div className="flex min-w-0 flex-col gap-1">
+                          {renaming?.id === model.id ? (
+                            <form
+                              className="flex flex-wrap items-center gap-2"
+                              onSubmit={(event) => { event.preventDefault(); saveName(model, renaming.draft); }}
+                            >
+                              <Input
+                                aria-label={`Name for ${model.id}`}
+                                className="max-w-xs"
+                                autoFocus
+                                maxLength={MAX_MODEL_NAME}
+                                placeholder={model.id}
+                                value={renaming.draft}
+                                onChange={(event) => setRenaming({ id: model.id, draft: event.target.value })}
+                                onKeyDown={(event) => { if (event.key === "Escape") setRenaming(null); }}
+                              />
+                              <Button type="submit" variant="outline">Save name</Button>
+                              <Button type="button" variant="ghost" onClick={() => setRenaming(null)}>Cancel</Button>
+                            </form>
+                          ) : model.name && (
+                            <strong className="text-sm">{modelName(model)}</strong>
+                          )}
                           <span className="text-sm">
-                            {model.id} <Badge variant={model.state === "active" ? "default" : "secondary"}>{STATE_LABEL[model.state]}</Badge>{" "}
+                            {model.name ? <small className="text-muted-foreground">{model.id}</small> : model.id} <Badge variant={model.state === "active" ? "default" : "secondary"}>{STATE_LABEL[model.state]}</Badge>{" "}
                             {model.imported && <Badge variant="outline">Imported</Badge>}
                             {model.monitorOnly && <Badge variant="outline">Monitor only</Badge>}
                           </span>
@@ -222,7 +254,7 @@ export function LabelModelsPanel({
                                   disabled={isPending(`${model.id}:delete`)}
                                   onClick={() => {
                                     setConfirmingDelete(null);
-                                    void attempt(`${model.id}:delete`, "Delete model", () => invoke("delete_label_model", { id: model.id }), `${model.id} was deleted.`);
+                                    void attempt(`${model.id}:delete`, "Delete model", () => invoke("delete_label_model", { id: model.id }), `${modelName(model)} was deleted.`);
                                   }}
                                 >
                                   Delete {model.id} for good
@@ -234,6 +266,15 @@ export function LabelModelsPanel({
                                 Delete
                               </Button>
                             ))}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            aria-label={`Rename ${model.id}`}
+                            disabled={!desktopAvailable || isPending(`${model.id}:rename`)}
+                            onClick={() => setRenaming({ id: model.id, draft: model.name ?? "" })}
+                          >
+                            Rename
+                          </Button>
                           {onInspect && (
                             <Button type="button" variant="ghost" aria-label={`Inspect ${model.id}`} onClick={() => onInspect(model.id)}>
                               Inspect

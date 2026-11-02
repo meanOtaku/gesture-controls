@@ -391,6 +391,17 @@ pub fn offsets_from(line: Option<&str>) -> Result<Vec<OffsetScore>, String> {
         .collect()
 }
 
+/// The labels a run may map: the catalogue's, and `left_out`, which the Labelling page gives a stretch it leaves out and
+/// which is never in the catalogue (recordings are imported with it on the same terms).
+fn labels_known_to_training(catalogue: BTreeSet<String>) -> BTreeSet<LabelId> {
+    catalogue
+        .iter()
+        .map(String::as_str)
+        .chain([dataset_files::LEFT_OUT_LABEL])
+        .filter_map(|l| LabelId::new(l).ok())
+        .collect()
+}
+
 /// Tries moving the labels to a range of offsets and says how well the chosen recordings separate the gesture's starts from
 /// the rest at each, judged on recordings left out. Nothing is recorded or trained.
 #[tauri::command]
@@ -532,10 +543,7 @@ pub async fn start_label_training(
         }
     }
     let checked = recordings_for(&app, &request)?;
-    let known: BTreeSet<LabelId> = crate::label_registry::catalogue_ids(&app)
-        .iter()
-        .filter_map(|l| LabelId::new(l.as_str()).ok())
-        .collect();
+    let known = labels_known_to_training(crate::label_registry::catalogue_ids(&app));
     let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
     let unique = Uuid::new_v4().simple().to_string()[..10].to_string();
     let plan = RunPlan {
@@ -921,6 +929,13 @@ mod tests {
         data[1].content_sha = Some("same".into());
         let refused = check_request(&request(), &data, &sha).unwrap_err();
         assert!(refused.contains("hold the same data"), "{refused}");
+    }
+
+    #[test]
+    fn a_run_may_map_left_out_though_the_catalogue_never_has_it() {
+        let known = labels_known_to_training(BTreeSet::from(["pinch_in".to_string()]));
+        assert!(known.contains(&LabelId::new("pinch_in").unwrap()));
+        assert!(known.contains(&LabelId::new(dataset_files::LEFT_OUT_LABEL).unwrap()));
     }
 
     #[test]

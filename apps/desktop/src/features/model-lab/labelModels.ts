@@ -6,6 +6,8 @@ export type LabelRuntimeMode = "off" | "monitor" | "live";
 export interface LabelModel {
   id: string;
   label: string;
+  /** The name the user gave it; shown in place of the id. */
+  name?: string | null;
   state: LabelModelState;
   deployable: boolean;
   /** It did not pass the checks for going live: it can be approved and activated, but it only ever reports (Monitor). */
@@ -14,6 +16,14 @@ export interface LabelModel {
   modelSha256: string | null;
   createdAt: string;
   active: boolean;
+}
+
+/** The longest name a model may be given (the registry's `MAX_MODEL_NAME_CHARS`). */
+export const MAX_MODEL_NAME = 60;
+
+/** What to call a model: the name the user gave it, or else its id. */
+export function modelName(model: Pick<LabelModel, "id" | "name">): string {
+  return model.name?.trim() || model.id;
 }
 
 export interface LabelRuntimeStatus {

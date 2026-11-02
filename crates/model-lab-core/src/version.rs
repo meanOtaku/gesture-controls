@@ -65,6 +65,9 @@ pub struct StateTransition {
     pub at: String,
 }
 
+/// The longest name a model may be given, in characters.
+pub const MAX_MODEL_NAME_CHARS: usize = 60;
+
 /// One candidate binary model for one label.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -73,6 +76,9 @@ pub struct ModelVersion {
     pub project_id: ProjectId,
     /// The one label this model detects.
     pub label: LabelId,
+    /// A name the user gave it, shown in place of its id. Only what is shown: the id, the files and the state stay.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     pub origin: ModelOrigin,
     pub state: LifecycleState,
     /// False for an evaluation-only model: it did not pass the checks for going live.
@@ -115,6 +121,7 @@ impl ModelVersion {
             id,
             project_id,
             label,
+            name: None,
             origin,
             state: LifecycleState::Draft,
             deployable,

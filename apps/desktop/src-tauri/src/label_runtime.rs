@@ -282,6 +282,8 @@ fn purge_old_models(store: &mut RegistryStore<FileStore>, dir: &Path) -> Result<
 pub struct LabelModelView {
     pub id: String,
     pub label: String,
+    /// The name the user gave it, if any; the UI shows it in place of the id.
+    pub name: Option<String>,
     pub state: LifecycleState,
     pub deployable: bool,
     /// It did not pass the checks for going live: it can be activated, but it only ever reports.
@@ -782,6 +784,26 @@ impl LabelRuntimeHost {
         Ok(())
     }
 
+    /// Names a model (`None` clears it). Only what is shown changes, so the running models are not reloaded.
+    pub fn rename_model(&self, app: &AppHandle, id: &str, name: Option<&str>) -> Result<(), String> {
+        let id = ModelVersionId::new(id).map_err(|e| e.to_string())?;
+        {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| "model state is unavailable".to_string())?;
+            let store = state
+                .store
+                .as_mut()
+                .ok_or_else(|| "the model registry is not available".to_string())?;
+            store
+                .mutate(|r| r.rename_version(&id, name))
+                .map_err(|e| e.to_string())?;
+        }
+        let _ = app.emit(LABEL_MODELS_EVENT, ());
+        Ok(())
+    }
+
     pub fn deactivate_label(&self, app: &AppHandle, label: &str) -> Result<(), String> {
         let label = LabelId::new(label).map_err(|e| e.to_string())?;
         let now = Self::now_rfc3339();
@@ -862,6 +884,7 @@ impl LabelRuntimeHost {
             .map(|v| LabelModelView {
                 id: v.id.to_string(),
                 label: v.label.to_string(),
+                name: v.name.clone(),
                 state: v.state,
                 deployable: v.deployable,
                 monitor_only: v.monitor_only,
@@ -1468,6 +1491,17 @@ pub fn delete_label_model(
     id: String,
 ) -> Result<(), String> {
     host.delete_model(&app, &id)
+}
+
+/// Names a model, or clears its name when `name` is absent or blank.
+#[tauri::command]
+pub fn rename_label_model(
+    app: AppHandle,
+    host: State<'_, LabelRuntimeHost>,
+    id: String,
+    name: Option<String>,
+) -> Result<(), String> {
+    host.rename_model(&app, &id, name.as_deref())
 }
 
 #[tauri::command]

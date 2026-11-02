@@ -35,7 +35,8 @@ pub use run::{ArtifactRef, RunError, RunOutcome, RunStatus, TrainingRun};
 pub use snapshot::{DatasetSnapshot, RecordingRef, SnapshotDraft, SnapshotError, Split};
 pub use store::{FileStore, Persist, RegistryStore, StoreError, load_registry_file, open_registry};
 pub use version::{
-    LifecycleState, ModelOrigin, ModelVersion, StateTransition, VersionError, legal_transition,
+    LifecycleState, MAX_MODEL_NAME_CHARS, ModelOrigin, ModelVersion, StateTransition, VersionError,
+    legal_transition,
 };
 
 /// Lower-case hex SHA-256 of `bytes`.

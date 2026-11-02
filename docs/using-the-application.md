@@ -513,6 +513,10 @@ The **Network lab** tab (under Train in the sidebar) shows the model the app tra
 - **PPG + IMU pinch-start model** shows the model's six stages (pulse sensor → compared with the recent past → how it changes → motion → ExtraTrees → peak trigger) and what the research measured for it.
 - **Your models** lists the models; **Look inside** opens the card described below. A model that may only run in Monitor is marked **Monitor only**.
 
+#### Name a model (Model Lab)
+
+Each model under **Label models** is known by an id such as `pinch_in-c0cb37c1273a`. **Rename** gives it a name of your own (one line, at most 60 characters), shown above the id there and in the Inspect view. Save an empty name to go back to the id. Only the name changes: the model's id, files and state stay as they are, and an active model keeps running.
+
 #### Inspect a model (Model Lab)
 
 Every model under **Label models** has an **Inspect** button, which opens it in the **Network lab** (the Network lab's **Your models** list does the same with **Look inside**). For a model trained in this app it shows:

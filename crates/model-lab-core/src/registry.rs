@@ -8,7 +8,9 @@ use crate::migrate::QuarantinedModel;
 use crate::project::{LabelProject, ProjectError};
 use crate::run::{ArtifactRef, RunError, RunOutcome, RunStatus, TrainingRun};
 use crate::snapshot::{DatasetSnapshot, SnapshotError};
-use crate::version::{LifecycleState, ModelOrigin, ModelVersion, VersionError, legal_transition};
+use crate::version::{
+    LifecycleState, MAX_MODEL_NAME_CHARS, ModelOrigin, ModelVersion, VersionError, legal_transition,
+};
 
 pub const REGISTRY_SCHEMA_VERSION: u32 = 2;
 
@@ -58,6 +60,8 @@ pub enum RegistryError {
     NothingToRollBackTo(LabelId),
     #[error("an active model cannot be archived or moved; deactivate or replace it first")]
     ActiveIsPinned,
+    #[error("a model's name must be one line of at most {MAX_MODEL_NAME_CHARS} characters")]
+    BadName,
     #[error("a run that did not produce a deployable model cannot register a deployable version")]
     RunNotDeployable,
     #[error("the registry is inconsistent: {0}")]
@@ -348,6 +352,22 @@ impl Registry {
         if to == LifecycleState::Archived && self.previous_by_label.get(&label) == Some(id) {
             self.previous_by_label.remove(&label);
         }
+        Ok(())
+    }
+
+    /// Names a model; `None`, or a name of only spaces, clears it. Any state, active included: only what is shown changes.
+    pub fn rename_version(
+        &mut self,
+        id: &ModelVersionId,
+        name: Option<&str>,
+    ) -> Result<(), RegistryError> {
+        let name = name.map(str::trim).filter(|n| !n.is_empty());
+        if name.is_some_and(|n| {
+            n.chars().count() > MAX_MODEL_NAME_CHARS || n.chars().any(char::is_control)
+        }) {
+            return Err(RegistryError::BadName);
+        }
+        self.version_mut(id)?.name = name.map(String::from);
         Ok(())
     }
 
@@ -1050,6 +1070,60 @@ pub(crate) mod tests {
             r.update_project(changed),
             Err(RegistryError::WrongProject(_))
         ));
+    }
+
+    #[test]
+    fn any_model_can_be_named_and_only_its_name_changes() {
+        let id = |v: &str| ModelVersionId::new(v).unwrap();
+        let mut r = two_label_registry();
+        r.activate(&id("a1"), "t").unwrap();
+        let before = r.clone();
+        r.rename_version(&id("a1"), Some("  Pinch in, CNN  "))
+            .unwrap();
+        assert_eq!(r.versions[&id("a1")].name.as_deref(), Some("Pinch in, CNN"));
+        let mut unnamed = r.clone();
+        unnamed.versions.get_mut(&id("a1")).unwrap().name = None;
+        assert_eq!(
+            unnamed, before,
+            "the state, the active slot and everything else stay"
+        );
+        r.validate().unwrap();
+        // Spaces only, or nothing, clears it.
+        r.rename_version(&id("a1"), Some("   ")).unwrap();
+        assert_eq!(r.versions[&id("a1")].name, None);
+        r.rename_version(&id("a1"), Some("x")).unwrap();
+        r.rename_version(&id("a1"), None).unwrap();
+        assert_eq!(r.versions[&id("a1")].name, None);
+        assert_eq!(
+            r.rename_version(&id("a1"), Some(&"x".repeat(61))),
+            Err(RegistryError::BadName)
+        );
+        assert_eq!(
+            r.rename_version(&id("a1"), Some("two\nlines")),
+            Err(RegistryError::BadName)
+        );
+        r.rename_version(&id("a1"), Some(&"é".repeat(60))).unwrap();
+        assert_eq!(
+            r.rename_version(&id("zz"), Some("x")),
+            Err(RegistryError::NoVersion(id("zz")))
+        );
+    }
+
+    #[test]
+    fn a_registry_saved_before_names_still_reads_and_an_unnamed_model_writes_none() {
+        let mut r = two_label_registry();
+        let json = serde_json::to_string(&r).unwrap();
+        assert!(
+            !json.contains("\"name\":null"),
+            "no name is not written, so older builds read the file too"
+        );
+        assert_eq!(serde_json::from_str::<Registry>(&json).unwrap(), r);
+        r.rename_version(&ModelVersionId::new("b1").unwrap(), Some("Swipe"))
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Registry>(&serde_json::to_string(&r).unwrap()).unwrap(),
+            r
+        );
     }
 
     #[test]

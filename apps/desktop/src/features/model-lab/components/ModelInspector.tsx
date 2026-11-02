@@ -5,7 +5,7 @@ import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
-import type { LabelModel } from "../labelModels";
+import { modelName, type LabelModel } from "../labelModels";
 import { currentInspection, type ModelInspectionView } from "../inspection";
 import { PULSE_MODEL } from "../training";
 import { DeclaredInputs, InspectInputs } from "./InspectInputs";
@@ -59,6 +59,7 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
   const sameLabel = view ? models.filter((model) => model.label === view.label && model.id !== view.id) : [];
   const manifestInput = (view?.manifest?.input ?? {}) as { features?: unknown };
   const monitorOnly = models.find((model) => model.id === id)?.monitorOnly ?? false;
+  const nameOf = (modelId: string) => modelName(models.find((model) => model.id === modelId) ?? { id: modelId });
   const auc = inspection?.evaluation.metrics.rocAuc;
   // Models trained before motion read the pulse alone.
   const readsMotion = inspection?.sources?.includes("watchOrientation") ?? false;
@@ -68,7 +69,7 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
       <CardHeader>
         <SectionHeader
           title={view ? `Inspect: ${view.label}` : "Inspect a model"}
-          description={view ? `${view.id} · ${view.origin === "trained" ? "trained in this app" : "imported"}` : "Loading…"}
+          description={view ? `${nameOf(view.id)}${nameOf(view.id) === view.id ? "" : ` (${view.id})`} · ${view.origin === "trained" ? "trained in this app" : "imported"}` : "Loading…"}
           status={<Button type="button" variant="outline" onClick={onClose}>Close</Button>}
           help={{
             label: "About inspecting a model",
@@ -104,14 +105,14 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
                   Compare with
                   <select className="recipe-select" aria-label="Compare with another model" value={compareId} onChange={(event) => setCompareId(event.target.value)}>
                     <option value="">No other model</option>
-                    {sameLabel.map((model) => <option key={model.id} value={model.id}>{model.id} ({model.state})</option>)}
+                    {sameLabel.map((model) => <option key={model.id} value={model.id}>{modelName(model)} ({model.state})</option>)}
                   </select>
                 </label>
                 {compareError && <span className="field-error" role="alert">{compareError}</span>}
-                {compare && !other && <span className="hint" role="status">{compare.id} has no saved inspection, so there is nothing to compare.</span>}
+                {compare && !other && <span className="hint" role="status">{nameOf(compare.id)} has no saved inspection, so there is nothing to compare.</span>}
               </div>
             )}
-            <InspectEvaluation inspection={inspection} other={other} otherName={compare?.id} />
+            <InspectEvaluation inspection={inspection} other={other} otherName={compare ? nameOf(compare.id) : undefined} />
             <InspectResearch inspection={inspection} />
             <InspectInputs inspection={inspection} />
           </>
