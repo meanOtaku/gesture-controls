@@ -1,0 +1,15 @@
+{
+  "formatVersion": 1,
+  "ppgRows": 3627,
+  "imuRows": 7254,
+  "labels": [
+    "left_out",
+    "pinch_in"
+  ],
+  "context": {
+    "arm": "resting",
+    "pinch": "light",
+    "strap": "normal",
+    "wrist": "left"
+  }
+}
