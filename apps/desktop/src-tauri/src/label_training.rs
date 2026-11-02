@@ -334,9 +334,55 @@ fn model_lab_dir(app: &AppHandle) -> Result<PathBuf, String> {
 fn recordings_for(app: &AppHandle, request: &TrainRequest) -> Result<Checked, String> {
     let index = load_index(app);
     let dir = datasets_dir(app)?;
-    check_request(request, &index.datasets, &|id| {
+    let checked = check_request(request, &index.datasets, &|id| {
         dataset_sha(&dataset_csv_path(&dir, id))
-    })
+    })?;
+    let stamps = checked
+        .recordings
+        .iter()
+        .map(|r| {
+            let name = index
+                .datasets
+                .iter()
+                .find(|d| d.id == r.id.as_str())
+                .map_or_else(|| r.id.to_string(), |d| d.original_filename.clone());
+            Ok((name, session_stamps(&dataset_csv_path(&dir, r.id.as_str()))?))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    if let Some((a, b)) = same_session(&stamps) {
+        return Err(format!(
+            "'{a}' and '{b}' are the same session (they hold the same watch samples): leave one out, or one could be trained on and the other tested on, and their labels may disagree"
+        ));
+    }
+    Ok(checked)
+}
+
+/// The watch timestamps of a recording's motion rows (every row, for a single-file recording).
+fn session_stamps(path: &Path) -> Result<Vec<i64>, String> {
+    let file = if path.is_dir() { path.join(dataset_files::IMU_FILE) } else { path.to_path_buf() };
+    let text = fs::read_to_string(&file).map_err(|e| format!("could not read {}: {e}", file.display()))?;
+    Ok(text
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .filter_map(|line| line.split(',').next()?.trim().parse().ok())
+        .collect())
+}
+
+/// The first two recordings, by name, that hold one session: at least half of the shorter one's timestamps are also the
+/// other's. Two copies of a session labelled differently are different files, so the duplicate check passes them; two
+/// sessions never share exact timestamps, even when the watch clock restarted between them.
+fn same_session(recordings: &[(String, Vec<i64>)]) -> Option<(&str, &str)> {
+    let sets: Vec<std::collections::HashSet<i64>> =
+        recordings.iter().map(|(_, stamps)| stamps.iter().copied().collect()).collect();
+    for i in 0..sets.len() {
+        for j in i + 1..sets.len() {
+            let (small, big) = if sets[i].len() <= sets[j].len() { (&sets[i], &sets[j]) } else { (&sets[j], &sets[i]) };
+            if !small.is_empty() && small.iter().filter(|t| big.contains(t)).count() * 2 >= small.len() {
+                return Some((recordings[i].0.as_str(), recordings[j].0.as_str()));
+            }
+        }
+    }
+    None
 }
 
 /// The trainer, with PyTorch installed for the CNN.
@@ -929,6 +975,35 @@ mod tests {
         data[1].content_sha = Some("same".into());
         let refused = check_request(&request(), &data, &sha).unwrap_err();
         assert!(refused.contains("hold the same data"), "{refused}");
+    }
+
+    #[test]
+    fn two_copies_of_one_session_are_refused_but_two_sessions_on_a_restarted_clock_are_not() {
+        let session = |from: i64, n: i64| (0..n).map(|k| from + k * 20_000_123).collect::<Vec<_>>();
+        let named = |list: &[(&str, Vec<i64>)]| list.iter().map(|(n, s)| (n.to_string(), s.clone())).collect::<Vec<_>>();
+        let a = session(1_725_454_345_507_365, 3000);
+        // A copy that lost a few rows at each end, as an export with other labels may.
+        let copy = a[40..2900].to_vec();
+        let other = session(2_025_806_369_310_949, 3000);
+        assert_eq!(
+            same_session(&named(&[("a.csv", a.clone()), ("other.csv", other.clone()), ("copy.csv", copy)])),
+            Some(("a.csv", "copy.csv"))
+        );
+        // After a restart the clock covers the same span again, but no sample falls on the same nanosecond.
+        let restarted = (0..3000).map(|k| 1_725_454_345_507_365 + 7_919 + k * 19_998_877).collect::<Vec<_>>();
+        assert_eq!(same_session(&named(&[("a.csv", a), ("restarted.csv", restarted), ("other.csv", other), ("empty.csv", vec![])])), None);
+    }
+
+    #[test]
+    fn session_stamps_reads_the_motion_rows_of_a_folder_and_every_row_of_a_single_file() {
+        let dir = std::env::temp_dir().join(format!("session-stamps-{}", Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(dataset_files::IMU_FILE), "# label: \ntimestamp_ns,sequence\n100,1\n120,1\n").unwrap();
+        assert_eq!(session_stamps(&dir).unwrap(), vec![100, 120]);
+        let single = dir.join("legacy.csv");
+        fs::write(&single, "timestamp_ns,label\n5,a\n6,\n").unwrap();
+        assert_eq!(session_stamps(&single).unwrap(), vec![5, 6]);
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
