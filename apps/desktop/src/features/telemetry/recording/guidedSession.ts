@@ -64,27 +64,57 @@ export const DEFAULT_PLAN: GuidedPlan = {
   ],
 };
 
-/** The app's standard label for everyday noise (`label_registry::STANDARD_LABELS`): "not the gesture" for every model. */
+/** The app's standard labels for recordings with no gesture (`label_registry::STANDARD_LABELS`): "not the gesture" for every model. */
 export const EVERYDAY_NOISE = "everyday_noise";
+export const STILL = "still";
+export const SUPPORTED = "supported";
 
 /** How long an everyday-noise recording may be: a recording keeps 200,000 rows, about 44 minutes of the watch's streams. */
 export const NOISE_MIN_MINUTES = 1;
 export const NOISE_MAX_MINUTES = 30;
 
-/** What to do during an everyday-noise recording; only suggestions, nothing is labelled by them. */
-export const NOISE_SUGGESTIONS = [
-  "type, use the mouse and your phone",
-  "drink, pick things up and put them down",
-  "talk with your hands, stretch, scratch, walk around",
-  "rest your hand, and tap or open and close it without pinching",
-];
+/** The three kinds of everyday noise, each with its own standard label. */
+export type NoiseKind = "active" | "still" | "supported";
+/** How the hand rests on its support. */
+export type SupportAngle = "flat" | "angled";
+
+export const NOISE_KINDS: Record<NoiseKind, { title: string; label: string; minutes: number; prompt: string; suggestions: string }> = {
+  active: {
+    title: "Active: your normal routine",
+    label: EVERYDAY_NOISE,
+    minutes: 10,
+    prompt: "Go about your routine. No gestures.",
+    suggestions: "type, use the mouse and your phone; drink, pick things up and put them down; talk with your hands, stretch, scratch, walk around; tap or open and close the hand without pinching",
+  },
+  still: {
+    title: "Still: the hand as still as you can",
+    label: STILL,
+    minutes: 3,
+    prompt: "Hold your hand as still as you can. No gestures.",
+    suggestions: "hold the hand in the air, in front of you or at your side, and change position now and then; small tremors and your pulse are what it should learn to ignore",
+  },
+  supported: {
+    title: "On a support: resting on a desk, armrest or lap",
+    label: SUPPORTED,
+    minutes: 5,
+    prompt: "Rest your hand on the support. No gestures.",
+    suggestions: "let the hand lie on a desk, an armrest or your lap, and shift it now and then as you would",
+  },
+};
+
+/** What a noise recording says it was, in its session details ("Doing"). */
+export function noiseActivity(kind: NoiseKind, angle: SupportAngle): string {
+  return kind === "supported" ? `Everyday noise: hand on a support, ${angle}` : kind === "still" ? "Everyday noise: hand still" : "Everyday noise: active";
+}
 
 /**
- * Everyday noise: a stretch of your ordinary routine with no gesture, labelled `everyday_noise` as a whole. It teaches a
- * model what is not the gesture and, held out, measures how often it fires in ordinary use.
+ * Everyday noise: a stretch with no gesture, labelled as a whole with the kind's standard label. It teaches a model what is
+ * not the gesture and, held out, measures how often it fires in ordinary use.
  */
-export function noiseRoutinePlan(minutes: number): GuidedPlan {
-  return noisePlan([{ activity: "Go about your routine. No gestures.", seconds: Math.round(minutes * 60) }]);
+export function noiseRoutinePlan(minutes: number, kind: NoiseKind = "active", angle: SupportAngle = "flat"): GuidedPlan {
+  const { label, prompt } = NOISE_KINDS[kind];
+  const text = kind === "supported" ? `Rest your hand on the support, ${angle}. No gestures.` : prompt;
+  return noisePlan([{ activity: text, seconds: Math.round(minutes * 60), label }]);
 }
 
 /** The plan for an everyday-noise session: no cues, only `activities`, each labelled its own label or `everydayLabel`. */

@@ -1132,11 +1132,11 @@ mod tests {
     #[test]
     fn the_standard_labels_are_not_the_gesture_without_being_asked_and_cannot_be_trained() {
         let mut list = datasets();
-        list.push(dataset("n1", &["everyday_noise", "still"]));
+        list.push(dataset("n1", &["everyday_noise", "still", "supported"]));
         let mut r = request();
         r.dataset_ids.push("n1".into());
         let checked = check_request(&r, &list, &sha).unwrap();
-        for standard in ["everyday_noise", "still"] {
+        for standard in ["everyday_noise", "still", "supported"] {
             assert_eq!(checked.mapping.entries[&LabelId::new(standard).unwrap()], ExampleRole::Negative);
         }
         // Left out when asked.

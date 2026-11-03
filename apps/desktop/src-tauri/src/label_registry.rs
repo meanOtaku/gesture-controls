@@ -19,9 +19,12 @@ const LABELS_FILE_NAME: &str = "labels.json";
 
 /// The app's own labels, the same for every model: (id, display name, description, colour). Never written to the
 /// catalogue file; listed with it. Training always gives them the role "not the gesture" (`label_training`).
-pub const STANDARD_LABELS: [(&str, &str, &str, &str); 2] = [
+/// One word each where it can be: training joins a gesture's parts by the name before the first "_" (`pinch_in`,
+/// `pinch_hold`), so a standard label must not share that name with a gesture (`hand_…` would join `hand_open`).
+pub const STANDARD_LABELS: [(&str, &str, &str, &str); 3] = [
     ("everyday_noise", "Everyday noise", "Ordinary use of the hand (typing, the phone, walking, …) with no gesture.", "#8a9bb0"),
-    ("still", "Hand still", "The hand at rest, not moving, with no gesture.", "#5f6f7f"),
+    ("still", "Hand still", "The hand held as still as you can, in the air, with no gesture.", "#5f6f7f"),
+    ("supported", "Hand on a support", "The hand resting on a support (a desk, an armrest, your lap), flat or angled, with no gesture.", "#6f7f6a"),
 ];
 
 /// Whether `id` is one of the [`STANDARD_LABELS`].
@@ -496,7 +499,10 @@ mod tests {
         // A user's own "still" (made before it was standard) is shown as the standard one.
         let mut index = LabelIndex { labels: vec![plain_record("pinch"), plain_record("still")] };
         let shown = listed(&index);
-        assert_eq!(shown.iter().map(|l| (l.id.as_str(), l.standard)).collect::<Vec<_>>(), [("everyday_noise", true), ("pinch", false), ("still", true)]);
+        assert_eq!(
+            shown.iter().map(|l| (l.id.as_str(), l.standard)).collect::<Vec<_>>(),
+            [("everyday_noise", true), ("pinch", false), ("still", true), ("supported", true)]
+        );
         assert!(shown.iter().filter(|l| l.standard).all(|l| l.role == LabelRole::NegativeBackground && l.archived_at.is_none()));
         let written = serde_json::to_string(&index).unwrap();
         assert!(!written.contains("everyday_noise") && !written.contains("standard"), "{written}");

@@ -276,15 +276,24 @@ Wherever a page needs the camera (the Recorder's camera marking, the Gestures ta
 
 **Pinch in and pinch out.** For the two moments of a pinch, use the **Pinch in / out session** above; or, in **Record a gesture**, pick **pinch in** and add **pinch out** under "Also mark in the same recording". No Gesture library gesture is needed: the camera marks a short **pinch in** (0.3 s) where the thumb and index finger meet, their distance falling below 0.35 hand sizes (or the level of a library gesture on `pinch_in`), and a short **pinch out** where they part again, timed where the distance rose back past that level and counted once it is 0.1 past it, so a distance hovering at the level does not mark a flurry. The card shows **Fingers together** or **Fingers apart** live, so you can check before you start. With both cameras on, the hand closer to a pinch in either counts. Add **pinch hold** as well (label `pinch_hold`) to label the time in between: only one label is on at a time, so each pinch becomes **pinch in** (0.3 s) → **pinch hold** (until the fingers part) → **pinch out** (0.3 s). A pinch shorter than 0.3 s has no hold, and if the camera loses your hand mid-hold the hold ends at the last frame that saw it. Leave a few still seconds between pinches. Train one model for each label (give the other the role Something else); the app never acts on both at once: if the two fire together, both are held off.
 
-**Everyday noise (Recorder).** The second card records your ordinary routine with **no gesture at all**, so every
-model learns what not to fire on, and so you can measure how often a model fires in daily use. There is nothing to label:
-set the **Minutes** (1 to 30; 10 by default), press **Start everyday noise session**, and go about your routine (typing,
-the mouse and phone, drinking and handling things, talking with your hands, walking, resting the hand, tapping or opening
-and closing it without pinching). The whole recording gets the app's standard label **Everyday noise** (`everyday_noise`,
-under Labels, below). It stops and is saved by itself at the end, or with **Stop and save**. Then:
+**Everyday noise (Recorder).** The second card records a few minutes with **no gesture at all**, so every model
+learns what not to fire on, and so you can measure how often a model fires in daily use. Choose the **Type**; each moves
+the wrist differently, so each teaches the model something different:
+
+- **Active**: your normal routine (typing, the mouse and phone, handling things, talking with your hands, walking, tapping
+  or opening and closing the hand without pinching). Labelled **Everyday noise** (`everyday_noise`). 10 minutes by default.
+- **Still**: the hand held as still as you can, in the air; change position now and then. Labelled **Hand still**
+  (`still`). 3 minutes by default.
+- **On a support**: the hand resting on a desk, an armrest or your lap, **Flat** or **Angled**. Labelled **Hand on a
+  support** (`supported`). 5 minutes by default.
+
+There is nothing to mark: set the **Minutes** (1 to 30, remembered for each type), press **Start everyday noise
+session**, and make no gesture. The whole recording gets the type's standard label (under Labels, below), and its session
+details say which type it was ("Doing", for example "Everyday noise: hand on a support, angled"; your own "Doing" is put
+back for the next recording). It stops and is saved by itself at the end, or with **Stop and save**. Then:
 
 - add it in Model Lab (**From the Recorder**, leaving the rest out);
-- train as usual: Everyday noise is already "not the gesture", so there is no role to choose. Tick **Learn from its
+- train as usual: the standard labels are already "not the gesture", so there is no role to choose. Tick **Learn from its
   own false alarms** (under Train a model) to make the most of it;
 - keep some noise recordings out of training: the false activations an hour on them are what daily use would see, and
   Model Lab's cards show them apart (a recording with no gesture in it is judged with the camera-timed ones, as it has
@@ -314,11 +323,12 @@ This viewer is inspection-only: it has no annotation-editing or training action,
 
 The **Labels** tab (first under Labels) is the one place labels are made and managed. A label is a short name for a gesture or an everyday activity the app can learn or recognise. Each label has an id (letters, digits and underscores, made from the name), a display name, optional notes and a role.
 
-- **Standard labels.** Two labels are the app's own and always listed, marked **Standard**: **Everyday noise**
-  (`everyday_noise`, ordinary use of the hand with no gesture) and **Hand still** (`still`, the hand at rest). They mean the
+- **Standard labels.** Three labels are the app's own and always listed, marked **Standard**: **Everyday noise**
+  (`everyday_noise`, ordinary use of the hand with no gesture), **Hand still** (`still`, the hand held as still as you can)
+  and **Hand on a support** (`supported`, resting on a desk, armrest or lap, flat or angled). They mean the
   same for every model, so they cannot be edited, archived or deleted, a new label cannot take their ids, and no model is
   trained to detect them: training always treats them as "not the gesture" (Something else) unless you leave them out.
-  The Recorder's Everyday noise session records Everyday noise; mark Hand still yourself on the Labelling page where you want it. Your own labels are the gestures (pinch, fist, …).
+  The Recorder's Everyday noise session records all three, one type at a time. Your own labels are the gestures (pinch, fist, …).
 - **Add a label** with a name; the id is shown before you create it and never changes afterwards. **Edit** changes the name, notes and role, and everything that refers to the label (recordings, models, recipes, gestures) keeps pointing at it.
 - Each label shows where it is used: in how many Recorder recordings, how many recordings in the training data, how many gestures and how many models. Recording and training happen in their own tabs, not here. A label something still uses can be **archived** but not deleted, so nothing is left without a meaning. Archived labels are hidden from pickers and can be restored.
 - **Archive…** and **Delete…** on a label that something uses open a preview that says exactly what will happen, and nothing runs until you confirm.
