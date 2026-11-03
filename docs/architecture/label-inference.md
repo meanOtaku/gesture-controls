@@ -203,9 +203,21 @@ The desktop decides and records; the trainer only trains (`apps/desktop/src-taur
 - **Cut-off.** For a PPG + IMU model:
   - the training recordings are split into up to five folds, each scored by a model trained without it;
   - each left-out recording is **replayed as the runtime would run it**: every pulse sample, the peak trigger;
-  - the cut-off taken is the one of 0.30–0.95 that catches the most starts with at most 2 false activations per minute of recording (none within it: the most starts caught less false activations, never simply the highest).
+  - the cut-off taken is the one of 0.30–0.95 that catches the most starts with at most 30 false activations per hour
+    with no gesture under way (`FALSE_ACTIVATIONS_BUDGET_PER_HOUR`); none within it: the most starts caught less false
+    activations, never simply the highest. It is the same budget the release check holds the held-out replay to.
   - A PPG-only spec keeps Youden's J on the left-out moments and the edge trigger.
-- **Testing.** It replays the held-out recordings the same way. A detection 680–1,280 ms after a start catches it.
+- **Testing.** It replays the held-out recordings the same way, counted as
+  [the evaluation standard](../research/gesture-detector-evaluation-metrics.md) counts them:
+  - a detection 680–1,280 ms after a start catches it;
+  - another detection while that gesture is under way (its start, through the parts of it that follow, such as
+    `pinch_hold` and `pinch_out`, to the end of its catch window) is a **repeat** if the gesture was caught, **late** if it
+    was not;
+  - any other detection is a **false activation**, per hour of time with no gesture under way.
+- **Label timing.** The spec's `labelTiming` says which recordings the camera timed and which were estimated from motion
+  (from `DatasetSummary::labels_from`). When both kinds are there and the camera-timed ones hold at least 20 gestures and a
+  minute without one, the cut-off and the verdict use the camera-timed ones (`cohort`); the totals of each kind are kept in
+  `byLabelTiming`.
 - **Still hand.** With the `steadyStartsOnly` setting on, the desktop's spec asks for `steadyStarts`: every decision
   whose gesture was not preceded by still motion (`steadiness.py`, the same test as the runtime's gate, with the trainer's
   880 ms decision delay) is left out of training and testing, and the replays count only the detections the gate would

@@ -88,6 +88,9 @@ def summarise(per_recording: list[dict]) -> dict:
         "caught": caught,
         "gestureRecall": caught / gestures if gestures else None,
         "repeats": sum(r["repeats"] for r in per_recording),
+        # Fired during a gesture it had not caught in time: the gesture counts as missed, the firing as no false alarm.
+        "late": sum(r.get("late", 0) for r in per_recording),
+        "repeatsPer100Gestures": 100 * sum(r["repeats"] for r in per_recording) / gestures if gestures else None,
         "medianLatencyMs": float(np.median(latencies)) if latencies else None,
         "falseActivations": false_activations,
         "negativeSeconds": negative_seconds,

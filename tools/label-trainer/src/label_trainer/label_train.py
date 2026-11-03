@@ -11,7 +11,8 @@ It learns from a positive 880 ms after each start of the gesture and, as negativ
 holds, quiet time, and moments 0, 200 and 400 ms after each start (so it does not fire before the moment).
 
 The cut-off is the one that, replayed over training recordings the model did not see, catches the most starts while firing
-by mistake at most `TARGET_FALSE_ACTIVATIONS_PER_MINUTE`. A spec whose sources are the pulse sensor alone trains the earlier
+by mistake at most `FALSE_ACTIVATIONS_BUDGET_PER_HOUR` (per hour without the gesture), the same budget the release check holds
+the held-out recordings to (`docs/research/gesture-detector-evaluation-metrics.md`). A spec whose sources are the pulse sensor alone trains the earlier
 PPG-only model instead (its cut-off from Youden's J, the edge trigger), so its runs can be repeated.
 
 It fires about 0.9 s after a gesture starts. The desktop owns the decisions that must be recorded and cannot change
@@ -39,7 +40,7 @@ import json
 import os
 import sys
 import warnings
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -84,10 +85,14 @@ COOLDOWN_MS = ppg_onset.COOLDOWN_MS
 WINDOW_MS = ppg_onset.GRID_TICKS * ppg_onset.TICK_NS // 1_000_000
 STRIDE_MS = ppg_onset.TICK_NS // 1_000_000
 MIN_WINDOW_SAMPLES = 100
-# The PPG + IMU model's cut-off: the most starts caught, replayed over training recordings each scored by a model that did not
-# see it, while firing by mistake at most this often per minute of recording (the operating point the research compared
-# rules at, counted as it counts them).
-TARGET_FALSE_ACTIVATIONS_PER_MINUTE = 2.0
+# How often a model may fire with no gesture under way, per hour of such time. One budget, used twice: the PPG + IMU model's
+# cut-off is the one that catches the most starts within it, replayed over training recordings each scored by a model that
+# did not see it; and a model whose held-out replay exceeds it cannot go live (`verdict`).
+FALSE_ACTIVATIONS_BUDGET_PER_HOUR = 30.0
+# Results are judged on the camera-timed recordings when there are at least this many gestures in them (and enough time
+# without one); estimated timings put gestures where they were not, which reads as misses and false activations.
+MIN_COHORT_GESTURES = 20
+LABEL_TIMINGS = ("camera", "estimated")
 THRESHOLD_CANDIDATES = tuple(round(t, 2) for t in np.arange(0.30, 0.951, 0.05))
 # The CNN's scores crowd towards 1 (its sigmoid saturates), so its cut-off may also be one of these.
 CNN_THRESHOLD_CANDIDATES = THRESHOLD_CANDIDATES + (0.96, 0.97, 0.98, 0.99)
@@ -113,6 +118,8 @@ class Spec:
     # the replay. Off in a spec that does not say; the desktop asks for it.
     steady_starts: bool = False
     backend: str = BACKEND
+    # How each recording's labels were timed: "camera" or "estimated" (from motion); a recording not named is unknown.
+    label_timing: dict[str, str] = field(default_factory=dict)
 
     @property
     def cnn(self) -> bool:
@@ -168,6 +175,9 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
     steady_starts = raw.get("steadyStarts", False)
     if not isinstance(steady_starts, bool):
         raise TrainingRefused(f"steadyStarts must be true or false, got {steady_starts!r}")
+    label_timing = raw.get("labelTiming", {}) or {}
+    if not isinstance(label_timing, dict) or any(rid not in recordings or t not in LABEL_TIMINGS for rid, t in label_timing.items()):
+        raise TrainingRefused(f"labelTiming must give recordings of the spec one of {list(LABEL_TIMINGS)}")
     return Spec(
         target=target,
         negatives=list(raw.get("negatives", [])),
@@ -181,6 +191,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         sources=sources,
         steady_starts=steady_starts,
         backend=backend,
+        label_timing=dict(label_timing),
     )
 
 
@@ -361,7 +372,7 @@ def out_of_fold_threshold(spec: Spec, train: Examples, recordings: dict[str, Rec
     """The cut-off, chosen without looking at the held-out recordings: models trained on all but a group of the training
     recordings score the group left out, and the cut-off is chosen on those scores. For a motion model, those models also
     replay the recordings they left out as the runtime would, and the cut-off is the one that catches the most starts while
-    firing by mistake at most TARGET_FALSE_ACTIVATIONS_PER_MINUTE (`budget_threshold`); for a PPG-only model it is Youden's J
+    firing by mistake at most FALSE_ACTIVATIONS_BUDGET_PER_HOUR (`budget_threshold`); for a PPG-only model it is Youden's J
     on the left-out decisions. Returns it, where it came from ("trainingRecordings", or "default" when the training
     recordings are too few to judge each other), the ROC AUC of the left-out decisions, and (motion) the replay at the
     chosen cut-off."""
@@ -402,23 +413,49 @@ def out_of_fold_threshold(spec: Spec, train: Examples, recordings: dict[str, Rec
 
 def budget_threshold(spec: Spec, timelines: list[tuple[Recording, np.ndarray, np.ndarray]]) -> tuple[float, dict[str, Any]]:
     """Of THRESHOLD_CANDIDATES, the cut-off whose replay of `timelines` (each recording's decision times and the scores a
-    model that did not see it gave them) catches the most starts with at most TARGET_FALSE_ACTIVATIONS_PER_MINUTE false
-    activations per minute of recording, as the research counts them (ties: the higher cut-off). When none stays within
-    it, the one that catches the most starts for its false activations (caught less false; ties: the higher cut-off), never
-    simply the highest: on recordings packed with gestures that would catch almost none. Returns it and its replay."""
+    model that did not see it gave them) catches the most starts with at most FALSE_ACTIVATIONS_BUDGET_PER_HOUR false
+    activations per hour without the gesture (ties: the higher cut-off), judged on the recordings `cohort` trusts. When none
+    stays within it, the one that catches the most starts for its false activations (caught less false; ties: the higher
+    cut-off), never simply the highest: on recordings packed with gestures that would catch almost none. Returns it and its
+    replay."""
     minutes = sum((times[-1] - times[0]) / 60e9 for _, times, _ in timelines)
     replays = {}
     for t in CNN_THRESHOLD_CANDIDATES if spec.cnn else THRESHOLD_CANDIDATES:
-        replay_ = summarise([detections(spec, r, times, scores, policy_for(t, spec.trigger)) for r, times, scores in timelines])
-        replays[t] = {**replay_, "recordingMinutes": minutes,
-                      "falseActivationsPerMinute": replay_["falseActivations"] / minutes if minutes > 0 else 0.0}
-    within = [t for t, e in replays.items() if e["falseActivationsPerMinute"] <= TARGET_FALSE_ACTIVATIONS_PER_MINUTE]
+        per_recording = [(r.session_id, detections(spec, r, times, scores, policy_for(t, spec.trigger))) for r, times, scores in timelines]
+        replays[t] = {**cohort(spec, per_recording), "recordingMinutes": minutes}
+    within = [t for t, e in replays.items() if within_budget(e)]
     if within:
         best = max(within, key=lambda t: (replays[t]["caught"], t))
     else:
         best = max(replays, key=lambda t: (replays[t]["caught"] - replays[t]["falseActivations"], t))
-    return float(best), {**replays[best], "targetFalseActivationsPerMinute": TARGET_FALSE_ACTIVATIONS_PER_MINUTE,
+    return float(best), {**replays[best], "falseActivationsBudgetPerHour": FALSE_ACTIVATIONS_BUDGET_PER_HOUR,
                          "withinTarget": bool(within)}
+
+
+def within_budget(events: dict[str, Any]) -> bool:
+    """Whether a replay fired by mistake at most FALSE_ACTIVATIONS_BUDGET_PER_HOUR; with no time without the gesture, only
+    when it never did."""
+    per_hour = events["falseActivationsPerHour"]
+    return events["falseActivations"] == 0 if per_hour is None else per_hour <= FALSE_ACTIVATIONS_BUDGET_PER_HOUR
+
+
+def cohort(spec: Spec, per_recording: list[tuple[str, dict[str, Any]]]) -> dict[str, Any]:
+    """The totals to judge a replay by, with which recordings they cover ("cohort"): the camera-timed ones when the spec says
+    some recordings were timed otherwise and the camera-timed ones hold at least MIN_COHORT_GESTURES gestures and
+    MIN_NEGATIVE_SECONDS without one; otherwise all of them. With timings given, also the totals of each ("byLabelTiming")."""
+    everything = summarise([r for _, r in per_recording])
+    if not spec.label_timing:
+        return {**everything, "cohort": "all"}
+    by_timing = {}
+    for timing in (*LABEL_TIMINGS, "unknown"):
+        part = [r for rid, r in per_recording if spec.label_timing.get(rid, "unknown") == timing]
+        if part:
+            by_timing[timing] = summarise(part)
+    camera = by_timing.get("camera")
+    mixed = len(by_timing) > 1
+    if mixed and camera and camera["gestures"] >= MIN_COHORT_GESTURES and camera["negativeSeconds"] >= MIN_NEGATIVE_SECONDS:
+        return {**camera, "cohort": "camera", "byLabelTiming": by_timing}
+    return {**everything, "cohort": "all", "byLabelTiming": by_timing}
 
 
 CALIBRATION_BINS = 10
@@ -473,14 +510,35 @@ def timeline(spec: Spec, recording: Recording, predict) -> tuple[np.ndarray, np.
     return ts[ok], predict(x[ok])
 
 
+def gesture_episodes(held: list[tuple[int, int, str]], target: str) -> list[tuple[int, int]]:
+    """(start, end) of each gesture of `target` as a whole: its hold, extended through the holds that follow it without a
+    gap of HOLD_MERGE_GAP_MS and are labels of the same gesture (the same name before the first "_": `pinch_in`, then
+    `pinch_hold` and `pinch_out`)."""
+    stem = target.split("_")[0]
+    episodes = []
+    for i, (start, end, label) in enumerate(held):
+        if label != target:
+            continue
+        for next_start, next_end, next_label in held[i + 1:]:
+            if next_label == target or next_label.split("_")[0] != stem or next_start - end >= ppg_onset.HOLD_MERGE_GAP_MS * 1_000_000:
+                break
+            end = next_end
+        episodes.append((start, end))
+    return episodes
+
+
 def detections(spec: Spec, recording: Recording, times: np.ndarray, scores: np.ndarray, policy: Policy) -> dict[str, Any]:
-    """One recording's scores through the runtime's detection rule (`events.detect`). A detection catches a start of the
-    target label when it rises `ppg_onset.match_window_ms` after it (for the model's delay; `ppg_onset.match`); any other is a
-    false activation, unless it is inside an excluded label's hold. Time inside the target's holds, and an excluded
-    label's, cannot hold one. `falseOn` counts the false activations by the label held where the start it fired for would
-    be (`decision_delay_ms` before it), "unlabelled" where none is."""
+    """One recording's scores through the runtime's detection rule (`events.detect`), counted as the evaluation standard
+    counts them (`docs/research/gesture-detector-evaluation-metrics.md`). A detection catches a start of the target label when
+    it rises `ppg_onset.match_window_ms` after it (for the model's delay; `ppg_onset.match_pairs`). Any other detection while
+    that gesture is under way (from its start, through the parts of it that follow, to the end of its match window) is a
+    repeat when the gesture was caught and late when it was not; a detection inside an excluded label's hold is ignored; any
+    other is a false activation. Time while a gesture is under way, and an excluded label's, is not time without the gesture.
+    `falseOn` counts the false activations by the label held where the start it fired for would be (`decision_delay_ms`
+    before it), "unlabelled" where none is."""
     held = ppg_onset.holds(recording.timestamps_ns, recording.raw_labels)
     earliest_ms, latest_ms = ppg_onset.match_window_ms(spec.decision_delay_ms)
+    latest_ns = latest_ms * 1_000_000
     starts = [s for s, _, label in held if label == spec.target and times[0] <= s + earliest_ms * 1_000_000 <= times[-1]]
     ignored = [(s, e) for s, e, label in held if label in set(spec.excludes)]
     rises = [rise for rise, _ in detect(times, scores, policy) if not any(s <= rise <= e for s, e in ignored)]
@@ -488,24 +546,48 @@ def detections(spec: Spec, recording: Recording, times: np.ndarray, scores: np.n
         # The runtime withholds a start the hand was not still before.
         still = still_mask(recording, np.array(rises, dtype=np.int64), spec.decision_delay_ms).tolist()
         rises = [rise for rise, ok in zip(rises, still) if ok]
-    caught, latencies = ppg_onset.match(rises, starts, spec.decision_delay_ms)
+    pairs = ppg_onset.match_pairs(rises, starts, spec.decision_delay_ms)
+    caught_rises, caught_starts = {i for i, _ in pairs}, {starts[j] for _, j in pairs}
+    # Each gesture under way: from its start to the later of its end and its match window's.
+    under_way = [(s, max(e, s + latest_ns), s in caught_starts) for s, e in gesture_episodes(held, spec.target)]
+    repeats = late = false_activations = 0
     false_on: dict[str, int] = {}
-    for rise in rises:
-        if not any(earliest_ms <= (rise - s) / 1e6 <= latest_ms for s in starts):
-            at = rise - spec.decision_delay_ms * 1_000_000
-            label = next((label for s, e, label in held if s <= at <= e), None) or next(
-                (label for s, e, label in held if s <= rise <= e), "unlabelled")
-            false_on[label] = false_on.get(label, 0) + 1
-    busy = [(s, e + latest_ms * 1_000_000) for s, e, label in held if label == spec.target or label in set(spec.excludes)]
+    for i, rise in enumerate(rises):
+        if i in caught_rises:
+            continue
+        during = [caught for s, e, caught in under_way if s <= rise <= e]
+        if during:
+            if any(during):
+                repeats += 1
+            else:
+                late += 1
+            continue
+        false_activations += 1
+        at = rise - spec.decision_delay_ms * 1_000_000
+        label = next((label for s, e, label in held if s <= at <= e), None) or next(
+            (label for s, e, label in held if s <= rise <= e), "unlabelled")
+        false_on[label] = false_on.get(label, 0) + 1
+    busy = [(s, e) for s, e, _ in under_way] + ignored
     observed = int(times[-1] - times[0])
-    covered = sum(max(0, min(e, times[-1]) - max(s, times[0])) for s, e in busy)
+    covered = sum(max(0, min(e, times[-1]) - max(s, times[0])) for s, e in merge_spans(busy))
     return {
-        "gestures": len(starts), "caught": caught, "repeats": 0,
-        "falseActivations": len(rises) - caught,
-        "latenciesMs": [latency / 1e6 for latency in latencies],
+        "gestures": len(starts), "caught": len(pairs), "repeats": repeats, "late": late,
+        "falseActivations": false_activations,
+        "latenciesMs": [(rises[i] - starts[j]) / 1e6 for i, j in pairs],
         "negativeNs": max(observed - covered, 0),
         "falseOn": false_on,
     }
+
+
+def merge_spans(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """The spans with overlapping ones joined, so time in two is counted once."""
+    merged: list[list[int]] = []
+    for start, end in sorted(spans):
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return [(a, b) for a, b in merged]
 
 
 def replay(spec: Spec, model, recordings: dict[str, Recording], threshold: float) -> dict[str, Any]:
@@ -516,15 +598,15 @@ def replay(spec: Spec, model, recordings: dict[str, Recording], threshold: float
     for rid in sorted(spec.evaluation):
         scored = timeline(spec, recordings[rid], lambda x: model.predict_proba(x)[:, 1])
         if scored is not None:
-            per_recording.append(detections(spec, recordings[rid], *scored, policy))
-    return {**summarise(per_recording), "policy": {"activation": policy.activation, "release": policy.release,
+            per_recording.append((rid, detections(spec, recordings[rid], *scored, policy)))
+    return {**cohort(spec, per_recording), "policy": {"activation": policy.activation, "release": policy.release,
                                                    "cooldownMs": COOLDOWN_MS, "trigger": policy.trigger}}
 
 
 MIN_AUC = 0.7
 MIN_BALANCED_ACCURACY = 0.7
 MAX_FALSE_ACTIVATION_RATE = 0.1
-MAX_FALSE_ACTIVATIONS_PER_HOUR = 30.0
+MAX_FALSE_ACTIVATIONS_PER_HOUR = FALSE_ACTIVATIONS_BUDGET_PER_HOUR
 MIN_NEGATIVE_SECONDS = 60.0
 MIN_GESTURE_RECALL = 0.5
 MORE_DATA = ". Record more sessions of the gesture (at least three, in different positions)"
@@ -532,14 +614,14 @@ MORE_DATA = ". Record more sessions of the gesture (at least three, in different
 
 def cross_check_advice(metrics: dict[str, Any]) -> str | None:
     """Why it failed when, trained on some training recordings and replayed over the others, no cut-off kept its false
-    activations within TARGET_FALSE_ACTIVATIONS_PER_MINUTE: the cut-off then had to be a poor one. Names the label most of
+    activations within FALSE_ACTIVATIONS_BUDGET_PER_HOUR: the cut-off then had to be a poor one. Names the label most of
     those false activations fell on, since that label often holds the gesture itself (recordings labelled before the
     gesture was split up). None when the cut-off was found within it, or there was no replay."""
     events = metrics.get("crossCheckEvents")
     if not events or events.get("withinTarget", True):
         return None
     advice = (
-        f". No cut-off kept it to {TARGET_FALSE_ACTIVATIONS_PER_MINUTE:.0f} false alarms a minute on the training "
+        f". No cut-off kept it to {FALSE_ACTIVATIONS_BUDGET_PER_HOUR:.0f} false alarms an hour without the gesture on the training "
         f"recordings: at the best one ({metrics['activationThreshold']:.2f}) it caught {events['caught']} of "
         f"{events['gestures']} starts there and fired {events['falseActivations']} times without one"
     )
@@ -591,16 +673,17 @@ def verdict(metrics: dict[str, Any]) -> str | None:
             f"often it would fire by mistake (at least {MIN_NEGATIVE_SECONDS:.0f} s is needed). Record a few minutes of "
             "ordinary activity, in sessions of its own"
         )
+    where = "the camera-timed held-out recordings" if events.get("cohort") == "camera" else "the held-out recordings"
     per_hour = events["falseActivationsPerHour"]
     if per_hour is not None and per_hour > MAX_FALSE_ACTIVATIONS_PER_HOUR:
         return (
-            f"Replayed over the held-out recordings it fired {events['falseActivations']} times without the gesture, about "
+            f"Replayed over {where} it fired {events['falseActivations']} times with no gesture under way, about "
             f"{per_hour:.0f} times an hour (at most {MAX_FALSE_ACTIVATIONS_PER_HOUR:.0f} is allowed). Record more ordinary "
             "activity and other gestures, so it learns what to ignore"
         )
     recall = events["gestureRecall"]
     if recall is not None and recall < MIN_GESTURE_RECALL:
-        return (f"Replayed over the held-out recordings it caught {events['caught']} of {events['gestures']} starts (at least "
+        return (f"Replayed over {where} it caught {events['caught']} of {events['gestures']} starts (at least "
                 f"{MIN_GESTURE_RECALL:.0%} is needed)" + (cross_check_advice(metrics) or MORE_DATA))
     return None
 
@@ -676,7 +759,8 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
             "evaluationGestureRecall": (metrics.get("events") or {}).get("gestureRecall"),
             "thresholdSource": metrics["thresholdSource"],
             "thresholdChosenOnEvaluationRecordings": metrics["thresholdChosenOnEvaluationRecordings"],
-            **({"targetFalseActivationsPerMinute": TARGET_FALSE_ACTIVATIONS_PER_MINUTE} if spec.motion else {}),
+            "falseActivationsBudgetPerHour": FALSE_ACTIVATIONS_BUDGET_PER_HOUR,
+            "evaluationCohort": (metrics.get("events") or {}).get("cohort"),
             "labelOffsetMs": spec.label_offset_ms,
         },
     }

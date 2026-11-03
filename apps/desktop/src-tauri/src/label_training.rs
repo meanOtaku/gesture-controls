@@ -97,6 +97,8 @@ struct Checked {
     recordings: Vec<RecordingInfo>,
     research: bool,
     label_offset_ms: i32,
+    /// How each recording's labels were timed, for the trainer to judge on the trusted ones (`label_timing_of`).
+    label_timing: BTreeMap<String, &'static str>,
 }
 
 fn label_id(raw: &str) -> Result<LabelId, String> {
@@ -190,6 +192,7 @@ fn check_request(
         ));
     }
     let (backend, input) = method_of(request)?;
+    let label_timing = label_timing_of(&recordings_ids(&recordings), datasets);
     Ok(Checked {
         target,
         mapping: LabelMapping { entries },
@@ -198,7 +201,32 @@ fn check_request(
         recordings,
         research: request.research,
         label_offset_ms,
+        label_timing,
     })
+}
+
+fn recordings_ids(recordings: &[RecordingInfo]) -> Vec<String> {
+    recordings.iter().map(|r| r.id.to_string()).collect()
+}
+
+/// "camera" for a recording whose labels the camera marked, "estimated" for one whose labels were estimated from motion;
+/// a recording that says neither is left out (the trainer counts it as unknown). See `DatasetSummary::labels_from`.
+fn label_timing_of(ids: &[String], datasets: &[DatasetSummary]) -> BTreeMap<String, &'static str> {
+    ids.iter()
+        .filter_map(|id| {
+            let timing = match datasets
+                .iter()
+                .find(|d| &d.id == id)?
+                .labels_from
+                .as_deref()?
+            {
+                "camera" => "camera",
+                "motion" => "estimated",
+                _ => return None,
+            };
+            Some((id.clone(), timing))
+        })
+        .collect()
 }
 
 /// Whether new models train only on moments the hand was still before, as the `steadyStartsOnly` setting asks.
@@ -237,6 +265,7 @@ fn build_spec(
         "seed": SEED,
         "research": checked.research,
         "labelOffsetMs": checked.label_offset_ms,
+        "labelTiming": checked.label_timing,
         // Train and test only on moments the runtime's steadiness gate would let a gesture start at (`steadiness.py`),
         // when the setting asks for the gate (`steady_starts_only`, set by the caller).
         "steadyStarts": false,
@@ -332,8 +361,12 @@ fn model_lab_dir(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn recordings_for(app: &AppHandle, request: &TrainRequest) -> Result<Checked, String> {
-    let index = load_index(app);
+    let mut index = load_index(app);
     let dir = datasets_dir(app)?;
+    // How each recording's labels were made is worked out from its Recorder recording, as the list shows it.
+    if let Ok(bundles) = crate::recording_bundle::recording_bundles_dir(app) {
+        crate::model_lab::describe(&mut index.datasets, &dir, &bundles);
+    }
     let checked = check_request(request, &index.datasets, &|id| {
         dataset_sha(&dataset_csv_path(&dir, id))
     })?;
@@ -1047,22 +1080,63 @@ mod tests {
         let paths: BTreeMap<String, PathBuf> = checked
             .recordings
             .iter()
-            .map(|r| (r.id.to_string(), PathBuf::from(format!("/data/{}.csv", r.id))))
+            .map(|r| {
+                (
+                    r.id.to_string(),
+                    PathBuf::from(format!("/data/{}.csv", r.id)),
+                )
+            })
             .collect();
         let spec = build_spec(&checked, &split, &paths);
         assert_eq!(spec["version"], 1);
         assert_eq!(spec["target"], "pinch");
         assert_eq!(spec["negatives"], serde_json::json!(["fist"]));
-        assert_eq!(spec["steadyStarts"], serde_json::json!(false), "the caller sets it from the setting");
+        assert_eq!(
+            spec["steadyStarts"],
+            serde_json::json!(false),
+            "the caller sets it from the setting"
+        );
         assert_eq!(
             spec["sources"],
             serde_json::json!(["watchPpg", "watchOrientation"])
         );
         assert_eq!(spec["backend"], BACKEND);
-        assert_eq!((spec["labelOffsetMs"].as_i64(), spec["research"].as_bool()), (Some(-250), Some(true)));
+        assert_eq!(
+            (spec["labelOffsetMs"].as_i64(), spec["research"].as_bool()),
+            (Some(-250), Some(true))
+        );
         let listed = |key: &str| spec[key].as_array().unwrap().len();
         assert_eq!(listed("train") + listed("evaluation"), 6);
         assert_eq!(spec["recordings"]["s1"], "/data/s1.csv");
+        assert_eq!(
+            spec["labelTiming"],
+            serde_json::json!({}),
+            "none of these says how its labels were made"
+        );
+    }
+
+    #[test]
+    fn the_trainer_is_told_which_recordings_the_camera_timed_and_which_were_estimated() {
+        let mut list = datasets();
+        list[0].labels_from = Some("camera".into());
+        list[1].labels_from = Some("motion".into());
+        list[2].labels_from = Some("recorder".into());
+        let ids: Vec<String> = list.iter().map(|d| d.id.clone()).collect();
+        let timing = label_timing_of(&ids, &list);
+        assert_eq!(
+            timing,
+            BTreeMap::from([
+                (list[0].id.clone(), "camera"),
+                (list[1].id.clone(), "estimated")
+            ])
+        );
+        let checked = check_request(&request(), &list, &sha).unwrap();
+        assert!(
+            checked
+                .label_timing
+                .values()
+                .all(|t| *t == "camera" || *t == "estimated")
+        );
     }
 
     #[test]

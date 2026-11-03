@@ -283,17 +283,23 @@ def match_window_ms(delay_ms: int = ONSET_DELAY_MS) -> tuple[int, int]:
     return MATCH_EARLIEST_MS - ONSET_DELAY_MS + delay_ms, MATCH_LATEST_MS - ONSET_DELAY_MS + delay_ms
 
 
-def match(detections_ns: list[int], onsets_ns: list[int], delay_ms: int = ONSET_DELAY_MS) -> tuple[int, list[int]]:
-    """(caught starts, latency in ns of each catch): each detection, in order, takes the unmatched start it is
+def match_pairs(detections_ns: list[int], onsets_ns: list[int], delay_ms: int = ONSET_DELAY_MS) -> list[tuple[int, int]]:
+    """(detection index, start index) of each catch: each detection, in order, takes the unmatched start it is
     `match_window_ms(delay_ms)` after, the one closest to `delay_ms` (then the earliest)."""
     used: set[int] = set()
-    latencies: list[int] = []
+    pairs: list[tuple[int, int]] = []
     earliest, latest = match_window_ms(delay_ms)
     lo, hi, target = earliest * 1_000_000, latest * 1_000_000, delay_ms * 1_000_000
-    for d in detections_ns:
+    for i, d in enumerate(detections_ns):
         candidates = [(abs(d - s - target), j) for j, s in enumerate(onsets_ns) if j not in used and lo <= d - s <= hi]
         if candidates:
             j = min(candidates)[1]
             used.add(j)
-            latencies.append(d - onsets_ns[j])
-    return len(used), latencies
+            pairs.append((i, j))
+    return pairs
+
+
+def match(detections_ns: list[int], onsets_ns: list[int], delay_ms: int = ONSET_DELAY_MS) -> tuple[int, list[int]]:
+    """(caught starts, latency in ns of each catch), as `match_pairs` pairs them."""
+    pairs = match_pairs(detections_ns, onsets_ns, delay_ms)
+    return len(pairs), [detections_ns[i] - onsets_ns[j] for i, j in pairs]

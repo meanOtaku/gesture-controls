@@ -108,16 +108,26 @@ export interface TrainingMetrics {
   events?: EventMetrics;
 }
 
+/** The replay counted as `docs/research/gesture-detector-evaluation-metrics.md` counts it (`label_train.detections`). */
 export interface EventMetrics {
   recordings: number;
   gestures: number;
   caught: number;
   gestureRecall: number | null;
+  /** Fired again during a gesture it had caught. */
   repeats: number;
+  /** Fired during a gesture it had not caught in time (that gesture counts as missed). */
+  late?: number;
+  repeatsPer100Gestures?: number | null;
   medianLatencyMs: number | null;
+  /** Fired with no gesture under way. */
   falseActivations: number;
   negativeSeconds: number;
   falseActivationsPerHour: number | null;
+  /** Which recordings these totals cover: the camera-timed ones when the test also had estimated timings, else all. */
+  cohort?: "camera" | "all";
+  /** The totals for each kind of label timing, when the recordings said. */
+  byLabelTiming?: Partial<Record<"camera" | "estimated" | "unknown", EventMetrics>>;
 }
 
 /** `monitorOnly`: trained, but it did not pass the checks for going live, so it can only run in Monitor. */
@@ -185,7 +195,19 @@ export function describeEvents(events: EventMetrics): string {
     ? `it caught ${events.caught} of ${events.gestures} gestures${events.medianLatencyMs !== null ? `, typically ${Math.round(events.medianLatencyMs)} ms after each began` : ""}, and `
     : "";
   const perHour = events.falseActivationsPerHour !== null ? ` (about ${Math.round(events.falseActivationsPerHour)} an hour)` : "";
-  return `Played through the test recordings as it would run live, ${caught}it went off ${events.falseActivations} times in ${time} without the gesture${perHour}.`;
+  const which = events.cohort === "camera" ? "the camera-timed test recordings" : "the test recordings";
+  const during = [
+    events.repeats > 0 ? `${events.repeats} more time${events.repeats === 1 ? "" : "s"} during gestures it had caught` : "",
+    (events.late ?? 0) > 0 ? `${events.late} time${events.late === 1 ? "" : "s"} too late to catch one` : "",
+  ].filter(Boolean);
+  const estimated = events.cohort === "camera" ? events.byLabelTiming?.estimated : undefined;
+  return [
+    `Played through ${which} as it would run live, ${caught}it went off ${events.falseActivations} times in ${time} with no gesture under way${perHour}.`,
+    during.length > 0 ? `It also went off ${during.join(" and ")}.` : "",
+    estimated && estimated.gestures > 0
+      ? `On the recordings with labels estimated from motion it caught ${estimated.caught} of ${estimated.gestures}: shown, but not judged on, as those timings are not exact.`
+      : "",
+  ].filter(Boolean).join(" ");
 }
 
 /** Where the cut-off for “detected” came from, and so how far the test numbers can be trusted. */

@@ -66,12 +66,21 @@ describe("describeEvents", () => {
   it("says what someone using it would notice: gestures caught, how soon, and false alarms over the time without one", () => {
     const text = describeEvents({ recordings: 2, gestures: 12, caught: 11, gestureRecall: 11 / 12, repeats: 0, medianLatencyMs: 240.4, falseActivations: 2, negativeSeconds: 300, falseActivationsPerHour: 24 });
     expect(text).toContain("caught 11 of 12 gestures, typically 240 ms after each began");
-    expect(text).toContain("went off 2 times in 5.0 minutes without the gesture (about 24 an hour)");
+    expect(text).toContain("went off 2 times in 5.0 minutes with no gesture under way (about 24 an hour)");
+    expect(text).not.toContain("also went off");
+  });
+
+  it("names the camera-timed recordings it was judged on, its repeats and late firings, and the estimated ones apart", () => {
+    const estimated = { recordings: 1, gestures: 30, caught: 26, gestureRecall: 26 / 30, repeats: 0, medianLatencyMs: 900, falseActivations: 0, negativeSeconds: 200, falseActivationsPerHour: 0 };
+    const text = describeEvents({ recordings: 3, gestures: 93, caught: 50, gestureRecall: 50 / 93, repeats: 1, late: 2, medianLatencyMs: 900, falseActivations: 18, negativeSeconds: 500, falseActivationsPerHour: 129.6, cohort: "camera", byLabelTiming: { estimated } });
+    expect(text).toContain("Played through the camera-timed test recordings");
+    expect(text).toContain("It also went off 1 more time during gestures it had caught and 2 times too late to catch one.");
+    expect(text).toContain("labels estimated from motion it caught 26 of 30: shown, but not judged on");
   });
 
   it("leaves out the gestures when the test recordings hold none", () => {
     const text = describeEvents({ recordings: 1, gestures: 0, caught: 0, gestureRecall: null, repeats: 0, medianLatencyMs: null, falseActivations: 0, negativeSeconds: 45, falseActivationsPerHour: 0 });
-    expect(text).toBe("Played through the test recordings as it would run live, it went off 0 times in 45 seconds without the gesture (about 0 an hour).");
+    expect(text).toBe("Played through the test recordings as it would run live, it went off 0 times in 45 seconds with no gesture under way (about 0 an hour).");
   });
 });
 

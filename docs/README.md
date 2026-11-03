@@ -22,7 +22,7 @@
 
 ## Research
 
-- [Gesture detector evaluation metrics](research/gesture-detector-evaluation-metrics.md): the event-level True Activation Rate, Miss Rate, and False Activation Rate standard; frozen comparison protocol; and release gate for old and new models.
+- [Gesture detector evaluation metrics](research/gesture-detector-evaluation-metrics.md): the event-level True Activation Rate, Miss Rate, and False Activation Rate standard the trainer implements: repeats and late firings apart from false activations, one false-activation budget for the threshold and the release gate, judging on camera-timed labels, and the evidence for each.
 - [PPG gesture-recognition literature, benchmark position, and acquisition priorities, October 2026](research/ppg-gesture-literature-2026-10.md): smartwatch/custom-hardware research, why reported metrics differ, the valid closure-label result, and the next data-collection protocol.
 - [PPG step across a gesture: findings, October 2026](research/ppg-step-findings-2026-10.md): whether the PPG change around a gesture is the same from session to session (yes for pinch), what was built from it, and what is next
 - [Green PPG pinch-onset experiments, October 2026](research/ppg-green-onset-experiments-2026-10.md): reproducible onset/duration experiments, results, limitations, and the candidate next pipeline

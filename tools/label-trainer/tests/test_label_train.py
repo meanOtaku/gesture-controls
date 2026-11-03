@@ -6,6 +6,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -47,7 +49,7 @@ def test_a_motion_model_reads_the_pulse_and_motion_and_detects_on_the_peak(tmp_p
     assert metrics["rocAuc"] > 0.9 and metrics["thresholdSource"] == "trainingRecordings"
     # The cut-off was chosen on a replay of the training recordings, each scored by a model that had not seen it.
     cross = metrics["crossCheckEvents"]
-    assert cross["gestures"] > 0 and cross["targetFalseActivationsPerMinute"] == lt.TARGET_FALSE_ACTIVATIONS_PER_MINUTE
+    assert cross["gestures"] > 0 and cross["falseActivationsBudgetPerHour"] == lt.FALSE_ACTIVATIONS_BUDGET_PER_HOUR
     events = metrics["events"]
     assert events["policy"]["trigger"] == "peak"
     assert events["gestures"] > 0 and events["caught"] / events["gestures"] >= 0.5
@@ -72,31 +74,69 @@ def test_with_steady_starts_only_moments_with_the_hand_still_count(tmp_path: Pat
     assert refused["outcome"] == "failed" and "made with the hand still" in refused["message"]
 
 
-def test_the_cut_off_catches_the_most_starts_within_the_false_activation_target() -> None:
+def test_the_cut_off_catches_the_most_starts_within_the_false_activation_budget() -> None:
     def summary(caught: int, false: int) -> dict:
-        return {"recordings": 1, "gestures": 10, "caught": caught, "gestureRecall": caught / 10, "repeats": 0, "medianLatencyMs": 900.0,
-                "falseActivations": false, "negativeSeconds": 60.0, "falseActivationsPerHour": float(false) * 60}
-    # Ten minutes of recording: the target is 20 false activations.
-    table = {t: summary(caught, false) for t, caught, false in [(0.3, 9, 40), (0.5, 8, 25), (0.6, 7, 20), (0.7, 7, 12), (0.8, 4, 5)]}
-    ten_minutes = np.array([0, 600 * 10**9])
+        # An hour without the gesture: the false activations are the rate per hour.
+        return {"recordings": 1, "gestures": 10, "caught": caught, "gestureRecall": caught / 10, "repeats": 0, "late": 0,
+                "medianLatencyMs": 900.0, "falseActivations": false, "negativeSeconds": 3600.0, "falseActivationsPerHour": float(false)}
+    table = {t: summary(caught, false) for t, caught, false in [(0.3, 9, 60), (0.5, 8, 45), (0.6, 7, 30), (0.7, 7, 20), (0.8, 4, 5)]}
+    an_hour = np.array([0, 3600 * 10**9])
+    recording = SimpleNamespace(session_id="r")
     original = (lt.summarise, lt.detections, lt.THRESHOLD_CANDIDATES)
     try:
         lt.summarise = lambda per_recording: per_recording[0]
         lt.detections = lambda spec, r, times, scores, policy: table[policy.activation]
         lt.THRESHOLD_CANDIDATES = tuple(table)
         spec = lt.Spec("pinch", [], [], {}, [], [], False, 17)
-        threshold, events = lt.budget_threshold(spec, [(None, ten_minutes, None)])
-        # 0.6 and 0.7 both catch 7 within 2 a minute: the higher cut-off wins the tie.
-        assert threshold == 0.7 and events["withinTarget"] and events["falseActivationsPerMinute"] == 1.2
-        # None within it: the most caught less false (0.8: 6 - 25 = -19 beats 0.7: 7 - 30 = -23).
-        table.update({0.3: summary(9, 60), 0.5: summary(8, 50), 0.6: summary(7, 40), 0.7: summary(7, 30), 0.8: summary(6, 25)})
-        threshold, events = lt.budget_threshold(spec, [(None, ten_minutes, None)])
+        threshold, events = lt.budget_threshold(spec, [(recording, an_hour, None)])
+        # 0.6 and 0.7 both catch 7 within 30 an hour: the higher cut-off wins the tie.
+        assert threshold == 0.7 and events["withinTarget"] and events["falseActivationsPerHour"] == 20
+        # None within it: the most caught less false (0.8: 6 - 55 = -49 beats 0.7: 7 - 60 = -53).
+        table.update({0.3: summary(9, 90), 0.5: summary(8, 80), 0.6: summary(7, 70), 0.7: summary(7, 60), 0.8: summary(6, 55)})
+        threshold, events = lt.budget_threshold(spec, [(recording, an_hour, None)])
         assert threshold == 0.8 and not events["withinTarget"]
         # Never simply the highest cut-off when a lower one catches far more for its false activations.
-        table.update({0.7: summary(9, 25), 0.8: summary(1, 21)})
-        assert lt.budget_threshold(spec, [(None, ten_minutes, None)])[0] == 0.7
+        table.update({0.7: summary(9, 55), 0.8: summary(1, 51)})
+        assert lt.budget_threshold(spec, [(recording, an_hour, None)])[0] == 0.7
     finally:
         lt.summarise, lt.detections, lt.THRESHOLD_CANDIDATES = original
+
+
+def test_a_firing_during_a_pinch_is_a_repeat_or_late_and_only_one_with_no_gesture_under_way_is_false(monkeypatch) -> None:
+    ms = 1_000_000
+    t = np.arange(0, 20_000, 10, dtype=np.int64) * ms
+    labels = np.full(len(t), "", dtype=object)
+    for start, end, label in [(2000, 2300, "pinch_in"), (2300, 4000, "pinch_hold"), (4000, 4300, "pinch_out"),
+                              (10000, 10300, "pinch_in"), (10300, 12000, "pinch_hold"), (12000, 12300, "pinch_out"),
+                              (15000, 16000, "fist")]:
+        labels[(t >= start * ms) & (t < end * ms)] = label
+    recording = SimpleNamespace(timestamps_ns=t, raw_labels=labels)
+    # Caught 0.9 s after the first pinch, again during its hold, late in the second, during a fist, and with nothing held.
+    rises = [2900, 3500, 11500, 15500, 18000]
+    monkeypatch.setattr(lt, "detect", lambda times, scores, policy: [(r * ms, None) for r in rises])
+    spec = lt.Spec("pinch_in", ["fist", "pinch_hold", "pinch_out"], [], {}, [], [], False, 17)
+    counted = lt.detections(spec, recording, t, np.zeros(len(t)), lt.policy_for(0.5, "peak"))
+    assert (counted["gestures"], counted["caught"], counted["repeats"], counted["late"], counted["falseActivations"]) == (2, 1, 1, 1, 2)
+    assert counted["falseOn"] == {"fist": 1, "unlabelled": 1}
+    # Time without the gesture leaves out both pinches, from their start through pinch out.
+    assert counted["negativeNs"] == (19_990 - 2_290 - 2_290) * ms
+    assert lt.gesture_episodes(lt.ppg_onset.holds(t, labels), "pinch_in") == [(2000 * ms, 4290 * ms), (10000 * ms, 12290 * ms)]
+
+
+def test_results_are_judged_on_the_camera_timed_recordings_when_there_are_enough_of_them() -> None:
+    def part(gestures: int, caught: int, false: int, seconds: float) -> dict:
+        return {"gestures": gestures, "caught": caught, "repeats": 0, "late": 0, "falseActivations": false, "latenciesMs": [],
+                "negativeNs": int(seconds * 1e9)}
+    spec = lt.Spec("pinch_in", [], [], {}, [], [], False, 17, label_timing={"a": "camera", "b": "estimated"})
+    judged = lt.cohort(spec, [("a", part(25, 10, 3, 600)), ("b", part(30, 28, 0, 600))])
+    assert judged["cohort"] == "camera" and (judged["gestures"], judged["caught"]) == (25, 10)
+    assert judged["byLabelTiming"]["estimated"]["caught"] == 28
+    # Too few camera-timed gestures to judge by: all of them, still split by timing.
+    few = lt.cohort(spec, [("a", part(5, 2, 0, 600)), ("b", part(30, 28, 0, 600))])
+    assert few["cohort"] == "all" and few["gestures"] == 35 and set(few["byLabelTiming"]) == {"camera", "estimated"}
+    # No timings given: all, as before.
+    plain = lt.cohort(lt.Spec("pinch_in", [], [], {}, [], [], False, 17), [("a", part(25, 10, 3, 600))])
+    assert plain == {**lt.summarise([part(25, 10, 3, 600)]), "cohort": "all"}
 
 
 def test_a_motion_model_without_motion_samples_has_nothing_to_learn_from(tmp_path: Path) -> None:
