@@ -64,27 +64,28 @@ export const DEFAULT_PLAN: GuidedPlan = {
   ],
 };
 
-/** The app's standard labels (`label_registry::STANDARD_LABELS`): the same for every model, always "not the gesture". */
+/** The app's standard label for everyday noise (`label_registry::STANDARD_LABELS`): "not the gesture" for every model. */
 export const EVERYDAY_NOISE = "everyday_noise";
-export const STILL = "still";
+
+/** How long an everyday-noise recording may be: a recording keeps 200,000 rows, about 44 minutes of the watch's streams. */
+export const NOISE_MIN_MINUTES = 1;
+export const NOISE_MAX_MINUTES = 30;
+
+/** What to do during an everyday-noise recording; only suggestions, nothing is labelled by them. */
+export const NOISE_SUGGESTIONS = [
+  "type, use the mouse and your phone",
+  "drink, pick things up and put them down",
+  "talk with your hands, stretch, scratch, walk around",
+  "rest your hand, and tap or open and close it without pinching",
+];
 
 /**
- * Everyday noise: no gesture at all, only everyday activity labelled `everyday_noise`, and the hand at rest labelled
- * `still`. It teaches a model what is not the gesture and, held out, measures how often it fires in ordinary use. The
- * last ones come close to a pinch without making one: those are the moments a detector is most often fooled by.
+ * Everyday noise: a stretch of your ordinary routine with no gesture, labelled `everyday_noise` as a whole. It teaches a
+ * model what is not the gesture and, held out, measures how often it fires in ordinary use.
  */
-export const NOISE_ACTIVITIES: GuidedActivity[] = [
-  { activity: "Sit still, hand relaxed on the desk", seconds: 45, label: STILL },
-  { activity: "Type on the keyboard", seconds: 60 },
-  { activity: "Use the mouse or trackpad", seconds: 60 },
-  { activity: "Use your phone: scroll, type, tap", seconds: 60 },
-  { activity: "Drink from a cup, pick things up and put them down", seconds: 60 },
-  { activity: "Talk, moving your hands as you do", seconds: 60 },
-  { activity: "Walk around", seconds: 60 },
-  { activity: "Stretch, reach and scratch", seconds: 45 },
-  { activity: "Rest your hand on your lap, still", seconds: 45, label: STILL },
-  { activity: "Tap your fingers, open and close the hand: no pinch", seconds: 45 },
-];
+export function noiseRoutinePlan(minutes: number): GuidedPlan {
+  return noisePlan([{ activity: "Go about your routine. No gestures.", seconds: Math.round(minutes * 60) }]);
+}
 
 /** The plan for an everyday-noise session: no cues, only `activities`, each labelled its own label or `everydayLabel`. */
 export function noisePlan(activities: GuidedActivity[], everydayLabel: string | null = EVERYDAY_NOISE): GuidedPlan {
@@ -97,8 +98,8 @@ export function planProblem(plan: GuidedPlan): string | null {
     // Everyday noise: only activities, and they must be labelled to teach anything.
     if (plan.activities.length === 0) return "Add at least one everyday activity.";
     if (!plan.everydayLabel) return "Choose the everyday label to give the activities.";
-    if (plan.activities.some((entry) => !(entry.seconds >= 5 && entry.seconds <= 900) || entry.activity.trim() === "")) {
-      return "Give each everyday activity a name and 5 to 900 s.";
+    if (plan.activities.some((entry) => !(entry.seconds >= 5 && entry.seconds <= NOISE_MAX_MINUTES * 60) || entry.activity.trim() === "")) {
+      return `Record ${NOISE_MIN_MINUTES} to ${NOISE_MAX_MINUTES} minutes.`;
     }
     return null;
   }

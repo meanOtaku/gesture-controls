@@ -113,13 +113,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .telemetry-shell .hero,.model-lab-shell .hero { align-items:center; }
 /* The Recorder: the sessions, with the camera beside them (above them on a narrow window) so it stays in view. */
 .recorder-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(300px,420px); gap:24px; align-items:start; }
-.recorder-camera { position:sticky; top:16px; min-width:0; }
-.noise-activity { display:grid; grid-template-columns:minmax(0,1fr) 5.5rem 9rem auto; gap:.5rem; align-items:center; }
-.noise-activity-head { font-size:.75rem; color:var(--ink-3); }
-@media (max-width: 640px) { .noise-activity { grid-template-columns:minmax(0,1fr) 5rem; } .noise-activity-head { display:none; } }
+/* A theme with a fixed header and footer sets --sticky-top and --sticky-bottom to their heights, so the camera stops below
+   the header rather than under it, and scrolls inside itself when it is taller than the space left. */
+.recorder-camera { position:sticky; top:calc(var(--sticky-top, 0px) + 16px); max-height:calc(100svh - var(--sticky-top, 0px) - var(--sticky-bottom, 0px) - 32px); overflow-y:auto; min-width:0; }
 @media (max-width: 1100px) {
   .recorder-layout { grid-template-columns:minmax(0,1fr); }
-  .recorder-camera { position:static; order:-1; }
+  .recorder-camera { position:static; order:-1; max-height:none; overflow:visible; }
 }
 .telemetry-shell .subtitle,.model-lab-shell .subtitle { max-width:680px; line-height:1.65; }
 .stream-status { display:flex; align-items:center; gap:24px; flex-wrap:wrap; margin:-6px 0 24px; color:var(--ink); font-size:.8rem; }

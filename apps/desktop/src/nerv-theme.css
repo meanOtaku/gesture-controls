@@ -504,7 +504,7 @@ html[data-theme="nerv"] .nerv-log time { color: var(--eva-cyan); margin-right: 6
 @media (max-width: 1100px) { html[data-theme="nerv"] .nerv-telemetry { display: none; } }
 
 /* The top and bottom bars (see app/components/NervBars.tsx). They span the window; the sidebar, page and telemetry panel sit between them. */
-html[data-theme="nerv"] { --nerv-header-h: 84px; --nerv-stripe-h: 6px; --nerv-footer-h: 34px; }
+html[data-theme="nerv"] { --nerv-header-h: 84px; --nerv-stripe-h: 6px; --nerv-footer-h: 34px; --sticky-top: calc(var(--nerv-header-h) + var(--nerv-stripe-h)); --sticky-bottom: calc(var(--nerv-footer-h) + var(--nerv-stripe-h)); }
 html[data-theme="nerv"] [data-slot="sidebar-wrapper"] { padding-top: calc(var(--nerv-header-h) + var(--nerv-stripe-h)); padding-bottom: calc(var(--nerv-footer-h) + var(--nerv-stripe-h)); }
 html[data-theme="nerv"] [data-slot="sidebar-container"] { top: calc(var(--nerv-header-h) + var(--nerv-stripe-h)); bottom: calc(var(--nerv-footer-h) + var(--nerv-stripe-h)); height: auto; }
 html[data-theme="nerv"] [data-slot="sidebar-inset"] { min-height: calc(100svh - var(--nerv-header-h) - var(--nerv-footer-h) - 2 * var(--nerv-stripe-h)); }

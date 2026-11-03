@@ -4,39 +4,34 @@ import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
+import { Label } from "../../../components/ui/label";
 import { guidedRunner } from "../recording/guidedRunner";
-import { EVERYDAY_NOISE, NOISE_ACTIVITIES, noisePlan, planProblem, planSteps, STILL, totalMs, type GuidedActivity } from "../recording/guidedSession";
+import { NOISE_MAX_MINUTES, NOISE_MIN_MINUTES, NOISE_SUGGESTIONS, noiseRoutinePlan, planProblem } from "../recording/guidedSession";
 import { GuidedRunningView } from "./GuidedRunningView";
 
-const STORAGE_KEY = "recorder.noiseActivities";
+const STORAGE_KEY = "recorder.noiseMinutes";
+const DEFAULT_MINUTES = 10;
 
-/** The standard labels a stretch can be given, by what is shown. */
-const KINDS: Record<string, string> = { [EVERYDAY_NOISE]: "Everyday noise", [STILL]: "Hand still" };
-
-function loadActivities(): GuidedActivity[] {
+function loadMinutes(): string {
   try {
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as GuidedActivity[] | null;
-    if (Array.isArray(stored)) return stored;
+    return localStorage.getItem(STORAGE_KEY) ?? String(DEFAULT_MINUTES);
   } catch {
-    // A missing or broken list falls back to the usual one.
+    return String(DEFAULT_MINUTES);
   }
-  return NOISE_ACTIVITIES;
 }
 
-function saveActivities(activities: GuidedActivity[]): void {
+function saveMinutes(minutes: string): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(activities));
+    localStorage.setItem(STORAGE_KEY, minutes);
   } catch {
     // Remembering is a convenience.
   }
 }
 
-const minutes = (ms: number) => `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} s`;
-
 /**
- * Everyday noise: a recording with no gesture in it, only everyday activity (typing, the phone, walking, …) labelled with
- * the standard label `everyday_noise`, and the hand at rest labelled `still`. Added to the training data, it teaches every
- * model what is not its gesture, most of all with "Learn from its own false alarms"; held out, it measures how often a
+ * Everyday noise: a few minutes of your ordinary routine with no gesture. The whole recording gets the app's standard label
+ * `everyday_noise`, so there is nothing to label: every model treats it as not its gesture. Added to the training data, it
+ * teaches a model what not to fire on, most of all with "Learn from its own false alarms"; held out, it measures how often a
  * model fires in ordinary use.
  */
 export function EverydayNoiseCard({ recording, watchConnected, onStop }: {
@@ -45,17 +40,12 @@ export function EverydayNoiseCard({ recording, watchConnected, onStop }: {
   /** Stops the recording and saves it, as the recorder's Stop does. */
   onStop: () => void;
 }) {
-  const [activities, setActivities] = useState<GuidedActivity[]>(loadActivities);
+  const [minutesText, setMinutesText] = useState(loadMinutes);
   const [error, setError] = useState<string | null>(null);
   const session = useSyncExternalStore(guidedRunner.subscribe, guidedRunner.snapshot, guidedRunner.snapshot);
-
-  const update = (next: GuidedActivity[]) => {
-    setActivities(next);
-    saveActivities(next);
-  };
-  const plan = useMemo(() => noisePlan(activities), [activities]);
-  const problem = planProblem(plan);
-  const length = useMemo(() => totalMs(planSteps(plan)), [plan]);
+  const minutes = Number(minutesText);
+  const plan = useMemo(() => noiseRoutinePlan(minutes), [minutes]);
+  const problem = Number.isFinite(minutes) && minutes >= NOISE_MIN_MINUTES ? planProblem(plan) : `Record ${NOISE_MIN_MINUTES} to ${NOISE_MAX_MINUTES} minutes.`;
 
   const start = () => {
     setError(null);
@@ -66,53 +56,50 @@ export function EverydayNoiseCard({ recording, watchConnected, onStop }: {
     return (
       <GuidedRunningView
         session={session}
-        nameOf={(id) => KINDS[id] ?? id}
+        nameOf={() => "Everyday noise"}
         onStop={onStop}
         title="Everyday noise session"
-        description="Do each activity as you normally would, and make no gesture. The recording stops and is saved by itself at the end."
+        description="Go about your routine and make no gesture. The recording stops and is saved by itself at the end; Stop and save keeps what you have so far."
       />
     );
   }
-
-  const setActivity = (index: number, next: Partial<GuidedActivity>) => update(activities.map((entry, i) => (i === index ? { ...entry, ...next } : entry)));
 
   return (
     <Card role="region" aria-label="Everyday noise session" className="min-w-0">
       <CardHeader>
         <SectionHeader
           title="Everyday noise"
-          description="Record ordinary use of your hand with no gesture, so every model learns what not to fire on."
+          description="Record your ordinary routine with no gesture, so every model learns what not to fire on."
           help={{
             label: "About everyday noise",
             content:
-              "The app asks for one activity after another; you make no gesture at all. Each stretch gets one of the app's standard labels: Everyday noise while you use your hand, Hand still while it rests. Every model treats them as not its gesture, so there is no role to choose. Add the recording to the training data from Model Lab (From the Recorder), and tick Learn from its own false alarms when you train: the model is run over it, every moment it fires is added as an example of what is not the gesture, and it is trained again. Keep some everyday-noise recordings out of training: on those, its false activations an hour are what you would see in daily use. Record a session on each day you record pinches, in different places and positions.",
+              "Wear the watch and go about your routine for a few minutes, making no gesture. There is nothing to label: the whole recording gets the app's standard label Everyday noise, which every model treats as not its gesture. Add it to the training data from Model Lab (From the Recorder) and tick Learn from its own false alarms when you train: the model is run over it, every moment it fires is added as an example of what is not the gesture, and it is trained again. Keep some of these recordings out of training: on those, its false activations an hour are what you would see in daily use. Record one on each day you record pinches, in different places and positions.",
           }}
         />
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {!watchConnected && <p className="hint">Connect the watch (Watch page) first.</p>}
-        <fieldset className="flex flex-col gap-2">
-          <legend className="label">Activities, one after another</legend>
-          <div className="noise-activity noise-activity-head" aria-hidden="true"><span>Activity</span><span>Seconds</span><span>Label</span><span /></div>
-          {activities.map((entry, index) => (
-            <div key={index} className="noise-activity">
-              <Input aria-label={`Noise activity ${index + 1}`} value={entry.activity} disabled={recording} onChange={(event) => setActivity(index, { activity: event.target.value })} />
-              <Input aria-label={`Seconds of noise activity ${index + 1}`} type="number" min={5} max={900} value={entry.seconds} disabled={recording} onChange={(event) => setActivity(index, { seconds: Number(event.target.value) })} />
-              <select aria-label={`Label of noise activity ${index + 1}`} className="recipe-select" value={entry.label ?? EVERYDAY_NOISE} disabled={recording} onChange={(event) => setActivity(index, { label: event.target.value })}>
-                {Object.entries(KINDS).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-              </select>
-              <Button type="button" variant="ghost" size="sm" disabled={recording} onClick={() => update(activities.filter((_, i) => i !== index))}>Remove</Button>
-            </div>
-          ))}
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={recording} onClick={() => update([...activities, { activity: "Cook, wash up or tidy", seconds: 60, label: EVERYDAY_NOISE }])}>Add an activity</Button>
-            <Button type="button" variant="ghost" size="sm" disabled={recording} onClick={() => update(NOISE_ACTIVITIES)}>Back to the usual list</Button>
-          </div>
-        </fieldset>
+        <div className="field max-w-48">
+          <Label htmlFor="noise-minutes">Minutes</Label>
+          <Input
+            id="noise-minutes"
+            type="number"
+            min={NOISE_MIN_MINUTES}
+            max={NOISE_MAX_MINUTES}
+            value={minutesText}
+            disabled={recording}
+            onChange={(event) => {
+              setMinutesText(event.target.value);
+              saveMinutes(event.target.value);
+            }}
+          />
+        </div>
+        <p className="hint">Make no gesture. For example: {NOISE_SUGGESTIONS.join("; ")}.</p>
         {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" disabled={recording || !watchConnected || problem !== null} onClick={start}>Start everyday noise session</Button>
-          <span className="hint">{problem ?? `About ${minutes(length)}.`}{recording && !problem ? " A recording is under way." : ""}</span>
+          {problem && <span className="hint">{problem}</span>}
+          {recording && !problem && <span className="hint">A recording is under way.</span>}
         </div>
       </CardContent>
     </Card>
