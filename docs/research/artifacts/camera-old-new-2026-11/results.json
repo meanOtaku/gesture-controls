@@ -33,6 +33,7 @@
       "model": "trees",
       "condition": "old only",
       "threshold": 0.65,
+      "hardNegatives": null,
       "outcome": "evaluationOnly",
       "verdict": "At its cut-off (0.65) it found 23% of the starts and wrongly flagged 0% of the other moments on recordings it had not seen (balanced accuracy 0.62; at least 0.7 is needed). Record more sessions of the gesture (at least three, in different positions)",
       "train": [
@@ -53,7 +54,7 @@
         "14 Oct fist",
         "14 Oct fist"
       ],
-      "seconds": 56,
+      "seconds": 12,
       "crossCheck": {
         "gestures": 203,
         "caught": 61,
@@ -178,6 +179,7 @@
       "model": "trees",
       "condition": "old + new, 3 Nov a held out",
       "threshold": 0.95,
+      "hardNegatives": null,
       "outcome": "evaluationOnly",
       "verdict": "At its cut-off (0.95) it found 0% of the starts and wrongly flagged 0% of the other moments on recordings it had not seen (balanced accuracy 0.50; at least 0.7 is needed). Record more sessions of the gesture (at least three, in different positions)",
       "train": [
@@ -201,7 +203,7 @@
         "3 Nov c",
         "3 Nov d"
       ],
-      "seconds": 55,
+      "seconds": 5,
       "crossCheck": {
         "gestures": 244,
         "caught": 5,
@@ -284,6 +286,7 @@
       "model": "trees",
       "condition": "old + new, 3 Nov b held out",
       "threshold": 0.9,
+      "hardNegatives": null,
       "outcome": "evaluationOnly",
       "verdict": "At its cut-off (0.90) it found 3% of the starts and wrongly flagged 0% of the other moments on recordings it had not seen (balanced accuracy 0.51; at least 0.7 is needed). Record more sessions of the gesture (at least three, in different positions)",
       "train": [
@@ -307,7 +310,7 @@
         "3 Nov c",
         "3 Nov d"
       ],
-      "seconds": 57,
+      "seconds": 5,
       "crossCheck": {
         "gestures": 243,
         "caught": 32,
@@ -390,6 +393,7 @@
       "model": "trees",
       "condition": "old + new, 3 Nov c held out",
       "threshold": 0.95,
+      "hardNegatives": null,
       "outcome": "evaluationOnly",
       "verdict": "At its cut-off (0.95) it found 5% of the starts and wrongly flagged 0% of the other moments on recordings it had not seen (balanced accuracy 0.53; at least 0.7 is needed). Record more sessions of the gesture (at least three, in different positions)",
       "train": [
@@ -413,7 +417,7 @@
         "3 Nov b",
         "3 Nov d"
       ],
-      "seconds": 57,
+      "seconds": 5,
       "crossCheck": {
         "gestures": 244,
         "caught": 6,
@@ -483,6 +487,7 @@
       "model": "trees",
       "condition": "old + new, 3 Nov d held out",
       "threshold": 0.9,
+      "hardNegatives": null,
       "outcome": "evaluationOnly",
       "verdict": "At its cut-off (0.90) it found 4% of the starts and wrongly flagged 1% of the other moments on recordings it had not seen (balanced accuracy 0.52; at least 0.7 is needed). Record more sessions of the gesture (at least three, in different positions)",
       "train": [
@@ -506,7 +511,7 @@
         "3 Nov b",
         "3 Nov c"
       ],
-      "seconds": 66,
+      "seconds": 5,
       "crossCheck": {
         "gestures": 255,
         "caught": 35,
@@ -576,6 +581,7 @@
       "model": "cnn",
       "condition": "old only",
       "threshold": 0.95,
+      "hardNegatives": null,
       "outcome": "evaluationOnly",
       "verdict": "Replayed over the held-out recordings it fired 25 times with no gesture under way, about 188 times an hour (at most 30 is allowed). Record more ordinary activity and other gestures, so it learns what to ignore",
       "train": [
@@ -596,7 +602,7 @@
         "14 Oct fist",
         "14 Oct fist"
       ],
-      "seconds": 333,
+      "seconds": 12,
       "crossCheck": {
         "gestures": 170,
         "caught": 57,
@@ -708,6 +714,7 @@
       "model": "cnn",
       "condition": "old + new, 3 Nov a held out",
       "threshold": 0.6,
+      "hardNegatives": null,
       "outcome": "evaluationOnly",
       "verdict": "Replayed over the held-out recordings it fired 5 times with no gesture under way, about 116 times an hour (at most 30 is allowed). Record more ordinary activity and other gestures, so it learns what to ignore",
       "train": [
@@ -731,7 +738,7 @@
         "3 Nov c",
         "3 Nov d"
       ],
-      "seconds": 533,
+      "seconds": 5,
       "crossCheck": {
         "gestures": 209,
         "caught": 94,
@@ -788,6 +795,7 @@
       "model": "cnn",
       "condition": "old + new, 3 Nov b held out",
       "threshold": 0.8,
+      "hardNegatives": null,
       "outcome": "evaluationOnly",
       "verdict": "Replayed over the held-out recordings it fired 2 times with no gesture under way, about 47 times an hour (at most 30 is allowed). Record more ordinary activity and other gestures, so it learns what to ignore",
       "train": [
@@ -811,7 +819,7 @@
         "3 Nov c",
         "3 Nov d"
       ],
-      "seconds": 532,
+      "seconds": 5,
       "crossCheck": {
         "gestures": 208,
         "caught": 92,
@@ -894,6 +902,7 @@
       "model": "cnn",
       "condition": "old + new, 3 Nov c held out",
       "threshold": 0.7,
+      "hardNegatives": null,
       "outcome": "evaluationOnly",
       "verdict": "Replayed over the held-out recordings it fired 5 times with no gesture under way, about 118 times an hour (at most 30 is allowed). Record more ordinary activity and other gestures, so it learns what to ignore",
       "train": [
@@ -917,7 +926,7 @@
         "3 Nov b",
         "3 Nov d"
       ],
-      "seconds": 469,
+      "seconds": 5,
       "crossCheck": {
         "gestures": 209,
         "caught": 85,
@@ -987,6 +996,7 @@
       "model": "cnn",
       "condition": "old + new, 3 Nov d held out",
       "threshold": 0.9,
+      "hardNegatives": null,
       "outcome": "evaluationOnly",
       "verdict": "Replayed over the held-out recordings it fired 16 times with no gesture under way, about 342 times an hour (at most 30 is allowed). Record more ordinary activity and other gestures, so it learns what to ignore",
       "train": [
@@ -1010,7 +1020,7 @@
         "3 Nov b",
         "3 Nov c"
       ],
-      "seconds": 478,
+      "seconds": 5,
       "crossCheck": {
         "gestures": 219,
         "caught": 96,
@@ -1074,6 +1084,434 @@
         "negativeSeconds": 49.850187741,
         "falseActivationsPerHour": 0.0,
         "threshold": 0.99
+      }
+    },
+    {
+      "model": "trees",
+      "condition": "old + new, hard negatives, 3 Nov a held out",
+      "threshold": 0.9,
+      "hardNegatives": 32,
+      "outcome": "evaluationOnly",
+      "verdict": "At its cut-off (0.90) it found 3% of the starts and wrongly flagged 0% of the other moments on recordings it had not seen (balanced accuracy 0.51; at least 0.7 is needed). Record more sessions of the gesture (at least three, in different positions)",
+      "train": [
+        "14 Oct 00:54",
+        "14 Oct 00:55",
+        "14 Oct 00:58",
+        "14 Oct 00:59",
+        "14 Oct 01:00",
+        "14 Oct 01:04",
+        "14 Oct 01:05",
+        "14 Oct 01:13",
+        "17 Oct 12:21",
+        "17 Oct 12:23",
+        "17 Oct 12:25",
+        "17 Oct 12:40",
+        "14 Oct fist",
+        "14 Oct fist",
+        "14 Oct fist",
+        "14 Oct fist",
+        "3 Nov b",
+        "3 Nov c",
+        "3 Nov d"
+      ],
+      "seconds": 348,
+      "crossCheck": {
+        "gestures": 244,
+        "caught": 16,
+        "falseActivationsPerHour": 8.721677240780497
+      },
+      "perRecording": {
+        "827be2d1-6ca3-4865-8155-3773db495a7f": {
+          "recordings": 1,
+          "gestures": 20,
+          "caught": 5,
+          "gestureRecall": 0.25,
+          "repeats": 0,
+          "late": 0,
+          "repeatsPer100Gestures": 0.0,
+          "medianLatencyMs": 872.99358,
+          "falseActivations": 0,
+          "negativeSeconds": 23.451988191,
+          "falseActivationsPerHour": 0.0,
+          "name": "14 Oct 00:57"
+        },
+        "7b445f79-cd38-41a6-a6f4-afac8c9b1971": {
+          "recordings": 1,
+          "gestures": 14,
+          "caught": 0,
+          "gestureRecall": 0.0,
+          "repeats": 0,
+          "late": 0,
+          "repeatsPer100Gestures": 0.0,
+          "medianLatencyMs": null,
+          "falseActivations": 0,
+          "negativeSeconds": 28.875463473,
+          "falseActivationsPerHour": 0.0,
+          "name": "17 Oct 12:26"
+        },
+        "8ed9fd23-5216-4642-8705-feea39125ba4": {
+          "recordings": 1,
+          "gestures": 17,
+          "caught": 0,
+          "gestureRecall": 0.0,
+          "repeats": 0,
+          "late": 0,
+          "repeatsPer100Gestures": 0.0,
+          "medianLatencyMs": null,
+          "falseActivations": 0,
+          "negativeSeconds": 110.117113298,
+          "falseActivationsPerHour": 0.0,
+          "name": "3 Nov a"
+        }
+      },
+      "oracleNew": {
+        "recordings": 1,
+        "gestures": 17,
+        "caught": 4,
+        "gestureRecall": 0.23529411764705882,
+        "repeats": 0,
+        "late": 0,
+        "repeatsPer100Gestures": 0.0,
+        "medianLatencyMs": 918.6182645,
+        "falseActivations": 0,
+        "negativeSeconds": 110.117113298,
+        "falseActivationsPerHour": 0.0,
+        "threshold": 0.75
+      },
+      "oracleOld": {
+        "recordings": 2,
+        "gestures": 34,
+        "caught": 6,
+        "gestureRecall": 0.17647058823529413,
+        "repeats": 0,
+        "late": 0,
+        "repeatsPer100Gestures": 0.0,
+        "medianLatencyMs": 885.3768215,
+        "falseActivations": 0,
+        "negativeSeconds": 52.327451664,
+        "falseActivationsPerHour": 0.0,
+        "threshold": 0.85
+      }
+    },
+    {
+      "model": "trees",
+      "condition": "old + new, hard negatives, 3 Nov b held out",
+      "threshold": 0.8,
+      "hardNegatives": 37,
+      "outcome": "evaluationOnly",
+      "verdict": "At its cut-off (0.80) it found 10% of the starts and wrongly flagged 0% of the other moments on recordings it had not seen (balanced accuracy 0.55; at least 0.7 is needed). Record more sessions of the gesture (at least three, in different positions)",
+      "train": [
+        "14 Oct 00:54",
+        "14 Oct 00:55",
+        "14 Oct 00:58",
+        "14 Oct 00:59",
+        "14 Oct 01:00",
+        "14 Oct 01:04",
+        "14 Oct 01:05",
+        "14 Oct 01:13",
+        "17 Oct 12:21",
+        "17 Oct 12:23",
+        "17 Oct 12:25",
+        "17 Oct 12:40",
+        "14 Oct fist",
+        "14 Oct fist",
+        "14 Oct fist",
+        "14 Oct fist",
+        "3 Nov a",
+        "3 Nov c",
+        "3 Nov d"
+      ],
+      "seconds": 245,
+      "crossCheck": {
+        "gestures": 243,
+        "caught": 34,
+        "falseActivationsPerHour": 17.384758404485282
+      },
+      "perRecording": {
+        "827be2d1-6ca3-4865-8155-3773db495a7f": {
+          "recordings": 1,
+          "gestures": 20,
+          "caught": 9,
+          "gestureRecall": 0.45,
+          "repeats": 0,
+          "late": 0,
+          "repeatsPer100Gestures": 0.0,
+          "medianLatencyMs": 872.99358,
+          "falseActivations": 0,
+          "negativeSeconds": 23.451988191,
+          "falseActivationsPerHour": 0.0,
+          "name": "14 Oct 00:57"
+        },
+        "7b445f79-cd38-41a6-a6f4-afac8c9b1971": {
+          "recordings": 1,
+          "gestures": 14,
+          "caught": 0,
+          "gestureRecall": 0.0,
+          "repeats": 0,
+          "late": 0,
+          "repeatsPer100Gestures": 0.0,
+          "medianLatencyMs": null,
+          "falseActivations": 1,
+          "negativeSeconds": 28.875463473,
+          "falseActivationsPerHour": 124.67332354218935,
+          "name": "17 Oct 12:26"
+        },
+        "9d150228-fb00-4533-a7a4-82801c4a864e": {
+          "recordings": 1,
+          "gestures": 18,
+          "caught": 0,
+          "gestureRecall": 0.0,
+          "repeats": 0,
+          "late": 0,
+          "repeatsPer100Gestures": 0.0,
+          "medianLatencyMs": null,
+          "falseActivations": 0,
+          "negativeSeconds": 107.334631273,
+          "falseActivationsPerHour": 0.0,
+          "name": "3 Nov b"
+        }
+      },
+      "oracleNew": {
+        "recordings": 1,
+        "gestures": 18,
+        "caught": 1,
+        "gestureRecall": 0.05555555555555555,
+        "repeats": 0,
+        "late": 0,
+        "repeatsPer100Gestures": 0.0,
+        "medianLatencyMs": 834.999808,
+        "falseActivations": 0,
+        "negativeSeconds": 107.334631273,
+        "falseActivationsPerHour": 0.0,
+        "threshold": 0.7
+      },
+      "oracleOld": {
+        "recordings": 2,
+        "gestures": 34,
+        "caught": 5,
+        "gestureRecall": 0.14705882352941177,
+        "repeats": 0,
+        "late": 0,
+        "repeatsPer100Gestures": 0.0,
+        "medianLatencyMs": 872.99358,
+        "falseActivations": 0,
+        "negativeSeconds": 52.327451664,
+        "falseActivationsPerHour": 0.0,
+        "threshold": 0.9
+      }
+    },
+    {
+      "model": "trees",
+      "condition": "old + new, hard negatives, 3 Nov c held out",
+      "threshold": 0.9,
+      "hardNegatives": 35,
+      "outcome": "evaluationOnly",
+      "verdict": "At its cut-off (0.90) it found 0% of the starts and wrongly flagged 0% of the other moments on recordings it had not seen (balanced accuracy 0.50; at least 0.7 is needed). Record more sessions of the gesture (at least three, in different positions)",
+      "train": [
+        "14 Oct 00:54",
+        "14 Oct 00:55",
+        "14 Oct 00:58",
+        "14 Oct 00:59",
+        "14 Oct 01:00",
+        "14 Oct 01:04",
+        "14 Oct 01:05",
+        "14 Oct 01:13",
+        "17 Oct 12:21",
+        "17 Oct 12:23",
+        "17 Oct 12:25",
+        "17 Oct 12:40",
+        "14 Oct fist",
+        "14 Oct fist",
+        "14 Oct fist",
+        "14 Oct fist",
+        "3 Nov a",
+        "3 Nov b",
+        "3 Nov d"
+      ],
+      "seconds": 182,
+      "crossCheck": {
+        "gestures": 244,
+        "caught": 12,
+        "falseActivationsPerHour": 8.691497078705073
+      },
+      "perRecording": {
+        "827be2d1-6ca3-4865-8155-3773db495a7f": {
+          "recordings": 1,
+          "gestures": 20,
+          "caught": 4,
+          "gestureRecall": 0.2,
+          "repeats": 0,
+          "late": 0,
+          "repeatsPer100Gestures": 0.0,
+          "medianLatencyMs": 866.5330819999999,
+          "falseActivations": 0,
+          "negativeSeconds": 23.451988191,
+          "falseActivationsPerHour": 0.0,
+          "name": "14 Oct 00:57"
+        },
+        "7b445f79-cd38-41a6-a6f4-afac8c9b1971": {
+          "recordings": 1,
+          "gestures": 14,
+          "caught": 0,
+          "gestureRecall": 0.0,
+          "repeats": 0,
+          "late": 0,
+          "repeatsPer100Gestures": 0.0,
+          "medianLatencyMs": null,
+          "falseActivations": 0,
+          "negativeSeconds": 28.875463473,
+          "falseActivationsPerHour": 0.0,
+          "name": "17 Oct 12:26"
+        },
+        "a842ec17-bfe1-4b93-9719-43f452e302d5": {
+          "recordings": 1,
+          "gestures": 17,
+          "caught": 0,
+          "gestureRecall": 0.0,
+          "repeats": 0,
+          "late": 0,
+          "repeatsPer100Gestures": 0.0,
+          "medianLatencyMs": null,
+          "falseActivations": 0,
+          "negativeSeconds": 107.250563672,
+          "falseActivationsPerHour": 0.0,
+          "name": "3 Nov c"
+        }
+      },
+      "oracleNew": {
+        "recordings": 1,
+        "gestures": 17,
+        "caught": 0,
+        "gestureRecall": 0.0,
+        "repeats": 0,
+        "late": 0,
+        "repeatsPer100Gestures": 0.0,
+        "medianLatencyMs": null,
+        "falseActivations": 0,
+        "negativeSeconds": 107.250563672,
+        "falseActivationsPerHour": 0.0,
+        "threshold": 0.95
+      },
+      "oracleOld": {
+        "recordings": 2,
+        "gestures": 34,
+        "caught": 8,
+        "gestureRecall": 0.23529411764705882,
+        "repeats": 0,
+        "late": 0,
+        "repeatsPer100Gestures": 0.0,
+        "medianLatencyMs": 873.496854,
+        "falseActivations": 0,
+        "negativeSeconds": 52.327451664,
+        "falseActivationsPerHour": 0.0,
+        "threshold": 0.8
+      }
+    },
+    {
+      "model": "trees",
+      "condition": "old + new, hard negatives, 3 Nov d held out",
+      "threshold": 0.75,
+      "hardNegatives": 26,
+      "outcome": "evaluationOnly",
+      "verdict": "At its cut-off (0.75) it found 26% of the starts and wrongly flagged 1% of the other moments on recordings it had not seen (balanced accuracy 0.62; at least 0.7 is needed). Record more sessions of the gesture (at least three, in different positions)",
+      "train": [
+        "14 Oct 00:54",
+        "14 Oct 00:55",
+        "14 Oct 00:58",
+        "14 Oct 00:59",
+        "14 Oct 01:00",
+        "14 Oct 01:04",
+        "14 Oct 01:05",
+        "14 Oct 01:13",
+        "17 Oct 12:21",
+        "17 Oct 12:23",
+        "17 Oct 12:25",
+        "17 Oct 12:40",
+        "14 Oct fist",
+        "14 Oct fist",
+        "14 Oct fist",
+        "14 Oct fist",
+        "3 Nov a",
+        "3 Nov b",
+        "3 Nov c"
+      ],
+      "seconds": 191,
+      "crossCheck": {
+        "gestures": 255,
+        "caught": 69,
+        "falseActivationsPerHour": 26.614827944303013
+      },
+      "perRecording": {
+        "827be2d1-6ca3-4865-8155-3773db495a7f": {
+          "recordings": 1,
+          "gestures": 20,
+          "caught": 8,
+          "gestureRecall": 0.4,
+          "repeats": 0,
+          "late": 0,
+          "repeatsPer100Gestures": 0.0,
+          "medianLatencyMs": 885.3768215,
+          "falseActivations": 0,
+          "negativeSeconds": 23.451988191,
+          "falseActivationsPerHour": 0.0,
+          "name": "14 Oct 00:57"
+        },
+        "7b445f79-cd38-41a6-a6f4-afac8c9b1971": {
+          "recordings": 1,
+          "gestures": 14,
+          "caught": 0,
+          "gestureRecall": 0.0,
+          "repeats": 0,
+          "late": 0,
+          "repeatsPer100Gestures": 0.0,
+          "medianLatencyMs": null,
+          "falseActivations": 1,
+          "negativeSeconds": 28.875463473,
+          "falseActivationsPerHour": 124.67332354218935,
+          "name": "17 Oct 12:26"
+        },
+        "5be1c51f-6c3d-499d-82aa-34f938a69157": {
+          "recordings": 1,
+          "gestures": 6,
+          "caught": 2,
+          "gestureRecall": 0.3333333333333333,
+          "repeats": 0,
+          "late": 2,
+          "repeatsPer100Gestures": 0.0,
+          "medianLatencyMs": 878.713049,
+          "falseActivations": 11,
+          "negativeSeconds": 124.06873288,
+          "falseActivationsPerHour": 319.1779192127427,
+          "name": "3 Nov d"
+        }
+      },
+      "oracleNew": {
+        "recordings": 1,
+        "gestures": 6,
+        "caught": 0,
+        "gestureRecall": 0.0,
+        "repeats": 0,
+        "late": 0,
+        "repeatsPer100Gestures": 0.0,
+        "medianLatencyMs": null,
+        "falseActivations": 0,
+        "negativeSeconds": 124.06873288,
+        "falseActivationsPerHour": 0.0,
+        "threshold": 0.95
+      },
+      "oracleOld": {
+        "recordings": 2,
+        "gestures": 34,
+        "caught": 6,
+        "gestureRecall": 0.17647058823529413,
+        "repeats": 0,
+        "late": 0,
+        "repeatsPer100Gestures": 0.0,
+        "medianLatencyMs": 885.3768215,
+        "falseActivations": 0,
+        "negativeSeconds": 52.327451664,
+        "falseActivationsPerHour": 0.0,
+        "threshold": 0.85
       }
     },
     {

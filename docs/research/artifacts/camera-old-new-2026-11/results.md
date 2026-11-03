@@ -8,6 +8,7 @@ Budget: 30 false activations an hour with no gesture under way. Each model at it
 | trees | old + new (4 folds) | 0.95, 0.90, 0.95, 0.90 | 6/58 (10%) | 80 | 0 | 2 | 854 | 5/136 (4%) | 34 | 0 | 0 | 870 |
 | cnn | old only | 0.95 | 35/55 (64%) | 193 | 0 | 16 | 397 | 15/30 (50%) | 144 | 0 | 1 | 539 |
 | cnn | old + new (4 folds) | 0.60, 0.80, 0.70, 0.90 | 37/55 (67%) | 168 | 0 | 8 | 415 | 62/120 (52%) | 144 | 0 | 3 | 495 |
+| trees | old + new, hard negatives (4 folds) | 0.90, 0.80, 0.90, 0.75 | 2/58 (3%) | 88 | 0 | 2 | 879 | 26/136 (19%) | 34 | 0 | 0 | 873 |
 | live cnn | in the app (old sessions only) | 0.75 | 37/55 (67%) | 193 | 0 | 17 | 414 | 19/30 (63%) | 72 | 0 | 0 | 493 |
 
 Old held-out totals of the 4-fold runs add the same two recordings once per fold.
@@ -20,4 +21,5 @@ Old held-out totals of the 4-fold runs add the same two recordings once per fold
 | trees | old + new (4 folds) | some folds none | 0/136 (0%) at 0.95, 0.95, 0.95, 0.95 |
 | cnn | old only | none within budget | 15/30 (50%) at 0.99 |
 | cnn | old + new (4 folds) | some folds none | some folds none |
+| trees | old + new, hard negatives (4 folds) | 5/58 (9%) at 0.75, 0.70, 0.95, 0.95 | 25/136 (18%) at 0.85, 0.90, 0.80, 0.85 |
 | live cnn | in the app (old sessions only) | none within budget | 16/30 (53%) at 0.97 |
