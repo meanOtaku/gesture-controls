@@ -11,6 +11,7 @@ mod actuators;
 mod automation;
 mod calibration;
 mod dataset_files;
+mod detector_events;
 mod gesture_library;
 mod gesture_samples;
 mod head_pose;

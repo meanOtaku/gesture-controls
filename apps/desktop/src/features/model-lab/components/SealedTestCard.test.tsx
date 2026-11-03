@@ -11,11 +11,18 @@ import type { LabelModel } from "../labelModels";
 const dataset = (id: string, name: string, sealed: boolean): DatasetSummary => ({ id, originalFilename: name, importedAt: "2026-10-24T10:00:00Z", label: "pinch", rowCount: 10, sealed });
 const model = { id: "pinch-v3", label: "pinch", state: "approved" } as unknown as LabelModel;
 
+// 4 false activations in 8 minutes with no gesture under way: 30 an hour, the budget; and a repeat and a late one.
+const totals = { recordings: 1, starts: 20, caught: 9, repeats: 1, late: 2, falseActivations: 4, negativeSeconds: 480, falseActivationsPerHour: 30 };
+
 beforeEach(() => {
   invoke.mockImplementation(async (command: string) => {
     if (command === "list_sealed_tests") return [{ testedAt: "2026-10-23T10:00:00Z", version: "pinch-v2", label: "pinch", recordings: ["s1"], starts: 20, caught: 5, falseActivations: 3, minutes: 2 }];
     if (command === "test_model_on_sealed")
-      return { version: "pinch-v3", label: "pinch", threshold: 0.9, testedAt: "2026-10-24T10:00:00Z", recordings: [{ id: "s1", name: "day five", starts: 20, caught: 9, falseActivations: 4, minutes: 2, medianLatencyMs: 905 }], starts: 20, caught: 9, falseActivations: 4, minutes: 2, earlierTests: 1 };
+      return {
+        version: "pinch-v3", label: "pinch", threshold: 0.9, testedAt: "2026-10-24T10:00:00Z", minutes: 2, earlierTests: 1,
+        recordings: [{ id: "s1", name: "day five", labelTiming: "camera", ...totals, minutes: 2, medianLatencyMs: 905 }],
+        events: { ...totals, cohort: "all", byLabelTiming: { camera: totals } },
+      };
     return null;
   });
 });
@@ -38,9 +45,13 @@ describe("SealedTestCard", () => {
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Run the final test" })));
     expect(invoke).toHaveBeenCalledWith("test_model_on_sealed", { versionId: "pinch-v3" });
     const result = screen.getByRole("region", { name: "Final test result" });
-    expect(result).toHaveTextContent("caught 9 of 20 starts (45%), with 4 false activations, 2.0 a minute");
+    expect(result).toHaveTextContent("caught 9 of 20 starts (45%), 30 false activations an hour with no gesture under way; 1 repeat and 2 late (within the 30 an hour budget)");
+    expect(screen.getByRole("row", { name: /day five/ })).toHaveTextContent("camera-timed");
     expect(result).toHaveTextContent("tested 1 time before this");
     expect(result).toHaveTextContent("905 ms");
+    // A test logged before the hour standard says it was counted the old way.
+    fireEvent.click(screen.getByText(/All final tests/));
+    expect(screen.getByText(/1\.5 false a minute of recording \(counted the old way\)/)).toBeInTheDocument();
   });
 });
 

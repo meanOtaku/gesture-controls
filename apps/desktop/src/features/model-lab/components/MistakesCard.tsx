@@ -7,34 +7,46 @@ import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { appNavigation } from "../../../shared/navigation/appNavigation";
 import { negativeSpanFor } from "../../labelling/labellingModel";
+import { cohortNote, describeTotals, type EventTotals, type Judged, type LabelTiming, TIMING_NAME, withinBudget } from "../detectorEvents";
 import type { LabelModel } from "../labelModels";
 
 /** Mirrors `mistakes::Mistake`. */
 export interface Mistake {
-  kind: "missed" | "false";
+  /** "false": fired with no gesture under way. "repeat" and "late": fired during a pinch it had, or had not, caught. */
+  kind: "missed" | "false" | "repeat" | "late";
   atMs: number;
   peak: number;
-  why: "early" | "late" | "repeat" | "elsewhere" | null;
+  why: "early" | "after" | "elsewhere" | null;
   during: string | null;
 }
+
+/** Mirrors `mistakes::RecordingMistakes`. */
+export type RecordingMistakes = EventTotals & { id: string; name: string; role: "test" | "train"; labelTiming: LabelTiming; minutes: number; mistakes: Mistake[] };
 
 /** Mirrors `mistakes::MistakesReport`. */
 export interface MistakesReport {
   version: string;
   label: string;
   threshold: number;
-  recordings: { id: string; name: string; role: "test" | "train"; minutes: number; starts: number; caught: number; mistakes: Mistake[] }[];
+  recordings: RecordingMistakes[];
+  tested: Judged;
+  trained: Judged | null;
+  budgetPerHour: number;
   missing: string[];
 }
 
-type Shown = "all" | "missed" | "false";
+type Shown = "all" | "missed" | "false" | "during";
 
 const WHY: Record<NonNullable<Mistake["why"]>, string> = {
-  early: "too early for a start",
-  late: "too late for a start",
-  repeat: "again, for a start already caught",
-  elsewhere: "nowhere near a start",
+  early: "just before a start",
+  after: "just after a gesture ended",
+  elsewhere: "with no gesture near",
 };
+
+const SHOWN: Record<Shown, string> = { all: "All", missed: "Missed", false: "False", during: "Repeats and late" };
+
+const shows = (shown: Shown, mistake: Mistake) =>
+  shown === "all" || (shown === "during" ? mistake.kind === "repeat" || mistake.kind === "late" : mistake.kind === shown);
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 
@@ -43,10 +55,13 @@ export function describeMistake(mistake: Mistake, threshold: number): string {
   if (mistake.kind === "missed") {
     return mistake.peak >= threshold ? `Missed: reached ${mistake.peak.toFixed(2)} but not at the right time` : `Missed: reached only ${mistake.peak.toFixed(2)} of ${threshold.toFixed(2)}`;
   }
-  return `False: fired ${mistake.why ? WHY[mistake.why] : ""}${mistake.during ? `, during ${mistake.during}` : ""}`;
+  const during = mistake.during ? `, during ${mistake.during}` : "";
+  if (mistake.kind === "repeat") return `Repeat: fired again during a gesture it had caught${during}`;
+  if (mistake.kind === "late") return `Late: fired during a gesture it had not caught in time${during}`;
+  return `False: fired with no gesture under way${mistake.why ? `, ${WHY[mistake.why]}` : ""}${during}`;
 }
 
-/** How many false detections came during each label (or with nothing labelled), most first. */
+/** How many false activations came during each label (or with nothing labelled), most first. */
 export function falseByActivity(report: MistakesReport): [string, number][] {
   const counts = new Map<string, number>();
   for (const recording of report.recordings) {
@@ -86,17 +101,13 @@ export function MistakesCard({ desktopAvailable, models }: { desktopAvailable: b
     }
   };
 
-  const totals = useMemo(() => {
-    if (!report) return null;
-    const all = report.recordings.flatMap((recording) => recording.mistakes);
-    return {
-      starts: report.recordings.reduce((sum, r) => sum + r.starts, 0),
-      caught: report.recordings.reduce((sum, r) => sum + r.caught, 0),
-      missed: all.filter((m) => m.kind === "missed").length,
-      false: all.filter((m) => m.kind === "false").length,
-      minutes: report.recordings.reduce((sum, r) => sum + r.minutes, 0),
-    };
-  }, [report]);
+  const falseCount = useMemo(() => report?.recordings.reduce((sum, r) => sum + r.falseActivations, 0) ?? 0, [report]);
+  const judged = (totals: Judged, where: string) => (
+    <>
+      {where}, {describeTotals(totals)}
+      {withinBudget(totals, report!.budgetPerHour) ? ` (within the ${report!.budgetPerHour} an hour budget)` : ` (over the ${report!.budgetPerHour} an hour budget)`}.
+    </>
+  );
 
   const open = (datasetId: string, mistake: Mistake) =>
     appNavigation.openInLabelling({ datasetId, atMs: mistake.atMs, select: mistake.kind === "false" ? negativeSpanFor(mistake.atMs) : undefined });
@@ -106,7 +117,7 @@ export function MistakesCard({ desktopAvailable, models }: { desktopAvailable: b
       <CardHeader>
         <SectionHeader
           title="Mistakes"
-          description="Every start a model missed and every time it fired when it should not, on the recordings it was tested on. Open one on the Labelling page: fix a wrong label there, or label a false detection's stretch as everyday activity so the next model learns from it."
+          description="Every start a model missed, every time it fired with no gesture under way, and every time it fired again (or too late) during a gesture, on the recordings it was tested on. Open one on the Labelling page: fix a wrong label there, or label a false activation's stretch as everyday activity so the next model learns from it."
         />
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -125,30 +136,32 @@ export function MistakesCard({ desktopAvailable, models }: { desktopAvailable: b
         </div>
         {includeTraining && <p className="field-hint">A model should do well on what it trained on: a mistake there usually means a wrong label.</p>}
         {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
-        {report && totals && (
+        {report && (
           <section aria-label="Mistakes found" className="flex flex-col gap-3 text-sm">
             <p>
-              <strong>{report.label}</strong> ({report.version}, threshold {report.threshold.toFixed(2)}): caught {totals.caught} of {totals.starts} starts; {totals.missed} missed and {totals.false} false over {totals.minutes.toFixed(1)} minutes.
+              <strong>{report.label}</strong> ({report.version}, threshold {report.threshold.toFixed(2)}): {judged(report.tested, "on the recordings it was tested on")}
+              {report.trained ? <> {judged(report.trained, "On those it trained on")}</> : null}
               {report.missing.length > 0 ? ` ${report.missing.length} of its recordings are no longer in Model Lab.` : ""}
             </p>
-            {totals.false > 0 && (
+            {cohortNote(report.tested) && <p className="hint" aria-label="Label timing">{cohortNote(report.tested)}</p>}
+            {falseCount > 0 && (
               <p className="hint">
-                False detections came during: {falseByActivity(report).map(([during, count]) => `${during} (${count})`).join(", ")}.
+                False activations came during: {falseByActivity(report).map(([during, count]) => `${during} (${count})`).join(", ")}.
               </p>
             )}
             <div className="flex gap-2" role="group" aria-label="Show">
-              {(["all", "missed", "false"] as const).map((kind) => (
+              {(["all", "missed", "false", "during"] as const).map((kind) => (
                 <Button key={kind} type="button" size="sm" variant={shown === kind ? "default" : "outline"} onClick={() => setShown(kind)}>
-                  {kind === "all" ? "All" : kind === "missed" ? "Missed" : "False"}
+                  {SHOWN[kind]}
                 </Button>
               ))}
             </div>
             {report.recordings.map((recording) => {
-              const listed = recording.mistakes.filter((mistake) => shown === "all" || mistake.kind === shown);
+              const listed = recording.mistakes.filter((mistake) => shows(shown, mistake));
               return (
                 <details key={recording.id} open={report.recordings.length <= 3}>
                   <summary>
-                    {recording.name} <small className="text-muted-foreground">({recording.role === "test" ? "tested on" : "trained on"}; caught {recording.caught} of {recording.starts}, {recording.mistakes.filter((m) => m.kind === "false").length} false)</small>
+                    {recording.name} <small className="text-muted-foreground">({recording.role === "test" ? "tested on" : "trained on"}, {TIMING_NAME[recording.labelTiming]}; caught {recording.caught} of {recording.starts}, {recording.falseActivations} false, {recording.repeats} repeat{recording.repeats === 1 ? "" : "s"}, {recording.late} late)</small>
                   </summary>
                   {listed.length === 0 ? (
                     <p className="hint">Nothing to show.</p>

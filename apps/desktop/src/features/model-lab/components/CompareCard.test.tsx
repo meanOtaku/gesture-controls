@@ -12,15 +12,20 @@ afterEach(() => {
 });
 
 const model = (id: string, label = "pinch"): LabelModel => ({ id, label, state: "draft", deployable: true, imported: false, modelSha256: null, createdAt: "2026-10-20", active: false });
-const sweep = (version: string) => ({ version, label: "pinch", threshold: 0.65, recordings: 1, points: [{ threshold: 0.65, starts: 10, caught: 5, falseActivations: 2, minutes: 2 }] });
+const judged = (caught: number, falseActivations: number) => ({
+  recordings: 1, starts: 10, caught, repeats: 0, late: 0, falseActivations, negativeSeconds: 360, falseActivationsPerHour: falseActivations * 10,
+  cohort: "all" as const, byLabelTiming: {},
+});
+const sweep = (version: string) => ({ version, label: "pinch", threshold: 0.65, recordings: 1, budgetPerHour: 30, points: [{ threshold: 0.65, ...judged(5, 2) }] });
 const comparison: Comparison = {
   models: [sweep("v1"), sweep("v2")],
-  recordings: [{ id: "r4", name: "thursday", minutes: 2, starts: 10, caught: [5, 7], falseActivations: [2, 4] }],
+  recordings: [{ id: "r4", name: "thursday", minutes: 2, labelTiming: "camera", starts: 10, caught: [5, 7], falseActivations: [2, 4], negativeSeconds: [360, 360] }],
+  totals: [judged(5, 2), judged(7, 4)],
 };
 
 describe("comparing models", () => {
   it("compares models of one label on the recordings none trained on", async () => {
-    invoke.mockImplementation(async (command: string) => (command === "compare_models" ? comparison : [{ testedAt: "2026-10-22T10:00:00Z", version: "v2", label: "pinch", recordings: ["s"], starts: 20, caught: 9, falseActivations: 3, minutes: 3 }]));
+    invoke.mockImplementation(async (command: string) => (command === "compare_models" ? comparison : [{ testedAt: "2026-10-22T10:00:00Z", version: "v2", label: "pinch", recordings: ["s"], starts: 20, caught: 9, falseActivations: 3, minutes: 3, negativeSeconds: 360 }]));
     render(<CompareCard desktopAvailable models={[model("v1"), model("v2"), model("f1", "fist")]} />);
     fireEvent.click(screen.getByRole("checkbox", { name: "Compare v1" }));
     // Only models of the same label can join.
@@ -32,6 +37,7 @@ describe("comparing models", () => {
     const row = within(result).getByRole("row", { name: /thursday/ });
     expect(row).toHaveTextContent("5 (50%) · 2");
     expect(row).toHaveTextContent("7 (70%) · 4");
-    await waitFor(() => expect(within(result).getByText(/Final tests: v2 caught 9 of 20 with 1\.0 false a minute/)).toBeInTheDocument());
+    expect(within(result).getByRole("row", { name: /All/ })).toHaveTextContent("50% · 20/h70% · 40/h");
+    await waitFor(() => expect(within(result).getByText(/Final tests: v2 caught 9 of 20 with 30 false an hour/)).toBeInTheDocument());
   });
 });

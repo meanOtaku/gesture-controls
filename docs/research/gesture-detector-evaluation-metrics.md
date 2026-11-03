@@ -2,7 +2,7 @@
 
 This project evaluates a pinch detector as a **continuous event detector**, not as a per-window classifier. ROC-AUC and window accuracy remain diagnostic values, but they are not release metrics.
 
-The trainer implements this standard (`tools/label-trainer/src/label_trainer/label_train.py`: `detections`, `cohort`, `budget_threshold`, `verdict`). Where this page and the code disagree, the code is wrong.
+The trainer implements this standard (`tools/label-trainer/src/label_trainer/label_train.py`: `detections`, `cohort`, `budget_threshold`, `verdict`), and so do Model Lab's own replays, the Threshold card, Mistakes, Compare models and the final test (`apps/desktop/src-tauri/src/detector_events.rs`: `count`, `judge`). Where this page and the code disagree, the code is wrong.
 
 ## Decision flow
 
@@ -112,7 +112,3 @@ What it shows:
 ## Legacy model comparison
 
 Old and new models are comparable only when their scores are replayed through the current event accounting on the same recordings. A model with only aggregate AUC or window metrics keeps those as history, but is not ranked against a new one by the headline metrics until it is replayed. Models trained before this standard state `targetFalseActivationsPerMinute` in their manifest's provenance. Models trained under it state `falseActivationsBudgetPerHour` and `evaluationCohort`.
-
-## Not yet aligned
-
-Model Lab's Threshold card and Mistakes list replay models in the desktop (`mistakes.rs`) and still count false alarms per minute of recording, without gesture episodes. Read them as exploration until they follow this page.

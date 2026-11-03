@@ -460,9 +460,15 @@ is the honest one: a model run over recordings that took no part in any of that.
   model changes.
 - It reports, overall and per recording:
   - how many of the gesture's starts it caught (a detection 0.68 to 1.28 s after a start);
-  - how many times a minute it fired with no start;
-  - the median delay.
-- Starts are counted as training counts them, by hand labels where you gave them.
+  - its false activations: times it fired with no gesture under way, per hour of that time, against the budget of 30 an hour;
+  - repeats (it fired again during a gesture it caught) and late ones (it fired during a gesture it did not catch in time),
+    which are not false activations;
+  - the median delay, and how each recording's labels were timed (camera-timed or estimated from motion).
+- Starts are counted as training counts them, by hand labels where you gave them, and every detection as the
+  [evaluation standard](research/gesture-detector-evaluation-metrics.md) counts it. With both camera-timed and estimated
+  sealed recordings, the totals are judged on the camera-timed ones when they hold at least 20 gestures and a minute with
+  none under way; the others are shown apart.
+- Tests logged before this way of counting say their false activations a minute of recording, "counted the old way".
 - Every test is logged, and the card says how many times the sealed recordings were tested before. Test sparingly: each look
   makes them a little less untouched. Once you have changed the model because of what the final test said, seal a new day
   for the next one.
@@ -550,33 +556,48 @@ Everything shown comes only from recordings the model never trained on. An impor
 
 #### Mistakes (Model Lab)
 
-**Mistakes** lists every start a model missed and every time it fired when it should not, on the recordings it was tested on
-(tick **Also the recordings it trained on** for those too: a mistake there usually means a wrong label).
+**Mistakes** lists every start a model missed, every time it fired with no gesture under way, and every time it fired again or
+too late during a gesture, on the recordings it was tested on (tick **Also the recordings it trained on** for those too: a
+mistake there usually means a wrong label).
 
-- Each model is run over the recordings as the app runs it live, and its detections are matched to the starts as in the
-  final test.
-- A miss says how high the score got (short of the threshold, or high enough but at the wrong time). A false detection says
-  whether it was too early or too late for a start nearby, a second detection of a start already caught, or nowhere near one,
-  and which label was on at the moment it was judging (0.88 s before it).
-- Above the list, the false detections are counted by what was going on, so you can see that, say, most came while typing.
-- **Open** shows the moment on the Labelling page. For a false detection, the stretch that makes it a training example is
+- Each model is run over the recordings as the app runs it live, and each detection is counted as the
+  [evaluation standard](research/gesture-detector-evaluation-metrics.md) and the final test count it. A gesture is under way
+  from its start, through the parts of it that follow without a gap (`pinch_in`, then `pinch_hold` and `pinch_out`), and at
+  least 1.28 s. A detection 0.68 to 1.28 s after a start catches it; another while that gesture is under way is a
+  **repeat**; one during a gesture it did not catch in time is **late** (the gesture is missed); any other is **false**.
+- The summary gives the starts caught, the false activations an hour with no gesture under way (against the budget of 30 an
+  hour), and the repeats and late ones. With both camera-timed and estimated recordings it is judged on the camera-timed
+  ones when they hold at least 20 gestures and a minute with none under way, and the others are shown apart. Each recording
+  says how its labels were timed.
+- A miss says how high the score got (short of the threshold, or high enough but at the wrong time). A false activation says
+  whether it came just before a start, just after a gesture ended (often the hand opening: a real second action), or with
+  no gesture near, and which label was on at the moment it was judging (0.88 s before it).
+- Above the list, the false activations are counted by what was going on, so you can see that, say, most came while typing.
+- **All**, **Missed**, **False** and **Repeats and late** choose what is listed.
+- **Open** shows the moment on the Labelling page. For a false activation, the stretch that makes it a training example is
   selected, ready to label as everyday activity.
-- A detection judging a stretch left out on the Labelling page is not counted.
+- A detection judging a stretch left out on the Labelling page is not counted, nor one inside a label the model's training
+  excluded, and neither stretch counts as time with no gesture under way.
 
 #### Threshold (Model Lab)
 
 **Threshold** shows what a model's threshold trades: at each threshold from 0.30 to 0.95, the share of starts it catches on
-its test recordings against its false alarms a minute, as a curve with its own threshold ringed. The slider shows the
-numbers at any one, beside those at its own. The curve comes from one run of the model's scores through its detection rule at
-each threshold. The threshold is part of a trained model: to use another, train again.
+its test recordings against its false activations an hour with no gesture under way, as a curve with its own threshold
+ringed. The dashed line is the release budget, 30 an hour: a threshold right of it fires too often to go live. The slider
+shows the numbers at any one, beside those at its own, with its repeats and late detections (counted apart, not as false
+activations) and whether it is within the budget. Detections are counted as on the Mistakes card. With both camera-timed and
+estimated test recordings, the curve is the camera-timed ones' when they hold at least 20 gestures and a minute with none
+under way, and the estimated ones' numbers are given under it. The curve comes from one run of the model's scores through its
+detection rule at each threshold. The threshold is part of a trained model: to use another, train again.
 
 #### Compare models (Model Lab)
 
 **Compare models** puts two to four models of one label side by side on the same recordings: ones that none of them trained
 on. Each model was tested on its own recordings when it was trained, so those scores cannot be compared; these can.
 
-- A table gives each recording's starts and, for each model, how many it caught and how many false alarms it made, at its own
-  threshold, with totals.
+- A table gives each recording's starts, how its labels were timed and, for each model, how many it caught and how many false
+  activations (with no gesture under way) it made, at its own threshold, with totals per hour, counted as on the Mistakes
+  card.
 - Their threshold curves are drawn together, and any final tests of them are listed.
 - If no recording is new to all of them, it says so: compare them on a sealed day with the final test instead.
 

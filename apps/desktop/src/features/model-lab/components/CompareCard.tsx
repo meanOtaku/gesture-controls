@@ -6,13 +6,16 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { formatTime, modelName, newestFirst, type LabelModel } from "../labelModels";
-import type { SealedTestLog } from "./SealedTestCard";
-import { caughtShare, falsePerMinute, pointAt, seriesColor, TradeOff, type ThresholdSweep } from "./ThresholdCard";
+import { cohortNote, type Judged, type LabelTiming, perHour, TIMING_NAME } from "../detectorEvents";
+import { loggedFalseRate, type SealedTestLog } from "./SealedTestCard";
+import { caughtShare, falsePerHour, pointAt, seriesColor, TradeOff, type ThresholdSweep } from "./ThresholdCard";
 
 /** Mirrors `mistakes::Comparison`. */
 export interface Comparison {
   models: ThresholdSweep[];
-  recordings: { id: string; name: string; minutes: number; starts: number; caught: number[]; falseActivations: number[] }[];
+  recordings: { id: string; name: string; minutes: number; labelTiming: LabelTiming; starts: number; caught: number[]; falseActivations: number[]; negativeSeconds: number[] }[];
+  /** Each model at its own threshold over all the recordings, judged on the camera-timed ones when there are enough. */
+  totals: Judged[];
 }
 
 const pct = (part: number, whole: number) => (whole > 0 ? `${Math.round((part / whole) * 100)}%` : "–");
@@ -50,10 +53,7 @@ export function CompareCard({ desktopAvailable, models }: { desktopAvailable: bo
   };
 
   const compared = comparison?.models ?? [];
-  const totals = compared.map((_, i) => ({
-    caught: comparison!.recordings.reduce((sum, r) => sum + r.caught[i], 0),
-    falseActivations: comparison!.recordings.reduce((sum, r) => sum + r.falseActivations[i], 0),
-  }));
+  const totals = comparison?.totals ?? [];
   const starts = comparison?.recordings.reduce((sum, r) => sum + r.starts, 0) ?? 0;
   const minutes = comparison?.recordings.reduce((sum, r) => sum + r.minutes, 0) ?? 0;
 
@@ -87,7 +87,7 @@ export function CompareCard({ desktopAvailable, models }: { desktopAvailable: bo
         {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
         {comparison && (
           <section aria-label="Comparison" className="flex flex-col gap-3">
-            <p className="hint">On {comparison.recordings.length} recording{comparison.recordings.length === 1 ? "" : "s"} none of them trained on, {starts} starts over {minutes.toFixed(1)} minutes, each at its own threshold.</p>
+            <p className="hint">On {comparison.recordings.length} recording{comparison.recordings.length === 1 ? "" : "s"} none of them trained on, {starts} starts over {minutes.toFixed(1)} minutes, each at its own threshold. False activations are those with no gesture under way, counted an hour of that time.</p>
             <table className="compare-table">
               <thead>
                 <tr>
@@ -99,7 +99,7 @@ export function CompareCard({ desktopAvailable, models }: { desktopAvailable: bo
               <tbody>
                 {comparison.recordings.map((row) => (
                   <tr key={row.id}>
-                    <td>{row.name}</td>
+                    <td>{row.name} <small className="text-muted-foreground">({TIMING_NAME[row.labelTiming]})</small></td>
                     <td>{row.starts}</td>
                     {row.caught.map((caught, i) => {
                       const best = Math.max(...row.caught) === caught && row.caught.filter((c) => c === caught).length === 1;
@@ -108,12 +108,13 @@ export function CompareCard({ desktopAvailable, models }: { desktopAvailable: bo
                   </tr>
                 ))}
                 <tr className="compare-total">
-                  <th>All</th>
-                  <th>{starts}</th>
-                  {totals.map((total, i) => <th key={i}>{pct(total.caught, starts)} · {(minutes > 0 ? total.falseActivations / minutes : 0).toFixed(1)}/min</th>)}
+                  <th>{totals[0]?.cohort === "camera" ? "Camera-timed" : "All"}</th>
+                  <th>{totals[0]?.starts ?? starts}</th>
+                  {totals.map((total, i) => <th key={i}>{pct(total.caught, total.starts)} · {perHour(total)}/h</th>)}
                 </tr>
               </tbody>
             </table>
+            {totals[0] && cohortNote(totals[0]) && <p className="hint">{cohortNote(totals[0])}</p>}
             <TradeOff sweeps={compared} />
             <ul className="flex flex-wrap gap-4" aria-label="At their own thresholds">
               {compared.map((model, i) => {
@@ -121,7 +122,7 @@ export function CompareCard({ desktopAvailable, models }: { desktopAvailable: bo
                 return (
                   <li key={model.version} style={{ color: seriesColor(i) }}>
                     <strong>{model.version}</strong>: threshold {model.threshold.toFixed(2)}
-                    {own ? `, ${Math.round(caughtShare(own) * 100)}% at ${falsePerMinute(own).toFixed(1)} false a minute` : ""}
+                    {own ? `, ${Math.round(caughtShare(own) * 100)}% at ${Math.round(falsePerHour(own))} false an hour` : ""}
                   </li>
                 );
               })}
@@ -129,7 +130,7 @@ export function CompareCard({ desktopAvailable, models }: { desktopAvailable: bo
             <p className="hint">
               {finals.length === 0
                 ? "No final test of these models yet."
-                : `Final tests: ${finals.map((entry) => `${entry.version} caught ${entry.caught} of ${entry.starts} with ${(entry.minutes > 0 ? entry.falseActivations / entry.minutes : 0).toFixed(1)} false a minute (${entry.testedAt.slice(0, 10)})`).join("; ")}.`}
+                : `Final tests: ${finals.map((entry) => `${entry.version} caught ${entry.caught} of ${entry.starts} with ${loggedFalseRate(entry)} (${entry.testedAt.slice(0, 10)})`).join("; ")}.`}
             </p>
           </section>
         )}

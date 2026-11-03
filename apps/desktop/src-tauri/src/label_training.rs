@@ -214,17 +214,11 @@ fn recordings_ids(recordings: &[RecordingInfo]) -> Vec<String> {
 fn label_timing_of(ids: &[String], datasets: &[DatasetSummary]) -> BTreeMap<String, &'static str> {
     ids.iter()
         .filter_map(|id| {
-            let timing = match datasets
-                .iter()
-                .find(|d| &d.id == id)?
-                .labels_from
-                .as_deref()?
-            {
-                "camera" => "camera",
-                "motion" => "estimated",
-                _ => return None,
-            };
-            Some((id.clone(), timing))
+            let labels_from = datasets.iter().find(|d| &d.id == id)?.labels_from.as_deref();
+            match crate::detector_events::label_timing(labels_from) {
+                "unknown" => None,
+                timing => Some((id.clone(), timing)),
+            }
         })
         .collect()
 }

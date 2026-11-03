@@ -1,34 +1,40 @@
-//! A model's mistakes, one by one: every start of its gesture it missed and every time it fired when it should not, on the
-//! recordings it was tested on (or trained on), so each can be opened on the Labelling page and looked at.
+//! A model's mistakes, one by one: every start of its gesture it missed, every time it fired with no gesture under way, and
+//! every time it fired again (or too late) during a gesture, on the recordings it was tested on (or trained on), so each can
+//! be opened on the Labelling page and looked at. Also the threshold trade-off and model comparison.
 //!
-//! The model runs over each recording as the app runs it live (`labelling::replay`), and its detections are matched to the
-//! starts exactly as in the final test (`sealed_test::assign`).
+//! The model runs over each recording as the app runs it live (`labelling::replay`), and its detections are counted exactly
+//! as in the final test and the trainer (`detector_events::count`): false activations per hour with no gesture under way,
+//! judged on the camera-timed recordings when there are enough of them (`detector_events::judge`).
 
 use serde::Serialize;
 use tauri::AppHandle;
 use tauri::Manager;
 
 use crate::dataset_files;
+use crate::detector_events::{self, EventTotals, Judged, Kind};
 use crate::labelling;
 use crate::model_lab;
 use crate::sealed_test;
 
-/// A false activation this close before a start rose too early for it, and this long after, too late.
+/// A false activation this close before a start rose too early for it, and this long after a gesture ended, as it ended
+/// (often the hand opening).
 const NEAR_BEFORE_MS: f64 = 500.0;
-const NEAR_AFTER_MS: f64 = 2500.0;
+const AFTER_END_MS: f64 = 2000.0;
 /// Training takes a decision 880 ms after the moment it describes: what was going on then is what fooled the model.
 const DECISION_DELAY_MS: f64 = 880.0;
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Mistake {
-    /// "missed": a start no detection caught. "false": a detection that caught no start.
+    /// "missed": a start no detection caught. "false": a detection with no gesture under way. "repeat": another detection
+    /// during a gesture already caught. "late": a detection during a gesture it had not caught in time (that start is
+    /// "missed" too).
     pub kind: &'static str,
-    /// The start that was missed, or when the false detection rose (ms after the recording's first sample).
+    /// The start that was missed, or when the detection rose (ms after the recording's first sample).
     pub at_ms: f64,
-    /// The highest score the model reached: while it should have caught a missed start, or during a false detection.
+    /// The highest score the model reached: while it should have caught a missed start, or during the detection.
     pub peak: f64,
-    /// For a false detection: "early" or "late" (for a start nearby), "repeat" (a start already caught) or "elsewhere".
+    /// For a false activation: "early" (just before a start), "after" (just after a gesture ended) or "elsewhere".
     pub why: Option<&'static str>,
     /// The label in effect at the moment the model was judging; None where nothing was labelled.
     pub during: Option<String>,
@@ -41,9 +47,11 @@ pub struct RecordingMistakes {
     pub name: String,
     /// "test" or "train": what the model used this recording for.
     pub role: &'static str,
+    /// "camera", "estimated" or "unknown" (`detector_events::label_timing`).
+    pub label_timing: &'static str,
     pub minutes: f64,
-    pub starts: usize,
-    pub caught: usize,
+    #[serde(flatten)]
+    pub events: EventTotals,
     pub mistakes: Vec<Mistake>,
 }
 
@@ -54,6 +62,10 @@ pub struct MistakesReport {
     pub label: String,
     pub threshold: f64,
     pub recordings: Vec<RecordingMistakes>,
+    /// The totals over the recordings it was tested on, and (when asked) over those it trained on.
+    pub tested: Judged,
+    pub trained: Option<Judged>,
+    pub budget_per_hour: f64,
     /// Recordings the model used that are no longer in Model Lab.
     pub missing: Vec<String>,
 }
@@ -71,52 +83,55 @@ fn label_at(holds: &[dataset_files::Hold], at: f64) -> Option<String> {
     holds.iter().find(|hold| (hold.start_ms..=hold.end_ms).contains(&at)).map(|hold| hold.label.clone())
 }
 
-/// The mistakes in one recording: `starts` are the gesture's starts, `holds` every labelled stretch, `replay` the run.
-fn mistakes_in(starts: &[f64], holds: &[dataset_files::Hold], replay: &labelling::ModelReplay) -> (usize, Vec<Mistake>) {
-    let counted = sealed_test::outside_left_out(&replay.detections.iter().map(|d| d.start_ms).collect::<Vec<_>>(), holds);
-    let detections: Vec<&labelling::ManualInterval> = replay.detections.iter().filter(|d| counted.contains(&d.start_ms)).collect();
-    let rises: Vec<f64> = detections.iter().map(|d| d.start_ms).collect();
-    let assigned = sealed_test::assign(&rises, starts);
-    let caught: Vec<bool> = (0..starts.len()).map(|i| assigned.contains(&Some(i))).collect();
+/// What one recording's replay holds for `target`: its starts, every labelled stretch, the labels training excluded, and
+/// the stretch the model judged.
+struct Recording<'a> {
+    target: &'a str,
+    starts: &'a [f64],
+    holds: &'a [dataset_files::Hold],
+    excluded: &'a [String],
+    span: (f64, f64),
+}
+
+/// The mistakes in one recording, and its totals.
+fn mistakes_in(recording: &Recording, replay: &labelling::ModelReplay) -> (EventTotals, Vec<Mistake>) {
+    let Recording { target, starts, holds, excluded, span } = *recording;
+    let rises: Vec<f64> = replay.detections.iter().map(|d| d.start_ms).collect();
+    let counted = detector_events::count(&rises, starts, holds, target, excluded, span);
     let mut mistakes = Vec::new();
     for (i, &start) in starts.iter().enumerate() {
-        if !caught[i] {
+        if !counted.caught[i] {
             mistakes.push(Mistake {
                 kind: "missed",
                 at_ms: start,
-                peak: peak_between(&replay.times_ms, &replay.scores, start, start + 1280.0),
+                peak: peak_between(&replay.times_ms, &replay.scores, start, start + sealed_test::CATCH_TO_MS),
                 why: None,
                 during: Some(replay.label.clone()),
             });
         }
     }
-    for (detection, start) in detections.iter().zip(&assigned) {
-        if start.is_some() {
-            continue;
-        }
-        let rise = detection.start_ms;
-        let nearest = starts
-            .iter()
-            .enumerate()
-            .filter(|(_, s)| (-NEAR_BEFORE_MS..=NEAR_AFTER_MS).contains(&(rise - **s)))
-            .min_by(|a, b| (rise - a.1 - DECISION_DELAY_MS).abs().total_cmp(&(rise - b.1 - DECISION_DELAY_MS).abs()));
-        let why = match nearest {
-            None => "elsewhere",
-            Some((i, s)) if caught[i] && (680.0..=1280.0).contains(&(rise - s)) => "repeat",
-            Some((_, s)) if rise - s < 680.0 => "early",
-            Some((i, _)) if caught[i] => "repeat",
-            Some(_) => "late",
+    for &(rise, kind) in &counted.detections {
+        let end = replay.detections.iter().find(|d| d.start_ms == rise).map_or(rise, |d| d.end_ms.max(rise));
+        let peak = peak_between(&replay.times_ms, &replay.scores, rise, end);
+        let (kind, why, during) = match kind {
+            Kind::Catch(_) => continue,
+            Kind::Repeat => ("repeat", None, label_at(holds, rise)),
+            Kind::Late => ("late", None, label_at(holds, rise)),
+            Kind::False => {
+                let why = if starts.iter().any(|s| (0.0..=NEAR_BEFORE_MS).contains(&(s - rise))) {
+                    "early"
+                } else if counted.under_way.iter().any(|(_, to, _)| (0.0..=AFTER_END_MS).contains(&(rise - to))) {
+                    "after"
+                } else {
+                    "elsewhere"
+                };
+                ("false", Some(why), label_at(holds, rise - DECISION_DELAY_MS).or_else(|| label_at(holds, rise)))
+            }
         };
-        mistakes.push(Mistake {
-            kind: "false",
-            at_ms: rise,
-            peak: peak_between(&replay.times_ms, &replay.scores, rise, detection.end_ms.max(rise)),
-            why: Some(why),
-            during: label_at(holds, rise - DECISION_DELAY_MS),
-        });
+        mistakes.push(Mistake { kind, at_ms: rise, peak, why, during });
     }
     mistakes.sort_by(|a, b| a.at_ms.total_cmp(&b.at_ms));
-    (caught.iter().filter(|c| **c).count(), mistakes)
+    (counted.totals, mistakes)
 }
 
 /// Every mistake model version `version_id` makes on the recordings it was tested on, and with `include_training` on those
@@ -125,7 +140,7 @@ fn mistakes_in(starts: &[f64], holds: &[dataset_files::Hold], replay: &labelling
 pub async fn model_mistakes(version_id: String, include_training: bool, app: AppHandle) -> Result<MistakesReport, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join(model_lab::MODEL_LAB_DIR_NAME);
     let datasets_dir = model_lab::datasets_dir(&app)?;
-    let index = model_lab::load_index(&app);
+    let index = model_lab::described_index(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let (registry, version) = sealed_test::version_for_test(&dir, &version_id)?;
         let model_lab_core::ModelOrigin::Trained { run_id } = &version.origin else {
@@ -136,6 +151,7 @@ pub async fn model_mistakes(version_id: String, include_training: bool, app: App
             .get(run_id)
             .and_then(|run| registry.snapshots.get(&run.snapshot_id))
             .ok_or("the training run behind this model is no longer in the registry")?;
+        let excluded = sealed_test::excluded_labels(&registry, &version);
         let mut wanted: Vec<(String, &'static str)> = snapshot.split.evaluation.iter().map(|id| (id.to_string(), "test")).collect();
         if include_training {
             wanted.extend(snapshot.split.train.iter().map(|id| (id.to_string(), "train")));
@@ -153,18 +169,32 @@ pub async fn model_mistakes(version_id: String, include_training: bool, app: App
             let (holds, _) = dataset_files::holds(&pair)?;
             let model = label_inference::load_version(&version, &dir)?;
             let replay = labelling::replay(&pair, vec![model])?.into_iter().next().ok_or("the model gave no result")?;
-            let (caught, mistakes) = mistakes_in(&starts, &holds, &replay);
+            let span = sealed_test::judged_span(&replay, duration_ms);
+            let (events, mistakes) = mistakes_in(&Recording { target: &label, starts: &starts, holds: &holds, excluded: &excluded, span }, &replay);
             recordings.push(RecordingMistakes {
                 id,
                 name: dataset.original_filename.clone(),
                 role,
+                label_timing: detector_events::label_timing(dataset.labels_from.as_deref()),
                 minutes: duration_ms / 60_000.0,
-                starts: starts.len(),
-                caught,
+                events,
                 mistakes,
             });
         }
-        Ok(MistakesReport { version: version_id, label, threshold: version.thresholds.activation, recordings, missing })
+        let judged = |role: &str| {
+            detector_events::judge(&recordings.iter().filter(|r| r.role == role).map(|r| (r.label_timing, r.events.clone())).collect::<Vec<_>>())
+        };
+        let (tested, trained) = (judged("test"), include_training.then(|| judged("train")));
+        Ok(MistakesReport {
+            version: version_id,
+            label,
+            threshold: version.thresholds.activation,
+            recordings,
+            tested,
+            trained,
+            budget_per_hour: detector_events::FALSE_ACTIVATIONS_BUDGET_PER_HOUR,
+            missing,
+        })
     })
     .await
     .map_err(|e| e.to_string())?
@@ -174,10 +204,9 @@ pub async fn model_mistakes(version_id: String, include_training: bool, app: App
 #[serde(rename_all = "camelCase")]
 pub struct ThresholdPoint {
     pub threshold: f64,
-    pub starts: usize,
-    pub caught: usize,
-    pub false_activations: usize,
-    pub minutes: f64,
+    /// Judged on the camera-timed recordings when there are enough of them; each kind of label timing apart too.
+    #[serde(flatten)]
+    pub events: Judged,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -189,15 +218,36 @@ pub struct ThresholdSweep {
     pub threshold: f64,
     pub points: Vec<ThresholdPoint>,
     pub recordings: usize,
+    /// The release gate's false-activation budget, per hour with no gesture under way.
+    pub budget_per_hour: f64,
 }
 
-/// How many starts model version `version_id` catches, and how many false activations it makes, at each threshold from
-/// 0.30 to 0.95, on the recordings it was tested on: the trade-off its threshold picks a point on.
+/// Each recording's totals at each threshold of a replay's sweep, by label timing.
+type SweepRows = Vec<(f64, Vec<(&'static str, EventTotals)>)>;
+
+/// Adds one recording's sweep to `rows`.
+fn add_sweep(rows: &mut SweepRows, timing: &'static str, recording: &Recording, replay: &labelling::ModelReplay) {
+    for (i, point) in replay.sweep.iter().enumerate() {
+        let counted = detector_events::count(&point.rises_ms, recording.starts, recording.holds, recording.target, recording.excluded, recording.span);
+        if rows.len() <= i {
+            rows.push((point.threshold, Vec::new()));
+        }
+        rows[i].1.push((timing, counted.totals));
+    }
+}
+
+fn sweep_points(rows: &SweepRows) -> Vec<ThresholdPoint> {
+    rows.iter().map(|(threshold, per_recording)| ThresholdPoint { threshold: *threshold, events: detector_events::judge(per_recording) }).collect()
+}
+
+/// How many starts model version `version_id` catches, and how many false activations an hour with no gesture under way it
+/// makes, at each threshold from 0.30 to 0.95, on the recordings it was tested on: the trade-off its threshold picks a point
+/// on.
 #[tauri::command]
 pub async fn threshold_sweep(version_id: String, app: AppHandle) -> Result<ThresholdSweep, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join(model_lab::MODEL_LAB_DIR_NAME);
     let datasets_dir = model_lab::datasets_dir(&app)?;
-    let index = model_lab::load_index(&app);
+    let index = model_lab::described_index(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let (registry, version) = sealed_test::version_for_test(&dir, &version_id)?;
         let model_lab_core::ModelOrigin::Trained { run_id } = &version.origin else {
@@ -208,36 +258,35 @@ pub async fn threshold_sweep(version_id: String, app: AppHandle) -> Result<Thres
             .get(run_id)
             .and_then(|run| registry.snapshots.get(&run.snapshot_id))
             .ok_or("the training run behind this model is no longer in the registry")?;
+        let excluded = sealed_test::excluded_labels(&registry, &version);
         let label = version.label.to_string();
-        let mut points: Vec<ThresholdPoint> = Vec::new();
+        let mut rows = SweepRows::new();
         let mut recordings = 0;
         for id in snapshot.split.evaluation.iter().map(ToString::to_string) {
-            if !index.datasets.iter().any(|d| d.id == id) {
+            let Some(dataset) = index.datasets.iter().find(|d| d.id == id) else {
                 continue;
-            }
+            };
             recordings += 1;
             let pair = labelling::pair_at(&model_lab::dataset_csv_path(&datasets_dir, &id))?;
             let (starts, duration_ms) = sealed_test::starts_of(&pair, &label)?;
             let (holds, _) = dataset_files::holds(&pair)?;
             let model = label_inference::load_version(&version, &dir)?;
             let replay = labelling::replay(&pair, vec![model])?.into_iter().next().ok_or("the model gave no result")?;
-            for (i, point) in replay.sweep.iter().enumerate() {
-                let rises = sealed_test::outside_left_out(&point.rises_ms, &holds);
-                let caught = sealed_test::assign(&rises, &starts).iter().filter(|a| a.is_some()).count();
-                if points.len() <= i {
-                    points.push(ThresholdPoint { threshold: point.threshold, starts: 0, caught: 0, false_activations: 0, minutes: 0.0 });
-                }
-                let total = &mut points[i];
-                total.starts += starts.len();
-                total.caught += caught;
-                total.false_activations += rises.len() - caught;
-                total.minutes += duration_ms / 60_000.0;
-            }
+            let span = sealed_test::judged_span(&replay, duration_ms);
+            let recording = Recording { target: &label, starts: &starts, holds: &holds, excluded: &excluded, span };
+            add_sweep(&mut rows, detector_events::label_timing(dataset.labels_from.as_deref()), &recording, &replay);
         }
         if recordings == 0 {
             return Err("none of the recordings this model was tested on is in Model Lab any more".into());
         }
-        Ok(ThresholdSweep { version: version_id, label, threshold: version.thresholds.activation, points, recordings })
+        Ok(ThresholdSweep {
+            version: version_id,
+            label,
+            threshold: version.thresholds.activation,
+            points: sweep_points(&rows),
+            recordings,
+            budget_per_hour: detector_events::FALSE_ACTIVATIONS_BUDGET_PER_HOUR,
+        })
     })
     .await
     .map_err(|e| e.to_string())?
@@ -249,10 +298,14 @@ pub struct ComparedRecording {
     pub id: String,
     pub name: String,
     pub minutes: f64,
+    /// "camera", "estimated" or "unknown".
+    pub label_timing: &'static str,
     pub starts: usize,
-    /// Caught and false activations for each model, in the order asked, at its own threshold.
+    /// Caught and false activations (with no gesture under way) for each model, in the order asked, at its own threshold.
     pub caught: Vec<usize>,
     pub false_activations: Vec<usize>,
+    /// Each model's time with no gesture under way here (it differs only by the labels each model's training excluded).
+    pub negative_seconds: Vec<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -260,6 +313,8 @@ pub struct ComparedRecording {
 pub struct Comparison {
     pub models: Vec<ThresholdSweep>,
     pub recordings: Vec<ComparedRecording>,
+    /// Each model at its own threshold over all the recordings, judged as the threshold trade-off is.
+    pub totals: Vec<Judged>,
 }
 
 /// The recordings two models can be compared on: those either was tested on and neither trained on. Sorted.
@@ -278,7 +333,7 @@ pub async fn compare_models(version_ids: Vec<String>, app: AppHandle) -> Result<
     }
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join(model_lab::MODEL_LAB_DIR_NAME);
     let datasets_dir = model_lab::datasets_dir(&app)?;
-    let index = model_lab::load_index(&app);
+    let index = model_lab::described_index(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let mut versions = Vec::new();
         let mut registry = None;
@@ -307,42 +362,55 @@ pub async fn compare_models(version_ids: Vec<String>, app: AppHandle) -> Result<
         if ids.is_empty() {
             return Err("there is no recording that none of these models trained on: compare them on a sealed day with the final test instead".into());
         }
-        let mut sweeps: Vec<ThresholdSweep> = versions
-            .iter()
-            .map(|v| ThresholdSweep { version: v.id.to_string(), label: v.label.to_string(), threshold: v.thresholds.activation, points: Vec::new(), recordings: ids.len() })
-            .collect();
+        let excluded: Vec<Vec<String>> = versions.iter().map(|v| sealed_test::excluded_labels(&registry, v)).collect();
+        let mut rows: Vec<SweepRows> = vec![SweepRows::new(); versions.len()];
+        let mut own: Vec<Vec<(&'static str, EventTotals)>> = vec![Vec::new(); versions.len()];
         let mut recordings = Vec::new();
         for id in &ids {
             let dataset = index.datasets.iter().find(|d| &d.id == id).ok_or("a recording went missing")?;
+            let timing = detector_events::label_timing(dataset.labels_from.as_deref());
             let pair = labelling::pair_at(&model_lab::dataset_csv_path(&datasets_dir, id))?;
             let (holds, duration_ms) = dataset_files::holds(&pair)?;
-            let mut row = ComparedRecording { id: id.clone(), name: dataset.original_filename.clone(), minutes: duration_ms / 60_000.0, starts: 0, caught: Vec::new(), false_activations: Vec::new() };
-            for (version, sweep) in versions.iter().zip(sweeps.iter_mut()) {
+            let mut row = ComparedRecording {
+                id: id.clone(),
+                name: dataset.original_filename.clone(),
+                minutes: duration_ms / 60_000.0,
+                label_timing: timing,
+                starts: 0,
+                caught: Vec::new(),
+                false_activations: Vec::new(),
+                negative_seconds: Vec::new(),
+            };
+            for (m, version) in versions.iter().enumerate() {
                 let label = version.label.to_string();
                 let (starts, _) = sealed_test::starts_of(&pair, &label)?;
                 row.starts = starts.len();
                 let model = label_inference::load_version(version, &dir)?;
                 let replay = labelling::replay(&pair, vec![model])?.into_iter().next().ok_or("the model gave no result")?;
-                let own = sealed_test::outside_left_out(&replay.detections.iter().map(|d| d.start_ms).collect::<Vec<_>>(), &holds);
-                let caught = sealed_test::assign(&own, &starts).iter().filter(|a| a.is_some()).count();
-                row.caught.push(caught);
-                row.false_activations.push(own.len() - caught);
-                for (i, point) in replay.sweep.iter().enumerate() {
-                    let rises = sealed_test::outside_left_out(&point.rises_ms, &holds);
-                    let hit = sealed_test::assign(&rises, &starts).iter().filter(|a| a.is_some()).count();
-                    if sweep.points.len() <= i {
-                        sweep.points.push(ThresholdPoint { threshold: point.threshold, starts: 0, caught: 0, false_activations: 0, minutes: 0.0 });
-                    }
-                    let total = &mut sweep.points[i];
-                    total.starts += starts.len();
-                    total.caught += hit;
-                    total.false_activations += rises.len() - hit;
-                    total.minutes += duration_ms / 60_000.0;
-                }
+                let span = sealed_test::judged_span(&replay, duration_ms);
+                let recording = Recording { target: &label, starts: &starts, holds: &holds, excluded: &excluded[m], span };
+                let (events, _) = mistakes_in(&recording, &replay);
+                row.caught.push(events.caught);
+                row.false_activations.push(events.false_activations);
+                row.negative_seconds.push(events.negative_seconds);
+                own[m].push((timing, events));
+                add_sweep(&mut rows[m], timing, &recording, &replay);
             }
             recordings.push(row);
         }
-        Ok(Comparison { models: sweeps, recordings })
+        let models = versions
+            .iter()
+            .zip(&rows)
+            .map(|(v, rows)| ThresholdSweep {
+                version: v.id.to_string(),
+                label: v.label.to_string(),
+                threshold: v.thresholds.activation,
+                points: sweep_points(rows),
+                recordings: ids.len(),
+                budget_per_hour: detector_events::FALSE_ACTIVATIONS_BUDGET_PER_HOUR,
+            })
+            .collect();
+        Ok(Comparison { models, recordings, totals: own.iter().map(|per| detector_events::judge(per)).collect() })
     })
     .await
     .map_err(|e| e.to_string())?
@@ -365,31 +433,85 @@ mod tests {
         }
     }
 
+    fn hold(label: &str, start_ms: f64, end_ms: f64) -> dataset_files::Hold {
+        dataset_files::Hold { label: label.into(), start_ms, end_ms }
+    }
+
+    /// The pinches of `detector_events`' test (after the trainer's), and a fist.
+    fn pinches() -> Vec<dataset_files::Hold> {
+        vec![
+            hold("pinch_in", 2000.0, 2290.0),
+            hold("pinch_hold", 2300.0, 3990.0),
+            hold("pinch_out", 4000.0, 4290.0),
+            hold("pinch_in", 10_000.0, 10_290.0),
+            hold("pinch_hold", 10_300.0, 11_990.0),
+            hold("pinch_out", 12_000.0, 12_290.0),
+            hold("fist", 15_000.0, 15_990.0),
+        ]
+    }
+
     #[test]
-    fn each_miss_and_false_detection_is_listed_with_why_and_what_was_going_on() {
-        // Starts at 0, 10 s and 20 s. Caught: 0 (at 900 ms). Too early for 10 s (at 10.3 s); a repeat of 0 (at 1.2 s); and
-        // at 35 s, during typing (labelled from 33 to 40 s).
-        let starts = [0.0, 10_000.0, 20_000.0];
-        let holds = vec![dataset_files::Hold { label: "typing".into(), start_ms: 33_000.0, end_ms: 40_000.0 }];
-        let times = [900.0, 10_300.0, 20_500.0, 35_000.0];
-        let scores = [0.9, 0.7, 0.4, 0.8];
-        let run = replay(&[(900.0, 1000.0), (1200.0, 1300.0), (10_300.0, 10_400.0), (35_000.0, 35_100.0)], &times, &scores);
-        let (caught, mistakes) = mistakes_in(&starts, &holds, &run);
-        assert_eq!(caught, 1);
+    fn a_firing_during_a_pinch_is_listed_as_a_repeat_or_late_and_only_one_with_no_gesture_under_way_as_false() {
+        // Caught 0.9 s after the first pinch; again during its hold; 0.7 s after it ended (the hand opening); 0.3 s before the
+        // second; late in the second; during a fist; and with nothing held.
+        let holds = pinches();
+        let starts = [2000.0, 10_000.0];
+        let times = [2900.0, 3500.0, 5000.0, 9700.0, 10_500.0, 11_500.0, 15_500.0, 18_000.0];
+        let scores = [0.9, 0.7, 0.8, 0.75, 0.4, 0.66, 0.8, 0.8];
+        let fired: Vec<(f64, f64)> = [2900.0, 3500.0, 5000.0, 9700.0, 11_500.0, 15_500.0, 18_000.0].iter().map(|&t| (t, t + 100.0)).collect();
+        let run = replay(&fired, &times, &scores);
+        let recording = Recording { target: "pinch_in", starts: &starts, holds: &holds, excluded: &[], span: (0.0, 19_990.0) };
+        let (events, mistakes) = mistakes_in(&recording, &run);
+        assert_eq!((events.caught, events.repeats, events.late, events.false_activations), (1, 1, 1, 4));
         let shown: Vec<_> = mistakes.iter().map(|m| (m.kind, m.at_ms, m.why, m.during.as_deref())).collect();
         assert_eq!(
             shown,
             [
-                ("false", 1200.0, Some("repeat"), None),
+                ("repeat", 3500.0, None, Some("pinch_hold")),
+                ("false", 5000.0, Some("after"), Some("pinch_out")),
+                ("false", 9700.0, Some("early"), None),
                 ("missed", 10_000.0, None, Some("pinch")),
-                ("false", 10_300.0, Some("early"), None),
-                ("missed", 20_000.0, None, Some("pinch")),
-                ("false", 35_000.0, Some("elsewhere"), Some("typing")),
+                ("late", 11_500.0, None, Some("pinch_hold")),
+                ("false", 15_500.0, Some("elsewhere"), Some("fist")),
+                ("false", 18_000.0, Some("elsewhere"), None),
             ]
         );
-        // The miss at 10 s peaked at 0.7 (its early detection), the one at 20 s only reached 0.4.
-        assert_eq!(mistakes[1].peak, 0.7);
+        // The miss at 10 s only reached 0.4 in its window.
         assert_eq!(mistakes[3].peak, 0.4);
+        // Four false activations in the 15.41 s with no pinch under way.
+        assert!((events.false_activations_per_hour.unwrap() - 4.0 * 3600.0 / 15.41).abs() < 1e-6);
+    }
+
+    #[test]
+    fn the_trade_off_is_judged_on_the_camera_timed_recordings_and_shows_the_estimated_ones_apart() {
+        // Camera-timed: 20 pinches every 5 s, all caught at 0.5 and none at 0.7, and one false activation at both.
+        // Estimated: one pinch, caught at both.
+        let camera_holds: Vec<_> = (0..20).map(|i| hold("pinch", 1000.0 + 5000.0 * i as f64, 1300.0 + 5000.0 * i as f64)).collect();
+        let camera_starts: Vec<f64> = camera_holds.iter().map(|h| h.start_ms).collect();
+        let mut low: Vec<f64> = camera_starts.iter().map(|s| s + 900.0).collect();
+        low.push(108_000.0);
+        let mut camera = replay(&[], &[], &[]);
+        camera.sweep = vec![
+            labelling::SweepPoint { threshold: 0.5, rises_ms: low },
+            labelling::SweepPoint { threshold: 0.7, rises_ms: vec![108_000.0] },
+        ];
+        let estimated_holds = vec![hold("pinch", 1000.0, 1300.0)];
+        let mut estimated = replay(&[], &[], &[]);
+        estimated.sweep = vec![
+            labelling::SweepPoint { threshold: 0.5, rises_ms: vec![1900.0] },
+            labelling::SweepPoint { threshold: 0.7, rises_ms: vec![1900.0] },
+        ];
+        let mut rows = SweepRows::new();
+        let on_camera = Recording { target: "pinch", starts: &camera_starts, holds: &camera_holds, excluded: &[], span: (0.0, 110_000.0) };
+        add_sweep(&mut rows, "camera", &on_camera, &camera);
+        let on_motion = Recording { target: "pinch", starts: &[1000.0], holds: &estimated_holds, excluded: &[], span: (0.0, 60_000.0) };
+        add_sweep(&mut rows, "estimated", &on_motion, &estimated);
+        let points = sweep_points(&rows);
+        let at = |i: usize| (points[i].events.cohort, points[i].events.totals.caught, points[i].events.totals.false_activations);
+        assert_eq!([at(0), at(1)], [("camera", 20, 1), ("camera", 0, 1)]);
+        // 110 s less 20 pinches under way for 1.28 s each.
+        assert!((points[0].events.totals.false_activations_per_hour.unwrap() - 3600.0 / 84.4).abs() < 1e-6);
+        assert_eq!(points[1].events.by_label_timing["estimated"].caught, 1);
     }
 
     #[test]
@@ -403,9 +525,12 @@ mod tests {
 
     #[test]
     fn a_detection_judging_a_stretch_left_out_is_no_mistake() {
-        let holds = vec![dataset_files::Hold { label: dataset_files::LEFT_OUT_LABEL.into(), start_ms: 30_000.0, end_ms: 40_000.0 }];
+        let holds = vec![hold(dataset_files::LEFT_OUT_LABEL, 30_000.0, 40_000.0)];
         let run = replay(&[(35_000.0, 35_100.0), (45_000.0, 45_100.0)], &[35_000.0, 45_000.0], &[0.8, 0.8]);
-        let (_, mistakes) = mistakes_in(&[], &holds, &run);
+        let recording = Recording { target: "pinch", starts: &[], holds: &holds, excluded: &[], span: (0.0, 60_000.0) };
+        let (events, mistakes) = mistakes_in(&recording, &run);
         assert_eq!(mistakes.iter().map(|m| m.at_ms).collect::<Vec<_>>(), [45_000.0]);
+        // Nor is the time left out time with no gesture under way.
+        assert_eq!(events.negative_seconds, 50.0);
     }
 }

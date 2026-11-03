@@ -1014,6 +1014,16 @@ pub fn list_model_datasets(
     Ok(index.datasets)
 }
 
+/// The index with what [`describe`] fills in (how each recording's labels were made, among others), for a replay that
+/// reports camera-timed and estimated recordings apart.
+pub(crate) fn described_index(app: &AppHandle) -> DatasetIndex {
+    let mut index = load_index(app);
+    if let (Ok(dir), Ok(bundles)) = (datasets_dir(app), crate::recording_bundle::recording_bundles_dir(app)) {
+        describe(&mut index.datasets, &dir, &bundles);
+    }
+    index
+}
+
 /// Fills in what the list shows but the index does not keep: whether the camera's landmarks are there, when the session
 /// was recorded, and (unless the index says) how its labels were made. A new version saved from the Labelling page is
 /// followed back to the recording it was made from, for the camera and the time; its labels are its own.
