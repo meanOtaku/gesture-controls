@@ -25,7 +25,7 @@ export function ExportSettingsCard({ compact = false }: { compact?: boolean }) {
       {desktop ? (
         <div className="flex flex-wrap items-center gap-2">
           <span className="label">Export folder</span>
-          <span className="truncate max-w-[28rem] font-mono text-xs" title={folder ?? undefined}>{folder ?? "Not chosen"}</span>
+          <span className="min-w-0 break-all font-mono text-xs" title={folder ?? undefined}>{folder ?? "Not chosen"}</span>
           <Button type="button" variant="outline" size="sm" onClick={() => void choose()}>{folder ? "Change…" : "Choose…"}</Button>
         </div>
       ) : (
