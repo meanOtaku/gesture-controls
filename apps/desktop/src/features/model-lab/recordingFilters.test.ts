@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extraCopies, filterRecordings, hasProblem, NO_FILTER } from "./recordingFilters";
+import { extraCopies, filterRecordings, groupNames, groupRecordings, hasProblem, NO_FILTER } from "./recordingFilters";
 import type { DatasetSummary } from "./types";
 
 const quality = (poor: number, holds: Record<string, number> = { pinch: 10 }) => ({ poorContactShare: poor, holds, shortHolds: 0 });
@@ -30,5 +30,20 @@ describe("filtering the recordings", () => {
 
   it("keeps one of each set of copies: the sealed one, else the oldest", () => {
     expect(ids(extraCopies(recordings))).toEqual(["b", "d"]);
+  });
+});
+
+describe("grouping the recordings", () => {
+  const grouped = [{ ...recordings[0], group: "old" }, recordings[1], { ...recordings[2], group: "day b" }, { ...recordings[3], group: "old" }];
+
+  it("lists those in no group first, then each group by name, keeping their order", () => {
+    expect(groupRecordings(grouped).map((g) => [g.name, ids(g.recordings)])).toEqual([[null, ["b"]], ["day b", ["c"]], ["old", ["a", "d"]]]);
+    expect(groupRecordings(recordings).map((g) => g.name)).toEqual([null]);
+    expect(groupRecordings([grouped[0]]).map((g) => g.name)).toEqual(["old"]);
+    expect(groupNames(grouped)).toEqual(["day b", "old"]);
+  });
+
+  it("finds recordings by their group's name", () => {
+    expect(ids(filterRecordings(grouped, { ...NO_FILTER, text: "day b" }))).toEqual(["c"]);
   });
 });

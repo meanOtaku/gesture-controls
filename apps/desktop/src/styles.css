@@ -521,3 +521,8 @@ html.overlay-document body::before { display:none; }
 .advanced-summary { color:var(--ink-2); font-size:.875rem; }
 .advanced-body { margin-top:.5rem; }
 @media (prefers-reduced-motion: reduce) { .advanced-chevron { transition:none; } }
+.recording-group { border-top:1px solid var(--line); }
+.recording-group > summary { display:flex; align-items:baseline; gap:.6rem; cursor:pointer; list-style:none; padding:.6rem .25rem; color:var(--ink); }
+.recording-group > summary::-webkit-details-marker { display:none; }
+.recording-group > summary:focus-visible { outline:2px solid var(--ring, currentColor); outline-offset:2px; }
+.recording-group[open] .advanced-chevron { transform:rotate(90deg); }

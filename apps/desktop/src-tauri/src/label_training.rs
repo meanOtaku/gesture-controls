@@ -895,6 +895,10 @@ mod tests {
             content_sha: None,
             quality: None,
             review: None,
+            group: None,
+            labels_from: None,
+            camera: false,
+            recorded_at: None,
         }
     }
 

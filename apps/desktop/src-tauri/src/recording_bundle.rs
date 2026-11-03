@@ -334,7 +334,7 @@ fn validate_recording_id(id: &str) -> Result<(), String> {
     }
 }
 
-fn recording_bundles_dir(app: &AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn recording_bundles_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let base = app
         .path()
         .app_data_dir()
@@ -2788,6 +2788,97 @@ fn camera_evidence_in(dir: &Path) -> Result<Option<CameraEvidence>, String> {
     }))
 }
 
+/// Whether a folder holds the camera's hand landmarks (a recording's, or an exported or imported dataset folder's).
+pub(crate) fn has_landmarks(dir: &Path) -> bool {
+    dir.join(HAND_LANDMARKS_FILE_NAME).is_file()
+        || dir.join(HAND_LANDMARKS_SECOND_FILE_NAME).is_file()
+}
+
+/// What a saved Recorder recording says about the Model Lab recording made from it, for the recordings list.
+#[derive(Debug, Default, PartialEq)]
+pub(crate) struct SourceFacts {
+    /// The camera's hand landmarks were saved with it.
+    pub camera: bool,
+    /// When it started (UTC, RFC 3339).
+    pub recorded_at: Option<String>,
+    /// How its marks were made: "camera" (every one by the camera), "recorder" (none by the camera: a button, key or
+    /// cue) or "mixed". None when it has no marks.
+    pub labels_from: Option<&'static str>,
+}
+
+/// The [`SourceFacts`] of the recording in `dir`; a recording that cannot be read gives what its files show.
+pub(crate) fn source_facts(dir: &Path) -> SourceFacts {
+    let camera = has_landmarks(dir);
+    let Ok((recording, annotations)) = load_bundle_pair(dir) else {
+        return SourceFacts {
+            camera,
+            ..SourceFacts::default()
+        };
+    };
+    let by_camera = annotations
+        .intervals
+        .iter()
+        .filter(|interval| interval.creation_mechanism == CreationMechanism::CameraProposal)
+        .count();
+    let labels_from = match (annotations.intervals.len(), by_camera) {
+        (0, _) => None,
+        (all, camera) if camera == all => Some("camera"),
+        (_, 0) => Some("recorder"),
+        _ => Some("mixed"),
+    };
+    SourceFacts {
+        camera,
+        recorded_at: Some(recording.actual_start.wall_clock_at),
+        labels_from,
+    }
+}
+
+/// The camera files a dataset folder can carry beside its two files (see `model_lab::export_dataset_folder`).
+pub(crate) const CAMERA_FILE_NAMES: [&str; 3] = [
+    HAND_LANDMARKS_FILE_NAME,
+    HAND_LANDMARKS_SECOND_FILE_NAME,
+    CLOCK_SYNC_FILE_NAME,
+];
+
+/// The camera evidence an exported dataset folder carries (`model_lab::export_dataset_folder`): its landmarks files as a
+/// recording keeps them, without the watch-time first column, and its `clock_sync.csv`. `None` when it holds no landmarks.
+/// A folder has no `raw.csv`, so `raw_timestamps_ns` is empty.
+pub(crate) fn folder_camera_evidence(dir: &Path) -> Option<CameraEvidence> {
+    let read = |name: &str| {
+        fs::read_to_string(dir.join(name))
+            .ok()
+            .map(|text| without_watch_time(&text))
+    };
+    let hand_landmarks = read(HAND_LANDMARKS_FILE_NAME);
+    let hand_landmarks_second = read(HAND_LANDMARKS_SECOND_FILE_NAME);
+    if hand_landmarks.is_none() && hand_landmarks_second.is_none() {
+        return None;
+    }
+    Some(CameraEvidence {
+        hand_landmarks,
+        hand_landmarks_second,
+        clock_sync: fs::read_to_string(dir.join(CLOCK_SYNC_FILE_NAME)).unwrap_or_default(),
+        raw_timestamps_ns: Vec::new(),
+    })
+}
+
+/// A landmarks file with the column [`landmarks_on_watch_clock`] adds taken off again; one without it is returned as it is.
+fn without_watch_time(landmarks: &str) -> String {
+    if landmarks
+        .lines()
+        .next()
+        .and_then(|header| header.split(',').next())
+        != Some(WATCH_TIME_COLUMN)
+    {
+        return landmarks.to_string();
+    }
+    let lines: Vec<&str> = landmarks
+        .lines()
+        .map(|line| line.split_once(',').map_or(line, |(_, rest)| rest))
+        .collect();
+    lines.join("\n") + "\n"
+}
+
 /// Checks camera-proposed intervals against what the recording already holds, and returns the combined list.
 /// Each must be a fresh, unreviewed `camera_proposal`, lie inside the raw rows, and overlap neither an existing
 /// interval nor another proposal (the ADR's no-overlap rule); one bad interval refuses the whole batch.
@@ -2939,20 +3030,30 @@ pub fn add_recording_to_training_data(
 ) -> Result<crate::model_lab::DatasetSummary, String> {
     validate_recording_id(&recording_id)?;
     let dir = recording_bundles_dir(&app)?.join(&recording_id);
-    let (recording, annotations) = load_bundle_pair(&dir)?;
+    let (filename, csv) =
+        training_csv_of_bundle(&dir, &recording_id, filter, rest_label.as_deref())?;
+    crate::model_lab::ingest_dataset(&app, &runtime, filename, csv, Some(recording_id))
+}
+
+/// The Model Lab CSV a saved recording becomes, with its session details, and the name it is added under.
+fn training_csv_of_bundle(
+    dir: &Path,
+    recording_id: &str,
+    filter: IntervalFilter,
+    rest_label: Option<&str>,
+) -> Result<(String, String), String> {
+    let (recording, annotations) = load_bundle_pair(dir)?;
     let raw = fs::read_to_string(dir.join(RAW_CSV_FILE_NAME)).map_err(|error| error.to_string())?;
-    let (csv, _, intervals) =
-        dataset_csv_from_bundle(&raw, &annotations, filter, rest_label.as_deref())?;
+    let (csv, _, intervals) = dataset_csv_from_bundle(&raw, &annotations, filter, rest_label)?;
     // The session details go with the rows into Model Lab.
     let mut lines = crate::dataset_files::context_lines(&recording.context);
     lines.push(csv);
-    let csv = lines.join("\n");
     let filename = format!(
         "recorder-{}-{}-intervals.csv",
         &recording_id[..recording_id.len().min(8)],
         intervals
     );
-    crate::model_lab::ingest_dataset(&app, &runtime, filename, csv, Some(recording_id))
+    Ok((filename, lines.join("\n")))
 }
 
 /// The annotations without any interval of `label_id`, and how many that removed.
@@ -3255,6 +3356,99 @@ mod tests {
     }
 
     #[test]
+    fn the_recordings_list_says_which_have_the_camera_when_each_was_recorded_and_how_its_labels_were_made()
+     {
+        let root = std::env::temp_dir().join(format!("recording-facts-{}", Uuid::new_v4()));
+        let (bundles, datasets) = (root.join("recording"), root.join("datasets"));
+        let id = Uuid::new_v4().to_string();
+        let mut annotations = sample_annotations(&id);
+        write_bundle_files(
+            &bundles.join(&id),
+            "timestamp_ns\n1\n",
+            &sample_metadata(&id),
+            &annotations,
+        )
+        .unwrap();
+        let facts = source_facts(&bundles.join(&id));
+        assert_eq!(
+            facts,
+            SourceFacts {
+                camera: false,
+                recorded_at: Some("2026-09-16T10:00:01Z".into()),
+                labels_from: Some("recorder")
+            }
+        );
+        annotations.intervals[0].creation_mechanism = CreationMechanism::CameraProposal;
+        let json = serde_json::to_string(&annotations).unwrap();
+        fs::write(bundles.join(&id).join(ANNOTATIONS_FILE_NAME), &json).unwrap();
+        fs::write(
+            bundles.join(&id).join(HAND_LANDMARKS_FILE_NAME),
+            hand_landmarks_header(),
+        )
+        .unwrap();
+        assert_eq!(source_facts(&bundles.join(&id)).labels_from, Some("camera"));
+        assert!(source_facts(&bundles.join(&id)).camera);
+        let mut second = annotations.intervals[0].clone();
+        second.creation_mechanism = CreationMechanism::GuidedCue;
+        annotations.intervals.push(second);
+        fs::write(
+            bundles.join(&id).join(ANNOTATIONS_FILE_NAME),
+            serde_json::to_string(&annotations).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(source_facts(&bundles.join(&id)).labels_from, Some("mixed"));
+        fs::write(bundles.join(&id).join(ANNOTATIONS_FILE_NAME), &json).unwrap();
+
+        // a: added from the recording; b: a new version of a; c: an imported folder that kept the landmarks; d: says itself
+        // how its labels were made; e: nothing known.
+        let entry = |key: &str, extra: &str| {
+            format!(
+                r#"{{"id":"{key}","originalFilename":"{key}","importedAt":"","label":"pinch","rowCount":1{extra}}}"#
+            )
+        };
+        let mut list: Vec<crate::model_lab::DatasetSummary> = serde_json::from_str(&format!(
+            "[{},{},{},{},{}]",
+            entry("a", &format!(r#","sourceRecordingId":"{id}""#)),
+            entry("b", r#","derivedFrom":"a""#),
+            entry("c", ""),
+            entry(
+                "d",
+                &format!(r#","sourceRecordingId":"{id}","labelsFrom":"motion""#)
+            ),
+            entry("e", r#","camera":true,"recordedAt":"stale""#),
+        ))
+        .unwrap();
+        fs::create_dir_all(datasets.join("c")).unwrap();
+        fs::write(
+            datasets.join("c").join(HAND_LANDMARKS_FILE_NAME),
+            hand_landmarks_header(),
+        )
+        .unwrap();
+        crate::model_lab::describe(&mut list, &datasets, &bundles);
+        let seen: Vec<(bool, Option<&str>, Option<&str>)> = list
+            .iter()
+            .map(|d| (d.camera, d.recorded_at.as_deref(), d.labels_from.as_deref()))
+            .collect();
+        let at = Some("2026-09-16T10:00:01Z");
+        assert_eq!(
+            seen,
+            [
+                (true, at, Some("camera")),
+                (true, at, None),
+                (true, None, None),
+                (true, at, Some("motion")),
+                (false, None, None)
+            ]
+        );
+        let stored = serde_json::to_string(&list[4]).unwrap();
+        assert!(
+            !stored.contains("camera") && !stored.contains("recordedAt"),
+            "worked out, never read back: {stored}"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn write_bundle_files_creates_all_three_files() {
         let id = Uuid::new_v4().to_string();
         let tmp_dir = std::env::temp_dir().join(format!("recording-bundle-test-{id}"));
@@ -3445,6 +3639,50 @@ mod tests {
             vec![100, 250]
         );
         assert!(raw_timestamps("timestamp_ns\nabc,1\n").is_err());
+    }
+
+    /// One-off tool: adds saved Recorder recordings to Model Lab in the app's own data folder, exactly as Add on Model Lab's
+    /// "From the Recorder" card does with its defaults (every interval not excluded, nothing between them labelled), so each
+    /// keeps its link to the recording and its camera. `APP_DATA` is the app's data folder (on macOS
+    /// `~/Library/Application Support/dev.meanotaku.spatial-gesture-control`) and `RECORDING_IDS` the recordings, separated
+    /// by commas. The app reads the files afresh on each action.
+    #[test]
+    #[ignore = "a tool: needs APP_DATA and RECORDING_IDS"]
+    fn add_recorder_recordings_to_the_app() {
+        let app_data = PathBuf::from(std::env::var("APP_DATA").expect("APP_DATA"));
+        let model_lab = app_data.join(crate::model_lab::MODEL_LAB_DIR_NAME);
+        let known = crate::label_registry::label_ids_at(&model_lab.join("labels.json"));
+        let lock = std::sync::Mutex::new(());
+        for id in std::env::var("RECORDING_IDS")
+            .expect("RECORDING_IDS")
+            .split(',')
+            .map(str::trim)
+        {
+            validate_recording_id(id).unwrap();
+            let outcome = training_csv_of_bundle(
+                &app_data.join(RECORDING_BUNDLES_DIR_NAME).join(id),
+                id,
+                IntervalFilter::NotExcluded,
+                None,
+            )
+            .and_then(|(filename, csv)| {
+                crate::model_lab::ingest_dataset_in(
+                    &model_lab.join("datasets"),
+                    |label| known.contains(label),
+                    &lock,
+                    filename,
+                    csv,
+                    Some(id.to_string()),
+                )
+            });
+            match outcome {
+                Ok(added) => println!(
+                    "added {id} as #{} {} ({} rows, {:?})",
+                    added.sequence, added.original_filename, added.row_count, added.labels
+                ),
+                Err(error) => println!("not added {id}: {error}"),
+            }
+        }
     }
 
     #[test]

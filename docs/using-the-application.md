@@ -410,10 +410,31 @@ short to train on (which training ignores), and how often the pulse sensor flagg
 - search by name, label or session details; filter by day, by label, and by what is wrong (**With something to fix**,
   **Copies**, sealed or not, **Labels not reviewed**, **Labels need work**); sort by number, day, name, worst contact or most
   holds;
-- tick recordings (or **Choose every recording listed**) to seal, unseal or delete them together;
+- tick recordings (or **Choose every recording listed**) to seal, unseal, group or delete them together;
 - when there are copies, **Keep one of each** deletes all but one of each set: the sealed copy if there is one, else the
   oldest;
 - **Label** on a recording opens it on the Labelling page. Each recording also shows whether its labels were reviewed there.
+
+**What each recording is.** Each recording is named by when it was recorded and what it holds, for example
+"03/11/2026 06:35 AM · 20 pinches" (a pinch's in, hold and out count once), with its file name below. The time comes
+from its Recorder recording, else from the time in its file name, else from when it was imported. The same name is used
+on the Labelling page's picker, on the Train card and in Training history.
+
+- **Camera** or **No camera**: whether the camera's hand landmarks are kept for it, so the Labelling page can draw the hand.
+- How its labels were made: **marked by the camera** (where it saw the fingers meet and part), **estimated from the
+  watch's motion** (no camera: good for testing, less exact for training), or **marked while recording** (a button, key or
+  cue).
+
+**Adding recordings.** Add new sessions with **From the Recorder**: the recording stays linked to its camera data.
+Importing a folder exported by the Recorder also keeps the camera files (`hand_landmarks.csv` and `clock_sync.csv`) with
+the recording. A single CSV has no camera data.
+
+**Group recordings.** Tick recordings, type a group name (or pick one already in use) and press **Move to group**; **Take out
+of group** puts them back in no group. Recordings in no group are listed first, then each group by name, folded away under
+its name with how many it holds. Click a group's name to open or close it; whether it was left open is remembered. An open
+group can **Choose every one listed**, **Rename group** or **Ungroup**. A group name is at most 60 characters. Search finds
+a recording by its group's name too. A group is only for finding recordings again: it changes nothing about training or any
+test.
 
 Each label is shown in its colour from the Labels tab, here, on the Train card, in the Recorder's label buttons and on the
 Labelling page.
@@ -615,7 +636,9 @@ marking recordings that have none.
 - **Graph height** makes every graph Compact, Normal or Tall.
 
 **Camera contact.** If the open recording was made in the Recorder with the camera on, the page draws the camera's view of the
-hand. This includes Model Lab recordings added from the Recorder, and new versions of them.
+hand. This includes Model Lab recordings added from the Recorder, and new versions of them. It also includes a dataset
+folder exported from the Recorder and opened with **Open folder…**: the export keeps the camera's landmarks
+(`hand_landmarks.csv`) and clock samples (`clock_sync.csv`) beside its two files.
 
 - **Camera: thumb to index** is a graph of the distance between thumb and index fingertip. When two hands are in view, it
   shows whichever pair is closer. The dashed line is where a pinch closes: the threshold of your Gesture library's pinch, or

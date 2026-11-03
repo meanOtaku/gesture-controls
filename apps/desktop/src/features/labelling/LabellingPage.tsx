@@ -20,7 +20,9 @@ import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Label } from "../../components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "../../components/ui/select";
+import { groupRecordings } from "../model-lab/recordingFilters";
+import { recordingLine } from "../model-lab/recordingNames";
 import { SectionHeader } from "../../components/app/SectionHeader";
 import { chooseExportFolder } from "../../shared/tauri/exportCsv";
 import { getRecordingCameraEvidence, notifyRecordingsChanged } from "../../shared/tauri/recordingBundle";
@@ -29,7 +31,7 @@ import { listGestureDefinitions } from "../gestureLibrary/gestureLibraryApi";
 import { cameraTrack, contactOnsets, contactThreshold, handsAt, type CameraTrack } from "./cameraTrack";
 import { inImportOrder, type DatasetLabel, type DatasetSummary } from "../model-lab/types";
 import { describeContext } from "../telemetry/sessionContext";
-import { exportLabellingRecording, openLabellingRecording, replayActiveModels, saveLabellingVersion, type LabellingRecording, type LabellingSource, type ModelReplay } from "./labellingApi";
+import { exportLabellingRecording, labellingCameraEvidence, openLabellingRecording, replayActiveModels, saveLabellingVersion, type LabellingRecording, type LabellingSource, type ModelReplay } from "./labellingApi";
 import { appNavigation, type LabellingFocus } from "../../shared/navigation/appNavigation";
 import { labelColor } from "../labels/labelColor";
 import { HandPreview } from "./HandPreview";
@@ -318,7 +320,7 @@ export function LabellingPage() {
       await refreshLists();
       // The new version is what you go on labelling; the original stays as it was.
       await load({ kind: "dataset", id: summary.id });
-      OperationFeedback.success("Saved", `A new recording in Model Lab: #${summary.sequence ?? "?"} ${summary.originalFilename}. The original is unchanged.`);
+      OperationFeedback.success("Saved", `A new recording in Model Lab: ${recordingLine(summary)}. The original is unchanged.`);
     } catch (error) {
       setMessage({ tone: "error", text: `Not saved: ${String(error)}` });
     } finally {
@@ -372,14 +374,27 @@ export function LabellingPage() {
 
   useEffect(() => {
     setCamera(null);
-    if (!recording || !recorderId) return;
+    if (!recording) return;
     let live = true;
-    void getRecordingCameraEvidence(recorderId).then((result) => {
-      if (!live) return;
-      if (result.status === "error") setCamera({ problem: result.message });
-      else if (!result.value) setCamera({ problem: "this recording was made with the camera off" });
-      else setCamera(cameraTrack(result.value, Number(recording.originNs)));
-    });
+    if (recorderId) {
+      void getRecordingCameraEvidence(recorderId).then((result) => {
+        if (!live) return;
+        if (result.status === "error") setCamera({ problem: result.message });
+        else if (!result.value) setCamera({ problem: "this recording was made with the camera off" });
+        else setCamera(cameraTrack(result.value, Number(recording.originNs)));
+      });
+    } else {
+      // No Recorder recording to go by: an exported folder keeps the landmarks beside its two files.
+      void labellingCameraEvidence(recording.source)
+        .then((evidence) => {
+          if (!live) return;
+          if (evidence) setCamera(cameraTrack(evidence, Number(recording.originNs)));
+          else if (recording.source.kind === "file") setCamera({ problem: "the opened folder holds no hand_landmarks.csv (the camera was off, or it is a single CSV)" });
+        })
+        .catch((err) => {
+          if (live) setCamera({ problem: `the camera's landmarks could not be read: ${String(err)}` });
+        });
+    }
     return () => {
       live = false;
     };
@@ -620,7 +635,7 @@ export function LabellingPage() {
           />
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-3">
-          <div className="field min-w-64">
+          <div className="field min-w-64 max-w-3xl flex-1">
             <Label htmlFor="labelling-dataset">Model Lab recording</Label>
             <Select value={currentSource} onValueChange={(id) => id && request({ kind: "dataset", id })}>
               <SelectTrigger id="labelling-dataset" aria-label="Model Lab recording">
@@ -628,16 +643,20 @@ export function LabellingPage() {
                   {(id: string | null) => {
                     if (!id) return datasets.length > 0 ? "Choose a recording" : "No recordings in Model Lab yet";
                     const dataset = datasets.find((entry) => entry.id === id);
-                    return dataset ? `#${dataset.sequence ?? "?"} ${dataset.originalFilename}` : id;
+                    return dataset ? recordingLine(dataset) : id;
                   }}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {datasets.map((dataset) => (
-                  <SelectItem key={dataset.id} value={dataset.id}>
-                    #{dataset.sequence ?? "?"} {dataset.originalFilename}
-                    {dataset.label ? ` (${dataset.label})` : ""}
-                  </SelectItem>
+                {groupRecordings(datasets).map((group) => (
+                  <SelectGroup key={group.name ?? ""}>
+                    {group.name !== null && <SelectLabel>{group.name}</SelectLabel>}
+                    {group.recordings.map((dataset) => (
+                      <SelectItem key={dataset.id} value={dataset.id}>
+                        {recordingLine(dataset)}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 ))}
               </SelectContent>
             </Select>
@@ -715,7 +734,7 @@ export function LabellingPage() {
             <p className="hint" aria-live="polite">
               {camera && "track" in camera
                 ? `Camera: ${camera.track.frames} frames, lined up with the watch to about ${Math.round(camera.track.jitterMs)} ms; click a yellow mark to start the selection where the fingers touched. `
-                : camera && "problem" in camera && recorderId
+                : camera && "problem" in camera
                   ? `No camera contact: ${camera.problem}. `
                   : ""}
               {selection ? `Selected ${formatSeconds(selection.startMs)} to ${formatSeconds(selection.endMs)} (${Math.round(selection.endMs - selection.startMs)} ms). ` : "Nothing selected. "}

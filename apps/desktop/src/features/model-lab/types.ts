@@ -30,6 +30,14 @@ export interface DatasetSummary {
   quality?: DatasetQuality;
   /** Whether its labels were checked on the Labelling page; absent while nobody has. */
   review?: DatasetReview;
+  /** The group it is listed under (for example "old"); absent for one in no group. Changes nothing about training. */
+  group?: string;
+  /** How its labels were made (see `labelsFromText`); absent when nothing says. */
+  labelsFrom?: "camera" | "motion" | "recorder" | "mixed";
+  /** The camera's hand landmarks are kept for it, so the Labelling page can draw the hand. */
+  camera?: boolean;
+  /** When the session was recorded (UTC), from its Recorder recording. */
+  recordedAt?: string;
 }
 
 /** Mirrors `DatasetReview` in model_lab.rs. */

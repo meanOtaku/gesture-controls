@@ -8,6 +8,7 @@ const undo = vi.hoisted(() => ({ last: null as null | (() => void) }));
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn((_t: string, options?: { action?: { onClick: () => void } }) => { undo.last = options?.action?.onClick ?? null; }), error: vi.fn(), info: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }) }));
 import { UNDO_MS } from "../../../components/app/OperationFeedback";
 import type { DatasetSummary } from "../types";
+import { formatTime } from "../labelModels";
 import { DatasetManager } from "./DatasetManager";
 
 afterEach(() => {
@@ -41,7 +42,24 @@ describe("DatasetManager", () => {
     setup({ datasets: [{ ...dataset, id: "d1", originalFilename: "first.csv", sequence: 1, importedAt: "2026-10-01T09:30:00Z" }, { ...dataset, id: "d4", originalFilename: "fourth.csv", sequence: 4 }] });
     expect(screen.getByLabelText("Recording 1")).toHaveTextContent("#1");
     expect(screen.getByLabelText("Recording 4")).toHaveTextContent("#4");
-    expect(screen.getByText(/imported 2026-10-01 09:30/)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`imported ${formatTime("2026-10-01T09:30:00Z")}`))).toBeInTheDocument();
+  });
+
+  it("names a recording by when it was recorded and what it holds, with whether the camera is there", () => {
+    setup({
+      datasets: [
+        { ...dataset, id: "a", sequence: 30, originalFilename: "recorder-94faf83c-60-intervals.csv", recordedAt: "2026-11-03T01:05:59Z", camera: true, labelsFrom: "camera", quality: { poorContactShare: 0, holds: { pinch_in: 17, pinch_hold: 20, pinch_out: 20 }, shortHolds: 0 } },
+        { ...dataset, id: "b", sequence: 27, originalFilename: "gesture-dataset-pinch-2026-10-11T12-08-32.241Z.csv", labelsFrom: "motion" },
+      ],
+    });
+    const [motion, camera] = within(screen.getByRole("list", { name: "Imported recordings" })).getAllByRole("listitem"); // by number
+    expect(camera).toHaveTextContent(`${formatTime("2026-11-03T01:05:59Z")} · 20 pinches`);
+    expect(within(camera).getByText("Camera")).toBeInTheDocument();
+    expect(camera).toHaveTextContent("recorder-94faf83c-60-intervals.csv");
+    expect(camera).toHaveTextContent("Labels marked by the camera");
+    expect(motion).toHaveTextContent(formatTime("2026-10-11T12:08:32.241Z"));
+    expect(within(motion).getByText("No camera")).toBeInTheDocument();
+    expect(motion).toHaveTextContent("estimated from the watch's motion");
   });
 
   it("imports a chosen CSV", async () => {
@@ -150,6 +168,38 @@ describe("DatasetManager", () => {
     await waitFor(() => expect(props.onDelete).toHaveBeenCalledTimes(2));
     expect(props.onDelete).toHaveBeenNthCalledWith(1, "a");
     expect(props.onDelete).toHaveBeenNthCalledWith(2, "c");
+  });
+
+  it("folds a group away, remembers it open, and moves, renames and ungroups recordings", async () => {
+    window.localStorage.removeItem("recordingGroup.old");
+    const onGroup = vi.fn().mockResolvedValue(undefined);
+    setup({
+      onGroup,
+      datasets: [
+        { ...dataset, id: "a", sequence: 1, originalFilename: "monday", group: "old" },
+        { ...dataset, id: "b", sequence: 2, originalFilename: "tuesday", group: "old" },
+        { ...dataset, id: "c", sequence: 3, originalFilename: "wednesday" },
+      ],
+    });
+    expect(within(screen.getByRole("list", { name: "Recordings in no group" })).getByText("wednesday")).toBeInTheDocument();
+    expect(screen.queryByText("monday")).toBeNull(); // closed until opened
+    const group = screen.getByRole("group", { name: "Group old" });
+    expect(group).toHaveTextContent("2 recordings");
+    fireEvent.click(within(group).getByText("old"));
+    await screen.findByText("monday");
+    expect(window.localStorage.getItem("recordingGroup.old")).toBe("open");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Choose wednesday" }));
+    fireEvent.change(screen.getByLabelText("Group name"), { target: { value: " old " } });
+    fireEvent.click(screen.getByRole("button", { name: "Move to group" }));
+    await waitFor(() => expect(onGroup).toHaveBeenCalledWith(["c"], "old"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Rename group" }));
+    fireEvent.change(screen.getByLabelText("New name for old"), { target: { value: "October" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save name" }));
+    await waitFor(() => expect(onGroup).toHaveBeenCalledWith(["a", "b"], "October"));
+    fireEvent.click(screen.getByRole("button", { name: "Ungroup" }));
+    await waitFor(() => expect(onGroup).toHaveBeenCalledWith(["a", "b"], null));
   });
 
   it("offers to keep one of each set of copies", async () => {

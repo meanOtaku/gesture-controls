@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { recordingLine } from "../recordingNames";
 import { useCallback, useEffect, useState } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { SectionHeader } from "../../../components/app/SectionHeader";
@@ -103,7 +104,7 @@ export function TrainingHistory({ desktopAvailable, labels, refreshKey, datasets
   const nameOf = (id: string) => labels.find((label) => label.id === id)?.displayName ?? id.replaceAll("_", " ");
   const recordingName = (id: string) => {
     const dataset = datasets?.find((entry) => entry.id === id);
-    return dataset ? `${dataset.sequence ? `#${dataset.sequence} ` : ""}${dataset.originalFilename}` : `${id.slice(0, 8)} (deleted)`;
+    return dataset ? recordingLine(dataset) : `${id.slice(0, 8)} (deleted)`;
   };
 
   const remove = async (project: TrainingHistoryProject) => {

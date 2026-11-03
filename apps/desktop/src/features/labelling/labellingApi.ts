@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { DatasetSummary } from "../model-lab/types";
+import type { CameraEvidenceFiles } from "../../shared/tauri/recordingBundle";
 import type { Span } from "./labellingModel";
 
 /** What is open for labelling: a recording in Model Lab, or a dataset folder or CSV file on disk (`labelling.rs`). */
@@ -39,6 +40,11 @@ const toIntervals = (spans: Span[]) => spans.map(({ startMs, endMs, label }) => 
 
 export function openLabellingRecording(source: LabellingSource): Promise<LabellingRecording> {
   return invoke<LabellingRecording>("open_labelling_recording", { source });
+}
+
+/** The camera's hand landmarks saved inside the opened folder (an exported recording), or null when it holds none. */
+export function labellingCameraEvidence(source: LabellingSource): Promise<CameraEvidenceFiles | null> {
+  return invoke<CameraEvidenceFiles | null>("labelling_camera_evidence", { source });
 }
 
 /** Saves the hand labels as a new recording in Model Lab; the source is left as it was. */

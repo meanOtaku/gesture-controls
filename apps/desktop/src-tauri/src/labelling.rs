@@ -277,6 +277,29 @@ pub fn open_labelling_recording(source: LabellingSource, app: AppHandle) -> Resu
 
 /// Saves the recording with these manual labels as a new recording in Model Lab, named after the source, which stays as it
 /// was. Its labels must be in the catalogue and at least one row must train on one, as for any recording added to Model Lab.
+/// The camera's hand landmarks saved inside a recording folder opened for labelling (an exported folder, or a Model Lab
+/// recording kept as one), for a recording no Recorder recording is linked to. None when the folder holds none, or the
+/// recording is a single file.
+#[tauri::command]
+pub fn labelling_camera_evidence(
+    source: LabellingSource,
+    app: AppHandle,
+) -> Result<Option<crate::recording_bundle::CameraEvidence>, String> {
+    let dir = match &source {
+        LabellingSource::Dataset { id } => {
+            if !model_lab::load_index(&app).datasets.iter().any(|d| &d.id == id) {
+                return Err("that recording is no longer in Model Lab".into());
+            }
+            model_lab::dataset_csv_path(&model_lab::datasets_dir(&app)?, id)
+        }
+        LabellingSource::File { path } => PathBuf::from(path),
+    };
+    Ok(dir
+        .is_dir()
+        .then(|| crate::recording_bundle::folder_camera_evidence(&dir))
+        .flatten())
+}
+
 #[tauri::command]
 pub fn save_labelling_version(
     source: LabellingSource,

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { recordingTitle } from "../recordingNames";
 import { useEffect, useId, useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
@@ -99,7 +100,10 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
   };
 
   const canStart = desktopAvailable && request !== null && plan !== null && plan.problem === null && running === null && environment?.available !== false;
-  const name = (id: string) => datasets.find((dataset) => dataset.id === id)?.originalFilename ?? id;
+  const name = (id: string) => {
+    const dataset = datasets.find((entry) => entry.id === id);
+    return dataset ? [recordingNumber(dataset), recordingTitle(dataset)].filter(Boolean).join(" ") : id;
+  };
 
   return (
     <Card id="lab-train" role="region" aria-label="Train a model" className="min-w-0">
@@ -170,7 +174,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
                   {candidates.map((dataset) => (
                     <li key={dataset.id} className="flex items-center gap-2 text-sm">
                       <Checkbox checked={selected.has(dataset.id)} disabled={running !== null} onCheckedChange={() => toggleRecording(dataset.id)} aria-label={`Use ${dataset.originalFilename}`} />
-                      <span>{dataset.sequence ? <strong className="mr-2 font-mono">{recordingNumber(dataset)}</strong> : null}{dataset.originalFilename}</span>
+                      <span>{dataset.sequence ? <strong className="mr-2 font-mono">{recordingNumber(dataset)}</strong> : null}{recordingTitle(dataset)}{dataset.camera ? "" : <span className="text-muted-foreground"> · no camera</span>}{dataset.labelsFrom === "motion" ? <span className="text-muted-foreground"> · estimated labels</span> : null}</span>
                       <small className="text-muted-foreground">{datasetLabels(dataset).map((label) => <LabelSwatch key={label} label={label} catalogue={labels} />)}{datasetLabels(dataset).join(", ")}</small>
                       {hasLabel(dataset, target) && <Badge variant="secondary">has {target}</Badge>}
                     </li>

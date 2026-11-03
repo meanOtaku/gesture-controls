@@ -158,6 +158,29 @@ export function ModelLab({ onOpenLabels, onInspectModel, onOpenNetworkLab }: { o
               setError(String(err));
             }
           }}
+          onGroup={async (ids, group) => {
+            // Undo puts each back in the group it was in.
+            const before = new Map<string | null, string[]>();
+            for (const dataset of datasets.filter((d) => ids.includes(d.id))) {
+              const was = dataset.group ?? null;
+              before.set(was, [...(before.get(was) ?? []), dataset.id]);
+            }
+            try {
+              await invoke("set_datasets_group", { ids, group });
+              await refreshDatasets();
+              feedbackWithUndo(
+                group === null ? "Taken out of the group" : `Moved to ${group}`,
+                `${ids.length} recording${ids.length === 1 ? "" : "s"}.`,
+                () =>
+                  void (async () => {
+                    for (const [was, wasIds] of before) await invoke("set_datasets_group", { ids: wasIds, group: was });
+                    await refreshDatasets();
+                  })().catch((err) => setError(String(err))),
+              );
+            } catch (err) {
+              setError(String(err));
+            }
+          }}
         />
         <TrainPanel desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} onOpenNetworkLab={onOpenNetworkLab} />
         <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} onInspect={onInspectModel} />

@@ -31,7 +31,7 @@ export function filterRecordings(datasets: DatasetSummary[], filter: RecordingFi
     if (filter.show === "unsealed" && dataset.sealed) return false;
     if (filter.show === "unreviewed" && dataset.review) return false;
     if (filter.show === "needs_work" && dataset.review?.status !== "needs_work") return false;
-    const haystack = `${dataset.originalFilename} ${dataset.label} ${dataset.context ? describeContext(dataset.context) : ""}`.toLowerCase();
+    const haystack = `${dataset.originalFilename} ${dataset.label} ${dataset.group ?? ""} ${dataset.context ? describeContext(dataset.context) : ""}`.toLowerCase();
     return words.every((word) => haystack.includes(word));
   });
   const by: Record<RecordingFilter["sort"], (a: DatasetSummary, b: DatasetSummary) => number> = {
@@ -67,4 +67,33 @@ export function extraCopies(datasets: DatasetSummary[]): DatasetSummary[] {
     const keep = group.find((dataset) => dataset.sealed) ?? group[0];
     return group.filter((dataset) => dataset !== keep);
   });
+}
+
+/** The longest group name, in characters (`MAX_GROUP_NAME_CHARS` in model_lab.rs). */
+export const MAX_GROUP_NAME = 60;
+
+/** Recordings listed under a group, or under none (`name` null). */
+export interface RecordingGroup {
+  name: string | null;
+  recordings: DatasetSummary[];
+}
+
+/**
+ * `recordings` split by group, each keeping their order: those in no group first (usually the newest), then the groups by
+ * name. Only groups with a recording in `recordings` are given.
+ */
+export function groupRecordings(recordings: DatasetSummary[]): RecordingGroup[] {
+  const byName = new Map<string, DatasetSummary[]>();
+  const loose: DatasetSummary[] = [];
+  for (const recording of recordings) {
+    if (recording.group) byName.set(recording.group, [...(byName.get(recording.group) ?? []), recording]);
+    else loose.push(recording);
+  }
+  const named = [...byName.keys()].sort((a, b) => a.localeCompare(b)).map((name) => ({ name, recordings: byName.get(name)! }));
+  return loose.length > 0 ? [{ name: null, recordings: loose }, ...named] : named;
+}
+
+/** Every group name in use, sorted. */
+export function groupNames(datasets: DatasetSummary[]): string[] {
+  return [...new Set(datasets.map((dataset) => dataset.group).filter((group): group is string => Boolean(group)))].sort((a, b) => a.localeCompare(b));
 }

@@ -169,6 +169,19 @@ describe("LabellingPage", () => {
     expect(feedback.withUndo).toHaveBeenCalledWith("Labels moved", expect.stringContaining("0 ms earlier"), expect.any(Function));
   });
 
+  it("draws the hand from the landmarks saved in an opened folder", async () => {
+    respond();
+    const fallback = invoke.getMockImplementation()!;
+    invoke.mockImplementation(async (command: string, args?: Record<string, unknown>) =>
+      command === "labelling_camera_evidence" ? { handLandmarks: "header", handLandmarksSecond: null, clockSync: "header", rawTimestampsNs: [] } : fallback(command, args));
+    openDialog.mockResolvedValue("/exports/pinch-session");
+    render(<LabellingPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open folder…" }));
+    expect(await screen.findByRole("img", { name: "Camera: thumb to index over the view" })).toBeInTheDocument();
+    expect(invoke).toHaveBeenCalledWith("labelling_camera_evidence", { source: { kind: "file", path: "/exports/pinch-session" } });
+    expect(invoke).not.toHaveBeenCalledWith("get_recording_camera_evidence", expect.anything());
+  });
+
   it("draws the camera's thumb-to-index distance and starts a selection where the fingers touched", async () => {
     await openRecording();
     expect(await screen.findByRole("img", { name: "Camera: thumb to index over the view" })).toBeInTheDocument();

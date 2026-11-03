@@ -111,6 +111,22 @@ pub struct DatasetSummary {
     /// Whether its labels were checked on the Labelling page; None while nobody has.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub review: Option<DatasetReview>,
+    /// The group it is listed under in Model Lab (for example "old"); None for one in no group. Only for finding it again: a
+    /// group changes nothing about training or testing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    /// How its labels were made: "camera" (where the camera saw the fingers meet and part), "motion" (estimated from the
+    /// watch's motion, with no camera), "recorder" (while recording, by a button, key or cue) or "mixed". Kept when an
+    /// import says so; otherwise worked out from its Recorder recording each time the list is read (see [`describe`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub labels_from: Option<String>,
+    /// Whether the camera's hand landmarks are kept for it (with its Recorder recording, or in its own folder). Worked out
+    /// each time the list is read; never stored.
+    #[serde(default, skip_deserializing, skip_serializing_if = "std::ops::Not::not")]
+    pub camera: bool,
+    /// When the session was recorded (UTC, RFC 3339), from its Recorder recording. Worked out like `camera`.
+    #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub recorded_at: Option<String>,
 }
 
 /// Where a recording's labels stand after a look on the Labelling page.
@@ -456,6 +472,26 @@ pub(crate) fn ingest_dataset(
     csv_content: String,
     source_recording_id: Option<String>,
 ) -> Result<DatasetSummary, String> {
+    ingest_dataset_in(
+        &datasets_dir(app)?,
+        |label| crate::label_registry::contains_label(app, label),
+        &runtime.lock,
+        filename,
+        csv_content,
+        source_recording_id,
+    )
+}
+
+/// `ingest_dataset` for the datasets folder `dir`, with `known_label` saying which labels the catalogue has (see
+/// `store_pair_in`).
+pub(crate) fn ingest_dataset_in(
+    dir: &std::path::Path,
+    known_label: impl Fn(&str) -> bool,
+    lock: &Mutex<()>,
+    filename: String,
+    csv_content: String,
+    source_recording_id: Option<String>,
+) -> Result<DatasetSummary, String> {
     validate_filename(&filename)?;
     if csv_content.len() > MAX_DATASET_CSV_BYTES {
         return Err(format!(
@@ -465,9 +501,10 @@ pub(crate) fn ingest_dataset(
     }
     let parsed = parse_csv(&csv_content)?;
     let pair = dataset_files::split_legacy(&parsed.csv)?;
-    store_pair(
-        app,
-        runtime,
+    store_pair_in(
+        dir,
+        known_label,
+        lock,
         filename,
         pair,
         source_recording_id,
@@ -507,7 +544,26 @@ pub(crate) fn ingest_folder(
         &read(dataset_files::PPG_FILE)?,
         &read(dataset_files::IMU_FILE)?,
     )?;
-    store_pair(app, runtime, name, pair, None, None, None)
+    let summary = store_pair(app, runtime, name, pair, None, None, None)?;
+    keep_camera_files(folder, &dataset_csv_path(&datasets_dir(app)?, &summary.id));
+    Ok(summary)
+}
+
+/// Copies the camera files an exported folder carries (`hand_landmarks.csv`, `hand_landmarks_2.csv`, `clock_sync.csv`)
+/// into the recording just stored from it, so the Labelling page can draw the hand. Returns how many were copied; one that
+/// cannot be copied is left out (the recording is kept either way).
+fn keep_camera_files(from: &std::path::Path, to: &std::path::Path) -> usize {
+    crate::recording_bundle::CAMERA_FILE_NAMES
+        .iter()
+        .filter(|name| from.join(name).is_file())
+        .filter(|name| match fs::copy(from.join(name), to.join(name)) {
+            Ok(_) => true,
+            Err(error) => {
+                warn!(%error, file = %name, "could not keep a camera file with the recording");
+                false
+            }
+        })
+        .count()
 }
 
 /// Whether a recording already stored holds exactly this data (so adding it again would only duplicate it). Compares like
@@ -643,6 +699,10 @@ pub(crate) fn store_pair_in(
         content_sha: Some(incoming),
         quality: dataset_files::quality_of(&pair).ok(),
         review: None,
+        group: None,
+        labels_from: None,
+        camera: false,
+        recorded_at: None,
     };
 
     index.next_sequence += 1;
@@ -945,7 +1005,59 @@ pub fn list_model_datasets(
             warn!(%error, "could not save the recordings' identities");
         }
     }
+    if let (Ok(dir), Ok(bundles)) = (
+        datasets_dir(&app),
+        crate::recording_bundle::recording_bundles_dir(&app),
+    ) {
+        describe(&mut index.datasets, &dir, &bundles);
+    }
     Ok(index.datasets)
+}
+
+/// Fills in what the list shows but the index does not keep: whether the camera's landmarks are there, when the session
+/// was recorded, and (unless the index says) how its labels were made. A new version saved from the Labelling page is
+/// followed back to the recording it was made from, for the camera and the time; its labels are its own.
+pub(crate) fn describe(
+    datasets: &mut [DatasetSummary],
+    dir: &std::path::Path,
+    bundles: &std::path::Path,
+) {
+    let links: std::collections::HashMap<String, (Option<String>, Option<String>)> = datasets
+        .iter()
+        .map(|d| {
+            (
+                d.id.clone(),
+                (d.source_recording_id.clone(), d.derived_from.clone()),
+            )
+        })
+        .collect();
+    for dataset in datasets.iter_mut() {
+        let mut seen = std::collections::BTreeSet::new();
+        let mut at = Some(dataset.id.clone());
+        let mut source = None;
+        while let Some(id) = at.filter(|id| seen.insert(id.clone())) {
+            let Some((recording, from)) = links.get(&id) else {
+                break;
+            };
+            if recording.is_some() {
+                source = recording.clone();
+                break;
+            }
+            at = from.clone();
+        }
+        let facts = source
+            .filter(|id| {
+                !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+            })
+            .map(|id| crate::recording_bundle::source_facts(&bundles.join(id)))
+            .unwrap_or_default();
+        dataset.camera =
+            facts.camera || crate::recording_bundle::has_landmarks(&dir.join(&dataset.id));
+        dataset.recorded_at = facts.recorded_at;
+        if dataset.labels_from.is_none() && dataset.derived_from.is_none() {
+            dataset.labels_from = facts.labels_from.map(String::from);
+        }
+    }
 }
 
 /// Works out the content identity and quality report of every recording that lacks them. Returns whether any changed.
@@ -989,6 +1101,68 @@ pub fn set_datasets_sealed(
     }
     write_index_atomic(&app, &index)?;
     Ok(index.datasets)
+}
+
+/// The longest group name, in characters.
+pub const MAX_GROUP_NAME_CHARS: usize = 60;
+
+/// A group name as stored: trimmed, and None when blank. Refuses one that is too long or holds a control character.
+fn clean_group_name(name: Option<&str>) -> Result<Option<String>, String> {
+    let Some(name) = name.map(str::trim).filter(|name| !name.is_empty()) else {
+        return Ok(None);
+    };
+    if name.chars().count() > MAX_GROUP_NAME_CHARS {
+        return Err(format!(
+            "a group name can be at most {MAX_GROUP_NAME_CHARS} characters"
+        ));
+    }
+    if name.chars().any(char::is_control) {
+        return Err("a group name cannot hold a line break or other control character".to_string());
+    }
+    Ok(Some(name.to_string()))
+}
+
+/// Puts recordings in a group, or takes them out of their group (`group` None or blank). Every id must exist, or nothing changes.
+#[tauri::command]
+pub fn set_datasets_group(
+    ids: Vec<String>,
+    group: Option<String>,
+    app: AppHandle,
+    runtime: State<'_, ModelLabRuntime>,
+) -> Result<Vec<DatasetSummary>, String> {
+    for id in &ids {
+        validate_dataset_id(id)?;
+    }
+    let group = clean_group_name(group.as_deref())?;
+    let _guard = runtime
+        .lock
+        .lock()
+        .map_err(|_| "model lab lock was poisoned".to_string())?;
+    let mut index = load_index(&app);
+    put_in_group(&mut index, &ids, group)?;
+    write_index_atomic(&app, &index)?;
+    Ok(index.datasets)
+}
+
+fn put_in_group(
+    index: &mut DatasetIndex,
+    ids: &[String],
+    group: Option<String>,
+) -> Result<(), String> {
+    if let Some(missing) = ids
+        .iter()
+        .find(|id| !index.datasets.iter().any(|dataset| &dataset.id == *id))
+    {
+        return Err(format!("no dataset with id '{missing}'"));
+    }
+    for dataset in index
+        .datasets
+        .iter_mut()
+        .filter(|dataset| ids.contains(&dataset.id))
+    {
+        dataset.group = group.clone();
+    }
+    Ok(())
 }
 
 /// Marks a recording's labels as reviewed or as needing work (with a note), or clears that (`status` None).
@@ -1221,6 +1395,10 @@ mod tests {
             content_sha: None,
             quality: None,
             review: None,
+            group: None,
+            labels_from: None,
+            camera: false,
+            recorded_at: None,
         };
         assert_eq!(dataset.effective_labels(), vec!["idle", "pinch_start"]);
         // An index written before multi-label datasets existed has no `labels`.
@@ -1318,6 +1496,66 @@ mod tests {
         }
         let twins: Vec<&Vec<&str>> = by_sha.values().filter(|ids| ids.len() > 1).collect();
         println!("same data: {twins:?}");
+    }
+
+    #[test]
+    fn recordings_are_put_in_a_group_and_taken_out_and_an_unknown_id_changes_nothing() {
+        let mut index: DatasetIndex = serde_json::from_str(
+            r#"{"datasets":[{"id":"a","originalFilename":"a.csv","importedAt":"","label":"idle","rowCount":3},
+                           {"id":"b","originalFilename":"b.csv","importedAt":"","label":"idle","rowCount":3}]}"#,
+        )
+        .unwrap();
+        assert!(
+            index.datasets.iter().all(|d| d.group.is_none()),
+            "an index from before groups reads as no group"
+        );
+        put_in_group(
+            &mut index,
+            &["a".into(), "b".into()],
+            clean_group_name(Some("  old ")).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            index
+                .datasets
+                .iter()
+                .all(|d| d.group.as_deref() == Some("old"))
+        );
+        assert!(
+            serde_json::to_string(&index)
+                .unwrap()
+                .contains(r#""group":"old""#)
+        );
+        assert!(put_in_group(&mut index, &["b".into(), "gone".into()], None).is_err());
+        assert_eq!(
+            index.datasets[1].group.as_deref(),
+            Some("old"),
+            "nothing changed"
+        );
+        put_in_group(
+            &mut index,
+            &["b".into()],
+            clean_group_name(Some("   ")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(index.datasets[1].group, None);
+        assert!(
+            !serde_json::to_string(&index.datasets[1])
+                .unwrap()
+                .contains("group")
+        );
+    }
+
+    #[test]
+    fn a_group_name_is_trimmed_and_refused_when_too_long_or_holding_a_line_break() {
+        assert_eq!(clean_group_name(None), Ok(None));
+        assert_eq!(
+            clean_group_name(Some(" pinch day 2 ")),
+            Ok(Some("pinch day 2".into()))
+        );
+        assert!(clean_group_name(Some(&"x".repeat(MAX_GROUP_NAME_CHARS))).is_ok());
+        assert!(clean_group_name(Some(&"x".repeat(MAX_GROUP_NAME_CHARS + 1))).is_err());
+        assert!(clean_group_name(Some("a\nb")).is_err());
     }
 
     #[test]
@@ -1586,6 +1824,21 @@ mod tests {
         assert!(saved.lines().next().unwrap().starts_with("watch_timestamp_ns,frame_index,capture_ms,"));
         assert!(saved.lines().nth(1).unwrap().starts_with("4990000000,0,1000.000,"));
         assert_eq!(fs::read_to_string(folder.join(CLOCK_SYNC_FILE_NAME)).unwrap(), sync);
+        // Labelling reads them back as the recording kept them.
+        let evidence = crate::recording_bundle::folder_camera_evidence(&folder).unwrap();
+        assert_eq!(evidence.hand_landmarks, Some(format!("{landmarks}\n")));
+        assert_eq!((evidence.hand_landmarks_second, evidence.clock_sync), (None, sync.clone()));
+        assert!(crate::recording_bundle::folder_camera_evidence(&parent).is_none(), "no landmarks there");
+        // Importing the folder keeps them with the recording.
+        let stored = parent.join("stored");
+        fs::create_dir_all(&stored).unwrap();
+        assert_eq!(
+            keep_camera_files(&folder, &stored),
+            2,
+            "the landmarks and the clock samples"
+        );
+        assert_eq!(fs::read_to_string(stored.join(HAND_LANDMARKS_FILE_NAME)).unwrap(), saved);
+        assert!(crate::recording_bundle::has_landmarks(&stored));
         // The pair still reads back exactly as before: the camera files sit beside it.
         assert!(dataset_files::parse_pair(
             &fs::read_to_string(folder.join("ppg.csv")).unwrap(),
@@ -1635,6 +1888,10 @@ mod tests {
             content_sha: None,
             quality: None,
             review: None,
+            group: None,
+            labels_from: None,
+            camera: false,
+            recorded_at: None,
         };
         let mut index = DatasetIndex {
             datasets: ids.iter().map(entry).collect(),

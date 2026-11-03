@@ -1,6 +1,7 @@
 import { describeContext } from "../../telemetry/sessionContext";
 import { invoke } from "@tauri-apps/api/core";
-import { useRef, useState, type ChangeEvent } from "react";
+import { ChevronRightIcon } from "lucide-react";
+import { useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import {
   AlertDialog,
@@ -22,8 +23,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Checkbox } from "../../../components/ui/checkbox";
 import { afterUndoWindow } from "../../../components/app/OperationFeedback";
 import { appNavigation } from "../../../shared/navigation/appNavigation";
-import { extraCopies, filterRecordings, NO_FILTER, type RecordingFilter } from "../recordingFilters";
+import { extraCopies, filterRecordings, groupNames, groupRecordings, MAX_GROUP_NAME, NO_FILTER, type RecordingFilter } from "../recordingFilters";
 import { LabelSwatch } from "../../labels/labelColor";
+import { formatTime } from "../labelModels";
+import { labelsFromText, recordingTitle } from "../recordingNames";
 import { datasetLabels, describeGaps, describeQuality, recordingDay, recordingNumber, sameDataAs, type DatasetLabel, type DatasetSummary } from "../types";
 
 function readFileAsText(file: File): Promise<string> {
@@ -50,12 +53,14 @@ type DatasetManagerProps = {
   onDelete: (id: string) => Promise<void>;
   /** Seals (or unseals) recordings for the final test. */
   onSeal?: (ids: string[], sealed: boolean) => Promise<void>;
+  /** Puts recordings in a group, or takes them out of theirs (`group` null). */
+  onGroup?: (ids: string[], group: string | null) => Promise<void>;
   /** The Labels list, for each label's colour. */
   labels?: DatasetLabel[];
 };
 
 /** Imports and manages recorded session CSVs. */
-export function DatasetManager({ desktopAvailable, datasets, loading, importing, error, pendingDeleteIds, onImport, onImportFolder, onConverted, onDelete, onSeal, labels = [] }: DatasetManagerProps) {
+export function DatasetManager({ desktopAvailable, datasets, loading, importing, error, pendingDeleteIds, onImport, onImportFolder, onConverted, onDelete, onSeal, onGroup, labels = [] }: DatasetManagerProps) {
   const days = [...new Set(datasets.map(recordingDay))].sort();
   const allLabels = [...new Set(datasets.flatMap(datasetLabels))].filter(Boolean).sort();
   const sealedCount = datasets.filter((dataset) => dataset.sealed).length;
@@ -64,6 +69,8 @@ export function DatasetManager({ desktopAvailable, datasets, loading, importing,
   const [leaving, setLeaving] = useState<Set<string>>(new Set());
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [working, setWorking] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const groups = groupNames(datasets);
   const shown = filterRecordings(datasets, filter).filter((dataset) => !leaving.has(dataset.id));
   // Only what is still listed counts as picked.
   const chosen = datasets.filter((dataset) => picked.has(dataset.id));
@@ -106,15 +113,83 @@ export function DatasetManager({ desktopAvailable, datasets, loading, importing,
     await onImport({ filename: file.name, csvContent: await readFileAsText(file) });
   };
 
+  const recordingItem = (dataset: DatasetSummary) => (
+    <li key={dataset.id} className="recipe-item">
+      <Checkbox checked={picked.has(dataset.id)} aria-label={`Choose ${dataset.originalFilename}`} onCheckedChange={(on) => setPick(dataset.id, Boolean(on))} />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="text-sm">
+          {dataset.sequence ? <strong className="mr-2 font-mono" aria-label={`Recording ${dataset.sequence}`}>{recordingNumber(dataset)}</strong> : null}
+          <span className="font-medium">{recordingTitle(dataset)}</span>
+          {dataset.camera ? <Badge variant="secondary" className="ml-2">Camera</Badge> : <Badge variant="outline" className="ml-2" title="No hand landmarks: the Labelling page cannot draw the hand">No camera</Badge>}
+          {dataset.sealed && <Badge variant="outline" className="ml-2">Sealed for the final test</Badge>}
+          {dataset.review?.status === "reviewed" && <Badge variant="secondary" className="ml-2">Labels reviewed</Badge>}
+          {dataset.review?.status === "needs_work" && <Badge variant="destructive" className="ml-2">Labels need work</Badge>}
+        </span>
+        <span className="break-all text-xs text-muted-foreground">{dataset.originalFilename}</span>
+        {labelsFromText(dataset) && <small className={dataset.labelsFrom === "motion" ? "text-xs text-amber-600 dark:text-amber-400" : "text-xs text-muted-foreground"}>{labelsFromText(dataset)}</small>}
+        <small className="text-xs text-muted-foreground">{datasetLabels(dataset).map((label) => <LabelSwatch key={label} label={label} catalogue={labels} />)}{dataset.label.replaceAll("_", " ")} · {dataset.rowCount} rows{dataset.twoFiles ? " · two files" : ""}{dataset.importedAt ? ` · imported ${formatTime(dataset.importedAt)}` : ""}</small>
+        {(() => {
+          const quality = describeQuality(dataset.quality);
+          return quality && <small className={quality.warn ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>{quality.text}</small>;
+        })()}
+        {(() => {
+          const twins = sameDataAs(dataset, datasets);
+          return twins.length > 0 && (
+            <small className="text-xs text-destructive" role="note">
+              Same data as {twins.map((twin) => `${twin.sequence ? `${recordingNumber(twin)} ` : ""}${twin.originalFilename}`).join(", ")}: delete one, or it counts twice in training and in every test.
+            </small>
+          );
+        })()}
+        {dataset.review?.status === "needs_work" && dataset.review.note && <small className="text-xs text-destructive">To do: {dataset.review.note}</small>}
+        {dataset.context && Object.keys(dataset.context).length > 0 && (
+          <small className="text-xs text-muted-foreground">Recorded: {describeContext(dataset.context)}</small>
+        )}
+        {dataset.derivedFrom && (
+          <small className="text-xs text-muted-foreground">
+            New version of {(() => {
+              const source = datasets.find((other) => other.id === dataset.derivedFrom);
+              return source ? `${source.sequence ? `${recordingNumber(source)} ` : ""}${source.originalFilename}` : "a recording since deleted";
+            })()}, labelled by hand
+          </small>
+        )}
+        {(() => {
+          const gaps = describeGaps(dataset.gaps);
+          return gaps && <small className={gaps.warn ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>{gaps.warn ? "Watch stream stalled: " : ""}{gaps.text}</small>;
+        })()}
+      </div>
+      <Button type="button" variant="outline" onClick={() => appNavigation.openInLabelling({ datasetId: dataset.id, atMs: 0 })}>Label</Button>
+      {onSeal && (
+        <Button type="button" variant="outline" onClick={() => void onSeal([dataset.id], !dataset.sealed)}>
+          {dataset.sealed ? "Unseal" : "Seal"}
+        </Button>
+      )}
+      <AlertDialog>
+        <AlertDialogTrigger render={<Button type="button" variant="outline" disabled={pendingDeleteIds.has(dataset.id)}>Delete</Button>} />
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this recording?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes {dataset.originalFilename} ({dataset.rowCount} rows) from the desktop app. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => deleteAll([dataset.id])}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </li>
+  );
+
   return (
     <Card id="lab-dataset" role="region" aria-label="Recordings" className="min-w-0">
       <CardHeader>
         <SectionHeader
           title="Recordings"
-          description="Labelled sessions to train from. Record them on the Recorder tab, export the CSV, then import it here."
+          description="Labelled sessions to train from. Add new sessions with From the Recorder above: that keeps the camera's hand landmarks, so the Labelling page can draw the hand. Import is for recordings from elsewhere."
           help={{
             label: "About importing recordings",
-            content: "Only CSVs exported from the Recorder tab's labelled dataset recorder are supported. A Quick Capture session has one label; a Timeline Capture session keeps the label of each interval and drops rows outside any interval. An import either fully succeeds or writes nothing, and a failure says exactly why so you can fix it and retry.",
+            content: "A recording folder exported by the Recorder keeps its camera files (hand_landmarks.csv and clock_sync.csv) when imported; a single CSV has no camera data. Only files exported from the Recorder are supported. A Quick Capture session has one label; a Timeline Capture session keeps the label of each interval and drops rows outside any interval. An import either fully succeeds or writes nothing, and a failure says exactly why so you can fix it and retry.",
           }}
         />
       </CardHeader>
@@ -137,7 +212,7 @@ export function DatasetManager({ desktopAvailable, datasets, loading, importing,
               <strong>Final test:</strong> {sealedCount} sealed. Seal a whole day you have not trained on; it is then never trained on, and Final test below runs a model over it.
             </span>
             <Select value="" onValueChange={(day) => void onSeal(datasets.filter((dataset) => recordingDay(dataset) === day).map((dataset) => dataset.id), true)}>
-              <SelectTrigger aria-label="Seal a day" className="w-44">
+              <SelectTrigger aria-label="Seal a day" className="min-w-44">
                 <SelectValue placeholder="Seal a day…" />
               </SelectTrigger>
               <SelectContent>
@@ -171,7 +246,7 @@ export function DatasetManager({ desktopAvailable, datasets, loading, importing,
         )}
         {datasets.length > 0 && (
           <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label="Find recordings">
-            <Input aria-label="Search recordings" placeholder="Search names, labels, session details" className="max-w-xs" value={filter.text} onChange={(event) => setFilter({ ...filter, text: event.target.value })} />
+            <Input aria-label="Search recordings" placeholder="Search names, labels, session details" className="min-w-56 max-w-xl flex-1" value={filter.text} onChange={(event) => setFilter({ ...filter, text: event.target.value })} />
             <select aria-label="Day" className="recipe-select" value={filter.day} onChange={(event) => setFilter({ ...filter, day: event.target.value })}>
               <option value="">Every day</option>
               {days.map((day) => <option key={day} value={day}>{day}</option>)}
@@ -204,6 +279,26 @@ export function DatasetManager({ desktopAvailable, datasets, loading, importing,
             <strong>{chosen.length} chosen</strong>
             {onSeal && <Button type="button" size="sm" variant="outline" disabled={working} onClick={() => void onSeal(chosen.map((d) => d.id), true)}>Seal</Button>}
             {onSeal && <Button type="button" size="sm" variant="outline" disabled={working} onClick={() => void onSeal(chosen.map((d) => d.id), false)}>Unseal</Button>}
+            {onGroup && (
+              <form
+                className="flex items-center gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!groupName.trim()) return;
+                  void onGroup(chosen.map((d) => d.id), groupName.trim()).then(() => {
+                    setGroupName("");
+                    setPicked(new Set());
+                  });
+                }}
+              >
+                <Input aria-label="Group name" placeholder="Group name" list="recording-groups" maxLength={MAX_GROUP_NAME} className="h-8 w-40" value={groupName} onChange={(event) => setGroupName(event.target.value)} />
+                <datalist id="recording-groups">{groups.map((group) => <option key={group} value={group} />)}</datalist>
+                <Button type="submit" size="sm" variant="outline" disabled={working || !groupName.trim()}>Move to group</Button>
+              </form>
+            )}
+            {onGroup && chosen.some((d) => d.group) && (
+              <Button type="button" size="sm" variant="outline" disabled={working} onClick={() => void onGroup(chosen.map((d) => d.id), null).then(() => setPicked(new Set()))}>Take out of group</Button>
+            )}
             <ConfirmButton
               label="Delete"
               size="sm"
@@ -229,77 +324,128 @@ export function DatasetManager({ desktopAvailable, datasets, loading, importing,
             />
             Choose every recording listed
           </label>
-          <ul className="flex flex-col gap-2" aria-label="Imported recordings">
-            {shown.map((dataset) => (
-              <li key={dataset.id} className="recipe-item">
-                <Checkbox checked={picked.has(dataset.id)} aria-label={`Choose ${dataset.originalFilename}`} onCheckedChange={(on) => setPick(dataset.id, Boolean(on))} />
-                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <span className="text-sm">
-                    {dataset.sequence ? <strong className="mr-2 font-mono" aria-label={`Recording ${dataset.sequence}`}>{recordingNumber(dataset)}</strong> : null}
-                    {dataset.originalFilename}
-                    {dataset.sealed && <Badge variant="outline" className="ml-2">Sealed for the final test</Badge>}
-                    {dataset.review?.status === "reviewed" && <Badge variant="secondary" className="ml-2">Labels reviewed</Badge>}
-                    {dataset.review?.status === "needs_work" && <Badge variant="destructive" className="ml-2">Labels need work</Badge>}
-                  </span>
-                  <small className="text-xs text-muted-foreground">{datasetLabels(dataset).map((label) => <LabelSwatch key={label} label={label} catalogue={labels} />)}{dataset.label.replaceAll("_", " ")} · {dataset.rowCount} rows{dataset.twoFiles ? " · two files" : ""}{dataset.importedAt ? ` · imported ${dataset.importedAt.slice(0, 16).replace("T", " ")}` : ""}</small>
-                  {(() => {
-                    const quality = describeQuality(dataset.quality);
-                    return quality && <small className={quality.warn ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>{quality.text}</small>;
-                  })()}
-                  {(() => {
-                    const twins = sameDataAs(dataset, datasets);
-                    return twins.length > 0 && (
-                      <small className="text-xs text-destructive" role="note">
-                        Same data as {twins.map((twin) => `${twin.sequence ? `${recordingNumber(twin)} ` : ""}${twin.originalFilename}`).join(", ")}: delete one, or it counts twice in training and in every test.
-                      </small>
-                    );
-                  })()}
-                  {dataset.review?.status === "needs_work" && dataset.review.note && <small className="text-xs text-destructive">To do: {dataset.review.note}</small>}
-                  {dataset.context && Object.keys(dataset.context).length > 0 && (
-                    <small className="text-xs text-muted-foreground">Recorded: {describeContext(dataset.context)}</small>
-                  )}
-                  {dataset.derivedFrom && (
-                    <small className="text-xs text-muted-foreground">
-                      New version of {(() => {
-                        const source = datasets.find((other) => other.id === dataset.derivedFrom);
-                        return source ? `${source.sequence ? `${recordingNumber(source)} ` : ""}${source.originalFilename}` : "a recording since deleted";
-                      })()}, labelled by hand
-                    </small>
-                  )}
-                  {(() => {
-                    const gaps = describeGaps(dataset.gaps);
-                    return gaps && <small className={gaps.warn ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>{gaps.warn ? "Watch stream stalled: " : ""}{gaps.text}</small>;
-                  })()}
-                </div>
-                <Button type="button" variant="outline" onClick={() => appNavigation.openInLabelling({ datasetId: dataset.id, atMs: 0 })}>Label</Button>
-                {onSeal && (
-                  <Button type="button" variant="outline" onClick={() => void onSeal([dataset.id], !dataset.sealed)}>
-                    {dataset.sealed ? "Unseal" : "Seal"}
-                  </Button>
-                )}
-                <AlertDialog>
-                  <AlertDialogTrigger render={<Button type="button" variant="outline" disabled={pendingDeleteIds.has(dataset.id)}>Delete</Button>} />
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Delete this recording?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This permanently deletes {dataset.originalFilename} ({dataset.rowCount} rows) from the desktop app. This cannot be undone.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Keep it</AlertDialogCancel>
-                      <AlertDialogAction variant="destructive" onClick={() => deleteAll([dataset.id])}>Delete</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </li>
-            ))}
-          </ul>
+          {groups.length === 0 ? (
+            <ul className="flex flex-col gap-2" aria-label="Imported recordings">
+              {shown.map(recordingItem)}
+            </ul>
+          ) : (
+            groupRecordings(shown).map((group) => {
+              const inGroup = group.recordings;
+              const list = (
+                <ul className="flex flex-col gap-2" aria-label={group.name === null ? "Recordings in no group" : `Recordings in ${group.name}`}>
+                  {group.recordings.map(recordingItem)}
+                </ul>
+              );
+              return group.name === null ? (
+                <section key="" className="flex flex-col gap-2" aria-label="In no group">
+                  <h3 className="text-sm font-semibold">In no group <span className="font-normal text-muted-foreground">({inGroup.length})</span></h3>
+                  {list}
+                </section>
+              ) : (
+                <RecordingGroupSection
+                  key={group.name}
+                  name={group.name}
+                  count={inGroup.length}
+                  total={datasets.filter((dataset) => dataset.group === group.name).length}
+                  allPicked={inGroup.every((dataset) => picked.has(dataset.id))}
+                  onPickAll={(on) => setPicked((previous) => {
+                    const next = new Set(previous);
+                    for (const dataset of inGroup) {
+                      if (on) next.add(dataset.id);
+                      else next.delete(dataset.id);
+                    }
+                    return next;
+                  })}
+                  onRename={onGroup && ((name) => onGroup(datasets.filter((dataset) => dataset.group === group.name).map((dataset) => dataset.id), name))}
+                >
+                  {list}
+                </RecordingGroupSection>
+              );
+            })
+          )}
           {shown.length === 0 && <p className="hint">No recording matches. <Button type="button" variant="link" className="h-auto p-0" onClick={() => setFilter(NO_FILTER)}>Show them all</Button></p>}
           </>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** Whether a group of recordings was left open, remembered per group name; a browser that will not say means closed. */
+function readGroupOpen(name: string): boolean {
+  try {
+    return window.localStorage.getItem(`recordingGroup.${name}`) === "open";
+  } catch {
+    return false;
+  }
+}
+
+/** One named group of recordings, folded away until opened; whether it was left open is remembered. */
+function RecordingGroupSection({ name, count, total, allPicked, onPickAll, onRename, children }: {
+  name: string;
+  /** How many of its recordings are listed under the current search. */
+  count: number;
+  total: number;
+  allPicked: boolean;
+  onPickAll: (on: boolean) => void;
+  /** Renames the group (null takes its recordings out of it). */
+  onRename?: (name: string | null) => Promise<void>;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(() => readGroupOpen(name));
+  const [renaming, setRenaming] = useState<string | null>(null);
+  return (
+    <details
+      className="recording-group"
+      open={open}
+      aria-label={`Group ${name}`}
+      onToggle={(event) => {
+        const now = (event.currentTarget as HTMLDetailsElement).open;
+        setOpen(now);
+        try {
+          window.localStorage.setItem(`recordingGroup.${name}`, now ? "open" : "closed");
+        } catch {
+          // Remembering is a convenience.
+        }
+      }}
+    >
+      <summary>
+        <ChevronRightIcon className="advanced-chevron size-4" aria-hidden="true" />
+        <span className="advanced-title">{name}</span>
+        <span className="advanced-summary">{count === total ? `${total} recording${total === 1 ? "" : "s"}` : `${count} of ${total} match`}</span>
+      </summary>
+      {open && (
+        <div className="flex flex-col gap-2 pt-2">
+          <div className="flex flex-wrap items-center gap-2 text-sm" role="group" aria-label={`With group ${name}`}>
+            <label className="flex items-center gap-2">
+              <Checkbox checked={allPicked} aria-label={`Choose every recording listed in ${name}`} onCheckedChange={(on) => onPickAll(Boolean(on))} />
+              Choose every one listed
+            </label>
+            {onRename && renaming === null && (
+              <>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setRenaming(name)}>Rename group</Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => void onRename(null)}>Ungroup</Button>
+              </>
+            )}
+            {onRename && renaming !== null && (
+              <form
+                className="flex items-center gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!renaming.trim()) return;
+                  void onRename(renaming.trim()).then(() => setRenaming(null));
+                }}
+              >
+                <Input aria-label={`New name for ${name}`} maxLength={MAX_GROUP_NAME} className="h-8 w-40" value={renaming} autoFocus onChange={(event) => setRenaming(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") setRenaming(null); }} />
+                <Button type="submit" size="sm" variant="outline" disabled={!renaming.trim()}>Save name</Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setRenaming(null)}>Cancel</Button>
+              </form>
+            )}
+          </div>
+          {children}
+        </div>
+      )}
+    </details>
   );
 }
 
