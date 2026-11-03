@@ -61,6 +61,8 @@ export interface TrainRequest {
   labelOffsetMs?: number;
   /** Which model to train; absent trains the trees. */
   method?: TrainMethod;
+  /** Train again with the moments it fired by mistake on its training recordings (`reinforce` in the trainer). */
+  hardNegatives?: boolean;
 }
 
 /** The most the labels may be moved in time, either way (the desktop's limit). */
@@ -167,6 +169,7 @@ export function buildRequest(input: {
   research?: boolean;
   labelOffsetMs?: number;
   method?: TrainMethod;
+  hardNegatives?: boolean;
 }): TrainRequest {
   const role = (label: string): OtherRole => input.roles[label] ?? "negative";
   return {
@@ -177,6 +180,7 @@ export function buildRequest(input: {
     ...(input.research ? { research: true } : {}),
     ...(input.labelOffsetMs ? { labelOffsetMs: input.labelOffsetMs } : {}),
     ...(input.method === CNN_METHOD ? { method: CNN_METHOD } : {}),
+    ...(input.hardNegatives ? { hardNegatives: true } : {}),
   };
 }
 

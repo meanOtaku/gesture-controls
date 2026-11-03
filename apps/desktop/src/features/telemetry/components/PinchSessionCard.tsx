@@ -14,7 +14,7 @@ import type { DatasetLabel } from "../../model-lab/types";
 import { guidedRunner } from "../recording/guidedRunner";
 import { planProblem, planSteps, totalMs, type GuidedPlan } from "../recording/guidedSession";
 import { telemetryStore } from "../store/telemetryStore";
-import { GuidedRunningView } from "./GuidedSessionCard";
+import { GuidedRunningView } from "./GuidedRunningView";
 
 /** What the person can change about a pinch session; the rest of the plan is fixed. */
 export interface PinchSettings {

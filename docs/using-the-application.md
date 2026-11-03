@@ -71,7 +71,7 @@ close the list.
 
 ### Advanced sections
 
-Pages with many tools show their main flow first and fold the rest under **Advanced** at the bottom: on the Recorder, guided sessions for other gestures and label coverage; in Model Lab, training history, mistakes, threshold, comparing models, the final test and the link to Labels. Click **Advanced** to open it; each page remembers whether you left it open.
+Pages with many tools show their main flow first and fold the rest under **Advanced** at the bottom: in Model Lab, training history, mistakes, threshold, comparing models, the final test and the link to Labels. Click **Advanced** to open it; each page remembers whether you left it open.
 
 ### Contextual help
 
@@ -162,8 +162,12 @@ If a sensor is unavailable, treat that as a device capability or permission stat
 The capture tools are three tabs in the **Record** group of the sidebar, in the order you use them:
 
 - **Live signals** shows what the sensors are sending right now (the charts below). Use it to check a stream, not to record one. The head and watch orientation graphs draw yaw, pitch and roll as continuous lines: an angle turning through the back of the circle (+180° to -180°) carries on past 180° instead of jumping, so a slow turn is not drawn as a spike. This is for the graphs only; recorded values keep the raw angles.
-- **Recorder** records a session from the watch and exports it. While a timed capture records, a **Time remaining** counter and a progress bar count down to the moment it stops. When a timed capture ends it exports by itself, as the **Export** button would, and it still does so if you switch to another tab while it runs.
-- **Exports**, the card at the top of the Recorder, is one setting for every export: the **export folder**, and whether to export a **folder of two files** (`ppg.csv` and `imu.csv`, the default and what Model Lab imports) or **one CSV** (the older format). It applies to the Recorder's **Export** button, to the export at the end of a timed or guided recording, and to the Labelling page's **Export**, which shows the same setting. It is remembered between launches. Export waits until a folder is chosen; the browser preview, which has no folder picker, downloads one CSV.
+- **Recorder** records a session from the watch: pinch in / out, everyday noise, or any other gesture, with the camera
+  beside the cards (above them in a narrow window) so you see what it sees while you record. Every recording is saved in
+  the app when it stops, and Model Lab adds it to the training data from there (**From the Recorder**); there is nothing to
+  export. A timed recording stops by itself, even if you switch to another tab while it runs. If you chose an export
+  folder (the Labelling page's export settings: the folder, and a **folder of two files** or **one CSV**), a timed
+  recording is also exported there when it ends; the browser preview downloads one CSV.
 - **Recordings** looks inside saved sessions (currently the raw image viewer).
 
 The sidebar marks **Recorder** while a recording is running (and, otherwise, while a camera is on). Cmd/Ctrl+1 to 9 and Cmd/Ctrl+0 open the first ten tabs (Overview to Model Lab, in sidebar order), and Cmd/Ctrl+comma opens Settings.
@@ -182,49 +186,27 @@ The fast charts (headphones, watch orientation and acceleration, PPG) show the *
 
 Chart visibility follows the enabled/streaming state of the corresponding sensor.
 
-#### Ordinary CSV capture (Recorder)
-
-Use **Start recording** / **Stop recording** for a general telemetry capture, then choose **Save CSV**. This exports buffered incoming rows with source timestamps and sequences. The tab shows buffer usage; when the cap is reached, the oldest ordinary-capture rows are dropped.
-
 #### Camera hand tracking (Recorder)
 
-Under the recorder, **Camera hand tracking** finds the landmarks of your hand with the camera, on this computer. **Turn camera on** (macOS asks for permission the first time; allow it), and you see a mirror view with the 21 points drawn on each hand, how many hands are in view, the frame rate, which hand it is, and the distance between thumb and index finger in hand sizes (about 0 is a firm pinch). Keep the hand that wears the watch in view. If the computer has more than one camera, a **Camera** dropdown appears (here and in the Gesture library); picking one while the camera is on switches to it at once, and picking one while it is off is used the next time you turn it on. The list updates when you plug a camera in. Only one camera is used at a time, and the choice is not remembered between launches.
+Beside the Recorder's cards, **Camera hand tracking** stays in view while you scroll (above the cards in a narrow window), so you can watch what the camera sees during any session. It finds the landmarks of your hand with the camera, on this computer. **Turn camera on** (macOS asks for permission the first time; allow it), and you see a mirror view with the 21 points drawn on each hand, how many hands are in view, the frame rate, which hand it is, and the distance between thumb and index finger in hand sizes (about 0 is a firm pinch). Keep the hand that wears the watch in view. If the computer has more than one camera, a **Camera** dropdown appears (here and in the Gesture library); picking one while the camera is on switches to it at once, and picking one while it is off is used the next time you turn it on. The list updates when you plug a camera in. Only one camera is used at a time, and the choice is not remembered between launches.
 
 With **Save hand landmarks with recordings** ticked (the default), each recording also saves `hand_landmarks.csv` (the landmarks of every camera frame, and when it was taken) and `clock_sync.csv` (how to line the camera up with the watch). **Only landmarks are saved, never the picture, and nothing leaves your computer.** The camera stays on while you switch to other tabs, so a recording keeps its pictures. A timed capture is now also saved as a recording (with its landmarks), as a manual stop already was. The camera badge shows how fast the camera is going and how long the hand model takes for each picture (for example “30 frames/s · 12 ms each”); the picture is asked for at 640×360, which is plenty for the hand model. The hand model runs in a **background worker**, so detecting your hand never holds up the page or the picture, and the camera takes a new picture only when the last one is answered, so pictures never queue up and the hands always belong to a recent picture. A “Hand model” badge says what runs it (graphics chip or processor, background or page thread); if the worker cannot start, the app quietly runs the same model on the page's own thread. Gestures are decided on every frame whatever the page is drawing. If the camera drops below 15 frames a second while camera marking records, the marking card warns that the marks may be a little off. The panel shows the clock alignment with the watch once the watch is streaming, and how many frames a running recording has kept (about 17 minutes is the limit).
 
 This step only captures. Turning landmarks into gesture labels is not built yet. Details: `docs/architecture/camera-landmarks.md`.
 
-#### Labeled dataset recorder (Recorder)
+#### Record a gesture (Recorder)
 
-Use this for model training data. It records a separate, labeled session distinct from the ordinary CSV capture above, and it never includes data you were already looking at before you pressed Start.
+For any of your gestures other than pinch in / out (fist, thumbs up, …), with no cues. Choose the **Gesture** (one of your
+own labels; make them on the Labels tab) and the **Recording duration**, then **Start recording**.
 
-**Graph history is excluded on purpose.** The live charts above keep a rolling buffer so you can see recent signal, but that buffer is never copied into a new recording. Pressing **Start** arms the recorder and clears only the new recording's buffer; the first row ever stored is the first sensor sample the desktop accepts *after* Start, not anything already visible in the graphs.
-
-**Arming and the timer.** After Start, the card shows `Arming…` while it waits for that first accepted sample — if the sensor is unavailable or you press Stop before any sample arrives, the session is cancelled and no data file is created. Once the first sample lands, recording begins immediately and the elapsed/remaining timer starts counting from that moment, not from when you pressed Start. This keeps "planned duration" and "actual duration" honest even if there's a short delay before the first sample.
-
-Two capture modes share this same Arming/timer behavior and the same immutable-raw-data guarantee, but differ in how labels are attached:
-
-- **Quick Capture** — pick or type one label, Start, perform only that gesture or activity, Stop. The whole session becomes a single label interval covering its full span. This is the simplest workflow and matches the original one-label-per-session recorder.
-- **Timeline Capture** — Start a longer recording, then switch labels live as you go: click a label, press number keys 1-9 to toggle a label on/off, or hold Alt+1-9 to label only while the key is held. Stretches you don't label stay `unannotated` rather than being silently treated as a negative/background label — an unlabeled gap is not the same thing as "no gesture happened."
-
-**Raw data is immutable.** Once samples are captured, `raw.csv` for that recording is never rewritten — not by labeling, not by curation, not by later edits. Only interval/label metadata (`annotations.json`) can change after the fact. Quick Capture saves its bundle automatically on Stop; Timeline Capture leaves the session in a **Saved** state so you can review/edit intervals first, then choose **Save recording bundle** to persist that reviewed state.
-
-**Interval curation (Timeline Capture only).** After Stop, the recording timeline editor lets you split, move boundaries, relabel, delete, or mark each interval's curation status (`unreviewed`, `approved`, `excluded`) before you rely on it for training, and lets you fill an unannotated gap with a new interval. Every one of these edits changes only interval metadata — the underlying raw samples and their timestamps never move. Use **excluded** to drop a bad stretch of a recording without discarding the rest of it.
-
-**Recording quality summary.** While a session is buffered and on a saved recording's detail view, a compact quality summary reports row count, observed time span and effective sample rate, timestamp ordering (`ok`/`warning`/`insufficient_data`), missing-value counts per channel, and label coverage including any interval shorter than ~150 ms (too brief for the current 500 ms model window). This is a data-quality review, not model validation — it never rewrites raw samples or annotations, and it never claims a recording is "training-ready."
-
-**Export review gate.** Pressing **Export** with a buffered session first shows this same quality summary as a review dialog. A session with no quality warnings exports immediately from that dialog. A session with warnings requires an explicit **Export anyway** click; **Cancel** closes the dialog and leaves every buffered row and interval untouched. A session with no recording/quality summary available (nothing buffered yet) exports exactly as before, with no dialog.
-
-**Discard** removes the current in-memory session without saving or exporting it — nothing has been written to disk yet at that point, so nothing needs to be cleaned up. **Export** writes the recording, as the Exports card says, into its folder. A folder of two files is two dense files that Model Lab imports as one: `ppg.csv` (a row for each pulse sample) and `imu.csv` (a row for each motion sample, with acceleration, gyroscope and orientation), plus a small `dataset.json` with the row counts and labels. Each file has a row only where its own sensor produced a sample, so neither has blank cells where the other sensor had nothing; both carry the label of each row, and a `# label:` line says every row of a single-label session. A name that is already taken gets a number after it, so an export never overwrites another. **One CSV** (the older format) writes the single file with blank cells instead, for tools that expect it. Either way, the export writes the dataset the Model Lab importer reads: a Quick Capture session is one uniformly labeled file; a Timeline Capture session keeps each row's interval label, with the rows between intervals left unlabeled (the importer drops those). Only these per-row labels reach training; a recording's curation status and interval boundaries in `annotations.json` do not (see [Review remediation](review-remediation.md)). Preserve a mix of positive gestures and realistic background/negative activities; that is important for false-activation evaluation.
-
-**Pinch collection protocol.** A practical routine for capturing usable `pinch` intervals with Timeline Capture:
-
-1. Put the watch/headphones on and let sensors settle a few seconds before recording anything.
-2. Start the recording, then hold a few seconds of neutral rest (no gesture) so there's clean lead-in.
-3. Hold the marker through one full pinch — start the hold just before the pinch begins and release just after it ends, for at least 300–500 ms (see the marker's tooltip); a shorter hold gives the 500 ms model window too little context and is flagged as a short label.
-4. Return to rest, then repeat steps 2–3 for several more pinches, mixed with realistic non-pinch activity so background/negative coverage isn't all idle.
-5. Capture more than one session (separate Start/Stop recordings) rather than one very long one — training holds out whole sessions, so one session can't cover evaluation by itself.
-6. Before exporting, check the quality summary and timeline intervals — fix mislabeled or too-short intervals, then export.
+- **Camera marking** is built into the card (below). When it can mark the gesture, the camera marks it wherever it sees it;
+  otherwise hold **Hold to mark "…"** (mouse, touch, Space or Enter) while you make it and let go when you stop. Stretches
+  you do not mark are left out of training, not taken as "not the gesture".
+- Start waits for the watch's first sample (**Waiting for the watch's first sample…**); nothing already on the charts goes
+  into the recording, and the timer counts from that first sample. **Cancel** before then makes no recording.
+- While it records, **Time remaining** and a progress bar count down. It stops and is saved by itself at the end, or with
+  **Stop and save**. **Discard** throws it away without saving.
+- The raw samples of a saved recording are never rewritten; only its labels can change afterwards (on the Labelling page).
 
 #### Session details (Recorder)
 
@@ -262,25 +244,6 @@ exported folder also holds `ppg_clock.csv`.
   own timestamp (`newest_sensor_ns`), and the offset added to put its samples on the watch clock (`offset_ns`).
 - A pulse row's own timestamp is its `timestamp_ns` less its batch's offset.
 
-#### Guided session (Recorder)
-
-A **guided session** tells you when to make the gesture and labels it at that moment, so there is no key to hold and every
-label starts the same way.
-
-- Choose the **gesture**, **how many times**, how long to **hold each**, and how long to **rest** between cues (each rest is
-  picked at random between the shortest and longest, so the cues cannot be anticipated).
-- Then come stretches of **everyday activity** (typing, using the mouse, moving the arm by default; add or remove them). They
-  are labelled with the **everyday label** you choose (a label with the everyday-activity role), or left unlabelled.
-- **Start guided session** starts a timeline recording. After a 5 s lead-in, each cue counts down ("Get ready… 3"), then
-  shows "*Gesture* now" in large type, and the watch buzzes. The label is on for the hold time.
-- The recording stops by itself at the end, and is saved and exported (as the Exports card says) like any timed
-  recording. **Stop and save** ends it early and saves it in the app without exporting it; press the recorder's **Export**
-  afterwards for an exported copy. Stopping or discarding it on the recorder ends the session too. Switching tabs does not.
-- Each label starts at the cue, so it trails the gesture by your reaction time (about 0.3 s). That lag is steady, and Label
-  timing on the Labelling page measures and removes it.
-- If the watch cannot be buzzed (not connected, or the browser preview), the card says so and the cues are on screen only.
-- The labels it makes are recorded as made by a guided cue.
-
 #### Signal health (Recorder)
 
 Under the connection status, a strip shows the watch's streams live: the **motion** and **pulse** rates over the last 5 s and
@@ -305,13 +268,32 @@ opened. **Not now** hides the card.
 
 #### Let the camera mark it (Recorder)
 
-Wherever a page needs the camera (the Recorder's camera marking, the Gestures tab's check against the camera, the arm switch, the gesture editor and the correction panel in Model Lab), the same small camera control is there: **Turn camera on**, then a badge with the frame rate, **Show preview** / **Hide preview** for a small live picture with the hand drawn on it, and **Turn camera off**. It is the same camera as everywhere else, so turning it off here turns it off for the whole app; it cannot be turned off in the middle of a recording, because the recording would lose its hand landmarks. Under the recorder, **Let the camera mark it** labels a recording for you, and it is **on by default**. It takes effect whenever the camera is on, hand landmarks are being saved, and the label you chose has a gesture in the Gesture library; until then recordings are made as usual with no camera marks. A badge shows live whether the camera sees the gesture, so you can check it before you start. Record as usual with the watch on the hand the camera sees. With marking in effect the recording is made as a timeline, and **while you record** the camera writes the label straight into the watch data, just like holding the **Mark label** button: the label is on while the camera sees the gesture and off when you let go, starting where the gesture began rather than where the camera noticed it. Those intervals are **unreviewed**, and the PPG and motion rows carry the label in the saved recording and in **Export Dataset CSV**, the moment you stop. When you stop, a message says how many were marked, or that the camera never saw the gesture (the recording is kept either way). The tick box is a choice you can switch off, and it is remembered. Review the intervals in Recordings like any others.
+Wherever a page needs the camera (the Recorder's camera marking, the Gestures tab's check against the camera, the arm switch, the gesture editor and the correction panel in Model Lab), the same small camera control is there: **Turn camera on**, then a badge with the frame rate, **Show preview** / **Hide preview** for a small live picture with the hand drawn on it, and **Turn camera off**. It is the same camera as everywhere else, so turning it off here turns it off for the whole app; it cannot be turned off in the middle of a recording, because the recording would lose its hand landmarks. In the Recorder's **Record a gesture** card, **Let the camera mark the gesture** labels a recording for you, and it is **on by default**. It takes effect whenever the camera is on, hand landmarks are being saved, and the label you chose has a gesture in the Gesture library; until then recordings are made as usual with no camera marks. A badge shows live whether the camera sees the gesture, so you can check it before you start. Record as usual with the watch on the hand the camera sees. With marking in effect the recording is made as a timeline, and **while you record** the camera writes the label straight into the watch data, just like holding **Hold to mark**: the label is on while the camera sees the gesture and off when you let go, starting where the gesture began rather than where the camera noticed it. Those intervals are **unreviewed**, and the PPG and motion rows carry the label in the saved recording the moment you stop. When you stop, a message says how many were marked, or that the camera never saw the gesture (the recording is kept either way). The tick box is a choice you can switch off, and it is remembered. Review the intervals in Recordings like any others.
 
-**Several labels in one recording.** Choose the main label as usual, then under **Also mark in the same recording** press the other labels you want (any label that has a gesture in the Gesture library; a pressed one is highlighted). The camera then marks all of them in the one recording, each label's intervals on its own rows, and the recording keeps every label for Model Lab. Only one label is on at a time: if gestures of two labels are held together, the one that began last is marked, and the other takes over from where it ended if it is still held. The extra labels are fixed when you press Start, and cannot be changed during a recording. If a chosen label has no gesture the card says which, and no marking happens until you add the gesture or drop the label. When you stop, the message counts the intervals for each label and names any the camera never saw. Marking by hand with the Mark label button still marks the one main label.
+**Several labels in one recording.** Choose the main label as usual, then under **Also mark in the same recording** press the other labels you want (any label that has a gesture in the Gesture library; a pressed one is highlighted). The camera then marks all of them in the one recording, each label's intervals on its own rows, and the recording keeps every label for Model Lab. Only one label is on at a time: if gestures of two labels are held together, the one that began last is marked, and the other takes over from where it ended if it is still held. The extra labels are fixed when you press Start, and cannot be changed during a recording. If a chosen label has no gesture the card says which, and no marking happens until you add the gesture or drop the label. When you stop, the message counts the intervals for each label and names any the camera never saw. Marking by hand with **Hold to mark** still marks the one main label.
 
-**Pinch in / out session (Recorder).** The first card on the Recorder records pinch in and pinch out in one go. It checks four things, each with a button to fix it: the watch is connected, the labels `pinch_in`, `pinch_hold` and `pinch_out` exist (**Add them** creates all three), the camera is on and saving hand landmarks, and camera marking is on. Set how many **Pinches**, how long to **Hold each**, and how long to stay **Still** between them (at least and at most; each rest is picked at random in between, so the cues cannot be anticipated), then **Start pinch session**. It records as a timeline with pinch in selected and pinch hold and pinch out beside it, and cues each pinch on screen and with a buzz on the watch: **Get ready… 3, 2, 1**, **Pinch** (hold), **Let go**, then still until the next. The session only cues: the camera marks pinch in, the hold and pinch out where your fingers really meet, stay together and part (below). The recording stops, is saved and is exported by itself at the end, or with **Stop and save**. Other guided sessions now also say **Let go** for a moment after each hold.
+**Pinch in / out session (Recorder).** The first card on the Recorder records pinch in and pinch out in one go. It checks four things, each with a button to fix it: the watch is connected, the labels `pinch_in`, `pinch_hold` and `pinch_out` exist (**Add them** creates all three), the camera is on and saving hand landmarks, and camera marking is on. Set how many **Pinches**, how long to **Hold each**, and how long to stay **Still** between them (at least and at most; each rest is picked at random in between, so the cues cannot be anticipated), then **Start pinch session**. It records as a timeline with pinch in selected and pinch hold and pinch out beside it, and cues each pinch on screen and with a buzz on the watch: **Get ready… 3, 2, 1**, **Pinch** (hold), **Let go**, then still until the next. The session only cues: the camera marks pinch in, the hold and pinch out where your fingers really meet, stay together and part (below). The recording stops and is saved by itself at the end, or with **Stop and save**.
 
-**Pinch in and pinch out.** For the two moments of a pinch, create the labels `pinch_in` and `pinch_out` (Model Lab → Labels), pick **pinch in** in the Recorder, and add **pinch out** under the camera card's "Also mark in the same recording". No Gesture library gesture is needed: the camera marks a short **pinch in** (0.3 s) where the thumb and index finger meet, their distance falling below 0.35 hand sizes (or the level of a library gesture on `pinch_in`), and a short **pinch out** where they part again, timed where the distance rose back past that level and counted once it is 0.1 past it, so a distance hovering at the level does not mark a flurry. The card shows **Fingers together** or **Fingers apart** live, so you can check before you start. With both cameras on, the hand closer to a pinch in either counts. Add **pinch hold** as well (label `pinch_hold`) to label the time in between: only one label is on at a time, so each pinch becomes **pinch in** (0.3 s) → **pinch hold** (until the fingers part) → **pinch out** (0.3 s). A pinch shorter than 0.3 s has no hold, and if the camera loses your hand mid-hold the hold ends at the last frame that saw it. Leave a few still seconds between pinches. Train one model for each label (give the other the role Something else); the app never acts on both at once: if the two fire together, both are held off.
+**Pinch in and pinch out.** For the two moments of a pinch, use the **Pinch in / out session** above; or, in **Record a gesture**, pick **pinch in** and add **pinch out** under "Also mark in the same recording". No Gesture library gesture is needed: the camera marks a short **pinch in** (0.3 s) where the thumb and index finger meet, their distance falling below 0.35 hand sizes (or the level of a library gesture on `pinch_in`), and a short **pinch out** where they part again, timed where the distance rose back past that level and counted once it is 0.1 past it, so a distance hovering at the level does not mark a flurry. The card shows **Fingers together** or **Fingers apart** live, so you can check before you start. With both cameras on, the hand closer to a pinch in either counts. Add **pinch hold** as well (label `pinch_hold`) to label the time in between: only one label is on at a time, so each pinch becomes **pinch in** (0.3 s) → **pinch hold** (until the fingers part) → **pinch out** (0.3 s). A pinch shorter than 0.3 s has no hold, and if the camera loses your hand mid-hold the hold ends at the last frame that saw it. Leave a few still seconds between pinches. Train one model for each label (give the other the role Something else); the app never acts on both at once: if the two fire together, both are held off.
+
+**Everyday noise (Recorder).** The second card records ordinary use of your hand with **no gesture at all**, so every
+model learns what not to fire on, and so you can measure how often a model fires in daily use. The usual list takes about
+10 minutes: sitting still, typing, the mouse, the phone, drinking and handling things, talking with your hands, walking,
+stretching and scratching, resting the hand on your lap, and tapping the fingers and opening and closing the hand without
+pinching (the motions a pinch detector is most often fooled by). Edit, add or remove any. Each stretch gets one of the
+app's standard labels (under Labels, below): **Everyday noise** (`everyday_noise`) while you use your hand, **Hand still**
+(`still`) while it rests; choose which beside each activity. **Start everyday noise session** shows one activity after
+another, with a few seconds between to change; make no gesture. It stops, is saved and is exported by itself at the end.
+Then:
+
+- add it in Model Lab (**From the Recorder**, leaving the rest out);
+- train as usual: the standard labels are already "not the gesture", so there is no role to choose. Tick **Learn from its
+  own false alarms** (under Train a model) to make the most of it;
+- keep some noise recordings out of training: the false activations an hour on them are what daily use would see, and
+  Model Lab's cards show them apart (a recording with no gesture in it is judged with the camera-timed ones, as it has
+  no gesture timing to doubt).
+
+Record a session on each day you record pinches, in different places and positions.
 
 #### Mark an older recording (Recordings)
 
@@ -335,6 +317,11 @@ This viewer is inspection-only: it has no annotation-editing or training action,
 
 The **Labels** tab (first under Labels) is the one place labels are made and managed. A label is a short name for a gesture or an everyday activity the app can learn or recognise. Each label has an id (letters, digits and underscores, made from the name), a display name, optional notes and a role.
 
+- **Standard labels.** Two labels are the app's own and always listed, marked **Standard**: **Everyday noise**
+  (`everyday_noise`, ordinary use of the hand with no gesture) and **Hand still** (`still`, the hand at rest). They mean the
+  same for every model, so they cannot be edited, archived or deleted, a new label cannot take their ids, and no model is
+  trained to detect them: training always treats them as "not the gesture" (Something else) unless you leave them out.
+  The Recorder's Everyday noise session records them. Your own labels are the gestures (pinch, fist, …).
 - **Add a label** with a name; the id is shown before you create it and never changes afterwards. **Edit** changes the name, notes and role, and everything that refers to the label (recordings, models, recipes, gestures) keeps pointing at it.
 - Each label shows where it is used: in how many Recorder recordings, how many recordings in the training data, how many gestures and how many models. Recording and training happen in their own tabs, not here. A label something still uses can be **archived** but not deleted, so nothing is left without a meaning. Archived labels are hidden from pickers and can be restored.
 - **Archive…** and **Delete…** on a label that something uses open a preview that says exactly what will happen, and nothing runs until you confirm.
@@ -487,7 +474,13 @@ It fires about 0.9 s after a gesture begins. Tested 20 times on recordings it ne
 
 1. Choose the **label to teach**. Every recording starts selected; untick any you do not want.
 2. Give every other label in those recordings a role: **Something else** (it teaches the model what is *not* the gesture; their starts are the hardest thing for it to tell apart) or **Leave out**. Nothing is assumed.
-3. Optionally set the **label timing** (below) and tick **Also run research checks**.
+3. Optionally set the **label timing** (below), tick **Learn from its own false alarms**, and tick **Also run research checks**.
+
+**Learn from its own false alarms** trains the model, runs it over its training recordings as the app runs it live, adds
+every moment it fired with no gesture under way as an example of what is not the gesture, and trains it again (each model
+the threshold is chosen with does the same, so the threshold fits the model you get). Everyday-noise recordings teach it
+most. It takes about twice as long. A recording with no start of the label (everyday noise, or a session of another
+gesture) also gives the trees about 30 moments a minute of what is not the gesture, instead of 40 in all.
 
 Before anything runs, the card shows which recordings it will **train on** and which it will **test on**. The app decides this, deterministically, and a recording is never in both, so the score is about recordings the model has not seen. It refuses, and says why, if there are not at least two recordings with the label and two with something else (a recording with both kinds counts for each). The card warns if only one recording of the gesture would be trained on: a model trained on a single session usually memorises it.
 
@@ -623,7 +616,7 @@ Importing a CSV file still works for recordings made elsewhere.
 
 #### Recordings
 
-Record a labelled session on the **Recorder** tab (Quick Capture is one label; Timeline Capture keeps the label of each interval), export the dataset folder, then **Import a recording folder** here: choose the folder and both files are imported together (the check covers each file's exact header, rows of the right width, timestamps that never go backwards, consistent labels and that every label is already in the catalogue). **Import a single CSV (older format)** still takes a one-file export, and stores it as two files too. Recordings are kept in the app as a folder of two dense files, and the trainer merges them by timestamp when it reads them, which gives it exactly the samples a single file held, so nothing about training or running a model changes. Each recording shows how dense its streams are: how many times the pulse or motion stream went quiet for more than a quarter of a second, the longest gap and the share of the recording spent in gaps, with a warning when it is more than a tenth (the watch stream stalls together for both sensors, and a model cannot score while it does). Recordings imported before this are in the older single-file format; **Convert to two files** converts them one at a time, checks that no row was lost, removes the old file only after the new folder is saved and the list says so, and keeps the recording's identity, so models trained on it stay tied to the same data. The import is all-or-nothing: the file is checked in full (size limit, exact header, consistent labels, every label already in the catalogue) before anything is written, a failure says exactly why, and nothing is changed on disk. It is a compatibility path independent of the newer recording-bundle format and never touches those bundles. Labels keep stable ids; archiving one hides it from new selection but never changes old recordings.
+Recorder sessions are saved in the app and added with **From the Recorder** (below). For a recording made elsewhere, or an exported dataset folder, **Import a recording folder** here: choose the folder and both files are imported together (the check covers each file's exact header, rows of the right width, timestamps that never go backwards, consistent labels and that every label is already in the catalogue). **Import a single CSV (older format)** still takes a one-file export, and stores it as two files too. Recordings are kept in the app as a folder of two dense files, and the trainer merges them by timestamp when it reads them, which gives it exactly the samples a single file held, so nothing about training or running a model changes. Each recording shows how dense its streams are: how many times the pulse or motion stream went quiet for more than a quarter of a second, the longest gap and the share of the recording spent in gaps, with a warning when it is more than a tenth (the watch stream stalls together for both sensors, and a model cannot score while it does). Recordings imported before this are in the older single-file format; **Convert to two files** converts them one at a time, checks that no row was lost, removes the old file only after the new folder is saved and the list says so, and keeps the recording's identity, so models trained on it stay tied to the same data. The import is all-or-nothing: the file is checked in full (size limit, exact header, consistent labels, every label already in the catalogue) before anything is written, a failure says exactly why, and nothing is changed on disk. It is a compatibility path independent of the newer recording-bundle format and never touches those bundles. Labels keep stable ids; archiving one hides it from new selection but never changes old recordings.
 
 The older three-class training, LiteRT readiness, intent-binding, replay and legacy inference panels were removed from this page; a model from the old system that could not be converted is kept aside and counted on the Label models card.
 

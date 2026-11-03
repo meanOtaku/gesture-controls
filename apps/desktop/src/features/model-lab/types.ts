@@ -121,6 +121,8 @@ export interface DatasetLabel {
   color: string;
   role: "positiveGesture" | "negativeBackground" | "calibrationOnly";
   archivedAt: string | null;
+  /** One of the app's standard labels (`label_registry::STANDARD_LABELS`): the same for every model, never edited. */
+  standard?: boolean;
   /** What archiving this label everywhere switched off, for restoring it. */
   archiveLog?: { disabledRecipes: string[]; archivedModels: string[] } | null;
 }

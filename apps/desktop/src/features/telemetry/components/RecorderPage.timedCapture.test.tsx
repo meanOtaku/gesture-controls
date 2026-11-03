@@ -24,8 +24,9 @@ vi.mock("../../../shared/tauri/exportCsv", () => ({
 const { isTauriDesktop } = await import("../../../shared/tauri/exportCsv");
 
 function startTimelineCapture(durationSeconds: number) {
+  telemetryStore.selectDatasetLabel("fist");
   fireEvent.change(screen.getByLabelText("Recording duration"), { target: { value: String(durationSeconds) } });
-  fireEvent.click(screen.getByRole("button", { name: "Start dataset capture" }));
+  fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
 }
 
 // The store debounces its subscriber notification (`schedulePublish`), so the component
@@ -98,7 +99,7 @@ describe("Timeline Capture timed recording", () => {
     await ingestOneSample();
     expect(telemetryStore.getDatasetRecordingState()).toBe("recording");
 
-    fireEvent.click(screen.getByRole("button", { name: "Stop dataset capture" }));
+    fireEvent.click(screen.getByRole("button", { name: "Stop and save" }));
     expect(telemetryStore.getDatasetRecordingState()).toBe("saved");
 
     await vi.advanceTimersByTimeAsync(15_000);
@@ -111,7 +112,6 @@ describe("Timeline Capture timed recording", () => {
     await ingestOneSample();
 
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
-    fireEvent.click(screen.getAllByRole("button", { name: "Discard" }).at(-1) as HTMLElement);
     expect(telemetryStore.getDatasetRecordingState()).toBe("discarded");
 
     await vi.advanceTimersByTimeAsync(10_000);
@@ -151,7 +151,7 @@ describe("Timeline Capture timed recording", () => {
     }
   });
 
-  it("auto-exports one CSV in the desktop app when the Exports card says so", async () => {
+  it("auto-exports one CSV in the desktop app when the export settings say so", async () => {
     vi.mocked(isTauriDesktop).mockReturnValue(true);
     exportFolderStore.set("/tmp/out");
     exportFolderStore.setFormat("csv");

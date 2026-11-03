@@ -1,10 +1,9 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveSignalsPage } from "./LiveSignalsPage";
 import { RecorderPage } from "./RecorderPage";
 import { RecordingsPage } from "./RecordingsPage";
 import { telemetryStore } from "../store/telemetryStore";
-import { Toaster } from "../../../components/ui/sonner";
 import { resetFeedbackForTests } from "../../../components/app/OperationFeedback";
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
@@ -26,14 +25,20 @@ describe("Live telemetry", () => {
     expect(screen.getByRole("heading", { name: "Live signals" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Signal monitor" })).toBeInTheDocument();
     expect(screen.getByText("Wellness signals & on-demand captures")).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Timeline recorder" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Record a gesture" })).not.toBeInTheDocument();
   });
 
-  it("shows only the recorder on the Recorder page", () => {
+  it("shows only the recorder on the Recorder page: the sessions, with the camera beside them", () => {
     render(<RecorderPage />);
     expect(screen.getByRole("heading", { name: "Recorder" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Timeline recorder" })).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Signal monitor" })).not.toBeInTheDocument();
+    for (const card of ["Pinch in / out session", "Everyday noise session", "Record a gesture", "Session details"]) {
+      expect(screen.getByRole("region", { name: card })).toBeInTheDocument();
+    }
+    expect(within(screen.getByRole("complementary", { name: "Camera" })).getByRole("region", { name: "Camera hand tracking" })).toBeInTheDocument();
+    // What these replaced is gone.
+    for (const gone of ["Timeline recorder", "Guided session", "Exports", "Signal monitor"]) {
+      expect(screen.queryByRole("region", { name: gone })).not.toBeInTheDocument();
+    }
   });
 
   it("explains that saved recordings need the desktop app, in browser preview", () => {
@@ -45,68 +50,5 @@ describe("Live telemetry", () => {
   it("shows whether the headphones and the watch are connected on the pages that need them", () => {
     render(<RecorderPage />);
     expect(screen.getByLabelText("Sensor connections")).toHaveTextContent("Watch · Disconnected");
-  });
-
-  it("reports a failed dataset export via toast and re-enables the control", async () => {
-    telemetryStore.startDatasetRecording();
-    telemetryStore.ingestWatchOrientation({
-      deviceId: "watch-test",
-      sequence: 1,
-      timestampNs: 123,
-      quaternion: [1, 0, 0, 0],
-      accelerometer: [0, 0, 0],
-      gyroscope: [0, 0, 0],
-    });
-    exportCsvToFolder.mockResolvedValue({ status: "error", message: "disk full" });
-    render(<><Toaster /><RecorderPage /></>);
-
-    fireEvent.click(screen.getByRole("button", { name: "Export" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Export anyway" })); // one row trips the quality review
-
-    expect(await screen.findByText("Could not save: disk full")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Export" })).toBeEnabled());
-  });
-
-  it("exports the dataset as a folder of two files, and reports a failed one via toast", async () => {
-    isTauriDesktop.mockReturnValue(true);
-    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
-    const { exportFolderStore } = await import("../store/exportFolderStore");
-    exportFolderStore.set("/exports");
-    telemetryStore.startDatasetRecording();
-    telemetryStore.ingestWatchOrientation({ deviceId: "watch-test", sequence: 1, timestampNs: 123, quaternion: [1, 0, 0, 0], accelerometer: [0, 0, 0], gyroscope: [0, 0, 0] });
-    invoke.mockImplementation(async (command: string) => {
-      if (command === "export_dataset_folder") throw "disk full";
-      return undefined;
-    });
-    render(<><Toaster /><RecorderPage /></>);
-
-    fireEvent.click(screen.getByRole("button", { name: "Export" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Export anyway" })); // one row trips the quality review
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("export_dataset_folder", expect.objectContaining({ parent: "/exports", ppgCsv: expect.stringContaining("ppg_green"), imuCsv: expect.stringContaining("quat_w") })));
-    expect(await screen.findByText("Could not save: disk full")).toBeInTheDocument();
-    isTauriDesktop.mockReturnValue(false);
-    exportFolderStore.set(null);
-  });
-
-  it("exports one CSV into the export folder when the Exports card says so", async () => {
-    isTauriDesktop.mockReturnValue(true);
-    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
-    const { exportFolderStore } = await import("../store/exportFolderStore");
-    exportFolderStore.set("/exports");
-    telemetryStore.startDatasetRecording();
-    telemetryStore.ingestWatchOrientation({ deviceId: "watch-test", sequence: 1, timestampNs: 123, quaternion: [1, 0, 0, 0], accelerometer: [0, 0, 0], gyroscope: [0, 0, 0] });
-    exportCsvToFolder.mockResolvedValue({ status: "saved", path: "/exports/x.csv" });
-    invoke.mockReset();
-    invoke.mockResolvedValue([]);
-    render(<><Toaster /><RecorderPage /></>);
-    const card = screen.getByRole("region", { name: "Exports" });
-    expect(within(card).getByText("/exports")).toBeInTheDocument();
-    fireEvent.click(within(card).getByRole("radio", { name: "One CSV" }));
-    fireEvent.click(screen.getByRole("button", { name: "Export" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Export anyway" }));
-    await waitFor(() => expect(exportCsvToFolder).toHaveBeenCalledWith(expect.objectContaining({ folder: "/exports" })));
-    expect(invoke).not.toHaveBeenCalledWith("export_dataset_folder", expect.anything());
-    isTauriDesktop.mockReturnValue(false);
-    exportFolderStore.reset();
   });
 });

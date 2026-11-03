@@ -101,7 +101,8 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
   const stray = [...new Set([...coverageByLabel.keys(), ...models.map((model) => model.label)])].filter((labelId) => !known.has(labelId)).sort();
   const live = labels.filter((label) => label.archivedAt === null);
   const archived = labels.filter((label) => label.archivedAt !== null);
-  const rows = [...live.map((label) => ({ id: label.id, name: label.displayName, description: label.description, archived: false, managed: true })), ...stray.map((labelId) => ({ id: labelId, name: labelId.replaceAll("_", " "), description: "", archived: false, managed: false })), ...(showArchived ? archived.map((label) => ({ id: label.id, name: label.displayName, description: label.description, archived: true, managed: true })) : [])];
+  // A standard label is the app's: listed, never edited, archived or deleted.
+  const rows = [...live.map((label) => ({ id: label.id, name: label.displayName, description: label.description, archived: false, managed: !label.standard, standard: label.standard === true })), ...stray.map((labelId) => ({ id: labelId, name: labelId.replaceAll("_", " "), description: "", archived: false, managed: false, standard: false })), ...(showArchived ? archived.map((label) => ({ id: label.id, name: label.displayName, description: label.description, archived: true, managed: true, standard: false })) : [])];
 
   const act = async (work: () => Promise<string | null | void>) => {
     setListError(null);
@@ -205,6 +206,7 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
                     <span className="text-sm">
                       {row.name}{row.name !== row.id && <> <code>{row.id}</code></>}{" "}
                       {row.archived && <Badge variant="outline">Archived</Badge>}
+                      {row.standard && <Badge variant="outline" title="The app's own label, the same for every model: always “not the gesture” when training">Standard</Badge>}
                     </span>
                     <small className="text-xs text-muted-foreground">
                       {recorderCountByLabel ? `${recorderRecordings} in Recorder recordings · ` : ""}

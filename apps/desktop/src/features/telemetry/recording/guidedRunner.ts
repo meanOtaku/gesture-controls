@@ -19,7 +19,7 @@ interface Running {
 }
 
 /** Which card started the session, so only that one shows its prompts. */
-export type GuidedSource = "guided" | "pinch";
+export type GuidedSource = "guided" | "pinch" | "noise";
 
 export interface GuidedSnapshot {
   steps: GuidedStep[];

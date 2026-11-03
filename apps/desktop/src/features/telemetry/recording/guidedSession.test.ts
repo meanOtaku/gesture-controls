@@ -1,9 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { COUNTDOWN_MS, DEFAULT_PLAN, LEAD_IN_MS, labelAt, planProblem, planSteps, prompt, stepAt, totalMs, type GuidedPlan } from "./guidedSession";
+import { COUNTDOWN_MS, DEFAULT_PLAN, LEAD_IN_MS, labelAt, noisePlan, planProblem, planSteps, prompt, stepAt, totalMs, type GuidedPlan } from "./guidedSession";
 
 const plan: GuidedPlan = { ...DEFAULT_PLAN, label: "pinch", cues: 3, holdMs: 800, minGapSeconds: 4, maxGapSeconds: 8, everydayLabel: "everyday", activities: [{ activity: "Type", seconds: 10 }] };
 
 describe("a guided session's plan", () => {
+  it("of everyday noise has no cue, only labelled activities", () => {
+    const noise = noisePlan([{ activity: "Type", seconds: 10 }, { activity: "Rest", seconds: 20, label: "still" }], "everyday");
+    expect(planProblem(noise)).toBeNull();
+    const steps = planSteps(noise);
+    expect(steps.map((step) => step.kind)).toEqual(["rest", "rest", "activity", "rest", "activity", "rest"]);
+    expect(labelAt(steps, steps[2].atMs + 1)).toBe("everyday");
+    // A stretch with its own label keeps it.
+    expect(labelAt(steps, steps[4].atMs + 1)).toBe("still");
+    expect(noisePlan(noise.activities).everydayLabel).toBe("everyday_noise");
+    expect(planProblem(noisePlan(noise.activities, null))).toBe("Choose the everyday label to give the activities.");
+    expect(planProblem(noisePlan([]))).toBe("Add at least one everyday activity.");
+    // A gesture plan still needs its gesture.
+    expect(planProblem({ ...noise, cues: 3 })).toBe("Choose the gesture to cue.");
+  });
+
   it("leads in, cues with rests drawn between the shortest and longest, then the activities", () => {
     const steps = planSteps(plan, () => 0.5); // every rest 6 s
     expect(steps.map((step) => step.kind)).toEqual(["rest", "cue", "rest", "cue", "rest", "cue", "rest", "activity", "rest"]);

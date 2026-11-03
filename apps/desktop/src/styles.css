@@ -111,6 +111,16 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* Sensor workspace */
 .telemetry-shell .hero,.model-lab-shell .hero { align-items:center; }
+/* The Recorder: the sessions, with the camera beside them (above them on a narrow window) so it stays in view. */
+.recorder-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(300px,420px); gap:24px; align-items:start; }
+.recorder-camera { position:sticky; top:16px; min-width:0; }
+.noise-activity { display:grid; grid-template-columns:minmax(0,1fr) 5.5rem 9rem auto; gap:.5rem; align-items:center; }
+.noise-activity-head { font-size:.75rem; color:var(--ink-3); }
+@media (max-width: 640px) { .noise-activity { grid-template-columns:minmax(0,1fr) 5rem; } .noise-activity-head { display:none; } }
+@media (max-width: 1100px) {
+  .recorder-layout { grid-template-columns:minmax(0,1fr); }
+  .recorder-camera { position:static; order:-1; }
+}
 .telemetry-shell .subtitle,.model-lab-shell .subtitle { max-width:680px; line-height:1.65; }
 .stream-status { display:flex; align-items:center; gap:24px; flex-wrap:wrap; margin:-6px 0 24px; color:var(--ink); font-size:.8rem; }
 .stream-status>span { display:flex; align-items:center; gap:8px; }

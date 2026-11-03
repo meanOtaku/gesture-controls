@@ -27,6 +27,7 @@ def test_a_spec_for_anything_but_the_pulse_model_is_refused(tmp_path: Path) -> N
         ({"labelOffsetMs": 2000}, "label offset"),
         ({"target": ""}, "no target label"),
         ({"steadyStarts": "yes"}, "steadyStarts must be true or false"),
+        ({"hardNegatives": 1}, "hardNegatives must be true or false"),
     ]:
         with pytest.raises(lt.TrainingRefused, match=reason):
             lt.parse_spec({**spec, **change})
@@ -137,6 +138,54 @@ def test_results_are_judged_on_the_camera_timed_recordings_when_there_are_enough
     # No timings given: all, as before.
     plain = lt.cohort(lt.Spec("pinch_in", [], [], {}, [], [], False, 17), [("a", part(25, 10, 3, 600))])
     assert plain == {**lt.summarise([part(25, 10, 3, 600)]), "cohort": "all"}
+
+
+def test_a_recording_of_everyday_noise_is_judged_with_the_camera_timed_ones() -> None:
+    def part(gestures: int, caught: int, false: int, seconds: float) -> dict:
+        return {"gestures": gestures, "caught": caught, "repeats": 0, "late": 0, "falseActivations": false, "latenciesMs": [],
+                "negativeNs": int(seconds * 1e9)}
+    timing = {"a": "camera", "b": "estimated", "n": "noGesture"}
+    spec = lt.Spec("pinch_in", [], [], {}, [], [], False, 17, label_timing=timing)
+    judged = lt.cohort(spec, [("a", part(25, 10, 3, 600)), ("b", part(30, 28, 0, 600)), ("n", part(0, 0, 6, 1800))])
+    # Its false activations and its time count with the camera-timed recordings'; the estimated ones stay apart.
+    assert judged["cohort"] == "camera" and (judged["gestures"], judged["falseActivations"]) == (25, 9)
+    assert judged["falseActivationsPerHour"] == pytest.approx(9 / (2400 / 3600))
+    assert judged["byLabelTiming"]["noGesture"]["falseActivations"] == 6
+    # Camera-timed and noise only: nothing to set apart, so all of them.
+    only = lt.Spec("pinch_in", [], [], {}, [], [], False, 17, label_timing={"a": "camera", "n": "noGesture"})
+    assert lt.cohort(only, [("a", part(25, 10, 3, 600)), ("n", part(0, 0, 6, 1800))])["cohort"] == "all"
+
+
+def test_a_recording_with_no_gesture_gives_the_trees_many_more_moments_of_what_is_not_it(tmp_path: Path) -> None:
+    ms = 1_000_000
+    ts = np.arange(0, 300_000, 40, dtype=np.int64) * ms                     # five minutes of pulse samples
+    held = [(10_000 * ms, 290_000 * ms, "everything_else")]
+    few = ppg_onset.sample_decisions(ts, held, "pinch_in", set())
+    many = ppg_onset.sample_decisions(ts, held, "pinch_in", set(), most=150)
+    assert len(few[0]) <= 2 * ppg_onset.PER_KIND + 1 and len(many[0]) > 100 and not many[1].any()
+
+
+def test_hard_negatives_train_it_again_with_the_moments_it_fired_by_mistake(monkeypatch) -> None:
+    spec = lt.Spec("pinch_in", ["everything_else"], [], {}, ["r"], [], False, 17, hard_negatives=True)
+    train = lt.Examples(np.ones((4, 2)), np.array([1, 0, 1, 0]), np.array(["r"] * 4), [], np.arange(4))
+    monkeypatch.setattr(lt, "timeline", lambda spec, recording, predict: (np.arange(3), np.zeros(3)))
+    monkeypatch.setattr(lt, "detections", lambda *args: {"falseRisesNs": [7, 9]})
+    monkeypatch.setattr(lt, "inputs", lambda spec, recording, rises: np.full((len(rises), 2), 5.0))
+    fitted = {}
+    monkeypatch.setattr(lt, "fit", lambda x, y, seed, backend=lt.BACKEND: fitted.update(x=x, y=y) or "again")
+    first = SimpleNamespace(predict_proba=lambda x: np.zeros((len(x), 2)))
+    model, mined = lt.reinforce(spec, first, train, {"r": None}, ["r"])
+    assert (model, mined) == ("again", 2)
+    assert fitted["x"].shape == (6, 2) and fitted["y"].tolist() == [1, 0, 1, 0, 0, 0]
+    # Off unless asked for.
+    assert lt.reinforce(lt.Spec("pinch_in", [], [], {}, ["r"], [], False, 17), first, train, {"r": None}, ["r"]) == (first, 0)
+
+
+def test_a_model_trained_with_hard_negatives_says_how_many(tmp_path: Path) -> None:
+    result = lt.run({**spec_for(tmp_path, motion=True, every_s=5.0), "hardNegatives": True}, tmp_path / "run")
+    assert result["outcome"] in ("deployable", "evaluationOnly"), result["message"]
+    manifest = json.loads((tmp_path / "run" / "bundle" / "manifest.json").read_text())
+    assert result["metrics"]["hardNegatives"] == manifest["provenance"]["hardNegatives"] >= 0
 
 
 def test_a_motion_model_without_motion_samples_has_nothing_to_learn_from(tmp_path: Path) -> None:

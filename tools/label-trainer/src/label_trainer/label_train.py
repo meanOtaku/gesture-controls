@@ -92,7 +92,13 @@ FALSE_ACTIVATIONS_BUDGET_PER_HOUR = 30.0
 # Results are judged on the camera-timed recordings when there are at least this many gestures in them (and enough time
 # without one); estimated timings put gestures where they were not, which reads as misses and false activations.
 MIN_COHORT_GESTURES = 20
-LABEL_TIMINGS = ("camera", "estimated")
+# "noGesture": a recording of everyday activity with no gesture in it (the Recorder's Everyday noise session). It has no
+# gesture timing to doubt, so it is judged with the camera-timed recordings, and is where false activations matter most.
+LABEL_TIMINGS = ("camera", "estimated", "noGesture")
+TRUSTED_TIMINGS = ("camera", "noGesture")
+# A recording with no start of the target (everyday noise) gives the trees this many decisions a minute of it, spread
+# evenly, instead of PER_KIND: it is only there to show what is not the gesture.
+NOISE_PER_MINUTE = 30
 THRESHOLD_CANDIDATES = tuple(round(t, 2) for t in np.arange(0.30, 0.951, 0.05))
 # The CNN's scores crowd towards 1 (its sigmoid saturates), so its cut-off may also be one of these.
 CNN_THRESHOLD_CANDIDATES = THRESHOLD_CANDIDATES + (0.96, 0.97, 0.98, 0.99)
@@ -118,8 +124,11 @@ class Spec:
     # the replay. Off in a spec that does not say; the desktop asks for it.
     steady_starts: bool = False
     backend: str = BACKEND
-    # How each recording's labels were timed: "camera" or "estimated" (from motion); a recording not named is unknown.
+    # How each recording's labels were timed: "camera", "estimated" (from motion) or "noGesture" (no gesture to time); a
+    # recording not named is unknown.
     label_timing: dict[str, str] = field(default_factory=dict)
+    # Train again with the moments the model fired by mistake on its own training recordings (`reinforce`).
+    hard_negatives: bool = False
 
     @property
     def cnn(self) -> bool:
@@ -178,6 +187,9 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
     label_timing = raw.get("labelTiming", {}) or {}
     if not isinstance(label_timing, dict) or any(rid not in recordings or t not in LABEL_TIMINGS for rid, t in label_timing.items()):
         raise TrainingRefused(f"labelTiming must give recordings of the spec one of {list(LABEL_TIMINGS)}")
+    hard_negatives = raw.get("hardNegatives", False)
+    if not isinstance(hard_negatives, bool):
+        raise TrainingRefused(f"hardNegatives must be true or false, got {hard_negatives!r}")
     return Spec(
         target=target,
         negatives=list(raw.get("negatives", [])),
@@ -192,6 +204,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         steady_starts=steady_starts,
         backend=backend,
         label_timing=dict(label_timing),
+        hard_negatives=hard_negatives,
     )
 
 
@@ -297,7 +310,10 @@ def examples(spec: Spec, recordings: dict[str, Recording], ids: list[str]) -> Ex
         ts, values = pulse_of(recording)
         held = ppg_onset.holds(recording.timestamps_ns, recording.raw_labels)
         early = ppg_onset.EARLY_OFFSETS_MS if spec.motion else ()
-        d, y, k = ppg_onset.sample_decisions(ts, held, spec.target, set(spec.excludes), early)
+        most = None
+        if ts.size and not any(label == spec.target for _, _, label in held):
+            most = max(ppg_onset.PER_KIND, round(NOISE_PER_MINUTE * (int(ts[-1]) - int(ts[0])) / 60e9))
+        d, y, k = ppg_onset.sample_decisions(ts, held, spec.target, set(spec.excludes), early, most)
         x = inputs(spec, recording, d)
         ok = np.isfinite(x).all(axis=1)
         if spec.steady_starts:
@@ -368,6 +384,30 @@ def choose_threshold(probability: np.ndarray, y: np.ndarray) -> float:
     return best[2]
 
 
+def reinforce(spec: Spec, model, train: Examples, recordings: dict[str, Recording], ids: list[str]):
+    """With `spec.hard_negatives`, the model trained again with the moments it fired by mistake (a false activation, at the
+    default cut-off ACTIVATION) on its own training recordings `ids` added as more examples of what is not the gesture: an
+    everyday-noise recording teaches most this way. Returns the model (the same one without them) and how many were added."""
+    if not spec.hard_negatives:
+        return model, 0
+    predict = lambda x: model.predict_proba(x)[:, 1]  # noqa: E731
+    xs = []
+    for rid in ids:
+        scored = timeline(spec, recordings[rid], predict)
+        if scored is None:
+            continue
+        rises = detections(spec, recordings[rid], *scored, policy_for(ACTIVATION, spec.trigger))["falseRisesNs"]
+        if rises:
+            x = inputs(spec, recordings[rid], np.array(rises, dtype=np.int64))
+            xs.append(x[np.isfinite(x).all(axis=1)])
+    mined = np.concatenate(xs) if xs else np.zeros((0, train.x.shape[1]))
+    if mined.shape[0] == 0:
+        return model, 0
+    x = np.concatenate([train.x, mined])
+    y = np.concatenate([train.y, np.zeros(mined.shape[0], dtype=train.y.dtype)])
+    return fit(x, y, spec.seed, backend=spec.backend), int(mined.shape[0])
+
+
 def out_of_fold_threshold(spec: Spec, train: Examples, recordings: dict[str, Recording], say=lambda _: None) -> tuple[float, str, float | None, dict[str, Any] | None]:
     """The cut-off, chosen without looking at the held-out recordings: models trained on all but a group of the training
     recordings score the group left out, and the cut-off is chosen on those scores. For a motion model, those models also
@@ -392,6 +432,9 @@ def out_of_fold_threshold(spec: Spec, train: Examples, recordings: dict[str, Rec
         if int(train.y[~test].sum()) < MIN_POSITIVE_TRAIN or int((train.y[~test] == 0).sum()) < MIN_POSITIVE_TRAIN:
             continue
         model = fit(train.x[~test], train.y[~test], spec.seed, backend=spec.backend)
+        if spec.hard_negatives:
+            fold_train = Examples(train.x[~test], train.y[~test], train.groups[~test], [], train.decisions[~test])
+            model, _ = reinforce(spec, model, fold_train, recordings, [g for g in groups if fold_of[g] != k])
         held_out[test] = model.predict_proba(train.x[test])[:, 1]
         if spec.motion:
             for group in (g for g in groups if fold_of[g] == k):
@@ -440,9 +483,10 @@ def within_budget(events: dict[str, Any]) -> bool:
 
 
 def cohort(spec: Spec, per_recording: list[tuple[str, dict[str, Any]]]) -> dict[str, Any]:
-    """The totals to judge a replay by, with which recordings they cover ("cohort"): the camera-timed ones when the spec says
-    some recordings were timed otherwise and the camera-timed ones hold at least MIN_COHORT_GESTURES gestures and
-    MIN_NEGATIVE_SECONDS without one; otherwise all of them. With timings given, also the totals of each ("byLabelTiming")."""
+    """The totals to judge a replay by, with which recordings they cover ("cohort"): the camera-timed ones (with any
+    recordings of no gesture, which have no timing to doubt) when the spec says some recordings were timed otherwise and the
+    camera-timed ones hold at least MIN_COHORT_GESTURES gestures and those MIN_NEGATIVE_SECONDS without one; otherwise all
+    of them. With timings given, also the totals of each ("byLabelTiming")."""
     everything = summarise([r for _, r in per_recording])
     if not spec.label_timing:
         return {**everything, "cohort": "all"}
@@ -452,9 +496,11 @@ def cohort(spec: Spec, per_recording: list[tuple[str, dict[str, Any]]]) -> dict[
         if part:
             by_timing[timing] = summarise(part)
     camera = by_timing.get("camera")
-    mixed = len(by_timing) > 1
-    if mixed and camera and camera["gestures"] >= MIN_COHORT_GESTURES and camera["negativeSeconds"] >= MIN_NEGATIVE_SECONDS:
-        return {**camera, "cohort": "camera", "byLabelTiming": by_timing}
+    trusted = [r for rid, r in per_recording if spec.label_timing.get(rid) in TRUSTED_TIMINGS]
+    judged = summarise(trusted) if trusted else None
+    mixed = len(set(by_timing) - {"noGesture"}) > 1
+    if mixed and camera and judged and camera["gestures"] >= MIN_COHORT_GESTURES and judged["negativeSeconds"] >= MIN_NEGATIVE_SECONDS:
+        return {**judged, "cohort": "camera", "byLabelTiming": by_timing}
     return {**everything, "cohort": "all", "byLabelTiming": by_timing}
 
 
@@ -552,6 +598,7 @@ def detections(spec: Spec, recording: Recording, times: np.ndarray, scores: np.n
     under_way = [(s, max(e, s + latest_ns), s in caught_starts) for s, e in gesture_episodes(held, spec.target)]
     repeats = late = false_activations = 0
     false_on: dict[str, int] = {}
+    false_rises: list[int] = []
     for i, rise in enumerate(rises):
         if i in caught_rises:
             continue
@@ -563,6 +610,7 @@ def detections(spec: Spec, recording: Recording, times: np.ndarray, scores: np.n
                 late += 1
             continue
         false_activations += 1
+        false_rises.append(rise)
         at = rise - spec.decision_delay_ms * 1_000_000
         label = next((label for s, e, label in held if s <= at <= e), None) or next(
             (label for s, e, label in held if s <= rise <= e), "unlabelled")
@@ -576,6 +624,7 @@ def detections(spec: Spec, recording: Recording, times: np.ndarray, scores: np.n
         "latenciesMs": [(rises[i] - starts[j]) / 1e6 for i, j in pairs],
         "negativeNs": max(observed - covered, 0),
         "falseOn": false_on,
+        "falseRisesNs": false_rises,
     }
 
 
@@ -762,6 +811,7 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
             "falseActivationsBudgetPerHour": FALSE_ACTIVATIONS_BUDGET_PER_HOUR,
             "evaluationCohort": (metrics.get("events") or {}).get("cohort"),
             "labelOffsetMs": spec.label_offset_ms,
+            **({"hardNegatives": metrics.get("hardNegatives", 0)} if spec.hard_negatives else {}),
         },
     }
     usual = training_range(x_train)
@@ -806,6 +856,9 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
         what = "the CNN" if spec.cnn else f"{TREES} trees"
         say(f"Training {what} on {train.y.shape[0]} moments ({int(train.y.sum())} starts) from {len(spec.train)} recordings")
         model = fit(train.x, train.y, spec.seed, backend=spec.backend)
+        model, mined = reinforce(spec, model, train, recordings, spec.train)
+        if spec.hard_negatives:
+            say(f"Trained again with the {mined} moments it fired by mistake on the training recordings")
         threshold, source, cross_check, cross_events = out_of_fold_threshold(spec, train, recordings, say)
         probability = model.predict_proba(held_out.x)[:, 1]
         metrics = evaluate(probability, held_out.y, threshold, source)
@@ -816,6 +869,8 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
         say("Replaying the held-out recordings as the runtime would")
         metrics["events"] = replay(spec, model, recordings, threshold)
         metrics["steadyStarts"] = spec.steady_starts
+        if spec.hard_negatives:
+            metrics["hardNegatives"] = mined
         (out / "evaluation.json").write_text(json.dumps(metrics, indent=2) + "\n")
 
         if spec.cnn:

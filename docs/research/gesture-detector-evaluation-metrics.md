@@ -50,12 +50,16 @@ Each recording's labels were timed in one of two ways:
 - **camera**: the camera marked where the thumb and index met and parted (the Recorder's camera marking, or the camera relabel of older sessions);
 - **estimated**: placed from the watch's own motion, with no camera (`scripts/split_pinch_from_motion.py`).
 
+A recording with no start of the target at all (everyday noise from the Recorder, or a session of another gesture) has
+no gesture timing to doubt: it is **noGesture**, and is judged together with the camera-timed recordings. Its time is
+all time with no gesture under way, so its false activations an hour are the closest measure of ordinary use.
+
 Estimated timings are not interchangeable with camera timings. They are placed from the same wrist jolt the model learns to detect, so scoring a model against them is partly circular and flatters it (see Evidence).
 
 The rules:
 
 1. Report totals for each cohort separately (`byLabelTiming`). Never blend them into one headline number without saying so.
-2. When a set holds both kinds and the camera-timed recordings have at least 20 pinches and 60 s with no gesture under way, **choose the threshold and judge the model on the camera-timed recordings only** (`cohort: camera`). Otherwise use all of them and say so (`cohort: all`).
+2. When a set holds both kinds and the camera-timed recordings have at least 20 pinches and, with any noGesture recordings, 60 s with no gesture under way, **choose the threshold and judge the model on the camera-timed and noGesture recordings only** (`cohort: camera`). Otherwise use all of them and say so (`cohort: all`).
 3. Estimated recordings may train a model, but they never decide whether it ships.
 
 The desktop sends each recording's timing in the training spec (`labelTiming`), from what Model Lab shows: "Labels marked by the camera" or "estimated from the watch's motion".

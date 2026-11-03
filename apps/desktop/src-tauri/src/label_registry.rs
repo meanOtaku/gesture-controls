@@ -2,6 +2,9 @@
 //!
 //! Labels are immutable ids with editable presentation metadata. Archiving never
 //! deletes an entry, so an imported historical recording remains interpretable.
+//!
+//! Gestures are the user's own labels. A few labels mean the same for every model and are the app's: the standard labels
+//! ([`STANDARD_LABELS`]), always listed, never changed or removed, and always "not the gesture" in training.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -13,6 +16,18 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 const LABELS_FILE_NAME: &str = "labels.json";
+
+/// The app's own labels, the same for every model: (id, display name, description, colour). Never written to the
+/// catalogue file; listed with it. Training always gives them the role "not the gesture" (`label_training`).
+pub const STANDARD_LABELS: [(&str, &str, &str, &str); 2] = [
+    ("everyday_noise", "Everyday noise", "Ordinary use of the hand (typing, the phone, walking, …) with no gesture.", "#8a9bb0"),
+    ("still", "Hand still", "The hand at rest, not moving, with no gesture.", "#5f6f7f"),
+];
+
+/// Whether `id` is one of the [`STANDARD_LABELS`].
+pub fn is_standard(id: &str) -> bool {
+    STANDARD_LABELS.iter().any(|(standard, ..)| *standard == id)
+}
 pub const LABEL_REGISTRY_EVENT: &str = "model-lab-labels-changed";
 
 /// Presentation-only classification of a collection label, chosen at creation time to help someone browsing
@@ -49,6 +64,9 @@ pub struct LabelRecord {
     /// Only read from files written when labels were shipped with the app; never written. See [`prune_legacy_builtins`].
     #[serde(default, skip_serializing)]
     built_in: bool,
+    /// One of the app's [`STANDARD_LABELS`]: listed, never stored.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub standard: bool,
     pub archived_at: Option<String>,
     /// Set when the label was archived together with what uses it; cleared when it is restored.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -109,6 +127,32 @@ fn load_index(app: &AppHandle) -> LabelIndex {
     index
 }
 
+/// The catalogue as the app shows it: the user's labels and the standard ones, sorted by id. A user's label with a
+/// standard id (made before they were standard) is shown as the standard one.
+fn listed(index: &LabelIndex) -> Vec<LabelRecord> {
+    let mut labels: Vec<LabelRecord> = index.labels.iter().filter(|label| !is_standard(&label.id)).cloned().collect();
+    labels.extend(STANDARD_LABELS.iter().map(|(id, name, description, color)| LabelRecord {
+        id: (*id).to_string(),
+        display_name: (*name).to_string(),
+        description: (*description).to_string(),
+        color: (*color).to_string(),
+        role: LabelRole::NegativeBackground,
+        built_in: false,
+        standard: true,
+        archived_at: None,
+        archive_log: None,
+    }));
+    labels.sort_by(|a, b| a.id.cmp(&b.id));
+    labels
+}
+
+fn refuse_standard(id: &str) -> Result<(), String> {
+    if is_standard(id) {
+        return Err(format!("'{id}' is a standard label: the app keeps it the same for every model"));
+    }
+    Ok(())
+}
+
 /// Labels this app used to ship with are not special any more. Drops the ones nothing refers to and keeps (as
 /// ordinary labels) the ones a recording or model still uses. Returns how many were dropped.
 fn prune_builtins(index: &mut LabelIndex, in_use: &BTreeSet<String>) -> usize {
@@ -167,6 +211,7 @@ fn validate_input(input: &CreateLabelInput) -> Result<(), String> {
 /// Changes what a label is called, its notes and its role. The id never changes: recordings, models, recipes and
 /// gestures refer to it.
 fn apply_update(index: &mut LabelIndex, input: &UpdateLabelInput) -> Result<(), String> {
+    refuse_standard(&input.id)?;
     validate_input(&CreateLabelInput {
         id: "placeholder".to_string(),
         display_name: input.display_name.clone(),
@@ -186,7 +231,7 @@ fn apply_update(index: &mut LabelIndex, input: &UpdateLabelInput) -> Result<(), 
 }
 
 fn emit(app: &AppHandle, index: &LabelIndex) {
-    let _ = app.emit(LABEL_REGISTRY_EVENT, &index.labels);
+    let _ = app.emit(LABEL_REGISTRY_EVENT, &listed(index));
 }
 
 #[tauri::command]
@@ -198,7 +243,7 @@ pub fn list_model_labels(
         .lock
         .lock()
         .map_err(|_| "label registry lock was poisoned".to_string())?;
-    Ok(load_index(&app).labels)
+    Ok(listed(&load_index(&app)))
 }
 
 #[tauri::command]
@@ -208,6 +253,7 @@ pub fn create_model_label(
     runtime: State<'_, LabelRegistryRuntime>,
 ) -> Result<Vec<LabelRecord>, String> {
     validate_input(&input)?;
+    refuse_standard(&input.id)?;
     let _guard = runtime
         .lock
         .lock()
@@ -223,13 +269,14 @@ pub fn create_model_label(
         color: input.color.to_lowercase(),
         role: input.role,
         built_in: false,
+        standard: false,
         archived_at: None,
         archive_log: None,
     });
     index.labels.sort_by(|a, b| a.id.cmp(&b.id));
     write_index_atomic(&app, &index)?;
     emit(&app, &index);
-    Ok(index.labels)
+    Ok(listed(&index))
 }
 
 #[tauri::command]
@@ -246,7 +293,7 @@ pub fn update_model_label(
     apply_update(&mut index, &input)?;
     write_index_atomic(&app, &index)?;
     emit(&app, &index);
-    Ok(index.labels)
+    Ok(listed(&index))
 }
 
 /// Remembers what archiving a label everywhere switched off, so restoring it can switch it back on.
@@ -270,7 +317,7 @@ pub fn save_label_archive_log(
     label.archive_log = Some(log);
     write_index_atomic(&app, &index)?;
     emit(&app, &index);
-    Ok(index.labels)
+    Ok(listed(&index))
 }
 
 #[tauri::command]
@@ -284,6 +331,7 @@ pub fn set_model_label_archived(
         .lock
         .lock()
         .map_err(|_| "label registry lock was poisoned".to_string())?;
+    refuse_standard(&id)?;
     let mut index = load_index(&app);
     let label = index
         .labels
@@ -296,7 +344,7 @@ pub fn set_model_label_archived(
     }
     write_index_atomic(&app, &index)?;
     emit(&app, &index);
-    Ok(index.labels)
+    Ok(listed(&index))
 }
 
 /// Removes a label nothing uses. A label that a recording, a project, a model or a gesture refers to cannot be removed (archive
@@ -312,6 +360,7 @@ pub fn delete_model_label(
         .lock
         .lock()
         .map_err(|_| "label registry lock was poisoned".to_string())?;
+    refuse_standard(&id)?;
     let mut index = load_index(&app);
     if !index.labels.iter().any(|label| label.id == id) {
         return Err(format!("no label with id '{id}'"));
@@ -327,7 +376,7 @@ pub fn delete_model_label(
     index.labels.retain(|label| label.id != id);
     write_index_atomic(&app, &index)?;
     emit(&app, &index);
-    Ok(index.labels)
+    Ok(listed(&index))
 }
 
 /// Every label a recording, a project or a model refers to; `None` when the model registry cannot be read.
@@ -372,13 +421,13 @@ pub fn prune_legacy_builtins(app: &AppHandle) {
 
 /// Every label in the catalogue, archived ones included (they still describe old recordings).
 pub(crate) fn catalogue_ids(app: &AppHandle) -> BTreeSet<String> {
-    load_index(app).labels.into_iter().map(|l| l.id).collect()
+    listed(&load_index(app)).into_iter().map(|l| l.id).collect()
 }
 
 /// Used by Model Lab import validation. Archived labels remain valid because
 /// they describe historical data; only unknown ids are rejected.
 pub(crate) fn contains_label(app: &AppHandle, id: &str) -> bool {
-    load_index(app).labels.iter().any(|label| label.id == id)
+    is_standard(id) || load_index(app).labels.iter().any(|label| label.id == id)
 }
 
 /// The ids in the catalogue file at `path` (the app's `model-lab/labels.json`), for the import tool.
@@ -411,6 +460,7 @@ pub(crate) fn add_gesture_labels_at(path: &std::path::Path, labels: &[(&str, &st
             color: "#65e6ff".into(),
             role: LabelRole::PositiveGesture,
             built_in: false,
+            standard: false,
             archived_at: None,
             archive_log: None,
         });
@@ -435,9 +485,25 @@ mod tests {
             color: "#65e6ff".to_string(),
             role: LabelRole::PositiveGesture,
             built_in: false,
+            standard: false,
             archived_at: None,
             archive_log: None,
         }
+    }
+
+    #[test]
+    fn the_standard_labels_are_always_listed_never_stored_and_cannot_be_changed() {
+        // A user's own "still" (made before it was standard) is shown as the standard one.
+        let mut index = LabelIndex { labels: vec![plain_record("pinch"), plain_record("still")] };
+        let shown = listed(&index);
+        assert_eq!(shown.iter().map(|l| (l.id.as_str(), l.standard)).collect::<Vec<_>>(), [("everyday_noise", true), ("pinch", false), ("still", true)]);
+        assert!(shown.iter().filter(|l| l.standard).all(|l| l.role == LabelRole::NegativeBackground && l.archived_at.is_none()));
+        let written = serde_json::to_string(&index).unwrap();
+        assert!(!written.contains("everyday_noise") && !written.contains("standard"), "{written}");
+        assert!(serde_json::to_string(&shown).unwrap().contains("\"standard\":true"));
+        let update = UpdateLabelInput { id: "everyday_noise".into(), display_name: "Mine".into(), description: String::new(), role: LabelRole::PositiveGesture };
+        assert!(apply_update(&mut index, &update).unwrap_err().contains("standard label"));
+        assert!(refuse_standard("still").is_err() && refuse_standard("pinch").is_ok());
     }
 
     #[test]
@@ -515,6 +581,7 @@ mod tests {
             color: "#65e6ff".into(),
             role: LabelRole::PositiveGesture,
             built_in,
+            standard: false,
             archived_at: None,
             archive_log: None,
         }

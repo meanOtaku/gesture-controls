@@ -11,6 +11,8 @@
 export interface GuidedActivity {
   activity: string;
   seconds: number;
+  /** The label for this stretch, in place of the plan's everyday label (an everyday-noise session's "still"). */
+  label?: string;
 }
 
 export interface GuidedPlan {
@@ -62,8 +64,44 @@ export const DEFAULT_PLAN: GuidedPlan = {
   ],
 };
 
+/** The app's standard labels (`label_registry::STANDARD_LABELS`): the same for every model, always "not the gesture". */
+export const EVERYDAY_NOISE = "everyday_noise";
+export const STILL = "still";
+
+/**
+ * Everyday noise: no gesture at all, only everyday activity labelled `everyday_noise`, and the hand at rest labelled
+ * `still`. It teaches a model what is not the gesture and, held out, measures how often it fires in ordinary use. The
+ * last ones come close to a pinch without making one: those are the moments a detector is most often fooled by.
+ */
+export const NOISE_ACTIVITIES: GuidedActivity[] = [
+  { activity: "Sit still, hand relaxed on the desk", seconds: 45, label: STILL },
+  { activity: "Type on the keyboard", seconds: 60 },
+  { activity: "Use the mouse or trackpad", seconds: 60 },
+  { activity: "Use your phone: scroll, type, tap", seconds: 60 },
+  { activity: "Drink from a cup, pick things up and put them down", seconds: 60 },
+  { activity: "Talk, moving your hands as you do", seconds: 60 },
+  { activity: "Walk around", seconds: 60 },
+  { activity: "Stretch, reach and scratch", seconds: 45 },
+  { activity: "Rest your hand on your lap, still", seconds: 45, label: STILL },
+  { activity: "Tap your fingers, open and close the hand: no pinch", seconds: 45 },
+];
+
+/** The plan for an everyday-noise session: no cues, only `activities`, each labelled its own label or `everydayLabel`. */
+export function noisePlan(activities: GuidedActivity[], everydayLabel: string | null = EVERYDAY_NOISE): GuidedPlan {
+  return { label: "", cues: 0, holdMs: 800, minGapSeconds: 4, maxGapSeconds: 8, everydayLabel, activities };
+}
+
 /** What is wrong with a plan, or null when it can be run. */
 export function planProblem(plan: GuidedPlan): string | null {
+  if (plan.cues === 0 && plan.label.trim() === "") {
+    // Everyday noise: only activities, and they must be labelled to teach anything.
+    if (plan.activities.length === 0) return "Add at least one everyday activity.";
+    if (!plan.everydayLabel) return "Choose the everyday label to give the activities.";
+    if (plan.activities.some((entry) => !(entry.seconds >= 5 && entry.seconds <= 900) || entry.activity.trim() === "")) {
+      return "Give each everyday activity a name and 5 to 900 s.";
+    }
+    return null;
+  }
   if (plan.label.trim() === "") return "Choose the gesture to cue.";
   if (!Number.isInteger(plan.cues) || plan.cues < 1 || plan.cues > 500) return "Cue it 1 to 500 times.";
   if (!(plan.holdMs >= 100 && plan.holdMs <= 5000)) return "Hold each one 0.1 to 5 s.";
@@ -94,7 +132,7 @@ export function planSteps(plan: GuidedPlan, random: () => number = Math.random):
   }
   for (const entry of plan.activities) {
     push({ kind: "rest", atMs: at, durationMs: ACTIVITY_CHANGE_MS });
-    push({ kind: "activity", atMs: at, durationMs: entry.seconds * 1000, label: plan.everydayLabel, activity: entry.activity });
+    push({ kind: "activity", atMs: at, durationMs: entry.seconds * 1000, label: entry.label ?? plan.everydayLabel, activity: entry.activity });
   }
   // A little quiet at the end, so the last step is not cut by the stop.
   push({ kind: "rest", atMs: at, durationMs: 2000 });

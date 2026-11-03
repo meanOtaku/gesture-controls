@@ -75,6 +75,9 @@ pub struct TrainRequest {
     /// Which model to train: [`BACKEND`] (absent) or [`CNN_BACKEND`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub method: Option<String>,
+    /// Train again with the moments the model fired by mistake on its training recordings (everyday noise teaches most).
+    #[serde(default)]
+    pub hard_negatives: bool,
 }
 
 /// The trainer backend a request asks for, and what its model reads.
@@ -96,6 +99,7 @@ struct Checked {
     input: InputContract,
     recordings: Vec<RecordingInfo>,
     research: bool,
+    hard_negatives: bool,
     label_offset_ms: i32,
     /// How each recording's labels were timed, for the trainer to judge on the trusted ones (`label_timing_of`).
     label_timing: BTreeMap<String, &'static str>,
@@ -112,6 +116,9 @@ fn check_request(
     sha_of: &dyn Fn(&str) -> Result<String, String>,
 ) -> Result<Checked, String> {
     let target = label_id(&request.label)?;
+    if crate::label_registry::is_standard(&request.label) {
+        return Err(format!("'{}' is a standard label, there to show a model what is not a gesture: choose a gesture to train", request.label));
+    }
     let negatives: Vec<LabelId> = request
         .negatives
         .iter()
@@ -185,6 +192,13 @@ fn check_request(
             Some(_) => return Err(format!("'{}' marks stretches left out, so it can only be excluded", dataset_files::LEFT_OUT_LABEL)),
         }
     }
+    // The standard labels are not the gesture for every model: something else, unless the request leaves them out.
+    for (standard, ..) in crate::label_registry::STANDARD_LABELS {
+        let id = label_id(standard)?;
+        if recordings.iter().any(|r| r.labels.contains(&id)) {
+            entries.entry(id).or_insert(ExampleRole::Negative);
+        }
+    }
     let label_offset_ms = request.label_offset_ms.unwrap_or(0);
     if label_offset_ms.abs() > MAX_LABEL_OFFSET_MS {
         return Err(format!(
@@ -192,7 +206,7 @@ fn check_request(
         ));
     }
     let (backend, input) = method_of(request)?;
-    let label_timing = label_timing_of(&recordings_ids(&recordings), datasets);
+    let label_timing = label_timing_of(&recordings_ids(&recordings), datasets, &target.to_string());
     Ok(Checked {
         target,
         mapping: LabelMapping { entries },
@@ -200,6 +214,7 @@ fn check_request(
         input,
         recordings,
         research: request.research,
+        hard_negatives: request.hard_negatives,
         label_offset_ms,
         label_timing,
     })
@@ -209,13 +224,14 @@ fn recordings_ids(recordings: &[RecordingInfo]) -> Vec<String> {
     recordings.iter().map(|r| r.id.to_string()).collect()
 }
 
-/// "camera" for a recording whose labels the camera marked, "estimated" for one whose labels were estimated from motion;
-/// a recording that says neither is left out (the trainer counts it as unknown). See `DatasetSummary::labels_from`.
-fn label_timing_of(ids: &[String], datasets: &[DatasetSummary]) -> BTreeMap<String, &'static str> {
+/// "camera" for a recording whose labels the camera marked, "estimated" for one whose labels were estimated from motion,
+/// "noGesture" for one with no `target` in it (everyday noise); a recording that says none of these is left out (the trainer
+/// counts it as unknown). See `detector_events::timing_of`.
+fn label_timing_of(ids: &[String], datasets: &[DatasetSummary], target: &str) -> BTreeMap<String, &'static str> {
     ids.iter()
         .filter_map(|id| {
-            let labels_from = datasets.iter().find(|d| &d.id == id)?.labels_from.as_deref();
-            match crate::detector_events::label_timing(labels_from) {
+            let dataset = datasets.iter().find(|d| &d.id == id)?;
+            match crate::detector_events::timing_of(dataset, target) {
                 "unknown" => None,
                 timing => Some((id.clone(), timing)),
             }
@@ -258,6 +274,7 @@ fn build_spec(
         "backend": checked.backend,
         "seed": SEED,
         "research": checked.research,
+        "hardNegatives": checked.hard_negatives,
         "labelOffsetMs": checked.label_offset_ms,
         "labelTiming": checked.label_timing,
         // Train and test only on moments the runtime's steadiness gate would let a gesture start at (`steadiness.py`),
@@ -631,6 +648,7 @@ pub async fn start_label_training(
                 ("method".to_string(), serde_json::Value::String(checked.backend.into())),
                 ("labelOffsetMs".to_string(), serde_json::Value::from(checked.label_offset_ms)),
                 ("research".to_string(), serde_json::Value::Bool(checked.research)),
+                ("hardNegatives".to_string(), serde_json::Value::Bool(checked.hard_negatives)),
             ]),
         },
         recordings: checked.recordings.clone(),
@@ -940,6 +958,7 @@ mod tests {
             research: false,
             label_offset_ms: None,
             method: None,
+            hard_negatives: false,
         }
     }
 
@@ -1099,14 +1118,32 @@ mod tests {
             (spec["labelOffsetMs"].as_i64(), spec["research"].as_bool()),
             (Some(-250), Some(true))
         );
+        assert_eq!(spec["hardNegatives"], serde_json::json!(false));
         let listed = |key: &str| spec[key].as_array().unwrap().len();
         assert_eq!(listed("train") + listed("evaluation"), 6);
         assert_eq!(spec["recordings"]["s1"], "/data/s1.csv");
         assert_eq!(
             spec["labelTiming"],
-            serde_json::json!({}),
-            "none of these says how its labels were made"
+            serde_json::json!({"i1": "noGesture", "i2": "noGesture", "i3": "noGesture"}),
+            "only the recordings with no pinch say anything: none says how its labels were made"
         );
+    }
+
+    #[test]
+    fn the_standard_labels_are_not_the_gesture_without_being_asked_and_cannot_be_trained() {
+        let mut list = datasets();
+        list.push(dataset("n1", &["everyday_noise", "still"]));
+        let mut r = request();
+        r.dataset_ids.push("n1".into());
+        let checked = check_request(&r, &list, &sha).unwrap();
+        for standard in ["everyday_noise", "still"] {
+            assert_eq!(checked.mapping.entries[&LabelId::new(standard).unwrap()], ExampleRole::Negative);
+        }
+        // Left out when asked.
+        r.excludes = vec!["still".into()];
+        assert_eq!(check_request(&r, &list, &sha).unwrap().mapping.entries[&LabelId::new("still").unwrap()], ExampleRole::Exclude);
+        r.label = "everyday_noise".into();
+        assert!(check_request(&r, &list, &sha).unwrap_err().contains("standard label"));
     }
 
     #[test]
@@ -1116,12 +1153,16 @@ mod tests {
         list[1].labels_from = Some("motion".into());
         list[2].labels_from = Some("recorder".into());
         let ids: Vec<String> = list.iter().map(|d| d.id.clone()).collect();
-        let timing = label_timing_of(&ids, &list);
+        let timing = label_timing_of(&ids, &list, "pinch");
+        // The fist recordings hold no pinch: everyday noise as far as a pinch model goes.
         assert_eq!(
             timing,
             BTreeMap::from([
                 (list[0].id.clone(), "camera"),
-                (list[1].id.clone(), "estimated")
+                (list[1].id.clone(), "estimated"),
+                (list[3].id.clone(), "noGesture"),
+                (list[4].id.clone(), "noGesture"),
+                (list[5].id.clone(), "noGesture")
             ])
         );
         let checked = check_request(&request(), &list, &sha).unwrap();
@@ -1129,7 +1170,7 @@ mod tests {
             checked
                 .label_timing
                 .values()
-                .all(|t| *t == "camera" || *t == "estimated")
+                .all(|t| ["camera", "estimated", "noGesture"].contains(t))
         );
     }
 

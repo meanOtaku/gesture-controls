@@ -209,6 +209,19 @@ pub fn label_timing(labels_from: Option<&str>) -> &'static str {
     }
 }
 
+/// How a recording's `target` gestures were timed: "noGesture" when it has none (everyday noise: nothing to time, so it is
+/// trusted like a camera-timed one), otherwise [`label_timing`].
+pub fn timing_of(dataset: &crate::model_lab::DatasetSummary, target: &str) -> &'static str {
+    if dataset.effective_labels().iter().any(|label| label == target) {
+        label_timing(dataset.labels_from.as_deref())
+    } else {
+        "noGesture"
+    }
+}
+
+/// Kinds of recording judged together when the camera-timed ones are enough to judge by.
+const TRUSTED: [&str; 2] = ["camera", "noGesture"];
+
 /// The totals to judge a replay by, with which recordings they cover.
 #[derive(Debug, Clone, Default, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -218,26 +231,28 @@ pub struct Judged {
     /// "camera": only the camera-timed recordings, as the set also held others and they were enough to judge by. "all":
     /// every one.
     pub cohort: &'static str,
-    /// The totals for each kind of label timing present ("camera", "estimated", "unknown").
+    /// The totals for each kind of label timing present ("camera", "estimated", "unknown", "noGesture").
     pub by_label_timing: BTreeMap<&'static str, EventTotals>,
 }
 
-/// Judged as the trainer's `cohort` judges: on the camera-timed recordings when others are present too and the
-/// camera-timed ones hold at least 20 gestures and 60 s with none under way; otherwise on all of them.
+/// Judged as the trainer's `cohort` judges: on the camera-timed recordings (with any of no gesture, which have no timing to
+/// doubt) when recordings timed otherwise are present too and the camera-timed ones hold at least 20 gestures, and those
+/// 60 s with none under way; otherwise on all of them.
 pub fn judge(per_recording: &[(&'static str, EventTotals)]) -> Judged {
     let mut by_label_timing: BTreeMap<&'static str, EventTotals> = BTreeMap::new();
-    for timing in ["camera", "estimated", "unknown"] {
+    for timing in ["camera", "estimated", "unknown", "noGesture"] {
         let part: Vec<&EventTotals> = per_recording.iter().filter(|(t, _)| *t == timing).map(|(_, totals)| totals).collect();
         if !part.is_empty() {
             by_label_timing.insert(timing, EventTotals::sum(part));
         }
     }
-    let camera = by_label_timing.get("camera").filter(|camera| {
-        by_label_timing.len() > 1 && camera.starts >= MIN_COHORT_GESTURES && camera.negative_seconds >= MIN_NEGATIVE_SECONDS
-    });
-    match camera {
-        Some(camera) => Judged { totals: camera.clone(), cohort: "camera", by_label_timing },
-        None => Judged { totals: EventTotals::sum(per_recording.iter().map(|(_, totals)| totals)), cohort: "all", by_label_timing },
+    let trusted = EventTotals::sum(per_recording.iter().filter(|(t, _)| TRUSTED.contains(t)).map(|(_, totals)| totals));
+    let mixed = by_label_timing.keys().filter(|t| **t != "noGesture").count() > 1;
+    let enough = by_label_timing.get("camera").is_some_and(|camera| camera.starts >= MIN_COHORT_GESTURES) && trusted.negative_seconds >= MIN_NEGATIVE_SECONDS;
+    if mixed && enough {
+        Judged { totals: trusted, cohort: "camera", by_label_timing }
+    } else {
+        Judged { totals: EventTotals::sum(per_recording.iter().map(|(_, totals)| totals)), cohort: "all", by_label_timing }
     }
 }
 
@@ -313,6 +328,11 @@ mod tests {
         assert_eq!((few.cohort, few.totals.starts, few.by_label_timing.len()), ("all", 35, 2));
         // Only camera-timed recordings: all of them.
         assert_eq!(judge(&[("camera", part(25, 10, 3, 600.0))]).cohort, "all");
+        // Everyday noise counts with the camera-timed recordings.
+        let noisy = judge(&[("camera", part(25, 10, 3, 600.0)), ("estimated", part(30, 28, 0, 600.0)), ("noGesture", part(0, 0, 6, 1800.0))]);
+        assert_eq!((noisy.cohort, noisy.totals.starts, noisy.totals.false_activations), ("camera", 25, 9));
+        assert_eq!(noisy.totals.false_activations_per_hour, Some(13.5));
+        assert_eq!(judge(&[("camera", part(25, 10, 3, 600.0)), ("noGesture", part(0, 0, 6, 1800.0))]).cohort, "all");
         assert_eq!(label_timing(Some("motion")), "estimated");
         assert_eq!(label_timing(Some("recorder")), "unknown");
     }

@@ -211,7 +211,7 @@ def _evenly(items: list[int], most: int) -> list[int]:
 
 
 def sample_decisions(ppg_ts_ns: np.ndarray, all_holds: list[tuple[int, int, str]], target: str, excluded: set[str],
-                     early_offsets_ms: tuple[int, ...] = ()) -> tuple[np.ndarray, np.ndarray, list[str]]:
+                     early_offsets_ms: tuple[int, ...] = (), most: int | None = None) -> tuple[np.ndarray, np.ndarray, list[str]]:
     """The decisions a model trains on in one recording, whether each is a start of `target` (1) or not (0), and what each is.
 
     Decisions are PPG sample times, as the runtime scores them. Every hold of a label that is not excluded gives a
@@ -221,7 +221,8 @@ def sample_decisions(ppg_ts_ns: np.ndarray, all_holds: list[tuple[int, int, str]
     and up to PER_KIND with no hold near (`unlabelled`; UNLABELLED_ONLY in a recording with no holds), each at least
     EDGE_CLEARANCE_MS from every hold edge, measured from the decision less ONSET_DELAY_MS, spread evenly. With
     `early_offsets_ms`, also a negative at each of those offsets after every start of the target (`target_early`). A
-    decision whose span touches an excluded hold is left out."""
+    decision whose span touches an excluded hold is left out. `most`, when given, replaces PER_KIND and UNLABELLED_ONLY (a
+    recording of everyday activity with no gesture gives more, `label_train.NOISE_PER_MINUTE`)."""
     ts = np.asarray(ppg_ts_ns, dtype=np.int64)
     if ts.size == 0:
         return ts, np.zeros(0, dtype=np.int64), []
@@ -253,11 +254,11 @@ def sample_decisions(ppg_ts_ns: np.ndarray, all_holds: list[tuple[int, int, str]
         for start, end, label in kept_holds:
             if wanted(label):
                 inside |= (anchors >= start + clearance) & (anchors <= end - clearance)
-        picked += [(t, 0, kind) for t in _evenly(ts[inside & allowed].tolist(), PER_KIND)]
+        picked += [(t, 0, kind) for t in _evenly(ts[inside & allowed].tolist(), most or PER_KIND)]
     clear = allowed.copy()
     for start, end, _ in all_holds:
         clear &= (anchors < start - clearance) | (anchors > end + clearance)
-    picked += [(t, 0, "unlabelled") for t in _evenly(ts[clear].tolist(), PER_KIND if all_holds else UNLABELLED_ONLY)]
+    picked += [(t, 0, "unlabelled") for t in _evenly(ts[clear].tolist(), most or (PER_KIND if all_holds else UNLABELLED_ONLY))]
     priority = {"start": 0, "other_start": 1}
     by_time: dict[int, tuple[int, int, str]] = {}
     for p in sorted(picked, key=lambda p: priority.get(p[2], 2)):

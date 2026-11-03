@@ -32,7 +32,7 @@ const CATCH_AT_MS: f64 = 880.0;
 pub struct SealedRecordingResult {
     pub id: String,
     pub name: String,
-    /// "camera", "estimated" or "unknown" (`detector_events::label_timing`).
+    /// "camera", "estimated", "unknown" or "noGesture" (`detector_events::timing_of`).
     pub label_timing: &'static str,
     #[serde(flatten)]
     pub events: EventTotals,
@@ -217,7 +217,7 @@ pub async fn test_model_on_sealed(version_id: String, app: AppHandle) -> Result<
             recordings.push(SealedRecordingResult {
                 id: dataset.id.clone(),
                 name: dataset.original_filename.clone(),
-                label_timing: detector_events::label_timing(dataset.labels_from.as_deref()),
+                label_timing: detector_events::timing_of(dataset, &version.label.to_string()),
                 events,
                 minutes,
                 median_latency_ms: median(&mut delays),

@@ -27,6 +27,7 @@ export function CameraAssistCard({
   onToggleExtraLabel,
   recording,
   desktopAvailable,
+  embedded = false,
 }: {
   selectedLabel: string | null;
   /** Labels besides the selected one that the camera also marks. */
@@ -34,6 +35,8 @@ export function CameraAssistCard({
   onToggleExtraLabel?: (label: string) => void;
   recording: boolean;
   desktopAvailable: boolean;
+  /** Inside another card (the Recorder's Record a gesture), with the camera shown beside it: no card of its own. */
+  embedded?: boolean;
 }) {
   const camera = getCameraController();
   const cam = useSyncExternalStore(camera.subscribe, camera.getSnapshot, camera.getSnapshot);
@@ -99,19 +102,8 @@ export function CameraAssistCard({
     return () => cameraAssist.setReady(null);
   }, [blocker, markLabels, mine]);
 
-  return (
-    <Card role="region" aria-label="Camera marking" className="min-w-0">
-      <CardHeader>
-        <SectionHeader
-          title="Let the camera mark it"
-          description="Mark the gesture in your recording automatically, using the camera."
-          help={{
-            label: "About camera marking",
-            content: "Record as usual with the watch worn on the hand the camera sees. For pinch in and pinch out, pick “pinch in” above and add “pinch out” here: the camera marks a short pinch in where thumb and index meet and a short pinch out where they part, from their distance, with no library gesture needed. Add “pinch hold” too to label the time in between, while the fingers stay together. You can mark several labels in one recording: pick one above, then add others here. Only one label is on at a time; if two gestures are held together the one that began last is marked, and the other takes over if it is still held when that ends. While you record, the label is switched on in the watch data whenever the camera sees the label's gesture from the Gesture library, and off when you let go, just like holding the Mark label button. The PPG and motion rows in between carry the label, in the recording and in the exported CSV. Everything it marks starts unreviewed, and nothing is marked if the camera never sees the gesture.",
-          }}
-        />
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
+  const body = (
+    <>
         <div className="flex items-start gap-2 text-sm">
           <Checkbox checked={enabled} disabled={recording} onCheckedChange={(on) => cameraAssist.setEnabled(on === true)} aria-label="Let the camera mark the gesture" />
           <span><strong>Let the camera mark the gesture</strong> <small className="text-muted-foreground">On by default. When the camera is on and the label has a gesture, the recording is a timeline and the camera marks the label live, while you record.</small></span>
@@ -153,7 +145,25 @@ export function CameraAssistCard({
             <span className="hint">{recording ? "Recording. Perform the gesture, with the watch hand in view." : "Perform the gesture now to check, then start recording."}</span>
           </div>
         )}
-        {enabled && <CameraQuickControl />}
+        {enabled && !embedded && <CameraQuickControl />}
+    </>
+  );
+  if (embedded) return <div className="flex flex-col gap-3" role="group" aria-label="Camera marking">{body}</div>;
+
+  return (
+    <Card role="region" aria-label="Camera marking" className="min-w-0">
+      <CardHeader>
+        <SectionHeader
+          title="Let the camera mark it"
+          description="Mark the gesture in your recording automatically, using the camera."
+          help={{
+            label: "About camera marking",
+            content: "Record as usual with the watch worn on the hand the camera sees. For pinch in and pinch out, pick “pinch in” above and add “pinch out” here: the camera marks a short pinch in where thumb and index meet and a short pinch out where they part, from their distance, with no library gesture needed. Add “pinch hold” too to label the time in between, while the fingers stay together. You can mark several labels in one recording: pick one above, then add others here. Only one label is on at a time; if two gestures are held together the one that began last is marked, and the other takes over if it is still held when that ends. While you record, the label is switched on in the watch data whenever the camera sees the label's gesture from the Gesture library, and off when you let go, just like holding the Mark label button. The PPG and motion rows in between carry the label, in the recording and in the exported CSV. Everything it marks starts unreviewed, and nothing is marked if the camera never sees the gesture.",
+          }}
+        />
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {body}
       </CardContent>
     </Card>
   );

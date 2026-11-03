@@ -37,6 +37,15 @@ describe("LabelCoverage", () => {
     expect(rows[1]).not.toContain("record at least one more");
   });
 
+  it("shows the standard labels as the app's, with nothing to edit, archive or delete", () => {
+    const still: DatasetLabel = { ...label("still", "Hand still"), role: "negativeBackground", standard: true };
+    setup({ labels: [label("snap", "Snap"), still], onUpdate: vi.fn() });
+    const row = screen.getAllByRole("listitem").find((li) => li.textContent?.includes("Hand still"))!;
+    expect(within(row).getByText("Standard")).toBeInTheDocument();
+    expect(within(row).queryByRole("button")).toBeNull();
+    expect(screen.getByRole("button", { name: "Edit snap" })).toBeInTheDocument();
+  });
+
   it("adds a label from a typed name, showing the id it will get", async () => {
     const props = setup();
     fireEvent.click(screen.getByRole("button", { name: /Add a label/ }));

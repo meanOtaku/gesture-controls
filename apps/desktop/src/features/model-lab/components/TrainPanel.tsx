@@ -39,18 +39,21 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [roles, setRoles] = useState<Record<string, OtherRole>>({});
   const [research, setResearch] = useState(false);
+  const [hardNegatives, setHardNegatives] = useState(false);
   const [labelOffset, setLabelOffset] = useState(0);
   const [method, setMethod] = useState<TrainMethod>(TREES_METHOD);
   const [plan, setPlan] = useState<TrainPlan | null>(null);
   const [environment, setEnvironment] = useState<TrainerEnvironment | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const usable = labels.filter((label) => label.archivedAt === null);
+  // A standard label is never trained: it shows a model what is not a gesture.
+  const usable = labels.filter((label) => label.archivedAt === null && !label.standard);
+  const isStandard = (id: string) => labels.some((label) => label.id === id && label.standard);
   // Sealed recordings are kept for the final test: never trained on, nor used to choose anything.
   const candidates = inImportOrder(datasets.filter((dataset) => datasetLabels(dataset).length > 0 && !dataset.sealed));
   const sealedCount = datasets.filter((dataset) => dataset.sealed).length;
   const others = otherLabels(datasets, selected, target);
-  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, research, labelOffsetMs: labelOffset, method });
+  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, research, labelOffsetMs: labelOffset, method, hardNegatives });
   const requestKey = JSON.stringify(request);
 
   useEffect(() => {
@@ -196,6 +199,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
                         <option value="negative">Something else (not {target})</option>
                         <option value="exclude">Leave out</option>
                       </select>
+                      {isStandard(other) && <small className="text-muted-foreground">Standard label: something else for every model unless you leave it out.</small>}
                     </li>
                   ))}
                 </ul>
@@ -225,6 +229,11 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
                 )}
               </div>
             )}
+
+            <div className="flex items-start gap-2 text-sm">
+              <Checkbox checked={hardNegatives} disabled={running !== null} onCheckedChange={() => setHardNegatives((value) => !value)} aria-label="Learn from its own false alarms" />
+              <span><strong>Learn from its own false alarms</strong> <small className="text-muted-foreground">After training, run the model over its training recordings, add every moment it fired with no gesture under way as an example of what is not the gesture, and train it again. Everyday-noise recordings (Recorder → Everyday noise) teach it most. It takes about twice as long.</small></span>
+            </div>
 
             <div className="flex items-start gap-2 text-sm">
               <Checkbox checked={research} disabled={running !== null} onCheckedChange={() => setResearch((value) => !value)} aria-label="Also run research checks" />

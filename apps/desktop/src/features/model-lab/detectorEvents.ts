@@ -19,11 +19,12 @@ export interface EventTotals {
   falseActivationsPerHour: number | null;
 }
 
-export type LabelTiming = "camera" | "estimated" | "unknown";
+/** "noGesture": everyday noise, with no gesture to time; judged with the camera-timed recordings. */
+export type LabelTiming = "camera" | "estimated" | "unknown" | "noGesture";
 
 /** Mirrors `detector_events::Judged`. */
 export interface Judged extends EventTotals {
-  /** "camera": judged on the camera-timed recordings only, as there were others too and enough of them. */
+  /** "camera": judged on the camera-timed recordings (and any of no gesture) only, as there were others too and enough. */
   cohort: "camera" | "all";
   byLabelTiming: Partial<Record<LabelTiming, EventTotals>>;
 }
@@ -35,6 +36,7 @@ export const TIMING_NAME: Record<LabelTiming, string> = {
   camera: "camera-timed",
   estimated: "estimated from motion",
   unknown: "timing not known",
+  noGesture: "no gesture (everyday noise)",
 };
 
 const share = (part: number, whole: number) => (whole > 0 ? ` (${Math.round((part / whole) * 100)}%)` : "");
@@ -61,16 +63,24 @@ export function describeTotals(totals: EventTotals): string {
 }
 
 /**
- * Which recordings a judged total covers, and how the other kinds of label timing did, or null when every recording was
- * timed one way.
+ * Which recordings a judged total covers, how the other kinds of label timing did, and how often it fired on everyday
+ * noise; null when every recording was timed one way and none is noise.
  */
 export function cohortNote(judged: Judged): string | null {
   const timings = (Object.keys(judged.byLabelTiming) as LabelTiming[]).filter((timing) => judged.byLabelTiming[timing]);
-  if (timings.length < 2) return null;
-  const others = timings
-    .filter((timing) => judged.cohort !== "camera" || timing !== "camera")
-    .map((timing) => `${TIMING_NAME[timing]} (${judged.byLabelTiming[timing]!.recordings}): ${describeTotals(judged.byLabelTiming[timing]!)}`);
-  return judged.cohort === "camera"
-    ? `Judged on the ${judged.byLabelTiming.camera!.recordings} camera-timed recordings. Shown, not judged on: ${others.join("; ")}.`
-    : `Too few camera-timed pinches to judge on them alone, so all recordings together. Apart: ${others.join("; ")}.`;
+  const noise = judged.byLabelTiming.noGesture;
+  const notes: string[] = [];
+  if (timings.filter((timing) => timing !== "noGesture").length >= 2) {
+    const trusted = (timing: LabelTiming) => timing === "camera" || timing === "noGesture";
+    const others = timings
+      .filter((timing) => timing !== "noGesture" && (judged.cohort !== "camera" || !trusted(timing)))
+      .map((timing) => `${TIMING_NAME[timing]} (${judged.byLabelTiming[timing]!.recordings}): ${describeTotals(judged.byLabelTiming[timing]!)}`);
+    notes.push(judged.cohort === "camera"
+      ? `Judged on the ${judged.byLabelTiming.camera!.recordings} camera-timed recordings${noise ? ` and the ${noise.recordings} of everyday noise` : ""}. Shown, not judged on: ${others.join("; ")}.`
+      : `Too few camera-timed pinches to judge on them alone, so all recordings together. Apart: ${others.join("; ")}.`);
+  }
+  if (noise) {
+    notes.push(`On everyday noise (${noise.recordings} recording${noise.recordings === 1 ? "" : "s"}, ${Math.round(noise.negativeSeconds / 60)} min): ${perHour(noise)} false activations an hour, what daily use would see.`);
+  }
+  return notes.length > 0 ? notes.join(" ") : null;
 }

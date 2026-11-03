@@ -47,7 +47,7 @@ pub struct RecordingMistakes {
     pub name: String,
     /// "test" or "train": what the model used this recording for.
     pub role: &'static str,
-    /// "camera", "estimated" or "unknown" (`detector_events::label_timing`).
+    /// "camera", "estimated", "unknown" or "noGesture" (`detector_events::timing_of`).
     pub label_timing: &'static str,
     pub minutes: f64,
     #[serde(flatten)]
@@ -175,7 +175,7 @@ pub async fn model_mistakes(version_id: String, include_training: bool, app: App
                 id,
                 name: dataset.original_filename.clone(),
                 role,
-                label_timing: detector_events::label_timing(dataset.labels_from.as_deref()),
+                label_timing: detector_events::timing_of(dataset, &label),
                 minutes: duration_ms / 60_000.0,
                 events,
                 mistakes,
@@ -274,7 +274,7 @@ pub async fn threshold_sweep(version_id: String, app: AppHandle) -> Result<Thres
             let replay = labelling::replay(&pair, vec![model])?.into_iter().next().ok_or("the model gave no result")?;
             let span = sealed_test::judged_span(&replay, duration_ms);
             let recording = Recording { target: &label, starts: &starts, holds: &holds, excluded: &excluded, span };
-            add_sweep(&mut rows, detector_events::label_timing(dataset.labels_from.as_deref()), &recording, &replay);
+            add_sweep(&mut rows, detector_events::timing_of(dataset, &label), &recording, &replay);
         }
         if recordings == 0 {
             return Err("none of the recordings this model was tested on is in Model Lab any more".into());
@@ -298,7 +298,7 @@ pub struct ComparedRecording {
     pub id: String,
     pub name: String,
     pub minutes: f64,
-    /// "camera", "estimated" or "unknown".
+    /// "camera", "estimated", "unknown" or "noGesture".
     pub label_timing: &'static str,
     pub starts: usize,
     /// Caught and false activations (with no gesture under way) for each model, in the order asked, at its own threshold.
@@ -368,7 +368,7 @@ pub async fn compare_models(version_ids: Vec<String>, app: AppHandle) -> Result<
         let mut recordings = Vec::new();
         for id in &ids {
             let dataset = index.datasets.iter().find(|d| &d.id == id).ok_or("a recording went missing")?;
-            let timing = detector_events::label_timing(dataset.labels_from.as_deref());
+            let timing = detector_events::timing_of(dataset, &versions[0].label.to_string());
             let pair = labelling::pair_at(&model_lab::dataset_csv_path(&datasets_dir, id))?;
             let (holds, duration_ms) = dataset_files::holds(&pair)?;
             let mut row = ComparedRecording {

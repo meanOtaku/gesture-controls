@@ -33,6 +33,11 @@ describe("buildRequest", () => {
     expect(request).toMatchObject({ research: true, labelOffsetMs: -250 });
     expect(buildRequest({ label: "snap", datasetIds: ["a"], others: [], roles: {}, labelOffsetMs: 0 })).not.toHaveProperty("labelOffsetMs");
   });
+
+  it("asks to learn from its own false alarms only when chosen", () => {
+    expect(buildRequest({ label: "snap", datasetIds: ["a"], others: [], roles: {}, hardNegatives: true })).toMatchObject({ hardNegatives: true });
+    expect(buildRequest({ label: "snap", datasetIds: ["a"], others: [], roles: {} })).not.toHaveProperty("hardNegatives");
+  });
 });
 
 describe("recordingsWithLabel", () => {

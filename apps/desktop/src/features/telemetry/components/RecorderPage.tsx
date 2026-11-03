@@ -1,40 +1,31 @@
 import { useSyncExternalStore } from "react";
-import { AdvancedSection } from "../../../components/app/AdvancedSection";
 import { CameraCapturePanel } from "../../camera/components/CameraCapturePanel";
-import { CameraAssistCard } from "../../gestureLibrary/CameraAssistCard";
-import { cameraAssist } from "../../gestureLibrary/cameraAssist";
 import { CoverageCard } from "./CoverageCard";
-import { DatasetCaptureCard } from "./DatasetCaptureCard";
-import { ExportSettingsCard } from "./ExportSettingsCard";
-import { GuidedSessionCard } from "./GuidedSessionCard";
+import { EverydayNoiseCard } from "./EverydayNoiseCard";
+import { GestureRecordingCard } from "./GestureRecordingCard";
 import { JustRecordedCard } from "./JustRecordedCard";
 import { PinchSessionCard } from "./PinchSessionCard";
 import { SessionDetailsCard } from "./SessionDetailsCard";
 import { SignalHealthStrip } from "./SignalHealthStrip";
 import { StreamStatus } from "./StreamStatus";
 import { useTelemetryExport } from "../hooks/useTelemetryExport";
-import { timedCapture } from "../recording/timedCapture";
 import { telemetryStore } from "../store/telemetryStore";
 
 /**
- * Records a session: choose a label (or mark intervals on a timeline), start, perform the gesture, stop. A timed
- * capture is ended by `RecordingTimer`, which lives outside this page so leaving it does not cancel the timer.
+ * Records a session: pinch in / out, everyday noise, or any other gesture, with the camera beside them so you see what it
+ * sees while you record. A recording is saved by itself when it stops; a timed one is ended by `RecordingTimer`, which
+ * lives outside this page so leaving it does not cancel the timer.
  */
 export function RecorderPage() {
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
-  const { exportDataset, saveDatasetRecording, datasetExportFolder } = useTelemetryExport();
-
-  const selectedLabel = telemetryStore.getSelectedLabel();
-  const sessionLabels = telemetryStore.getSessionLabels();
-  const extraLabels = telemetryStore.getExtraLabels();
-  const markLabels = telemetryStore.getMarkLabels();
+  const { saveDatasetRecording } = useTelemetryExport();
   const datasetRecording = telemetryStore.getDatasetRecording();
-  const datasetRecordingState = telemetryStore.getDatasetRecordingState();
-  const datasetSession = telemetryStore.getDatasetSession();
-  const datasetRowCount = telemetryStore.getDatasetRowCount();
-  const datasetElapsedMs = telemetryStore.getDatasetRecordingElapsedMs();
-  const activeMarkerLabel = telemetryStore.getActiveTimelineLabel();
+  const watchConnected = telemetryStore.getWatchStatus()?.connected === true;
+  const stop = () => {
+    telemetryStore.stopDatasetRecording();
+    void saveDatasetRecording();
+  };
 
   return <main className="shell telemetry-shell">
     <header className="hero">
@@ -43,66 +34,18 @@ export function RecorderPage() {
     </header>
     <StreamStatus />
     <SignalHealthStrip recording={datasetRecording} />
-    <div className="card-stack">
-      <PinchSessionCard
-        recording={datasetRecording}
-        watchConnected={telemetryStore.getWatchStatus()?.connected === true}
-        desktopAvailable={desktopAvailable}
-        onStop={() => {
-          telemetryStore.stopDatasetRecording();
-          void saveDatasetRecording();
-        }}
-      />
-      <DatasetCaptureCard
-        selectedLabel={selectedLabel}
-        sessionLabels={sessionLabels}
-        onRemoveLabel={(label) => telemetryStore.removeSessionLabel(label)}
-        getLabelRemovalBlockedReason={(label) => telemetryStore.labelRemovalBlockedReason(label)}
-        desktopAvailable={desktopAvailable}
-        datasetExportFolder={datasetExportFolder}
-        datasetRecording={datasetRecording}
-        datasetRecordingState={datasetRecordingState}
-        datasetSession={datasetSession}
-        datasetRowCount={datasetRowCount}
-        datasetElapsedMs={datasetElapsedMs}
-        onSelectLabel={(label) => telemetryStore.selectDatasetLabel(label)}
-        activeMarkerLabel={activeMarkerLabel}
-        onMarkStart={() => {
-          if (!selectedLabel) return;
-          telemetryStore.setTimelineLabel(selectedLabel, "hotkey_hold");
-        }}
-        onMarkEnd={() => telemetryStore.setTimelineLabel(null)}
-        onStart={(timelineDurationSeconds) => {
-          // With camera marking on, the recording is a timeline with no manual marks; the camera marks it live while recording.
-          const assisted = cameraAssist.willMark(markLabels);
-          if (assisted) telemetryStore.setDatasetCaptureMode("timeline");
-          timedCapture.request(timelineDurationSeconds);
-          if (telemetryStore.startDatasetRecording() && assisted && markLabels.length > 0) cameraAssist.arm(markLabels);
-        }}
-        onStop={() => {
-          telemetryStore.stopDatasetRecording();
-          void saveDatasetRecording();
-        }}
-        onDiscard={() => { cameraAssist.disarm(); telemetryStore.discardDatasetRecording(); }}
-        onExport={exportDataset}
-        getDatasetRows={() => telemetryStore.getDatasetRows()}
-        timelineIntervals={telemetryStore.getTimelineIntervals()}
-      />
-      <JustRecordedCard recording={datasetRecording} />
-      <CameraAssistCard selectedLabel={selectedLabel} extraLabels={extraLabels} onToggleExtraLabel={(label) => telemetryStore.toggleExtraLabel(label)} recording={datasetRecording} desktopAvailable={desktopAvailable} />
-      <CameraCapturePanel />
-      <SessionDetailsCard context={telemetryStore.getSessionContext()} onChange={(context) => telemetryStore.setSessionContext(context)} recording={datasetRecording} />
-      <ExportSettingsCard />
-      <AdvancedSection storageKey="recorder" summary="Guided sessions for other gestures, and how much of each label you have">
-        <GuidedSessionCard
-          recording={datasetRecording}
-          onStop={() => {
-            telemetryStore.stopDatasetRecording();
-            void saveDatasetRecording();
-          }}
-        />
+    <div className="recorder-layout">
+      <div className="card-stack recorder-sessions">
+        <PinchSessionCard recording={datasetRecording} watchConnected={watchConnected} desktopAvailable={desktopAvailable} onStop={stop} />
+        <EverydayNoiseCard recording={datasetRecording} watchConnected={watchConnected} onStop={stop} />
+        <GestureRecordingCard desktopAvailable={desktopAvailable} onStop={stop} />
+        <JustRecordedCard recording={datasetRecording} />
+        <SessionDetailsCard context={telemetryStore.getSessionContext()} onChange={(context) => telemetryStore.setSessionContext(context)} recording={datasetRecording} />
         <CoverageCard />
-      </AdvancedSection>
+      </div>
+      <aside className="recorder-camera" aria-label="Camera">
+        <CameraCapturePanel />
+      </aside>
     </div>
   </main>;
 }
