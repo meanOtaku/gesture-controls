@@ -603,6 +603,37 @@ class TelemetryStore {
     return true;
   }
 
+  /**
+   * Timeline Capture only: adds a finished interval over a moment already past (`fromMs` to `toMs`, the browser clock), for
+   * marks known only once the moment is over. It starts no earlier than the end of the intervals already made, and is
+   * refused while a label is on.
+   */
+  addTimelineInterval(label: GestureDatasetLabel, fromMs: number, toMs: number, mechanism: "camera_proposal"): boolean {
+    if (this.datasetCaptureMode !== "timeline" || this.datasetRecordingState !== "recording") return false;
+    if (this.activeTimelineIntervalId !== null) return false;
+    const normalized = normalizeDatasetLabel(label);
+    if (!normalized) return false;
+    const currentRowCount = this.datasetRows.length;
+    const startRow = this.firstRowSince(fromMs, currentRowCount);
+    const interval: LiveInterval = {
+      intervalId: crypto.randomUUID(),
+      labelId: normalized,
+      startMonotonicNs: Math.round(fromMs * 1_000_000),
+      endMonotonicNs: Math.round(toMs * 1_000_000),
+      startRawRow: startRow,
+      endRawRow: Math.max(startRow, this.rowArrivedSince(toMs, currentRowCount)),
+      creationMechanism: mechanism,
+      curationStatus: "unreviewed",
+      createdAt: new Date().toISOString(),
+      revision: 1,
+    };
+    if (isDegenerate(interval)) return false;
+    this.sessionLabels.add(normalized);
+    this.timelineIntervals.push(interval);
+    this.publishNow();
+    return true;
+  }
+
   /** Post-capture editing (only while `saved`): rename a label without moving boundaries. Bumps revision for audit. */
   relabelTimelineInterval(intervalId: string, label: GestureDatasetLabel): boolean {
     if (this.datasetRecordingState !== "saved") return false;

@@ -2,7 +2,7 @@
 
 Recordings, all in `data/recordings/` (the same data as Model Lab's, so this runs from a clone of the repo):
 
-* camera-timed pinch sessions: 14 Oct (9), 17 Oct (5), 3 Nov (5), 4 Nov (2: 04:49 and 04:53);
+* camera-timed pinch sessions: 14 Oct (9), 17 Oct (5), 3 Nov (5), 4 Nov (3: 04:46, 04:49 and 04:53);
 * the 14 Oct fist sessions (4): no pinch;
 * everyday noise of 4 Nov (7): active (03:54, 04:37), hand still (04:03), on a support flat (04:09) and angled (04:15,
   04:20, 04:26).
@@ -16,16 +16,19 @@ Folds, each holding out one day's pinch sessions and some noise, and training on
 | 14 Oct | 14 Oct (9) | active 03:54, the fist sessions |
 | 17 Oct | 17 Oct (5) | active 04:37 |
 | 3 Nov | 3 Nov (5) | still 04:03, support flat 04:09 |
-| 4 Nov | 4 Nov (2) | support angled 04:15 |
+| 4 Nov | 4 Nov (3) | support angled 04:15 |
 
 Each fold through the app's trainer (`label_train.run`: the CNN, still-hand gate on, threshold chosen within 30 false
 activations an hour on the training recordings only), with and without `hardNegatives` (learning from its own false
 activations, found at the lowest cut-off). The live CNN ("Pinch in tree", trained on most of the 14/17 Oct sessions) is
 replayed on the same held-out recordings for comparison; on 14 and 17 Oct it is not being tested on unseen data.
 
-    tools/label-trainer/.venv/bin/python docs/research/artifacts/cnn-all-days-2026-11/all_days_check.py hard|plain
+"anytime" trains without the gate, so the model also sees the moments the hand was moving, and is replayed both without
+the gate and with it (the second as "all moments, gate when running", at the same threshold).
 
-Run "hard" first, then "plain"; each adds to results.json and rewrites results.md here, skipping a day already in
+    tools/label-trainer/.venv/bin/python docs/research/artifacts/cnn-all-days-2026-11/all_days_check.py hard|plain|anytime
+
+Each mode adds to results.json and rewrites results.md here, skipping a day already in
 results.json. Bundles go under runs/. The live CNN comes from the app's `model-lab` folder (`MODEL_LAB_DIR` for a copy of
 it); without it, that comparison is left out.
 """
@@ -57,6 +60,7 @@ RECORDINGS = [
     *[(f"{FIST}{t}.csv", "fist", "14 Oct", "noGesture") for t in ["01-02-50.880Z", "01-06-46.525Z", "01-10-16.565Z", "01-11-31.499Z"]],
     *[(f"{RELABELLED}2026-10-17T{t}", "pinch", "17 Oct", "camera") for t in ["12-21-44.346Z", "12-23-03.399Z.csv", "12-25-10.832Z.csv", "12-26-46.748Z.csv", "12-40-50.602Z"]],
     *[(f"{PINCH}3T{t}", "pinch", "3 Nov", "camera") for t in ["01-08-16.560Z", "01-10-50.957Z", "01-13-19.283Z", "01-17-14.928Z", "12-40-05.547Z"]],
+    (f"{PINCH}4T04-46-55.110Z", "pinch", "4 Nov", "camera"),
     (f"{PINCH}4T04-49-21.416Z", "pinch", "4 Nov", "camera"),
     (f"{PINCH}4T04-53-02.645Z", "pinch", "4 Nov", "camera"),
     (f"{NOISE}03-54-31.816Z", "noise: active", "14 Oct", "noGesture"),
@@ -82,13 +86,13 @@ def resolve() -> tuple[dict[str, Path], dict[str, str], dict[str, str | None], d
     return paths, kind, fold, timing
 
 
-def spec_for(paths: dict[str, Path], timing: dict[str, str], train: list[str], evaluation: list[str], hard: bool) -> dict:
+def spec_for(paths: dict[str, Path], timing: dict[str, str], train: list[str], evaluation: list[str], hard: bool, steady: bool = True) -> dict:
     ids = train + evaluation
     return {
         "version": 1, "target": "pinch_in", "negatives": NEGATIVES, "excludes": ["left_out"],
         "recordings": {rid: str(paths[rid]) for rid in ids}, "train": train, "evaluation": evaluation,
         "sources": list(lt.MOTION_SOURCES), "backend": lt.CNN_BACKEND, "seed": 17, "research": False, "labelOffsetMs": 0,
-        "labelTiming": {rid: timing[rid] for rid in ids}, "steadyStarts": True, "hardNegatives": hard,
+        "labelTiming": {rid: timing[rid] for rid in ids}, "steadyStarts": steady, "hardNegatives": hard,
     }
 
 
@@ -105,7 +109,7 @@ def scored(name: str, threshold: float, replays: dict, kind: dict[str, str]) -> 
 
 
 def main(mode: str) -> None:
-    hard = mode == "hard"
+    hard, steady = mode == "hard", mode != "anytime"
     paths, kind, fold, timing = resolve()
     results_path = HERE / "results.json"
     results = json.loads(results_path.read_text()) if results_path.exists() else {"budgetPerHour": BUDGET, "folds": {}}
@@ -113,11 +117,11 @@ def main(mode: str) -> None:
         evaluation = [r for r in paths if fold[r] == day]
         train = [r for r in paths if fold[r] != day]
         entry = results["folds"].setdefault(day, {"heldOut": [kind[r] for r in evaluation], "models": {}})
-        name = "all days + noise, hard negatives" if hard else "all days + noise"
+        name = "all days + noise, hard negatives" if hard else "all days + noise" if steady else "all moments, no still-hand gate"
         if name in entry["models"]:
             continue
-        out = HERE / "runs" / f"{'hard' if hard else 'plain'}-{day.replace(' ', '-')}"
-        raw = spec_for(paths, timing, train, evaluation, hard)
+        out = HERE / "runs" / f"{mode}-{day.replace(' ', '-')}"
+        raw = spec_for(paths, timing, train, evaluation, hard, steady)
         started = time.time()
         if not (out / "result.json").exists() or json.loads((out / "result.json").read_text())["outcome"] == "failed":
             print(f"== {day}: {name}", flush=True)
@@ -134,6 +138,10 @@ def main(mode: str) -> None:
             entry["models"][name] = {**scored(name, threshold, replays, kind), "hardNegatives": result["metrics"].get("hardNegatives"),
                                      "crossCheck": {k: (result["metrics"].get("crossCheckEvents") or {}).get(k) for k in ("gestures", "caught", "falseActivationsPerHour")},
                                      "minutes": round((time.time() - started) / 60)}
+            if not steady:
+                gated = lt.parse_spec({**raw, "steadyStarts": True})
+                both = replay(gated, lambda x: cnn.predict(data, x), recs, evaluation, (threshold,))
+                entry["models"]["all moments, gate when running"] = scored("all moments, gate when running", threshold, both, kind)
             if "live CNN" not in entry["models"] and LIVE_MODEL.exists():
                 live = (LIVE_MODEL / "model.cnn").read_bytes()
                 live_threshold = json.loads((LIVE_MODEL / "manifest.json").read_text())["thresholds"]["activation"]

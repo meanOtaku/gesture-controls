@@ -1,14 +1,12 @@
-"""Marks pinch in, pinch hold and pinch out in an exported Recorder folder whose camera landmarks were saved but whose
-pinches were not marked (camera marking was off), with the app's live rule (`pinchEdgeMarker.ts`, as
-`scripts/relabel_pinch_from_camera.py` applies it): a touch where the thumb-to-index distance falls below 0.35 hand sizes
-once it has been open (0.45 or more), a release timed where it rose back past 0.35 and counted at 0.45, nothing from the
-first reading after the hand was lost for 400 ms. Each touch becomes pinch_in (0.3 s, or until the release if sooner),
-then pinch_hold to the release, then pinch_out (0.3 s).
+"""Marks pinch in, pinch hold and pinch out in exported Recorder folders, from their saved camera landmarks.
 
-The export's hand_landmarks.csv already carries each frame's watch time (`watch_timestamp_ns`), so no clock alignment is
-needed. Writes a labelled copy (ppg.csv, imu.csv, dataset.json) to OUT; the source folder is not changed.
+Each touch and release comes from `relabel_pinch_from_camera.edges`, judged against that session's own hand. A touch
+becomes pinch_in (0.3 s, or until the release if sooner), then pinch_hold to the release, then pinch_out (0.3 s). Rows get
+their label by time, so a mark keeps its length. The export's hand_landmarks.csv already carries each frame's watch time
+(`watch_timestamp_ns`), so no clock alignment is needed. Rewrites each folder's ppg.csv, imu.csv and dataset.json in place;
+git keeps what they were.
 
-    python3 mark_from_camera.py SOURCE_FOLDER OUT_FOLDER
+    python3 scripts/mark_pinches_from_camera.py FOLDER...
 """
 from __future__ import annotations
 
@@ -18,7 +16,7 @@ import math
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from relabel_pinch_from_camera import INDEX_TIP, MARK_NS, MIDDLE_MCP, THUMB_TIP, WRIST, edges  # noqa: E402
 
 
@@ -74,17 +72,16 @@ def relabel(path: Path, marks: list[tuple[int, int, str]], out: Path) -> None:
     out.write_text("\n".join(lines) + "\n")
 
 
-def main(source: Path, out: Path) -> None:
-    out.mkdir(parents=True, exist_ok=True)
-    found = edges(distances(source / "hand_landmarks.csv"))
-    marks = spans(found)
-    for name in ("ppg.csv", "imu.csv"):
-        relabel(source / name, marks, out / name)
-    meta = json.loads((source / "dataset.json").read_text())
-    meta["labels"] = sorted({label for _, _, label in marks})
-    (out / "dataset.json").write_text(json.dumps(meta, indent=2) + "\n")
-    print(f"{sum(1 for _, _, l in marks if l == 'pinch_in')} pinches marked ({len(found)} edges)")
+def main(folders: list[Path]) -> None:
+    for folder in folders:
+        marks = spans(edges(distances(folder / "hand_landmarks.csv")))
+        for name in ("ppg.csv", "imu.csv"):
+            relabel(folder / name, marks, folder / name)
+        meta = json.loads((folder / "dataset.json").read_text())
+        meta["labels"] = sorted({label for _, _, label in marks})
+        (folder / "dataset.json").write_text(json.dumps(meta, indent=2) + "\n")
+        print(f"{folder.name}: {sum(1 for _, _, label in marks if label == 'pinch_in')} pinches")
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]), Path(sys.argv[2]))
+    main([Path(arg) for arg in sys.argv[1:]])

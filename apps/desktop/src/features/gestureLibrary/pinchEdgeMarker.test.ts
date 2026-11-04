@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { HandFrame } from "../camera/handTypes";
-import type { MarkingCamera, MarkingTarget } from "./cameraMarker";
-import { MARK_MS, PINCH_HOLD, PINCH_IN, PINCH_OUT, PinchEdges, startPinchEdgeMarking, wantsPinchEdges } from "./pinchEdgeMarker";
+import type { MarkingCamera } from "./cameraMarker";
+import { JOIN_MS, MARK_MS, PINCH_HOLD, PINCH_IN, PINCH_OUT, type Pinch, PinchDips, startPinchEdgeMarking, wantsPinchEdges } from "./pinchEdgeMarker";
 import { makeHand } from "./testHands";
 
 /** A camera whose frames the test pushes by hand, at a chosen thumb-to-index distance (null: no hand). */
@@ -23,24 +23,15 @@ function fakeCamera() {
 
 function fakeStore(accepting = true) {
   const calls: string[] = [];
-  let active: string | null = null;
   const store = {
     accepting,
-    getActiveTimelineLabel: () => active,
-    setTimelineLabel(label: string, _mechanism: string, sinceMs?: number) {
+    addTimelineInterval(label: string, fromMs: number, toMs: number) {
       if (!store.accepting) return false;
-      active = label;
-      calls.push(`open ${label} at ${sinceMs}`);
-      return true;
-    },
-    closeTimelineLabelAt(label: string, atMs: number) {
-      if (!store.accepting || active !== label) return false;
-      active = null;
-      calls.push(`close ${label} at ${atMs}`);
+      calls.push(`${label} ${fromMs}-${toMs}`);
       return true;
     },
   };
-  return { store: store as MarkingTarget & { accepting: boolean }, calls };
+  return { store, calls };
 }
 
 /** Pushes one frame every 33 ms from `start`, at each distance in turn. */
@@ -48,96 +39,106 @@ function play(push: (ms: number, pinch: number | null) => void, start: number, d
   distances.forEach((distance, i) => push(start + i * 33, distance));
 }
 
-describe("PinchEdges", () => {
-  it("finds the touch where the distance falls below the level and the release where it rose back past it", () => {
-    const edges = new PinchEdges(0.35);
-    const seen = [1.0, 0.8, 0.3, 0.1, 0.1, 0.38, 0.6, 1.0].map((d, i) => edges.update(i * 33, d)).filter(Boolean);
-    expect(seen).toEqual([{ kind: "in", atMs: 66 }, { kind: "out", atMs: 165 }]);
+const open = (frames: number) => Array<number>(frames).fill(1.0);
+/** A second of open hand, so the next frame is at 1320 when `play` starts at 0. */
+const SETTLED = open(40);
+
+function feed(dips: PinchDips, distances: (number | null)[]): (Pinch | null)[] {
+  return distances.map((distance, i) => dips.update(i * 33, distance));
+}
+
+describe("PinchDips", () => {
+  it("times the touch and release at the first and last frames near the closest distance, once the pinch is over", () => {
+    const found = feed(new PinchDips(), [...SETTLED, 0.8, 0.5, 0.4, 0.3, 0.3, 0.3, 0.3, 0.4, 0.5, 0.8, ...open(20)]);
+    expect(found.filter(Boolean)).toEqual([{ touchMs: 42 * 33, releaseMs: 47 * 33 }]);
+    // Not at the release: only after the fingers have stayed open.
+    expect(found.findIndex(Boolean) * 33).toBeGreaterThanOrEqual(48 * 33 + JOIN_MS);
   });
 
-  it("does not mark a flurry when the distance hovers at the level, and starts afresh after losing the hand", () => {
-    const edges = new PinchEdges(0.35);
-    const hover = [1.0, 0.3, 0.37, 0.33, 0.4, 0.34, 1.0].map((d, i) => edges.update(i * 33, d)).filter(Boolean);
-    expect(hover.map((e) => e?.kind)).toEqual(["in", "out"]);
-    // The hand leaves while closed and comes back open: that is not a release anyone saw.
-    const lost = new PinchEdges(0.35);
-    lost.update(0, 1.0);
-    lost.update(33, 0.1);
-    for (let t = 66; t < 600; t += 33) lost.update(t, null);
-    expect(lost.update(600, 1.0)).toBeNull();
-    expect(lost.update(633, 0.1)).toEqual({ kind: "in", atMs: 633 });
+  it("finds a pinch on a hand whose fingers look far apart even when touching", () => {
+    // Closed at 0.45 hand sizes: above the old fixed 0.35, so that rule never saw it.
+    const dip = [0.6, 0.45, 0.45, 0.45, 0.45, 0.45, 0.45, 0.6];
+    const found = feed(new PinchDips(), [...SETTLED, ...dip, ...open(20), ...dip, ...open(20)]);
+    expect(found.filter(Boolean)).toHaveLength(2);
+  });
+
+  it("ignores a stretch too short to be a pinch", () => {
+    const found = feed(new PinchDips(), [...SETTLED, 0.2, 0.2, ...open(30)]);
+    expect(found.filter(Boolean)).toEqual([]);
+  });
+
+  it("joins closed frames across a moment of lost hand, and splits pinches further apart", () => {
+    const hold = [0.2, 0.2, 0.2, 0.2, 0.2, 0.2];
+    const joined = feed(new PinchDips(), [...SETTLED, ...hold, null, null, ...hold, ...open(20)]);
+    expect(joined.filter(Boolean)).toEqual([{ touchMs: 40 * 33, releaseMs: 53 * 33 }]);
+    const apart = feed(new PinchDips(), [...SETTLED, ...hold, ...open(20), ...hold, ...open(20)]);
+    expect(apart.filter(Boolean)).toHaveLength(2);
+  });
+
+  it("does not take the first moments of a recording, before the open hand is known, as a pinch", () => {
+    const found = feed(new PinchDips(), [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, ...open(40)]);
+    expect(found.filter(Boolean)).toEqual([]);
   });
 });
 
 describe("startPinchEdgeMarking", () => {
-  it("marks pinch in at the touch and pinch out at the release, each for a short stretch", () => {
+  const start = (withHold: boolean, accepting = true) => {
     const primary = fakeCamera();
     const secondary = fakeCamera();
-    const { store, calls } = fakeStore();
-    startPinchEdgeMarking(0.35, store, (slot) => (slot === "primary" ? primary.camera : secondary.camera));
-    // Open, touch at 1066, held, release rising past the level at 1561, open again; then quiet frames.
-    play(primary.push, 1000, [1.0, 0.8, 0.2, ...Array(12).fill(0.1), 0.4, 0.7, 1.0, ...Array(12).fill(1.0)]);
-    expect(calls).toEqual([
-      `open ${PINCH_IN} at 1066`,
-      `close ${PINCH_IN} at ${1066 + MARK_MS}`,
-      `open ${PINCH_OUT} at 1495`,
-      `close ${PINCH_OUT} at ${1495 + MARK_MS}`,
-    ]);
+    const { store, calls } = fakeStore(accepting);
+    const stop = startPinchEdgeMarking(store, (slot) => (slot === "primary" ? primary.camera : secondary.camera), withHold);
+    return { primary, secondary, store, calls, stop };
+  };
+  const pinch = (frames: number) => Array<number>(frames).fill(0.2);
+
+  it("marks pinch in from the touch and pinch out from the release, each for a short stretch", () => {
+    const { primary, calls } = start(false);
+    play(primary.push, 0, [...SETTLED, ...pinch(16), ...open(20)]);
+    const touch = 40 * 33;
+    const release = 55 * 33;
+    expect(calls).toEqual([`${PINCH_IN} ${touch}-${touch + MARK_MS}`, `${PINCH_OUT} ${release}-${release + MARK_MS}`]);
   });
 
   it("with the hold, labels the time between pinch in and pinch out as pinch hold", () => {
-    const primary = fakeCamera();
-    const secondary = fakeCamera();
-    const { store, calls } = fakeStore();
-    startPinchEdgeMarking(0.35, store, (slot) => (slot === "primary" ? primary.camera : secondary.camera), true);
-    play(primary.push, 1000, [1.0, 0.8, 0.2, ...Array(12).fill(0.1), 0.4, 0.7, 1.0, ...Array(12).fill(1.0)]);
-    expect(calls).toEqual([
-      `open ${PINCH_IN} at 1066`,
-      `close ${PINCH_IN} at ${1066 + MARK_MS}`,
-      `open ${PINCH_HOLD} at ${1066 + MARK_MS}`,
-      `close ${PINCH_HOLD} at 1495`,
-      `open ${PINCH_OUT} at 1495`,
-      `close ${PINCH_OUT} at ${1495 + MARK_MS}`,
-    ]);
+    const { primary, calls } = start(true);
+    play(primary.push, 0, [...SETTLED, ...pinch(16), ...open(20)]);
+    const touch = 40 * 33;
+    const release = 55 * 33;
+    expect(calls).toEqual([`${PINCH_IN} ${touch}-${touch + MARK_MS}`, `${PINCH_HOLD} ${touch + MARK_MS}-${release}`, `${PINCH_OUT} ${release}-${release + MARK_MS}`]);
   });
 
-  it("with the hold, a pinch shorter than pinch in has no hold, and a hand lost mid-hold ends it where last seen", () => {
-    const primary = fakeCamera();
-    const secondary = fakeCamera();
-    const short = fakeStore();
-    startPinchEdgeMarking(0.35, short.store, (slot) => (slot === "primary" ? primary.camera : secondary.camera), true);
-    play(primary.push, 0, [1.0, 0.1, 0.1, 0.5, 1.0, ...Array(12).fill(1.0)]);
-    expect(short.calls.some((call) => call.includes(PINCH_HOLD))).toBe(false);
-
-    const lost = fakeStore();
-    const camera = fakeCamera();
-    const other = fakeCamera();
-    startPinchEdgeMarking(0.35, lost.store, (slot) => (slot === "primary" ? camera.camera : other.camera), true);
-    play(camera.push, 0, [1.0, 0.1, ...Array(12).fill(0.1), ...Array(20).fill(null)]);
-    expect(lost.calls).toEqual([`open ${PINCH_IN} at 33`, `close ${PINCH_IN} at ${33 + MARK_MS}`, `open ${PINCH_HOLD} at ${33 + MARK_MS}`, `close ${PINCH_HOLD} at ${13 * 33}`]);
+  it("cuts pinch in short when the fingers part sooner, with no hold", () => {
+    const { primary, calls } = start(true);
+    play(primary.push, 0, [...SETTLED, ...pinch(6), ...open(20)]);
+    const touch = 40 * 33;
+    const release = 45 * 33;
+    expect(calls).toEqual([`${PINCH_IN} ${touch}-${release}`, `${PINCH_OUT} ${release}-${release + MARK_MS}`]);
   });
 
-  it("cuts pinch in short when the release comes sooner, and stops listening when stopped", () => {
-    const primary = fakeCamera();
-    const secondary = fakeCamera();
-    const { store, calls } = fakeStore();
-    const stop = startPinchEdgeMarking(0.35, store, (slot) => (slot === "primary" ? primary.camera : secondary.camera));
-    play(primary.push, 0, [1.0, 0.1, 0.1, 0.5, 1.0]);
-    expect(calls.slice(0, 3)).toEqual([`open ${PINCH_IN} at 33`, `close ${PINCH_IN} at 99`, `open ${PINCH_OUT} at 99`]);
+  it("stops listening when stopped", () => {
+    const { primary, secondary, stop } = start(false);
     stop();
     expect(primary.listeners()).toBe(0);
     expect(secondary.listeners()).toBe(0);
   });
 
-  it("leaves a moment unmarked while the recording is still arming, and marks the next one", () => {
-    const primary = fakeCamera();
-    const secondary = fakeCamera();
-    const { store, calls } = fakeStore(false);
-    startPinchEdgeMarking(0.35, store, (slot) => (slot === "primary" ? primary.camera : secondary.camera));
-    play(primary.push, 0, [1.0, 0.1]);
+  it("takes the closer hand of two cameras", () => {
+    const { primary, secondary, calls } = start(false);
+    const distances = [...SETTLED, ...pinch(16), ...open(20)];
+    distances.forEach((distance, i) => {
+      primary.push(i * 33, 1.0);
+      secondary.push(i * 33, distance);
+    });
+    expect(calls).toHaveLength(2);
+  });
+
+  it("leaves a pinch unmarked while the recording is still arming, and marks the next one", () => {
+    const { primary, store, calls } = start(false, false);
+    play(primary.push, 0, [...SETTLED, ...pinch(16), ...open(20)]);
+    expect(calls).toEqual([]);
     store.accepting = true;
-    play(primary.push, 66, [0.1, 1.0]);
-    expect(calls).toEqual([`open ${PINCH_OUT} at 99`]);
+    play(primary.push, 76 * 33, [...pinch(16), ...open(20)]);
+    expect(calls).toHaveLength(2);
   });
 
   it("is asked for only when both labels are in the recording", () => {

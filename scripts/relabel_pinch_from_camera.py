@@ -5,9 +5,7 @@ fingers met. Those made with the camera on have the camera's hand landmarks save
 bundles. This finds each recording's bundle (by its start time), measures the thumb-to-index distance in every camera
 frame exactly as the app does (`landmarkMath.ts`: tip to tip over wrist to middle knuckle, the closest hand), puts the
 frames on the watch clock (the smallest arrival delay in clock_sync.csv, as `recording_bundle::landmarks_on_watch_clock`),
-and finds the touches and releases with the app's live rule (`pinchEdgeMarker.ts`): a touch where the distance falls below
-0.35 hand sizes once it has been open (0.45 or more), a release timed where it rose back past 0.35 and counted at 0.45,
-and no edge from the first reading after the hand was lost for 400 ms.
+and finds the touches and releases against each session's own hand (see `edges`).
 
 Each labelled pinch then becomes, from the first touch from 1 s before it to its end and the first release after that
 touch (until 1 s after its end):
@@ -48,9 +46,10 @@ BUNDLES = Path(os.environ.get(
 ))
 
 CONTACT = 0.35
-RELEASE = CONTACT + 0.1
 MARK_NS = 300_000_000
-LOST_MS = 400.0
+JOIN_MS = 400.0
+MIN_DIP_MS = 150.0
+NEAR_CLOSEST = 0.10
 BEFORE_NS, AFTER_NS = 1_000_000_000, 1_000_000_000
 WRIST, MIDDLE_MCP, THUMB_TIP, INDEX_TIP = 0, 9, 4, 8
 PINCH_IN, PINCH_HOLD, PINCH_OUT, LEFT_OUT = "pinch_in", "pinch_hold", "pinch_out", "left_out"
@@ -117,32 +116,40 @@ def watch_offset_ms(path: Path) -> float | None:
 
 
 def edges(frames: list[tuple[float, float | None]]) -> list[tuple[str, float]]:
-    """("in" | "out", camera ms) by the app's live rule (`PinchEdges`)."""
-    out, state, rose, last_seen = [], "unknown", None, -math.inf
+    """("in" | "out", camera ms) of each pinch, judged against the session's own hand. How close thumb and index look depends
+    on how the hand faces the camera (from about 0.15 to 0.45 hand sizes at their closest), so one fixed level misses whole
+    sessions. A pinch is a stretch of at least `MIN_DIP_MS` below halfway between the session's open hand (its 70th percentile)
+    and closed hand (its 2nd), across gaps under `JOIN_MS`. Its touch is the first frame within `NEAR_CLOSEST` of that
+    pinch's closest distance, and its release the last. On pinches 0.35 also found, the touch lands where 0.35 put it (median
+    shift 0 ms, 90% within a camera frame) and the release about a frame earlier."""
+    known = [d for _, d in frames if d is not None]
+    if not known:
+        return []
+    ordered = sorted(known)
+    level = lambda share: ordered[int(share * (len(ordered) - 1))]  # noqa: E731
+    halfway = (level(0.70) + level(0.02)) / 2
+    stretches: list[list[tuple[float, float]]] = []
+    current: list[tuple[float, float]] = []
     for ms, d in frames:
-        if d is None:
-            if ms - last_seen > LOST_MS:
-                state, rose = "unknown", None
+        if d is not None and d < halfway:
+            if current or not stretches or ms - stretches[-1][-1][0] >= JOIN_MS:
+                current.append((ms, d))
+            else:
+                current = stretches.pop()  # back within a moment: the same pinch
+                current.append((ms, d))
+        elif current:
+            stretches.append(current)
+            current = []
+    if current:
+        stretches.append(current)
+    found: list[tuple[str, float]] = []
+    for stretch in stretches:
+        if stretch[-1][0] - stretch[0][0] < MIN_DIP_MS:
             continue
-        if ms - last_seen > LOST_MS:
-            state = "unknown"
-        last_seen = ms
-        if state == "unknown":
-            state = "closed" if d < CONTACT else "open" if d >= RELEASE else "unknown"
-            rose = None
-        elif state == "open":
-            if d < CONTACT:
-                state, rose = "closed", None
-                out.append(("in", ms))
-        elif d < CONTACT:
-            rose = None
-        else:
-            rose = ms if rose is None else rose
-            if d >= RELEASE:
-                state = "open"
-                out.append(("out", rose))
-                rose = None
-    return out
+        near = min(d for _, d in stretch) + NEAR_CLOSEST
+        closed = [ms for ms, d in stretch if d <= near]
+        found += [("in", closed[0]), ("out", closed[-1])]
+    return found
 
 
 class Table:

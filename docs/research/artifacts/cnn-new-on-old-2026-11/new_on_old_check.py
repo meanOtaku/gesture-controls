@@ -3,7 +3,7 @@
 Training (4 Nov 2026, `data/recordings/new/`):
 
 * pinch in / out, marked by the camera: the 04:49 and 04:53 sessions (19 pinch-ins each). The 04:46 session is left out:
-  its camera saw 20 pinches but never the fingers closer than 0.35 hand sizes, so nothing was marked (`mark_from_camera.py`);
+  its camera saw 20 pinches but never the fingers closer than 0.35 hand sizes, so nothing was marked then (`scripts/mark_pinches_from_camera.py` has since);
 * everyday noise, labelled as a whole with the standard labels: active (2 sessions, `everyday_noise`), hand still (1,
   `still`) and hand on a support (1 flat, 3 angled, `supported`).
 

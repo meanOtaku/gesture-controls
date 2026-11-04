@@ -92,9 +92,9 @@ describe("cameraAssist with several labels", () => {
 
   it("marks pinch in and pinch out from the finger distance, and any other labels from their library gestures", () => {
     cameraAssist.arm(["pinch_in", "pinch_out"], []);
-    expect(markers.edges).toHaveBeenCalledWith(0.35, undefined, undefined, false);
+    expect(markers.edges).toHaveBeenCalledWith(undefined, undefined, false);
     cameraAssist.arm(["pinch_in", "pinch_hold", "pinch_out"], []);
-    expect(markers.edges).toHaveBeenLastCalledWith(0.35, undefined, undefined, true);
+    expect(markers.edges).toHaveBeenLastCalledWith(undefined, undefined, true);
     expect(markers.gestures).not.toHaveBeenCalled();
     cameraAssist.arm(["pinch"], []);
     expect(markers.gestures).toHaveBeenCalledWith(["pinch"], []);

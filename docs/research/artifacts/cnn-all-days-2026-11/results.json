@@ -19,31 +19,31 @@
         "noise: active"
       ],
       "models": {
-        "all days + noise, hard negatives": {
-          "model": "all days + noise, hard negatives",
-          "threshold": 0.96,
+        "all days + noise": {
+          "model": "all days + noise",
+          "threshold": 0.9,
           "all": {
             "recordings": 14,
-            "gestures": 153,
-            "caught": 16,
-            "gestureRecall": 0.10457516339869281,
+            "gestures": 171,
+            "caught": 30,
+            "gestureRecall": 0.17543859649122806,
             "repeats": 0,
-            "late": 0,
-            "medianLatencyMs": 542.192258,
+            "late": 3,
+            "medianLatencyMs": 505.524697,
             "falseActivations": 5,
-            "negativeSeconds": 981.971368175,
-            "falseActivationsPerHour": 18.33047335530069
+            "negativeSeconds": 976.022507652,
+            "falseActivationsPerHour": 18.442197653107694
           },
           "pinch": {
             "recordings": 9,
-            "gestures": 153,
-            "caught": 16,
-            "gestureRecall": 0.10457516339869281,
+            "gestures": 171,
+            "caught": 30,
+            "gestureRecall": 0.17543859649122806,
             "repeats": 0,
-            "late": 0,
-            "medianLatencyMs": 542.192258,
+            "late": 3,
+            "medianLatencyMs": 505.524697,
             "falseActivations": 0,
-            "negativeSeconds": 189.507367663,
+            "negativeSeconds": 183.55850714,
             "falseActivationsPerHour": 0.0
           },
           "noise": {
@@ -59,72 +59,72 @@
             "falseActivationsPerHour": 22.713965540857945
           },
           "perRecording": {
-            "82ee8162-4b3a-42a6-8a2e-bd4942a40a9e": {
-              "recordings": 1,
-              "gestures": 9,
-              "caught": 2,
-              "gestureRecall": 0.2222222222222222,
-              "repeats": 0,
-              "late": 0,
-              "medianLatencyMs": 547.3953879999999,
-              "falseActivations": 0,
-              "negativeSeconds": 23.302311156,
-              "falseActivationsPerHour": 0.0,
-              "kind": "pinch"
-            },
-            "60ef94c6-1779-4a55-9856-870eb76fab84": {
+            "gesture-dataset-pinch-2026-10-14T00-54-06.988Z": {
               "recordings": 1,
               "gestures": 15,
-              "caught": 1,
-              "gestureRecall": 0.06666666666666667,
+              "caught": 2,
+              "gestureRecall": 0.13333333333333333,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": 576.342363,
+              "medianLatencyMs": 399.37006099999996,
               "falseActivations": 0,
-              "negativeSeconds": 23.860751141,
+              "negativeSeconds": 22.135238692,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "827be2d1-6ca3-4865-8155-3773db495a7f": {
+            "gesture-dataset-pinch-2026-10-14T00-55-38.245Z": {
+              "recordings": 1,
+              "gestures": 20,
+              "caught": 1,
+              "gestureRecall": 0.05,
+              "repeats": 0,
+              "late": 1,
+              "medianLatencyMs": 349.322768,
+              "falseActivations": 0,
+              "negativeSeconds": 17.939724936,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch-2026-10-14T00-57-01.701Z": {
               "recordings": 1,
               "gestures": 17,
-              "caught": 2,
-              "gestureRecall": 0.11764705882352941,
+              "caught": 7,
+              "gestureRecall": 0.4117647058823529,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": 512.273513,
+              "medianLatencyMs": 494.999808,
               "falseActivations": 0,
-              "negativeSeconds": 21.360695272,
+              "negativeSeconds": 22.090705798,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "35af4113-a8a1-438f-bef5-258b9738d015": {
+            "gesture-dataset-pinch-2026-10-14T00-58-20.761Z": {
               "recordings": 1,
               "gestures": 21,
-              "caught": 3,
-              "gestureRecall": 0.14285714285714285,
+              "caught": 8,
+              "gestureRecall": 0.38095238095238093,
               "repeats": 0,
-              "late": 0,
-              "medianLatencyMs": 529.000192,
+              "late": 1,
+              "medianLatencyMs": 499.908331,
               "falseActivations": 0,
-              "negativeSeconds": 17.305002204,
+              "negativeSeconds": 18.999907773,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "6d6f7b3c-98b3-46ad-b256-20ef1035a5b0": {
+            "gesture-dataset-pinch-2026-10-14T00-59-37.623Z": {
               "recordings": 1,
               "gestures": 14,
-              "caught": 0,
-              "gestureRecall": 0.0,
+              "caught": 3,
+              "gestureRecall": 0.21428571428571427,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": null,
+              "medianLatencyMs": 553.798153,
               "falseActivations": 0,
-              "negativeSeconds": 19.418622944,
+              "negativeSeconds": 20.809200769,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "c6c2a72c-d0cc-4591-a9b6-700200219f91": {
+            "gesture-dataset-pinch-2026-10-14T01-00-54.801Z": {
               "recordings": 1,
               "gestures": 20,
               "caught": 0,
@@ -133,50 +133,50 @@
               "late": 0,
               "medianLatencyMs": null,
               "falseActivations": 0,
-              "negativeSeconds": 18.416151499,
+              "negativeSeconds": 18.997526835,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "20a4372a-3273-45ae-8816-f84dfe00bdbf": {
+            "gesture-dataset-pinch-2026-10-14T01-04-14.013Z": {
               "recordings": 1,
-              "gestures": 17,
-              "caught": 1,
-              "gestureRecall": 0.058823529411764705,
+              "gestures": 23,
+              "caught": 2,
+              "gestureRecall": 0.08695652173913043,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": 433.311222,
+              "medianLatencyMs": 485.624315,
               "falseActivations": 0,
-              "negativeSeconds": 23.374115211,
+              "negativeSeconds": 21.562505073,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "b2fcf81f-7b06-4aeb-80b5-95f9f408ff06": {
+            "gesture-dataset-pinch-2026-10-14T01-05-31.133Z": {
               "recordings": 1,
               "gestures": 22,
               "caught": 5,
               "gestureRecall": 0.22727272727272727,
               "repeats": 0,
-              "late": 0,
-              "medianLatencyMs": 553.107978,
+              "late": 1,
+              "medianLatencyMs": 531.000064,
               "falseActivations": 0,
-              "negativeSeconds": 17.479978162,
+              "negativeSeconds": 18.728192152,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "aad37c5c-f4e5-44ba-a9c5-4ae1faf89b4a": {
+            "gesture-dataset-pinch-2026-10-14T01-13-08.108Z": {
               "recordings": 1,
-              "gestures": 18,
+              "gestures": 19,
               "caught": 2,
-              "gestureRecall": 0.1111111111111111,
+              "gestureRecall": 0.10526315789473684,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": 557.78801,
+              "medianLatencyMs": 505.243358,
               "falseActivations": 0,
-              "negativeSeconds": 24.989740074,
+              "negativeSeconds": 22.295505112,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "08f918d8-c3df-40d5-a268-d0004257d759": {
+            "gesture-dataset-fist-2026-10-14T01-02-50.880Z": {
               "recordings": 1,
               "gestures": 0,
               "caught": 0,
@@ -184,12 +184,12 @@
               "repeats": 0,
               "late": 0,
               "medianLatencyMs": null,
-              "falseActivations": 0,
+              "falseActivations": 1,
               "negativeSeconds": 49.198903808,
-              "falseActivationsPerHour": 0.0,
+              "falseActivationsPerHour": 73.17236201133858,
               "kind": "fist"
             },
-            "6a12cac7-8132-4af8-ae9d-a18f3e0e2fa6": {
+            "gesture-dataset-fist-2026-10-14T01-06-46.525Z": {
               "recordings": 1,
               "gestures": 0,
               "caught": 0,
@@ -197,12 +197,12 @@
               "repeats": 0,
               "late": 0,
               "medianLatencyMs": null,
-              "falseActivations": 0,
+              "falseActivations": 1,
               "negativeSeconds": 49.103574272,
-              "falseActivationsPerHour": 0.0,
+              "falseActivationsPerHour": 73.3144186217174,
               "kind": "fist"
             },
-            "3942decb-4943-4625-8ba6-ee2522189be3": {
+            "gesture-dataset-fist-2026-10-14T01-10-16.565Z": {
               "recordings": 1,
               "gestures": 0,
               "caught": 0,
@@ -210,12 +210,12 @@
               "repeats": 0,
               "late": 0,
               "medianLatencyMs": null,
-              "falseActivations": 2,
+              "falseActivations": 1,
               "negativeSeconds": 48.997610496,
-              "falseActivationsPerHour": 146.94594138601482,
+              "falseActivationsPerHour": 73.47297069300741,
               "kind": "fist"
             },
-            "12c09140-6c00-423c-84c0-54fe82dddaa1": {
+            "gesture-dataset-fist-2026-10-14T01-11-31.499Z": {
               "recordings": 1,
               "gestures": 0,
               "caught": 0,
@@ -223,9 +223,9 @@
               "repeats": 0,
               "late": 0,
               "medianLatencyMs": null,
-              "falseActivations": 3,
+              "falseActivations": 1,
               "negativeSeconds": 49.133736704,
-              "falseActivationsPerHour": 219.8082361425763,
+              "falseActivationsPerHour": 73.26941204752544,
               "kind": "fist"
             },
             "gesture-dataset-unlabeled-2026-11-04T03-54-31.816Z": {
@@ -236,45 +236,45 @@
               "repeats": 0,
               "late": 0,
               "medianLatencyMs": null,
-              "falseActivations": 0,
+              "falseActivations": 1,
               "negativeSeconds": 596.030175232,
-              "falseActivationsPerHour": 0.0,
+              "falseActivationsPerHour": 6.03996265557986,
               "kind": "noise: active"
             }
           },
-          "hardNegatives": 2,
+          "hardNegatives": null,
           "crossCheck": {
-            "gestures": 153,
-            "caught": 68,
-            "falseActivationsPerHour": 29.23341693181911
+            "gestures": 201,
+            "caught": 100,
+            "falseActivationsPerHour": 12.436157253291043
           },
-          "minutes": 7
+          "minutes": 5
         },
         "live CNN": {
           "model": "live CNN",
           "threshold": 0.75,
           "all": {
             "recordings": 14,
-            "gestures": 153,
-            "caught": 99,
-            "gestureRecall": 0.6470588235294118,
+            "gestures": 171,
+            "caught": 97,
+            "gestureRecall": 0.5672514619883041,
             "repeats": 0,
-            "late": 7,
-            "medianLatencyMs": 507.999744,
+            "late": 10,
+            "medianLatencyMs": 499.102137,
             "falseActivations": 48,
-            "negativeSeconds": 981.971368175,
-            "falseActivationsPerHour": 175.9725442108866
+            "negativeSeconds": 976.022507652,
+            "falseActivationsPerHour": 177.04509746983388
           },
           "pinch": {
             "recordings": 9,
-            "gestures": 153,
-            "caught": 99,
-            "gestureRecall": 0.6470588235294118,
+            "gestures": 171,
+            "caught": 97,
+            "gestureRecall": 0.5672514619883041,
             "repeats": 0,
-            "late": 7,
-            "medianLatencyMs": 507.999744,
+            "late": 10,
+            "medianLatencyMs": 499.102137,
             "falseActivations": 0,
-            "negativeSeconds": 189.507367663,
+            "negativeSeconds": 183.55850714,
             "falseActivationsPerHour": 0.0
           },
           "noise": {
@@ -290,72 +290,72 @@
             "falseActivationsPerHour": 218.05406919223626
           },
           "perRecording": {
-            "82ee8162-4b3a-42a6-8a2e-bd4942a40a9e": {
+            "gesture-dataset-pinch-2026-10-14T00-54-06.988Z": {
               "recordings": 1,
-              "gestures": 9,
+              "gestures": 15,
               "caught": 1,
-              "gestureRecall": 0.1111111111111111,
+              "gestureRecall": 0.06666666666666667,
               "repeats": 0,
               "late": 2,
               "medianLatencyMs": 454.302748,
               "falseActivations": 0,
-              "negativeSeconds": 23.302311156,
+              "negativeSeconds": 22.135238692,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "60ef94c6-1779-4a55-9856-870eb76fab84": {
+            "gesture-dataset-pinch-2026-10-14T00-55-38.245Z": {
               "recordings": 1,
-              "gestures": 15,
-              "caught": 11,
-              "gestureRecall": 0.7333333333333333,
+              "gestures": 20,
+              "caught": 12,
+              "gestureRecall": 0.6,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": 536.342363,
+              "medianLatencyMs": 526.9648305000001,
               "falseActivations": 0,
-              "negativeSeconds": 23.860751141,
+              "negativeSeconds": 17.939724936,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "827be2d1-6ca3-4865-8155-3773db495a7f": {
+            "gesture-dataset-pinch-2026-10-14T00-57-01.701Z": {
               "recordings": 1,
               "gestures": 17,
               "caught": 16,
               "gestureRecall": 0.9411764705882353,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": 492.31298300000003,
+              "medianLatencyMs": 489.036356,
               "falseActivations": 0,
-              "negativeSeconds": 21.360695272,
+              "negativeSeconds": 22.090705798,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "35af4113-a8a1-438f-bef5-258b9738d015": {
+            "gesture-dataset-pinch-2026-10-14T00-58-20.761Z": {
               "recordings": 1,
               "gestures": 21,
-              "caught": 20,
-              "gestureRecall": 0.9523809523809523,
+              "caught": 18,
+              "gestureRecall": 0.8571428571428571,
               "repeats": 0,
-              "late": 1,
-              "medianLatencyMs": 529.0947424999999,
+              "late": 3,
+              "medianLatencyMs": 500.0563465,
               "falseActivations": 0,
-              "negativeSeconds": 17.305002204,
+              "negativeSeconds": 18.999907773,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "6d6f7b3c-98b3-46ad-b256-20ef1035a5b0": {
+            "gesture-dataset-pinch-2026-10-14T00-59-37.623Z": {
               "recordings": 1,
               "gestures": 14,
-              "caught": 13,
-              "gestureRecall": 0.9285714285714286,
+              "caught": 12,
+              "gestureRecall": 0.8571428571428571,
               "repeats": 0,
-              "late": 1,
-              "medianLatencyMs": 473.798153,
+              "late": 2,
+              "medianLatencyMs": 488.0847255,
               "falseActivations": 0,
-              "negativeSeconds": 19.418622944,
+              "negativeSeconds": 20.809200769,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "c6c2a72c-d0cc-4591-a9b6-700200219f91": {
+            "gesture-dataset-pinch-2026-10-14T01-00-54.801Z": {
               "recordings": 1,
               "gestures": 20,
               "caught": 1,
@@ -364,50 +364,50 @@
               "late": 0,
               "medianLatencyMs": 432.763772,
               "falseActivations": 0,
-              "negativeSeconds": 18.416151499,
+              "negativeSeconds": 18.997526835,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "20a4372a-3273-45ae-8816-f84dfe00bdbf": {
+            "gesture-dataset-pinch-2026-10-14T01-04-14.013Z": {
               "recordings": 1,
-              "gestures": 17,
+              "gestures": 23,
               "caught": 11,
-              "gestureRecall": 0.6470588235294118,
+              "gestureRecall": 0.4782608695652174,
               "repeats": 0,
               "late": 1,
               "medianLatencyMs": 489.999872,
               "falseActivations": 0,
-              "negativeSeconds": 23.374115211,
+              "negativeSeconds": 21.562505073,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "b2fcf81f-7b06-4aeb-80b5-95f9f408ff06": {
+            "gesture-dataset-pinch-2026-10-14T01-05-31.133Z": {
               "recordings": 1,
               "gestures": 22,
               "caught": 20,
               "gestureRecall": 0.9090909090909091,
               "repeats": 0,
               "late": 1,
-              "medianLatencyMs": 571.2745965,
+              "medianLatencyMs": 561.9268275,
               "falseActivations": 0,
-              "negativeSeconds": 17.479978162,
+              "negativeSeconds": 18.728192152,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "aad37c5c-f4e5-44ba-a9c5-4ae1faf89b4a": {
+            "gesture-dataset-pinch-2026-10-14T01-13-08.108Z": {
               "recordings": 1,
-              "gestures": 18,
+              "gestures": 19,
               "caught": 6,
-              "gestureRecall": 0.3333333333333333,
+              "gestureRecall": 0.3157894736842105,
               "repeats": 0,
               "late": 1,
               "medianLatencyMs": 437.4148985,
               "falseActivations": 0,
-              "negativeSeconds": 24.989740074,
+              "negativeSeconds": 22.295505112,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "08f918d8-c3df-40d5-a268-d0004257d759": {
+            "gesture-dataset-fist-2026-10-14T01-02-50.880Z": {
               "recordings": 1,
               "gestures": 0,
               "caught": 0,
@@ -420,7 +420,7 @@
               "falseActivationsPerHour": 73.17236201133858,
               "kind": "fist"
             },
-            "6a12cac7-8132-4af8-ae9d-a18f3e0e2fa6": {
+            "gesture-dataset-fist-2026-10-14T01-06-46.525Z": {
               "recordings": 1,
               "gestures": 0,
               "caught": 0,
@@ -433,7 +433,7 @@
               "falseActivationsPerHour": 513.2009303520217,
               "kind": "fist"
             },
-            "3942decb-4943-4625-8ba6-ee2522189be3": {
+            "gesture-dataset-fist-2026-10-14T01-10-16.565Z": {
               "recordings": 1,
               "gestures": 0,
               "caught": 0,
@@ -446,7 +446,7 @@
               "falseActivationsPerHour": 367.364853465037,
               "kind": "fist"
             },
-            "12c09140-6c00-423c-84c0-54fe82dddaa1": {
+            "gesture-dataset-fist-2026-10-14T01-11-31.499Z": {
               "recordings": 1,
               "gestures": 0,
               "caught": 0,
@@ -474,31 +474,31 @@
             }
           }
         },
-        "all days + noise": {
-          "model": "all days + noise",
-          "threshold": 0.97,
+        "all moments, no still-hand gate": {
+          "model": "all moments, no still-hand gate",
+          "threshold": 0.98,
           "all": {
             "recordings": 14,
-            "gestures": 153,
-            "caught": 7,
-            "gestureRecall": 0.0457516339869281,
+            "gestures": 171,
+            "caught": 21,
+            "gestureRecall": 0.12280701754385964,
             "repeats": 0,
-            "late": 0,
-            "medianLatencyMs": 553.107978,
-            "falseActivations": 2,
-            "negativeSeconds": 981.971368175,
-            "falseActivationsPerHour": 7.332189342120276
+            "late": 1,
+            "medianLatencyMs": 467.396936,
+            "falseActivations": 3,
+            "negativeSeconds": 976.022507652,
+            "falseActivationsPerHour": 11.065318591864617
           },
           "pinch": {
             "recordings": 9,
-            "gestures": 153,
-            "caught": 7,
-            "gestureRecall": 0.0457516339869281,
+            "gestures": 171,
+            "caught": 21,
+            "gestureRecall": 0.12280701754385964,
             "repeats": 0,
-            "late": 0,
-            "medianLatencyMs": 553.107978,
+            "late": 1,
+            "medianLatencyMs": 467.396936,
             "falseActivations": 0,
-            "negativeSeconds": 189.507367663,
+            "negativeSeconds": 183.55850714,
             "falseActivationsPerHour": 0.0
           },
           "noise": {
@@ -509,129 +509,129 @@
             "repeats": 0,
             "late": 0,
             "medianLatencyMs": null,
-            "falseActivations": 2,
+            "falseActivations": 3,
             "negativeSeconds": 792.464000512,
-            "falseActivationsPerHour": 9.085586216343177
+            "falseActivationsPerHour": 13.628379324514766
           },
           "perRecording": {
-            "82ee8162-4b3a-42a6-8a2e-bd4942a40a9e": {
-              "recordings": 1,
-              "gestures": 9,
-              "caught": 1,
-              "gestureRecall": 0.1111111111111111,
-              "repeats": 0,
-              "late": 0,
-              "medianLatencyMs": 380.27673,
-              "falseActivations": 0,
-              "negativeSeconds": 23.302311156,
-              "falseActivationsPerHour": 0.0,
-              "kind": "pinch"
-            },
-            "60ef94c6-1779-4a55-9856-870eb76fab84": {
+            "gesture-dataset-pinch-2026-10-14T00-54-06.988Z": {
               "recordings": 1,
               "gestures": 15,
-              "caught": 0,
-              "gestureRecall": 0.0,
+              "caught": 1,
+              "gestureRecall": 0.06666666666666667,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": null,
+              "medianLatencyMs": 482.772323,
               "falseActivations": 0,
-              "negativeSeconds": 23.860751141,
+              "negativeSeconds": 22.135238692,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "827be2d1-6ca3-4865-8155-3773db495a7f": {
-              "recordings": 1,
-              "gestures": 17,
-              "caught": 0,
-              "gestureRecall": 0.0,
-              "repeats": 0,
-              "late": 0,
-              "medianLatencyMs": null,
-              "falseActivations": 0,
-              "negativeSeconds": 21.360695272,
-              "falseActivationsPerHour": 0.0,
-              "kind": "pinch"
-            },
-            "35af4113-a8a1-438f-bef5-258b9738d015": {
-              "recordings": 1,
-              "gestures": 21,
-              "caught": 0,
-              "gestureRecall": 0.0,
-              "repeats": 0,
-              "late": 0,
-              "medianLatencyMs": null,
-              "falseActivations": 0,
-              "negativeSeconds": 17.305002204,
-              "falseActivationsPerHour": 0.0,
-              "kind": "pinch"
-            },
-            "6d6f7b3c-98b3-46ad-b256-20ef1035a5b0": {
-              "recordings": 1,
-              "gestures": 14,
-              "caught": 0,
-              "gestureRecall": 0.0,
-              "repeats": 0,
-              "late": 0,
-              "medianLatencyMs": null,
-              "falseActivations": 0,
-              "negativeSeconds": 19.418622944,
-              "falseActivationsPerHour": 0.0,
-              "kind": "pinch"
-            },
-            "c6c2a72c-d0cc-4591-a9b6-700200219f91": {
+            "gesture-dataset-pinch-2026-10-14T00-55-38.245Z": {
               "recordings": 1,
               "gestures": 20,
-              "caught": 0,
-              "gestureRecall": 0.0,
+              "caught": 2,
+              "gestureRecall": 0.1,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": null,
+              "medianLatencyMs": 483.9906525,
               "falseActivations": 0,
-              "negativeSeconds": 18.416151499,
+              "negativeSeconds": 17.939724936,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "20a4372a-3273-45ae-8816-f84dfe00bdbf": {
+            "gesture-dataset-pinch-2026-10-14T00-57-01.701Z": {
               "recordings": 1,
               "gestures": 17,
+              "caught": 2,
+              "gestureRecall": 0.11764705882352941,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": 491.000064,
+              "falseActivations": 0,
+              "negativeSeconds": 22.090705798,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch-2026-10-14T00-58-20.761Z": {
+              "recordings": 1,
+              "gestures": 21,
+              "caught": 9,
+              "gestureRecall": 0.42857142857142855,
+              "repeats": 0,
+              "late": 1,
+              "medianLatencyMs": 423.112757,
+              "falseActivations": 0,
+              "negativeSeconds": 18.999907773,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch-2026-10-14T00-59-37.623Z": {
+              "recordings": 1,
+              "gestures": 14,
+              "caught": 1,
+              "gestureRecall": 0.07142857142857142,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": 473.798153,
+              "falseActivations": 0,
+              "negativeSeconds": 20.809200769,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch-2026-10-14T01-00-54.801Z": {
+              "recordings": 1,
+              "gestures": 20,
+              "caught": 1,
+              "gestureRecall": 0.05,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": 320.062203,
+              "falseActivations": 0,
+              "negativeSeconds": 18.997526835,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch-2026-10-14T01-04-14.013Z": {
+              "recordings": 1,
+              "gestures": 23,
               "caught": 0,
               "gestureRecall": 0.0,
               "repeats": 0,
               "late": 0,
               "medianLatencyMs": null,
               "falseActivations": 0,
-              "negativeSeconds": 23.374115211,
+              "negativeSeconds": 21.562505073,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "b2fcf81f-7b06-4aeb-80b5-95f9f408ff06": {
+            "gesture-dataset-pinch-2026-10-14T01-05-31.133Z": {
               "recordings": 1,
               "gestures": 22,
               "caught": 4,
               "gestureRecall": 0.18181818181818182,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": 562.0540209999999,
+              "medianLatencyMs": 514.9729545,
               "falseActivations": 0,
-              "negativeSeconds": 17.479978162,
+              "negativeSeconds": 18.728192152,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "aad37c5c-f4e5-44ba-a9c5-4ae1faf89b4a": {
+            "gesture-dataset-pinch-2026-10-14T01-13-08.108Z": {
               "recordings": 1,
-              "gestures": 18,
-              "caught": 2,
-              "gestureRecall": 0.1111111111111111,
+              "gestures": 19,
+              "caught": 1,
+              "gestureRecall": 0.05263157894736842,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": 470.787946,
+              "medianLatencyMs": 357.335251,
               "falseActivations": 0,
-              "negativeSeconds": 24.989740074,
+              "negativeSeconds": 22.295505112,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "08f918d8-c3df-40d5-a268-d0004257d759": {
+            "gesture-dataset-fist-2026-10-14T01-02-50.880Z": {
               "recordings": 1,
               "gestures": 0,
               "caught": 0,
@@ -639,12 +639,12 @@
               "repeats": 0,
               "late": 0,
               "medianLatencyMs": null,
-              "falseActivations": 0,
+              "falseActivations": 2,
               "negativeSeconds": 49.198903808,
-              "falseActivationsPerHour": 0.0,
+              "falseActivationsPerHour": 146.34472402267716,
               "kind": "fist"
             },
-            "6a12cac7-8132-4af8-ae9d-a18f3e0e2fa6": {
+            "gesture-dataset-fist-2026-10-14T01-06-46.525Z": {
               "recordings": 1,
               "gestures": 0,
               "caught": 0,
@@ -657,7 +657,7 @@
               "falseActivationsPerHour": 0.0,
               "kind": "fist"
             },
-            "3942decb-4943-4625-8ba6-ee2522189be3": {
+            "gesture-dataset-fist-2026-10-14T01-10-16.565Z": {
               "recordings": 1,
               "gestures": 0,
               "caught": 0,
@@ -665,12 +665,12 @@
               "repeats": 0,
               "late": 0,
               "medianLatencyMs": null,
-              "falseActivations": 1,
+              "falseActivations": 0,
               "negativeSeconds": 48.997610496,
-              "falseActivationsPerHour": 73.47297069300741,
+              "falseActivationsPerHour": 0.0,
               "kind": "fist"
             },
-            "12c09140-6c00-423c-84c0-54fe82dddaa1": {
+            "gesture-dataset-fist-2026-10-14T01-11-31.499Z": {
               "recordings": 1,
               "gestures": 0,
               "caught": 0,
@@ -699,11 +699,235 @@
           },
           "hardNegatives": null,
           "crossCheck": {
-            "gestures": 153,
-            "caught": 72,
-            "falseActivationsPerHour": 27.962398804348712
+            "gestures": 201,
+            "caught": 143,
+            "falseActivationsPerHour": 14.923388703949252
           },
           "minutes": 4
+        },
+        "all moments, gate when running": {
+          "model": "all moments, gate when running",
+          "threshold": 0.98,
+          "all": {
+            "recordings": 14,
+            "gestures": 171,
+            "caught": 18,
+            "gestureRecall": 0.10526315789473684,
+            "repeats": 0,
+            "late": 1,
+            "medianLatencyMs": 470.5975445,
+            "falseActivations": 1,
+            "negativeSeconds": 976.022507652,
+            "falseActivationsPerHour": 3.688439530621539
+          },
+          "pinch": {
+            "recordings": 9,
+            "gestures": 171,
+            "caught": 18,
+            "gestureRecall": 0.10526315789473684,
+            "repeats": 0,
+            "late": 1,
+            "medianLatencyMs": 470.5975445,
+            "falseActivations": 0,
+            "negativeSeconds": 183.55850714,
+            "falseActivationsPerHour": 0.0
+          },
+          "noise": {
+            "recordings": 5,
+            "gestures": 0,
+            "caught": 0,
+            "gestureRecall": null,
+            "repeats": 0,
+            "late": 0,
+            "medianLatencyMs": null,
+            "falseActivations": 1,
+            "negativeSeconds": 792.464000512,
+            "falseActivationsPerHour": 4.542793108171589
+          },
+          "perRecording": {
+            "gesture-dataset-pinch-2026-10-14T00-54-06.988Z": {
+              "recordings": 1,
+              "gestures": 15,
+              "caught": 0,
+              "gestureRecall": 0.0,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": null,
+              "falseActivations": 0,
+              "negativeSeconds": 22.135238692,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch-2026-10-14T00-55-38.245Z": {
+              "recordings": 1,
+              "gestures": 20,
+              "caught": 2,
+              "gestureRecall": 0.1,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": 483.9906525,
+              "falseActivations": 0,
+              "negativeSeconds": 17.939724936,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch-2026-10-14T00-57-01.701Z": {
+              "recordings": 1,
+              "gestures": 17,
+              "caught": 2,
+              "gestureRecall": 0.11764705882352941,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": 491.000064,
+              "falseActivations": 0,
+              "negativeSeconds": 22.090705798,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch-2026-10-14T00-58-20.761Z": {
+              "recordings": 1,
+              "gestures": 21,
+              "caught": 8,
+              "gestureRecall": 0.38095238095238093,
+              "repeats": 0,
+              "late": 1,
+              "medianLatencyMs": 422.1016895,
+              "falseActivations": 0,
+              "negativeSeconds": 18.999907773,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch-2026-10-14T00-59-37.623Z": {
+              "recordings": 1,
+              "gestures": 14,
+              "caught": 1,
+              "gestureRecall": 0.07142857142857142,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": 473.798153,
+              "falseActivations": 0,
+              "negativeSeconds": 20.809200769,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch-2026-10-14T01-00-54.801Z": {
+              "recordings": 1,
+              "gestures": 20,
+              "caught": 0,
+              "gestureRecall": 0.0,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": null,
+              "falseActivations": 0,
+              "negativeSeconds": 18.997526835,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch-2026-10-14T01-04-14.013Z": {
+              "recordings": 1,
+              "gestures": 23,
+              "caught": 0,
+              "gestureRecall": 0.0,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": null,
+              "falseActivations": 0,
+              "negativeSeconds": 21.562505073,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch-2026-10-14T01-05-31.133Z": {
+              "recordings": 1,
+              "gestures": 22,
+              "caught": 4,
+              "gestureRecall": 0.18181818181818182,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": 514.9729545,
+              "falseActivations": 0,
+              "negativeSeconds": 18.728192152,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch-2026-10-14T01-13-08.108Z": {
+              "recordings": 1,
+              "gestures": 19,
+              "caught": 1,
+              "gestureRecall": 0.05263157894736842,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": 357.335251,
+              "falseActivations": 0,
+              "negativeSeconds": 22.295505112,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-fist-2026-10-14T01-02-50.880Z": {
+              "recordings": 1,
+              "gestures": 0,
+              "caught": 0,
+              "gestureRecall": null,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": null,
+              "falseActivations": 0,
+              "negativeSeconds": 49.198903808,
+              "falseActivationsPerHour": 0.0,
+              "kind": "fist"
+            },
+            "gesture-dataset-fist-2026-10-14T01-06-46.525Z": {
+              "recordings": 1,
+              "gestures": 0,
+              "caught": 0,
+              "gestureRecall": null,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": null,
+              "falseActivations": 0,
+              "negativeSeconds": 49.103574272,
+              "falseActivationsPerHour": 0.0,
+              "kind": "fist"
+            },
+            "gesture-dataset-fist-2026-10-14T01-10-16.565Z": {
+              "recordings": 1,
+              "gestures": 0,
+              "caught": 0,
+              "gestureRecall": null,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": null,
+              "falseActivations": 0,
+              "negativeSeconds": 48.997610496,
+              "falseActivationsPerHour": 0.0,
+              "kind": "fist"
+            },
+            "gesture-dataset-fist-2026-10-14T01-11-31.499Z": {
+              "recordings": 1,
+              "gestures": 0,
+              "caught": 0,
+              "gestureRecall": null,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": null,
+              "falseActivations": 1,
+              "negativeSeconds": 49.133736704,
+              "falseActivationsPerHour": 73.26941204752544,
+              "kind": "fist"
+            },
+            "gesture-dataset-unlabeled-2026-11-04T03-54-31.816Z": {
+              "recordings": 1,
+              "gestures": 0,
+              "caught": 0,
+              "gestureRecall": null,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": null,
+              "falseActivations": 0,
+              "negativeSeconds": 596.030175232,
+              "falseActivationsPerHour": 0.0,
+              "kind": "noise: active"
+            }
+          }
         }
       }
     },
@@ -717,32 +941,32 @@
         "noise: active"
       ],
       "models": {
-        "all days + noise, hard negatives": {
-          "model": "all days + noise, hard negatives",
-          "threshold": 0.6,
+        "all days + noise": {
+          "model": "all days + noise",
+          "threshold": 0.55,
           "all": {
             "recordings": 6,
-            "gestures": 47,
-            "caught": 5,
-            "gestureRecall": 0.10638297872340426,
+            "gestures": 52,
+            "caught": 8,
+            "gestureRecall": 0.15384615384615385,
             "repeats": 0,
             "late": 0,
-            "medianLatencyMs": 484.458327,
-            "falseActivations": 6,
-            "negativeSeconds": 700.955276079,
-            "falseActivationsPerHour": 30.81509011648499
+            "medianLatencyMs": 457.3258755,
+            "falseActivations": 9,
+            "negativeSeconds": 694.09143984,
+            "falseActivationsPerHour": 46.679728549121364
           },
           "pinch": {
             "recordings": 5,
-            "gestures": 47,
-            "caught": 5,
-            "gestureRecall": 0.10638297872340426,
+            "gestures": 52,
+            "caught": 8,
+            "gestureRecall": 0.15384615384615385,
             "repeats": 0,
             "late": 0,
-            "medianLatencyMs": 484.458327,
-            "falseActivations": 2,
-            "negativeSeconds": 101.997024559,
-            "falseActivationsPerHour": 70.59029448290595
+            "medianLatencyMs": 457.3258755,
+            "falseActivations": 1,
+            "negativeSeconds": 95.13318832,
+            "falseActivationsPerHour": 37.84168347107911
           },
           "noise": {
             "recordings": 1,
@@ -752,73 +976,73 @@
             "repeats": 0,
             "late": 0,
             "medianLatencyMs": null,
-            "falseActivations": 4,
+            "falseActivations": 8,
             "negativeSeconds": 598.95825152,
-            "falseActivationsPerHour": 24.041742414361188
+            "falseActivationsPerHour": 48.083484828722376
           },
           "perRecording": {
-            "833eba84-1490-430d-bc08-d45d86ae0355": {
+            "gesture-dataset-pinch-2026-10-17T12-21-44.346Z": {
               "recordings": 1,
               "gestures": 10,
               "caught": 1,
               "gestureRecall": 0.1,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": 447.491829,
+              "medianLatencyMs": 309.491701,
               "falseActivations": 0,
-              "negativeSeconds": 14.055722775,
+              "negativeSeconds": 16.893251902,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "6a0d166e-72aa-43c6-9a1a-ee0331309200": {
+            "gesture-dataset-pinch-2026-10-17T12-23-03.399Z": {
               "recordings": 1,
               "gestures": 12,
               "caught": 4,
               "gestureRecall": 0.3333333333333333,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": 491.06257500000004,
+              "medianLatencyMs": 487.1898245,
               "falseActivations": 0,
-              "negativeSeconds": 11.70469823,
+              "negativeSeconds": 12.162482057,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "08d6dfbf-bc2f-460e-8dea-84b483153344": {
+            "gesture-dataset-pinch-2026-10-17T12-25-10.832Z": {
               "recordings": 1,
-              "gestures": 9,
+              "gestures": 7,
               "caught": 0,
               "gestureRecall": 0.0,
               "repeats": 0,
               "late": 0,
               "medianLatencyMs": null,
               "falseActivations": 0,
-              "negativeSeconds": 24.076462308,
+              "negativeSeconds": 26.20109883,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "7b445f79-cd38-41a6-a6f4-afac8c9b1971": {
+            "gesture-dataset-pinch-2026-10-17T12-26-46.748Z": {
               "recordings": 1,
-              "gestures": 13,
-              "caught": 0,
-              "gestureRecall": 0.0,
+              "gestures": 18,
+              "caught": 2,
+              "gestureRecall": 0.1111111111111111,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": null,
-              "falseActivations": 2,
-              "negativeSeconds": 28.489492469,
-              "falseActivationsPerHour": 252.72475484898393,
+              "medianLatencyMs": 477.6014285,
+              "falseActivations": 1,
+              "negativeSeconds": 19.178083846,
+              "falseActivationsPerHour": 187.7142695228573,
               "kind": "pinch"
             },
-            "ca87d8fd-7fe2-4353-b797-4c08ec654e3d": {
+            "gesture-dataset-pinch-2026-10-17T12-40-50.602Z": {
               "recordings": 1,
-              "gestures": 3,
-              "caught": 0,
-              "gestureRecall": 0.0,
+              "gestures": 5,
+              "caught": 1,
+              "gestureRecall": 0.2,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": null,
+              "medianLatencyMs": 434.651751,
               "falseActivations": 0,
-              "negativeSeconds": 23.670648777,
+              "negativeSeconds": 20.698271685,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
@@ -830,46 +1054,46 @@
               "repeats": 0,
               "late": 0,
               "medianLatencyMs": null,
-              "falseActivations": 4,
+              "falseActivations": 8,
               "negativeSeconds": 598.95825152,
-              "falseActivationsPerHour": 24.041742414361188,
+              "falseActivationsPerHour": 48.083484828722376,
               "kind": "noise: active"
             }
           },
-          "hardNegatives": 41,
+          "hardNegatives": null,
           "crossCheck": {
-            "gestures": 259,
-            "caught": 164,
-            "falseActivationsPerHour": 50.877000050844785
+            "gestures": 320,
+            "caught": 172,
+            "falseActivationsPerHour": 22.664915954170013
           },
-          "minutes": 8
+          "minutes": 5
         },
         "live CNN": {
           "model": "live CNN",
           "threshold": 0.75,
           "all": {
             "recordings": 6,
-            "gestures": 47,
-            "caught": 9,
-            "gestureRecall": 0.19148936170212766,
+            "gestures": 52,
+            "caught": 10,
+            "gestureRecall": 0.19230769230769232,
             "repeats": 0,
             "late": 2,
-            "medianLatencyMs": 453.208082,
+            "medianLatencyMs": 457.4380645,
             "falseActivations": 29,
-            "negativeSeconds": 700.955276079,
-            "falseActivationsPerHour": 148.93960222967743
+            "negativeSeconds": 694.09143984,
+            "falseActivationsPerHour": 150.41245865827995
           },
           "pinch": {
             "recordings": 5,
-            "gestures": 47,
-            "caught": 9,
-            "gestureRecall": 0.19148936170212766,
+            "gestures": 52,
+            "caught": 10,
+            "gestureRecall": 0.19230769230769232,
             "repeats": 0,
             "late": 2,
-            "medianLatencyMs": 453.208082,
+            "medianLatencyMs": 457.4380645,
             "falseActivations": 1,
-            "negativeSeconds": 101.997024559,
-            "falseActivationsPerHour": 35.29514724145297
+            "negativeSeconds": 95.13318832,
+            "falseActivationsPerHour": 37.84168347107911
           },
           "noise": {
             "recordings": 1,
@@ -884,7 +1108,7 @@
             "falseActivationsPerHour": 168.29219690052832
           },
           "perRecording": {
-            "833eba84-1490-430d-bc08-d45d86ae0355": {
+            "gesture-dataset-pinch-2026-10-17T12-21-44.346Z": {
               "recordings": 1,
               "gestures": 10,
               "caught": 0,
@@ -893,11 +1117,11 @@
               "late": 1,
               "medianLatencyMs": null,
               "falseActivations": 0,
-              "negativeSeconds": 14.055722775,
+              "negativeSeconds": 16.893251902,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "6a0d166e-72aa-43c6-9a1a-ee0331309200": {
+            "gesture-dataset-pinch-2026-10-17T12-23-03.399Z": {
               "recordings": 1,
               "gestures": 12,
               "caught": 4,
@@ -906,46 +1130,46 @@
               "late": 1,
               "medianLatencyMs": 406.7939295,
               "falseActivations": 0,
-              "negativeSeconds": 11.70469823,
+              "negativeSeconds": 12.162482057,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "08d6dfbf-bc2f-460e-8dea-84b483153344": {
+            "gesture-dataset-pinch-2026-10-17T12-25-10.832Z": {
               "recordings": 1,
-              "gestures": 9,
+              "gestures": 7,
               "caught": 0,
               "gestureRecall": 0.0,
               "repeats": 0,
               "late": 0,
               "medianLatencyMs": null,
               "falseActivations": 0,
-              "negativeSeconds": 24.076462308,
+              "negativeSeconds": 26.20109883,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "7b445f79-cd38-41a6-a6f4-afac8c9b1971": {
+            "gesture-dataset-pinch-2026-10-17T12-26-46.748Z": {
               "recordings": 1,
-              "gestures": 13,
-              "caught": 3,
-              "gestureRecall": 0.23076923076923078,
+              "gestures": 18,
+              "caught": 4,
+              "gestureRecall": 0.2222222222222222,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": 494.000128,
+              "medianLatencyMs": 482.7192775,
               "falseActivations": 1,
-              "negativeSeconds": 28.489492469,
-              "falseActivationsPerHour": 126.36237742449197,
+              "negativeSeconds": 19.178083846,
+              "falseActivationsPerHour": 187.7142695228573,
               "kind": "pinch"
             },
-            "ca87d8fd-7fe2-4353-b797-4c08ec654e3d": {
+            "gesture-dataset-pinch-2026-10-17T12-40-50.602Z": {
               "recordings": 1,
-              "gestures": 3,
+              "gestures": 5,
               "caught": 2,
-              "gestureRecall": 0.6666666666666666,
+              "gestureRecall": 0.4,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": 316.3258115,
+              "medianLatencyMs": 336.3258115,
               "falseActivations": 0,
-              "negativeSeconds": 23.670648777,
+              "negativeSeconds": 20.698271685,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
@@ -964,32 +1188,32 @@
             }
           }
         },
-        "all days + noise": {
-          "model": "all days + noise",
+        "all moments, no still-hand gate": {
+          "model": "all moments, no still-hand gate",
           "threshold": 0.75,
           "all": {
             "recordings": 6,
-            "gestures": 47,
-            "caught": 5,
-            "gestureRecall": 0.10638297872340426,
-            "repeats": 0,
-            "late": 1,
-            "medianLatencyMs": 480.0,
-            "falseActivations": 5,
-            "negativeSeconds": 700.955276079,
-            "falseActivationsPerHour": 25.67924176373749
+            "gestures": 52,
+            "caught": 37,
+            "gestureRecall": 0.7115384615384616,
+            "repeats": 1,
+            "late": 2,
+            "medianLatencyMs": 487.498678,
+            "falseActivations": 11,
+            "negativeSeconds": 694.09143984,
+            "falseActivationsPerHour": 57.053001560037224
           },
           "pinch": {
             "recordings": 5,
-            "gestures": 47,
-            "caught": 5,
-            "gestureRecall": 0.10638297872340426,
-            "repeats": 0,
-            "late": 1,
-            "medianLatencyMs": 480.0,
-            "falseActivations": 2,
-            "negativeSeconds": 101.997024559,
-            "falseActivationsPerHour": 70.59029448290595
+            "gestures": 52,
+            "caught": 37,
+            "gestureRecall": 0.7115384615384616,
+            "repeats": 1,
+            "late": 2,
+            "medianLatencyMs": 487.498678,
+            "falseActivations": 10,
+            "negativeSeconds": 95.13318832,
+            "falseActivationsPerHour": 378.4168347107911
           },
           "noise": {
             "recordings": 1,
@@ -999,73 +1223,200 @@
             "repeats": 0,
             "late": 0,
             "medianLatencyMs": null,
-            "falseActivations": 3,
+            "falseActivations": 1,
             "negativeSeconds": 598.95825152,
-            "falseActivationsPerHour": 18.031306810770893
+            "falseActivationsPerHour": 6.010435603590297
           },
           "perRecording": {
-            "833eba84-1490-430d-bc08-d45d86ae0355": {
+            "gesture-dataset-pinch-2026-10-17T12-21-44.346Z": {
               "recordings": 1,
               "gestures": 10,
-              "caught": 1,
-              "gestureRecall": 0.1,
+              "caught": 8,
+              "gestureRecall": 0.8,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": 513.491701,
-              "falseActivations": 0,
-              "negativeSeconds": 14.055722775,
-              "falseActivationsPerHour": 0.0,
+              "medianLatencyMs": 507.938144,
+              "falseActivations": 2,
+              "negativeSeconds": 16.893251902,
+              "falseActivationsPerHour": 426.20568507284196,
               "kind": "pinch"
             },
-            "6a0d166e-72aa-43c6-9a1a-ee0331309200": {
+            "gesture-dataset-pinch-2026-10-17T12-23-03.399Z": {
               "recordings": 1,
               "gestures": 12,
-              "caught": 3,
-              "gestureRecall": 0.25,
+              "caught": 10,
+              "gestureRecall": 0.8333333333333334,
               "repeats": 0,
               "late": 1,
-              "medianLatencyMs": 414.379649,
+              "medianLatencyMs": 463.259957,
               "falseActivations": 0,
-              "negativeSeconds": 11.70469823,
+              "negativeSeconds": 12.162482057,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "08d6dfbf-bc2f-460e-8dea-84b483153344": {
+            "gesture-dataset-pinch-2026-10-17T12-25-10.832Z": {
               "recordings": 1,
-              "gestures": 9,
-              "caught": 0,
-              "gestureRecall": 0.0,
-              "repeats": 0,
+              "gestures": 7,
+              "caught": 6,
+              "gestureRecall": 0.8571428571428571,
+              "repeats": 1,
               "late": 0,
-              "medianLatencyMs": null,
-              "falseActivations": 0,
-              "negativeSeconds": 24.076462308,
-              "falseActivationsPerHour": 0.0,
+              "medianLatencyMs": 397.4238825,
+              "falseActivations": 4,
+              "negativeSeconds": 26.20109883,
+              "falseActivationsPerHour": 549.5952705430866,
               "kind": "pinch"
             },
-            "7b445f79-cd38-41a6-a6f4-afac8c9b1971": {
+            "gesture-dataset-pinch-2026-10-17T12-26-46.748Z": {
               "recordings": 1,
-              "gestures": 13,
-              "caught": 0,
-              "gestureRecall": 0.0,
+              "gestures": 18,
+              "caught": 11,
+              "gestureRecall": 0.6111111111111112,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": null,
+              "medianLatencyMs": 491.395522,
               "falseActivations": 2,
-              "negativeSeconds": 28.489492469,
-              "falseActivationsPerHour": 252.72475484898393,
+              "negativeSeconds": 19.178083846,
+              "falseActivationsPerHour": 375.4285390457146,
               "kind": "pinch"
             },
-            "ca87d8fd-7fe2-4353-b797-4c08ec654e3d": {
+            "gesture-dataset-pinch-2026-10-17T12-40-50.602Z": {
               "recordings": 1,
-              "gestures": 3,
-              "caught": 1,
+              "gestures": 5,
+              "caught": 2,
+              "gestureRecall": 0.4,
+              "repeats": 0,
+              "late": 1,
+              "medianLatencyMs": 431.4063575,
+              "falseActivations": 2,
+              "negativeSeconds": 20.698271685,
+              "falseActivationsPerHour": 347.8551305913057,
+              "kind": "pinch"
+            },
+            "gesture-dataset-unlabeled-2026-11-04T04-37-45.372Z": {
+              "recordings": 1,
+              "gestures": 0,
+              "caught": 0,
+              "gestureRecall": null,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": null,
+              "falseActivations": 1,
+              "negativeSeconds": 598.95825152,
+              "falseActivationsPerHour": 6.010435603590297,
+              "kind": "noise: active"
+            }
+          },
+          "hardNegatives": null,
+          "crossCheck": {
+            "gestures": 320,
+            "caught": 198,
+            "falseActivationsPerHour": 23.798161751878514
+          },
+          "minutes": 5
+        },
+        "all moments, gate when running": {
+          "model": "all moments, gate when running",
+          "threshold": 0.75,
+          "all": {
+            "recordings": 6,
+            "gestures": 52,
+            "caught": 10,
+            "gestureRecall": 0.19230769230769232,
+            "repeats": 0,
+            "late": 1,
+            "medianLatencyMs": 492.8875855,
+            "falseActivations": 1,
+            "negativeSeconds": 694.09143984,
+            "falseActivationsPerHour": 5.186636505457929
+          },
+          "pinch": {
+            "recordings": 5,
+            "gestures": 52,
+            "caught": 10,
+            "gestureRecall": 0.19230769230769232,
+            "repeats": 0,
+            "late": 1,
+            "medianLatencyMs": 492.8875855,
+            "falseActivations": 0,
+            "negativeSeconds": 95.13318832,
+            "falseActivationsPerHour": 0.0
+          },
+          "noise": {
+            "recordings": 1,
+            "gestures": 0,
+            "caught": 0,
+            "gestureRecall": null,
+            "repeats": 0,
+            "late": 0,
+            "medianLatencyMs": null,
+            "falseActivations": 1,
+            "negativeSeconds": 598.95825152,
+            "falseActivationsPerHour": 6.010435603590297
+          },
+          "perRecording": {
+            "gesture-dataset-pinch-2026-10-17T12-21-44.346Z": {
+              "recordings": 1,
+              "gestures": 10,
+              "caught": 2,
+              "gestureRecall": 0.2,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": 530.01911,
+              "falseActivations": 0,
+              "negativeSeconds": 16.893251902,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch-2026-10-17T12-23-03.399Z": {
+              "recordings": 1,
+              "gestures": 12,
+              "caught": 4,
               "gestureRecall": 0.3333333333333333,
               "repeats": 0,
               "late": 0,
-              "medianLatencyMs": 521.52553,
+              "medianLatencyMs": 414.22929150000004,
               "falseActivations": 0,
-              "negativeSeconds": 23.670648777,
+              "negativeSeconds": 12.162482057,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch-2026-10-17T12-25-10.832Z": {
+              "recordings": 1,
+              "gestures": 7,
+              "caught": 1,
+              "gestureRecall": 0.14285714285714285,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": 837.216376,
+              "falseActivations": 0,
+              "negativeSeconds": 26.20109883,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch-2026-10-17T12-26-46.748Z": {
+              "recordings": 1,
+              "gestures": 18,
+              "caught": 3,
+              "gestureRecall": 0.16666666666666666,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": 491.395522,
+              "falseActivations": 0,
+              "negativeSeconds": 19.178083846,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch-2026-10-17T12-40-50.602Z": {
+              "recordings": 1,
+              "gestures": 5,
+              "caught": 0,
+              "gestureRecall": 0.0,
+              "repeats": 0,
+              "late": 1,
+              "medianLatencyMs": null,
+              "falseActivations": 0,
+              "negativeSeconds": 20.698271685,
               "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
@@ -1077,19 +1428,12 @@
               "repeats": 0,
               "late": 0,
               "medianLatencyMs": null,
-              "falseActivations": 3,
+              "falseActivations": 1,
               "negativeSeconds": 598.95825152,
-              "falseActivationsPerHour": 18.031306810770893,
+              "falseActivationsPerHour": 6.010435603590297,
               "kind": "noise: active"
             }
-          },
-          "hardNegatives": null,
-          "crossCheck": {
-            "gestures": 259,
-            "caught": 152,
-            "falseActivationsPerHour": 46.25181822804071
-          },
-          "minutes": 4
+          }
         }
       }
     },
@@ -1104,32 +1448,32 @@
         "noise: support, flat"
       ],
       "models": {
-        "all days + noise, hard negatives": {
-          "model": "all days + noise, hard negatives",
+        "all days + noise": {
+          "model": "all days + noise",
           "threshold": 0.65,
           "all": {
             "recordings": 7,
-            "gestures": 70,
-            "caught": 48,
-            "gestureRecall": 0.6857142857142857,
+            "gestures": 92,
+            "caught": 65,
+            "gestureRecall": 0.7065217391304348,
             "repeats": 0,
-            "late": 17,
-            "medianLatencyMs": 431.06512399999997,
-            "falseActivations": 27,
-            "negativeSeconds": 1009.966712131,
-            "falseActivationsPerHour": 96.24079569405893
+            "late": 25,
+            "medianLatencyMs": 435.158142,
+            "falseActivations": 5,
+            "negativeSeconds": 985.605849956,
+            "falseActivationsPerHour": 18.262878615019954
           },
           "pinch": {
             "recordings": 5,
-            "gestures": 70,
-            "caught": 48,
-            "gestureRecall": 0.6857142857142857,
+            "gestures": 92,
+            "caught": 65,
+            "gestureRecall": 0.7065217391304348,
             "repeats": 0,
-            "late": 17,
-            "medianLatencyMs": 431.06512399999997,
-            "falseActivations": 26,
-            "negativeSeconds": 531.844211779,
-            "falseActivationsPerHour": 175.99138606192838
+            "late": 25,
+            "medianLatencyMs": 435.158142,
+            "falseActivations": 4,
+            "negativeSeconds": 507.483349604,
+            "falseActivationsPerHour": 28.375315192580455
           },
           "noise": {
             "recordings": 2,
@@ -1144,69 +1488,69 @@
             "falseActivationsPerHour": 7.529451128841736
           },
           "perRecording": {
-            "8ed9fd23-5216-4642-8705-feea39125ba4": {
+            "gesture-dataset-pinch_in-2026-11-03T01-08-16.560Z": {
               "recordings": 1,
-              "gestures": 16,
-              "caught": 13,
-              "gestureRecall": 0.8125,
+              "gestures": 19,
+              "caught": 15,
+              "gestureRecall": 0.7894736842105263,
               "repeats": 0,
-              "late": 3,
-              "medianLatencyMs": 478.761875,
-              "falseActivations": 3,
-              "negativeSeconds": 105.091470455,
-              "falseActivationsPerHour": 102.76761713620272,
+              "late": 4,
+              "medianLatencyMs": 455.644153,
+              "falseActivations": 0,
+              "negativeSeconds": 101.897327364,
+              "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "9d150228-fb00-4533-a7a4-82801c4a864e": {
+            "gesture-dataset-pinch_in-2026-11-03T01-10-50.957Z": {
               "recordings": 1,
-              "gestures": 17,
+              "gestures": 18,
+              "caught": 15,
+              "gestureRecall": 0.8333333333333334,
+              "repeats": 0,
+              "late": 4,
+              "medianLatencyMs": 423.969805,
+              "falseActivations": 0,
+              "negativeSeconds": 101.216712281,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch_in-2026-11-03T01-13-19.283Z": {
+              "recordings": 1,
+              "gestures": 20,
+              "caught": 14,
+              "gestureRecall": 0.7,
+              "repeats": 0,
+              "late": 4,
+              "medianLatencyMs": 401.252817,
+              "falseActivations": 0,
+              "negativeSeconds": 99.34400601,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch_in-2026-11-03T01-17-14.928Z": {
+              "recordings": 1,
+              "gestures": 19,
               "caught": 10,
-              "gestureRecall": 0.5882352941176471,
+              "gestureRecall": 0.5263157894736842,
               "repeats": 0,
-              "late": 5,
-              "medianLatencyMs": 405.4746045,
+              "late": 9,
+              "medianLatencyMs": 386.4339165,
               "falseActivations": 1,
-              "negativeSeconds": 101.992156399,
-              "falseActivationsPerHour": 35.29683190456886,
+              "negativeSeconds": 104.234886827,
+              "falseActivationsPerHour": 34.53738100157356,
               "kind": "pinch"
             },
-            "a842ec17-bfe1-4b93-9719-43f452e302d5": {
+            "gesture-dataset-pinch_in-2026-11-03T12-40-05.547Z": {
               "recordings": 1,
               "gestures": 16,
               "caught": 11,
               "gestureRecall": 0.6875,
               "repeats": 0,
               "late": 4,
-              "medianLatencyMs": 422.540921,
+              "medianLatencyMs": 474.944823,
               "falseActivations": 3,
-              "negativeSeconds": 102.412622965,
-              "falseActivationsPerHour": 105.45575034916303,
-              "kind": "pinch"
-            },
-            "5be1c51f-6c3d-499d-82aa-34f938a69157": {
-              "recordings": 1,
-              "gestures": 6,
-              "caught": 2,
-              "gestureRecall": 0.3333333333333333,
-              "repeats": 0,
-              "late": 3,
-              "medianLatencyMs": 361.213145,
-              "falseActivations": 15,
-              "negativeSeconds": 118.719297929,
-              "falseActivationsPerHour": 454.8544418810046,
-              "kind": "pinch"
-            },
-            "gesture-dataset-pinch_in-2026-11-03T12-40-05.547Z": {
-              "recordings": 1,
-              "gestures": 15,
-              "caught": 12,
-              "gestureRecall": 0.8,
-              "repeats": 0,
-              "late": 2,
-              "medianLatencyMs": 449.352087,
-              "falseActivations": 4,
-              "negativeSeconds": 103.628664031,
-              "falseActivationsPerHour": 138.95769220466175,
+              "negativeSeconds": 100.790417122,
+              "falseActivationsPerHour": 107.15304399353094,
               "kind": "pinch"
             },
             "gesture-dataset-unlabeled-2026-11-04T04-03-41.167Z": {
@@ -1236,40 +1580,40 @@
               "kind": "noise: support, flat"
             }
           },
-          "hardNegatives": 6,
+          "hardNegatives": null,
           "crossCheck": {
-            "gestures": 236,
-            "caught": 107,
-            "falseActivationsPerHour": 28.2415396702518
+            "gestures": 280,
+            "caught": 143,
+            "falseActivationsPerHour": 27.450422067846088
           },
-          "minutes": 6
+          "minutes": 5
         },
         "live CNN": {
           "model": "live CNN",
           "threshold": 0.75,
           "all": {
             "recordings": 7,
-            "gestures": 70,
-            "caught": 47,
-            "gestureRecall": 0.6714285714285714,
+            "gestures": 92,
+            "caught": 60,
+            "gestureRecall": 0.6521739130434783,
             "repeats": 0,
-            "late": 21,
-            "medianLatencyMs": 416.0,
-            "falseActivations": 31,
-            "negativeSeconds": 1009.966712131,
-            "falseActivationsPerHour": 110.49869135243803
+            "late": 30,
+            "medianLatencyMs": 413.00437,
+            "falseActivations": 9,
+            "negativeSeconds": 985.605849956,
+            "falseActivationsPerHour": 32.873181507035916
           },
           "pinch": {
             "recordings": 5,
-            "gestures": 70,
-            "caught": 47,
-            "gestureRecall": 0.6714285714285714,
+            "gestures": 92,
+            "caught": 60,
+            "gestureRecall": 0.6521739130434783,
             "repeats": 0,
-            "late": 21,
-            "medianLatencyMs": 416.0,
-            "falseActivations": 27,
-            "negativeSeconds": 531.844211779,
-            "falseActivationsPerHour": 182.7602855258487
+            "late": 30,
+            "medianLatencyMs": 413.00437,
+            "falseActivations": 5,
+            "negativeSeconds": 507.483349604,
+            "falseActivationsPerHour": 35.46914399072557
           },
           "noise": {
             "recordings": 2,
@@ -1284,69 +1628,69 @@
             "falseActivationsPerHour": 30.117804515366945
           },
           "perRecording": {
-            "8ed9fd23-5216-4642-8705-feea39125ba4": {
+            "gesture-dataset-pinch_in-2026-11-03T01-08-16.560Z": {
               "recordings": 1,
-              "gestures": 16,
-              "caught": 13,
-              "gestureRecall": 0.8125,
+              "gestures": 19,
+              "caught": 15,
+              "gestureRecall": 0.7894736842105263,
               "repeats": 0,
-              "late": 3,
-              "medianLatencyMs": 447.236401,
-              "falseActivations": 3,
-              "negativeSeconds": 105.091470455,
-              "falseActivationsPerHour": 102.76761713620272,
+              "late": 4,
+              "medianLatencyMs": 439.483279,
+              "falseActivations": 0,
+              "negativeSeconds": 101.897327364,
+              "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
-            "9d150228-fb00-4533-a7a4-82801c4a864e": {
+            "gesture-dataset-pinch_in-2026-11-03T01-10-50.957Z": {
               "recordings": 1,
-              "gestures": 17,
+              "gestures": 18,
               "caught": 13,
-              "gestureRecall": 0.7647058823529411,
-              "repeats": 0,
-              "late": 5,
-              "medianLatencyMs": 398.416891,
-              "falseActivations": 2,
-              "negativeSeconds": 101.992156399,
-              "falseActivationsPerHour": 70.59366380913772,
-              "kind": "pinch"
-            },
-            "a842ec17-bfe1-4b93-9719-43f452e302d5": {
-              "recordings": 1,
-              "gestures": 16,
-              "caught": 9,
-              "gestureRecall": 0.5625,
+              "gestureRecall": 0.7222222222222222,
               "repeats": 0,
               "late": 6,
-              "medianLatencyMs": 413.49226,
-              "falseActivations": 3,
-              "negativeSeconds": 102.412622965,
-              "falseActivationsPerHour": 105.45575034916303,
+              "medianLatencyMs": 416.008868,
+              "falseActivations": 1,
+              "negativeSeconds": 101.216712281,
+              "falseActivationsPerHour": 35.56724891444412,
               "kind": "pinch"
             },
-            "5be1c51f-6c3d-499d-82aa-34f938a69157": {
+            "gesture-dataset-pinch_in-2026-11-03T01-13-19.283Z": {
               "recordings": 1,
-              "gestures": 6,
-              "caught": 2,
-              "gestureRecall": 0.3333333333333333,
+              "gestures": 20,
+              "caught": 11,
+              "gestureRecall": 0.55,
               "repeats": 0,
-              "late": 3,
-              "medianLatencyMs": 414.49996799999997,
-              "falseActivations": 15,
-              "negativeSeconds": 118.719297929,
-              "falseActivationsPerHour": 454.8544418810046,
+              "late": 7,
+              "medianLatencyMs": 404.80953,
+              "falseActivations": 0,
+              "negativeSeconds": 99.34400601,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch_in-2026-11-03T01-17-14.928Z": {
+              "recordings": 1,
+              "gestures": 19,
+              "caught": 11,
+              "gestureRecall": 0.5789473684210527,
+              "repeats": 0,
+              "late": 8,
+              "medianLatencyMs": 407.153434,
+              "falseActivations": 1,
+              "negativeSeconds": 104.234886827,
+              "falseActivationsPerHour": 34.53738100157356,
               "kind": "pinch"
             },
             "gesture-dataset-pinch_in-2026-11-03T12-40-05.547Z": {
               "recordings": 1,
-              "gestures": 15,
+              "gestures": 16,
               "caught": 10,
-              "gestureRecall": 0.6666666666666666,
+              "gestureRecall": 0.625,
               "repeats": 0,
-              "late": 4,
-              "medianLatencyMs": 431.8540315,
-              "falseActivations": 4,
-              "negativeSeconds": 103.628664031,
-              "falseActivationsPerHour": 138.95769220466175,
+              "late": 5,
+              "medianLatencyMs": 413.25682600000005,
+              "falseActivations": 3,
+              "negativeSeconds": 100.790417122,
+              "falseActivationsPerHour": 107.15304399353094,
               "kind": "pinch"
             },
             "gesture-dataset-unlabeled-2026-11-04T04-03-41.167Z": {
@@ -1377,32 +1721,32 @@
             }
           }
         },
-        "all days + noise": {
-          "model": "all days + noise",
-          "threshold": 0.6,
+        "all moments, no still-hand gate": {
+          "model": "all moments, no still-hand gate",
+          "threshold": 0.95,
           "all": {
             "recordings": 7,
-            "gestures": 70,
-            "caught": 56,
-            "gestureRecall": 0.8,
+            "gestures": 92,
+            "caught": 67,
+            "gestureRecall": 0.7282608695652174,
             "repeats": 0,
-            "late": 10,
-            "medianLatencyMs": 446.1231685,
-            "falseActivations": 26,
-            "negativeSeconds": 1009.966712131,
-            "falseActivationsPerHour": 92.67632177946416
+            "late": 23,
+            "medianLatencyMs": 452.531155,
+            "falseActivations": 4,
+            "negativeSeconds": 985.605849956,
+            "falseActivationsPerHour": 14.610302892015964
           },
           "pinch": {
             "recordings": 5,
-            "gestures": 70,
-            "caught": 56,
-            "gestureRecall": 0.8,
+            "gestures": 92,
+            "caught": 67,
+            "gestureRecall": 0.7282608695652174,
             "repeats": 0,
-            "late": 10,
-            "medianLatencyMs": 446.1231685,
-            "falseActivations": 26,
-            "negativeSeconds": 531.844211779,
-            "falseActivationsPerHour": 175.99138606192838
+            "late": 23,
+            "medianLatencyMs": 452.531155,
+            "falseActivations": 4,
+            "negativeSeconds": 507.483349604,
+            "falseActivationsPerHour": 28.375315192580455
           },
           "noise": {
             "recordings": 2,
@@ -1417,69 +1761,69 @@
             "falseActivationsPerHour": 0.0
           },
           "perRecording": {
-            "8ed9fd23-5216-4642-8705-feea39125ba4": {
+            "gesture-dataset-pinch_in-2026-11-03T01-08-16.560Z": {
+              "recordings": 1,
+              "gestures": 19,
+              "caught": 13,
+              "gestureRecall": 0.6842105263157895,
+              "repeats": 0,
+              "late": 5,
+              "medianLatencyMs": 478.761875,
+              "falseActivations": 0,
+              "negativeSeconds": 101.897327364,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch_in-2026-11-03T01-10-50.957Z": {
+              "recordings": 1,
+              "gestures": 18,
+              "caught": 14,
+              "gestureRecall": 0.7777777777777778,
+              "repeats": 0,
+              "late": 5,
+              "medianLatencyMs": 420.4626555,
+              "falseActivations": 0,
+              "negativeSeconds": 101.216712281,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch_in-2026-11-03T01-13-19.283Z": {
+              "recordings": 1,
+              "gestures": 20,
+              "caught": 13,
+              "gestureRecall": 0.65,
+              "repeats": 0,
+              "late": 6,
+              "medianLatencyMs": 380.236699,
+              "falseActivations": 0,
+              "negativeSeconds": 99.34400601,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch_in-2026-11-03T01-17-14.928Z": {
+              "recordings": 1,
+              "gestures": 19,
+              "caught": 13,
+              "gestureRecall": 0.6842105263157895,
+              "repeats": 0,
+              "late": 6,
+              "medianLatencyMs": 407.153434,
+              "falseActivations": 1,
+              "negativeSeconds": 104.234886827,
+              "falseActivationsPerHour": 34.53738100157356,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch_in-2026-11-03T12-40-05.547Z": {
               "recordings": 1,
               "gestures": 16,
               "caught": 14,
               "gestureRecall": 0.875,
               "repeats": 0,
-              "late": 2,
-              "medianLatencyMs": 468.3353695,
+              "late": 1,
+              "medianLatencyMs": 483.64144150000004,
               "falseActivations": 3,
-              "negativeSeconds": 105.091470455,
-              "falseActivationsPerHour": 102.76761713620272,
-              "kind": "pinch"
-            },
-            "9d150228-fb00-4533-a7a4-82801c4a864e": {
-              "recordings": 1,
-              "gestures": 17,
-              "caught": 15,
-              "gestureRecall": 0.8823529411764706,
-              "repeats": 0,
-              "late": 2,
-              "medianLatencyMs": 464.597825,
-              "falseActivations": 1,
-              "negativeSeconds": 101.992156399,
-              "falseActivationsPerHour": 35.29683190456886,
-              "kind": "pinch"
-            },
-            "a842ec17-bfe1-4b93-9719-43f452e302d5": {
-              "recordings": 1,
-              "gestures": 16,
-              "caught": 13,
-              "gestureRecall": 0.8125,
-              "repeats": 0,
-              "late": 2,
-              "medianLatencyMs": 422.975234,
-              "falseActivations": 3,
-              "negativeSeconds": 102.412622965,
-              "falseActivationsPerHour": 105.45575034916303,
-              "kind": "pinch"
-            },
-            "5be1c51f-6c3d-499d-82aa-34f938a69157": {
-              "recordings": 1,
-              "gestures": 6,
-              "caught": 1,
-              "gestureRecall": 0.16666666666666666,
-              "repeats": 0,
-              "late": 4,
-              "medianLatencyMs": 371.426226,
-              "falseActivations": 15,
-              "negativeSeconds": 118.719297929,
-              "falseActivationsPerHour": 454.8544418810046,
-              "kind": "pinch"
-            },
-            "gesture-dataset-pinch_in-2026-11-03T12-40-05.547Z": {
-              "recordings": 1,
-              "gestures": 15,
-              "caught": 13,
-              "gestureRecall": 0.8666666666666667,
-              "repeats": 0,
-              "late": 0,
-              "medianLatencyMs": 473.994001,
-              "falseActivations": 4,
-              "negativeSeconds": 103.628664031,
-              "falseActivationsPerHour": 138.95769220466175,
+              "negativeSeconds": 100.790417122,
+              "falseActivationsPerHour": 107.15304399353094,
               "kind": "pinch"
             },
             "gesture-dataset-unlabeled-2026-11-04T04-03-41.167Z": {
@@ -1511,50 +1855,41 @@
           },
           "hardNegatives": null,
           "crossCheck": {
-            "gestures": 236,
-            "caught": 113,
-            "falseActivationsPerHour": 29.525246018899608
+            "gestures": 280,
+            "caught": 159,
+            "falseActivationsPerHour": 23.707182694957982
           },
-          "minutes": 4
-        }
-      }
-    },
-    "4 Nov": {
-      "heldOut": [
-        "pinch",
-        "pinch",
-        "noise: support, angled"
-      ],
-      "models": {
-        "all days + noise, hard negatives": {
-          "model": "all days + noise, hard negatives",
-          "threshold": 0.96,
+          "minutes": 5
+        },
+        "all moments, gate when running": {
+          "model": "all moments, gate when running",
+          "threshold": 0.95,
           "all": {
-            "recordings": 3,
-            "gestures": 36,
-            "caught": 15,
-            "gestureRecall": 0.4166666666666667,
+            "recordings": 7,
+            "gestures": 92,
+            "caught": 66,
+            "gestureRecall": 0.717391304347826,
             "repeats": 0,
-            "late": 0,
-            "medianLatencyMs": 503.884739,
+            "late": 23,
+            "medianLatencyMs": 451.16701650000005,
             "falseActivations": 4,
-            "negativeSeconds": 523.08548639,
-            "falseActivationsPerHour": 27.52896108699086
+            "negativeSeconds": 985.605849956,
+            "falseActivationsPerHour": 14.610302892015964
           },
           "pinch": {
-            "recordings": 2,
-            "gestures": 36,
-            "caught": 15,
-            "gestureRecall": 0.4166666666666667,
+            "recordings": 5,
+            "gestures": 92,
+            "caught": 66,
+            "gestureRecall": 0.717391304347826,
             "repeats": 0,
-            "late": 0,
-            "medianLatencyMs": 503.884739,
+            "late": 23,
+            "medianLatencyMs": 451.16701650000005,
             "falseActivations": 4,
-            "negativeSeconds": 224.008739126,
-            "falseActivationsPerHour": 64.28320634357178
+            "negativeSeconds": 507.483349604,
+            "falseActivationsPerHour": 28.375315192580455
           },
           "noise": {
-            "recordings": 1,
+            "recordings": 2,
             "gestures": 0,
             "caught": 0,
             "gestureRecall": null,
@@ -1562,37 +1897,76 @@
             "late": 0,
             "medianLatencyMs": null,
             "falseActivations": 0,
-            "negativeSeconds": 299.076747264,
+            "negativeSeconds": 478.122500352,
             "falseActivationsPerHour": 0.0
           },
           "perRecording": {
-            "gesture-dataset-pinch_in-2026-11-04T04-49-21.416Z": {
+            "gesture-dataset-pinch_in-2026-11-03T01-08-16.560Z": {
+              "recordings": 1,
+              "gestures": 19,
+              "caught": 13,
+              "gestureRecall": 0.6842105263157895,
+              "repeats": 0,
+              "late": 5,
+              "medianLatencyMs": 478.761875,
+              "falseActivations": 0,
+              "negativeSeconds": 101.897327364,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch_in-2026-11-03T01-10-50.957Z": {
               "recordings": 1,
               "gestures": 18,
-              "caught": 7,
-              "gestureRecall": 0.3888888888888889,
+              "caught": 14,
+              "gestureRecall": 0.7777777777777778,
               "repeats": 0,
-              "late": 0,
-              "medianLatencyMs": 422.390289,
+              "late": 5,
+              "medianLatencyMs": 420.4626555,
+              "falseActivations": 0,
+              "negativeSeconds": 101.216712281,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch_in-2026-11-03T01-13-19.283Z": {
+              "recordings": 1,
+              "gestures": 20,
+              "caught": 12,
+              "gestureRecall": 0.6,
+              "repeats": 0,
+              "late": 6,
+              "medianLatencyMs": 377.7361515,
+              "falseActivations": 0,
+              "negativeSeconds": 99.34400601,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch_in-2026-11-03T01-17-14.928Z": {
+              "recordings": 1,
+              "gestures": 19,
+              "caught": 13,
+              "gestureRecall": 0.6842105263157895,
+              "repeats": 0,
+              "late": 6,
+              "medianLatencyMs": 407.153434,
               "falseActivations": 1,
-              "negativeSeconds": 108.968795921,
-              "falseActivationsPerHour": 33.036980628930884,
+              "negativeSeconds": 104.234886827,
+              "falseActivationsPerHour": 34.53738100157356,
               "kind": "pinch"
             },
-            "gesture-dataset-pinch_in-2026-11-04T04-53-02.645Z": {
+            "gesture-dataset-pinch_in-2026-11-03T12-40-05.547Z": {
               "recordings": 1,
-              "gestures": 18,
-              "caught": 8,
-              "gestureRecall": 0.4444444444444444,
+              "gestures": 16,
+              "caught": 14,
+              "gestureRecall": 0.875,
               "repeats": 0,
-              "late": 0,
-              "medianLatencyMs": 536.112537,
+              "late": 1,
+              "medianLatencyMs": 483.64144150000004,
               "falseActivations": 3,
-              "negativeSeconds": 115.039943205,
-              "falseActivationsPerHour": 93.88043577833231,
+              "negativeSeconds": 100.790417122,
+              "falseActivationsPerHour": 107.15304399353094,
               "kind": "pinch"
             },
-            "gesture-dataset-unlabeled-2026-11-04T04-15-17.305Z": {
+            "gesture-dataset-unlabeled-2026-11-04T04-03-41.167Z": {
               "recordings": 1,
               "gestures": 0,
               "caught": 0,
@@ -1601,86 +1975,11 @@
               "late": 0,
               "medianLatencyMs": null,
               "falseActivations": 0,
-              "negativeSeconds": 299.076747264,
+              "negativeSeconds": 179.022514944,
               "falseActivationsPerHour": 0.0,
-              "kind": "noise: support, angled"
-            }
-          },
-          "hardNegatives": 70,
-          "crossCheck": {
-            "gestures": 270,
-            "caught": 109,
-            "falseActivationsPerHour": 29.53275439599788
-          },
-          "minutes": 7
-        },
-        "live CNN": {
-          "model": "live CNN",
-          "threshold": 0.75,
-          "all": {
-            "recordings": 3,
-            "gestures": 36,
-            "caught": 23,
-            "gestureRecall": 0.6388888888888888,
-            "repeats": 0,
-            "late": 12,
-            "medianLatencyMs": 428.837045,
-            "falseActivations": 10,
-            "negativeSeconds": 523.08548639,
-            "falseActivationsPerHour": 68.82240271747716
-          },
-          "pinch": {
-            "recordings": 2,
-            "gestures": 36,
-            "caught": 23,
-            "gestureRecall": 0.6388888888888888,
-            "repeats": 0,
-            "late": 12,
-            "medianLatencyMs": 428.837045,
-            "falseActivations": 4,
-            "negativeSeconds": 224.008739126,
-            "falseActivationsPerHour": 64.28320634357178
-          },
-          "noise": {
-            "recordings": 1,
-            "gestures": 0,
-            "caught": 0,
-            "gestureRecall": null,
-            "repeats": 0,
-            "late": 0,
-            "medianLatencyMs": null,
-            "falseActivations": 6,
-            "negativeSeconds": 299.076747264,
-            "falseActivationsPerHour": 72.22226467821426
-          },
-          "perRecording": {
-            "gesture-dataset-pinch_in-2026-11-04T04-49-21.416Z": {
-              "recordings": 1,
-              "gestures": 18,
-              "caught": 14,
-              "gestureRecall": 0.7777777777777778,
-              "repeats": 0,
-              "late": 4,
-              "medianLatencyMs": 440.35420350000004,
-              "falseActivations": 1,
-              "negativeSeconds": 108.968795921,
-              "falseActivationsPerHour": 33.036980628930884,
-              "kind": "pinch"
+              "kind": "noise: still"
             },
-            "gesture-dataset-pinch_in-2026-11-04T04-53-02.645Z": {
-              "recordings": 1,
-              "gestures": 18,
-              "caught": 9,
-              "gestureRecall": 0.5,
-              "repeats": 0,
-              "late": 8,
-              "medianLatencyMs": 421.990334,
-              "falseActivations": 3,
-              "negativeSeconds": 115.039943205,
-              "falseActivationsPerHour": 93.88043577833231,
-              "kind": "pinch"
-            },
-            "gesture-dataset-unlabeled-2026-11-04T04-15-17.305Z": {
+            "gesture-dataset-unlabeled-2026-11-04T04-09-05.352Z": {
               "recordings": 1,
               "gestures": 0,
               "caught": 0,
@@ -1688,39 +1987,49 @@
               "repeats": 0,
               "late": 0,
               "medianLatencyMs": null,
-              "falseActivations": 6,
-              "negativeSeconds": 299.076747264,
-              "falseActivationsPerHour": 72.22226467821426,
-              "kind": "noise: support, angled"
+              "falseActivations": 0,
+              "negativeSeconds": 299.099985408,
+              "falseActivationsPerHour": 0.0,
+              "kind": "noise: support, flat"
             }
           }
-        },
+        }
+      }
+    },
+    "4 Nov": {
+      "heldOut": [
+        "pinch",
+        "pinch",
+        "pinch",
+        "noise: support, angled"
+      ],
+      "models": {
         "all days + noise": {
           "model": "all days + noise",
-          "threshold": 0.99,
+          "threshold": 0.65,
           "all": {
-            "recordings": 3,
-            "gestures": 36,
-            "caught": 26,
-            "gestureRecall": 0.7222222222222222,
+            "recordings": 4,
+            "gestures": 57,
+            "caught": 43,
+            "gestureRecall": 0.7543859649122807,
             "repeats": 0,
-            "late": 1,
-            "medianLatencyMs": 512.2014845,
-            "falseActivations": 4,
-            "negativeSeconds": 523.08548639,
-            "falseActivationsPerHour": 27.52896108699086
+            "late": 13,
+            "medianLatencyMs": 454.373448,
+            "falseActivations": 1,
+            "negativeSeconds": 616.720041689,
+            "falseActivationsPerHour": 5.8373325928256605
           },
           "pinch": {
-            "recordings": 2,
-            "gestures": 36,
-            "caught": 26,
-            "gestureRecall": 0.7222222222222222,
+            "recordings": 3,
+            "gestures": 57,
+            "caught": 43,
+            "gestureRecall": 0.7543859649122807,
             "repeats": 0,
-            "late": 1,
-            "medianLatencyMs": 512.2014845,
-            "falseActivations": 4,
-            "negativeSeconds": 224.008739126,
-            "falseActivationsPerHour": 64.28320634357178
+            "late": 13,
+            "medianLatencyMs": 454.373448,
+            "falseActivations": 1,
+            "negativeSeconds": 317.643294425,
+            "falseActivationsPerHour": 11.333467644946648
           },
           "noise": {
             "recordings": 1,
@@ -1735,30 +2044,43 @@
             "falseActivationsPerHour": 0.0
           },
           "perRecording": {
+            "gesture-dataset-pinch_in-2026-11-04T04-46-55.110Z": {
+              "recordings": 1,
+              "gestures": 19,
+              "caught": 14,
+              "gestureRecall": 0.7368421052631579,
+              "repeats": 0,
+              "late": 4,
+              "medianLatencyMs": 431.9530795,
+              "falseActivations": 0,
+              "negativeSeconds": 97.709579173,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
             "gesture-dataset-pinch_in-2026-11-04T04-49-21.416Z": {
               "recordings": 1,
               "gestures": 18,
               "caught": 15,
               "gestureRecall": 0.8333333333333334,
               "repeats": 0,
-              "late": 1,
-              "medianLatencyMs": 511.96712,
+              "late": 3,
+              "medianLatencyMs": 497.834076,
               "falseActivations": 1,
-              "negativeSeconds": 108.968795921,
-              "falseActivationsPerHour": 33.036980628930884,
+              "negativeSeconds": 106.558975137,
+              "falseActivationsPerHour": 33.784108709487654,
               "kind": "pinch"
             },
             "gesture-dataset-pinch_in-2026-11-04T04-53-02.645Z": {
               "recordings": 1,
-              "gestures": 18,
-              "caught": 11,
-              "gestureRecall": 0.6111111111111112,
+              "gestures": 20,
+              "caught": 14,
+              "gestureRecall": 0.7,
               "repeats": 0,
-              "late": 0,
-              "medianLatencyMs": 523.990206,
-              "falseActivations": 3,
-              "negativeSeconds": 115.039943205,
-              "falseActivationsPerHour": 93.88043577833231,
+              "late": 6,
+              "medianLatencyMs": 419.316438,
+              "falseActivations": 0,
+              "negativeSeconds": 113.374740115,
+              "falseActivationsPerHour": 0.0,
               "kind": "pinch"
             },
             "gesture-dataset-unlabeled-2026-11-04T04-15-17.305Z": {
@@ -1777,11 +2099,300 @@
           },
           "hardNegatives": null,
           "crossCheck": {
-            "gestures": 270,
-            "caught": 91,
-            "falseActivationsPerHour": 26.251337240887004
+            "gestures": 315,
+            "caught": 154,
+            "falseActivationsPerHour": 29.870126282154757
           },
-          "minutes": 3
+          "minutes": 4
+        },
+        "live CNN": {
+          "model": "live CNN",
+          "threshold": 0.75,
+          "all": {
+            "recordings": 4,
+            "gestures": 57,
+            "caught": 37,
+            "gestureRecall": 0.6491228070175439,
+            "repeats": 0,
+            "late": 20,
+            "medianLatencyMs": 418.82728,
+            "falseActivations": 7,
+            "negativeSeconds": 616.720041689,
+            "falseActivationsPerHour": 40.861328149779624
+          },
+          "pinch": {
+            "recordings": 3,
+            "gestures": 57,
+            "caught": 37,
+            "gestureRecall": 0.6491228070175439,
+            "repeats": 0,
+            "late": 20,
+            "medianLatencyMs": 418.82728,
+            "falseActivations": 1,
+            "negativeSeconds": 317.643294425,
+            "falseActivationsPerHour": 11.333467644946648
+          },
+          "noise": {
+            "recordings": 1,
+            "gestures": 0,
+            "caught": 0,
+            "gestureRecall": null,
+            "repeats": 0,
+            "late": 0,
+            "medianLatencyMs": null,
+            "falseActivations": 6,
+            "negativeSeconds": 299.076747264,
+            "falseActivationsPerHour": 72.22226467821426
+          },
+          "perRecording": {
+            "gesture-dataset-pinch_in-2026-11-04T04-46-55.110Z": {
+              "recordings": 1,
+              "gestures": 19,
+              "caught": 14,
+              "gestureRecall": 0.7368421052631579,
+              "repeats": 0,
+              "late": 5,
+              "medianLatencyMs": 424.658797,
+              "falseActivations": 0,
+              "negativeSeconds": 97.709579173,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch_in-2026-11-04T04-49-21.416Z": {
+              "recordings": 1,
+              "gestures": 18,
+              "caught": 12,
+              "gestureRecall": 0.6666666666666666,
+              "repeats": 0,
+              "late": 6,
+              "medianLatencyMs": 450.9704625,
+              "falseActivations": 1,
+              "negativeSeconds": 106.558975137,
+              "falseActivationsPerHour": 33.784108709487654,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch_in-2026-11-04T04-53-02.645Z": {
+              "recordings": 1,
+              "gestures": 20,
+              "caught": 11,
+              "gestureRecall": 0.55,
+              "repeats": 0,
+              "late": 9,
+              "medianLatencyMs": 391.93052,
+              "falseActivations": 0,
+              "negativeSeconds": 113.374740115,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-unlabeled-2026-11-04T04-15-17.305Z": {
+              "recordings": 1,
+              "gestures": 0,
+              "caught": 0,
+              "gestureRecall": null,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": null,
+              "falseActivations": 6,
+              "negativeSeconds": 299.076747264,
+              "falseActivationsPerHour": 72.22226467821426,
+              "kind": "noise: support, angled"
+            }
+          }
+        },
+        "all moments, no still-hand gate": {
+          "model": "all moments, no still-hand gate",
+          "threshold": 0.96,
+          "all": {
+            "recordings": 4,
+            "gestures": 57,
+            "caught": 36,
+            "gestureRecall": 0.631578947368421,
+            "repeats": 0,
+            "late": 6,
+            "medianLatencyMs": 502.8859925,
+            "falseActivations": 1,
+            "negativeSeconds": 616.720041689,
+            "falseActivationsPerHour": 5.8373325928256605
+          },
+          "pinch": {
+            "recordings": 3,
+            "gestures": 57,
+            "caught": 36,
+            "gestureRecall": 0.631578947368421,
+            "repeats": 0,
+            "late": 6,
+            "medianLatencyMs": 502.8859925,
+            "falseActivations": 1,
+            "negativeSeconds": 317.643294425,
+            "falseActivationsPerHour": 11.333467644946648
+          },
+          "noise": {
+            "recordings": 1,
+            "gestures": 0,
+            "caught": 0,
+            "gestureRecall": null,
+            "repeats": 0,
+            "late": 0,
+            "medianLatencyMs": null,
+            "falseActivations": 0,
+            "negativeSeconds": 299.076747264,
+            "falseActivationsPerHour": 0.0
+          },
+          "perRecording": {
+            "gesture-dataset-pinch_in-2026-11-04T04-46-55.110Z": {
+              "recordings": 1,
+              "gestures": 19,
+              "caught": 13,
+              "gestureRecall": 0.6842105263157895,
+              "repeats": 0,
+              "late": 3,
+              "medianLatencyMs": 446.622721,
+              "falseActivations": 0,
+              "negativeSeconds": 97.709579173,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch_in-2026-11-04T04-49-21.416Z": {
+              "recordings": 1,
+              "gestures": 18,
+              "caught": 12,
+              "gestureRecall": 0.6666666666666666,
+              "repeats": 0,
+              "late": 2,
+              "medianLatencyMs": 525.497114,
+              "falseActivations": 1,
+              "negativeSeconds": 106.558975137,
+              "falseActivationsPerHour": 33.784108709487654,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch_in-2026-11-04T04-53-02.645Z": {
+              "recordings": 1,
+              "gestures": 20,
+              "caught": 11,
+              "gestureRecall": 0.55,
+              "repeats": 0,
+              "late": 1,
+              "medianLatencyMs": 483.418274,
+              "falseActivations": 0,
+              "negativeSeconds": 113.374740115,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-unlabeled-2026-11-04T04-15-17.305Z": {
+              "recordings": 1,
+              "gestures": 0,
+              "caught": 0,
+              "gestureRecall": null,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": null,
+              "falseActivations": 0,
+              "negativeSeconds": 299.076747264,
+              "falseActivationsPerHour": 0.0,
+              "kind": "noise: support, angled"
+            }
+          },
+          "hardNegatives": null,
+          "crossCheck": {
+            "gestures": 315,
+            "caught": 164,
+            "falseActivationsPerHour": 21.019718494849645
+          },
+          "minutes": 5
+        },
+        "all moments, gate when running": {
+          "model": "all moments, gate when running",
+          "threshold": 0.96,
+          "all": {
+            "recordings": 4,
+            "gestures": 57,
+            "caught": 36,
+            "gestureRecall": 0.631578947368421,
+            "repeats": 0,
+            "late": 6,
+            "medianLatencyMs": 502.8859925,
+            "falseActivations": 1,
+            "negativeSeconds": 616.720041689,
+            "falseActivationsPerHour": 5.8373325928256605
+          },
+          "pinch": {
+            "recordings": 3,
+            "gestures": 57,
+            "caught": 36,
+            "gestureRecall": 0.631578947368421,
+            "repeats": 0,
+            "late": 6,
+            "medianLatencyMs": 502.8859925,
+            "falseActivations": 1,
+            "negativeSeconds": 317.643294425,
+            "falseActivationsPerHour": 11.333467644946648
+          },
+          "noise": {
+            "recordings": 1,
+            "gestures": 0,
+            "caught": 0,
+            "gestureRecall": null,
+            "repeats": 0,
+            "late": 0,
+            "medianLatencyMs": null,
+            "falseActivations": 0,
+            "negativeSeconds": 299.076747264,
+            "falseActivationsPerHour": 0.0
+          },
+          "perRecording": {
+            "gesture-dataset-pinch_in-2026-11-04T04-46-55.110Z": {
+              "recordings": 1,
+              "gestures": 19,
+              "caught": 13,
+              "gestureRecall": 0.6842105263157895,
+              "repeats": 0,
+              "late": 3,
+              "medianLatencyMs": 446.622721,
+              "falseActivations": 0,
+              "negativeSeconds": 97.709579173,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch_in-2026-11-04T04-49-21.416Z": {
+              "recordings": 1,
+              "gestures": 18,
+              "caught": 12,
+              "gestureRecall": 0.6666666666666666,
+              "repeats": 0,
+              "late": 2,
+              "medianLatencyMs": 525.497114,
+              "falseActivations": 1,
+              "negativeSeconds": 106.558975137,
+              "falseActivationsPerHour": 33.784108709487654,
+              "kind": "pinch"
+            },
+            "gesture-dataset-pinch_in-2026-11-04T04-53-02.645Z": {
+              "recordings": 1,
+              "gestures": 20,
+              "caught": 11,
+              "gestureRecall": 0.55,
+              "repeats": 0,
+              "late": 1,
+              "medianLatencyMs": 483.418274,
+              "falseActivations": 0,
+              "negativeSeconds": 113.374740115,
+              "falseActivationsPerHour": 0.0,
+              "kind": "pinch"
+            },
+            "gesture-dataset-unlabeled-2026-11-04T04-15-17.305Z": {
+              "recordings": 1,
+              "gestures": 0,
+              "caught": 0,
+              "gestureRecall": null,
+              "repeats": 0,
+              "late": 0,
+              "medianLatencyMs": null,
+              "falseActivations": 0,
+              "negativeSeconds": 299.076747264,
+              "falseActivationsPerHour": 0.0,
+              "kind": "noise: support, angled"
+            }
+          }
         }
       }
     }

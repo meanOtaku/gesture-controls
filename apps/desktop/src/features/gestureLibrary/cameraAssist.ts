@@ -1,9 +1,8 @@
 import { OperationFeedback } from "../../components/app/OperationFeedback";
 import { telemetryStore } from "../telemetry/store/telemetryStore";
-import { contactThreshold } from "../labelling/cameraTrack";
 import { startCameraMarking } from "./cameraMarker";
 import type { GestureDefinition } from "./definition";
-import { PINCH_HOLD, PINCH_IN, startPinchEdgeMarking, wantsPinchEdges } from "./pinchEdgeMarker";
+import { PINCH_HOLD, startPinchEdgeMarking, wantsPinchEdges } from "./pinchEdgeMarker";
 
 const KEY = "cameraMarkingOn";
 const readSaved = (): boolean => {
@@ -84,7 +83,7 @@ class CameraAssist {
     const gestures = definitions ?? (sameLabels(this.armedLabels, this.readyLabels) ? this.readyDefinitions : []);
     // Pinch in and pinch out are the moments the fingers meet and part, from the camera's thumb-to-index distance.
     this.stopMarking = wantsPinchEdges(this.armedLabels)
-      ? startPinchEdgeMarking(contactThreshold(gestures, PINCH_IN), undefined, undefined, this.armedLabels.includes(PINCH_HOLD))
+      ? startPinchEdgeMarking(undefined, undefined, this.armedLabels.includes(PINCH_HOLD))
       : startCameraMarking(this.armedLabels, gestures);
   }
   disarm(): void {

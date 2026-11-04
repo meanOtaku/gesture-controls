@@ -69,7 +69,7 @@ it needs everyday noise to train on.
   top of the score's climb once it reaches the threshold. It ends when the score falls 0.15 under the threshold, and the
   next one waits 1.5 s.
 - **Still hand:** with the setting on, the app only lets a gesture start after a still moment (`steadiness.py`), and training
-  and testing keep only those moments.
+  and testing keep only those moments. Leave it off for these models (see below).
 - **Standard labels:** `everyday_noise`, `still` and `supported` always count as not the gesture.
 - **Output folder:** `bundle/` holds `manifest.json` and the model file, and Model Lab imports it. The app runs both kinds
   itself, with no Python.
@@ -100,23 +100,43 @@ Full results: [`cnn-all-days-2026-11`](../research/artifacts/cnn-all-days-2026-1
 
 - **Use the CNN.** On new sessions it caught about two thirds of the pinches, against 10–28% for the trees, about 0.4 s
   sooner.
-- **Train it on every camera-timed pinch session plus everyday noise.** With each day held out, it fired 8 times an hour on
-  unseen noise (budget 30; the live CNN, 143). It caught 80% of 3 Nov and 72% of 4 Nov (live: 67% and 64%).
+- **Train it on every camera-timed pinch session plus everyday noise, with the still-hand rule off.** That rule also removes
+  from training every moment the hand was moving, so a model trained under it never learns that movement is not a pinch.
+  With each day held out, on 372 camera-marked pinches:
+
+| Trained | Pinches caught | False an hour, unseen noise | False an hour, pinch sessions |
+|---|---:|---:|---:|
+| Live CNN (October only, no noise) | 204 (55%)* | 143 | 23 |
+| With the rule | 146 (39%) | 23 | 20 |
+| **Without the rule** | **161 (43%)** | **7** | 49 |
+| Without it, the rule on when running | 130 (35%) | 3 | 16 |
+
+  \* It trained on most of the October pinches, so that figure is not on unseen data. The 49 an hour comes from one day: 10
+  false activations in 95 s of pauses on 17 Oct, the sessions with the most pinches the camera could not mark. The other days
+  match the row above (0–28 an hour).
 - **Leave Learn from its own false alarms off.** With noise in training it found 2–70 mistakes per fold, and it caught
   fewer pinches (27% against 31%) for no fewer false activations.
+- **Mark pinches against each session's own hand.** How close the fingers look depends on how the hand faces the camera, so a
+  fixed level of 0.35 hand sizes missed many real pinches, which then trained as not-a-pinch and were counted as false
+  activations. Judged per session (`edges` in `scripts/relabel_pinch_from_camera.py`, and `PinchDips` in the app), false
+  activations on the pinch sessions fell from 110 an hour to 20, and the threshold on 4 Nov from 0.99 to 0.65. The earlier
+  results are in `results-before-adaptive-marks.md`.
 
-These results used Model Lab's older copies of the 3 Nov sessions, which had lost some pinches. A mark is saved as a range of
-rows, and rows land in bursts, so a 0.3 s camera mark can span 0.18–0.44 s, and the trainer ignores a mark under 0.2 s. A mark
-saved too short is now restored to the length it lasted when a session joins Datasets: on six real sessions that took them
-from 91 pinches to 106. The script reads `data/recordings/`, so a new run has about 12% more 3 Nov pinch moments and its
-numbers will differ a little. Recordings added to Model Lab before this fix keep their short marks: delete them and add the
-session again (Datasets, **From the Recorder**, **Also those already in Datasets**).
+The models to use are built by `final_models.py` beside `results.md`, for `pinch_in` and `pinch_out`: they train on everything
+but one pinch session and one noise session. Their cross-checks caught 58–59% within 28 false activations an hour, and on the
+sessions they never saw, 15 of 20 and 18 of 21. The corrected marks are only in the folders under `data/recordings/`:
+Model Lab's copies keep the old marks until deleted and added again.
+
+Marks saved under 0.2 s are restored to the length they lasted when a session joins Datasets: a mark is saved as a range of
+rows, rows land in bursts, and the trainer ignores a mark under 0.2 s. Recordings added to Model Lab before that fix keep
+their short marks too.
 
 Still open:
 
-- **The October sessions are caught poorly by every model:** 5–11% held out. Even the live CNN, which trained on most of the
-  17 Oct sessions, catches 19% of them. Check their label timing first.
-- **It still fires too often between pinches:** about 110 times an hour on the pinch sessions, for every model.
+- **The 14 Oct sessions are caught poorly by every model trained on other days:** 12–18%, against 63–75% on 3 and 4 Nov. Their
+  threshold rose to 0.98. They are the only ones with the rule off that stay low: 17 Oct went from 15% to 71%, and the same
+  model with the rule on when running catches 19%, so the rule itself was blocking most of that day's pinches.
+- **Pinches made while moving are barely in the data,** so how often it catches those is unknown.
 
 ## Training on another machine
 
@@ -178,14 +198,14 @@ runs.
 `~/Library/Application Support/dev.meanotaku.spatial-gesture-control/model-lab/label-models` from the Mac into a folder such
 as `~/model-lab/`, and set `MODEL_LAB_DIR=~/model-lab`. Without it, that comparison is left out.
 
-**6. Train.** From the repo's top folder, `plain` runs the configuration that did best, one model for each held-out day:
+**6. Train.** From the repo's top folder, `anytime` runs the configuration that did best, one model for each held-out day:
 
 ```bash
 rm docs/research/artifacts/cnn-all-days-2026-11/results.json
 ```
 
 ```bash
-tools/label-trainer/.venv/bin/python docs/research/artifacts/cnn-all-days-2026-11/all_days_check.py plain
+tools/label-trainer/.venv/bin/python docs/research/artifacts/cnn-all-days-2026-11/all_days_check.py anytime
 ```
 
 The first command matters: the script skips any held-out day already in `results.json`, so with the committed file it would

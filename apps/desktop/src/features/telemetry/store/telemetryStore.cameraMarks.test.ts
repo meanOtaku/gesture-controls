@@ -135,4 +135,28 @@ describe("several labels in one recording", () => {
     expect(telemetryStore.countCameraIntervals("fist")).toBe(1);
     expect(telemetryStore.countCameraIntervals()).toBe(2);
   });
+
+  it("adds a finished mark over rows that have already arrived, and it reaches the export", () => {
+    rows(0, 9);
+    const began = clock;
+    rows(10, 14);
+    const ended = clock;
+    rows(15, 19);
+    expect(telemetryStore.addTimelineInterval("pinch_in", began, ended, "camera_proposal")).toBe(true);
+    expect(telemetryStore.getActiveTimelineLabel()).toBeNull();
+    expect(telemetryStore.countCameraIntervals("pinch_in")).toBe(1);
+    telemetryStore.stopDatasetRecording();
+    const marked = labelsOf(telemetryStore.generateDatasetCsv()).filter((label) => label === "pinch_in");
+    expect(marked.length).toBeGreaterThanOrEqual(4);
+    expect(marked.length).toBeLessThanOrEqual(6);
+  });
+
+  it("refuses a finished mark while a label is on or once the recording has stopped", () => {
+    rows(0, 9);
+    telemetryStore.setTimelineLabel("snap");
+    rows(10, 14);
+    expect(telemetryStore.addTimelineInterval("pinch_in", 1000, clock, "camera_proposal")).toBe(false);
+    telemetryStore.stopDatasetRecording();
+    expect(telemetryStore.addTimelineInterval("pinch_in", 1000, clock, "camera_proposal")).toBe(false);
+  });
 });

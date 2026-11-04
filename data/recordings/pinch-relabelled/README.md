@@ -6,22 +6,22 @@ release) and `pinch_out` (0.3 s from the release); one it saw no touch in is `le
 
 | Recording | Pinches | Relabelled | Left out |
 |---|---:|---:|---:|
-| 2026-10-downloads/gesture-dataset-pinch-2026-10-14T00-54-06.988Z.csv | 25 | 19 | 6 |
-| 2026-10-downloads/gesture-dataset-pinch-2026-10-14T00-55-38.245Z.csv | 25 | 23 | 2 |
+| 2026-10-downloads/gesture-dataset-pinch-2026-10-14T00-54-06.988Z.csv | 25 | 24 | 1 |
+| 2026-10-downloads/gesture-dataset-pinch-2026-10-14T00-55-38.245Z.csv | 25 | 25 | 0 |
 | 2026-10-downloads/gesture-dataset-pinch-2026-10-14T00-57-01.701Z.csv | 22 | 22 | 0 |
 | 2026-10-downloads/gesture-dataset-pinch-2026-10-14T00-58-20.761Z.csv | 26 | 26 | 0 |
 | 2026-10-downloads/gesture-dataset-pinch-2026-10-14T00-59-37.623Z.csv | 18 | 18 | 0 |
 | 2026-10-downloads/gesture-dataset-pinch-2026-10-14T01-00-54.801Z.csv | 24 | 24 | 0 |
-| 2026-10-downloads/gesture-dataset-pinch-2026-10-14T01-04-14.013Z.csv | 29 | 25 | 4 |
+| 2026-10-downloads/gesture-dataset-pinch-2026-10-14T01-04-14.013Z.csv | 29 | 29 | 0 |
 | 2026-10-downloads/gesture-dataset-pinch-2026-10-14T01-05-31.133Z.csv | 28 | 28 | 0 |
 | 2026-10-downloads/gesture-dataset-pinch-2026-10-14T01-13-08.108Z.csv | 28 | 27 | 1 |
 | 2026-10-downloads/gesture-dataset-pinch-2026-10-17T12-21-44.346Z | 15 | 15 | 0 |
 | 2026-10-downloads/gesture-dataset-pinch-2026-10-17T12-23-03.399Z.csv | 15 | 15 | 0 |
-| 2026-10-downloads/gesture-dataset-pinch-2026-10-17T12-25-10.832Z.csv | 13 | 13 | 0 |
-| 2026-10-downloads/gesture-dataset-pinch-2026-10-17T12-26-46.748Z.csv | 20 | 19 | 1 |
+| 2026-10-downloads/gesture-dataset-pinch-2026-10-17T12-25-10.832Z.csv | 13 | 11 | 2 |
+| 2026-10-downloads/gesture-dataset-pinch-2026-10-17T12-26-46.748Z.csv | 20 | 20 | 0 |
 | 2026-10-downloads/gesture-dataset-pinch-2026-10-17T12-40-50.602Z | 10 | 6 | 4 |
 
-Total: 280 of 298 pinches relabelled.
+Total: 290 of 298 pinches relabelled.
 
 Not relabelled (no camera data, so their timing cannot be recovered):
 
