@@ -157,20 +157,21 @@ The **Watch** tab is the Watch connection and sensor-control dashboard.
 
 If a sensor is unavailable, treat that as a device capability or permission state—not a successful inference input. Low-quality, stale, malformed, or disconnected sensor data fails closed and releases any active interaction.
 
-### Record: Live signals, Recorder and Recordings
+### Record: Live signals, Recorder, Recordings and Datasets
 
-The capture tools are three tabs in the **Record** group of the sidebar, in the order you use them:
+The capture tools are four tabs in the **Record** group of the sidebar, in the order you use them:
 
 - **Live signals** shows what the sensors are sending right now (the charts below). Use it to check a stream, not to record one. The head and watch orientation graphs draw yaw, pitch and roll as continuous lines: an angle turning through the back of the circle (+180° to -180°) carries on past 180° instead of jumping, so a slow turn is not drawn as a spike. This is for the graphs only; recorded values keep the raw angles.
 - **Recorder** records a session from the watch: pinch in / out, everyday noise, or any other gesture, with the camera
   beside the cards (above them in a narrow window) so you see what it sees while you record. Every recording is saved in
-  the app when it stops, and Model Lab adds it to the training data from there (**From the Recorder**); there is nothing to
-  export. A timed recording stops by itself, even if you switch to another tab while it runs. If you chose an export
+  the app when it stops and joins **Datasets** by itself; there is nothing to export or add. A timed recording stops by itself, even if you switch to another tab while it runs. If you chose an export
   folder (the Labelling page's export settings: the folder, and a **folder of two files** or **one CSV**), a timed
   recording is also exported there when it ends; the browser preview downloads one CSV.
 - **Recordings** looks inside saved sessions (currently the raw image viewer).
+- **Datasets** is the one library of recordings to label, train and test on: name them there, and every other tab shows
+  them by that name (below).
 
-The sidebar marks **Recorder** while a recording is running (and, otherwise, while a camera is on). Cmd/Ctrl+1 to 9 and Cmd/Ctrl+0 open the first ten tabs (Overview to Model Lab, in sidebar order), and Cmd/Ctrl+comma opens Settings.
+The sidebar marks **Recorder** while a recording is running (and, otherwise, while a camera is on). Cmd/Ctrl+1 to 9 and Cmd/Ctrl+0 open the first ten tabs (Overview to Gesture library, in sidebar order), and Cmd/Ctrl+comma opens Settings.
 
 #### Live charts
 
@@ -262,9 +263,9 @@ recorded with: a grid of arm by wrist, and lines for activity, strap and pinch. 
 
 #### Review it right away (Recorder)
 
-After a recording is saved, a card offers **Review it in Labelling**: it adds the recording to Model Lab (as **From the
-Recorder** would, with unreviewed intervals counted) and opens it on the Labelling page. A recording already added is just
-opened. **Not now** hides the card.
+After a recording is saved, its message says which recording it became on the **Datasets** tab (for example "added to
+Datasets as #43"), or why it did not join (nothing in it was labelled, so there is nothing to train on). A card then offers
+**Review it in Labelling**, which opens it on the Labelling page. **Not now** hides the card.
 
 #### Let the camera mark it (Recorder)
 
@@ -292,7 +293,7 @@ session**, and make no gesture. The whole recording gets the type's standard lab
 details say which type it was ("Doing", for example "Everyday noise: hand on a support, angled"; your own "Doing" is put
 back for the next recording). It stops and is saved by itself at the end, or with **Stop and save**. Then:
 
-- add it in Model Lab (**From the Recorder**, leaving the rest out);
+- it joins **Datasets** by itself when it is saved;
 - train as usual: the standard labels are already "not the gesture", so there is no role to choose. Tick **Learn from its
   own false alarms** (under Train a model) to make the most of it;
 - keep some noise recordings out of training: the false activations an hour on them are what daily use would see, and
@@ -318,6 +319,83 @@ The **Recordings** tab gives a read-only visual inspection of one numeric raw-da
 The same selected window renders as two images side by side (stacked on narrow layouts): a grayscale image (black = low, white = high) and a rainbow false-colour image (red = low through the spectrum to violet = high). Both share the same grid, navigation position, and normalization mode; the color mode is a second pure rendering choice, like normalization, and is not a channel-mapping or multi-sensor composite. Missing-value and beyond-recording fills and the constant-value gray are the same in both images, and each has its own title, aria-label, and legend describing its palette and endpoints.
 
 This viewer is inspection-only: it has no annotation-editing or training action, and nothing it renders or computes feeds Model Lab, dataset export, or inference.
+
+### Datasets
+
+**Datasets** (in the Record group) is the one library of recordings the app labels, trains and tests on. Every Recorder
+session joins it by itself when it is saved, and recordings made elsewhere are imported here. The Labelling page, Model
+Lab (training, Training history, Mistakes, Compare models, the final test), the Labels tab and the Overview all list the
+recordings it holds, under the same names.
+
+**Name a recording.** **Rename** on a recording gives it your own name ("Monday pinches", up to 80 characters), shown
+wherever it is listed or chosen, with its number: "#34 Monday pinches". Below the name, the list keeps when it was
+recorded, what it holds and its file name. Clear the name to go back to the default, when it was recorded and what it
+holds. A name changes nothing about the data, training or testing. A new version saved from the Labelling page is named
+after the recording it came from, with the next version number ("Monday pinches (v2)").
+
+On this tab you also group recordings, seal a day for the final test, check their quality and copies, and delete them
+(below). Model Lab shows how many there are, with a link here.
+
+#### Importing recordings (Datasets)
+
+For a recording made elsewhere, or an exported dataset folder, **Import a recording folder** here: choose the folder and both files are imported together (the check covers each file's exact header, rows of the right width, timestamps that never go backwards, consistent labels and that every label is already in the catalogue). **Import a single CSV (older format)** still takes a one-file export, and stores it as two files too. Recordings are kept in the app as a folder of two dense files, and the trainer merges them by timestamp when it reads them, which gives it exactly the samples a single file held, so nothing about training or running a model changes. Each recording shows how dense its streams are: how many times the pulse or motion stream went quiet for more than a quarter of a second, the longest gap and the share of the recording spent in gaps, with a warning when it is more than a tenth (the watch stream stalls together for both sensors, and a model cannot score while it does). Recordings imported before this are in the older single-file format; **Convert to two files** converts them one at a time, checks that no row was lost, removes the old file only after the new folder is saved and the list says so, and keeps the recording's identity, so models trained on it stay tied to the same data. The import is all-or-nothing: the file is checked in full (size limit, exact header, consistent labels, every label already in the catalogue) before anything is written, a failure says exactly why, and nothing is changed on disk. It is a compatibility path independent of the newer recording-bundle format and never touches those bundles. Labels keep stable ids; archiving one hides it from new selection but never changes old recordings.
+
+#### Quality and copies (Datasets)
+
+Each recording shows what training can use: its holds of each label (of at least 200 ms), holds too
+short to train on (which training ignores), and how often the pulse sensor flagged its contact.
+
+- It is shown in red when there are short holds, when no hold is long enough, or when contact was flagged on more than a
+  tenth of the samples.
+- A recording whose rows are the same as another's is marked "Same data as …", whatever its `#` lines say: a recording
+  imported once as a single CSV and once as a folder is one recording twice.
+- Delete one copy. Otherwise it counts twice, and one copy can be trained on while the other is tested on, which makes the
+  test look far better than it is.
+- Importing a recording Model Lab already holds is refused, and training refuses a request that includes two copies.
+- Recordings imported before these checks get them the first time the list is shown.
+
+**Find and act on recordings.** Above the list:
+
+- search by name, label or session details; filter by day, by label, and by what is wrong (**With something to fix**,
+  **Copies**, sealed or not, **Labels not reviewed**, **Labels need work**); sort by number, day, name, worst contact or most
+  holds;
+- tick recordings (or **Choose every recording listed**) to seal, unseal, group or delete them together;
+- when there are copies, **Keep one of each** deletes all but one of each set: the sealed copy if there is one, else the
+  oldest;
+- **Label** on a recording opens it on the Labelling page. Each recording also shows whether its labels were reviewed there.
+
+**What each recording is.** Each recording is named by when it was recorded and what it holds, for example
+"03/11/2026 06:35 AM · 20 pinches" (a pinch's in, hold and out count once), with its file name below. The time comes
+from its Recorder recording, else from the time in its file name, else from when it was imported.
+
+- **Camera** or **No camera**: whether the camera's hand landmarks are kept for it, so the Labelling page can draw the hand.
+- How its labels were made: **marked by the camera** (where it saw the fingers meet and part), **estimated from the
+  watch's motion** (no camera: good for testing, less exact for training), or **marked while recording** (a button, key or
+  cue).
+
+**Adding recordings.** Recorder sessions join by themselves, linked to their camera data. Importing a folder exported by
+the Recorder also keeps the camera files (`hand_landmarks.csv` and `clock_sync.csv`) with
+the recording. A single CSV has no camera data.
+
+**Group recordings.** Tick recordings, type a group name (or pick one already in use) and press **Move to group**; **Take out
+of group** puts them back in no group. Recordings in no group are listed first, then each group by name, folded away under
+its name with how many it holds. Click a group's name to open or close it; whether it was left open is remembered. An open
+group can **Choose every one listed**, **Rename group** or **Ungroup**. A group name is at most 60 characters. Search finds
+a recording by its group's name too. A group is only for finding recordings again: it changes nothing about training or any
+test.
+
+Each label is shown in its colour from the Labels tab, here, on the Train card, in the Recorder's label buttons and on the
+Labelling page.
+
+#### From the Recorder (Datasets)
+
+Every Recorder session joins Datasets by itself when it is saved, unless nothing in it was labelled then. **From the Recorder** lists the sessions that are not in Datasets (those saved before sessions joined by themselves, and those that could not join), with how many intervals are approved, unreviewed and excluded. Tick **Also those already in Datasets** to list every session, for example to add one again after you changed its marks.
+
+- **Intervals to use** chooses whether intervals you have not reviewed yet count ("Approved and not yet reviewed") or only the ones you approved. Excluded intervals never count.
+- **Label everything else as** optionally gives the rows between intervals a background label (a label that is an everyday activity). That teaches the model what is not the gesture, which a recording that only holds the gesture cannot. Use it only if the gesture did not happen in those stretches; camera-marked recordings can miss one, so review them first.
+- **Add to training data** makes a recording from the labelled rows. Adding the same, unchanged recording twice is refused; after you change its intervals, adding it again makes a new recording alongside the old one, which you can delete in the list above.
+
+Importing a CSV file still works for recordings made elsewhere.
 
 ### Labels
 
@@ -367,13 +445,11 @@ Saved gestures show **Detected** live while the camera is on.
 Model Lab is organised around **one model per label**: a label is a gesture or activity ("snap_fingers", "pinch_start"), and each label has its own model. Models run inside the app; nothing else needs to be installed to use one. The page follows the order you use it, top to bottom, and the buttons under the overview jump to each part:
 
 1. an overview (runtime mode, active models, recordings);
-2. **From the Recorder**: add recordings you made in the Recorder to the training data;
-3. **Recordings**: the labelled sessions in the training data, and importing a CSV;
-4. **Labels**: a pointer to the Labels tab, and how many labels are in use;
-5. **Train a model**: teach a label from the recordings;
-6. **Training history**: what was tried for each label;
-7. **Label models**: your models, and the Off / Monitor / Live switch;
-8. **Activity**: detections and releases this session.
+2. **Recordings**: how many there are, with **Open Datasets** (they are kept, named and managed on the Datasets tab);
+3. **Train a model**: teach a label from the recordings;
+4. **Label models**: your models, and the Off / Monitor / Live switch;
+5. **Activity**: detections and releases this session;
+6. under **Advanced**: training history, mistakes, threshold, comparing models, the final test, and labels.
 
 #### Label models
 
@@ -385,54 +461,6 @@ The **Label models** card in Model Lab is the per-label model system: one binary
 - **Model runtime** is **Off**, **Monitor** (models run and show a score and a "Detected" badge, nothing acts) or **Live** (a detection can start recipes that use that label, see *Model label* below). Switching to Live asks first, and a restart always comes back in Monitor.
 - A label whose active model cannot be loaded (for example its file was changed) is named in a red alert and has no running model.
 
-#### Duplicates and quality (Model Lab)
-
-Each recording under **Recordings** shows what training can use: its holds of each label (of at least 200 ms), holds too
-short to train on (which training ignores), and how often the pulse sensor flagged its contact.
-
-- It is shown in red when there are short holds, when no hold is long enough, or when contact was flagged on more than a
-  tenth of the samples.
-- A recording whose rows are the same as another's is marked "Same data as …", whatever its `#` lines say: a recording
-  imported once as a single CSV and once as a folder is one recording twice.
-- Delete one copy. Otherwise it counts twice, and one copy can be trained on while the other is tested on, which makes the
-  test look far better than it is.
-- Importing a recording Model Lab already holds is refused, and training refuses a request that includes two copies.
-- Recordings imported before these checks get them the first time the list is shown.
-
-**Find and act on recordings.** Above the list:
-
-- search by name, label or session details; filter by day, by label, and by what is wrong (**With something to fix**,
-  **Copies**, sealed or not, **Labels not reviewed**, **Labels need work**); sort by number, day, name, worst contact or most
-  holds;
-- tick recordings (or **Choose every recording listed**) to seal, unseal, group or delete them together;
-- when there are copies, **Keep one of each** deletes all but one of each set: the sealed copy if there is one, else the
-  oldest;
-- **Label** on a recording opens it on the Labelling page. Each recording also shows whether its labels were reviewed there.
-
-**What each recording is.** Each recording is named by when it was recorded and what it holds, for example
-"03/11/2026 06:35 AM · 20 pinches" (a pinch's in, hold and out count once), with its file name below. The time comes
-from its Recorder recording, else from the time in its file name, else from when it was imported. The same name is used
-on the Labelling page's picker, on the Train card and in Training history.
-
-- **Camera** or **No camera**: whether the camera's hand landmarks are kept for it, so the Labelling page can draw the hand.
-- How its labels were made: **marked by the camera** (where it saw the fingers meet and part), **estimated from the
-  watch's motion** (no camera: good for testing, less exact for training), or **marked while recording** (a button, key or
-  cue).
-
-**Adding recordings.** Add new sessions with **From the Recorder**: the recording stays linked to its camera data.
-Importing a folder exported by the Recorder also keeps the camera files (`hand_landmarks.csv` and `clock_sync.csv`) with
-the recording. A single CSV has no camera data.
-
-**Group recordings.** Tick recordings, type a group name (or pick one already in use) and press **Move to group**; **Take out
-of group** puts them back in no group. Recordings in no group are listed first, then each group by name, folded away under
-its name with how many it holds. Click a group's name to open or close it; whether it was left open is remembered. An open
-group can **Choose every one listed**, **Rename group** or **Ungroup**. A group name is at most 60 characters. Search finds
-a recording by its group's name too. A group is only for finding recordings again: it changes nothing about training or any
-test.
-
-Each label is shown in its colour from the Labels tab, here, on the Train card, in the Recorder's label buttons and on the
-Labelling page.
-
 #### Final test (Model Lab)
 
 Every score Model Lab shows comes from recordings that also shaped the model, its threshold or the method. The **final test**
@@ -440,7 +468,7 @@ is the honest one: a model run over recordings that took no part in any of that.
 
 **Seal a test set:**
 
-- Under **Recordings**, **Seal a day…** seals every recording of a day (the day in a Recorder export's name, else the day it
+- On the **Datasets** tab, **Seal a day…** seals every recording of a day (the day in a Recorder export's name, else the day it
   was imported). **Seal** and **Unseal** on each recording do one at a time.
 - Seal a whole day you have not trained on: a new day is what the model will meet.
 - A sealed recording is marked **Sealed for the final test**.
@@ -610,20 +638,6 @@ moved, and says what changed from the run before: recordings added or dropped, l
 out, a different label timing, research checks on or off. Runs from before this was kept show less.
 
 A deleted model leaves this record behind. **Delete history** removes it (after a confirmation) and never touches a recording. It is disabled, with the reason, while the label still has models (delete them under Label models first) or while another label's history mentions it (that history is sealed; delete it first). This is also what has to be cleared before a label can be deleted from the Labels tab.
-
-#### From the Recorder (Model Lab)
-
-Recordings you make in the Recorder are saved automatically and can go straight into the training data, with no export and import. In Model Lab, **From the Recorder** lists them with how many intervals are approved, unreviewed and excluded.
-
-- **Intervals to use** chooses whether intervals you have not reviewed yet count ("Approved and not yet reviewed") or only the ones you approved. Excluded intervals never count.
-- **Label everything else as** optionally gives the rows between intervals a background label (a label that is an everyday activity). That teaches the model what is not the gesture, which a recording that only holds the gesture cannot. Use it only if the gesture did not happen in those stretches; camera-marked recordings can miss one, so review them first.
-- **Add to training data** makes a recording from the labelled rows. Adding the same, unchanged recording twice is refused; after you change its intervals, adding it again makes a new recording alongside the old one, which you can delete under Recordings.
-
-Importing a CSV file still works for recordings made elsewhere.
-
-#### Recordings
-
-Recorder sessions are saved in the app and added with **From the Recorder** (below). For a recording made elsewhere, or an exported dataset folder, **Import a recording folder** here: choose the folder and both files are imported together (the check covers each file's exact header, rows of the right width, timestamps that never go backwards, consistent labels and that every label is already in the catalogue). **Import a single CSV (older format)** still takes a one-file export, and stores it as two files too. Recordings are kept in the app as a folder of two dense files, and the trainer merges them by timestamp when it reads them, which gives it exactly the samples a single file held, so nothing about training or running a model changes. Each recording shows how dense its streams are: how many times the pulse or motion stream went quiet for more than a quarter of a second, the longest gap and the share of the recording spent in gaps, with a warning when it is more than a tenth (the watch stream stalls together for both sensors, and a model cannot score while it does). Recordings imported before this are in the older single-file format; **Convert to two files** converts them one at a time, checks that no row was lost, removes the old file only after the new folder is saved and the list says so, and keeps the recording's identity, so models trained on it stay tied to the same data. The import is all-or-nothing: the file is checked in full (size limit, exact header, consistent labels, every label already in the catalogue) before anything is written, a failure says exactly why, and nothing is changed on disk. It is a compatibility path independent of the newer recording-bundle format and never touches those bundles. Labels keep stable ids; archiving one hides it from new selection but never changes old recordings.
 
 The older three-class training, LiteRT readiness, intent-binding, replay and legacy inference panels were removed from this page; a model from the old system that could not be converted is kept aside and counted on the Label models card.
 

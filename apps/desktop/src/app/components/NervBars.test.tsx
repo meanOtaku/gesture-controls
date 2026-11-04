@@ -26,7 +26,7 @@ afterEach(() => {
 describe("NervBars", () => {
   it("names a page by its place in the navigation and its name", () => {
     expect(sectionIdentifier("main")).toBe("01 // OVERVIEW");
-    expect(sectionIdentifier("gestureLibrary")).toBe("09 // GESTURE LIBRARY");
+    expect(sectionIdentifier("gestureLibrary")).toBe("10 // GESTURE LIBRARY");
     expect(sectionIdentifier("settings")).toMatch(/^\d\d \/\/ SETTINGS$/);
   });
 

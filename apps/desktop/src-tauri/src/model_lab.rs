@@ -115,6 +115,9 @@ pub struct DatasetSummary {
     /// group changes nothing about training or testing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
+    /// The name you gave it, shown wherever it is listed or chosen; None shows when it was recorded and what it holds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     /// How its labels were made: "camera" (where the camera saw the fingers meet and part), "motion" (estimated from the
     /// watch's motion, with no camera), "recorder" (while recording, by a button, key or cue) or "mixed". Kept when an
     /// import says so; otherwise worked out from its Recorder recording each time the list is read (see [`describe`]).
@@ -701,6 +704,7 @@ pub(crate) fn store_pair_in(
         review: None,
         group: None,
         labels_from: None,
+        name: None,
         camera: false,
         recorded_at: None,
     };
@@ -1132,6 +1136,73 @@ fn clean_group_name(name: Option<&str>) -> Result<Option<String>, String> {
     Ok(Some(name.to_string()))
 }
 
+const MAX_DATASET_NAME_CHARS: usize = 80;
+
+/// A name as it is kept: trimmed, one line, at most [`MAX_DATASET_NAME_CHARS`]; None when blank.
+fn clean_dataset_name(name: Option<&str>) -> Result<Option<String>, String> {
+    let Some(name) = name.map(str::trim).filter(|name| !name.is_empty()) else {
+        return Ok(None);
+    };
+    if name.chars().count() > MAX_DATASET_NAME_CHARS {
+        return Err(format!("a name can be at most {MAX_DATASET_NAME_CHARS} characters"));
+    }
+    if name.chars().any(char::is_control) {
+        return Err("a name cannot hold a line break or other control character".to_string());
+    }
+    Ok(Some(name.to_string()))
+}
+
+fn rename_in(index: &mut DatasetIndex, id: &str, name: Option<String>) -> Result<(), String> {
+    let dataset = index
+        .datasets
+        .iter_mut()
+        .find(|dataset| dataset.id == id)
+        .ok_or_else(|| format!("no dataset with id '{id}'"))?;
+    dataset.name = name;
+    Ok(())
+}
+
+/// Names a recording, or takes its name away (`name` None or blank) so it is shown by when it was recorded and what it
+/// holds. The name is only for finding it: it changes nothing about the data, training or testing.
+#[tauri::command]
+pub fn set_dataset_name(
+    id: String,
+    name: Option<String>,
+    app: AppHandle,
+    runtime: State<'_, ModelLabRuntime>,
+) -> Result<Vec<DatasetSummary>, String> {
+    validate_dataset_id(&id)?;
+    let name = clean_dataset_name(name.as_deref())?;
+    let _guard = runtime
+        .lock
+        .lock()
+        .map_err(|_| "model lab lock was poisoned".to_string())?;
+    let mut index = load_index(&app);
+    rename_in(&mut index, &id, name)?;
+    write_index_atomic(&app, &index)?;
+    Ok(index.datasets)
+}
+
+/// The name of a new version of `parent` saved from the Labelling page: its name with the next version number ("Monday
+/// pinches (v2)", then "(v3)"), or None when it has none.
+pub(crate) fn version_name(datasets: &[DatasetSummary], parent: &str) -> Option<String> {
+    let parent_name = datasets.iter().find(|d| d.id == parent)?.name.as_deref()?;
+    let base = parent_name
+        .rsplit_once(" (v")
+        .filter(|(_, n)| n.strip_suffix(')').is_some_and(|n| n.parse::<u32>().is_ok()))
+        .map_or(parent_name, |(base, _)| base);
+    let taken = datasets.iter().filter_map(|d| d.name.as_deref()).filter(|n| n.starts_with(&format!("{base} (v"))).count();
+    Some(format!("{base} (v{})", taken + 2))
+}
+
+/// Names the recording `id` with `name`, as `set_dataset_name` does, for the app's own use (a new version's name).
+pub(crate) fn name_dataset(app: &AppHandle, runtime: &ModelLabRuntime, id: &str, name: Option<String>) -> Result<(), String> {
+    let _guard = runtime.lock.lock().map_err(|_| "model lab lock was poisoned".to_string())?;
+    let mut index = load_index(app);
+    rename_in(&mut index, id, name)?;
+    write_index_atomic(app, &index)
+}
+
 /// Puts recordings in a group, or takes them out of their group (`group` None or blank). Every id must exist, or nothing changes.
 #[tauri::command]
 pub fn set_datasets_group(
@@ -1407,6 +1478,7 @@ mod tests {
             review: None,
             group: None,
             labels_from: None,
+            name: None,
             camera: false,
             recorded_at: None,
         };
@@ -1506,6 +1578,29 @@ mod tests {
         }
         let twins: Vec<&Vec<&str>> = by_sha.values().filter(|ids| ids.len() > 1).collect();
         println!("same data: {twins:?}");
+    }
+
+    #[test]
+    fn a_recording_is_named_and_unnamed_and_its_new_versions_are_numbered_after_it() {
+        let mut index: DatasetIndex = serde_json::from_str(
+            r#"{"datasets":[{"id":"a","originalFilename":"a.csv","importedAt":"","label":"idle","rowCount":3},
+                           {"id":"b","originalFilename":"b.csv","importedAt":"","label":"idle","rowCount":3}]}"#,
+        )
+        .unwrap();
+        assert!(index.datasets.iter().all(|d| d.name.is_none()), "an index from before names reads as no name");
+        rename_in(&mut index, "a", clean_dataset_name(Some("  Monday pinches ")).unwrap()).unwrap();
+        assert_eq!(index.datasets[0].name.as_deref(), Some("Monday pinches"));
+        assert!(serde_json::to_string(&index).unwrap().contains(r#""name":"Monday pinches""#));
+        assert!(clean_dataset_name(Some("two\nlines")).is_err() && clean_dataset_name(Some(&"x".repeat(81))).is_err());
+        assert!(rename_in(&mut index, "gone", None).is_err());
+        // Its first new version is v2, the next v3, also when saved from a version; an unnamed one gets no name.
+        assert_eq!(version_name(&index.datasets, "a").as_deref(), Some("Monday pinches (v2)"));
+        index.datasets.push(DatasetSummary { id: "c".into(), name: Some("Monday pinches (v2)".into()), ..index.datasets[1].clone() });
+        assert_eq!(version_name(&index.datasets, "c").as_deref(), Some("Monday pinches (v3)"));
+        assert_eq!(version_name(&index.datasets, "b"), None);
+        // Blank takes the name away.
+        rename_in(&mut index, "a", clean_dataset_name(Some("   ")).unwrap()).unwrap();
+        assert_eq!(index.datasets[0].name, None);
     }
 
     #[test]
@@ -1900,6 +1995,7 @@ mod tests {
             review: None,
             group: None,
             labels_from: None,
+            name: None,
             camera: false,
             recorded_at: None,
         };

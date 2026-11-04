@@ -246,6 +246,12 @@ pub struct RecordingBundleSummary {
     pub sequence: u32,
     /// When it was saved (the wall clock at its start).
     pub saved_at: String,
+    /// Only on a save: the recording it became on the Datasets tab, which every recording joins as it is saved.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dataset: Option<crate::model_lab::DatasetSummary>,
+    /// Only on a save: why it did not join the Datasets tab (for example, nothing in it was labelled).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub not_in_datasets: Option<String>,
 }
 
 /// True only when `recording.sources` is exactly the single
@@ -296,6 +302,8 @@ fn summarize_bundle(
         is_imported: is_imported_only(recording),
         sequence: 0,
         saved_at: recording.actual_start.wall_clock_at.clone(),
+        dataset: None,
+        not_in_datasets: None,
     }
 }
 
@@ -596,7 +604,22 @@ pub fn save_recording_bundle(
         return Err(error.to_string());
     }
 
-    Ok(numbered_summary(&app, &recording, &annotations))
+    let mut summary = numbered_summary(&app, &recording, &annotations);
+    // Every recording joins the Datasets tab as it is saved, as "Add to training data" would add it. One it cannot join
+    // (nothing labelled, or a label not in the catalogue) is still saved, and the reason goes back with it.
+    match add_to_datasets(&app, &final_dir, &recording.recording_id) {
+        Ok(dataset) => summary.dataset = Some(dataset),
+        Err(reason) => summary.not_in_datasets = Some(reason),
+    }
+    Ok(summary)
+}
+
+/// Adds the saved recording `id` (in `dir`) to the Datasets tab, as "Add to training data" does with unreviewed
+/// intervals counted and the rest left out.
+fn add_to_datasets(app: &AppHandle, dir: &Path, id: &str) -> Result<crate::model_lab::DatasetSummary, String> {
+    let (filename, csv) = training_csv_of_bundle(dir, id, IntervalFilter::NotExcluded, None)?;
+    let runtime = app.state::<crate::model_lab::ModelLabRuntime>();
+    crate::model_lab::ingest_dataset(app, &runtime, filename, csv, Some(id.to_string()))
 }
 
 /// Rejects a data row whose field count is not `RAW_CSV_HEADER.len()`. Counting
@@ -3132,6 +3155,44 @@ fn write_bundle_with_evidence(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A tool, not a test: adds Recorder recordings to the app's Model Lab exactly as "Add to training data" (From the
+    /// Recorder) does, with unreviewed intervals counted and the rest left out, each linked to its Recorder recording (so
+    /// Model Lab sees its camera and how its labels were made). `APP_DATA` is the app's data folder (on macOS
+    /// `~/Library/Application Support/dev.meanotaku.spatial-gesture-control`) and `RECORDING_IDS` the recordings' ids, or
+    /// the start of each, separated by commas. Labels must be in the catalogue or standard. The app reads the files afresh.
+    #[test]
+    #[ignore = "a tool: needs APP_DATA and RECORDING_IDS"]
+    fn add_recorder_recordings_into_the_app() {
+        let app_data = PathBuf::from(std::env::var("APP_DATA").expect("APP_DATA"));
+        let bundles = app_data.join(RECORDING_BUNDLES_DIR_NAME);
+        let all: Vec<String> = fs::read_dir(&bundles).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().to_string()).collect();
+        let labels_file = app_data.join(crate::model_lab::MODEL_LAB_DIR_NAME).join("labels.json");
+        let known = crate::label_registry::label_ids_at(&labels_file);
+        let datasets = app_data.join(crate::model_lab::MODEL_LAB_DIR_NAME).join("datasets");
+        let lock = std::sync::Mutex::new(());
+        for wanted in std::env::var("RECORDING_IDS").expect("RECORDING_IDS").split(',').map(str::trim).filter(|w| !w.is_empty()) {
+            let found: Vec<&String> = all.iter().filter(|id| id.starts_with(wanted)).collect();
+            let [id] = found.as_slice() else {
+                println!("not added: {wanted}: {} recordings start with it", found.len());
+                continue;
+            };
+            let outcome = training_csv_of_bundle(&bundles.join(id.as_str()), id, IntervalFilter::NotExcluded, None).and_then(|(filename, csv)| {
+                crate::model_lab::ingest_dataset_in(
+                    &datasets,
+                    |label| known.contains(label) || crate::label_registry::is_standard(label),
+                    &lock,
+                    filename,
+                    csv,
+                    Some(id.to_string()),
+                )
+            });
+            match outcome {
+                Ok(summary) => println!("added #{} {} ({}, {} rows)", summary.sequence, summary.original_filename, summary.labels.join(", "), summary.row_count),
+                Err(error) => println!("not added: {id}: {error}"),
+            }
+        }
+    }
 
     /// One-off tool: writes a saved recording out as a dataset folder, as the Recorder exports one (`ppg.csv`, `imu.csv`,
     /// `dataset.json`, `ppg_clock.csv`), every row kept and labelled from its intervals (the excluded ones left out).

@@ -1,3 +1,5 @@
+import { lineOf } from "../recordingNames";
+import type { DatasetSummary } from "../types";
 import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
@@ -24,7 +26,7 @@ const pct = (part: number, whole: number) => (whole > 0 ? `${Math.round((part / 
  * Two to four models of one label side by side, on the same recordings: ones none of them trained on, so neither has seen
  * the answers. Each recording's catches and false alarms for each, their threshold trade-offs, and their final tests.
  */
-export function CompareCard({ desktopAvailable, models }: { desktopAvailable: boolean; models: LabelModel[] }) {
+export function CompareCard({ desktopAvailable, models, datasets }: { desktopAvailable: boolean; models: LabelModel[]; datasets?: DatasetSummary[] }) {
   const [picked, setPicked] = useState<string[]>([]);
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [finals, setFinals] = useState<SealedTestLog[]>([]);
@@ -99,7 +101,7 @@ export function CompareCard({ desktopAvailable, models }: { desktopAvailable: bo
               <tbody>
                 {comparison.recordings.map((row) => (
                   <tr key={row.id}>
-                    <td>{row.name} <small className="text-muted-foreground">({TIMING_NAME[row.labelTiming]})</small></td>
+                    <td>{lineOf(datasets, row.id, row.name)} <small className="text-muted-foreground">({TIMING_NAME[row.labelTiming]})</small></td>
                     <td>{row.starts}</td>
                     {row.caught.map((caught, i) => {
                       const best = Math.max(...row.caught) === caught && row.caught.filter((c) => c === caught).length === 1;

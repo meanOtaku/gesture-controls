@@ -31,6 +31,22 @@ function setup(over: Partial<React.ComponentProps<typeof DatasetManager>> = {}) 
 }
 
 describe("DatasetManager", () => {
+  it("renames a recording, shows the name with when and what beside it, and takes the name away when cleared", async () => {
+    const onRename = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(<DatasetManager desktopAvailable datasets={[{ ...dataset, sequence: 7 }]} loading={false} importing={false} error={null} pendingDeleteIds={new Set()} onImport={vi.fn()} onDelete={vi.fn()} onRename={onRename} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Rename #7 / }));
+    fireEvent.change(screen.getByRole("textbox", { name: /^Name of / }), { target: { value: "  Monday pinches " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onRename).toHaveBeenCalledWith("d1", "Monday pinches"));
+    rerender(<DatasetManager desktopAvailable datasets={[{ ...dataset, sequence: 7, name: "Monday pinches" }]} loading={false} importing={false} error={null} pendingDeleteIds={new Set()} onImport={vi.fn()} onDelete={vi.fn()} onRename={onRename} />);
+    expect(screen.getByText("Monday pinches")).toBeInTheDocument();
+    expect(screen.getByText(/session-1\.csv/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Rename #7 Monday pinches" }));
+    fireEvent.change(screen.getByRole("textbox", { name: /^Name of / }), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onRename).toHaveBeenLastCalledWith("d1", null));
+  });
+
   it("lists recordings plainly, with no training-role or selection leftovers", () => {
     setup();
     expect(screen.getByText("session-1.csv")).toBeInTheDocument();
@@ -154,8 +170,8 @@ describe("DatasetManager", () => {
     expect(screen.getByText("1 of 3")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Search recordings"), { target: { value: "" } });
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Choose monday" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Choose wednesday" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /^Choose #1 / }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /^Choose #3 / }));
     const bulk = screen.getByRole("group", { name: "With the chosen recordings" });
     expect(bulk).toHaveTextContent("2 chosen");
     fireEvent.click(within(bulk).getByRole("button", { name: "Seal" }));
@@ -189,7 +205,7 @@ describe("DatasetManager", () => {
     await screen.findByText("monday");
     expect(window.localStorage.getItem("recordingGroup.old")).toBe("open");
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Choose wednesday" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /^Choose #3 / }));
     fireEvent.change(screen.getByLabelText("Group name"), { target: { value: " old " } });
     fireEvent.click(screen.getByRole("button", { name: "Move to group" }));
     await waitFor(() => expect(onGroup).toHaveBeenCalledWith(["c"], "old"));

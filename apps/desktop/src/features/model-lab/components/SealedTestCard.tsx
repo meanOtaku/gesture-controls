@@ -1,3 +1,4 @@
+import { lineOf } from "../recordingNames";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
@@ -99,7 +100,7 @@ export function SealedTestCard({ desktopAvailable, models, datasets }: { desktop
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {sealed.length === 0 ? (
-          <p className="hint">No recording is sealed. Under Recordings, seal a whole day you have not trained on.</p>
+          <p className="hint">No recording is sealed. On the Datasets tab, seal a whole day you have not trained on.</p>
         ) : (
           <>
             <p className="hint">
@@ -149,7 +150,7 @@ export function SealedTestCard({ desktopAvailable, models, datasets }: { desktop
               <tbody>
                 {report.recordings.map((row) => (
                   <tr key={row.id}>
-                    <td>{row.name}</td>
+                    <td>{lineOf(datasets, row.id, row.name)}</td>
                     <td className="text-center">{TIMING_NAME[row.labelTiming]}</td>
                     <td className="text-center">{row.starts}</td>
                     <td className="text-center">{row.caught} ({share(row.caught, row.starts)})</td>

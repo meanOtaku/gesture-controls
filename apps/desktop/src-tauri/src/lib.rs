@@ -226,6 +226,7 @@ pub fn run() {
             labelling::labelling_model_replay,
             model_lab::set_datasets_sealed,
             model_lab::set_datasets_group,
+            model_lab::set_dataset_name,
             model_lab::set_dataset_review,
             sealed_test::test_model_on_sealed,
             sealed_test::list_sealed_tests,

@@ -1,7 +1,7 @@
 import { formatTime } from "./labelModels";
 import { recordingNumber, type DatasetSummary } from "./types";
 
-type Named = Pick<DatasetSummary, "originalFilename" | "importedAt" | "recordedAt" | "quality" | "sequence" | "camera">;
+type Named = Pick<DatasetSummary, "originalFilename" | "importedAt" | "recordedAt" | "quality" | "sequence" | "camera"> & { name?: string };
 
 /**
  * When the session was recorded: from its Recorder recording, else the time in its file name (when the Recorder exported
@@ -27,16 +27,35 @@ export function gestureSummary(dataset: Pick<DatasetSummary, "quality">): string
     .join(", ");
 }
 
-/** What to call a recording: when it was recorded and what it holds ("03/11/2026 06:35 AM · 20 pinches"), else its file name. */
+/** What to call a recording: the name you gave it, else `defaultTitle`. */
 export function recordingTitle(dataset: Named): string {
+  return dataset.name?.trim() || defaultTitle(dataset);
+}
+
+/** What a recording is called with no name: when it was recorded and what it holds ("03/11/2026 06:35 AM · 20 pinches"), else its file name. */
+export function defaultTitle(dataset: Named): string {
   const when = recordingWhen(dataset);
   const parts = [when ? formatTime(when) : "", gestureSummary(dataset)].filter(Boolean);
   return parts.length > 0 ? parts.join(" · ") : dataset.originalFilename;
 }
 
+/** A recording's number and title, for messages and plans: "#30 Monday pinches" or "#30 03/11/2026 06:35 AM · 20 pinches". */
+export function recordingName(dataset: Named): string {
+  return [recordingNumber(dataset), recordingTitle(dataset)].filter(Boolean).join(" ");
+}
+
 /** A recording in one line of text, for lists and pickers: "#30 03/11/2026 06:35 AM · 20 pinches · camera". */
 export function recordingLine(dataset: Named): string {
   return [recordingNumber(dataset), `${recordingTitle(dataset)} · ${dataset.camera ? "camera" : "no camera"}`].filter(Boolean).join(" ");
+}
+
+/**
+ * How a report from the desktop (which names a recording by its file) shows recording `id`: its line from `datasets` when
+ * Model Lab still has it, else `fallback`.
+ */
+export function lineOf(datasets: DatasetSummary[] | undefined, id: string, fallback: string): string {
+  const dataset = datasets?.find((entry) => entry.id === id);
+  return dataset ? recordingLine(dataset) : fallback;
 }
 
 /** How its labels were made, in words; null when nothing says. */

@@ -69,3 +69,16 @@ describe("useTelemetryExport", () => {
     expect(second.result.current.datasetExportFolder).toBe("/exports");
   });
 });
+
+describe("what a save says", () => {
+  it("says where the recording joined Datasets, or why it did not", async () => {
+    const { toast } = await import("sonner");
+    const success = vi.spyOn(toast, "success");
+    const warning = vi.spyOn(toast, "warning");
+    const { reportRecordingBundleOutcome } = await import("./useTelemetryExport");
+    reportRecordingBundleOutcome({ status: "saved", recordingId: "r", rowCount: 17493, intervalCount: 47, dataset: { id: "d", originalFilename: "x", importedAt: "", label: "", rowCount: 1, sequence: 43, name: "Morning pinches" } });
+    expect(success).toHaveBeenLastCalledWith("Save recording", expect.objectContaining({ description: `Saved (${(17493).toLocaleString()} rows) and added to Datasets as #43 Morning pinches.` }));
+    reportRecordingBundleOutcome({ status: "saved", recordingId: "r", rowCount: 10, intervalCount: 0, notInDatasets: "this recording has no labelled intervals to train on" });
+    expect(warning).toHaveBeenLastCalledWith("Save recording", expect.objectContaining({ description: "Saved (10 rows), but not added to Datasets: this recording has no labelled intervals to train on." }));
+  });
+});

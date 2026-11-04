@@ -1,4 +1,4 @@
-import { Activity, Brain, CircleDot, Highlighter, Network, FolderOpen, Hand, Headphones, Shapes, Tags, Radar, LayoutDashboard, Settings as SettingsIcon, SlidersHorizontal, Watch, Workflow } from "lucide-react";
+import { Activity, Brain, CircleDot, Database, Highlighter, Network, FolderOpen, Hand, Headphones, Shapes, Tags, Radar, LayoutDashboard, Settings as SettingsIcon, SlidersHorizontal, Watch, Workflow } from "lucide-react";
 import { useEffect } from "react";
 import {
   Sidebar,
@@ -14,7 +14,7 @@ import {
   SidebarRail,
 } from "../../components/ui/sidebar";
 
-export type AppTab = "main" | "headphone" | "watch" | "recipes" | "devices" | "gestures" | "signals" | "recorder" | "recordings" | "labelling" | "labels" | "gestureLibrary" | "modelLab" | "networkLab" | "settings";
+export type AppTab = "main" | "headphone" | "watch" | "recipes" | "devices" | "gestures" | "signals" | "recorder" | "recordings" | "datasets" | "labelling" | "labels" | "gestureLibrary" | "modelLab" | "networkLab" | "settings";
 
 type NavItem = { id: AppTab; label: string; icon: typeof LayoutDashboard };
 
@@ -29,6 +29,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { id: "signals", label: "Live signals", icon: Activity },
       { id: "recorder", label: "Recorder", icon: CircleDot },
       { id: "recordings", label: "Recordings", icon: FolderOpen },
+      { id: "datasets", label: "Datasets", icon: Database },
     ],
   },
   {

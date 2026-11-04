@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatTime } from "./labelModels";
-import { gestureSummary, labelsFromText, recordingLine, recordingTitle, recordingWhen } from "./recordingNames";
+import { defaultTitle, gestureSummary, labelsFromText, lineOf, recordingLine, recordingName, recordingTitle, recordingWhen } from "./recordingNames";
 import type { DatasetSummary } from "./types";
 
 const base: DatasetSummary = { id: "a", originalFilename: "recorder-94faf83c-60-intervals.csv", importedAt: "2026-11-03T01:30:00Z", label: "", rowCount: 1, sequence: 30 };
@@ -27,6 +27,19 @@ describe("naming a recording", () => {
     expect(recordingTitle(named)).toBe(`${formatTime(at)} · 20 pinches`);
     expect(recordingLine(named)).toBe(`#30 ${formatTime(at)} · 20 pinches · camera`);
     expect(recordingLine({ ...base, importedAt: "", sequence: 3, originalFilename: "pinch session" })).toBe("#3 pinch session · no camera");
+  });
+
+  it("goes by the name you gave it everywhere, keeping when and what as its default", () => {
+    const at = "2026-11-03T01:05:59.434Z";
+    const named = { ...base, recordedAt: at, camera: true, quality: quality({ pinch_hold: 20 }), name: "Monday pinches" };
+    expect(recordingTitle(named)).toBe("Monday pinches");
+    expect(defaultTitle(named)).toBe(`${formatTime(at)} · 20 pinches`);
+    expect(recordingName(named)).toBe("#30 Monday pinches");
+    expect(recordingLine(named)).toBe("#30 Monday pinches · camera");
+    expect(recordingTitle({ ...named, name: "  " })).toBe(`${formatTime(at)} · 20 pinches`);
+    // A report from the desktop names a recording by its file: Model Lab's name wins while it has the recording.
+    expect(lineOf([named], "a", "recorder-94faf83c.csv")).toBe("#30 Monday pinches · camera");
+    expect(lineOf([named], "gone", "recorder-94faf83c.csv")).toBe("recorder-94faf83c.csv");
   });
 
   it("says how the labels were made, and nothing for a version labelled by hand", () => {

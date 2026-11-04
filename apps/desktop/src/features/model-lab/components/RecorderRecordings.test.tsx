@@ -46,6 +46,9 @@ describe("RecorderRecordings", () => {
   it("disables an unreviewed-only recording when only approved intervals are allowed, and marks recordings already added", async () => {
     render(<RecorderRecordings desktopAvailable labels={[]} datasets={[{ id: "d", originalFilename: "x", importedAt: "", label: "pinch", rowCount: 1, sourceRecordingId: "aaaaaaaa-1" } as DatasetSummary]} onAdded={vi.fn()} />);
     await screen.findAllByRole("button", { name: "Add to training data" });
+    // A recording already in Datasets is listed only when asked for.
+    expect(screen.queryByText("Added")).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Also those already in Datasets \(1\)/ }));
     expect(screen.getByText("Added")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Intervals to use"), { target: { value: "approvedOnly" } });
     expect(screen.getAllByRole("button", { name: "Add to training data" })[0]).toBeDisabled();

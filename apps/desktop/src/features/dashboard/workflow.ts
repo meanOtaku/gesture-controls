@@ -7,7 +7,7 @@ export interface WorkflowStep {
   title: string;
   status: string;
   complete: boolean;
-  tab: "recorder" | "labelling" | "modelLab";
+  tab: "recorder" | "datasets" | "labelling" | "modelLab";
   action: string;
 }
 
@@ -43,7 +43,7 @@ export function workflowSteps(input: { recorderRecordings: number; datasets: Dat
       title: "Clean",
       status: problems === 0 ? "Nothing to fix." : `${problems} recording${problems === 1 ? " has" : "s have"} something to fix: copies, poor contact, stalls or short holds.`,
       complete: datasets.length > 0 && problems === 0,
-      tab: "modelLab",
+      tab: "datasets",
       action: "See recordings →",
     },
     {

@@ -1,3 +1,4 @@
+import type { DatasetSummary } from "../../features/model-lab/types";
 import type { PowerRates } from "./watchPower";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -65,7 +66,16 @@ export type RecordingBundlePayload = {
 export type RecordingEvidence = { files: Record<string, string>; sources: RecordingSource[] };
 
 export type SaveRecordingBundleResult =
-  | { status: "saved"; recordingId: string; rowCount: number; intervalCount: number }
+  | {
+      status: "saved";
+      recordingId: string;
+      rowCount: number;
+      intervalCount: number;
+      /** The recording it became on the Datasets tab, which every saved recording joins. */
+      dataset?: DatasetSummary;
+      /** Why it did not join the Datasets tab (for example, nothing in it was labelled). */
+      notInDatasets?: string;
+    }
   | { status: "error"; message: string };
 
 /** Mirrors `recording_bundle::RecordingBundleSummary`. */
@@ -425,7 +435,7 @@ export async function saveRecordingBundle(payload: RecordingBundlePayload): Prom
     return { status: "error", message: "Recording bundle persistence requires the desktop app" };
   }
   try {
-    const summary = await invoke<{ recordingId: string; rawRowCount: number; intervalCount: number }>(
+    const summary = await invoke<{ recordingId: string; rawRowCount: number; intervalCount: number; dataset?: DatasetSummary; notInDatasets?: string }>(
       "save_recording_bundle",
       { rawCsv: payload.rawCsv, recording: payload.recording, annotations: payload.annotations, extraFiles: payload.extraFiles ?? null },
     );
@@ -435,6 +445,8 @@ export async function saveRecordingBundle(payload: RecordingBundlePayload): Prom
       recordingId: summary.recordingId,
       rowCount: summary.rawRowCount,
       intervalCount: summary.intervalCount,
+      ...(summary.dataset ? { dataset: summary.dataset } : {}),
+      ...(summary.notInDatasets ? { notInDatasets: summary.notInDatasets } : {}),
     };
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : String(error) };

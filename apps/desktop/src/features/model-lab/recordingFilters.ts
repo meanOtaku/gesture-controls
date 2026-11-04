@@ -1,3 +1,4 @@
+import { recordingTitle } from "./recordingNames";
 import { describeContext } from "../telemetry/sessionContext";
 import { datasetLabels, describeGaps, describeQuality, recordingDay, sameDataAs, type DatasetSummary } from "./types";
 
@@ -31,12 +32,13 @@ export function filterRecordings(datasets: DatasetSummary[], filter: RecordingFi
     if (filter.show === "unsealed" && dataset.sealed) return false;
     if (filter.show === "unreviewed" && dataset.review) return false;
     if (filter.show === "needs_work" && dataset.review?.status !== "needs_work") return false;
-    const haystack = `${dataset.originalFilename} ${dataset.label} ${dataset.group ?? ""} ${dataset.context ? describeContext(dataset.context) : ""}`.toLowerCase();
+    const haystack = `${recordingTitle(dataset)} ${dataset.originalFilename} ${dataset.label} ${dataset.group ?? ""} ${dataset.context ? describeContext(dataset.context) : ""}`.toLowerCase();
     return words.every((word) => haystack.includes(word));
   });
   const by: Record<RecordingFilter["sort"], (a: DatasetSummary, b: DatasetSummary) => number> = {
     number: (a, b) => (a.sequence ?? 0) - (b.sequence ?? 0),
-    name: (a, b) => a.originalFilename.localeCompare(b.originalFilename),
+    // Your name when you gave one, else the file name (which, from the Recorder, starts with when it was recorded).
+    name: (a, b) => (a.name ?? a.originalFilename).localeCompare(b.name ?? b.originalFilename),
     day: (a, b) => recordingDay(a).localeCompare(recordingDay(b)) || (a.sequence ?? 0) - (b.sequence ?? 0),
     // Worst contact first.
     contact: (a, b) => (b.quality?.poorContactShare ?? 0) - (a.quality?.poorContactShare ?? 0),

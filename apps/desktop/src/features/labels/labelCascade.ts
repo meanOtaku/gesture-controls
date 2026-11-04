@@ -1,3 +1,4 @@
+import { recordingName } from "../model-lab/recordingNames";
 import { datasetLabels } from "../model-lab/types";
 import type { UsageSources } from "./labelUsage";
 import { recipesUsing } from "./labelUsage";
@@ -116,8 +117,8 @@ export function planCascade(mode: CascadeMode, labelId: string, sources: Cascade
   const datasets = sources.datasets.filter((dataset) => datasetLabels(dataset).includes(labelId));
   for (const dataset of datasets) {
     const others = datasetLabels(dataset).filter((other) => other !== labelId);
-    if (others.length > 0) blockers.push(`The training recording “${dataset.originalFilename}” also holds ${others.join(", ")}. Delete or replace it in Model Lab first.`);
-    else steps.push({ kind: "deleteDataset", id: dataset.id, name: dataset.originalFilename });
+    if (others.length > 0) blockers.push(`The training recording “${recordingName(dataset)}” also holds ${others.join(", ")}. Delete or replace it in Model Lab first.`);
+    else steps.push({ kind: "deleteDataset", id: dataset.id, name: recordingName(dataset) });
   }
   const bundles = sources.bundles.filter((bundle) => bundle.labelIds.includes(labelId));
   for (const bundle of bundles) steps.push({ kind: "removeIntervals", recordingId: bundle.recordingId });
@@ -127,7 +128,7 @@ export function planCascade(mode: CascadeMode, labelId: string, sources: Cascade
   if (gestures.length > 0) lines.push(`Delete ${plural(gestures.length, "gesture")} from the Gesture library: ${names(gestures)}.`);
   if (models.length > 0) lines.push(`Delete ${plural(models.length, "model")}, with their files.`);
   if (history && history.projects > 0) lines.push(`Delete its training history: ${plural(history.projects, "project")}, ${plural(history.runs, "run")} and ${plural(history.snapshots, "sealed snapshot")}.`);
-  if (datasets.length > 0 && blockers.length === 0) lines.push(`Delete ${plural(datasets.length, "recording")} from the training data: ${names(datasets.map((d) => ({ name: d.originalFilename })))}.`);
+  if (datasets.length > 0 && blockers.length === 0) lines.push(`Delete ${plural(datasets.length, "recording")} from the training data: ${names(datasets.map((d) => ({ name: recordingName(d) })))}.`);
   if (bundles.length > 0) lines.push(`Remove this label's marks from ${plural(bundles.length, "Recorder recording")}. The recordings and their raw data stay.`);
   lines.push("Delete the label itself. This cannot be undone.");
   return { mode, label: labelId, steps, lines, blockers, blockedBy };

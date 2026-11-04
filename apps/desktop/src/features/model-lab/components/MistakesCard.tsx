@@ -1,3 +1,5 @@
+import { lineOf } from "../recordingNames";
+import type { DatasetSummary } from "../types";
 import { invoke } from "@tauri-apps/api/core";
 import { useMemo, useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
@@ -79,7 +81,7 @@ export function falseByActivity(report: MistakesReport): [string, number][] {
  * recordings it was tested on. Open one to see it on the Labelling page: a wrong label is fixed there, and a false
  * detection is a stretch ready to label as everyday activity, so the next model learns from it.
  */
-export function MistakesCard({ desktopAvailable, models }: { desktopAvailable: boolean; models: LabelModel[] }) {
+export function MistakesCard({ desktopAvailable, models, datasets }: { desktopAvailable: boolean; models: LabelModel[]; datasets?: DatasetSummary[] }) {
   const [version, setVersion] = useState("");
   const [includeTraining, setIncludeTraining] = useState(false);
   const [running, setRunning] = useState(false);
@@ -161,12 +163,12 @@ export function MistakesCard({ desktopAvailable, models }: { desktopAvailable: b
               return (
                 <details key={recording.id} open={report.recordings.length <= 3}>
                   <summary>
-                    {recording.name} <small className="text-muted-foreground">({recording.role === "test" ? "tested on" : "trained on"}, {TIMING_NAME[recording.labelTiming]}; caught {recording.caught} of {recording.starts}, {recording.falseActivations} false, {recording.repeats} repeat{recording.repeats === 1 ? "" : "s"}, {recording.late} late)</small>
+                    {lineOf(datasets, recording.id, recording.name)} <small className="text-muted-foreground">({recording.role === "test" ? "tested on" : "trained on"}, {TIMING_NAME[recording.labelTiming]}; caught {recording.caught} of {recording.starts}, {recording.falseActivations} false, {recording.repeats} repeat{recording.repeats === 1 ? "" : "s"}, {recording.late} late)</small>
                   </summary>
                   {listed.length === 0 ? (
                     <p className="hint">Nothing to show.</p>
                   ) : (
-                    <ul className="mistake-list" aria-label={`Mistakes in ${recording.name}`}>
+                    <ul className="mistake-list" aria-label={`Mistakes in ${lineOf(datasets, recording.id, recording.name)}`}>
                       {listed.map((mistake) => (
                         <li key={`${mistake.kind}-${mistake.atMs}`} className={`mistake-${mistake.kind}`}>
                           <span className="font-mono">{seconds(mistake.atMs)}</span>

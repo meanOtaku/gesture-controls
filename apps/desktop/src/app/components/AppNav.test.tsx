@@ -54,12 +54,12 @@ const renderNav = (props: Partial<Parameters<typeof AppNav>[0]> = {}) => {
 
 describe("AppNav", () => {
   it("orders the pages as the app is used: devices, record, label, train, automate, then settings", () => {
-    expect(NAV_ORDER).toEqual(["main", "watch", "headphone", "signals", "recorder", "recordings", "labelling", "labels", "gestureLibrary", "modelLab", "networkLab", "gestures", "recipes", "devices", "settings"]);
+    expect(NAV_ORDER).toEqual(["main", "watch", "headphone", "signals", "recorder", "recordings", "datasets", "labelling", "labels", "gestureLibrary", "modelLab", "networkLab", "gestures", "recipes", "devices", "settings"]);
   });
 
   it("lists every destination, grouped, with the current page marked", () => {
     renderNav({ activeTab: "recorder" });
-    for (const name of ["Overview", "Headphones", "Watch", "Live signals", "Recorder", "Recordings", "Model Lab", "Settings"]) {
+    for (const name of ["Overview", "Headphones", "Watch", "Live signals", "Recorder", "Recordings", "Datasets", "Model Lab", "Settings"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
     expect(screen.queryByRole("button", { name: "Live data" })).not.toBeInTheDocument();
@@ -89,7 +89,7 @@ describe("AppNav", () => {
       fireEvent.keyDown(window, { key: String((index + 1) % 10), ctrlKey: true });
       expect(onSelect).toHaveBeenLastCalledWith(tab);
     });
-    expect(onSelect).toHaveBeenLastCalledWith("modelLab");
+    expect(onSelect).toHaveBeenLastCalledWith("gestureLibrary");
   });
 
   it("opens Settings with Ctrl+comma, since the eleventh and later tabs have no number", () => {
@@ -104,8 +104,10 @@ describe("AppNav", () => {
     const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
     const prefix = isMac ? "⌘" : "Ctrl+";
     expect(shortcutFor("main")).toBe(`${prefix}1`);
-    expect(shortcutFor("gestureLibrary")).toBe(`${prefix}9`);
-    expect(shortcutFor("modelLab")).toBe(`${prefix}0`);
+    expect(shortcutFor("datasets")).toBe(`${prefix}7`);
+    expect(shortcutFor("gestureLibrary")).toBe(`${prefix}0`);
+    // The eleventh and later tabs have no number.
+    expect(shortcutFor("modelLab")).toBeNull();
     expect(shortcutFor("recipes")).toBeNull();
     expect(shortcutFor("settings")).toBe(`${prefix},`);
   });

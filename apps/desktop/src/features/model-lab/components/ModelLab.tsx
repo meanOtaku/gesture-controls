@@ -1,13 +1,9 @@
-import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
-import { useCallback, useState } from "react";
-import { feedbackWithUndo, OperationFeedback } from "../../../components/app/OperationFeedback";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
 import { useLabelModels } from "../hooks/useLabelModels";
 import { useModelLabData } from "../hooks/useModelLabData";
-import { datasetLabels, describeGaps, type DatasetSummary } from "../types";
-import { DatasetManager } from "./DatasetManager";
+import { datasetLabels } from "../types";
+import { appNavigation } from "../../../shared/navigation/appNavigation";
 import { CompareCard } from "./CompareCard";
 import { MistakesCard } from "./MistakesCard";
 import { ThresholdCard } from "./ThresholdCard";
@@ -15,79 +11,17 @@ import { SealedTestCard } from "./SealedTestCard";
 import { DetectionActivity } from "./DetectionActivity";
 import { AdvancedSection } from "../../../components/app/AdvancedSection";
 import { LabelModelsPanel } from "./LabelModelsPanel";
-import { RecorderRecordings } from "./RecorderRecordings";
 import { TrainingHistory } from "./TrainingHistory";
 import { TrainPanel } from "./TrainPanel";
 
 /**
- * Model Lab: teach the app a gesture one label at a time. The sections follow the order you use them: add recordings
- * to the training data, check which labels they cover, train, look back at what was tried, then switch the models on
- * and watch what they detect.
+ * Model Lab: teach the app a gesture one label at a time. The recordings it trains and tests on are kept on the Datasets
+ * tab; here you train, look back at what was tried, then switch the models on and watch what they detect.
  */
 export function ModelLab({ onOpenLabels, onInspectModel, onOpenNetworkLab }: { onOpenLabels?: () => void; /** Opens the Network lab on this model, to look inside it. */ onInspectModel?: (id: string) => void; onOpenNetworkLab?: () => void }) {
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
-  const { datasets, labels, loading, error, setError, refreshDatasets } = useModelLabData(desktopAvailable);
-  const [importing, setImporting] = useState(false);
-  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
+  const { datasets, labels } = useModelLabData(desktopAvailable);
   const { models, status, error: modelsError, refresh } = useLabelModels(desktopAvailable);
-
-  const handleImport = useCallback(
-    async ({ filename, csvContent }: { filename: string; csvContent: string }) => {
-      setImporting(true);
-      try {
-        await invoke("import_model_dataset", { filename, csvContent });
-        setError(null);
-        await refreshDatasets();
-        OperationFeedback.success("Import recording", `Imported ${filename}.`);
-      } catch (err) {
-        setError(String(err));
-        OperationFeedback.error("Import recording", String(err));
-      } finally {
-        setImporting(false);
-      }
-    },
-    [refreshDatasets],
-  );
-
-  const handleImportFolder = useCallback(async () => {
-    const chosen = await open({ directory: true, multiple: false, title: "Choose a recording folder (it holds ppg.csv and imu.csv)" });
-    if (typeof chosen !== "string") return;
-    setImporting(true);
-    try {
-      const made = await invoke<DatasetSummary>("import_model_dataset_folder", { path: chosen });
-      setError(null);
-      await refreshDatasets();
-      const gaps = describeGaps(made?.gaps);
-      OperationFeedback.success("Import recording folder", `Imported ${made?.originalFilename ?? "the folder"}.${gaps?.warn ? ` The watch stream stalled in it (${gaps.text}).` : ""}`);
-    } catch (err) {
-      setError(String(err));
-      OperationFeedback.error("Import recording folder", String(err));
-    } finally {
-      setImporting(false);
-    }
-  }, [refreshDatasets]);
-
-  const handleDelete = useCallback(
-    async (id: string) => {
-      setPendingDeleteIds((prev) => new Set(prev).add(id));
-      try {
-        await invoke("delete_model_dataset", { id });
-        setError(null);
-        await refreshDatasets();
-        OperationFeedback.success("Delete recording", "Recording deleted.");
-      } catch (err) {
-        setError(String(err));
-        OperationFeedback.error("Delete recording", String(err));
-      } finally {
-        setPendingDeleteIds((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-      }
-    },
-    [refreshDatasets],
-  );
 
   const coverageByLabel = new Map<string, number>();
   for (const dataset of datasets) {
@@ -125,71 +59,24 @@ export function ModelLab({ onOpenLabels, onInspectModel, onOpenNetworkLab }: { o
       </section>
 
       <nav className="lab-workflow" aria-label="Model Lab sections">
-        <a href="#lab-recorder">From the Recorder</a><a href="#lab-dataset">Recordings</a><a href="#lab-train">Train</a><a href="#lab-labels">Models</a><a href="#lab-activity">Activity</a><a href="#lab-advanced">Advanced</a>
+        <a href="#lab-dataset">Recordings</a><a href="#lab-train">Train</a><a href="#lab-labels">Models</a><a href="#lab-activity">Activity</a><a href="#lab-advanced">Advanced</a>
       </nav>
 
       <fieldset className="lab-workspace card-stack" disabled={!desktopAvailable} aria-label="Desktop model tools">
-        <RecorderRecordings desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} onAdded={() => void refreshDatasets()} />
-        <DatasetManager
-          desktopAvailable={desktopAvailable}
-          labels={labels}
-          datasets={datasets}
-          loading={loading}
-          importing={importing}
-          error={error}
-          pendingDeleteIds={pendingDeleteIds}
-          onImport={handleImport}
-          onImportFolder={handleImportFolder}
-          onConverted={() => void refreshDatasets()}
-          onDelete={handleDelete}
-          onSeal={async (ids, sealed) => {
-            const seal = async (which: boolean) => {
-              await invoke("set_datasets_sealed", { ids, sealed: which });
-              await refreshDatasets();
-            };
-            try {
-              await seal(sealed);
-              feedbackWithUndo(
-                sealed ? "Sealed for the final test" : "Unsealed",
-                `${ids.length} recording${ids.length === 1 ? "" : "s"}.`,
-                () => void seal(!sealed).catch((err) => setError(String(err))),
-              );
-            } catch (err) {
-              setError(String(err));
-            }
-          }}
-          onGroup={async (ids, group) => {
-            // Undo puts each back in the group it was in.
-            const before = new Map<string | null, string[]>();
-            for (const dataset of datasets.filter((d) => ids.includes(d.id))) {
-              const was = dataset.group ?? null;
-              before.set(was, [...(before.get(was) ?? []), dataset.id]);
-            }
-            try {
-              await invoke("set_datasets_group", { ids, group });
-              await refreshDatasets();
-              feedbackWithUndo(
-                group === null ? "Taken out of the group" : `Moved to ${group}`,
-                `${ids.length} recording${ids.length === 1 ? "" : "s"}.`,
-                () =>
-                  void (async () => {
-                    for (const [was, wasIds] of before) await invoke("set_datasets_group", { ids: wasIds, group: was });
-                    await refreshDatasets();
-                  })().catch((err) => setError(String(err))),
-              );
-            } catch (err) {
-              setError(String(err));
-            }
-          }}
-        />
+        <Card id="lab-dataset" role="region" aria-label="Recordings">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm">{datasets.length} recording{datasets.length === 1 ? "" : "s"} to train and test on, kept on the Datasets tab: name, group and seal them there, and add ones recorded elsewhere.</span>
+            <Button type="button" variant="outline" onClick={() => appNavigation.open("datasets")}>Open Datasets</Button>
+          </CardContent>
+        </Card>
         <TrainPanel desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} onOpenNetworkLab={onOpenNetworkLab} />
         <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} onInspect={onInspectModel} />
         <DetectionActivity desktopAvailable={desktopAvailable} />
         <AdvancedSection id="lab-advanced" storageKey="modelLab" summary="Training history, mistakes, threshold, comparing models, the final test, and labels">
           <TrainingHistory desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} refreshKey={models.map((model) => `${model.id}:${model.state}`).join(",")} />
-          <MistakesCard desktopAvailable={desktopAvailable} models={models} />
+          <MistakesCard desktopAvailable={desktopAvailable} models={models} datasets={datasets} />
           <ThresholdCard desktopAvailable={desktopAvailable} models={models} />
-          <CompareCard desktopAvailable={desktopAvailable} models={models} />
+          <CompareCard desktopAvailable={desktopAvailable} models={models} datasets={datasets} />
           <SealedTestCard desktopAvailable={desktopAvailable} models={models} datasets={datasets} />
           <Card id="lab-coverage" role="region" aria-label="Labels">
             <CardContent className="flex flex-wrap items-center justify-between gap-3">

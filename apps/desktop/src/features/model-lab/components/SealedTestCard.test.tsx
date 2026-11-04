@@ -46,7 +46,8 @@ describe("SealedTestCard", () => {
     expect(invoke).toHaveBeenCalledWith("test_model_on_sealed", { versionId: "pinch-v3" });
     const result = screen.getByRole("region", { name: "Final test result" });
     expect(result).toHaveTextContent("caught 9 of 20 starts (45%), 30 false activations an hour with no gesture under way; 1 repeat and 2 late (within the 30 an hour budget)");
-    expect(screen.getByRole("row", { name: /day five/ })).toHaveTextContent("camera-timed");
+    // Named as Model Lab names it: its number, when it was recorded (here, imported) and whether it has the camera.
+    expect(screen.getByRole("row", { name: /no camera/ })).toHaveTextContent("camera-timed");
     expect(result).toHaveTextContent("tested 1 time before this");
     expect(result).toHaveTextContent("905 ms");
     // A test logged before the hour standard says it was counted the old way.

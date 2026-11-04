@@ -32,6 +32,8 @@ export interface DatasetSummary {
   review?: DatasetReview;
   /** The group it is listed under (for example "old"); absent for one in no group. Changes nothing about training. */
   group?: string;
+  /** The name you gave it, shown wherever it is listed or chosen; absent shows when it was recorded and what it holds. */
+  name?: string;
   /** How its labels were made (see `labelsFromText`); absent when nothing says. */
   labelsFrom?: "camera" | "motion" | "recorder" | "mixed";
   /** The camera's hand landmarks are kept for it, so the Labelling page can draw the hand. */

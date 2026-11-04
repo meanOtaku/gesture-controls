@@ -27,9 +27,10 @@ export function eligibleIntervals(summary: Pick<RecordingBundleSummary, "approve
 }
 
 /**
- * Recordings saved by the Recorder, ready to train on without exporting and importing a file. The labelled intervals
- * of a recording become its labelled rows; you choose whether unreviewed ones count and whether everything between the
- * intervals is background.
+ * Recorder sessions not on the Datasets tab yet. Every session joins it as it is saved; this lists the ones that did not
+ * (saved before that, or with nothing labelled then), and lets you add one again after changing its marks. The labelled
+ * intervals of a recording become its labelled rows; you choose whether unreviewed ones count and whether everything
+ * between the intervals is background.
  */
 export function RecorderRecordings({ desktopAvailable, labels, datasets, onAdded }: Props) {
   const uid = useId();
@@ -37,6 +38,7 @@ export function RecorderRecordings({ desktopAvailable, labels, datasets, onAdded
   const [filter, setFilter] = useState<IntervalFilter>("notExcluded");
   const [restLabel, setRestLabel] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -52,6 +54,7 @@ export function RecorderRecordings({ desktopAvailable, labels, datasets, onAdded
 
   const backgrounds = labels.filter((label) => label.archivedAt === null && label.role === "negativeBackground");
   const addedCount = (id: string) => datasets.filter((dataset) => dataset.sourceRecordingId === id).length;
+  const listed = showAll ? recordings : recordings.filter((summary) => addedCount(summary.recordingId) === 0);
 
   const add = async (summary: RecordingBundleSummary) => {
     setBusy(summary.recordingId);
@@ -72,10 +75,10 @@ export function RecorderRecordings({ desktopAvailable, labels, datasets, onAdded
       <CardHeader>
         <SectionHeader
           title="From the Recorder"
-          description="Add recordings you made in the Recorder straight to the training data."
+          description="Every Recorder session joins Datasets as it is saved. Here are the ones that have not, to add by hand."
           help={{
             label: "About adding recordings from the Recorder",
-            content: "Each labelled interval of a recording (marked by hand, or by the camera and then reviewed) becomes labelled rows. Choose whether intervals you have not reviewed yet count. Rows between intervals are normally left out; choose a background label to give them that label instead, which teaches the model what is not the gesture. Do that only if the gesture really did not happen in those stretches. Adding the same, unchanged recording twice is refused.",
+            content: "A session joins Datasets by itself when it is saved, unless nothing in it was labelled then. This lists the sessions not in Datasets: those saved before sessions joined by themselves, and those that could not. Show all of them to add one again after you changed its marks (it is added as a new recording beside the old one). Each labelled interval of a recording (marked by hand, or by the camera and then reviewed) becomes labelled rows. Choose whether intervals you have not reviewed yet count. Rows between intervals are normally left out; choose a background label to give them that label instead, which teaches the model what is not the gesture. Do that only if the gesture really did not happen in those stretches. Adding the same, unchanged recording twice is refused.",
           }}
         />
       </CardHeader>
@@ -98,11 +101,15 @@ export function RecorderRecordings({ desktopAvailable, labels, datasets, onAdded
             <p className="field-hint">{backgrounds.length === 0 ? "Add a label that is an everyday activity on the Labels tab to use this." : "Only if the gesture did not happen between the intervals."}</p>
           </div>
         </div>
-        {recordings.length === 0 ? (
-          <p className="hint">No recordings from the Recorder yet.</p>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={showAll} onChange={(event) => setShowAll(event.target.checked)} />
+          Also those already in Datasets ({recordings.filter((summary) => addedCount(summary.recordingId) > 0).length})
+        </label>
+        {listed.length === 0 ? (
+          <p className="hint">{recordings.length === 0 ? "No recordings from the Recorder yet." : "Every Recorder session is in Datasets."}</p>
         ) : (
           <ul className="flex flex-col gap-2" aria-label="Recorder recordings">
-            {recordings.map((summary) => {
+            {listed.map((summary) => {
               const usable = eligibleIntervals(summary, filter);
               const added = addedCount(summary.recordingId);
               return (

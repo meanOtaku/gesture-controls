@@ -942,6 +942,7 @@ mod tests {
             review: None,
             group: None,
             labels_from: None,
+            name: None,
             camera: false,
             recorded_at: None,
         }

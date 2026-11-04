@@ -43,10 +43,12 @@ describe("LabelsPage", () => {
     const usage = await screen.findByRole("list", { name: "Where pinch is used" });
     expect(usage.textContent).toContain("Gesture library: Pinch");
     expect(usage.textContent).toContain("Recorder recordings: r1");
-    expect(usage.textContent).toContain("Training data: a.csv");
+    expect(usage.textContent).toContain("Datasets: a.csv");
     expect(usage.textContent).toContain("Recipes: Pinch pause");
     fireEvent.click(within(usage).getByRole("button", { name: "Open Recipes" }));
     expect(onOpen).toHaveBeenCalledWith("recipes");
+    fireEvent.click(within(usage).getByRole("button", { name: "Open Datasets" }));
+    expect(onOpen).toHaveBeenCalledWith("datasets");
     expect(screen.queryByRole("list", { name: "Where fist is used" })).toBeNull();
   });
 });

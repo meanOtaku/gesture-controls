@@ -1,3 +1,4 @@
+import { recordingName } from "../model-lab/recordingNames";
 import type { LabelModel } from "../model-lab/labelModels";
 import { datasetLabels, type DatasetSummary } from "../model-lab/types";
 
@@ -47,7 +48,7 @@ export function recipesUsing(labelId: string, sources: Pick<UsageSources, "gestu
 export function usageOf(labelId: string, sources: UsageSources): LabelUsage {
   return {
     recordings: sources.bundles.filter((bundle) => bundle.labelIds.includes(labelId)).map((bundle) => ({ id: bundle.recordingId })),
-    trainingRecordings: sources.datasets.filter((dataset) => datasetLabels(dataset).includes(labelId)).map((dataset) => ({ id: dataset.id, name: dataset.originalFilename })),
+    trainingRecordings: sources.datasets.filter((dataset) => datasetLabels(dataset).includes(labelId)).map((dataset) => ({ id: dataset.id, name: recordingName(dataset) })),
     gestures: sources.gestures.filter((gesture) => gesture.labelId === labelId).map(({ id, name }) => ({ id, name })),
     models: sources.models.filter((model) => model.label === labelId).map(({ id, state }) => ({ id, state })),
     recipes: recipesUsing(labelId, sources).map(({ id, name }) => ({ id, name })),

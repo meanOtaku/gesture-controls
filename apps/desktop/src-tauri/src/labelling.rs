@@ -315,7 +315,14 @@ pub fn save_labelling_version(
         LabellingSource::File { .. } => None,
     };
     let filename = format!("{name} (labelled)");
-    model_lab::store_pair(&app, &runtime, filename, labelled, None, None, derived_from)
+    // A named recording's new version is named after it, with the next version number.
+    let new_name = derived_from.as_deref().and_then(|parent| model_lab::version_name(&model_lab::load_index(&app).datasets, parent));
+    let mut made = model_lab::store_pair(&app, &runtime, filename, labelled, None, None, derived_from)?;
+    if new_name.is_some() {
+        model_lab::name_dataset(&app, &runtime, &made.id, new_name.clone())?;
+        made.name = new_name;
+    }
+    Ok(made)
 }
 
 /// Exports the recording with these manual labels: as a folder of two files (`ppg.csv`, `imu.csv`, `dataset.json`), never

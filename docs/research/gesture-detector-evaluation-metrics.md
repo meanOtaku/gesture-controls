@@ -68,7 +68,7 @@ The desktop sends each recording's timing in the training spec (`labelTiming`), 
 
 A model must work on a session it has never seen, recorded on another day. The held-out set should contain whole new sessions, not only recordings from the days it trained on. When the old and new sessions perform differently, report both; do not let the old ones carry the average.
 
-The strongest new-session check is the **final test**: seal a whole day you have not trained on (Model Lab → Recordings → Seal a day), and run the candidate over it once. Every sealed run is logged.
+The strongest new-session check is the **final test**: seal a whole day you have not trained on (Datasets → Seal a day), and run the candidate over it once. Every sealed run is logged.
 
 ## Comparison protocol
 
