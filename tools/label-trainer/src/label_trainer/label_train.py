@@ -344,11 +344,13 @@ def check_enough(train: Examples, held_out: Examples, steady_starts: bool = Fals
         )
 
 
-def fit(x: np.ndarray, y: np.ndarray, seed: int, n_trees: int = TREES, backend: str = BACKEND):
+def fit(x: np.ndarray, y: np.ndarray, seed: int, n_trees: int = TREES, backend: str = BACKEND, keep: np.ndarray | None = None):
+    """The model trained on `x` and `y`. For the CNN, `keep` marks rows it must train on whatever it leaves out to stay
+    within its number of negatives (the false activations `reinforce` adds); the trees train on every row."""
     if backend == CNN_BACKEND:
         from . import cnn
 
-        return cnn.fit(x, y, seed)
+        return cnn.fit(x, y, seed, keep)
     from sklearn.ensemble import ExtraTreesClassifier
 
     return ExtraTreesClassifier(n_estimators=n_trees, min_samples_leaf=MIN_SAMPLES_LEAF, max_features=MAX_FEATURES,
@@ -385,18 +387,21 @@ def choose_threshold(probability: np.ndarray, y: np.ndarray) -> float:
 
 
 def reinforce(spec: Spec, model, train: Examples, recordings: dict[str, Recording], ids: list[str]):
-    """With `spec.hard_negatives`, the model trained again with the moments it fired by mistake (a false activation, at the
-    default cut-off ACTIVATION) on its own training recordings `ids` added as more examples of what is not the gesture: an
-    everyday-noise recording teaches most this way. Returns the model (the same one without them) and how many were added."""
+    """With `spec.hard_negatives`, the model trained again with the moments it fired by mistake (a false activation) on its
+    own training recordings `ids` added as more examples of what is not the gesture: an everyday-noise recording teaches
+    most this way. They are found at the lowest cut-off the threshold may then be chosen at, so every mistake it could make
+    at any of them is learnt from (at a fixed 0.5, a model whose scores stay lower found none and was trained the same
+    again). Returns the model (the same one without them) and how many were added."""
     if not spec.hard_negatives:
         return model, 0
     predict = lambda x: model.predict_proba(x)[:, 1]  # noqa: E731
+    lowest = min(CNN_THRESHOLD_CANDIDATES if spec.cnn else THRESHOLD_CANDIDATES)
     xs = []
     for rid in ids:
         scored = timeline(spec, recordings[rid], predict)
         if scored is None:
             continue
-        rises = detections(spec, recordings[rid], *scored, policy_for(ACTIVATION, spec.trigger))["falseRisesNs"]
+        rises = detections(spec, recordings[rid], *scored, policy_for(lowest, spec.trigger))["falseRisesNs"]
         if rises:
             x = inputs(spec, recordings[rid], np.array(rises, dtype=np.int64))
             xs.append(x[np.isfinite(x).all(axis=1)])
@@ -405,7 +410,8 @@ def reinforce(spec: Spec, model, train: Examples, recordings: dict[str, Recordin
         return model, 0
     x = np.concatenate([train.x, mined])
     y = np.concatenate([train.y, np.zeros(mined.shape[0], dtype=train.y.dtype)])
-    return fit(x, y, spec.seed, backend=spec.backend), int(mined.shape[0])
+    keep = np.concatenate([np.zeros(train.y.shape[0], dtype=bool), np.ones(mined.shape[0], dtype=bool)])
+    return fit(x, y, spec.seed, backend=spec.backend, keep=keep), int(mined.shape[0])
 
 
 def out_of_fold_threshold(spec: Spec, train: Examples, recordings: dict[str, Recording], say=lambda _: None) -> tuple[float, str, float | None, dict[str, Any] | None]:

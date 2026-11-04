@@ -11,12 +11,16 @@ The file is JSON with batch normalisation folded into the convolutions, read by 
 plain weights, not code. `predict` evaluates the file exactly as the runtime does, so training can check the exported
 file reproduces the trained network before it is shipped.
 
-PyTorch is only needed to train (the `cnn` extra): `uv run --project tools/label-trainer --extra cnn ...`.
+PyTorch is only needed to train (the `cnn` extra): `uv run --project tools/label-trainer --extra cnn ...`. It trains and
+scores on the GPU where there is one (Apple's MPS, else CUDA), about ten times faster than the CPU for training and forty
+times for scoring; `LABEL_TRAINER_DEVICE=cpu` keeps it on the CPU. The networks are moved back to the CPU when trained, so
+the file and its check (`predict`) are the same either way.
 """
 
 from __future__ import annotations
 
 import json
+import os
 
 import numpy as np
 
@@ -60,6 +64,18 @@ def labels(decisions_ns: np.ndarray, starts_ns: list[int], excluded: list[tuple[
     return y
 
 
+def device() -> str:
+    """Where to train and score: `LABEL_TRAINER_DEVICE` when set, else the GPU there is (MPS, then CUDA), else the CPU."""
+    import torch
+
+    wanted = os.environ.get("LABEL_TRAINER_DEVICE")
+    if wanted:
+        return wanted
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
+
 def _net():
     import torch
     from torch import nn
@@ -92,24 +108,27 @@ class Model:
     def predict_proba(self, x: np.ndarray) -> np.ndarray:
         import torch
 
+        where = device()
         windows = torch.from_numpy(np.asarray(x, dtype=np.float32).reshape(-1, CHANNELS, LENGTH))
         p = np.zeros(len(windows))
         with torch.no_grad():
             for net in self.nets:
-                net.eval()
+                net.to(where).eval()
                 for i in range(0, len(windows), 4096):
-                    p[i:i + 4096] += torch.sigmoid(net(windows[i:i + 4096])).numpy().astype(np.float64)
+                    p[i:i + 4096] += torch.sigmoid(net(windows[i:i + 4096].to(where))).cpu().numpy().astype(np.float64)
+                net.to("cpu")
         p /= len(self.nets)
         return np.stack([1.0 - p, p], axis=1)
 
 
-def fit(x: np.ndarray, y: np.ndarray, seed: int) -> Model:
-    """Trains MEMBERS networks on `x` (decisions x 450 inputs) and `y` (1 or 0), each from its own seed."""
-    return Model([_fit_one(x, y, seed + member) for member in range(MEMBERS)])
+def fit(x: np.ndarray, y: np.ndarray, seed: int, keep: np.ndarray | None = None) -> Model:
+    """Trains MEMBERS networks on `x` (decisions x 450 inputs) and `y` (1 or 0), each from its own seed. `keep` marks rows
+    every network trains on (the false activations it is learning from), never left out to stay within MAX_NEGATIVES."""
+    return Model([_fit_one(x, y, seed + member, keep) for member in range(MEMBERS)])
 
 
-def _fit_one(x: np.ndarray, y: np.ndarray, seed: int):
-    """One network, on all positives and up to MAX_NEGATIVES negatives."""
+def _fit_one(x: np.ndarray, y: np.ndarray, seed: int, keep: np.ndarray | None = None):
+    """One network, on all positives, every row `keep` marks, and up to MAX_NEGATIVES negatives in all."""
     import torch
     from torch import nn
 
@@ -117,19 +136,22 @@ def _fit_one(x: np.ndarray, y: np.ndarray, seed: int):
     torch.set_num_threads(max(1, torch.get_num_threads()))
     rng = np.random.default_rng(seed)
     y = np.asarray(y)
-    negatives = np.flatnonzero(y == 0)
-    if len(negatives) > MAX_NEGATIVES:
-        keep = np.sort(np.concatenate([np.flatnonzero(y == 1), rng.choice(negatives, MAX_NEGATIVES, replace=False)]))
-        x, y = x[keep], y[keep]
-    windows = torch.from_numpy(np.asarray(x, dtype=np.float32).reshape(-1, CHANNELS, LENGTH))
-    truth = torch.from_numpy(y.astype(np.float32))
-    net = _net()
+    kept = np.zeros(len(y), dtype=bool) if keep is None else np.asarray(keep, dtype=bool)
+    negatives = np.flatnonzero((y == 0) & ~kept)
+    room = max(0, MAX_NEGATIVES - int(((y == 0) & kept).sum()))
+    if len(negatives) > room:
+        rows = np.sort(np.concatenate([np.flatnonzero((y == 1) | kept), rng.choice(negatives, room, replace=False)]))
+        x, y = x[rows], y[rows]
+    where = device()
+    windows = torch.from_numpy(np.asarray(x, dtype=np.float32).reshape(-1, CHANNELS, LENGTH)).to(where)
+    truth = torch.from_numpy(y.astype(np.float32)).to(where)
+    net = _net().to(where)
     optimiser = torch.optim.Adam(net.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     positives = max(1.0, float(y.sum()))
-    loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(min(MAX_POSITIVE_WEIGHT, (len(y) - positives) / positives)))
+    loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(min(MAX_POSITIVE_WEIGHT, (len(y) - positives) / positives), device=where))
     for _ in range(EPOCHS):
         net.train()
-        order = torch.from_numpy(rng.permutation(len(y)))
+        order = torch.from_numpy(rng.permutation(len(y))).to(where)
         for b in range(0, len(order), BATCH):
             pick = order[b:b + BATCH]
             if len(pick) < 2:
@@ -138,7 +160,8 @@ def _fit_one(x: np.ndarray, y: np.ndarray, seed: int):
             optimiser.zero_grad()
             loss.backward()
             optimiser.step()
-    net.eval()
+    # Back to the CPU, where the file is written from and the trainer's numpy code reads it.
+    net.to("cpu").eval()
     return net
 
 

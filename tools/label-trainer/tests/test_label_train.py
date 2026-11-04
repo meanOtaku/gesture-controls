@@ -169,14 +169,19 @@ def test_hard_negatives_train_it_again_with_the_moments_it_fired_by_mistake(monk
     spec = lt.Spec("pinch_in", ["everything_else"], [], {}, ["r"], [], False, 17, hard_negatives=True)
     train = lt.Examples(np.ones((4, 2)), np.array([1, 0, 1, 0]), np.array(["r"] * 4), [], np.arange(4))
     monkeypatch.setattr(lt, "timeline", lambda spec, recording, predict: (np.arange(3), np.zeros(3)))
-    monkeypatch.setattr(lt, "detections", lambda *args: {"falseRisesNs": [7, 9]})
+    cut_offs = []
+    monkeypatch.setattr(lt, "detections", lambda spec, recording, times, scores, policy: cut_offs.append(policy.activation) or {"falseRisesNs": [7, 9]})
     monkeypatch.setattr(lt, "inputs", lambda spec, recording, rises: np.full((len(rises), 2), 5.0))
     fitted = {}
-    monkeypatch.setattr(lt, "fit", lambda x, y, seed, backend=lt.BACKEND: fitted.update(x=x, y=y) or "again")
+    monkeypatch.setattr(lt, "fit", lambda x, y, seed, backend=lt.BACKEND, keep=None: fitted.update(x=x, y=y, keep=keep) or "again")
     first = SimpleNamespace(predict_proba=lambda x: np.zeros((len(x), 2)))
     model, mined = lt.reinforce(spec, first, train, {"r": None}, ["r"])
     assert (model, mined) == ("again", 2)
     assert fitted["x"].shape == (6, 2) and fitted["y"].tolist() == [1, 0, 1, 0, 0, 0]
+    # Looked for at the lowest cut-off the threshold may be chosen at, not a fixed 0.5 the model may never reach.
+    assert cut_offs == [min(lt.THRESHOLD_CANDIDATES)]
+    # They are marked to be kept: never among the negatives left out to stay within the CNN's number.
+    assert fitted["keep"].tolist() == [False] * 4 + [True] * 2
     # Off unless asked for.
     assert lt.reinforce(lt.Spec("pinch_in", [], [], {}, ["r"], [], False, 17), first, train, {"r": None}, ["r"]) == (first, 0)
 

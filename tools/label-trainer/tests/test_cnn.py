@@ -57,6 +57,49 @@ def test_the_exported_file_reproduces_the_trained_networks(monkeypatch):
     assert np.max(np.abs(exported - model.predict_proba(x[:40])[:, 1])) < cnn.PARITY_TOLERANCE
 
 
+@pytest.mark.parametrize("where", ["cpu", "gpu"])
+def test_trained_on_the_gpu_or_the_cpu_the_file_reproduces_it_and_the_networks_come_back_to_the_cpu(monkeypatch, where):
+    if where == "gpu":
+        if not (torch.backends.mps.is_available() or torch.cuda.is_available()):
+            pytest.skip("no GPU here")
+        monkeypatch.delenv("LABEL_TRAINER_DEVICE", raising=False)
+    else:
+        monkeypatch.setenv("LABEL_TRAINER_DEVICE", "cpu")
+    monkeypatch.setattr(cnn, "EPOCHS", 2)
+    rng = np.random.default_rng(0)
+    x = rng.random((300, cnn_input.FEATURE_COUNT))
+    y = (x[:, :50].mean(axis=1) > 0.5).astype(int)
+    model = cnn.fit(x, y, 1)
+    assert all(p.device.type == "cpu" for net in model.nets for p in net.parameters())
+    exported = cnn.predict(cnn.to_bytes(model), x[:40])
+    assert np.max(np.abs(exported - model.predict_proba(x[:40])[:, 1])) < cnn.PARITY_TOLERANCE
+
+
+def test_the_rows_it_must_keep_are_never_left_out_to_stay_within_its_negatives(monkeypatch):
+    monkeypatch.setattr(cnn, "EPOCHS", 1)
+    monkeypatch.setattr(cnn, "MAX_NEGATIVES", 20)
+    seen = []
+    real_net = cnn._net
+
+    def recording_net():
+        net = real_net()
+        original = net.forward
+        net.forward = lambda x: (seen.append(x.detach().cpu().numpy().copy()), original(x))[1]
+        return net
+    monkeypatch.setattr(cnn, "_net", recording_net)
+    rng = np.random.default_rng(1)
+    x = rng.random((200, cnn_input.FEATURE_COUNT))
+    y = np.zeros(200, dtype=int)
+    y[:10] = 1
+    keep = np.zeros(200, dtype=bool)
+    keep[-5:] = True                                  # five false activations to learn from
+    x[-5:, 0] = 7.0                                   # marked so they can be found among the batches
+    cnn._fit_one(x, y, 3, keep)
+    trained = np.concatenate([batch.reshape(len(batch), -1) for batch in seen])
+    assert int((trained[:, 0] == 7.0).sum()) == 5     # every one of them, in the one epoch
+    assert len(trained) == 10 + 20                     # the positives, and 20 negatives in all
+
+
 def test_a_cnn_spec_trains_a_cnn_bundle(tmp_path, monkeypatch):
     monkeypatch.setattr(cnn, "EPOCHS", 3)
     monkeypatch.setattr(cnn, "MEMBERS", 1)
