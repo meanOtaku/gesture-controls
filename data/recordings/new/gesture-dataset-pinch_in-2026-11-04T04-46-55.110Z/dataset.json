@@ -1,0 +1,12 @@
+{
+  "formatVersion": 1,
+  "ppgRows": 3325,
+  "imuRows": 13306,
+  "labels": [],
+  "context": {
+    "arm": "resting",
+    "pinch": "light",
+    "strap": "normal",
+    "wrist": "left"
+  }
+}
