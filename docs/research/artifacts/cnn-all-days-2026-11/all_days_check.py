@@ -23,10 +23,12 @@ activations an hour on the training recordings only), with and without `hardNega
 activations, found at the lowest cut-off). The live CNN ("Pinch in tree", trained on most of the 14/17 Oct sessions) is
 replayed on the same held-out recordings for comparison; on 14 and 17 Oct it is not being tested on unseen data.
 
-"anytime" trains without the gate, so the model also sees the moments the hand was moving, and is replayed both without
+"pretrained" is "anytime" with `pretraining.py` first. "wide" is "anytime" on a 2 s window ending at the same moment, with a
+fourth convolution (dilation 8) so the filters reach 1.2 s; `widen` changes the constants for that run, here only, so its
+bundles are for this comparison and the app cannot run them. "anytime" trains without the gate, so the model also sees the moments the hand was moving, and is replayed both without
 the gate and with it (the second as "all moments, gate when running", at the same threshold).
 
-    tools/label-trainer/.venv/bin/python docs/research/artifacts/cnn-all-days-2026-11/all_days_check.py hard|plain|anytime
+    tools/label-trainer/.venv/bin/python docs/research/artifacts/cnn-all-days-2026-11/all_days_check.py hard|plain|anytime|pretrained|wide
 
 Each mode adds to results.json and rewrites results.md here, skipping a day already in
 results.json. Bundles go under runs/. The live CNN comes from the app's `model-lab` folder (`MODEL_LAB_DIR` for a copy of
@@ -43,8 +45,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT / "tools" / "label-trainer" / "src"))
 sys.path.insert(0, str(ROOT / "docs" / "research" / "artifacts" / "cnn-new-on-old-2026-11"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from label_trainer import cnn, label_train as lt  # noqa: E402
+from label_trainer import cnn, cnn_input, label_train as lt  # noqa: E402
+import pretraining  # noqa: E402
 from new_on_old_check import LIVE_MODEL, NEGATIVES, headline, replay  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
@@ -72,6 +76,7 @@ RECORDINGS = [
     (f"{NOISE}04-26-46.986Z", "noise: support, angled", None, "noGesture"),
 ]
 DAYS = ["14 Oct", "17 Oct", "3 Nov", "4 Nov"]
+SEED = int(os.environ.get("SEED", "17"))   # another seed adds its own models and runs, for how much a result is chance
 
 
 def resolve() -> tuple[dict[str, Path], dict[str, str], dict[str, str | None], dict[str, str]]:
@@ -86,12 +91,23 @@ def resolve() -> tuple[dict[str, Path], dict[str, str], dict[str, str | None], d
     return paths, kind, fold, timing
 
 
+def widen() -> None:
+    """The window and the network for the "wide" run."""
+    cnn_input.WINDOW_TICKS = 100
+    cnn_input.GRID_TICKS = cnn_input.WINDOW_TICKS + cnn_input.HISTORY_TICKS - 1
+    cnn_input.SPAN_NS = (cnn_input.GRID_TICKS - 1) * cnn_input.TICK_NS
+    cnn_input.FEATURE_NAMES = tuple(f"cnn_{c}_t{t:03d}" for c in cnn_input.CHANNELS for t in range(cnn_input.WINDOW_TICKS))
+    cnn_input.FEATURE_COUNT = len(cnn_input.FEATURE_NAMES)
+    cnn.LENGTH = cnn_input.WINDOW_TICKS
+    cnn.CONVOLUTIONS = (*cnn.CONVOLUTIONS, (64, 8))
+
+
 def spec_for(paths: dict[str, Path], timing: dict[str, str], train: list[str], evaluation: list[str], hard: bool, steady: bool = True) -> dict:
     ids = train + evaluation
     return {
         "version": 1, "target": "pinch_in", "negatives": NEGATIVES, "excludes": ["left_out"],
         "recordings": {rid: str(paths[rid]) for rid in ids}, "train": train, "evaluation": evaluation,
-        "sources": list(lt.MOTION_SOURCES), "backend": lt.CNN_BACKEND, "seed": 17, "research": False, "labelOffsetMs": 0,
+        "sources": list(lt.MOTION_SOURCES), "backend": lt.CNN_BACKEND, "seed": SEED, "research": False, "labelOffsetMs": 0,
         "labelTiming": {rid: timing[rid] for rid in ids}, "steadyStarts": steady, "hardNegatives": hard,
     }
 
@@ -109,7 +125,9 @@ def scored(name: str, threshold: float, replays: dict, kind: dict[str, str]) -> 
 
 
 def main(mode: str) -> None:
-    hard, steady = mode == "hard", mode != "anytime"
+    hard, pretrain, wide, steady = mode == "hard", mode == "pretrained", mode == "wide", mode not in ("anytime", "pretrained", "wide")
+    if wide:
+        widen()
     paths, kind, fold, timing = resolve()
     results_path = HERE / "results.json"
     results = json.loads(results_path.read_text()) if results_path.exists() else {"budgetPerHour": BUDGET, "folds": {}}
@@ -117,15 +135,19 @@ def main(mode: str) -> None:
         evaluation = [r for r in paths if fold[r] == day]
         train = [r for r in paths if fold[r] != day]
         entry = results["folds"].setdefault(day, {"heldOut": [kind[r] for r in evaluation], "models": {}})
-        name = "all days + noise, hard negatives" if hard else "all days + noise" if steady else "all moments, no still-hand gate"
+        name = "all days + noise, hard negatives" if hard else "all days + noise" if steady else "all moments, pretrained" if pretrain else "all moments, 2 s window" if wide else "all moments, no still-hand gate"
+        name += "" if SEED == 17 else f" (seed {SEED})"
         if name in entry["models"]:
             continue
-        out = HERE / "runs" / f"{mode}-{day.replace(' ', '-')}"
+        out = HERE / "runs" / f"{mode}-{day.replace(' ', '-')}{'' if SEED == 17 else f'-seed{SEED}'}"
         raw = spec_for(paths, timing, train, evaluation, hard, steady)
         started = time.time()
         if not (out / "result.json").exists() or json.loads((out / "result.json").read_text())["outcome"] == "failed":
             print(f"== {day}: {name}", flush=True)
+            restore = pretraining.install(lt.parse_spec(raw), lt.load_spec_recordings(lt.parse_spec(raw))) if pretrain else None
             lt.run(raw, out)
+            if restore:
+                restore()
         result = json.loads((out / "result.json").read_text())
         if result["outcome"] == "failed":
             entry["models"][name] = {"failed": result["message"]}
@@ -138,7 +160,7 @@ def main(mode: str) -> None:
             entry["models"][name] = {**scored(name, threshold, replays, kind), "hardNegatives": result["metrics"].get("hardNegatives"),
                                      "crossCheck": {k: (result["metrics"].get("crossCheckEvents") or {}).get(k) for k in ("gestures", "caught", "falseActivationsPerHour")},
                                      "minutes": round((time.time() - started) / 60)}
-            if not steady:
+            if not steady and not pretrain and not wide and SEED == 17:
                 gated = lt.parse_spec({**raw, "steadyStarts": True})
                 both = replay(gated, lambda x: cnn.predict(data, x), recs, evaluation, (threshold,))
                 entry["models"]["all moments, gate when running"] = scored("all moments, gate when running", threshold, both, kind)

@@ -116,6 +116,16 @@ Full results: [`cnn-all-days-2026-11`](../research/artifacts/cnn-all-days-2026-1
   match the row above (0–28 an hour).
 - **Leave Learn from its own false alarms off.** With noise in training it found 2–70 mistakes per fold, and it caught
   fewer pinches (27% against 31%) for no fewer false activations.
+- **A 2 s window beats 1 s, with a fourth convolution so the filters reach 1.2 s.** The window ends at the same moment, so it
+  decides no later. On two seeds, at a threshold holding about 20 false activations an hour, it caught 49–51% against 45%.
+  On 3 and 4 Nov it caught about 95% (1 s: about 75%), mostly by firing on time: on 3 Nov, 1 late pinch against 23. October
+  barely moved. Its threshold, chosen on the training recordings, let in 33–65 false activations an hour on unseen noise, over
+  the budget, many of them on fists, so it needs a stricter choice. The buzz at each cue does not explain the gain: with the
+  motion before each touch replaced by earlier rest, 140 of 150 pinches still fired, against 141. Nearly all recorded pinches
+  follow a still hand, so how it does after movement is unknown. The app does not run this window yet.
+- **Don't pretrain it on unlabelled data.** Teaching its convolutions to fill in hidden stretches of a window first
+  (`pretraining.py`, one seed) caught 48% against 43% at its chosen threshold, but with 27 false activations an hour on noise
+  against 7. Compared at about 21 false activations an hour across all held-out data, it caught 152 pinches against 168.
 - **Mark pinches against each session's own hand.** How close the fingers look depends on how the hand faces the camera, so a
   fixed level of 0.35 hand sizes missed many real pinches, which then trained as not-a-pinch and were counted as false
   activations. Judged per session (`edges` in `scripts/relabel_pinch_from_camera.py`, and `PinchDips` in the app), false
