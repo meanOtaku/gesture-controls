@@ -2985,10 +2985,28 @@ pub enum IntervalFilter {
     NotExcluded,
 }
 
+/// The rows after `interval`'s end that are still within how long it lasted, when it was saved too short to train on but
+/// lasted long enough. An interval is saved as a range of rows, and rows land in a session in bursts, so a 300 ms camera mark
+/// can span 180 to 440 ms of rows. Training ignores a hold under [`crate::dataset_files::MIN_HOLD_MS`], which would lose that
+/// gesture altogether. The start stands; only the end moves, and an interval long enough to train on is left as it is.
+fn restored_rows(interval: &AnnotationInterval, rows: &[&str]) -> std::ops::Range<usize> {
+    let (start, end) = (&interval.resolved_start, &interval.resolved_end);
+    let saved_ms = end.source_timestamp_ns.saturating_sub(start.source_timestamp_ns) as f64 / 1e6;
+    let lasted_ms = interval.requested_end_monotonic_ns.saturating_sub(interval.requested_start_monotonic_ns) as f64 / 1e6;
+    let first = end.raw_row + 1;
+    if saved_ms >= crate::dataset_files::MIN_HOLD_MS || lasted_ms < crate::dataset_files::MIN_HOLD_MS {
+        return first..first;
+    }
+    let until = start.source_timestamp_ns as f64 + lasted_ms * 1e6;
+    let stamp = |row: &str| row.split(',').next().and_then(|t| t.parse::<f64>().ok());
+    let count = rows[first.min(rows.len())..].iter().take_while(|row| stamp(row).is_some_and(|t| t <= until)).count();
+    first..first + count
+}
+
 /// A Model Lab dataset CSV made from a saved recording: each raw row gets the label of the interval that covers it, and
 /// rows no kept interval covers are left unlabelled (Model Lab drops them) or, with `rest_label`, given that label (the
-/// background label for "everything else"). Returns the CSV, how many rows carry a label
-/// and how many kept intervals there were.
+/// background label for "everything else"). An interval saved too short to train on though it lasted long enough is restored
+/// to its length (`restored_rows`). Returns the CSV, how many rows carry a label and how many kept intervals there were.
 fn dataset_csv_from_bundle(
     raw_csv: &str,
     annotations: &AnnotationsFile,
@@ -3000,14 +3018,11 @@ fn dataset_csv_from_bundle(
     let rows: Vec<&str> = lines.collect();
     let mut labels: Vec<Option<&str>> = vec![None; rows.len()];
     let mut kept = 0;
-    for interval in &annotations.intervals {
-        let keep = match filter {
-            IntervalFilter::ApprovedOnly => interval.curation_status == CurationStatus::Approved,
-            IntervalFilter::NotExcluded => interval.curation_status != CurationStatus::Excluded,
-        };
-        if !keep {
-            continue;
-        }
+    let keep = |interval: &&AnnotationInterval| match filter {
+        IntervalFilter::ApprovedOnly => interval.curation_status == CurationStatus::Approved,
+        IntervalFilter::NotExcluded => interval.curation_status != CurationStatus::Excluded,
+    };
+    for interval in annotations.intervals.iter().filter(|i| keep(i)) {
         let (start, end) = (
             interval.resolved_start.raw_row,
             interval.resolved_end.raw_row,
@@ -3021,6 +3036,11 @@ fn dataset_csv_from_bundle(
         kept += 1;
         for slot in &mut labels[start..=end] {
             *slot = Some(interval.label_id.as_str());
+        }
+    }
+    for interval in annotations.intervals.iter().filter(|i| keep(i)) {
+        for row in restored_rows(interval, &rows) {
+            labels[row] = Some(interval.label_id.as_str());
         }
     }
     let labelled = labels.iter().flatten().count();
@@ -3593,6 +3613,43 @@ mod tests {
         let mut unlabeled = proposal("b", 40, 50);
         unlabeled.label_id = " ".into();
         assert!(merge_proposed_intervals(&existing, &[unlabeled], 100).is_err());
+    }
+
+    #[test]
+    fn a_mark_saved_too_short_to_train_on_gets_back_the_length_it_lasted() {
+        // Rows every 20 ms. A 300 ms mark saved as rows 5 to 13 (160 ms), then a hold straight after it, then a mark saved as
+        // 240 ms, long enough to leave alone.
+        let raw = format!(
+            "{}\n{}",
+            RAW_CSV_HEADER.join(","),
+            (0..50)
+                .map(|i| format!("{}{}", i * 20_000_000, ",0".repeat(15)))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+        let mark = |label: &str, from: usize, to: usize, lasted_ms: i64| {
+            let mut interval = proposal(label, from, to);
+            interval.label_id = label.into();
+            interval.resolved_start.source_timestamp_ns = from as i64 * 20_000_000;
+            interval.resolved_end.source_timestamp_ns = to as i64 * 20_000_000;
+            interval.requested_start_monotonic_ns = 1_000_000_000;
+            interval.requested_end_monotonic_ns = 1_000_000_000 + lasted_ms * 1_000_000;
+            interval
+        };
+        let annotations = AnnotationsFile {
+            format_version: 1,
+            recording_id: "r".into(),
+            intervals: vec![mark("pinch_in", 5, 13, 300), mark("pinch_hold", 14, 30, 340), mark("pinch_out", 31, 43, 300), mark("tap", 45, 47, 60)],
+        };
+        let (csv, ..) = dataset_csv_from_bundle(&raw, &annotations, IntervalFilter::NotExcluded, None).unwrap();
+        let labels: Vec<&str> = csv.lines().skip(1).map(|line| line.rsplit(',').next().unwrap()).collect();
+        let count = |label: &str| labels.iter().filter(|l| **l == label).count();
+        // Back to 300 ms (rows 5 to 20), over the start of the hold; the hold and pinch out, long enough, keep their rows.
+        assert_eq!(labels[5..=20], ["pinch_in"; 16]);
+        assert_eq!(labels[21], "pinch_hold");
+        assert_eq!((count("pinch_hold"), count("pinch_out")), (10, 13));
+        // A mark that really was short stays short: training is right to ignore it.
+        assert_eq!(count("tap"), 3);
     }
 
     #[test]

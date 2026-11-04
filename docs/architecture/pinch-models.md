@@ -105,6 +105,13 @@ Full results: [`cnn-all-days-2026-11`](../research/artifacts/cnn-all-days-2026-1
 - **Leave Learn from its own false alarms off.** With noise in training it found 2–70 mistakes per fold, and it caught
   fewer pinches (27% against 31%) for no fewer false activations.
 
+These results used Model Lab's older copies of the 3 Nov sessions, which had lost some pinches. A mark is saved as a range of
+rows, and rows land in bursts, so a 0.3 s camera mark can span 0.18–0.44 s, and the trainer ignores a mark under 0.2 s. A mark
+saved too short is now restored to the length it lasted when a session joins Datasets: on six real sessions that took them
+from 91 pinches to 106. The script reads `data/recordings/`, so a new run has about 12% more 3 Nov pinch moments and its
+numbers will differ a little. Recordings added to Model Lab before this fix keep their short marks: delete them and add the
+session again (Datasets, **From the Recorder**, **Also those already in Datasets**).
+
 Still open:
 
 - **The October sessions are caught poorly by every model:** 5–11% held out. Even the live CNN, which trained on most of the
@@ -166,16 +173,10 @@ times one training pass and one scoring pass on the card and on the processor. A
 multiply to see how long a run will take. If the card is slower than the processor, set `LABEL_TRAINER_DEVICE=cpu` for real
 runs.
 
-**5. Copy the recordings.** The 4 Nov sessions are in the repo (`data/recordings/new/`), but the older ones are read from the
-app's Model Lab folder. Copy it from the Mac (about 105 MB):
-
-```text
-~/Library/Application Support/dev.meanotaku.spatial-gesture-control/model-lab/datasets
-~/Library/Application Support/dev.meanotaku.spatial-gesture-control/model-lab/label-models
-```
-
-Keep them together in one folder, for example `~/model-lab/`, and point `MODEL_LAB_DIR` at it. `label-models` is only for
-comparing with the live CNN; without it, that comparison is left out.
+**5. The recordings are already there.** Every recording the script trains and tests on is in the repo, under
+`data/recordings/`, so nothing needs copying. To also compare with the live CNN, copy
+`~/Library/Application Support/dev.meanotaku.spatial-gesture-control/model-lab/label-models` from the Mac into a folder such
+as `~/model-lab/`, and set `MODEL_LAB_DIR=~/model-lab`. Without it, that comparison is left out.
 
 **6. Train.** From the repo's top folder, `plain` runs the configuration that did best, one model for each held-out day:
 
@@ -184,7 +185,7 @@ rm docs/research/artifacts/cnn-all-days-2026-11/results.json
 ```
 
 ```bash
-MODEL_LAB_DIR=~/model-lab tools/label-trainer/.venv/bin/python docs/research/artifacts/cnn-all-days-2026-11/all_days_check.py plain
+tools/label-trainer/.venv/bin/python docs/research/artifacts/cnn-all-days-2026-11/all_days_check.py plain
 ```
 
 The first command matters: the script skips any held-out day already in `results.json`, so with the committed file it would
@@ -228,6 +229,6 @@ models. It arrives as a Draft and has to be approved and activated like any othe
 | "This PyTorch build has no GPU support" | A CPU-only build was installed. Repeat the `uv pip install` line |
 | The version went back to 2.15 | `uv run --extra cnn` or `uv sync --extra cnn` replaced it. Use `.venv/bin/python` directly, and repeat step 3 |
 | It runs on the processor from the app's **Train** button | The app runs `uv run --extra cnn`, which installs the locked build. On this machine, train from the command line |
-| `no single Model Lab recording starts with …` | `MODEL_LAB_DIR` is wrong, or `datasets/` was not copied |
+| `no recording at …` | The clone is incomplete, or missing the recordings: run `git pull` |
 | It finishes at once and trains nothing | `results.json` is still there: see step 6 |
 | "the exported model differs from the trained one" | The file did not match the network closely enough on this GPU, so the model is not shipped. Run again with `LABEL_TRAINER_DEVICE=cpu` |

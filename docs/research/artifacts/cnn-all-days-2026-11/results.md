@@ -45,3 +45,8 @@ Trained on the M3's GPU: 3 to 8 minutes a model, about 45 minutes for all eight.
 - **Learning from its own false alarms did not help here.** With the fix it found 2 to 70 to learn from, and it caught fewer
   pinches (27% against 31%) for no fewer false activations. With noise in training, the model already makes few of the
   mistakes this is meant for. Leave it off by default.
+
+These runs read the 14 Oct, 17 Oct and 3 Nov sessions from Model Lab. Its 3 Nov copies, added from the Recorder, had lost some of
+their pinch starts: 300 ms marks saved as a range of rows, which shrank under the 200 ms training needs. `all_days_check.py`
+now reads `data/recordings/`, whose exports kept most of them (388 pinch moments against 346 in the 3 Nov fold), so a new run
+will differ a little. Sessions joining Datasets now get such marks back at their real length.

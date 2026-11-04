@@ -1,6 +1,6 @@
 """The CNN trained on every camera-timed pinch session and the everyday noise of 4 Nov, each day held out in turn.
 
-Recordings (Model Lab's, and `data/recordings/new/` for the 3 Nov 12:40 session and the 4 Nov sessions):
+Recordings, all in `data/recordings/` (the same data as Model Lab's, so this runs from a clone of the repo):
 
 * camera-timed pinch sessions: 14 Oct (9), 17 Oct (5), 3 Nov (5), 4 Nov (2: 04:49 and 04:53);
 * the 14 Oct fist sessions (4): no pinch;
@@ -25,9 +25,9 @@ replayed on the same held-out recordings for comparison; on 14 and 17 Oct it is 
 
     tools/label-trainer/.venv/bin/python docs/research/artifacts/cnn-all-days-2026-11/all_days_check.py hard|plain
 
-Run "hard" first, then "plain"; each adds to results.json and rewrites results.md here. Bundles go under runs/. Set
-`MODEL_LAB_DIR` to a copy of the app's `model-lab` folder on another machine (the steps are in
-`docs/architecture/pinch-models.md`); without its `label-models/` the live CNN is left out.
+Run "hard" first, then "plain"; each adds to results.json and rewrites results.md here, skipping a day already in
+results.json. Bundles go under runs/. The live CNN comes from the app's `model-lab` folder (`MODEL_LAB_DIR` for a copy of
+it); without it, that comparison is left out.
 """
 from __future__ import annotations
 
@@ -42,42 +42,42 @@ sys.path.insert(0, str(ROOT / "tools" / "label-trainer" / "src"))
 sys.path.insert(0, str(ROOT / "docs" / "research" / "artifacts" / "cnn-new-on-old-2026-11"))
 
 from label_trainer import cnn, label_train as lt  # noqa: E402
-from new_on_old_check import DATASETS, LIVE_MODEL, NEGATIVES, NEW, headline, replay  # noqa: E402
+from new_on_old_check import LIVE_MODEL, NEGATIVES, headline, replay  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 BUDGET = lt.FALSE_ACTIVATIONS_BUDGET_PER_HOUR
 
-# (Model Lab id prefix or data/recordings/new folder, what it is, the day whose fold holds it out, label timing)
+RELABELLED = "pinch-relabelled/2026-10-downloads/gesture-dataset-pinch-"
+FIST = "old/2026-10-downloads/gesture-dataset-fist-2026-10-14T"
+PINCH = "new/gesture-dataset-pinch_in-2026-11-0"
+NOISE = "new/gesture-dataset-unlabeled-2026-11-04T"
+# (path under data/recordings, what it is, the day whose fold holds it out, label timing). Model Lab holds the same data.
 RECORDINGS = [
-    *[(p, "pinch", "14 Oct", "camera") for p in ["82ee8162", "60ef94c6", "827be2d1", "35af4113", "6d6f7b3c", "c6c2a72c", "20a4372a", "b2fcf81f", "aad37c5c"]],
-    *[(p, "fist", "14 Oct", "noGesture") for p in ["08f918d8", "6a12cac7", "3942decb", "12c09140"]],
-    *[(p, "pinch", "17 Oct", "camera") for p in ["833eba84", "6a0d166e", "08d6dfbf", "7b445f79", "ca87d8fd"]],
-    *[(p, "pinch", "3 Nov", "camera") for p in ["8ed9fd23", "9d150228", "a842ec17", "5be1c51f", "gesture-dataset-pinch_in-2026-11-03T12-40-05.547Z"]],
-    ("gesture-dataset-pinch_in-2026-11-04T04-49-21.416Z", "pinch", "4 Nov", "camera"),
-    ("gesture-dataset-pinch_in-2026-11-04T04-53-02.645Z", "pinch", "4 Nov", "camera"),
-    ("gesture-dataset-unlabeled-2026-11-04T03-54-31.816Z", "noise: active", "14 Oct", "noGesture"),
-    ("gesture-dataset-unlabeled-2026-11-04T04-37-45.372Z", "noise: active", "17 Oct", "noGesture"),
-    ("gesture-dataset-unlabeled-2026-11-04T04-03-41.167Z", "noise: still", "3 Nov", "noGesture"),
-    ("gesture-dataset-unlabeled-2026-11-04T04-09-05.352Z", "noise: support, flat", "3 Nov", "noGesture"),
-    ("gesture-dataset-unlabeled-2026-11-04T04-15-17.305Z", "noise: support, angled", "4 Nov", "noGesture"),
-    ("gesture-dataset-unlabeled-2026-11-04T04-20-47.293Z", "noise: support, angled", None, "noGesture"),
-    ("gesture-dataset-unlabeled-2026-11-04T04-26-46.986Z", "noise: support, angled", None, "noGesture"),
+    *[(f"{RELABELLED}2026-10-14T{t}.csv", "pinch", "14 Oct", "camera") for t in ["00-54-06.988Z", "00-55-38.245Z", "00-57-01.701Z", "00-58-20.761Z", "00-59-37.623Z", "01-00-54.801Z", "01-04-14.013Z", "01-05-31.133Z", "01-13-08.108Z"]],
+    *[(f"{FIST}{t}.csv", "fist", "14 Oct", "noGesture") for t in ["01-02-50.880Z", "01-06-46.525Z", "01-10-16.565Z", "01-11-31.499Z"]],
+    *[(f"{RELABELLED}2026-10-17T{t}", "pinch", "17 Oct", "camera") for t in ["12-21-44.346Z", "12-23-03.399Z.csv", "12-25-10.832Z.csv", "12-26-46.748Z.csv", "12-40-50.602Z"]],
+    *[(f"{PINCH}3T{t}", "pinch", "3 Nov", "camera") for t in ["01-08-16.560Z", "01-10-50.957Z", "01-13-19.283Z", "01-17-14.928Z", "12-40-05.547Z"]],
+    (f"{PINCH}4T04-49-21.416Z", "pinch", "4 Nov", "camera"),
+    (f"{PINCH}4T04-53-02.645Z", "pinch", "4 Nov", "camera"),
+    (f"{NOISE}03-54-31.816Z", "noise: active", "14 Oct", "noGesture"),
+    (f"{NOISE}04-37-45.372Z", "noise: active", "17 Oct", "noGesture"),
+    (f"{NOISE}04-03-41.167Z", "noise: still", "3 Nov", "noGesture"),
+    (f"{NOISE}04-09-05.352Z", "noise: support, flat", "3 Nov", "noGesture"),
+    (f"{NOISE}04-15-17.305Z", "noise: support, angled", "4 Nov", "noGesture"),
+    (f"{NOISE}04-20-47.293Z", "noise: support, angled", None, "noGesture"),
+    (f"{NOISE}04-26-46.986Z", "noise: support, angled", None, "noGesture"),
 ]
 DAYS = ["14 Oct", "17 Oct", "3 Nov", "4 Nov"]
 
 
 def resolve() -> tuple[dict[str, Path], dict[str, str], dict[str, str | None], dict[str, str]]:
-    """Each recording's path, what it is, the fold that holds it out and its label timing, keyed by id."""
-    ids = [p.name for p in DATASETS.iterdir() if p.is_dir()]
+    """Each recording's path, what it is, the fold that holds it out and its label timing, keyed by its name."""
     paths, kind, fold, timing = {}, {}, {}, {}
-    for key, what, day, when in RECORDINGS:
-        if key.startswith("gesture-dataset"):
-            rid, path = key, NEW / key
-        else:
-            match = [i for i in ids if i.startswith(key)]
-            if len(match) != 1:
-                raise SystemExit(f"no single Model Lab recording starts with {key}")
-            rid, path = match[0], DATASETS / match[0]
+    for relative, what, day, when in RECORDINGS:
+        path = ROOT / "data" / "recordings" / relative
+        if not path.exists():
+            raise SystemExit(f"no recording at {path}")
+        rid = path.stem if path.is_file() else path.name
         paths[rid], kind[rid], fold[rid], timing[rid] = path, what, day, when
     return paths, kind, fold, timing
 
