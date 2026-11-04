@@ -1,5 +1,8 @@
 # label-trainer
 
+[The pinch models](../../docs/architecture/pinch-models.md) explains the trees and the CNN side by side, and how to train on
+another machine, including an older NVIDIA card. `python -m label_trainer.gpu_check` says what a machine will train on.
+
 Offline training of **one model for one label**: the PPG pinch-start model. The desktop app runs it when you train a model
 in Model Lab, and imports the bundle it writes.
 

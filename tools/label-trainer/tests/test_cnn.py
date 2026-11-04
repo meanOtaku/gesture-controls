@@ -3,7 +3,7 @@ import json
 import numpy as np
 import pytest
 
-from label_trainer import cnn, cnn_input, label_train as lt
+from label_trainer import cnn, cnn_input, gpu_check, label_train as lt
 from tests.make_cnn_input_cases import FIXTURE, build
 from tests.pulse_data import spec_for
 
@@ -73,6 +73,28 @@ def test_trained_on_the_gpu_or_the_cpu_the_file_reproduces_it_and_the_networks_c
     assert all(p.device.type == "cpu" for net in model.nets for p in net.parameters())
     exported = cnn.predict(cnn.to_bytes(model), x[:40])
     assert np.max(np.abs(exported - model.predict_proba(x[:40])[:, 1])) < cnn.PARITY_TOLERANCE
+
+
+def test_a_gpu_the_build_sees_but_cannot_run_is_left_for_the_cpu(monkeypatch, capsys):
+    monkeypatch.delenv("LABEL_TRAINER_DEVICE", raising=False)
+    monkeypatch.setattr(torch.backends.mps, "is_available", lambda: False)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)   # an old card: seen, but the build has no code for it
+    monkeypatch.setattr(cnn, "_runs", {})
+
+    def no_kernel(*args, **kwargs):
+        raise RuntimeError("CUDA error: no kernel image is available for execution on the device\nmore detail")
+    monkeypatch.setattr(torch.nn, "Conv1d", no_kernel)
+    assert cnn.device() == "cpu" and cnn.device() == "cpu"
+    assert capsys.readouterr().out.count("no kernel image") == 1        # said once
+    # Asking for it by name fails loudly instead.
+    monkeypatch.setenv("LABEL_TRAINER_DEVICE", "cuda")
+    assert cnn.device() == "cuda"
+
+
+def test_the_gpu_check_says_what_it_will_use_and_times_it(capsys):
+    assert gpu_check.main(rows=300) in ("cpu", "mps", "cuda")
+    out = capsys.readouterr().out
+    assert "The trainer will use:" in out and "one training pass over 300 moments" in out
 
 
 def test_the_rows_it_must_keep_are_never_left_out_to_stay_within_its_negatives(monkeypatch):

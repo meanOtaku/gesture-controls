@@ -344,6 +344,13 @@ def check_enough(train: Examples, held_out: Examples, steady_starts: bool = Fals
         )
 
 
+def cnn_device() -> str:
+    """Where the CNN trains, for the log."""
+    from . import cnn
+
+    return cnn.device()
+
+
 def fit(x: np.ndarray, y: np.ndarray, seed: int, n_trees: int = TREES, backend: str = BACKEND, keep: np.ndarray | None = None):
     """The model trained on `x` and `y`. For the CNN, `keep` marks rows it must train on whatever it leaves out to stay
     within its number of negatives (the false activations `reinforce` adds); the trees train on every row."""
@@ -859,7 +866,7 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
         train = examples(spec, recordings, spec.train)
         held_out = examples(spec, recordings, spec.evaluation)
         check_enough(train, held_out, spec.steady_starts)
-        what = "the CNN" if spec.cnn else f"{TREES} trees"
+        what = f"the CNN on {cnn_device()}" if spec.cnn else f"{TREES} trees"
         say(f"Training {what} on {train.y.shape[0]} moments ({int(train.y.sum())} starts) from {len(spec.train)} recordings")
         model = fit(train.x, train.y, spec.seed, backend=spec.backend)
         model, mined = reinforce(spec, model, train, recordings, spec.train)

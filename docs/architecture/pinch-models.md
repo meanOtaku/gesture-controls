@@ -1,0 +1,233 @@
+# The pinch models: trees and CNN
+
+The app detects a gesture with **one model per label**, run on the watch's pulse sensor and motion. A label's model can be
+one of two kinds, trained by the same trainer (`tools/label-trainer`) and judged by the same rules. This page says how
+each works, how training goes, where they stand, and how to train on another machine, including one with an older NVIDIA
+card such as a GTX 1050 Ti.
+
+Related: [Gesture detector evaluation metrics](../research/gesture-detector-evaluation-metrics.md) (how models are judged),
+[label inference](label-inference.md) (how they run in the app).
+
+## The two models
+
+Both answer one question at every pulse sample: did the gesture just start? They read the same sensors and differ in what
+they are shown, how they decide, and how much they learn from.
+
+| | **Trees** (`ppg-onset-trees`) | **CNN** (`ppg-imu-cnn`) |
+|---|---|---|
+| Input | 2,733 summary numbers worked out by code | The raw signals: 9 channels × 50 steps = 450 numbers |
+| Sensors | Pulse (green, red, infrared), accelerometer, gyroscope | The same |
+| What it sees | Statistics of the last 0.3, 0.6 and 1.3 s | The last 1 s, each channel scaled by its own last 10 s |
+| Model | 300 decision trees that vote (ExtraTrees) | 3 small neural networks, averaged |
+| Moments learnt from | Chosen ones: about 1,000–1,300 | Nearly every pulse sample: tens of thousands |
+| Decides | About 0.88 s after a gesture starts | About 0.5 s after |
+| Catches a start | 0.68–1.28 s after it | 0.3–0.9 s after it |
+| Data needed before scoring | About 5.6 s | 11 s |
+| File | `model.trees` | `model.cnn` |
+| Training needs | numpy, scikit-learn | PyTorch; much faster on a GPU |
+
+### Trees
+
+Code in `ppg_onset.py` and `imu_onset.py` describes each moment, then the trees find rules on those numbers.
+
+- **Pulse (1,701 inputs):** each moment is compared with the 1, 2 and 4 s before it (a z-score against each). Its slope,
+  curvature and jerk are worked out from the samples before it, and 21 statistics of those are taken over the last 0.3, 0.6
+  and 1.3 s.
+- **Motion (1,032 inputs):** the same statistics of each axis, its size and its change, and how much it moved against the
+  3 s before.
+- **Learns from** (`ppg_onset.sample_decisions`): as the gesture, the moment 0.88 s after each start. As not the gesture:
+  the same moment after other gestures' starts, up to 20 moments inside holds and 20 in quiet time per recording, and moments
+  just after a start, which stop it firing too early. A recording with no start of the gesture gives about 30 moments a
+  minute instead.
+- **Settings:** 300 trees, at least 3 samples a leaf, 70% of the inputs per split. These came from the research and are not
+  tuned per run.
+
+It works from little data and trains quickly, but it only sees what the summaries describe.
+
+### CNN
+
+`cnn_input.py` builds the input and `cnn.py` trains it. `crates/pinch-inference/src/cnn_input.rs` builds the same input live,
+and `tests/fixtures/cnn_input_cases.json` keeps the two equal.
+
+- **Input:** accelerometer, gyroscope and pulse (9 channels) on a 50-a-second grid. Each step is z-scored against its
+  channel's previous 10 s and put through a sigmoid, and the last second goes in.
+- **Network:** three dilated convolutions (32, 32 and 64 channels, kernel 5, dilation 1, 2, 4), each with batch normalisation;
+  each channel's maximum and mean over time; a dense layer of 32 with dropout; one output.
+- **Three networks** are trained from different seeds and their probabilities averaged, which steadies the score.
+- **Learns from** (`cnn.labels`): as the gesture, every pulse sample 0.4–0.6 s after a start. As not the gesture, every sample
+  with no start from 1.2 s before it to 0.2 s after it. Each network trains on all the gesture moments and at most 40,000
+  others, picked at random, so with a lot of noise each network sees part of it and the three together see most of it.
+- **Settings:** 12 passes, batches of 256, Adam at 0.001, weight decay 0.0001, gesture moments weighted up to 20×.
+
+It finds signal shapes nobody wrote code for and fires sooner. Because every channel is scaled by its own recent level, it
+sees the shape of a movement rather than its size: after stillness, a small twitch can look as large as a pinch. That is why
+it needs everyday noise to train on.
+
+### What both share
+
+- **Detection rule** (`events.py`, equal to the runtime's by `tests/fixtures/detection_cases.json`): the detection comes at the
+  top of the score's climb once it reaches the threshold. It ends when the score falls 0.15 under the threshold, and the
+  next one waits 1.5 s.
+- **Still hand:** with the setting on, the app only lets a gesture start after a still moment (`steadiness.py`), and training
+  and testing keep only those moments.
+- **Standard labels:** `everyday_noise`, `still` and `supported` always count as not the gesture.
+- **Output folder:** `bundle/` holds `manifest.json` and the model file, and Model Lab imports it. The app runs both kinds
+  itself, with no Python.
+
+## How training goes
+
+The app does this when you press **Train**; the command line does the same from a `spec.json` (see below).
+
+1. **Read** the recordings the spec names, split into training and test recordings. A recording is never in both.
+2. **Pick the moments** to learn from and build their inputs.
+3. **Train** the model.
+4. **Choose the threshold on the training recordings only.** Five more models, each trained without a fifth of them, score
+   the part they did not see. Those are replayed as the app would run them, and the threshold that catches the most starts
+   within **30 false activations an hour** wins.
+5. **Replay the test recordings** at that threshold and count catches, repeats, late firings and false activations, as the
+   [evaluation standard](../research/gesture-detector-evaluation-metrics.md) defines them.
+6. **Export** the model and check the file gives the trained model's answers.
+7. **Write** `bundle/`, `evaluation.json`, `inspection.json` and `result.json`. A model that fails the checks for going live is
+   still written, as monitor-only.
+
+**Learn from its own false alarms** (`hardNegatives`) adds a step after 3: the model is replayed over its training recordings,
+each false activation becomes one more "not the gesture" example, and it is trained again.
+
+## Where they stand (4 Nov 2026)
+
+Full results: [`cnn-all-days-2026-11`](../research/artifacts/cnn-all-days-2026-11/results.md), and for trees against the CNN,
+[`camera-old-new-2026-11`](../research/artifacts/camera-old-new-2026-11/results.md).
+
+- **Use the CNN.** On new sessions it caught about two thirds of the pinches, against 10–28% for the trees, about 0.4 s
+  sooner.
+- **Train it on every camera-timed pinch session plus everyday noise.** With each day held out, it fired 8 times an hour on
+  unseen noise (budget 30; the live CNN, 143). It caught 80% of 3 Nov and 72% of 4 Nov (live: 67% and 64%).
+- **Leave Learn from its own false alarms off.** With noise in training it found 2–70 mistakes per fold, and it caught
+  fewer pinches (27% against 31%) for no fewer false activations.
+
+Still open:
+
+- **The October sessions are caught poorly by every model:** 5–11% held out. Even the live CNN, which trained on most of the
+  17 Oct sessions, catches 19% of them. Check their label timing first.
+- **It still fires too often between pinches:** about 110 times an hour on the pinch sessions, for every model.
+
+## Training on another machine
+
+### What a GTX 1050 Ti can run
+
+The 1050 Ti is a **Pascal** card (CUDA `sm_61`). Recent PyTorch builds no longer include code for it, and the version this
+repo locks (`torch` 2.15) has no CUDA 12.6 build, the last line that does:
+
+| PyTorch build | On a 1050 Ti |
+|---|---|
+| CUDA 12.8 and later (the default on Linux) | Sees the card, then fails with "no kernel image". [Dropped for Pascal](https://dev-discuss.pytorch.org/t/cuda-toolkit-version-and-architecture-support-update-maxwell-and-pascal-architecture-support-removed-in-cuda-12-8-and-12-9-builds/3128) |
+| CPU-only (the default on Windows) | Runs on the processor, ignoring the card |
+| **`2.14.1+cu126`** | **The newest that should run it**: the last CUDA 12.6 release on [PyTorch's server](https://download.pytorch.org/whl/cu126/torch/) |
+
+Not tried on a real 1050 Ti yet: step 4 below is what proves it. The trainer tests the GPU before using it, so a build that
+cannot run the card falls back to the processor with a message instead of crashing.
+
+The card's 4 GB is plenty: the network is tiny, and a whole training set takes under 100 MB of it. Nobody has timed this card
+yet, so run step 4 before planning around it. For scale, an M3's GPU takes 3–8 minutes a model.
+
+### Steps
+
+The commands are for Linux; on Windows use PowerShell, `.venv\Scripts\python` for `.venv/bin/python`, and `$env:NAME = "value"`
+to set a variable.
+
+**1. Install the driver.** `nvidia-smi` should list the card and show a CUDA version of 12.6 or higher. Linux driver branch
+580 is [the last for Pascal cards](https://www.phoronix.com/news/NVIDIA-580-Linux-Driver-Last-HW); do not move past it.
+
+**2. Get the code**, and install [uv](https://docs.astral.sh/uv/).
+
+```bash
+git clone git@github.com:meanOtaku/gesture-controls.git
+```
+
+**3. Install the trainer, then the PyTorch build for this card.** Run these in `tools/label-trainer`. Leave out `--extra cnn`:
+it would install the locked build that cannot run the card.
+
+```bash
+uv sync --python 3.12 --extra dev
+```
+
+```bash
+uv pip install "torch==2.14.1" --index-url https://download.pytorch.org/whl/cu126
+```
+
+**4. Check the card.** Still in `tools/label-trainer`:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m label_trainer.gpu_check
+```
+
+It should say `The trainer will use: cuda` and name the card (`sm_60` in the list of supported cards covers `sm_61`). It then
+times one training pass and one scoring pass on the card and on the processor. A full model is about 200 passes, so
+multiply to see how long a run will take. If the card is slower than the processor, set `LABEL_TRAINER_DEVICE=cpu` for real
+runs.
+
+**5. Copy the recordings.** The 4 Nov sessions are in the repo (`data/recordings/new/`), but the older ones are read from the
+app's Model Lab folder. Copy it from the Mac (about 105 MB):
+
+```text
+~/Library/Application Support/dev.meanotaku.spatial-gesture-control/model-lab/datasets
+~/Library/Application Support/dev.meanotaku.spatial-gesture-control/model-lab/label-models
+```
+
+Keep them together in one folder, for example `~/model-lab/`, and point `MODEL_LAB_DIR` at it. `label-models` is only for
+comparing with the live CNN; without it, that comparison is left out.
+
+**6. Train.** From the repo's top folder, `plain` runs the configuration that did best, one model for each held-out day:
+
+```bash
+rm docs/research/artifacts/cnn-all-days-2026-11/results.json
+```
+
+```bash
+MODEL_LAB_DIR=~/model-lab tools/label-trainer/.venv/bin/python docs/research/artifacts/cnn-all-days-2026-11/all_days_check.py plain
+```
+
+The first command matters: the script skips any held-out day already in `results.json`, so with the committed file it would
+finish at once and train nothing. The log says which device it trains on. `results.md` is rewritten after each day, and each
+model is under `runs/plain-<day>/bundle/`.
+
+To train one model of your own, write a spec and run the trainer on it:
+
+```json
+{
+  "version": 1,
+  "target": "pinch_in",
+  "negatives": ["pinch_hold", "pinch_out", "fist", "hand_open", "everyday_noise", "still", "supported"],
+  "excludes": ["left_out"],
+  "recordings": { "session-a": "/path/to/folder-a", "session-b": "/path/to/folder-b" },
+  "train": ["session-a"],
+  "evaluation": ["session-b"],
+  "sources": ["watchPpg", "watchOrientation"],
+  "backend": "ppg-imu-cnn",
+  "seed": 17,
+  "labelTiming": { "session-a": "camera", "session-b": "camera" },
+  "steadyStarts": true
+}
+```
+
+```bash
+PYTHONPATH=tools/label-trainer/src tools/label-trainer/.venv/bin/python -m label_trainer.label_train --spec spec.json --out runs/mine
+```
+
+Every recording must be in `train` or `evaluation`, and every label in them must have a role. Leave out `"backend"` for the
+trees. In `labelTiming`, use `camera`, `estimated` or `noGesture` (a recording with no gesture in it).
+
+**7. Bring the model back.** Copy the `bundle/` folder to the Mac, and in Model Lab use **Import a model folder** under Label
+models. It arrives as a Draft and has to be approved and activated like any other.
+
+### If something goes wrong
+
+| What you see | Why, and what to do |
+|---|---|
+| `The trainer will use: cpu`, with "no kernel image" | The PyTorch build has no code for the card. Repeat step 3 and check the version with step 4 |
+| "This PyTorch build has no GPU support" | A CPU-only build was installed. Repeat the `uv pip install` line |
+| The version went back to 2.15 | `uv run --extra cnn` or `uv sync --extra cnn` replaced it. Use `.venv/bin/python` directly, and repeat step 3 |
+| It runs on the processor from the app's **Train** button | The app runs `uv run --extra cnn`, which installs the locked build. On this machine, train from the command line |
+| `no single Model Lab recording starts with …` | `MODEL_LAB_DIR` is wrong, or `datasets/` was not copied |
+| It finishes at once and trains nothing | `results.json` is still there: see step 6 |
+| "the exported model differs from the trained one" | The file did not match the network closely enough on this GPU, so the model is not shipped. Run again with `LABEL_TRAINER_DEVICE=cpu` |

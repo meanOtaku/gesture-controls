@@ -12,9 +12,10 @@ plain weights, not code. `predict` evaluates the file exactly as the runtime doe
 file reproduces the trained network before it is shipped.
 
 PyTorch is only needed to train (the `cnn` extra): `uv run --project tools/label-trainer --extra cnn ...`. It trains and
-scores on the GPU where there is one (Apple's MPS, else CUDA), about ten times faster than the CPU for training and forty
-times for scoring; `LABEL_TRAINER_DEVICE=cpu` keeps it on the CPU. The networks are moved back to the CPU when trained, so
-the file and its check (`predict`) are the same either way.
+scores on the GPU where there is one that can run it (Apple's MPS, else CUDA): on an M3, about 4 times faster than the CPU
+for training and 20 times for scoring. `LABEL_TRAINER_DEVICE` names the device instead. The networks are moved back
+to the CPU when trained, so the file and its check (`predict`) are the same either way. `python -m label_trainer.gpu_check`
+says what a machine will use and how fast it is; `docs/architecture/pinch-models.md` covers older NVIDIA cards.
 """
 
 from __future__ import annotations
@@ -64,16 +65,36 @@ def labels(decisions_ns: np.ndarray, starts_ns: list[int], excluded: list[tuple[
     return y
 
 
+# Whether each GPU backend was found able to run the network, so it is tried once.
+_runs: dict[str, bool] = {}
+
+
+def _runs_on(where: str) -> bool:
+    """Whether `where` can really run a convolution. A PyTorch build can see a GPU it has no code for (an old NVIDIA card
+    with a recent build reports CUDA as available, then fails with "no kernel image"), so seeing it is not enough."""
+    import torch
+
+    if where not in _runs:
+        try:
+            torch.nn.Conv1d(1, 1, 3).to(where)(torch.zeros(1, 1, 8, device=where))
+            _runs[where] = True
+        except (RuntimeError, NotImplementedError) as error:
+            print(f"The GPU ({where}) cannot run the network, so using the CPU: {str(error).splitlines()[0]}", flush=True)
+            _runs[where] = False
+    return _runs[where]
+
+
 def device() -> str:
-    """Where to train and score: `LABEL_TRAINER_DEVICE` when set, else the GPU there is (MPS, then CUDA), else the CPU."""
+    """Where to train and score: `LABEL_TRAINER_DEVICE` when set (a device that fails then fails loudly), else the GPU there
+    is if it can run the network (MPS, then CUDA), else the CPU."""
     import torch
 
     wanted = os.environ.get("LABEL_TRAINER_DEVICE")
     if wanted:
         return wanted
-    if torch.backends.mps.is_available():
+    if torch.backends.mps.is_available() and _runs_on("mps"):
         return "mps"
-    return "cuda" if torch.cuda.is_available() else "cpu"
+    return "cuda" if torch.cuda.is_available() and _runs_on("cuda") else "cpu"
 
 
 def _net():

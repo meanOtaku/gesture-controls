@@ -45,8 +45,10 @@ from label_trainer.events import summarise  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 NEW = ROOT / "data" / "recordings" / "new"
-DATASETS = Path.home() / "Library/Application Support/dev.meanotaku.spatial-gesture-control/model-lab/datasets"
-LIVE_MODEL = DATASETS.parent / "label-models" / "pinch_in-c0cb37c1273a"
+# The app's Model Lab folder (`datasets/`, `label-models/`), or a copy of it on another machine.
+MODEL_LAB = Path(os.environ.get("MODEL_LAB_DIR", Path.home() / "Library/Application Support/dev.meanotaku.spatial-gesture-control/model-lab"))
+DATASETS = MODEL_LAB / "datasets"
+LIVE_MODEL = MODEL_LAB / "label-models" / "pinch_in-c0cb37c1273a"
 BUDGET = lt.FALSE_ACTIVATIONS_BUDGET_PER_HOUR
 
 TRAIN = {

@@ -25,7 +25,9 @@ replayed on the same held-out recordings for comparison; on 14 and 17 Oct it is 
 
     tools/label-trainer/.venv/bin/python docs/research/artifacts/cnn-all-days-2026-11/all_days_check.py hard|plain
 
-Run "hard" first, then "plain"; each adds to results.json and rewrites results.md here. Bundles go under runs/.
+Run "hard" first, then "plain"; each adds to results.json and rewrites results.md here. Bundles go under runs/. Set
+`MODEL_LAB_DIR` to a copy of the app's `model-lab` folder on another machine (the steps are in
+`docs/architecture/pinch-models.md`); without its `label-models/` the live CNN is left out.
 """
 from __future__ import annotations
 
@@ -132,7 +134,7 @@ def main(mode: str) -> None:
             entry["models"][name] = {**scored(name, threshold, replays, kind), "hardNegatives": result["metrics"].get("hardNegatives"),
                                      "crossCheck": {k: (result["metrics"].get("crossCheckEvents") or {}).get(k) for k in ("gestures", "caught", "falseActivationsPerHour")},
                                      "minutes": round((time.time() - started) / 60)}
-            if "live CNN" not in entry["models"]:
+            if "live CNN" not in entry["models"] and LIVE_MODEL.exists():
                 live = (LIVE_MODEL / "model.cnn").read_bytes()
                 live_threshold = json.loads((LIVE_MODEL / "manifest.json").read_text())["thresholds"]["activation"]
                 live_replays = replay(spec, lambda x: cnn.predict(live, x), recs, evaluation, (live_threshold,))
