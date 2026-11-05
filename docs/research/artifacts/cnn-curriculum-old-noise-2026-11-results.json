@@ -1,0 +1,108 @@
+{
+  "protocol": {
+    "stage1": "latest camera-timed pinch sessions",
+    "stage2": "same model fine-tuned on old camera-timed sessions with latest-session rehearsal",
+    "stage3": "same model fine-tuned on newest noise with all clean-positive rehearsal",
+    "validation": "reserved latest pinch/noise pair; threshold chosen here, so not a release test",
+    "excluded": "fist sessions and non-camera old labels"
+  },
+  "trainingOrder": [
+    {
+      "stage": 1,
+      "name": "latest clean camera labels",
+      "datasetRoles": ["latestClean"]
+    },
+    {
+      "stage": 2,
+      "name": "older camera labels with latest-session rehearsal",
+      "datasetRoles": ["latestClean", "oldCamera"]
+    },
+    {
+      "stage": 3,
+      "name": "latest noise with all clean-positive rehearsal",
+      "datasetRoles": ["latestClean", "oldCamera", "noise"]
+    }
+  ],
+  "validation": {
+    "datasetIds": [
+      "gesture-dataset-pinch_in-2026-11-04T04-46-55.110Z",
+      "gesture-dataset-unlabeled-2026-11-04T04-26-46.986Z"
+    ],
+    "role": "threshold selection and exploratory validation only; never used for training"
+  },
+  "cohort": {
+    "latestClean": [
+      "gesture-dataset-pinch_in-2026-11-03T01-08-16.560Z",
+      "gesture-dataset-pinch_in-2026-11-03T01-10-50.957Z",
+      "gesture-dataset-pinch_in-2026-11-03T01-13-19.283Z",
+      "gesture-dataset-pinch_in-2026-11-03T01-17-14.928Z",
+      "gesture-dataset-pinch_in-2026-11-03T12-40-05.547Z",
+      "gesture-dataset-pinch_in-2026-11-04T04-49-21.416Z",
+      "gesture-dataset-pinch_in-2026-11-04T04-53-02.645Z"
+    ],
+    "oldCamera": [
+      "gesture-dataset-pinch-2026-10-14T00-54-06.988Z",
+      "gesture-dataset-pinch-2026-10-14T00-55-38.245Z",
+      "gesture-dataset-pinch-2026-10-14T00-57-01.701Z",
+      "gesture-dataset-pinch-2026-10-14T00-58-20.761Z",
+      "gesture-dataset-pinch-2026-10-14T00-59-37.623Z",
+      "gesture-dataset-pinch-2026-10-14T01-00-54.801Z",
+      "gesture-dataset-pinch-2026-10-14T01-04-14.013Z",
+      "gesture-dataset-pinch-2026-10-14T01-05-31.133Z",
+      "gesture-dataset-pinch-2026-10-14T01-13-08.108Z",
+      "gesture-dataset-pinch-2026-10-17T12-21-44.346Z",
+      "gesture-dataset-pinch-2026-10-17T12-23-03.399Z",
+      "gesture-dataset-pinch-2026-10-17T12-25-10.832Z",
+      "gesture-dataset-pinch-2026-10-17T12-26-46.748Z",
+      "gesture-dataset-pinch-2026-10-17T12-40-50.602Z"
+    ],
+    "noise": [
+      "gesture-dataset-unlabeled-2026-11-04T03-54-31.816Z",
+      "gesture-dataset-unlabeled-2026-11-04T04-37-45.372Z",
+      "gesture-dataset-unlabeled-2026-11-04T04-03-41.167Z",
+      "gesture-dataset-unlabeled-2026-11-04T04-09-05.352Z",
+      "gesture-dataset-unlabeled-2026-11-04T04-15-17.305Z",
+      "gesture-dataset-unlabeled-2026-11-04T04-20-47.293Z"
+    ]
+  },
+  "targets": {
+    "pinch_in": {
+      "threshold": 0.99,
+      "validation": {
+        "recordings": 2,
+        "gestures": 19,
+        "caught": 15,
+        "gestureRecall": 0.7894736842105263,
+        "falseActivations": 0,
+        "negativeSeconds": 396.908077989,
+        "falseActivationsPerHour": 0.0,
+        "medianLatencyMs": 468.811769
+      },
+      "modelSha256": "921ec67e87903e6baeb79138416bad8178822cb58b0ea01e58a7ac92271dcbde",
+      "stageWindows": {
+        "latestClean": 18308,
+        "oldPlusRehearsal": 28422,
+        "noisePlusRehearsal": 85147
+      }
+    },
+    "pinch_out": {
+      "threshold": 0.99,
+      "validation": {
+        "recordings": 2,
+        "gestures": 19,
+        "caught": 10,
+        "gestureRecall": 0.5263157894736842,
+        "falseActivations": 0,
+        "negativeSeconds": 404.180255488,
+        "falseActivationsPerHour": 0.0,
+        "medianLatencyMs": 389.6939585
+      },
+      "modelSha256": "c7a18dcf057a2953c04a37ff129b014a5911bc334a77a21646e68c21d04a768d",
+      "stageWindows": {
+        "latestClean": 18145,
+        "oldPlusRehearsal": 28214,
+        "noisePlusRehearsal": 84939
+      }
+    }
+  }
+}

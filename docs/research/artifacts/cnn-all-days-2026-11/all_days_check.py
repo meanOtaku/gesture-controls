@@ -3,7 +3,6 @@
 Recordings, all in `data/recordings/` (the same data as Model Lab's, so this runs from a clone of the repo):
 
 * camera-timed pinch sessions: 14 Oct (9), 17 Oct (5), 3 Nov (5), 4 Nov (3: 04:46, 04:49 and 04:53);
-* the 14 Oct fist sessions (4): no pinch;
 * everyday noise of 4 Nov (7): active (03:54, 04:37), hand still (04:03), on a support flat (04:09) and angled (04:15,
   04:20, 04:26).
 
@@ -13,7 +12,7 @@ Folds, each holding out one day's pinch sessions and some noise, and training on
 
 | held out | pinch | noise and no-pinch |
 |---|---|---|
-| 14 Oct | 14 Oct (9) | active 03:54, the fist sessions |
+| 14 Oct | 14 Oct (9) | active 03:54 |
 | 17 Oct | 17 Oct (5) | active 04:37 |
 | 3 Nov | 3 Nov (5) | still 04:03, support flat 04:09 |
 | 4 Nov | 4 Nov (3) | support angled 04:15 |
@@ -55,13 +54,11 @@ HERE = Path(__file__).resolve().parent
 BUDGET = lt.FALSE_ACTIVATIONS_BUDGET_PER_HOUR
 
 RELABELLED = "pinch-relabelled/2026-10-downloads/gesture-dataset-pinch-"
-FIST = "old/2026-10-downloads/gesture-dataset-fist-2026-10-14T"
 PINCH = "new/gesture-dataset-pinch_in-2026-11-0"
 NOISE = "new/gesture-dataset-unlabeled-2026-11-04T"
 # (path under data/recordings, what it is, the day whose fold holds it out, label timing). Model Lab holds the same data.
 RECORDINGS = [
     *[(f"{RELABELLED}2026-10-14T{t}.csv", "pinch", "14 Oct", "camera") for t in ["00-54-06.988Z", "00-55-38.245Z", "00-57-01.701Z", "00-58-20.761Z", "00-59-37.623Z", "01-00-54.801Z", "01-04-14.013Z", "01-05-31.133Z", "01-13-08.108Z"]],
-    *[(f"{FIST}{t}.csv", "fist", "14 Oct", "noGesture") for t in ["01-02-50.880Z", "01-06-46.525Z", "01-10-16.565Z", "01-11-31.499Z"]],
     *[(f"{RELABELLED}2026-10-17T{t}", "pinch", "17 Oct", "camera") for t in ["12-21-44.346Z", "12-23-03.399Z.csv", "12-25-10.832Z.csv", "12-26-46.748Z.csv", "12-40-50.602Z"]],
     *[(f"{PINCH}3T{t}", "pinch", "3 Nov", "camera") for t in ["01-08-16.560Z", "01-10-50.957Z", "01-13-19.283Z", "01-17-14.928Z", "12-40-05.547Z"]],
     (f"{PINCH}4T04-46-55.110Z", "pinch", "4 Nov", "camera"),
@@ -188,7 +185,7 @@ def write_markdown(results: dict) -> None:
         "# The CNN trained on every camera-timed pinch day and the 4 Nov everyday noise, each day held out (pinch_in)",
         "",
         f"Budget {results['budgetPerHour']:.0f} false activations an hour with no gesture under way. Pinch: caught / pinches · false"
-        " activations an hour on the held-out pinch sessions. Noise: false activations an hour on the held-out noise (and fist)"
+        " activations an hour on the held-out pinch sessions. Noise: false activations an hour on the held-out noise"
         " sessions, which hold no pinch. Each model at its own threshold.",
         "",
         "| Held out | Model | Threshold | Pinch | Noise | Learnt from |",
