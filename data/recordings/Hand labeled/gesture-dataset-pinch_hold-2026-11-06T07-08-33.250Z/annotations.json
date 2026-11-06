@@ -1,0 +1,1146 @@
+{
+  "format_version": 1,
+  "recording_id": "7aaef53e-6c36-4929-96c2-ab3d297837a9",
+  "intervals": [
+    {
+      "interval_id": "9be38e95-6085-46a3-8ba3-0f2e360d708c",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3245005000000,
+      "requested_end_monotonic_ns": 3245305000000,
+      "resolved_start": {
+        "raw_row": 674,
+        "source_timestamp_ns": 1044565902529024
+      },
+      "resolved_end": {
+        "raw_row": 708,
+        "source_timestamp_ns": 1044566175528960
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:08:40.102Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "0443bb5e-f0b8-4492-bc93-93ff3134fed7",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3245305000000,
+      "requested_end_monotonic_ns": 3246034000000,
+      "resolved_start": {
+        "raw_row": 709,
+        "source_timestamp_ns": 1044566181269514
+      },
+      "resolved_end": {
+        "raw_row": 807,
+        "source_timestamp_ns": 1044566972498762
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:08:40.102Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "b4cfddf4-c06d-44d9-83fe-34b77977967e",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3246034000000,
+      "requested_end_monotonic_ns": 3246334000000,
+      "resolved_start": {
+        "raw_row": 808,
+        "source_timestamp_ns": 1044566976528896
+      },
+      "resolved_end": {
+        "raw_row": 839,
+        "source_timestamp_ns": 1044567222773420
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:08:40.102Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "1e1ef212-ca42-4790-8426-1cdffe1b5402",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3252805000000,
+      "requested_end_monotonic_ns": 3253105000000,
+      "resolved_start": {
+        "raw_row": 1650,
+        "source_timestamp_ns": 1044573720942848
+      },
+      "resolved_end": {
+        "raw_row": 1681,
+        "source_timestamp_ns": 1044573971400129
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:08:47.836Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "96592706-b524-461f-a95c-7adab3277693",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3253105000000,
+      "requested_end_monotonic_ns": 3253772000000,
+      "resolved_start": {
+        "raw_row": 1682,
+        "source_timestamp_ns": 1044573971942656
+      },
+      "resolved_end": {
+        "raw_row": 1770,
+        "source_timestamp_ns": 1044574682368147
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:08:47.836Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "d5f73ac2-969f-4ca0-ab5b-788bab9582c3",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3253772000000,
+      "requested_end_monotonic_ns": 3254072000000,
+      "resolved_start": {
+        "raw_row": 1771,
+        "source_timestamp_ns": 1044574692377913
+      },
+      "resolved_end": {
+        "raw_row": 1806,
+        "source_timestamp_ns": 1044574966942720
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:08:47.836Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "b21ce9f0-3a01-48b1-8531-b8e5abd3a2e4",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3257874000000,
+      "requested_end_monotonic_ns": 3258174000000,
+      "resolved_start": {
+        "raw_row": 2281,
+        "source_timestamp_ns": 1044578778942720
+      },
+      "resolved_end": {
+        "raw_row": 2315,
+        "source_timestamp_ns": 1044579049433577
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:08:52.858Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "bbee9938-9fa2-495b-9b22-e23f09e6e26c",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3258174000000,
+      "requested_end_monotonic_ns": 3258774000000,
+      "resolved_start": {
+        "raw_row": 2316,
+        "source_timestamp_ns": 1044579059443342
+      },
+      "resolved_end": {
+        "raw_row": 2390,
+        "source_timestamp_ns": 1044579650507795
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:08:52.858Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "1edbca61-094d-4880-bfc6-9a054de3b781",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3258774000000,
+      "requested_end_monotonic_ns": 3259074000000,
+      "resolved_start": {
+        "raw_row": 2391,
+        "source_timestamp_ns": 1044579658942720
+      },
+      "resolved_end": {
+        "raw_row": 2433,
+        "source_timestamp_ns": 1044580001154768
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:08:52.858Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "15e675cd-82e6-4f8b-b5c8-e4b2df95db1e",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3263443000000,
+      "requested_end_monotonic_ns": 3263743000000,
+      "resolved_start": {
+        "raw_row": 2984,
+        "source_timestamp_ns": 1044584407343733
+      },
+      "resolved_end": {
+        "raw_row": 3011,
+        "source_timestamp_ns": 1044584627741682
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:08:57.953Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "f173964c-4184-432c-9e71-fdbf62c6f811",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3263743000000,
+      "requested_end_monotonic_ns": 3263877000000,
+      "resolved_start": {
+        "raw_row": 3012,
+        "source_timestamp_ns": 1044584637751448
+      },
+      "resolved_end": {
+        "raw_row": 3026,
+        "source_timestamp_ns": 1044584747919905
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:08:57.953Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "9fd7c574-9141-4eba-8f49-d113b941a43b",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3263877000000,
+      "requested_end_monotonic_ns": 3264177000000,
+      "resolved_start": {
+        "raw_row": 3027,
+        "source_timestamp_ns": 1044584757960188
+      },
+      "resolved_end": {
+        "raw_row": 3056,
+        "source_timestamp_ns": 1044584988367903
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:08:57.953Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "4f2c3a7d-eb10-434a-9df1-a88a4853d3bc",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3266279000000,
+      "requested_end_monotonic_ns": 3266579000000,
+      "resolved_start": {
+        "raw_row": 3332,
+        "source_timestamp_ns": 1044587191676008
+      },
+      "resolved_end": {
+        "raw_row": 3368,
+        "source_timestamp_ns": 1044587491968977
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:01.320Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "80aad1ae-da8b-453c-bfa1-3cc096bed4cb",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3266579000000,
+      "requested_end_monotonic_ns": 3267246000000,
+      "resolved_start": {
+        "raw_row": 3369,
+        "source_timestamp_ns": 1044587497942784
+      },
+      "resolved_end": {
+        "raw_row": 3447,
+        "source_timestamp_ns": 1044588122942720
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:01.320Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "fbfc5854-6b63-49f4-8bd4-a542f9af3afb",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3267246000000,
+      "requested_end_monotonic_ns": 3267546000000,
+      "resolved_start": {
+        "raw_row": 3448,
+        "source_timestamp_ns": 1044588122980940
+      },
+      "resolved_end": {
+        "raw_row": 3489,
+        "source_timestamp_ns": 1044588453333723
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:01.320Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "5f3c5ec1-8193-47c4-9a51-f4b918ae8dd0",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3273982000000,
+      "requested_end_monotonic_ns": 3274282000000,
+      "resolved_start": {
+        "raw_row": 4293,
+        "source_timestamp_ns": 1044594890772688
+      },
+      "resolved_end": {
+        "raw_row": 4330,
+        "source_timestamp_ns": 1044595191035139
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:09.147Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "eb52c829-a207-4cbe-964e-caba8e0defeb",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3274282000000,
+      "requested_end_monotonic_ns": 3275082000000,
+      "resolved_start": {
+        "raw_row": 4331,
+        "source_timestamp_ns": 1044595191942656
+      },
+      "resolved_end": {
+        "raw_row": 4435,
+        "source_timestamp_ns": 1044596032343733
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:09.148Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "adbe25de-c9e3-4924-88da-7ec6bd1af6ac",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3275082000000,
+      "requested_end_monotonic_ns": 3275382000000,
+      "resolved_start": {
+        "raw_row": 4436,
+        "source_timestamp_ns": 1044596042353498
+      },
+      "resolved_end": {
+        "raw_row": 4465,
+        "source_timestamp_ns": 1044596272669661
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:09.148Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "358712b1-1a2b-46c4-a569-67a0fae97c3b",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3280285000000,
+      "requested_end_monotonic_ns": 3280585000000,
+      "resolved_start": {
+        "raw_row": 5082,
+        "source_timestamp_ns": 1044601209942784
+      },
+      "resolved_end": {
+        "raw_row": 5114,
+        "source_timestamp_ns": 1044601468470442
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:15.357Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "d2c417b4-a6f2-4fb8-b99f-3ebad7ae63b8",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3280585000000,
+      "requested_end_monotonic_ns": 3281252000000,
+      "resolved_start": {
+        "raw_row": 5115,
+        "source_timestamp_ns": 1044601478480207
+      },
+      "resolved_end": {
+        "raw_row": 5199,
+        "source_timestamp_ns": 1044602149195539
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:15.357Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "697c0dec-c5d7-4853-9e36-c2bc7e334120",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3281252000000,
+      "requested_end_monotonic_ns": 3281552000000,
+      "resolved_start": {
+        "raw_row": 5200,
+        "source_timestamp_ns": 1044602159205305
+      },
+      "resolved_end": {
+        "raw_row": 5240,
+        "source_timestamp_ns": 1044602479487288
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:15.357Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "a580d2fd-941d-402a-b37e-c40bf87d74dc",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3286155000000,
+      "requested_end_monotonic_ns": 3286455000000,
+      "resolved_start": {
+        "raw_row": 5808,
+        "source_timestamp_ns": 1044607024714338
+      },
+      "resolved_end": {
+        "raw_row": 5849,
+        "source_timestamp_ns": 1044607355067122
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:21.358Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "e27f6dfd-903a-41e8-8da2-358174d173c1",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3286455000000,
+      "requested_end_monotonic_ns": 3287256000000,
+      "resolved_start": {
+        "raw_row": 5850,
+        "source_timestamp_ns": 1044607365107405
+      },
+      "resolved_end": {
+        "raw_row": 5954,
+        "source_timestamp_ns": 1044608196253645
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:21.358Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "c9ec6ff9-03b8-46b2-b9cf-edd4e5fd66c5",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3287256000000,
+      "requested_end_monotonic_ns": 3287556000000,
+      "resolved_start": {
+        "raw_row": 5955,
+        "source_timestamp_ns": 1044608206263411
+      },
+      "resolved_end": {
+        "raw_row": 5982,
+        "source_timestamp_ns": 1044608426661360
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:21.358Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "f32bbf2b-71ea-4266-97c0-c92ab174f5aa",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3293158000000,
+      "requested_end_monotonic_ns": 3293458000000,
+      "resolved_start": {
+        "raw_row": 6689,
+        "source_timestamp_ns": 1044614087326208
+      },
+      "resolved_end": {
+        "raw_row": 6723,
+        "source_timestamp_ns": 1044614364326144
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:28.333Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "5072e500-a043-406d-ba19-c33dba179108",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3293458000000,
+      "requested_end_monotonic_ns": 3294226000000,
+      "resolved_start": {
+        "raw_row": 6724,
+        "source_timestamp_ns": 1044614364802229
+      },
+      "resolved_end": {
+        "raw_row": 6818,
+        "source_timestamp_ns": 1044615125819075
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:28.333Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "c06387ea-2073-42f4-847b-f83e2d69ee9e",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3294226000000,
+      "requested_end_monotonic_ns": 3294526000000,
+      "resolved_start": {
+        "raw_row": 6819,
+        "source_timestamp_ns": 1044615126326016
+      },
+      "resolved_end": {
+        "raw_row": 6851,
+        "source_timestamp_ns": 1044615386072981
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:28.333Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "1314899e-87f6-45eb-aeda-89ca0c41271d",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3300129000000,
+      "requested_end_monotonic_ns": 3300429000000,
+      "resolved_start": {
+        "raw_row": 7555,
+        "source_timestamp_ns": 1044621022669661
+      },
+      "resolved_end": {
+        "raw_row": 7595,
+        "source_timestamp_ns": 1044621343073713
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:35.165Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "26603093-cb20-4f3d-bd28-7d8b63ee421f",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3300429000000,
+      "requested_end_monotonic_ns": 3301096000000,
+      "resolved_start": {
+        "raw_row": 7596,
+        "source_timestamp_ns": 1044621353083479
+      },
+      "resolved_end": {
+        "raw_row": 7681,
+        "source_timestamp_ns": 1044622034083235
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:35.165Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "8148aa77-7dde-4b06-9f36-1b69768ea6b5",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3301096000000,
+      "requested_end_monotonic_ns": 3301396000000,
+      "resolved_start": {
+        "raw_row": 7682,
+        "source_timestamp_ns": 1044622035429120
+      },
+      "resolved_end": {
+        "raw_row": 7723,
+        "source_timestamp_ns": 1044622374689924
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:35.165Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "0f400eaf-3865-499d-9d63-6b06648a34d5",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3308299000000,
+      "requested_end_monotonic_ns": 3308599000000,
+      "resolved_start": {
+        "raw_row": 8571,
+        "source_timestamp_ns": 1044629164576399
+      },
+      "resolved_end": {
+        "raw_row": 8614,
+        "source_timestamp_ns": 1044629505122053
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:42.936Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "5b9e1237-2fc8-4c1c-9410-de8c73a48623",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3308599000000,
+      "requested_end_monotonic_ns": 3308835000000,
+      "resolved_start": {
+        "raw_row": 8615,
+        "source_timestamp_ns": 1044629515131819
+      },
+      "resolved_end": {
+        "raw_row": 8643,
+        "source_timestamp_ns": 1044629745429248
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:42.936Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "ac9cc167-0a39-4dd1-a240-30d3483088a6",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3308835000000,
+      "requested_end_monotonic_ns": 3309135000000,
+      "resolved_start": {
+        "raw_row": 8644,
+        "source_timestamp_ns": 1044629745539534
+      },
+      "resolved_end": {
+        "raw_row": 8683,
+        "source_timestamp_ns": 1044630066035139
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:42.936Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "a5557924-b20f-4401-8313-7b5f2c81bc92",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3314035000000,
+      "requested_end_monotonic_ns": 3314335000000,
+      "resolved_start": {
+        "raw_row": 9294,
+        "source_timestamp_ns": 1044634955429120
+      },
+      "resolved_end": {
+        "raw_row": 9326,
+        "source_timestamp_ns": 1044635213984358
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:49.135Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "d2cd43c5-64dd-4460-9739-5b0a09173284",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3314335000000,
+      "requested_end_monotonic_ns": 3315036000000,
+      "resolved_start": {
+        "raw_row": 9327,
+        "source_timestamp_ns": 1044635223963606
+      },
+      "resolved_end": {
+        "raw_row": 9412,
+        "source_timestamp_ns": 1044635905146467
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:49.135Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "356f6ad6-7e32-4b81-a50a-51e1df6d0e73",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3315036000000,
+      "requested_end_monotonic_ns": 3315336000000,
+      "resolved_start": {
+        "raw_row": 9413,
+        "source_timestamp_ns": 1044635915186750
+      },
+      "resolved_end": {
+        "raw_row": 9455,
+        "source_timestamp_ns": 1044636245753157
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:49.135Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "4116bce6-4a97-47ba-ab91-d920ecf6a3c8",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3322806000000,
+      "requested_end_monotonic_ns": 3323106000000,
+      "resolved_start": {
+        "raw_row": 10387,
+        "source_timestamp_ns": 1044643706080305
+      },
+      "resolved_end": {
+        "raw_row": 10426,
+        "source_timestamp_ns": 1044644026484358
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:57.736Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "92eec902-00bf-4a78-8a43-7bf944a4102c",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3323106000000,
+      "requested_end_monotonic_ns": 3323673000000,
+      "resolved_start": {
+        "raw_row": 10427,
+        "source_timestamp_ns": 1044644036494123
+      },
+      "resolved_end": {
+        "raw_row": 10502,
+        "source_timestamp_ns": 1044644627344954
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:57.736Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "c4a859c5-96e6-4761-9094-23365abeeaff",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3323673000000,
+      "requested_end_monotonic_ns": 3323973000000,
+      "resolved_start": {
+        "raw_row": 10503,
+        "source_timestamp_ns": 1044644637385237
+      },
+      "resolved_end": {
+        "raw_row": 10534,
+        "source_timestamp_ns": 1044644892429056
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:09:57.736Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "628dfa87-be61-443f-a773-6f96e0e5f530",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3332078000000,
+      "requested_end_monotonic_ns": 3332378000000,
+      "resolved_start": {
+        "raw_row": 11547,
+        "source_timestamp_ns": 1044653007838118
+      },
+      "resolved_end": {
+        "raw_row": 11590,
+        "source_timestamp_ns": 1044653348109114
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:07.020Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "89c115d1-a443-4773-8010-365fa519a207",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3332378000000,
+      "requested_end_monotonic_ns": 3332845000000,
+      "resolved_start": {
+        "raw_row": 11591,
+        "source_timestamp_ns": 1044653350641920
+      },
+      "resolved_end": {
+        "raw_row": 11642,
+        "source_timestamp_ns": 1044653768610823
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:07.020Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "89d7c79c-abd7-48e7-86ad-e12ebf15d79e",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3332845000000,
+      "requested_end_monotonic_ns": 3333145000000,
+      "resolved_start": {
+        "raw_row": 11643,
+        "source_timestamp_ns": 1044653772641792
+      },
+      "resolved_end": {
+        "raw_row": 11676,
+        "source_timestamp_ns": 1044654038782942
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:07.020Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "ea94a2e7-1db5-412c-a572-afeee48ad816",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3338583000000,
+      "requested_end_monotonic_ns": 3338883000000,
+      "resolved_start": {
+        "raw_row": 12362,
+        "source_timestamp_ns": 1044659534144270
+      },
+      "resolved_end": {
+        "raw_row": 12390,
+        "source_timestamp_ns": 1044659754359114
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:13.724Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "a1781326-4518-4f79-be76-368c866177e3",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3338883000000,
+      "requested_end_monotonic_ns": 3339615000000,
+      "resolved_start": {
+        "raw_row": 12391,
+        "source_timestamp_ns": 1044659764399397
+      },
+      "resolved_end": {
+        "raw_row": 12480,
+        "source_timestamp_ns": 1044660475367414
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:13.724Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "4affecd0-393b-43cb-bbb6-52ad42e1f739",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3339615000000,
+      "requested_end_monotonic_ns": 3339915000000,
+      "resolved_start": {
+        "raw_row": 12481,
+        "source_timestamp_ns": 1044660485346663
+      },
+      "resolved_end": {
+        "raw_row": 12524,
+        "source_timestamp_ns": 1044660830641920
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:13.724Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "6b6acb05-e307-4a8c-9c53-54838844b9c4",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3354489000000,
+      "requested_end_monotonic_ns": 3354789000000,
+      "resolved_start": {
+        "raw_row": 14341,
+        "source_timestamp_ns": 1044675385157454
+      },
+      "resolved_end": {
+        "raw_row": 14382,
+        "source_timestamp_ns": 1044675715540754
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:29.452Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "092b23e0-2e40-4e4c-8fad-d5a222ec8c98",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3354789000000,
+      "requested_end_monotonic_ns": 3355389000000,
+      "resolved_start": {
+        "raw_row": 14383,
+        "source_timestamp_ns": 1044675725550520
+      },
+      "resolved_end": {
+        "raw_row": 14453,
+        "source_timestamp_ns": 1044676276301252
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:29.452Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "03bd782b-22dd-4e83-a02d-2c896afd164b",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3355389000000,
+      "requested_end_monotonic_ns": 3355689000000,
+      "resolved_start": {
+        "raw_row": 14454,
+        "source_timestamp_ns": 1044676286311018
+      },
+      "resolved_end": {
+        "raw_row": 14497,
+        "source_timestamp_ns": 1044676633867520
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:29.452Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "654576ad-55a9-499c-a2ee-5b026cd7144f",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3360960000000,
+      "requested_end_monotonic_ns": 3361260000000,
+      "resolved_start": {
+        "raw_row": 15147,
+        "source_timestamp_ns": 1044681841653504
+      },
+      "resolved_end": {
+        "raw_row": 15187,
+        "source_timestamp_ns": 1044682156653568
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:35.996Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "9e79bd43-a66f-4b6a-af5b-9d21b4fdb28e",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3361260000000,
+      "requested_end_monotonic_ns": 3361893000000,
+      "resolved_start": {
+        "raw_row": 15188,
+        "source_timestamp_ns": 1044682162623274
+      },
+      "resolved_end": {
+        "raw_row": 15266,
+        "source_timestamp_ns": 1044682793299543
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:35.996Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "b973c797-a0fa-4259-bc2c-226828174fed",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3361893000000,
+      "requested_end_monotonic_ns": 3362193000000,
+      "resolved_start": {
+        "raw_row": 15267,
+        "source_timestamp_ns": 1044682803278791
+      },
+      "resolved_end": {
+        "raw_row": 15313,
+        "source_timestamp_ns": 1044683163660872
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:35.996Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "0add9021-64d7-44d6-b913-072fd68c8cb8",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3366530000000,
+      "requested_end_monotonic_ns": 3366830000000,
+      "resolved_start": {
+        "raw_row": 15844,
+        "source_timestamp_ns": 1044687420039045
+      },
+      "resolved_end": {
+        "raw_row": 15885,
+        "source_timestamp_ns": 1044687750544416
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:41.466Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "91fbea43-6d5d-4fc7-aa09-2edee96b8c33",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3366830000000,
+      "requested_end_monotonic_ns": 3367396000000,
+      "resolved_start": {
+        "raw_row": 15886,
+        "source_timestamp_ns": 1044687760554182
+      },
+      "resolved_end": {
+        "raw_row": 15943,
+        "source_timestamp_ns": 1044688211054670
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:41.466Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "97f4d5a7-8027-4efb-b28e-71379da96a15",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3367396000000,
+      "requested_end_monotonic_ns": 3367696000000,
+      "resolved_start": {
+        "raw_row": 15944,
+        "source_timestamp_ns": 1044688221064436
+      },
+      "resolved_end": {
+        "raw_row": 15997,
+        "source_timestamp_ns": 1044688651575911
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:41.466Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "b825b849-3171-49c2-8ac0-1011cddc90a1",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3373700000000,
+      "requested_end_monotonic_ns": 3374000000000,
+      "resolved_start": {
+        "raw_row": 16729,
+        "source_timestamp_ns": 1044694509211409
+      },
+      "resolved_end": {
+        "raw_row": 16781,
+        "source_timestamp_ns": 1044694929865705
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:48.764Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "36a7b72d-e13d-4a88-8e80-d722b831915b",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3374000000000,
+      "requested_end_monotonic_ns": 3374699000000,
+      "resolved_start": {
+        "raw_row": 16782,
+        "source_timestamp_ns": 1044694935265024
+      },
+      "resolved_end": {
+        "raw_row": 16866,
+        "source_timestamp_ns": 1044695610834944
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:48.764Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "286e0d1d-6b41-4155-8bee-2491827e59b5",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3374699000000,
+      "requested_end_monotonic_ns": 3374999000000,
+      "resolved_start": {
+        "raw_row": 16867,
+        "source_timestamp_ns": 1044695617265152
+      },
+      "resolved_end": {
+        "raw_row": 16900,
+        "source_timestamp_ns": 1044695881220686
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:48.764Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "feb2b121-53ed-41bf-b7fc-0c0c06abc69d",
+      "label_id": "pinch_in",
+      "requested_start_monotonic_ns": 3380435000000,
+      "requested_end_monotonic_ns": 3380735000000,
+      "resolved_start": {
+        "raw_row": 17591,
+        "source_timestamp_ns": 1044701419031965
+      },
+      "resolved_end": {
+        "raw_row": 17621,
+        "source_timestamp_ns": 1044701657265152
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:55.402Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "5bffa5ec-b0e4-40a0-bb9e-22c154b80cb2",
+      "label_id": "pinch_hold",
+      "requested_start_monotonic_ns": 3380735000000,
+      "requested_end_monotonic_ns": 3381336000000,
+      "resolved_start": {
+        "raw_row": 17622,
+        "source_timestamp_ns": 1044701659388411
+      },
+      "resolved_end": {
+        "raw_row": 17693,
+        "source_timestamp_ns": 1044702230250227
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:55.403Z",
+      "revision": 1
+    },
+    {
+      "interval_id": "cd3efffe-4350-4409-80f5-699289f74ca1",
+      "label_id": "pinch_out",
+      "requested_start_monotonic_ns": 3381336000000,
+      "requested_end_monotonic_ns": 3381636000000,
+      "resolved_start": {
+        "raw_row": 17694,
+        "source_timestamp_ns": 1044702240259993
+      },
+      "resolved_end": {
+        "raw_row": 17736,
+        "source_timestamp_ns": 1044702580744612
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "camera_proposal",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:10:55.403Z",
+      "revision": 1
+    }
+  ]
+}

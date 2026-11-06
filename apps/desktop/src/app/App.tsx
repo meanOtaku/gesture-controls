@@ -1,3 +1,4 @@
+import { HandPreviewTarget } from "../shared/HandPreviewTarget";
 import { NervBars } from "./components/NervBars";
 import { NervSelectMenu } from "./components/NervSelectMenu";
 import { NervTelemetryPanel } from "../features/dashboard/components/NervTelemetryPanel";
@@ -177,6 +178,7 @@ function OverlayApp() {
 }
 
 function MainApp() {
+  const [handPreviewTarget, setHandPreviewTarget] = useState<HTMLElement | null>(null);
   const cameraOn = useCameraOn();
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
   const status = telemetryStore.getHeadStatus();
@@ -623,7 +625,7 @@ function MainApp() {
     .filter((error): error is string => error !== null)
     .join(" · ") || null;
 
-  return <SidebarProvider>
+  return <HandPreviewTarget.Provider value={handPreviewTarget}><SidebarProvider>
     <RecordingTimer />
     <CameraGestureBridge />
     <ShortcutsSheet />
@@ -759,7 +761,7 @@ function MainApp() {
     )}
     </Suspense>
     </SidebarInset>
-    <NervTelemetryPanel headStatus={status} watchStatus={watchStatus} />
+    <NervTelemetryPanel headStatus={status} watchStatus={watchStatus} handPreviewRef={activeTab === "labelling" ? setHandPreviewTarget : undefined} />
     <NervSelectMenu />
     <NervBars
       activeTab={activeTab}
@@ -768,5 +770,5 @@ function MainApp() {
       watchWorn={watchStatus?.worn ?? null}
       recordingState={telemetryStore.getDatasetRecordingState()}
     />
-  </SidebarProvider>;
+  </SidebarProvider></HandPreviewTarget.Provider>;
 }

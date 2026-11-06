@@ -1,0 +1,25 @@
+{
+  "format_version": 1,
+  "recording_id": "577219be-da68-4c5e-8fe1-f872d12287c5",
+  "intervals": [
+    {
+      "interval_id": "dde7fbcc-f5a4-4ee1-bb60-c0048a4d0373",
+      "label_id": "everyday_noise",
+      "requested_start_monotonic_ns": 2622040000000,
+      "requested_end_monotonic_ns": 3222037000000,
+      "resolved_start": {
+        "raw_row": 1001,
+        "source_timestamp_ns": 862115626853003
+      },
+      "resolved_end": {
+        "raw_row": 75931,
+        "source_timestamp_ns": 862715657526147
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "guided_cue",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-04T04:27:43.303Z",
+      "revision": 1
+    }
+  ]
+}

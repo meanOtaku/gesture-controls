@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "recording_id": "bf57c2ff-eb19-4602-8bfa-3f32482d38c4",
+  "requested_start_at": "2026-10-14T01:12:07.986Z",
+  "actual_start": {
+    "monotonic_ns": 1256441000000,
+    "wall_clock_at": "2026-10-14T01:12:08.016Z"
+  },
+  "actual_end": {
+    "monotonic_ns": 1316513000000,
+    "wall_clock_at": "2026-10-14T01:13:08.088Z"
+  },
+  "requested_duration_ms": null,
+  "actual_duration_ms": 60072,
+  "stop_reason": "timer_elapsed",
+  "sources": [
+    {
+      "source_id": "watch",
+      "configuration": {}
+    },
+    {
+      "source_id": "camera_hand_landmarks",
+      "configuration": {
+        "camera": "first",
+        "capture_time_from_callback": 0,
+        "capture_time_from_camera_frames": 36294,
+        "clock": "browser performance.now(); line up with the watch using clock_sync.csv",
+        "first_frame_capture_ms": 1255463,
+        "frames": 1830,
+        "frames_with_a_hand": 1830,
+        "handedness_convention": "model_label_assumes_mirrored_picture",
+        "last_frame_capture_ms": 1316461,
+        "margin_ms": 1000,
+        "model": "hand_landmarker.task (float16)",
+        "picture": {
+          "height": 360,
+          "width": 640
+        },
+        "runtime": "@mediapipe/tasks-vision",
+        "truncated": false
+      }
+    }
+  ],
+  "raw_row_count": 4497,
+  "raw_source_row_counts": {
+    "watch": 4497
+  }
+}

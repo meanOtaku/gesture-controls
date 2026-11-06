@@ -740,3 +740,7 @@ html[data-theme="nerv"] details > summary::marker { color: var(--eva-orange); }
   html[data-theme="nerv"] [data-slot="collapsible-content"],
   html[data-theme="nerv"] details[open] > :not(summary) { animation: none; }
 }
+
+html[data-theme="nerv"] .nerv-hand-preview-slot:empty { display: none; }
+html[data-theme="nerv"] .nerv-hand-preview-slot .labelling-hand { border: 0; padding: 12px; }
+html[data-theme="nerv"] .nerv-hand-preview-slot canvas { width: 100% !important; height: auto !important; aspect-ratio: 4 / 3; }

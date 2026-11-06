@@ -139,6 +139,20 @@ describe("LabellingPage", () => {
     expect(byHand()).toHaveLength(0);
   });
 
+  it("saves labels to the original without creating a version and clears unsaved status", async () => {
+    const lanes = await openRecording();
+    drag(lanes, 0, 400);
+    fireEvent.click(screen.getByRole("button", { name: /^Nothing here/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Label selection: Nothing here/ }));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save to original" })));
+    expect(invoke).toHaveBeenCalledWith("save_labelling_original", {
+      source: { kind: "dataset", id: "d1" }, intervals: [{ startMs: 0, endMs: 400, label: "-" }],
+    });
+    expect(invoke.mock.calls.some(([command]) => command === "save_labelling_version")).toBe(false);
+    expect(screen.queryByText("Unsaved labels")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save to original" })).toBeDisabled();
+  });
+
   it("saves a new version with the hand labels and opens it, leaving the original", async () => {
     const lanes = await openRecording();
     drag(lanes, 0, 400);
@@ -199,7 +213,7 @@ describe("LabellingPage", () => {
     expect(invoke).toHaveBeenCalledWith("export_labelling_recording", {
       source: { kind: "dataset", id: "d1" },
       intervals: [],
-      target: { kind: "folder", parent: "/exports", name: "pinch-session-labelled" },
+      target: { kind: "folder", parent: "/exports", name: expect.stringMatching(/^gesture-dataset-pinch-\d{4}-\d{2}-\d{2}T[\d-]+\.\d+Z$/) },
     });
     expect(exportFolderStore.get()).toBe("/exports");
     openDialog.mockClear();
@@ -208,7 +222,7 @@ describe("LabellingPage", () => {
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Export" })));
     expect(openDialog).not.toHaveBeenCalled();
     expect(invoke).toHaveBeenCalledWith("export_labelling_recording", expect.objectContaining({
-      target: { kind: "csv", path: expect.stringMatching(/^\/exports\/pinch-session-labelled-\d{4}-\d{2}-\d{2}T[\d-]+\.\d+Z\.csv$/) },
+      target: { kind: "csv", path: expect.stringMatching(/^\/exports\/gesture-dataset-pinch-\d{4}-\d{2}-\d{2}T[\d-]+\.\d+Z\.csv$/) },
     }));
   });
 

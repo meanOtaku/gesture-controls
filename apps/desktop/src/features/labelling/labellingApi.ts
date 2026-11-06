@@ -74,3 +74,8 @@ export interface ModelReplay {
 export function replayActiveModels(source: LabellingSource): Promise<ModelReplay[]> {
   return invoke<ModelReplay[]>("labelling_model_replay", { source });
 }
+
+/** Applies manual labels to the opened source in place. */
+export function saveLabellingOriginal(source: LabellingSource, spans: Span[]): Promise<void> {
+  return invoke<void>("save_labelling_original", { source, intervals: toIntervals(spans) });
+}

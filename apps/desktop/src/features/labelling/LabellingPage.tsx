@@ -22,7 +22,7 @@ import { Checkbox } from "../../components/ui/checkbox";
 import { Label } from "../../components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { groupRecordings } from "../model-lab/recordingFilters";
-import { recordingLine } from "../model-lab/recordingNames";
+import { recordingLine, recordingWhen } from "../model-lab/recordingNames";
 import { SectionHeader } from "../../components/app/SectionHeader";
 import { chooseExportFolder } from "../../shared/tauri/exportCsv";
 import { getRecordingCameraEvidence, notifyRecordingsChanged } from "../../shared/tauri/recordingBundle";
@@ -31,7 +31,7 @@ import { listGestureDefinitions } from "../gestureLibrary/gestureLibraryApi";
 import { cameraTrack, contactOnsets, contactThreshold, handsAt, type CameraTrack } from "./cameraTrack";
 import { inImportOrder, type DatasetLabel, type DatasetSummary } from "../model-lab/types";
 import { describeContext } from "../telemetry/sessionContext";
-import { exportLabellingRecording, labellingCameraEvidence, openLabellingRecording, replayActiveModels, saveLabellingVersion, type LabellingRecording, type LabellingSource, type ModelReplay } from "./labellingApi";
+import { exportLabellingRecording, labellingCameraEvidence, openLabellingRecording, replayActiveModels, saveLabellingOriginal, saveLabellingVersion, type LabellingRecording, type LabellingSource, type ModelReplay } from "./labellingApi";
 import { appNavigation, type LabellingFocus } from "../../shared/navigation/appNavigation";
 import { labelColor } from "../labels/labelColor";
 import { HandPreview } from "./HandPreview";
@@ -85,8 +85,8 @@ export function forgetLabellingWork(): void {
 /**
  * Label a recording by hand. Open a Model Lab recording, a dataset folder or a CSV; every column is drawn on one shared
  * timeline; drag across any graph to select a stretch, choose a label and apply it (or "Nothing here", or erase). The
- * labels go in the recording's `manual_label` column, which training uses wherever it is set. Save makes a new version in
- * Model Lab and leaves the original as it was; Export writes the folder of two files (or one CSV).
+ * labels go in the recording's `manual_label` column, which training uses wherever it is set. Save to original updates
+ * the opened source; saving a version or exporting keeps a separate copy.
  */
 export function LabellingPage() {
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
@@ -311,6 +311,22 @@ export function LabellingPage() {
     return () => element.removeEventListener("wheel", onWheel);
   }, [recording !== null]);
 
+  const saveOriginal = async () => {
+    if (!recording) return;
+    setBusy(true);
+    try {
+      await saveLabellingOriginal(recording.source, spans);
+      setSaved(spans);
+      notifyRecordingsChanged();
+      await refreshLists();
+      OperationFeedback.success("Saved", "Manual labels saved to the original dataset.");
+    } catch (error) {
+      setMessage({ tone: "error", text: `Not saved: ${String(error)}` });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const saveVersion = async () => {
     if (!recording) return;
     setBusy(true);
@@ -333,7 +349,14 @@ export function LabellingPage() {
   const exportFormat = useSyncExternalStore(exportFolderStore.subscribe, exportFolderStore.getFormat, exportFolderStore.getFormat);
   const exportIt = async () => {
     if (!recording) return;
-    const base = `${recording.name.replace(/[^\w.-]+/g, "-")}-labelled`;
+    const originalName = recording.name.replace(/\.csv$/i, "");
+    const existing = /gesture-dataset-[\w.-]+-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z/.exec(originalName);
+    const source = recording.source;
+    const dataset = source.kind === "dataset" ? datasets.find((item) => item.id === source.id) : undefined;
+    const recordedAt = dataset ? recordingWhen(dataset) : null;
+    const label = (dataset?.labels?.[0] || recording.labelIntervals[0]?.label || "unlabeled").replace(/[^\w.-]+/g, "-");
+    const timestamp = new Date(recordedAt || Date.now()).toISOString().replaceAll(":", "-");
+    const base = existing?.[0] ?? `gesture-dataset-${label}-${timestamp}`;
     try {
       let parent = exportFolder;
       if (!parent) {
@@ -344,8 +367,7 @@ export function LabellingPage() {
       const target: { kind: "folder"; parent: string; name: string } | { kind: "csv"; path: string } =
         exportFormat === "folder"
           ? { kind: "folder", parent, name: base }
-          : // Stamped like the Recorder's exports, so an earlier one is never overwritten.
-            { kind: "csv", path: `${parent.replace(/[\\/]+$/, "")}/${base}-${new Date().toISOString().replaceAll(":", "-")}.csv` };
+          : { kind: "csv", path: `${parent.replace(/[\\/]+$/, "")}/${base}.csv` };
       setBusy(true);
       const where = await exportLabellingRecording(recording.source, spans, target);
       OperationFeedback.success("Exported", where);
@@ -738,8 +760,10 @@ export function LabellingPage() {
                   ? `No camera contact: ${camera.problem}. `
                   : ""}
               {selection ? `Selected ${formatSeconds(selection.startMs)} to ${formatSeconds(selection.endMs)} (${Math.round(selection.endMs - selection.startMs)} ms). ` : "Nothing selected. "}
-              {hoverMs !== null ? `Cursor at ${formatSeconds(hoverMs)}. ` : ""}
               Showing {formatSeconds(view.startMs)} to {formatSeconds(view.endMs)}.
+            </p>
+            <p className="hint labelling-cursor" aria-label="Graph cursor">
+              Cursor at {hoverMs === null ? "—" : formatSeconds(hoverMs)}.
             </p>
 
             <div className="labelling-suggestions" role="region" aria-label="Problems">
@@ -1040,11 +1064,12 @@ export function LabellingPage() {
           <CardHeader>
             <SectionHeader
               title="Keep it"
-              description="Save makes a new recording in Model Lab with these labels and leaves this one as it was, so models trained on it stay tied to the data they learned from. Export writes the recording with its labels for keeping or sharing."
+              description="Save to original updates this dataset’s manual_label column with your labels. Save as new version keeps a separate copy in Model Lab. Export includes all available recording files and manual labels. CSV exports also include a companion folder for supporting files."
             />
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-4">
-            <Button onClick={() => void saveVersion()} disabled={busy || !dirty}>Save as new version</Button>
+            <Button onClick={() => void saveOriginal()} disabled={busy || !dirty}>Save to original</Button>
+            <Button variant="outline" onClick={() => void saveVersion()} disabled={busy || !dirty}>Save as new version</Button>
             <Button variant="outline" onClick={() => void exportIt()} disabled={busy}>Export</Button>
             <div className="basis-full">
               <ExportSettingsCard compact />

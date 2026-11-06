@@ -1,0 +1,15 @@
+{
+  "formatVersion": 1,
+  "ppgRows": 7743,
+  "imuRows": 30974,
+  "labels": [
+    "supported"
+  ],
+  "context": {
+    "activity": "Everyday noise: hand on a support, flat",
+    "arm": "resting",
+    "pinch": "light",
+    "strap": "normal",
+    "wrist": "left"
+  }
+}

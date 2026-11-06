@@ -1,0 +1,33 @@
+{
+  "format_version": 1,
+  "recording_id": "577219be-da68-4c5e-8fe1-f872d12287c5",
+  "requested_start_at": "2026-11-04T04:27:35.269Z",
+  "actual_start": {
+    "monotonic_ns": 2614024000000,
+    "wall_clock_at": "2026-11-04T04:27:35.286Z"
+  },
+  "actual_end": {
+    "monotonic_ns": 3224048000000,
+    "wall_clock_at": "2026-11-04T04:37:45.308Z"
+  },
+  "requested_duration_ms": null,
+  "actual_duration_ms": 610022,
+  "stop_reason": "timer_elapsed",
+  "sources": [
+    {
+      "source_id": "watch",
+      "configuration": {}
+    }
+  ],
+  "raw_row_count": 76180,
+  "raw_source_row_counts": {
+    "watch": 76180
+  },
+  "context": {
+    "activity": "Everyday noise: active",
+    "arm": "resting",
+    "pinch": "light",
+    "strap": "normal",
+    "wrist": "left"
+  }
+}

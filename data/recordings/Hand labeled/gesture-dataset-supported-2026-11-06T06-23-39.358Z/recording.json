@@ -1,0 +1,33 @@
+{
+  "format_version": 1,
+  "recording_id": "e425c54f-aa20-4533-ad5b-0e633bb280a9",
+  "requested_start_at": "2026-11-06T06:23:39.307Z",
+  "actual_start": {
+    "monotonic_ns": 548921000000,
+    "wall_clock_at": "2026-11-06T06:23:39.358Z"
+  },
+  "actual_end": {
+    "monotonic_ns": 713042000000,
+    "wall_clock_at": "2026-11-06T06:26:23.480Z"
+  },
+  "requested_duration_ms": null,
+  "actual_duration_ms": 164122,
+  "stop_reason": "manual_stop",
+  "sources": [
+    {
+      "source_id": "watch",
+      "configuration": {}
+    }
+  ],
+  "raw_row_count": 20518,
+  "raw_source_row_counts": {
+    "watch": 20518
+  },
+  "context": {
+    "activity": "Everyday noise: hand on a support, angled",
+    "arm": "resting",
+    "pinch": "light",
+    "strap": "normal",
+    "wrist": "left"
+  }
+}

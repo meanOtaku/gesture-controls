@@ -1,0 +1,15 @@
+{
+  "formatVersion": 1,
+  "ppgRows": 15236,
+  "imuRows": 60944,
+  "labels": [
+    "everyday_noise"
+  ],
+  "context": {
+    "activity": "Everyday noise: active",
+    "arm": "resting",
+    "pinch": "light",
+    "strap": "normal",
+    "wrist": "left"
+  }
+}

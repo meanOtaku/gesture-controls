@@ -222,6 +222,7 @@ pub fn run() {
             labelling::open_labelling_recording,
             labelling::labelling_camera_evidence,
             labelling::save_labelling_version,
+            labelling::save_labelling_original,
             labelling::export_labelling_recording,
             labelling::labelling_model_replay,
             model_lab::set_datasets_sealed,

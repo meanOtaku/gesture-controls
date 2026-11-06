@@ -2,9 +2,8 @@
 //! labelling by hand, saves the labels as a new version of it in Model Lab, and exports it.
 //!
 //! The page owns the manual labels while you work, as intervals of time over the whole recording; they are applied here to
-//! every row of both files that falls inside one (`manual_label`, see `dataset_files::effective_label`). The source is never
-//! changed: saving makes a new recording that names the one it came from, so models trained on the original stay tied to
-//! the data they learned from.
+//! every row of both files that falls inside one (`manual_label`, see `dataset_files::effective_label`). The source is not
+//! changed by export or saving a version. Saving to original explicitly updates its manual labels in place.
 //!
 //! Times cross to the page as milliseconds after the recording's first sample, which a JavaScript number holds exactly
 //! enough; the watch's nanosecond timestamps would not fit.
@@ -300,6 +299,86 @@ pub fn labelling_camera_evidence(
         .flatten())
 }
 
+/// Writes manual labels back to the opened dataset without creating another dataset.
+#[tauri::command]
+pub fn save_labelling_original(
+    source: LabellingSource,
+    intervals: Vec<ManualInterval>,
+    app: AppHandle,
+    runtime: State<'_, ModelLabRuntime>,
+) -> Result<(), String> {
+    let _guard = runtime.lock.lock().map_err(|_| "model lab lock was poisoned")?;
+    let (pair, _) = load(&app, &source)?;
+    let (ppg, imu) = with_manual(&pair, &intervals)?;
+    let labelled = dataset_files::parse_pair_with(&ppg, &imu, false)?;
+    let mut index = model_lab::load_index(&app);
+    let path = match &source {
+        LabellingSource::Dataset { id } => {
+            let summary = index.datasets.iter_mut().find(|d| &d.id == id)
+                .ok_or("that recording is no longer in Model Lab")?;
+            summary.labels = labelled.labels.clone();
+            summary.label = labelled.labels.join(", ");
+            summary.content_sha = Some(dataset_files::rows_sha(&ppg, &imu));
+            summary.quality = Some(dataset_files::quality_of(&labelled)?);
+            summary.review = None;
+            model_lab::dataset_csv_path(&model_lab::datasets_dir(&app)?, id)
+        }
+        LabellingSource::File { path } => PathBuf::from(path),
+    };
+    let originals = replace_manual_files(&path, &labelled)?;
+    if matches!(source, LabellingSource::Dataset { .. }) {
+        if let Err(error) = model_lab::write_index_atomic(&app, &index) {
+            restore_manual_files(&originals)?;
+            return Err(error);
+        }
+    }
+    Ok(())
+}
+
+fn restore_manual_files(files: &[(PathBuf, Vec<u8>)]) -> Result<(), String> {
+    for (path, bytes) in files {
+        fs::write(path, bytes).map_err(|e| format!("could not restore {}: {e}", path.display()))?;
+    }
+    Ok(())
+}
+
+/// Stage every changed file before replacing any; roll back a failed replacement. Other evidence stays untouched.
+fn replace_manual_files(path: &Path, pair: &Pair) -> Result<Vec<(PathBuf, Vec<u8>)>, String> {
+    let mut files = if path.is_dir() {
+        vec![(path.join(dataset_files::PPG_FILE), pair.ppg_csv.clone().into_bytes()),
+             (path.join(dataset_files::IMU_FILE), pair.imu_csv.clone().into_bytes())]
+    } else {
+        vec![(path.to_path_buf(), dataset_files::merge_to_single(&pair.ppg_csv, &pair.imu_csv)?.into_bytes())]
+    };
+    let meta_path = path.join(dataset_files::META_FILE);
+    if path.is_dir() && meta_path.exists() {
+        let mut meta: dataset_files::Meta = serde_json::from_str(&read_limited(&meta_path)?).map_err(|e| e.to_string())?;
+        meta.labels = pair.labels.clone();
+        meta.original_sha256 = None;
+        files.push((meta_path, serde_json::to_vec_pretty(&meta).map_err(|e| e.to_string())?));
+    }
+    let originals = files.iter().map(|(p, _)| fs::read(p).map(|bytes| (p.clone(), bytes)).map_err(|e| e.to_string()))
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut staged = Vec::new();
+    let result = (|| -> Result<(), String> {
+        for (target, bytes) in &files {
+            let temporary = target.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
+            staged.push((temporary.clone(), target.clone()));
+            fs::write(&temporary, bytes).map_err(|e| e.to_string())?;
+        }
+        for (temporary, target) in &staged {
+            fs::rename(temporary, target).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    })();
+    for (temporary, _) in &staged { let _ = fs::remove_file(temporary); }
+    if let Err(error) = result {
+        restore_manual_files(&originals)?;
+        return Err(error);
+    }
+    Ok(originals)
+}
+
 #[tauri::command]
 pub fn save_labelling_version(
     source: LabellingSource,
@@ -325,8 +404,63 @@ pub fn save_labelling_version(
     Ok(made)
 }
 
-/// Exports the recording with these manual labels: as a folder of two files (`ppg.csv`, `imu.csv`, `dataset.json`), never
-/// overwriting one, or as one CSV with both `label` and `manual_label`. Returns where it was written.
+/// Locate evidence through saved versions, oldest first so the opened source wins.
+fn export_evidence_dirs(app: &AppHandle, source: &LabellingSource) -> Result<Vec<PathBuf>, String> {
+    let mut dirs = Vec::new();
+    match source {
+        LabellingSource::File { path } => {
+            let path = PathBuf::from(path);
+            if path.is_dir() { dirs.push(path); }
+            else {
+                // A CSV exported here keeps its evidence in a companion folder.
+                let companion = path.with_file_name(format!("{}-files", path.file_stem().and_then(|s| s.to_str()).unwrap_or("recording")));
+                if companion.is_dir() { dirs.push(companion); }
+            }
+        }
+        LabellingSource::Dataset { id } => {
+            let index = model_lab::load_index(app);
+            let datasets = model_lab::datasets_dir(app)?;
+            let mut seen = std::collections::BTreeSet::new();
+            let mut at = Some(id.clone());
+            while let Some(id) = at.filter(|id| seen.insert(id.clone())) {
+                let summary = index.datasets.iter().find(|d| d.id == id).ok_or("source dataset is no longer available")?;
+                let path = model_lab::dataset_csv_path(&datasets, &id);
+                if path.is_dir() { dirs.push(path); }
+                if let Some(recording) = &summary.source_recording_id {
+                    if recording.is_empty() || !recording.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+                        return Err("invalid source recording id".into());
+                    }
+                    dirs.push(crate::recording_bundle::recording_bundles_dir(app)?.join(recording));
+                    break;
+                }
+                at = summary.derived_from.clone();
+            }
+            dirs.reverse();
+        }
+    }
+    Ok(dirs)
+}
+
+fn copy_export_evidence(dirs: &[PathBuf], target: &Path, intervals: &[ManualInterval]) -> Result<(), String> {
+    // Keep the source evidence byte for byte, including its clock domain. Never remap already exported landmarks.
+    for dir in dirs {
+        for name in ["raw.csv", "recording.json", "annotations.json", "hand_landmarks.csv", "hand_landmarks_2.csv", "clock_sync.csv", "ppg_clock.csv"] {
+            let source = dir.join(name);
+            if source.exists() {
+                fs::copy(&source, target.join(name)).map_err(|e| format!("could not export {}: {e}", source.display()))?;
+            }
+        }
+        let metadata = dir.join(dataset_files::META_FILE);
+        if metadata.exists() {
+            fs::copy(&metadata, target.join("source_dataset.json")).map_err(|e| e.to_string())?;
+        }
+    }
+    // The original annotations remain evidence; the current hand edits have their own explicit intervals too.
+    fs::write(target.join("manual_labels.json"), serde_json::to_vec_pretty(intervals).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())
+}
+
+/// Exports the labelled streams and all available recording evidence. CSV exports include a companion folder.
 #[tauri::command]
 pub fn export_labelling_recording(
     source: LabellingSource,
@@ -336,14 +470,57 @@ pub fn export_labelling_recording(
 ) -> Result<String, String> {
     let (pair, _) = load(&app, &source)?;
     let (ppg_csv, imu_csv) = with_manual(&pair, &intervals)?;
-    match target {
-        ExportTarget::Folder { parent, name } => model_lab::export_dataset_folder(parent, name, ppg_csv, imu_csv, None, None),
+    let evidence = export_evidence_dirs(&app, &source)?;
+    let (parent, name, csv_path) = match target {
+        ExportTarget::Folder { parent, name } => (PathBuf::from(parent), name, None),
         ExportTarget::Csv { path } => {
-            let single = dataset_files::merge_to_single(&ppg_csv, &imu_csv)?;
-            fs::write(&path, single).map_err(|e| format!("could not write {path}: {e}"))?;
-            Ok(path)
+            let requested = PathBuf::from(path);
+            let parent = requested.parent().ok_or("the export has no parent folder")?.to_path_buf();
+            let stem = requested.file_stem().and_then(|n| n.to_str()).ok_or("invalid CSV filename")?;
+            let mut path = requested.clone();
+            let mut name = format!("{stem}-files");
+            let mut number = 2;
+            while path.exists() || parent.join(&name).exists() {
+                path = parent.join(format!("{stem}-{number}.csv"));
+                name = format!("{stem}-{number}-files");
+                number += 1;
+            }
+            (parent, name, Some(path))
         }
-    }
+    };
+    if !parent.is_dir() { return Err("choose an existing export folder".into()); }
+    // A private staging folder keeps failed evidence copies from leaving an incomplete export.
+    let staging = parent.join(format!(".{}.exporting", uuid::Uuid::new_v4()));
+    fs::create_dir(&staging).map_err(|e| e.to_string())?;
+    let result = (|| -> Result<String, String> {
+        let folder = PathBuf::from(model_lab::export_dataset_folder(
+            staging.display().to_string(), name.clone(), ppg_csv.clone(), imu_csv.clone(), None, None,
+        )?);
+        copy_export_evidence(&evidence, &folder, &intervals)?;
+        let mut destination = parent.join(&name);
+        if csv_path.is_some() && destination.exists() { return Err("the CSV companion folder already exists".into()); }
+        let mut number = 2;
+        while destination.exists() {
+            destination = parent.join(format!("{name}-{number}"));
+            number += 1;
+        }
+        if let Some(path) = &csv_path {
+            let single = dataset_files::merge_to_single(&ppg_csv, &imu_csv)?;
+            let temporary = staging.join("recording.csv");
+            fs::write(&temporary, single).map_err(|e| e.to_string())?;
+            fs::rename(&folder, &destination).map_err(|e| e.to_string())?;
+            if let Err(e) = fs::rename(&temporary, path) {
+                let _ = fs::remove_dir_all(&destination);
+                return Err(e.to_string());
+            }
+            Ok(format!("{} (supporting files: {})", path.display(), destination.display()))
+        } else {
+            fs::rename(&folder, &destination).map_err(|e| e.to_string())?;
+            Ok(destination.display().to_string())
+        }
+    })();
+    let _ = fs::remove_dir_all(staging);
+    result
 }
 
 /// One active model run over the recording as the app runs it live: its score at each decision and its detections, in
@@ -602,6 +779,58 @@ mod tests {
             false,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn full_export_keeps_original_evidence_and_current_manual_labels() {
+        let root = std::env::temp_dir().join(format!("full-export-{}", uuid::Uuid::new_v4()));
+        let original = root.join("original");
+        let current = root.join("current");
+        let output = root.join("output");
+        for dir in [&original, &current, &output] { fs::create_dir_all(dir).unwrap(); }
+        let names = ["raw.csv", "recording.json", "annotations.json", "hand_landmarks.csv", "hand_landmarks_2.csv", "clock_sync.csv", "ppg_clock.csv"];
+        for name in names { fs::write(original.join(name), format!("original {name}")).unwrap(); }
+        fs::write(current.join("hand_landmarks.csv"), "already aligned landmarks").unwrap();
+        fs::write(current.join("dataset.json"), "source metadata").unwrap();
+        fs::write(output.join("ppg.csv"), "labelled pulse").unwrap();
+        fs::write(output.join("dataset.json"), "updated export metadata").unwrap();
+        let intervals = vec![ManualInterval { start_ms: 0.0, end_ms: 40.0, label: "pinch".into() }];
+        copy_export_evidence(&[original, current], &output, &intervals).unwrap();
+        for name in names {
+            let expected = if name == "hand_landmarks.csv" { "already aligned landmarks".to_string() } else { format!("original {name}") };
+            assert_eq!(fs::read_to_string(output.join(name)).unwrap(), expected);
+        }
+        assert_eq!(fs::read_to_string(output.join("ppg.csv")).unwrap(), "labelled pulse");
+        assert_eq!(fs::read_to_string(output.join("dataset.json")).unwrap(), "updated export metadata");
+        assert_eq!(fs::read_to_string(output.join("source_dataset.json")).unwrap(), "source metadata");
+        let labels: Vec<ManualInterval> = serde_json::from_str(&fs::read_to_string(output.join("manual_labels.json")).unwrap()).unwrap();
+        assert_eq!(labels, intervals);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn saving_original_updates_both_streams_preserves_evidence_and_can_restore() {
+        let dir = std::env::temp_dir().join(format!("manual-save-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let original = pair();
+        fs::write(dir.join(dataset_files::PPG_FILE), &original.ppg_csv).unwrap();
+        fs::write(dir.join(dataset_files::IMU_FILE), &original.imu_csv).unwrap();
+        fs::write(dir.join("hand_landmarks.csv"), "camera evidence").unwrap();
+        let (ppg, imu) = with_manual(&original, &[ManualInterval { start_ms: 0.0, end_ms: 80.0, label: "fist".into() }]).unwrap();
+        let labelled = dataset_files::parse_pair_with(&ppg, &imu, false).unwrap();
+        let backup = replace_manual_files(&dir, &labelled).unwrap();
+        let reopened = pair_at(&dir).unwrap();
+        assert_eq!(reopened.ppg_csv, ppg);
+        assert_eq!(reopened.imu_csv, imu);
+        assert_eq!(fs::read_to_string(dir.join("hand_landmarks.csv")).unwrap(), "camera evidence");
+        restore_manual_files(&backup).unwrap();
+        assert_eq!(pair_at(&dir).unwrap().ppg_csv, original.ppg_csv);
+        // Single CSV sources are updated in place too.
+        let single = dir.join("session.csv");
+        fs::write(&single, dataset_files::merge_to_single(&original.ppg_csv, &original.imu_csv).unwrap()).unwrap();
+        replace_manual_files(&single, &labelled).unwrap();
+        assert_eq!(pair_at(&single).unwrap().ppg_csv, ppg);
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

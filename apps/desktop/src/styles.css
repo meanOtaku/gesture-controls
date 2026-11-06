@@ -538,3 +538,6 @@ html.overlay-document body::before { display:none; }
 .recording-group > summary::-webkit-details-marker { display:none; }
 .recording-group > summary:focus-visible { outline:2px solid var(--ring, currentColor); outline-offset:2px; }
 .recording-group[open] .advanced-chevron { transform:rotate(90deg); }
+
+/* Keep the cursor readout separate so hovering cannot reflow the graphs. */
+.labelling-cursor { block-size: 1.5em; line-height: 1.5; white-space: nowrap; font-variant-numeric: tabular-nums; }

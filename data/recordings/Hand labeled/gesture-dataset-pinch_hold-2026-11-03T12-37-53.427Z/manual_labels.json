@@ -1,0 +1,297 @@
+[
+  {
+    "startMs": 5335.510254,
+    "endMs": 5605.682373,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 5615.692139,
+    "endMs": 5785.858154,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 10899.405615,
+    "endMs": 11419.76084,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 11429.770605,
+    "endMs": 11960.227148,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 11970.236914,
+    "endMs": 12590.567725,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 19257.376807,
+    "endMs": 19948.042188,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 19958.021436,
+    "endMs": 20478.559766,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 20480.370073,
+    "endMs": 21119.12373,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 26354.933057,
+    "endMs": 27175.733838,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 27185.774121,
+    "endMs": 27526.106152,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 27536.115918,
+    "endMs": 28237.013135,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 33612.776074,
+    "endMs": 34335.140249,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 34343.275342,
+    "endMs": 34897.140121,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 34903.761182,
+    "endMs": 35434.309277,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 40949.162891,
+    "endMs": 41579.83916,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 41589.787891,
+    "endMs": 42190.495898,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 42193.140121,
+    "endMs": 42637.140121,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 46716.252734,
+    "endMs": 47296.819141,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 47306.828906,
+    "endMs": 47647.283008,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 47657.262256,
+    "endMs": 48338.200977,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 51831.85332,
+    "endMs": 52532.536914,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 52541.372313,
+    "endMs": 53085.372313,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 53093.083789,
+    "endMs": 53827.372185,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 58937.047412,
+    "endMs": 59587.621143,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 59597.630908,
+    "endMs": 60161.372313,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 60168.065479,
+    "endMs": 60738.591602,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 66363.552637,
+    "endMs": 66964.138574,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 66974.117822,
+    "endMs": 67464.657373,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 67474.667139,
+    "endMs": 68196.372377,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 71728.573389,
+    "endMs": 72249.020166,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 72258.999414,
+    "endMs": 72779.568262,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 72789.578027,
+    "endMs": 73260.220117,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 79125.415527,
+    "endMs": 79695.911133,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 79705.920898,
+    "endMs": 80206.378662,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 80216.388428,
+    "endMs": 80676.990234,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 84741.290772,
+    "endMs": 85281.87915,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 85291.888916,
+    "endMs": 85742.541992,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 85752.551758,
+    "endMs": 86233.325684,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 90728.259766,
+    "endMs": 91248.553955,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 91258.533203,
+    "endMs": 91783.174297,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 91788.898193,
+    "endMs": 92389.423096,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 96822.459082,
+    "endMs": 97412.546973,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 97422.526221,
+    "endMs": 97822.61167,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 97832.590918,
+    "endMs": 98453.074316,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 103797.953467,
+    "endMs": 104418.772559,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 104425.174169,
+    "endMs": 104919.443945,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 104929.453711,
+    "endMs": 105449.900488,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 110503.480908,
+    "endMs": 110973.665234,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 110976.174233,
+    "endMs": 111414.033887,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 111424.043652,
+    "endMs": 111976.174233,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 116397.340772,
+    "endMs": 116947.694775,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 116957.704541,
+    "endMs": 117557.924268,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 117567.179417,
+    "endMs": 118201.179289,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 123750.001904,
+    "endMs": 124170.381543,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 124180.391309,
+    "endMs": 124750.673291,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 124760.652539,
+    "endMs": 125370.943066,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 128903.832568,
+    "endMs": 129654.717578,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 129664.727344,
+    "endMs": 130025.109424,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 130035.088672,
+    "endMs": 130695.885791,
+    "label": "pinch_out"
+  }
+]

@@ -178,7 +178,7 @@ fn number_unnumbered(index: &mut DatasetIndex) {
 /// import/delete invocations from the UI never race each other.
 #[derive(Default)]
 pub struct ModelLabRuntime {
-    lock: Mutex<()>,
+    pub(crate) lock: Mutex<()>,
 }
 
 fn validate_filename(filename: &str) -> Result<(), String> {
@@ -439,7 +439,7 @@ fn load_index_file(path: &std::path::Path) -> DatasetIndex {
 
 /// Writes `index.json` atomically: serialize to a sibling `.tmp` file, then
 /// rename over the real path, matching `settings::write_atomic`.
-fn write_index_atomic(app: &AppHandle, index: &DatasetIndex) -> Result<(), String> {
+pub(crate) fn write_index_atomic(app: &AppHandle, index: &DatasetIndex) -> Result<(), String> {
     write_index_file(&index_path(app)?, index)
 }
 

@@ -1,0 +1,25 @@
+{
+  "format_version": 1,
+  "recording_id": "b9b54f4c-2908-491a-80ba-19c146d7ae79",
+  "intervals": [
+    {
+      "interval_id": "4abc120f-11b5-48ca-a13d-af60eb5e8990",
+      "label_id": "still",
+      "requested_start_monotonic_ns": 3617958000000,
+      "requested_end_monotonic_ns": 3682525000000,
+      "resolved_start": {
+        "raw_row": 1016,
+        "source_timestamp_ns": 1044938933668684
+      },
+      "resolved_end": {
+        "raw_row": 9074,
+        "source_timestamp_ns": 1045003450116864
+      },
+      "resolution_rule_version": 1,
+      "creation_mechanism": "guided_cue",
+      "curation_status": "unreviewed",
+      "created_at": "2026-11-06T07:14:51.593Z",
+      "revision": 1
+    }
+  ]
+}

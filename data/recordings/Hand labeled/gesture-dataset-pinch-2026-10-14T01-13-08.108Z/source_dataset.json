@@ -1,0 +1,10 @@
+{
+  "formatVersion": 1,
+  "ppgRows": 1499,
+  "imuRows": 2998,
+  "labels": [
+    "pinch_hold",
+    "pinch_in",
+    "pinch_out"
+  ]
+}

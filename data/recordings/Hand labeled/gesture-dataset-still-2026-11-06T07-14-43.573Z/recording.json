@@ -1,0 +1,55 @@
+{
+  "format_version": 1,
+  "recording_id": "b9b54f4c-2908-491a-80ba-19c146d7ae79",
+  "requested_start_at": "2026-11-06T07:14:43.528Z",
+  "actual_start": {
+    "monotonic_ns": 3609937000000,
+    "wall_clock_at": "2026-11-06T07:14:43.573Z"
+  },
+  "actual_end": {
+    "monotonic_ns": 3682526000000,
+    "wall_clock_at": "2026-11-06T07:15:56.161Z"
+  },
+  "requested_duration_ms": null,
+  "actual_duration_ms": 72589,
+  "stop_reason": "manual_stop",
+  "sources": [
+    {
+      "source_id": "watch",
+      "configuration": {}
+    },
+    {
+      "source_id": "camera_hand_landmarks",
+      "configuration": {
+        "camera": "first",
+        "capture_time_from_callback": 0,
+        "capture_time_from_camera_frames": 13736,
+        "clock": "browser performance.now(); line up with the watch using clock_sync.csv",
+        "first_frame_capture_ms": 3608951,
+        "frames": 2194,
+        "frames_with_a_hand": 2194,
+        "handedness_convention": "model_label_assumes_mirrored_picture",
+        "last_frame_capture_ms": 3682453,
+        "margin_ms": 1000,
+        "model": "MediaPipe hand landmarks (float16; gesture_recognizer.task, or hand_landmarker.task if that cannot load)",
+        "picture": {
+          "height": 360,
+          "width": 640
+        },
+        "runtime": "@mediapipe/tasks-vision",
+        "truncated": false
+      }
+    }
+  ],
+  "raw_row_count": 9075,
+  "raw_source_row_counts": {
+    "watch": 9075
+  },
+  "context": {
+    "activity": "Everyday noise: hand still",
+    "arm": "resting",
+    "pinch": "light",
+    "strap": "normal",
+    "wrist": "left"
+  }
+}

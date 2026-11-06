@@ -71,9 +71,9 @@ function useEventLog(headConnected: boolean, watchConnected: boolean, worn: bool
   return lines;
 }
 
-type PanelProps = { headStatus: HeadTrackerStatus | null; watchStatus: WatchStatus | null };
+type PanelProps = { headStatus: HeadTrackerStatus | null; watchStatus: WatchStatus | null; handPreviewRef?: (element: HTMLDivElement | null) => void };
 
-function Panel({ headStatus, watchStatus }: PanelProps) {
+function Panel({ headStatus, watchStatus, handPreviewRef }: PanelProps) {
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return window.localStorage.getItem(COLLAPSED_KEY) === "1";
@@ -156,6 +156,7 @@ function Panel({ headStatus, watchStatus }: PanelProps) {
           ))}
         </ol>
       </section>
+      {handPreviewRef && <div ref={handPreviewRef} className="nerv-hand-preview-slot" />}
     </aside>
   );
 }
