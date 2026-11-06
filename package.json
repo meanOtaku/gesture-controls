@@ -1,7 +1,9 @@
 {
   "name": "spatial-gesture-control",
   "private": true,
-  "workspaces": ["apps/desktop"],
+  "workspaces": [
+    "apps/desktop"
+  ],
   "scripts": {
     "build": "npm run build --workspace @spatial-gesture/desktop",
     "check:tauri-icons": "node scripts/check-tauri-icons.mjs",
@@ -10,6 +12,7 @@
     "test:launcher": "node --test scripts/run-system.test.mjs",
     "test:tauri-config": "node --test scripts/tauri-config.test.mjs",
     "typecheck": "npm run typecheck --workspace @spatial-gesture/desktop",
-    "tauri": "npm run tauri --workspace @spatial-gesture/desktop --"
+    "tauri": "npm run tauri --workspace @spatial-gesture/desktop --",
+    "test:performance": "npm run test:performance --workspace @spatial-gesture/desktop"
   }
 }

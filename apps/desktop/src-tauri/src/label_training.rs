@@ -117,7 +117,10 @@ fn check_request(
 ) -> Result<Checked, String> {
     let target = label_id(&request.label)?;
     if crate::label_registry::is_standard(&request.label) {
-        return Err(format!("'{}' is a standard label, there to show a model what is not a gesture: choose a gesture to train", request.label));
+        return Err(format!(
+            "'{}' is a standard label, there to show a model what is not a gesture: choose a gesture to train",
+            request.label
+        ));
     }
     let negatives: Vec<LabelId> = request
         .negatives
@@ -170,9 +173,15 @@ fn check_request(
         });
     }
     // Two copies of the same data could land one in training and one in the test, which then measures nothing.
-    let chosen: Vec<&DatasetSummary> = seen.iter().filter_map(|id| datasets.iter().find(|d| &d.id == id)).collect();
+    let chosen: Vec<&DatasetSummary> = seen
+        .iter()
+        .filter_map(|id| datasets.iter().find(|d| &d.id == id))
+        .collect();
     for (i, a) in chosen.iter().enumerate() {
-        if let Some(b) = chosen[i + 1..].iter().find(|b| a.content_sha.is_some() && b.content_sha == a.content_sha) {
+        if let Some(b) = chosen[i + 1..]
+            .iter()
+            .find(|b| a.content_sha.is_some() && b.content_sha == a.content_sha)
+        {
             return Err(format!(
                 "'{}' and '{}' hold the same data: leave one out (or delete it in Model Lab), or one could be trained on and the other tested on",
                 a.original_filename, b.original_filename
@@ -189,7 +198,12 @@ fn check_request(
             None | Some(ExampleRole::Exclude) => {
                 entries.insert(left_out, ExampleRole::Exclude);
             }
-            Some(_) => return Err(format!("'{}' marks stretches left out, so it can only be excluded", dataset_files::LEFT_OUT_LABEL)),
+            Some(_) => {
+                return Err(format!(
+                    "'{}' marks stretches left out, so it can only be excluded",
+                    dataset_files::LEFT_OUT_LABEL
+                ));
+            }
         }
     }
     // The standard labels are not the gesture for every model: something else, unless the request leaves them out.
@@ -227,7 +241,11 @@ fn recordings_ids(recordings: &[RecordingInfo]) -> Vec<String> {
 /// "camera" for a recording whose labels the camera marked, "estimated" for one whose labels were estimated from motion,
 /// "noGesture" for one with no `target` in it (everyday noise); a recording that says none of these is left out (the trainer
 /// counts it as unknown). See `detector_events::timing_of`.
-fn label_timing_of(ids: &[String], datasets: &[DatasetSummary], target: &str) -> BTreeMap<String, &'static str> {
+fn label_timing_of(
+    ids: &[String],
+    datasets: &[DatasetSummary],
+    target: &str,
+) -> BTreeMap<String, &'static str> {
     ids.iter()
         .filter_map(|id| {
             let dataset = datasets.iter().find(|d| &d.id == id)?;
@@ -390,7 +408,10 @@ fn recordings_for(app: &AppHandle, request: &TrainRequest) -> Result<Checked, St
                 .iter()
                 .find(|d| d.id == r.id.as_str())
                 .map_or_else(|| r.id.to_string(), |d| d.original_filename.clone());
-            Ok((name, session_stamps(&dataset_csv_path(&dir, r.id.as_str()))?))
+            Ok((
+                name,
+                session_stamps(&dataset_csv_path(&dir, r.id.as_str()))?,
+            ))
         })
         .collect::<Result<Vec<_>, String>>()?;
     if let Some((a, b)) = same_session(&stamps) {
@@ -403,8 +424,13 @@ fn recordings_for(app: &AppHandle, request: &TrainRequest) -> Result<Checked, St
 
 /// The watch timestamps of a recording's motion rows (every row, for a single-file recording).
 fn session_stamps(path: &Path) -> Result<Vec<i64>, String> {
-    let file = if path.is_dir() { path.join(dataset_files::IMU_FILE) } else { path.to_path_buf() };
-    let text = fs::read_to_string(&file).map_err(|e| format!("could not read {}: {e}", file.display()))?;
+    let file = if path.is_dir() {
+        path.join(dataset_files::IMU_FILE)
+    } else {
+        path.to_path_buf()
+    };
+    let text =
+        fs::read_to_string(&file).map_err(|e| format!("could not read {}: {e}", file.display()))?;
     Ok(text
         .lines()
         .filter(|line| !line.starts_with('#'))
@@ -416,12 +442,20 @@ fn session_stamps(path: &Path) -> Result<Vec<i64>, String> {
 /// other's. Two copies of a session labelled differently are different files, so the duplicate check passes them; two
 /// sessions never share exact timestamps, even when the watch clock restarted between them.
 fn same_session(recordings: &[(String, Vec<i64>)]) -> Option<(&str, &str)> {
-    let sets: Vec<std::collections::HashSet<i64>> =
-        recordings.iter().map(|(_, stamps)| stamps.iter().copied().collect()).collect();
+    let sets: Vec<std::collections::HashSet<i64>> = recordings
+        .iter()
+        .map(|(_, stamps)| stamps.iter().copied().collect())
+        .collect();
     for i in 0..sets.len() {
         for j in i + 1..sets.len() {
-            let (small, big) = if sets[i].len() <= sets[j].len() { (&sets[i], &sets[j]) } else { (&sets[j], &sets[i]) };
-            if !small.is_empty() && small.iter().filter(|t| big.contains(t)).count() * 2 >= small.len() {
+            let (small, big) = if sets[i].len() <= sets[j].len() {
+                (&sets[i], &sets[j])
+            } else {
+                (&sets[j], &sets[i])
+            };
+            if !small.is_empty()
+                && small.iter().filter(|t| big.contains(t)).count() * 2 >= small.len()
+            {
                 return Some((recordings[i].0.as_str(), recordings[j].0.as_str()));
             }
         }
@@ -542,14 +576,21 @@ pub async fn suggest_label_offset(
 
 /// Says how a request would be split, or why it cannot be, without recording or starting anything.
 #[tauri::command]
-pub async fn plan_label_training(app: AppHandle, request: TrainRequest) -> Result<PlanView, String> {
+pub async fn plan_label_training(
+    app: AppHandle,
+    request: TrainRequest,
+) -> Result<PlanView, String> {
     tauri::async_runtime::spawn_blocking(move || plan_label_training_blocking(&app, &request))
-        .await.map_err(|e| e.to_string())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 fn plan_label_training_blocking(app: &AppHandle, request: &TrainRequest) -> PlanView {
-    let inputs = method_of(&request).map_or(pinch_start_contract().features.len(), |(_, contract)| contract.features.len());
-    let result = recordings_for(&app, &request).and_then(|checked| {
+    let inputs = method_of(request)
+        .map_or(pinch_start_contract().features.len(), |(_, contract)| {
+            contract.features.len()
+        });
+    let result = recordings_for(app, request).and_then(|checked| {
         plan_split(&checked.recordings, &checked.mapping, &checked.target)
             .map_err(|e| e.to_string())
     });
@@ -650,10 +691,22 @@ pub async fn start_label_training(
             backend: trainer_backend(checked.backend).ok_or("unknown training method")?,
             // What else shaped the run, so the training history can say what changed from one run to the next.
             params: BTreeMap::from([
-                ("method".to_string(), serde_json::Value::String(checked.backend.into())),
-                ("labelOffsetMs".to_string(), serde_json::Value::from(checked.label_offset_ms)),
-                ("research".to_string(), serde_json::Value::Bool(checked.research)),
-                ("hardNegatives".to_string(), serde_json::Value::Bool(checked.hard_negatives)),
+                (
+                    "method".to_string(),
+                    serde_json::Value::String(checked.backend.into()),
+                ),
+                (
+                    "labelOffsetMs".to_string(),
+                    serde_json::Value::from(checked.label_offset_ms),
+                ),
+                (
+                    "research".to_string(),
+                    serde_json::Value::Bool(checked.research),
+                ),
+                (
+                    "hardNegatives".to_string(),
+                    serde_json::Value::Bool(checked.hard_negatives),
+                ),
             ]),
         },
         recordings: checked.recordings.clone(),
@@ -883,7 +936,12 @@ fn finish(
         Ok(version) => TrainingEvent::Finished {
             run_id: id,
             label,
-            outcome: if deployable { "deployable" } else { "monitorOnly" }.into(),
+            outcome: if deployable {
+                "deployable"
+            } else {
+                "monitorOnly"
+            }
+            .into(),
             message,
             version_id: Some(version),
             metrics: Some(result["metrics"].clone()),
@@ -1036,25 +1094,47 @@ mod tests {
     #[test]
     fn two_copies_of_one_session_are_refused_but_two_sessions_on_a_restarted_clock_are_not() {
         let session = |from: i64, n: i64| (0..n).map(|k| from + k * 20_000_123).collect::<Vec<_>>();
-        let named = |list: &[(&str, Vec<i64>)]| list.iter().map(|(n, s)| (n.to_string(), s.clone())).collect::<Vec<_>>();
+        let named = |list: &[(&str, Vec<i64>)]| {
+            list.iter()
+                .map(|(n, s)| (n.to_string(), s.clone()))
+                .collect::<Vec<_>>()
+        };
         let a = session(1_725_454_345_507_365, 3000);
         // A copy that lost a few rows at each end, as an export with other labels may.
         let copy = a[40..2900].to_vec();
         let other = session(2_025_806_369_310_949, 3000);
         assert_eq!(
-            same_session(&named(&[("a.csv", a.clone()), ("other.csv", other.clone()), ("copy.csv", copy)])),
+            same_session(&named(&[
+                ("a.csv", a.clone()),
+                ("other.csv", other.clone()),
+                ("copy.csv", copy)
+            ])),
             Some(("a.csv", "copy.csv"))
         );
         // After a restart the clock covers the same span again, but no sample falls on the same nanosecond.
-        let restarted = (0..3000).map(|k| 1_725_454_345_507_365 + 7_919 + k * 19_998_877).collect::<Vec<_>>();
-        assert_eq!(same_session(&named(&[("a.csv", a), ("restarted.csv", restarted), ("other.csv", other), ("empty.csv", vec![])])), None);
+        let restarted = (0..3000)
+            .map(|k| 1_725_454_345_507_365 + 7_919 + k * 19_998_877)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            same_session(&named(&[
+                ("a.csv", a),
+                ("restarted.csv", restarted),
+                ("other.csv", other),
+                ("empty.csv", vec![])
+            ])),
+            None
+        );
     }
 
     #[test]
     fn session_stamps_reads_the_motion_rows_of_a_folder_and_every_row_of_a_single_file() {
         let dir = std::env::temp_dir().join(format!("session-stamps-{}", Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join(dataset_files::IMU_FILE), "# label: \ntimestamp_ns,sequence\n100,1\n120,1\n").unwrap();
+        fs::write(
+            dir.join(dataset_files::IMU_FILE),
+            "# label: \ntimestamp_ns,sequence\n100,1\n120,1\n",
+        )
+        .unwrap();
         assert_eq!(session_stamps(&dir).unwrap(), vec![100, 120]);
         let single = dir.join("legacy.csv");
         fs::write(&single, "timestamp_ns,label\n5,a\n6,\n").unwrap();
@@ -1074,19 +1154,38 @@ mod tests {
         let mut data = datasets();
         data[0].labels.push(dataset_files::LEFT_OUT_LABEL.into());
         let checked = check_request(&request(), &data, &sha).unwrap();
-        assert_eq!(checked.mapping.entries[&LabelId::new("left_out").unwrap()], ExampleRole::Exclude);
+        assert_eq!(
+            checked.mapping.entries[&LabelId::new("left_out").unwrap()],
+            ExampleRole::Exclude
+        );
         let mut r = request();
         r.negatives.push("left_out".into());
-        assert!(check_request(&r, &data, &sha).unwrap_err().contains("can only be excluded"));
+        assert!(
+            check_request(&r, &data, &sha)
+                .unwrap_err()
+                .contains("can only be excluded")
+        );
         // With none left out, nothing is added.
-        assert!(!check_request(&request(), &datasets(), &sha).unwrap().mapping.entries.contains_key(&LabelId::new("left_out").unwrap()));
+        assert!(
+            !check_request(&request(), &datasets(), &sha)
+                .unwrap()
+                .mapping
+                .entries
+                .contains_key(&LabelId::new("left_out").unwrap())
+        );
     }
 
     #[test]
     fn a_recording_listed_twice_counts_once() {
         let mut r = request();
         r.dataset_ids.push("s1".into());
-        assert_eq!(check_request(&r, &datasets(), &sha).unwrap().recordings.len(), 6);
+        assert_eq!(
+            check_request(&r, &datasets(), &sha)
+                .unwrap()
+                .recordings
+                .len(),
+            6
+        );
     }
 
     #[test]
@@ -1143,13 +1242,24 @@ mod tests {
         r.dataset_ids.push("n1".into());
         let checked = check_request(&r, &list, &sha).unwrap();
         for standard in ["everyday_noise", "still", "supported"] {
-            assert_eq!(checked.mapping.entries[&LabelId::new(standard).unwrap()], ExampleRole::Negative);
+            assert_eq!(
+                checked.mapping.entries[&LabelId::new(standard).unwrap()],
+                ExampleRole::Negative
+            );
         }
         // Left out when asked.
         r.excludes = vec!["still".into()];
-        assert_eq!(check_request(&r, &list, &sha).unwrap().mapping.entries[&LabelId::new("still").unwrap()], ExampleRole::Exclude);
+        assert_eq!(
+            check_request(&r, &list, &sha).unwrap().mapping.entries
+                [&LabelId::new("still").unwrap()],
+            ExampleRole::Exclude
+        );
         r.label = "everyday_noise".into();
-        assert!(check_request(&r, &list, &sha).unwrap_err().contains("standard label"));
+        assert!(
+            check_request(&r, &list, &sha)
+                .unwrap_err()
+                .contains("standard label")
+        );
     }
 
     #[test]
@@ -1188,22 +1298,47 @@ mod tests {
         assert_eq!(checked.backend, CNN_BACKEND);
         assert_eq!(checked.input, cnn_contract());
         let split = plan_split(&checked.recordings, &checked.mapping, &checked.target).unwrap();
-        assert_eq!(build_spec(&checked, &split, &BTreeMap::new())["backend"], CNN_BACKEND);
-        assert_eq!(trainer_backend(CNN_BACKEND), Some(model_lab_core::TrainerBackend::PyTorch));
-        let args: Vec<String> = trainer_command(CNN_BACKEND).as_std().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        assert_eq!(
+            build_spec(&checked, &split, &BTreeMap::new())["backend"],
+            CNN_BACKEND
+        );
+        assert_eq!(
+            trainer_backend(CNN_BACKEND),
+            Some(model_lab_core::TrainerBackend::PyTorch)
+        );
+        let args: Vec<String> = trainer_command(CNN_BACKEND)
+            .as_std()
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
         assert!(args.windows(2).any(|w| w == ["--extra", "cnn"]), "{args:?}");
-        assert!(!trainer_command(BACKEND).as_std().get_args().any(|a| a == "--extra"));
+        assert!(
+            !trainer_command(BACKEND)
+                .as_std()
+                .get_args()
+                .any(|a| a == "--extra")
+        );
         r.method = Some("svm".into());
-        assert!(check_request(&r, &datasets(), &sha).unwrap_err().contains("no training method 'svm'"));
+        assert!(
+            check_request(&r, &datasets(), &sha)
+                .unwrap_err()
+                .contains("no training method 'svm'")
+        );
     }
 
     #[test]
     fn the_trainers_timing_scores_become_the_numbers_shown_and_a_refusal_becomes_its_reason() {
         let line = r#"{"outcome":"ok","scores":[{"offsetMs":0,"auc":0.8,"windows":900,"positives":500},{"offsetMs":250,"auc":null,"windows":0,"positives":0}]}"#;
         let scores = offsets_from(Some(line)).unwrap();
-        assert_eq!((scores[0].offset_ms, scores[0].auc, scores[0].windows), (0, Some(0.8), 900));
+        assert_eq!(
+            (scores[0].offset_ms, scores[0].auc, scores[0].windows),
+            (0, Some(0.8), 900)
+        );
         assert_eq!(scores[1].auc, None);
-        let refused = offsets_from(Some(r#"{"outcome":"refused","message":"too few recordings"}"#)).unwrap_err();
+        let refused = offsets_from(Some(
+            r#"{"outcome":"refused","message":"too few recordings"}"#,
+        ))
+        .unwrap_err();
         assert_eq!(refused, "too few recordings");
         assert!(offsets_from(None).is_err() && offsets_from(Some("not json")).is_err());
     }

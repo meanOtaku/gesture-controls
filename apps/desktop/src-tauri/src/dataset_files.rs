@@ -230,7 +230,11 @@ pub(crate) fn read_rows<'a>(
         }
         previous = Some(stamp);
         let (label, manual, line) = if columns == header.len() {
-            (fields[columns - 2], fields[columns - 1], (*line).to_string())
+            (
+                fields[columns - 2],
+                fields[columns - 1],
+                (*line).to_string(),
+            )
         } else {
             (fields[columns - 1], "", format!("{line},"))
         };
@@ -257,7 +261,11 @@ pub fn context_of<'a>(comments: impl IntoIterator<Item = &'a str>) -> BTreeMap<S
     comments
         .into_iter()
         .filter_map(|line| {
-            let rest = line.trim_start().trim_start_matches('#').trim_start().strip_prefix(CONTEXT_PREFIX)?;
+            let rest = line
+                .trim_start()
+                .trim_start_matches('#')
+                .trim_start()
+                .strip_prefix(CONTEXT_PREFIX)?;
             let (field, value) = rest.split_once(':')?;
             let (field, value) = (field.trim(), value.trim());
             (!field.is_empty() && !value.is_empty()).then(|| (field.to_string(), value.to_string()))
@@ -269,12 +277,20 @@ pub fn context_of<'a>(comments: impl IntoIterator<Item = &'a str>) -> BTreeMap<S
 pub fn context_lines(context: &BTreeMap<String, String>) -> Vec<String> {
     context
         .iter()
-        .map(|(field, value)| format!("# {CONTEXT_PREFIX}{field}: {}", value.replace(['\n', '\r'], " ")))
+        .map(|(field, value)| {
+            format!(
+                "# {CONTEXT_PREFIX}{field}: {}",
+                value.replace(['\n', '\r'], " ")
+            )
+        })
         .collect()
 }
 
 fn is_context_line(line: &str) -> bool {
-    line.trim_start().trim_start_matches('#').trim_start().starts_with(CONTEXT_PREFIX)
+    line.trim_start()
+        .trim_start_matches('#')
+        .trim_start()
+        .starts_with(CONTEXT_PREFIX)
 }
 
 fn declared_label(comments: &[&str]) -> Option<String> {
@@ -342,7 +358,11 @@ pub fn parse_pair(ppg_text: &str, imu_text: &str) -> Result<Pair, String> {
 }
 
 /// [`parse_pair`], optionally allowing a recording with no label at all (one opened for labelling).
-pub fn parse_pair_with(ppg_text: &str, imu_text: &str, require_label: bool) -> Result<Pair, String> {
+pub fn parse_pair_with(
+    ppg_text: &str,
+    imu_text: &str,
+    require_label: bool,
+) -> Result<Pair, String> {
     let ppg = read_ppg(ppg_text)?;
     let imu = read_imu(imu_text)?;
     let mut labels = BTreeSet::new();
@@ -492,12 +512,19 @@ pub fn merge_to_single(ppg_csv: &str, imu_csv: &str) -> Result<String, String> {
 fn merge(ppg_csv: &str, imu_csv: &str, keep_manual: bool) -> Result<String, String> {
     let ppg = read_ppg(ppg_csv)?;
     let imu = read_imu(imu_csv)?;
-    let motion: Vec<Vec<&str>> = imu.rows.iter().map(|row| row.line.split(',').collect()).collect();
+    let motion: Vec<Vec<&str>> = imu
+        .rows
+        .iter()
+        .map(|row| row.line.split(',').collect())
+        .collect();
     let mut fused = vec![false; motion.len()];
     // Motion rows by timestamp, sequence and labels, earliest first, so each pulse row finds its partner without a scan.
     let mut partners: HashMap<(&str, &str, &str, &str), VecDeque<usize>> = HashMap::new();
     for (i, m) in motion.iter().enumerate() {
-        partners.entry((m[0], m[1], m[12], m[13])).or_default().push_back(i);
+        partners
+            .entry((m[0], m[1], m[12], m[13]))
+            .or_default()
+            .push_back(i);
     }
     let labels = |label: &str, manual: &str| {
         if keep_manual {
@@ -509,7 +536,9 @@ fn merge(ppg_csv: &str, imu_csv: &str, keep_manual: bool) -> Result<String, Stri
     let mut merged: Vec<(i128, u8, String)> = Vec::new();
     for row in &ppg.rows {
         let f: Vec<&str> = row.line.split(',').collect();
-        let partner = partners.get_mut(&(f[0], f[1], f[6], f[7])).and_then(VecDeque::pop_front);
+        let partner = partners
+            .get_mut(&(f[0], f[1], f[6], f[7]))
+            .and_then(VecDeque::pop_front);
         let middle = match partner {
             Some(i) => {
                 fused[i] = true;
@@ -520,7 +549,16 @@ fn merge(ppg_csv: &str, imu_csv: &str, keep_manual: bool) -> Result<String, Stri
         merged.push((
             row.stamp,
             0,
-            format!("{},{},{},{},{},{middle},{},{}", f[0], f[1], f[2], f[3], f[4], f[5], labels(f[6], f[7])),
+            format!(
+                "{},{},{},{},{},{middle},{},{}",
+                f[0],
+                f[1],
+                f[2],
+                f[3],
+                f[4],
+                f[5],
+                labels(f[6], f[7])
+            ),
         ));
     }
     for (index, (row, f)) in imu.rows.iter().zip(&motion).enumerate() {
@@ -530,7 +568,13 @@ fn merge(ppg_csv: &str, imu_csv: &str, keep_manual: bool) -> Result<String, Stri
         merged.push((
             row.stamp,
             1,
-            format!("{},{},,,,{},,{}", f[0], f[1], f[2..12].join(","), labels(f[12], f[13])),
+            format!(
+                "{},{},,,,{},,{}",
+                f[0],
+                f[1],
+                f[2..12].join(","),
+                labels(f[12], f[13])
+            ),
         ));
     }
     merged.sort_by_key(|row| (row.0, row.1));
@@ -569,12 +613,23 @@ pub const MIN_HOLD_MS: f64 = 200.0;
 pub fn holds(pair: &Pair) -> Result<(Vec<Hold>, f64), String> {
     let ppg = read_ppg(&pair.ppg_csv)?;
     let imu = read_imu(&pair.imu_csv)?;
-    let origin = ppg.rows.iter().chain(&imu.rows).map(|row| row.stamp).min().unwrap_or(0);
+    let origin = ppg
+        .rows
+        .iter()
+        .chain(&imu.rows)
+        .map(|row| row.stamp)
+        .min()
+        .unwrap_or(0);
     let mut rows: Vec<(f64, &str)> = ppg
         .rows
         .iter()
         .chain(&imu.rows)
-        .map(|row| ((row.stamp - origin) as f64 / 1e6, effective_label(&row.label, &row.manual)))
+        .map(|row| {
+            (
+                (row.stamp - origin) as f64 / 1e6,
+                effective_label(&row.label, &row.manual),
+            )
+        })
         .collect();
     rows.sort_by(|a, b| a.0.total_cmp(&b.0));
     let duration = rows.last().map_or(0.0, |row| row.0);
@@ -591,8 +646,14 @@ pub fn holds(pair: &Pair) -> Result<(Vec<Hold>, f64), String> {
             continue;
         }
         match out.last_mut() {
-            Some(hold) if hold.label == label && start - hold.end_ms < HOLD_MERGE_GAP_MS => hold.end_ms = end,
-            _ => out.push(Hold { label: label.to_string(), start_ms: start, end_ms: end }),
+            Some(hold) if hold.label == label && start - hold.end_ms < HOLD_MERGE_GAP_MS => {
+                hold.end_ms = end
+            }
+            _ => out.push(Hold {
+                label: label.to_string(),
+                start_ms: start,
+                end_ms: end,
+            }),
         }
     }
     Ok((out, duration))
@@ -616,7 +677,13 @@ pub fn quality_of(pair: &Pair) -> Result<Quality, String> {
     let flagged = ppg
         .rows
         .iter()
-        .filter(|row| row.line.split(',').nth(5).and_then(|v| v.trim().parse::<f64>().ok()).is_some_and(|v| v > 0.0))
+        .filter(|row| {
+            row.line
+                .split(',')
+                .nth(5)
+                .and_then(|v| v.trim().parse::<f64>().ok())
+                .is_some_and(|v| v > 0.0)
+        })
         .count();
     let (all, _) = holds(pair)?;
     let mut counts: BTreeMap<String, usize> = BTreeMap::new();
@@ -629,7 +696,11 @@ pub fn quality_of(pair: &Pair) -> Result<Quality, String> {
         }
     }
     Ok(Quality {
-        poor_contact_share: if ppg.rows.is_empty() { 0.0 } else { flagged as f64 / ppg.rows.len() as f64 },
+        poor_contact_share: if ppg.rows.is_empty() {
+            0.0
+        } else {
+            flagged as f64 / ppg.rows.len() as f64
+        },
         holds: counts,
         short_holds: short,
     })
@@ -684,15 +755,22 @@ mod tests {
         assert_eq!(pair.labels, ["idle", "pinch"]);
         let ppg: Vec<&str> = pair.ppg_csv.lines().collect();
         assert_eq!(ppg[0], ppg_header());
-        assert_eq!(ppg[1], "100,1,10,20,30,0,pinch,", "with an empty manual_label");
+        assert_eq!(
+            ppg[1], "100,1,10,20,30,0,pinch,",
+            "with an empty manual_label"
+        );
         assert!(
-            ppg.iter().skip(1).all(|row| !row.trim_end_matches(',').contains(",,")),
+            ppg.iter()
+                .skip(1)
+                .all(|row| !row.trim_end_matches(',').contains(",,")),
             "no blank cells in the pulse file: {ppg:?}"
         );
         let imu: Vec<&str> = pair.imu_csv.lines().collect();
         assert_eq!(imu[1], "120,2,0.1,0.2,0.3,0.4,0.5,0.6,1,0,0,0,pinch,");
         assert!(
-            imu.iter().skip(1).all(|row| !row.trim_end_matches(',').contains(",,")),
+            imu.iter()
+                .skip(1)
+                .all(|row| !row.trim_end_matches(',').contains(",,")),
             "no blank cells in the motion file"
         );
         // Merged back: every row is as it was, the fused one included, so the conversion is lossless in what a model reads.
@@ -778,7 +856,10 @@ mod tests {
         assert_eq!(effective_label("pinch", NO_LABEL), "");
         assert_eq!(effective_label("", "fist"), "fist");
         let pair = parse_pair(
-            &format!("{}\n100,1,1,2,3,0,pinch,fist\n200,2,1,2,3,0,pinch,-\n300,3,1,2,3,0,,\n", ppg_header()),
+            &format!(
+                "{}\n100,1,1,2,3,0,pinch,fist\n200,2,1,2,3,0,pinch,-\n300,3,1,2,3,0,,\n",
+                ppg_header()
+            ),
             &format!("{}\n150,1,0,0,0,0,0,0,1,0,0,0,pinch,\n", imu_header()),
         )
         .unwrap();
@@ -789,7 +870,13 @@ mod tests {
         assert_eq!(rows[0], "100,1,1,2,3,,,,,,,,,,,0,fist");
         assert_eq!(rows[2], "200,2,1,2,3,,,,,,,,,,,0,");
         let single = merge_to_single(&pair.ppg_csv, &pair.imu_csv).unwrap();
-        assert!(single.lines().next().unwrap().ends_with(",label,manual_label"));
+        assert!(
+            single
+                .lines()
+                .next()
+                .unwrap()
+                .ends_with(",label,manual_label")
+        );
         assert!(single.contains("\n100,1,1,2,3,,,,,,,,,,,0,pinch,fist\n"));
         // And that single file splits back into the same pair.
         let back = split_legacy(&single).unwrap();
@@ -798,8 +885,11 @@ mod tests {
 
     #[test]
     fn session_details_travel_with_the_files() {
-        let context: BTreeMap<String, String> =
-            [("arm".to_string(), "resting".to_string()), ("wrist".to_string(), "left".to_string())].into();
+        let context: BTreeMap<String, String> = [
+            ("arm".to_string(), "resting".to_string()),
+            ("wrist".to_string(), "left".to_string()),
+        ]
+        .into();
         let lines = context_lines(&context);
         assert_eq!(lines, ["# context.arm: resting", "# context.wrist: left"]);
         let single = format!(
@@ -809,8 +899,16 @@ mod tests {
         );
         let pair = split_legacy(&single).unwrap();
         assert_eq!(pair.context, context);
-        assert!(pair.ppg_csv.starts_with("# context.arm: resting\n# context.wrist: left\n# label: \n"), "{}", pair.ppg_csv);
-        assert!(!pair.ppg_csv.contains("gesture-dataset-export"), "other lines described the old single file");
+        assert!(
+            pair.ppg_csv
+                .starts_with("# context.arm: resting\n# context.wrist: left\n# label: \n"),
+            "{}",
+            pair.ppg_csv
+        );
+        assert!(
+            !pair.ppg_csv.contains("gesture-dataset-export"),
+            "other lines described the old single file"
+        );
         // A line with no value says nothing.
         assert!(context_of(["# context.notes: ", "# label: x"]).is_empty());
     }
@@ -819,10 +917,16 @@ mod tests {
     fn files_from_before_manual_labels_are_read_and_get_the_column() {
         let pair = parse_pair(
             &format!("{}\n100,1,1,2,3,0,pinch\n", PPG_HEADER_V1.join(",")),
-            &format!("{}\n150,1,0,0,0,0,0,0,1,0,0,0,pinch\n", IMU_HEADER_V1.join(",")),
+            &format!(
+                "{}\n150,1,0,0,0,0,0,0,1,0,0,0,pinch\n",
+                IMU_HEADER_V1.join(",")
+            ),
         )
         .unwrap();
-        assert_eq!(pair.ppg_csv, format!("{}\n100,1,1,2,3,0,pinch,\n", ppg_header()));
+        assert_eq!(
+            pair.ppg_csv,
+            format!("{}\n100,1,1,2,3,0,pinch,\n", ppg_header())
+        );
         assert!(pair.imu_csv.ends_with(",pinch,\n"));
         // A recording with no label at all opens for labelling, though it cannot be stored for training as it is.
         let bare = format!("{}\n100,1,1,2,3,0,\n", PPG_HEADER_V1.join(","));
@@ -835,15 +939,32 @@ mod tests {
     fn holds_are_joined_across_short_gaps_and_the_quality_report_counts_them() {
         let mut ppg = vec![ppg_header()];
         let mut push = |ms: i64, label: &str, manual: &str, contact: u8| {
-            ppg.push(format!("{},1,1,2,3,{contact},{label},{manual}", 1_000_000_000 + ms * 1_000_000));
+            ppg.push(format!(
+                "{},1,1,2,3,{contact},{label},{manual}",
+                1_000_000_000 + ms * 1_000_000
+            ));
         };
-        for ms in (0..=300).step_by(20) { push(ms, "pinch", "", 0); }
-        for ms in (320..=380).step_by(20) { push(ms, "", "", 0); }
-        for ms in (400..=600).step_by(20) { push(ms, "pinch", "", 2); }
-        for ms in (620..=980).step_by(20) { push(ms, "", "", 0); }
-        for ms in (1000..=1100).step_by(20) { push(ms, "pinch", "", 0); }
-        for ms in (1120..=1980).step_by(20) { push(ms, "", "", 0); }
-        for ms in (2000..=2400).step_by(20) { push(ms, "fist", "pinch", 0); }
+        for ms in (0..=300).step_by(20) {
+            push(ms, "pinch", "", 0);
+        }
+        for ms in (320..=380).step_by(20) {
+            push(ms, "", "", 0);
+        }
+        for ms in (400..=600).step_by(20) {
+            push(ms, "pinch", "", 2);
+        }
+        for ms in (620..=980).step_by(20) {
+            push(ms, "", "", 0);
+        }
+        for ms in (1000..=1100).step_by(20) {
+            push(ms, "pinch", "", 0);
+        }
+        for ms in (1120..=1980).step_by(20) {
+            push(ms, "", "", 0);
+        }
+        for ms in (2000..=2400).step_by(20) {
+            push(ms, "fist", "pinch", 0);
+        }
         let pair = parse_pair(&(ppg.join("\n") + "\n"), &format!("{}\n", imu_header())).unwrap();
         let (found, duration) = holds(&pair).unwrap();
         let spans: Vec<(f64, f64)> = found.iter().map(|h| (h.start_ms, h.end_ms)).collect();
@@ -852,7 +973,11 @@ mod tests {
         let quality = quality_of(&pair).unwrap();
         assert_eq!(quality.holds, BTreeMap::from([("pinch".to_string(), 2)]));
         assert_eq!(quality.short_holds, 1);
-        assert!((quality.poor_contact_share - 11.0 / 121.0).abs() < 1e-9, "11 of the 121 pulse samples were flagged: {}", quality.poor_contact_share);
+        assert!(
+            (quality.poor_contact_share - 11.0 / 121.0).abs() < 1e-9,
+            "11 of the 121 pulse samples were flagged: {}",
+            quality.poor_contact_share
+        );
     }
 
     #[test]
@@ -874,8 +999,17 @@ mod tests {
     fn what_a_pair_holds_is_its_rows_whatever_its_comment_lines() {
         let rows = format!("{}\n100,1,1,2,3,0,pinch,\n", ppg_header());
         let imu = format!("{}\n", imu_header());
-        assert_eq!(rows_sha(&rows, &imu), rows_sha(&format!("# gesture-dataset-export: 1\n# label: \n{rows}"), &imu));
-        assert_ne!(rows_sha(&rows, &imu), rows_sha(&rows.replace(",pinch,", ",fist,"), &imu));
+        assert_eq!(
+            rows_sha(&rows, &imu),
+            rows_sha(
+                &format!("# gesture-dataset-export: 1\n# label: \n{rows}"),
+                &imu
+            )
+        );
+        assert_ne!(
+            rows_sha(&rows, &imu),
+            rows_sha(&rows.replace(",pinch,", ",fist,"), &imu)
+        );
     }
 
     #[test]

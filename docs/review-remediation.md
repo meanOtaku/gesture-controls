@@ -1,5 +1,11 @@
 # Review remediation
 
+**Historical scope:** the entries below describe the implementations and commits reviewed
+in October. References to LiteRT and old batch-window gates are superseded by the current
+[tree/CNN runtime](architecture/label-inference.md). Use the
+[current release checklist](release-readiness.md) for operational commands and the
+[November review](project-review-2026-11-06.md) for new findings.
+
 Status of every finding in the four engineering reviews under
 [`.hermes/reviews/`](../.hermes/reviews/): the architecture baseline (M1), sensor
 timing (M2), data and model lifecycle (M3) and gesture-to-action safety (M4). The

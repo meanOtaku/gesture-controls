@@ -20,15 +20,15 @@ mod label_runtime;
 mod label_training;
 mod labelling;
 mod latest_write;
+mod mistakes;
 mod model_lab;
 mod overlay;
 mod recording_bundle;
 mod recording_sequence;
-mod mistakes;
-mod watch_power;
 mod sealed_test;
 mod settings;
 mod watch;
+mod watch_power;
 
 const WATCH_WEBSOCKET_ADDRESS: SocketAddr =
     SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 8766);

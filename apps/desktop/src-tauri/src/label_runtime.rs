@@ -75,7 +75,10 @@ fn exclusivity_groups() -> Vec<label_inference::ExclusivityGroup> {
     EXCLUSIVE_LABELS
         .iter()
         .map(|labels| label_inference::ExclusivityGroup {
-            labels: labels.iter().filter_map(|label| LabelId::new(*label).ok()).collect(),
+            labels: labels
+                .iter()
+                .filter_map(|label| LabelId::new(*label).ok())
+                .collect(),
         })
         .collect()
 }
@@ -243,7 +246,9 @@ fn purge_old_models(store: &mut RegistryStore<FileStore>, dir: &Path) -> Result<
                 .ok()
                 .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
                 .and_then(|spec| spec["backend"].as_str().map(str::to_string));
-            if backend.is_some_and(|b| b != crate::label_training::BACKEND && b != crate::label_training::CNN_BACKEND) {
+            if backend.is_some_and(|b| {
+                b != crate::label_training::BACKEND && b != crate::label_training::CNN_BACKEND
+            }) {
                 let _ = std::fs::remove_dir_all(entry.path());
                 leftovers += 1;
             }
@@ -251,7 +256,10 @@ fn purge_old_models(store: &mut RegistryStore<FileStore>, dir: &Path) -> Result<
     }
     for legacy in &purged.quarantined {
         let plain = !legacy.id.is_empty()
-            && legacy.id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+            && legacy
+                .id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
         if plain {
             let _ = std::fs::remove_dir_all(dir.join(&legacy.id));
         }
@@ -785,7 +793,12 @@ impl LabelRuntimeHost {
     }
 
     /// Names a model (`None` clears it). Only what is shown changes, so the running models are not reloaded.
-    pub fn rename_model(&self, app: &AppHandle, id: &str, name: Option<&str>) -> Result<(), String> {
+    pub fn rename_model(
+        &self,
+        app: &AppHandle,
+        id: &str,
+        name: Option<&str>,
+    ) -> Result<(), String> {
         let id = ModelVersionId::new(id).map_err(|e| e.to_string())?;
         {
             let mut state = self
@@ -942,7 +955,8 @@ impl LabelRuntimeHost {
     /// Requires (or stops requiring) the hand to have been still before a gesture starts, for the active models and the
     /// one being compared. A detection under way is not affected.
     pub fn set_steadiness_gate(&self, on: bool) {
-        self.steady_starts.store(on, std::sync::atomic::Ordering::Relaxed);
+        self.steady_starts
+            .store(on, std::sync::atomic::Ordering::Relaxed);
         if let Ok(mut runtime) = self.runtime.lock() {
             runtime.set_steadiness_gate(on);
         }
@@ -959,7 +973,12 @@ impl LabelRuntimeHost {
             .lock()
             .map(|runtime| {
                 if runtime.is_off_wrist() {
-                    HandSteadinessView { state: "offWrist".into(), accel_spread: None, turning: None, tilt_change_deg: None }
+                    HandSteadinessView {
+                        state: "offWrist".into(),
+                        accel_spread: None,
+                        turning: None,
+                        tilt_change_deg: None,
+                    }
                 } else {
                     runtime.hand_steadiness().into()
                 }
@@ -1001,14 +1020,19 @@ impl LabelRuntimeHost {
     pub fn start_shadow(&self, app: &AppHandle, id: &str) -> Result<(), String> {
         let version = self.version_for(id)?;
         if !version.runnable() {
-            return Err("this model cannot run (it has no model file that passed its checks)".into());
+            return Err(
+                "this model cannot run (it has no model file that passed its checks)".into(),
+            );
         }
         let dir = Self::model_lab_dir(app)?;
         let mut probe = version.clone();
         probe.state = LifecycleState::Active;
         let model = label_inference::load_version(&probe, &dir)?;
         // Judged as the active models are, gate included, so the comparison is fair.
-        let mut runtime = runtime_with_gate(self.steady_starts.load(std::sync::atomic::Ordering::Relaxed));
+        let mut runtime = runtime_with_gate(
+            self.steady_starts
+                .load(std::sync::atomic::Ordering::Relaxed),
+        );
         runtime.set_models(vec![model]);
         runtime.set_mode(RuntimeMode::Monitor);
         *self
@@ -1262,12 +1286,24 @@ fn text_of<T: Serialize>(value: &T) -> Option<String> {
 }
 
 /// A run's data and settings, from its snapshot and its trainer's parameters.
-fn history_details(registry: &model_lab_core::Registry, run: &model_lab_core::TrainingRun) -> TrainingHistoryRun {
+fn history_details(
+    registry: &model_lab_core::Registry,
+    run: &model_lab_core::TrainingRun,
+) -> TrainingHistoryRun {
     let snapshot = registry.snapshots.get(&run.snapshot_id);
-    let ids = |list: &[model_lab_core::RecordingId]| list.iter().map(ToString::to_string).collect::<Vec<_>>();
+    let ids = |list: &[model_lab_core::RecordingId]| {
+        list.iter().map(ToString::to_string).collect::<Vec<_>>()
+    };
     let with_role = |role: model_lab_core::ExampleRole| {
         snapshot
-            .map(|s| s.mapping.entries.iter().filter(|(_, r)| **r == role).map(|(l, _)| l.to_string()).collect())
+            .map(|s| {
+                s.mapping
+                    .entries
+                    .iter()
+                    .filter(|(_, r)| **r == role)
+                    .map(|(l, _)| l.to_string())
+                    .collect()
+            })
             .unwrap_or_default()
     };
     TrainingHistoryRun {
@@ -1542,10 +1578,18 @@ mod tests {
     fn import_model_bundles_while_the_app_is_closed() {
         let dir = std::path::PathBuf::from(std::env::var("MODEL_LAB_DIR").expect("MODEL_LAB_DIR"));
         let (mut store, _) = open_registry(&dir, Some(&dir.join("registry.json"))).unwrap();
-        for source in std::env::var("IMPORT_BUNDLES").expect("IMPORT_BUNDLES").split(';').filter(|s| !s.is_empty()) {
+        for source in std::env::var("IMPORT_BUNDLES")
+            .expect("IMPORT_BUNDLES")
+            .split(';')
+            .filter(|s| !s.is_empty())
+        {
             let staged = stage_bundle(std::path::Path::new(source), &dir).unwrap();
-            let outcome = publish_staged(staged, &dir, &mut store, &LabelRuntimeHost::now_rfc3339()).unwrap();
-            println!("imported {} as draft {} (model {})", outcome.label, outcome.version_id, outcome.model_sha256);
+            let outcome =
+                publish_staged(staged, &dir, &mut store, &LabelRuntimeHost::now_rfc3339()).unwrap();
+            println!(
+                "imported {} as draft {} (model {})",
+                outcome.label, outcome.version_id, outcome.model_sha256
+            );
         }
         assert!(store.registry().validate().is_ok());
     }
@@ -1559,7 +1603,11 @@ mod tests {
         let dir = std::path::PathBuf::from(std::env::var("MODEL_LAB_DIR").expect("MODEL_LAB_DIR"));
         let (mut store, _) = open_registry(&dir, Some(&dir.join("registry.json"))).unwrap();
         let now = LabelRuntimeHost::now_rfc3339();
-        for raw in std::env::var("ACTIVATE_MODELS").expect("ACTIVATE_MODELS").split(';').filter(|s| !s.is_empty()) {
+        for raw in std::env::var("ACTIVATE_MODELS")
+            .expect("ACTIVATE_MODELS")
+            .split(';')
+            .filter(|s| !s.is_empty())
+        {
             let id = ModelVersionId::new(raw).unwrap();
             store
                 .mutate(|r| {
@@ -1579,7 +1627,12 @@ mod tests {
             store.mutate(|r| r.activate(&id, &now).map(|_| ())).unwrap();
             println!("{raw}: active, monitor only");
         }
-        store.mutate(|r| { r.set_inference_mode(model_lab_core::InferenceMode::Monitor); Ok(()) }).unwrap();
+        store
+            .mutate(|r| {
+                r.set_inference_mode(model_lab_core::InferenceMode::Monitor);
+                Ok(())
+            })
+            .unwrap();
         assert!(store.registry().validate().is_ok());
         println!("runtime mode: {:?}", store.registry().inference_mode);
     }
@@ -1588,13 +1641,32 @@ mod tests {
     #[ignore = "one-off: set PURGE_E2E_DIR to a copy of a model-lab folder"]
     fn the_cleanup_on_a_copy_of_a_real_store() {
         let dir = std::path::PathBuf::from(std::env::var("PURGE_E2E_DIR").expect("PURGE_E2E_DIR"));
-        let (mut store, _) = model_lab_core::open_registry(&dir, Some(&dir.join("registry.json"))).unwrap();
-        let before = (store.registry().versions.len(), store.registry().runs.len(), store.registry().snapshots.len(), store.registry().quarantined.len());
+        let (mut store, _) =
+            model_lab_core::open_registry(&dir, Some(&dir.join("registry.json"))).unwrap();
+        let before = (
+            store.registry().versions.len(),
+            store.registry().runs.len(),
+            store.registry().snapshots.len(),
+            store.registry().quarantined.len(),
+        );
         purge_old_models(&mut store, &dir).unwrap();
         let r = store.registry();
-        println!("versions {} -> {}, runs {} -> {}, snapshots {} -> {}, quarantined {} -> {}", before.0, r.versions.len(), before.1, r.runs.len(), before.2, r.snapshots.len(), before.3, r.quarantined.len());
+        println!(
+            "versions {} -> {}, runs {} -> {}, snapshots {} -> {}, quarantined {} -> {}",
+            before.0,
+            r.versions.len(),
+            before.1,
+            r.runs.len(),
+            before.2,
+            r.snapshots.len(),
+            before.3,
+            r.quarantined.len()
+        );
         assert!(r.validate().is_ok());
-        assert!(dir.join("datasets").is_dir() && dir.join("labels.json").is_file(), "recordings and labels are kept");
+        assert!(
+            dir.join("datasets").is_dir() && dir.join("labels.json").is_file(),
+            "recordings and labels are kept"
+        );
     }
 
     #[test]
@@ -1603,18 +1675,39 @@ mod tests {
         let lab = tempfile::tempdir().unwrap();
         let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../../crates/label-inference/tests/fixtures/ppg_onset_bundle");
-        let mut store =
-            RegistryStore::new(Registry::default(), FileStore::new(lab.path().join("registry-v2.json"))).unwrap();
-        let kept = label_inference::import_bundle(&fixture, lab.path(), &mut store, "2026-10-19T00:00:00Z").unwrap();
+        let mut store = RegistryStore::new(
+            Registry::default(),
+            FileStore::new(lab.path().join("registry-v2.json")),
+        )
+        .unwrap();
+        let kept = label_inference::import_bundle(
+            &fixture,
+            lab.path(),
+            &mut store,
+            "2026-10-19T00:00:00Z",
+        )
+        .unwrap();
         // A CNN, which this app runs too.
         let cnn_fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../../crates/label-inference/tests/fixtures/ppg_imu_cnn_bundle");
-        let cnn = label_inference::import_bundle(&cnn_fixture, lab.path(), &mut store, "2026-10-19T00:00:00Z").unwrap();
+        let cnn = label_inference::import_bundle(
+            &cnn_fixture,
+            lab.path(),
+            &mut store,
+            "2026-10-19T00:00:00Z",
+        )
+        .unwrap();
         // An older model of the same label, its ONNX bundle in its own folder.
         let old_dir = lab.path().join("label-models/pinch-old");
         std::fs::create_dir_all(&old_dir).unwrap();
-        std::fs::write(old_dir.join("manifest.json"), r#"{"model":{"format":"onnx"},"preprocessing":{"kind":"none"}}"#).unwrap();
-        let project = store.registry().versions[&kept.version_id].project_id.clone();
+        std::fs::write(
+            old_dir.join("manifest.json"),
+            r#"{"model":{"format":"onnx"},"preprocessing":{"kind":"none"}}"#,
+        )
+        .unwrap();
+        let project = store.registry().versions[&kept.version_id]
+            .project_id
+            .clone();
         let contract = store.registry().versions[&kept.version_id].input.clone();
         let old = ModelVersion::new(
             ModelVersionId::new("pinch-old").unwrap(),
@@ -1641,21 +1734,43 @@ mod tests {
         ] {
             let folder = lab.path().join("training-runs").join(run);
             std::fs::create_dir_all(&folder).unwrap();
-            std::fs::write(folder.join("spec.json"), format!(r#"{{"backend":"{backend}"}}"#)).unwrap();
+            std::fs::write(
+                folder.join("spec.json"),
+                format!(r#"{{"backend":"{backend}"}}"#),
+            )
+            .unwrap();
         }
 
         purge_old_models(&mut store, lab.path()).unwrap();
-        let mut versions: Vec<String> = store.registry().versions.keys().map(ToString::to_string).collect();
+        let mut versions: Vec<String> = store
+            .registry()
+            .versions
+            .keys()
+            .map(ToString::to_string)
+            .collect();
         versions.sort();
         let mut expected = vec![kept.version_id.to_string(), cnn.version_id.to_string()];
         expected.sort();
         assert_eq!(versions, expected, "the trees and the CNN are kept");
         assert!(lab.path().join("training-runs/run-cnn").exists());
-        assert!(lab.path().join(&store.registry().versions[&cnn.version_id].artifact_dir).join("model.cnn").is_file());
+        assert!(
+            lab.path()
+                .join(&store.registry().versions[&cnn.version_id].artifact_dir)
+                .join("model.cnn")
+                .is_file()
+        );
         assert!(!old_dir.exists() && !lab.path().join("network-designs.json").exists());
-        assert!(lab.path().join("datasets").is_dir(), "recordings are never touched");
-        assert!(!lab.path().join("training-runs/run-old").exists() && lab.path().join("training-runs/run-new").exists());
-        let kept_dir = lab.path().join(&store.registry().versions[&kept.version_id].artifact_dir);
+        assert!(
+            lab.path().join("datasets").is_dir(),
+            "recordings are never touched"
+        );
+        assert!(
+            !lab.path().join("training-runs/run-old").exists()
+                && lab.path().join("training-runs/run-new").exists()
+        );
+        let kept_dir = lab
+            .path()
+            .join(&store.registry().versions[&kept.version_id].artifact_dir);
         assert!(kept_dir.join("model.trees").is_file());
         // Nothing old is left, so a second start changes nothing.
         let before = store.registry().clone();
@@ -1856,14 +1971,24 @@ mod tests {
     #[test]
     fn the_hand_state_is_shown_in_plain_words_with_its_measures() {
         use label_inference::steadiness::{Measures, Verdict};
-        let m = Measures { accel_spread: 0.1, turning: 0.2, tilt_change_deg: 3.0 };
+        let m = Measures {
+            accel_spread: 0.1,
+            turning: 0.2,
+            tilt_change_deg: 3.0,
+        };
         let still = HandSteadinessView::from(Verdict::Steady(m));
         assert_eq!((still.state.as_str(), still.turning), ("still", Some(0.2)));
         assert_eq!(HandSteadinessView::from(Verdict::Moving(m)).state, "moving");
         let unknown = HandSteadinessView::from(Verdict::Unknown);
-        assert_eq!((unknown.state.as_str(), unknown.accel_spread), ("unknown", None));
+        assert_eq!(
+            (unknown.state.as_str(), unknown.accel_spread),
+            ("unknown", None)
+        );
         // Before the watch streams anything there is nothing to tell.
-        assert_eq!(LabelRuntimeHost::default().hand_steadiness().state, "unknown");
+        assert_eq!(
+            LabelRuntimeHost::default().hand_steadiness().state,
+            "unknown"
+        );
     }
 
     #[test]
@@ -1871,7 +1996,11 @@ mod tests {
         let groups = exclusivity_groups();
         assert_eq!(groups.len(), 1);
         assert_eq!(
-            groups[0].labels.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            groups[0]
+                .labels
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
             vec!["pinch_in".to_string(), "pinch_out".to_string()]
         );
     }

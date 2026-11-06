@@ -125,7 +125,11 @@ pub struct DatasetSummary {
     pub labels_from: Option<String>,
     /// Whether the camera's hand landmarks are kept for it (with its Recorder recording, or in its own folder). Worked out
     /// each time the list is read; never stored.
-    #[serde(default, skip_deserializing, skip_serializing_if = "std::ops::Not::not")]
+    #[serde(
+        default,
+        skip_deserializing,
+        skip_serializing_if = "std::ops::Not::not"
+    )]
     pub camera: bool,
     /// When the session was recorded (UTC, RFC 3339), from its Recorder recording. Worked out like `camera`.
     #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]
@@ -581,7 +585,9 @@ fn already_holds(dir: &std::path::Path, id: &str, pair: &Pair, legacy_text: Opti
         let same_files = read(dataset_files::PPG_FILE)
             .zip(read(dataset_files::IMU_FILE))
             .and_then(|(ppg, imu)| dataset_files::parse_pair_with(&ppg, &imu, false).ok())
-            .is_some_and(|stored| dataset_files::pair_sha(&stored.ppg_csv, &stored.imu_csv) == incoming);
+            .is_some_and(|stored| {
+                dataset_files::pair_sha(&stored.ppg_csv, &stored.imu_csv) == incoming
+            });
         // A folder converted from a single file also holds that file's data.
         let same_original = legacy_text.is_some_and(|text| {
             read(dataset_files::META_FILE)
@@ -669,7 +675,11 @@ pub(crate) fn store_pair_in(
     if fill_identities(dir, &mut index) {
         write_index_file(&index_file, &index)?;
     }
-    if let Some(existing) = index.datasets.iter().find(|d| d.content_sha.as_deref() == Some(incoming.as_str())) {
+    if let Some(existing) = index
+        .datasets
+        .iter()
+        .find(|d| d.content_sha.as_deref() == Some(incoming.as_str()))
+    {
         return Err(format!(
             "this recording is already in Model Lab as #{} {}, so nothing was added",
             existing.sequence, existing.original_filename
@@ -824,7 +834,11 @@ pub fn export_dataset_folder(
         fs::write(staging.join(dataset_files::IMU_FILE), &imu_csv).map_err(|e| e.to_string())?;
         // How the pulse timestamps were mapped, so it can be redone (see `recording_bundle::PPG_CLOCK_HEADER`).
         if let Some(clock) = &ppg_clock_csv {
-            fs::write(staging.join(crate::recording_bundle::PPG_CLOCK_FILE_NAME), clock).map_err(|e| e.to_string())?;
+            fs::write(
+                staging.join(crate::recording_bundle::PPG_CLOCK_FILE_NAME),
+                clock,
+            )
+            .map_err(|e| e.to_string())?;
         }
         for (file, content) in &camera {
             fs::write(staging.join(file), content).map_err(|e| e.to_string())?;
@@ -845,7 +859,9 @@ pub fn export_dataset_folder(
 
 /// The camera files an exported folder gets: each landmarks file on the watch's clock, then `clock_sync.csv` itself.
 /// Anything else is refused, and so is a landmarks file without the clock pairs that place it.
-fn camera_export(files: std::collections::BTreeMap<String, String>) -> Result<Vec<(String, String)>, String> {
+fn camera_export(
+    files: std::collections::BTreeMap<String, String>,
+) -> Result<Vec<(String, String)>, String> {
     use crate::recording_bundle::{CLOCK_SYNC_FILE_NAME, landmarks_on_watch_clock};
     if files.is_empty() {
         return Ok(Vec::new());
@@ -996,26 +1012,31 @@ pub async fn list_model_datasets(app: AppHandle) -> Result<Vec<DatasetSummary>, 
     tauri::async_runtime::spawn_blocking(move || {
         let runtime = app.state::<ModelLabRuntime>();
         list_model_datasets_blocking(&app, &runtime)
-    }).await.map_err(|e| e.to_string())?
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
-fn list_model_datasets_blocking(app: &AppHandle, runtime: &ModelLabRuntime) -> Result<Vec<DatasetSummary>, String> {
+fn list_model_datasets_blocking(
+    app: &AppHandle,
+    runtime: &ModelLabRuntime,
+) -> Result<Vec<DatasetSummary>, String> {
     let _guard = runtime
         .lock
         .lock()
         .map_err(|_| "model lab lock was poisoned".to_string())?;
-    let mut index = load_index(&app);
-    if let Ok(dir) = datasets_dir(&app)
+    let mut index = load_index(app);
+    if let Ok(dir) = datasets_dir(app)
         && fill_identities(&dir, &mut index)
     {
         // Recordings added before identities and quality were kept get them once.
-        if let Err(error) = write_index_atomic(&app, &index) {
+        if let Err(error) = write_index_atomic(app, &index) {
             warn!(%error, "could not save the recordings' identities");
         }
     }
     if let (Ok(dir), Ok(bundles)) = (
-        datasets_dir(&app),
-        crate::recording_bundle::recording_bundles_dir(&app),
+        datasets_dir(app),
+        crate::recording_bundle::recording_bundles_dir(app),
     ) {
         describe(&mut index.datasets, &dir, &bundles);
     }
@@ -1026,7 +1047,10 @@ fn list_model_datasets_blocking(app: &AppHandle, runtime: &ModelLabRuntime) -> R
 /// reports camera-timed and estimated recordings apart.
 pub(crate) fn described_index(app: &AppHandle) -> DatasetIndex {
     let mut index = load_index(app);
-    if let (Ok(dir), Ok(bundles)) = (datasets_dir(app), crate::recording_bundle::recording_bundles_dir(app)) {
+    if let (Ok(dir), Ok(bundles)) = (
+        datasets_dir(app),
+        crate::recording_bundle::recording_bundles_dir(app),
+    ) {
         describe(&mut index.datasets, &dir, &bundles);
     }
     index
@@ -1081,7 +1105,11 @@ pub(crate) fn describe(
 /// Works out the content identity and quality report of every recording that lacks them. Returns whether any changed.
 pub(crate) fn fill_identities(dir: &std::path::Path, index: &mut DatasetIndex) -> bool {
     let mut changed = false;
-    for dataset in index.datasets.iter_mut().filter(|d| d.content_sha.is_none() || d.quality.is_none()) {
+    for dataset in index
+        .datasets
+        .iter_mut()
+        .filter(|d| d.content_sha.is_none() || d.quality.is_none())
+    {
         let Ok(pair) = crate::labelling::pair_at(&dataset_csv_path(dir, &dataset.id)) else {
             continue;
         };
@@ -1148,7 +1176,9 @@ fn clean_dataset_name(name: Option<&str>) -> Result<Option<String>, String> {
         return Ok(None);
     };
     if name.chars().count() > MAX_DATASET_NAME_CHARS {
-        return Err(format!("a name can be at most {MAX_DATASET_NAME_CHARS} characters"));
+        return Err(format!(
+            "a name can be at most {MAX_DATASET_NAME_CHARS} characters"
+        ));
     }
     if name.chars().any(char::is_control) {
         return Err("a name cannot hold a line break or other control character".to_string());
@@ -1193,15 +1223,30 @@ pub(crate) fn version_name(datasets: &[DatasetSummary], parent: &str) -> Option<
     let parent_name = datasets.iter().find(|d| d.id == parent)?.name.as_deref()?;
     let base = parent_name
         .rsplit_once(" (v")
-        .filter(|(_, n)| n.strip_suffix(')').is_some_and(|n| n.parse::<u32>().is_ok()))
+        .filter(|(_, n)| {
+            n.strip_suffix(')')
+                .is_some_and(|n| n.parse::<u32>().is_ok())
+        })
         .map_or(parent_name, |(base, _)| base);
-    let taken = datasets.iter().filter_map(|d| d.name.as_deref()).filter(|n| n.starts_with(&format!("{base} (v"))).count();
+    let taken = datasets
+        .iter()
+        .filter_map(|d| d.name.as_deref())
+        .filter(|n| n.starts_with(&format!("{base} (v")))
+        .count();
     Some(format!("{base} (v{})", taken + 2))
 }
 
 /// Names the recording `id` with `name`, as `set_dataset_name` does, for the app's own use (a new version's name).
-pub(crate) fn name_dataset(app: &AppHandle, runtime: &ModelLabRuntime, id: &str, name: Option<String>) -> Result<(), String> {
-    let _guard = runtime.lock.lock().map_err(|_| "model lab lock was poisoned".to_string())?;
+pub(crate) fn name_dataset(
+    app: &AppHandle,
+    runtime: &ModelLabRuntime,
+    id: &str,
+    name: Option<String>,
+) -> Result<(), String> {
+    let _guard = runtime
+        .lock
+        .lock()
+        .map_err(|_| "model lab lock was poisoned".to_string())?;
     let mut index = load_index(app);
     rename_in(&mut index, id, name)?;
     write_index_atomic(app, &index)
@@ -1339,33 +1384,74 @@ mod tests {
                 let mut parts = entry.splitn(3, ':');
                 let id = parts.next().unwrap_or_default().trim().to_string();
                 let name = parts.next().unwrap_or(&id).trim().to_string();
-                (id, name, parts.next().unwrap_or_default().trim().to_string())
+                (
+                    id,
+                    name,
+                    parts.next().unwrap_or_default().trim().to_string(),
+                )
             })
             .collect();
-        let refs: Vec<(&str, &str, &str)> = wanted.iter().map(|(a, b, c)| (a.as_str(), b.as_str(), c.as_str())).collect();
-        println!("labels added: {:?}", crate::label_registry::add_gesture_labels_at(&labels_file, &refs).unwrap());
+        let refs: Vec<(&str, &str, &str)> = wanted
+            .iter()
+            .map(|(a, b, c)| (a.as_str(), b.as_str(), c.as_str()))
+            .collect();
+        println!(
+            "labels added: {:?}",
+            crate::label_registry::add_gesture_labels_at(&labels_file, &refs).unwrap()
+        );
         let known = crate::label_registry::label_ids_at(&labels_file);
         let dir = app_data.join(MODEL_LAB_DIR_NAME).join(DATASETS_DIR_NAME);
         let lock = Mutex::new(());
-        let mut entries: Vec<PathBuf> = fs::read_dir(&import).unwrap().map(|e| e.unwrap().path()).collect();
+        let mut entries: Vec<PathBuf> = fs::read_dir(&import)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .collect();
         entries.sort();
         for path in entries {
             let name = path.file_name().unwrap().to_string_lossy().to_string();
             let outcome = if path.is_dir() && path.join(dataset_files::IMU_FILE).is_file() {
                 let read = |file: &str| fs::read_to_string(path.join(file)).unwrap();
-                dataset_files::parse_pair(&read(dataset_files::PPG_FILE), &read(dataset_files::IMU_FILE))
-                    .and_then(|pair| store_pair_in(&dir, |label| known.contains(label), &lock, name.clone(), pair, None, None, None))
+                dataset_files::parse_pair(
+                    &read(dataset_files::PPG_FILE),
+                    &read(dataset_files::IMU_FILE),
+                )
+                .and_then(|pair| {
+                    store_pair_in(
+                        &dir,
+                        |label| known.contains(label),
+                        &lock,
+                        name.clone(),
+                        pair,
+                        None,
+                        None,
+                        None,
+                    )
+                })
             } else if path.extension().is_some_and(|ext| ext == "csv") {
                 let text = fs::read_to_string(&path).unwrap();
                 parse_csv(&text).and_then(|parsed| {
                     let pair = dataset_files::split_legacy(&parsed.csv)?;
-                    store_pair_in(&dir, |label| known.contains(label), &lock, name.clone(), pair, None, Some(&parsed.csv), None)
+                    store_pair_in(
+                        &dir,
+                        |label| known.contains(label),
+                        &lock,
+                        name.clone(),
+                        pair,
+                        None,
+                        Some(&parsed.csv),
+                        None,
+                    )
                 })
             } else {
                 continue;
             };
             match outcome {
-                Ok(summary) => println!("added #{} {} ({})", summary.sequence, name, summary.labels.join(", ")),
+                Ok(summary) => println!(
+                    "added #{} {} ({})",
+                    summary.sequence,
+                    name,
+                    summary.labels.join(", ")
+                ),
                 Err(error) => println!("not added: {name}: {error}"),
             }
         }
@@ -1568,7 +1654,8 @@ mod tests {
     #[ignore = "one-off: set MODEL_LAB_E2E_DATASETS"]
     fn identities_and_quality_of_a_real_datasets_folder() {
         let dir = PathBuf::from(std::env::var("MODEL_LAB_E2E_DATASETS").unwrap());
-        let mut index: DatasetIndex = serde_json::from_slice(&fs::read(dir.join(INDEX_FILE_NAME)).unwrap()).unwrap();
+        let mut index: DatasetIndex =
+            serde_json::from_slice(&fs::read(dir.join(INDEX_FILE_NAME)).unwrap()).unwrap();
         for dataset in &mut index.datasets {
             dataset.content_sha = None;
             dataset.quality = None;
@@ -1576,9 +1663,18 @@ mod tests {
         assert!(fill_identities(&dir, &mut index));
         let mut by_sha: std::collections::BTreeMap<&str, Vec<&str>> = Default::default();
         for dataset in &index.datasets {
-            by_sha.entry(dataset.content_sha.as_deref().unwrap()).or_default().push(&dataset.id[..8]);
+            by_sha
+                .entry(dataset.content_sha.as_deref().unwrap())
+                .or_default()
+                .push(&dataset.id[..8]);
             let q = dataset.quality.as_ref().unwrap();
-            println!("{} holds {:?} short {} poor contact {:.1}%", &dataset.id[..8], q.holds, q.short_holds, q.poor_contact_share * 100.0);
+            println!(
+                "{} holds {:?} short {} poor contact {:.1}%",
+                &dataset.id[..8],
+                q.holds,
+                q.short_holds,
+                q.poor_contact_share * 100.0
+            );
         }
         let twins: Vec<&Vec<&str>> = by_sha.values().filter(|ids| ids.len() > 1).collect();
         println!("same data: {twins:?}");
@@ -1591,16 +1687,41 @@ mod tests {
                            {"id":"b","originalFilename":"b.csv","importedAt":"","label":"idle","rowCount":3}]}"#,
         )
         .unwrap();
-        assert!(index.datasets.iter().all(|d| d.name.is_none()), "an index from before names reads as no name");
-        rename_in(&mut index, "a", clean_dataset_name(Some("  Monday pinches ")).unwrap()).unwrap();
+        assert!(
+            index.datasets.iter().all(|d| d.name.is_none()),
+            "an index from before names reads as no name"
+        );
+        rename_in(
+            &mut index,
+            "a",
+            clean_dataset_name(Some("  Monday pinches ")).unwrap(),
+        )
+        .unwrap();
         assert_eq!(index.datasets[0].name.as_deref(), Some("Monday pinches"));
-        assert!(serde_json::to_string(&index).unwrap().contains(r#""name":"Monday pinches""#));
-        assert!(clean_dataset_name(Some("two\nlines")).is_err() && clean_dataset_name(Some(&"x".repeat(81))).is_err());
+        assert!(
+            serde_json::to_string(&index)
+                .unwrap()
+                .contains(r#""name":"Monday pinches""#)
+        );
+        assert!(
+            clean_dataset_name(Some("two\nlines")).is_err()
+                && clean_dataset_name(Some(&"x".repeat(81))).is_err()
+        );
         assert!(rename_in(&mut index, "gone", None).is_err());
         // Its first new version is v2, the next v3, also when saved from a version; an unnamed one gets no name.
-        assert_eq!(version_name(&index.datasets, "a").as_deref(), Some("Monday pinches (v2)"));
-        index.datasets.push(DatasetSummary { id: "c".into(), name: Some("Monday pinches (v2)".into()), ..index.datasets[1].clone() });
-        assert_eq!(version_name(&index.datasets, "c").as_deref(), Some("Monday pinches (v3)"));
+        assert_eq!(
+            version_name(&index.datasets, "a").as_deref(),
+            Some("Monday pinches (v2)")
+        );
+        index.datasets.push(DatasetSummary {
+            id: "c".into(),
+            name: Some("Monday pinches (v2)".into()),
+            ..index.datasets[1].clone()
+        });
+        assert_eq!(
+            version_name(&index.datasets, "c").as_deref(),
+            Some("Monday pinches (v3)")
+        );
         assert_eq!(version_name(&index.datasets, "b"), None);
         // Blank takes the name away.
         rename_in(&mut index, "a", clean_dataset_name(Some("   ")).unwrap()).unwrap();
@@ -1910,14 +2031,24 @@ mod tests {
 
     #[test]
     fn an_exported_folder_carries_the_camera_landmarks_on_the_watch_clock() {
-        use crate::recording_bundle::{CLOCK_SYNC_FILE_NAME, HAND_LANDMARKS_FILE_NAME, hand_landmarks_header};
+        use crate::recording_bundle::{
+            CLOCK_SYNC_FILE_NAME, HAND_LANDMARKS_FILE_NAME, hand_landmarks_header,
+        };
         let parent = temp_dir("export-camera");
         let pair = dataset_files::split_legacy(LEGACY).unwrap();
         let header = hand_landmarks_header();
-        let landmarks = format!("{header}\n0,1000.000{}", ",".repeat(header.matches(',').count() - 1));
+        let landmarks = format!(
+            "{header}\n0,1000.000{}",
+            ",".repeat(header.matches(',').count() - 1)
+        );
         let sync = "watch_timestamp_ns,browser_arrival_ms\n5000000000,1010.000".to_string();
         let files = |entries: &[(&str, &str)]| {
-            Some(entries.iter().map(|(name, text)| (name.to_string(), text.to_string())).collect())
+            Some(
+                entries
+                    .iter()
+                    .map(|(name, text)| (name.to_string(), text.to_string()))
+                    .collect(),
+            )
         };
         let written = export_dataset_folder(
             parent.display().to_string(),
@@ -1925,19 +2056,43 @@ mod tests {
             pair.ppg_csv.clone(),
             pair.imu_csv.clone(),
             None,
-            files(&[(HAND_LANDMARKS_FILE_NAME, &landmarks), (CLOCK_SYNC_FILE_NAME, &sync)]),
+            files(&[
+                (HAND_LANDMARKS_FILE_NAME, &landmarks),
+                (CLOCK_SYNC_FILE_NAME, &sync),
+            ]),
         )
         .unwrap();
         let folder = PathBuf::from(&written);
         let saved = fs::read_to_string(folder.join(HAND_LANDMARKS_FILE_NAME)).unwrap();
-        assert!(saved.lines().next().unwrap().starts_with("watch_timestamp_ns,frame_index,capture_ms,"));
-        assert!(saved.lines().nth(1).unwrap().starts_with("4990000000,0,1000.000,"));
-        assert_eq!(fs::read_to_string(folder.join(CLOCK_SYNC_FILE_NAME)).unwrap(), sync);
+        assert!(
+            saved
+                .lines()
+                .next()
+                .unwrap()
+                .starts_with("watch_timestamp_ns,frame_index,capture_ms,")
+        );
+        assert!(
+            saved
+                .lines()
+                .nth(1)
+                .unwrap()
+                .starts_with("4990000000,0,1000.000,")
+        );
+        assert_eq!(
+            fs::read_to_string(folder.join(CLOCK_SYNC_FILE_NAME)).unwrap(),
+            sync
+        );
         // Labelling reads them back as the recording kept them.
         let evidence = crate::recording_bundle::folder_camera_evidence(&folder).unwrap();
         assert_eq!(evidence.hand_landmarks, Some(format!("{landmarks}\n")));
-        assert_eq!((evidence.hand_landmarks_second, evidence.clock_sync), (None, sync.clone()));
-        assert!(crate::recording_bundle::folder_camera_evidence(&parent).is_none(), "no landmarks there");
+        assert_eq!(
+            (evidence.hand_landmarks_second, evidence.clock_sync),
+            (None, sync.clone())
+        );
+        assert!(
+            crate::recording_bundle::folder_camera_evidence(&parent).is_none(),
+            "no landmarks there"
+        );
         // Importing the folder keeps them with the recording.
         let stored = parent.join("stored");
         fs::create_dir_all(&stored).unwrap();
@@ -1946,28 +2101,35 @@ mod tests {
             2,
             "the landmarks and the clock samples"
         );
-        assert_eq!(fs::read_to_string(stored.join(HAND_LANDMARKS_FILE_NAME)).unwrap(), saved);
+        assert_eq!(
+            fs::read_to_string(stored.join(HAND_LANDMARKS_FILE_NAME)).unwrap(),
+            saved
+        );
         assert!(crate::recording_bundle::has_landmarks(&stored));
         // The pair still reads back exactly as before: the camera files sit beside it.
-        assert!(dataset_files::parse_pair(
-            &fs::read_to_string(folder.join("ppg.csv")).unwrap(),
-            &fs::read_to_string(folder.join("imu.csv")).unwrap(),
-        )
-        .is_ok());
+        assert!(
+            dataset_files::parse_pair(
+                &fs::read_to_string(folder.join("ppg.csv")).unwrap(),
+                &fs::read_to_string(folder.join("imu.csv")).unwrap(),
+            )
+            .is_ok()
+        );
         // Landmarks without the clock pairs, or a file that is not camera evidence, are refused and nothing is written.
         for bad in [
             files(&[(HAND_LANDMARKS_FILE_NAME, &landmarks)]),
             files(&[("notes.txt", "hello"), (CLOCK_SYNC_FILE_NAME, &sync)]),
         ] {
-            assert!(export_dataset_folder(
-                parent.display().to_string(),
-                "refused".into(),
-                pair.ppg_csv.clone(),
-                pair.imu_csv.clone(),
-                None,
-                bad,
-            )
-            .is_err());
+            assert!(
+                export_dataset_folder(
+                    parent.display().to_string(),
+                    "refused".into(),
+                    pair.ppg_csv.clone(),
+                    pair.imu_csv.clone(),
+                    None,
+                    bad,
+                )
+                .is_err()
+            );
         }
         assert!(!parent.join("refused").exists());
         let _ = fs::remove_dir_all(&parent);

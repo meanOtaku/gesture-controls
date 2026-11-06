@@ -207,7 +207,12 @@ impl LabelRuntime {
         let events: Vec<DetectionEvent> = self
             .loaded_labels()
             .iter()
-            .filter_map(|label| self.hub.clear_label(label, ClearReason::Rejected("the watch is off the wrist".into())))
+            .filter_map(|label| {
+                self.hub.clear_label(
+                    label,
+                    ClearReason::Rejected("the watch is off the wrist".into()),
+                )
+            })
             .collect();
         self.release(events)
     }
@@ -422,21 +427,33 @@ impl LabelRuntime {
                 // next start is judged afresh. Held detections and releases pass.
                 if let DetectionEvent::Rising { label, .. } = &change {
                     let score = moment.iter().find(|s| &s.label == label);
-                    let delay = self.models.get(label).map_or(crate::steadiness::DEFAULT_DECISION_DELAY_MS, |m| m.decision_delay_ms);
+                    let delay = self
+                        .models
+                        .get(label)
+                        .map_or(crate::steadiness::DEFAULT_DECISION_DELAY_MS, |m| {
+                            m.decision_delay_ms
+                        });
                     let watch_ns = score.and_then(|s| s.watch_ns);
-                    let refusal = self.steadiness.jolt_near(watch_ns, delay).refusal().map(Rejection::NoMovement).or_else(|| {
-                        self.steady_starts
-                            .then(|| {
-                                self.steadiness
-                                    .before(watch_ns, delay)
-                                    .refusal()
-                                    .or_else(|| self.steadiness.turned_during(watch_ns, delay))
-                                    .map(Rejection::HandNotStill)
-                            })
-                            .flatten()
-                    });
+                    let refusal = self
+                        .steadiness
+                        .jolt_near(watch_ns, delay)
+                        .refusal()
+                        .map(Rejection::NoMovement)
+                        .or_else(|| {
+                            self.steady_starts
+                                .then(|| {
+                                    self.steadiness
+                                        .before(watch_ns, delay)
+                                        .refusal()
+                                        .or_else(|| self.steadiness.turned_during(watch_ns, delay))
+                                        .map(Rejection::HandNotStill)
+                                })
+                                .flatten()
+                        });
                     if let Some(reason) = refusal {
-                        let _ = self.hub.clear_label(label, ClearReason::Rejected(reason.to_string()));
+                        let _ = self
+                            .hub
+                            .clear_label(label, ClearReason::Rejected(reason.to_string()));
                         if let Some(score) = score {
                             rejections.push(WindowRejection {
                                 label: label.clone(),
@@ -504,15 +521,28 @@ mod tests {
         expected()
             .0
             .into_iter()
-            .map(|s| PpgSample { ts_ns: s.ts_ns + shift_ns, ..s })
+            .map(|s| PpgSample {
+                ts_ns: s.ts_ns + shift_ns,
+                ..s
+            })
             .collect()
     }
 
     /// Drives the runtime through the real path, one pulse sample at a time, each received 5 ms after it was taken.
-    fn drive(rt: &mut LabelRuntime, trace: &[PpgSample], from: usize, to: usize) -> Vec<RuntimeOutput> {
+    fn drive(
+        rt: &mut LabelRuntime,
+        trace: &[PpgSample],
+        from: usize,
+        to: usize,
+    ) -> Vec<RuntimeOutput> {
         let origin = expected().0[0].ts_ns;
         (from..to)
-            .map(|i| rt.observe_ppg(&batch(trace, i, i + 1), trace[i].ts_ns - origin + BASE_NS + 5_000_000))
+            .map(|i| {
+                rt.observe_ppg(
+                    &batch(trace, i, i + 1),
+                    trace[i].ts_ns - origin + BASE_NS + 5_000_000,
+                )
+            })
             .collect()
     }
 
@@ -533,7 +563,13 @@ mod tests {
     fn rises(outputs: &[RuntimeOutput], actionable: bool) -> usize {
         outputs
             .iter()
-            .flat_map(|o| if actionable { o.actionable.iter() } else { o.events.iter() })
+            .flat_map(|o| {
+                if actionable {
+                    o.actionable.iter()
+                } else {
+                    o.events.iter()
+                }
+            })
             .filter(|e| matches!(e, DetectionEvent::Rising { .. }))
             .count()
     }
@@ -594,7 +630,10 @@ mod tests {
         assert_eq!(rises(&out, true), 1);
         assert!(events(&out).iter().any(|e| matches!(
             e,
-            DetectionEvent::Falling { reason: ClearReason::ScoreBelowRelease, .. }
+            DetectionEvent::Falling {
+                reason: ClearReason::ScoreBelowRelease,
+                ..
+            }
         )));
     }
 
@@ -604,7 +643,11 @@ mod tests {
         let out = drive(&mut rt, &trace(0), 0, 300);
         assert_eq!(rises(&out, false), 1, "it is reported");
         assert_eq!(rises(&out, true), 0, "but nothing may start anything");
-        assert!(out.iter().any(|o| o.actionable.iter().any(|e| matches!(e, DetectionEvent::Falling { .. }))));
+        assert!(out.iter().any(|o| {
+            o.actionable
+                .iter()
+                .any(|e| matches!(e, DetectionEvent::Falling { .. }))
+        }));
     }
 
     #[test]
@@ -621,7 +664,11 @@ mod tests {
     #[test]
     fn off_does_nothing() {
         let mut rt = runtime(RuntimeMode::Off);
-        assert!(drive(&mut rt, &trace(0), 0, 300).iter().all(|o| *o == RuntimeOutput::default()));
+        assert!(
+            drive(&mut rt, &trace(0), 0, 300)
+                .iter()
+                .all(|o| *o == RuntimeOutput::default())
+        );
     }
 
     #[test]
@@ -631,10 +678,17 @@ mod tests {
         let out = rt.set_mode(RuntimeMode::Monitor);
         assert!(matches!(
             out.actionable.as_slice(),
-            [DetectionEvent::Falling { reason: ClearReason::Runtime(_), .. }]
+            [DetectionEvent::Falling {
+                reason: ClearReason::Runtime(_),
+                ..
+            }]
         ));
         assert!(!rt.is_active(&pinch()));
-        assert_eq!(rt.set_mode(RuntimeMode::Monitor), RuntimeOutput::default(), "no change, no event");
+        assert_eq!(
+            rt.set_mode(RuntimeMode::Monitor),
+            RuntimeOutput::default(),
+            "no change, no event"
+        );
     }
 
     #[test]
@@ -646,9 +700,15 @@ mod tests {
         let out = rt.set_models(vec![replacement]);
         assert!(matches!(
             out.actionable.as_slice(),
-            [DetectionEvent::Falling { reason: ClearReason::ModelChanged, .. }]
+            [DetectionEvent::Falling {
+                reason: ClearReason::ModelChanged,
+                ..
+            }]
         ));
-        assert!(!rt.is_active(&pinch()), "the new model starts with a clean state");
+        assert!(
+            !rt.is_active(&pinch()),
+            "the new model starts with a clean state"
+        );
         assert!(rt.set_models(vec![]).events.is_empty(), "nothing was held");
         assert!(rt.loaded_labels().is_empty());
     }
@@ -659,7 +719,10 @@ mod tests {
     fn switching_to_another_model_and_back_scores_exactly_as_if_it_had_never_been_switched() {
         let t = trace(0);
         let scores = |out: Vec<RuntimeOutput>| -> Vec<(u64, f64)> {
-            out.into_iter().flat_map(|o| o.scores).map(|s| (s.timestamp_ns, s.confidence)).collect()
+            out.into_iter()
+                .flat_map(|o| o.scores)
+                .map(|s| (s.timestamp_ns, s.confidence))
+                .collect()
         };
         let other = || {
             let mut model = loaded();
@@ -682,7 +745,8 @@ mod tests {
     }
 
     #[test]
-    fn a_warning_goes_up_when_most_decisions_are_unlike_the_training_ones_and_comes_down_when_they_are_back() {
+    fn a_warning_goes_up_when_most_decisions_are_unlike_the_training_ones_and_comes_down_when_they_are_back()
+     {
         let mut f = Familiarity::default();
         let s = 1_000_000_000;
         for i in 0..10 {
@@ -696,28 +760,43 @@ mod tests {
     }
 
     #[test]
-    fn a_model_whose_range_every_decision_fits_is_never_warned_about_and_changing_the_model_clears_a_warning() {
+    fn a_model_whose_range_every_decision_fits_is_never_warned_about_and_changing_the_model_clears_a_warning()
+     {
         let ranged = |low: f64, high: f64| {
             let mut model = loaded();
             let n = model.input.features.len();
-            model.training_range = Some(crate::bundle::TrainingRange { low: vec![low; n], high: vec![high; n] });
+            model.training_range = Some(crate::bundle::TrainingRange {
+                low: vec![low; n],
+                high: vec![high; n],
+            });
             model
         };
         let mut rt = LabelRuntime::default();
         rt.set_models(vec![ranged(-1e12, 1e12)]);
         rt.set_mode(RuntimeMode::Monitor);
-        assert!(drive(&mut rt, &trace(0), 0, 300).iter().all(|o| o.input_warnings.is_none()));
+        assert!(
+            drive(&mut rt, &trace(0), 0, 300)
+                .iter()
+                .all(|o| o.input_warnings.is_none())
+        );
 
         // A range nothing fits: every input is far outside it, and the warning goes up.
         let mut rt = LabelRuntime::default();
         rt.set_models(vec![ranged(1e9, 1e9 + 1.0)]);
         rt.set_mode(RuntimeMode::Monitor);
         let out = drive(&mut rt, &trace(0), 0, 300);
-        let up = out.iter().find_map(|o| o.input_warnings.clone()).expect("a warning went up");
+        let up = out
+            .iter()
+            .find_map(|o| o.input_warnings.clone())
+            .expect("a warning went up");
         assert_eq!(up[0].label, pinch());
         let mut replacement = ranged(1e9, 1e9 + 1.0);
         replacement.version_id = ModelVersionId::new("pinch-v2").unwrap();
-        assert_eq!(rt.set_models(vec![replacement]).input_warnings, Some(Vec::new()), "a clean slate");
+        assert_eq!(
+            rt.set_models(vec![replacement]).input_warnings,
+            Some(Vec::new()),
+            "a clean slate"
+        );
     }
 
     #[test]
@@ -753,9 +832,15 @@ mod tests {
         until_active(&mut rt, &t);
         assert!(matches!(
             rt.fail("backend crashed").actionable.as_slice(),
-            [DetectionEvent::Falling { reason: ClearReason::Runtime(_), .. }]
+            [DetectionEvent::Falling {
+                reason: ClearReason::Runtime(_),
+                ..
+            }]
         ));
-        assert!(rt.tick(1_000_000_000_000).scores.is_empty(), "nothing is scored from stale data");
+        assert!(
+            rt.tick(1_000_000_000_000).scores.is_empty(),
+            "nothing is scored from stale data"
+        );
         // A bad motion sample releases nothing: no model reads motion.
         let mut rt = runtime(RuntimeMode::Live);
         until_active(&mut rt, &t);
@@ -767,7 +852,11 @@ mod tests {
             accelerometer: None,
             gyroscope: None,
         };
-        assert!(rt.observe_orientation(&motion, BASE_NS).actionable.is_empty());
+        assert!(
+            rt.observe_orientation(&motion, BASE_NS)
+                .actionable
+                .is_empty()
+        );
         assert!(rt.is_active(&pinch()));
     }
 
@@ -793,7 +882,10 @@ mod tests {
         }]);
         rt.set_mode(RuntimeMode::Live);
         let out = drive(&mut rt, &trace(0), 0, 300);
-        assert!(out.iter().any(|o| !o.conflicts.is_empty()), "the clash is reported");
+        assert!(
+            out.iter().any(|o| !o.conflicts.is_empty()),
+            "the clash is reported"
+        );
         assert_eq!(rises(&out, true), 0, "and neither starts");
     }
 
@@ -827,10 +919,16 @@ mod tests {
                     accelerometer: Some(accel),
                     gyroscope: Some(gyro),
                 };
-                out.push(rt.observe_orientation(&sample, next.saturating_sub(origin) + BASE_NS + 5_000_000));
+                out.push(rt.observe_orientation(
+                    &sample,
+                    next.saturating_sub(origin) + BASE_NS + 5_000_000,
+                ));
                 next += 20_000_000;
             }
-            out.push(rt.observe_ppg(&batch(trace, i, i + 1), pulse.ts_ns - origin + BASE_NS + 5_000_000));
+            out.push(rt.observe_ppg(
+                &batch(trace, i, i + 1),
+                pulse.ts_ns - origin + BASE_NS + 5_000_000,
+            ));
             if stop(rt) {
                 return (out, i + 1);
             }
@@ -851,10 +949,35 @@ mod tests {
     }
 
     /// A still hand on the wrist: a small tremor (a jolt of about 0.15 m/s², spread well under the still-hand limit).
-    const STILL: fn(u64) -> ([f64; 3], [f64; 3]) =
-        |ns| ([if (ns / 20_000_000) % 2 == 0 { 0.2 } else { -0.1 }, 0.0, 0.02], [0.02, 0.0, 0.0]);
+    const STILL: fn(u64) -> ([f64; 3], [f64; 3]) = |ns| {
+        (
+            [
+                if (ns / 20_000_000) % 2 == 0 {
+                    0.2
+                } else {
+                    -0.1
+                },
+                0.0,
+                0.02,
+            ],
+            [0.02, 0.0, 0.0],
+        )
+    };
     /// A watch lying on a table: only sensor noise.
-    const LYING: fn(u64) -> ([f64; 3], [f64; 3]) = |ns| ([if (ns / 20_000_000) % 2 == 0 { 0.01 } else { -0.01 }, 0.0, 0.0], [0.0; 3]);
+    const LYING: fn(u64) -> ([f64; 3], [f64; 3]) = |ns| {
+        (
+            [
+                if (ns / 20_000_000) % 2 == 0 {
+                    0.01
+                } else {
+                    -0.01
+                },
+                0.0,
+                0.0,
+            ],
+            [0.0; 3],
+        )
+    };
     const TURNING: fn(u64) -> ([f64; 3], [f64; 3]) = |ns| (STILL(ns).0, [0.0, 0.0, 1.0]);
 
     #[test]
@@ -874,8 +997,16 @@ mod tests {
         let mut turning = runtime(RuntimeMode::Live);
         turning.set_steadiness_gate(true);
         let out = drive_with_motion(&mut turning, &t, TURNING);
-        assert_eq!(rises(&out, false), 0, "a withheld start is never announced, not even for display");
-        assert!(out.iter().all(|o| o.events.iter().all(|e| !matches!(e, DetectionEvent::Falling { .. }))));
+        assert_eq!(
+            rises(&out, false),
+            0,
+            "a withheld start is never announced, not even for display"
+        );
+        assert!(out.iter().all(|o| {
+            o.events
+                .iter()
+                .all(|e| !matches!(e, DetectionEvent::Falling { .. }))
+        }));
         let why = not_still(&out);
         assert!(!why.is_empty() && why[0].contains("turning"), "{why:?}");
         assert!(!turning.hand_steadiness().is_steady());
@@ -897,7 +1028,10 @@ mod tests {
                     _ => None,
                 })
                 .collect();
-            assert!(!why.is_empty() && why[0].contains("nothing moved"), "gate {gate}: {why:?}");
+            assert!(
+                !why.is_empty() && why[0].contains("nothing moved"),
+                "gate {gate}: {why:?}"
+            );
         }
     }
 
@@ -907,7 +1041,11 @@ mod tests {
         rt.set_steadiness_gate(true);
         let out = drive(&mut rt, &trace(0), 0, trace(0).len());
         assert_eq!(rises(&out, true), 0);
-        assert!(not_still(&out).iter().any(|why| why.contains("no motion data")));
+        assert!(
+            not_still(&out)
+                .iter()
+                .any(|why| why.contains("no motion data"))
+        );
     }
 
     #[test]
@@ -931,7 +1069,11 @@ mod tests {
                 gyroscope: Some([0.0, 0.0, 2.0]),
             };
             let out = rt.observe_orientation(&sample, ts - origin + BASE_NS + 5_000_000);
-            assert!(out.events.iter().all(|e| !matches!(e, DetectionEvent::Falling { .. })));
+            assert!(
+                out.events
+                    .iter()
+                    .all(|e| !matches!(e, DetectionEvent::Falling { .. }))
+            );
         }
         assert!(rt.is_active(&pinch()));
     }
@@ -949,7 +1091,11 @@ mod tests {
         assert!(rt.is_off_wrist() && !rt.is_active(&pinch()));
         // The rest of the trace holds more pinches: none is scored or detected while off.
         let later = drive(&mut rt, &t, at, t.len());
-        assert!(later.iter().all(|o| o.scores.is_empty() && o.events.is_empty()));
+        assert!(
+            later
+                .iter()
+                .all(|o| o.scores.is_empty() && o.events.is_empty())
+        );
         assert!(rt.set_worn(true).events.is_empty());
         assert!(!rt.is_off_wrist());
         // Losing the watch forgets it, since a watch that comes back says again.

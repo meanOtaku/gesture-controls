@@ -22,9 +22,24 @@ const LABELS_FILE_NAME: &str = "labels.json";
 /// One word each where it can be: training joins a gesture's parts by the name before the first "_" (`pinch_in`,
 /// `pinch_hold`), so a standard label must not share that name with a gesture (`hand_…` would join `hand_open`).
 pub const STANDARD_LABELS: [(&str, &str, &str, &str); 3] = [
-    ("everyday_noise", "Everyday noise", "Ordinary use of the hand (typing, the phone, walking, …) with no gesture.", "#8a9bb0"),
-    ("still", "Hand still", "The hand held as still as you can, in the air, with no gesture.", "#5f6f7f"),
-    ("supported", "Hand on a support", "The hand resting on a support (a desk, an armrest, your lap), flat or angled, with no gesture.", "#6f7f6a"),
+    (
+        "everyday_noise",
+        "Everyday noise",
+        "Ordinary use of the hand (typing, the phone, walking, …) with no gesture.",
+        "#8a9bb0",
+    ),
+    (
+        "still",
+        "Hand still",
+        "The hand held as still as you can, in the air, with no gesture.",
+        "#5f6f7f",
+    ),
+    (
+        "supported",
+        "Hand on a support",
+        "The hand resting on a support (a desk, an armrest, your lap), flat or angled, with no gesture.",
+        "#6f7f6a",
+    ),
 ];
 
 /// Whether `id` is one of the [`STANDARD_LABELS`].
@@ -133,25 +148,36 @@ fn load_index(app: &AppHandle) -> LabelIndex {
 /// The catalogue as the app shows it: the user's labels and the standard ones, sorted by id. A user's label with a
 /// standard id (made before they were standard) is shown as the standard one.
 fn listed(index: &LabelIndex) -> Vec<LabelRecord> {
-    let mut labels: Vec<LabelRecord> = index.labels.iter().filter(|label| !is_standard(&label.id)).cloned().collect();
-    labels.extend(STANDARD_LABELS.iter().map(|(id, name, description, color)| LabelRecord {
-        id: (*id).to_string(),
-        display_name: (*name).to_string(),
-        description: (*description).to_string(),
-        color: (*color).to_string(),
-        role: LabelRole::NegativeBackground,
-        built_in: false,
-        standard: true,
-        archived_at: None,
-        archive_log: None,
-    }));
+    let mut labels: Vec<LabelRecord> = index
+        .labels
+        .iter()
+        .filter(|label| !is_standard(&label.id))
+        .cloned()
+        .collect();
+    labels.extend(
+        STANDARD_LABELS
+            .iter()
+            .map(|(id, name, description, color)| LabelRecord {
+                id: (*id).to_string(),
+                display_name: (*name).to_string(),
+                description: (*description).to_string(),
+                color: (*color).to_string(),
+                role: LabelRole::NegativeBackground,
+                built_in: false,
+                standard: true,
+                archived_at: None,
+                archive_log: None,
+            }),
+    );
     labels.sort_by(|a, b| a.id.cmp(&b.id));
     labels
 }
 
 fn refuse_standard(id: &str) -> Result<(), String> {
     if is_standard(id) {
-        return Err(format!("'{id}' is a standard label: the app keeps it the same for every model"));
+        return Err(format!(
+            "'{id}' is a standard label: the app keeps it the same for every model"
+        ));
     }
     Ok(())
 }
@@ -446,9 +472,13 @@ pub(crate) fn label_ids_at(path: &std::path::Path) -> BTreeSet<String> {
 /// Adds each `(id, display name, description)` missing from the catalogue file at `path`, as a gesture to detect, and
 /// returns the ids it added. The file is written atomically, as the app writes it.
 #[cfg(test)]
-pub(crate) fn add_gesture_labels_at(path: &std::path::Path, labels: &[(&str, &str, &str)]) -> Result<Vec<String>, String> {
+pub(crate) fn add_gesture_labels_at(
+    path: &std::path::Path,
+    labels: &[(&str, &str, &str)],
+) -> Result<Vec<String>, String> {
     let mut index: LabelIndex = match fs::read_to_string(path) {
-        Ok(text) => serde_json::from_str(&text).map_err(|e| format!("could not read {}: {e}", path.display()))?,
+        Ok(text) => serde_json::from_str(&text)
+            .map_err(|e| format!("could not read {}: {e}", path.display()))?,
         Err(_) => LabelIndex::default(),
     };
     let mut added = Vec::new();
@@ -471,7 +501,11 @@ pub(crate) fn add_gesture_labels_at(path: &std::path::Path, labels: &[(&str, &st
     }
     index.labels.sort_by(|a, b| a.id.cmp(&b.id));
     let temporary = path.with_extension("json.tmp");
-    fs::write(&temporary, serde_json::to_string_pretty(&index).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    fs::write(
+        &temporary,
+        serde_json::to_string_pretty(&index).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
     fs::rename(temporary, path).map_err(|e| e.to_string())?;
     Ok(added)
 }
@@ -497,18 +531,49 @@ mod tests {
     #[test]
     fn the_standard_labels_are_always_listed_never_stored_and_cannot_be_changed() {
         // A user's own "still" (made before it was standard) is shown as the standard one.
-        let mut index = LabelIndex { labels: vec![plain_record("pinch"), plain_record("still")] };
+        let mut index = LabelIndex {
+            labels: vec![plain_record("pinch"), plain_record("still")],
+        };
         let shown = listed(&index);
         assert_eq!(
-            shown.iter().map(|l| (l.id.as_str(), l.standard)).collect::<Vec<_>>(),
-            [("everyday_noise", true), ("pinch", false), ("still", true), ("supported", true)]
+            shown
+                .iter()
+                .map(|l| (l.id.as_str(), l.standard))
+                .collect::<Vec<_>>(),
+            [
+                ("everyday_noise", true),
+                ("pinch", false),
+                ("still", true),
+                ("supported", true)
+            ]
         );
-        assert!(shown.iter().filter(|l| l.standard).all(|l| l.role == LabelRole::NegativeBackground && l.archived_at.is_none()));
+        assert!(
+            shown
+                .iter()
+                .filter(|l| l.standard)
+                .all(|l| l.role == LabelRole::NegativeBackground && l.archived_at.is_none())
+        );
         let written = serde_json::to_string(&index).unwrap();
-        assert!(!written.contains("everyday_noise") && !written.contains("standard"), "{written}");
-        assert!(serde_json::to_string(&shown).unwrap().contains("\"standard\":true"));
-        let update = UpdateLabelInput { id: "everyday_noise".into(), display_name: "Mine".into(), description: String::new(), role: LabelRole::PositiveGesture };
-        assert!(apply_update(&mut index, &update).unwrap_err().contains("standard label"));
+        assert!(
+            !written.contains("everyday_noise") && !written.contains("standard"),
+            "{written}"
+        );
+        assert!(
+            serde_json::to_string(&shown)
+                .unwrap()
+                .contains("\"standard\":true")
+        );
+        let update = UpdateLabelInput {
+            id: "everyday_noise".into(),
+            display_name: "Mine".into(),
+            description: String::new(),
+            role: LabelRole::PositiveGesture,
+        };
+        assert!(
+            apply_update(&mut index, &update)
+                .unwrap_err()
+                .contains("standard label")
+        );
         assert!(refuse_standard("still").is_err() && refuse_standard("pinch").is_ok());
     }
 

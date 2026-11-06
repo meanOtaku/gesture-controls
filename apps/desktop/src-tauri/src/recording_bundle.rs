@@ -449,9 +449,14 @@ pub(crate) fn landmarks_on_watch_clock(
     let header = lines.next().unwrap_or_default();
     let mut out = vec![format!("{WATCH_TIME_COLUMN},{header}")];
     for line in lines {
-        let capture_ms = line.split(',').nth(1).and_then(|field| field.trim().parse::<f64>().ok());
+        let capture_ms = line
+            .split(',')
+            .nth(1)
+            .and_then(|field| field.trim().parse::<f64>().ok());
         let watch_ns = match (capture_ms, offset_ms) {
-            (Some(capture), Some(offset)) => format!("{}", ((capture - offset) * 1e6).round() as i64),
+            (Some(capture), Some(offset)) => {
+                format!("{}", ((capture - offset) * 1e6).round() as i64)
+            }
             _ => String::new(),
         };
         out.push(format!("{watch_ns},{line}"));
@@ -616,7 +621,11 @@ pub fn save_recording_bundle(
 
 /// Adds the saved recording `id` (in `dir`) to the Datasets tab, as "Add to training data" does with unreviewed
 /// intervals counted and the rest left out.
-fn add_to_datasets(app: &AppHandle, dir: &Path, id: &str) -> Result<crate::model_lab::DatasetSummary, String> {
+fn add_to_datasets(
+    app: &AppHandle,
+    dir: &Path,
+    id: &str,
+) -> Result<crate::model_lab::DatasetSummary, String> {
     let (filename, csv) = training_csv_of_bundle(dir, id, IntervalFilter::NotExcluded, None)?;
     let runtime = app.state::<crate::model_lab::ModelLabRuntime>();
     crate::model_lab::ingest_dataset(app, &runtime, filename, csv, Some(id.to_string()))
@@ -929,7 +938,7 @@ fn import_recording_text(
         intervals,
     };
 
-    let dir = recording_bundles_dir(&app)?;
+    let dir = recording_bundles_dir(app)?;
     fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
     let final_dir = dir.join(&recording_id);
     if final_dir.exists() {
@@ -948,7 +957,7 @@ fn import_recording_text(
         return Err(error.to_string());
     }
 
-    Ok(numbered_summary(&app, &recording, &annotations))
+    Ok(numbered_summary(app, &recording, &annotations))
 }
 
 /// Lists every saved bundle for curation review. A bundle directory that fails
@@ -2991,15 +3000,26 @@ pub enum IntervalFilter {
 /// gesture altogether. The start stands; only the end moves, and an interval long enough to train on is left as it is.
 fn restored_rows(interval: &AnnotationInterval, rows: &[&str]) -> std::ops::Range<usize> {
     let (start, end) = (&interval.resolved_start, &interval.resolved_end);
-    let saved_ms = end.source_timestamp_ns.saturating_sub(start.source_timestamp_ns) as f64 / 1e6;
-    let lasted_ms = interval.requested_end_monotonic_ns.saturating_sub(interval.requested_start_monotonic_ns) as f64 / 1e6;
+    let saved_ms = end
+        .source_timestamp_ns
+        .saturating_sub(start.source_timestamp_ns) as f64
+        / 1e6;
+    let lasted_ms = interval
+        .requested_end_monotonic_ns
+        .saturating_sub(interval.requested_start_monotonic_ns) as f64
+        / 1e6;
     let first = end.raw_row + 1;
-    if saved_ms >= crate::dataset_files::MIN_HOLD_MS || lasted_ms < crate::dataset_files::MIN_HOLD_MS {
+    if saved_ms >= crate::dataset_files::MIN_HOLD_MS
+        || lasted_ms < crate::dataset_files::MIN_HOLD_MS
+    {
         return first..first;
     }
     let until = start.source_timestamp_ns as f64 + lasted_ms * 1e6;
     let stamp = |row: &str| row.split(',').next().and_then(|t| t.parse::<f64>().ok());
-    let count = rows[first.min(rows.len())..].iter().take_while(|row| stamp(row).is_some_and(|t| t <= until)).count();
+    let count = rows[first.min(rows.len())..]
+        .iter()
+        .take_while(|row| stamp(row).is_some_and(|t| t <= until))
+        .count();
     first..first + count
 }
 
@@ -3186,18 +3206,39 @@ mod tests {
     fn add_recorder_recordings_into_the_app() {
         let app_data = PathBuf::from(std::env::var("APP_DATA").expect("APP_DATA"));
         let bundles = app_data.join(RECORDING_BUNDLES_DIR_NAME);
-        let all: Vec<String> = fs::read_dir(&bundles).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().to_string()).collect();
-        let labels_file = app_data.join(crate::model_lab::MODEL_LAB_DIR_NAME).join("labels.json");
+        let all: Vec<String> = fs::read_dir(&bundles)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
+            .collect();
+        let labels_file = app_data
+            .join(crate::model_lab::MODEL_LAB_DIR_NAME)
+            .join("labels.json");
         let known = crate::label_registry::label_ids_at(&labels_file);
-        let datasets = app_data.join(crate::model_lab::MODEL_LAB_DIR_NAME).join("datasets");
+        let datasets = app_data
+            .join(crate::model_lab::MODEL_LAB_DIR_NAME)
+            .join("datasets");
         let lock = std::sync::Mutex::new(());
-        for wanted in std::env::var("RECORDING_IDS").expect("RECORDING_IDS").split(',').map(str::trim).filter(|w| !w.is_empty()) {
+        for wanted in std::env::var("RECORDING_IDS")
+            .expect("RECORDING_IDS")
+            .split(',')
+            .map(str::trim)
+            .filter(|w| !w.is_empty())
+        {
             let found: Vec<&String> = all.iter().filter(|id| id.starts_with(wanted)).collect();
             let [id] = found.as_slice() else {
-                println!("not added: {wanted}: {} recordings start with it", found.len());
+                println!(
+                    "not added: {wanted}: {} recordings start with it",
+                    found.len()
+                );
                 continue;
             };
-            let outcome = training_csv_of_bundle(&bundles.join(id.as_str()), id, IntervalFilter::NotExcluded, None).and_then(|(filename, csv)| {
+            let outcome = training_csv_of_bundle(
+                &bundles.join(id.as_str()),
+                id,
+                IntervalFilter::NotExcluded,
+                None,
+            )
+            .and_then(|(filename, csv)| {
                 crate::model_lab::ingest_dataset_in(
                     &datasets,
                     |label| known.contains(label) || crate::label_registry::is_standard(label),
@@ -3208,7 +3249,13 @@ mod tests {
                 )
             });
             match outcome {
-                Ok(summary) => println!("added #{} {} ({}, {} rows)", summary.sequence, summary.original_filename, summary.labels.join(", "), summary.row_count),
+                Ok(summary) => println!(
+                    "added #{} {} ({}, {} rows)",
+                    summary.sequence,
+                    summary.original_filename,
+                    summary.labels.join(", "),
+                    summary.row_count
+                ),
                 Err(error) => println!("not added: {id}: {error}"),
             }
         }
@@ -3223,7 +3270,8 @@ mod tests {
         let dir = std::path::PathBuf::from(std::env::var("EXPORT_BUNDLE").expect("EXPORT_BUNDLE"));
         let (recording, annotations) = load_bundle_pair(&dir).unwrap();
         let raw = fs::read_to_string(dir.join(RAW_CSV_FILE_NAME)).unwrap();
-        let (csv, labelled, intervals) = dataset_csv_from_bundle(&raw, &annotations, IntervalFilter::NotExcluded, None).unwrap();
+        let (csv, labelled, intervals) =
+            dataset_csv_from_bundle(&raw, &annotations, IntervalFilter::NotExcluded, None).unwrap();
         let mut lines = crate::dataset_files::context_lines(&recording.context);
         lines.push(csv);
         let pair = crate::dataset_files::split_legacy(&lines.join("\n")).unwrap();
@@ -3236,8 +3284,16 @@ mod tests {
             clock,
             camera_evidence_in(&dir).unwrap().map(|evidence| {
                 let mut files = std::collections::BTreeMap::new();
-                files.extend(evidence.hand_landmarks.map(|text| (HAND_LANDMARKS_FILE_NAME.to_string(), text)));
-                files.extend(evidence.hand_landmarks_second.map(|text| (HAND_LANDMARKS_SECOND_FILE_NAME.to_string(), text)));
+                files.extend(
+                    evidence
+                        .hand_landmarks
+                        .map(|text| (HAND_LANDMARKS_FILE_NAME.to_string(), text)),
+                );
+                files.extend(
+                    evidence
+                        .hand_landmarks_second
+                        .map(|text| (HAND_LANDMARKS_SECOND_FILE_NAME.to_string(), text)),
+                );
                 files.insert(CLOCK_SYNC_FILE_NAME.to_string(), evidence.clock_sync);
                 files
             }),
@@ -3639,10 +3695,20 @@ mod tests {
         let annotations = AnnotationsFile {
             format_version: 1,
             recording_id: "r".into(),
-            intervals: vec![mark("pinch_in", 5, 13, 300), mark("pinch_hold", 14, 30, 340), mark("pinch_out", 31, 43, 300), mark("tap", 45, 47, 60)],
+            intervals: vec![
+                mark("pinch_in", 5, 13, 300),
+                mark("pinch_hold", 14, 30, 340),
+                mark("pinch_out", 31, 43, 300),
+                mark("tap", 45, 47, 60),
+            ],
         };
-        let (csv, ..) = dataset_csv_from_bundle(&raw, &annotations, IntervalFilter::NotExcluded, None).unwrap();
-        let labels: Vec<&str> = csv.lines().skip(1).map(|line| line.rsplit(',').next().unwrap()).collect();
+        let (csv, ..) =
+            dataset_csv_from_bundle(&raw, &annotations, IntervalFilter::NotExcluded, None).unwrap();
+        let labels: Vec<&str> = csv
+            .lines()
+            .skip(1)
+            .map(|line| line.rsplit(',').next().unwrap())
+            .collect();
         let count = |label: &str| labels.iter().filter(|l| **l == label).count();
         // Back to 300 ms (rows 5 to 20), over the start of the hold; the hold and pinch out, long enough, keep their rows.
         assert_eq!(labels[5..=20], ["pinch_in"; 16]);
@@ -4384,7 +4450,14 @@ mod tests {
         let (rows, first, last) = validate_raw_csv_full(&raw).unwrap();
         assert_eq!((rows, first, last), (3, 100, 300));
         assert_eq!(runs.len(), 1);
-        assert_eq!((runs[0].label.as_str(), runs[0].start_timestamp_ns, runs[0].end_timestamp_ns), ("pinch", 100, 200));
+        assert_eq!(
+            (
+                runs[0].label.as_str(),
+                runs[0].start_timestamp_ns,
+                runs[0].end_timestamp_ns
+            ),
+            ("pinch", 100, 200)
+        );
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -5381,7 +5454,8 @@ mod tests {
     #[test]
     fn exported_landmarks_get_each_frame_on_the_watch_clock_from_the_fastest_clock_pair() {
         let header = hand_landmarks_header();
-        let frame = |capture: &str| format!("7,{capture}{}", ",".repeat(header.matches(',').count() - 1));
+        let frame =
+            |capture: &str| format!("7,{capture}{}", ",".repeat(header.matches(',').count() - 1));
         let landmarks = format!("{header}\n{}\n{}", frame("1000.000"), frame("1033.500"));
         // Arrival minus watch time: 1010 - 5000 = -3990 ms and 2030 - 6000 = -3970 ms. The first travelled faster.
         let sync = format!("{CLOCK_SYNC_HEADER}\n5000000000,1010.000\n6000000000,2030.000\n");
@@ -5392,12 +5466,22 @@ mod tests {
         assert!(lines[2].starts_with("5023500000,7,1033.500,"));
         assert_eq!(lines.len(), 3);
         // Without a clock pair the time is left empty rather than guessed; the rest of the row is kept as it was.
-        let none = landmarks_on_watch_clock(HAND_LANDMARKS_SECOND_FILE_NAME, &landmarks, CLOCK_SYNC_HEADER).unwrap();
+        let none = landmarks_on_watch_clock(
+            HAND_LANDMARKS_SECOND_FILE_NAME,
+            &landmarks,
+            CLOCK_SYNC_HEADER,
+        )
+        .unwrap();
         assert!(none.lines().nth(1).unwrap().starts_with(",7,1000.000,"));
         // Only landmark files, and only well-formed ones.
         assert!(landmarks_on_watch_clock(CLOCK_SYNC_FILE_NAME, &landmarks, &sync).is_err());
-        assert!(landmarks_on_watch_clock(HAND_LANDMARKS_FILE_NAME, "frame,time\n1,2", &sync).is_err());
-        assert!(landmarks_on_watch_clock(HAND_LANDMARKS_FILE_NAME, &landmarks, "watch,arrival\n1,2").is_err());
+        assert!(
+            landmarks_on_watch_clock(HAND_LANDMARKS_FILE_NAME, "frame,time\n1,2", &sync).is_err()
+        );
+        assert!(
+            landmarks_on_watch_clock(HAND_LANDMARKS_FILE_NAME, &landmarks, "watch,arrival\n1,2")
+                .is_err()
+        );
     }
 
     #[test]

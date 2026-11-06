@@ -425,8 +425,11 @@ impl Registry {
         for run in &runs {
             self.runs.remove(run);
         }
-        let used: std::collections::BTreeSet<SnapshotId> =
-            self.runs.values().map(|run| run.snapshot_id.clone()).collect();
+        let used: std::collections::BTreeSet<SnapshotId> = self
+            .runs
+            .values()
+            .map(|run| run.snapshot_id.clone())
+            .collect();
         let snapshots: Vec<SnapshotId> = self
             .snapshots
             .keys()
@@ -950,7 +953,8 @@ pub(crate) mod tests {
             Err(VersionError::MissingHash)
         );
         kept.model_sha256 = Some(sha256_hex(b"m1"));
-        r.register_version(kept.for_monitor_only().unwrap()).unwrap();
+        r.register_version(kept.for_monitor_only().unwrap())
+            .unwrap();
         approve(&mut r, "m1");
         r.activate(&mid("m1"), T).unwrap();
         assert!(r.versions[&mid("m1")].monitor_only && !r.versions[&mid("m1")].deployable);
@@ -970,10 +974,17 @@ pub(crate) mod tests {
         // Removing every run removes the models they made and every snapshot.
         let purged = r.purge(|_| true, |_, _| false);
         assert!(r.runs.is_empty() && r.snapshots.is_empty());
-        assert!(r.versions.values().all(|v| !matches!(v.origin, ModelOrigin::Trained { .. })));
+        assert!(
+            r.versions
+                .values()
+                .all(|v| !matches!(v.origin, ModelOrigin::Trained { .. }))
+        );
         assert!(!purged.runs.is_empty());
         assert!(r.validate().is_ok());
-        assert!(r.purge(|_| true, |_, _| true).is_empty(), "nothing more to remove");
+        assert!(
+            r.purge(|_| true, |_, _| true).is_empty(),
+            "nothing more to remove"
+        );
     }
 
     #[test]

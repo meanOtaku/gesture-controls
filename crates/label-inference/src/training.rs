@@ -396,7 +396,13 @@ pub fn monitor_only_run<P: Persist>(
         },
         false,
         move |registry| {
-            registry.finish_run(&finished, RunOutcome::EvaluationOnly, Some(message), artifacts, now)
+            registry.finish_run(
+                &finished,
+                RunOutcome::EvaluationOnly,
+                Some(message),
+                artifacts,
+                now,
+            )
         },
     )?)
 }
@@ -724,12 +730,19 @@ mod tests {
 
     #[test]
     fn the_only_backend_is_the_pulse_model_and_its_contract_is_sound() {
-        assert_eq!(trainer_backend("ppg-onset-trees"), Some(TrainerBackend::ScikitLearn));
+        assert_eq!(
+            trainer_backend("ppg-onset-trees"),
+            Some(TrainerBackend::ScikitLearn)
+        );
         assert_eq!(trainer_backend("logreg"), None);
         let contract = ppg_onset_contract();
         contract.validate().unwrap();
         let bundle = crate::bundle::validate_bundle(&fixture_dir(), None).unwrap();
-        assert_eq!(bundle.manifest.input_contract(), contract, "the trainer declares exactly this");
+        assert_eq!(
+            bundle.manifest.input_contract(),
+            contract,
+            "the trainer declares exactly this"
+        );
     }
 
     #[test]
@@ -739,7 +752,16 @@ mod tests {
         let begun = begin_run(&mut store, &plan(sessions()), &known(), NOW).unwrap();
         let bundle = trained_bundle();
         let staged = stage_bundle(bundle.path(), lab.path()).unwrap();
-        let outcome = monitor_only_run(&mut store, staged, lab.path(), &begun.run_id, "it fired too often", Vec::new(), NOW).unwrap();
+        let outcome = monitor_only_run(
+            &mut store,
+            staged,
+            lab.path(),
+            &begun.run_id,
+            "it fired too often",
+            Vec::new(),
+            NOW,
+        )
+        .unwrap();
         let registry = store.registry();
         let version = &registry.versions[&outcome.version_id];
         assert!(version.monitor_only && !version.deployable && version.runnable());

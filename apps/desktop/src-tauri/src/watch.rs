@@ -6,8 +6,8 @@ use serde::Serialize;
 use spatial_protocol::{WatchBiaResultSample, WatchHeartbeatSample, WatchOrientationSample};
 use tauri::{AppHandle, Emitter, Manager, State};
 use watch_bridge::{
-    ClockOffsetEstimate, LinkDiagnostics, MeasurementCommand, SensorControlCommand,
-    HapticCommand, WatchBridgeServer, WatchEvent, WatchTransport, ble::BleStatus,
+    ClockOffsetEstimate, HapticCommand, LinkDiagnostics, MeasurementCommand, SensorControlCommand,
+    WatchBridgeServer, WatchEvent, WatchTransport, ble::BleStatus,
 };
 
 pub const WATCH_STATUS_EVENT: &str = "watch-status";

@@ -54,6 +54,8 @@
 
 ## Records
 
+- [Project review and AI-agent handoff — 6 November 2026](project-review-2026-11-06.md): prioritized fixes, improvements, upgrade options, verification results and acceptance criteria for future agents
+
 - [Review remediation](review-remediation.md): the status of every finding in the four engineering reviews, with commits
 - [GC-036 optimization and documentation pass](optimization-2026-09-gc-036.md)
 - The reviews themselves (historical, not edited): [`.hermes/reviews/`](../.hermes/reviews/)

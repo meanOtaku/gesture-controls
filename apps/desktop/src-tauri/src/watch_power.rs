@@ -74,29 +74,46 @@ pub fn rates_between(a: &WatchStatsReport, b: &WatchStatsReport) -> Option<Power
     let per_second = |later: u64, earlier: u64| later.saturating_sub(earlier) as f64 / seconds;
     let battery_a = a.battery.as_ref();
     let battery_b = b.battery.as_ref();
-    let charging = battery_a.and_then(|x| x.charging).unwrap_or(false) || battery_b.and_then(|x| x.charging).unwrap_or(false);
-    let battery_percent_per_hour = match (battery_a.and_then(|x| x.percent), battery_b.and_then(|x| x.percent)) {
+    let charging = battery_a.and_then(|x| x.charging).unwrap_or(false)
+        || battery_b.and_then(|x| x.charging).unwrap_or(false);
+    let battery_percent_per_hour = match (
+        battery_a.and_then(|x| x.percent),
+        battery_b.and_then(|x| x.percent),
+    ) {
         (Some(before), Some(after)) => Some((f64::from(before) - f64::from(after)) / hours),
         _ => None,
     };
-    let average_draw_ma = match (battery_a.and_then(|x| x.charge_uah), battery_b.and_then(|x| x.charge_uah)) {
+    let average_draw_ma = match (
+        battery_a.and_then(|x| x.charge_uah),
+        battery_b.and_then(|x| x.charge_uah),
+    ) {
         (Some(before), Some(after)) => Some((before - after) as f64 / 1000.0 / hours),
         _ => None,
     };
     let cpu_percent = match (a.cpu_ms, b.cpu_ms) {
-        (Some(before), Some(after)) if after >= before => Some((after - before) as f64 / (b.elapsed_ms - a.elapsed_ms) as f64 * 100.0),
+        (Some(before), Some(after)) if after >= before => {
+            Some((after - before) as f64 / (b.elapsed_ms - a.elapsed_ms) as f64 * 100.0)
+        }
         _ => None,
     };
     let sensors = b
         .sensors
         .iter()
         .map(|sensor| {
-            let before = a.sensors.iter().find(|s| s.id == sensor.id).map(|s| s.events).unwrap_or(sensor.events);
+            let before = a
+                .sensors
+                .iter()
+                .find(|s| s.id == sensor.id)
+                .map(|s| s.events)
+                .unwrap_or(sensor.events);
             SensorRate {
                 id: sensor.id.clone(),
                 name: sensor.name.clone(),
                 registered: sensor.registered,
-                requested_hz: sensor.requested_period_us.filter(|us| *us > 0).map(|us| 1_000_000.0 / f64::from(us)),
+                requested_hz: sensor
+                    .requested_period_us
+                    .filter(|us| *us > 0)
+                    .map(|us| 1_000_000.0 / f64::from(us)),
                 achieved_hz: per_second(sensor.events, before),
                 fifo_max_events: sensor.fifo_max_events,
             }
@@ -151,7 +168,8 @@ impl Run {
         if let Some(last) = &self.last
             && rates_between(last, report).is_none()
         {
-            self.notes.push("the watch restarted during the run; it is measured from the restart".into());
+            self.notes
+                .push("the watch restarted during the run; it is measured from the restart".into());
             self.first = None;
         }
         if self.first.is_none() {
@@ -173,7 +191,8 @@ impl Run {
     fn finish(mut self, id: String) -> WatchMeasurement {
         let rates = self.rates();
         if rates.as_ref().is_some_and(|r| r.charging) {
-            self.notes.push("the watch was charging: its battery figures do not count".into());
+            self.notes
+                .push("the watch was charging: its battery figures do not count".into());
         }
         match &rates {
             None => self.notes.push("no two reports from the watch: nothing measured (is a watch with this build connected?)".into()),
@@ -201,7 +220,11 @@ fn median(values: &mut [f64]) -> Option<f64> {
     }
     values.sort_by(f64::total_cmp);
     let mid = values.len() / 2;
-    Some(if values.len() % 2 == 1 { values[mid] } else { (values[mid - 1] + values[mid]) / 2.0 })
+    Some(if values.len() % 2 == 1 {
+        values[mid]
+    } else {
+        (values[mid - 1] + values[mid]) / 2.0
+    })
 }
 
 fn now() -> String {
@@ -240,7 +263,11 @@ pub struct WatchPower {
 
 impl WatchPower {
     /// Takes one report, with the link's motion delay at that moment, and returns the view to publish.
-    pub fn observe(&self, report: WatchStatsReport, delay: (Option<u64>, Option<u64>)) -> Option<WatchPowerView> {
+    pub fn observe(
+        &self,
+        report: WatchStatsReport,
+        delay: (Option<u64>, Option<u64>),
+    ) -> Option<WatchPowerView> {
         let mut inner = self.inner.lock().ok()?;
         if let Some(last) = inner.recent.back()
             && rates_between(last, &report).is_none()
@@ -248,7 +275,9 @@ impl WatchPower {
             inner.recent.clear(); // a restarted watch starts its counters again
         }
         inner.recent.push_back(report.clone());
-        while inner.recent.len() > 2 && report.elapsed_ms - inner.recent[1].elapsed_ms >= LIVE_WINDOW_MS {
+        while inner.recent.len() > 2
+            && report.elapsed_ms - inner.recent[1].elapsed_ms >= LIVE_WINDOW_MS
+        {
             inner.recent.pop_front();
         }
         if let Some(run) = inner.run.as_mut() {
@@ -258,7 +287,14 @@ impl WatchPower {
     }
 
     pub fn view(&self) -> WatchPowerView {
-        self.inner.lock().map(|inner| view_of(&inner)).unwrap_or(WatchPowerView { live: None, reporting: false, run: None })
+        self.inner
+            .lock()
+            .map(|inner| view_of(&inner))
+            .unwrap_or(WatchPowerView {
+                live: None,
+                reporting: false,
+                run: None,
+            })
     }
 }
 
@@ -270,12 +306,20 @@ fn view_of(inner: &Inner) -> WatchPowerView {
     WatchPowerView {
         live,
         reporting: !inner.recent.is_empty(),
-        run: inner.run.as_ref().map(|run| RunView { label: run.label.clone(), started_at: run.started_at.clone(), rates: run.rates() }),
+        run: inner.run.as_ref().map(|run| RunView {
+            label: run.label.clone(),
+            started_at: run.started_at.clone(),
+            rates: run.rates(),
+        }),
     }
 }
 
 fn measurements_path(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(app.path().app_data_dir().map_err(|e| e.to_string())?.join(MEASUREMENTS_FILE))
+    Ok(app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join(MEASUREMENTS_FILE))
 }
 
 fn read_measurements(app: &AppHandle) -> Vec<WatchMeasurement> {
@@ -292,7 +336,11 @@ fn write_measurements(app: &AppHandle, list: &[WatchMeasurement]) -> Result<(), 
         fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
     let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, serde_json::to_vec_pretty(list).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    fs::write(
+        &tmp,
+        serde_json::to_vec_pretty(list).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
     fs::rename(&tmp, &path).map_err(|e| e.to_string())
 }
 
@@ -319,11 +367,21 @@ pub fn get_watch_power(power: State<'_, WatchPower>) -> WatchPowerView {
 
 /// Starts a measurement named `label`, replacing any under way (which is dropped, not kept).
 #[tauri::command]
-pub fn start_watch_measurement(label: String, power: State<'_, WatchPower>) -> Result<WatchPowerView, String> {
+pub fn start_watch_measurement(
+    label: String,
+    power: State<'_, WatchPower>,
+) -> Result<WatchPowerView, String> {
     let label = label.trim().chars().take(80).collect::<String>();
-    let mut inner = power.inner.lock().map_err(|_| "the power meter's lock was poisoned".to_string())?;
+    let mut inner = power
+        .inner
+        .lock()
+        .map_err(|_| "the power meter's lock was poisoned".to_string())?;
     inner.run = Some(Run {
-        label: if label.is_empty() { "Measurement".into() } else { label },
+        label: if label.is_empty() {
+            "Measurement".into()
+        } else {
+            label
+        },
         started_at: now(),
         first: None,
         last: None,
@@ -343,7 +401,10 @@ pub fn start_watch_measurement(label: String, power: State<'_, WatchPower>) -> R
 
 /// Ends the measurement under way and keeps its result.
 #[tauri::command]
-pub fn stop_watch_measurement(app: AppHandle, power: State<'_, WatchPower>) -> Result<WatchMeasurement, String> {
+pub fn stop_watch_measurement(
+    app: AppHandle,
+    power: State<'_, WatchPower>,
+) -> Result<WatchMeasurement, String> {
     let run = power
         .inner
         .lock()
@@ -364,7 +425,10 @@ pub fn list_watch_measurements(app: AppHandle) -> Vec<WatchMeasurement> {
 }
 
 #[tauri::command]
-pub fn delete_watch_measurement(id: String, app: AppHandle) -> Result<Vec<WatchMeasurement>, String> {
+pub fn delete_watch_measurement(
+    id: String,
+    app: AppHandle,
+) -> Result<Vec<WatchMeasurement>, String> {
     let mut list = read_measurements(&app);
     list.retain(|m| m.id != id);
     write_measurements(&app, &list)?;
@@ -380,7 +444,13 @@ mod tests {
         WatchStatsReport {
             elapsed_ms,
             cpu_ms: Some(scale * 30),
-            battery: Some(WatchBatteryReport { percent: Some(percent), charging: Some(false), charge_uah: Some(charge_uah), current_ua: None, temperature_c: Some(30.0) }),
+            battery: Some(WatchBatteryReport {
+                percent: Some(percent),
+                charging: Some(false),
+                charge_uah: Some(charge_uah),
+                current_ua: None,
+                temperature_c: Some(30.0),
+            }),
             sensor_deliveries: scale * 50,
             sensors: vec![WatchSensorReport {
                 id: "acceleration".into(),
@@ -408,8 +478,15 @@ mod tests {
         let rates = rates_between(&a, &b).unwrap();
         assert_eq!(rates.seconds, 3600.0);
         assert_eq!(rates.battery_percent_per_hour, Some(6.0));
-        assert_eq!(rates.average_draw_ma, Some(60.0), "60,000 µAh in an hour is 60 mA");
-        assert!((rates.cpu_percent.unwrap() - 3.0).abs() < 1e-9, "30 ms of CPU a second is 3%");
+        assert_eq!(
+            rates.average_draw_ma,
+            Some(60.0),
+            "60,000 µAh in an hour is 60 mA"
+        );
+        assert!(
+            (rates.cpu_percent.unwrap() - 3.0).abs() < 1e-9,
+            "30 ms of CPU a second is 3%"
+        );
         assert!((rates.sensor_deliveries_per_second - 50.0).abs() < 1e-9);
         assert!((rates.sensors[0].achieved_hz - 50.0).abs() < 1e-9);
         assert_eq!(rates.sensors[0].requested_hz, Some(50.0));
@@ -423,7 +500,10 @@ mod tests {
     fn a_restarted_watch_or_a_report_out_of_order_gives_no_rates() {
         let a = report(4_600_000, 4600, 84, 240_000);
         assert!(rates_between(&a, &report(1_000_000, 1000, 90, 300_000)).is_none());
-        assert!(rates_between(&a, &report(4_700_000, 10, 84, 240_000)).is_none(), "its counters started again");
+        assert!(
+            rates_between(&a, &report(4_700_000, 10, 84, 240_000)).is_none(),
+            "its counters started again"
+        );
     }
 
     #[test]
@@ -433,12 +513,24 @@ mod tests {
             power.observe(report(i * 5_000, i * 5, 90, 300_000), (None, None));
         }
         let live = power.view().live.unwrap();
-        assert!(live.seconds >= 60.0 && live.seconds <= 65.0, "{}", live.seconds);
+        assert!(
+            live.seconds >= 60.0 && live.seconds <= 65.0,
+            "{}",
+            live.seconds
+        );
     }
 
     #[test]
     fn a_measurement_covers_its_run_with_the_median_delay_and_says_what_to_doubt() {
-        let mut run = Run { label: "batching off".into(), started_at: now(), first: None, last: None, delays_p50: vec![], delays_p95: vec![], notes: vec![] };
+        let mut run = Run {
+            label: "batching off".into(),
+            started_at: now(),
+            first: None,
+            last: None,
+            delays_p50: vec![],
+            delays_p95: vec![],
+            notes: vec![],
+        };
         run.observe(&report(0, 0, 90, 300_000), (Some(40), Some(90)));
         run.observe(&report(60_000, 60, 90, 299_000), (Some(60), Some(120)));
         run.observe(&report(120_000, 120, 89, 298_000), (Some(50), Some(100)));
@@ -446,14 +538,30 @@ mod tests {
         assert_eq!(result.rates.as_ref().unwrap().seconds, 120.0);
         assert_eq!(result.delay_p50_ms, Some(50.0));
         assert_eq!(result.delay_p95_ms, Some(100.0));
-        assert!(result.notes.iter().any(|n| n.contains("only 2 minutes")), "{:?}", result.notes);
+        assert!(
+            result.notes.iter().any(|n| n.contains("only 2 minutes")),
+            "{:?}",
+            result.notes
+        );
 
-        let mut restarted = Run { label: "r".into(), started_at: now(), first: None, last: None, delays_p50: vec![], delays_p95: vec![], notes: vec![] };
+        let mut restarted = Run {
+            label: "r".into(),
+            started_at: now(),
+            first: None,
+            last: None,
+            delays_p50: vec![],
+            delays_p95: vec![],
+            notes: vec![],
+        };
         restarted.observe(&report(500_000, 500, 90, 300_000), (None, None));
         restarted.observe(&report(1_000, 1, 90, 300_000), (None, None));
         restarted.observe(&report(61_000, 61, 90, 300_000), (None, None));
         let result = restarted.finish("y".into());
-        assert_eq!(result.rates.unwrap().seconds, 60.0, "measured from the restart");
+        assert_eq!(
+            result.rates.unwrap().seconds,
+            60.0,
+            "measured from the restart"
+        );
         assert!(result.notes.iter().any(|n| n.contains("restarted")));
     }
 }

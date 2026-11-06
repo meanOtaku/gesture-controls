@@ -159,11 +159,17 @@ fn stream(rows: &dataset_files::Rows, header: &[&str], origin: i128) -> Labellin
     for row in &rows.rows {
         let fields: Vec<&str> = row.line.split(',').collect();
         for (column, field) in columns.iter_mut().zip(&fields[values.clone()]) {
-            column.values.push(field.trim().parse::<f64>().ok().filter(|v| v.is_finite()));
+            column
+                .values
+                .push(field.trim().parse::<f64>().ok().filter(|v| v.is_finite()));
         }
     }
     LabellingStream {
-        times_ms: rows.rows.iter().map(|row| ms_after(row.stamp, origin)).collect(),
+        times_ms: rows
+            .rows
+            .iter()
+            .map(|row| ms_after(row.stamp, origin))
+            .collect(),
         columns,
     }
 }
@@ -244,8 +250,14 @@ fn with_manual(pair: &Pair, intervals: &[ManualInterval]) -> Result<(String, Str
             || label
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
-        if !plain || !(span.start_ms.is_finite() && span.end_ms.is_finite()) || span.end_ms < span.start_ms {
-            return Err(format!("the span '{label}' from {} to {} ms is not one that can be saved", span.start_ms, span.end_ms));
+        if !plain
+            || !(span.start_ms.is_finite() && span.end_ms.is_finite())
+            || span.end_ms < span.start_ms
+        {
+            return Err(format!(
+                "the span '{label}' from {} to {} ms is not one that can be saved",
+                span.start_ms, span.end_ms
+            ));
         }
     }
     let ppg = dataset_files::read_ppg(&pair.ppg_csv)?;
@@ -257,7 +269,10 @@ fn with_manual(pair: &Pair, intervals: &[ManualInterval]) -> Result<(String, Str
         for row in &rows.rows {
             // Every column but the last (the manual label) is kept as it was.
             let kept = &row.line[..row.line.rfind(',').unwrap_or(row.line.len())];
-            out.push(format!("{kept},{}", manual_at(intervals, ms_after(row.stamp, origin))));
+            out.push(format!(
+                "{kept},{}",
+                manual_at(intervals, ms_after(row.stamp, origin))
+            ));
         }
         out.join("\n") + "\n"
     };
@@ -269,7 +284,10 @@ fn with_manual(pair: &Pair, intervals: &[ManualInterval]) -> Result<(String, Str
 
 /// Opens a recording for labelling. Nothing is required of its labels: a recording with none is what this page is for.
 #[tauri::command]
-pub fn open_labelling_recording(source: LabellingSource, app: AppHandle) -> Result<LabellingRecording, String> {
+pub fn open_labelling_recording(
+    source: LabellingSource,
+    app: AppHandle,
+) -> Result<LabellingRecording, String> {
     let (pair, name) = load(&app, &source)?;
     view(&pair, name, source)
 }
@@ -286,7 +304,11 @@ pub fn labelling_camera_evidence(
 ) -> Result<Option<crate::recording_bundle::CameraEvidence>, String> {
     let dir = match &source {
         LabellingSource::Dataset { id } => {
-            if !model_lab::load_index(&app).datasets.iter().any(|d| &d.id == id) {
+            if !model_lab::load_index(&app)
+                .datasets
+                .iter()
+                .any(|d| &d.id == id)
+            {
                 return Err("that recording is no longer in Model Lab".into());
             }
             model_lab::dataset_csv_path(&model_lab::datasets_dir(&app)?, id)
@@ -307,14 +329,20 @@ pub fn save_labelling_original(
     app: AppHandle,
     runtime: State<'_, ModelLabRuntime>,
 ) -> Result<(), String> {
-    let _guard = runtime.lock.lock().map_err(|_| "model lab lock was poisoned")?;
+    let _guard = runtime
+        .lock
+        .lock()
+        .map_err(|_| "model lab lock was poisoned")?;
     let (pair, _) = load(&app, &source)?;
     let (ppg, imu) = with_manual(&pair, &intervals)?;
     let labelled = dataset_files::parse_pair_with(&ppg, &imu, false)?;
     let mut index = model_lab::load_index(&app);
     let path = match &source {
         LabellingSource::Dataset { id } => {
-            let summary = index.datasets.iter_mut().find(|d| &d.id == id)
+            let summary = index
+                .datasets
+                .iter_mut()
+                .find(|d| &d.id == id)
                 .ok_or("that recording is no longer in Model Lab")?;
             summary.labels = labelled.labels.clone();
             summary.label = labelled.labels.join(", ");
@@ -326,11 +354,11 @@ pub fn save_labelling_original(
         LabellingSource::File { path } => PathBuf::from(path),
     };
     let originals = replace_manual_files(&path, &labelled)?;
-    if matches!(source, LabellingSource::Dataset { .. }) {
-        if let Err(error) = model_lab::write_index_atomic(&app, &index) {
-            restore_manual_files(&originals)?;
-            return Err(error);
-        }
+    if matches!(source, LabellingSource::Dataset { .. })
+        && let Err(error) = model_lab::write_index_atomic(&app, &index)
+    {
+        restore_manual_files(&originals)?;
+        return Err(error);
     }
     Ok(())
 }
@@ -345,19 +373,40 @@ fn restore_manual_files(files: &[(PathBuf, Vec<u8>)]) -> Result<(), String> {
 /// Stage every changed file before replacing any; roll back a failed replacement. Other evidence stays untouched.
 fn replace_manual_files(path: &Path, pair: &Pair) -> Result<Vec<(PathBuf, Vec<u8>)>, String> {
     let mut files = if path.is_dir() {
-        vec![(path.join(dataset_files::PPG_FILE), pair.ppg_csv.clone().into_bytes()),
-             (path.join(dataset_files::IMU_FILE), pair.imu_csv.clone().into_bytes())]
+        vec![
+            (
+                path.join(dataset_files::PPG_FILE),
+                pair.ppg_csv.clone().into_bytes(),
+            ),
+            (
+                path.join(dataset_files::IMU_FILE),
+                pair.imu_csv.clone().into_bytes(),
+            ),
+        ]
     } else {
-        vec![(path.to_path_buf(), dataset_files::merge_to_single(&pair.ppg_csv, &pair.imu_csv)?.into_bytes())]
+        vec![(
+            path.to_path_buf(),
+            dataset_files::merge_to_single(&pair.ppg_csv, &pair.imu_csv)?.into_bytes(),
+        )]
     };
     let meta_path = path.join(dataset_files::META_FILE);
     if path.is_dir() && meta_path.exists() {
-        let mut meta: dataset_files::Meta = serde_json::from_str(&read_limited(&meta_path)?).map_err(|e| e.to_string())?;
+        let mut meta: dataset_files::Meta =
+            serde_json::from_str(&read_limited(&meta_path)?).map_err(|e| e.to_string())?;
         meta.labels = pair.labels.clone();
         meta.original_sha256 = None;
-        files.push((meta_path, serde_json::to_vec_pretty(&meta).map_err(|e| e.to_string())?));
+        files.push((
+            meta_path,
+            serde_json::to_vec_pretty(&meta).map_err(|e| e.to_string())?,
+        ));
     }
-    let originals = files.iter().map(|(p, _)| fs::read(p).map(|bytes| (p.clone(), bytes)).map_err(|e| e.to_string()))
+    let originals = files
+        .iter()
+        .map(|(p, _)| {
+            fs::read(p)
+                .map(|bytes| (p.clone(), bytes))
+                .map_err(|e| e.to_string())
+        })
         .collect::<Result<Vec<_>, _>>()?;
     let mut staged = Vec::new();
     let result = (|| -> Result<(), String> {
@@ -371,7 +420,9 @@ fn replace_manual_files(path: &Path, pair: &Pair) -> Result<Vec<(PathBuf, Vec<u8
         }
         Ok(())
     })();
-    for (temporary, _) in &staged { let _ = fs::remove_file(temporary); }
+    for (temporary, _) in &staged {
+        let _ = fs::remove_file(temporary);
+    }
     if let Err(error) = result {
         restore_manual_files(&originals)?;
         return Err(error);
@@ -395,8 +446,11 @@ pub fn save_labelling_version(
     };
     let filename = format!("{name} (labelled)");
     // A named recording's new version is named after it, with the next version number.
-    let new_name = derived_from.as_deref().and_then(|parent| model_lab::version_name(&model_lab::load_index(&app).datasets, parent));
-    let mut made = model_lab::store_pair(&app, &runtime, filename, labelled, None, None, derived_from)?;
+    let new_name = derived_from
+        .as_deref()
+        .and_then(|parent| model_lab::version_name(&model_lab::load_index(&app).datasets, parent));
+    let mut made =
+        model_lab::store_pair(&app, &runtime, filename, labelled, None, None, derived_from)?;
     if new_name.is_some() {
         model_lab::name_dataset(&app, &runtime, &made.id, new_name.clone())?;
         made.name = new_name;
@@ -410,11 +464,19 @@ fn export_evidence_dirs(app: &AppHandle, source: &LabellingSource) -> Result<Vec
     match source {
         LabellingSource::File { path } => {
             let path = PathBuf::from(path);
-            if path.is_dir() { dirs.push(path); }
-            else {
+            if path.is_dir() {
+                dirs.push(path);
+            } else {
                 // A CSV exported here keeps its evidence in a companion folder.
-                let companion = path.with_file_name(format!("{}-files", path.file_stem().and_then(|s| s.to_str()).unwrap_or("recording")));
-                if companion.is_dir() { dirs.push(companion); }
+                let companion = path.with_file_name(format!(
+                    "{}-files",
+                    path.file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("recording")
+                ));
+                if companion.is_dir() {
+                    dirs.push(companion);
+                }
             }
         }
         LabellingSource::Dataset { id } => {
@@ -423,11 +485,21 @@ fn export_evidence_dirs(app: &AppHandle, source: &LabellingSource) -> Result<Vec
             let mut seen = std::collections::BTreeSet::new();
             let mut at = Some(id.clone());
             while let Some(id) = at.filter(|id| seen.insert(id.clone())) {
-                let summary = index.datasets.iter().find(|d| d.id == id).ok_or("source dataset is no longer available")?;
+                let summary = index
+                    .datasets
+                    .iter()
+                    .find(|d| d.id == id)
+                    .ok_or("source dataset is no longer available")?;
                 let path = model_lab::dataset_csv_path(&datasets, &id);
-                if path.is_dir() { dirs.push(path); }
+                if path.is_dir() {
+                    dirs.push(path);
+                }
                 if let Some(recording) = &summary.source_recording_id {
-                    if recording.is_empty() || !recording.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+                    if recording.is_empty()
+                        || !recording
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '-')
+                    {
                         return Err("invalid source recording id".into());
                     }
                     dirs.push(crate::recording_bundle::recording_bundles_dir(app)?.join(recording));
@@ -441,13 +513,26 @@ fn export_evidence_dirs(app: &AppHandle, source: &LabellingSource) -> Result<Vec
     Ok(dirs)
 }
 
-fn copy_export_evidence(dirs: &[PathBuf], target: &Path, intervals: &[ManualInterval]) -> Result<(), String> {
+fn copy_export_evidence(
+    dirs: &[PathBuf],
+    target: &Path,
+    intervals: &[ManualInterval],
+) -> Result<(), String> {
     // Keep the source evidence byte for byte, including its clock domain. Never remap already exported landmarks.
     for dir in dirs {
-        for name in ["raw.csv", "recording.json", "annotations.json", "hand_landmarks.csv", "hand_landmarks_2.csv", "clock_sync.csv", "ppg_clock.csv"] {
+        for name in [
+            "raw.csv",
+            "recording.json",
+            "annotations.json",
+            "hand_landmarks.csv",
+            "hand_landmarks_2.csv",
+            "clock_sync.csv",
+            "ppg_clock.csv",
+        ] {
             let source = dir.join(name);
             if source.exists() {
-                fs::copy(&source, target.join(name)).map_err(|e| format!("could not export {}: {e}", source.display()))?;
+                fs::copy(&source, target.join(name))
+                    .map_err(|e| format!("could not export {}: {e}", source.display()))?;
             }
         }
         let metadata = dir.join(dataset_files::META_FILE);
@@ -456,8 +541,11 @@ fn copy_export_evidence(dirs: &[PathBuf], target: &Path, intervals: &[ManualInte
         }
     }
     // The original annotations remain evidence; the current hand edits have their own explicit intervals too.
-    fs::write(target.join("manual_labels.json"), serde_json::to_vec_pretty(intervals).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())
+    fs::write(
+        target.join("manual_labels.json"),
+        serde_json::to_vec_pretty(intervals).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())
 }
 
 /// Exports the labelled streams and all available recording evidence. CSV exports include a companion folder.
@@ -475,8 +563,14 @@ pub fn export_labelling_recording(
         ExportTarget::Folder { parent, name } => (PathBuf::from(parent), name, None),
         ExportTarget::Csv { path } => {
             let requested = PathBuf::from(path);
-            let parent = requested.parent().ok_or("the export has no parent folder")?.to_path_buf();
-            let stem = requested.file_stem().and_then(|n| n.to_str()).ok_or("invalid CSV filename")?;
+            let parent = requested
+                .parent()
+                .ok_or("the export has no parent folder")?
+                .to_path_buf();
+            let stem = requested
+                .file_stem()
+                .and_then(|n| n.to_str())
+                .ok_or("invalid CSV filename")?;
             let mut path = requested.clone();
             let mut name = format!("{stem}-files");
             let mut number = 2;
@@ -488,17 +582,26 @@ pub fn export_labelling_recording(
             (parent, name, Some(path))
         }
     };
-    if !parent.is_dir() { return Err("choose an existing export folder".into()); }
+    if !parent.is_dir() {
+        return Err("choose an existing export folder".into());
+    }
     // A private staging folder keeps failed evidence copies from leaving an incomplete export.
     let staging = parent.join(format!(".{}.exporting", uuid::Uuid::new_v4()));
     fs::create_dir(&staging).map_err(|e| e.to_string())?;
     let result = (|| -> Result<String, String> {
         let folder = PathBuf::from(model_lab::export_dataset_folder(
-            staging.display().to_string(), name.clone(), ppg_csv.clone(), imu_csv.clone(), None, None,
+            staging.display().to_string(),
+            name.clone(),
+            ppg_csv.clone(),
+            imu_csv.clone(),
+            None,
+            None,
         )?);
         copy_export_evidence(&evidence, &folder, &intervals)?;
         let mut destination = parent.join(&name);
-        if csv_path.is_some() && destination.exists() { return Err("the CSV companion folder already exists".into()); }
+        if csv_path.is_some() && destination.exists() {
+            return Err("the CSV companion folder already exists".into());
+        }
         let mut number = 2;
         while destination.exists() {
             destination = parent.join(format!("{name}-{number}"));
@@ -513,7 +616,11 @@ pub fn export_labelling_recording(
                 let _ = fs::remove_dir_all(&destination);
                 return Err(e.to_string());
             }
-            Ok(format!("{} (supporting files: {})", path.display(), destination.display()))
+            Ok(format!(
+                "{} (supporting files: {})",
+                path.display(),
+                destination.display()
+            ))
         } else {
             fs::rename(&folder, &destination).map_err(|e| e.to_string())?;
             Ok(destination.display().to_string())
@@ -555,9 +662,18 @@ const SWEEP_STEP: f64 = 0.05;
 
 /// Where detections start when `scores` (at `times_ms`) go through the detection rule of `thresholds` with the activation
 /// threshold at `activation` (and the release as far below it as before).
-pub(crate) fn rises_at(times_ms: &[f64], scores: &[f64], thresholds: &model_lab_core::Thresholds, activation: f64) -> Vec<f64> {
+pub(crate) fn rises_at(
+    times_ms: &[f64],
+    scores: &[f64],
+    thresholds: &model_lab_core::Thresholds,
+    activation: f64,
+) -> Vec<f64> {
     let gap = (thresholds.activation - thresholds.release).max(0.0);
-    let moved = model_lab_core::Thresholds { activation, release: (activation - gap).max(0.0), ..*thresholds };
+    let moved = model_lab_core::Thresholds {
+        activation,
+        release: (activation - gap).max(0.0),
+        ..*thresholds
+    };
     let mut detector = label_inference::TemporalDetector::new(moved);
     times_ms
         .iter()
@@ -567,19 +683,29 @@ pub(crate) fn rises_at(times_ms: &[f64], scores: &[f64], thresholds: &model_lab_
         .collect()
 }
 
-fn sweep_of(times_ms: &[f64], scores: &[f64], thresholds: &model_lab_core::Thresholds) -> Vec<SweepPoint> {
+fn sweep_of(
+    times_ms: &[f64],
+    scores: &[f64],
+    thresholds: &model_lab_core::Thresholds,
+) -> Vec<SweepPoint> {
     let steps = ((SWEEP_TO - SWEEP_FROM) / SWEEP_STEP).round() as usize;
     (0..=steps)
         .map(|i| (SWEEP_FROM + i as f64 * SWEEP_STEP) * 100.0)
         .map(|pct| pct.round() / 100.0)
-        .map(|threshold| SweepPoint { threshold, rises_ms: rises_at(times_ms, scores, thresholds, threshold) })
+        .map(|threshold| SweepPoint {
+            threshold,
+            rises_ms: rises_at(times_ms, scores, thresholds, threshold),
+        })
         .collect()
 }
 
 /// The rows of a pair as the watch sends them, in the order they arrive: each pulse sample in a batch of its own sent the
 /// moment it was taken, each motion sample 60 ms after it was taken (the streams are sent separately). The recording's
 /// timestamps are all on the watch's clock, so a batch's send time is its sample's own.
-pub(crate) fn replay(pair: &Pair, models: Vec<label_inference::LoadedModel>) -> Result<Vec<ModelReplay>, String> {
+pub(crate) fn replay(
+    pair: &Pair,
+    models: Vec<label_inference::LoadedModel>,
+) -> Result<Vec<ModelReplay>, String> {
     use label_inference::{DetectionEvent, LabelRuntime, RuntimeMode};
     use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
 
@@ -587,10 +713,24 @@ pub(crate) fn replay(pair: &Pair, models: Vec<label_inference::LoadedModel>) -> 
     let imu = dataset_files::read_imu(&pair.imu_csv)?;
     let origin = origin_of(&ppg, &imu);
     let ms = |stamp: i128| ms_after(stamp, origin);
-    let field = |line: &str, i: usize| line.split(',').nth(i).and_then(|v| v.trim().parse::<f64>().ok());
+    let field = |line: &str, i: usize| {
+        line.split(',')
+            .nth(i)
+            .and_then(|v| v.trim().parse::<f64>().ok())
+    };
     // (arrival, pulse first on a tie, index)
-    let mut arrivals: Vec<(i128, u8, usize)> = ppg.rows.iter().enumerate().map(|(i, r)| (r.stamp + 5_000_000, 0, i)).collect();
-    arrivals.extend(imu.rows.iter().enumerate().map(|(i, r)| (r.stamp + 60_000_000, 1, i)));
+    let mut arrivals: Vec<(i128, u8, usize)> = ppg
+        .rows
+        .iter()
+        .enumerate()
+        .map(|(i, r)| (r.stamp + 5_000_000, 0, i))
+        .collect();
+    arrivals.extend(
+        imu.rows
+            .iter()
+            .enumerate()
+            .map(|(i, r)| (r.stamp + 60_000_000, 1, i)),
+    );
     arrivals.sort();
 
     let mut results: Vec<ModelReplay> = models
@@ -606,7 +746,8 @@ pub(crate) fn replay(pair: &Pair, models: Vec<label_inference::LoadedModel>) -> 
             sweep: Vec::new(),
         })
         .collect();
-    let thresholds: Vec<model_lab_core::Thresholds> = models.iter().map(|model| model.thresholds).collect();
+    let thresholds: Vec<model_lab_core::Thresholds> =
+        models.iter().map(|model| model.thresholds).collect();
     let mut runtime = LabelRuntime::default();
     runtime.set_models(models);
     runtime.set_mode(RuntimeMode::Monitor);
@@ -618,7 +759,9 @@ pub(crate) fn replay(pair: &Pair, models: Vec<label_inference::LoadedModel>) -> 
         let received = u64::try_from(arrival + base).unwrap_or(0);
         let output = if kind == 0 {
             let row = &ppg.rows[index];
-            let Ok(stamp) = u64::try_from(row.stamp) else { continue };
+            let Ok(stamp) = u64::try_from(row.stamp) else {
+                continue;
+            };
             if previous_pulse.is_some_and(|p| stamp <= p) {
                 continue; // a repeated timestamp, which the watch never sends live
             }
@@ -643,12 +786,20 @@ pub(crate) fn replay(pair: &Pair, models: Vec<label_inference::LoadedModel>) -> 
             )
         } else {
             let row = &imu.rows[index];
-            let Ok(stamp) = u64::try_from(row.stamp) else { continue };
+            let Ok(stamp) = u64::try_from(row.stamp) else {
+                continue;
+            };
             if previous_motion.is_some_and(|p| stamp <= p) {
                 continue;
             }
             previous_motion = Some(stamp);
-            let three = |from: usize| -> Option<[f64; 3]> { Some([field(&row.line, from)?, field(&row.line, from + 1)?, field(&row.line, from + 2)?]) };
+            let three = |from: usize| -> Option<[f64; 3]> {
+                Some([
+                    field(&row.line, from)?,
+                    field(&row.line, from + 1)?,
+                    field(&row.line, from + 2)?,
+                ])
+            };
             let quaternion = [8, 9, 10, 11].map(|i| field(&row.line, i).unwrap_or(0.0));
             runtime.observe_orientation(
                 &WatchOrientationSample {
@@ -670,13 +821,22 @@ pub(crate) fn replay(pair: &Pair, models: Vec<label_inference::LoadedModel>) -> 
         }
         for event in &output.events {
             match event {
-                DetectionEvent::Rising { label, timestamp_ns, .. } => {
+                DetectionEvent::Rising {
+                    label,
+                    timestamp_ns,
+                    ..
+                } => {
                     open.insert(label.to_string(), ms(i128::from(*timestamp_ns)));
                 }
-                DetectionEvent::Falling { label, timestamp_ns, .. } => {
-                    if let (Some(start), Some(result)) =
-                        (open.remove(label.as_str()), results.iter_mut().find(|r| r.label == label.as_str()))
-                    {
+                DetectionEvent::Falling {
+                    label,
+                    timestamp_ns,
+                    ..
+                } => {
+                    if let (Some(start), Some(result)) = (
+                        open.remove(label.as_str()),
+                        results.iter_mut().find(|r| r.label == label.as_str()),
+                    ) {
                         result.detections.push(ManualInterval {
                             start_ms: start,
                             end_ms: ms(i128::from(*timestamp_ns)).max(start),
@@ -688,7 +848,9 @@ pub(crate) fn replay(pair: &Pair, models: Vec<label_inference::LoadedModel>) -> 
             }
         }
         for rejection in &output.rejections {
-            if let Some(result) = results.iter_mut().find(|r| r.label == rejection.label.as_str())
+            if let Some(result) = results
+                .iter_mut()
+                .find(|r| r.label == rejection.label.as_str())
                 && result.rejections.len() < 5
             {
                 let text = rejection.reason.to_string();
@@ -702,7 +864,11 @@ pub(crate) fn replay(pair: &Pair, models: Vec<label_inference::LoadedModel>) -> 
     for (label, start) in open {
         if let Some(result) = results.iter_mut().find(|r| r.label == label) {
             let end = result.times_ms.last().copied().unwrap_or(start);
-            result.detections.push(ManualInterval { start_ms: start, end_ms: end, label });
+            result.detections.push(ManualInterval {
+                start_ms: start,
+                end_ms: end,
+                label,
+            });
         }
     }
     for (result, thresholds) in results.iter_mut().zip(&thresholds) {
@@ -714,7 +880,10 @@ pub(crate) fn replay(pair: &Pair, models: Vec<label_inference::LoadedModel>) -> 
 /// Runs every active model over the recording, as the app runs it live (in Monitor: nothing acts on it), to show where it
 /// fires and where it does not. Read-only: nothing about the models or the recording changes.
 #[tauri::command]
-pub async fn labelling_model_replay(source: LabellingSource, app: AppHandle) -> Result<Vec<ModelReplay>, String> {
+pub async fn labelling_model_replay(
+    source: LabellingSource,
+    app: AppHandle,
+) -> Result<Vec<ModelReplay>, String> {
     use tauri::Manager;
     let (pair, _) = load(&app, &source)?;
     let dir = app
@@ -729,8 +898,13 @@ pub async fn labelling_model_replay(source: LabellingSource, app: AppHandle) -> 
         let (models, failures) = label_inference::load_active_models(&registry, &dir);
         if models.is_empty() {
             return Err(match failures.first() {
-                Some(failure) => format!("the active model for '{}' could not be loaded: {}", failure.label, failure.detail),
-                None => "no model is active: activate one under Label models in Model Lab".to_string(),
+                Some(failure) => format!(
+                    "the active model for '{}' could not be loaded: {}",
+                    failure.label, failure.detail
+                ),
+                None => {
+                    "no model is active: activate one under Label models in Model Lab".to_string()
+                }
             });
         }
         replay(&pair, models)
@@ -751,7 +925,9 @@ mod tests {
             trigger: model_lab_core::Trigger::Peak,
         };
         // Two bumps: up to 0.7 (peaking at 40 ms) and up to 0.9 (peaking at 140 ms).
-        let times = [0.0, 20.0, 40.0, 60.0, 80.0, 100.0, 120.0, 140.0, 160.0, 180.0];
+        let times = [
+            0.0, 20.0, 40.0, 60.0, 80.0, 100.0, 120.0, 140.0, 160.0, 180.0,
+        ];
         let scores = [0.1, 0.5, 0.7, 0.4, 0.1, 0.3, 0.8, 0.9, 0.6, 0.1];
         // The peak trigger fires on the first fall after reaching the threshold.
         assert_eq!(rises_at(&times, &scores, &thresholds, 0.6), [60.0, 160.0]);
@@ -787,23 +963,58 @@ mod tests {
         let original = root.join("original");
         let current = root.join("current");
         let output = root.join("output");
-        for dir in [&original, &current, &output] { fs::create_dir_all(dir).unwrap(); }
-        let names = ["raw.csv", "recording.json", "annotations.json", "hand_landmarks.csv", "hand_landmarks_2.csv", "clock_sync.csv", "ppg_clock.csv"];
-        for name in names { fs::write(original.join(name), format!("original {name}")).unwrap(); }
-        fs::write(current.join("hand_landmarks.csv"), "already aligned landmarks").unwrap();
+        for dir in [&original, &current, &output] {
+            fs::create_dir_all(dir).unwrap();
+        }
+        let names = [
+            "raw.csv",
+            "recording.json",
+            "annotations.json",
+            "hand_landmarks.csv",
+            "hand_landmarks_2.csv",
+            "clock_sync.csv",
+            "ppg_clock.csv",
+        ];
+        for name in names {
+            fs::write(original.join(name), format!("original {name}")).unwrap();
+        }
+        fs::write(
+            current.join("hand_landmarks.csv"),
+            "already aligned landmarks",
+        )
+        .unwrap();
         fs::write(current.join("dataset.json"), "source metadata").unwrap();
         fs::write(output.join("ppg.csv"), "labelled pulse").unwrap();
         fs::write(output.join("dataset.json"), "updated export metadata").unwrap();
-        let intervals = vec![ManualInterval { start_ms: 0.0, end_ms: 40.0, label: "pinch".into() }];
+        let intervals = vec![ManualInterval {
+            start_ms: 0.0,
+            end_ms: 40.0,
+            label: "pinch".into(),
+        }];
         copy_export_evidence(&[original, current], &output, &intervals).unwrap();
         for name in names {
-            let expected = if name == "hand_landmarks.csv" { "already aligned landmarks".to_string() } else { format!("original {name}") };
+            let expected = if name == "hand_landmarks.csv" {
+                "already aligned landmarks".to_string()
+            } else {
+                format!("original {name}")
+            };
             assert_eq!(fs::read_to_string(output.join(name)).unwrap(), expected);
         }
-        assert_eq!(fs::read_to_string(output.join("ppg.csv")).unwrap(), "labelled pulse");
-        assert_eq!(fs::read_to_string(output.join("dataset.json")).unwrap(), "updated export metadata");
-        assert_eq!(fs::read_to_string(output.join("source_dataset.json")).unwrap(), "source metadata");
-        let labels: Vec<ManualInterval> = serde_json::from_str(&fs::read_to_string(output.join("manual_labels.json")).unwrap()).unwrap();
+        assert_eq!(
+            fs::read_to_string(output.join("ppg.csv")).unwrap(),
+            "labelled pulse"
+        );
+        assert_eq!(
+            fs::read_to_string(output.join("dataset.json")).unwrap(),
+            "updated export metadata"
+        );
+        assert_eq!(
+            fs::read_to_string(output.join("source_dataset.json")).unwrap(),
+            "source metadata"
+        );
+        let labels: Vec<ManualInterval> =
+            serde_json::from_str(&fs::read_to_string(output.join("manual_labels.json")).unwrap())
+                .unwrap();
         assert_eq!(labels, intervals);
         fs::remove_dir_all(root).unwrap();
     }
@@ -816,18 +1027,33 @@ mod tests {
         fs::write(dir.join(dataset_files::PPG_FILE), &original.ppg_csv).unwrap();
         fs::write(dir.join(dataset_files::IMU_FILE), &original.imu_csv).unwrap();
         fs::write(dir.join("hand_landmarks.csv"), "camera evidence").unwrap();
-        let (ppg, imu) = with_manual(&original, &[ManualInterval { start_ms: 0.0, end_ms: 80.0, label: "fist".into() }]).unwrap();
+        let (ppg, imu) = with_manual(
+            &original,
+            &[ManualInterval {
+                start_ms: 0.0,
+                end_ms: 80.0,
+                label: "fist".into(),
+            }],
+        )
+        .unwrap();
         let labelled = dataset_files::parse_pair_with(&ppg, &imu, false).unwrap();
         let backup = replace_manual_files(&dir, &labelled).unwrap();
         let reopened = pair_at(&dir).unwrap();
         assert_eq!(reopened.ppg_csv, ppg);
         assert_eq!(reopened.imu_csv, imu);
-        assert_eq!(fs::read_to_string(dir.join("hand_landmarks.csv")).unwrap(), "camera evidence");
+        assert_eq!(
+            fs::read_to_string(dir.join("hand_landmarks.csv")).unwrap(),
+            "camera evidence"
+        );
         restore_manual_files(&backup).unwrap();
         assert_eq!(pair_at(&dir).unwrap().ppg_csv, original.ppg_csv);
         // Single CSV sources are updated in place too.
         let single = dir.join("session.csv");
-        fs::write(&single, dataset_files::merge_to_single(&original.ppg_csv, &original.imu_csv).unwrap()).unwrap();
+        fs::write(
+            &single,
+            dataset_files::merge_to_single(&original.ppg_csv, &original.imu_csv).unwrap(),
+        )
+        .unwrap();
         replace_manual_files(&single, &labelled).unwrap();
         assert_eq!(pair_at(&single).unwrap().ppg_csv, ppg);
         fs::remove_dir_all(dir).unwrap();
@@ -835,37 +1061,73 @@ mod tests {
 
     #[test]
     fn a_recording_is_shown_as_columns_over_time_with_its_label_and_manual_spans() {
-        let shown = view(&pair(), "session".into(), LabellingSource::File { path: "x".into() }).unwrap();
+        let shown = view(
+            &pair(),
+            "session".into(),
+            LabellingSource::File { path: "x".into() },
+        )
+        .unwrap();
         assert_eq!(shown.duration_ms, 80.0);
         assert_eq!(shown.ppg.times_ms, [0.0, 40.0, 80.0]);
         assert_eq!(shown.imu.times_ms, [20.0, 60.0]);
         let names: Vec<&str> = shown.imu.columns.iter().map(|c| c.name.as_str()).collect();
         assert_eq!(names[..3], ["accel_x", "accel_y", "accel_z"]);
         assert_eq!(names.len(), 10, "no timestamp, sequence or labels");
-        assert_eq!(shown.imu.columns[1].values, [Some(0.2), None], "a blank cell stays blank");
+        assert_eq!(
+            shown.imu.columns[1].values,
+            [Some(0.2), None],
+            "a blank cell stays blank"
+        );
         assert_eq!(
             shown.label_intervals,
-            [ManualInterval { start_ms: 40.0, end_ms: 80.0, label: "pinch".into() }]
+            [ManualInterval {
+                start_ms: 40.0,
+                end_ms: 80.0,
+                label: "pinch".into()
+            }]
         );
         assert_eq!(
             shown.manual_intervals,
-            [ManualInterval { start_ms: 80.0, end_ms: 80.0, label: "fist".into() }]
+            [ManualInterval {
+                start_ms: 80.0,
+                end_ms: 80.0,
+                label: "fist".into()
+            }]
         );
     }
 
     #[test]
     fn manual_spans_label_every_row_of_both_files_inside_them_and_change_nothing_else() {
-        let span = |start_ms: f64, end_ms: f64, label: &str| ManualInterval { start_ms, end_ms, label: label.into() };
-        // fist over 10-50 ms, then "nothing here" over 50-70 ms; the later span wins where they meet.
-        let (ppg, imu) = with_manual(&pair(), &[span(10.0, 50.0, "fist"), span(50.0, 70.0, NO_LABEL)]).unwrap();
-        let manual = |text: &str| -> Vec<String> {
-            text.lines().skip(1).map(|l| l.rsplit(',').next().unwrap().to_string()).collect()
+        let span = |start_ms: f64, end_ms: f64, label: &str| ManualInterval {
+            start_ms,
+            end_ms,
+            label: label.into(),
         };
-        assert_eq!(manual(&ppg), ["", "fist", ""], "the hand label the file had at 80 ms is replaced by the spans");
+        // fist over 10-50 ms, then "nothing here" over 50-70 ms; the later span wins where they meet.
+        let (ppg, imu) = with_manual(
+            &pair(),
+            &[span(10.0, 50.0, "fist"), span(50.0, 70.0, NO_LABEL)],
+        )
+        .unwrap();
+        let manual = |text: &str| -> Vec<String> {
+            text.lines()
+                .skip(1)
+                .map(|l| l.rsplit(',').next().unwrap().to_string())
+                .collect()
+        };
+        assert_eq!(
+            manual(&ppg),
+            ["", "fist", ""],
+            "the hand label the file had at 80 ms is replaced by the spans"
+        );
         assert_eq!(manual(&imu), ["fist", "-"]);
         assert!(ppg.contains("\n1040000000,2,1,2,3,0,pinch,fist\n"));
         let saved = dataset_files::parse_pair(&ppg, &imu).unwrap();
-        assert_eq!(saved.labels, ["fist", "pinch"], "the 80 ms row trains on its pinch again");
+        assert_eq!(
+            saved.labels,
+            ["fist", "pinch"],
+            "the 80 ms row trains on its pinch again"
+        );
         // A span that is not a label, or runs backwards, is refused.
         assert!(with_manual(&pair(), &[span(0.0, 10.0, "a,b")]).is_err());
         assert!(with_manual(&pair(), &[span(10.0, 0.0, "fist")]).is_err());
@@ -877,7 +1139,14 @@ mod tests {
     fn a_real_recording_opens_takes_hand_labels_and_round_trips() {
         let path = PathBuf::from(std::env::var("LABELLING_E2E_SOURCE").unwrap());
         let pair = pair_at(&path).unwrap();
-        let shown = view(&pair, "real".into(), LabellingSource::File { path: path.display().to_string() }).unwrap();
+        let shown = view(
+            &pair,
+            "real".into(),
+            LabellingSource::File {
+                path: path.display().to_string(),
+            },
+        )
+        .unwrap();
         let (ppg_rows, imu_rows) = (shown.ppg.times_ms.len(), shown.imu.times_ms.len());
         println!(
             "{ppg_rows} pulse and {imu_rows} motion rows over {:.1} s; {} recorded spans, {} hand spans",
@@ -888,21 +1157,60 @@ mod tests {
         // Label the middle tenth "fist" and the first second "nothing here".
         let middle = shown.duration_ms / 2.0;
         let spans = [
-            ManualInterval { start_ms: 0.0, end_ms: 1000.0, label: NO_LABEL.into() },
-            ManualInterval { start_ms: middle, end_ms: middle + shown.duration_ms / 10.0, label: "fist".into() },
+            ManualInterval {
+                start_ms: 0.0,
+                end_ms: 1000.0,
+                label: NO_LABEL.into(),
+            },
+            ManualInterval {
+                start_ms: middle,
+                end_ms: middle + shown.duration_ms / 10.0,
+                label: "fist".into(),
+            },
         ];
         let (ppg, imu) = with_manual(&pair, &spans).unwrap();
         let labelled = dataset_files::parse_pair_with(&ppg, &imu, false).unwrap();
-        assert_eq!((labelled.ppg_rows, labelled.imu_rows), (ppg_rows, imu_rows), "no row lost or added");
-        let reopened = view(&labelled, "again".into(), LabellingSource::File { path: String::new() }).unwrap();
-        assert_eq!(reopened.manual_intervals.len(), 2, "{:?}", reopened.manual_intervals);
-        assert_eq!(reopened.label_intervals, shown.label_intervals, "the recorded labels are untouched");
+        assert_eq!(
+            (labelled.ppg_rows, labelled.imu_rows),
+            (ppg_rows, imu_rows),
+            "no row lost or added"
+        );
+        let reopened = view(
+            &labelled,
+            "again".into(),
+            LabellingSource::File {
+                path: String::new(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            reopened.manual_intervals.len(),
+            2,
+            "{:?}",
+            reopened.manual_intervals
+        );
+        assert_eq!(
+            reopened.label_intervals, shown.label_intervals,
+            "the recorded labels are untouched"
+        );
         let single = dataset_files::merge_to_single(&ppg, &imu).unwrap();
         let back = dataset_files::split_legacy_with(&single, false).unwrap();
         // The rows come back exactly; of the `#` lines only `# label:` is kept, as for any single file read back.
-        let rows = |text: &str| text.lines().filter(|l| !l.starts_with('#')).map(str::to_string).collect::<Vec<_>>();
-        assert_eq!((rows(&back.ppg_csv), rows(&back.imu_csv)), (rows(&ppg), rows(&imu)), "the one-file export splits back into the same rows");
-        println!("hand spans after a round trip: {:?}", reopened.manual_intervals);
+        let rows = |text: &str| {
+            text.lines()
+                .filter(|l| !l.starts_with('#'))
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            (rows(&back.ppg_csv), rows(&back.imu_csv)),
+            (rows(&ppg), rows(&imu)),
+            "the one-file export splits back into the same rows"
+        );
+        println!(
+            "hand spans after a round trip: {:?}",
+            reopened.manual_intervals
+        );
     }
 
     /// A one-off check with real models: `LABELLING_E2E_BUNDLE` (a trained bundle) or `LABELLING_E2E_MODEL_LAB` (the app's
@@ -912,8 +1220,11 @@ mod tests {
     fn the_active_models_replay_a_real_recording() {
         let models = if let Ok(bundle) = std::env::var("LABELLING_E2E_BUNDLE") {
             // A bundle the trainer made, approved here as the registry would.
-            use model_lab_core::{LifecycleState, ModelOrigin, ModelVersion, ModelVersionId, ProjectId};
-            let bundle = label_inference::validate_bundle(std::path::Path::new(&bundle), None).unwrap();
+            use model_lab_core::{
+                LifecycleState, ModelOrigin, ModelVersion, ModelVersionId, ProjectId,
+            };
+            let bundle =
+                label_inference::validate_bundle(std::path::Path::new(&bundle), None).unwrap();
             let mut version = ModelVersion::new(
                 ModelVersionId::new("e2e-v1").unwrap(),
                 ProjectId::new("p-e2e").unwrap(),
@@ -932,13 +1243,18 @@ mod tests {
             vec![label_inference::LoadedModel::load(bundle, &version).unwrap()]
         } else {
             let dir = PathBuf::from(std::env::var("LABELLING_E2E_MODEL_LAB").unwrap());
-            let registry = model_lab_core::load_registry_file(&dir.join("registry-v2.json")).unwrap().unwrap();
+            let registry = model_lab_core::load_registry_file(&dir.join("registry-v2.json"))
+                .unwrap()
+                .unwrap();
             let (models, failures) = label_inference::load_active_models(&registry, &dir);
             assert!(failures.is_empty(), "{failures:?}");
             models
         };
         assert!(!models.is_empty(), "no active model");
-        let pair = pair_at(&PathBuf::from(std::env::var("LABELLING_E2E_SOURCE").unwrap())).unwrap();
+        let pair = pair_at(&PathBuf::from(
+            std::env::var("LABELLING_E2E_SOURCE").unwrap(),
+        ))
+        .unwrap();
         let started = std::time::Instant::now();
         for model in replay(&pair, models).unwrap() {
             println!(
@@ -949,7 +1265,11 @@ mod tests {
                 model.scores.iter().copied().fold(0.0, f64::max),
                 model.threshold,
                 model.detections.len(),
-                model.detections.iter().map(|d| d.start_ms.round()).collect::<Vec<_>>(),
+                model
+                    .detections
+                    .iter()
+                    .map(|d| d.start_ms.round())
+                    .collect::<Vec<_>>(),
                 model.rejections,
                 started.elapsed().as_secs_f64()
             );
@@ -959,10 +1279,20 @@ mod tests {
 
     #[test]
     fn an_export_as_one_file_holds_both_labels_and_splits_back_into_the_same_files() {
-        let span = ManualInterval { start_ms: 0.0, end_ms: 30.0, label: "fist".into() };
+        let span = ManualInterval {
+            start_ms: 0.0,
+            end_ms: 30.0,
+            label: "fist".into(),
+        };
         let (ppg, imu) = with_manual(&pair(), &[span]).unwrap();
         let single = dataset_files::merge_to_single(&ppg, &imu).unwrap();
-        assert!(single.lines().next().unwrap().ends_with("contact_quality,label,manual_label"));
+        assert!(
+            single
+                .lines()
+                .next()
+                .unwrap()
+                .ends_with("contact_quality,label,manual_label")
+        );
         let back = dataset_files::split_legacy(&single).unwrap();
         assert_eq!((back.ppg_csv, back.imu_csv), (ppg, imu));
     }

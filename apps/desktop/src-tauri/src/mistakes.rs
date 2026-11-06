@@ -80,7 +80,10 @@ fn peak_between(times: &[f64], scores: &[f64], from: f64, to: f64) -> f64 {
 }
 
 fn label_at(holds: &[dataset_files::Hold], at: f64) -> Option<String> {
-    holds.iter().find(|hold| (hold.start_ms..=hold.end_ms).contains(&at)).map(|hold| hold.label.clone())
+    holds
+        .iter()
+        .find(|hold| (hold.start_ms..=hold.end_ms).contains(&at))
+        .map(|hold| hold.label.clone())
 }
 
 /// What one recording's replay holds for `target`: its starts, every labelled stretch, the labels training excluded, and
@@ -94,8 +97,17 @@ struct Recording<'a> {
 }
 
 /// The mistakes in one recording, and its totals.
-fn mistakes_in(recording: &Recording, replay: &labelling::ModelReplay) -> (EventTotals, Vec<Mistake>) {
-    let Recording { target, starts, holds, excluded, span } = *recording;
+fn mistakes_in(
+    recording: &Recording,
+    replay: &labelling::ModelReplay,
+) -> (EventTotals, Vec<Mistake>) {
+    let Recording {
+        target,
+        starts,
+        holds,
+        excluded,
+        span,
+    } = *recording;
     let rises: Vec<f64> = replay.detections.iter().map(|d| d.start_ms).collect();
     let counted = detector_events::count(&rises, starts, holds, target, excluded, span);
     let mut mistakes = Vec::new();
@@ -104,31 +116,57 @@ fn mistakes_in(recording: &Recording, replay: &labelling::ModelReplay) -> (Event
             mistakes.push(Mistake {
                 kind: "missed",
                 at_ms: start,
-                peak: peak_between(&replay.times_ms, &replay.scores, start, start + sealed_test::CATCH_TO_MS),
+                peak: peak_between(
+                    &replay.times_ms,
+                    &replay.scores,
+                    start,
+                    start + sealed_test::CATCH_TO_MS,
+                ),
                 why: None,
                 during: Some(replay.label.clone()),
             });
         }
     }
     for &(rise, kind) in &counted.detections {
-        let end = replay.detections.iter().find(|d| d.start_ms == rise).map_or(rise, |d| d.end_ms.max(rise));
+        let end = replay
+            .detections
+            .iter()
+            .find(|d| d.start_ms == rise)
+            .map_or(rise, |d| d.end_ms.max(rise));
         let peak = peak_between(&replay.times_ms, &replay.scores, rise, end);
         let (kind, why, during) = match kind {
             Kind::Catch(_) => continue,
             Kind::Repeat => ("repeat", None, label_at(holds, rise)),
             Kind::Late => ("late", None, label_at(holds, rise)),
             Kind::False => {
-                let why = if starts.iter().any(|s| (0.0..=NEAR_BEFORE_MS).contains(&(s - rise))) {
+                let why = if starts
+                    .iter()
+                    .any(|s| (0.0..=NEAR_BEFORE_MS).contains(&(s - rise)))
+                {
                     "early"
-                } else if counted.under_way.iter().any(|(_, to, _)| (0.0..=AFTER_END_MS).contains(&(rise - to))) {
+                } else if counted
+                    .under_way
+                    .iter()
+                    .any(|(_, to, _)| (0.0..=AFTER_END_MS).contains(&(rise - to)))
+                {
                     "after"
                 } else {
                     "elsewhere"
                 };
-                ("false", Some(why), label_at(holds, rise - DECISION_DELAY_MS).or_else(|| label_at(holds, rise)))
+                (
+                    "false",
+                    Some(why),
+                    label_at(holds, rise - DECISION_DELAY_MS).or_else(|| label_at(holds, rise)),
+                )
             }
         };
-        mistakes.push(Mistake { kind, at_ms: rise, peak, why, during });
+        mistakes.push(Mistake {
+            kind,
+            at_ms: rise,
+            peak,
+            why,
+            during,
+        });
     }
     mistakes.sort_by(|a, b| a.at_ms.total_cmp(&b.at_ms));
     (counted.totals, mistakes)
@@ -137,8 +175,16 @@ fn mistakes_in(recording: &Recording, replay: &labelling::ModelReplay) -> (Event
 /// Every mistake model version `version_id` makes on the recordings it was tested on, and with `include_training` on those
 /// it trained on too (where it should do well: mistakes there usually mean a wrong label).
 #[tauri::command]
-pub async fn model_mistakes(version_id: String, include_training: bool, app: AppHandle) -> Result<MistakesReport, String> {
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join(model_lab::MODEL_LAB_DIR_NAME);
+pub async fn model_mistakes(
+    version_id: String,
+    include_training: bool,
+    app: AppHandle,
+) -> Result<MistakesReport, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join(model_lab::MODEL_LAB_DIR_NAME);
     let datasets_dir = model_lab::datasets_dir(&app)?;
     let index = model_lab::described_index(&app);
     tauri::async_runtime::spawn_blocking(move || {
@@ -226,9 +272,21 @@ pub struct ThresholdSweep {
 type SweepRows = Vec<(f64, Vec<(&'static str, EventTotals)>)>;
 
 /// Adds one recording's sweep to `rows`.
-fn add_sweep(rows: &mut SweepRows, timing: &'static str, recording: &Recording, replay: &labelling::ModelReplay) {
+fn add_sweep(
+    rows: &mut SweepRows,
+    timing: &'static str,
+    recording: &Recording,
+    replay: &labelling::ModelReplay,
+) {
     for (i, point) in replay.sweep.iter().enumerate() {
-        let counted = detector_events::count(&point.rises_ms, recording.starts, recording.holds, recording.target, recording.excluded, recording.span);
+        let counted = detector_events::count(
+            &point.rises_ms,
+            recording.starts,
+            recording.holds,
+            recording.target,
+            recording.excluded,
+            recording.span,
+        );
         if rows.len() <= i {
             rows.push((point.threshold, Vec::new()));
         }
@@ -237,7 +295,12 @@ fn add_sweep(rows: &mut SweepRows, timing: &'static str, recording: &Recording, 
 }
 
 fn sweep_points(rows: &SweepRows) -> Vec<ThresholdPoint> {
-    rows.iter().map(|(threshold, per_recording)| ThresholdPoint { threshold: *threshold, events: detector_events::judge(per_recording) }).collect()
+    rows.iter()
+        .map(|(threshold, per_recording)| ThresholdPoint {
+            threshold: *threshold,
+            events: detector_events::judge(per_recording),
+        })
+        .collect()
 }
 
 /// How many starts model version `version_id` catches, and how many false activations an hour with no gesture under way it
@@ -245,7 +308,11 @@ fn sweep_points(rows: &SweepRows) -> Vec<ThresholdPoint> {
 /// on.
 #[tauri::command]
 pub async fn threshold_sweep(version_id: String, app: AppHandle) -> Result<ThresholdSweep, String> {
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join(model_lab::MODEL_LAB_DIR_NAME);
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join(model_lab::MODEL_LAB_DIR_NAME);
     let datasets_dir = model_lab::datasets_dir(&app)?;
     let index = model_lab::described_index(&app);
     tauri::async_runtime::spawn_blocking(move || {
@@ -319,19 +386,32 @@ pub struct Comparison {
 
 /// The recordings two models can be compared on: those either was tested on and neither trained on. Sorted.
 fn fair_recordings(splits: &[&model_lab_core::Split]) -> Vec<String> {
-    let trained: std::collections::BTreeSet<String> = splits.iter().flat_map(|s| s.train.iter().map(ToString::to_string)).collect();
-    let tested: std::collections::BTreeSet<String> = splits.iter().flat_map(|s| s.evaluation.iter().map(ToString::to_string)).collect();
+    let trained: std::collections::BTreeSet<String> = splits
+        .iter()
+        .flat_map(|s| s.train.iter().map(ToString::to_string))
+        .collect();
+    let tested: std::collections::BTreeSet<String> = splits
+        .iter()
+        .flat_map(|s| s.evaluation.iter().map(ToString::to_string))
+        .collect();
     tested.difference(&trained).cloned().collect()
 }
 
 /// Two (or more) model versions on the same recordings, ones none of them trained on: each recording's catches and false
 /// activations for each, and each one's threshold trade-off over them all.
 #[tauri::command]
-pub async fn compare_models(version_ids: Vec<String>, app: AppHandle) -> Result<Comparison, String> {
+pub async fn compare_models(
+    version_ids: Vec<String>,
+    app: AppHandle,
+) -> Result<Comparison, String> {
     if version_ids.len() < 2 || version_ids.len() > 4 {
         return Err("compare two to four models".into());
     }
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join(model_lab::MODEL_LAB_DIR_NAME);
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join(model_lab::MODEL_LAB_DIR_NAME);
     let datasets_dir = model_lab::datasets_dir(&app)?;
     let index = model_lab::described_index(&app);
     tauri::async_runtime::spawn_blocking(move || {
@@ -427,14 +507,25 @@ mod tests {
             threshold: 0.6,
             times_ms: times.to_vec(),
             scores: scores.to_vec(),
-            detections: detections.iter().map(|&(start_ms, end_ms)| labelling::ManualInterval { start_ms, end_ms, label: "pinch".into() }).collect(),
+            detections: detections
+                .iter()
+                .map(|&(start_ms, end_ms)| labelling::ManualInterval {
+                    start_ms,
+                    end_ms,
+                    label: "pinch".into(),
+                })
+                .collect(),
             rejections: Vec::new(),
             sweep: Vec::new(),
         }
     }
 
     fn hold(label: &str, start_ms: f64, end_ms: f64) -> dataset_files::Hold {
-        dataset_files::Hold { label: label.into(), start_ms, end_ms }
+        dataset_files::Hold {
+            label: label.into(),
+            start_ms,
+            end_ms,
+        }
     }
 
     /// The pinches of `detector_events`' test (after the trainer's), and a fist.
@@ -451,19 +542,42 @@ mod tests {
     }
 
     #[test]
-    fn a_firing_during_a_pinch_is_listed_as_a_repeat_or_late_and_only_one_with_no_gesture_under_way_as_false() {
+    fn a_firing_during_a_pinch_is_listed_as_a_repeat_or_late_and_only_one_with_no_gesture_under_way_as_false()
+     {
         // Caught 0.9 s after the first pinch; again during its hold; 0.7 s after it ended (the hand opening); 0.3 s before the
         // second; late in the second; during a fist; and with nothing held.
         let holds = pinches();
         let starts = [2000.0, 10_000.0];
-        let times = [2900.0, 3500.0, 5000.0, 9700.0, 10_500.0, 11_500.0, 15_500.0, 18_000.0];
+        let times = [
+            2900.0, 3500.0, 5000.0, 9700.0, 10_500.0, 11_500.0, 15_500.0, 18_000.0,
+        ];
         let scores = [0.9, 0.7, 0.8, 0.75, 0.4, 0.66, 0.8, 0.8];
-        let fired: Vec<(f64, f64)> = [2900.0, 3500.0, 5000.0, 9700.0, 11_500.0, 15_500.0, 18_000.0].iter().map(|&t| (t, t + 100.0)).collect();
+        let fired: Vec<(f64, f64)> = [2900.0, 3500.0, 5000.0, 9700.0, 11_500.0, 15_500.0, 18_000.0]
+            .iter()
+            .map(|&t| (t, t + 100.0))
+            .collect();
         let run = replay(&fired, &times, &scores);
-        let recording = Recording { target: "pinch_in", starts: &starts, holds: &holds, excluded: &[], span: (0.0, 19_990.0) };
+        let recording = Recording {
+            target: "pinch_in",
+            starts: &starts,
+            holds: &holds,
+            excluded: &[],
+            span: (0.0, 19_990.0),
+        };
         let (events, mistakes) = mistakes_in(&recording, &run);
-        assert_eq!((events.caught, events.repeats, events.late, events.false_activations), (1, 1, 1, 4));
-        let shown: Vec<_> = mistakes.iter().map(|m| (m.kind, m.at_ms, m.why, m.during.as_deref())).collect();
+        assert_eq!(
+            (
+                events.caught,
+                events.repeats,
+                events.late,
+                events.false_activations
+            ),
+            (1, 1, 1, 4)
+        );
+        let shown: Vec<_> = mistakes
+            .iter()
+            .map(|m| (m.kind, m.at_ms, m.why, m.during.as_deref()))
+            .collect();
         assert_eq!(
             shown,
             [
@@ -486,39 +600,86 @@ mod tests {
     fn the_trade_off_is_judged_on_the_camera_timed_recordings_and_shows_the_estimated_ones_apart() {
         // Camera-timed: 20 pinches every 5 s, all caught at 0.5 and none at 0.7, and one false activation at both.
         // Estimated: one pinch, caught at both.
-        let camera_holds: Vec<_> = (0..20).map(|i| hold("pinch", 1000.0 + 5000.0 * i as f64, 1300.0 + 5000.0 * i as f64)).collect();
+        let camera_holds: Vec<_> = (0..20)
+            .map(|i| {
+                hold(
+                    "pinch",
+                    1000.0 + 5000.0 * i as f64,
+                    1300.0 + 5000.0 * i as f64,
+                )
+            })
+            .collect();
         let camera_starts: Vec<f64> = camera_holds.iter().map(|h| h.start_ms).collect();
         let mut low: Vec<f64> = camera_starts.iter().map(|s| s + 900.0).collect();
         low.push(108_000.0);
         let mut camera = replay(&[], &[], &[]);
         camera.sweep = vec![
-            labelling::SweepPoint { threshold: 0.5, rises_ms: low },
-            labelling::SweepPoint { threshold: 0.7, rises_ms: vec![108_000.0] },
+            labelling::SweepPoint {
+                threshold: 0.5,
+                rises_ms: low,
+            },
+            labelling::SweepPoint {
+                threshold: 0.7,
+                rises_ms: vec![108_000.0],
+            },
         ];
         let estimated_holds = vec![hold("pinch", 1000.0, 1300.0)];
         let mut estimated = replay(&[], &[], &[]);
         estimated.sweep = vec![
-            labelling::SweepPoint { threshold: 0.5, rises_ms: vec![1900.0] },
-            labelling::SweepPoint { threshold: 0.7, rises_ms: vec![1900.0] },
+            labelling::SweepPoint {
+                threshold: 0.5,
+                rises_ms: vec![1900.0],
+            },
+            labelling::SweepPoint {
+                threshold: 0.7,
+                rises_ms: vec![1900.0],
+            },
         ];
         let mut rows = SweepRows::new();
-        let on_camera = Recording { target: "pinch", starts: &camera_starts, holds: &camera_holds, excluded: &[], span: (0.0, 110_000.0) };
+        let on_camera = Recording {
+            target: "pinch",
+            starts: &camera_starts,
+            holds: &camera_holds,
+            excluded: &[],
+            span: (0.0, 110_000.0),
+        };
         add_sweep(&mut rows, "camera", &on_camera, &camera);
-        let on_motion = Recording { target: "pinch", starts: &[1000.0], holds: &estimated_holds, excluded: &[], span: (0.0, 60_000.0) };
+        let on_motion = Recording {
+            target: "pinch",
+            starts: &[1000.0],
+            holds: &estimated_holds,
+            excluded: &[],
+            span: (0.0, 60_000.0),
+        };
         add_sweep(&mut rows, "estimated", &on_motion, &estimated);
         let points = sweep_points(&rows);
-        let at = |i: usize| (points[i].events.cohort, points[i].events.totals.caught, points[i].events.totals.false_activations);
+        let at = |i: usize| {
+            (
+                points[i].events.cohort,
+                points[i].events.totals.caught,
+                points[i].events.totals.false_activations,
+            )
+        };
         assert_eq!([at(0), at(1)], [("camera", 20, 1), ("camera", 0, 1)]);
         // 110 s less 20 pinches under way for 1.28 s each.
-        assert!((points[0].events.totals.false_activations_per_hour.unwrap() - 3600.0 / 84.4).abs() < 1e-6);
+        assert!(
+            (points[0].events.totals.false_activations_per_hour.unwrap() - 3600.0 / 84.4).abs()
+                < 1e-6
+        );
         assert_eq!(points[1].events.by_label_timing["estimated"].caught, 1);
     }
 
     #[test]
     fn models_are_compared_only_on_recordings_none_of_them_trained_on() {
         let id = |s: &str| model_lab_core::RecordingId::new(s.to_string()).unwrap();
-        let a = model_lab_core::Split { train: vec![id("r1"), id("r2")], evaluation: vec![id("r3"), id("r4")] };
-        let b = model_lab_core::Split { train: vec![id("r1"), id("r3")], evaluation: vec![id("r2"), id("r5")] };
+        let a = model_lab_core::Split {
+            train: vec![id("r1"), id("r2")],
+            evaluation: vec![id("r3"), id("r4")],
+        };
+        let b = model_lab_core::Split {
+            train: vec![id("r1"), id("r3")],
+            evaluation: vec![id("r2"), id("r5")],
+        };
         // r3 trained b and r2 trained a: only r4 and r5 are new to both.
         assert_eq!(fair_recordings(&[&a, &b]), ["r4", "r5"]);
     }
@@ -526,10 +687,23 @@ mod tests {
     #[test]
     fn a_detection_judging_a_stretch_left_out_is_no_mistake() {
         let holds = vec![hold(dataset_files::LEFT_OUT_LABEL, 30_000.0, 40_000.0)];
-        let run = replay(&[(35_000.0, 35_100.0), (45_000.0, 45_100.0)], &[35_000.0, 45_000.0], &[0.8, 0.8]);
-        let recording = Recording { target: "pinch", starts: &[], holds: &holds, excluded: &[], span: (0.0, 60_000.0) };
+        let run = replay(
+            &[(35_000.0, 35_100.0), (45_000.0, 45_100.0)],
+            &[35_000.0, 45_000.0],
+            &[0.8, 0.8],
+        );
+        let recording = Recording {
+            target: "pinch",
+            starts: &[],
+            holds: &holds,
+            excluded: &[],
+            span: (0.0, 60_000.0),
+        };
         let (events, mistakes) = mistakes_in(&recording, &run);
-        assert_eq!(mistakes.iter().map(|m| m.at_ms).collect::<Vec<_>>(), [45_000.0]);
+        assert_eq!(
+            mistakes.iter().map(|m| m.at_ms).collect::<Vec<_>>(),
+            [45_000.0]
+        );
         // Nor is the time left out time with no gesture under way.
         assert_eq!(events.negative_seconds, 50.0);
     }

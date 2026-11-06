@@ -873,21 +873,28 @@ pub fn decode_packed_imu(
     device_id: &str,
     sequence: u64,
 ) -> Result<Vec<WatchOrientationSample>, WatchPacketError> {
-    let bad = |detail: &str| WatchPacketError::InvalidSensorBatch(format!("packed motion: {detail}"));
+    let bad =
+        |detail: &str| WatchPacketError::InvalidSensorBatch(format!("packed motion: {detail}"));
     let bytes = base64_decode(text).ok_or_else(|| bad("not base64"))?;
     if bytes.len() < PACKED_IMU_HEADER || bytes[0] != PACKED_IMU_VERSION {
         return Err(bad("unknown layout"));
     }
     let count = u16::from_le_bytes([bytes[1], bytes[2]]) as usize;
     if count == 0 || count > MAX_IMU_BATCH_SAMPLES {
-        return Err(bad(&format!("sampleCount {count} is outside 1..={MAX_IMU_BATCH_SAMPLES}")));
+        return Err(bad(&format!(
+            "sampleCount {count} is outside 1..={MAX_IMU_BATCH_SAMPLES}"
+        )));
     }
     if bytes.len() != PACKED_IMU_HEADER + count * PACKED_IMU_SAMPLE {
         return Err(bad("its length does not match its sample count"));
     }
     let first = i64::from_le_bytes(bytes[3..11].try_into().expect("8 bytes"));
     let first = u64::try_from(first).map_err(|_| bad("a negative timestamp"))?;
-    let f32_at = |at: usize| f64::from(f32::from_le_bytes(bytes[at..at + 4].try_into().expect("4 bytes")));
+    let f32_at = |at: usize| {
+        f64::from(f32::from_le_bytes(
+            bytes[at..at + 4].try_into().expect("4 bytes"),
+        ))
+    };
     let mut out = Vec::with_capacity(count);
     for index in 0..count {
         let at = PACKED_IMU_HEADER + index * PACKED_IMU_SAMPLE;
@@ -1408,13 +1415,32 @@ mod sensor_batch_tests {
         let samples = decode_packed_imu(PACKED_IMU_EXAMPLE, "w", 9).unwrap();
         assert_eq!(samples.len(), 2);
         assert_eq!(samples[0].timestamp_ns, 2_026_873_695_031_040);
-        assert_eq!(samples[1].timestamp_ns, 2_026_873_715_031_040, "20 ms after the first");
-        assert_eq!(samples[0].quaternion[0], f64::from(0.83891f32), "the sensor's own float, exactly");
-        assert_eq!(samples[0].accelerometer.unwrap()[1], f64::from(0.0047884034f32));
+        assert_eq!(
+            samples[1].timestamp_ns, 2_026_873_715_031_040,
+            "20 ms after the first"
+        );
+        assert_eq!(
+            samples[0].quaternion[0],
+            f64::from(0.83891f32),
+            "the sensor's own float, exactly"
+        );
+        assert_eq!(
+            samples[0].accelerometer.unwrap()[1],
+            f64::from(0.0047884034f32)
+        );
         assert_eq!(samples[0].gyroscope.unwrap()[2], f64::from(0.004886922f32));
-        assert_eq!(samples[1].accelerometer, Some([0.1f32, 0.2, 0.3].map(f64::from)));
-        assert_eq!(samples[1].gyroscope, None, "a sensor that gave nothing is absent");
-        assert_eq!((samples[1].device_id.as_str(), samples[1].sequence), ("w", 9));
+        assert_eq!(
+            samples[1].accelerometer,
+            Some([0.1f32, 0.2, 0.3].map(f64::from))
+        );
+        assert_eq!(
+            samples[1].gyroscope, None,
+            "a sensor that gave nothing is absent"
+        );
+        assert_eq!(
+            (samples[1].device_id.as_str(), samples[1].sequence),
+            ("w", 9)
+        );
     }
 
     #[test]
@@ -1498,8 +1524,14 @@ mod heartbeat_tests {
     use super::*;
 
     fn decode(payload: &str) -> WatchHeartbeatSample {
-        let json = format!(r#"{{"version":1,"type":"watch.heartbeat","deviceId":"w","sequence":3,"timestampNs":7,"payload":{payload}}}"#);
-        match WatchEnvelope::from_json(json.as_bytes()).unwrap().decode().unwrap() {
+        let json = format!(
+            r#"{{"version":1,"type":"watch.heartbeat","deviceId":"w","sequence":3,"timestampNs":7,"payload":{payload}}}"#
+        );
+        match WatchEnvelope::from_json(json.as_bytes())
+            .unwrap()
+            .decode()
+            .unwrap()
+        {
             WatchInboundMessage::Heartbeat(sample) => sample,
             other => panic!("not a heartbeat: {other:?}"),
         }

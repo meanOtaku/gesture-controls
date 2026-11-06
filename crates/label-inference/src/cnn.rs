@@ -223,7 +223,10 @@ impl Member {
                 out.fill(c.bias[o]);
                 for i in 0..c.input {
                     let row = &padded[i * wide..][..wide];
-                    for (k, weight) in c.weight[(o * c.input + i) * c.kernel..][..c.kernel].iter().enumerate() {
+                    for (k, weight) in c.weight[(o * c.input + i) * c.kernel..][..c.kernel]
+                        .iter()
+                        .enumerate()
+                    {
                         for (value, tap) in out.iter_mut().zip(&row[k * c.dilation..][..length]) {
                             *value += weight * tap;
                         }

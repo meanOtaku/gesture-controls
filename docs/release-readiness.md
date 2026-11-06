@@ -10,20 +10,21 @@ OS/architecture, device model/firmware, and outcome for every applicable row.
 - [ ] The working tree is the release candidate commit and `npm ci` completed.
 - [ ] `npm test`, `npm run typecheck`, `npm run build`, `cargo fmt --all -- --check`,
   `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace`
-  pass. Also run the two suites CI does not: the trainer
-  (`cd tools/label-trainer && uv run --with pytest pytest tests -q`) and the
+  pass. Run `npm run test:performance` separately on an otherwise idle host (see
+  [performance validation](performance.md#calibration-performance-gate)). Also run the two suites CI does not: the trainer
+  (`cd tools/label-trainer && uv run --locked --extra dev --extra cnn pytest tests -q -rs`) and the
   watch (`cd apps/watch && ./gradlew :app:testDebugUnitTest`). If
   `native-head-tracking`'s `ffi_macos` smoke test aborts locally, confirm the
   `macos-14` CI job passes it instead.
 - [ ] Run the platform bundle command, `npm run tauri -- build`, on every release
   platform. CI's packaging matrix exercises Ubuntu x64, macOS ARM64-host, and Windows
   x64 tooling; it is not a signed-release, cross-architecture, or install test.
-- [ ] For a LiteRT candidate, build the desktop with the `litert-inference` Cargo
-  feature and have a reviewed, validated TFLite bundle with complete model-versioned
-  safe intent bindings. Use only the `npm run package:litert` entrypoint and
-  its reviewed, target-native runtime inputs; see
-  [LiteRT desktop runtime packaging](release/litert-runtime-packaging.md).
-  The default build deliberately fails inference closed.
+- [ ] Validate a reviewed tree or CNN bundle (`manifest.json` plus `model.trees` or
+  `model.cnn`) through the current importer. Inference runs in Rust inside the ordinary
+  desktop build; no separate LiteRT runtime, Cargo feature or packaging command is used.
+  See [label inference](architecture/label-inference.md) and
+  [pinch models](architecture/pinch-models.md). Training requires the repository and uv;
+  importing/running a model does not require Python.
 - [ ] Use an isolated test audio output and a test dataset. Do not enable Live on an
   unreviewed model or a production presentation/audio device.
 
@@ -34,18 +35,11 @@ changed behavior this checklist must now confirm on real hardware: the rows mark
 *(remediation)* below. None of them has been exercised on a physical watch,
 headset or audio backend.
 
-**Status of this checklist as of GC-004:** GC-004 supplies source/configuration
-for intentional feature-enabled LiteRT packaging, but no native runtime was
-provided and no LiteRT package was created. Native-loader behavior, package
-contents, signing, clean-host installation, model execution, safety behavior,
-CI, and physical-device results are all **DEFERRED / NOT CLEARED**. The
-async-feedback layer
-(pending button states plus success/info/warning/error toasts), contextual help
-tooltips, and the native CSV save dialog described below have been exercised only
-through the automated frontend test suite and manual testing on Linux development
-hardware. No macOS or Windows host was available in the environment that produced
-this change, so the macOS- and Windows-specific rows in this checklist remain
-unexecuted and are not being claimed as passed.
+**Current scope (2026-11-06):** the earlier GC-004 LiteRT packaging instructions
+are superseded by the in-process tree/CNN runtime. Historical review records describe
+older implementations, not additional current release commands. No automated test result
+clears signing, clean-host installation or physical-device acceptance; attach fresh results
+to this checklist for each release candidate.
 
 ## UI feedback and accessibility
 
@@ -95,41 +89,33 @@ unexecuted and are not being claimed as passed.
 
 ## Model lifecycle, replay, and inference diagnostics
 
-- [ ] In Model Lab, import a labeled dataset and check label coverage, roles, metadata,
-  and archived-label history before training.
-- [ ] Train/evaluate the candidate; inspect false-positive and quality results. Promote
-  only through Draft → Evaluated → Approved, and record the model ID and bundle digest.
-- [ ] Create/verify every deployable class's versioned binding. Bind only the offered
-  safe intents (or no action); labels must never represent arbitrary desktop commands.
-- [ ] Activate the reviewed bundle, then run offline replay on a managed dataset.
-  Preserve the bounded replay report and compare the displayed decisions with expected
-  labels before enabling any live control.
-- [ ] Select **Monitor** and replay/live-stream telemetry. Confirm diagnostics record
-  accepted/rejected decisions while no desktop volume or other action occurs.
-  Check each window's diagnostics for a **window mismatch**: the live PPG window
-  duration must be within 25% of the `window_ms` the bundle was trained on. The
-  1 Hz Watch PPG flush (the default is now 10 Hz) gives roughly 960 ms windows, so a default 500 ms
-  bundle will show a mismatch and **Live will refuse to start** until the PPG flush
-  rate is aligned (about 2 Hz for 500 ms) or the model is retrained with a matching
-  `--window-ms`. A bundle's `min_samples_per_window` is also enforced live.
-- [ ] *(remediation)* Record the live PPG window duration the diagnostics show and the
-  model's trained window. Confirm Live is refused with the actionable message while
-  they disagree, and accepted once the flush rate (or the model) is aligned.
-- [ ] *(remediation)* Quit and relaunch with Live selected: confirm the app starts in
-  **Monitor** (not Live) and that the UI and the actual behavior agree.
-- [ ] *(remediation)* Import a Timeline Capture dataset export: confirm it imports,
-  that every label on it needs a training role before training starts, and that
-  offline replay scores a user-defined target label as that target (not negative).
-- [ ] *(remediation)* Import a hand-edited bundle with its conversion-parity record
-  removed (or a one-sample minimum window): confirm it is rejected. Corrupt
-  `registry.json` on a scratch profile: confirm the app reports an error and leaves
-  the file untouched.
-- [ ] Select **Live** only after the Monitor result is accepted. Confirm diagnostics
-  identify the active model and each decision's intent/reason, and confirm only the
-  approved binding is eligible to act.
-- [ ] Switch to a previously approved model and then roll back. Confirm the active
-  model and bindings change atomically, with no decision accepted from an incomplete
-  or invalid bundle.
+- [ ] Import recordings, inspect annotation quality and identity, and assign explicit
+  training/test roles. Preserve original data and keep untouched evaluation sessions out
+  of training and threshold selection.
+- [ ] Train/evaluate each candidate label model. Record its ID, bundle digest, dataset
+  identities, environment, event recall, false activations/hour, exposure duration and
+  latency. Research-only or Monitor-only models must not be treated as deployable.
+- [ ] Import the reviewed tree/CNN bundle; verify its hash, preprocessing contract,
+  feature order, thresholds and quality rules through the importer. Reject a scratch copy
+  with changed weights/hash, an unsupported format, or a malformed manifest.
+- [ ] Approve and activate the candidate for its label, replay a managed recording, and
+  compare results with labels before enabling actions. Confirm a failed load leaves the
+  previous active model intact.
+- [ ] Select **Monitor** and stream telemetry. Confirm model detections are diagnostic
+  only and cannot start a recipe. For this check disable unrelated camera, button and
+  rule-based recipes, which have their own activation controls.
+- [ ] Let the model's required sensor history warm up. Verify missing contact, insufficient
+  history, stream gaps and stale data prevent actionable detections and clear an active
+  detection. PPG transport flush batches are not model windows: do not retrain or change
+  flush rate to match the obsolete 500 ms batch-window rules.
+- [ ] Restart after selecting Live: confirm the model runtime returns to **Monitor**,
+  and the UI and behavior agree. Corrupt the registry only in a scratch profile and
+  confirm the error is reported without silently replacing the file.
+- [ ] Enable **Live** only after independent evaluation and Monitor acceptance. Verify
+  only deployable active label detections can satisfy enabled recipe conditions and only
+  the configured action runs. A Monitor-only model must never initiate that action.
+- [ ] Switch to another approved model and roll back. Confirm model state is released
+  and the selected version is loaded/validated before it supplies new detections.
 
 ## Interaction safety and failure handling
 
@@ -215,11 +201,11 @@ Do not call the candidate hardware-validated until every applicable checked item
 an attached result. A failed or unavailable device/platform is a release blocker for
 that target, not evidence that the fail-closed desktop behavior was exercised.
 
-**Known, intentionally excluded risk:** over the **Wi-Fi** transport the Watch pairs and
+**Open Wi-Fi security risk (REV-01):** over the **Wi-Fi** transport the Watch pairs and
 streams over the LAN WebSocket without pairing-derived identity or an authenticated
-session. This is not a gap in the checklist above; it is an accepted, unrepaired risk
-that remains out of scope for every release candidate until a dedicated remediation is
-scoped and completed. The default **Bluetooth** transport adds OS bonding and an
+session. A successful connectivity test does not clear this risk. Track its remediation in
+[the project review](project-review-2026-11-06.md#rev-01--p1-authenticate-wi-fi-peers-before-accepting-telemetry-or-pairing)
+and record the release decision explicitly; do not infer security acceptance from pairing success. The default **Bluetooth** transport adds OS bonding and an
 explicit on-Watch approval of the desktop, but its Just Works bonding has no
 man-in-the-middle protection (see the
 [BLE transport doc](protocols/watch-ble-transport.md#known-limitations)).

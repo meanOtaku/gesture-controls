@@ -453,7 +453,20 @@ mod tests {
         });
         let steps = run(
             &mut d,
-            &[(0.2, 0), (0.6, 40), (0.7, 80), (0.9, 120), (0.85, 160), (0.6, 200), (0.3, 240), (0.75, 280), (0.5, 320), (0.1, 360), (0.65, 400), (0.6, 440)],
+            &[
+                (0.2, 0),
+                (0.6, 40),
+                (0.7, 80),
+                (0.9, 120),
+                (0.85, 160),
+                (0.6, 200),
+                (0.3, 240),
+                (0.75, 280),
+                (0.5, 320),
+                (0.1, 360),
+                (0.65, 400),
+                (0.6, 440),
+            ],
         );
         // It climbs to 0.9 and rises at 0.85, its first fall. A peak that only touches the threshold counts too: 0.75
         // falls straight to 0.5, which rises. 0.65 never reached 0.7, so its fall to 0.6 is nothing.

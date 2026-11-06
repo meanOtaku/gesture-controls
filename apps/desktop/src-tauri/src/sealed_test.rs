@@ -86,7 +86,9 @@ pub(crate) fn starts_of(pair: &Pair, label: &str) -> Result<(Vec<f64>, f64), Str
     let (all, duration) = dataset_files::holds(pair)?;
     let starts = all
         .into_iter()
-        .filter(|hold| hold.label == label && hold.end_ms - hold.start_ms >= dataset_files::MIN_HOLD_MS)
+        .filter(|hold| {
+            hold.label == label && hold.end_ms - hold.start_ms >= dataset_files::MIN_HOLD_MS
+        })
         .map(|hold| hold.start_ms)
         .collect();
     Ok((starts, duration))
@@ -102,8 +104,14 @@ pub(crate) fn assign(detections: &[f64], starts: &[f64]) -> Vec<Option<usize>> {
             let best = starts
                 .iter()
                 .enumerate()
-                .filter(|(i, start)| !used[*i] && (CATCH_FROM_MS..=CATCH_TO_MS).contains(&(detection - **start)))
-                .min_by(|a, b| ((detection - a.1) - CATCH_AT_MS).abs().total_cmp(&((detection - b.1) - CATCH_AT_MS).abs()))
+                .filter(|(i, start)| {
+                    !used[*i] && (CATCH_FROM_MS..=CATCH_TO_MS).contains(&(detection - **start))
+                })
+                .min_by(|a, b| {
+                    ((detection - a.1) - CATCH_AT_MS)
+                        .abs()
+                        .total_cmp(&((detection - b.1) - CATCH_AT_MS).abs())
+                })
                 .map(|(i, _)| i);
             if let Some(i) = best {
                 used[i] = true;
@@ -119,7 +127,11 @@ fn median(values: &mut [f64]) -> Option<f64> {
     }
     values.sort_by(f64::total_cmp);
     let mid = values.len() / 2;
-    Some(if values.len() % 2 == 1 { values[mid] } else { (values[mid - 1] + values[mid]) / 2.0 })
+    Some(if values.len() % 2 == 1 {
+        values[mid]
+    } else {
+        (values[mid - 1] + values[mid]) / 2.0
+    })
 }
 
 /// The detections that count: not those judging a moment inside a stretch left out on the Labelling page, which is
@@ -129,9 +141,10 @@ pub(crate) fn outside_left_out(detections: &[f64], holds: &[dataset_files::Hold]
         .iter()
         .copied()
         .filter(|&at| {
-            !holds
-                .iter()
-                .any(|hold| hold.label == dataset_files::LEFT_OUT_LABEL && (hold.start_ms..=hold.end_ms).contains(&(at - CATCH_AT_MS)))
+            !holds.iter().any(|hold| {
+                hold.label == dataset_files::LEFT_OUT_LABEL
+                    && (hold.start_ms..=hold.end_ms).contains(&(at - CATCH_AT_MS))
+            })
         })
         .collect()
 }
@@ -145,7 +158,10 @@ pub(crate) fn judged_span(replay: &labelling::ModelReplay, duration_ms: f64) -> 
 }
 
 /// The labels the training behind `version` left out (mapped to Exclude); none for an imported model.
-pub(crate) fn excluded_labels(registry: &model_lab_core::Registry, version: &model_lab_core::ModelVersion) -> Vec<String> {
+pub(crate) fn excluded_labels(
+    registry: &model_lab_core::Registry,
+    version: &model_lab_core::ModelVersion,
+) -> Vec<String> {
     let model_lab_core::ModelOrigin::Trained { run_id } = &version.origin else {
         return Vec::new();
     };
@@ -153,30 +169,58 @@ pub(crate) fn excluded_labels(registry: &model_lab_core::Registry, version: &mod
         .runs
         .get(run_id)
         .and_then(|run| registry.snapshots.get(&run.snapshot_id))
-        .map(|snapshot| snapshot.mapping.labels_with(model_lab_core::ExampleRole::Exclude).map(ToString::to_string).collect())
+        .map(|snapshot| {
+            snapshot
+                .mapping
+                .labels_with(model_lab_core::ExampleRole::Exclude)
+                .map(ToString::to_string)
+                .collect()
+        })
         .unwrap_or_default()
 }
 
 /// One recording's result for a model: its counted detections, its length in minutes, and the delay of each catch.
-fn test_recording(pair: &Pair, model: label_inference::LoadedModel, excluded: &[String]) -> Result<(EventTotals, f64, Vec<f64>), String> {
+fn test_recording(
+    pair: &Pair,
+    model: label_inference::LoadedModel,
+    excluded: &[String],
+) -> Result<(EventTotals, f64, Vec<f64>), String> {
     let label = model.label.to_string();
     let (starts, duration_ms) = starts_of(pair, &label)?;
-    let replay = labelling::replay(pair, vec![model])?.into_iter().next().ok_or("the model gave no result")?;
+    let replay = labelling::replay(pair, vec![model])?
+        .into_iter()
+        .next()
+        .ok_or("the model gave no result")?;
     let (holds, _) = dataset_files::holds(pair)?;
     let rises: Vec<f64> = replay.detections.iter().map(|d| d.start_ms).collect();
-    let counted = detector_events::count(&rises, &starts, &holds, &label, excluded, judged_span(&replay, duration_ms));
+    let counted = detector_events::count(
+        &rises,
+        &starts,
+        &holds,
+        &label,
+        excluded,
+        judged_span(&replay, duration_ms),
+    );
     let delays = counted.latencies(&starts);
     Ok((counted.totals, duration_ms / 60_000.0, delays))
 }
 
 /// The registry and model version `version_id`, made loadable for a test whatever its state: nothing is saved, and
 /// nothing acts on it.
-pub(crate) fn version_for_test(dir: &Path, version_id: &str) -> Result<(model_lab_core::Registry, model_lab_core::ModelVersion), String> {
+pub(crate) fn version_for_test(
+    dir: &Path,
+    version_id: &str,
+) -> Result<(model_lab_core::Registry, model_lab_core::ModelVersion), String> {
     let registry = model_lab_core::load_registry_file(&dir.join("registry-v2.json"))
         .map_err(|e| e.to_string())?
         .ok_or("there is no model registry yet")?;
-    let id = model_lab_core::ModelVersionId::new(version_id.to_string()).map_err(|e| e.to_string())?;
-    let mut version = registry.versions.get(&id).cloned().ok_or_else(|| format!("there is no model '{version_id}'"))?;
+    let id =
+        model_lab_core::ModelVersionId::new(version_id.to_string()).map_err(|e| e.to_string())?;
+    let mut version = registry
+        .versions
+        .get(&id)
+        .cloned()
+        .ok_or_else(|| format!("there is no model '{version_id}'"))?;
     version.state = model_lab_core::LifecycleState::Active;
     version.monitor_only = true;
     Ok((registry, version))
@@ -192,17 +236,32 @@ fn read_log(path: &Path) -> Vec<SealedTestLog> {
 /// Every final test so far, newest last.
 #[tauri::command]
 pub fn list_sealed_tests(app: AppHandle) -> Result<Vec<SealedTestLog>, String> {
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join(model_lab::MODEL_LAB_DIR_NAME);
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join(model_lab::MODEL_LAB_DIR_NAME);
     Ok(read_log(&dir.join(LOG_FILE)))
 }
 
 /// Runs model version `version_id` over every sealed recording, as the app runs it live, and logs the test. The version need
 /// not be active: it is loaded for this test only, and nothing about it changes.
 #[tauri::command]
-pub async fn test_model_on_sealed(version_id: String, app: AppHandle) -> Result<SealedTestReport, String> {
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join(model_lab::MODEL_LAB_DIR_NAME);
+pub async fn test_model_on_sealed(
+    version_id: String,
+    app: AppHandle,
+) -> Result<SealedTestReport, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join(model_lab::MODEL_LAB_DIR_NAME);
     let datasets_dir = model_lab::datasets_dir(&app)?;
-    let sealed: Vec<model_lab::DatasetSummary> = model_lab::described_index(&app).datasets.into_iter().filter(|d| d.sealed).collect();
+    let sealed: Vec<model_lab::DatasetSummary> = model_lab::described_index(&app)
+        .datasets
+        .into_iter()
+        .filter(|d| d.sealed)
+        .collect();
     if sealed.is_empty() {
         return Err("no recording is sealed: seal the recordings of a day you have not trained on, then test".into());
     }
@@ -211,7 +270,8 @@ pub async fn test_model_on_sealed(version_id: String, app: AppHandle) -> Result<
         let excluded = excluded_labels(&registry, &version);
         let mut recordings = Vec::new();
         for dataset in &sealed {
-            let pair = labelling::pair_at(&model_lab::dataset_csv_path(&datasets_dir, &dataset.id))?;
+            let pair =
+                labelling::pair_at(&model_lab::dataset_csv_path(&datasets_dir, &dataset.id))?;
             let model = label_inference::load_version(&version, &dir)?;
             let (events, minutes, mut delays) = test_recording(&pair, model, &excluded)?;
             recordings.push(SealedRecordingResult {
@@ -226,13 +286,21 @@ pub async fn test_model_on_sealed(version_id: String, app: AppHandle) -> Result<
         let log_path = dir.join(LOG_FILE);
         let mut log = read_log(&log_path);
         let ids: Vec<String> = recordings.iter().map(|r| r.id.clone()).collect();
-        let earlier_tests = log.iter().filter(|entry| entry.recordings.iter().any(|id| ids.contains(id))).count();
+        let earlier_tests = log
+            .iter()
+            .filter(|entry| entry.recordings.iter().any(|id| ids.contains(id)))
+            .count();
         let report = SealedTestReport {
             version: version_id.clone(),
             label: version.label.to_string(),
             threshold: version.thresholds.activation,
             tested_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
-            events: detector_events::judge(&recordings.iter().map(|r| (r.label_timing, r.events.clone())).collect::<Vec<_>>()),
+            events: detector_events::judge(
+                &recordings
+                    .iter()
+                    .map(|r| (r.label_timing, r.events.clone()))
+                    .collect::<Vec<_>>(),
+            ),
             minutes: recordings.iter().map(|r| r.minutes).sum(),
             recordings,
             earlier_tests,
@@ -252,7 +320,11 @@ pub async fn test_model_on_sealed(version_id: String, app: AppHandle) -> Result<
             cohort: Some(report.events.cohort.to_string()),
         });
         let tmp = log_path.with_extension("json.tmp");
-        fs::write(&tmp, serde_json::to_vec_pretty(&log).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        fs::write(
+            &tmp,
+            serde_json::to_vec_pretty(&log).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
         fs::rename(&tmp, &log_path).map_err(|e| e.to_string())?;
         Ok(report)
     })
@@ -269,17 +341,45 @@ mod tests {
         // pinch 0-300 ms, a 100 ms gap, pinch again to 600 ms (one hold); then a 100 ms pinch (too short) at 1000 ms; a
         // hand-labelled pinch at 2000-2400 ms over a recorded fist; and a recorded pinch at 3000-3400 ms marked "nothing here".
         let mut ppg = vec![dataset_files::ppg_header()];
-        let mut push = |ms: i64, label: &str, manual: &str| ppg.push(format!("{},1,1,2,3,0,{label},{manual}", 1_000_000_000 + ms * 1_000_000));
-        for ms in (0..=300).step_by(20) { push(ms, "pinch", ""); }
-        for ms in (320..=380).step_by(20) { push(ms, "", ""); }
-        for ms in (400..=600).step_by(20) { push(ms, "pinch", ""); }
-        for ms in (620..=980).step_by(20) { push(ms, "", ""); }
-        for ms in (1000..=1100).step_by(20) { push(ms, "pinch", ""); }
-        for ms in (1120..=1980).step_by(20) { push(ms, "", ""); }
-        for ms in (2000..=2400).step_by(20) { push(ms, "fist", "pinch"); }
-        for ms in (2420..=2980).step_by(20) { push(ms, "", ""); }
-        for ms in (3000..=3400).step_by(20) { push(ms, "pinch", dataset_files::NO_LABEL); }
-        let pair = dataset_files::parse_pair_with(&(ppg.join("\n") + "\n"), &format!("{}\n", dataset_files::imu_header()), false).unwrap();
+        let mut push = |ms: i64, label: &str, manual: &str| {
+            ppg.push(format!(
+                "{},1,1,2,3,0,{label},{manual}",
+                1_000_000_000 + ms * 1_000_000
+            ))
+        };
+        for ms in (0..=300).step_by(20) {
+            push(ms, "pinch", "");
+        }
+        for ms in (320..=380).step_by(20) {
+            push(ms, "", "");
+        }
+        for ms in (400..=600).step_by(20) {
+            push(ms, "pinch", "");
+        }
+        for ms in (620..=980).step_by(20) {
+            push(ms, "", "");
+        }
+        for ms in (1000..=1100).step_by(20) {
+            push(ms, "pinch", "");
+        }
+        for ms in (1120..=1980).step_by(20) {
+            push(ms, "", "");
+        }
+        for ms in (2000..=2400).step_by(20) {
+            push(ms, "fist", "pinch");
+        }
+        for ms in (2420..=2980).step_by(20) {
+            push(ms, "", "");
+        }
+        for ms in (3000..=3400).step_by(20) {
+            push(ms, "pinch", dataset_files::NO_LABEL);
+        }
+        let pair = dataset_files::parse_pair_with(
+            &(ppg.join("\n") + "\n"),
+            &format!("{}\n", dataset_files::imu_header()),
+            false,
+        )
+        .unwrap();
         let (starts, duration) = starts_of(&pair, "pinch").unwrap();
         assert_eq!(starts, [0.0, 2000.0]);
         assert_eq!(duration, 3400.0);
@@ -289,7 +389,10 @@ mod tests {
     fn a_detection_catches_the_start_it_rises_680_to_1280_ms_after_and_each_start_once() {
         // 900 ms catches the start at 0; 950 ms finds it taken; 5 s is near no start; 9.2 s catches the start at 8 s, and 9.3 s
         // would be too late for it.
-        assert_eq!(assign(&[900.0, 950.0, 5000.0, 9200.0], &[0.0, 8000.0]), [Some(0), None, None, Some(1)]);
+        assert_eq!(
+            assign(&[900.0, 950.0, 5000.0, 9200.0], &[0.0, 8000.0]),
+            [Some(0), None, None, Some(1)]
+        );
         assert_eq!(assign(&[9300.0], &[8000.0]), [None]);
     }
 
@@ -297,6 +400,13 @@ mod tests {
     fn a_test_logged_before_false_activations_were_counted_per_hour_still_reads() {
         let old = r#"[{"testedAt":"2026-10-23T10:00:00Z","version":"v1","label":"pinch","recordings":["s1"],"starts":20,"caught":5,"falseActivations":3,"minutes":2.0}]"#;
         let log: Vec<SealedTestLog> = serde_json::from_str(old).unwrap();
-        assert_eq!((log[0].negative_seconds, log[0].repeats, log[0].cohort.as_deref()), (None, 0, None));
+        assert_eq!(
+            (
+                log[0].negative_seconds,
+                log[0].repeats,
+                log[0].cohort.as_deref()
+            ),
+            (None, 0, None)
+        );
     }
 }

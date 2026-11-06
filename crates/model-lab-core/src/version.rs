@@ -145,7 +145,11 @@ impl ModelVersion {
         if self.deployable {
             return Err(VersionError::DeployableNotMonitorOnly);
         }
-        if !self.model_sha256.as_deref().is_some_and(crate::is_sha256_hex) {
+        if !self
+            .model_sha256
+            .as_deref()
+            .is_some_and(crate::is_sha256_hex)
+        {
             return Err(VersionError::MissingHash);
         }
         self.monitor_only = true;

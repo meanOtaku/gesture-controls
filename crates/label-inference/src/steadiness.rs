@@ -114,15 +114,27 @@ impl Verdict {
             Self::Moving(m) => {
                 let mut why = Vec::new();
                 if m.accel_spread > MAX_ACCEL_SPREAD {
-                    why.push(format!("moving ({:.2} m/s², at most {MAX_ACCEL_SPREAD})", m.accel_spread));
+                    why.push(format!(
+                        "moving ({:.2} m/s², at most {MAX_ACCEL_SPREAD})",
+                        m.accel_spread
+                    ));
                 }
                 if m.turning > MAX_TURNING {
-                    why.push(format!("turning ({:.2} rad/s, at most {MAX_TURNING})", m.turning));
+                    why.push(format!(
+                        "turning ({:.2} rad/s, at most {MAX_TURNING})",
+                        m.turning
+                    ));
                 }
                 if m.tilt_change_deg > MAX_TILT_DEG {
-                    why.push(format!("tilting ({:.0}°, at most {MAX_TILT_DEG:.0}°)", m.tilt_change_deg));
+                    why.push(format!(
+                        "tilting ({:.0}°, at most {MAX_TILT_DEG:.0}°)",
+                        m.tilt_change_deg
+                    ));
                 }
-                Some(format!("the hand was not still before the gesture: {}", why.join(", ")))
+                Some(format!(
+                    "the hand was not still before the gesture: {}",
+                    why.join(", ")
+                ))
             }
             Self::Unknown => Some("no motion data to tell whether the hand was still".into()),
         }
@@ -144,9 +156,9 @@ impl Jolt {
     /// Why a start was withheld, in words for the detections list; `None` when it may start.
     pub fn refusal(&self) -> Option<String> {
         match self {
-            Self::TooSmall(size) => {
-                Some(format!("nothing moved at the gesture (jolt {size:.2} m/s², at least {MIN_JOLT})"))
-            }
+            Self::TooSmall(size) => Some(format!(
+                "nothing moved at the gesture (jolt {size:.2} m/s², at least {MIN_JOLT})"
+            )),
             Self::Felt(_) | Self::Unknown => None,
         }
     }
@@ -177,7 +189,11 @@ fn up_of(q: &[f64; 4]) -> Option<[f64; 3]> {
         return None;
     }
     let [w, x, y, z] = q.map(|c| c / norm);
-    Some([2.0 * (x * z - w * y), 2.0 * (y * z + w * x), 1.0 - 2.0 * (x * x + y * y)])
+    Some([
+        2.0 * (x * z - w * y),
+        2.0 * (y * z + w * x),
+        1.0 - 2.0 * (x * x + y * y),
+    ])
 }
 
 impl Steadiness {
@@ -193,12 +209,22 @@ impl Steadiness {
         let Some(up) = up_of(&sample.quaternion) else {
             return;
         };
-        if self.motion.back().is_some_and(|m| sample.timestamp_ns <= m.ts_ns) {
+        if self
+            .motion
+            .back()
+            .is_some_and(|m| sample.timestamp_ns <= m.ts_ns)
+        {
             return;
         }
         let norm = sample.quaternion.iter().map(|c| c * c).sum::<f64>().sqrt();
         let rotation = sample.quaternion.map(|c| c / norm);
-        self.motion.push_back(Motion { ts_ns: sample.timestamp_ns, accel, gyro, up, rotation });
+        self.motion.push_back(Motion {
+            ts_ns: sample.timestamp_ns,
+            accel,
+            gyro,
+            up,
+            rotation,
+        });
         let oldest = sample.timestamp_ns.saturating_sub(KEEP_NS);
         while self.motion.front().is_some_and(|m| m.ts_ns < oldest) {
             self.motion.pop_front();
@@ -211,7 +237,11 @@ impl Steadiness {
 
     /// The measures over the motion from `from_ns` to `to_ns` (watch clock), or `None` with too few samples.
     pub fn measure(&self, from_ns: u64, to_ns: u64) -> Option<Measures> {
-        let inside: Vec<&Motion> = self.motion.iter().filter(|m| m.ts_ns >= from_ns && m.ts_ns <= to_ns).collect();
+        let inside: Vec<&Motion> = self
+            .motion
+            .iter()
+            .filter(|m| m.ts_ns >= from_ns && m.ts_ns <= to_ns)
+            .collect();
         if inside.len() < MIN_SAMPLES {
             return None;
         }
@@ -219,14 +249,28 @@ impl Steadiness {
         let mut spread = 0.0;
         for axis in 0..3 {
             let mean = inside.iter().map(|m| m.accel[axis]).sum::<f64>() / n;
-            spread += inside.iter().map(|m| (m.accel[axis] - mean).powi(2)).sum::<f64>() / n;
+            spread += inside
+                .iter()
+                .map(|m| (m.accel[axis] - mean).powi(2))
+                .sum::<f64>()
+                / n;
         }
-        let turning = (inside.iter().map(|m| m.gyro.iter().map(|g| g * g).sum::<f64>()).sum::<f64>() / n).sqrt();
+        let turning = (inside
+            .iter()
+            .map(|m| m.gyro.iter().map(|g| g * g).sum::<f64>())
+            .sum::<f64>()
+            / n)
+            .sqrt();
         let (a, b) = (inside[0].up, inside[inside.len() - 1].up);
         let dot = a.iter().zip(&b).map(|(p, q)| p * q).sum::<f64>();
-        let norms = a.iter().map(|c| c * c).sum::<f64>().sqrt() * b.iter().map(|c| c * c).sum::<f64>().sqrt();
+        let norms = a.iter().map(|c| c * c).sum::<f64>().sqrt()
+            * b.iter().map(|c| c * c).sum::<f64>().sqrt();
         let tilt = (dot / norms).clamp(-1.0, 1.0).acos().to_degrees();
-        Some(Measures { accel_spread: spread.sqrt(), turning, tilt_change_deg: tilt })
+        Some(Measures {
+            accel_spread: spread.sqrt(),
+            turning,
+            tilt_change_deg: tilt,
+        })
     }
 
     /// Whether a gesture decided at `decision_watch_ns`, by a model that decides `decision_delay_ms` after a gesture
@@ -236,19 +280,32 @@ impl Steadiness {
             return Verdict::Unknown;
         };
         let start = at.saturating_sub(u64::from(decision_delay_ms) * 1_000_000);
-        self.verdict(start.saturating_sub(WINDOW_FROM_NS), start.saturating_sub(WINDOW_TO_NS))
+        self.verdict(
+            start.saturating_sub(WINDOW_FROM_NS),
+            start.saturating_sub(WINDOW_TO_NS),
+        )
     }
 
     /// The largest turn of the watch, in degrees, from its orientation at the first sample from `from_ns` to that at any
     /// later sample up to `to_ns` (watch clock), or `None` with too few samples.
     pub fn turn(&self, from_ns: u64, to_ns: u64) -> Option<f64> {
-        let inside: Vec<&Motion> = self.motion.iter().filter(|m| m.ts_ns >= from_ns && m.ts_ns <= to_ns).collect();
+        let inside: Vec<&Motion> = self
+            .motion
+            .iter()
+            .filter(|m| m.ts_ns >= from_ns && m.ts_ns <= to_ns)
+            .collect();
         if inside.len() < MIN_JOLT_SAMPLES {
             return None;
         }
         let first = inside[0].rotation;
         Some(inside.iter().fold(0.0, |largest: f64, m| {
-            let dot = first.iter().zip(&m.rotation).map(|(a, b)| a * b).sum::<f64>().abs().min(1.0);
+            let dot = first
+                .iter()
+                .zip(&m.rotation)
+                .map(|(a, b)| a * b)
+                .sum::<f64>()
+                .abs()
+                .min(1.0);
             largest.max((2.0 * dot.acos()).to_degrees())
         }))
     }
@@ -256,12 +313,22 @@ impl Steadiness {
     /// Why a gesture decided at `decision_watch_ns`, by a model that decides `decision_delay_ms` after a gesture starts,
     /// may not start because the wrist turned in its first moments; `None` if it did not, or with too little motion to
     /// tell (the window before the gesture already fails closed on that).
-    pub fn turned_during(&self, decision_watch_ns: Option<u64>, decision_delay_ms: u32) -> Option<String> {
+    pub fn turned_during(
+        &self,
+        decision_watch_ns: Option<u64>,
+        decision_delay_ms: u32,
+    ) -> Option<String> {
         let at = decision_watch_ns?;
         let start = at.saturating_sub(u64::from(decision_delay_ms) * 1_000_000);
-        let turned = self.turn(start.saturating_sub(TURN_FROM_NS), (start + TURN_TO_NS).min(at))?;
-        (turned > MAX_TURN_DEG)
-            .then(|| format!("the wrist turned during the gesture ({turned:.0}°, at most {MAX_TURN_DEG:.0}°)"))
+        let turned = self.turn(
+            start.saturating_sub(TURN_FROM_NS),
+            (start + TURN_TO_NS).min(at),
+        )?;
+        (turned > MAX_TURN_DEG).then(|| {
+            format!(
+                "the wrist turned during the gesture ({turned:.0}°, at most {MAX_TURN_DEG:.0}°)"
+            )
+        })
     }
 
     /// The largest jolt from `from_ns` to `to_ns` (watch clock), or `None` with too few samples. Each sample's mean is
@@ -270,16 +337,25 @@ impl Steadiness {
         let near: Vec<&Motion> = self
             .motion
             .iter()
-            .filter(|m| m.ts_ns + JOLT_HALF_SPAN_NS >= from_ns && m.ts_ns <= to_ns + JOLT_HALF_SPAN_NS)
+            .filter(|m| {
+                m.ts_ns + JOLT_HALF_SPAN_NS >= from_ns && m.ts_ns <= to_ns + JOLT_HALF_SPAN_NS
+            })
             .collect();
         let mut largest: Option<f64> = None;
         let mut judged = 0;
-        for m in near.iter().filter(|m| m.ts_ns >= from_ns && m.ts_ns <= to_ns) {
-            let around: Vec<&&Motion> =
-                near.iter().filter(|o| o.ts_ns.abs_diff(m.ts_ns) <= JOLT_HALF_SPAN_NS).collect();
+        for m in near
+            .iter()
+            .filter(|m| m.ts_ns >= from_ns && m.ts_ns <= to_ns)
+        {
+            let around: Vec<&&Motion> = near
+                .iter()
+                .filter(|o| o.ts_ns.abs_diff(m.ts_ns) <= JOLT_HALF_SPAN_NS)
+                .collect();
             let n = around.len() as f64;
             let size = (0..3)
-                .map(|axis| (m.accel[axis] - around.iter().map(|o| o.accel[axis]).sum::<f64>() / n).powi(2))
+                .map(|axis| {
+                    (m.accel[axis] - around.iter().map(|o| o.accel[axis]).sum::<f64>() / n).powi(2)
+                })
                 .sum::<f64>()
                 .sqrt();
             largest = Some(largest.map_or(size, |l: f64| l.max(size)));
@@ -298,7 +374,10 @@ impl Steadiness {
             return Jolt::Unknown;
         };
         let start = at.saturating_sub(u64::from(decision_delay_ms) * 1_000_000);
-        match self.jolt(start.saturating_sub(JOLT_FROM_NS), (start + JOLT_TO_NS).min(at)) {
+        match self.jolt(
+            start.saturating_sub(JOLT_FROM_NS),
+            (start + JOLT_TO_NS).min(at),
+        ) {
             Some(size) if size >= MIN_JOLT => Jolt::Felt(size),
             Some(size) => Jolt::TooSmall(size),
             None => Jolt::Unknown,
@@ -310,7 +389,10 @@ impl Steadiness {
         let Some(newest) = self.motion.back() else {
             return Verdict::Unknown;
         };
-        self.verdict(newest.ts_ns.saturating_sub(WINDOW_FROM_NS - WINDOW_TO_NS), newest.ts_ns)
+        self.verdict(
+            newest.ts_ns.saturating_sub(WINDOW_FROM_NS - WINDOW_TO_NS),
+            newest.ts_ns,
+        )
     }
 
     fn verdict(&self, from_ns: u64, to_ns: u64) -> Verdict {
@@ -328,7 +410,12 @@ mod tests {
 
     const LEVEL: [f64; 4] = [1.0, 0.0, 0.0, 0.0];
 
-    fn sample(i: u64, accel: [f64; 3], gyro: [f64; 3], quaternion: [f64; 4]) -> WatchOrientationSample {
+    fn sample(
+        i: u64,
+        accel: [f64; 3],
+        gyro: [f64; 3],
+        quaternion: [f64; 4],
+    ) -> WatchOrientationSample {
         WatchOrientationSample {
             device_id: "w".into(),
             sequence: i,
@@ -365,7 +452,14 @@ mod tests {
     #[test]
     fn a_moving_arm_a_turning_wrist_and_a_tilting_watch_are_each_not_steady() {
         // Arm swinging: acceleration swings by ±1.5 m/s².
-        let moving = feed(|i| sample(i, [1.5 * ((i as f64) / 8.0).sin(), 0.0, 0.0], [0.0; 3], LEVEL));
+        let moving = feed(|i| {
+            sample(
+                i,
+                [1.5 * ((i as f64) / 8.0).sin(), 0.0, 0.0],
+                [0.0; 3],
+                LEVEL,
+            )
+        });
         // Wrist turning at 1 rad/s.
         let turning = feed(|i| sample(i, [0.0; 3], [0.0, 0.0, 1.0], LEVEL));
         // The watch slowly tilting about x by 30° over the two seconds: little motion, but the pose changes.
@@ -373,10 +467,18 @@ mod tests {
             let half = (30f64.to_radians() * i as f64 / 200.0) / 2.0;
             sample(i, [0.0; 3], [0.0; 3], [half.cos(), half.sin(), 0.0, 0.0])
         });
-        for (name, s, word) in [("moving", moving, "moving"), ("turning", turning, "turning"), ("tilting", tilting, "tilting")] {
+        for (name, s, word) in [
+            ("moving", moving, "moving"),
+            ("turning", turning, "turning"),
+            ("tilting", tilting, "tilting"),
+        ] {
             let v = s.before(Some(END), 0);
             assert!(matches!(v, Verdict::Moving(_)), "{name}: {v:?}");
-            assert!(v.refusal().unwrap().contains(word), "{name}: {:?}", v.refusal());
+            assert!(
+                v.refusal().unwrap().contains(word),
+                "{name}: {:?}",
+                v.refusal()
+            );
         }
     }
 
@@ -388,7 +490,10 @@ mod tests {
             sample(i, [jolt, 0.0, 0.0], [jolt, 0.0, 0.0], LEVEL)
         });
         assert!(s.before(Some(END), 0).is_steady());
-        assert!(!s.now().is_steady(), "the jolt is in the last second, so the hand is moving right now");
+        assert!(
+            !s.now().is_steady(),
+            "the jolt is in the last second, so the hand is moving right now"
+        );
     }
 
     #[test]
@@ -398,7 +503,12 @@ mod tests {
         assert_eq!(empty.now(), Verdict::Unknown);
         let s = feed(|i| sample(i, [0.0; 3], [0.0; 3], LEVEL));
         assert_eq!(s.before(None, 0), Verdict::Unknown);
-        assert!(Verdict::Unknown.refusal().unwrap().contains("no motion data"));
+        assert!(
+            Verdict::Unknown
+                .refusal()
+                .unwrap()
+                .contains("no motion data")
+        );
         // A decision far later than the motion: nothing in its window.
         assert_eq!(s.before(Some(END + 10_000_000_000), 0), Verdict::Unknown);
     }
@@ -423,33 +533,64 @@ mod tests {
             let moving = if i >= 110 { 3.0 } else { 0.0 };
             sample(i, [moving, 0.0, 0.0], [moving, 0.0, 0.0], LEVEL)
         });
-        assert!(s.before(Some(END), 900).is_steady(), "the second before the gesture was still");
-        assert!(!s.before(Some(END), 0).is_steady(), "judged as a model with no delay, the gesture itself is in the window");
+        assert!(
+            s.before(Some(END), 900).is_steady(),
+            "the second before the gesture was still"
+        );
+        assert!(
+            !s.before(Some(END), 0).is_steady(),
+            "judged as a model with no delay, the gesture itself is in the window"
+        );
     }
 
     #[test]
     fn a_start_needs_a_jolt_around_it_and_sensor_noise_is_not_one() {
         // A watch lying still: only sensor noise of ±0.01 m/s².
-        let lying = feed(|i| sample(i, [if i % 2 == 0 { 0.01 } else { -0.01 }, 0.0, 0.0], [0.0; 3], LEVEL));
+        let lying = feed(|i| {
+            sample(
+                i,
+                [if i % 2 == 0 { 0.01 } else { -0.01 }, 0.0, 0.0],
+                [0.0; 3],
+                LEVEL,
+            )
+        });
         let v = lying.jolt_near(Some(END), 900);
         assert!(matches!(v, Jolt::TooSmall(size) if size < 0.02), "{v:?}");
         assert!(v.refusal().unwrap().contains("nothing moved"));
         // The same, with a pinch's small jolt 0.1 s after the estimated start (0.9 s before the decision).
         let pinched = feed(|i| {
             let jolt = if (110..113).contains(&i) { 0.07 } else { 0.0 };
-            sample(i, [0.01 * if i % 2 == 0 { 1.0 } else { -1.0 } + jolt, 0.0, 0.0], [0.0; 3], LEVEL)
+            sample(
+                i,
+                [0.01 * if i % 2 == 0 { 1.0 } else { -1.0 } + jolt, 0.0, 0.0],
+                [0.0; 3],
+                LEVEL,
+            )
         });
         let v = pinched.jolt_near(Some(END), 900);
         assert!(matches!(v, Jolt::Felt(size) if size >= MIN_JOLT), "{v:?}");
         assert_eq!(v.refusal(), None);
         // A jolt long before the gesture does not count for it.
-        let earlier = feed(|i| sample(i, [if (20..23).contains(&i) { 0.3 } else { 0.0 }, 0.0, 0.0], [0.0; 3], LEVEL));
-        assert!(matches!(earlier.jolt_near(Some(END), 900), Jolt::TooSmall(_)));
+        let earlier = feed(|i| {
+            sample(
+                i,
+                [if (20..23).contains(&i) { 0.3 } else { 0.0 }, 0.0, 0.0],
+                [0.0; 3],
+                LEVEL,
+            )
+        });
+        assert!(matches!(
+            earlier.jolt_near(Some(END), 900),
+            Jolt::TooSmall(_)
+        ));
     }
 
     #[test]
     fn with_too_little_motion_or_no_watch_time_the_jolt_check_lets_a_start_through() {
-        assert_eq!(Steadiness::default().jolt_near(Some(END), 900), Jolt::Unknown);
+        assert_eq!(
+            Steadiness::default().jolt_near(Some(END), 900),
+            Jolt::Unknown
+        );
         let s = feed(|i| sample(i, [0.0; 3], [0.0; 3], LEVEL));
         assert_eq!(s.jolt_near(None, 900), Jolt::Unknown);
         assert_eq!(s.jolt_near(Some(END + 10_000_000_000), 900), Jolt::Unknown);
@@ -461,16 +602,34 @@ mod tests {
         // Still, then the wrist turns about z at 3 rad/s (as when rotating the hand) from 0.1 s before the estimated start
         // (0.9 s before the decision).
         let turning = feed(|i| {
-            let angle = if i >= 100 { 3.0 * (i - 100) as f64 / 100.0 } else { 0.0 };
+            let angle = if i >= 100 {
+                3.0 * (i - 100) as f64 / 100.0
+            } else {
+                0.0
+            };
             let half = angle.min(std::f64::consts::PI) / 2.0;
-            sample(i, [0.0; 3], [0.0, 0.0, if i >= 100 { 3.0 } else { 0.0 }], [half.cos(), 0.0, 0.0, half.sin()])
+            sample(
+                i,
+                [0.0; 3],
+                [0.0, 0.0, if i >= 100 { 3.0 } else { 0.0 }],
+                [half.cos(), 0.0, 0.0, half.sin()],
+            )
         });
-        assert!(turning.before(Some(END), 900).is_steady(), "the second before the gesture was still");
-        let why = turning.turned_during(Some(END), 900).expect("the turn is refused");
+        assert!(
+            turning.before(Some(END), 900).is_steady(),
+            "the second before the gesture was still"
+        );
+        let why = turning
+            .turned_during(Some(END), 900)
+            .expect("the turn is refused");
         assert!(why.contains("turned during the gesture"), "{why}");
         // A pinch: the watch wobbles by a few degrees and back.
         let pinch = feed(|i| {
-            let half = if (110..120).contains(&i) { 3f64.to_radians() / 2.0 } else { 0.0 };
+            let half = if (110..120).contains(&i) {
+                3f64.to_radians() / 2.0
+            } else {
+                0.0
+            };
             sample(i, [0.0; 3], [0.0; 3], [half.cos(), half.sin(), 0.0, 0.0])
         });
         assert_eq!(pinch.turned_during(Some(END), 900), None);

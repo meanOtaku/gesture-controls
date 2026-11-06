@@ -82,7 +82,10 @@ impl TreeEnsemble {
         for tree in 0..count {
             let nodes = r.u32()? as usize;
             if nodes == 0 {
-                return Err(TreesError::Malformed { tree, detail: "it has no nodes".into() });
+                return Err(TreesError::Malformed {
+                    tree,
+                    detail: "it has no nodes".into(),
+                });
             }
             let needed = nodes.checked_mul(NODE_BYTES).ok_or(TreesError::Truncated)?;
             if bytes.len().saturating_sub(r.at) < needed {
@@ -127,7 +130,11 @@ impl TreeEnsemble {
             let mut node = &tree[0];
             while let Some(feature) = node.feature {
                 let value = f64::from(x[feature as usize] as f32);
-                node = &tree[if value <= node.threshold { node.left } else { node.right } as usize];
+                node = &tree[if value <= node.threshold {
+                    node.left
+                } else {
+                    node.right
+                } as usize];
             }
             total += f64::from(node.probability);
         }
@@ -149,19 +156,30 @@ fn check_tree(tree: usize, nodes: &[Node], features: usize) -> Result<(), TreesE
         match node.feature {
             None => {
                 if !(0.0..=1.0).contains(&node.probability) {
-                    return Err(bad(format!("leaf {index} has probability {}", node.probability)));
+                    return Err(bad(format!(
+                        "leaf {index} has probability {}",
+                        node.probability
+                    )));
                 }
             }
             Some(feature) => {
                 if feature as usize >= features {
-                    return Err(bad(format!("node {index} reads feature {feature} of {features}")));
+                    return Err(bad(format!(
+                        "node {index} reads feature {feature} of {features}"
+                    )));
                 }
                 if !node.threshold.is_finite() {
-                    return Err(bad(format!("node {index} has threshold {}", node.threshold)));
+                    return Err(bad(format!(
+                        "node {index} has threshold {}",
+                        node.threshold
+                    )));
                 }
                 for child in [node.left, node.right] {
                     if child as usize >= nodes.len() {
-                        return Err(bad(format!("node {index} points at node {child} of {}", nodes.len())));
+                        return Err(bad(format!(
+                            "node {index} points at node {child} of {}",
+                            nodes.len()
+                        )));
                     }
                     stack.push(child as usize);
                 }
@@ -201,12 +219,20 @@ pub(crate) mod tests {
     }
 
     fn stump(feature: i32, threshold: f64, low: f32, high: f32) -> Vec<RawNode> {
-        vec![(feature, threshold, 1, 2, 0.0), (-1, 0.0, 0, 0, low), (-1, 0.0, 0, 0, high)]
+        vec![
+            (feature, threshold, 1, 2, 0.0),
+            (-1, 0.0, 0, 0, low),
+            (-1, 0.0, 0, 0, high),
+        ]
     }
 
     #[test]
     fn it_averages_the_leaves_each_tree_reaches() {
-        let model = TreeEnsemble::parse(&file(2, &[stump(0, 0.5, 0.0, 1.0), stump(1, 0.0, 0.2, 0.6)])).unwrap();
+        let model = TreeEnsemble::parse(&file(
+            2,
+            &[stump(0, 0.5, 0.0, 1.0), stump(1, 0.0, 0.2, 0.6)],
+        ))
+        .unwrap();
         assert_eq!((model.features(), model.trees()), (2, 2));
         // Leaves are single precision.
         assert!((model.predict(&[0.4, 1.0]) - 0.3).abs() < 1e-7); // left of 0.5 -> 0, right of 0 -> 0.6
@@ -223,18 +249,39 @@ pub(crate) mod tests {
     #[test]
     fn broken_files_are_refused() {
         let good = file(1, &[stump(0, 0.5, 0.0, 1.0)]);
-        assert_eq!(TreeEnsemble::parse(b"ONNX....").unwrap_err(), TreesError::NotTrees);
-        assert_eq!(TreeEnsemble::parse(&good[..good.len() - 3]).unwrap_err(), TreesError::Truncated);
+        assert_eq!(
+            TreeEnsemble::parse(b"ONNX....").unwrap_err(),
+            TreesError::NotTrees
+        );
+        assert_eq!(
+            TreeEnsemble::parse(&good[..good.len() - 3]).unwrap_err(),
+            TreesError::Truncated
+        );
         let mut extra = good.clone();
         extra.push(0);
-        assert_eq!(TreeEnsemble::parse(&extra).unwrap_err(), TreesError::TrailingBytes);
+        assert_eq!(
+            TreeEnsemble::parse(&extra).unwrap_err(),
+            TreesError::TrailingBytes
+        );
         let looping = file(1, &[vec![(0, 0.5, 0, 0, 0.0)]]);
-        assert!(matches!(TreeEnsemble::parse(&looping), Err(TreesError::Malformed { .. })));
+        assert!(matches!(
+            TreeEnsemble::parse(&looping),
+            Err(TreesError::Malformed { .. })
+        ));
         let out_of_range = file(1, &[stump(3, 0.5, 0.0, 1.0)]);
-        assert!(matches!(TreeEnsemble::parse(&out_of_range), Err(TreesError::Malformed { .. })));
+        assert!(matches!(
+            TreeEnsemble::parse(&out_of_range),
+            Err(TreesError::Malformed { .. })
+        ));
         let child_out = file(1, &[vec![(0, 0.5, 1, 7, 0.0), (-1, 0.0, 0, 0, 0.5)]]);
-        assert!(matches!(TreeEnsemble::parse(&child_out), Err(TreesError::Malformed { .. })));
+        assert!(matches!(
+            TreeEnsemble::parse(&child_out),
+            Err(TreesError::Malformed { .. })
+        ));
         let bad_leaf = file(1, &[stump(0, 0.5, 0.0, 1.5)]);
-        assert!(matches!(TreeEnsemble::parse(&bad_leaf), Err(TreesError::Malformed { .. })));
+        assert!(matches!(
+            TreeEnsemble::parse(&bad_leaf),
+            Err(TreesError::Malformed { .. })
+        ));
     }
 }

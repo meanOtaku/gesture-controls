@@ -538,7 +538,9 @@ impl LabelPipeline {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::model::tests::{expected, expected_cnn, expected_motion, loaded, loaded_cnn, loaded_motion};
+    use crate::model::tests::{
+        expected, expected_cnn, expected_motion, loaded, loaded_cnn, loaded_motion,
+    };
 
     /// One PPG batch of the samples `from..to` of `trace` (statuses all valid).
     pub fn batch(trace: &[Sample], from: usize, to: usize) -> WatchPpgBatchSample {
@@ -589,9 +591,16 @@ pub(crate) mod tests {
         assert!(scores.len() > 300);
         let model = loaded();
         for score in &scores {
-            let i = trace.iter().position(|s| s.ts_ns == score.timestamp_ns).unwrap();
+            let i = trace
+                .iter()
+                .position(|s| s.ts_ns == score.timestamp_ns)
+                .unwrap();
             let want = probabilities[i].expect("the trainer scored it too");
-            assert!((score.confidence - want).abs() < 1e-6, "{} vs {want}", score.confidence);
+            assert!(
+                (score.confidence - want).abs() < 1e-6,
+                "{} vs {want}",
+                score.confidence
+            );
             assert_eq!(score.model_version, model.version_id);
         }
     }
@@ -604,11 +613,14 @@ pub(crate) mod tests {
     #[ignore = "one-off: set PPG_E2E_BUNDLE and PPG_E2E_TRACE"]
     fn a_real_bundle_scores_a_real_recording_as_the_trainer_did() {
         let bundle_dir = std::env::var("PPG_E2E_BUNDLE").expect("PPG_E2E_BUNDLE");
-        let bundle = crate::bundle::validate_bundle(std::path::Path::new(&bundle_dir), None).unwrap();
+        let bundle =
+            crate::bundle::validate_bundle(std::path::Path::new(&bundle_dir), None).unwrap();
         let version = crate::model::tests::active_version(&bundle);
         let model = LoadedModel::load(bundle, &version).unwrap();
-        let raw: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(std::env::var("PPG_E2E_TRACE").unwrap()).unwrap()).unwrap();
+        let raw: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(std::env::var("PPG_E2E_TRACE").unwrap()).unwrap(),
+        )
+        .unwrap();
         let trace: Vec<Sample> = raw["samples"]
             .as_array()
             .unwrap()
@@ -620,19 +632,32 @@ pub(crate) mod tests {
                 ir: r[3].as_f64().unwrap(),
             })
             .collect();
-        let want: Vec<Option<f64>> = raw["probabilities"].as_array().unwrap().iter().map(serde_json::Value::as_f64).collect();
+        let want: Vec<Option<f64>> = raw["probabilities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(serde_json::Value::as_f64)
+            .collect();
         let motion: Vec<MotionSample> = raw["motion"]
             .as_array()
             .map(|rows| {
                 rows.iter()
                     .map(|r| {
                         let v = |i: usize| r[i].as_f64().unwrap();
-                        MotionSample { ts_ns: r[0].as_u64().unwrap(), accel: [v(1), v(2), v(3)], gyro: [v(4), v(5), v(6)] }
+                        MotionSample {
+                            ts_ns: r[0].as_u64().unwrap(),
+                            accel: [v(1), v(2), v(3)],
+                            gyro: [v(4), v(5), v(6)],
+                        }
                     })
                     .collect()
             })
             .unwrap_or_default();
-        assert_eq!(model.kind.reads_motion(), !motion.is_empty(), "a PPG + IMU model needs the motion samples, and only it");
+        assert_eq!(
+            model.kind.reads_motion(),
+            !motion.is_empty(),
+            "a PPG + IMU model needs the motion samples, and only it"
+        );
         // A recording can repeat a timestamp, which the watch never sends live: keep the last sample at each, as the
         // trainer's zero-order hold does (both decide the same at that time).
         let keep: Vec<usize> = (0..trace.len())
@@ -645,9 +670,13 @@ pub(crate) mod tests {
             .filter(|&j| j + 1 == motion.len() || motion[j + 1].ts_ns > motion[j].ts_ns)
             .map(|j| motion[j])
             .collect();
-        let origin = trace[0].ts_ns.min(motion.first().map_or(u64::MAX, |m| m.ts_ns));
+        let origin = trace[0]
+            .ts_ns
+            .min(motion.first().map_or(u64::MAX, |m| m.ts_ns));
         let received = |ts: u64, delay_ms: u64| ts - origin + 10_000_000_000 + delay_ms * NS_PER_MS;
-        let mut arrivals: Vec<(u64, bool, usize)> = (0..trace.len()).map(|i| (received(trace[i].ts_ns, 5), true, i)).collect();
+        let mut arrivals: Vec<(u64, bool, usize)> = (0..trace.len())
+            .map(|i| (received(trace[i].ts_ns, 5), true, i))
+            .collect();
         arrivals.extend((0..motion.len()).map(|j| (received(motion[j].ts_ns, 60), false, j)));
         arrivals.sort();
         let mut p = LabelPipeline::default();
@@ -659,18 +688,24 @@ pub(crate) mod tests {
                 b.timestamp_ns = trace[i].ts_ns;
                 p.observe_ppg(&b, at).unwrap();
             } else {
-                p.observe_orientation(&motion_sample(&motion[i], i as u64), at).unwrap();
+                p.observe_orientation(&motion_sample(&motion[i], i as u64), at)
+                    .unwrap();
             }
             let (scores, rejections) = p.evaluate(&[&model], at);
             rejected += rejections.len();
             for score in scores {
-                let index = trace.iter().position(|s| s.ts_ns == score.timestamp_ns).unwrap();
+                let index = trace
+                    .iter()
+                    .position(|s| s.ts_ns == score.timestamp_ns)
+                    .unwrap();
                 let expected = want[index].expect("the trainer scored this decision too");
                 worst = worst.max((score.confidence - expected).abs());
                 scored += 1;
             }
         }
-        println!("scored {scored} decisions live ({repeated} repeated timestamps dropped), largest difference from the trainer {worst:e}, {rejected} rejected");
+        println!(
+            "scored {scored} decisions live ({repeated} repeated timestamps dropped), largest difference from the trainer {worst:e}, {rejected} rejected"
+        );
         assert!(scored > 1000 && worst < 1e-6);
     }
 
@@ -745,13 +780,23 @@ pub(crate) mod tests {
                 .position(|s| s.ts_ns - SDK_BEHIND_NS == score.timestamp_ns)
                 .unwrap();
             let want = probabilities[i].expect("the trainer scored it too");
-            assert!((score.confidence - want).abs() < 1e-6, "sample {i}: {} vs {want}", score.confidence);
+            assert!(
+                (score.confidence - want).abs() < 1e-6,
+                "sample {i}: {} vs {want}",
+                score.confidence
+            );
         }
         let first = trace
             .iter()
             .position(|s| s.ts_ns - SDK_BEHIND_NS == scores[0].timestamp_ns)
             .unwrap();
-        assert_eq!(scores.len(), probabilities[first..].iter().filter(|p| p.is_some()).count());
+        assert_eq!(
+            scores.len(),
+            probabilities[first..]
+                .iter()
+                .filter(|p| p.is_some())
+                .count()
+        );
     }
 
     #[test]
@@ -855,9 +900,13 @@ pub(crate) mod tests {
         let at = |i: usize| trace[i].ts_ns - origin + 10_000_000_000;
         p.observe_ppg(&batch(&trace, 0, 200), at(199)).unwrap();
         assert_eq!(p.evaluate(&[&model], at(199)).0.len(), 1);
-        assert!(p.evaluate(&[&model], at(199) + 10 * NS_PER_MS).0.is_empty(), "nothing new");
+        assert!(
+            p.evaluate(&[&model], at(199) + 10 * NS_PER_MS).0.is_empty(),
+            "nothing new"
+        );
         // A sample arriving sooner than a stride after the last is still decided on.
-        p.observe_ppg(&batch(&trace, 200, 201), at(199) + 30 * NS_PER_MS).unwrap();
+        p.observe_ppg(&batch(&trace, 200, 201), at(199) + 30 * NS_PER_MS)
+            .unwrap();
         assert_eq!(p.evaluate(&[&model], at(199) + 30 * NS_PER_MS).0.len(), 1);
         // A stalled stream is reported, then not again until a stride has passed.
         let late = at(200) + 1_100 * NS_PER_MS;
@@ -907,7 +956,10 @@ pub(crate) mod tests {
         assert!(p.observe_orientation(&motion, 4).is_err());
         motion.accelerometer = None;
         assert!(p.observe_orientation(&motion, 4).is_ok());
-        assert!(p.observe_orientation(&motion, 5).is_err(), "a repeated timestamp");
+        assert!(
+            p.observe_orientation(&motion, 5).is_err(),
+            "a repeated timestamp"
+        );
     }
 
     #[test]
@@ -922,10 +974,16 @@ pub(crate) mod tests {
         // Hours of samples keep only the model's history.
         let (mut p, _) = configured();
         let long: Vec<Sample> = (0..20_000u64)
-            .map(|i| Sample { ts_ns: i * 40 * NS_PER_MS, green: 1.0, red: 2.0, ir: 3.0 })
+            .map(|i| Sample {
+                ts_ns: i * 40 * NS_PER_MS,
+                green: 1.0,
+                red: 2.0,
+                ir: 3.0,
+            })
             .collect();
         for i in (0..long.len()).step_by(25) {
-            p.observe_ppg(&batch(&long, i, i + 25), long[i + 24].ts_ns).unwrap();
+            p.observe_ppg(&batch(&long, i, i + 25), long[i + 24].ts_ns)
+                .unwrap();
         }
         assert!(p.ppg.len() < 200, "{}", p.ppg.len());
     }

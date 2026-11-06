@@ -26,27 +26,29 @@ import okhttp3.WebSocketListener
  * Extracted from `WatchLinkManager` in GC-037 so the BLE transport could exist
  * alongside it behind [WatchTransportLink]; the socket lifecycle is unchanged.
  */
-class WebSocketTransport(private val url: String) : WatchTransportLink {
+class WebSocketTransport internal constructor(
+    private val url: String,
+    private val client: WebSocket.Factory,
+    private val scope: CoroutineScope,
+) : WatchTransportLink {
+    constructor(url: String) : this(
+        url,
+        OkHttpClient.Builder().pingInterval(PING_INTERVAL_SECONDS, java.util.concurrent.TimeUnit.SECONDS).build(),
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+    )
 
     override val kind = WatchTransportKind.WIFI
     override var onState: ((ConnectionState, String?) -> Unit)? = null
     override var onMessage: ((String) -> Unit)? = null
-
-    private val client = OkHttpClient.Builder()
-        .pingInterval(PING_INTERVAL_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
-        .build()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private var webSocket: WebSocket? = null
     private var reconnectJob: Job? = null
     private var attempt = 0
     private var userRequestedConnection = false
 
-    // Set right before we close a socket ourselves, so the async onClosed/onFailure
-    // callback OkHttp delivers afterwards is recognized as expected and doesn't
-    // trigger a reconnect (e.g. right after pause() or a fresh start()).
-    private var closeExpected = false
-    private var pendingFailureCategory: String = "Connection closed"
+    // Lifecycle methods and callback bodies run on the owning (main) dispatcher.
+    // Invalidate before closing: callbacks may already be queued for dispatch.
+    private var generation = 0L
 
     override fun start() {
         userRequestedConnection = true
@@ -100,20 +102,20 @@ class WebSocketTransport(private val url: String) : WatchTransportLink {
             if (attempt == 0) "wifi: connecting to $url" else "wifi: reconnecting to $url (attempt $attempt)",
         )
         val request = Request.Builder().url(url).build()
-        webSocket = client.newWebSocket(request, listener)
+        webSocket = client.newWebSocket(request, listener(generation))
     }
 
     private fun closeSocket() {
-        if (webSocket != null) {
-            closeExpected = true
-        }
-        webSocket?.close(1000, "client closing")
+        generation += 1
+        val previous = webSocket
         webSocket = null
+        previous?.close(1000, "client closing")
     }
 
-    private val listener = object : WebSocketListener() {
+    private fun listener(socketGeneration: Long) = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
             scope.launch {
+                if (socketGeneration != generation) return@launch
                 attempt = 0
                 LinkLog.add("wifi: connected")
                 onState?.invoke(ConnectionState.CONNECTED, null)
@@ -121,23 +123,33 @@ class WebSocketTransport(private val url: String) : WatchTransportLink {
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
-            scope.launch { onMessage?.invoke(text) }
+            scope.launch {
+                if (socketGeneration != generation) return@launch
+                onMessage?.invoke(text)
+            }
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+            // Acknowledge only the socket passed by OkHttp, never the current field.
             webSocket.close(1000, null)
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            pendingFailureCategory = if (code == 1000) "Connection closed" else "Server closed connection"
-            LinkLog.add("wifi: closed by the desktop (code $code${if (reason.isNotEmpty()) ", $reason" else ""})")
-            scope.launch { handleDisconnect() }
+            scope.launch {
+                if (socketGeneration != generation) return@launch
+                val category = if (code == 1000) "Connection closed" else "Server closed connection"
+                LinkLog.add("wifi: closed by the desktop (code $code${if (reason.isNotEmpty()) ", $reason" else ""})")
+                handleDisconnect(category)
+            }
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            pendingFailureCategory = classifyFailure(t)
-            LinkLog.add("wifi: connection failed: $pendingFailureCategory (${t.javaClass.simpleName})")
-            scope.launch { handleDisconnect() }
+            scope.launch {
+                if (socketGeneration != generation) return@launch
+                val category = classifyFailure(t)
+                LinkLog.add("wifi: connection failed: $category (${t.javaClass.simpleName})")
+                handleDisconnect(category)
+            }
         }
     }
 
@@ -150,12 +162,10 @@ class WebSocketTransport(private val url: String) : WatchTransportLink {
         else -> "Connection error"
     }
 
-    private fun handleDisconnect() {
+    private fun handleDisconnect(category: String) {
+        // Reject any further callbacks from this ended attempt, even before retry.
+        generation += 1
         webSocket = null
-        if (closeExpected) {
-            closeExpected = false
-            return
-        }
         if (!userRequestedConnection) {
             onState?.invoke(ConnectionState.DISCONNECTED, null)
             return
@@ -165,7 +175,7 @@ class WebSocketTransport(private val url: String) : WatchTransportLink {
         LinkLog.add("wifi: retrying in ${delayMs / 1000.0} s (attempt $attempt)")
         onState?.invoke(
             ConnectionState.RECONNECTING,
-            "$pendingFailureCategory — retrying in ${delayMs / 1000} s (attempt $attempt)",
+            "$category — retrying in ${delayMs / 1000} s (attempt $attempt)",
         )
         reconnectJob?.cancel()
         reconnectJob = scope.launch {

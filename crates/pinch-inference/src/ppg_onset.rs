@@ -88,7 +88,9 @@ pub struct PpgSample {
 pub static COEFFICIENTS: LazyLock<[[f64; DIFF_TAPS]; 3]> = LazyLock::new(|| {
     // Normal equations of the cubic through times -9..-1 ticks (seconds); invert the 4x4 Gram matrix exactly.
     let dt = TICK_NS as f64 / 1e9;
-    let t: Vec<f64> = (0..DIFF_TAPS).map(|i| (i as f64 - DIFF_TAPS as f64) * dt).collect();
+    let t: Vec<f64> = (0..DIFF_TAPS)
+        .map(|i| (i as f64 - DIFF_TAPS as f64) * dt)
+        .collect();
     let mut gram = [[0.0f64; 4]; 4];
     for &x in &t {
         for (r, row) in gram.iter_mut().enumerate() {
@@ -178,7 +180,11 @@ fn quantile(sorted: &[f64], q: f64) -> f64 {
     let (a, b) = (sorted[lo], sorted[hi]);
     let diff = b - a;
     // numpy's lerp: from the nearer end, so t = 1 gives b exactly.
-    if t >= 0.5 { b - diff * (1.0 - t) } else { a + diff * t }
+    if t >= 0.5 {
+        b - diff * (1.0 - t)
+    } else {
+        a + diff * t
+    }
 }
 
 /// numpy's `median`: the middle value, or the mean of the two middle ones.
@@ -399,7 +405,12 @@ mod tests {
             let samples: Vec<PpgSample> = case
                 .samples
                 .iter()
-                .map(|&(ts_ns, green, red, ir)| PpgSample { ts_ns, green, red, ir })
+                .map(|&(ts_ns, green, red, ir)| PpgSample {
+                    ts_ns,
+                    green,
+                    red,
+                    ir,
+                })
                 .collect();
             for (decision, expected) in case.decisions.iter().zip(&case.expected) {
                 let got = features(&samples, *decision);
@@ -409,7 +420,12 @@ mod tests {
                         assert_eq!(got.len(), expected.len());
                         for (i, (a, b)) in got.iter().zip(expected).enumerate() {
                             worst = worst.max(error(*a, *b));
-                            assert!(close(*a, *b), "{}: {} at {decision}: {a} vs {b}", case.name, FEATURE_NAMES[i]);
+                            assert!(
+                                close(*a, *b),
+                                "{}: {} at {decision}: {a} vs {b}",
+                                case.name,
+                                FEATURE_NAMES[i]
+                            );
                         }
                     }
                     (got, expected) => panic!(
@@ -427,7 +443,12 @@ mod tests {
     #[test]
     fn a_gap_in_the_span_means_no_features() {
         let mut samples: Vec<PpgSample> = (0..200u64)
-            .map(|i| PpgSample { ts_ns: i * TICK_NS, green: (i as f64).sin(), red: 1.0 + (i as f64 * 0.3).cos(), ir: i as f64 })
+            .map(|i| PpgSample {
+                ts_ns: i * TICK_NS,
+                green: (i as f64).sin(),
+                red: 1.0 + (i as f64 * 0.3).cos(),
+                ir: i as f64,
+            })
             .collect();
         let decision = samples.last().unwrap().ts_ns;
         assert!(features(&samples, decision).is_some());

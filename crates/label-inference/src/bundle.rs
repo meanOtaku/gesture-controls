@@ -313,7 +313,9 @@ pub fn validate_bundle(
         return Err(BundleError::UnsafePath(name.clone()));
     }
     if manifest.model.format != MODEL_FORMAT && manifest.model.format != CNN_MODEL_FORMAT {
-        return Err(BundleError::UnsupportedFormat(manifest.model.format.clone()));
+        return Err(BundleError::UnsupportedFormat(
+            manifest.model.format.clone(),
+        ));
     }
     let Some(kind) = ModelKind::from_preprocessing(&manifest.preprocessing.kind) else {
         return Err(BundleError::UnsupportedPreprocessing(
@@ -459,7 +461,8 @@ pub(crate) mod tests {
             fs::copy(cnn_fixture_dir().join(file), dir.path().join(file)).unwrap();
         }
         let path = dir.path().join(MANIFEST_FILE);
-        let mut manifest: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         manifest["model"]["format"] = "trees".into();
         fs::write(&path, manifest.to_string()).unwrap();
         let refused = validate_bundle(dir.path(), None).err().unwrap().to_string();
@@ -534,23 +537,38 @@ pub(crate) mod tests {
         let onnx = refused(|m| m["model"]["format"] = "onnx".into());
         assert!(onnx.contains("train a new one in Model Lab"), "{onnx}");
         assert!(
-            refused(|m| m["preprocessing"] = serde_json::json!({"kind": "spike_extraction", "method": "first_derivative"}))
-                .contains("not valid")
+            refused(|m| m["preprocessing"] =
+                serde_json::json!({"kind": "spike_extraction", "method": "first_derivative"}))
+            .contains("not valid")
         );
-        assert!(refused(|m| m["preprocessing"]["kind"] = "none".into()).contains("unsupported preprocessing"));
+        assert!(
+            refused(|m| m["preprocessing"]["kind"] = "none".into())
+                .contains("unsupported preprocessing")
+        );
     }
 
     #[test]
     fn a_bundle_that_does_not_read_exactly_the_ppg_features_is_refused() {
-        assert!(refused(|m| m["sources"] = serde_json::json!(["watchPpg", "watchAcceleration"])).contains("must read [WatchPpg]"));
+        assert!(
+            refused(|m| m["sources"] = serde_json::json!(["watchPpg", "watchAcceleration"]))
+                .contains("must read [WatchPpg]")
+        );
         // A PPG-only model's features under the PPG + IMU kind's name are not that model.
-        assert!(refused(|m| m["preprocessing"]["kind"] = "ppg_imu_onset".into()).contains("must read [WatchPpg, WatchOrientation]"));
-        assert!(refused(|m| {
-            m["input"]["features"].as_array_mut().unwrap().swap(0, 1);
-        })
-        .contains("in this app's order"));
+        assert!(
+            refused(|m| m["preprocessing"]["kind"] = "ppg_imu_onset".into())
+                .contains("must read [WatchPpg, WatchOrientation]")
+        );
+        assert!(
+            refused(|m| {
+                m["input"]["features"].as_array_mut().unwrap().swap(0, 1);
+            })
+            .contains("in this app's order")
+        );
         assert!(refused(|m| m["window"]["durationMs"] = 500.into()).contains("5640 ms"));
-        assert!(refused(|m| m["input"]["trainingRange"]["low"][0] = 1e30.into()).contains("training range"));
+        assert!(
+            refused(|m| m["input"]["trainingRange"]["low"][0] = 1e30.into())
+                .contains("training range")
+        );
     }
 
     #[test]
@@ -565,7 +583,9 @@ pub(crate) mod tests {
             validate_bundle(dir.path(), None),
             Err(BundleError::HashMismatch { .. })
         ));
-        assert!(refused(|m| m["model"]["file"] = "../model.trees".into()).contains("plain file name"));
+        assert!(
+            refused(|m| m["model"]["file"] = "../model.trees".into()).contains("plain file name")
+        );
     }
 
     #[test]

@@ -6,9 +6,9 @@ use model_lab_core::{
 };
 use thiserror::Error;
 
+use crate::bundle::Network;
 use crate::bundle::ValidatedBundle;
 use crate::inputs::ModelKind;
-use crate::bundle::Network;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ModelError {
@@ -250,10 +250,8 @@ pub(crate) mod tests {
     }
 
     fn expected_in(dir: &std::path::Path) -> (Vec<PpgSample>, Vec<MotionSample>, Vec<Option<f64>>) {
-        let raw: serde_json::Value = serde_json::from_slice(
-            &std::fs::read(dir.join("expected.json")).unwrap(),
-        )
-        .unwrap();
+        let raw: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(dir.join("expected.json")).unwrap()).unwrap();
         let samples = raw["samples"]
             .as_array()
             .unwrap()
@@ -296,14 +294,21 @@ pub(crate) mod tests {
         let mut scored = 0;
         for (i, want) in probabilities.iter().enumerate() {
             let at = samples[i].ts_ns;
-            match (pinch_inference::cnn_input::inputs(&motion, &samples[..=i], at), want) {
+            match (
+                pinch_inference::cnn_input::inputs(&motion, &samples[..=i], at),
+                want,
+            ) {
                 (None, None) => {}
                 (Some(x), Some(want)) => {
                     let p = model.predict(&x).unwrap();
                     assert!((p - want).abs() < 1e-6, "sample {i}: {p} vs {want}");
                     scored += 1;
                 }
-                (got, want) => panic!("sample {i}: runtime inputs {}, trainer {}", got.is_some(), want.is_some()),
+                (got, want) => panic!(
+                    "sample {i}: runtime inputs {}, trainer {}",
+                    got.is_some(),
+                    want.is_some()
+                ),
             }
         }
         assert!(scored > 300, "{scored}");
@@ -311,7 +316,10 @@ pub(crate) mod tests {
 
     #[test]
     fn a_bundle_that_does_not_say_its_decision_delay_gets_the_trainer_s() {
-        assert_eq!(loaded().decision_delay_ms, crate::steadiness::DEFAULT_DECISION_DELAY_MS);
+        assert_eq!(
+            loaded().decision_delay_ms,
+            crate::steadiness::DEFAULT_DECISION_DELAY_MS
+        );
     }
 
     #[test]
@@ -350,10 +358,9 @@ pub(crate) mod tests {
 
     /// The PPG trace in the fixture and the probability the trainer gives each of its samples (`None`: no features).
     pub fn expected() -> (Vec<PpgSample>, Vec<Option<f64>>) {
-        let raw: serde_json::Value = serde_json::from_slice(
-            &std::fs::read(fixture_dir().join("expected.json")).unwrap(),
-        )
-        .unwrap();
+        let raw: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(fixture_dir().join("expected.json")).unwrap())
+                .unwrap();
         let samples = raw["samples"]
             .as_array()
             .unwrap()
@@ -391,12 +398,20 @@ pub(crate) mod tests {
                     assert!((p - want).abs() < 1e-6, "sample {i}: {p} vs {want}");
                     scored += 1;
                 }
-                (got, want) => panic!("sample {i}: runtime features {}, trainer {}", got.is_some(), want.is_some()),
+                (got, want) => panic!(
+                    "sample {i}: runtime features {}, trainer {}",
+                    got.is_some(),
+                    want.is_some()
+                ),
             }
         }
         assert!(scored > 300);
         // It tells the trace's pinch starts from the rest.
-        let high = probabilities.iter().flatten().filter(|p| **p >= model.thresholds.activation).count();
+        let high = probabilities
+            .iter()
+            .flatten()
+            .filter(|p| **p >= model.thresholds.activation)
+            .count();
         assert!(high > 0 && high < scored / 2);
     }
 

@@ -290,11 +290,17 @@ mod tests {
         let (trace, _) = expected();
         let rose = (0..300).any(|i| {
             runtime
-                .observe_ppg(&batch(&trace, i, i + 1), trace[i].ts_ns - trace[0].ts_ns + 10_000_000_000)
+                .observe_ppg(
+                    &batch(&trace, i, i + 1),
+                    trace[i].ts_ns - trace[0].ts_ns + 10_000_000_000,
+                )
                 .actionable
                 .iter()
                 .any(|e| matches!(e, crate::DetectionEvent::Rising { .. }))
         });
-        assert!(rose, "a registry-approved model detects a pinch start in live mode");
+        assert!(
+            rose,
+            "a registry-approved model detects a pinch start in live mode"
+        );
     }
 }

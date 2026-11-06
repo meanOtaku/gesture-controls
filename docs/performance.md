@@ -208,3 +208,18 @@ cargo build --release -p spatial-gesture-desktop && ls -l target/release/spatial
 # macOS osascript spawn cost (read-only)
 time osascript -e 'output volume of (get volume settings)'
 ```
+
+
+## Calibration performance gate
+
+Use the Node 22 release line (at least 22.12) and run `npm run test:performance`
+from the repository root, with other builds/tests stopped. This runs only the calibration
+benchmark in a Node environment with one worker. It builds the input outside the timed
+region, warms up five times, then reports median and p95 over 21 runs; the median must
+remain below the original 100 ms budget. Record Node version, OS, CPU and host load when
+comparing results. CI runs this as a separate command after the frontend suite.
+
+The ordinary unit suite retains long-recording correctness/score-equivalence checks but
+no longer makes a single wall-clock assertion while many jsdom workers compete for CPU.
+The benchmark measures computation only, not camera delivery or packaged webview latency.
+A failed budget requires investigation on a controlled host, not an automatic threshold increase.
