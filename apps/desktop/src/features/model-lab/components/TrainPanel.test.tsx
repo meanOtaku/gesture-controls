@@ -1,3 +1,4 @@
+import * as recordingNames from "../recordingNames";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TrainPlan, TrainerEnvironment, TrainingStatus } from "../training";
@@ -17,7 +18,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 const label = (id: string, displayName: string, archivedAt: string | null = null): DatasetLabel => ({ id, displayName, description: "", color: "#65e6ff", role: "positiveGesture", archivedAt });
 const dataset = (id: string, labels: string[]): DatasetSummary => ({ id, originalFilename: `${id}.csv`, importedAt: "", label: labels.join(", "), labels, rowCount: 10 });
 const labels = [label("snap", "Snap"), label("idle", "Idle"), label("old", "Old", "2026-01-01")];
-const datasets = [dataset("s1", ["snap"]), dataset("s2", ["snap"]), dataset("i1", ["idle", "walking"]), dataset("i2", ["idle"])];
+const datasets = [{ ...dataset("s1", ["snap"]), group: "New camera labels" }, dataset("s2", ["snap"]), dataset("i1", ["idle", "walking"]), dataset("i2", ["idle"])];
 
 const okPlan: TrainPlan = { train: ["s1", "i1"], evaluation: ["s2", "i2"], problem: null, inputs: 1701 };
 
@@ -57,6 +58,37 @@ describe("TrainPanel", () => {
     expect(calls("plan_label_training").at(-1)?.[1]).toEqual({
       request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["idle", "walking"], excludes: [] },
     });
+  });
+
+  it("shows the dataset group beside each training recording", async () => {
+    setup();
+    choose("snap");
+    const recordings = screen.getByRole("list", { name: "Recordings to use" });
+    const rows = within(recordings).getAllByRole("listitem");
+    expect(within(rows[0]).getByLabelText("Dataset group: New camera labels")).toHaveTextContent("Group: New camera labels");
+    expect(within(rows[1]).getByLabelText("Dataset group: Ungrouped")).toHaveTextContent("Group: Ungrouped");
+    expect(within(rows[0]).getByRole("checkbox")).toBeChecked();
+  });
+
+  it("does not rebuild the recording list for training log updates", async () => {
+    const title = vi.spyOn(recordingNames, "recordingTitle");
+    setup({ plan: { train: [], evaluation: [], problem: "Pick more recordings", inputs: 1701 } });
+    choose("snap");
+    await screen.findByText("Pick more recordings");
+    title.mockClear();
+    act(() => handlers.get("label-training-event")?.({ payload: { kind: "log", runId: "r", message: "Training progress" } }));
+    expect(title).not.toHaveBeenCalled();
+    title.mockRestore();
+  });
+
+  it("coalesces rapid recording choices into one plan request", async () => {
+    setup();
+    choose("snap");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Use s2.csv" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Use i2.csv" }));
+    await screen.findByText(/It will train on/);
+    expect(calls("plan_label_training")).toHaveLength(1);
+    expect(calls("plan_label_training")[0][1]).toEqual(expect.objectContaining({ request: expect.objectContaining({ datasetIds: ["s1", "i1"] }) }));
   });
 
   it("sends the roles and the recordings, and nothing about the model when it is the default trees", async () => {

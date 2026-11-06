@@ -200,7 +200,11 @@ function MainApp() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<AppTab>("main");
+  const [activeTab, setActiveTabUnchecked] = useState<AppTab>("main");
+  const setActiveTab = useStableCallback((tab: AppTab) => {
+    if (tab === activeTab) return;
+    appNavigation.requestLeave(() => setActiveTabUnchecked(tab));
+  });
   const [startWithDevice, setStartWithDevice] = useState<DeviceKind | null>(null);
   const { isPending, run } = usePendingActions();
   const calibrationEventVersion = useRef(0);

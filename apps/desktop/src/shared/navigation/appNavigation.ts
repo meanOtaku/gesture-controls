@@ -12,10 +12,19 @@ export interface LabellingFocus {
 
 type Listener = (tab: string) => void;
 const listeners = new Set<Listener>();
+let leaveGuard: ((proceed: () => void) => void) | null = null;
 let pendingFocus: LabellingFocus | null = null;
 const focusListeners = new Set<() => void>();
 
 export const appNavigation = {
+  beforeLeave(guard: (proceed: () => void) => void): () => void {
+    leaveGuard = guard;
+    return () => { if (leaveGuard === guard) leaveGuard = null; };
+  },
+  requestLeave(proceed: () => void): void {
+    if (leaveGuard) leaveGuard(proceed);
+    else proceed();
+  },
   open(tab: string): void {
     listeners.forEach((listener) => listener(tab));
   },

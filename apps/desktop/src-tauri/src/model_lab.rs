@@ -992,10 +992,14 @@ pub(crate) fn dataset_labels_in_use(app: &AppHandle) -> std::collections::BTreeS
 }
 
 #[tauri::command]
-pub fn list_model_datasets(
-    app: AppHandle,
-    runtime: State<'_, ModelLabRuntime>,
-) -> Result<Vec<DatasetSummary>, String> {
+pub async fn list_model_datasets(app: AppHandle) -> Result<Vec<DatasetSummary>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let runtime = app.state::<ModelLabRuntime>();
+        list_model_datasets_blocking(&app, &runtime)
+    }).await.map_err(|e| e.to_string())?
+}
+
+fn list_model_datasets_blocking(app: &AppHandle, runtime: &ModelLabRuntime) -> Result<Vec<DatasetSummary>, String> {
     let _guard = runtime
         .lock
         .lock()

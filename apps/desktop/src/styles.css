@@ -541,3 +541,15 @@ html.overlay-document body::before { display:none; }
 
 /* Keep the cursor readout separate so hovering cannot reflow the graphs. */
 .labelling-cursor { block-size: 1.5em; line-height: 1.5; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.labelling-span-editable { padding: 0; overflow: visible; touch-action: none; opacity: 1; }
+.labelling-drag-body { display: block; width: 100%; height: 100%; border: 0; background: transparent; color: #111; cursor: grab; padding: 0 9px; font: inherit; overflow: hidden; text-overflow: ellipsis; }
+.labelling-drag-body:active { cursor: grabbing; }
+.labelling-resize { position: absolute; top: 0; bottom: 0; width: 7px; padding: 0; border: 0; background: #0004; cursor: ew-resize; touch-action: none; }
+.labelling-resize-start { left: 0; border-right: 1px solid #0008; }
+.labelling-resize-end { right: 0; border-left: 1px solid #0008; }
+.labelling-resize:focus-visible, .labelling-drag-body:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+.labelling-timing { display:flex; flex-wrap:wrap; align-items:end; gap:12px; padding:12px; border:1px solid var(--line); }
+.labelling-timing label { display:flex; flex-direction:column; gap:4px; font-size:12px; }
+.labelling-timing input { width:140px; padding:6px; border:1px solid var(--line); background:var(--surface-2); color:var(--ink); }

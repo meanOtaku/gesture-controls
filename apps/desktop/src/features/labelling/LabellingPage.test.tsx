@@ -139,6 +139,50 @@ describe("LabellingPage", () => {
     expect(byHand()).toHaveLength(0);
   });
 
+  it("moves and resizes manual labels with one undo step per drag", async () => {
+    const lanes = await openRecording();
+    drag(lanes, 100, 300);
+    fireEvent.keyDown(window, { key: "2" });
+    fireEvent.keyDown(window, { key: "Enter" });
+    const rail = screen.getByRole("list", { name: "By hand labels" });
+    rail.getBoundingClientRect = lanes.getBoundingClientRect;
+    const body = screen.getByRole("button", { name: "Move Fist" });
+    fireEvent.pointerDown(body, { button: 0, clientX: 200, pointerId: 2 });
+    fireEvent.pointerMove(body, { clientX: 300, pointerId: 2 });
+    fireEvent.pointerUp(body, { pointerId: 2 });
+    expect(within(rail).getByRole("listitem").title).toContain("0.200 s to 0.400 s");
+    const edge = screen.getByRole("button", { name: "Resize Fist end" });
+    fireEvent.pointerDown(edge, { button: 0, clientX: 400, pointerId: 3 });
+    fireEvent.pointerMove(edge, { clientX: 550, pointerId: 3 });
+    fireEvent.pointerUp(edge, { pointerId: 3 });
+    expect(within(rail).getByRole("listitem").title).toContain("0.200 s to 0.550 s");
+    fireEvent.keyDown(window, { key: "z", metaKey: true });
+    expect(within(rail).getByRole("listitem").title).toContain("0.200 s to 0.400 s");
+    fireEvent.keyDown(window, { key: "z", metaKey: true });
+    expect(within(rail).getByRole("listitem").title).toContain("0.100 s to 0.300 s");
+  });
+
+  it("applies precise timing and guards leaving with unsaved labels", async () => {
+    const lanes = await openRecording();
+    drag(lanes, 100, 300);
+    fireEvent.keyDown(window, { key: "2" });
+    fireEvent.keyDown(window, { key: "Enter" });
+    fireEvent.click(screen.getByRole("button", { name: "Move Fist" }));
+    fireEvent.change(screen.getByLabelText("Start (seconds)"), { target: { value: "0.125" } });
+    fireEvent.change(screen.getByLabelText("Duration (seconds)"), { target: { value: "0.25" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply timing" }));
+    expect(within(screen.getByRole("list", { name: "By hand labels" })).getByRole("listitem").title).toContain("0.125 s to 0.375 s");
+    const leave = vi.fn();
+    act(() => appNavigation.requestLeave(leave));
+    expect(leave).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Keep working" }));
+    expect(leave).not.toHaveBeenCalled();
+    act(() => appNavigation.requestLeave(leave));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save and leave" })));
+    expect(invoke).toHaveBeenCalledWith("save_labelling_original", expect.objectContaining({ intervals: [{ startMs: 125, endMs: 375, label: "fist" }] }));
+    expect(leave).toHaveBeenCalledOnce();
+  });
+
   it("saves labels to the original without creating a version and clears unsaved status", async () => {
     const lanes = await openRecording();
     drag(lanes, 0, 400);

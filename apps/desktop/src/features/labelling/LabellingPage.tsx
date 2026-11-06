@@ -1,3 +1,5 @@
+import { LabelTimingEditor } from "./LabelTimingEditor";
+import { EditableLabelRail } from "./EditableLabelRail";
 import { invoke } from "@tauri-apps/api/core";
 import { feedbackWithUndo, OperationFeedback } from "../../components/app/OperationFeedback";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -105,6 +107,7 @@ export function LabellingPage() {
   const [chosen, setChosen] = useState<string>(NO_LABEL);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
   const [pendingSource, setPendingSource] = useState<{ source: LabellingSource; focus?: Omit<LabellingFocus, "datasetId"> } | null>(null);
   const [replays, setReplays] = useState<ModelReplay[] | null>(null);
   const [camera, setCamera] = useState<{ track: CameraTrack } | { problem: string } | null>(null);
@@ -117,6 +120,15 @@ export function LabellingPage() {
   const spans = history.present;
   const dirty = recording !== null && !sameSpans(spans, saved);
   const durationMs = Math.max(1, recording?.durationMs ?? 1);
+  const selectedIndex = selection ? spans.findIndex((span) => span.startMs === selection.startMs && span.endMs === selection.endMs) : -1;
+  useEffect(() => {
+    if (!dirty) return;
+    const unregister = appNavigation.beforeLeave((proceed) => setPendingLeave(() => proceed));
+    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => { unregister(); window.removeEventListener("beforeunload", beforeUnload); };
+  }, [dirty]);
+
 
   useEffect(() => {
     kept = recording ? { recording, history, saved, view, hidden, laneSize, fitToView } : null;
@@ -149,7 +161,18 @@ export function LabellingPage() {
     return () => observer.disconnect();
   }, [recording !== null]);
 
-  const colorOf = useCallback((label: string) => labelColor(label, catalogue), [catalogue]);
+  const labelColors = useMemo(() => {
+    const palette = ["#22d3ee", "#fb923c", "#c084fc", "#4ade80", "#f472b6", "#facc15", "#60a5fa", "#f87171"];
+    const used = new Set<string>();
+    return new Map([...catalogue].sort((a, b) => a.id.localeCompare(b.id)).map((entry, index) => {
+      let color = labelColor(entry.id, catalogue);
+      if (used.has(color)) color = palette.find((item) => !used.has(item)) ?? `hsl(${index * 137.508 % 360} 75% 65%)`;
+      used.add(color);
+      return [entry.id, color];
+    }));
+  }, [catalogue]);
+  const colorOf = useCallback((label: string) => labelColors.get(label) ?? labelColor(label, catalogue), [catalogue, labelColors]);
+  const [dragPreview, setDragPreview] = useState<Span[] | null>(null);
   const nameOf = useCallback(
     (label: string) => (label === NO_LABEL ? "Nothing here" : label === LEFT_OUT ? "Left out" : catalogue.find((entry) => entry.id === label)?.displayName || label),
     [catalogue],
@@ -320,6 +343,7 @@ export function LabellingPage() {
       notifyRecordingsChanged();
       await refreshLists();
       OperationFeedback.success("Saved", "Manual labels saved to the original dataset.");
+      return true;
     } catch (error) {
       setMessage({ tone: "error", text: `Not saved: ${String(error)}` });
     } finally {
@@ -561,6 +585,8 @@ export function LabellingPage() {
   snapPoints.current = useMemo(
     () => [
       ...closedSpans.flatMap((span) => [span.startMs, span.endMs]),
+      ...(recording?.ppg.timesMs ?? []),
+      ...(recording?.imu.timesMs ?? []),
       ...bursts.flatMap((span) => [span.startMs + 100, span.endMs - 100]),
       ...(recording?.labelIntervals ?? []).flatMap((span) => [span.startMs, span.endMs]),
       ...spans.flatMap((span) => [span.startMs, span.endMs]),
@@ -825,7 +851,14 @@ export function LabellingPage() {
 
             <div className="labelling-timeline">
               <SpanRail title="Recorded" spans={recording.labelIntervals} view={view} colorOf={colorOf} nameOf={nameOf} />
-              <SpanRail title="By hand" spans={spans} view={view} colorOf={colorOf} nameOf={nameOf} />
+              <EditableLabelRail spans={spans} view={view} duration={durationMs} colorOf={colorOf} nameOf={nameOf}
+                snap={snap} snapPoints={snapPoints.current} onPreview={setDragPreview} onCommit={(next) => setHistory((current) => commit(current, next))} onSelect={setSelection} />
+              <p className="hint">Drag a manual label to move it; drag its left or right handle to resize. Edits stop at neighbouring labels. Undo restores the previous position.</p>
+              {selectedIndex >= 0 && <LabelTimingEditor key={`${selectedIndex}-${spans[selectedIndex].startMs}-${spans[selectedIndex].endMs}`} span={spans[selectedIndex]}
+                min={selectedIndex === 0 ? 0 : spans[selectedIndex - 1].endMs + 1e-6}
+                max={selectedIndex === spans.length - 1 ? durationMs : spans[selectedIndex + 1].startMs - 1e-6}
+                onApply={(edited) => { setHistory((current) => commit(current, current.present.map((span, index) => index === selectedIndex ? edited : span))); setSelection(edited); }} />}
+
               {hazards.length > 0 && (
                 <SpanRail
                   title="Data"
@@ -898,7 +931,7 @@ export function LabellingPage() {
                     view={view}
                     width={width}
                     height={LANE_HEIGHTS[laneSize]}
-                    spans={spans}
+                    spans={dragPreview ?? spans}
                     colorOf={colorOf}
                     selection={selection}
                     hoverMs={hoverMs}
@@ -915,7 +948,7 @@ export function LabellingPage() {
                     view={view}
                     width={width}
                     height={LANE_HEIGHTS[laneSize]}
-                    spans={spans}
+                    spans={dragPreview ?? spans}
                     colorOf={colorOf}
                     selection={selection}
                     hoverMs={hoverMs}
@@ -932,7 +965,7 @@ export function LabellingPage() {
                     view={view}
                     width={width}
                     height={LANE_HEIGHTS[laneSize]}
-                    spans={spans}
+                    spans={dragPreview ?? spans}
                     colorOf={colorOf}
                     selection={selection}
                     hoverMs={hoverMs}
@@ -1086,6 +1119,19 @@ export function LabellingPage() {
           onChanged={(updated) => setDatasets((current) => current.map((dataset) => (dataset.id === updated.id ? updated : dataset)))}
         />
       )}
+
+      <AlertDialog open={pendingLeave !== null} onOpenChange={(openNow) => !openNow && setPendingLeave(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader><AlertDialogTitle>Leave with unsaved labels?</AlertDialogTitle>
+            <AlertDialogDescription>Save your labels before leaving Labelling. Leaving without saving keeps your draft for this app session.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Keep working</AlertDialogCancel>
+            <Button variant="outline" disabled={busy} onClick={() => { const proceed = pendingLeave; setPendingLeave(null); proceed?.(); }}>Leave without saving</Button>
+            <Button disabled={busy} onClick={() => { void (async () => { if (await saveOriginal()) { const proceed = pendingLeave; setPendingLeave(null); proceed?.(); } })(); }}>Save and leave</Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={pendingSource !== null} onOpenChange={(openNow) => !openNow && setPendingSource(null)}>
         <AlertDialogContent>

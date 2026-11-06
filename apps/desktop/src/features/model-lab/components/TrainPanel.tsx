@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { recordingTitle } from "../recordingNames";
-import { useEffect, useId, useState } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
@@ -31,7 +31,7 @@ const NATIVE_SELECT = "recipe-select";
  * recordings and what each other label means. The app picks which recordings train and which test (never the same one) and
  * shows you that before anything runs. The result is a Draft you review before it can do anything.
  */
-export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLab }: TrainPanelProps) {
+export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLab }: TrainPanelProps) {
   const uid = useId();
   const run = useTrainingRun(desktopAvailable);
   const running = run.running;
@@ -50,11 +50,12 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
   const usable = labels.filter((label) => label.archivedAt === null && !label.standard);
   const isStandard = (id: string) => labels.some((label) => label.id === id && label.standard);
   // Sealed recordings are kept for the final test: never trained on, nor used to choose anything.
-  const candidates = inImportOrder(datasets.filter((dataset) => datasetLabels(dataset).length > 0 && !dataset.sealed));
-  const sealedCount = datasets.filter((dataset) => dataset.sealed).length;
-  const others = otherLabels(datasets, selected, target);
-  const request = target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, research, labelOffsetMs: labelOffset, method, hardNegatives });
+  const candidates = useMemo(() => inImportOrder(datasets.filter((dataset) => datasetLabels(dataset).length > 0 && !dataset.sealed)), [datasets]);
+  const sealedCount = useMemo(() => datasets.filter((dataset) => dataset.sealed).length, [datasets]);
+  const others = useMemo(() => otherLabels(datasets, selected, target), [datasets, selected, target]);
+  const request = useMemo(() => target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, research, labelOffsetMs: labelOffset, method, hardNegatives }), [target, selected, others, roles, research, labelOffset, method, hardNegatives]);
   const requestKey = JSON.stringify(request);
+  const coverage = useMemo(() => plan ? splitCoverage(datasets, plan.train, plan.evaluation, target) : [], [datasets, plan, target]);
 
   useEffect(() => {
     if (!desktopAvailable) return;
@@ -68,21 +69,23 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
       return;
     }
     let stale = false;
-    void invoke<TrainPlan>("plan_label_training", { request })
+    setPlan(null);
+    const timer = window.setTimeout(() => { void invoke<TrainPlan>("plan_label_training", { request })
       .then((next) => { if (!stale) setPlan(next); })
       .catch((err) => { if (!stale) setPlan({ train: [], evaluation: [], problem: String(err), inputs: method === CNN_METHOD ? CNN_MODEL.inputs : PULSE_MODEL.inputs }); });
-    return () => { stale = true; };
+    }, 150);
+    return () => { stale = true; window.clearTimeout(timer); };
     // `requestKey` stands for every part of `request`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desktopAvailable, requestKey]);
 
-  const toggleRecording = (id: string) =>
+  const toggleRecording = useCallback((id: string) =>
     setSelected((previous) => {
       const next = new Set(previous);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
-    });
+    }), []);
 
   const chooseTarget = (label: string) => {
     setTarget(label);
@@ -168,24 +171,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
 
         {target !== "" && (
           <>
-            <fieldset className="flex flex-col gap-2">
-              <legend className="label">Recordings to use</legend>
-              {candidates.length === 0 ? (
-                <p className="field-hint">No recordings imported yet.</p>
-              ) : (
-                <ul className="flex flex-col gap-1" aria-label="Recordings to use">
-                  {candidates.map((dataset) => (
-                    <li key={dataset.id} className="flex items-center gap-2 text-sm">
-                      <Checkbox checked={selected.has(dataset.id)} disabled={running !== null} onCheckedChange={() => toggleRecording(dataset.id)} aria-label={`Use ${dataset.originalFilename}`} />
-                      <span>{dataset.sequence ? <strong className="mr-2 font-mono">{recordingNumber(dataset)}</strong> : null}{recordingTitle(dataset)}{dataset.camera ? "" : <span className="text-muted-foreground"> · no camera</span>}{dataset.labelsFrom === "motion" ? <span className="text-muted-foreground"> · estimated labels</span> : null}</span>
-                      <small className="text-muted-foreground">{datasetLabels(dataset).map((label) => <LabelSwatch key={label} label={label} catalogue={labels} />)}{datasetLabels(dataset).join(", ")}</small>
-                      {hasLabel(dataset, target) && <Badge variant="secondary">has {target}</Badge>}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {sealedCount > 0 && <p className="field-hint">{sealedCount} sealed recording{sealedCount === 1 ? " is" : "s are"} kept out for the final test.</p>}
-            </fieldset>
+            <TrainingRecordings candidates={candidates} selected={selected} disabled={running !== null} labels={labels} target={target} sealedCount={sealedCount} toggleRecording={toggleRecording} />
 
             {others.length > 0 && (
               <fieldset className="flex flex-col gap-2">
@@ -193,7 +179,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
                 <p className="field-hint">“Something else” teaches the model what is not the gesture: their starts are the hardest thing for it to tell apart. “Leave out” ignores that part of the recordings. Nothing is assumed: each label here has a role.</p>
                 <ul className="flex flex-col gap-2" aria-label="Roles of the other labels">
                   {others.map((other) => (
-                    <li key={other} className="flex items-center gap-2 text-sm">
+                    <li key={other} className="flex flex-wrap items-center gap-2 text-sm">
                       <span className="min-w-32"><LabelSwatch label={other} catalogue={labels} /><code>{other}</code></span>
                       <select aria-label={`Role of ${other}`} className={NATIVE_SELECT} value={roles[other] ?? "negative"} disabled={running !== null} onChange={(event) => setRoles((previous) => ({ ...previous, [other]: event.target.value as OtherRole }))}>
                         <option value="negative">Something else (not {target})</option>
@@ -217,7 +203,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
                     <p className="field-hint">
                       It will train on {plan.train.length} recording{plan.train.length === 1 ? "" : "s"} ({plan.train.map(name).join(", ")}) and test on {plan.evaluation.length} it never trains on ({plan.evaluation.map(name).join(", ")}).
                     </p>
-                    <SplitCoverageTable rows={splitCoverage(datasets, plan.train, plan.evaluation, target)} label={target} />
+                    <SplitCoverageTable rows={coverage} label={target} />
                     {recordingsWithLabel(datasets, plan.train, target) < 2 && (
                       <Alert role="note">
                         <AlertDescription>
@@ -250,7 +236,7 @@ export function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLa
       </CardContent>
     </Card>
   );
-}
+});
 
 /** Holds of the label by arm and wrist on each side of the split, with what only one side has called out. */
 function SplitCoverageTable({ rows, label }: { rows: SplitCondition[]; label: string }) {
@@ -279,3 +265,31 @@ function SplitCoverageTable({ rows, label }: { rows: SplitCondition[]; label: st
     </div>
   );
 }
+
+
+/** Progress and runtime polling must not rebuild the recording checkboxes and swatches. */
+const TrainingRecordings = memo(function TrainingRecordings({ candidates, selected, disabled, labels, target, sealedCount, toggleRecording }: {
+  candidates: DatasetSummary[]; selected: Set<string>; disabled: boolean; labels: DatasetLabel[]; target: string; sealedCount: number; toggleRecording: (id: string) => void;
+}) {
+  return (
+            <fieldset className="flex flex-col gap-2">
+              <legend className="label">Recordings to use</legend>
+              {candidates.length === 0 ? (
+                <p className="field-hint">No recordings imported yet.</p>
+              ) : (
+                <ul className="flex flex-col gap-1" aria-label="Recordings to use">
+                  {candidates.map((dataset) => (
+                    <li key={dataset.id} className="flex flex-wrap items-center gap-2 text-sm">
+                      <Checkbox checked={selected.has(dataset.id)} disabled={disabled} onCheckedChange={() => toggleRecording(dataset.id)} aria-label={`Use ${dataset.originalFilename}`} />
+                      <span>{dataset.sequence ? <strong className="mr-2 font-mono">{recordingNumber(dataset)}</strong> : null}{recordingTitle(dataset)}{dataset.camera ? "" : <span className="text-muted-foreground"> · no camera</span>}{dataset.labelsFrom === "motion" ? <span className="text-muted-foreground"> · estimated labels</span> : null}</span>
+                      <Badge variant="outline" aria-label={`Dataset group: ${dataset.group?.trim() || "Ungrouped"}`}>Group: {dataset.group?.trim() || "Ungrouped"}</Badge>
+                      <small className="text-muted-foreground">{datasetLabels(dataset).map((label) => <LabelSwatch key={label} label={label} catalogue={labels} />)}{datasetLabels(dataset).join(", ")}</small>
+                      {hasLabel(dataset, target) && <Badge variant="secondary">has {target}</Badge>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {sealedCount > 0 && <p className="field-hint">{sealedCount} sealed recording{sealedCount === 1 ? " is" : "s are"} kept out for the final test.</p>}
+            </fieldset>
+  );
+});

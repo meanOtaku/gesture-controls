@@ -542,7 +542,12 @@ pub async fn suggest_label_offset(
 
 /// Says how a request would be split, or why it cannot be, without recording or starting anything.
 #[tauri::command]
-pub fn plan_label_training(app: AppHandle, request: TrainRequest) -> PlanView {
+pub async fn plan_label_training(app: AppHandle, request: TrainRequest) -> Result<PlanView, String> {
+    tauri::async_runtime::spawn_blocking(move || plan_label_training_blocking(&app, &request))
+        .await.map_err(|e| e.to_string())
+}
+
+fn plan_label_training_blocking(app: &AppHandle, request: &TrainRequest) -> PlanView {
     let inputs = method_of(&request).map_or(pinch_start_contract().features.len(), |(_, contract)| contract.features.len());
     let result = recordings_for(&app, &request).and_then(|checked| {
         plan_split(&checked.recordings, &checked.mapping, &checked.target)
