@@ -49,8 +49,10 @@ It works from little data and trains quickly, but it only sees what the summarie
 `cnn_input.py` builds the input and `cnn.py` trains it. `crates/pinch-inference/src/cnn_input.rs` builds the same input live,
 and `tests/fixtures/cnn_input_cases.json` keeps the two equal.
 
-- **Input:** accelerometer, gyroscope and pulse (9 channels) on a 50-a-second grid. Each step is z-scored against its
-  channel's previous 10 s and put through a sigmoid, and the last second goes in.
+- **Input:** accelerometer, gyroscope and pulse (9 channels) on a 50-a-second grid. Each channel is centred and scaled by the
+  median and median absolute deviation of its last 11 s and put through a sigmoid, and the last second goes in. Models of the
+  earlier `ppg_imu_cnn` kind used a rolling 10 s mean and deviation, and keep running that way, but a burst of motion leaves
+  them nearly blind for 10 s ([why](../research/cnn-motion-hangover-2026-11.md)).
 - **Network:** three dilated convolutions (32, 32 and 64 channels, kernel 5, dilation 1, 2, 4), each with batch normalisation;
   each channel's maximum and mean over time; a dense layer of 32 with dropout; one output.
 - **Three networks** are trained from different seeds and their probabilities averaged, which steadies the score.

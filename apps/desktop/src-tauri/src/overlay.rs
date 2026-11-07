@@ -81,13 +81,16 @@ pub struct OverlayRuntime {
     native_write_lock: Mutex<()>,
 }
 
-/// How far a recipe-driven interaction has asked the volume to move, in volume points (0..=100).
-///
-/// `wanted` is the base volume plus every change the device has asked for; `submitted` follows it no faster
-/// than the configured slew rate, so a fast wrist flick cannot change the loudness faster than that.
+const VOLUME_JITTER_BAND_POINTS: f32 = 0.5;
+const VOLUME_SMOOTHING_SECONDS: f32 = 0.15;
+
+/// Tracks a grab in volume points (0..=100). `wanted` includes every small movement;
+/// `accepted` changes only when they add up. Smooth that target before limiting its speed.
 #[derive(Debug, Default, Clone, Copy)]
 struct RecipeDrive {
     wanted: f32,
+    accepted: f32,
+    smoothed: f32,
     submitted: f32,
     last_at: Option<Instant>,
 }
@@ -96,20 +99,32 @@ impl RecipeDrive {
     fn begin(base_percent: f32) -> Self {
         Self {
             wanted: base_percent,
+            accepted: base_percent,
+            smoothed: base_percent,
             submitted: base_percent,
             last_at: None,
         }
     }
 
-    /// Adds a device change and returns the slew-limited target to write.
+    /// Adds a device change and returns the smoothed, slew-limited target to write.
     fn advance(&mut self, delta_percent: f32, max_points_per_second: f32, now: Instant) -> f32 {
         self.wanted = (self.wanted + delta_percent).clamp(0.0, 100.0);
         let elapsed = self
             .last_at
-            .map_or(0.0, |at| now.duration_since(at).as_secs_f32());
+            .map_or(0.02, |at| now.saturating_duration_since(at).as_secs_f32());
         self.last_at = Some(now);
-        let max_step = max_points_per_second * elapsed.max(0.02);
-        self.submitted += (self.wanted - self.submitted).clamp(-max_step, max_step);
+        if (self.wanted - self.accepted).abs() >= VOLUME_JITTER_BAND_POINTS
+            || self.wanted == 0.0
+            || self.wanted == 100.0
+        {
+            self.accepted = self.wanted;
+        }
+        // Exponential smoothing uses elapsed time, not a fixed coefficient per sample:
+        // changing sensor rates must not change the feel of the knob.
+        let alpha = -(-elapsed / VOLUME_SMOOTHING_SECONDS).exp_m1();
+        self.smoothed += alpha * (self.accepted - self.smoothed);
+        let max_step = max_points_per_second * elapsed;
+        self.submitted += (self.smoothed - self.submitted).clamp(-max_step, max_step);
         self.submitted
     }
 }
@@ -807,5 +822,73 @@ mod tests {
         assert_eq!(drive.wanted, 100.0);
         drive.advance(-500.0, 1000.0, start);
         assert_eq!(drive.wanted, 0.0);
+    }
+    #[test]
+    fn high_rate_samples_do_not_multiply_the_volume_slew_budget() {
+        let start = Instant::now();
+        let mut drive = RecipeDrive::begin(50.0);
+        drive.advance(30.0, 20.0, start);
+        for tick in 1..=200 {
+            drive.advance(0.0, 20.0, start + Duration::from_millis(tick * 5));
+        }
+        assert!((drive.submitted - 70.4).abs() < 0.001);
+        let before = drive.submitted;
+        assert_eq!(
+            drive.advance(0.0, 20.0, start + Duration::from_secs(1)),
+            before
+        );
+        // No new rotation is necessary for the remaining rate-limited movement to catch up.
+        assert!((drive.advance(0.0, 20.0, start + Duration::from_secs(2)) - 80.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn volume_smoothing_ignores_small_jitter_but_accumulates_slow_turns() {
+        let start = Instant::now();
+        let mut drive = RecipeDrive::begin(50.0);
+        for tick in 0..100 {
+            let delta = if tick % 2 == 0 { 0.2 } else { -0.2 };
+            assert_eq!(
+                drive.advance(delta, 1000.0, start + Duration::from_millis(tick * 10)),
+                50.0
+            );
+        }
+        for tick in 100..106 {
+            drive.advance(0.1, 1000.0, start + Duration::from_millis(tick * 10));
+        }
+        assert!(drive.submitted > 50.0 && drive.submitted < 50.6);
+    }
+
+    #[test]
+    fn volume_smoothing_is_time_based_and_settles_without_overshoot() {
+        let start = Instant::now();
+        let run = |interval: u64| {
+            let mut drive = RecipeDrive::begin(50.0);
+            let first = drive.advance(10.0, 1000.0, start);
+            assert!(first > 50.0 && first < 53.0);
+            let mut previous = first;
+            for tick in 1..=(600 / interval) {
+                let next =
+                    drive.advance(0.0, 1000.0, start + Duration::from_millis(tick * interval));
+                assert!(next >= previous && next <= 60.0);
+                previous = next;
+            }
+            assert!((previous - 60.0).abs() < 0.2);
+            previous
+        };
+        assert!((run(5) - run(20)).abs() < 0.001);
+        // A new grab starts from the actually applied volume, not the old filter target.
+        let mut fresh = RecipeDrive::begin(55.0);
+        assert_eq!(fresh.advance(0.0, 1000.0, start), 55.0);
+    }
+
+    #[test]
+    fn volume_smoothing_can_reach_both_endpoints_despite_the_jitter_band() {
+        let start = Instant::now();
+        let mut high = RecipeDrive::begin(99.8);
+        let mut low = RecipeDrive::begin(0.2);
+        high.advance(0.2, 1000.0, start);
+        low.advance(-0.2, 1000.0, start);
+        assert!(high.advance(0.0, 1000.0, start + Duration::from_secs(2)) > 99.99);
+        assert!(low.advance(0.0, 1000.0, start + Duration::from_secs(2)) < 0.01);
     }
 }

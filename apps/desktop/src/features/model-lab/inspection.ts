@@ -23,17 +23,19 @@ export interface Research {
 }
 export interface Inspection {
   version: number;
-  kind: "trees";
+  /** Trees say which inputs they lean on; a CNN has no such list. */
+  kind: "trees" | "cnn";
   backend: string;
   target: string;
-  /** How many inputs the model reads (the pinch-start features). */
+  /** How many inputs the model reads. */
   inputCount: number;
+  /** How many trees; 0 for a CNN. */
   trees: number;
   /** What it reads (absent from models trained before motion: the pulse sensor alone). */
   sources?: string[];
   /** Which score starts a detection (absent before triggers: the edge). */
   trigger?: "edge" | "peak";
-  /** The inputs the trees lean on most (mean decrease in impurity), most first. */
+  /** The inputs the trees lean on most (mean decrease in impurity), most first; empty for a CNN. */
   importance: { name: string; importance: number }[];
   /** Every held-out decision: its recording, whether it is a start of the gesture (1), and the model's score. */
   evaluation: {
@@ -58,9 +60,11 @@ export interface ModelInspectionView {
   inspection: Inspection | null;
 }
 
-/** The inspection, if it is one this view can show (a model trained with the pulse model). */
+/** The inspection, if it is one this view can show. */
 export function currentInspection(value: unknown): Inspection | null {
-  return typeof value === "object" && value !== null && (value as { kind?: unknown }).kind === "trees" ? (value as Inspection) : null;
+  if (typeof value !== "object" || value === null) return null;
+  const { kind } = value as { kind?: unknown };
+  return kind === "trees" || kind === "cnn" ? (value as Inspection) : null;
 }
 
 export const percent = (value: number): string => `${(value * 100).toFixed(0)}%`;
@@ -78,13 +82,20 @@ const ORDER: Record<string, string> = { d1: "slope", d2: "curvature", d3: "jerk"
 const MOTION: Record<string, string> = {
   accel_x: "acceleration x", accel_y: "acceleration y", accel_z: "acceleration z", accel_mag: "acceleration size",
   gyro_x: "rotation x", gyro_y: "rotation y", gyro_z: "rotation z", gyro_mag: "rotation size",
+  ppg_green: "green light", ppg_red: "red light", ppg_ir: "infrared light",
 };
 
 /**
  * One input's name in words: a pulse input (`ppg_z1000ms_d1_green_n8_q10`: "green slope against the last 1 s: 10th
- * percentile over 0.32 s") or a motion one (`imu_accel_x_diff_n320ms_std`: "change in acceleration x: spread over 0.32 s").
+ * percentile over 0.32 s"), a motion one (`imu_accel_x_diff_n320ms_std`: "change in acceleration x: spread over 0.32 s") or
+ * a CNN's (`cnn_accel_x_t00`: "acceleration x, 0.98 s before the decision").
  */
 export function describeInput(name: string): string {
+  const tick = /^cnn_([a-z]+_[a-z]+)_t(\d{2})$/.exec(name);
+  if (tick && MOTION[tick[1]]) {
+    const before = (49 - Number(tick[2])) * 0.02;
+    return before === 0 ? `${MOTION[tick[1]]}, at the decision` : `${MOTION[tick[1]]}, ${before.toFixed(2)} s before the decision`;
+  }
   const pulse = /^ppg_z(\d+)ms_(d[123])_(green|red|ir)_n(\d+)_(.+)$/.exec(name);
   if (pulse) {
     const [, history, order, channel, window, stat] = pulse;

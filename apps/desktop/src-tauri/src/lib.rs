@@ -182,6 +182,7 @@ pub fn run() {
             label_runtime::stop_shadow_model,
             label_runtime::get_shadow_model,
             label_training::plan_label_training,
+            label_training::find_same_session_recordings,
             label_training::check_label_trainer,
             label_training::suggest_label_offset,
             label_training::start_label_training,

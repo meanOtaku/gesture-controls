@@ -1,5 +1,6 @@
-"""Writes crates/label-inference/tests/fixtures/ppg_onset_bundle, ppg_imu_onset_bundle and ppg_imu_cnn_bundle: a bundle
-of each kind this trainer made, and what it must answer.
+"""Writes crates/label-inference/tests/fixtures/ppg_onset_bundle, ppg_imu_onset_bundle and ppg_imu_cnn_median_bundle: a
+bundle of each kind this trainer makes, and what it must answer. ppg_imu_cnn_bundle is the earlier rolling-scaled CNN, which
+this trainer no longer makes: it is kept as it is, so the runtime stays tested on the models people already have.
 
 The runtime's tests load each bundle through the full validation and feed `expected.json`'s trace (pinches and fists for
 15 s, then 9 s of quiet: the PPG, and for the PPG + IMU models the motion too) through the live pipeline; every score
@@ -61,11 +62,11 @@ def write(name: str, motion: bool, backend: str = lt.BACKEND) -> None:
 def main() -> None:
     write("ppg_onset_bundle", motion=False)
     write("ppg_imu_onset_bundle", motion=True)
-    write("ppg_imu_cnn_bundle", motion=True, backend=lt.CNN_BACKEND)
+    write("ppg_imu_cnn_median_bundle", motion=True, backend=lt.CNN_BACKEND)
 
 
 if __name__ == "__main__":
     if sys.argv[1:] == ["cnn"]:
-        write("ppg_imu_cnn_bundle", motion=True, backend=lt.CNN_BACKEND)
+        write("ppg_imu_cnn_median_bundle", motion=True, backend=lt.CNN_BACKEND)
     else:
         main()

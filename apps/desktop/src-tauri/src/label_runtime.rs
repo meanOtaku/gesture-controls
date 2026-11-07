@@ -1090,7 +1090,10 @@ impl LabelRuntimeHost {
             Err(_) => (BTreeSet::new(), BTreeSet::new()),
         };
         // Recipes are told when something they can see changes, and by the 100 ms tick when a one-shot's moment is over.
-        let (risen, dropped) = recipe_edges(&output);
+        let (risen, mut dropped) = recipe_edges(&output);
+        if output.reset_interactions {
+            dropped.extend(loaded.iter().cloned());
+        }
         let now = self.now_ns();
         let push = self
             .push_gate
@@ -1157,7 +1160,13 @@ fn record(state: &mut HostState, output: &RuntimeOutput) {
 /// rather than ending normally (a one-shot waiting on them must not fire).
 fn recipe_edges(output: &RuntimeOutput) -> (Vec<String>, Vec<String>) {
     let mut risen = Vec::new();
-    let mut dropped = Vec::new();
+    let mut dropped: Vec<String> = output
+        .rejections
+        .iter()
+        .map(|r| r.label.to_string())
+        .collect();
+    dropped.extend(output.conflicts.iter().flat_map(conflict_labels));
+    dropped.extend(output.blocked_labels.iter().map(ToString::to_string));
     for event in &output.actionable {
         match event {
             DetectionEvent::Rising { label, .. } => risen.push(label.to_string()),

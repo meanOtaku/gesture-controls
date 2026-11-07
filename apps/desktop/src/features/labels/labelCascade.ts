@@ -120,7 +120,11 @@ export function planCascade(mode: CascadeMode, labelId: string, sources: Cascade
     if (others.length > 0) blockers.push(`The training recording “${recordingName(dataset)}” also holds ${others.join(", ")}. Delete or replace it in Model Lab first.`);
     else steps.push({ kind: "deleteDataset", id: dataset.id, name: recordingName(dataset) });
   }
-  const bundles = sources.bundles.filter((bundle) => bundle.labelIds.includes(labelId));
+  // A session whose last training recording goes above goes with it, so there are no marks left to remove.
+  const deleted = new Set(steps.flatMap((step) => (step.kind === "deleteDataset" ? [step.id] : [])));
+  const going = new Set(datasets.filter((dataset) => deleted.has(dataset.id)).flatMap((dataset) => dataset.sourceRecordingId ?? []));
+  for (const dataset of sources.datasets) if (!deleted.has(dataset.id) && dataset.sourceRecordingId) going.delete(dataset.sourceRecordingId);
+  const bundles = sources.bundles.filter((bundle) => bundle.labelIds.includes(labelId) && !going.has(bundle.recordingId));
   for (const bundle of bundles) steps.push({ kind: "removeIntervals", recordingId: bundle.recordingId });
   steps.push({ kind: "deleteLabel" });
 
@@ -148,7 +152,7 @@ const describe = (step: CascadeStep): string => {
     case "setModelState": return `moving a model to ${step.to}`;
     case "deleteModel": return "deleting a model";
     case "deleteTrainingHistory": return "deleting its training history";
-    case "deleteDataset": return `deleting “${step.name}” from the training data`;
+    case "deleteDataset": return `deleting “${step.name}” and its saved session`;
     case "removeIntervals": return "removing marks from a recording";
     case "archiveLabel": return "archiving the label";
     case "restoreLabel": return "restoring the label";

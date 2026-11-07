@@ -27,7 +27,7 @@ import { groupRecordings } from "../model-lab/recordingFilters";
 import { recordingLine, recordingWhen } from "../model-lab/recordingNames";
 import { SectionHeader } from "../../components/app/SectionHeader";
 import { chooseExportFolder } from "../../shared/tauri/exportCsv";
-import { getRecordingCameraEvidence, notifyRecordingsChanged } from "../../shared/tauri/recordingBundle";
+import { getRecordingCameraEvidence, notifyRecordingsChanged, onRecordingsChanged } from "../../shared/tauri/recordingBundle";
 import type { GestureDefinition } from "../gestureLibrary/definition";
 import { listGestureDefinitions } from "../gestureLibrary/gestureLibraryApi";
 import { cameraTrack, contactOnsets, contactThreshold, handsAt, type CameraTrack } from "./cameraTrack";
@@ -85,7 +85,7 @@ export function forgetLabellingWork(): void {
 
 
 /**
- * Label a recording by hand. Open a Model Lab recording, a dataset folder or a CSV; every column is drawn on one shared
+ * Label a recording by hand. Open a recording from Datasets, a dataset folder or a CSV; every column is drawn on one shared
  * timeline; drag across any graph to select a stretch, choose a label and apply it (or "Nothing here", or erase). The
  * labels go in the recording's `manual_label` column, which training uses wherever it is set. Save to original updates
  * the opened source; saving a version or exporting keeps a separate copy.
@@ -134,6 +134,7 @@ export function LabellingPage() {
     kept = recording ? { recording, history, saved, view, hidden, laneSize, fitToView } : null;
   }, [recording, history, saved, view, hidden, laneSize, fitToView]);
 
+  const [listsLoaded, setListsLoaded] = useState(false);
   const refreshLists = useCallback(async () => {
     if (!desktopAvailable) return;
     try {
@@ -142,6 +143,7 @@ export function LabellingPage() {
         invoke<DatasetLabel[]>("list_model_labels"),
       ]);
       setDatasets(inImportOrder(Array.isArray(sets) ? sets : []));
+      setListsLoaded(true);
       setCatalogue((Array.isArray(labels) ? labels : []).filter((label) => !label.archivedAt));
       const gestures = await listGestureDefinitions().catch(() => []);
       setDefinitions(Array.isArray(gestures) ? gestures : []);
@@ -150,6 +152,18 @@ export function LabellingPage() {
     }
   }, [desktopAvailable]);
   useEffect(() => void refreshLists(), [refreshLists]);
+  // Datasets is the one list: what is added or deleted there shows here too.
+  useEffect(() => onRecordingsChanged(() => void refreshLists()), [refreshLists]);
+  // A recording deleted from Datasets is gone from here as well, even with its draft kept for this session.
+  useEffect(() => {
+    if (!listsLoaded || recording?.source.kind !== "dataset") return;
+    const { id } = recording.source;
+    if (datasets.some((dataset) => dataset.id === id)) return;
+    setRecording(null);
+    setHistory(historyOf([]));
+    setSaved([]);
+    setMessage({ tone: "error", text: "That recording was deleted from Datasets, so it was closed here." });
+  }, [listsLoaded, datasets, recording]);
 
   useEffect(() => {
     const element = area.current;
@@ -360,7 +374,7 @@ export function LabellingPage() {
       await refreshLists();
       // The new version is what you go on labelling; the original stays as it was.
       await load({ kind: "dataset", id: summary.id });
-      OperationFeedback.success("Saved", `A new recording in Model Lab: ${recordingLine(summary)}. The original is unchanged.`);
+      OperationFeedback.success("Saved", `A new dataset: ${recordingLine(summary)}. The original is unchanged.`);
     } catch (error) {
       setMessage({ tone: "error", text: `Not saved: ${String(error)}` });
     } finally {
@@ -371,7 +385,8 @@ export function LabellingPage() {
   // Exports go where, and in the form, the shared Exports setting says (the Recorder's Exports card).
   const exportFolder = useSyncExternalStore(exportFolderStore.subscribe, exportFolderStore.get, exportFolderStore.get);
   const exportFormat = useSyncExternalStore(exportFolderStore.subscribe, exportFolderStore.getFormat, exportFolderStore.getFormat);
-  const exportIt = async () => {
+  /** To the usual folder, or (`chooseFolder`) to one picked for this export alone. */
+  const exportIt = async (chooseFolder = false) => {
     if (!recording) return;
     const originalName = recording.name.replace(/\.csv$/i, "");
     const existing = /gesture-dataset-[\w.-]+-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z/.exec(originalName);
@@ -382,11 +397,11 @@ export function LabellingPage() {
     const timestamp = new Date(recordedAt || Date.now()).toISOString().replaceAll(":", "-");
     const base = existing?.[0] ?? `gesture-dataset-${label}-${timestamp}`;
     try {
-      let parent = exportFolder;
+      let parent = chooseFolder ? null : exportFolder;
       if (!parent) {
-        parent = await chooseExportFolder("Choose where exports go");
+        parent = await chooseExportFolder(chooseFolder ? "Export this recording to" : "Choose where exports go");
         if (!parent) return;
-        exportFolderStore.set(parent);
+        if (!chooseFolder) exportFolderStore.set(parent);
       }
       const target: { kind: "folder"; parent: string; name: string } | { kind: "csv"; path: string } =
         exportFormat === "folder"
@@ -678,18 +693,18 @@ export function LabellingPage() {
         <CardHeader>
           <SectionHeader
             title="Recording"
-            description="Open a recording from Model Lab, or a dataset folder or CSV exported by the Recorder. Files without a manual_label column get one."
+            description="Open a recording from Datasets, or a dataset folder or CSV exported by the Recorder. Files without a manual_label column get one."
             status={dirty ? <Badge variant="outline">Unsaved labels</Badge> : null}
           />
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-3">
           <div className="field min-w-64 max-w-3xl flex-1">
-            <Label htmlFor="labelling-dataset">Model Lab recording</Label>
+            <Label htmlFor="labelling-dataset">Dataset</Label>
             <Select value={currentSource} onValueChange={(id) => id && request({ kind: "dataset", id })}>
-              <SelectTrigger id="labelling-dataset" aria-label="Model Lab recording">
+              <SelectTrigger id="labelling-dataset" aria-label="Dataset">
                 <SelectValue placeholder="Choose a recording">
                   {(id: string | null) => {
-                    if (!id) return datasets.length > 0 ? "Choose a recording" : "No recordings in Model Lab yet";
+                    if (!id) return datasets.length > 0 ? "Choose a recording" : "Nothing in Datasets yet";
                     const dataset = datasets.find((entry) => entry.id === id);
                     return dataset ? recordingLine(dataset) : id;
                   }}
@@ -1097,13 +1112,14 @@ export function LabellingPage() {
           <CardHeader>
             <SectionHeader
               title="Keep it"
-              description="Save to original updates this dataset’s manual_label column with your labels. Save as new version keeps a separate copy in Model Lab. Export includes all available recording files and manual labels. CSV exports also include a companion folder for supporting files."
+              description="Save to original updates this dataset’s manual_label column with your labels. Save as new dataset keeps a separate copy in Datasets, and leaves this one as it was. Export includes all available recording files and manual labels. CSV exports also include a companion folder for supporting files."
             />
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-4">
             <Button onClick={() => void saveOriginal()} disabled={busy || !dirty}>Save to original</Button>
-            <Button variant="outline" onClick={() => void saveVersion()} disabled={busy || !dirty}>Save as new version</Button>
+            <Button variant="outline" onClick={() => void saveVersion()} disabled={busy || !dirty}>Save as new dataset</Button>
             <Button variant="outline" onClick={() => void exportIt()} disabled={busy}>Export</Button>
+            <Button variant="outline" onClick={() => void exportIt(true)} disabled={busy}>Export to a folder…</Button>
             <div className="basis-full">
               <ExportSettingsCard compact />
               <p className="hint">The same export setting as the Recorder&apos;s: change it here or there.</p>

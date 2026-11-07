@@ -21,7 +21,10 @@ use model_lab_core::{InputContract, LabelId, QualityRules, StreamSource, Thresho
 use pinch_inference::ppg_onset::{GRID_TICKS, MAX_GAP_MS, TICK_NS};
 
 use crate::cnn::{Cnn, CnnError};
-use crate::inputs::{CNN_PREPROCESSING, ModelKind, PPG_IMU_PREPROCESSING, PPG_ONLY_PREPROCESSING};
+use crate::inputs::{
+    CNN_MEDIAN_PREPROCESSING, CNN_PREPROCESSING, ModelKind, PPG_IMU_PREPROCESSING,
+    PPG_ONLY_PREPROCESSING,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -63,7 +66,7 @@ pub enum BundleError {
     )]
     UnsupportedFormat(String),
     #[error(
-        "unsupported preprocessing '{0}': this app's models read '{PPG_IMU_PREPROCESSING}' (the pulse and motion), '{CNN_PREPROCESSING}' (the pulse and motion, for a CNN) or '{PPG_ONLY_PREPROCESSING}' (the pulse alone)"
+        "unsupported preprocessing '{0}': this app's models read '{PPG_IMU_PREPROCESSING}' (the pulse and motion), '{CNN_MEDIAN_PREPROCESSING}' or '{CNN_PREPROCESSING}' (the pulse and motion, for a CNN) or '{PPG_ONLY_PREPROCESSING}' (the pulse alone)"
     )]
     UnsupportedPreprocessing(String),
     #[error(
@@ -438,9 +441,26 @@ pub(crate) mod tests {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ppg_imu_onset_bundle")
     }
 
-    /// The CNN bundle the trainer made for the runtime's tests.
+    /// The earlier rolling-scaled CNN bundle, kept for the versions people already have.
     pub fn cnn_fixture_dir() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ppg_imu_cnn_bundle")
+    }
+
+    /// The CNN bundle the trainer makes now.
+    pub fn median_cnn_fixture_dir() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ppg_imu_cnn_median_bundle")
+    }
+
+    #[test]
+    fn the_trainers_median_cnn_bundle_is_valid_and_reads_its_own_contract() {
+        let bundle = validate_bundle(&median_cnn_fixture_dir(), None).unwrap();
+        assert_eq!(bundle.kind, ModelKind::CnnMedian);
+        assert_eq!(bundle.manifest.model.format, CNN_MODEL_FORMAT);
+        assert_eq!(
+            bundle.manifest.input_contract(),
+            ModelKind::CnnMedian.contract()
+        );
+        assert_eq!(bundle.manifest.thresholds.decision_delay_ms, Some(500));
     }
 
     #[test]

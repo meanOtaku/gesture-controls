@@ -22,7 +22,6 @@ use pinch_inference::ppg_onset::{PpgSample as Sample, features};
 use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
 
 use crate::clock::ClockMap;
-use crate::inputs::ModelKind;
 use crate::model::{InputCheck, LoadedModel};
 
 const NS_PER_MS: u64 = 1_000_000;
@@ -482,7 +481,8 @@ impl LabelPipeline {
             Vec::new()
         };
         // The CNN reads the pulse on the watch's clock, as the motion is (the trainer's recordings share one clock).
-        let pulse_on_watch: Vec<Sample> = if model.kind == ModelKind::Cnn {
+        let cnn_scaling = model.kind.cnn_scaling();
+        let pulse_on_watch: Vec<Sample> = if cnn_scaling.is_some() {
             self.ppg
                 .iter()
                 .filter_map(|s| {
@@ -501,11 +501,11 @@ impl LabelPipeline {
         let mut through = None;
         for sample in pending {
             // The model's inputs, from the samples' own timestamps, for a decision at this sample: what the trainer computes.
-            let inputs = match (motion_through, sample.watch_ns) {
-                (Some(_), Some(at)) if model.kind == ModelKind::Cnn => {
-                    cnn_input::inputs(&motion, &pulse_on_watch, at)
+            let inputs = match (motion_through, sample.watch_ns, cnn_scaling) {
+                (Some(_), Some(at), Some(scaling)) => {
+                    cnn_input::inputs(&motion, &pulse_on_watch, at, scaling)
                 }
-                (Some(_), Some(at)) => {
+                (Some(_), Some(at), None) => {
                     features(&samples, sample.raw_ts_ns).and_then(|mut pulse| {
                         pulse.extend(imu_onset::features(&motion, at)?);
                         Some(pulse)
@@ -539,7 +539,8 @@ impl LabelPipeline {
 pub(crate) mod tests {
     use super::*;
     use crate::model::tests::{
-        expected, expected_cnn, expected_motion, loaded, loaded_cnn, loaded_motion,
+        expected, expected_cnn, expected_median_cnn, expected_motion, loaded, loaded_cnn,
+        loaded_median_cnn, loaded_motion,
     };
 
     /// One PPG batch of the samples `from..to` of `trace` (statuses all valid).
@@ -769,9 +770,21 @@ pub(crate) mod tests {
 
     #[test]
     fn a_cnn_scores_the_live_streams_as_the_trainer_did() {
+        scores_the_live_streams(&loaded_cnn(), expected_cnn());
+    }
+
+    #[test]
+    fn a_median_cnn_scores_the_live_streams_as_the_trainer_did() {
+        scores_the_live_streams(&loaded_median_cnn(), expected_median_cnn());
+    }
+
+    fn scores_the_live_streams(
+        model: &LoadedModel,
+        expected: (Vec<Sample>, Vec<MotionSample>, Vec<Option<f64>>),
+    ) {
         // The pulse arrives on its own clock: the CNN must place it on the watch's, as the trainer's recordings have it.
-        let (trace, _, probabilities) = expected_cnn();
-        let (scores, rejected) = replay_streams(&loaded_cnn(), expected_cnn(), 60);
+        let (trace, _, probabilities) = expected.clone();
+        let (scores, rejected) = replay_streams(model, expected, 60);
         assert!(rejected.is_empty(), "{rejected:?}");
         assert!(scores.len() > 250, "{}", scores.len());
         for score in &scores {

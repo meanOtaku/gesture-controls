@@ -30,6 +30,59 @@ function setup(over: Partial<React.ComponentProps<typeof DatasetManager>> = {}) 
   return props;
 }
 
+describe("DatasetManager finding duplicates", () => {
+  const original: DatasetSummary = { ...dataset, id: "a", sequence: 1, name: "Original", contentSha: "1", quality: { poorContactShare: 0, holds: { pinch_in: 20 }, shortHolds: 0 } };
+  const relabelled: DatasetSummary = { ...dataset, id: "b", sequence: 2, name: "Relabelled", contentSha: "2", quality: { poorContactShare: 0, holds: { pinch_in: 13 }, shortHolds: 0 } };
+  const alone: DatasetSummary = { ...dataset, id: "c", sequence: 3, name: "Alone", contentSha: "3" };
+
+  it("says when there are none", async () => {
+    invokeMock.mockResolvedValueOnce([]);
+    setup({ datasets: [original, alone] });
+    fireEvent.click(screen.getByRole("button", { name: "Find duplicates" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("No duplicates");
+    expect(invokeMock).toHaveBeenCalledWith("find_same_session_recordings");
+  });
+
+  it("makes you choose between copies labelled differently, then deletes the rest after the undo window", async () => {
+    invokeMock.mockResolvedValueOnce([["a", "b"]]);
+    const onDelete = vi.fn().mockResolvedValue(undefined);
+    setup({ datasets: [original, relabelled, alone], onDelete });
+    fireEvent.click(screen.getByRole("button", { name: "Find duplicates" }));
+    const group = await screen.findByRole("group", { name: "Session 1" });
+    expect(within(group).getByText(/different labels/)).toBeInTheDocument();
+    expect(within(group).getByText(/20 pinch in/)).toBeInTheDocument();
+    expect(within(group).getByText(/13 pinch in/)).toBeInTheDocument();
+    expect(within(group).getByRole("button", { name: "Choose one to keep" })).toBeDisabled();
+    fireEvent.click(within(group).getByRole("radio", { name: /Relabelled/ }));
+    fireEvent.click(within(group).getByRole("button", { name: "Keep the selected one (delete 1)" }));
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    letUndoPass();
+    await act(async () => { await Promise.resolve(); });
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(onDelete).toHaveBeenCalledWith("a");
+  });
+
+  it("suggests the sealed copy and warns before a sealed one is deleted", async () => {
+    invokeMock.mockResolvedValueOnce([["a", "b"]]);
+    setup({ datasets: [original, { ...relabelled, sealed: true }] });
+    fireEvent.click(screen.getByRole("button", { name: "Find duplicates" }));
+    const group = await screen.findByRole("group", { name: "Session 1" });
+    expect(within(group).getByRole("radio", { name: /Relabelled/ })).toBeChecked();
+    expect(within(group).getByText(/Suggested: sealed for the final test/)).toBeInTheDocument();
+    fireEvent.click(within(group).getByRole("radio", { name: /Original/ }));
+    fireEvent.click(within(group).getByRole("button", { name: "Keep the selected one (delete 1)" }));
+    expect(await screen.findByText(/is sealed for the final test/)).toBeInTheDocument();
+  });
+
+  it("tells you when looking failed", async () => {
+    invokeMock.mockRejectedValueOnce("no recordings folder");
+    setup({ datasets: [original, alone] });
+    fireEvent.click(screen.getByRole("button", { name: "Find duplicates" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("no recordings folder");
+  });
+});
+
 describe("DatasetManager", () => {
   it("renames a recording, shows the name with when and what beside it, and takes the name away when cleared", async () => {
     const onRename = vi.fn().mockResolvedValue(undefined);

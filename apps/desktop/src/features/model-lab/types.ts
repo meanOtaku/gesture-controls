@@ -34,6 +34,8 @@ export interface DatasetSummary {
   group?: string;
   /** The name you gave it, shown wherever it is listed or chosen; absent shows when it was recorded and what it holds. */
   name?: string;
+  /** The saved session made for an imported recording, so the Recordings tab can show it. */
+  viewerSessionId?: string;
   /** How its labels were made (see `labelsFromText`); absent when nothing says. */
   labelsFrom?: "camera" | "motion" | "recorder" | "mixed";
   /** The camera's hand landmarks are kept for it, so the Labelling page can draw the hand. */
@@ -112,7 +114,8 @@ export function describeGaps(gaps: DatasetGaps | undefined): { text: string; war
 
 /** The labels a dataset trains on: what coverage and training-role checks apply to. */
 export function datasetLabels(dataset: Pick<DatasetSummary, "label" | "labels">): string[] {
-  return dataset.labels && dataset.labels.length > 0 ? dataset.labels : [dataset.label];
+  if (dataset.labels && dataset.labels.length > 0) return dataset.labels;
+  return dataset.label ? [dataset.label] : []; // no labels yet: it is waiting on the Labelling page
 }
 
 /** Mirrors `DatasetLabel` in src-tauri/src/label_registry.rs. */

@@ -27,6 +27,8 @@ pub struct Signals<'a> {
     pub pitch: Option<PitchDirection>,
     /// The watch's orientation as a quaternion `[w, i, j, k]`; `None` while it has no valid orientation.
     pub orientation: Option<[f64; 4]>,
+    /// Fresh actionable starts for this update only; never a cached pulse.
+    pub model_edges: Option<&'a BTreeSet<String>>,
     /// Model labels detected right now and cleared to act.
     pub models_held: Option<&'a BTreeSet<String>>,
     /// Model labels first detected a moment ago, which still count as happening.
@@ -57,6 +59,7 @@ pub struct RecipeRunner {
     /// Set by [`Self::cancel`]: stay idle until the chain has been broken once, so an interaction the user
     /// cancelled (Escape) does not restart while they are still holding the same gesture.
     latched: bool,
+    paired_grab: bool,
     /// A trigger recipe's chain completed since [`Self::take_fired`] last looked.
     fired: bool,
     /// The orientation when the chain completed; rotation is measured from here.
@@ -79,6 +82,7 @@ impl RecipeRunner {
             recipe,
             phase: RunnerPhase::Idle,
             latched: false,
+            paired_grab: false,
             fired: false,
             start: [1.0, 0.0, 0.0, 0.0],
             last_angle: 0.0,
@@ -102,12 +106,14 @@ impl RecipeRunner {
 
     /// Ends the interaction and keeps it ended until the user lets go of the chain and starts it again.
     pub fn cancel(&mut self) {
+        self.paired_grab = false;
         self.phase = RunnerPhase::Idle;
         self.latched = true;
     }
 
     /// Ends any interaction (the recipe was disabled or is blocked by a conflict, or the link dropped).
     pub fn reset(&mut self) {
+        self.paired_grab = false;
         self.phase = RunnerPhase::Idle;
     }
 
@@ -146,6 +152,7 @@ impl RecipeRunner {
             Stage::Hold {
                 hold: Hold::PitchDown,
             } => signals.pitch == Some(PitchDirection::Down),
+            Stage::ModelPair { .. } => true,
             Stage::Model { label, hold } => match hold {
                 ModelHold::Held => signals.models_held,
                 ModelHold::OneShot => signals.models_pulsed,
@@ -194,7 +201,7 @@ impl RecipeRunner {
             }) => Some((axis, dead_zone_degrees, invert)),
             _ => None,
         };
-        let chain_holds = self.recipe.enabled
+        let mut chain_holds = self.recipe.enabled
             && !self.recipe.stages.is_empty()
             && self
                 .recipe
@@ -213,10 +220,37 @@ impl RecipeRunner {
         let gates_hold = self.recipe.enabled
             && has_gates
             && gates.all(|stage| Self::stage_holds(stage, signals));
+        if let Some((start_label, end_label)) =
+            self.recipe.stages.iter().find_map(|stage| match stage {
+                Stage::ModelPair {
+                    start_label,
+                    end_label,
+                } => Some((start_label, end_label)),
+                _ => None,
+            })
+        {
+            let edge = |label: &String| {
+                signals
+                    .model_edges
+                    .is_some_and(|edges| edges.contains(label))
+            };
+            if edge(end_label) {
+                // Normal release returns to the corner preview. Only cancellation/faults
+                // latch the interaction hidden until the user looks away.
+                self.paired_grab = false;
+            }
+            if !chain_holds || orientation.is_none() {
+                self.paired_grab = false;
+            } else if !self.latched && edge(start_label) && !edge(end_label) {
+                self.paired_grab = true;
+            }
+            chain_holds &= self.paired_grab;
+        }
         if self.latched {
             if !chain_holds && !gates_hold {
                 self.latched = false;
             }
+            self.paired_grab = false;
             self.phase = RunnerPhase::Idle;
             return None;
         }
@@ -266,7 +300,7 @@ impl RecipeRunner {
         let position = self.recipe.device.position(outside_dead_zone);
         let delta = position - self.last_position;
         self.last_position = position;
-        (delta != 0.0).then_some(Output {
+        (delta != 0.0 || self.paired_grab).then_some(Output {
             delta_fraction: delta,
         })
     }

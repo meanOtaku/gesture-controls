@@ -118,6 +118,10 @@ pub struct DatasetSummary {
     /// The name you gave it, shown wherever it is listed or chosen; None shows when it was recorded and what it holds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// The saved session made for an imported recording, so the Recordings tab can show it. Kept apart from
+    /// `source_recording_id`, which says where the session's camera data and recording time are: this one has neither.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub viewer_session_id: Option<String>,
     /// How its labels were made: "camera" (where the camera saw the fingers meet and part), "motion" (estimated from the
     /// watch's motion, with no camera), "recorder" (while recording, by a button, key or cue) or "mixed". Kept when an
     /// import says so; otherwise worked out from its Recorder recording each time the list is read (see [`describe`]).
@@ -152,10 +156,12 @@ impl DatasetSummary {
     /// The labels this dataset trains on: what registry and training-role
     /// coverage checks must be applied to.
     pub fn effective_labels(&self) -> Vec<String> {
-        if self.labels.is_empty() {
-            vec![self.label.clone()]
-        } else {
+        if !self.labels.is_empty() {
             self.labels.clone()
+        } else if self.label.is_empty() {
+            Vec::new() // no labels yet: it is waiting on the Labelling page
+        } else {
+            vec![self.label.clone()]
         }
     }
 }
@@ -348,12 +354,7 @@ fn parse_csv(content: &str) -> Result<ParsedDataset, String> {
         .collect::<std::collections::BTreeSet<_>>()
         .into_iter()
         .collect();
-    if labels.is_empty() {
-        return Err(
-            "no labeled rows: add a '# label: <value>' line for a single-label session, or label the rows"
-                .to_string(),
-        );
-    }
+    // A recording with no labels yet is welcome: it joins Datasets to be labelled on the Labelling page.
     Ok(ParsedDataset {
         labels,
         row_count: data_lines.len(),
@@ -466,7 +467,44 @@ pub fn import_model_dataset(
     app: AppHandle,
     runtime: State<'_, ModelLabRuntime>,
 ) -> Result<DatasetSummary, String> {
-    ingest_dataset(&app, &runtime, filename, csv_content, None)
+    let summary = ingest_dataset(&app, &runtime, filename, csv_content.clone(), None)?;
+    Ok(with_viewer_session(&app, &runtime, summary, csv_content))
+}
+
+/// Makes the saved session that lets the Recordings tab show an imported recording, and links it. The recording is in
+/// Datasets either way: one the viewer cannot read is only missing from that tab.
+fn with_viewer_session(
+    app: &AppHandle,
+    runtime: &ModelLabRuntime,
+    mut summary: DatasetSummary,
+    csv: String,
+) -> DatasetSummary {
+    let session = match crate::recording_bundle::import_recording_text(csv, app) {
+        Ok(session) => session.recording_id,
+        Err(error) => {
+            warn!(%error, "an imported recording could not be saved for the Recordings tab");
+            return summary;
+        }
+    };
+    let linked = runtime
+        .lock
+        .lock()
+        .map_err(|_| "model lab lock was poisoned".to_string())
+        .and_then(|_guard| {
+            let mut index = load_index(app);
+            if let Some(dataset) = index.datasets.iter_mut().find(|d| d.id == summary.id) {
+                dataset.viewer_session_id = Some(session.clone());
+            }
+            write_index_atomic(app, &index)
+        });
+    match linked {
+        Ok(()) => summary.viewer_session_id = Some(session),
+        Err(error) => {
+            warn!(%error, "could not link an imported recording to its saved session");
+            let _ = crate::recording_bundle::remove_session(app, &session);
+        }
+    }
+    summary
 }
 
 /// Validates a single-file dataset CSV and stores it as a new recording in Model Lab, as a folder of two dense files. When it
@@ -507,7 +545,7 @@ pub(crate) fn ingest_dataset_in(
         ));
     }
     let parsed = parse_csv(&csv_content)?;
-    let pair = dataset_files::split_legacy(&parsed.csv)?;
+    let pair = dataset_files::split_legacy_with(&parsed.csv, false)?;
     store_pair_in(
         dir,
         known_label,
@@ -547,13 +585,18 @@ pub(crate) fn ingest_folder(
         }
         fs::read_to_string(&path).map_err(|e| format!("could not read {file}: {e}"))
     };
-    let pair = dataset_files::parse_pair(
-        &read(dataset_files::PPG_FILE)?,
-        &read(dataset_files::IMU_FILE)?,
-    )?;
+    let ppg_csv = read(dataset_files::PPG_FILE)?;
+    let imu_csv = read(dataset_files::IMU_FILE)?;
+    let pair = dataset_files::parse_pair_with(&ppg_csv, &imu_csv, false)?;
     let summary = store_pair(app, runtime, name, pair, None, None, None)?;
     keep_camera_files(folder, &dataset_csv_path(&datasets_dir(app)?, &summary.id));
-    Ok(summary)
+    match dataset_files::merge_to_legacy(&ppg_csv, &imu_csv) {
+        Ok(merged) => Ok(with_viewer_session(app, runtime, summary, merged)),
+        Err(error) => {
+            warn!(%error, "an imported folder could not be merged for the Recordings tab");
+            Ok(summary)
+        }
+    }
 }
 
 /// Copies the camera files an exported folder carries (`hand_landmarks.csv`, `hand_landmarks_2.csv`, `clock_sync.csv`)
@@ -681,7 +724,7 @@ pub(crate) fn store_pair_in(
         .find(|d| d.content_sha.as_deref() == Some(incoming.as_str()))
     {
         return Err(format!(
-            "this recording is already in Model Lab as #{} {}, so nothing was added",
+            "this recording is already in Datasets as #{} {}, so nothing was added",
             existing.sequence, existing.original_filename
         ));
     }
@@ -715,6 +758,7 @@ pub(crate) fn store_pair_in(
         group: None,
         labels_from: None,
         name: None,
+        viewer_session_id: None,
         camera: false,
         recorded_at: None,
     };
@@ -1330,6 +1374,33 @@ pub fn set_dataset_review(
     Ok(updated)
 }
 
+/// Takes a recording out of the list. New versions made from it are linked to where it came from instead, so they keep
+/// their way back to the session's camera data and time.
+fn remove_from_index(datasets: &mut Vec<DatasetSummary>, id: &str) -> Result<(), String> {
+    let at = datasets
+        .iter()
+        .position(|dataset| dataset.id == id)
+        .ok_or_else(|| format!("no dataset with id '{id}'"))?;
+    let removed = datasets.remove(at);
+    for version in datasets
+        .iter_mut()
+        .filter(|dataset| dataset.derived_from.as_deref() == Some(id))
+    {
+        version.derived_from.clone_from(&removed.derived_from);
+        if version.source_recording_id.is_none() {
+            version
+                .source_recording_id
+                .clone_from(&removed.source_recording_id);
+        }
+        if version.viewer_session_id.is_none() {
+            version
+                .viewer_session_id
+                .clone_from(&removed.viewer_session_id);
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn delete_model_dataset(
     id: String,
@@ -1344,11 +1415,19 @@ pub fn delete_model_dataset(
         .map_err(|_| "model lab lock was poisoned".to_string())?;
 
     let mut index = load_index(&app);
-    let before = index.datasets.len();
-    index.datasets.retain(|dataset| dataset.id != id);
-    if index.datasets.len() == before {
-        return Err(format!("no dataset with id '{id}'"));
-    }
+    let sessions: Vec<String> = index
+        .datasets
+        .iter()
+        .filter(|dataset| dataset.id == id)
+        .flat_map(|dataset| {
+            [
+                dataset.source_recording_id.clone(),
+                dataset.viewer_session_id.clone(),
+            ]
+        })
+        .flatten()
+        .collect();
+    remove_from_index(&mut index.datasets, &id)?;
     write_index_atomic(&app, &index)?;
 
     let dir = datasets_dir(&app)?;
@@ -1357,6 +1436,12 @@ pub fn delete_model_dataset(
         fs::remove_dir_all(&path).map_err(|error| error.to_string())?;
     } else if path.exists() {
         fs::remove_file(&path).map_err(|error| error.to_string())?;
+    }
+    // Datasets owns the sessions behind it: the last recording of one takes the session's raw and camera files with it.
+    for session in sessions {
+        if !crate::recording_bundle::session_in_use(&index.datasets, &session) {
+            crate::recording_bundle::remove_session(&app, &session)?;
+        }
     }
     Ok(())
 }
@@ -1489,11 +1574,11 @@ mod tests {
     }
 
     #[test]
-    fn a_file_with_no_label_anywhere_is_rejected() {
+    fn a_file_with_no_label_anywhere_joins_to_be_labelled() {
         let csv = valid_csv()
             .replace("# label: pinch_start\n", "")
             .replace(",pinch_start", ",");
-        assert!(parse_csv(&csv).unwrap_err().contains("no labeled rows"));
+        assert!(parse_csv(&csv).unwrap().labels.is_empty());
     }
 
     /// D-M3-1: a Timeline Capture export has an empty `# label:` line and a
@@ -1548,6 +1633,93 @@ mod tests {
     }
 
     #[test]
+    fn deleting_a_recording_links_its_new_versions_to_where_it_came_from() {
+        let entry = |id: &str, source: Option<&str>, from: Option<&str>| -> DatasetSummary {
+            serde_json::from_value(serde_json::json!({
+                "id": id, "originalFilename": "t.csv", "importedAt": "", "label": "", "rowCount": 0,
+                "sourceRecordingId": source, "derivedFrom": from,
+            }))
+            .unwrap()
+        };
+        let mut list = vec![
+            entry("first", Some("session"), None),
+            entry("second", None, Some("first")),
+            entry("third", None, Some("second")),
+        ];
+        remove_from_index(&mut list, "first").unwrap();
+        assert_eq!(list[0].source_recording_id.as_deref(), Some("session"));
+        assert_eq!(list[0].derived_from, None);
+        remove_from_index(&mut list, "second").unwrap();
+        assert_eq!(list[0].id, "third");
+        assert_eq!(list[0].source_recording_id.as_deref(), Some("session"));
+        assert!(remove_from_index(&mut list, "gone").is_err());
+        assert_eq!(list.len(), 1);
+    }
+
+    #[test]
+    fn a_recording_with_no_labels_is_stored_and_listed_to_be_labelled() {
+        let dir = temp_dir("unlabelled-joins");
+        let csv = valid_csv()
+            .replace("# label: pinch_start\n", "")
+            .replace(",pinch_start", ",");
+        let made = ingest_dataset_in(
+            &dir,
+            |_| panic!("no label to look up"),
+            &Mutex::new(()),
+            "session.csv".into(),
+            csv,
+            Some("rec-1".into()),
+        )
+        .unwrap();
+        assert!(made.labels.is_empty());
+        assert_eq!(made.source_recording_id.as_deref(), Some("rec-1"));
+        let index = load_index_file(&dir.join(INDEX_FILE_NAME));
+        assert_eq!(index.datasets.len(), 1);
+        assert!(index.datasets[0].effective_labels().is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_session_stays_in_use_until_its_last_recording_is_deleted() {
+        use crate::recording_bundle::session_in_use;
+        let entry = |id: &str, source: Option<&str>, from: Option<&str>| -> DatasetSummary {
+            serde_json::from_value(serde_json::json!({
+                "id": id, "originalFilename": "t.csv", "importedAt": "", "label": "", "rowCount": 0,
+                "sourceRecordingId": source, "derivedFrom": from,
+            }))
+            .unwrap()
+        };
+        let mut list = vec![
+            entry("first", Some("session"), None),
+            entry("again", Some("session"), None),
+            entry("version", None, Some("first")),
+            entry("elsewhere", Some("other"), None),
+        ];
+        remove_from_index(&mut list, "first").unwrap();
+        assert!(session_in_use(&list, "session"), "added twice");
+        remove_from_index(&mut list, "again").unwrap();
+        assert!(
+            session_in_use(&list, "session"),
+            "a new version still needs it"
+        );
+        remove_from_index(&mut list, "version").unwrap();
+        assert!(!session_in_use(&list, "session"));
+        assert!(session_in_use(&list, "other"));
+        // An imported recording's session is in use by that link, and goes to a new version made from it.
+        let mut imported = entry("imported", None, None);
+        imported.viewer_session_id = Some("viewer".into());
+        let mut list = vec![imported, entry("version", None, Some("imported"))];
+        assert!(session_in_use(&list, "viewer"));
+        remove_from_index(&mut list, "imported").unwrap();
+        assert!(
+            session_in_use(&list, "viewer"),
+            "the new version shows it now"
+        );
+        remove_from_index(&mut list, "version").unwrap();
+        assert!(!session_in_use(&list, "viewer"));
+    }
+
+    #[test]
     fn a_multi_label_dataset_requires_every_label_to_have_a_training_role() {
         let dataset = DatasetSummary {
             id: "a".into(),
@@ -1569,6 +1741,7 @@ mod tests {
             group: None,
             labels_from: None,
             name: None,
+            viewer_session_id: None,
             camera: false,
             recorded_at: None,
         };
@@ -2162,6 +2335,7 @@ mod tests {
             group: None,
             labels_from: None,
             name: None,
+            viewer_session_id: None,
             camera: false,
             recorded_at: None,
         };

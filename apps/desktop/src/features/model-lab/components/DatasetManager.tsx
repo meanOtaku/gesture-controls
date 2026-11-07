@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Checkbox } from "../../../components/ui/checkbox";
 import { afterUndoWindow } from "../../../components/app/OperationFeedback";
 import { appNavigation } from "../../../shared/navigation/appNavigation";
-import { extraCopies, filterRecordings, groupNames, groupRecordings, MAX_GROUP_NAME, NO_FILTER, type RecordingFilter } from "../recordingFilters";
+import { extraCopies, filterRecordings, groupNames, groupRecordings, MAX_GROUP_NAME, NO_FILTER, sessionCopies, type RecordingFilter, type SessionCopies } from "../recordingFilters";
 import { LabelSwatch } from "../../labels/labelColor";
 import { formatTime } from "../labelModels";
 import { defaultTitle, labelsFromText, recordingName, recordingTitle } from "../recordingNames";
@@ -60,6 +60,92 @@ type DatasetManagerProps = {
   /** The Labels list, for each label's colour. */
   labels?: DatasetLabel[];
 };
+
+/** One session's recordings: choose the one to keep, and delete the rest. */
+function SessionCopiesCard({ copies, number, disabled, onDelete }: { copies: SessionCopies; number: number; disabled: boolean; onDelete: (ids: string[]) => void }) {
+  const { recordings, keep: suggested, why, sameLabels } = copies;
+  const [chosen, setChosen] = useState<string | null>(null);
+  const keep = chosen ?? suggested;
+  const others = recordings.filter((dataset) => dataset.id !== keep);
+  const sealedOthers = others.filter((dataset) => dataset.sealed);
+  return (
+    <fieldset className="flex flex-col gap-2 rounded-md border p-3 text-sm">
+      <legend className="px-1 font-medium">Session {number}</legend>
+      <p className="m-0">
+        {sameLabels ? "The same data and labels, more than once." : "The same watch data with different labels: check which labels you want, as the others are lost."}
+      </p>
+      {recordings.map((dataset) => {
+        const facts = [describeQuality(dataset.quality)?.text, labelsFromText(dataset), dataset.derivedFrom ? "Saved from the Labelling page" : null].filter(Boolean);
+        return (
+          <label key={dataset.id} className="flex items-start gap-2">
+            <input type="radio" name={`keep-session-${number}`} className="mt-1" checked={keep === dataset.id} disabled={disabled} onChange={() => setChosen(dataset.id)} />
+            <span className="flex min-w-0 flex-col gap-1">
+              <span className="flex flex-wrap items-center gap-2">
+                <strong>{recordingName(dataset)}</strong>
+                {dataset.sealed && <Badge variant="secondary">Sealed</Badge>}
+                {dataset.review?.status === "reviewed" && <Badge variant="secondary">Labels reviewed</Badge>}
+                {dataset.camera && <Badge variant="secondary">Camera</Badge>}
+                {suggested === dataset.id && <Badge variant="outline">Suggested: {why}</Badge>}
+              </span>
+              {facts.length > 0 && <span className="text-muted-foreground">{facts.join(" · ")}</span>}
+            </span>
+          </label>
+        );
+      })}
+      <div className="flex flex-wrap items-center gap-2">
+        <ConfirmButton
+          label={keep ? `Keep the selected one (delete ${others.length})` : "Choose one to keep"}
+          title="Delete the other copies?"
+          description={`This permanently deletes ${others.map(recordingName).join(", ")}.${sealedOthers.length > 0 ? ` ${sealedOthers.map(recordingName).join(", ")} ${sealedOthers.length === 1 ? "is" : "are"} sealed for the final test.` : ""} This cannot be undone.`}
+          disabled={disabled || !keep}
+          onConfirm={() => onDelete(others.map((dataset) => dataset.id))}
+        />
+      </div>
+    </fieldset>
+  );
+}
+
+/**
+ * Finds recordings of one session, labelled alike or not, by the check training refuses them with, and removes the extras.
+ * Asked for, not automatic: it reads every recording's motion rows.
+ */
+function SessionCopiesFinder({ datasets, disabled, onDelete }: { datasets: DatasetSummary[]; disabled: boolean; onDelete: (ids: string[]) => void }) {
+  const [sets, setSets] = useState<string[][] | null>(null);
+  const [looking, setLooking] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const find = async () => {
+    setLooking(true);
+    setProblem(null);
+    try {
+      setSets(await invoke<string[][]>("find_same_session_recordings"));
+    } catch (err) {
+      setProblem(String(err));
+    } finally {
+      setLooking(false);
+    }
+  };
+  const found = sets ? sessionCopies(sets, datasets) : [];
+  return (
+    <div className="flex flex-col gap-2" role="group" aria-label="Duplicate sessions">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <Button type="button" variant="outline" onClick={() => void find()} disabled={looking} aria-busy={looking}>
+          {looking ? "Looking for duplicates…" : "Find duplicates"}
+        </Button>
+        {sets && !looking && (
+          <span role="status">
+            {found.length === 0
+              ? "No duplicates: every recording is its own session."
+              : `${found.length} session${found.length === 1 ? " is" : "s are"} held more than once. Training refuses copies chosen together, because one could be trained on and the other tested on.`}
+          </span>
+        )}
+      </div>
+      {problem && <p role="alert" className="text-sm text-destructive">Could not look for duplicates: {problem}</p>}
+      {found.map((copies, index) => (
+        <SessionCopiesCard key={copies.recordings.map((dataset) => dataset.id).join()} copies={copies} number={index + 1} disabled={disabled} onDelete={onDelete} />
+      ))}
+    </div>
+  );
+}
 
 /** Imports and manages recorded session CSVs. */
 export function DatasetManager({ desktopAvailable, datasets, loading, importing, error, pendingDeleteIds, onImport, onImportFolder, onConverted, onDelete, onSeal, onGroup, onRename, labels = [] }: DatasetManagerProps) {
@@ -272,6 +358,9 @@ export function DatasetManager({ desktopAvailable, datasets, loading, importing,
               onConfirm={() => deleteAll(copies.map((copy) => copy.id))}
             />
           </div>
+        )}
+        {desktopAvailable && datasets.length > 1 && (
+          <SessionCopiesFinder datasets={datasets.filter((dataset) => !leaving.has(dataset.id))} disabled={working} onDelete={deleteAll} />
         )}
         {datasets.length > 0 && (
           <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label="Find recordings">

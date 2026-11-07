@@ -3,8 +3,10 @@
 //! * [`ModelKind::PpgImu`], which Model Lab trains by default: the pulse sensor's 1,701 features
 //!   ([`pinch_inference::ppg_onset`]) and the motion sensors' 1,032 ([`pinch_inference::imu_onset`]), in that order, read by
 //!   trees.
-//! * [`ModelKind::Cnn`], which Model Lab can train instead: the last second of motion and pulse, each channel scaled by its
-//!   recent level ([`pinch_inference::cnn_input`]), read by a small convolutional network ([`crate::cnn`]).
+//! * [`ModelKind::CnnMedian`], which Model Lab can train instead: the last second of motion and pulse, each channel scaled
+//!   by its recent median ([`pinch_inference::cnn_input`]), read by a small convolutional network ([`crate::cnn`]).
+//! * [`ModelKind::Cnn`], the earlier CNN: the same network and inputs scaled by a rolling mean and deviation, which a burst
+//!   of motion upsets for 10 s. Versions trained on it keep running as they were.
 //! * [`ModelKind::PpgOnly`], the earlier model: the pulse sensor's features alone. Versions trained before the motion model
 //!   keep running.
 //!
@@ -13,7 +15,8 @@
 use std::sync::LazyLock;
 
 use model_lab_core::{InputContract, StreamSource};
-use pinch_inference::{cnn_input, imu_onset, ppg_onset};
+use pinch_inference::cnn_input::{self, Scaling};
+use pinch_inference::{imu_onset, ppg_onset};
 
 use crate::bundle::{STRIDE_MS, WINDOW_MS};
 use crate::training::MIN_WINDOW_SAMPLES;
@@ -21,6 +24,7 @@ use crate::training::MIN_WINDOW_SAMPLES;
 pub const PPG_ONLY_PREPROCESSING: &str = "ppg_multiscale_onset";
 pub const PPG_IMU_PREPROCESSING: &str = "ppg_imu_onset";
 pub const CNN_PREPROCESSING: &str = "ppg_imu_cnn";
+pub const CNN_MEDIAN_PREPROCESSING: &str = "ppg_imu_cnn_median";
 /// The history a CNN decision reads: its grid of 10.96 s, rounded up.
 pub const CNN_WINDOW_MS: u32 = 11_000;
 
@@ -37,6 +41,7 @@ pub enum ModelKind {
     PpgOnly,
     PpgImu,
     Cnn,
+    CnnMedian,
 }
 
 impl ModelKind {
@@ -46,6 +51,7 @@ impl ModelKind {
             PPG_ONLY_PREPROCESSING => Some(Self::PpgOnly),
             PPG_IMU_PREPROCESSING => Some(Self::PpgImu),
             CNN_PREPROCESSING => Some(Self::Cnn),
+            CNN_MEDIAN_PREPROCESSING => Some(Self::CnnMedian),
             _ => None,
         }
     }
@@ -55,6 +61,7 @@ impl ModelKind {
             Self::PpgOnly => PPG_ONLY_PREPROCESSING,
             Self::PpgImu => PPG_IMU_PREPROCESSING,
             Self::Cnn => CNN_PREPROCESSING,
+            Self::CnnMedian => CNN_MEDIAN_PREPROCESSING,
         }
     }
 
@@ -62,7 +69,16 @@ impl ModelKind {
     pub fn model_format(self) -> &'static str {
         match self {
             Self::PpgOnly | Self::PpgImu => crate::bundle::MODEL_FORMAT,
-            Self::Cnn => crate::bundle::CNN_MODEL_FORMAT,
+            Self::Cnn | Self::CnnMedian => crate::bundle::CNN_MODEL_FORMAT,
+        }
+    }
+
+    /// How a CNN's inputs are scaled; `None` for a model of trees.
+    pub fn cnn_scaling(self) -> Option<Scaling> {
+        match self {
+            Self::PpgOnly | Self::PpgImu => None,
+            Self::Cnn => Some(Scaling::Rolling),
+            Self::CnnMedian => Some(Scaling::Median),
         }
     }
 
@@ -74,7 +90,7 @@ impl ModelKind {
     pub fn sources(self) -> Vec<StreamSource> {
         match self {
             Self::PpgOnly => vec![StreamSource::WatchPpg],
-            Self::PpgImu | Self::Cnn => {
+            Self::PpgImu | Self::Cnn | Self::CnnMedian => {
                 vec![StreamSource::WatchPpg, StreamSource::WatchOrientation]
             }
         }
@@ -84,7 +100,7 @@ impl ModelKind {
         match self {
             Self::PpgOnly => &ppg_onset::FEATURE_NAMES,
             Self::PpgImu => &PPG_IMU_FEATURE_NAMES,
-            Self::Cnn => &cnn_input::FEATURE_NAMES,
+            Self::Cnn | Self::CnnMedian => &cnn_input::FEATURE_NAMES,
         }
     }
 
@@ -92,7 +108,7 @@ impl ModelKind {
         match self {
             Self::PpgOnly => ppg_onset::FEATURE_COUNT,
             Self::PpgImu => ppg_onset::FEATURE_COUNT + imu_onset::FEATURE_COUNT,
-            Self::Cnn => cnn_input::FEATURE_COUNT,
+            Self::Cnn | Self::CnnMedian => cnn_input::FEATURE_COUNT,
         }
     }
 
@@ -115,7 +131,7 @@ impl ModelKind {
     pub fn window_ms(self) -> u32 {
         match self {
             Self::PpgOnly | Self::PpgImu => WINDOW_MS,
-            Self::Cnn => CNN_WINDOW_MS,
+            Self::Cnn | Self::CnnMedian => CNN_WINDOW_MS,
         }
     }
 }
@@ -140,7 +156,20 @@ mod tests {
         assert_eq!(ModelKind::Cnn.feature_names()[0], "cnn_accel_x_t00");
         assert!(ModelKind::Cnn.reads_motion());
         assert_eq!(ModelKind::Cnn.contract().window_ms, 11_000);
-        for kind in [ModelKind::PpgOnly, ModelKind::PpgImu, ModelKind::Cnn] {
+        assert_eq!(
+            ModelKind::CnnMedian.contract(),
+            ModelKind::Cnn.contract(),
+            "the kinds differ only in how they scale"
+        );
+        assert_eq!(ModelKind::Cnn.cnn_scaling(), Some(Scaling::Rolling));
+        assert_eq!(ModelKind::CnnMedian.cnn_scaling(), Some(Scaling::Median));
+        assert_eq!(ModelKind::PpgImu.cnn_scaling(), None);
+        for kind in [
+            ModelKind::PpgOnly,
+            ModelKind::PpgImu,
+            ModelKind::Cnn,
+            ModelKind::CnnMedian,
+        ] {
             assert_eq!(
                 ModelKind::from_preprocessing(kind.preprocessing()),
                 Some(kind)

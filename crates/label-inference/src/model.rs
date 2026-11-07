@@ -192,7 +192,9 @@ impl LoadedModel {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::bundle::tests::{cnn_fixture_dir, fixture_dir, motion_fixture_dir};
+    use crate::bundle::tests::{
+        cnn_fixture_dir, fixture_dir, median_cnn_fixture_dir, motion_fixture_dir,
+    };
     use crate::bundle::validate_bundle;
     use model_lab_core::{ModelOrigin, ProjectId};
     use pinch_inference::imu_onset::MotionSample;
@@ -238,6 +240,13 @@ pub(crate) mod tests {
         LoadedModel::load(bundle, &version).unwrap()
     }
 
+    /// The median-scaled CNN fixture model, approved and active.
+    pub fn loaded_median_cnn() -> LoadedModel {
+        let bundle = validate_bundle(&median_cnn_fixture_dir(), None).unwrap();
+        let version = active_version(&bundle);
+        LoadedModel::load(bundle, &version).unwrap()
+    }
+
     /// The PPG + IMU fixture's trace: its pulse samples, its motion samples, and the probability the trainer gives each
     /// pulse sample (`None`: no features).
     pub fn expected_motion() -> (Vec<PpgSample>, Vec<MotionSample>, Vec<Option<f64>>) {
@@ -247,6 +256,11 @@ pub(crate) mod tests {
     /// The CNN fixture's trace, as [`expected_motion`].
     pub fn expected_cnn() -> (Vec<PpgSample>, Vec<MotionSample>, Vec<Option<f64>>) {
         expected_in(&cnn_fixture_dir())
+    }
+
+    /// The median-scaled CNN fixture's trace, as [`expected_motion`].
+    pub fn expected_median_cnn() -> (Vec<PpgSample>, Vec<MotionSample>, Vec<Option<f64>>) {
+        expected_in(&median_cnn_fixture_dir())
     }
 
     fn expected_in(dir: &std::path::Path) -> (Vec<PpgSample>, Vec<MotionSample>, Vec<Option<f64>>) {
@@ -289,13 +303,27 @@ pub(crate) mod tests {
     fn the_runtime_scores_every_cnn_decision_as_the_trainer_did() {
         let model = loaded_cnn();
         assert_eq!(model.kind, ModelKind::Cnn);
+        scores_every_decision_as_the_trainer_did(&model, expected_cnn());
+    }
+
+    #[test]
+    fn the_runtime_scores_every_median_cnn_decision_as_the_trainer_did() {
+        let model = loaded_median_cnn();
+        assert_eq!(model.kind, ModelKind::CnnMedian);
+        scores_every_decision_as_the_trainer_did(&model, expected_median_cnn());
+    }
+
+    fn scores_every_decision_as_the_trainer_did(
+        model: &LoadedModel,
+        (samples, motion, probabilities): (Vec<PpgSample>, Vec<MotionSample>, Vec<Option<f64>>),
+    ) {
         assert_eq!(model.decision_delay_ms, 500);
-        let (samples, motion, probabilities) = expected_cnn();
+        let scaling = model.kind.cnn_scaling().unwrap();
         let mut scored = 0;
         for (i, want) in probabilities.iter().enumerate() {
             let at = samples[i].ts_ns;
             match (
-                pinch_inference::cnn_input::inputs(&motion, &samples[..=i], at),
+                pinch_inference::cnn_input::inputs(&motion, &samples[..=i], at, scaling),
                 want,
             ) {
                 (None, None) => {}

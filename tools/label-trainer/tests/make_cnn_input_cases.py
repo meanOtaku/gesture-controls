@@ -41,13 +41,15 @@ def pulse(n: int, seed: int):
 
 def case(name, m, p, decisions):
     decisions = np.asarray(decisions, dtype=np.int64)
-    rows = C.inputs(m[0], m[1], p[0], p[1], decisions)
+    rows = C.inputs(m[0], m[1], p[0], p[1], decisions, scaling=C.ROLLING)
+    median = C.inputs(m[0], m[1], p[0], p[1], decisions, scaling=C.MEDIAN)
     return {
         "name": name,
         "motion": [[int(a), *map(float, v)] for a, v in zip(*m)],
         "pulse": [[int(a), *map(float, v)] for a, v in zip(*p)],
         "decisions": [int(d) for d in decisions],
         "expected": [None if not np.isfinite(row).all() else [float(v) for v in row] for row in rows],
+        "expected_median": [None if not np.isfinite(row).all() else [float(v) for v in row] for row in median],
     }
 
 

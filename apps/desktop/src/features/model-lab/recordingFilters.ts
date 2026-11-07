@@ -71,6 +71,51 @@ export function extraCopies(datasets: DatasetSummary[]): DatasetSummary[] {
   });
 }
 
+/** Recordings holding one session, and which to keep, if anything says. */
+export interface SessionCopies {
+  recordings: DatasetSummary[];
+  /** The id of the one suggested, or null when the choice is yours. */
+  keep: string | null;
+  /** Why that one, in words. */
+  why: string | null;
+  /** Whether their rows, labels included, are the same. */
+  sameLabels: boolean;
+}
+
+/** The one recording of `recordings` that `test` picks, if it picks exactly one. */
+function onlyOne(recordings: DatasetSummary[], test: (dataset: DatasetSummary) => boolean): DatasetSummary | null {
+  const found = recordings.filter(test);
+  return found.length === 1 ? found[0] : null;
+}
+
+/**
+ * What to keep of a session's recordings. Copies labelled differently are only ever suggested on evidence: the final test's
+ * copy, then the one whose labels were reviewed, then the latest version from the Labelling page. Otherwise nothing is.
+ */
+function suggestion(recordings: DatasetSummary[], sameLabels: boolean): Pick<SessionCopies, "keep" | "why"> {
+  const sealed = recordings.filter((dataset) => dataset.sealed);
+  if (sealed.length > 1) return { keep: null, why: null };
+  if (sealed.length === 1) return { keep: sealed[0].id, why: "sealed for the final test" };
+  const reviewed = onlyOne(recordings, (dataset) => dataset.review?.status === "reviewed");
+  if (reviewed) return { keep: reviewed.id, why: "its labels were reviewed" };
+  const parents = new Set(recordings.flatMap((dataset) => dataset.derivedFrom ?? []));
+  const latest = onlyOne(recordings, (dataset) => !parents.has(dataset.id));
+  if (parents.size > 0 && latest) return { keep: latest.id, why: "the latest version of its labels" };
+  return sameLabels ? { keep: recordings[0].id, why: "the oldest copy" } : { keep: null, why: null };
+}
+
+/** The sets of ids from `find_same_session_recordings` as recordings, oldest first; ones no longer listed are dropped. */
+export function sessionCopies(sets: string[][], datasets: DatasetSummary[]): SessionCopies[] {
+  return sets.flatMap((set) => {
+    const recordings = datasets
+      .filter((dataset) => set.includes(dataset.id))
+      .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0) || a.importedAt.localeCompare(b.importedAt));
+    if (recordings.length < 2) return [];
+    const sameLabels = recordings.every((dataset) => dataset.contentSha && dataset.contentSha === recordings[0].contentSha);
+    return [{ recordings, sameLabels, ...suggestion(recordings, sameLabels) }];
+  });
+}
+
 /** The longest group name, in characters (`MAX_GROUP_NAME_CHARS` in model_lab.rs). */
 export const MAX_GROUP_NAME = 60;
 

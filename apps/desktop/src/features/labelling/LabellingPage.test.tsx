@@ -18,6 +18,7 @@ vi.mock("./cameraTrack", async (actual) => ({
 }));
 
 import { appNavigation } from "../../shared/navigation/appNavigation";
+import { RECORDINGS_CHANGED } from "../../shared/tauri/recordingBundle";
 import { exportFolderStore } from "../telemetry/store/exportFolderStore";
 import { forgetLabellingWork, LabellingPage } from "./LabellingPage";
 
@@ -60,10 +61,10 @@ function respond() {
   });
 }
 
-/** Opens the Model Lab recording and gives the lanes a width, so dragging maps to time. */
+/** Opens the recording and gives the lanes a width, so dragging maps to time. */
 async function openRecording() {
   render(<LabellingPage />);
-  fireEvent.click(await screen.findByRole("combobox", { name: "Model Lab recording" }));
+  fireEvent.click(await screen.findByRole("combobox", { name: "Dataset" }));
   fireEvent.click(await screen.findByRole("option", { name: /#3 pinch session/ }));
   await screen.findByRole("list", { name: "Recorded labels" });
   const lanes = document.querySelector(".labelling-lanes") as HTMLElement;
@@ -202,7 +203,7 @@ describe("LabellingPage", () => {
     drag(lanes, 0, 400);
     fireEvent.click(screen.getByRole("button", { name: /^Nothing here/ }));
     fireEvent.click(screen.getByRole("button", { name: /Label selection: Nothing here/ }));
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save as new version" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save as new dataset" })));
     const saved = invoke.mock.calls.find(([command]) => command === "save_labelling_version");
     expect(saved?.[1]).toEqual({ source: { kind: "dataset", id: "d1" }, intervals: [{ startMs: 0, endMs: 400, label: "-" }] });
     await waitFor(() => expect(feedback.success).toHaveBeenCalledWith("Saved", expect.stringContaining("#4 pinch session (labelled)")));
@@ -225,6 +226,25 @@ describe("LabellingPage", () => {
     expect(timing).toHaveTextContent("catch the most starts (1, against 1 as labelled)");
     fireEvent.click(within(timing).getByRole("button", { name: "Move the labels to the model" }));
     expect(feedback.withUndo).toHaveBeenCalledWith("Labels moved", expect.stringContaining("0 ms earlier"), expect.any(Function));
+  });
+
+  it("closes a recording deleted from Datasets, and lists what is added there", async () => {
+    await openRecording();
+    expect(await screen.findByRole("button", { name: "Save to original" })).toBeInTheDocument();
+    const answer = invoke.getMockImplementation()!;
+    invoke.mockImplementation(async (command: string, args?: Record<string, unknown>) => (command === "list_model_datasets" ? [] : answer(command, args)));
+    await act(async () => { window.dispatchEvent(new Event(RECORDINGS_CHANGED)); await Promise.resolve(); });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Save to original" })).not.toBeInTheDocument());
+    expect(await screen.findByText("That recording was deleted from Datasets, so it was closed here.")).toBeInTheDocument();
+  });
+
+  it("exports to a folder chosen for that export, keeping the usual folder", async () => {
+    await openRecording();
+    exportFolderStore.set("/exports");
+    openDialog.mockResolvedValueOnce("/somewhere/else");
+    await act(async () => fireEvent.click(await screen.findByRole("button", { name: "Export to a folder…" })));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("export_labelling_recording", expect.objectContaining({ target: expect.objectContaining({ parent: "/somewhere/else" }) })));
+    expect(exportFolderStore.get()).toBe("/exports");
   });
 
   it("draws the hand from the landmarks saved in an opened folder", async () => {

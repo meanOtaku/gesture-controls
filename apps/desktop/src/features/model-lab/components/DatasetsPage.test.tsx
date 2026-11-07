@@ -33,7 +33,7 @@ describe("DatasetsPage", () => {
   it("keeps every recording in one place, where it is named for every other tab", async () => {
     render(<DatasetsPage />);
     expect(screen.getByRole("heading", { name: "Datasets" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Recordings from the Recorder" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Recordings from the Recorder" })).not.toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Rename #1 a.csv" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Name of a.csv" }), { target: { value: "Monday pinches" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));

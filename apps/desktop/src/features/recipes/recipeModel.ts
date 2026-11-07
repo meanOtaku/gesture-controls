@@ -197,6 +197,8 @@ function stageLabel(stage: RecipeStage, locationName: (id: string) => string, ge
       return `Look at ${locationName(stage.location)}`;
     case "hold":
       return HOLDS.find((hold) => hold.value === stage.hold)?.label ?? stage.hold;
+    case "modelPair":
+      return `${stage.startLabel} to grab, ${stage.endLabel} to release`;
     case "model":
       return `Model “${stage.label}”${stage.hold === "oneShot" ? " (once)" : ""}`;
     case "camera":
@@ -245,6 +247,9 @@ const sameStage = (a: RecipeStage, b: RecipeStage) => JSON.stringify(a) === JSON
 
 /** Why this chain of steps cannot be saved, or null. The backend checks the same things. */
 export function chainProblem(leading: RecipeStage[], locations: CalibrationLocation[], trigger = false): string | null {
+  const pairs = leading.filter((s) => s.kind === "modelPair");
+  if (pairs.length > 1 || (trigger && pairs.length > 0)) return "Use one grab/release pair with a continuous control.";
+  if (pairs.some((p) => !isValidLabel(p.startLabel) || !isValidLabel(p.endLabel) || p.startLabel === p.endLabel)) return "Choose two different valid model labels for grab and release.";
   if (trigger && leading.length === 0) return "Add at least one step: something has to start it.";
   if (leading.some((stage) => stage.kind === "model" && !isValidLabel(stage.label))) {
     return "A model step needs a label: lowercase letters, digits and underscores, starting with a letter.";
@@ -273,4 +278,17 @@ export function nameProblem(name: string): string | null {
   if (trimmed === "") return "Give the recipe a name.";
   if (trimmed.length > MAX_RECIPE_NAME_CHARS) return `Too long: the maximum is ${MAX_RECIPE_NAME_CHARS} characters.`;
   return null;
+}
+
+/** Ready-to-edit original interaction. Saving never enables it or changes active models. */
+export function pinchVolumeRecipe(locations: CalibrationLocation[]): Recipe {
+  const target = locations.find((l) => l.id === "topRight") ?? locations.find((l) => !l.builtin);
+  return {
+    ...blankRecipe(locations), name: "Pinch volume knob",
+    stages: [
+      { kind: "headAt", location: target?.id ?? "topRight" },
+      { kind: "modelPair", startLabel: "pinch_in", endLabel: "pinch_out" },
+      { kind: "drive", axis: "roll", deadZoneDegrees: 1, invert: false },
+    ],
+  };
 }

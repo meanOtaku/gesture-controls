@@ -115,7 +115,7 @@ fn load(app: &AppHandle, source: &LabellingSource) -> Result<(Pair, String), Str
                 .datasets
                 .iter()
                 .find(|d| &d.id == id)
-                .ok_or("that recording is no longer in Model Lab")?;
+                .ok_or("that recording is no longer in Datasets")?;
             let dir = model_lab::datasets_dir(app)?;
             let pair = pair_at(&model_lab::dataset_csv_path(&dir, id))?;
             Ok((pair, summary.original_filename.clone()))
@@ -309,7 +309,7 @@ pub fn labelling_camera_evidence(
                 .iter()
                 .any(|d| &d.id == id)
             {
-                return Err("that recording is no longer in Model Lab".into());
+                return Err("that recording is no longer in Datasets".into());
             }
             model_lab::dataset_csv_path(&model_lab::datasets_dir(&app)?, id)
         }
@@ -343,7 +343,7 @@ pub fn save_labelling_original(
                 .datasets
                 .iter_mut()
                 .find(|d| &d.id == id)
-                .ok_or("that recording is no longer in Model Lab")?;
+                .ok_or("that recording is no longer in Datasets")?;
             summary.labels = labelled.labels.clone();
             summary.label = labelled.labels.join(", ");
             summary.content_sha = Some(dataset_files::rows_sha(&ppg, &imu));

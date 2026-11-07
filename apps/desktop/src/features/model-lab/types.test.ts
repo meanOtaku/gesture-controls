@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeQuality, inImportOrder, recordingNumber, sameDataAs } from "./types";
+import { datasetLabels, describeQuality, inImportOrder, recordingNumber, sameDataAs } from "./types";
 
 describe("import order", () => {
   it("puts recordings in the order they were imported, keeping stored order where there is no number", () => {
@@ -31,5 +31,12 @@ describe("recording quality and duplicates", () => {
     const c = { ...a, id: "c", contentSha: "y" };
     expect(sameDataAs(a, [a, b, c]).map((d) => d.id)).toEqual(["b"]);
     expect(sameDataAs({ ...a, contentSha: undefined }, [a, b])).toEqual([]);
+  });
+});
+
+describe("datasetLabels with no labels yet", () => {
+  it("gives none, rather than one blank label", () => {
+    expect(datasetLabels({ label: "", labels: [] })).toEqual([]);
+    expect(datasetLabels({ label: "pinch" })).toEqual(["pinch"]);
   });
 });

@@ -55,6 +55,15 @@ describe("delete plan", () => {
     expect(plan.steps.some((step) => step.kind === "deleteGesture" && step.id === "g2")).toBe(false);
   });
 
+  it("does not remove marks from a session that goes with its last training recording", () => {
+    const only = { id: "d1", originalFilename: "only.csv", importedAt: "", label: "pinch", labels: ["pinch"], rowCount: 5 };
+    const bundles = [{ recordingId: "r1", labelIds: ["pinch"] }];
+    const going = planCascade("delete", "pinch", sources({ datasets: [{ ...only, sourceRecordingId: "r1" }], bundles }));
+    expect(going.steps.some((step) => step.kind === "removeIntervals")).toBe(false);
+    const kept = planCascade("delete", "pinch", sources({ datasets: [{ ...only, sourceRecordingId: "r1" }, { ...only, id: "d2", labels: ["idle"], label: "idle", sourceRecordingId: "r1" }], bundles }));
+    expect(kept.steps.filter((step) => step.kind === "removeIntervals")).toEqual([{ kind: "removeIntervals", recordingId: "r1" }]);
+  });
+
   it("has no blockers when every training recording holds only this label", () => {
     const plan = planCascade("delete", "pinch", sources({ datasets: [{ id: "d1", originalFilename: "only.csv", importedAt: "", label: "pinch", labels: ["pinch"], rowCount: 5 }] }));
     expect(plan.blockers).toEqual([]);

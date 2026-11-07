@@ -370,3 +370,21 @@ describe("RecipesPage", () => {
     expect(screen.getAllByText("Paused: conflict")).toHaveLength(2);
   });
 });
+
+it("sets up a continuous pinch knob with editable start/end labels without enabling it", async () => {
+  const props = setup();
+  fireEvent.click(screen.getByRole("button", { name: "Set up pinch volume knob" }));
+  expect(screen.getByLabelText("Step 2 grab label")).toHaveValue("pinch_in");
+  expect(screen.getByLabelText("Step 2 release label")).toHaveValue("pinch_out");
+  fireEvent.change(screen.getByLabelText("Step 2 release label"), { target: { value: "my_release" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save recipe" }));
+  await waitFor(() => expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({
+    enabled: false, action: "volume", device: { kind: "rotationKnob", fractionPerDegree: expect.closeTo(1 / 300, 10) },
+    stages: [
+      { kind: "headAt", location: "topRight" },
+      { kind: "modelPair", startLabel: "pinch_in", endLabel: "my_release" },
+      { kind: "drive", axis: "roll", deadZoneDegrees: 1, invert: false },
+    ],
+  })));
+  expect(props.onSetEnabled).not.toHaveBeenCalled();
+});

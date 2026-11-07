@@ -59,7 +59,7 @@ BACKEND = "ppg-onset-trees"
 # The CNN (`cnn.py`): the last second of motion and pulse into a small convolutional network. It needs PyTorch.
 CNN_BACKEND = "ppg-imu-cnn"
 BACKENDS = (BACKEND, CNN_BACKEND)
-CNN_PREPROCESSING = "ppg_imu_cnn"
+CNN_PREPROCESSING = "ppg_imu_cnn_median"
 CNN_WINDOW_MS = 11_000
 PPG_SOURCES = ("watchPpg",)
 MOTION_SOURCES = ("watchPpg", "watchOrientation")
@@ -777,7 +777,7 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
         import torch
 
         framework = {"name": "pytorch", "version": torch.__version__.split("+")[0]}
-        pipeline = ("accelerometer, gyroscope and PPG on a 50 Hz grid -> each tick z-scored against the 10 s before it, sigmoid"
+        pipeline = ("accelerometer, gyroscope and PPG on a 50 Hz grid -> each channel scaled by the median and median absolute deviation of its last 11 s, sigmoid"
                     " -> the last 1 s (9 x 50) -> CNN (3 dilated convolutions, max and mean pooling, 2 dense) -> peak trigger")
         from . import cnn
 

@@ -5,8 +5,9 @@ import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { useLabelModels } from "../hooks/useLabelModels";
 import { formatTime, modelName, newestFirst, type LabelModel } from "../labelModels";
-import { PULSE_MODEL } from "../training";
+import { CNN_MODEL, PULSE_MODEL, type ModelDescription } from "../training";
 import { ModelInspector } from "./ModelInspector";
+import { ModelStages } from "./ModelStages";
 
 const STATE_TEXT: Record<string, string> = { draft: "Draft", evaluated: "Evaluated", approved: "Approved", active: "Active", archived: "Archived" };
 
@@ -26,50 +27,51 @@ function ModelRow({ model, chosen, onChoose }: { model: LabelModel; chosen: bool
   );
 }
 
-/** The model's pipeline, stage by stage, with what the research measured. */
-export function ModelPipeline() {
-  const { research } = PULSE_MODEL;
+/** One model the app trains: its pipeline, stage by stage, with what the research measured. */
+function PipelineCard({ model, description, help, results, hint }: { model: ModelDescription; description: string; help: string; results: [string, string][]; hint: string }) {
   return (
-    <Card id="lab-pipeline" role="region" aria-label="Model pipeline" className="min-w-0">
+    <Card role="region" aria-label={`${model.name} pipeline`} className="min-w-0">
       <CardHeader>
-        <SectionHeader
-          title={PULSE_MODEL.name}
-          description="The one model the app trains, for every label."
-          help={{
-            label: "About this model",
-            content: "Chosen by the October 2026 research: of 26 methods and several ways of preparing the pulse signal, multi-scale z-scored derivatives with ExtraTrees had the best worst-case score on recordings the model never saw; adding the watch's motion raised it again and halved the false alarms on recordings without the gesture, and firing at the top of the score's climb caught more starts for the same false alarms. The research is in docs/research/ppg-imu-fusion-and-triggers-2026-10.md.",
-          }}
-        />
+        <SectionHeader title={model.name} description={description} help={{ label: `About the ${model.name}`, content: help }} />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <p className="text-sm">{PULSE_MODEL.summary}</p>
-        <ol className="flex flex-wrap items-stretch gap-2" aria-label="Pipeline stages">
-          {PULSE_MODEL.stages.map((stage, index) => (
-            <li key={stage.title} className="flex items-center gap-2">
-              <div className="rounded-md border px-3 py-2 text-sm" style={{ maxWidth: 190 }}>
-                <strong className="block">{stage.title}</strong>
-                <small className="text-muted-foreground">{stage.detail}</small>
-              </div>
-              {index < PULSE_MODEL.stages.length - 1 && <span aria-hidden="true">→</span>}
-            </li>
-          ))}
-        </ol>
+        <p className="text-sm">{model.summary}</p>
+        <ModelStages stages={model.stages} />
         <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-4" aria-label="Research results">
-          <div><dt className="text-muted-foreground">Worst-case AUC</dt><dd className="text-numeric">{research.worstAuc.toFixed(3)}</dd></div>
-          <div><dt className="text-muted-foreground">Mean AUC</dt><dd className="text-numeric">{research.meanAuc.toFixed(3)}</dd></div>
-          <div><dt className="text-muted-foreground">Gesture starts caught</dt><dd className="text-numeric">{Math.round(research.recall * 100)}%</dd></div>
-          <div><dt className="text-muted-foreground">False alarms</dt><dd className="text-numeric">≈{research.falsePerMinute.toFixed(1)} / min</dd></div>
+          {results.map(([name, value]) => <div key={name}><dt className="text-muted-foreground">{name}</dt><dd className="text-numeric">{value}</dd></div>)}
         </dl>
-        <p className="field-hint">
-          Measured on 37 recordings, testing 20 times on recordings the model never trained on, firing on the peak at a cut-off of 0.65 (picked on those same tests, so a little optimistic). Your models choose their own cut-off, on their training recordings. One that does not pass the checks for going live can be activated, but it only runs in Monitor.
-        </p>
+        <p className="field-hint">{hint}</p>
       </CardContent>
     </Card>
   );
 }
 
+/** The two kinds of model the app trains, stage by stage. */
+export function ModelPipeline() {
+  const trees = PULSE_MODEL.research;
+  const cnn = CNN_MODEL.research;
+  return (
+    <div id="lab-pipeline" className="flex min-w-0 flex-col gap-4">
+      <PipelineCard
+        model={PULSE_MODEL}
+        description="Trees: Model Lab's default for every label."
+        help="Chosen by the October 2026 research: of 26 methods and several ways of preparing the pulse signal, multi-scale z-scored derivatives with ExtraTrees had the best worst-case score on recordings the model never saw; adding the watch's motion raised it again and halved the false alarms on recordings without the gesture, and firing at the top of the score's climb caught more starts for the same false alarms. The research is in docs/research/ppg-imu-fusion-and-triggers-2026-10.md."
+        results={[["Worst-case AUC", trees.worstAuc.toFixed(3)], ["Mean AUC", trees.meanAuc.toFixed(3)], ["Gesture starts caught", `${Math.round(trees.recall * 100)}%`], ["False alarms", `≈${trees.falsePerMinute.toFixed(1)} / min`]]}
+        hint="Measured on 37 recordings, testing 20 times on recordings the model never trained on, firing on the peak at a cut-off of 0.65 (picked on those same tests, so a little optimistic). Your models choose their own cut-off, on their training recordings. One that does not pass the checks for going live can be activated, but it only runs in Monitor."
+      />
+      <PipelineCard
+        model={CNN_MODEL}
+        description="The CNN: choose it in Model Lab's Train card."
+        help="It decides sooner than the trees. Since November 2026 each channel is scaled by its median and spread, because the earlier rolling scaling hid pinches for 8 to 10 seconds after heavy motion. The research is in docs/research/cnn-motion-hangover-2026-11.md."
+        results={[["Pinch ins caught", `${Math.round(cnn.recall * 100)}%`], ["False alarms", `at most ${cnn.falsePerMinute.toFixed(0)} / min`], ["Decides after", `${cnn.delayMs} ms`], ["Inputs", String(CNN_MODEL.inputs)]]}
+        hint={`${CNN_MODEL.trainingNote} Pinch ins from a still hand, against 64% for the trees on the same recordings, measured with the earlier rolling scaling. Your models choose their own cut-off, on their training recordings. One that does not pass the checks for going live can be activated, but it only runs in Monitor.`}
+      />
+    </div>
+  );
+}
+
 /**
- * The Network lab: what the model is, stage by stage, and a look inside each trained model (its inputs, how well it works,
+ * The Network lab: what each kind of model is, stage by stage, and a look inside each trained model (its inputs, how well it works,
  * the research checks). Training happens in Model Lab.
  */
 export function NetworkLab({ modelId, onModelChange }: { modelId: string | null; onModelChange: (id: string | null) => void }) {
@@ -87,7 +89,7 @@ export function NetworkLab({ modelId, onModelChange }: { modelId: string | null;
         <div>
           <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Network lab</h1>
-          <p className="subtitle">The model the app trains, and a look inside each one you have.</p>
+          <p className="subtitle">The two kinds of model the app trains, and a look inside each one you have.</p>
         </div>
       </header>
 
@@ -102,7 +104,7 @@ export function NetworkLab({ modelId, onModelChange }: { modelId: string | null;
       )}
 
       <nav className="lab-workflow" aria-label="Network lab sections">
-        <a href="#lab-pipeline">The model</a><a href="#lab-models">Look inside a model</a>
+        <a href="#lab-pipeline">The models</a><a href="#lab-models">Look inside a model</a>
       </nav>
 
       <div className="lab-workspace card-stack">

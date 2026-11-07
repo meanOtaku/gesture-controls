@@ -1,6 +1,34 @@
 import { describe, expect, it } from "vitest";
-import { extraCopies, filterRecordings, groupNames, groupRecordings, hasProblem, NO_FILTER } from "./recordingFilters";
+import { extraCopies, filterRecordings, groupNames, groupRecordings, hasProblem, NO_FILTER, sessionCopies } from "./recordingFilters";
 import type { DatasetSummary } from "./types";
+
+describe("sessionCopies", () => {
+  const take = (id: string, sequence: number, over: Partial<DatasetSummary> = {}): DatasetSummary => ({ id, sequence, originalFilename: `${id}.csv`, importedAt: "2026-10-18", label: "pinch", rowCount: 1, contentSha: id, ...over });
+  const keepOf = (...datasets: DatasetSummary[]) => sessionCopies([datasets.map((d) => d.id)], datasets)[0];
+
+  it("suggests nothing between copies labelled differently with nothing to tell them apart", () => {
+    expect(keepOf(take("a", 1), take("b", 2))).toMatchObject({ keep: null, why: null, sameLabels: false });
+  });
+
+  it("suggests the oldest of copies that are the same in every row", () => {
+    expect(keepOf(take("b", 2, { contentSha: "x" }), take("a", 1, { contentSha: "x" }))).toMatchObject({ keep: "a", why: "the oldest copy", sameLabels: true });
+  });
+
+  it("puts the sealed copy before the reviewed one, and the reviewed one before the latest version", () => {
+    const reviewed = { review: { status: "reviewed", at: "2026-10-19" } } as const;
+    expect(keepOf(take("a", 1, { sealed: true }), take("b", 2, reviewed)).keep).toBe("a");
+    expect(keepOf(take("a", 1), take("b", 2, reviewed), take("c", 3, { derivedFrom: "a" })).keep).toBe("b");
+    expect(keepOf(take("a", 1), take("b", 2, { derivedFrom: "a" })).keep).toBe("b");
+  });
+
+  it("leaves the choice to you when two copies are sealed", () => {
+    expect(keepOf(take("a", 1, { sealed: true, contentSha: "x" }), take("b", 2, { sealed: true, contentSha: "x" })).keep).toBeNull();
+  });
+
+  it("drops a set with fewer than two recordings still listed", () => {
+    expect(sessionCopies([["a", "gone"]], [take("a", 1)])).toEqual([]);
+  });
+});
 
 const quality = (poor: number, holds: Record<string, number> = { pinch: 10 }) => ({ poorContactShare: poor, holds, shortHolds: 0 });
 const recordings: DatasetSummary[] = [

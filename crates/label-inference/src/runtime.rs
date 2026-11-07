@@ -104,6 +104,10 @@ impl Familiarity {
 
 #[derive(Debug, Default, PartialEq)]
 pub struct RuntimeOutput {
+    /// Invalidate latched interactions even if no detector is currently active.
+    pub reset_interactions: bool,
+    /// Loaded models that cannot provide a grab or release event in this mode.
+    pub blocked_labels: Vec<LabelId>,
     pub scores: Vec<LabelScore>,
     pub rejections: Vec<WindowRejection>,
     /// Every detection change, for display and diagnostics.
@@ -230,6 +234,7 @@ impl LabelRuntime {
 
     fn release(&mut self, events: Vec<DetectionEvent>) -> RuntimeOutput {
         RuntimeOutput {
+            reset_interactions: true,
             actionable: events.clone(),
             events,
             input_warnings: self.warnings_changed(0, false),
@@ -486,6 +491,12 @@ impl LabelRuntime {
         }
         let input_warnings = self.warnings_changed(now_ns, true);
         RuntimeOutput {
+            reset_interactions: false,
+            blocked_labels: if self.mode == RuntimeMode::Live {
+                self.monitor_only().into_iter().collect()
+            } else {
+                self.loaded_labels()
+            },
             actionable: allow(self.mode, &self.monitor_only(), &events),
             scores,
             rejections,
@@ -1102,5 +1113,14 @@ mod tests {
         rt.set_worn(false);
         rt.watch_lost();
         assert!(!rt.is_off_wrist());
+    }
+    #[test]
+    fn faults_invalidate_a_latched_interaction_without_an_active_detector() {
+        let mut runtime = LabelRuntime::default();
+        assert!(runtime.set_mode(RuntimeMode::Monitor).reset_interactions);
+        assert!(runtime.fail("lost input").reset_interactions);
+        assert!(runtime.watch_lost().reset_interactions);
+        assert!(runtime.set_worn(false).reset_interactions);
+        assert!(runtime.set_models(vec![]).reset_interactions);
     }
 }

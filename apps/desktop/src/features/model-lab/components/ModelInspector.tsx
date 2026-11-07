@@ -7,10 +7,11 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { modelName, type LabelModel } from "../labelModels";
 import { currentInspection, type ModelInspectionView } from "../inspection";
-import { PULSE_MODEL } from "../training";
-import { DeclaredInputs, InspectInputs } from "./InspectInputs";
+import { CNN_MODEL, modelDescription } from "../training";
+import { DeclaredFacts, DeclaredInputs, InspectInputs } from "./InspectInputs";
 import { InspectEvaluation } from "./InspectEvaluation";
 import { InspectResearch } from "./InspectResearch";
+import { ModelStages } from "./ModelStages";
 
 const asStrings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
 
@@ -63,6 +64,17 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
   const auc = inspection?.evaluation.metrics.rocAuc;
   // Models trained before motion read the pulse alone.
   const readsMotion = inspection?.sources?.includes("watchOrientation") ?? false;
+  const isCnn = inspection?.kind === "cnn";
+  // The manifest says what kind of model it is; an inspection stands in for a manifest that does not.
+  const declaredKind = (view?.manifest?.preprocessing as { kind?: unknown } | undefined)?.kind;
+  const description = modelDescription(declaredKind) ?? modelDescription(isCnn ? "ppg_imu_cnn" : readsMotion ? "ppg_imu_onset" : inspection ? "ppg_multiscale_onset" : null);
+  const howItWorks = description && (
+    <section aria-label="How this model works" className="flex flex-col gap-2">
+      <h3 className="text-base font-semibold">How this model works</h3>
+      <p className="field-hint">{description.summary}</p>
+      <ModelStages stages={description.stages} />
+    </section>
+  );
 
   return (
     <Card id="lab-inspect" role="region" aria-label={`Inspect ${id}`} className="min-w-0">
@@ -84,17 +96,19 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
           <>
             <Alert role="note"><AlertDescription>
               {view.origin === "imported"
-                ? "This model was imported, so the app has only what it declares: its inputs and settings. How it did on test recordings is not available."
+                ? "This model was imported, so the app has only what it declares. The charts of its scores on test recordings are not available."
                 : "This model's inspection could not be made, so only what it declares is shown."}
             </AlertDescription></Alert>
+            {howItWorks}
+            {view.manifest && <DeclaredFacts manifest={view.manifest} />}
             <DeclaredInputs names={asStrings(manifestInput.features)} />
           </>
         )}
         {inspection && (
           <>
             <div className="flex flex-wrap items-center gap-2" role="status" aria-label="Model summary">
-              <Badge variant="outline">{readsMotion ? PULSE_MODEL.name : "PPG pinch-start model"}</Badge>
-              <Badge variant="outline">{inspection.inputCount.toLocaleString("en-US")} {readsMotion ? "pulse and motion" : "pulse"} inputs · {inspection.trees} trees{readsMotion ? " · fires on the peak" : ""}</Badge>
+              <Badge variant="outline">{description?.name}</Badge>
+              <Badge variant="outline">{inspection.inputCount.toLocaleString("en-US")} {readsMotion ? "pulse and motion" : "pulse"} inputs · {isCnn ? `${CNN_MODEL.networks} networks` : `${inspection.trees} trees`}{readsMotion ? " · fires on the peak" : ""}</Badge>
               <Badge variant="outline">Trained on {inspection.examples.trainStarts} starts among {inspection.examples.train.toLocaleString("en-US")} moments</Badge>
               {typeof auc === "number" && <Badge variant="outline">Held-out ROC AUC {auc.toFixed(2)}</Badge>}
               {monitorOnly && <Badge variant="secondary">Monitor only</Badge>}
@@ -112,6 +126,7 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
                 {compare && !other && <span className="hint" role="status">{nameOf(compare.id)} has no saved inspection, so there is nothing to compare.</span>}
               </div>
             )}
+            {howItWorks}
             <InspectEvaluation inspection={inspection} other={other} otherName={compare ? nameOf(compare.id) : undefined} />
             <InspectResearch inspection={inspection} />
             <InspectInputs inspection={inspection} />

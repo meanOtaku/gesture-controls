@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
+import { onRecordingsChanged } from "../../../shared/tauri/recordingBundle";
 import { inImportOrder, type DatasetLabel, type DatasetSummary } from "../types";
 
 /** The training recordings and the labels they can have: what Model Lab and the Network lab both train from. */
@@ -24,6 +25,8 @@ export function useModelLabData(desktopAvailable: boolean) {
 
   useEffect(() => {
     void refreshDatasets();
+    // Datasets is the one list: anything added, changed or deleted elsewhere shows here at once.
+    return onRecordingsChanged(() => void refreshDatasets());
   }, [refreshDatasets]);
 
   useEffect(() => {

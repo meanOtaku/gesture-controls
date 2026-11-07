@@ -9,6 +9,18 @@ export type OtherRole = "negative" | "exclude";
 export const LABEL_TRAINING_EVENT = "label-training-event";
 
 /** The one model the app trains: what it reads, the steps it takes, and what the research measured for it. */
+export interface ModelStage {
+  title: string;
+  detail: string;
+}
+
+/** How a kind of model works, in words. */
+export interface ModelDescription {
+  name: string;
+  summary: string;
+  stages: readonly ModelStage[];
+}
+
 export const PULSE_MODEL = {
   name: "PPG + IMU pinch-start model",
   summary:
@@ -36,19 +48,54 @@ export const CNN_METHOD: TrainMethod = "ppg-imu-cnn";
 export const CNN_MODEL = {
   name: "CNN pinch-start model",
   summary:
-    "Reads the last second of the watch's accelerometer, gyroscope and pulse sensor, each scaled by its own last 10 seconds, and fires about 0.5 s after a gesture starts, about 0.4 s sooner than the trees. Three small convolutional networks look at the shape of that second and their votes are averaged. Use it with Settings → Gestures → Still hand on: it learned the jolt of a gesture from a still hand, and fires on jolts in other movement. Training it needs PyTorch, which the trainer installs the first time (a large download).",
+    "Reads the last second of the watch's accelerometer, gyroscope and pulse sensor, each scaled by the median and spread of its last 11 seconds so that a burst of motion does not hide the next pinch, and fires about 0.5 s after a gesture starts, about 0.4 s sooner than the trees. Three small convolutional networks look at the shape of that second and their votes are averaged.",
+  /** What to know before training one. */
+  trainingNote:
+    "Use it with Settings → Gestures → Still hand on: it learned the jolt of a gesture from a still hand, and fires on jolts in other movement. Training it needs PyTorch, which the trainer installs the first time (a large download).",
   stages: [
     { title: "Motion and pulse", detail: "Accelerometer and gyroscope, and green, red and infrared light, on one 50 Hz grid" },
-    { title: "Scaled to its recent level", detail: "Each tick z-scored against the 10 s before it, then squashed to 0-1" },
+    { title: "Scaled to its recent level", detail: "Each channel against the median and spread of its last 11 s, then squashed to 0-1" },
     { title: "The last second", detail: "9 channels x 50 ticks: 450 inputs" },
     { title: "CNN", detail: "Three dilated convolutions, max and mean over time, two dense layers; three networks averaged" },
     { title: "Peak trigger", detail: "Fires when the vote falls back after reaching the cut-off" },
   ],
   inputs: 450,
-  /** Pinch ins caught with still hand, at most 1 false alarm a minute, on the current pinch model's split
+  networks: 3,
+  /** Pinch ins caught with still hand, at most 1 false alarm a minute, on the current pinch model's split, measured with the
+   * earlier rolling scaling
    * (docs/research/artifacts/double-pinch-2026-10/cnn-vs-trees): against 64% for the trees. */
   research: { recall: 0.69, falsePerMinute: 1.0, delayMs: 500 },
 } as const;
+
+/** The CNN as it was first trained: the same network, scaled by a rolling mean and deviation, which motion upsets. */
+const ROLLING_CNN_MODEL: ModelDescription = {
+  name: "CNN pinch-start model (rolling scaling)",
+  summary:
+    "An earlier CNN. It reads the same second of motion and pulse, but each tick is scaled by the 10 seconds before it, so a burst of motion hides pinches until it has left those 10 seconds. Train a new CNN to replace it.",
+  stages: CNN_MODEL.stages.map((stage, index) => (index === 1 ? { ...stage, detail: "Each tick z-scored against the 10 s before it, then squashed to 0-1" } : stage)),
+};
+
+/** The earlier model of the pulse sensor alone. */
+const PULSE_ONLY_MODEL: ModelDescription = {
+  name: "PPG pinch-start model",
+  summary: "An earlier model. It reads the pulse sensor alone, compares it with the 1, 2 and 4 seconds before it, and randomised decision trees decide whether a gesture has just begun, firing as the vote crosses the cut-off.",
+  stages: [
+    ...PULSE_MODEL.stages.slice(0, 3),
+    PULSE_MODEL.stages[4],
+    { title: "Edge trigger", detail: "Fires when the vote crosses the cut-off" },
+  ],
+};
+
+/** How the model of a bundle's preprocessing kind works (`ModelKind` in inputs.rs); null for a kind this app does not know. */
+export function modelDescription(kind: unknown): ModelDescription | null {
+  switch (kind) {
+    case "ppg_imu_onset": return PULSE_MODEL;
+    case "ppg_multiscale_onset": return PULSE_ONLY_MODEL;
+    case "ppg_imu_cnn_median": return CNN_MODEL;
+    case "ppg_imu_cnn": return ROLLING_CNN_MODEL;
+    default: return null;
+  }
+}
 
 export interface TrainRequest {
   label: string;

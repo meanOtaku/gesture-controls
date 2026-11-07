@@ -37,7 +37,10 @@ pub use import::{
     IMPORTED_MODELS_DIR, ImportError, ImportOutcome, STAGING_DIR, StagedBundle, clean_staging,
     import_bundle, publish_staged, publish_staged_with, stage_bundle,
 };
-pub use inputs::{CNN_PREPROCESSING, ModelKind, PPG_IMU_PREPROCESSING, PPG_ONLY_PREPROCESSING};
+pub use inputs::{
+    CNN_MEDIAN_PREPROCESSING, CNN_PREPROCESSING, ModelKind, PPG_IMU_PREPROCESSING,
+    PPG_ONLY_PREPROCESSING,
+};
 pub use loader::{
     ModelLoadFailure, check_loadable, load_active_models, load_version, removable_model_dir,
 };

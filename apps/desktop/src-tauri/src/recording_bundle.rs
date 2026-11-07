@@ -246,6 +246,9 @@ pub struct RecordingBundleSummary {
     pub sequence: u32,
     /// When it was saved (the wall clock at its start).
     pub saved_at: String,
+    /// Whether a recording on the Datasets tab was made from it. Datasets owns those: they are deleted there. Filled in
+    /// when listing.
+    pub in_datasets: bool,
     /// Only on a save: the recording it became on the Datasets tab, which every recording joins as it is saved.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dataset: Option<crate::model_lab::DatasetSummary>,
@@ -302,6 +305,7 @@ fn summarize_bundle(
         is_imported: is_imported_only(recording),
         sequence: 0,
         saved_at: recording.actual_start.wall_clock_at.clone(),
+        in_datasets: false,
         dataset: None,
         not_in_datasets: None,
     }
@@ -610,8 +614,8 @@ pub fn save_recording_bundle(
     }
 
     let mut summary = numbered_summary(&app, &recording, &annotations);
-    // Every recording joins the Datasets tab as it is saved, as "Add to training data" would add it. One it cannot join
-    // (nothing labelled, or a label not in the catalogue) is still saved, and the reason goes back with it.
+    // Every recording joins the Datasets tab as it is saved, labelled or not. One it cannot join (a label not in the
+    // catalogue) is still saved, and the reason goes back with it.
     match add_to_datasets(&app, &final_dir, &recording.recording_id) {
         Ok(dataset) => summary.dataset = Some(dataset),
         Err(reason) => summary.not_in_datasets = Some(reason),
@@ -862,7 +866,7 @@ fn merge_dataset_folder(folder: &std::path::Path) -> Result<String, String> {
     )
 }
 
-fn import_recording_text(
+pub(crate) fn import_recording_text(
     csv_text: String,
     app: &AppHandle,
 ) -> Result<RecordingBundleSummary, String> {
@@ -968,7 +972,23 @@ fn import_recording_text(
 #[tauri::command]
 pub fn list_recording_bundles(app: AppHandle) -> Result<Vec<RecordingBundleSummary>, String> {
     let dir = recording_bundles_dir(&app)?;
-    all_summaries(&dir)
+    let mut summaries = all_summaries(&dir)?;
+    let datasets = crate::model_lab::load_index(&app).datasets;
+    for summary in &mut summaries {
+        summary.in_datasets = session_in_use(&datasets, &summary.recording_id);
+    }
+    Ok(summaries)
+}
+
+/// Whether a recording on the Datasets tab was made from the session `recording_id`.
+pub(crate) fn session_in_use(
+    datasets: &[crate::model_lab::DatasetSummary],
+    recording_id: &str,
+) -> bool {
+    datasets.iter().any(|dataset| {
+        dataset.source_recording_id.as_deref() == Some(recording_id)
+            || dataset.viewer_session_id.as_deref() == Some(recording_id)
+    })
 }
 
 /// Every saved bundle, numbered and in that order.
@@ -1042,11 +1062,25 @@ pub fn load_recording_bundle(
 #[tauri::command]
 pub fn delete_recording_bundle(recording_id: String, app: AppHandle) -> Result<(), String> {
     validate_recording_id(&recording_id)?;
+    if session_in_use(&crate::model_lab::load_index(&app).datasets, &recording_id) {
+        return Err(
+            "this session belongs to a recording on the Datasets tab: delete it there".to_string(),
+        );
+    }
     let dir = recording_bundles_dir(&app)?.join(&recording_id);
     load_bundle_pair(&dir)?;
-    fs::remove_dir_all(&dir).map_err(|error| error.to_string())?;
+    remove_session(&app, &recording_id)
+}
+
+/// Removes a saved session's files, if it still has any. Datasets calls this when its last recording of a session goes.
+pub(crate) fn remove_session(app: &AppHandle, recording_id: &str) -> Result<(), String> {
+    validate_recording_id(recording_id)?;
+    let dir = recording_bundles_dir(app)?.join(recording_id);
+    if dir.exists() {
+        fs::remove_dir_all(&dir).map_err(|error| error.to_string())?;
+    }
     app.state::<RawColumnCache>()
-        .invalidate_recording(&recording_id);
+        .invalidate_recording(recording_id);
     Ok(())
 }
 

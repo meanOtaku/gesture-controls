@@ -9,7 +9,7 @@ import { Switch } from "../../../components/ui/switch";
 import type { AutomationState, CalibrationState, HeuristicGestures, Recipe } from "../../../shared/protocol/events";
 import { CameraArmSwitch } from "../../gestureLibrary/CameraArmSwitch";
 import { listGestureDefinitions } from "../../gestureLibrary/gestureLibraryApi";
-import { blankRecipe, describeRecipe, offGesturesUsed, type DeviceKind } from "../recipeModel";
+import { pinchVolumeRecipe, blankRecipe, describeRecipe, offGesturesUsed, type DeviceKind } from "../recipeModel";
 import { ConflictAlerts } from "./ConflictAlerts";
 import { RecipeEditor } from "./RecipeEditor";
 
@@ -80,7 +80,7 @@ export function RecipesPage({ automation, calibration, pendingRecipeIds, error, 
               description="Steps, wrist rotation and device"
               help={{
                 label: "About recipes",
-                content: "Every step must hold at the same moment. Looking at a location shows the knob; the hold steps then grab it, and turning your wrist moves the virtual device, which changes the volume. Releasing any step ends the interaction.",
+                content: "Every step must hold at the same moment. Looking at a location shows the knob; the hold steps then grab it, and turning your wrist moves the virtual device, which changes the volume. A grab/release pair holds between its two events; looking away or pressing Escape ends it too.",
               }}
             />
           </CardHeader>
@@ -104,6 +104,8 @@ export function RecipesPage({ automation, calibration, pendingRecipeIds, error, 
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {automation && <ConflictAlerts automation={automation} />}
+          <Button type="button" variant="outline" disabled={editing !== null || calibration === null} onClick={() => setEditing(pinchVolumeRecipe(locations))}>Set up pinch volume knob</Button>
+          <p className="field-hint">Look at the right corner, pinch to grab, turn your wrist, then release. Choose your Pinch In and Pinch Out labels in the setup; enable only one volume recipe.</p>
           {automation?.recipes.some((recipe) => recipe.stages.some((stage) => stage.kind === "camera")) && <CameraArmSwitch armed={automation.cameraArmed === true} />}
           {automation && automation.recipes.length === 0 && (
             <p className="field-hint">No recipes yet. Create one to start controlling the volume with gestures.</p>

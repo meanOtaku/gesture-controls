@@ -14,7 +14,7 @@ export function VolumeKnob({
   grabbed = false,
   nativeVolumeError = null,
 }: VolumeKnobProps) {
-  const boundedVolume = Math.min(100, Math.max(0, Math.round(volume)));
+  const boundedVolume = Math.min(100, Math.max(0, volume));
   const style: KnobStyle = { "--volume-progress": boundedVolume };
 
   return (
@@ -32,8 +32,9 @@ export function VolumeKnob({
         <circle className="volume-knob__progress" cx="60" cy="60" r="52" pathLength="100" style={style} />
       </svg>
       <div className="volume-knob__value">
-        <strong>{boundedVolume}%</strong>
+        <strong>{Math.round(boundedVolume)}%</strong>
         <span>Volume</span>
+        <small>{grabbed ? "Grabbed · Turn wrist" : "Ready"}</small>
       </div>
       {nativeVolumeError && <p className="volume-knob__native-error" role="alert">{nativeVolumeError}</p>}
     </section>

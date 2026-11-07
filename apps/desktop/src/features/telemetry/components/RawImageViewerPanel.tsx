@@ -14,19 +14,18 @@ import {
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { HelpTooltip } from "../../../components/app/HelpTooltip";
-import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
-import { chooseExportFolder } from "../../../shared/tauri/exportCsv";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { Slider } from "../../../components/ui/slider";
 import {
+  addRecordingToDatasets,
   deleteRecordingBundle,
   getRecordingQualitySummary,
-  importRecordingFromFolder,
-  importRecordingFromRawCsv,
   listRecordingBundles,
   loadRecordingBundle,
+  notifyRecordingsChanged,
+  onRecordingsChanged,
   RAW_GRID_SIZES,
   RAW_IMAGE_VIEWER_CHANNELS,
   rawWindowMaxValues,
@@ -88,51 +87,13 @@ function recordingLabel(summary: RecordingBundleSummary): string {
 export function RawImageViewerPanel() {
   const [recordingList, setRecordingList] = useState<RecordingListState>({ status: "loading" });
   const [listVersion, setListVersion] = useState(0);
-  const [importing, setImporting] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const [labelRanges, setLabelRanges] = useState<LabelRangesState>({ status: "empty" });
   const labelRangesRequestVersion = useRef(0);
   const [qualitySummary, setQualitySummary] = useState<QualitySummaryState>({ status: "empty" });
   const qualitySummaryRequestVersion = useRef(0);
   useSyncExternalStore(rawImageViewerStore.subscribe, rawImageViewerStore.getVersion, rawImageViewerStore.getVersion);
-
-  const handleImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    await runImport(async () => importRecordingFromRawCsv(await file.text()));
-  };
-
-  /** Imports a dataset folder (ppg.csv and imu.csv), the Recorder's default export. */
-  const handleImportFolder = async () => {
-    const folder = await chooseExportFolder("Choose a dataset folder (it holds ppg.csv and imu.csv)");
-    if (!folder) return;
-    await runImport(() => importRecordingFromFolder(folder));
-  };
-
-  const runImport = async (importIt: () => Promise<Awaited<ReturnType<typeof importRecordingFromRawCsv>>>) => {
-    setImporting(true);
-    setImportError(null);
-    setImportSuccessMessage(null);
-    try {
-      const result = await importIt();
-      if (result.status === "error") {
-        setImportError(result.message);
-        return;
-      }
-      setListVersion((v) => v + 1);
-      rawImageViewerStore.setRecording(result.recordingId);
-      setImportSuccessMessage(
-        `Imported recording ${result.recordingId} (${result.rowCount.toLocaleString()} rows).`,
-      );
-    } finally {
-      setImporting(false);
-    }
-  };
 
   const [pendingDelete, setPendingDelete] = useState<RecordingBundleSummary | null>(null);
 
@@ -151,6 +112,26 @@ export function RawImageViewerPanel() {
       setDeleting(false);
     }
   };
+
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const handleAddToDatasets = async (summary: RecordingBundleSummary) => {
+    setAdding(true);
+    setAddError(null);
+    try {
+      const result = await addRecordingToDatasets(summary.recordingId);
+      if (result.status === "error") {
+        setAddError(result.message);
+        return;
+      }
+      setListVersion((v) => v + 1);
+      notifyRecordingsChanged();
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  useEffect(() => onRecordingsChanged(() => setListVersion((v) => v + 1)), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -283,9 +264,9 @@ export function RawImageViewerPanel() {
             variant="outline"
             size="sm"
             className="text-destructive"
-            disabled={!selectedSummary || deleting}
+            disabled={!selectedSummary || deleting || selectedSummary.inDatasets}
             aria-busy={deleting}
-            title="Permanently delete the selected recording"
+            title={selectedSummary?.inDatasets ? "This session is in Datasets: delete it there" : "Permanently delete the selected recording"}
             onClick={() => selectedSummary && setPendingDelete(selectedSummary)}
           >
             {deleting ? "Deleting…" : "Delete recording"}
@@ -485,53 +466,21 @@ export function RawImageViewerPanel() {
         <section className="viewer-group" aria-label="Source">
         <div className="viewer-group-head">
           <h3 className="viewer-group-title">Source</h3>
-          <Input
-            ref={importFileInputRef}
-            type="file"
-            accept=".csv"
-            hidden
-            onChange={(event) => {
-              void handleImportFileChange(event);
-            }}
-          />
-          <div className="flex items-center gap-1">
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => void handleImportFolder()}
-              disabled={importing}
-              aria-busy={importing}
-            >
-              {importing ? "Importing…" : "Import dataset folder"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => importFileInputRef.current?.click()}
-              disabled={importing}
-              aria-busy={importing}
-            >
-              Import CSV
-            </Button>
-            <HelpTooltip label="About importing a recording">
-              <strong>Import dataset folder</strong> takes a folder exported by the Recorder (it holds{" "}
-              <code>ppg.csv</code> and <code>imu.csv</code>); the two files are merged back by time.{" "}
-              <strong>Import CSV</strong> takes a Timeline Capture <code>raw.csv</code> file (the app&apos;s exact
-              16-column schema) or a single-file dataset export (the older 17-column format, label column
-              included). Either becomes a new, read-only recording for inspection here; labels in a dataset
-              become its label ranges. It is never used for training.
-            </HelpTooltip>
-          </div>
         </div>
-        {importError && (
-          <p role="alert" className="text-sm text-destructive">
-            Could not import this file: {importError}
-          </p>
+        <p className="text-sm text-muted-foreground">
+          Sessions saved on the Datasets tab, to look inside. Import recordings and delete them on the Datasets tab.
+        </p>
+        {selectedSummary && selectedSummary.inDatasets === false && (
+          <div className="flex flex-wrap items-center gap-2 text-sm" role="group" aria-label="Not in Datasets">
+            <span>This session did not join Datasets when it was saved, usually because a label in it is not on the Labels tab.</span>
+            <Button type="button" size="sm" disabled={adding} aria-busy={adding} onClick={() => void handleAddToDatasets(selectedSummary)}>
+              {adding ? "Adding…" : "Add to Datasets"}
+            </Button>
+          </div>
         )}
-        {importSuccessMessage && (
-          <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
-            {importSuccessMessage}
+        {addError && (
+          <p role="alert" className="text-sm text-destructive">
+            Could not add this session to Datasets: {addError}
           </p>
         )}
         {deleteError && (

@@ -318,6 +318,7 @@ pub struct Engine {
     overlay: OverlayWanted,
     /// Model labels detected now and cleared to act.
     models_held: BTreeSet<String>,
+    model_edges: BTreeSet<String>,
     /// Model labels first detected recently, mapped to when that stops counting (the label runtime's clock).
     model_pulses: BTreeMap<String, u64>,
     model_now_ns: u64,
@@ -365,6 +366,7 @@ impl Engine {
             blocked: BTreeSet::new(),
             overlay: OverlayWanted::Hidden,
             models_held: BTreeSet::new(),
+            model_edges: BTreeSet::new(),
             model_pulses: BTreeMap::new(),
             model_now_ns: 0,
             models_loaded: None,
@@ -515,15 +517,22 @@ impl Engine {
             .iter()
             .filter(|recipe| recipe.enabled)
             .flat_map(|recipe| {
-                recipe.stages.iter().filter_map(|stage| match stage {
-                    Stage::Model { label, .. } if !loaded.contains(label) => {
-                        Some(UnavailableLabel {
-                            recipe: recipe.id.clone(),
-                            label: label.clone(),
-                        })
-                    }
-                    _ => None,
-                })
+                recipe
+                    .stages
+                    .iter()
+                    .flat_map(|stage| match stage {
+                        Stage::Model { label, .. } => vec![label],
+                        Stage::ModelPair {
+                            start_label,
+                            end_label,
+                        } => vec![start_label, end_label],
+                        _ => vec![],
+                    })
+                    .filter(|label| !loaded.contains(*label))
+                    .map(|label| UnavailableLabel {
+                        recipe: recipe.id.clone(),
+                        label: label.clone(),
+                    })
             })
             .collect()
     }
@@ -540,6 +549,34 @@ impl Engine {
         now_ns: u64,
     ) -> Effects {
         self.model_now_ns = now_ns;
+        self.model_edges = risen
+            .iter()
+            .filter(|l| loaded.contains(*l) && !dropped.contains(*l))
+            .cloned()
+            .collect();
+        for runner in &mut self.runners {
+            let unavailable_start = runner.recipe().stages.iter().find_map(|stage| match stage {
+                Stage::ModelPair {
+                    start_label,
+                    end_label,
+                } if dropped.contains(start_label)
+                    || dropped.contains(end_label)
+                    || !loaded.contains(start_label)
+                    || !loaded.contains(end_label) =>
+                {
+                    Some(start_label.clone())
+                }
+                _ => None,
+            });
+            if let Some(start) = unavailable_start {
+                // A corner preview is useful before the models are ready. Only an actual
+                // grab is cancelled/latches hidden. Reject a simultaneous start either way.
+                self.model_edges.remove(&start);
+                if runner.phase() == RunnerPhase::Driving {
+                    runner.cancel();
+                }
+            }
+        }
         for label in risen {
             self.model_pulses
                 .insert(label.clone(), now_ns + MODEL_PULSE_NS);
@@ -569,6 +606,18 @@ impl Engine {
 
     /// The watch went away: nothing it contributed can still hold.
     pub fn watch_lost(&mut self) -> Effects {
+        self.model_edges.clear();
+        for runner in &mut self.runners {
+            if runner.phase() == RunnerPhase::Driving
+                && runner
+                    .recipe()
+                    .stages
+                    .iter()
+                    .any(|s| matches!(s, Stage::ModelPair { .. }))
+            {
+                runner.cancel();
+            }
+        }
         self.models_held.clear();
         self.model_pulses.clear();
         self.stem = false;
@@ -706,6 +755,7 @@ impl Engine {
             .map(|(gesture, _)| gesture.clone())
             .collect();
         let signals = Signals {
+            model_edges: Some(&self.model_edges),
             models_held: Some(&self.models_held),
             models_pulsed: Some(&pulsed),
             cameras_held: self.cameras_armed.then_some(&self.cameras_held),
@@ -746,6 +796,13 @@ impl Engine {
                 runner.reset();
             } else if let Some(output) = runner.update(&signals) {
                 effects.deltas.push((recipe.action, output.delta_fraction));
+            } else if recipe.action == Action::Volume
+                && runner.phase() == RunnerPhase::Driving
+                && self.previous_phases[index] == RunnerPhase::Driving
+            {
+                // A held recipe may emit no delta while the wrist is still. Step the
+                // volume filter so it can settle, but never on the grab or release.
+                effects.deltas.push((Action::Volume, 0.0));
             }
             if runner.take_fired() {
                 effects.fired.push(recipe.action);
@@ -774,6 +831,7 @@ impl Engine {
                 };
             }
         }
+        self.model_edges.clear();
         self.driving = driving;
         if wanted != self.overlay {
             self.overlay = wanted;
@@ -1339,7 +1397,11 @@ mod tests {
             moved.deltas
         );
 
-        assert_eq!(engine.set_stem(false).overlay, Some(OverlayWanted::Armed));
+        let still = engine.observe_orientation(about_x(60.0), ts(5), None);
+        assert_eq!(still.deltas, vec![(Action::Volume, 0.0)]);
+        let released = engine.set_stem(false);
+        assert_eq!(released.overlay, Some(OverlayWanted::Armed));
+        assert!(released.deltas.is_empty());
         assert_eq!(engine.set_head(None).overlay, Some(OverlayWanted::Hidden));
     }
 
@@ -2418,5 +2480,134 @@ mod tests {
                 .conflicts
                 .is_empty()
         );
+    }
+    #[test]
+    fn paired_models_hold_between_events_but_faults_release_even_when_detectors_are_idle() {
+        let mut recipe = default_recipes().remove(1);
+        recipe.enabled = true;
+        recipe.stages[1] = Stage::ModelPair {
+            start_label: "pinch_in".into(),
+            end_label: "pinch_out".into(),
+        };
+        let mut engine = Engine::new(vec![recipe], Tuning::default());
+        let loaded = set(&["pinch_in", "pinch_out"]);
+        engine.set_models(loaded.clone(), set(&[]), &[], &[], 1);
+        engine.set_head(Some("topRight".into()));
+        engine.orientation = Some(Orientation {
+            quaternion: about_x(0.0),
+            timestamp_ns: 1,
+        });
+        let started = engine.set_models(loaded.clone(), set(&[]), &["pinch_in".into()], &[], 2);
+        assert_eq!(started.overlay, Some(OverlayWanted::Driving));
+        engine.set_models(loaded.clone(), set(&[]), &[], &[], 3);
+        assert!(
+            engine.driving,
+            "ordinary detection silence must not release the grab"
+        );
+        let fault = engine.set_models(loaded, set(&[]), &[], &["pinch_out".into()], 4);
+        assert_eq!(fault.overlay, Some(OverlayWanted::Hidden));
+        assert!(!engine.driving);
+        engine.set_head(Some("topRight".into()));
+        assert!(!engine.driving);
+    }
+
+    #[test]
+    fn a_pinch_before_targeting_cannot_be_reused_as_a_grab() {
+        let mut recipe = default_recipes().remove(1);
+        recipe.enabled = true;
+        recipe.stages[1] = Stage::ModelPair {
+            start_label: "pinch_in".into(),
+            end_label: "pinch_out".into(),
+        };
+        let mut engine = Engine::new(vec![recipe], Tuning::default());
+        engine.orientation = Some(Orientation {
+            quaternion: about_x(0.0),
+            timestamp_ns: 1,
+        });
+        engine.set_models(
+            set(&["pinch_in", "pinch_out"]),
+            set(&[]),
+            &["pinch_in".into()],
+            &[],
+            2,
+        );
+        let armed = engine.set_head(Some("topRight".into()));
+        assert_eq!(armed.overlay, Some(OverlayWanted::Armed));
+        assert!(!engine.driving);
+    }
+    #[test]
+    fn model_warmup_keeps_corner_preview_visible_but_cannot_grab() {
+        let mut recipe = default_recipes().remove(1);
+        recipe.enabled = true;
+        recipe.stages[1] = Stage::ModelPair {
+            start_label: "pinch_in".into(),
+            end_label: "pinch_out".into(),
+        };
+        let mut engine = Engine::new(vec![recipe], Tuning::default());
+        engine.orientation = Some(Orientation {
+            quaternion: about_x(0.0),
+            timestamp_ns: 1,
+        });
+        let loaded = set(&["pinch_in", "pinch_out"]);
+        engine.set_head(Some("topRight".into()));
+        assert_eq!(engine.overlay, OverlayWanted::Armed);
+        // An unavailable release must block a concurrent start, but not hide the preview.
+        engine.set_models(
+            loaded.clone(),
+            set(&[]),
+            &["pinch_in".into()],
+            &["pinch_out".into()],
+            2,
+        );
+        assert_eq!(engine.overlay, OverlayWanted::Armed);
+        assert!(!engine.driving);
+        // Fully unloaded models also leave a useful corner preview.
+        engine.set_models(set(&[]), set(&[]), &[], &[], 3);
+        assert_eq!(engine.overlay, OverlayWanted::Armed);
+        // Recovery needs a fresh pinch, not another head-target entry.
+        engine.set_models(loaded.clone(), set(&[]), &[], &[], 4);
+        assert!(!engine.driving);
+        engine.set_models(loaded.clone(), set(&[]), &["pinch_in".into()], &[], 5);
+        assert!(engine.driving);
+        // Once grabbed, a model fault still cancels and hides immediately.
+        engine.set_models(loaded, set(&[]), &[], &["pinch_out".into()], 6);
+        assert_eq!(engine.overlay, OverlayWanted::Hidden);
+        assert!(!engine.driving);
+    }
+    #[test]
+    fn pinch_out_keeps_the_overlay_armed_and_a_fresh_pinch_regrabs() {
+        let mut recipe = default_recipes().remove(1);
+        recipe.enabled = true;
+        recipe.stages[1] = Stage::ModelPair {
+            start_label: "pinch_in".into(),
+            end_label: "pinch_out".into(),
+        };
+        let mut engine = Engine::new(vec![recipe], Tuning::default());
+        engine.orientation = Some(Orientation {
+            quaternion: about_x(0.0),
+            timestamp_ns: 1,
+        });
+        let loaded = set(&["pinch_in", "pinch_out"]);
+        engine.set_head(Some("topRight".into()));
+        engine.set_models(loaded.clone(), set(&[]), &["pinch_in".into()], &[], 2);
+        // End wins even when the two detectors rise in the same update.
+        let released = engine.set_models(
+            loaded.clone(),
+            set(&[]),
+            &["pinch_in".into(), "pinch_out".into()],
+            &[],
+            3,
+        );
+        assert_eq!(released.overlay, Some(OverlayWanted::Armed));
+        assert_eq!(released.ended, vec![Action::Volume]);
+        assert!(released.deltas.is_empty());
+        assert!(!engine.driving);
+        let idle = engine.set_models(loaded.clone(), set(&[]), &[], &[], 4);
+        assert!(idle.deltas.is_empty());
+        assert_eq!(engine.overlay, OverlayWanted::Armed);
+        let grabbed = engine.set_models(loaded, set(&[]), &["pinch_in".into()], &[], 5);
+        assert_eq!(grabbed.overlay, Some(OverlayWanted::Driving));
+        assert!(grabbed.deltas.is_empty());
+        assert_eq!(engine.cancel().overlay, Some(OverlayWanted::Hidden));
     }
 }

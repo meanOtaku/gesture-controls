@@ -209,35 +209,39 @@ afterEach(() => {
   Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
 });
 
-describe("RawImageViewerPanel importing", () => {
-  it("imports a dataset folder (ppg.csv and imu.csv) chosen in the folder picker, and selects the new recording", async () => {
+describe("RawImageViewerPanel and the Datasets tab", () => {
+  const withDetail = (id: string) => ({ [id]: () => Promise.resolve({ recording: {}, annotations: { format_version: 1, recording_id: id, intervals: [] } }) });
+
+  it("has no way to import: recordings come in on the Datasets tab", async () => {
     mockInvoke({ recordings: [summary("rec-a")], detailByRecording: {} });
-    const listAndDetail = invoke.getMockImplementation()!;
-    invoke.mockImplementation((command: string, args?: Record<string, unknown>) =>
-      command === "import_recording_from_folder" ? Promise.resolve({ recordingId: "rec-new", rawRowCount: 1234 }) : listAndDetail(command, args));
-    open.mockResolvedValue("/data/gesture-dataset-pinch");
     renderPanel();
-    fireEvent.click(await screen.findByRole("button", { name: "Import dataset folder" }));
-    expect(await screen.findByText("Imported recording rec-new (1,234 rows).")).toBeInTheDocument();
-    expect(open).toHaveBeenCalledWith(expect.objectContaining({ directory: true }));
-    expect(invoke).toHaveBeenCalledWith("import_recording_from_folder", { path: "/data/gesture-dataset-pinch" });
-    expect(rawImageViewerStore.getRecordingId()).toBe("rec-new");
+    await screen.findByRole("combobox", { name: "Saved recording" });
+    expect(screen.queryByRole("button", { name: "Import dataset folder" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Import CSV" })).not.toBeInTheDocument();
   });
 
-  it("does nothing when the folder picker is cancelled, and shows the desktop's reason when a folder is refused", async () => {
-    mockInvoke({ recordings: [summary("rec-a")], detailByRecording: {} });
+  it("leaves deleting a session that is in Datasets to the Datasets tab", async () => {
+    mockInvoke({ recordings: [{ ...summary("rec-a"), inDatasets: true }], detailByRecording: withDetail("rec-a") });
+    renderPanel();
+    await screen.findByRole("combobox", { name: "Saved recording" });
+    act(() => rawImageViewerStore.setRecording("rec-a"));
+    const button = await screen.findByRole("button", { name: "Delete recording" });
+    await waitFor(() => expect(button).toHaveAttribute("title", "This session is in Datasets: delete it there"));
+    expect(button).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Add to Datasets" })).not.toBeInTheDocument();
+  });
+
+  it("adds a session that did not join Datasets, and shows why not when it still cannot", async () => {
+    mockInvoke({ recordings: [{ ...summary("rec-a"), inDatasets: false }], detailByRecording: withDetail("rec-a") });
     const listAndDetail = invoke.getMockImplementation()!;
     invoke.mockImplementation((command: string, args?: Record<string, unknown>) =>
-      command === "import_recording_from_folder" ? Promise.reject(new Error("the folder has no ppg.csv")) : listAndDetail(command, args));
-    open.mockReset();
-    open.mockResolvedValueOnce(null);
+      command === "add_recording_to_training_data" ? Promise.reject(new Error("nothing in it was labelled")) : listAndDetail(command, args));
     renderPanel();
-    fireEvent.click(await screen.findByRole("button", { name: "Import dataset folder" }));
-    await waitFor(() => expect(open).toHaveBeenCalledTimes(1));
-    expect(invoke).not.toHaveBeenCalledWith("import_recording_from_folder", expect.anything());
-    open.mockResolvedValueOnce("/data/empty");
-    fireEvent.click(screen.getByRole("button", { name: "Import dataset folder" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("the folder has no ppg.csv");
+    await screen.findByRole("combobox", { name: "Saved recording" });
+    act(() => rawImageViewerStore.setRecording("rec-a"));
+    fireEvent.click(await screen.findByRole("button", { name: "Add to Datasets" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("nothing in it was labelled");
+    expect(invoke).toHaveBeenCalledWith("add_recording_to_training_data", { recordingId: "rec-a", filter: "notExcluded", restLabel: null });
   });
 });
 

@@ -438,14 +438,15 @@ fn session_stamps(path: &Path) -> Result<Vec<i64>, String> {
         .collect())
 }
 
-/// The first two recordings, by name, that hold one session: at least half of the shorter one's timestamps are also the
+/// Every two recordings that hold one session, by position: at least half of the shorter one's timestamps are also the
 /// other's. Two copies of a session labelled differently are different files, so the duplicate check passes them; two
 /// sessions never share exact timestamps, even when the watch clock restarted between them.
-fn same_session(recordings: &[(String, Vec<i64>)]) -> Option<(&str, &str)> {
+fn same_session_pairs(recordings: &[(String, Vec<i64>)]) -> Vec<(usize, usize)> {
     let sets: Vec<std::collections::HashSet<i64>> = recordings
         .iter()
         .map(|(_, stamps)| stamps.iter().copied().collect())
         .collect();
+    let mut pairs = Vec::new();
     for i in 0..sets.len() {
         for j in i + 1..sets.len() {
             let (small, big) = if sets[i].len() <= sets[j].len() {
@@ -456,11 +457,60 @@ fn same_session(recordings: &[(String, Vec<i64>)]) -> Option<(&str, &str)> {
             if !small.is_empty()
                 && small.iter().filter(|t| big.contains(t)).count() * 2 >= small.len()
             {
-                return Some((recordings[i].0.as_str(), recordings[j].0.as_str()));
+                pairs.push((i, j));
             }
         }
     }
-    None
+    pairs
+}
+
+/// The first two recordings, by name, that hold one session.
+fn same_session(recordings: &[(String, Vec<i64>)]) -> Option<(&str, &str)> {
+    same_session_pairs(recordings)
+        .first()
+        .map(|&(i, j)| (recordings[i].0.as_str(), recordings[j].0.as_str()))
+}
+
+/// The recordings that hold one session, set by set, each set in the order given; only sets of two or more. A recording
+/// sharing a session with either of two others puts all three in one set.
+fn session_sets(recordings: &[(String, Vec<i64>)]) -> Vec<Vec<String>> {
+    let mut set_of: Vec<usize> = (0..recordings.len()).collect();
+    for (i, j) in same_session_pairs(recordings) {
+        let (from, to) = (set_of[j], set_of[i]);
+        for set in &mut set_of {
+            if *set == from {
+                *set = to;
+            }
+        }
+    }
+    let mut sets = BTreeMap::<usize, Vec<String>>::new();
+    for (i, (id, _)) in recordings.iter().enumerate() {
+        sets.entry(set_of[i]).or_default().push(id.clone());
+    }
+    sets.into_values().filter(|set| set.len() > 1).collect()
+}
+
+/// The recordings in Model Lab that hold one session, by the check training refuses them with, whether or not their labels
+/// agree. It reads every recording's motion rows, so it runs when asked. A recording that cannot be read is left out.
+#[tauri::command]
+pub async fn find_same_session_recordings(app: AppHandle) -> Result<Vec<Vec<String>>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = datasets_dir(&app)?;
+        let stamps: Vec<(String, Vec<i64>)> = load_index(&app)
+            .datasets
+            .iter()
+            .filter_map(|d| match session_stamps(&dataset_csv_path(&dir, &d.id)) {
+                Ok(stamps) => Some((d.id.clone(), stamps)),
+                Err(error) => {
+                    warn!(%error, "could not read a recording while looking for copies");
+                    None
+                }
+            })
+            .collect();
+        Ok(session_sets(&stamps))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// The trainer, with PyTorch installed for the CNN.
@@ -1006,6 +1056,7 @@ mod tests {
             group: None,
             labels_from: None,
             name: None,
+            viewer_session_id: None,
             camera: false,
             recorded_at: None,
         }
@@ -1124,6 +1175,31 @@ mod tests {
             ])),
             None
         );
+    }
+
+    #[test]
+    fn recordings_sharing_a_session_are_gathered_into_one_set() {
+        let stamps = |from: i64, to: i64| (from..to).map(|k| k * 19_998_877).collect::<Vec<_>>();
+        let recordings: Vec<(String, Vec<i64>)> = [
+            ("a", stamps(0, 100)),
+            ("other", stamps(1_000, 1_100)),
+            ("relabelled a", stamps(0, 100)),
+            ("end of a", stamps(40, 100)),
+            ("copy of other", stamps(1_000, 1_100)),
+            ("alone", stamps(5_000, 5_100)),
+            ("empty", vec![]),
+        ]
+        .into_iter()
+        .map(|(name, stamps)| (name.to_string(), stamps))
+        .collect();
+        assert_eq!(
+            session_sets(&recordings),
+            [
+                vec!["a", "relabelled a", "end of a"],
+                vec!["other", "copy of other"]
+            ]
+        );
+        assert!(session_sets(&recordings[5..]).is_empty());
     }
 
     #[test]

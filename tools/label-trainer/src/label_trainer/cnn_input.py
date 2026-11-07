@@ -9,9 +9,15 @@ For a decision at time T (on the watch clock both streams share):
    stream's last sample at or before it (zero-order hold).
 2. The channels are the accelerometer's and gyroscope's three axes and the pulse sensor's green, red and infrared
    (`CHANNELS`).
-3. Each of the last `WINDOW_TICKS` ticks (1 s) is z-scored against the `HISTORY_TICKS` ticks (10 s) ending at it: the
-   population mean and standard deviation of those ticks, the deviation floored by `motion_floor` (0.02 m/s² for the
-   accelerometer, 0.01 rad/s for the gyroscope) or, for the pulse, 0.001 x (|mean| + 1). Then a sigmoid puts it in (0, 1).
+3. Each of the last `WINDOW_TICKS` ticks (1 s) is centred and scaled, then a sigmoid puts it in (0, 1). `scaling` says how:
+   * `MEDIAN`, which new models use: against the median of the channel's `GRID_TICKS` ticks and 1.4826 x their median
+     absolute deviation (as large as a standard deviation on normal data). A burst of motion filling under half of the
+     history leaves both nearly unmoved, so a pinch just after it still stands out. Research:
+     `docs/research/cnn-motion-hangover-2026-11.md`.
+   * `ROLLING`, which models of the `ppg_imu_cnn` kind were trained on: z-scored against the `HISTORY_TICKS` ticks (10 s)
+     ending at each tick, their population mean and standard deviation.
+   Either way the spread is floored by `MOTION_FLOOR` (0.02 m/s² for the accelerometer, 0.01 rad/s for the gyroscope) or,
+   for the pulse, 0.001 x (|centre| + 1).
 
 That is 9 channels x 50 ticks = 450 inputs, channel by channel, oldest tick first (`FEATURE_NAMES`). A decision with a tick
 before either stream's first sample, or a gap between consecutive samples of either stream longer than `MAX_GAP_MS` within
@@ -33,6 +39,9 @@ PULSE_CHANNELS = ("ppg_green", "ppg_red", "ppg_ir")
 CHANNELS = (*MOTION_CHANNELS, *PULSE_CHANNELS)
 MOTION_FLOOR = np.array([0.02, 0.02, 0.02, 0.01, 0.01, 0.01])
 PULSE_FLOOR_SCALE = 1e-3
+MEDIAN, ROLLING = "median", "rolling"
+MAD_TO_STD = 1.4826                # a median absolute deviation times this is a standard deviation, on normal data
+MAX_Z = 500.0                      # far enough that the sigmoid is flat; keeps its exponential finite
 FEATURE_NAMES = tuple(f"cnn_{channel}_t{tick:02d}" for channel in CHANNELS for tick in range(WINDOW_TICKS))
 FEATURE_COUNT = len(FEATURE_NAMES)
 assert FEATURE_COUNT == 450 and GRID_TICKS == 549
@@ -75,8 +84,18 @@ def _scaled(grid: np.ndarray, pulse: bool) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-(shifted[:, last] - mean) / (std + floor)))
 
 
+def _median_scaled(grid: np.ndarray, pulse: bool) -> np.ndarray:
+    """(decisions, WINDOW_TICKS, channels): the last ticks against each channel's median and median absolute deviation over
+    the whole grid, through the sigmoid."""
+    centre = np.median(grid, axis=1, keepdims=True)
+    spread = MAD_TO_STD * np.median(np.abs(grid - centre), axis=1, keepdims=True)
+    floor = PULSE_FLOOR_SCALE * (np.abs(centre) + 1.0) if pulse else MOTION_FLOOR[None, None, :]
+    z = (grid[:, -WINDOW_TICKS:, :] - centre) / (spread + floor)
+    return 1.0 / (1.0 + np.exp(-np.clip(z, -MAX_Z, MAX_Z)))
+
+
 def inputs(motion_ts_ns: np.ndarray, motion: np.ndarray, pulse_ts_ns: np.ndarray, pulse: np.ndarray,
-           decisions_ns: np.ndarray, chunk: int = 1024) -> np.ndarray:
+           decisions_ns: np.ndarray, chunk: int = 1024, scaling: str = MEDIAN) -> np.ndarray:
     """(decisions, FEATURE_COUNT) from motion samples (rows of accelerometer x/y/z, gyroscope x/y/z) and pulse samples (rows
     of green, red, IR), each at its sorted int64 timestamps on the decisions' clock; a row of NaN where there are none."""
     motion_ts_ns = np.asarray(motion_ts_ns, dtype=np.int64)
@@ -84,6 +103,7 @@ def inputs(motion_ts_ns: np.ndarray, motion: np.ndarray, pulse_ts_ns: np.ndarray
     motion = np.asarray(motion, dtype=np.float64)
     pulse = np.asarray(pulse, dtype=np.float64)
     decisions_ns = np.asarray(decisions_ns, dtype=np.int64)
+    scaled = {MEDIAN: _median_scaled, ROLLING: _scaled}[scaling]
     out = np.full((len(decisions_ns), FEATURE_COUNT), np.nan)
     if len(motion_ts_ns) == 0 or len(pulse_ts_ns) == 0:
         return out
@@ -91,8 +111,8 @@ def inputs(motion_ts_ns: np.ndarray, motion: np.ndarray, pulse_ts_ns: np.ndarray
     for start in range(0, len(decisions_ns), chunk):
         part = slice(start, start + chunk)
         d = decisions_ns[part]
-        m = _scaled(_held(motion_ts_ns, motion, d), pulse=False)
-        p = _scaled(_held(pulse_ts_ns, pulse, d), pulse=True)
+        m = scaled(_held(motion_ts_ns, motion, d), pulse=False)
+        p = scaled(_held(pulse_ts_ns, pulse, d), pulse=True)
         # Channel by channel, oldest tick first.
         rows = np.concatenate([m, p], axis=2).transpose(0, 2, 1).reshape(len(d), FEATURE_COUNT)
         out[part] = rows

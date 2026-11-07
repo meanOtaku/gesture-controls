@@ -38,6 +38,51 @@ describe("ModelInspector", () => {
     expect(inputs).toHaveTextContent(/against the last [124] s/);
   });
 
+  const cnn = { ...(trees as object), kind: "cnn", trees: 0, inputCount: 450, sources: ["watchPpg", "watchOrientation"], trigger: "peak", importance: [], research: null };
+  const kindIs = (kind: string) => ({ manifest: { preprocessing: { kind } } });
+
+  it("shows a CNN's pipeline, results and channels, with no list of inputs it does not have", async () => {
+    await open(view(cnn, kindIs("ppg_imu_cnn_median")));
+    const summary = screen.getByRole("status", { name: "Model summary" });
+    expect(summary).toHaveTextContent("CNN pinch-start model");
+    expect(summary).toHaveTextContent("450 pulse and motion inputs · 3 networks · fires on the peak");
+    expect(summary).not.toHaveTextContent("trees");
+    expect(screen.getByRole("region", { name: "How well it works" })).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "How this model works" })).getByRole("list", { name: "Pipeline stages" })).toHaveTextContent("median and spread");
+    expect(screen.getByRole("table", { name: "Channels the model reads" })).toHaveTextContent("Gyroscope");
+    expect(screen.queryByRole("table", { name: "Most important inputs" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/inspection could not be made/)).not.toBeInTheDocument();
+  });
+
+  it("describes each kind of model by what its manifest says, not by what it was given to compare", async () => {
+    await open(view(cnn, kindIs("ppg_imu_cnn")));
+    expect(screen.getByRole("status", { name: "Model summary" })).toHaveTextContent("rolling scaling");
+    expect(screen.getByRole("region", { name: "How this model works" })).toHaveTextContent("z-scored against the 10 s");
+    cleanup();
+    await open(view({ ...(trees as object), sources: ["watchPpg", "watchOrientation"] }, kindIs("ppg_imu_onset")));
+    expect(screen.getByRole("region", { name: "How this model works" })).toHaveTextContent("ExtraTrees");
+    expect(screen.getByRole("region", { name: "How this model works" })).toHaveTextContent("Peak trigger");
+    cleanup();
+    await open(view(trees, kindIs("ppg_multiscale_onset")));
+    const earlier = screen.getByRole("region", { name: "How this model works" });
+    expect(earlier).toHaveTextContent("Edge trigger");
+    expect(earlier).not.toHaveTextContent("Accelerometer");
+  });
+
+  it("shows an imported CNN's pipeline, settings and stated results", async () => {
+    invokeMock.mockResolvedValue(view(null, { origin: "imported", manifest: {
+      preprocessing: { kind: "ppg_imu_cnn_median" },
+      input: { features: ["cnn_accel_x_t00", "cnn_ppg_ir_t49"] },
+      thresholds: { activation: 0.97, release: 0.82, cooldownMs: 1500, decisionDelayMs: 500 },
+      provenance: { evaluationGestureRecall: 0.8305, evaluationFalseActivationsPerHour: 0, evaluationRocAuc: 0.9954, trainRecordings: ["a", "b"], evaluationRecordings: ["c"] },
+    } }));
+    render(<ModelInspector id="pinch-abc" onClose={() => undefined} />);
+    expect(await screen.findByRole("region", { name: "How this model works" })).toHaveTextContent("Scaled to its recent level");
+    const facts = screen.getByRole("region", { name: "Declared settings and results" });
+    for (const text of ["0.97", "0.82", "500 ms", "83%", "0.0 / hour", "0.995"]) expect(facts).toHaveTextContent(text);
+    expect(screen.getByRole("region", { name: "Declared inputs" })).toHaveTextContent("acceleration x, 0.98 s before the decision");
+  });
+
   it("marks a model that may only run in Monitor", async () => {
     await open(view(trees), [model("pinch-abc", "pinch", { deployable: false, monitorOnly: true })]);
     expect(screen.getByRole("status", { name: "Model summary" })).toHaveTextContent("Monitor only");

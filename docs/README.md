@@ -8,6 +8,8 @@
 
 ## Architecture
 
+- [Original volume interaction: next milestone](original-volume-interaction.md): connect working Pinch In/Out detections to the head-targeted volume knob
+
 - [Components and deployment](architecture/components-and-deployment.md): what runs where, how the pieces communicate, data at rest, build, packaging and CI
 - [Performance review](performance.md): what was measured, what changed because of it, what was deliberately left alone, and how to reproduce the numbers
 - [Safety and fail-closed behavior](architecture/safety-and-fail-closed-behavior.md): the invariants that bound what the desktop can do, and what is not guaranteed
@@ -29,6 +31,7 @@
 - [RGB PPG pinch-onset follow-up experiments, October 2026](research/ppg-rgb-onset-follow-up-2026-10.md): preprocessing, feature, regularization, augmentation, and label-audit results; research-only candidate and evidence gaps
 - [PPG pinch onset: mixed-era robustness study, October 2026](research/ppg-mixed-era-robustness-2026-10.md): 32-recording strap/session-generalisation screens, robust model combinations, operational checks, and the remaining untouched-data gate
 - [CNN curriculum: newest clean data, older camera labels, then noise](research/cnn-curriculum-old-noise-2026-11.md): the staged GPU experiment, its validation result, limits, and the frozen protocol for the next untouched-data test
+- [CNN blind spot after wrist motion, November 2026](research/cnn-motion-hangover-2026-11.md): a burst of motion hid pinches for 8–10 s by inflating the 10 s scaling history; median scaling fixes bursts up to about 4 s, tested on spliced replays
 - [Camera-label hold-gap audit, November 2026](research/camera-label-hold-audit-2026-11.md): eight camera-labelled rapid-release candidates for landmark-based review; no labels or model state were changed
 - [PPG pinch onset: held-out test on the 2026-10-14 recordings](research/ppg-onset-heldout-test-2026-10-14.md): every October technique, trained on the original recordings and tested once on a new day with labelled non-pinch activity: about 0.60-0.64 AUC, fist starts not told apart, no usable detector
 - [PPG pinch onset: the open questions, tested, October 2026](research/ppg-onset-open-questions-2026-10.md): non-pinch negatives, decision delay, motion, days, intervals, mark timing and continuous detection on the current recordings: a real but weak, slow, non-specific onset cue

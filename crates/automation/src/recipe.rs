@@ -135,6 +135,11 @@ pub enum Stage {
     Hold { hold: Hold },
     /// A trained model's label, detected by the label runtime.
     Model { label: String, hold: ModelHold },
+    /// A fresh start grabs until a separate end event. Both labels must remain healthy.
+    ModelPair {
+        start_label: String,
+        end_label: String,
+    },
     /// A gesture from the Gesture library (by id), seen by the camera. Only works while the app is open and its
     /// camera is on; see `report_camera_gestures` in the desktop.
     Camera { gesture: String, hold: ModelHold },
@@ -181,6 +186,8 @@ pub enum RecipeError {
     MomentaryNeedsButtonAction,
     #[error("a model step needs a label made of lowercase letters, digits and underscores")]
     InvalidLabel,
+    #[error("use one paired model step with two different labels and a continuous action")]
+    InvalidModelPair,
     #[error("a camera gesture step needs a Gesture library gesture")]
     InvalidCameraGesture,
     #[error("the dead zone must be from 0 to under 90 degrees")]
@@ -199,6 +206,26 @@ pub fn validate_recipe(recipe: &Recipe) -> Result<(), RecipeError> {
         return Err(RecipeError::InvalidName);
     }
     let (last, rest) = recipe.stages.split_last().ok_or(RecipeError::NoStages)?;
+    let pairs: Vec<_> = recipe
+        .stages
+        .iter()
+        .filter_map(|s| match s {
+            Stage::ModelPair {
+                start_label,
+                end_label,
+            } => Some((start_label, end_label)),
+            _ => None,
+        })
+        .collect();
+    if pairs.len() > 1
+        || pairs
+            .iter()
+            .any(|(a, b)| a == b || !is_valid_label(a) || !is_valid_label(b))
+        || (!pairs.is_empty() && recipe.action.is_trigger())
+    {
+        return Err(RecipeError::InvalidModelPair);
+    }
+
     if recipe
         .stages
         .iter()

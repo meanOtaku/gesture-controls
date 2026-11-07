@@ -172,6 +172,8 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
                       index,
                       event.target.value === "headAt"
                         ? { kind: "headAt", location: locationOptions[0]?.value ?? "" }
+                        : event.target.value === "modelPair"
+                          ? { kind: "modelPair", startLabel: "pinch_in", endLabel: "pinch_out" }
                         : event.target.value === "model"
                           ? { kind: "model", label: modelLabels[0] ?? "", hold: "held" }
                           : event.target.value === "camera"
@@ -183,6 +185,7 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
                   <option value="headAt">Look at</option>
                   <option value="hold">Gesture</option>
                   <option value="model">Model label</option>
+                  {!trigger && <option value="modelPair">Pinch grab / release</option>}
                   <option value="camera">Camera gesture</option>
                 </select>
                 {step.kind === "headAt" ? (
@@ -219,6 +222,12 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
                       <option value="held">While seen</option>
                       {(trigger || step.hold === "oneShot") && <option value="oneShot">Once, when seen</option>}
                     </select>
+                  </>
+                ) : step.kind === "modelPair" ? (
+                  <>
+                    <label>Grab label<input className={NATIVE_SELECT} aria-label={`${label} grab label`} list={`${uid}-labels`} value={step.startLabel} onChange={(e) => setStep(index, { ...step, startLabel: e.target.value.trim().toLowerCase() })} /></label>
+                    <label>Release label<input className={NATIVE_SELECT} aria-label={`${label} release label`} list={`${uid}-labels`} value={step.endLabel} onChange={(e) => setStep(index, { ...step, endLabel: e.target.value.trim().toLowerCase() })} /></label>
+                    <p className="field-hint">Pinch In grabs; turn left to decrease, right to increase; Pinch Out releases. Use Reverse direction if your watch orientation reverses the movement.</p>
                   </>
                 ) : step.kind === "model" ? (
                   <>
@@ -314,7 +323,7 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
         {steps.some((step) => step.kind === "hold" && step.hold === "shake") && (
           <p className="field-hint">A shake needs the watch's acceleration sensor switched on. It counts as happening for about half a second after it is recognised.</p>
         )}
-        {steps.some((step) => step.kind === "model") && (
+        {steps.some((step) => step.kind === "model" || step.kind === "modelPair") && (
           <p className="field-hint">
             A model label is detected by a model you trained and activated.
             {modelLabels.length === 0 ? " None is loaded yet, so a recipe using one will not run until you load one." : ` Loaded now: ${modelLabels.join(", ")}.`}{" "}

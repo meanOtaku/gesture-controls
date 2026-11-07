@@ -6,9 +6,8 @@
 //! 1. A 50 Hz grid of [`GRID_TICKS`] ticks ends at T. Each tick holds each stream's last sample at or before it.
 //! 2. The channels are the accelerometer's and gyroscope's axes and the pulse sensor's green, red and infrared
 //!    ([`CHANNELS`]).
-//! 3. Each of the last [`WINDOW_TICKS`] ticks (1 s) is z-scored against the [`HISTORY_TICKS`] ticks (10 s) ending at it:
-//!    their population mean and standard deviation, the deviation floored by [`MOTION_FLOOR`] or, for the pulse,
-//!    0.001 x (|mean| + 1). A sigmoid then puts it in (0, 1).
+//! 3. Each of the last [`WINDOW_TICKS`] ticks (1 s) is centred and scaled as [`Scaling`] says, the spread floored by
+//!    [`MOTION_FLOOR`] or, for the pulse, 0.001 x (|centre| + 1). A sigmoid then puts it in (0, 1).
 //!
 //! 9 channels x 50 ticks = [`FEATURE_COUNT`] inputs, channel by channel, oldest tick first. A decision with a tick before
 //! either stream's first sample, or a gap of more than [`MAX_GAP_MS`] between consecutive samples of either stream in its
@@ -39,6 +38,23 @@ pub const CHANNELS: [&str; 9] = [
     "ppg_red",
     "ppg_ir",
 ];
+/// How a channel's last ticks are centred and scaled. A model is trained on one and runs on the same one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scaling {
+    /// Against the median of the channel's [`GRID_TICKS`] ticks and [`MAD_TO_STD`] x their median absolute deviation. A
+    /// burst of motion filling under half of the history leaves both nearly unmoved, so a pinch just after it still stands
+    /// out (`docs/research/cnn-motion-hangover-2026-11.md`).
+    Median,
+    /// Each tick against the population mean and standard deviation of the [`HISTORY_TICKS`] ticks (10 s) ending at it.
+    /// One burst of motion inflates that deviation until it leaves the history, about 10 s later. What `ppg_imu_cnn` models
+    /// were trained on.
+    Rolling,
+}
+
+/// A median absolute deviation times this is a standard deviation, on normal data.
+pub const MAD_TO_STD: f64 = 1.4826;
+/// Far enough that the sigmoid is flat; keeps its exponential finite.
+const MAX_Z: f64 = 500.0;
 /// The smallest spread each motion channel is scaled by: 0.02 m/s² for the accelerometer, 0.01 rad/s for the gyroscope.
 pub const MOTION_FLOOR: [f64; 6] = [0.02, 0.02, 0.02, 0.01, 0.01, 0.01];
 const PULSE_FLOOR_SCALE: f64 = 1e-3;
@@ -87,9 +103,12 @@ fn held<S, const N: usize>(
         .collect()
 }
 
+/// Puts one channel's scaled last ticks on the output, given the floor for a centre.
+type Scaler = fn(&[f64], &dyn Fn(f64) -> f64, &mut Vec<f64>);
+
 /// One channel's last ticks, z-scored against the ticks ending at each and through the sigmoid (as the trainer computes
 /// it: sums of the values less the first tick).
-fn scaled(series: &[f64], floor: impl Fn(f64) -> f64, out: &mut Vec<f64>) {
+fn rolling(series: &[f64], floor: &dyn Fn(f64) -> f64, out: &mut Vec<f64>) {
     let first = series[0];
     let mut total = vec![0.0; GRID_TICKS + 1];
     let mut squares = vec![0.0; GRID_TICKS + 1];
@@ -108,9 +127,39 @@ fn scaled(series: &[f64], floor: impl Fn(f64) -> f64, out: &mut Vec<f64>) {
     }
 }
 
+/// The middle value of `values`, an odd number of them (as [`GRID_TICKS`] is), so it is one of them.
+fn middle(values: &mut [f64]) -> f64 {
+    let at = values.len() / 2;
+    *values.select_nth_unstable_by(at, f64::total_cmp).1
+}
+
+/// One channel's last ticks against its median and median absolute deviation over all of `series`, through the sigmoid.
+fn median(series: &[f64], floor: &dyn Fn(f64) -> f64, out: &mut Vec<f64>) {
+    let mut scratch = series.to_vec();
+    let centre = middle(&mut scratch);
+    for (slot, v) in scratch.iter_mut().zip(series) {
+        *slot = (v - centre).abs();
+    }
+    let spread = MAD_TO_STD * middle(&mut scratch);
+    let bottom = spread + floor(centre);
+    for v in &series[series.len() - WINDOW_TICKS..] {
+        let z = ((v - centre) / bottom).clamp(-MAX_Z, MAX_Z);
+        out.push(1.0 / (1.0 + (-z).exp()));
+    }
+}
+
 /// The inputs for a decision at `decision_ns` from `motion` and `pulse` (each sorted by time, on the decision's clock), or
 /// `None` when it has none.
-pub fn inputs(motion: &[MotionSample], pulse: &[PpgSample], decision_ns: u64) -> Option<Vec<f64>> {
+pub fn inputs(
+    motion: &[MotionSample],
+    pulse: &[PpgSample],
+    decision_ns: u64,
+    scaling: Scaling,
+) -> Option<Vec<f64>> {
+    let scaled: Scaler = match scaling {
+        Scaling::Median => median,
+        Scaling::Rolling => rolling,
+    };
     if motion.is_empty()
         || pulse.is_empty()
         || !gap_free(motion.iter().map(|s| s.ts_ns), decision_ns)
@@ -132,13 +181,13 @@ pub fn inputs(motion: &[MotionSample], pulse: &[PpgSample], decision_ns: u64) ->
     let mut out = Vec::with_capacity(FEATURE_COUNT);
     for (c, floor) in MOTION_FLOOR.iter().enumerate() {
         let series: Vec<f64> = m.iter().map(|row| row[c]).collect();
-        scaled(&series, |_| *floor, &mut out);
+        scaled(&series, &|_| *floor, &mut out);
     }
     for c in 0..3 {
         let series: Vec<f64> = p.iter().map(|row| row[c]).collect();
         scaled(
             &series,
-            |mean| PULSE_FLOOR_SCALE * (mean.abs() + 1.0),
+            &|centre| PULSE_FLOOR_SCALE * (centre.abs() + 1.0),
             &mut out,
         );
     }
@@ -155,8 +204,10 @@ mod tests {
         motion: Vec<(u64, f64, f64, f64, f64, f64, f64)>,
         pulse: Vec<(u64, f64, f64, f64)>,
         decisions: Vec<u64>,
-        /// One row per decision; `None` where the trainer gives no inputs.
+        /// One row per decision, with [`Scaling::Rolling`]; `None` where the trainer gives no inputs.
         expected: Vec<Option<Vec<f64>>>,
+        /// The same with [`Scaling::Median`].
+        expected_median: Vec<Option<Vec<f64>>>,
     }
 
     #[derive(serde::Deserialize)]
@@ -206,12 +257,25 @@ mod tests {
 
     #[test]
     fn inputs_match_the_trainer_on_the_shared_cases() {
+        check(Scaling::Rolling);
+    }
+
+    #[test]
+    fn median_inputs_match_the_trainer_on_the_shared_cases() {
+        check(Scaling::Median);
+    }
+
+    fn check(scaling: Scaling) {
         let mut worst = 0.0f64;
         let mut compared = 0;
         for case in cases().cases {
             let (motion, pulse) = streams(&case);
-            for (decision, expected) in case.decisions.iter().zip(&case.expected) {
-                match (inputs(&motion, &pulse, *decision), expected) {
+            let rows = match scaling {
+                Scaling::Rolling => &case.expected,
+                Scaling::Median => &case.expected_median,
+            };
+            for (decision, expected) in case.decisions.iter().zip(rows) {
+                match (inputs(&motion, &pulse, *decision, scaling), expected) {
                     (None, None) => {}
                     (Some(got), Some(expected)) => {
                         assert_eq!(got.len(), expected.len());

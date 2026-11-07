@@ -143,7 +143,7 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
           {method === CNN_METHOD ? (
             <>
               <p><strong>{CNN_MODEL.name}</strong> <Badge variant="secondary">pulse sensor and motion</Badge></p>
-              <p className="field-hint">{CNN_MODEL.summary}</p>
+              <p className="field-hint">{CNN_MODEL.summary} {CNN_MODEL.trainingNote}</p>
               <p className="field-hint">
                 Compared with the trees on the same pinch recordings, with the hand still before each pinch, it caught about {Math.round(CNN_MODEL.research.recall * 100)}% of pinch starts at {CNN_MODEL.research.falsePerMinute.toFixed(0)} false alarm a minute or fewer (the trees: 64%), about {CNN_MODEL.research.delayMs} ms after the pinch began.
               </p>

@@ -924,3 +924,98 @@ fn a_camera_step_round_trips_through_json_in_camel_case() {
     );
     assert_eq!(serde_json::from_str::<Stage>(&json).unwrap(), stage);
 }
+
+fn paired_recipe() -> Recipe {
+    let mut stages = chain();
+    stages[1] = Stage::ModelPair {
+        start_label: "pinch_in".into(),
+        end_label: "pinch_out".into(),
+    };
+    recipe(
+        "paired",
+        stages,
+        Device::RotationKnob {
+            fraction_per_degree: 0.01,
+        },
+    )
+}
+
+#[test]
+fn paired_pinch_releases_to_ready_and_regrabs_at_the_current_wrist_angle() {
+    let mut runner = RecipeRunner::new(paired_recipe());
+    let start = ["pinch_in".to_string()].into_iter().collect();
+    let end = ["pinch_out".to_string()].into_iter().collect();
+    let mut input = signals(Some("topRight"), false, 0.0);
+    runner.update(&input);
+    assert_eq!(runner.phase(), RunnerPhase::Armed);
+    input.model_edges = Some(&start);
+    runner.update(&input);
+    assert_eq!(runner.phase(), RunnerPhase::Driving);
+    input.model_edges = None;
+    input.orientation = Some(about_x(10.25));
+    assert!((runner.update(&input).unwrap().delta_fraction - 0.1025).abs() < 1e-9);
+    // Silence between detections is a hold, including an exactly stationary wrist.
+    assert_eq!(runner.update(&input).unwrap().delta_fraction, 0.0);
+    input.model_edges = Some(&start); // duplicate does not rebase the knob
+    input.orientation = Some(about_x(5.0));
+    assert!((runner.update(&input).unwrap().delta_fraction + 0.0525).abs() < 1e-9);
+    input.model_edges = Some(&end);
+    assert_eq!(runner.update(&input), None);
+    assert_eq!(runner.phase(), RunnerPhase::Armed);
+    // Unheld rotation cannot change volume. No head movement is needed to grab again.
+    input.model_edges = None;
+    input.orientation = Some(about_x(60.0));
+    assert_eq!(runner.update(&input), None);
+    assert_eq!(runner.phase(), RunnerPhase::Armed);
+    input.model_edges = Some(&start);
+    assert_eq!(runner.update(&input), None); // rebase; no jump
+    assert_eq!(runner.phase(), RunnerPhase::Driving);
+    input.model_edges = None;
+    input.orientation = Some(about_x(62.0));
+    assert!((runner.update(&input).unwrap().delta_fraction - 0.02).abs() < 1e-9);
+    input.head_location = None;
+    assert_eq!(runner.update(&input), None);
+    assert_eq!(runner.phase(), RunnerPhase::Idle);
+}
+
+#[test]
+fn paired_pinch_needs_a_fresh_start_and_release_wins() {
+    let mut runner = RecipeRunner::new(paired_recipe());
+    let start = ["pinch_in".to_string()].into_iter().collect();
+    let both = ["pinch_in".to_string(), "pinch_out".to_string()]
+        .into_iter()
+        .collect();
+    let mut input = signals(None, false, 0.0);
+    input.model_edges = Some(&start);
+    runner.update(&input);
+    input.head_location = Some("topRight");
+    input.model_edges = None;
+    runner.update(&input);
+    assert_eq!(runner.phase(), RunnerPhase::Armed);
+    input.model_edges = Some(&both);
+    runner.update(&input);
+    assert_eq!(runner.phase(), RunnerPhase::Armed);
+    input.model_edges = Some(&start);
+    runner.update(&input);
+    runner.cancel();
+    runner.update(&input);
+    assert_eq!(runner.phase(), RunnerPhase::Idle);
+}
+
+#[test]
+fn paired_recipe_validation_and_serialization() {
+    let recipe = paired_recipe();
+    validate_recipe(&recipe).unwrap();
+    let json = serde_json::to_string(&recipe).unwrap();
+    assert!(json.contains("startLabel"));
+    assert_eq!(serde_json::from_str::<Recipe>(&json).unwrap(), recipe);
+    let mut bad = recipe.clone();
+    bad.stages[1] = Stage::ModelPair {
+        start_label: "pinch_in".into(),
+        end_label: "pinch_in".into(),
+    };
+    assert!(validate_recipe(&bad).is_err());
+    bad = recipe;
+    bad.action = Action::PlayPause;
+    assert!(validate_recipe(&bad).is_err());
+}

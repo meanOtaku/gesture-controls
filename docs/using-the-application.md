@@ -314,7 +314,7 @@ At the top of **Recordings**, **Mark an older recording** runs camera marking on
 
 The **Recordings** tab gives a read-only visual inspection of one numeric raw-data column from a saved recording's `raw.csv`. Choose a square grid size — any multiple of 4 from 4×4 through 64×64 (default 64×64) — and each frame reshapes exactly `N × N` chronological raw rows into an `N × N` image (pixel left-to-right, then top-to-bottom, in raw-row order); the slider and prev/next controls move in `N`-row hops, and the far end of a recording is always reachable even if it isn't hop-aligned. Changing the grid size realigns the current position to the new hop and reloads the frame. A missing raw field renders in a distinct color from "beyond the end of this recording," and neither is ever filled in with replacement data. Recording-scale normalization (the default) and an explicitly labeled per-frame-scale alternative are pure rendering choices over the already-loaded frame. Hover or use arrow keys to inspect a pixel's raw row, timestamp, value, and null state.
 
-**Importing a recording.** **Import dataset folder** (on the Recordings tab, beside Source) takes a folder exported by the Recorder, the one that holds `ppg.csv` and `imu.csv`; the two files are merged back by time into one recording. **Import CSV** takes a Timeline Capture `raw.csv` or a single-file dataset export (the older format). Either becomes a new read-only recording to inspect, and the labels in a dataset become its label ranges.
+**Importing a recording.** Recordings are imported on the **Datasets** tab, not here.
 
 The same selected window renders as two images side by side (stacked on narrow layouts): a grayscale image (black = low, white = high) and a rainbow false-colour image (red = low through the spectrum to violet = high). Both share the same grid, navigation position, and normalization mode; the color mode is a second pure rendering choice, like normalization, and is not a channel-mapping or multi-sensor composite. Missing-value and beyond-recording fills and the constant-value gray are the same in both images, and each has its own title, aria-label, and legend describing its palette and endpoints.
 
@@ -351,6 +351,13 @@ short to train on (which training ignores), and how often the pulse sensor flagg
   imported once as a single CSV and once as a folder is one recording twice.
 - Delete one copy. Otherwise it counts twice, and one copy can be trained on while the other is tested on, which makes the
   test look far better than it is.
+- **Find duplicates** also finds recordings of one session whose labels differ, which "Same data as …" cannot, because their
+  rows differ. It uses the same check as training, comparing watch timestamps, so it finds a shortened copy too. Each session
+  it finds lists its recordings with their holds, how their labels were made and whether they are sealed, reviewed or have
+  camera data. Choose one to keep and delete the rest, with the usual confirmation and Undo.
+- It suggests which to keep only with a reason: the sealed copy, then the one with reviewed labels, then the latest version
+  from the Labelling page, or the oldest when all the rows are the same. Otherwise you choose. A new version whose original
+  is deleted keeps its link to the session's camera data.
 - Importing a recording Model Lab already holds is refused, and training refuses a request that includes two copies.
 - Recordings imported before these checks get them the first time the list is shown.
 
@@ -387,15 +394,16 @@ test.
 Each label is shown in its colour from the Labels tab, here, on the Train card, in the Recorder's label buttons and on the
 Labelling page.
 
-#### From the Recorder (Datasets)
+#### Where recordings come from (Datasets)
 
-Every Recorder session joins Datasets by itself when it is saved, unless nothing in it was labelled then. **From the Recorder** lists the sessions that are not in Datasets (those saved before sessions joined by themselves, and those that could not join), with how many intervals are approved, unreviewed and excluded. Tick **Also those already in Datasets** to list every session, for example to add one again after you changed its marks.
+Datasets is the one source of recordings. Every Recorder session joins it by itself when it is saved, labelled or not, and
+recordings made elsewhere are imported here, labelled or not: one with no labels waits to be labelled on the Labelling page.
+Each then shows on every tab. Deleting a recording here, after its Undo window, also deletes its saved session (raw data and
+camera files) for good, once no other recording in Datasets was made from that session.
 
-- **Intervals to use** chooses whether intervals you have not reviewed yet count ("Approved and not yet reviewed") or only the ones you approved. Excluded intervals never count.
-- **Label everything else as** optionally gives the rows between intervals a background label (a label that is an everyday activity). That teaches the model what is not the gesture, which a recording that only holds the gesture cannot. Use it only if the gesture did not happen in those stretches; camera-marked recordings can miss one, so review them first.
-- **Add to training data** makes a recording from the labelled rows. Adding the same, unchanged recording twice is refused; after you change its intervals, adding it again makes a new recording alongside the old one, which you can delete in the list above.
-
-Importing a CSV file still works for recordings made elsewhere.
+The **Recordings** tab only looks inside the sessions behind Datasets: it has no import, and a session in Datasets cannot be
+deleted there. A session that could not join when it was saved (usually because a label in it is not on the Labels tab) is the one
+exception: Recordings says so and offers **Add to Datasets**, or you can delete it there.
 
 ### Labels
 
@@ -563,7 +571,7 @@ A model run beside the active one for comparison is not checked. The check never
 
 #### The Network lab
 
-The **Network lab** tab (under Train in the sidebar) shows the model the app trains and lets you look inside each one:
+The **Network lab** tab (under Train in the sidebar) shows the two kinds of model the app trains, trees and the CNN, stage by stage, and lets you look inside each one you have. Looking inside shows that model's own pipeline, chosen by its kind, so an earlier rolling-scaled CNN says so. A CNN shows the channels it reads rather than a list of inputs it leans on, because it has none. An imported model shows its pipeline with the settings and test results its manifest states:
 
 - **PPG + IMU pinch-start model** shows the model's six stages (pulse sensor → compared with the recent past → how it changes → motion → ExtraTrees → peak trigger) and what the research measured for it.
 - **Your models** lists the models; **Look inside** opens the card described below. A model that may only run in Monitor is marked **Monitor only**.
@@ -649,7 +657,7 @@ marking recordings that have none.
 
 **Open a recording:**
 
-- **Model Lab recording** opens one of Model Lab's recordings.
+- **Dataset** opens one of the recordings on the Datasets tab.
 - **Open CSV…** opens a single-file dataset.
 - **Open folder…** opens a dataset folder (`ppg.csv` and `imu.csv`), as the Recorder exports it.
 - A recording with no labels at all opens too.
@@ -714,7 +722,7 @@ folder exported from the Recorder and opened with **Open folder…**: the export
 - **Click a red detection** to select the stretch that turns it into a training example of what is not the gesture. The
   stretch starts 0.88 s before the detection, because training takes each labelled start's moment 0.88 s in. The page also
   picks your everyday-activity label (a label with that role on the Labels page).
-- Press **Enter** to label it, then **Save as new version**. Retraining on the new version teaches the model that moment
+- Press **Enter** to label it, then **Save as new dataset**. Retraining on the new dataset teaches the model that moment
   was not the gesture. A missed start shows as a labelled start with no green detection after it.
 - This is the quickest way to collect the hard negatives the model needs. Record ordinary activity (typing, using the mouse,
   drinking, talking with your hands), run the model over it, and label what it fires on.
@@ -771,7 +779,7 @@ threshold, on the rail, in the summary and among the places to check. It changes
 
 **Keep it:**
 
-- **Save as new version** adds the recording, with your labels, to Model Lab as a new recording named "… (labelled)", and
+- **Save as new dataset** adds the recording, with your labels, to Datasets as a new recording named "… (labelled)", and
   opens it so you can go on.
   - The recording you started from is left exactly as it was, so models trained on it stay tied to the data they learned
     from.
@@ -779,7 +787,7 @@ threshold, on the rail, in the summary and among the places to check. It changes
 - **Export** writes the recording with your labels, where and as the shared export setting says (the Recorder's Exports
   card, shown here too): a **folder of two files** (`ppg.csv`, `imu.csv` and `dataset.json`, numbered if the name is taken),
   or **one CSV** with both `label` and `manual_label`, stamped with the time so it never overwrites another. With no export
-  folder chosen yet, it asks for one and keeps it. Either form can be opened here again or imported into Model Lab.
+  folder chosen yet, it asks for one and keeps it. **Export to a folder…** asks where for this export alone. Either form can be opened here again or imported on the Datasets tab.
 
 **Review.** Once you have looked through a recording, say where its labels stand: **Labels are right**, or **Needs work** with
 what still needs doing. Save your labels first: the review is of the recording as saved. Model Lab shows it beside the

@@ -81,6 +81,8 @@ export type SaveRecordingBundleResult =
 /** Mirrors `recording_bundle::RecordingBundleSummary`. */
 export type RecordingBundleSummary = {
   recordingId: string;
+  /** Whether a recording on the Datasets tab was made from it; Datasets then owns it, and it is deleted there. */
+  inDatasets?: boolean;
   rawRowCount: number;
   intervalCount: number;
   actualDurationMs: number;
@@ -496,6 +498,14 @@ export async function importRecordingFromFolder(path: string): Promise<ImportRaw
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : String(error) };
   }
+}
+
+/** Adds a saved session that did not join the Datasets tab when it was saved. */
+export async function addRecordingToDatasets(recordingId: string): Promise<RecordingBundleResult<DatasetSummary>> {
+  if (!isTauriDesktop()) {
+    return { status: "error", message: "Recording bundle persistence requires the desktop app" };
+  }
+  return toResult(invoke<DatasetSummary>("add_recording_to_training_data", { recordingId, filter: "notExcluded", restLabel: null }));
 }
 
 /** Lists every saved recording bundle for curation review. */

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { notifyRecordingsChanged } from "../../../shared/tauri/recordingBundle";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useState } from "react";
 import { feedbackWithUndo, OperationFeedback } from "../../../components/app/OperationFeedback";
@@ -6,7 +7,6 @@ import { useModelLabData } from "../hooks/useModelLabData";
 import { recordingName } from "../recordingNames";
 import { describeGaps, type DatasetSummary } from "../types";
 import { DatasetManager } from "./DatasetManager";
-import { RecorderRecordings } from "./RecorderRecordings";
 
 /**
  * Datasets: every recording the app can label, train and test on, in one library. Recorder sessions join it as they are
@@ -26,6 +26,7 @@ export function DatasetsPage() {
         await invoke("import_model_dataset", { filename, csvContent });
         setError(null);
         await refreshDatasets();
+        notifyRecordingsChanged();
         OperationFeedback.success("Import recording", `Imported ${filename}.`);
       } catch (err) {
         setError(String(err));
@@ -45,6 +46,7 @@ export function DatasetsPage() {
       const made = await invoke<DatasetSummary>("import_model_dataset_folder", { path: chosen });
       setError(null);
       await refreshDatasets();
+      notifyRecordingsChanged();
       const gaps = describeGaps(made?.gaps);
       OperationFeedback.success("Import recording folder", `Imported ${made ? recordingName(made) : "the folder"}.${gaps?.warn ? ` The watch stream stalled in it (${gaps.text}).` : ""}`);
     } catch (err) {
@@ -62,6 +64,7 @@ export function DatasetsPage() {
         await invoke("delete_model_dataset", { id });
         setError(null);
         await refreshDatasets();
+        notifyRecordingsChanged();
         OperationFeedback.success("Delete recording", "Recording deleted.");
       } catch (err) {
         setError(String(err));
@@ -155,7 +158,6 @@ export function DatasetsPage() {
             }
           }}
         />
-        <RecorderRecordings desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} onAdded={() => void refreshDatasets()} />
       </fieldset>
     </main>
   );

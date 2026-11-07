@@ -16,10 +16,11 @@ def test_the_shared_cases_are_what_the_inputs_give_now():
     assert stored["feature_names"] == now["feature_names"]
     for a, b in zip(stored["cases"], now["cases"], strict=True):
         assert a["decisions"] == b["decisions"]
-        for row_a, row_b in zip(a["expected"], b["expected"], strict=True):
-            assert (row_a is None) == (row_b is None)
-            if row_a is not None:
-                assert np.allclose(row_a, row_b, rtol=0, atol=1e-12)
+        for key in ("expected", "expected_median"):
+            for row_a, row_b in zip(a[key], b[key], strict=True):
+                assert (row_a is None) == (row_b is None)
+                if row_a is not None:
+                    assert np.allclose(row_a, row_b, rtol=0, atol=1e-12)
 
 
 def test_each_input_is_in_zero_to_one_and_a_gap_or_too_little_history_gives_none():
@@ -33,6 +34,25 @@ def test_each_input_is_in_zero_to_one_and_a_gap_or_too_little_history_gives_none
     assert not np.isfinite(x[1]).any(), "5 s of history, less than the 10.98 s it reads"
     keep = (pulse_t < t[1100]) | (pulse_t > t[1140])
     assert not np.isfinite(cnn_input.inputs(t, motion, pulse_t[keep], pulse[keep], np.array([t[-1]]))).any()
+
+
+def test_a_burst_of_motion_barely_moves_median_scaling_but_squashes_rolling_scaling():
+    ms = 1_000_000
+    rng = np.random.default_rng(3)
+    t = 1_000_000_000_000 + np.arange(1300) * 10 * ms
+    quiet = rng.normal(0, 0.03, (1300, 6))
+    tap = np.zeros((1300, 6))
+    tap[1250:1255] = 0.5                                                       # 0.5 s before the decision
+    burst = np.zeros((1300, 6))
+    burst[500:700] = rng.normal(0, 4.0, (200, 6))                              # 2 s of hard motion, 6 s before the decision
+    pulse_t = t[::4]
+    pulse = 200_000 + rng.normal(0, 50, (len(pulse_t), 3))
+    def tap_size(motion, scaling):
+        x = cnn_input.inputs(t, motion, pulse_t, pulse, t[-1:], scaling=scaling).reshape(9, 50)
+        return x[3, 25:30].max() - 0.5                                         # gyro_x, around the tap, above "nothing"
+    assert tap_size(quiet + tap + burst, cnn_input.MEDIAN) > 0.45
+    assert tap_size(quiet + tap + burst, cnn_input.ROLLING) < 0.2
+    assert tap_size(quiet + tap, cnn_input.ROLLING) > 0.45
 
 
 def test_labels_mark_the_moments_after_a_start_and_leave_out_those_around_it():
@@ -133,7 +153,7 @@ def test_a_cnn_spec_trains_a_cnn_bundle(tmp_path, monkeypatch):
     assert result["outcome"] in ("deployable", "evaluationOnly"), result["message"]
     assert result["backend"] == lt.CNN_BACKEND
     manifest = json.loads((tmp_path / "run" / "bundle" / "manifest.json").read_text())
-    assert manifest["model"]["format"] == "cnn" and manifest["preprocessing"]["kind"] == "ppg_imu_cnn"
+    assert manifest["model"]["format"] == "cnn" and manifest["preprocessing"]["kind"] == "ppg_imu_cnn_median"
     assert manifest["window"]["durationMs"] == 11_000 and manifest["thresholds"]["decisionDelayMs"] == cnn.DECISION_DELAY_MS
     assert manifest["input"]["features"] == list(cnn_input.FEATURE_NAMES)
     assert (tmp_path / "run" / "bundle" / "model.cnn").exists()

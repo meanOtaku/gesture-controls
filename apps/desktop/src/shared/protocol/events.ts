@@ -69,6 +69,7 @@ export type RecipeStage =
   | { kind: "headAt"; location: CalibrationTarget }
   | { kind: "hold"; hold: HoldGesture }
   | { kind: "model"; label: string; hold: ModelHold }
+  | { kind: "modelPair"; startLabel: string; endLabel: string }
   /** A Gesture library gesture (by id) seen by the camera. Only works while the app is open with its camera on. */
   | { kind: "camera"; gesture: string; hold: ModelHold }
   | { kind: "drive"; axis: "roll" | "pitch" | "yaw"; deadZoneDegrees: number; invert: boolean };
