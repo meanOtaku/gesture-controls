@@ -1,0 +1,55 @@
+% IEEE journal (Transactions) version. Build: latexmk -pdf main.tex
+% Fill every [bracketed] placeholder and check the target journal's author instructions before submission.
+\documentclass[journal]{IEEEtran}
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{url}
+
+\begin{document}
+
+\title{Spatial Gesture Control: Controlling a Laptop with Head Orientation and Smartwatch Pinch Gestures}
+
+\author{Vaibhav~Bisht%
+\thanks{Manuscript received [date]; revised [date].}%
+\thanks{V. Bisht is with [Department, Institution, City, Country] (e-mail: vaibhavbisht78@gmail.com).}}
+
+\markboth{[Journal Name],~Vol.~[X], No.~[Y], [Month]~[Year]}%
+{Bisht: Spatial Gesture Control with Head Orientation and Smartwatch Pinch Gestures}
+
+\maketitle
+
+\begin{abstract}
+We present and evaluate a system that lets a person control a laptop without touching it. The user looks at a calibrated screen location, pinches to grab a virtual volume knob, turns the wrist to change the volume and pinches again to release. Head orientation comes from consumer Sony headphones. Wrist motion and raw photoplethysmography (PPG) come from a Samsung Galaxy Watch over Bluetooth Low Energy, and all inference runs on the laptop behind a fail-closed safety chain. Because the watch cannot see the fingers, we recorded wrist signals with camera hand landmarks as timing ground truth. We evaluated detectors as continuous event detectors, counting caught pinches against false activations per hour of no-gesture time. Wrist PPG alone generalised poorly to a new day (AUC 0.60--0.64), and ten robustness methods did not change this. Fusing the inertial sensors raised worst-split AUC from 0.789 to 0.837, and firing at the score's peak added 4--12 recall points. A three-network 1-D convolutional model on nine raw channels caught about two thirds of pinches on unseen sessions, against 10--28\% for tree ensembles, and fired about 0.4~s sooner. Median-based normalisation removed a motion-induced blind spot. We report the system design, data pipeline and results, and analyse the evaluation and labelling practices that determined whether offline results predicted live behaviour.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Gesture recognition, smartwatch, photoplethysmography, inertial sensing, head tracking, human--computer interaction, wearable computing, event detection.
+\end{IEEEkeywords}
+
+\IEEEpeerreviewmaketitle
+
+\input{body}
+
+\section*{Data and Code Availability}
+[State where the recordings, trained models and source code can be obtained, for example a repository URL and licence, or ``available from the author on reasonable request''.]
+
+\section*{Ethics Statement}
+All recordings were made with the author as the only participant; no other people took part. [Confirm whether the target journal or the author's institution requires an ethics approval or waiver for self-recorded physiological data, and state it here.]
+
+\section*{Conflict of Interest}
+The author declares no competing interests. [Confirm.]
+
+\section*{Acknowledgment}
+[Funding sources and acknowledgements, or remove this section.]
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+\begin{IEEEbiographynophoto}{Vaibhav Bisht}
+[Short biography: degrees, current position and research interests.]
+\end{IEEEbiographynophoto}
+
+\end{document}
