@@ -21,6 +21,7 @@
 
 - [Watch WebSocket protocol](protocols/watch-websocket-protocol.md): the message envelope and every message, shared by both transports; the Wi-Fi transport
 - [Watch Bluetooth LE transport](protocols/watch-ble-transport.md): the default transport, framing, trust model and failure states
+- [WIFI UAV drone](protocols/wifi-uav-drone.md): how the desktop talks to a Wi-Fi toy drone, and which parts are tested, captured or only read from the app
 
 ## Research
 
