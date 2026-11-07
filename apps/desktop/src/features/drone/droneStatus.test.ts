@@ -16,8 +16,13 @@ const state: DroneState = {
   driftX: 0,
   driftY: 0,
   holding: false,
+  holdPhase: "off",
+  holdFault: null,
   correction: null,
+  heightRate: 0,
+  flightLog: null,
   pageAlive: false,
+  onNetwork: false,
 };
 
 const status = (over: Partial<DroneStatus>): DroneStatus => ({ ...state, videoRate: null, ...over });
@@ -39,6 +44,7 @@ describe("droneDevice", () => {
   it("warns whenever the drone could move or something went wrong", () => {
     expect(droneDevice(status({ armed: true }))).toEqual({ tone: "caution", text: "ARMED" });
     expect(droneDevice(status({ armed: true, holding: true }))).toEqual({ tone: "caution", text: "HOLDING" });
+    expect(droneDevice(status({ armed: true, holding: true, holdPhase: "calibrating" }))).toEqual({ tone: "caution", text: "CALIBRATING" });
     expect(droneDevice(status({ failsafeTripped: true }))).toEqual({ tone: "caution", text: "FAILSAFE" });
     expect(droneDevice(status({ phase: "failed" }))).toEqual({ tone: "caution", text: "NO ANSWER" });
   });

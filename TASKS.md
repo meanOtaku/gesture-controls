@@ -1066,3 +1066,20 @@ measured before it was made, and paths that proved cheap were left alone.
       thin LTO (+~1.5 min of CI per OS, no measured runtime gain).
 - [ ] **No packaged-app or hardware validation.** The writer thread is covered by unit tests
       of its mailbox, pacing and epoch logic but has not run against a live Tauri app.
+
+## GC-040 — Fly a Wi-Fi drone from the desktop
+
+**Status: in progress.** See [Drone control](docs/architecture/drone.md).
+
+- [x] `crates/drone-link`: the DM002HW's wire format, worked out from a capture of the phone app and the decompiled app.
+- [x] Flight rules: arming, stick limits, and landing when nothing checks in.
+- [x] Live video, decoded by restoring the JPEG header the drone leaves off, with lost frames skipped.
+- [x] Camera tracking, and a position hold that measures the drone with test pushes, then runs a PID loop on each axis.
+- [x] Simulated flights across 270 combinations of drone and room: hold stays close or refuses, and never runs away.
+- [x] Flight recorder, and height controls that work while holding.
+- [x] Drone page, auto-connect on the drone's Wi-Fi, top bar triangle, telemetry module and footer item.
+- [x] Wrist steering while the watch button is held.
+- [x] Live video and tracking seen working on the real drone in the desktop app.
+- [ ] **Not run on the real drone:** arming and motors from the Rust link, auto-connect, sticks, height, Stop, hold, recording.
+- [ ] Unknown: what the drone does when commands stop, what Down does in the air, and which way the sticks push it.
+- [ ] Hold gains are tuned in simulation only, there is no flight data, and no flight has been made with the props on.

@@ -5,7 +5,6 @@
 //!
 //! Arguments, all optional, are for a stand-in drone: host, control port, aux port.
 
-use std::net::{IpAddr, UdpSocket};
 use std::process::ExitCode;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
@@ -17,21 +16,6 @@ const REPORT_EVERY: Duration = Duration::from_secs(1);
 const OPENING_LIMIT: Duration = Duration::from_secs(3);
 /// Fewer frames than this over the run means the drone stopped answering.
 const MIN_VIDEO_FRAMES: u32 = 40;
-
-/// The address we would reach the host from, to catch not being on the drone's Wi-Fi.
-fn local_address(host: IpAddr) -> Option<IpAddr> {
-    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
-    socket.connect((host, 9)).ok()?;
-    socket.local_addr().ok().map(|address| address.ip())
-}
-
-fn on_same_network(local: IpAddr, host: IpAddr) -> bool {
-    match (local, host) {
-        (_, IpAddr::V4(host)) if host.is_loopback() => true,
-        (IpAddr::V4(local), IpAddr::V4(host)) => local.octets()[..3] == host.octets()[..3],
-        _ => false,
-    }
-}
 
 fn endpoint() -> Result<Endpoint, String> {
     let mut endpoint = Endpoint::default();
@@ -50,12 +34,8 @@ fn endpoint() -> Result<Endpoint, String> {
 
 fn run() -> Result<(), String> {
     let endpoint = endpoint()?;
-    let local = local_address(endpoint.host);
-    if !local.is_some_and(|local| on_same_network(local, endpoint.host)) {
-        return Err(format!(
-            "not on the drone's network: {} would be reached from {local:?}",
-            endpoint.host
-        ));
+    if !endpoint.is_reachable() {
+        return Err(format!("not on the drone's network at {}", endpoint.host));
     }
 
     let link = Link::open(endpoint, PilotConfig::default(), LinkTiming::default())

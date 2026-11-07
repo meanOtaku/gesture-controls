@@ -12,6 +12,7 @@
 
 - [Components and deployment](architecture/components-and-deployment.md): what runs where, how the pieces communicate, data at rest, build, packaging and CI
 - [Performance review](performance.md): what was measured, what changed because of it, what was deliberately left alone, and how to reproduce the numbers
+- [Drone control](architecture/drone.md): how the desktop flies a Wi-Fi drone, camera hold, the code map and settings, what has been tested, and the next steps
 - [Safety and fail-closed behavior](architecture/safety-and-fail-closed-behavior.md): the invariants that bound what the desktop can do, and what is not guaranteed
 - [Project brief](architecture/project-brief.md): the original design specification and milestone plan (see its status note for where the implementation differs)
 - Per-app structure: [desktop](../apps/desktop/ARCHITECTURE.md), [watch](../apps/watch/ARCHITECTURE.md), [Sony tracker](../tools/sony-head-tracker/ARCHITECTURE.md)
@@ -21,7 +22,7 @@
 
 - [Watch WebSocket protocol](protocols/watch-websocket-protocol.md): the message envelope and every message, shared by both transports; the Wi-Fi transport
 - [Watch Bluetooth LE transport](protocols/watch-ble-transport.md): the default transport, framing, trust model and failure states
-- [WIFI UAV drone](protocols/wifi-uav-drone.md): how the desktop talks to a Wi-Fi toy drone, and which parts are tested, captured or only read from the app
+- [WIFI UAV drone](protocols/wifi-uav-drone.md): every code the desktop uses to talk to a Wi-Fi toy drone, and which parts are tested, captured or only read from the app
 
 ## Research
 

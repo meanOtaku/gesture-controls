@@ -25,8 +25,13 @@ export interface DroneState {
   driftX: number;
   driftY: number;
   holding: boolean;
+  holdPhase: "off" | "calibrating" | "holding" | "failed";
+  holdFault: string | null;
   correction: { aileron: number; elevator: number } | null;
+  heightRate: number;
+  flightLog: string | null;
   pageAlive: boolean;
+  onNetwork: boolean;
 }
 
 /** The drone's state, and the video frames arriving each second, or null until a second has passed. */
@@ -95,6 +100,7 @@ export function droneDevice(status: DroneStatus | null): { tone: DroneTone; text
     case "opening": return { tone: "unknown", text: "CONNECTING" };
     case "failed": return { tone: "caution", text: "NO ANSWER" };
     case "open":
+      if (status.holdPhase === "calibrating") return { tone: "caution", text: "CALIBRATING" };
       if (status.holding) return { tone: "caution", text: "HOLDING" };
       return status.armed ? { tone: "caution", text: "ARMED" } : { tone: "active", text: "ONLINE" };
     default: return { tone: "offline", text: "OFFLINE" };

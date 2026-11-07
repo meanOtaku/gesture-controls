@@ -1,5 +1,8 @@
 # WIFI UAV drone protocol
 
+Every code the desktop uses to talk to the drone. How the system around it works is in
+[Drone control](../architecture/drone.md).
+
 How the desktop talks to a Wi-Fi toy drone that pairs with the WIFI UAV phone app, as implemented in
 [`crates/drone-link`](../../crates/drone-link). Worked out on a DM002HW, firmware
 `(NOFLOW)FLOW_720P_V1.4.17_20250520`, from an over-the-air capture of the phone app, the decompiled app
@@ -10,6 +13,20 @@ Each fact is marked **tested** (seen working on the drone), **captured** (in the
 
 [reversing-wifi-uav](https://github.com/FahrulRPutra/reversing-wifi-uav) documents an older drone in the same family.
 Its frame container matches, but its 20-byte control record does not work here.
+
+## Packets at a glance
+
+| Direction | Port | Starts | Length | What |
+| --- | --- | --- | --- | --- |
+| To drone | 8800, 8801 | `ef 00 04 00` | 4 | Start video |
+| To drone | 8800 | `ef 02 58 00` | 88 | Control |
+| To drone | 8800 | `ef 02 6c 00` | 108 | Control with a setup record |
+| To drone | 8800 | `ef 02 7c 00` | 124 | Control that also requests video |
+| To drone | 8800 | `ef 02 80 00` | 128 | Seen in the capture, purpose unknown |
+| To drone | 8800 | `ef 20 06 00 01 65` | 6 | Ask for the firmware name |
+| To drone | 8800 | `ef 20 19 00 01 67` | 25 | Text command |
+| From drone | 1234 | `93 01` | Up to 1,080 | Video part |
+| From drone | 1234 | `93 04` | Varies | Text reply |
 
 ## Transport
 
@@ -57,9 +74,13 @@ checks, and those inspected were damaged in the air.
 The 108-byte setup frame has `1` at offset 8 and these records at 88: `01 00 00 00`, eight zero bytes, `14 00 00 00`,
 `00 00 fe ff`.
 
+A frame with no control has zeros from offset 12 to 81. The phone app alternates 88-byte and 124-byte frames, and the
+desktop sends only 124-byte ones, which the drone accepts.
+
 ### Flags
 
-The app holds Up and Down for about 1.1 s. Bit names are the app's.
+The app holds Up and Down for about 1.1 s, and Stop for about 0.3 s. Bit names are the app's. As bytes, with `Hl` set: idle
+`40`, Up `41`, Down `42`, Stop `44`, GyroCheck `c0`.
 
 | Bit | Name | Status |
 | --- | --- | --- |
@@ -80,7 +101,27 @@ App stick positions are scaled before sending. **App code**
 - Throttle always uses its full range.
 - Trim adds up to ±31.
 
+The app's calculation, with `stick` and `trim` from 0 to 1 and centred on 0.5, and `speed` from 0.3, 0.6 or 1.0:
+
+```text
+value = (stick - 0.5) × speed × 255 + 127.5 + (trim - 0.5) × 63
+```
+
+A value within 1 of 127.5 becomes exactly `80`. Without `Hl`, throttle is `stick × 255` instead, so it no longer self-centres.
+
+During a flip the app overwrites one axis with `00` or `ff` to pick the direction. **App code**
+
 Which way each axis moves the drone is not known yet.
+
+### Older control record
+
+Some drones in this family use a 20-byte record at offset 18, as in the reversing repo, and the app picks by drone type:
+
+```text
+66 14 aileron elevator throttle rudder flags1 flags2 (ten zeros) checksum 99
+```
+
+The checksum covers the 16 bytes from aileron on. **The DM002HW ignores this record**: it has the 8-byte one.
 
 ## Video
 
@@ -108,9 +149,25 @@ link now gives up on a frame after 200 ms. Whether that fixes the stall is not y
 
 The picture is very dark, averaging about 25 of 255 in a dim room, and the app brightens it for display.
 
+## Text commands
+
+The app sends these after the firmware query. Their meaning is unknown, and the desktop does not send them. **Captured**
+
+```text
+ef 20 19 00 01 67 <i=2^bf_ssid=cmd=2>     reply: 93 04 ... 01 67 <e=0>
+ef 20 19 00 01 67 <i=2^bf_ssid=cmd=3>     reply: 93 04 ... 01 67 <e=0>
+```
+
+## Status message
+
+The app can read a status message: `88`, then a type byte of 0, fly state, battery, a flag byte, and a checksum, ending in
+`55`. The flags hold speed (bits 0 and 1), remote control, camera tilt support, headless, photo, video and light. **App code**
+None appeared in the capture, so this drone may not send it, or may only send it in a mode not yet seen.
+
 ## What is not known
 
 - **What the drone does when frames stop.** No code on the phone can answer this, so it decides how safe a lost link is.
 - What Down does in the air: a landing or a motor cut.
 - Stick directions, and whether Stop works as expected.
-- Telemetry. The app can parse a `88 … 55` status message with fly state and battery, but none appeared in the capture.
+- What `ef 02 80 00` frames and the text commands do.
+- Why flags briefly went to `00` with throttle at `00` in the capture.

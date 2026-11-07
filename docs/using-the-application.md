@@ -135,12 +135,14 @@ The overlay is deliberately non-focus-stealing. Keyboard volume controls only wo
 
 ### Drone
 
-Flies a Wi-Fi drone that pairs with the WIFI UAV phone app, such as the DM002HW. This is early: read
+Flies a Wi-Fi drone that pairs with the WIFI UAV phone app, such as the DM002HW. The drone also appears in the top bar, the
+bottom bar and the telemetry panel. This is early: read
 [Safety §7](architecture/safety-and-fail-closed-behavior.md#7-the-drone) before putting the props on, and fly somewhere open
 with the battery switch within reach.
 
-1. Join the drone's Wi-Fi on this computer. Keep the watch on Bluetooth, because the Wi-Fi is now taken.
-2. Open **Drone** and choose **Connect**, then **Arm**.
+1. Join the drone's Wi-Fi on this computer. The app connects by itself within a second or so, without arming or starting
+   the drone. Keep the watch on Bluetooth, because the Wi-Fi is now taken.
+2. Open **Drone** and choose **Arm**. If you chose **Disconnect** earlier, choose **Connect** first.
 3. Choose **Take off**. Hold the watch button and tilt your wrist to steer. Let go to stop steering.
 4. Choose **Land**, or press Esc on any page. **Stop** may cut the motors in the air, so keep it for when landing fails.
 
@@ -151,9 +153,13 @@ the watch does that.
 carry the drone: the marker shows how far the view has moved. It turns red when the view is too dark or blank to follow, so
 fly in good light, facing something with detail.
 
-**Would send** previews the small stick corrections that would bring the view back. Nothing reaches the drone until you arm
-and choose **Hold position**, which holds the current view until you land or choose **Stop holding**. Hold is untested in
-flight and can only reduce drift, so stay ready to land. Keep this page open: if it closes, the drone is told to land.
+**Would send** previews the stick corrections that would bring the view back, and nothing reaches the drone until you arm and
+choose **Hold position**. Once the drone is in the air, hold first gives it gentle test pushes each way, about nine seconds in all,
+then keeps the view where it was until you land or choose **Stop holding**. Use **Climb** and **Descend** to change height while it
+holds. If hold cannot measure the drone it says why and centres the sticks. Hold is untested in flight and can only reduce drift,
+so stay ready to land. Keep this page open: if it closes, the drone is told to land.
+
+Each armed flight is recorded to a file, and the page shows where.
 
 ### Watch
 

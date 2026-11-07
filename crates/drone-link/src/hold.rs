@@ -1,39 +1,71 @@
-//! Works out how to push the sticks to bring the picture back to where it started.
+//! Holds the drone where it is, using nothing but the picture.
+//!
+//! Which way a stick moves the picture, and how far, depends on the drone and on how far away the scene is, so neither
+//! is assumed. When hold starts, the autopilot gives each axis one small push and watches what the picture does. That
+//! measures the direction and strength for this flight, and a PID loop scaled by the result then keeps the picture
+//! where it was. If an axis does not respond clearly, or the picture is lost, hold gives up and centres the sticks.
 //!
 //! The picture sliding sideways steers aileron, and the picture growing or shrinking steers elevator. Sliding up and
-//! down is left alone, because a tilt and a climb look the same and the drone holds its own height. Corrections are
-//! small on purpose: this is a nudge against drift, and there is no attitude data to catch a mistake with. Which way
-//! each correction should go has not been tested in flight, so both can be reversed.
+//! down is left alone, because a tilt and a climb look the same, and the drone holds its own height. Everything here
+//! is pure: time is passed in, so a simulated flight can run it in tests.
+
+use std::time::{Duration, Instant};
 
 use crate::frame::{NEUTRAL, Sticks};
 use crate::vision::{Flow, MIN_CONFIDENCE};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct HoldConfig {
-    /// Stick steps per pixel of sideways drift.
-    pub drift_gain: f32,
-    /// Stick steps per pixel of sideways movement in one frame, which damps the correction.
-    pub damping_gain: f32,
-    /// Stick steps per unit of added-up zoom.
-    pub zoom_gain: f32,
-    /// The most a correction can move a stick.
+    /// The most a correction can move a stick, in steps.
     pub max_correction: u8,
-    pub reverse_aileron: bool,
-    pub reverse_elevator: bool,
+    /// The stick steps of a calibration push, and the scale for the gains below.
+    pub push: i8,
+    /// Gains, relative to one calibration push: an error as large as the push's response asks for `proportional` pushes.
+    pub proportional: f32,
+    /// As `proportional`, per second of rate of change, which damps the correction.
+    pub derivative: f32,
+    /// As `proportional`, per second of error held, which cancels a steady lean.
+    pub integral: f32,
+    /// The most the integral can ask for, in pushes.
+    pub integral_limit: f32,
+    /// Waiting before and after a push.
+    pub settle: Duration,
+    /// How long a push lasts, and then the same again the other way to stop.
+    pub push_time: Duration,
+    /// The least sideways picture movement, in pixels, that counts as a response.
+    pub min_slide_response: f32,
+    /// The least added-up zoom that counts as a response.
+    pub min_zoom_response: f32,
+    /// With no trusted picture for this long, hold gives up.
+    pub picture_lost_after: Duration,
 }
 
 impl Default for HoldConfig {
     fn default() -> Self {
         Self {
-            drift_gain: 0.5,
-            damping_gain: 1.5,
-            zoom_gain: 40.0,
             max_correction: 12,
-            reverse_aileron: false,
-            reverse_elevator: false,
+            push: 12,
+            proportional: 0.8,
+            derivative: 0.5,
+            integral: 0.15,
+            integral_limit: 0.6,
+            settle: Duration::from_millis(500),
+            push_time: Duration::from_millis(600),
+            min_slide_response: 0.8,
+            min_zoom_response: 0.004,
+            picture_lost_after: Duration::from_secs(1),
         }
     }
 }
+
+/// Used only to show what hold might do before it has measured anything.
+const ASSUMED_SLIDE_RESPONSE: f32 = -24.0;
+const ASSUMED_ZOOM_RESPONSE: f32 = 0.3;
+/// How much of each new rate reading to take, which steadies the derivative.
+const RATE_SMOOTHING: f32 = 0.4;
+const MAX_FRAME_GAP: f32 = 0.5;
+/// Drift this many times larger than a push's response drowns it out.
+const MAX_DRIFT_TO_RESPONSE: f32 = 8.0;
 
 /// A push away from centre, in stick steps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -58,31 +90,372 @@ impl Correction {
     }
 }
 
-impl HoldConfig {
-    /// The correction for this drift and latest movement, or `None` when the measure cannot be trusted.
-    pub fn correct(&self, drift_x: f32, zoom_total: f32, flow: Flow) -> Option<Correction> {
-        if flow.confidence < MIN_CONFIDENCE {
-            return None;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HoldAxis {
+    Sideways,
+    ForwardBack,
+}
+
+/// Why hold stopped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HoldFault {
+    /// A push made no clear change in the picture: the scene is too plain, or the drone is not flying.
+    NoResponse(HoldAxis),
+    /// The picture was moving too much to measure a push.
+    Unsteady(HoldAxis),
+    /// No trusted picture for too long.
+    PictureLost,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HoldPhase {
+    Off,
+    Calibrating,
+    Holding,
+    Failed(HoldFault),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Stage {
+    Settling { first: f32 },
+    Pushing,
+    Braking,
+    Recovering,
+}
+
+/// Pushes one axis both ways and measures what the picture does.
+///
+/// A drifting drone is already moving, which swamps a single push and can even show the wrong direction. Taking the
+/// difference between a push each way cancels any steady drift, and a mismatch shows the measurement cannot be trusted.
+#[derive(Debug, Clone, Copy)]
+struct Probe {
+    axis: HoldAxis,
+    stage: Stage,
+    since: Instant,
+    direction: i8,
+    start: f32,
+    first_pass: Option<f32>,
+}
+
+impl Probe {
+    fn new(axis: HoldAxis, value: f32, now: Instant) -> Self {
+        Self {
+            axis,
+            stage: Stage::Settling { first: value },
+            since: now,
+            direction: 1,
+            start: value,
+            first_pass: None,
         }
-        let limit = f32::from(self.max_correction);
-        let steps = |value: f32, reverse: bool| {
-            let signed = if reverse { -value } else { value };
-            signed.clamp(-limit, limit).round() as i8
+    }
+
+    fn min_response(&self, config: &HoldConfig) -> f32 {
+        match self.axis {
+            HoldAxis::Sideways => config.min_slide_response,
+            HoldAxis::ForwardBack => config.min_zoom_response,
+        }
+    }
+
+    /// The push to send now, or the finished measurement.
+    fn step(
+        &mut self,
+        value: f32,
+        now: Instant,
+        config: &HoldConfig,
+    ) -> Result<i8, Result<f32, HoldFault>> {
+        let elapsed = now.saturating_duration_since(self.since);
+        let push = self.direction * config.push;
+        match self.stage {
+            Stage::Settling { .. } if elapsed < config.settle => Ok(0),
+            Stage::Settling { .. } => {
+                self.start = value;
+                self.stage = Stage::Pushing;
+                self.since = now;
+                Ok(push)
+            }
+            Stage::Pushing if elapsed >= config.push_time => {
+                self.stage = Stage::Braking;
+                self.since = now;
+                Ok(-push)
+            }
+            Stage::Pushing => Ok(push),
+            Stage::Braking if elapsed >= config.push_time => {
+                self.stage = Stage::Recovering;
+                self.since = now;
+                Ok(0)
+            }
+            Stage::Braking => Ok(-push),
+            Stage::Recovering if elapsed >= config.settle => self.next_pass(value, now, config),
+            Stage::Recovering => Ok(0),
+        }
+    }
+
+    fn next_pass(
+        &mut self,
+        value: f32,
+        now: Instant,
+        config: &HoldConfig,
+    ) -> Result<i8, Result<f32, HoldFault>> {
+        let moved = value - self.start;
+        let Some(first) = self.first_pass else {
+            self.first_pass = Some(moved);
+            self.direction = -1;
+            self.stage = Stage::Settling { first: value };
+            self.since = now;
+            return Ok(0);
         };
-        // The picture sliding right means the drone slid left, so it needs pushing right.
-        let aileron = self.drift_gain * drift_x + self.damping_gain * flow.dx;
-        // The picture growing means the drone came forward, so it needs pulling back.
-        let elevator = -self.zoom_gain * zoom_total;
-        Some(Correction {
-            aileron: steps(aileron, self.reverse_aileron),
-            elevator: steps(elevator, self.reverse_elevator),
+        // Half the difference is the push. Half the sum is whatever was happening anyway.
+        let response = (first - moved) / 2.0;
+        let drift = (first + moved) / 2.0;
+        Err(if response.abs() < self.min_response(config) {
+            Err(HoldFault::NoResponse(self.axis))
+        } else if drift.abs() > response.abs() * MAX_DRIFT_TO_RESPONSE {
+            Err(HoldFault::Unsteady(self.axis))
+        } else {
+            Ok(response)
         })
+    }
+}
+
+/// One axis's PID loop, working in calibration pushes.
+#[derive(Debug, Clone, Copy)]
+struct Loop {
+    response: f32,
+    target: f32,
+    integral: f32,
+    rate: f32,
+}
+
+impl Loop {
+    fn new(response: f32, target: f32) -> Self {
+        Self {
+            response,
+            target,
+            integral: 0.0,
+            rate: 0.0,
+        }
+    }
+
+    /// `change` is how much the value moved this frame.
+    fn update(&mut self, value: f32, change: f32, dt: f32, config: &HoldConfig) -> f32 {
+        let scale = self.response.abs().max(f32::EPSILON);
+        let error = (value - self.target) / scale;
+        self.rate += RATE_SMOOTHING * (change / scale / dt - self.rate);
+        let limit = config.integral_limit;
+        let wanted = self.integral + config.integral * error * dt;
+        self.integral = wanted.clamp(-limit, limit);
+        let pushes = config.proportional * error + config.derivative * self.rate + self.integral;
+        -self.response.signum() * pushes * f32::from(config.push)
+    }
+}
+
+/// Whatever the autopilot is doing now.
+#[derive(Debug, Clone, Copy)]
+enum Mode {
+    Off,
+    Probing { probe: Probe, slide: Option<f32> },
+    Holding { slide: Loop, zoom: Loop },
+    Failed(HoldFault),
+}
+
+#[derive(Debug)]
+pub struct Autopilot {
+    config: HoldConfig,
+    mode: Mode,
+    slide: f32,
+    zoom: f32,
+    vertical: f32,
+    last_frame: Option<Instant>,
+    last_trusted: Option<Instant>,
+    /// What this frame's correction was, whether or not it is on.
+    preview: Option<Correction>,
+}
+
+impl Default for Autopilot {
+    fn default() -> Self {
+        Self::new(HoldConfig::default())
+    }
+}
+
+impl Autopilot {
+    pub fn new(config: HoldConfig) -> Self {
+        Self {
+            config,
+            mode: Mode::Off,
+            slide: 0.0,
+            zoom: 0.0,
+            vertical: 0.0,
+            last_frame: None,
+            last_trusted: None,
+            preview: None,
+        }
+    }
+
+    pub fn phase(&self) -> HoldPhase {
+        match self.mode {
+            Mode::Off => HoldPhase::Off,
+            Mode::Probing { .. } => HoldPhase::Calibrating,
+            Mode::Holding { .. } => HoldPhase::Holding,
+            Mode::Failed(fault) => HoldPhase::Failed(fault),
+        }
+    }
+
+    /// Picture movement added up since the last reset: sideways and vertical pixels.
+    pub fn drift(&self) -> (f32, f32) {
+        (self.slide, self.vertical)
+    }
+
+    pub fn zoom_total(&self) -> f32 {
+        self.zoom
+    }
+
+    /// What hold is sending, or would send if it were on. `None` when the picture cannot be trusted.
+    pub fn preview(&self) -> Option<Correction> {
+        self.preview
+    }
+
+    /// Makes the current view the centre. Ignored while calibrating or holding, which have their own.
+    pub fn reset(&mut self) {
+        if !matches!(self.mode, Mode::Probing { .. } | Mode::Holding { .. }) {
+            self.slide = 0.0;
+            self.zoom = 0.0;
+            self.vertical = 0.0;
+            self.preview = None;
+        }
+    }
+
+    /// Starts measuring, then holding the current view.
+    pub fn start(&mut self, now: Instant) {
+        self.slide = 0.0;
+        self.zoom = 0.0;
+        self.vertical = 0.0;
+        self.last_trusted = Some(now);
+        self.mode = Mode::Probing {
+            probe: Probe::new(HoldAxis::Sideways, 0.0, now),
+            slide: None,
+        };
+    }
+
+    pub fn stop(&mut self) {
+        self.mode = Mode::Off;
+    }
+
+    fn fail(&mut self, fault: HoldFault) -> Option<Correction> {
+        self.mode = Mode::Failed(fault);
+        self.preview = None;
+        None
+    }
+
+    /// Takes in the movement between the last two frames, and returns the correction to send, if any.
+    pub fn on_frame(&mut self, flow: Option<Flow>, now: Instant) -> Option<Correction> {
+        let dt = self
+            .last_frame
+            .map_or(0.066, |at| now.saturating_duration_since(at).as_secs_f32())
+            .clamp(0.001, MAX_FRAME_GAP);
+        self.last_frame = Some(now);
+        let trusted = flow.filter(|flow| flow.confidence >= MIN_CONFIDENCE);
+        let Some(flow) = trusted else {
+            let last = self.last_trusted.unwrap_or(now);
+            let lost = now.saturating_duration_since(last) >= self.config.picture_lost_after;
+            if lost && matches!(self.mode, Mode::Probing { .. } | Mode::Holding { .. }) {
+                return self.fail(HoldFault::PictureLost);
+            }
+            self.preview = None;
+            return None;
+        };
+        self.last_trusted = Some(now);
+        self.slide += flow.dx;
+        self.zoom += flow.zoom;
+        self.vertical += flow.dy;
+
+        let config = self.config;
+        let limit = f32::from(config.max_correction);
+        let steps = |value: f32| value.clamp(-limit, limit).round() as i8;
+        let correction = match self.mode {
+            Mode::Off | Mode::Failed(_) => {
+                let mut slide = Loop::new(ASSUMED_SLIDE_RESPONSE, 0.0);
+                let mut zoom = Loop::new(ASSUMED_ZOOM_RESPONSE, 0.0);
+                Some(Correction {
+                    aileron: steps(slide.update(self.slide, flow.dx, dt, &config)),
+                    elevator: steps(zoom.update(self.zoom, flow.zoom, dt, &config)),
+                })
+            }
+            Mode::Probing { .. } => self.probe(now),
+            Mode::Holding {
+                mut slide,
+                mut zoom,
+            } => {
+                let correction = Correction {
+                    aileron: steps(slide.update(self.slide, flow.dx, dt, &config)),
+                    elevator: steps(zoom.update(self.zoom, flow.zoom, dt, &config)),
+                };
+                self.mode = Mode::Holding { slide, zoom };
+                Some(correction)
+            }
+        };
+        self.preview = correction;
+        correction
+    }
+
+    fn probe(&mut self, now: Instant) -> Option<Correction> {
+        let Mode::Probing {
+            mut probe,
+            slide: measured,
+        } = self.mode
+        else {
+            return None;
+        };
+        let value = match probe.axis {
+            HoldAxis::Sideways => self.slide,
+            HoldAxis::ForwardBack => self.zoom,
+        };
+        match probe.step(value, now, &self.config) {
+            Ok(push) => {
+                self.mode = Mode::Probing {
+                    probe,
+                    slide: measured,
+                };
+                Some(match probe.axis {
+                    HoldAxis::Sideways => Correction {
+                        aileron: push,
+                        elevator: 0,
+                    },
+                    HoldAxis::ForwardBack => Correction {
+                        aileron: 0,
+                        elevator: push,
+                    },
+                })
+            }
+            Err(Err(fault)) => self.fail(fault),
+            Err(Ok(response)) => {
+                match (probe.axis, measured) {
+                    (HoldAxis::Sideways, _) => {
+                        self.mode = Mode::Probing {
+                            probe: Probe::new(HoldAxis::ForwardBack, self.zoom, now),
+                            slide: Some(response),
+                        };
+                    }
+                    (HoldAxis::ForwardBack, Some(slide)) => {
+                        self.mode = Mode::Holding {
+                            slide: Loop::new(slide, self.slide),
+                            zoom: Loop::new(response, self.zoom),
+                        };
+                    }
+                    (HoldAxis::ForwardBack, None) => {
+                        return self.fail(HoldFault::NoResponse(HoldAxis::Sideways));
+                    }
+                }
+                Some(Correction::default())
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const FRAME: Duration = Duration::from_millis(66);
 
     fn flow(dx: f32, confidence: f32) -> Flow {
         Flow {
@@ -94,70 +467,82 @@ mod tests {
     }
 
     #[test]
-    fn no_drift_means_no_correction() {
-        let correction = HoldConfig::default().correct(0.0, 0.0, flow(0.0, 0.5));
-        assert_eq!(correction, Some(Correction::default()));
+    fn a_still_picture_previews_no_correction() {
+        let mut pilot = Autopilot::default();
+        let start = Instant::now();
+        assert_eq!(
+            pilot.on_frame(Some(flow(0.0, 0.5)), start),
+            Some(Correction::default())
+        );
+        assert_eq!(pilot.phase(), HoldPhase::Off);
     }
 
     #[test]
-    fn sideways_drift_pushes_aileron_the_opposite_way_to_the_drone() {
-        let config = HoldConfig::default();
-        assert_eq!(
-            config.correct(10.0, 0.0, flow(0.0, 0.5)).unwrap().aileron,
-            5
-        );
-        assert_eq!(
-            config.correct(-10.0, 0.0, flow(0.0, 0.5)).unwrap().aileron,
-            -5
-        );
+    fn the_preview_opposes_a_slide_on_the_assumed_direction() {
+        let mut pilot = Autopilot::default();
+        let start = Instant::now();
+        let correction = pilot.on_frame(Some(flow(10.0, 0.5)), start).unwrap();
+        assert!(correction.aileron > 0, "{correction:?}");
     }
 
     #[test]
-    fn movement_adds_damping() {
-        let config = HoldConfig::default();
-        assert_eq!(config.correct(0.0, 0.0, flow(2.0, 0.5)).unwrap().aileron, 3);
-        // Already coming back: the drift says push, the movement says ease off.
-        assert_eq!(
-            config.correct(10.0, 0.0, flow(-2.0, 0.5)).unwrap().aileron,
-            2
-        );
-    }
-
-    #[test]
-    fn growing_picture_pulls_elevator_back() {
-        let config = HoldConfig::default();
-        assert_eq!(
-            config.correct(0.0, 0.1, flow(0.0, 0.5)).unwrap().elevator,
-            -4
-        );
+    fn an_untrusted_picture_gives_nothing_to_send() {
+        let mut pilot = Autopilot::default();
+        assert_eq!(pilot.on_frame(Some(flow(5.0, 0.2)), Instant::now()), None);
+        assert_eq!(pilot.on_frame(None, Instant::now()), None);
+        assert_eq!(pilot.drift().0, 0.0);
     }
 
     #[test]
     fn corrections_stay_small_however_large_the_drift() {
-        let config = HoldConfig::default();
-        let correction = config.correct(5000.0, -50.0, flow(90.0, 0.5)).unwrap();
+        let mut pilot = Autopilot::default();
+        let correction = pilot
+            .on_frame(Some(flow(5000.0, 0.5)), Instant::now())
+            .unwrap();
         assert_eq!(correction.aileron, 12);
-        assert_eq!(correction.elevator, 12);
     }
 
     #[test]
-    fn an_untrusted_measure_gives_no_correction() {
+    fn a_drone_that_does_not_respond_fails_calibration_and_stops_pushing() {
+        let mut pilot = Autopilot::default();
+        let start = Instant::now();
+        pilot.start(start);
+        let mut last = None;
+        for frame in 0..160 {
+            last = pilot.on_frame(Some(flow(0.0, 0.5)), start + FRAME * frame);
+        }
         assert_eq!(
-            HoldConfig::default().correct(50.0, 0.0, flow(5.0, 0.2)),
-            None
+            pilot.phase(),
+            HoldPhase::Failed(HoldFault::NoResponse(HoldAxis::Sideways))
+        );
+        assert_ne!(
+            last,
+            Some(Correction {
+                aileron: 12,
+                elevator: 0
+            })
         );
     }
 
     #[test]
-    fn each_axis_can_be_reversed() {
-        let config = HoldConfig {
-            reverse_aileron: true,
-            reverse_elevator: true,
-            ..HoldConfig::default()
-        };
-        let correction = config.correct(10.0, 0.1, flow(0.0, 0.5)).unwrap();
-        assert_eq!(correction.aileron, -5);
-        assert_eq!(correction.elevator, 4);
+    fn losing_the_picture_ends_calibration() {
+        let mut pilot = Autopilot::default();
+        let start = Instant::now();
+        pilot.start(start);
+        assert_eq!(pilot.on_frame(None, start + Duration::from_secs(2)), None);
+        assert_eq!(pilot.phase(), HoldPhase::Failed(HoldFault::PictureLost));
+    }
+
+    #[test]
+    fn stopping_ends_hold_and_centre_can_be_set_again() {
+        let mut pilot = Autopilot::default();
+        let start = Instant::now();
+        pilot.on_frame(Some(flow(3.0, 0.5)), start);
+        pilot.reset();
+        assert_eq!(pilot.drift().0, 0.0);
+        pilot.start(start);
+        pilot.stop();
+        assert_eq!(pilot.phase(), HoldPhase::Off);
     }
 
     #[test]

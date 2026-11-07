@@ -181,14 +181,17 @@ is known about it are in [WIFI UAV drone](../protocols/wifi-uav-drone.md).
 
 | Rule | Enforced in |
 | --- | --- |
-| Nothing is sent until the user connects, and no control is sent if the drone never sends a first video frame | `drone-link` `link.rs` `open_session` |
+| A session opens only when the user connects or this computer joins the drone's Wi-Fi. That sends start packets and idle frames, and never arms. Disconnect holds until the user connects again or leaves the Wi-Fi | desktop `drone.rs` `AutoConnect` |
+| No control is sent if the drone never sends a first video frame | `drone-link` `link.rs` `open_session` |
 | Up and sticks need arming, which is never persisted and needs video moving and the watch streaming | `drone-link` `pilot.rs`, `link.rs` `arm`, desktop `drone.rs` `arm` |
 | Sticks are limited to ±38, and throttle to ±64. Steering moves aileron and elevator only, so throttle and rudder stay centred | `drone-link` `pilot.rs` `limited`, `steering.rs` |
 | Steering needs the watch button held. Letting go centres the sticks. A pinch cannot steer | `drone-link` `steering.rs`, desktop `lib.rs` |
 | Sticks older than 200 ms are centred, and after 1 s without updates the pilot presses Down and disarms | `drone-link` `pilot.rs` `tick` |
 | Something must keep checking in: the watch's stream or the open Drone page. If the page closes or stalls with no watch streaming, the timeout above lands. Hold corrections do not count as checking in | desktop `drone.rs` `heartbeat`, `DronePage.tsx`; `drone-link` `pilot.rs` |
 | A watch disconnect lands at once, unless the page is keeping the link alive, when it only ends steering | desktop `drone.rs` `watch_lost` |
-| Camera corrections reach the sticks only while Hold is on, which needs arming, starts from the current view, and is off again after every landing or stop. Each is at most 12 steps and within the ±38 limit. A correction older than 300 ms, or from a picture with under 25% agreement, is dropped | `drone-link` `hold.rs`, `pilot.rs` `corrected` |
+| Camera corrections reach the sticks only while Hold is on, which needs arming and is off again after every landing or stop. Each is at most 12 steps and within the ±38 limit. A correction older than 300 ms, or from a picture with under 25% agreement, is dropped | `drone-link` `hold.rs`, `pilot.rs` `corrected` |
+| Hold measures each axis with test pushes before steering, and refuses if a push shows no clear change or drift swamps it. Those pushes do move the drone. It gives up and centres the sticks after 1 s with no trusted picture | `drone-link` `hold.rs` |
+| The height buttons move only the throttle, within ±40 and the throttle limit. They are sent with each heartbeat and lapse after 300 ms | desktop `drone.rs` `heartbeat`, `DronePage.tsx` |
 | Malformed watch data or a lagging event stream ends steering but keeps the hover | desktop `drone.rs` `release` |
 | Landing or stopping cannot be steered, and Stop cannot be interrupted | `drone-link` `pilot.rs` |
 | Esc lands, from any page. Closing the app or disconnecting lands first | desktop `App.tsx`, `drone.rs`; `drone-link` `link.rs` `fly` |
@@ -198,10 +201,10 @@ motors proven on the drone, and Stop may cut them in the air.
 
 ### What has been tested
 
-On a DM002HW with the props off: the Python scripts started the motors with Up and
-stopped them with Down, and the Rust link held an idle session. The desktop app has held
-a session and shown live video with tracking. Arming, Up, Down, Stop, hold and every
-rule in the table have been tested against a stand-in drone or in unit tests only.
+See [Drone control](drone.md#what-has-been-tested). In short, on the real drone the Python
+scripts started and stopped the motors with the props off, and the desktop app has held a
+session with live video and tracking. Every rule in the table has been tested only against
+a stand-in drone or in unit tests.
 
 ### What is not guaranteed
 
@@ -218,5 +221,7 @@ rule in the table have been tested against a stand-in drone or in unit tests onl
 - **Position is not held.** The drone drifts, and only the person flying corrects it.
   Camera hold reduces drift at best. A forward camera cannot tell a drift from a turn or a
   tilt, the drone reports no attitude to separate them, and hold has never run in flight.
-- **Hold can push the wrong way.** Its directions are untested and could add to a drift
-  rather than cancel it, up to the 12-step limit, until someone stops it.
+- **Hold could still push the wrong way.** Calibration measures direction, but a gust or a
+  person walking past during a test push could mislead it. A wrong result would push the
+  drone up to the 12-step limit until someone lands or stops it. Stay ready to land.
+- **Simulated flights are not flights.** Their physics are estimates.

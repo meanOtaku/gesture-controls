@@ -14,13 +14,14 @@ use std::time::{Duration, Instant};
 
 use thiserror::Error;
 
+use crate::flight_log::FlightLog;
 use crate::frame::{
     Button, Sticks, VERSION_QUERY, VIDEO_START, VideoFrame, VideoTracker, control_frame,
     empty_frame, opening_request_frame, setup_frame,
 };
-use crate::hold::{Correction, HoldConfig};
+use crate::hold::{Autopilot, Correction, HoldPhase};
 use crate::pilot::{Pilot, PilotConfig, PilotError};
-use crate::vision::{Flow, Luma, MIN_CONFIDENCE, measure, to_jpeg};
+use crate::vision::{Flow, Luma, measure, to_jpeg};
 
 const MAX_DATAGRAM: usize = 2048;
 const SHORTEST_READ_TIMEOUT: Duration = Duration::from_millis(1);
@@ -46,6 +47,30 @@ impl Default for Endpoint {
             control_port: 8800,
             aux_port: 8801,
         }
+    }
+}
+
+impl Endpoint {
+    /// True when this machine sits on the drone's network. Asks the system for a route, so nothing is sent.
+    pub fn is_reachable(&self) -> bool {
+        let Ok(socket) = unbound_socket(self.host) else {
+            return false;
+        };
+        socket.connect((self.host, self.control_port)).is_ok()
+            && socket
+                .local_addr()
+                .is_ok_and(|local| same_network(local.ip(), self.host))
+    }
+}
+
+/// Loopback, or the same /24. A default route would "reach" the drone without being on its Wi-Fi at all.
+fn same_network(local: IpAddr, host: IpAddr) -> bool {
+    if host.is_loopback() {
+        return true;
+    }
+    match (local, host) {
+        (IpAddr::V4(local), IpAddr::V4(host)) => local.octets()[..3] == host.octets()[..3],
+        _ => false,
     }
 }
 
@@ -93,8 +118,8 @@ pub struct LinkStatus {
     pub drift: (f32, f32),
     /// Confident zoom added up since the last reset.
     pub zoom_total: f32,
-    /// True while corrections are reaching the sticks.
-    pub holding: bool,
+    /// What the autopilot is doing.
+    pub hold: HoldPhase,
     /// What the hold would send, whether or not it is on. `None` when the picture cannot be trusted.
     pub correction: Option<Correction>,
 }
@@ -122,26 +147,40 @@ struct Shared {
     pilot: Mutex<Pilot>,
     status: Mutex<LinkStatus>,
     latest_frame: Mutex<Option<Arc<LiveFrame>>>,
+    autopilot: Mutex<Autopilot>,
+    flight_log: Mutex<Option<FlightLog>>,
     closing: AtomicBool,
 }
 
 impl Shared {
     fn add_flow(&self, flow: Option<(u32, Flow)>) {
-        let correction = {
+        let now = Instant::now();
+        let hold_allowed = lock(&self.pilot).is_holding();
+        let mut autopilot = lock(&self.autopilot);
+        // A landing or a stop ends hold in the pilot, which the autopilot learns of here.
+        let active = matches!(
+            autopilot.phase(),
+            HoldPhase::Calibrating | HoldPhase::Holding
+        );
+        if active && !hold_allowed {
+            autopilot.stop();
+        }
+        let correction = autopilot.on_frame(flow.map(|(_, flow)| flow), now);
+        let phase = autopilot.phase();
+        {
             let mut status = lock(&self.status);
             status.flow = flow;
-            if let Some((_, flow)) = flow.filter(|(_, flow)| flow.confidence >= MIN_CONFIDENCE) {
-                status.drift.0 += flow.dx;
-                status.drift.1 += flow.dy;
-                status.zoom_total += flow.zoom;
-            }
-            let correction = flow.and_then(|(_, flow)| {
-                HoldConfig::default().correct(status.drift.0, status.zoom_total, flow)
-            });
-            status.correction = correction;
-            correction
-        };
-        lock(&self.pilot).set_correction(correction, Instant::now());
+            status.drift = autopilot.drift();
+            status.zoom_total = autopilot.zoom_total();
+            status.correction = autopilot.preview();
+            status.hold = phase;
+        }
+        drop(autopilot);
+        let mut pilot = lock(&self.pilot);
+        pilot.set_correction(correction, now);
+        if matches!(phase, HoldPhase::Failed(_)) {
+            pilot.set_hold(false);
+        }
     }
 }
 
@@ -175,10 +214,12 @@ impl Link {
                 flow: None,
                 drift: (0.0, 0.0),
                 zoom_total: 0.0,
-                holding: false,
+                hold: HoldPhase::Off,
                 correction: None,
             }),
             latest_frame: Mutex::new(None),
+            autopilot: Mutex::new(Autopilot::default()),
+            flight_log: Mutex::new(None),
             closing: AtomicBool::new(false),
         });
         // Room for one frame: the picture should be the newest, not a queue of old ones.
@@ -213,25 +254,34 @@ impl Link {
 
     /// Makes the current view the point drift is measured from.
     pub fn reset_drift(&self) {
+        let mut autopilot = lock(&self.shared.autopilot);
+        autopilot.reset();
         let mut status = lock(&self.shared.status);
-        status.drift = (0.0, 0.0);
-        status.zoom_total = 0.0;
-        status.correction = None;
+        status.drift = autopilot.drift();
+        status.zoom_total = autopilot.zoom_total();
+        status.correction = autopilot.preview();
     }
 
-    /// Starts holding the current view, or stops. Refused unless armed.
+    /// Measures the drone, then holds the current view. Or stops. Starting is refused unless armed.
     pub fn set_hold(&self, enabled: bool) -> Result<(), LinkError> {
         let mut pilot = lock(&self.shared.pilot);
         if enabled && !pilot.is_armed() {
             return Err(PilotError::NotArmed.into());
         }
-        drop(pilot);
+        let mut autopilot = lock(&self.shared.autopilot);
         if enabled {
-            self.reset_drift();
+            autopilot.start(Instant::now());
+        } else {
+            autopilot.stop();
         }
-        pilot = lock(&self.shared.pilot);
+        lock(&self.shared.status).hold = autopilot.phase();
         pilot.set_hold(enabled);
         Ok(())
+    }
+
+    /// Records every control frame from now on, until the link closes.
+    pub fn record_flight(&self, log: FlightLog) {
+        *lock(&self.shared.flight_log) = Some(log);
     }
 
     pub fn latest_frame(&self) -> Option<Arc<LiveFrame>> {
@@ -396,7 +446,7 @@ impl Worker {
                 self.video.skip();
                 lock(&self.shared.status).video_skipped += 1;
             }
-            let (control, armed, failsafe, holding) = {
+            let (control, armed, failsafe) = {
                 let mut pilot = lock(&self.shared.pilot);
                 let closing = self.shared.closing.load(Ordering::SeqCst);
                 if closing {
@@ -406,21 +456,18 @@ impl Worker {
                 if closing && !pilot.is_busy() {
                     return;
                 }
-                (
-                    control,
-                    pilot.is_armed(),
-                    pilot.failsafe_tripped(),
-                    pilot.is_holding(),
-                )
+                (control, pilot.is_armed(), pilot.failsafe_tripped())
             };
             self.send(&control_frame(sequence, control, self.video.completed()));
+            if let Some(log) = &*lock(&self.shared.flight_log) {
+                log.record(control, &lock(&self.shared.status));
+            }
             sequence = sequence.wrapping_add(1);
             {
                 let mut status = lock(&self.shared.status);
                 status.frames_sent += 1;
                 status.armed = armed;
                 status.failsafe_tripped = failsafe;
-                status.holding = holding;
             }
             next = (next + self.timing.period).max(Instant::now());
             self.pump(next.saturating_duration_since(Instant::now()));
@@ -452,5 +499,34 @@ impl Worker {
                 let _ = self.frames.try_send(frame);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn address(text: &str) -> IpAddr {
+        text.parse().unwrap()
+    }
+
+    #[test]
+    fn only_the_same_subnet_counts_as_the_drones_network() {
+        let drone = address("192.168.169.1");
+        assert!(same_network(address("192.168.169.3"), drone));
+        assert!(!same_network(address("192.168.1.3"), drone));
+        assert!(!same_network(address("172.22.64.43"), drone));
+        assert!(!same_network(address("0.0.0.0"), drone));
+        assert!(!same_network(address("fe80::1"), drone));
+    }
+
+    #[test]
+    fn loopback_always_counts_so_a_stand_in_drone_can_be_used() {
+        assert!(same_network(address("127.0.0.1"), address("127.0.0.1")));
+        let endpoint = Endpoint {
+            host: address("127.0.0.1"),
+            ..Endpoint::default()
+        };
+        assert!(endpoint.is_reachable());
     }
 }

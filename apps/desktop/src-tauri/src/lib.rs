@@ -61,7 +61,7 @@ fn exit_gracefully(handle: tauri::AppHandle, reason: &'static str) {
     info!(reason, "shutting down: releasing the watch transports");
     tauri::async_runtime::spawn(async move {
         // Closing the link lands an armed drone first, so this comes before anything else goes away.
-        let drone_link = handle.state::<drone::DroneRuntime>().take_link();
+        let drone_link = handle.state::<drone::DroneRuntime>().shut_down();
         let closing = tauri::async_runtime::spawn_blocking(move || drop(drone_link));
         if tokio::time::timeout(TEARDOWN_TIMEOUT, closing)
             .await
@@ -313,6 +313,7 @@ pub fn run() {
             label_runtime::spawn_timer(handle.clone());
             overlay::prepare_window(&handle).map_err(std::io::Error::other)?;
             head_pose::spawn(handle.clone());
+            drone::spawn_auto_connect(handle.clone());
 
             // `npm start` asks where to send its "please quit" first, so it can wait for the
             // watch to be disconnected before tearing the rest of the process tree down.

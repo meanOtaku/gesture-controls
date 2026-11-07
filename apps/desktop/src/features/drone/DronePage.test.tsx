@@ -20,8 +20,13 @@ const idle: DroneState = {
   driftX: 0,
   driftY: 0,
   holding: false,
+  holdPhase: "off",
+  holdFault: null,
   correction: null,
+  heightRate: 0,
+  flightLog: null,
   pageAlive: false,
+  onNetwork: false,
 };
 
 async function show(state: Partial<DroneState>) {
@@ -65,6 +70,14 @@ describe("DronePage", () => {
     expect(invoke).toHaveBeenCalledWith("drone_reset_drift");
   });
 
+  it("says it is waiting for the drone's Wi-Fi until it is on it", async () => {
+    await show({});
+    expect(screen.getByText("Waiting for the drone's Wi-Fi")).toBeTruthy();
+    cleanup();
+    await show({ onNetwork: true });
+    expect(screen.getByText("Not connected")).toBeTruthy();
+  });
+
   it("offers only connecting while disconnected", async () => {
     await show({});
     expect(button("Connect").disabled).toBe(false);
@@ -87,7 +100,48 @@ describe("DronePage", () => {
     expect(invoke).not.toHaveBeenCalledWith("drone_heartbeat");
     cleanup();
     await show({ phase: "open" });
-    expect(invoke).toHaveBeenCalledWith("drone_heartbeat");
+    expect(invoke).toHaveBeenCalledWith("drone_heartbeat", { height: 0 });
+  });
+
+  it("offers height control only once armed", async () => {
+    await show({ phase: "open" });
+    expect(button("Climb").disabled).toBe(true);
+    expect(button("Descend").disabled).toBe(true);
+    cleanup();
+    await show({ phase: "open", armed: true });
+    expect(button("Climb").disabled).toBe(false);
+  });
+
+  it("sends height only while a button is held, and lets go if the pointer leaves", async () => {
+    vi.useFakeTimers();
+    try {
+      await show({ phase: "open", armed: true });
+      const heights = () => invoke.mock.calls.filter(([command]) => command === "drone_heartbeat").map(([, args]) => args.height);
+      fireEvent.pointerDown(button("Climb"));
+      await act(async () => { vi.advanceTimersByTime(100); });
+      expect(heights().at(-1)).toBe(30);
+      fireEvent.pointerLeave(button("Climb"));
+      await act(async () => { vi.advanceTimersByTime(100); });
+      expect(heights().at(-1)).toBe(0);
+      fireEvent.pointerDown(button("Descend"));
+      await act(async () => { vi.advanceTimersByTime(100); });
+      expect(heights().at(-1)).toBe(-30);
+      fireEvent(window, new Event("blur"));
+      await act(async () => { vi.advanceTimersByTime(100); });
+      expect(heights().at(-1)).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows calibration, why hold stopped, and where the flight is recorded", async () => {
+    await show({ phase: "open", armed: true, holding: true, holdPhase: "calibrating", flightLog: "/logs/flight.csv" });
+    expect(screen.getByText("Armed, measuring the drone")).toBeTruthy();
+    expect(screen.getByText(/Recording this flight to \/logs\/flight\.csv/)).toBeTruthy();
+    cleanup();
+    await show({ phase: "open", armed: true, holdPhase: "failed", holdFault: "The picture could not be followed." });
+    expect(screen.getByRole("alert").textContent).toContain("could not be followed");
+    expect(button("Hold position").disabled).toBe(false);
   });
 
   it("previews corrections and only allows hold once armed", async () => {

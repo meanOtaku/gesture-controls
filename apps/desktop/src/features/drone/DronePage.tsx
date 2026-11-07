@@ -10,6 +10,8 @@ export type { DroneFlow, DroneState } from "./droneStatus";
 
 const POLL_MS = 100;
 const HEARTBEAT_MS = 100;
+/** How hard the height buttons push the throttle, within the backend's limit. */
+const HEIGHT_RATE = 30;
 const FRAME_POLL_MS = 60;
 /** The measure works on a 160 by 90 picture, so the marker is scaled up to the 640 by 360 view. */
 const VIEW_SCALE = 4;
@@ -136,13 +138,34 @@ export function DronePage() {
   const frameRate = useSyncExternalStore(subscribeDrone, getDroneSnapshot, getDroneSnapshot)?.videoRate;
 
   // Keeps the link alive while this page is open. If the page dies, the pilot lands.
+  const height = useRef(0);
   useEffect(() => {
     if (!connected) return;
-    const beat = () => { void Promise.resolve(invoke("drone_heartbeat")).catch(() => {}); };
+    const beat = () => { void Promise.resolve(invoke("drone_heartbeat", { height: height.current })).catch(() => {}); };
+    const release = () => { height.current = 0; };
     beat();
     const timer = window.setInterval(beat, HEARTBEAT_MS);
-    return () => window.clearInterval(timer);
+    window.addEventListener("blur", release);
+    window.addEventListener("pointerup", release);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("blur", release);
+      window.removeEventListener("pointerup", release);
+      release();
+    };
   }, [connected]);
+
+  const heightButton = (label: string, rate: number) => (
+    <Button
+      variant="outline"
+      disabled={!state?.armed}
+      onPointerDown={() => { height.current = rate; }}
+      onPointerUp={() => { height.current = 0; }}
+      onPointerLeave={() => { height.current = 0; }}
+    >
+      {label}
+    </Button>
+  );
 
   return (
     <main className="shell">
@@ -161,14 +184,18 @@ export function DronePage() {
         </Alert>
       )}
 
+      {state?.holdFault && <Alert variant="destructive" role="alert"><AlertDescription>{state.holdFault}</AlertDescription></Alert>}
+
       <Card role="region" aria-label="Connection">
         <CardHeader>
           <SectionHeader
             title="Connection"
-            description={state ? PHASE_LABEL[state.phase] : "Only available in the desktop app"}
+            description={!state ? "Only available in the desktop app"
+              : state.phase === "disconnected" ? (state.onNetwork ? "Not connected" : "Waiting for the drone's Wi-Fi")
+                : PHASE_LABEL[state.phase]}
             help={{
               label: "About connecting",
-              content: "Join the drone's Wi-Fi on this computer first. The watch must use Bluetooth, because the Wi-Fi is taken by the drone.",
+              content: "Join the drone's Wi-Fi on this computer and the app connects by itself, which never arms or starts the drone. Disconnect stays that way until you choose Connect or leave the Wi-Fi. The watch must use Bluetooth, because the Wi-Fi is taken by the drone.",
             }}
           />
         </CardHeader>
@@ -191,7 +218,7 @@ export function DronePage() {
             description={flow ? `Agreement ${Math.round(flow.confidence * 100)}%` : "Waiting for two good frames"}
             help={{
               label: "About camera tracking",
-              content: "The app follows the picture the way a mouse follows a desk. The marker shows how far the view has moved since you pressed Set centre: green when the measure is trusted, red when the view is too blank or dark. Would send shows the small stick corrections that bring the view back. They reach the drone only while Hold position is on, which needs arming first.",
+              content: "The app follows the picture the way a mouse follows a desk. The marker shows how far the view has moved since you pressed Set centre: green when the measure is trusted, red when the view is too blank or dark. Hold position first gives the drone gentle test pushes both ways, about nine seconds in all, to measure which way the sticks move the picture and how far. It then keeps the view where it was. Would send shows the corrections, which reach the drone only while hold is on.",
             }}
           />
         </CardHeader>
@@ -212,7 +239,7 @@ export function DronePage() {
               : <Button disabled={!state?.armed} onClick={() => runHold(true)}>Hold position</Button>}
             {state && (
               <p className="subtitle">
-                {state.holding ? "Sending" : "Would send"}{" "}
+                {state.holdPhase === "calibrating" ? "Measuring the drone, sending" : state.holding ? "Sending" : "Would send"}{" "}
                 {state.correction
                   ? `aileron ${signed(state.correction.aileron)}, elevator ${signed(state.correction.elevator)}`
                   : "nothing: the picture cannot be trusted"}
@@ -226,18 +253,24 @@ export function DronePage() {
         <CardHeader>
           <SectionHeader
             title="Flight"
-            description={state?.armed ? (state.steering ? "Armed, steering" : "Armed, hovering") : "Not armed"}
+            description={!state?.armed ? "Not armed"
+              : state.holdPhase === "calibrating" ? "Armed, measuring the drone"
+                : state.holdPhase === "holding" ? "Armed, holding position"
+                  : state.steering ? "Armed, steering" : "Armed"}
             help={{
               label: "About flying",
-              content: "Arming lasts until you land, and this page must stay open: if it closes, the drone is told to land. Esc lands from any page while this window is focused. Stop may cut the motors in the air, so use it only if landing fails. If the watch goes quiet for a second the drone is told to land.",
+              content: "Arming lasts until you land, and this page must stay open: if it closes, the drone is told to land. Hold Climb or Descend to change height, which works while the position is held. Esc lands from any page while this window is focused. Stop may cut the motors in the air, so use it only if landing fails. If the watch goes quiet for a second the drone is told to land.",
             }}
           />
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-2">
           <Button disabled={!connected || state?.armed || !(state?.watchStreaming || state?.pageAlive)} onClick={() => run("drone_arm")}>Arm</Button>
           <Button disabled={!state?.armed} onClick={() => run("drone_take_off")}>Take off</Button>
+          {heightButton("Climb", HEIGHT_RATE)}
+          {heightButton("Descend", -HEIGHT_RATE)}
           <Button variant="outline" disabled={!linked} onClick={() => run("drone_land")}>Land</Button>
           <Button variant="destructive" disabled={!linked} onClick={() => run("drone_stop")}>Stop</Button>
+          {state?.flightLog && <p className="subtitle">Recording this flight to {state.flightLog}</p>}
         </CardContent>
       </Card>
     </main>

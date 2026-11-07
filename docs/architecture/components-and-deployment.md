@@ -27,6 +27,7 @@ policy decisions and every action run on the desktop.
 | `native-head-tracking` | In-process Sony provider: IOKit/IOBluetooth (macOS), HID/SetupAPI (Windows) |
 | `interaction-engine` | Head calibration and dwell, wrist-rotation mapper, gesture policy state machine |
 | `pinch-inference` | Telemetry fusion, the 55-feature extractor, the model trait, the LiteRT backend |
+| `drone-link` | Flies a Wi-Fi toy drone: the wire format, flight rules, the UDP link, video decoding, image motion and camera hold. See [Drone control](drone.md) |
 | `volume-control` | Native system-volume adapters (macOS, Windows Core Audio, Linux `wpctl`/`pactl`) |
 | `watch-bridge` | The two watch transports (Wi-Fi WebSocket server, BLE central), framing, sequencing, time sync |
 | `spatial-gesture-desktop` (`apps/desktop/src-tauri`) | The Tauri backend that wires all of the above together |

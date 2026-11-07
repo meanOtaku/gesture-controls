@@ -15,6 +15,7 @@ src/
 │   └── app/                     # Shared app widgets (async buttons, help tooltips, operation feedback)
 ├── features/
 │   ├── dashboard/components/    # Connection, calibration, and watch controls
+│   ├── drone/                   # Drone page, live view, and the status the top bar and telemetry panel share
 │   ├── model-lab/               # Dataset import, training, lifecycle, replay, and deployment UI
 │   │   ├── components/
 │   │   └── hooks/
@@ -55,6 +56,7 @@ Rules:
 | `calibration.rs` | Center/top-right calibration state, dwell, target entered/exited events; the optional corner-demo start |
 | `watch.rs` | Watch connection status, latest orientation, and the typed watch events forwarded to the frontend |
 | `overlay.rs` | The overlay window and `OverlayState`; grab ownership (`GrabOwner`), the wrist-rotation transaction, write and haptic throttling, native volume reads and writes |
+| `drone.rs` | The drone session, auto-connect when its Wi-Fi appears, feeding it from the watch and the Drone page, and its commands. See [Drone control](../../docs/architecture/drone.md) |
 | `settings.rs` | Validated, atomically persisted `settings.json`, watch settings replay, transport switching |
 | `inference.rs` | The live path: PPG ordering watermark, quality and window checks, fusion, model load, the gesture policy runtime, `apply_decision` |
 | `model_registry.rs` | Model lifecycle, thresholds, quality gates, intent bindings, the bundle contract (`load_and_verify_bundle`), activation and rollback, inference-mode handling |
