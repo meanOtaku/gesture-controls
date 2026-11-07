@@ -94,10 +94,15 @@ mod tests {
             phase: LinkPhase::Open,
             armed: true,
             failsafe_tripped: false,
+            took_off: true,
+            headless: false,
+            returning: false,
             frames_sent: 1,
             video_frames: 7,
             video_skipped: 0,
             video_damaged: 0,
+            video_restarts: 0,
+            video_repeats: 0,
             send_errors: 0,
             flow: None,
             drift: (1.5, -2.0),
@@ -107,6 +112,9 @@ mod tests {
                 aileron: 3,
                 elevator: -2,
             }),
+            unknown_packets: 0,
+            drone_status: None,
+            status_messages: 0,
         }
     }
 

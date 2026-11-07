@@ -27,7 +27,7 @@ afterEach(() => {
 
 const drone: DroneState = {
   phase: "open", armed: false, failsafeTripped: false, steering: false, watchStreaming: false, framesSent: 0, videoFrames: 0,
-  videoSkipped: 0, videoDamaged: 0, sendErrors: 0, flow: null, driftX: 0, driftY: 0, holding: false, holdPhase: "off", holdFault: null, correction: null, heightRate: 0, flightLog: null, pageAlive: false, onNetwork: true, firmware: null,
+  videoSkipped: 0, videoDamaged: 0, videoRestarts: 0, videoRepeats: 0, unknownPackets: 0, report: null, statusMessages: 0, unknownPacketsFile: null, sendErrors: 0, flow: null, driftX: 0, driftY: 0, holding: false, holdPhase: "off", holdFault: null, correction: null, heightRate: 0, manualSteering: false, tookOff: false, headless: false, returning: false, flightLog: null, pageAlive: false, onNetwork: true, hasHoldCalibration: false, firmware: null,
 };
 
 describe("NervBars' drone", () => {

@@ -5,6 +5,10 @@
 //! measures the direction and strength for this flight, and a PID loop scaled by the result then keeps the picture
 //! where it was. If an axis does not respond clearly, or the picture is lost, hold gives up and centres the sticks.
 //!
+//! The drone's own IMU does the fast work: it keeps the drone level and at height many times a second, and the app
+//! cannot read it. So this is a slow, gentle outer loop that only leans against drift, and a measurement saved from one
+//! flight can start hold straight after the next takeoff, without the test pushes.
+//!
 //! The picture sliding sideways steers aileron, and the picture growing or shrinking steers elevator. Sliding up and
 //! down is left alone, because a tilt and a climb look the same, and the drone holds its own height. Everything here
 //! is pure: time is passed in, so a simulated flight can run it in tests.
@@ -38,6 +42,10 @@ pub struct HoldConfig {
     pub min_zoom_response: f32,
     /// With no trusted picture for this long, hold gives up.
     pub picture_lost_after: Duration,
+    /// Test pushes need a trusted picture at least this long before they start.
+    pub steady_before_pushing: Duration,
+    /// While pushing, a gap longer than this between trusted frames abandons calibration at once.
+    pub probe_gap: Duration,
 }
 
 impl Default for HoldConfig {
@@ -45,15 +53,17 @@ impl Default for HoldConfig {
         Self {
             max_correction: 12,
             push: 12,
-            proportional: 0.8,
-            derivative: 0.5,
-            integral: 0.15,
-            integral_limit: 0.6,
+            proportional: 0.5,
+            derivative: 0.4,
+            integral: 0.08,
+            integral_limit: 0.4,
             settle: Duration::from_millis(500),
             push_time: Duration::from_millis(600),
             min_slide_response: 0.8,
             min_zoom_response: 0.004,
             picture_lost_after: Duration::from_secs(1),
+            steady_before_pushing: Duration::from_secs(2),
+            probe_gap: Duration::from_millis(250),
         }
     }
 }
@@ -66,6 +76,27 @@ const RATE_SMOOTHING: f32 = 0.4;
 const MAX_FRAME_GAP: f32 = 0.5;
 /// Drift this many times larger than a push's response drowns it out.
 const MAX_DRIFT_TO_RESPONSE: f32 = 8.0;
+
+/// What the test pushes measured: how far one push moves the picture sideways, in pixels, and how much it zooms it.
+/// The sign says which way the sticks work, which belongs to the drone. The size also depends on how far away the scene
+/// is, so a saved one is only roughly right in another place, which the gentle gains allow for.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Calibration {
+    pub slide: f32,
+    pub zoom: f32,
+}
+
+impl Calibration {
+    /// Whether this could have come from a real measurement, so a damaged saved file is never used.
+    pub fn is_plausible(&self, config: &HoldConfig) -> bool {
+        self.slide.is_finite()
+            && self.zoom.is_finite()
+            && self.slide.abs() >= config.min_slide_response
+            && self.zoom.abs() >= config.min_zoom_response
+            && self.slide.abs() < 500.0
+            && self.zoom.abs() < 5.0
+    }
+}
 
 /// A push away from centre, in stick steps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -105,6 +136,8 @@ pub enum HoldFault {
     Unsteady(HoldAxis),
     /// No trusted picture for too long.
     PictureLost,
+    /// Hold was not started, because the picture had not been steady for long enough.
+    PictureNotSteady,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -267,6 +300,10 @@ pub struct Autopilot {
     vertical: f32,
     last_frame: Option<Instant>,
     last_trusted: Option<Instant>,
+    /// Since when the picture has been trusted without a break.
+    steady_since: Option<Instant>,
+    /// The latest measurement, from the test pushes or from a saved one.
+    calibration: Option<Calibration>,
     /// What this frame's correction was, whether or not it is on.
     preview: Option<Correction>,
 }
@@ -287,6 +324,8 @@ impl Autopilot {
             vertical: 0.0,
             last_frame: None,
             last_trusted: None,
+            steady_since: None,
+            calibration: None,
             preview: None,
         }
     }
@@ -324,8 +363,12 @@ impl Autopilot {
         }
     }
 
-    /// Starts measuring, then holding the current view.
-    pub fn start(&mut self, now: Instant) {
+    /// Starts measuring, then holding the current view. Refused unless the picture has been steady for a while,
+    /// because the test pushes move the drone, and on a poor picture they measure nothing and are wasted.
+    pub fn start(&mut self, now: Instant) -> Result<(), HoldFault> {
+        if !self.is_steady(now) {
+            return Err(HoldFault::PictureNotSteady);
+        }
         self.slide = 0.0;
         self.zoom = 0.0;
         self.vertical = 0.0;
@@ -334,10 +377,62 @@ impl Autopilot {
             probe: Probe::new(HoldAxis::Sideways, 0.0, now),
             slide: None,
         };
+        Ok(())
+    }
+
+    /// Holds the current view straight away with a saved measurement, so no test pushes are needed.
+    pub fn start_calibrated(
+        &mut self,
+        now: Instant,
+        calibration: Calibration,
+    ) -> Result<(), HoldFault> {
+        if !calibration.is_plausible(&self.config) {
+            return Err(HoldFault::NoResponse(HoldAxis::Sideways));
+        }
+        if !self.is_steady(now) {
+            return Err(HoldFault::PictureNotSteady);
+        }
+        self.slide = 0.0;
+        self.zoom = 0.0;
+        self.vertical = 0.0;
+        self.calibration = Some(calibration);
+        self.mode = Mode::Holding {
+            slide: Loop::new(calibration.slide, 0.0),
+            zoom: Loop::new(calibration.zoom, 0.0),
+        };
+        Ok(())
+    }
+
+    /// The measurement in use, once the test pushes have finished or a saved one was given.
+    pub fn calibration(&self) -> Option<Calibration> {
+        self.calibration
+    }
+
+    fn is_steady(&self, now: Instant) -> bool {
+        self.steady_since.is_some_and(|since| {
+            now.saturating_duration_since(since) >= self.config.steady_before_pushing
+        }) && self
+            .last_trusted
+            .is_some_and(|at| now.saturating_duration_since(at) < self.config.probe_gap)
     }
 
     pub fn stop(&mut self) {
         self.mode = Mode::Off;
+    }
+
+    /// Gives up if the picture has stopped. Called on a timer, because no frames also means no `on_frame`.
+    pub fn check_picture(&mut self, now: Instant) {
+        let allowed = match self.mode {
+            Mode::Probing { .. } => self.config.probe_gap,
+            Mode::Holding { .. } => self.config.picture_lost_after,
+            Mode::Off | Mode::Failed(_) => return,
+        };
+        if self
+            .last_trusted
+            .is_some_and(|at| now.saturating_duration_since(at) >= allowed)
+        {
+            self.fail(HoldFault::PictureLost);
+        }
     }
 
     fn fail(&mut self, fault: HoldFault) -> Option<Correction> {
@@ -355,14 +450,29 @@ impl Autopilot {
         self.last_frame = Some(now);
         let trusted = flow.filter(|flow| flow.confidence >= MIN_CONFIDENCE);
         let Some(flow) = trusted else {
+            self.steady_since = None;
+            // A push measured on a broken picture would be wrong, so calibration gives up at once.
+            if matches!(self.mode, Mode::Probing { .. }) {
+                return self.fail(HoldFault::PictureLost);
+            }
             let last = self.last_trusted.unwrap_or(now);
             let lost = now.saturating_duration_since(last) >= self.config.picture_lost_after;
-            if lost && matches!(self.mode, Mode::Probing { .. } | Mode::Holding { .. }) {
+            if lost && matches!(self.mode, Mode::Holding { .. }) {
                 return self.fail(HoldFault::PictureLost);
             }
             self.preview = None;
             return None;
         };
+        let gap = self
+            .last_trusted
+            .map(|at| now.saturating_duration_since(at));
+        let broken = gap.is_none_or(|gap| gap > self.config.probe_gap);
+        if broken && matches!(self.mode, Mode::Probing { .. }) {
+            return self.fail(HoldFault::PictureLost);
+        }
+        if broken || self.steady_since.is_none() {
+            self.steady_since = Some(now);
+        }
         self.last_trusted = Some(now);
         self.slide += flow.dx;
         self.zoom += flow.zoom;
@@ -436,6 +546,10 @@ impl Autopilot {
                         };
                     }
                     (HoldAxis::ForwardBack, Some(slide)) => {
+                        self.calibration = Some(Calibration {
+                            slide,
+                            zoom: response,
+                        });
                         self.mode = Mode::Holding {
                             slide: Loop::new(slide, self.slide),
                             zoom: Loop::new(response, self.zoom),
@@ -502,11 +616,114 @@ mod tests {
         assert_eq!(correction.aileron, 12);
     }
 
+    /// A trusted picture for long enough to start, returning when it ended.
+    fn steady(pilot: &mut Autopilot, start: Instant) -> Instant {
+        let mut now = start;
+        for _ in 0..35 {
+            pilot.on_frame(Some(flow(0.0, 0.5)), now);
+            now += FRAME;
+        }
+        now
+    }
+
+    #[test]
+    fn hold_will_not_start_on_a_picture_that_has_not_been_steady() {
+        let mut pilot = Autopilot::default();
+        let start = Instant::now();
+        assert_eq!(pilot.start(start), Err(HoldFault::PictureNotSteady));
+        let mut now = start;
+        for _ in 0..10 {
+            pilot.on_frame(Some(flow(0.0, 0.5)), now);
+            now += FRAME;
+        }
+        assert_eq!(pilot.start(now), Err(HoldFault::PictureNotSteady));
+        pilot.on_frame(Some(flow(0.0, 0.1)), now);
+        let now = steady(&mut pilot, now + FRAME);
+        assert_eq!(pilot.start(now), Ok(()));
+        assert_eq!(pilot.phase(), HoldPhase::Calibrating);
+    }
+
+    #[test]
+    fn hold_will_not_start_once_the_picture_has_stopped() {
+        let mut pilot = Autopilot::default();
+        let now = steady(&mut pilot, Instant::now());
+        assert_eq!(
+            pilot.start(now + Duration::from_millis(500)),
+            Err(HoldFault::PictureNotSteady)
+        );
+    }
+
+    #[test]
+    fn one_untrusted_frame_during_calibration_ends_it_at_once() {
+        let mut pilot = Autopilot::default();
+        let now = steady(&mut pilot, Instant::now());
+        pilot.start(now).unwrap();
+        pilot.on_frame(Some(flow(0.0, 0.5)), now + FRAME);
+        assert_eq!(pilot.on_frame(Some(flow(0.0, 0.1)), now + FRAME * 2), None);
+        assert_eq!(pilot.phase(), HoldPhase::Failed(HoldFault::PictureLost));
+    }
+
+    #[test]
+    fn a_gap_in_frames_during_calibration_ends_it() {
+        let mut pilot = Autopilot::default();
+        let now = steady(&mut pilot, Instant::now());
+        pilot.start(now).unwrap();
+        pilot.check_picture(now + Duration::from_millis(300));
+        assert_eq!(pilot.phase(), HoldPhase::Failed(HoldFault::PictureLost));
+    }
+
+    #[test]
+    fn a_saved_measurement_holds_at_once_without_test_pushes() {
+        let mut pilot = Autopilot::default();
+        let now = steady(&mut pilot, Instant::now());
+        let saved = Calibration {
+            slide: -20.0,
+            zoom: 0.05,
+        };
+        pilot.start_calibrated(now, saved).unwrap();
+        assert_eq!(pilot.phase(), HoldPhase::Holding);
+        assert_eq!(pilot.calibration(), Some(saved));
+        let correction = pilot.on_frame(Some(flow(4.0, 0.5)), now + FRAME).unwrap();
+        assert!(correction.aileron > 0, "{correction:?}");
+    }
+
+    #[test]
+    fn a_saved_measurement_still_needs_a_steady_picture_and_must_be_plausible() {
+        let mut pilot = Autopilot::default();
+        let start = Instant::now();
+        let saved = Calibration {
+            slide: -20.0,
+            zoom: 0.05,
+        };
+        assert_eq!(
+            pilot.start_calibrated(start, saved),
+            Err(HoldFault::PictureNotSteady)
+        );
+        let now = steady(&mut pilot, start);
+        for broken in [
+            Calibration {
+                slide: f32::NAN,
+                zoom: 0.05,
+            },
+            Calibration {
+                slide: 0.0,
+                zoom: 0.05,
+            },
+            Calibration {
+                slide: -20.0,
+                zoom: 99.0,
+            },
+        ] {
+            assert!(pilot.start_calibrated(now, broken).is_err(), "{broken:?}");
+        }
+        assert_eq!(pilot.phase(), HoldPhase::Off);
+    }
+
     #[test]
     fn a_drone_that_does_not_respond_fails_calibration_and_stops_pushing() {
         let mut pilot = Autopilot::default();
-        let start = Instant::now();
-        pilot.start(start);
+        let start = steady(&mut pilot, Instant::now());
+        pilot.start(start).unwrap();
         let mut last = None;
         for frame in 0..160 {
             last = pilot.on_frame(Some(flow(0.0, 0.5)), start + FRAME * frame);
@@ -527,9 +744,20 @@ mod tests {
     #[test]
     fn losing_the_picture_ends_calibration() {
         let mut pilot = Autopilot::default();
-        let start = Instant::now();
-        pilot.start(start);
+        let start = steady(&mut pilot, Instant::now());
+        pilot.start(start).unwrap();
         assert_eq!(pilot.on_frame(None, start + Duration::from_secs(2)), None);
+        assert_eq!(pilot.phase(), HoldPhase::Failed(HoldFault::PictureLost));
+    }
+
+    #[test]
+    fn a_frozen_picture_ends_hold_even_though_no_frames_arrive() {
+        let mut pilot = Autopilot::default();
+        let start = steady(&mut pilot, Instant::now());
+        pilot.start(start).unwrap();
+        pilot.check_picture(start + Duration::from_millis(200));
+        assert_eq!(pilot.phase(), HoldPhase::Calibrating);
+        pilot.check_picture(start + Duration::from_millis(300));
         assert_eq!(pilot.phase(), HoldPhase::Failed(HoldFault::PictureLost));
     }
 
@@ -540,7 +768,8 @@ mod tests {
         pilot.on_frame(Some(flow(3.0, 0.5)), start);
         pilot.reset();
         assert_eq!(pilot.drift().0, 0.0);
-        pilot.start(start);
+        let now = steady(&mut pilot, start + FRAME);
+        pilot.start(now).unwrap();
         pilot.stop();
         assert_eq!(pilot.phase(), HoldPhase::Off);
     }

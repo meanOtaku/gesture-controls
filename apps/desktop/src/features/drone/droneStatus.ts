@@ -9,6 +9,19 @@ export interface DroneFlow {
   confidence: number;
 }
 
+/** Mirrors `drone::DroneReport`: the drone's own status message, raw. */
+export interface DroneReport {
+  flyState: number;
+  battery: number;
+  speed: number;
+  remoteControl: boolean;
+  cameraTilt: boolean;
+  headless: boolean;
+  photo: boolean;
+  video: boolean;
+  light: boolean;
+}
+
 /** Mirrors `drone::DroneState`. */
 export interface DroneState {
   phase: "disconnected" | "opening" | "open" | "failed" | "closed";
@@ -20,6 +33,13 @@ export interface DroneState {
   videoFrames: number;
   videoSkipped: number;
   videoDamaged: number;
+  videoRestarts: number;
+  videoRepeats: number;
+  unknownPackets: number;
+  /** The drone's own status message, raw. None seen from the DM002HW so far. */
+  report: DroneReport | null;
+  statusMessages: number;
+  unknownPacketsFile: string | null;
   sendErrors: number;
   flow: DroneFlow | null;
   driftX: number;
@@ -29,9 +49,14 @@ export interface DroneState {
   holdFault: string | null;
   correction: { aileron: number; elevator: number } | null;
   heightRate: number;
+  manualSteering: boolean;
+  tookOff: boolean;
+  headless: boolean;
+  returning: boolean;
   flightLog: string | null;
   pageAlive: boolean;
   onNetwork: boolean;
+  hasHoldCalibration: boolean;
   firmware: string | null;
 }
 

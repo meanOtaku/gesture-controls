@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 
 use crate::frame::{Button, Control, NEUTRAL, Sticks};
+use crate::frame::{FLAG_HEADLESS, FLAG_RETURN};
 use crate::hold::Correction;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,6 +26,8 @@ pub struct PilotConfig {
     pub press_hold: Duration,
     /// How long Stop is held, as the app does.
     pub stop_hold: Duration,
+    /// Return is sent for at most this long, as the drone has no way to know it is home and may keep going.
+    pub return_limit: Duration,
     /// A hold correction older than this is dropped, so a stalled picture cannot leave a push in place.
     pub correction_stale_after: Duration,
 }
@@ -38,6 +41,7 @@ impl Default for PilotConfig {
             land_after: Duration::from_secs(1),
             press_hold: Duration::from_millis(1100),
             stop_hold: Duration::from_millis(500),
+            return_limit: Duration::from_secs(10),
             correction_stale_after: Duration::from_millis(300),
         }
     }
@@ -49,8 +53,12 @@ pub enum PilotError {
     NotArmed,
     #[error("calibrating needs the drone on the ground, so land first")]
     Armed,
+    #[error("already taken off: land first")]
+    AlreadyFlying,
     #[error("another button is still being held")]
     Busy,
+    #[error("the drone has not taken off")]
+    NotFlying,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -69,6 +77,12 @@ pub struct Pilot {
     press: Option<Press>,
     hold_enabled: bool,
     correction: Option<(Correction, Instant)>,
+    /// Up has been pressed since the last landing. The drone never says it is flying, so this is the nearest guess.
+    took_off: bool,
+    took_off_at: Option<Instant>,
+    headless: bool,
+    /// Return is being sent until then.
+    returning_until: Option<Instant>,
 }
 
 impl Pilot {
@@ -82,7 +96,59 @@ impl Pilot {
             press: None,
             hold_enabled: false,
             correction: None,
+            took_off: false,
+            took_off_at: None,
+            headless: false,
+            returning_until: None,
         }
+    }
+
+    /// Turns headless mode on or off. It is sent only while armed, and lasts until turned off or Stop.
+    pub fn set_headless(&mut self, enabled: bool) {
+        self.headless = enabled;
+    }
+
+    pub fn is_headless(&self) -> bool {
+        self.headless
+    }
+
+    /// Starts the one-key return, which also ends hold, as the two would fight. Only while flying, and only for
+    /// `return_limit`; Down, Stop, landing by the failsafe and `cancel_return` all end it sooner.
+    pub fn start_return(&mut self, now: Instant) -> Result<(), PilotError> {
+        self.release_if_due(now);
+        if !self.armed {
+            return Err(PilotError::NotArmed);
+        }
+        if !self.took_off {
+            return Err(PilotError::NotFlying);
+        }
+        if self.holding(Button::Down) || self.holding(Button::Stop) {
+            return Err(PilotError::Busy);
+        }
+        self.hold_enabled = false;
+        self.correction = None;
+        self.returning_until = Some(now + self.config.return_limit);
+        Ok(())
+    }
+
+    pub fn cancel_return(&mut self) {
+        self.returning_until = None;
+    }
+
+    pub fn is_returning(&self, now: Instant) -> bool {
+        self.returning_until.is_some_and(|until| now < until) && self.armed
+    }
+
+    /// How long since Up was pressed, while the drone is taken to be flying.
+    pub fn airborne_for(&self, now: Instant) -> Option<Duration> {
+        self.took_off_at
+            .filter(|_| self.took_off && self.armed)
+            .map(|at| now.saturating_duration_since(at))
+    }
+
+    /// True from Up until Down, Stop or disarming.
+    pub fn has_taken_off(&self) -> bool {
+        self.took_off
     }
 
     pub fn is_holding(&self) -> bool {
@@ -93,6 +159,9 @@ impl Pilot {
     pub fn set_hold(&mut self, enabled: bool) {
         self.hold_enabled = enabled && self.armed;
         self.correction = None;
+        if self.hold_enabled {
+            self.returning_until = None;
+        }
     }
 
     /// The newest correction from the camera, or `None` when the picture cannot be trusted.
@@ -117,6 +186,7 @@ impl Pilot {
     /// Allows the drone to be started and steered. From here on the caller must keep sending sticks.
     pub fn arm(&mut self, now: Instant) {
         self.armed = true;
+        self.took_off = false;
         self.failsafe = false;
         self.sticks = Sticks::CENTRED;
         self.sticks_at = now;
@@ -125,6 +195,8 @@ impl Pilot {
     /// Ends the session by pressing Down. Does nothing when already disarmed.
     pub fn disarm(&mut self, now: Instant) {
         self.hold_enabled = false;
+        self.took_off = false;
+        self.returning_until = None;
         if self.armed {
             self.armed = false;
             self.hold(Button::Down, now);
@@ -135,6 +207,9 @@ impl Pilot {
     pub fn stop(&mut self, now: Instant) {
         self.armed = false;
         self.hold_enabled = false;
+        self.took_off = false;
+        self.headless = false;
+        self.returning_until = None;
         self.hold(Button::Stop, now);
     }
 
@@ -149,14 +224,22 @@ impl Pilot {
                 if self.holding(Button::Stop) {
                     return Err(PilotError::Busy);
                 }
+                self.took_off = false;
+                self.returning_until = None;
             }
             Button::Up => {
                 if !self.armed {
                     return Err(PilotError::NotArmed);
                 }
+                // What Up does in the air is unknown, so it is never sent twice in one flight.
+                if self.took_off {
+                    return Err(PilotError::AlreadyFlying);
+                }
                 if self.press.is_some() {
                     return Err(PilotError::Busy);
                 }
+                self.took_off = true;
+                self.took_off_at = Some(now);
             }
             // The drone never says whether it is flying, and armed is the nearest thing to knowing.
             Button::GyroCheck => {
@@ -197,13 +280,22 @@ impl Pilot {
         } else {
             Sticks::CENTRED
         };
-        match self.press {
+        let mut control = match self.press {
             Some(press) => Control::pressing(sticks, press.button),
             None => Control {
                 sticks,
                 ..Control::IDLE
             },
+        };
+        if self.armed && self.headless {
+            control.flags |= FLAG_HEADLESS;
         }
+        if self.is_returning(now) {
+            control.flags |= FLAG_RETURN;
+        } else {
+            self.returning_until = None;
+        }
+        control
     }
 
     fn corrected(&self, sticks: Sticks, now: Instant) -> Sticks {
@@ -277,6 +369,89 @@ mod tests {
         }
     }
 
+    const HEADLESS: u8 = 0x50;
+    const RETURNING: u8 = 0x60;
+
+    #[test]
+    fn headless_is_sent_in_every_frame_while_armed_and_on() {
+        let (mut pilot, start) = pilot();
+        pilot.set_headless(true);
+        assert_eq!(pilot.tick(start).flags, 0x40, "not armed yet");
+        pilot.arm(start);
+        assert_eq!(pilot.tick(start).flags, HEADLESS);
+        pilot.press(Button::Up, start).unwrap();
+        assert_eq!(pilot.tick(start + ms(10)).flags, UP | 0x10);
+        pilot.set_headless(false);
+        assert_eq!(pilot.tick(start + ms(20)).flags, UP);
+    }
+
+    #[test]
+    fn stop_turns_headless_off() {
+        let (mut pilot, start) = pilot();
+        pilot.arm(start);
+        pilot.set_headless(true);
+        pilot.stop(start);
+        pilot.arm(start + ms(600));
+        assert_eq!(pilot.tick(start + ms(600)).flags, 0x40);
+    }
+
+    #[test]
+    fn return_needs_a_takeoff_and_ends_by_itself() {
+        let (mut pilot, start) = pilot();
+        assert_eq!(pilot.start_return(start), Err(PilotError::NotArmed));
+        pilot.arm(start);
+        assert_eq!(pilot.start_return(start), Err(PilotError::NotFlying));
+        pilot.press(Button::Up, start).unwrap();
+        pilot.start_return(start + ms(1200)).unwrap();
+        pilot.set_sticks(Sticks::CENTRED, start + ms(1200));
+        assert_eq!(pilot.tick(start + ms(1300)).flags, RETURNING);
+        assert!(pilot.is_returning(start + ms(1300)));
+        let limit = PilotConfig::default().return_limit;
+        for at in (1300..(1200 + limit.as_millis() as u64)).step_by(100) {
+            pilot.set_sticks(Sticks::CENTRED, start + ms(at));
+        }
+        let after = start + ms(1200) + limit;
+        pilot.set_sticks(Sticks::CENTRED, after);
+        assert_eq!(pilot.tick(after).flags, 0x40);
+        assert!(!pilot.is_returning(after));
+    }
+
+    #[test]
+    fn landing_stop_and_hold_each_end_return() {
+        for end in 0..4 {
+            let (mut pilot, start) = pilot();
+            pilot.arm(start);
+            pilot.press(Button::Up, start).unwrap();
+            let now = start + ms(1200);
+            pilot.set_sticks(Sticks::CENTRED, now);
+            pilot.start_return(now).unwrap();
+            match end {
+                0 => pilot.press(Button::Down, now).unwrap(),
+                1 => pilot.stop(now),
+                2 => pilot.set_hold(true),
+                _ => pilot.cancel_return(),
+            }
+            assert!(!pilot.is_returning(now), "case {end}");
+            assert_eq!(pilot.tick(now).flags & 0x20, 0, "case {end}");
+        }
+    }
+
+    #[test]
+    fn return_turns_hold_off_and_is_refused_during_a_landing() {
+        let (mut pilot, start) = pilot();
+        pilot.arm(start);
+        pilot.press(Button::Up, start).unwrap();
+        pilot.set_hold(true);
+        let now = start + ms(1200);
+        pilot.start_return(now).unwrap();
+        assert!(!pilot.is_holding());
+        pilot.press(Button::Down, now).unwrap();
+        pilot.arm(now);
+        pilot.press(Button::Up, now + ms(1200)).unwrap();
+        pilot.press(Button::Down, now + ms(2400)).unwrap();
+        assert!(pilot.start_return(now + ms(2500)).is_err());
+    }
+
     #[test]
     fn nothing_moves_before_arming() {
         let (mut pilot, start) = pilot();
@@ -301,7 +476,10 @@ mod tests {
         let (mut pilot, start) = pilot();
         pilot.arm(start);
         pilot.press(Button::Up, start).unwrap();
-        assert_eq!(pilot.press(Button::Up, start), Err(PilotError::Busy));
+        assert_eq!(
+            pilot.press(Button::Up, start),
+            Err(PilotError::AlreadyFlying)
+        );
     }
 
     #[test]
@@ -391,6 +569,47 @@ mod tests {
         pilot.arm(later);
         assert!(!pilot.failsafe_tripped());
         assert_eq!(pilot.tick(later), Control::IDLE);
+    }
+
+    #[test]
+    fn take_off_is_refused_once_flying_until_landed() {
+        let (mut pilot, start) = pilot();
+        pilot.arm(start);
+        pilot.press(Button::Up, start).unwrap();
+        assert!(pilot.has_taken_off());
+        let later = start + ms(2000);
+        pilot.set_sticks(Sticks::CENTRED, later);
+        assert_eq!(
+            pilot.press(Button::Up, later),
+            Err(PilotError::AlreadyFlying)
+        );
+        pilot.press(Button::Down, later).unwrap();
+        assert!(!pilot.has_taken_off());
+        let landed = later + ms(1200);
+        pilot.set_sticks(Sticks::CENTRED, landed);
+        pilot.press(Button::Up, landed).unwrap();
+    }
+
+    #[test]
+    fn time_in_the_air_counts_from_take_off_until_landing() {
+        let (mut pilot, start) = pilot();
+        assert_eq!(pilot.airborne_for(start), None);
+        pilot.arm(start);
+        pilot.press(Button::Up, start).unwrap();
+        assert_eq!(pilot.airborne_for(start + ms(3000)), Some(ms(3000)));
+        pilot.disarm(start + ms(4000));
+        assert_eq!(pilot.airborne_for(start + ms(4000)), None);
+    }
+
+    #[test]
+    fn stop_and_rearming_also_count_as_landed() {
+        let (mut pilot, start) = pilot();
+        pilot.arm(start);
+        pilot.press(Button::Up, start).unwrap();
+        pilot.stop(start + ms(100));
+        assert!(!pilot.has_taken_off());
+        pilot.arm(start + ms(700));
+        assert!(!pilot.has_taken_off());
     }
 
     #[test]

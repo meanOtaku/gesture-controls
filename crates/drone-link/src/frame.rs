@@ -78,6 +78,13 @@ impl Button {
     }
 }
 
+/// Headless mode, while it is on: the drone steers by the direction it faced when the mode began, not by its nose.
+/// The app's headless switch keeps this set in every frame for as long as the switch is on.
+pub const FLAG_HEADLESS: u8 = 0x10;
+/// Named Back in the app's code, and presumably the advertised one-key return. The app never sets it, so whether it
+/// must be held or only pressed, and what the drone does, are not known. Sent here in every frame while returning.
+pub const FLAG_RETURN: u8 = 0x20;
+
 /// Always set by the app's control screen. The code calls it `Hl`, and it centres the throttle stick.
 const FLAG_HL: u8 = 0x40;
 
@@ -168,6 +175,72 @@ pub fn control_frame(sequence: u16, control: Control, received: u32) -> [u8; REQ
 }
 
 /// The firmware name, if this packet is the reply to [`VERSION_QUERY`].
+const STATUS_START: u8 = 0x88;
+const STATUS_TYPE: u8 = 0x00;
+const STATUS_END: u8 = 0x55;
+const STATUS_MIN_LENGTH: usize = 7;
+
+/// The flight controller's status message, as the phone app reads it: `88 00 fly battery flags … xor 55`, where the
+/// xor covers every byte from the type to just before itself. The app reads it but never shows it, so the meaning of
+/// the fly state and battery numbers is not known, and they are kept raw. No DM002HW has been seen sending it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DroneStatus {
+    pub fly_state: u8,
+    pub battery: u8,
+    /// The speed setting, 0 to 3.
+    pub speed: u8,
+    pub remote_control: bool,
+    pub camera_tilt: bool,
+    pub headless: bool,
+    pub photo: bool,
+    pub video: bool,
+    pub light: bool,
+}
+
+/// Finds a status message anywhere in a packet. Where the drone puts it is not known: the phone's native code hands it
+/// on after a source byte of 0 (flight controller), so it may sit inside a `93 04` text packet, or arrive bare.
+/// Never call this on video, whose random bytes could pass the check by chance.
+pub fn parse_status(packet: &[u8]) -> Option<DroneStatus> {
+    (0..packet.len())
+        .filter(|&start| packet[start] == STATUS_START)
+        .find_map(|start| {
+            (start + STATUS_MIN_LENGTH - 1..packet.len())
+                .filter(|&end| packet[end] == STATUS_END)
+                .find_map(|end| status_at(&packet[start..=end]))
+        })
+}
+
+fn status_at(message: &[u8]) -> Option<DroneStatus> {
+    let length = message.len();
+    if length < STATUS_MIN_LENGTH || message[1] != STATUS_TYPE {
+        return None;
+    }
+    let checksum = message[1..length - 2]
+        .iter()
+        .fold(0, |sum, byte| sum ^ byte);
+    if checksum != message[length - 2] {
+        return None;
+    }
+    let flags = message[4];
+    let bit = |mask: u8| flags & mask == mask;
+    Some(DroneStatus {
+        fly_state: message[2],
+        battery: message[3],
+        speed: flags & 0x03,
+        remote_control: bit(0x04),
+        camera_tilt: bit(0x08),
+        headless: bit(0x10),
+        photo: bit(0x20),
+        video: bit(0x40),
+        light: bit(0x80),
+    })
+}
+
+/// Whether a packet is a video part, even a damaged one.
+pub fn is_video_packet(packet: &[u8]) -> bool {
+    packet.len() >= 2 && packet[..2] == VIDEO_MAGIC
+}
+
 pub fn parse_firmware(packet: &[u8]) -> Option<String> {
     if packet.len() <= FIRMWARE_TEXT_OFFSET
         || packet[..2] != TEXT_MAGIC
@@ -217,10 +290,21 @@ impl VideoTracker {
         self.received
     }
 
-    /// Gives up on the next frame, so the drone is asked for the one after it.
-    pub fn skip(&mut self) {
-        self.completed = self.completed.saturating_add(1);
-        self.pending = self.pending.split_off(&(self.completed.saturating_add(1)));
+    /// True while a frame has arrived in part and is still missing pieces.
+    pub fn is_incomplete(&self) -> bool {
+        !self.pending.is_empty()
+    }
+
+    /// Gives up on the newest unfinished frame, so the drone is asked for the one after it. Returns true if there was
+    /// one. With nothing part-received this does nothing: the frame number only ever comes from the drone, because
+    /// counting past it would make every later frame look old, and freeze the picture for good.
+    pub fn skip(&mut self) -> bool {
+        let Some(newest) = self.pending.keys().next_back().copied() else {
+            return false;
+        };
+        self.completed = newest;
+        self.pending.clear();
+        true
     }
 
     /// Takes in a packet from the drone, and returns the frame when it finishes one that adds up.
@@ -274,6 +358,46 @@ fn parse_video(packet: &[u8]) -> Option<(u32, u32, u32, usize)> {
 
 #[cfg(test)]
 mod tests {
+
+    fn status_message(fly: u8, battery: u8, flags: u8) -> Vec<u8> {
+        let body = [0x00, fly, battery, flags];
+        let checksum = body.iter().fold(0, |sum, byte| sum ^ byte);
+        let mut message = vec![0x88];
+        message.extend_from_slice(&body);
+        message.extend_from_slice(&[checksum, 0x55]);
+        message
+    }
+
+    #[test]
+    fn a_status_message_is_read_as_the_app_reads_it() {
+        let status = parse_status(&status_message(2, 87, 0b1001_0110)).unwrap();
+        assert_eq!(status.fly_state, 2);
+        assert_eq!(status.battery, 87);
+        assert_eq!(status.speed, 2);
+        assert!(status.remote_control && status.headless && status.light);
+        assert!(!status.camera_tilt && !status.photo && !status.video);
+    }
+
+    #[test]
+    fn a_status_message_is_found_inside_a_text_packet() {
+        let mut packet = vec![0x93, 0x04, 0x20, 0, 0x10, 0, 0, 0, 0, 0, 0, 0, 0x00];
+        packet.extend(status_message(1, 50, 0x01));
+        assert_eq!(parse_status(&packet).unwrap().battery, 50);
+    }
+
+    #[test]
+    fn a_damaged_or_other_message_is_not_status() {
+        let mut bad = status_message(1, 50, 0);
+        bad[3] ^= 1;
+        assert_eq!(parse_status(&bad), None);
+        let mut other_type = status_message(1, 50, 0);
+        other_type[1] = 1;
+        other_type[5] ^= 1;
+        assert_eq!(parse_status(&other_type), None);
+        assert_eq!(parse_status(&[0x88, 0x00, 0x55]), None);
+        assert_eq!(parse_status(&bytes(FIRMWARE_PACKET)), None);
+    }
+
     use super::*;
 
     /// Decodes hex in a test fixture.
@@ -499,11 +623,33 @@ mod tests {
     }
 
     #[test]
+    fn a_frame_in_pieces_is_incomplete_until_whole() {
+        let mut tracker = VideoTracker::default();
+        assert!(!tracker.is_incomplete());
+        tracker.observe(&part(1, 0, 2));
+        assert!(tracker.is_incomplete());
+        tracker.observe(&part(1, 1, 2));
+        assert!(!tracker.is_incomplete());
+    }
+
+    #[test]
+    fn a_gap_in_the_video_cannot_make_later_frames_look_old() {
+        let mut tracker = VideoTracker::default();
+        assert!(tracker.observe(&part(1, 0, 1)).is_some());
+        // Nothing arrives for a while, and each skip fires anyway.
+        for _ in 0..10 {
+            assert!(!tracker.skip());
+        }
+        assert_eq!(tracker.completed(), 1);
+        assert!(tracker.observe(&part(2, 0, 1)).is_some());
+    }
+
+    #[test]
     fn skipping_asks_for_the_next_frame_without_counting_it_as_received() {
         let mut tracker = VideoTracker::default();
         tracker.observe(&part(1, 0, 1));
         tracker.observe(&part(2, 0, 2));
-        tracker.skip();
+        assert!(tracker.skip());
         assert_eq!(tracker.completed(), 2);
         assert_eq!(tracker.received(), 1);
         assert!(tracker.observe(&part(2, 1, 2)).is_none());

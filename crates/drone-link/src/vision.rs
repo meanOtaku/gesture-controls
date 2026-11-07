@@ -1,6 +1,6 @@
 //! Turns the drone's video into a measure of how the picture is moving, as a mouse's optical sensor does.
 //!
-//! Video frames are JPEGs without their headers, and small patches of each frame are searched for in the next one.
+//! Video frames are JPEGs without their headers, and small patches of a reference frame are searched for in each new one.
 //! The camera faces forward, so sideways drift or a turn slides the picture sideways, climbing or tilting slides it up
 //! and down, and flying forward spreads it outward from the centre. There is no attitude data to tell a tilt from a
 //! drift, so this measures the picture only. Damaged frames and blank views give low confidence, not a false reading.
@@ -26,6 +26,10 @@ const MIN_DISTINCTNESS: f32 = 1.4;
 /// Patches further than this from the median, in pixels, are not moving with the picture.
 const INLIER_DISTANCE: f32 = 2.0;
 const MIN_PATCHES: usize = 4;
+/// How far the view can move from the reference, in pixels, before it is replaced.
+const REFERENCE_REACH: f32 = 30.0;
+/// How much the view can grow or shrink from the reference before it is replaced.
+const REFERENCE_ZOOM_REACH: f32 = 0.15;
 /// A measurement with less agreement than this is not added to the drift.
 pub const MIN_CONFIDENCE: f32 = 0.25;
 
@@ -152,8 +156,19 @@ struct PatchMove {
     dy: f32,
 }
 
-/// Where a patch went, or `None` if it is blank, ambiguous or left the search area.
-fn follow(before: &Luma, after: &Luma, x: usize, y: usize) -> Option<PatchMove> {
+/// Where a patch went, searching around where it is expected to be. `None` if it is blank, ambiguous, or left the
+/// search area or the picture.
+fn follow(before: &Luma, after: &Luma, x: usize, y: usize, guess: (i32, i32)) -> Option<PatchMove> {
+    let highest_x = (FLOW_WIDTH - PATCH) as i32;
+    let highest_y = (FLOW_HEIGHT - PATCH) as i32;
+    let (reach_x, reach_y) = (x as i32 + guess.0, y as i32 + guess.1);
+    if reach_x < SEARCH
+        || reach_y < SEARCH
+        || reach_x > highest_x - SEARCH
+        || reach_y > highest_y - SEARCH
+    {
+        return None;
+    }
     let average = mean(before, x, y);
     if texture(before, x, y, average) < MIN_TEXTURE {
         return None;
@@ -164,8 +179,8 @@ fn follow(before: &Luma, after: &Luma, x: usize, y: usize) -> Option<PatchMove> 
     let mut sum = 0.0;
     for (row, line) in costs.chunks_exact_mut(side).enumerate() {
         for (column, cost) in line.iter_mut().enumerate() {
-            let dx = column as i32 - SEARCH;
-            let dy = row as i32 - SEARCH;
+            let dx = guess.0 + column as i32 - SEARCH;
+            let dy = guess.1 + row as i32 - SEARCH;
             let gap = mean_shifted(after, x, y, dx, dy) - average;
             *cost = difference(before, after, x, y, dx, dy, gap);
             sum += *cost;
@@ -180,8 +195,10 @@ fn follow(before: &Luma, after: &Luma, x: usize, y: usize) -> Option<PatchMove> 
         return None;
     }
     let at = |c: usize, r: usize| costs[r * side + c];
-    let dx = column as f32 - SEARCH as f32 + refine(at(column - 1, row), cost, at(column + 1, row));
-    let dy = row as f32 - SEARCH as f32 + refine(at(column, row - 1), cost, at(column, row + 1));
+    let dx = (guess.0 + column as i32 - SEARCH) as f32
+        + refine(at(column - 1, row), cost, at(column + 1, row));
+    let dy = (guess.1 + row as i32 - SEARCH) as f32
+        + refine(at(column, row - 1), cost, at(column, row + 1));
     let half = PATCH as f32 / 2.0;
     Some(PatchMove {
         x: x as f32 + half - FLOW_WIDTH as f32 / 2.0,
@@ -200,18 +217,30 @@ fn median(values: &mut [f32]) -> f32 {
     values[values.len() / 2]
 }
 
-/// How the picture moved from `before` to `after`.
-pub fn measure(before: &Luma, after: &Luma) -> Flow {
+/// How the picture moved from `before` to `after`, knowing roughly where it should have got to.
+fn measure_near(before: &Luma, after: &Luma, guess: Flow) -> Flow {
     let margin = SEARCH as usize;
     let usable_width = FLOW_WIDTH - 2 * margin - PATCH;
     let usable_height = FLOW_HEIGHT - 2 * margin - PATCH;
+    let half = PATCH as f32 / 2.0;
     let mut moves = Vec::with_capacity(COLUMNS * ROWS);
     for row in 0..ROWS {
         for column in 0..COLUMNS {
             let x = margin + usable_width * column / (COLUMNS - 1);
             let y = margin + usable_height * row / (ROWS - 1);
-            moves.extend(follow(before, after, x, y));
+            let from_centre_x = x as f32 + half - FLOW_WIDTH as f32 / 2.0;
+            let from_centre_y = y as f32 + half - FLOW_HEIGHT as f32 / 2.0;
+            let expected = (
+                (guess.dx + guess.zoom * from_centre_x).round() as i32,
+                (guess.dy + guess.zoom * from_centre_y).round() as i32,
+            );
+            moves.extend(follow(before, after, x, y, expected));
         }
+    }
+    // With the zoom expected so far taken out, every patch that belongs to the picture moves alike.
+    for each in &mut moves {
+        each.dx -= guess.zoom * each.x;
+        each.dy -= guess.zoom * each.y;
     }
     if moves.len() < MIN_PATCHES {
         return Flow::NONE;
@@ -230,14 +259,164 @@ pub fn measure(before: &Luma, after: &Luma) -> Flow {
     Flow {
         dx,
         dy,
-        zoom: spread / radius.max(1.0),
+        zoom: guess.zoom + spread / radius.max(1.0),
         confidence: moves.len() as f32 / (COLUMNS * ROWS) as f32,
+    }
+}
+
+/// How the picture moved from `before` to `after`.
+pub fn measure(before: &Luma, after: &Luma) -> Flow {
+    measure_near(before, after, Flow::NONE)
+}
+
+/// Follows the picture against one fixed reference frame.
+///
+/// Adding up the movement between neighbouring frames also adds up their small errors, so a still drone appears to
+/// creep. Comparing each frame with the same reference cannot build up error like that. Each result is reported as
+/// the change since the last one, so adding them up gives the true position. The reference is replaced when the view
+/// moves too far from it to compare, and that one step is the only error added.
+#[derive(Debug, Default)]
+pub struct Tracker {
+    reference: Option<Luma>,
+    previous: Option<Luma>,
+    /// Where the picture has got to against the reference.
+    position: Option<Flow>,
+}
+
+impl Tracker {
+    /// Takes in a frame, and returns how the picture moved since the last one. `None` for the first frame.
+    pub fn observe(&mut self, frame: Luma) -> Option<Flow> {
+        let (Some(reference), Some(previous)) = (&self.reference, &self.previous) else {
+            self.reference = Some(frame.clone());
+            self.previous = Some(frame);
+            self.position = Some(Flow::NONE);
+            return None;
+        };
+        let was = self.position.unwrap_or(Flow::NONE);
+        let now = measure_near(reference, &frame, was);
+        let trusted = now.confidence >= MIN_CONFIDENCE;
+        let (step, replace) = if trusted {
+            let step = Flow {
+                dx: now.dx - was.dx,
+                dy: now.dy - was.dy,
+                zoom: now.zoom - was.zoom,
+                confidence: now.confidence,
+            };
+            let far =
+                now.dx.hypot(now.dy) > REFERENCE_REACH || now.zoom.abs() > REFERENCE_ZOOM_REACH;
+            (step, far)
+        } else {
+            // The reference has been lost, so the only comparison left is with the frame before.
+            (measure(previous, &frame), true)
+        };
+        if replace {
+            self.reference = Some(frame.clone());
+            self.position = Some(Flow::NONE);
+        } else {
+            self.position = Some(now);
+        }
+        self.previous = Some(frame);
+        Some(step)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn add_noise(image: &Luma, seed: u32) -> Luma {
+        let mut state = seed.max(1);
+        Luma(
+            image
+                .0
+                .iter()
+                .map(|value| {
+                    state ^= state << 13;
+                    state ^= state >> 17;
+                    state ^= state << 5;
+                    let noise = (state % 7) as i16 - 3;
+                    (i16::from(*value) + noise).clamp(0, 255) as u8
+                })
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn a_still_view_does_not_creep_however_long_it_is_watched() {
+        let view = shifted(0.0, 0.0);
+        let mut tracker = Tracker::default();
+        tracker.observe(view.clone());
+        let (mut x, mut zoom) = (0.0, 0.0);
+        for frame in 1..600 {
+            let flow = tracker.observe(add_noise(&view, frame)).unwrap();
+            x += flow.dx;
+            zoom += flow.zoom;
+        }
+        assert!(f32::abs(x) < 0.15, "crept {x} px");
+        assert!(f32::abs(zoom) < 0.003, "crept {zoom} zoom");
+    }
+
+    #[test]
+    fn going_away_and_coming_back_ends_where_it_started() {
+        let mut tracker = Tracker::default();
+        tracker.observe(shifted(0.0, 0.0));
+        let mut x = 0.0;
+        for step in (1..=12).chain((0..12).rev()) {
+            x += tracker.observe(shifted(step as f32, 0.0)).unwrap().dx;
+        }
+        assert!(f32::abs(x) < 0.05, "ended {x} px away");
+    }
+
+    #[test]
+    fn the_added_up_movement_gives_the_true_position() {
+        let mut tracker = Tracker::default();
+        tracker.observe(shifted(0.0, 0.0));
+        let mut x = 0.0;
+        for step in 1..=20 {
+            x += tracker.observe(shifted(step as f32 * 0.5, 0.0)).unwrap().dx;
+        }
+        assert!((x - 10.0).abs() < 0.4, "measured {x} px");
+    }
+
+    #[test]
+    fn a_view_that_moves_past_the_reference_keeps_being_followed() {
+        let mut tracker = Tracker::default();
+        tracker.observe(shifted(0.0, 0.0));
+        let mut x = 0.0;
+        for step in 1..=50 {
+            x += tracker.observe(shifted(step as f32 * 2.0, 0.0)).unwrap().dx;
+        }
+        assert!((x - 100.0).abs() < 5.0, "measured {x} px");
+    }
+
+    #[test]
+    fn slowly_coming_closer_adds_up_to_the_true_zoom() {
+        let mut tracker = Tracker::default();
+        tracker.observe(shifted(0.0, 0.0));
+        let mut zoom = 0.0;
+        for step in 1..=10 {
+            let scale = 1.0 + step as f32 * 0.01;
+            let closer = image(move |x, y| {
+                let (cx, cy) = (FLOW_WIDTH as f32 / 2.0, FLOW_HEIGHT as f32 / 2.0);
+                (cx + (x - cx) / scale, cy + (y - cy) / scale)
+            });
+            zoom += tracker.observe(closer).unwrap().zoom;
+        }
+        assert!((zoom - 0.1).abs() < 0.025, "measured {zoom}");
+    }
+
+    #[test]
+    fn after_a_blank_stretch_tracking_carries_on() {
+        let blank = Luma(vec![90; FLOW_WIDTH * FLOW_HEIGHT]);
+        let mut tracker = Tracker::default();
+        tracker.observe(shifted(0.0, 0.0));
+        let lost = tracker.observe(blank.clone()).unwrap();
+        assert_eq!(lost.confidence, 0.0);
+        tracker.observe(shifted(4.0, 0.0));
+        let back = tracker.observe(shifted(5.0, 0.0)).unwrap();
+        assert!(back.confidence >= MIN_CONFIDENCE, "{back:?}");
+        assert!((back.dx - 1.0).abs() < 0.4, "{back:?}");
+    }
 
     /// A smooth random-looking scene, sampled at any position so it can be shifted or zoomed.
     fn scene(x: f32, y: f32) -> f32 {

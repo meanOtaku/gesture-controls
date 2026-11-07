@@ -179,6 +179,8 @@ pub fn run() {
             drone::drone_calibrate_gyro,
             drone::drone_heartbeat,
             drone::drone_set_hold,
+            drone::drone_set_headless,
+            drone::drone_set_return,
             drone::drone_reset_drift,
             drone::drone_connect,
             drone::drone_disconnect,

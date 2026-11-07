@@ -26,9 +26,9 @@ const watch = (over: Partial<WatchStatus> = {}): WatchStatus => ({
 
 const drone: DroneState = {
   phase: "open", armed: false, failsafeTripped: false, steering: false, watchStreaming: false, framesSent: 100, videoFrames: 40,
-  videoSkipped: 2, videoDamaged: 0, sendErrors: 0, flow: { frame: 40, dx: 0, dy: 0, zoom: 0, confidence: 0.53 },
-  driftX: 1.25, driftY: -3, holding: false, holdPhase: "off", holdFault: null, correction: { aileron: 3, elevator: -1 }, heightRate: 0, flightLog: null,
-  pageAlive: true, onNetwork: true, firmware: "(NOFLOW)FLOW_720P_V1.4.17_20250520",
+  videoSkipped: 2, videoDamaged: 0, videoRestarts: 0, videoRepeats: 0, unknownPackets: 0, report: null, statusMessages: 0, unknownPacketsFile: null, sendErrors: 0, flow: { frame: 40, dx: 0, dy: 0, zoom: 0, confidence: 0.53 },
+  driftX: 1.25, driftY: -3, holding: false, holdPhase: "off", holdFault: null, correction: { aileron: 3, elevator: -1 }, heightRate: 0, manualSteering: false, tookOff: false, headless: false, returning: false, flightLog: null,
+  pageAlive: true, onNetwork: true, hasHoldCalibration: false, firmware: "(NOFLOW)FLOW_720P_V1.4.17_20250520",
 };
 
 describe("NervTelemetryPanel's drone module", () => {

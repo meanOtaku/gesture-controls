@@ -15,6 +15,12 @@ const idle: DroneState = {
   videoFrames: 0,
   videoSkipped: 0,
   videoDamaged: 0,
+  videoRestarts: 0,
+  videoRepeats: 0,
+  unknownPackets: 0,
+  report: null,
+  statusMessages: 0,
+  unknownPacketsFile: null,
   sendErrors: 0,
   flow: null,
   driftX: 0,
@@ -24,6 +30,11 @@ const idle: DroneState = {
   holdFault: null,
   correction: null,
   heightRate: 0,
+  hasHoldCalibration: false,
+  manualSteering: false,
+  tookOff: false,
+  headless: false,
+  returning: false,
   flightLog: null,
   pageAlive: false,
   onNetwork: false,
@@ -101,7 +112,7 @@ describe("DronePage", () => {
     expect(invoke).not.toHaveBeenCalledWith("drone_heartbeat");
     cleanup();
     await show({ phase: "open" });
-    expect(invoke).toHaveBeenCalledWith("drone_heartbeat", { height: 0 });
+    expect(invoke).toHaveBeenCalledWith("drone_heartbeat", { input: expect.objectContaining({ height: 0, aileron: 0, elevator: 0 }) });
   });
 
   it("calibrates the gyro only when connected and not armed", async () => {
@@ -134,7 +145,7 @@ describe("DronePage", () => {
     vi.useFakeTimers();
     try {
       await show({ phase: "open", armed: true });
-      const heights = () => invoke.mock.calls.filter(([command]) => command === "drone_heartbeat").map(([, args]) => args.height);
+      const heights = () => invoke.mock.calls.filter(([command]) => command === "drone_heartbeat").map(([, args]) => args.input.height);
       fireEvent.pointerDown(button("Climb"));
       await act(async () => { vi.advanceTimersByTime(100); });
       expect(heights().at(-1)).toBe(30);
@@ -157,9 +168,155 @@ describe("DronePage", () => {
     expect(screen.getByText("Armed, measuring the drone")).toBeTruthy();
     expect(screen.getByText(/Recording this flight to \/logs\/flight\.csv/)).toBeTruthy();
     cleanup();
-    await show({ phase: "open", armed: true, holdPhase: "failed", holdFault: "The picture could not be followed." });
+    await show({ phase: "open", armed: true, tookOff: true, holdPhase: "failed", holdFault: "The picture could not be followed." });
     expect(screen.getByRole("alert").textContent).toContain("could not be followed");
     expect(button("Hold position").disabled).toBe(false);
+  });
+
+  it("steers with the arrow keys only while armed, and lets go on release", async () => {
+    vi.useFakeTimers();
+    try {
+      await show({ phase: "open" });
+      const beats = () => invoke.mock.calls.filter(([command]) => command === "drone_heartbeat").map(([, args]) => ({ height: args.input.height, aileron: args.input.aileron, elevator: args.input.elevator }));
+      fireEvent.keyDown(window, { key: "ArrowRight" });
+      await act(async () => { vi.advanceTimersByTime(100); });
+      expect(beats().at(-1)).toEqual({ height: 0, aileron: 0, elevator: 0 });
+      cleanup();
+      invoke.mockClear();
+      await show({ phase: "open", armed: true });
+      fireEvent.keyDown(window, { key: "ArrowRight" });
+      fireEvent.keyDown(window, { key: "ArrowUp" });
+      await act(async () => { vi.advanceTimersByTime(100); });
+      expect(beats().at(-1)).toEqual({ height: 0, aileron: 25, elevator: 25 });
+      fireEvent.keyUp(window, { key: "ArrowRight" });
+      await act(async () => { vi.advanceTimersByTime(100); });
+      expect(beats().at(-1)).toEqual({ height: 0, aileron: 0, elevator: 25 });
+      fireEvent(window, new Event("blur"));
+      await act(async () => { vi.advanceTimersByTime(100); });
+      expect(beats().at(-1)).toEqual({ height: 0, aileron: 0, elevator: 0 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reverses an axis when asked, and remembers it", async () => {
+    vi.useFakeTimers();
+    try {
+      window.localStorage.clear();
+      await show({ phase: "open", armed: true });
+      const beats = () => invoke.mock.calls.filter(([command]) => command === "drone_heartbeat").map(([, args]) => ({ height: args.input.height, aileron: args.input.aileron, elevator: args.input.elevator }));
+      fireEvent.click(screen.getByLabelText("Reverse left and right"));
+      fireEvent.pointerDown(button("Left"));
+      await act(async () => { vi.advanceTimersByTime(100); });
+      expect(beats().at(-1)).toEqual({ height: 0, aileron: 25, elevator: 0 });
+      expect(window.localStorage.getItem("droneReverse")).toContain("\"aileron\":true");
+    } finally {
+      vi.useRealTimers();
+      window.localStorage.clear();
+    }
+  });
+
+  it("refuses a second take off until landed, and hold until flying", async () => {
+    await show({ phase: "open", armed: true });
+    expect(button("Take off").disabled).toBe(false);
+    expect(button("Hold position").disabled).toBe(true);
+    cleanup();
+    await show({ phase: "open", armed: true, tookOff: true });
+    expect(button("Take off").disabled).toBe(true);
+    expect(button("Hold position").disabled).toBe(false);
+    expect(screen.getByText(/Keep a metre clear all round/)).toBeTruthy();
+  });
+
+  it("sends trim with every heartbeat, within its limit, and remembers it", async () => {
+    vi.useFakeTimers();
+    try {
+      window.localStorage.clear();
+      await show({ phase: "open" });
+      const inputs = () => invoke.mock.calls.filter(([command]) => command === "drone_heartbeat").map(([, args]) => args.input);
+      fireEvent.click(screen.getByRole("button", { name: "Trim sideways right" }));
+      fireEvent.click(screen.getByRole("button", { name: "Trim sideways right" }));
+      fireEvent.click(screen.getByRole("button", { name: "Trim turning left" }));
+      for (let step = 0; step < 30; step += 1) fireEvent.click(screen.getByRole("button", { name: "Trim forward back" }));
+      await act(async () => { vi.advanceTimersByTime(100); });
+      expect(inputs().at(-1)).toMatchObject({ trimAileron: 2, trimRudder: -1, trimElevator: -20 });
+      expect(JSON.parse(window.localStorage.getItem("droneTrim") ?? "{}")).toEqual({ aileron: 2, elevator: -20, rudder: -1 });
+      fireEvent.click(button("Reset trim"));
+      await act(async () => { vi.advanceTimersByTime(100); });
+      expect(inputs().at(-1)).toMatchObject({ trimAileron: 0, trimElevator: 0, trimRudder: 0 });
+    } finally {
+      vi.useRealTimers();
+      window.localStorage.clear();
+    }
+  });
+
+  it("holds after takeoff by default, and says when a measurement is needed first", async () => {
+    vi.useFakeTimers();
+    try {
+      window.localStorage.clear();
+      await show({ phase: "open" });
+      const inputs = () => invoke.mock.calls.filter(([command]) => command === "drone_heartbeat").map(([, args]) => args.input);
+      expect(screen.getByText(/Needs one measurement first/)).toBeTruthy();
+      await act(async () => { vi.advanceTimersByTime(100); });
+      expect(inputs().at(-1)).toMatchObject({ autoHold: true });
+      fireEvent.click(screen.getByLabelText("Hold position after takeoff"));
+      await act(async () => { vi.advanceTimersByTime(100); });
+      expect(inputs().at(-1)).toMatchObject({ autoHold: false });
+      expect(window.localStorage.getItem("droneAutoHold")).toBe("off");
+      cleanup();
+      await show({ phase: "open", hasHoldCalibration: true });
+      expect(screen.getByText(/Three seconds after Take off/)).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+      window.localStorage.clear();
+    }
+  });
+
+  it("says where packets the app does not understand are saved, only once there are some", async () => {
+    await show({ phase: "open" });
+    expect(screen.queryByText(/does not understand/)).toBeNull();
+    cleanup();
+    await show({ phase: "open", unknownPackets: 3, unknownPacketsFile: "/data/drone-unknown-packets.txt" });
+    expect(screen.getByText(/sent 3 packets the app does not understand/)).toBeTruthy();
+    expect(screen.getByText(/saved in \/data\/drone-unknown-packets.txt/)).toBeTruthy();
+  });
+
+  it("shows the drone's own report only once it has sent one", async () => {
+    await show({ phase: "open" });
+    expect(screen.queryByLabelText("Drone report")).toBeNull();
+    cleanup();
+    await show({
+      phase: "open",
+      statusMessages: 4,
+      report: { flyState: 2, battery: 81, speed: 1, remoteControl: false, cameraTilt: false, headless: true, photo: false, video: false, light: false },
+    });
+    expect(screen.getByLabelText("Drone report").textContent).toMatch(/fly state 2, battery 81 .*speed 1, headless on\. 4 reports/);
+  });
+
+  it("turns headless on and off", async () => {
+    await show({ phase: "open" });
+    fireEvent.click(screen.getByLabelText("Headless mode"));
+    expect(invoke).toHaveBeenCalledWith("drone_set_headless", { enabled: true });
+    cleanup();
+    await show({ phase: "open", headless: true });
+    fireEvent.click(screen.getByLabelText("Headless mode"));
+    expect(invoke).toHaveBeenCalledWith("drone_set_headless", { enabled: false });
+  });
+
+  it("asks before returning, only while flying, and can cancel", async () => {
+    await show({ phase: "open", armed: true });
+    expect((button("Return home") as HTMLButtonElement).disabled).toBe(true);
+    cleanup();
+    await show({ phase: "open", armed: true, tookOff: true });
+    fireEvent.click(button("Return home"));
+    expect(invoke).not.toHaveBeenCalledWith("drone_set_return", expect.anything());
+    fireEvent.click(button("Keep flying"));
+    fireEvent.click(button("Return home"));
+    fireEvent.click(button("Confirm return"));
+    expect(invoke).toHaveBeenCalledWith("drone_set_return", { enabled: true });
+    cleanup();
+    await show({ phase: "open", armed: true, tookOff: true, returning: true });
+    fireEvent.click(button("Cancel return"));
+    expect(invoke).toHaveBeenCalledWith("drone_set_return", { enabled: false });
   });
 
   it("previews corrections and only allows hold once armed", async () => {
@@ -174,7 +331,7 @@ describe("DronePage", () => {
   });
 
   it("turns hold on and off", async () => {
-    await show({ phase: "open", armed: true });
+    await show({ phase: "open", armed: true, tookOff: true });
     fireEvent.click(button("Hold position"));
     expect(invoke).toHaveBeenCalledWith("drone_set_hold", { enabled: true });
     cleanup();

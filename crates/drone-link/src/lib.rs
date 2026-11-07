@@ -13,8 +13,10 @@ mod pilot;
 mod steering;
 pub mod vision;
 
-pub use frame::{Button, Control, Sticks};
-pub use hold::{Autopilot, Correction, HoldAxis, HoldConfig, HoldFault, HoldPhase};
-pub use link::{Endpoint, Link, LinkError, LinkPhase, LinkStatus, LinkTiming, LiveFrame};
+pub use frame::{Button, Control, DroneStatus, Sticks};
+pub use hold::{Autopilot, Calibration, Correction, HoldAxis, HoldConfig, HoldFault, HoldPhase};
+pub use link::{
+    Endpoint, Link, LinkError, LinkPhase, LinkStatus, LinkTiming, LiveFrame, UnknownPacket, Viewer,
+};
 pub use pilot::{Pilot, PilotConfig, PilotError};
 pub use steering::{Steering, SteeringConfig};

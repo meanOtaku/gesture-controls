@@ -190,7 +190,14 @@ is known about it are in [WIFI UAV drone](../protocols/wifi-uav-drone.md).
 | Something must keep checking in: the watch's stream or the open Drone page. If the page closes or stalls with no watch streaming, the timeout above lands. Hold corrections do not count as checking in | desktop `drone.rs` `heartbeat`, `DronePage.tsx`; `drone-link` `pilot.rs` |
 | A watch disconnect lands at once, unless the page is keeping the link alive, when it only ends steering | desktop `drone.rs` `watch_lost` |
 | Camera corrections reach the sticks only while Hold is on, which needs arming and is off again after every landing or stop. Each is at most 12 steps and within the ±38 limit. A correction older than 300 ms, or from a picture with under 25% agreement, is dropped | `drone-link` `hold.rs`, `pilot.rs` `corrected` |
-| Hold measures each axis with test pushes before steering, and refuses if a push shows no clear change or drift swamps it. Those pushes do move the drone. It gives up and centres the sticks after 1 s with no trusted picture | `drone-link` `hold.rs` |
+| Hold measures each axis with test pushes before steering, and refuses if a push shows no clear change or drift swamps it. Those pushes do move the drone | `drone-link` `hold.rs` |
+| Hold starts only after Take off, and only once the picture has been trusted for 2 s without a break. During the test pushes, one untrusted frame or a 250 ms gap ends them at once. Once holding, it gives up after 1 s with no trusted picture. Any of these centres the sticks | `drone-link` `hold.rs` `start`, `on_frame`, `check_picture`; `DronePage.tsx` |
+| Steering by hand, from the page's buttons or arrow keys, ends hold at once. It is limited to ±30 steps, within the ±38 limit, sent with each heartbeat, and lapses after 300 ms | desktop `drone.rs` `page`, `DronePage.tsx` |
+| Hold can also start by itself 3 to 10 s after Take off, once per takeoff, only if the person left that switch on and a measurement from an earlier flight is saved. It then makes no test pushes, but still needs a steady picture, and stops on the same rules | `drone-link` `link.rs` `maybe_auto_hold`; desktop `drone.rs` |
+| Trim is at most ±20 steps per axis, and sent with each heartbeat like the steering buttons | desktop `drone.rs` `Manual` |
+| Return is sent only after Take off, for at most 10 s, and Down, Stop, disarming, the failsafe and starting hold each end it. It ends hold, and hold cannot start by itself during it. The page asks for a second click first, as it has never been tried on the drone | `drone-link` `pilot.rs` `start_return`; `DronePage.tsx` |
+| Headless mode is sent only while armed, and Stop turns it off | `drone-link` `pilot.rs` `tick` |
+| Take off is refused from the first Up until Down, Stop or disarming, because what Up does in the air is unknown | `drone-link` `pilot.rs` `press` |
 | The height buttons move only the throttle, within ±40 and the throttle limit. They are sent with each heartbeat and lapse after 300 ms | desktop `drone.rs` `heartbeat`, `DronePage.tsx` |
 | Malformed watch data or a lagging event stream ends steering but keeps the hover | desktop `drone.rs` `release` |
 | Landing or stopping cannot be steered, and Stop cannot be interrupted | `drone-link` `pilot.rs` |
@@ -199,6 +206,17 @@ is known about it are in [WIFI UAV drone](../protocols/wifi-uav-drone.md).
 
 Esc presses Down rather than Stop on purpose. Down is the only way of stopping the
 motors proven on the drone, and Stop may cut them in the air.
+
+### What has gone wrong
+
+In the first flights, on 2026-11-07:
+
+- **The picture froze for good**, from a bug in skipping lost frames, which counted past the drone's own frame numbers.
+  Fixed, with a test that reproduces it.
+- **The drone hit something.** Hold's test pushes started on a poor picture and moved it sideways for 2.5 s, then the
+  picture dropped out and hold stopped. For the next 37 s the drone drifted with nothing to steer it, because the page could
+  only climb, descend or land. Take off had also been pressed three more times in the air. This led to the steady-picture
+  rule, manual steering, and refusing a second Take off.
 
 ### What has been tested
 
@@ -217,11 +235,18 @@ a stand-in drone or in unit tests.
 - **Which way each tilt moves the drone is unknown**, so a first flight may steer
   backwards.
 - **Esc needs this window focused.** There is no system-wide key.
-- **Video is not a sign of link health.** It nearly stalled while the motors ran in
-  our first tools, and a skip for lost frames has not been tested with them running.
+- **Hold needs video in flight, which is unproven.** An early version froze the picture
+  permanently, and that has been fixed, but video has not yet been tried with the motors
+  running since. With no picture, hold stops within a second and the drone just drifts.
 - **Position is not held.** The drone drifts, and only the person flying corrects it.
   Camera hold reduces drift at best. A forward camera cannot tell a drift from a turn or a
   tilt, the drone reports no attitude to separate them, and hold has never run in flight.
+- **The drone's IMU cannot be read.** It sends no telemetry, so the app cannot see tilt,
+  height or acceleration, and relies on the drone's own stabilising.
+- **A saved measurement can be wrong for a new place.** Its direction belongs to the drone,
+  but its strength depends on the distance to the scene. A bad saved measurement, such as
+  one taken when something moved through the view, would be reused on every takeoff until
+  the next Hold position replaces it.
 - **Hold could still push the wrong way.** Calibration measures direction, but a gust or a
   person walking past during a test push could mislead it. A wrong result would push the
   drone up to the 12-step limit until someone lands or stops it. Stay ready to land.

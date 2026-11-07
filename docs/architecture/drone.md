@@ -47,7 +47,7 @@ A DM002HW, a small toy quadcopter with brushed motors that pairs with the WIFI U
 | `crates/drone-link/src/frame.rs` | The wire format: control frames, opening frames, video reassembly |
 | `crates/drone-link/src/pilot.rs` | Arming, button presses, stick limits, the failsafe |
 | `crates/drone-link/src/link.rs` | The session, the 20 Hz sender, the vision thread, detecting the drone's network |
-| `crates/drone-link/src/vision.rs` | JPEG decoding and image motion |
+| `crates/drone-link/src/vision.rs` | JPEG decoding, image motion and the reference-frame tracker |
 | `crates/drone-link/src/hold.rs` | The autopilot: calibration and the PID loops |
 | `crates/drone-link/src/flight_log.rs` | The flight recorder |
 | `crates/drone-link/src/steering.rs` | Turning wrist tilt into sticks |
@@ -65,10 +65,12 @@ A DM002HW, a small toy quadcopter with brushed motors that pairs with the WIFI U
 | `drone_arm` | Allows flight, if video is moving and the watch or page is checking in |
 | `drone_take_off`, `drone_land`, `drone_stop` | Presses Up, Down or Stop |
 | `drone_calibrate_gyro` | Presses GyroCheck. Refused while armed |
-| `drone_heartbeat` | The page saying it is still open, with how hard Climb or Descend is held |
+| `drone_heartbeat` | The page saying it is still open, with what its Climb, Descend and steering buttons ask for |
 | `drone_set_hold` | Calibrates and starts hold, or stops it |
+| `drone_set_headless` | Turns headless mode on or off. It reaches the drone only while armed, and Stop turns it off |
+| `drone_set_return` | Starts the one-key return, only once taken off, or cancels it. Ends hold |
 | `drone_reset_drift` | Makes the current view the centre |
-| `drone_frame` | The newest video frame, as its number and then a JPEG |
+| `drone_frame` | Waits up to 500 ms for a frame newer than the one shown, then returns its number and the JPEG |
 
 ### Settings in the code
 
@@ -82,15 +84,23 @@ There is no settings screen yet. These are the values to change while tuning.
 | Land after silence | 1 s | `PilotConfig::land_after` |
 | Up and Down held for | 1.1 s | `PilotConfig::press_hold` |
 | Stop held for | 0.5 s | `PilotConfig::stop_hold` |
+| Return sent for at most | 10 s | `PilotConfig::return_limit` |
 | Correction dropped after | 300 ms | `PilotConfig::correction_stale_after` |
-| Hold gains | P 0.8, I 0.15, D 0.5, in calibration pushes | `HoldConfig` |
+| Hold gains | P 0.5, I 0.08, D 0.4, in calibration pushes, gentle so the drone's IMU leads | `HoldConfig` |
+| Hold after takeoff | 3 s after Up, giving up at 10 s | `AUTO_HOLD_AFTER`, `AUTO_HOLD_GIVE_UP` in `link.rs` |
+| Trim | ±20 steps on aileron, elevator and rudder | `MAX_TRIM` in `drone.rs` |
 | Largest correction | 12 steps | `HoldConfig::max_correction` |
 | Calibration push | 12 steps for 0.6 s each way, 0.5 s settling | `HoldConfig` |
 | Least response to a push | 0.8 pixels, 0.4% zoom | `HoldConfig` |
 | Hold gives up without a picture | 1 s | `HoldConfig::picture_lost_after` |
 | Height button | ±30 steps, at most ±40 | `HEIGHT_RATE` in `DronePage.tsx`, `MAX_HEIGHT_RATE` in `drone.rs` |
+| Steering button and arrow key | ±25 steps, at most ±30 | `NUDGE` in `DronePage.tsx`, `MAX_NUDGE` in `drone.rs` |
+| Steady picture before test pushes | 2 s | `HoldConfig::steady_before_pushing` |
+| Break that ends test pushes | One untrusted frame, or 250 ms | `HoldConfig::probe_gap` |
 | Wrist dead zone, full tilt | 8°, 35° | `SteeringConfig` |
-| Give up on a video frame | 200 ms | `SKIP_FRAME_AFTER` in `link.rs` |
+| Ask again for a frame stuck partway | 15 ms | `REPEAT_REQUEST_AFTER` in `link.rs` |
+| Give up on a video frame | 500 ms | `SKIP_FRAME_AFTER` in `link.rs` |
+| Restart video after silence | 1 s | `RESTART_VIDEO_AFTER` in `link.rs` |
 | Least tracking agreement | 25% | `vision::MIN_CONFIDENCE` |
 
 The gains were tuned in simulation only, and not on the drone.
@@ -100,6 +110,12 @@ The gains were tuned in simulation only, and not on the drone.
 Arming starts a recording of every control frame, in `drone-flights/flight-<date>-<time>.csv` in the app's data folder. The page
 shows the path. Each row has the time, sticks, flags, hold phase, picture movement, confidence, drift and correction. These files
 are how hold gets tuned, and they can feed the simulator's physics with real numbers.
+
+**Unknown packets.** Anything the drone sends that is neither video nor the firmware name, on either port, is appended to
+`drone-unknown-packets.txt` in the app's data folder: one `# session` line per connection, then one line per packet with the
+time, port, length and hex bytes, up to 200 a session. The page counts them. The DM002HW has sent none so far; one appearing
+would be the first sign of status or sensor data. A status message is read too: the page then shows the drone's own fly
+state, raw battery number, speed and headless, and the file marks its line `status`.
 
 ## Connecting
 
@@ -113,13 +129,41 @@ The watch must use Bluetooth, because the computer's Wi-Fi is taken by the drone
 
 ## Camera hold
 
-The aim is that a person only sets the height. The drone keeps its own height, and hold keeps the other two axes.
+The aim is that a person only takes off. The drone's own takeoff sets the height and its altitude hold keeps it, and hold keeps
+the other two axes.
+
+**Two loops.** The drone's IMU runs the fast inner loop on board: it keeps the drone level and at height many times a second.
+The app cannot read the IMU, because the drone sends no telemetry. So the camera loop is a slow, gentle outer loop that only
+leans against drift, and **trim** removes any steady lean so the inner loop has less to fight.
+
+**After takeoff**, if **Hold position after takeoff** is on and a measurement is saved, the app waits 3 seconds for the drone's
+own climb to settle, then holds that spot with the saved measurement and no test pushes. It needs a steady picture, tries until
+10 seconds after takeoff, and runs once per takeoff. Steering by hand ends it.
+
+**The saved measurement** comes from the first time **Hold position** finishes its test pushes, and is kept in
+`drone-hold-calibration.txt` in the app's data folder. Its sign belongs to the drone and is reliable. Its size depends on the
+distance to the scene, so it is only roughly right elsewhere; in simulation, a measurement taken 1 to 4 m from the scene and
+reused at 1 to 4 m held within 0.3 m. A damaged file is ignored.
 
 **Measuring movement** works like a mouse's optical sensor, using the drone's own camera.
 
 1. Each frame is shrunk to 160 × 90 greyscale.
-2. Fifteen patches are searched for in the next frame, ±10 pixels, ignoring brightness changes.
+2. Fifteen patches of a saved **reference frame** are searched for in each new frame, ±10 pixels around where they are
+   expected, ignoring brightness changes.
 3. The median of the patches that agree gives sideways and vertical movement, and their spread gives zoom.
+4. The reference is replaced when the view moves more than 30 pixels or 15% zoom from it, or cannot be found. The movement
+   since the last frame then comes from the frame before.
+
+Comparing with one fixed frame matters because adding up movement between neighbouring frames adds up their errors too, so a
+still drone appears to creep. Against a reference, it does not. On captured frames of a still drone, false movement over 10
+seconds fell about threefold, as below.
+
+| False movement over 10 s, on average | Adding up frames | Against a reference | At 2 m |
+| --- | --- | --- | --- |
+| Sideways | 1.63 px | 0.51 px | 2.9 cm to 0.9 cm |
+| Zoom, for forward and back | 0.051 | 0.018 | 10 cm to 3.5 cm |
+
+These are from a small bench sample in one dim scene, with the drone still. Flight will be worse.
 
 **Calibrating** happens every time hold starts, and takes about nine seconds. Which way a stick moves the picture, and how far,
 depends on the drone and on how far away the scene is, so neither is assumed. For each axis the autopilot pushes one way, stops,
@@ -134,24 +178,35 @@ is flying and can see something, and a drone sitting on a table cannot pass.
 | Picture does | Could mean | Hold does |
 | --- | --- | --- |
 | Slides sideways | Drifting sideways, or turning | Steers aileron |
-| Grows or shrinks | Flying forward or back | Steers elevator |
+| Grows or shrinks | Flying forward or back | Steers elevator. The faintest signal, but tilting and turning barely change it |
 | Slides up or down | Climbing, or tilting | Nothing: the drone holds its own height |
+
+**Trim** shifts aileron, elevator and rudder by a few steps for the whole flight, as the phone app's trim does. It is
+remembered on the page and sent with every heartbeat.
 
 **Height** comes from the **Climb** and **Descend** buttons, which work while holding. They move only the throttle, and are sent
 with every heartbeat, so a stuck button or frozen page cannot keep the drone climbing.
 
+**Steering by hand** uses the Left, Right, Forward and Back buttons or the arrow keys. It is sent the same way and ends hold at
+once, so a person always wins over the autopilot. Which way each goes has not been checked, so the page can reverse either axis,
+and remembers it.
+
+**Hold only starts once flying**, after Take off, and only when the picture has been trusted for 2 seconds without a break.
+During the test pushes, a single untrusted frame stops them. In the first flights, pushes on a poor picture moved the drone
+into something.
+
 ### Simulated flights
 
 `crates/drone-link/tests/hold_flight.rs` flies the autopilot in a simulated room with video delay, noise, a steady lean and
-gusts. Across 270 combinations of scene distance, drone response, drag, lean and stick direction, hold stayed within 1 m in 184
-and refused in 86. It never ran away. Refusals rise with distance, because a far wall gives a weaker signal.
+gusts. Across 270 combinations of scene distance, drone response, drag, lean and stick direction, hold stayed within 1 m in 182
+and refused in 88. It never ran away. Refusals rise with distance, because a far wall gives a weaker signal.
 
 The physics are estimates, not measurements of the real drone. This shows the loop is stable across a wide range and fails safely.
 It does not show how well it will hold on the real drone.
 
 ### What to expect
 
-On the bench, with the drone still, measured movement had a median of 0.02 pixels and 99% of frames stayed under 0.26. Decoding
+On the bench, with the drone still, frame-to-frame movement had a median of 0.02 pixels and 99% of frames stayed under 0.26. Decoding
 takes about 1 ms and measuring about 2 ms. Vibration in flight will make the noise worse, by an unknown amount.
 
 A forward camera cannot lock a position the way a downward sensor can, and calibration does not change that:
@@ -172,30 +227,32 @@ a fixed external camera would do better.
 | Carrying the drone moves the marker, and it returns | Yes, seen by eye | |
 | Up starts the motors | Python script only, props off | Yes |
 | Down stops the motors | Python script only, props off, on the bench | Yes |
-| Arming, Up and Down from the Rust link | **No** | Yes |
+| Arming, Up, Down and Stop from the Rust link | **Yes**, in the first flights. What Stop did was not recorded | Yes |
 | Auto-connect | **No** | Policy only |
 | Stop (`44`) | **Never sent** | Yes |
 | Gyro calibration (`c0`) | **Never sent** | Yes |
 | Firmware name in the app | **No**: the reply was read by hand earlier | Yes |
 | Stick movement | **Never sent** | Yes |
-| Calibration and hold reaching the sticks | **No** | Yes, in simulated flights |
+| Calibration and hold reaching the sticks | **Yes, once**: pushes ran on a poor picture and the drone hit something, which led to the steady-picture rule | Yes, in simulated flights |
+| Video in flight | Dropouts of 1 to 8 s, about every 10 to 20 s, after the freeze was fixed | Yes |
+| Manual steering | **No** | Yes |
 | Height buttons | **No** | Yes |
 | Flight recording | **No** | Yes |
 | Which way tilt pushes the drone | **Unknown** | Calibration measures this for hold |
 | What the drone does when commands stop | **Unknown** | |
-| Any flight with the props on | **None** | |
+| Flights with the props on | Five on 2026-11-07, one ending in a collision | |
 
 ## Next steps, in order
 
 Each stage needs a person's go before anything is sent to the drone.
 
-1. **Motors from the app, props off.** Secure the drone, then Arm, Take off and Land, with the battery switch in reach. Check
-   a recording appears. **Hold position** should refuse with "no clear change", which proves that safety on real hardware.
-2. **Lost-link test, props off.** With the motors running, stop sending and time what the drone does. This decides how much a
-   dropped link matters, and nothing else can answer it.
-3. **First flight, props on.** Open space, low and short. Take off, try Climb and Descend, then Land. Learn what Down does in the air.
-4. **Hold in flight.** In good light, facing a detailed scene, take off and choose **Hold position**. Be ready to land while it
-   makes its test pushes.
+1. **Check the drone** after the collision: props, motors, frame and battery. Calibrate its gyro on a flat surface.
+2. **Manual flight, hold off.** Open space, a metre or more from anything, low and short. Nudge each way gently to learn the
+   directions, and reverse an axis if needed. Watch the video rate and restarts count.
+3. **Phone app video in flight.** If the phone's video also drops out, the drone's Wi-Fi is the limit, and camera hold is not
+   workable on this drone without another sensor.
+4. **Lost-link test, props off.** With the motors running, stop sending and time what the drone does.
+5. **Hold in flight**, only if video stays steady. In good light, facing a detailed scene, a metre clear all round.
 5. **Tune from recordings.** Put real numbers into the simulator, then adjust the gains.
 6. **One-button hover.** Start hold by itself after takeoff, once it has proven reliable.
 7. **Watch control.** Let the watch move the point being held.
@@ -209,7 +266,7 @@ Each stage needs a person's go before anything is sent to the drone.
 | `scripts/drone_motor_test.py --props-off` | Start and stop the motors | Up, Down, Stop |
 | `scripts/drone_stick_test.py --props-off` | Move each axis in turn | Up, sticks, Down |
 | `cargo run -p drone-link --example drone_check` | Check the Rust link | Idle frames, never arms |
-| `cargo run --release -p drone-link --example flow_frames -- <folder>` | Measure tracking noise on saved frames | Nothing |
+| `cargo run --release -p drone-link --example flow_frames -- <folder>` | Measure tracking noise on saved frames, with and without a reference | Nothing |
 
 Those that talk to the drone refuse to run unless the computer is on its network, and the Python motor and stick tools send
 Down then Stop on Ctrl-C. Press Ctrl-C once only: a second press cuts that sequence short.
@@ -240,5 +297,6 @@ its fields are set in `ActCtrlN`, and native code in `libuav_lib.so` handles sen
 | Hold says "no clear change" | The drone is not flying, or the scene is too plain or far away |
 | Hold says it is drifting too much | The drone is too unsteady to measure. Land, choose **Calibrate gyro** on a flat surface, and try again |
 | Marker is red | The view is too dark or plain to follow. Add light, or face something with detail |
-| Video lags but frames a second is about 15 | The link is fine, and the delay is in the display |
+| Video lags but frames a second is about 15 | Before this was fixed the page checked for frames every 60 ms; it now shows each as soon as it is decoded. If it still lags, the delay is in the drone's camera, which cannot be measured |
+| Video freezes for seconds in flight | Likely radio noise from the motors losing pieces of frames. Check whether the phone app's video freezes too |
 | Picture is very dark | The camera is dim indoors. The app brightens the display, not the measurement |

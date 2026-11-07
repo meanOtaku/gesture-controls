@@ -154,9 +154,27 @@ the watch does that.
 carry the drone: the marker shows how far the view has moved. It turns red when the view is too dark or blank to follow, so
 fly in good light, facing something with detail.
 
+If the drone always drifts one way after takeoff, use **Trim**: nudge that axis the other way a step at a time. Trim is
+remembered.
+
+**Headless mode** makes the drone steer by the way it faced when the mode began, whatever way its nose turns. Point it away
+from you before turning it on.
+
+**Return home** is the drone's advertised one-key return. It has not been tried from this app yet. The drone has no GPS, so it
+can only fly back the way it faced at takeoff, and may not stop by itself. Use it only in open space with room behind the drone;
+it asks you to confirm, stops by itself after 10 seconds, and **Cancel return**, **Land** and **Stop** end it sooner.
+
+With **Hold position after takeoff** on, the drone holds its spot by itself 3 seconds after Take off. This needs one measurement
+first: in an open space, take off and choose **Hold position** once, and its result is saved for later flights.
+
+Steer with the **Left**, **Right**, **Forward** and **Back** buttons or the arrow keys, which work once armed. Nudge gently
+first: which way each goes has not been checked, and **Reverse left and right** or **Reverse forward and back** flips it. Steering
+ends hold. Take off works once per flight, until you land.
+
 **Would send** previews the stick corrections that would bring the view back, and nothing reaches the drone until you arm and
-choose **Hold position**. Once the drone is in the air, hold first gives it gentle test pushes each way, about nine seconds in all,
-then keeps the view where it was until you land or choose **Stop holding**. Use **Climb** and **Descend** to change height while it
+choose **Hold position**. Hold works only after Take off, once the picture has been steady for two seconds. It first pushes the drone
+sideways and forward and back, both ways, about nine seconds in all, so keep a metre clear all round. Any break in the picture
+stops the pushes. It then keeps the view where it was until you land or choose **Stop holding**. Use **Climb** and **Descend** to change height while it
 holds. If hold cannot measure the drone it says why and centres the sticks. Hold is untested in flight and can only reduce drift,
 so stay ready to land. Keep this page open: if it closes, the drone is told to land.
 

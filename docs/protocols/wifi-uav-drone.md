@@ -89,8 +89,8 @@ The app holds Up and Down for about 1.1 s, and Stop for about 0.3 s. Bit names a
 | `02` | Down | **Tested**: stopped the motors on the bench. Effect in the air unknown |
 | `04` | Stop | **Captured**: presumably the emergency cut. Never sent by us |
 | `08` | Roll | **App code**: presumably a flip |
-| `10` | Headless | **App code** |
-| `20` | Back | **App code**: off in the UAV control screen |
+| `10` | Headless | **Captured**: a switch in the app, so the bit stays set in every frame while it is on (`50` for 3 s in the capture). The desktop sends it the same way |
+| `20` | Back | **App code**: presumably the advertised one-key return. No control screen ever sets it, so the phone never sends it. Whether it must be held or only pressed is unknown; the desktop holds it for at most 10 s. Never yet tried on the drone |
 | `40` | Hl | **Captured**: always set in the UAV control screen. It makes throttle self-centring, which suggests altitude hold |
 | `80` | GyroCheck | **Captured**, held about 1.2 s. Gyro calibration by its name. Never sent by us, and the desktop refuses it while armed |
 
@@ -144,9 +144,33 @@ its header and end marker left off. Adding the standard quality 50 header gives 
 frames in a capture decoded this way. The rest were damaged, possibly in the capture. The app's native library holds
 this header among six of different quality. **Tested** on captured frames.
 
-The phone's own requests show about 15 frames a second during the takeoff stretches of the capture, with one dip to
-about 1 a second. Our first tools waited for every frame to arrive whole, and nearly stalled while the motors ran. The
-link now gives up on a frame after 200 ms. Whether that fixes the stall is not yet tested with the motors running.
+Frame numbers come from the drone. A client must never count past them: a frame numbered at or below the one acknowledged
+is treated as old, so running ahead freezes the picture for good. That happened on the real drone with an early version.
+
+### How the phone app paces video
+
+Measured from both captures: the phone's own capture in the reversing repo, and the over-the-air capture of the user's app
+and drone while the motors were off. The desktop follows this.
+
+| | Older app, other drone | User's app, DM002HW |
+| --- | --- | --- |
+| Control frames | Every 27 ms, alternating 88 and 124 bytes | Every 50 ms, mostly 124 bytes |
+| Next frame asked for, after one finishes | About 42 ms later, on the next 124-byte frame | About 43 ms later |
+| Drone's answer to a request | About 5 ms to the first part | About 6 ms |
+| Whole frames a second | 15.9 | About 17 |
+| A frame stuck partway | Asked for again 26 to 31 ms later | Asked for again about 14 ms later |
+| Frames given up on | None: every request followed a whole frame | Not measurable over the air |
+
+So the app asks on its regular tick, never immediately, and keeps asking for a stuck frame until it arrives whole. The drone
+answers within milliseconds, so the rate is set by how often a client asks. The app's native code sets its control interval
+to 50 ms (`nativeSetCtlMsgInterval(50)`). **App code** and **captured**
+
+The desktop sends a control frame every 50 ms, asks again 15 ms after a frame stops arriving partway, and gives up only after
+500 ms. After a second of silence, the start packets are sent again.
+
+During the motor stretches of the phone capture, the drone kept sending about 16 frames a second and the phone kept requesting
+them, but the Mac recording it heard only 1 or 2 whole frames a second. That may be the Mac missing packets, or real loss from
+motor noise. Whether video stays usable in flight is not yet known.
 
 The picture is very dark, averaging about 25 of 255 in a dim room, and the app brightens it for display.
 
@@ -161,9 +185,39 @@ ef 20 19 00 01 67 <i=2^bf_ssid=cmd=3>     reply: 93 04 ... 01 67 <e=0>
 
 ## Status message
 
-The app can read a status message: `88`, then a type byte of 0, fly state, battery, a flag byte, and a checksum, ending in
-`55`. The flags hold speed (bits 0 and 1), remote control, camera tilt support, headless, photo, video and light. **App code**
-None appeared in the capture, so this drone may not send it, or may only send it in a mode not yet seen.
+**App code.** The phone's native library hands every message from the drone to Java with a source byte first: `1` for the
+Wi-Fi chip, `0` for the flight controller. The firmware reply shows where that sits on the wire: in a `93 04` packet, byte 12
+is the source and byte 13 the type (`01 65`). From the Wi-Fi chip the app knows `65` (firmware name), `67` (Wi-Fi renamed),
+`69` (busy) and `6a` (disconnected). From the flight controller it knows only:
+
+| Type | Meaning |
+| --- | --- |
+| `66` | A remote's button: byte 5 is `02` for photo, `04` for record |
+| `71`, `72` | Photo, record |
+| `88` | Status |
+
+The status message is `88 00 fly battery flags … xor 55`, at least 7 bytes, where the xor covers every byte from the `00` to
+just before itself. Flags: speed (bits 0 and 1), remote control `04`, camera tilt `08`, headless `10`, photo `20`, video `40`,
+light `80`. The app reads it but never shows it, so the scale of battery and the meaning of fly state are unknown.
+
+The link looks for a status message in any packet that is not video or the firmware name, wherever it sits, because where a
+DM002HW would put one is not known. It shows the numbers raw on the Drone page, and still writes the packet to
+`drone-unknown-packets.txt`, marked `status`, so its meaning can be worked out. **Link code.** None has come from the
+DM002HW so far.
+
+## Sensor data
+
+**The drone sends no IMU, gyro, attitude or height data.** Three checks agree:
+
+- **App code.** Nothing in the Java code reads sensor values. The only drone data it reads is the status message above.
+- **Native code.** `libuav_lib.so` has `handle_mcu_msg_ctlmsg` and `handle_mcu_msg_frag`, so the Wi-Fi module (built for a
+  Bouffalo BL618) can forward flight-controller messages, but they reach only the status reader.
+- **Captures.** Of 15,579 drone packets, including flights, all were video or text replies. Every changing video-header byte
+  is explained: part counts, frame size, byte 49 (part type: 01 first, 00 continuing, 04 resent) and byte 51 (resend count).
+
+The link keeps every packet that is neither video nor the firmware name, from both the control and aux ports, in case a
+drone does send status or sensor data. The desktop app appends the first 200 of each session to
+`drone-unknown-packets.txt` in its data folder, and the Drone page shows the count. **Link code**
 
 ## What is not known
 

@@ -1075,11 +1075,19 @@ measured before it was made, and paths that proved cheap were left alone.
 - [x] Flight rules: arming, stick limits, and landing when nothing checks in.
 - [x] Live video, decoded by restoring the JPEG header the drone leaves off, with lost frames skipped.
 - [x] Camera tracking, and a position hold that measures the drone with test pushes, then runs a PID loop on each axis.
+- [x] Tracking against a reference frame, which cut false movement about threefold on captured frames.
 - [x] Simulated flights across 270 combinations of drone and room: hold stays close or refuses, and never runs away.
 - [x] Flight recorder, and height controls that work while holding.
+- [x] After the first flights: fixed a permanent video freeze, added manual steering with reversible axes, a steady-picture
+      rule before hold's test pushes, and refusing a second Take off. One flight ended in a collision.
 - [x] Drone page, auto-connect on the drone's Wi-Fi, top bar triangle, telemetry module and footer item.
 - [x] Wrist steering while the watch button is held.
 - [x] Live video and tracking seen working on the real drone in the desktop app.
-- [ ] **Not run on the real drone:** arming and motors from the Rust link, auto-connect, sticks, height, Stop, hold, recording.
+- [x] Trim, gentler hold gains, a saved hold measurement, and hold starting by itself after the drone's own takeoff.
+- [x] Investigated sensor data: the drone sends none. The link now keeps any packet it does not know, from both ports, in `drone-unknown-packets.txt`.
+- [x] Headless mode switch and a guarded one-key Return home on the Drone page.
+- [x] The drone's status message (fly state, battery, speed, headless) is decoded and shown, should the drone ever send one.
+- [ ] **Not yet checked on the real drone:** headless, return home, trim, hold after takeoff, manual steering and its directions, the steady-picture rule, and the video fix
+      in flight. Video still drops out for seconds at a time while flying.
 - [ ] Unknown: what the drone does when commands stop, what Down does in the air, and which way the sticks push it.
 - [ ] Hold gains are tuned in simulation only, there is no flight data, and no flight has been made with the props on.

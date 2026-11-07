@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use drone_link::Correction;
-use drone_link::hold::{Autopilot, HoldAxis, HoldFault, HoldPhase};
+use drone_link::hold::{Autopilot, Calibration, HoldAxis, HoldFault, HoldPhase};
 use drone_link::vision::Flow;
 
 const STEP: f32 = 0.01;
@@ -181,9 +181,11 @@ impl Flight {
         }
     }
 
+    /// Flies with the picture steady long enough for hold to agree to start, then starts it.
     fn start_hold(&mut self) {
+        self.run(3.0);
         let now = self.now();
-        self.pilot.start(now);
+        self.pilot.start(now).unwrap();
     }
 
     /// How far the drone is from where it was at `from`.
@@ -356,4 +358,43 @@ fn a_drone_sitting_on_a_table_cannot_pass_calibration() {
         HoldPhase::Failed(HoldFault::NoResponse(HoldAxis::Sideways))
     );
     assert_eq!(flight.correction, Correction::default());
+}
+
+/// Measures in one room, then holds with that saved measurement straight after takeoff in another, with no test pushes.
+#[test]
+fn a_measurement_saved_in_one_room_holds_safely_in_another() {
+    let mut results = Vec::new();
+    for measured_at in [1.0, 2.0, 4.0] {
+        let mut learning = Flight::new(Room {
+            depth: measured_at,
+            ..Room::default()
+        });
+        learning.hold_for(1.0);
+        let saved: Calibration = learning.pilot.calibration().unwrap();
+        for flown_at in [1.0, 2.0, 4.0] {
+            let mut flight = Flight::new(Room {
+                depth: flown_at,
+                ..Room::default()
+            });
+            flight.run(3.0);
+            let now = flight.now();
+            flight.pilot.start_calibrated(now, saved).unwrap();
+            flight.run(10.0);
+            let centre = flight.position();
+            let mut peak: f32 = 0.0;
+            for _ in 0..6000 {
+                flight.step(0.5);
+                peak = peak.max(flight.distance(centre));
+            }
+            assert_eq!(flight.pilot.phase(), HoldPhase::Holding);
+            assert!(
+                peak < 1.0,
+                "strayed {peak} m, measured at {measured_at} m, flown at {flown_at} m"
+            );
+            results.push((measured_at, flown_at, peak));
+        }
+    }
+    for (measured_at, flown_at, peak) in results {
+        println!("measured at {measured_at} m, flown at {flown_at} m: strayed {peak:.2} m");
+    }
 }
