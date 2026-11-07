@@ -1,0 +1,65 @@
+{
+  "audit_date": "2026-11-07",
+  "search_scope": "Focused retrieval following the repository bibliography; not a systematic review or exhaustive prior-art search. No current journal-quartile verification performed.",
+  "sources": [
+    {
+      "id": "openwatch",
+      "title": "OpenWatch: A Multimodal Benchmark for Hand Gesture Recognition on Smartwatches",
+      "url": "https://arxiv.org/html/2605.04791v2",
+      "retrieval": "Primary full-text HTML retrieved successfully",
+      "supported_use": "50 participants, over 10 hours, 59 labelled gesture sequences, subject-independent evaluation; PPG benefit of 12.5 F1 points is scoped to foundation smartwatch models",
+      "boundary": "Sequence/classification benchmark; not comparable directly with continuous event recall or false activations per eligible negative hour; preprint status does not establish a journal quartile"
+    },
+    {
+      "id": "viwatch",
+      "title": "Robust Finger Interactions with COTS Smartwatches via Unsupervised Siamese Adaptation",
+      "url": "https://www.cs.virginia.edu/~stankovic/psfiles/ViWatch_UIST_%20FINAL.pdf",
+      "retrieval": "Author-hosted primary PDF downloaded and text extracted successfully",
+      "supported_use": "Prior work on COTS smartwatch finger interaction and unsupervised Siamese adaptation",
+      "boundary": "No project-equivalent continuous performance baseline was reproduced; adaptation protocol must not be conflated with a frozen model"
+    },
+    {
+      "id": "tsunoda",
+      "title": "Thumb-to-Finger Gesture Recognition Using COTS Smartwatch Accelerometers",
+      "url": "https://www.iplab.cs.tsukuba.ac.jp/paper/international/tsunoda_MUM2024.pdf",
+      "retrieval": "Author-hosted primary PDF downloaded and text extracted successfully",
+      "supported_use": "12 recruited participants; abstract reports 94.7% for four gestures under leave-one-participant-out and 90.2% for 11 gestures under participant-specific leave-one-session-out evaluation",
+      "boundary": "Recognition accuracy is not continuous event recall at a matched false-activation budget"
+    },
+    {
+      "id": "ppg-pca",
+      "title": "Principal component analysis of photoplethysmography signals for improved gesture recognition",
+      "doi": "10.3389/fnins.2022.1047070",
+      "url": "https://www.frontiersin.org/journals/neuroscience/articles/10.3389/fnins.2022.1047070/full",
+      "retrieval": "Publisher primary full-text HTML retrieved successfully",
+      "supported_use": "14 subjects, green/red/infrared signals, sitting/walking/jogging/running conditions and SVM/KNN classifiers",
+      "boundary": "Does not establish low everyday continuous false-activation rates for this project or justify fitting PCA on test data"
+    },
+    {
+      "id": "sensor-shift",
+      "title": "Exploration on the Negative Effects of Sensor Shifts in Photoplethysmography-Based Gesture Recognition and a Solution Based on Transfer Learning",
+      "doi": "10.1109/TIM.2023.3268469",
+      "url": "https://api.crossref.org/works/10.1109/TIM.2023.3268469",
+      "retrieval": "Crossref DOI metadata retrieved successfully; primary full text not reviewed in this audit",
+      "supported_use": "Title/authorship/DOI existence and relevance of prior work on sensor shifts",
+      "boundary": "No quantitative experimental conclusion inferred from metadata alone"
+    },
+    {
+      "id": "findroidhr",
+      "title": "FinDroidHR",
+      "doi": "10.1145/3191788",
+      "url": "https://api.crossref.org/works/10.1145/3191788",
+      "retrieval": "Crossref DOI metadata retrieved successfully; primary full text not reviewed in this audit",
+      "supported_use": "DOI and author metadata cross-check for the manuscript's longstanding related-work entry",
+      "boundary": "Publisher full title/subtitle and experimental claims still need direct verification before bibliography completion"
+    },
+    {
+      "id": "sklearn-leakage",
+      "title": "Common pitfalls and recommended practices",
+      "url": "https://scikit-learn.org/stable/common_pitfalls.html",
+      "retrieval": "Official documentation HTML retrieved successfully",
+      "supported_use": "Keep test data out of fitting and model/preprocessing selection",
+      "boundary": "Methodological guidance, not wearable benchmark evidence or a publication-tier rule"
+    }
+  ]
+}

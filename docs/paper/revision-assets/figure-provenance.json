@@ -1,0 +1,24 @@
+{
+  "annotation-telemetry": {
+    "recording": "gesture-dataset-pinch_hold-2026-11-03T01-05-59.434Z",
+    "origin_timestamp_ns": 763615310799872,
+    "range_s": [
+      3.5,
+      10.5
+    ],
+    "normalization": "each PPG channel centred by displayed-window median and divided by displayed-window unscaled MAD; visualisation only; not model preprocessing",
+    "source": "saved ppg.csv and imu.csv; manual_label overrides label; no time shifts"
+  },
+  "historical-day-transfer": {
+    "source": "docs/research/artifacts/cnn-all-days-2026-11/results.md",
+    "configuration": "all moments, no still-hand gate",
+    "evidence": "historical exploratory camera-label results"
+  },
+  "evidence-lineage": {
+    "source": "evidence-audit.json and checked manifests",
+    "evidence": "audit schematic, not performance comparison"
+  },
+  "prospective-protocol": {
+    "evidence": "proposed future design, no measured results"
+  }
+}

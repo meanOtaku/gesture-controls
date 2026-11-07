@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="656.39952pt" height="344.041869pt" viewBox="0 0 656.39952 344.041869" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.11.2, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 344.041869
+L 656.39952 344.041869
+L 656.39952 0
+L 0 0
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 47.288281 282.192098
+L 649.19952 282.192098
+L 649.19952 23.077969
+L 47.288281 23.077969
+z
+" style="fill: #ffffff"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 88.753278 282.192098
+L 166.332948 282.192098
+L 166.332948 250.371065
+L 88.753278 250.371065
+z
+" clip-path="url(#p01b8de7b39)" style="fill: #d55e00"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 222.511331 282.192098
+L 300.091002 282.192098
+L 300.091002 97.822429
+L 222.511331 97.822429
+z
+" clip-path="url(#p01b8de7b39)" style="fill: #d55e00"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 356.269384 282.192098
+L 433.849055 282.192098
+L 433.849055 93.489417
+L 356.269384 93.489417
+z
+" clip-path="url(#p01b8de7b39)" style="fill: #0072b2"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 490.027437 282.192098
+L 567.607108 282.192098
+L 567.607108 118.541069
+L 490.027437 118.541069
+z
+" clip-path="url(#p01b8de7b39)" style="fill: #0072b2"/>
+   </g>
+   <g id="matplotlib.axis_1">
+    <g id="xtick_1">
+     <g id="line2d_1">
+      <defs>
+       <path id="md2675477ba" d="M 0 0
+L 0 3.5
+" style="stroke: #000000; stroke-width: 0.8"/>
+      </defs>
+      <g>
+       <use xlink:href="#md2675477ba" x="127.543113" y="282.192098" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_1">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(110.946238 297.790731)">14 Oct</text>
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(93.368894 309.793465)">FAR pinch 0/h</text>
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(90.539207 321.7962)">FAR noise 14/h</text>
+     </g>
+    </g>
+    <g id="xtick_2">
+     <g id="line2d_2">
+      <g>
+       <use xlink:href="#md2675477ba" x="261.301166" y="282.192098" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_2">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(244.704291 297.790731)">17 Oct</text>
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(220.764447 309.793465)">FAR pinch 378/h</text>
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(227.47851 321.7962)">FAR noise 6/h</text>
+     </g>
+    </g>
+    <g id="xtick_3">
+     <g id="line2d_3">
+      <g>
+       <use xlink:href="#md2675477ba" x="395.059219" y="282.192098" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_3">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(380.529532 297.790731)">3 Nov</text>
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(357.70375 309.793465)">FAR pinch 28/h</text>
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(361.236563 321.7962)">FAR noise 0/h</text>
+     </g>
+    </g>
+    <g id="xtick_4">
+     <g id="line2d_4">
+      <g>
+       <use xlink:href="#md2675477ba" x="528.817272" y="282.192098" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_4">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(514.287585 297.790731)">4 Nov</text>
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(491.461803 309.793465)">FAR pinch 11/h</text>
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(494.994616 321.7962)">FAR noise 0/h</text>
+     </g>
+    </g>
+   </g>
+   <g id="matplotlib.axis_2">
+    <g id="ytick_1">
+     <g id="line2d_5">
+      <defs>
+       <path id="ma7c2a49dbd" d="M 0 0
+L -3.5 0
+" style="stroke: #000000; stroke-width: 0.8"/>
+      </defs>
+      <g>
+       <use xlink:href="#ma7c2a49dbd" x="47.288281" y="282.192098" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_5">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="40.288281" y="285.990926" transform="rotate(-0 40.288281 285.990926)">0</text>
+     </g>
+    </g>
+    <g id="ytick_2">
+     <g id="line2d_6">
+      <g>
+       <use xlink:href="#ma7c2a49dbd" x="47.288281" y="230.369272" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_6">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="40.288281" y="234.1681" transform="rotate(-0 40.288281 234.1681)">20</text>
+     </g>
+    </g>
+    <g id="ytick_3">
+     <g id="line2d_7">
+      <g>
+       <use xlink:href="#ma7c2a49dbd" x="47.288281" y="178.546446" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_7">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="40.288281" y="182.345275" transform="rotate(-0 40.288281 182.345275)">40</text>
+     </g>
+    </g>
+    <g id="ytick_4">
+     <g id="line2d_8">
+      <g>
+       <use xlink:href="#ma7c2a49dbd" x="47.288281" y="126.72362" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_8">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="40.288281" y="130.522449" transform="rotate(-0 40.288281 130.522449)">60</text>
+     </g>
+    </g>
+    <g id="ytick_5">
+     <g id="line2d_9">
+      <g>
+       <use xlink:href="#ma7c2a49dbd" x="47.288281" y="74.900795" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_9">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="40.288281" y="78.699623" transform="rotate(-0 40.288281 78.699623)">80</text>
+     </g>
+    </g>
+    <g id="ytick_6">
+     <g id="line2d_10">
+      <g>
+       <use xlink:href="#ma7c2a49dbd" x="47.288281" y="23.077969" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_10">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="40.288281" y="26.876797" transform="rotate(-0 40.288281 26.876797)">100</text>
+     </g>
+    </g>
+    <g id="text_11">
+     <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="14.798438" y="152.635033" transform="rotate(-90 14.798438 152.635033)">Caught pinch-in starts (%)</text>
+    </g>
+   </g>
+   <g id="line2d_11">
+    <path d="M 47.288281 170.048617
+L 649.19952 170.048617
+" clip-path="url(#p01b8de7b39)" style="fill: none; stroke-dasharray: 3.7,1.6; stroke-dashoffset: 0; stroke: #333333"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 47.288281 282.192098
+L 47.288281 23.077969
+" style="fill: none; stroke: #000000; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_8">
+    <path d="M 47.288281 282.192098
+L 649.19952 282.192098
+" style="fill: none; stroke: #000000; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="text_12">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(109.952488 233.186829)">21/171</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(111.659519 245.188782)">12.3%</text>
+   </g>
+   <g id="text_13">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(246.891791 80.638193)">37/52</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(245.417572 92.640147)">71.2%</text>
+   </g>
+   <g id="text_14">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(380.649844 76.305181)">67/92</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(379.175625 88.307134)">72.8%</text>
+   </g>
+   <g id="text_15">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(514.407897 101.356833)">36/57</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(512.933678 113.358786)">63.2%</text>
+   </g>
+   <g id="text_16">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'" transform="translate(586.333235 161.583987)">Pooled</text>
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'" transform="translate(586.333235 172.385745)">161/372</text>
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'" transform="translate(586.333235 183.187503)">43.3%</text>
+   </g>
+   <g id="text_17">
+    <text style="font-size: 13px; font-family: 'DejaVu Sans'; text-anchor: middle" x="348.243901" y="17.077969" transform="rotate(-0 348.243901 17.077969)">Historical camera-label transfer varies sharply by held-out day</text>
+   </g>
+  </g>
+  <g id="text_18">
+   <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="328.19976" y="334.67976" transform="rotate(-0 328.19976 334.67976)">FAR: events/hour of no-gesture time. Historical explored LODO; not the hand-labelled model or a new test.</text>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p01b8de7b39">
+   <rect x="47.288281" y="23.077969" width="601.911239" height="259.114129"/>
+  </clipPath>
+ </defs>
+</svg>

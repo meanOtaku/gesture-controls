@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="628.2pt" height="318.237812pt" viewBox="0 0 628.2 318.237812" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.11.2, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 318.237812
+L 628.2 318.237812
+L 628.2 0
+L 0 0
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 22.545 148.044212
+L 194.409 148.044212
+Q 201.7746 148.044212 201.7746 144.717812
+L 201.7746 78.189812
+Q 201.7746 74.863412 194.409 74.863412
+L 22.545 74.863412
+Q 15.1794 74.863412 15.1794 78.189812
+L 15.1794 144.717812
+Q 15.1794 148.044212 22.545 148.044212
+z
+" clip-path="url(#p4f568918e0)" style="fill: #eaf2f8; stroke: #444444; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 234.306 148.044212
+L 393.894 148.044212
+Q 401.2596 148.044212 401.2596 144.717812
+L 401.2596 78.189812
+Q 401.2596 74.863412 393.894 74.863412
+L 234.306 74.863412
+Q 226.9404 74.863412 226.9404 78.189812
+L 226.9404 144.717812
+Q 226.9404 148.044212 234.306 148.044212
+z
+" clip-path="url(#p4f568918e0)" style="fill: #eaf2f8; stroke: #444444; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 203.77447 111.453812
+Q 214.357782 111.453812 223.599453 111.453812
+" clip-path="url(#p4f568918e0)" style="fill: none; stroke: #444444; stroke-width: 1.2; stroke-linecap: round"/>
+    <path d="M 218.399453 108.853812
+L 223.599453 111.453812
+L 218.399453 114.053812
+z
+" clip-path="url(#p4f568918e0)" style="fill: #444444; stroke: #444444; stroke-width: 1.2; stroke-linecap: round"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 22.545 281.100212
+L 194.409 281.100212
+Q 201.7746 281.100212 201.7746 277.773812
+L 201.7746 197.385812
+Q 201.7746 194.059412 194.409 194.059412
+L 22.545 194.059412
+Q 15.1794 194.059412 15.1794 197.385812
+L 15.1794 277.773812
+Q 15.1794 281.100212 22.545 281.100212
+z
+" clip-path="url(#p4f568918e0)" style="fill: #e7f3ef; stroke: #444444; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 234.306 281.100212
+L 393.894 281.100212
+Q 401.2596 281.100212 401.2596 277.773812
+L 401.2596 197.385812
+Q 401.2596 194.059412 393.894 194.059412
+L 234.306 194.059412
+Q 226.9404 194.059412 226.9404 197.385812
+L 226.9404 277.773812
+Q 226.9404 281.100212 234.306 281.100212
+z
+" clip-path="url(#p4f568918e0)" style="fill: #e7f3ef; stroke: #444444; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 203.77447 238.965812
+Q 214.357782 238.965812 223.599453 238.965812
+" clip-path="url(#p4f568918e0)" style="fill: none; stroke: #444444; stroke-width: 1.2; stroke-linecap: round"/>
+    <path d="M 218.399453 236.365812
+L 223.599453 238.965812
+L 218.399453 241.565812
+z
+" clip-path="url(#p4f568918e0)" style="fill: #444444; stroke: #444444; stroke-width: 1.2; stroke-linecap: round"/>
+   </g>
+   <g id="patch_8">
+    <path d="M 436.86 281.100212
+L 602.586 281.100212
+Q 609.9516 281.100212 609.9516 277.773812
+L 609.9516 197.385812
+Q 609.9516 194.059412 602.586 194.059412
+L 436.86 194.059412
+Q 429.4944 194.059412 429.4944 197.385812
+L 429.4944 277.773812
+Q 429.4944 281.100212 436.86 281.100212
+z
+" clip-path="url(#p4f568918e0)" style="fill: #fff2d5; stroke: #444444; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_9">
+    <path d="M 403.262093 238.965812
+Q 415.377563 238.965812 426.151393 238.965812
+" clip-path="url(#p4f568918e0)" style="fill: none; stroke: #444444; stroke-width: 1.2; stroke-linecap: round"/>
+    <path d="M 420.951393 236.365812
+L 426.151393 238.965812
+L 420.951393 241.565812
+z
+" clip-path="url(#p4f568918e0)" style="fill: #444444; stroke: #444444; stroke-width: 1.2; stroke-linecap: round"/>
+   </g>
+   <g id="text_1">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(37.622313 102.049125)">Historical cue/camera labels</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(45.819969 114.051859)">October–early November</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(13.02075 126.054594)">Mixed benchmarks; multiple protocols</text>
+   </g>
+   <g id="text_2">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(247.64375 102.049125)">Existing manuscript tables</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(248.922656 114.051859)">Fusion, CNN / trees, LODO</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(242.25625 126.054594)">Retain as historical evidence</text>
+   </g>
+   <g id="text_3">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(49.815281 222.173758)">Hand-labelled directory</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(17.222313 234.176492)">37 exports → 28 unique sensor pairs</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(29.265281 246.179227)">14 have manual-label PPG rows</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(20.300438 258.181961)">Freeze sensor + annotation hashes</text>
+   </g>
+   <g id="text_4">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(244.422656 222.173758)">pinch_in-ae0a22bf manifest</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(246.554688 234.176492)">20 train + 8 evaluation IDs</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(240.189844 246.179227)">82.46% recorded event recall</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(238.855469 258.181961)">0 observed false activations/h</text>
+   </g>
+   <g id="text_5">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(440.419875 222.173758)">Needed before headline update</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(444.108938 234.176492)">Recover event log + exposure</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(434.375344 246.179227)">Audit label versions and all tuning</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(446.3105 258.181961)">Run a prospective frozen test</text>
+   </g>
+   <g id="text_6">
+    <text style="font-weight: 700; font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="314.1" y="175.209812" transform="rotate(-0 314.1 175.209812)">No direct improvement claim across different cohorts, labels or thresholds</text>
+   </g>
+   <g id="text_7">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="314.1" y="306.879812" transform="rotate(-0 314.1 306.879812)">Solid boxes: verified repository evidence. Yellow box: proposed verification, not a completed study.</text>
+   </g>
+   <g id="text_8">
+    <text style="font-size: 14px; font-family: 'DejaVu Sans'; text-anchor: middle" x="314.1" y="17.837812" transform="rotate(-0 314.1 17.837812)">Evidence lineage: historical results are not current-model results</text>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p4f568918e0">
+   <rect x="7.2" y="33.837812" width="613.8" height="277.2"/>
+  </clipPath>
+ </defs>
+</svg>

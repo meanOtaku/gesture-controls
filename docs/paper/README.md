@@ -1,5 +1,22 @@
 # Papers
 
+## Evidence audit and revision guides
+
+The manuscripts currently mix historical cue/camera-labelled experiments and later model variants.
+The November 7 audit separates these from the newer hand-labelled development model; **do not
+replace old table values with new manifest percentages without matching cohort and protocol**.
+
+- [Evidence audit: old versus hand-labelled data, source aliases and claim corrections](EVIDENCE_AUDIT.md)
+- [Q2-target research plan: implemented capabilities, related work and proposed studies](Q2_RESEARCH_PLAN.md)
+- Format-specific improvements and suggested manuscript text:
+  [IEEE conference](ieee/IMPROVEMENTS.md), [Springer LNCS](springer/IMPROVEMENTS.md),
+  [IEEE journal](ieee-journal/IMPROVEMENTS.md), [Springer Nature journal](springer-journal/IMPROVEMENTS.md)
+- [Reproducible figures, inventory, provenance and verification](revision-assets/README.md)
+
+These additions are documentation and proposed revisions, not a completed new study, a rewritten
+manuscript or a guarantee of journal quartile/acceptance. The shared audit assets are outside the
+self-contained LaTeX folders: copy selected figures into a paper folder before standalone upload.
+
 Four versions of the Spatial Gesture Control paper: two conference and two journal formats.
 
 | Folder | Format | Pages |
