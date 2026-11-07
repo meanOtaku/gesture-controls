@@ -1,11 +1,14 @@
 # Safety and fail-closed behavior
 
-The desktop's only external side effect is changing the system output volume
-(plus a confirmatory haptic pulse on the watch). This document states the
-invariants that bound that effect, where each one is enforced, and what is
-*not* guaranteed. Every claim below names the code that enforces it; none has
-been exercised against real hardware (see
+The desktop has two external effects: changing the system output volume (plus a
+confirmatory haptic pulse on the watch), and, when a user connects one, flying a
+Wi-Fi drone. This document states the invariants that bound those effects, where
+each one is enforced, and what is *not* guaranteed. Every claim below names the
+code that enforces it. Sections 1 to 6 are about volume and have not been
+exercised against real hardware (see
 [Components and deployment §6](components-and-deployment.md#6-what-is-and-is-not-validated)).
+[Section 7](#7-the-drone) covers the drone, which is a physical object that can
+hurt someone, and says what has been tested on it.
 
 ## 1. The decision chain
 
@@ -169,3 +172,51 @@ The overlay has one `grabbed` flag, so it also records an **owner**:
   listed in the [BLE transport doc](../protocols/watch-ble-transport.md).
 - **No physical validation** of any of the above; see the
   [release-readiness checklist](../release-readiness.md).
+
+## 7. The drone
+
+The drone reports nothing back, so the desktop can never know whether it is flying
+or heard a command. The rules below hold whichever is true. The protocol and what
+is known about it are in [WIFI UAV drone](../protocols/wifi-uav-drone.md).
+
+| Rule | Enforced in |
+| --- | --- |
+| Nothing is sent until the user connects, and no control is sent if the drone never sends a first video frame | `drone-link` `link.rs` `open_session` |
+| Up and sticks need arming, which is never persisted and needs video moving and the watch streaming | `drone-link` `pilot.rs`, `link.rs` `arm`, desktop `drone.rs` `arm` |
+| Sticks are limited to ±38, and throttle to ±64. Steering moves aileron and elevator only, so throttle and rudder stay centred | `drone-link` `pilot.rs` `limited`, `steering.rs` |
+| Steering needs the watch button held. Letting go centres the sticks. A pinch cannot steer | `drone-link` `steering.rs`, desktop `lib.rs` |
+| Sticks older than 200 ms are centred, and after 1 s without updates the pilot presses Down and disarms | `drone-link` `pilot.rs` `tick` |
+| Something must keep checking in: the watch's stream or the open Drone page. If the page closes or stalls with no watch streaming, the timeout above lands. Hold corrections do not count as checking in | desktop `drone.rs` `heartbeat`, `DronePage.tsx`; `drone-link` `pilot.rs` |
+| A watch disconnect lands at once, unless the page is keeping the link alive, when it only ends steering | desktop `drone.rs` `watch_lost` |
+| Camera corrections reach the sticks only while Hold is on, which needs arming, starts from the current view, and is off again after every landing or stop. Each is at most 12 steps and within the ±38 limit. A correction older than 300 ms, or from a picture with under 25% agreement, is dropped | `drone-link` `hold.rs`, `pilot.rs` `corrected` |
+| Malformed watch data or a lagging event stream ends steering but keeps the hover | desktop `drone.rs` `release` |
+| Landing or stopping cannot be steered, and Stop cannot be interrupted | `drone-link` `pilot.rs` |
+| Esc lands, from any page. Closing the app or disconnecting lands first | desktop `App.tsx`, `drone.rs`; `drone-link` `link.rs` `fly` |
+
+Esc presses Down rather than Stop on purpose. Down is the only way of stopping the
+motors proven on the drone, and Stop may cut them in the air.
+
+### What has been tested
+
+On a DM002HW with the props off: the Python scripts started the motors with Up and
+stopped them with Down, and the Rust link held an idle session. The desktop app has held
+a session and shown live video with tracking. Arming, Up, Down, Stop, hold and every
+rule in the table have been tested against a stand-in drone or in unit tests only.
+
+### What is not guaranteed
+
+- **A lost Wi-Fi link cannot be handled from here.** The landing rules work by
+  sending Down, which needs a working link. What the drone does when frames stop is
+  unknown. Until that is measured, assume it can fly on.
+- **Down has only been seen on the bench.** It may land gently or cut the motors.
+- **Stop has never been sent by us**, and its effect is inferred from its name.
+- **Which way each tilt moves the drone is unknown**, so a first flight may steer
+  backwards.
+- **Esc needs this window focused.** There is no system-wide key.
+- **Video is not a sign of link health.** It nearly stalled while the motors ran in
+  our first tools, and a skip for lost frames has not been tested with them running.
+- **Position is not held.** The drone drifts, and only the person flying corrects it.
+  Camera hold reduces drift at best. A forward camera cannot tell a drift from a turn or a
+  tilt, the drone reports no attitude to separate them, and hold has never run in flight.
+- **Hold can push the wrong way.** Its directions are untested and could add to a drift
+  rather than cancel it, up to the 12-step limit, until someone stops it.

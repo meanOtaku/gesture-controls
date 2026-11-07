@@ -54,7 +54,7 @@ const renderNav = (props: Partial<Parameters<typeof AppNav>[0]> = {}) => {
 
 describe("AppNav", () => {
   it("orders the pages as the app is used: devices, record, label, train, automate, then settings", () => {
-    expect(NAV_ORDER).toEqual(["main", "watch", "headphone", "signals", "recorder", "recordings", "datasets", "labelling", "labels", "gestureLibrary", "modelLab", "networkLab", "gestures", "recipes", "devices", "settings"]);
+    expect(NAV_ORDER).toEqual(["main", "watch", "headphone", "signals", "recorder", "recordings", "datasets", "labelling", "labels", "gestureLibrary", "modelLab", "networkLab", "gestures", "recipes", "devices", "drone", "settings"]);
   });
 
   it("lists every destination, grouped, with the current page marked", () => {

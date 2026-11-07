@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 
 use crate::frame::{Button, Control, NEUTRAL, Sticks};
+use crate::hold::Correction;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PilotConfig {
@@ -24,6 +25,8 @@ pub struct PilotConfig {
     pub press_hold: Duration,
     /// How long Stop is held, as the app does.
     pub stop_hold: Duration,
+    /// A hold correction older than this is dropped, so a stalled picture cannot leave a push in place.
+    pub correction_stale_after: Duration,
 }
 
 impl Default for PilotConfig {
@@ -35,6 +38,7 @@ impl Default for PilotConfig {
             land_after: Duration::from_secs(1),
             press_hold: Duration::from_millis(1100),
             stop_hold: Duration::from_millis(500),
+            correction_stale_after: Duration::from_millis(300),
         }
     }
 }
@@ -61,6 +65,8 @@ pub struct Pilot {
     sticks: Sticks,
     sticks_at: Instant,
     press: Option<Press>,
+    hold_enabled: bool,
+    correction: Option<(Correction, Instant)>,
 }
 
 impl Pilot {
@@ -72,7 +78,24 @@ impl Pilot {
             sticks: Sticks::CENTRED,
             sticks_at: now,
             press: None,
+            hold_enabled: false,
+            correction: None,
         }
+    }
+
+    pub fn is_holding(&self) -> bool {
+        self.hold_enabled
+    }
+
+    /// Lets camera corrections reach the sticks. Ignored unless armed, and off again at every disarm.
+    pub fn set_hold(&mut self, enabled: bool) {
+        self.hold_enabled = enabled && self.armed;
+        self.correction = None;
+    }
+
+    /// The newest correction from the camera, or `None` when the picture cannot be trusted.
+    pub fn set_correction(&mut self, correction: Option<Correction>, now: Instant) {
+        self.correction = correction.map(|correction| (correction, now));
     }
 
     pub fn is_armed(&self) -> bool {
@@ -99,6 +122,7 @@ impl Pilot {
 
     /// Ends the session by pressing Down. Does nothing when already disarmed.
     pub fn disarm(&mut self, now: Instant) {
+        self.hold_enabled = false;
         if self.armed {
             self.armed = false;
             self.hold(Button::Down, now);
@@ -108,6 +132,7 @@ impl Pilot {
     /// Presses Stop, whatever else is going on.
     pub fn stop(&mut self, now: Instant) {
         self.armed = false;
+        self.hold_enabled = false;
         self.hold(Button::Stop, now);
     }
 
@@ -157,7 +182,7 @@ impl Pilot {
             && !self.holding(Button::Down)
             && !self.holding(Button::Stop);
         let sticks = if steering {
-            self.limited(self.sticks)
+            self.corrected(self.limited(self.sticks), now)
         } else {
             Sticks::CENTRED
         };
@@ -167,6 +192,18 @@ impl Pilot {
                 sticks,
                 ..Control::IDLE
             },
+        }
+    }
+
+    fn corrected(&self, sticks: Sticks, now: Instant) -> Sticks {
+        let fresh = self.correction.filter(|(_, at)| {
+            now.saturating_duration_since(*at) < self.config.correction_stale_after
+        });
+        match fresh {
+            Some((correction, _)) if self.hold_enabled => {
+                correction.apply(sticks, self.config.stick_limit)
+            }
+            _ => sticks,
         }
     }
 
@@ -348,6 +385,76 @@ mod tests {
         pilot.arm(later);
         assert!(!pilot.failsafe_tripped());
         assert_eq!(pilot.tick(later), Control::IDLE);
+    }
+
+    fn push() -> Correction {
+        Correction {
+            aileron: 10,
+            elevator: -5,
+        }
+    }
+
+    fn pushed_sticks() -> Sticks {
+        Sticks {
+            aileron: 0x80 + 10,
+            elevator: 0x80 - 5,
+            ..Sticks::CENTRED
+        }
+    }
+
+    #[test]
+    fn corrections_do_nothing_until_hold_is_on() {
+        let (mut pilot, start) = pilot();
+        pilot.arm(start);
+        pilot.set_correction(Some(push()), start);
+        assert_eq!(pilot.tick(start), Control::IDLE);
+        pilot.set_hold(true);
+        pilot.set_correction(Some(push()), start);
+        assert_eq!(pilot.tick(start).sticks, pushed_sticks());
+    }
+
+    #[test]
+    fn hold_cannot_start_unarmed() {
+        let (mut pilot, start) = pilot();
+        pilot.set_hold(true);
+        assert!(!pilot.is_holding());
+        pilot.set_correction(Some(push()), start);
+        assert_eq!(pilot.tick(start), Control::IDLE);
+    }
+
+    #[test]
+    fn a_stale_or_untrusted_correction_is_dropped() {
+        let (mut pilot, start) = pilot();
+        pilot.arm(start);
+        pilot.set_hold(true);
+        pilot.set_correction(Some(push()), start);
+        pilot.set_sticks(Sticks::CENTRED, start + ms(300));
+        assert_eq!(pilot.tick(start + ms(300)), Control::IDLE);
+        pilot.set_correction(Some(push()), start + ms(300));
+        pilot.set_correction(None, start + ms(310));
+        assert_eq!(pilot.tick(start + ms(310)), Control::IDLE);
+    }
+
+    #[test]
+    fn hold_does_not_keep_the_link_alive() {
+        let (mut pilot, start) = pilot();
+        pilot.arm(start);
+        pilot.set_hold(true);
+        pilot.set_correction(Some(push()), start + ms(999));
+        assert_eq!(pilot.tick(start + ms(1000)).flags, DOWN);
+        assert!(!pilot.is_holding());
+    }
+
+    #[test]
+    fn landing_and_stop_turn_hold_off_and_cannot_be_steered() {
+        let (mut pilot, start) = pilot();
+        pilot.arm(start);
+        pilot.set_hold(true);
+        pilot.set_correction(Some(push()), start);
+        pilot.press(Button::Down, start).unwrap();
+        assert_eq!(pilot.tick(start).sticks, Sticks::CENTRED);
+        pilot.stop(start);
+        assert!(!pilot.is_holding());
     }
 
     #[test]

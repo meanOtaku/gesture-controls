@@ -121,6 +121,7 @@ fn serve(video: &UdpSocket, frame: u32, target: SocketAddr) {
         packet[16..20].copy_from_slice(&frame.to_le_bytes());
         packet[32..36].copy_from_slice(&part.to_le_bytes());
         packet[36..40].copy_from_slice(&VIDEO_PARTS.to_le_bytes());
+        packet[40..44].copy_from_slice(&(VIDEO_PARTS * 24).to_le_bytes());
         let _ = video.send_to(&packet, target);
     }
 }
@@ -303,4 +304,46 @@ fn arming_needs_video_to_be_moving() {
         link.arm(),
         Err(LinkError::NotOpen | LinkError::NoVideo)
     ));
+}
+
+#[test]
+fn a_frame_that_never_arrives_is_skipped_rather_than_stalling_the_video() {
+    let control = UdpSocket::bind((LOOPBACK, 0)).unwrap();
+    let aux = UdpSocket::bind((LOOPBACK, 0)).unwrap();
+    let video = UdpSocket::bind((LOOPBACK, 0)).unwrap();
+    control
+        .set_read_timeout(Some(Duration::from_millis(5)))
+        .unwrap();
+    let endpoint = Endpoint {
+        host: LOOPBACK,
+        control_port: control.local_addr().unwrap().port(),
+        aux_port: aux.local_addr().unwrap().port(),
+    };
+    let finished = Arc::new(AtomicBool::new(false));
+    let running = Arc::clone(&finished);
+    let worker = std::thread::spawn(move || {
+        let mut buffer = [0; 2048];
+        while !running.load(Ordering::SeqCst) {
+            let Ok((length, source)) = control.recv_from(&mut buffer) else {
+                continue;
+            };
+            let data = &buffer[..length];
+            if data == [0xEF, 0x00, 0x04, 0x00] {
+                serve(&video, 1, source);
+            } else if length == 124 {
+                let wanted = u32::from_le_bytes(data[108..112].try_into().unwrap());
+                // Frame 4 never comes, however often it is asked for.
+                if wanted != 4 {
+                    serve(&video, wanted, source);
+                }
+            }
+        }
+    });
+
+    let link = Link::open(endpoint, quick_pilot(), LinkTiming::default()).unwrap();
+    wait_until("video past the gap", || link.status().video_frames >= 8);
+    assert!(link.status().video_skipped >= 1);
+    drop(link);
+    finished.store(true, Ordering::SeqCst);
+    worker.join().unwrap();
 }

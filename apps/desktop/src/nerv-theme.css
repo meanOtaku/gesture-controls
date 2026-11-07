@@ -535,7 +535,7 @@ html[data-theme="nerv"] .nerv-header-mark::after {
   clip-path: polygon(50% 20%, calc(100% - 7px) calc(100% - 4px), 7px calc(100% - 4px));
 }
 /*
- * The devices as three oversized caution triangles locked edge to edge (pointing up, down, up), just right of the
+ * The devices as oversized caution triangles locked edge to edge (pointing up, down, up, down), just right of the
  * system name, running off the top and bottom of the bar and cropped at its edges. Each name and state sits in the
  * wide part of its triangle. Outlined when off, filled when live.
  */
@@ -546,7 +546,7 @@ html[data-theme="nerv"] .nerv-units-frame {
   position: relative;
   flex: none;
   align-self: stretch;
-  width: calc(var(--unit-w) * 2 + var(--unit-gap) * 2);
+  width: calc(var(--unit-w) * 2.5 + var(--unit-gap) * 3);
   margin: 0 auto 0 8px;
   overflow: hidden;
 }
@@ -569,14 +569,15 @@ html[data-theme="nerv"] .nerv-unit {
 html[data-theme="nerv"] .nerv-unit::before { content: ""; position: absolute; inset: 0; background: #000; clip-path: polygon(50% 5px, calc(100% - 4px) calc(100% - 2px), 4px calc(100% - 2px)); }
 html[data-theme="nerv"] .nerv-unit:nth-child(1) { left: 0; }
 html[data-theme="nerv"] .nerv-unit:nth-child(3) { left: calc(var(--unit-w) + var(--unit-gap) * 2); }
-/* The middle one points down and fits between the other two. */
-html[data-theme="nerv"] .nerv-unit:nth-child(2) {
-  left: calc(var(--unit-w) / 2 + var(--unit-gap));
+/* The even ones point down and fit between their neighbours. */
+html[data-theme="nerv"] .nerv-unit:nth-child(2) { left: calc(var(--unit-w) / 2 + var(--unit-gap)); }
+html[data-theme="nerv"] .nerv-unit:nth-child(4) { left: calc(var(--unit-w) * 1.5 + var(--unit-gap) * 3); }
+html[data-theme="nerv"] .nerv-unit:nth-child(even) {
   justify-content: flex-start;
   padding: 20px 0 0;
   clip-path: polygon(0 0, 100% 0, 50% 100%);
 }
-html[data-theme="nerv"] .nerv-unit:nth-child(2)::before { clip-path: polygon(4px 2px, calc(100% - 4px) 2px, 50% calc(100% - 5px)); }
+html[data-theme="nerv"] .nerv-unit:nth-child(even)::before { clip-path: polygon(4px 2px, calc(100% - 4px) 2px, 50% calc(100% - 5px)); }
 html[data-theme="nerv"] .nerv-unit > span { position: relative; color: var(--eva-text-muted); }
 html[data-theme="nerv"] .nerv-unit-name { font-family: var(--font-tall); font-size: 1.25rem; letter-spacing: 0.08em; }
 html[data-theme="nerv"] .nerv-unit-state { margin-top: 1px; font-family: var(--font-mono); font-size: 0.58rem; font-weight: 700; letter-spacing: 0.06em; }
@@ -587,7 +588,7 @@ html[data-theme="nerv"] .nerv-unit:is([data-tone="active"], [data-tone="caution"
 /* The name and page plate stay above the triangles; on a narrow bar there is no room for them. */
 html[data-theme="nerv"] .nerv-header-id,
 html[data-theme="nerv"] .nerv-header-section { position: relative; z-index: 1; }
-@media (max-width: 980px) { html[data-theme="nerv"] .nerv-units-frame { display: none; } }
+@media (max-width: 1060px) { html[data-theme="nerv"] .nerv-units-frame { display: none; } }
 html[data-theme="nerv"] .nerv-header-id strong { font-family: var(--font-tall); font-weight: 400; font-size: 1.75rem; line-height: 1; letter-spacing: 0.08em; color: var(--eva-orange); }
 html[data-theme="nerv"] .nerv-header-id small { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.3em; color: var(--eva-green); }
 html[data-theme="nerv"] .nerv-header-section { flex: none; padding: 4px 14px 4px 24px; background: var(--eva-orange); color: #000; clip-path: polygon(14px 0, 100% 0, 100% 100%, 0 100%); font-family: var(--font-tall); font-weight: 400; font-size: 1.5rem; line-height: 1.1; letter-spacing: 0.1em; text-align: right; }

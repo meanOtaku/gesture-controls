@@ -6,9 +6,14 @@
 //! format is written up in `docs/protocols/wifi-uav-drone.md`.
 
 pub mod frame;
+mod hold;
 mod link;
 mod pilot;
+mod steering;
+pub mod vision;
 
 pub use frame::{Button, Control, Sticks};
-pub use link::{Endpoint, Link, LinkError, LinkPhase, LinkStatus, LinkTiming};
+pub use hold::{Correction, HoldConfig};
+pub use link::{Endpoint, Link, LinkError, LinkPhase, LinkStatus, LinkTiming, LiveFrame};
 pub use pilot::{Pilot, PilotConfig, PilotError};
+pub use steering::{Steering, SteeringConfig};

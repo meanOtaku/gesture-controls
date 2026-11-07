@@ -95,11 +95,18 @@ Parts of up to 1,080 bytes, with a 56-byte header. **Tested**
 | 36 | Parts in the frame as `u32` |
 | 40 | Frame size as `u32` |
 | 44 | Width and height as `u16`: 640 × 360 |
+| 48 | `32`, which is the JPEG quality, 50 |
 
-The drone sends the next frame only when asked, and resends one that is asked for again. The body has no JPEG or H.264
-markers. An issue on the reversing repo reports headerless JPEG, which is unconfirmed here.
+The drone sends the next frame only when asked, and resends one that is asked for again. A frame is a JPEG body with
+its header and end marker left off. Adding the standard quality 50 header gives the picture: 736 of the 858 complete
+frames in a capture decoded this way. The rest were damaged, possibly in the capture. The app's native library holds
+this header among six of different quality. **Tested** on captured frames.
 
-Video nearly stops while the motors run, so it is not a sign of link health.
+The phone's own requests show about 15 frames a second during the takeoff stretches of the capture, with one dip to
+about 1 a second. Our first tools waited for every frame to arrive whole, and nearly stalled while the motors ran. The
+link now gives up on a frame after 200 ms. Whether that fixes the stall is not yet tested with the motors running.
+
+The picture is very dark, averaging about 25 of 255 in a dim room, and the app brightens it for display.
 
 ## What is not known
 

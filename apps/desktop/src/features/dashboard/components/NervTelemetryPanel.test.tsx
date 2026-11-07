@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { HeadTrackerStatus, WatchStatus } from "../../../shared/protocol/events";
+import { publishDroneState, type DroneState } from "../../drone/droneStatus";
 import { NervTelemetryPanel } from "./NervTelemetryPanel";
 
 beforeEach(() => {
@@ -9,6 +10,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  publishDroneState(null);
   document.documentElement.removeAttribute("data-theme");
 });
 
@@ -21,6 +23,41 @@ const watch = (over: Partial<WatchStatus> = {}): WatchStatus => ({
   heartRateLast: { timestampNs: 1, heartRate: 71.6, heartRateStatus: 1, ibiMs: [], ibiStatus: [] }, heartRateRateHz: null,
   skinTemperatureLast: null, skinTemperatureRateHz: null, edaLast: null, edaRateHz: null, spo2Last: null, ecgLast: null, biaLast: null, sweatLossLast: null, ...over,
 } as WatchStatus);
+
+const drone: DroneState = {
+  phase: "open", armed: false, failsafeTripped: false, steering: false, watchStreaming: false, framesSent: 100, videoFrames: 40,
+  videoSkipped: 2, videoDamaged: 0, sendErrors: 0, flow: { frame: 40, dx: 0, dy: 0, zoom: 0, confidence: 0.53 },
+  driftX: 1.25, driftY: -3, holding: false, correction: { aileron: 3, elevator: -1 }, pageAlive: true,
+};
+
+describe("NervTelemetryPanel's drone module", () => {
+  it("shows no signal, and no numbers, with no drone", () => {
+    render(<NervTelemetryPanel headStatus={null} watchStatus={null} />);
+    const module = within(screen.getByRole("region", { name: "Drone" }));
+    expect(module.getByText("○ OFFLINE")).toBeInTheDocument();
+    expect(module.getByText("NO SIGNAL")).toBeInTheDocument();
+    expect(module.queryByText("TRACKING")).toBeNull();
+  });
+
+  it("shows what the link measures, and no battery or height, since the drone reports neither", async () => {
+    render(<NervTelemetryPanel headStatus={null} watchStatus={null} />);
+    await act(async () => { publishDroneState(drone); await Promise.resolve(); });
+    const module = within(screen.getByRole("region", { name: "Drone" }));
+    expect(module.getByText("● ONLINE")).toBeInTheDocument();
+    expect(module.getByRole("meter", { name: "Tracking agreement" })).toHaveAttribute("aria-valuenow", "53");
+    expect(module.getByText("+3 / -1")).toBeInTheDocument();
+    expect(module.queryByText("BATTERY")).toBeNull();
+  });
+
+  it("logs the drone's changes", async () => {
+    render(<NervTelemetryPanel headStatus={null} watchStatus={null} />);
+    await act(async () => { publishDroneState(drone); await Promise.resolve(); });
+    await act(async () => { publishDroneState({ ...drone, armed: true }); await Promise.resolve(); });
+    const log = within(screen.getByRole("region", { name: "Event log" }));
+    expect(log.getByText(/DRONE ONLINE/)).toBeInTheDocument();
+    expect(log.getByText(/DRONE ARMED/)).toBeInTheDocument();
+  });
+});
 
 describe("NervTelemetryPanel", () => {
   it("is only there under the NERV theme, and follows a change of theme at once", async () => {

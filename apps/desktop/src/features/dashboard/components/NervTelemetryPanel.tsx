@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { HeadTrackerStatus, PpgState, WatchStatus } from "../../../shared/protocol/events";
 import { useThemeIs } from "../../../shared/theme/useThemeIs";
+import { droneDevice, getDroneSnapshot, subscribeDrone, type DroneStatus } from "../../drone/droneStatus";
 
 const COLLAPSED_KEY = "nervTelemetryCollapsed";
 const MAX_LOG = 8;
@@ -52,9 +53,9 @@ interface LogLine {
 const clock = (at: Date) => at.toLocaleTimeString([], { hour12: false });
 
 /** A timestamped list of the changes seen while the panel has been open: nothing is invented, and nothing before it opened is shown. */
-function useEventLog(headConnected: boolean, watchConnected: boolean, worn: boolean | null, ppg: PpgState | null): LogLine[] {
+function useEventLog(headConnected: boolean, watchConnected: boolean, worn: boolean | null, ppg: PpgState | null, drone: string): LogLine[] {
   const [lines, setLines] = useState<LogLine[]>(() => [{ id: 0, at: new Date(), text: "TELEMETRY ONLINE" }]);
-  const previous = useRef({ headConnected, watchConnected, worn, ppg });
+  const previous = useRef({ headConnected, watchConnected, worn, ppg, drone });
   const next = useRef(1);
   useEffect(() => {
     const was = previous.current;
@@ -63,12 +64,43 @@ function useEventLog(headConnected: boolean, watchConnected: boolean, worn: bool
     if (was.watchConnected !== watchConnected) added.push(watchConnected ? "WATCH CONNECTED" : "WATCH LOST");
     if (was.worn !== worn && worn !== null) added.push(worn ? "WATCH ON WRIST" : "WATCH OFF WRIST");
     if (was.ppg !== ppg && ppg !== null) added.push(`PPG ${PPG_WORDS[ppg]}`);
-    previous.current = { headConnected, watchConnected, worn, ppg };
+    if (was.drone !== drone) added.push(`DRONE ${drone}`);
+    previous.current = { headConnected, watchConnected, worn, ppg, drone };
     if (added.length === 0) return;
     const at = new Date();
     setLines((current) => [...added.map((text) => ({ id: next.current++, at, text })).reverse(), ...current].slice(0, MAX_LOG));
-  }, [headConnected, watchConnected, worn, ppg]);
+  }, [headConnected, watchConnected, worn, ppg, drone]);
   return lines;
+}
+
+const signed = (value: number) => `${value > 0 ? "+" : ""}${value}`;
+
+/** Only what the drone link really measures. The drone reports no battery or height, so neither is shown. */
+function DroneModule({ status }: { status: DroneStatus | null }) {
+  const device = droneDevice(status);
+  const live = status?.phase === "open";
+  const trust = status?.flow ? status.flow.confidence * 100 : null;
+  return (
+    <section className="nerv-module" aria-label="Drone">
+      <header><span>03 / DRONE</span><StatusTag tone={device.tone} text={device.tone === "offline" ? undefined : `${TAGS[device.tone].slice(0, 1)} ${device.text}`} /></header>
+      {live && status ? (
+        <>
+          <Row label="ARMED" value={status.armed ? "▲ YES" : "○ NO"} />
+          <Row label="HOLD" value={status.holding ? "▲ ON" : "○ OFF"} />
+          <Row label="VIDEO" value={status.videoRate !== null ? String(status.videoRate) : "—"} unit={status.videoRate !== null ? " /s" : undefined} />
+          <Row label="TRACKING" value={trust !== null ? String(Math.round(trust)) : "—"} unit={trust !== null ? "%" : undefined} />
+          {trust !== null && <SegmentBar percent={trust} label="Tracking agreement" />}
+          <Row label="DRIFT X" value={fixed(status.driftX, 1)} unit=" px" />
+          <Row label="DRIFT Y" value={fixed(status.driftY, 1)} unit=" px" />
+          <Row label="CORRECTION" value={status.correction ? `${signed(status.correction.aileron)} / ${signed(status.correction.elevator)}` : "—"} />
+          <Row label="SKIPPED" value={String(status.videoSkipped)} />
+          <Row label="SEND ERRORS" value={String(status.sendErrors)} />
+        </>
+      ) : (
+        <p className="nerv-empty">NO SIGNAL</p>
+      )}
+    </section>
+  );
 }
 
 type PanelProps = { headStatus: HeadTrackerStatus | null; watchStatus: WatchStatus | null; handPreviewRef?: (element: HTMLDivElement | null) => void };
@@ -94,7 +126,8 @@ function Panel({ headStatus, watchStatus, handPreviewRef }: PanelProps) {
   const headConnected = headStatus?.connected === true;
   const watchConnected = watchStatus?.connected === true;
   const worn = watchStatus?.worn ?? null;
-  const log = useEventLog(headConnected, watchConnected, worn, watchStatus?.ppgState ?? null);
+  const droneStatus = useSyncExternalStore(subscribeDrone, getDroneSnapshot, () => null);
+  const log = useEventLog(headConnected, watchConnected, worn, watchStatus?.ppgState ?? null, droneDevice(droneStatus).text);
 
   if (collapsed) {
     return (
@@ -148,8 +181,10 @@ function Panel({ headStatus, watchStatus, handPreviewRef }: PanelProps) {
         )}
       </section>
 
+      <DroneModule status={droneStatus} />
+
       <section className="nerv-module" aria-label="Event log">
-        <header><span>03 / EVENT LOG</span></header>
+        <header><span>04 / EVENT LOG</span></header>
         <ol className="nerv-log">
           {log.map((line) => (
             <li key={line.id}><time dateTime={line.at.toISOString()}>{clock(line.at)}</time> {line.text}</li>
@@ -162,7 +197,7 @@ function Panel({ headStatus, watchStatus, handPreviewRef }: PanelProps) {
 }
 
 /**
- * The NERV theme's right-hand telemetry panel: the headphones' and the watch's live readings while they are connected
+ * The NERV theme's right-hand telemetry panel: the headphones', the watch's and the drone's live readings while connected
  * (otherwise "no signal", never a made-up number), and a log of the changes seen since it opened. It exists only under
  * the NERV theme, can be collapsed (remembered), and gives way on narrow windows.
  */

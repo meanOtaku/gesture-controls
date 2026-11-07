@@ -13,6 +13,7 @@ export function shortcutGroups(mac: boolean): { title: string; keys: [string, st
         [`${cmd}1 … ${cmd}9`, "Go to a tab, in the order of the menu"],
         [`${cmd},`, "Settings"],
         ["?", "This list"],
+        ["Esc", "Land the drone, if one is connected"],
       ],
     },
     {

@@ -133,6 +133,28 @@ Earlier versions had a single "Watch worn on" setting that also swapped swipe le
 
 The overlay is deliberately non-focus-stealing. Keyboard volume controls only work while a visible overlay and a supported native volume backend are available.
 
+### Drone
+
+Flies a Wi-Fi drone that pairs with the WIFI UAV phone app, such as the DM002HW. This is early: read
+[Safety §7](architecture/safety-and-fail-closed-behavior.md#7-the-drone) before putting the props on, and fly somewhere open
+with the battery switch within reach.
+
+1. Join the drone's Wi-Fi on this computer. Keep the watch on Bluetooth, because the Wi-Fi is now taken.
+2. Open **Drone** and choose **Connect**, then **Arm**.
+3. Choose **Take off**. Hold the watch button and tilt your wrist to steer. Let go to stop steering.
+4. Choose **Land**, or press Esc on any page. **Stop** may cut the motors in the air, so keep it for when landing fails.
+
+If nothing keeps the link alive for a second, the drone is told to land, and you need to arm again. Either the open page or
+the watch does that.
+
+**Camera tracking** shows the drone's live view and follows it the way a mouse follows a desk. Press **Set centre**, then
+carry the drone: the marker shows how far the view has moved. It turns red when the view is too dark or blank to follow, so
+fly in good light, facing something with detail.
+
+**Would send** previews the small stick corrections that would bring the view back. Nothing reaches the drone until you arm
+and choose **Hold position**, which holds the current view until you land or choose **Stop holding**. Hold is untested in
+flight and can only reduce drift, so stay ready to land. Keep this page open: if it closes, the drone is told to land.
+
 ### Watch
 
 The **Watch** tab is the Watch connection and sensor-control dashboard.

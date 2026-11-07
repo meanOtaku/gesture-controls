@@ -3,7 +3,7 @@
 //! Every control frame also asks for video: its records name the frame just received and the next one wanted, and the
 //! drone sends nothing further until asked.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 /// Stick centre. The app's trims offset this, but the drone's own centre is here.
 pub const NEUTRAL: u8 = 0x80;
@@ -25,6 +25,7 @@ const VIDEO_HEADER_LENGTH: usize = 56;
 const VIDEO_FRAME_OFFSET: usize = 16;
 const VIDEO_PART_OFFSET: usize = 32;
 const VIDEO_TOTAL_OFFSET: usize = 36;
+const VIDEO_SIZE_OFFSET: usize = 40;
 /// More parts than this is corruption: a whole frame is a few dozen.
 const MAX_VIDEO_PARTS: u32 = 1024;
 /// Unfinished frames worth remembering, so corrupt frame numbers cannot grow the tracker without limit.
@@ -161,45 +162,79 @@ pub fn control_frame(sequence: u16, control: Control, received: u32) -> [u8; REQ
     )
 }
 
-/// Works out which video frames have fully arrived. Parts can arrive out of order, and more than once.
+/// A whole video frame, still without its JPEG header.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VideoFrame {
+    pub number: u32,
+    pub body: Vec<u8>,
+}
+
+#[derive(Debug)]
+struct PendingFrame {
+    total: u32,
+    size: usize,
+    parts: BTreeMap<u32, Vec<u8>>,
+}
+
+/// Rebuilds video frames from their parts, which can arrive out of order and more than once.
 #[derive(Debug, Default)]
 pub struct VideoTracker {
-    pending: BTreeMap<u32, (u32, BTreeSet<u32>)>,
+    pending: BTreeMap<u32, PendingFrame>,
     completed: u32,
+    received: u32,
 }
 
 impl VideoTracker {
-    /// The highest frame number fully received, or 0 before the first.
+    /// The frame to acknowledge: the newest one finished or given up on, or 0 before the first.
     pub fn completed(&self) -> u32 {
         self.completed
     }
 
-    /// Takes in a packet from the drone, and returns true when it finished a new frame.
-    pub fn observe(&mut self, packet: &[u8]) -> bool {
-        let Some((frame, part, total)) = parse_video(packet) else {
-            return false;
-        };
-        if frame <= self.completed {
-            return false;
+    /// How many frames have really arrived whole.
+    pub fn received(&self) -> u32 {
+        self.received
+    }
+
+    /// Gives up on the next frame, so the drone is asked for the one after it.
+    pub fn skip(&mut self) {
+        self.completed = self.completed.saturating_add(1);
+        self.pending = self.pending.split_off(&(self.completed.saturating_add(1)));
+    }
+
+    /// Takes in a packet from the drone, and returns the frame when it finishes one that adds up.
+    pub fn observe(&mut self, packet: &[u8]) -> Option<VideoFrame> {
+        let (number, part, total, size) = parse_video(packet)?;
+        if number <= self.completed {
+            return None;
         }
-        let (_, parts) = self
-            .pending
-            .entry(frame)
-            .or_insert_with(|| (total, BTreeSet::new()));
-        parts.insert(part);
-        if parts.len() as u32 >= total {
-            self.completed = frame;
-            self.pending = self.pending.split_off(&(frame + 1));
-            return true;
+        let frame = self.pending.entry(number).or_insert_with(|| PendingFrame {
+            total,
+            size,
+            parts: BTreeMap::new(),
+        });
+        frame
+            .parts
+            .insert(part, packet[VIDEO_HEADER_LENGTH..].to_vec());
+        if (frame.parts.len() as u32) < frame.total {
+            while self.pending.len() > MAX_TRACKED_FRAMES {
+                self.pending.pop_first();
+            }
+            return None;
         }
-        while self.pending.len() > MAX_TRACKED_FRAMES {
-            self.pending.pop_first();
+        let frame = self.pending.remove(&number)?;
+        self.completed = number;
+        self.pending = self.pending.split_off(&(number + 1));
+        let body: Vec<u8> = frame.parts.into_values().flatten().collect();
+        // A frame that does not add up was damaged: acknowledged, but never decoded.
+        if body.len() != frame.size {
+            return None;
         }
-        false
+        self.received = self.received.saturating_add(1);
+        Some(VideoFrame { number, body })
     }
 }
 
-fn parse_video(packet: &[u8]) -> Option<(u32, u32, u32)> {
+fn parse_video(packet: &[u8]) -> Option<(u32, u32, u32, usize)> {
     if packet.len() < VIDEO_HEADER_LENGTH || packet[..2] != VIDEO_MAGIC {
         return None;
     }
@@ -210,8 +245,9 @@ fn parse_video(packet: &[u8]) -> Option<(u32, u32, u32)> {
     let frame = read(VIDEO_FRAME_OFFSET)?;
     let part = read(VIDEO_PART_OFFSET)?;
     let total = read(VIDEO_TOTAL_OFFSET)?;
+    let size = read(VIDEO_SIZE_OFFSET)? as usize;
     (frame < u32::MAX && total > 0 && total <= MAX_VIDEO_PARTS && part < total)
-        .then_some((frame, part, total))
+        .then_some((frame, part, total, size))
 }
 
 #[cfg(test)]
@@ -331,38 +367,59 @@ mod tests {
         assert_eq!(request[108], 2);
     }
 
+    const PART_BYTES: usize = 8;
+
     fn part(frame: u32, part: u32, total: u32) -> Vec<u8> {
-        let mut packet = vec![0; VIDEO_HEADER_LENGTH + 8];
+        let mut packet = vec![part as u8; VIDEO_HEADER_LENGTH + PART_BYTES];
+        packet[..VIDEO_HEADER_LENGTH].fill(0);
         packet[..2].copy_from_slice(&VIDEO_MAGIC);
         packet[VIDEO_FRAME_OFFSET..VIDEO_FRAME_OFFSET + 4].copy_from_slice(&frame.to_le_bytes());
         packet[VIDEO_PART_OFFSET..VIDEO_PART_OFFSET + 4].copy_from_slice(&part.to_le_bytes());
         packet[VIDEO_TOTAL_OFFSET..VIDEO_TOTAL_OFFSET + 4].copy_from_slice(&total.to_le_bytes());
+        let size = total * PART_BYTES as u32;
+        packet[VIDEO_SIZE_OFFSET..VIDEO_SIZE_OFFSET + 4].copy_from_slice(&size.to_le_bytes());
         packet
     }
 
     #[test]
-    fn a_frame_completes_once_with_parts_out_of_order_and_repeated() {
+    fn a_frame_is_rebuilt_in_order_once_with_parts_out_of_order_and_repeated() {
         let mut tracker = VideoTracker::default();
-        assert!(!tracker.observe(&part(1, 2, 3)));
-        assert!(!tracker.observe(&part(1, 0, 3)));
-        assert!(!tracker.observe(&part(1, 0, 3)));
-        assert!(tracker.observe(&part(1, 1, 3)));
-        assert!(!tracker.observe(&part(1, 1, 3)));
+        assert!(tracker.observe(&part(1, 2, 3)).is_none());
+        assert!(tracker.observe(&part(1, 0, 3)).is_none());
+        assert!(tracker.observe(&part(1, 0, 3)).is_none());
+        let frame = tracker.observe(&part(1, 1, 3)).unwrap();
+        assert!(tracker.observe(&part(1, 1, 3)).is_none());
+        assert_eq!(frame.number, 1);
+        assert_eq!(frame.body.len(), 3 * PART_BYTES);
+        assert_eq!(frame.body[0], 0);
+        assert_eq!(frame.body[PART_BYTES], 1);
+        assert_eq!(frame.body[2 * PART_BYTES], 2);
         assert_eq!(tracker.completed(), 1);
+        assert_eq!(tracker.received(), 1);
     }
 
     #[test]
     fn corrupt_packets_are_ignored() {
         let mut tracker = VideoTracker::default();
-        assert!(!tracker.observe(&[0x93, 0x01]));
-        assert!(!tracker.observe(&part(5, 0, 0)));
-        assert!(!tracker.observe(&part(5, 3, 3)));
-        assert!(!tracker.observe(&part(5, 0, MAX_VIDEO_PARTS + 1)));
-        assert!(!tracker.observe(&part(u32::MAX, 0, 1)));
+        assert!(tracker.observe(&[0x93, 0x01]).is_none());
+        assert!(tracker.observe(&part(5, 0, 0)).is_none());
+        assert!(tracker.observe(&part(5, 3, 3)).is_none());
+        assert!(tracker.observe(&part(5, 0, MAX_VIDEO_PARTS + 1)).is_none());
+        assert!(tracker.observe(&part(u32::MAX, 0, 1)).is_none());
         let mut wrong_magic = part(5, 0, 1);
         wrong_magic[0] = 0x3F;
-        assert!(!tracker.observe(&wrong_magic));
+        assert!(tracker.observe(&wrong_magic).is_none());
         assert_eq!(tracker.completed(), 0);
+    }
+
+    #[test]
+    fn a_frame_of_the_wrong_size_is_acknowledged_but_not_returned() {
+        let mut tracker = VideoTracker::default();
+        let mut damaged = part(1, 0, 1);
+        damaged[VIDEO_SIZE_OFFSET] += 1;
+        assert!(tracker.observe(&damaged).is_none());
+        assert_eq!(tracker.completed(), 1);
+        assert_eq!(tracker.received(), 0);
     }
 
     #[test]
@@ -378,8 +435,20 @@ mod tests {
     fn a_finished_frame_forgets_older_ones() {
         let mut tracker = VideoTracker::default();
         tracker.observe(&part(3, 0, 2));
-        assert!(tracker.observe(&part(4, 0, 1)));
-        assert!(!tracker.observe(&part(3, 1, 2)));
+        assert!(tracker.observe(&part(4, 0, 1)).is_some());
+        assert!(tracker.observe(&part(3, 1, 2)).is_none());
         assert_eq!(tracker.completed(), 4);
+    }
+
+    #[test]
+    fn skipping_asks_for_the_next_frame_without_counting_it_as_received() {
+        let mut tracker = VideoTracker::default();
+        tracker.observe(&part(1, 0, 1));
+        tracker.observe(&part(2, 0, 2));
+        tracker.skip();
+        assert_eq!(tracker.completed(), 2);
+        assert_eq!(tracker.received(), 1);
+        assert!(tracker.observe(&part(2, 1, 2)).is_none());
+        assert!(tracker.observe(&part(3, 0, 1)).is_some());
     }
 }

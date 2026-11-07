@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { getCameraController } from "../../features/camera/cameraService";
+import { droneDevice, getDroneSnapshot, subscribeDrone } from "../../features/drone/droneStatus";
 import { useThemeIs } from "../../shared/theme/useThemeIs";
 import { NAV_LABELS, NAV_ORDER, type AppTab, type NavStatusInput } from "./AppNav";
 
@@ -65,7 +66,7 @@ function Unit({ name, tone, text }: { name: string; tone: Tone; text: string }) 
   );
 }
 
-type DeviceTones = { headphones: Tone; watch: Tone; camera: Tone; watchText: string };
+type DeviceTones = { headphones: Tone; watch: Tone; camera: Tone; watchText: string; drone: { tone: Tone; text: string } };
 
 function HeaderBar({ activeTab, devices, now }: { activeTab: AppTab; devices: DeviceTones; now: Date }) {
   const headText = devices.headphones === "active" ? "ONLINE" : "OFFLINE";
@@ -85,6 +86,7 @@ function HeaderBar({ activeTab, devices, now }: { activeTab: AppTab; devices: De
           <Unit name="HEAD" tone={devices.headphones} text={headText} />
           <Unit name="WATCH" tone={devices.watch} text={devices.watchText} />
           <Unit name="CAM" tone={devices.camera} text={camText} />
+          <Unit name="DRONE" tone={devices.drone.tone} text={devices.drone.text} />
         </ul>
       </div>
       {/* The computer's time on a seven-segment display; the bottom bar shows it instead when the window is too narrow. */}
@@ -107,7 +109,7 @@ function Item({ label, tone, text }: { label: string; tone: Tone; text: string }
   );
 }
 
-function FooterBar({ headphonesConnected, watchConnected, watchWorn, recordingState, cameraOn, now }: NavStatusInput & { cameraOn: boolean; now: Date }) {
+function FooterBar({ headphonesConnected, watchConnected, watchWorn, recordingState, cameraOn, drone, now }: NavStatusInput & { cameraOn: boolean; drone: DeviceTones["drone"]; now: Date }) {
   const recording = recordingState === "recording" || recordingState === "arming";
   return (
     <footer className="nerv-footer" aria-label="System status">
@@ -119,6 +121,7 @@ function FooterBar({ headphonesConnected, watchConnected, watchWorn, recordingSt
           text={!watchConnected ? "OFFLINE" : watchWorn === false ? "OFF WRIST" : "ONLINE"}
         />
         <Item label="CAMERA" tone={cameraOn ? "active" : "offline"} text={cameraOn ? "ON" : "OFF"} />
+        <Item label="DRONE" tone={drone.tone} text={drone.text} />
         <Item label="RECORDER" tone={recording ? "caution" : "offline"} text={recordingState === "arming" ? "ARMING" : recording ? "RECORDING" : "IDLE"} />
       </ul>
       <time className="nerv-footer-clock" dateTime={now.toISOString()}>{clockText(now)}</time>
@@ -128,25 +131,28 @@ function FooterBar({ headphonesConnected, watchConnected, watchWorn, recordingSt
 
 /**
  * The NERV theme's top and bottom bars. The top bar names the system and the open page, with a caution triangle per device; the bottom bar shows which of the
- * headphones, watch, camera and recorder are live, and the computer's clock. Everything shown is read from the app's
+ * headphones, watch, camera, drone and recorder are live, and the computer's clock. Everything shown is read from the app's
  * own state: nothing is made up for effect. They exist only under the NERV theme.
  */
 export function NervBars({ activeTab, ...status }: { activeTab: AppTab } & NavStatusInput) {
   const nerv = useThemeIs("nerv");
   const camera = getCameraController();
   const cameraOn = useSyncExternalStore(camera.subscribe, () => camera.getSnapshot().status === "on", () => false);
+  const droneStatus = useSyncExternalStore(subscribeDrone, getDroneSnapshot, () => null);
   const now = useClock();
   if (!nerv) return null;
+  const drone = droneDevice(droneStatus);
   const devices: DeviceTones = {
     headphones: status.headphonesConnected ? "active" : "offline",
     watch: !status.watchConnected ? "offline" : status.watchWorn === false ? "caution" : "active",
     watchText: !status.watchConnected ? "OFFLINE" : status.watchWorn === false ? "OFF WRIST" : "ONLINE",
     camera: cameraOn ? "active" : "offline",
+    drone,
   };
   return (
     <>
       <HeaderBar activeTab={activeTab} devices={devices} now={now} />
-      <FooterBar {...status} cameraOn={cameraOn} now={now} />
+      <FooterBar {...status} cameraOn={cameraOn} drone={drone} now={now} />
     </>
   );
 }

@@ -14,6 +14,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 chrono.workspace = true
 automation = { path = "../../../crates/automation" }
+drone-link = { path = "../../../crates/drone-link" }
 head-tracking = { path = "../../../crates/head-tracking" }
 label-inference = { path = "../../../crates/label-inference" }
 model-lab-core = { path = "../../../crates/model-lab-core" }

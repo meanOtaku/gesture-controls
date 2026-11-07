@@ -96,6 +96,7 @@ const ModelLab = memo(lazy(() => import("../features/model-lab/components/ModelL
 const RecipesPage = memo(lazy(() => import("../features/recipes/components/RecipesPage").then((m) => ({ default: m.RecipesPage }))));
 const GesturesPage = memo(lazy(() => import("../features/gestures/components/GesturesPage").then((m) => ({ default: m.GesturesPage }))));
 const VirtualDevicesPage = memo(lazy(() => import("../features/devices/components/VirtualDevicesPage").then((m) => ({ default: m.VirtualDevicesPage }))));
+const DronePage = memo(lazy(() => import("../features/drone/DronePage").then((m) => ({ default: m.DronePage }))));
 const LabelsPage = memo(lazy(() => import("../features/labels/LabelsPage").then((m) => ({ default: m.LabelsPage }))));
 const GestureLibraryPage = memo(lazy(() => import("../features/gestureLibrary/GestureLibraryPage").then((m) => ({ default: m.GestureLibraryPage }))));
 const Settings = lazy(() => import("../features/settings/components/Settings").then((m) => ({ default: m.Settings })));
@@ -341,6 +342,8 @@ function MainApp() {
     const handleKeyboard = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         hideOverlay();
+        // Lands rather than stops: Down is the one way of stopping the motors proven on the drone.
+        if (inTauri) void Promise.resolve(invoke("drone_land")).catch(() => {});
         return;
       }
       const target = event.target;
@@ -720,6 +723,7 @@ function MainApp() {
         onMakeRecipe={makeRecipeFromDevice}
       />
     )}
+    {activeTab === "drone" && <DronePage />}
     {activeTab === "gestures" && (
       <GesturesPage
         heuristics={settings?.heuristicGestures}

@@ -850,6 +850,7 @@ dependencies = [
 name = "drone-link"
 version = "0.1.0"
 dependencies = [
+ "jpeg-decoder",
  "thiserror 2.0.21",
 ]
 
@@ -1895,6 +1896,12 @@ dependencies = [
  "quote",
  "syn 2.0.119",
 ]
+
+[[package]]
+name = "jpeg-decoder"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00810f1d8b74be64b13dbf3db89ac67740615d6c891f0e7b6179326533011a07"
 
 [[package]]
 name = "js-sys"
@@ -3508,6 +3515,7 @@ version = "0.1.0"
 dependencies = [
  "automation",
  "chrono",
+ "drone-link",
  "head-tracking",
  "interaction-engine",
  "label-inference",

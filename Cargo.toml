@@ -53,3 +53,10 @@ opt-level = 3
 
 [profile.dev.package.pinch-inference]
 opt-level = 3
+
+# Video decoding and image motion run on every video frame even in `tauri dev`.
+[profile.dev.package.drone-link]
+opt-level = 3
+
+[profile.dev.package.jpeg-decoder]
+opt-level = 3

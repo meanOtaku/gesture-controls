@@ -12,6 +12,7 @@ mod automation;
 mod calibration;
 mod dataset_files;
 mod detector_events;
+mod drone;
 mod gesture_library;
 mod gesture_samples;
 mod head_pose;
@@ -59,6 +60,15 @@ fn exit_gracefully(handle: tauri::AppHandle, reason: &'static str) {
     }
     info!(reason, "shutting down: releasing the watch transports");
     tauri::async_runtime::spawn(async move {
+        // Closing the link lands an armed drone first, so this comes before anything else goes away.
+        let drone_link = handle.state::<drone::DroneRuntime>().take_link();
+        let closing = tauri::async_runtime::spawn_blocking(move || drop(drone_link));
+        if tokio::time::timeout(TEARDOWN_TIMEOUT, closing)
+            .await
+            .is_err()
+        {
+            warn!(timeout = ?TEARDOWN_TIMEOUT, "closing the drone link timed out; exiting anyway");
+        }
         if let Some(server) = handle.try_state::<Arc<WatchBridgeServer>>() {
             // Both transports are torn down regardless of which one is selected, so neither a
             // listener nor a GATT connection outlives the app. The whole teardown is bounded:
@@ -149,6 +159,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .manage(automation::AutomationRuntime::default())
+        .manage(drone::DroneRuntime::default())
         .manage(label_runtime::LabelRuntimeHost::default())
         .manage(label_training::LabelTrainingRuntime::default())
         .manage(calibration::CalibrationRuntime::default())
@@ -163,6 +174,17 @@ pub fn run() {
         .manage(recording_bundle::RawColumnCache::default())
         .invoke_handler(tauri::generate_handler![
             calibration::get_calibration_state,
+            drone::get_drone_state,
+            drone::drone_frame,
+            drone::drone_heartbeat,
+            drone::drone_set_hold,
+            drone::drone_reset_drift,
+            drone::drone_connect,
+            drone::drone_disconnect,
+            drone::drone_arm,
+            drone::drone_take_off,
+            drone::drone_land,
+            drone::drone_stop,
             label_runtime::get_label_runtime_status,
             label_runtime::get_hand_steadiness,
             label_runtime::get_label_registry_usage,
@@ -363,8 +385,12 @@ pub fn run() {
                                     watch_handle
                                         .state::<automation::AutomationRuntime>()
                                         .set_stem(&watch_handle, sample.state == BUTTON_STATE_DOWN);
+                                    watch_handle
+                                        .state::<drone::DroneRuntime>()
+                                        .set_button(sample.state == BUTTON_STATE_DOWN);
                                 }
                                 WatchEvent::Disconnected => {
+                                    watch_handle.state::<drone::DroneRuntime>().watch_lost();
                                     watch_handle
                                         .state::<automation::AutomationRuntime>()
                                         .watch_lost(&watch_handle);
@@ -373,6 +399,9 @@ pub fn run() {
                                         .watch_lost(&watch_handle);
                                 }
                                 WatchEvent::Orientation(sample) => {
+                                    watch_handle
+                                        .state::<drone::DroneRuntime>()
+                                        .observe_orientation(sample);
                                     watch_handle
                                         .state::<automation::AutomationRuntime>()
                                         .observe_orientation(&watch_handle, sample);
@@ -390,6 +419,7 @@ pub fn run() {
                                     watch_handle
                                         .state::<label_runtime::LabelRuntimeHost>()
                                         .fail(&watch_handle, "a malformed or out-of-order watch message");
+                                    watch_handle.state::<drone::DroneRuntime>().release();
                                     watch_handle.state::<automation::AutomationRuntime>().cancel(&watch_handle);
                                 }
                                 WatchEvent::WearStateUpdated(sample) if sample.worn => {
@@ -422,6 +452,7 @@ pub fn run() {
                         }
                         Err(error) => {
                             warn!(%error, "watch event receiver lagged or closed; failing closed");
+                            watch_handle.state::<drone::DroneRuntime>().release();
                             watch_handle.state::<automation::AutomationRuntime>().cancel(&watch_handle);
                             // `Lagged` is recoverable (events were dropped, the
                             // stream continues); `Closed` is permanent, and

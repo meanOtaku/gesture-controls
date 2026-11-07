@@ -9,6 +9,7 @@ vi.mock("../../features/camera/cameraService", () => ({
   }),
 }));
 
+import { publishDroneState, type DroneState } from "../../features/drone/droneStatus";
 import { NervBars, sectionIdentifier } from "./NervBars";
 
 const base = { activeTab: "main" as const, headphonesConnected: false, watchConnected: false, watchWorn: null, recordingState: "idle" as const };
@@ -19,8 +20,33 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  publishDroneState(null);
   vi.useRealTimers();
   document.documentElement.removeAttribute("data-theme");
+});
+
+const drone: DroneState = {
+  phase: "open", armed: false, failsafeTripped: false, steering: false, watchStreaming: false, framesSent: 0, videoFrames: 0,
+  videoSkipped: 0, videoDamaged: 0, sendErrors: 0, flow: null, driftX: 0, driftY: 0, holding: false, correction: null, pageAlive: false,
+};
+
+describe("NervBars' drone", () => {
+  it("is a fourth triangle after the camera, and offline with no link", () => {
+    render(<NervBars {...base} />);
+    const units = within(screen.getByRole("list", { name: "Devices" })).getAllByRole("listitem");
+    expect(units.map((unit) => unit.getAttribute("aria-label"))).toEqual(["HEAD: OFFLINE", "WATCH: OFFLINE", "CAM: OFF", "DRONE: OFFLINE"]);
+    expect(within(screen.getByRole("contentinfo")).getByText("DRONE").nextElementSibling?.textContent).toBe("○ OFFLINE");
+  });
+
+  it("follows the link, in both bars, warning once armed", async () => {
+    render(<NervBars {...base} />);
+    await act(async () => { publishDroneState(drone); await Promise.resolve(); });
+    const unit = screen.getByRole("listitem", { name: "DRONE: ONLINE" });
+    expect(unit).toHaveAttribute("data-tone", "active");
+    await act(async () => { publishDroneState({ ...drone, armed: true }); await Promise.resolve(); });
+    expect(screen.getByRole("listitem", { name: "DRONE: ARMED" })).toHaveAttribute("data-tone", "caution");
+    expect(within(screen.getByRole("contentinfo")).getByText("DRONE").nextElementSibling?.textContent).toBe("▲ ARMED");
+  });
 });
 
 describe("NervBars", () => {

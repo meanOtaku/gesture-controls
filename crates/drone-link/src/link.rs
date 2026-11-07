@@ -1,11 +1,13 @@
 //! Talks to the drone over UDP: opens the session as the app does, then sends one control frame per period.
 //!
 //! All sending happens on one thread, so a slow caller cannot delay frames, and a caller that disappears is caught by
-//! the pilot rather than leaving the last sticks in place. Video is requested only because the drone expects it. It
-//! is not a sign of the link's health: it almost stopped while the motors ran on the bench.
+//! the pilot rather than leaving the last sticks in place. Video is decoded on a second thread for the same reason,
+//! and frames are dropped rather than queued when it falls behind. The drone sends video only when asked, so a frame
+//! that never completes is skipped: waiting for it would stall the picture.
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -13,10 +15,12 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 
 use crate::frame::{
-    Button, Sticks, VERSION_QUERY, VIDEO_START, VideoTracker, control_frame, empty_frame,
-    opening_request_frame, setup_frame,
+    Button, Sticks, VERSION_QUERY, VIDEO_START, VideoFrame, VideoTracker, control_frame,
+    empty_frame, opening_request_frame, setup_frame,
 };
+use crate::hold::{Correction, HoldConfig};
 use crate::pilot::{Pilot, PilotConfig, PilotError};
+use crate::vision::{Flow, Luma, MIN_CONFIDENCE, measure, to_jpeg};
 
 const MAX_DATAGRAM: usize = 2048;
 const SHORTEST_READ_TIMEOUT: Duration = Duration::from_millis(1);
@@ -24,6 +28,8 @@ const SHORTEST_READ_TIMEOUT: Duration = Duration::from_millis(1);
 const MIN_VIDEO_FRAMES_TO_ARM: u32 = 5;
 /// The gap between the app's opening frames.
 const OPENING_GAP: Duration = Duration::from_millis(27);
+/// A frame not finished by now is given up on. The phone app gets about 15 a second, so this is a few frames' time.
+const SKIP_FRAME_AFTER: Duration = Duration::from_millis(200);
 
 /// Where the drone is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,14 +74,36 @@ pub enum LinkPhase {
     Closed,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LinkStatus {
     pub phase: LinkPhase,
     pub armed: bool,
     pub failsafe_tripped: bool,
     pub frames_sent: u64,
+    /// Whole video frames received.
     pub video_frames: u32,
+    /// Video frames given up on.
+    pub video_skipped: u32,
+    /// Frames that arrived whole but would not decode.
+    pub video_damaged: u32,
     pub send_errors: u64,
+    /// How the picture moved between the last two good frames, and which frame that was.
+    pub flow: Option<(u32, Flow)>,
+    /// Confident movement added up since the last reset, in pixels of the shrunken image.
+    pub drift: (f32, f32),
+    /// Confident zoom added up since the last reset.
+    pub zoom_total: f32,
+    /// True while corrections are reaching the sticks.
+    pub holding: bool,
+    /// What the hold would send, whether or not it is on. `None` when the picture cannot be trusted.
+    pub correction: Option<Correction>,
+}
+
+/// The newest good video frame, as a complete JPEG.
+#[derive(Debug, PartialEq, Eq)]
+pub struct LiveFrame {
+    pub number: u32,
+    pub jpeg: Vec<u8>,
 }
 
 #[derive(Debug, Error)]
@@ -93,7 +121,28 @@ pub enum LinkError {
 struct Shared {
     pilot: Mutex<Pilot>,
     status: Mutex<LinkStatus>,
+    latest_frame: Mutex<Option<Arc<LiveFrame>>>,
     closing: AtomicBool,
+}
+
+impl Shared {
+    fn add_flow(&self, flow: Option<(u32, Flow)>) {
+        let correction = {
+            let mut status = lock(&self.status);
+            status.flow = flow;
+            if let Some((_, flow)) = flow.filter(|(_, flow)| flow.confidence >= MIN_CONFIDENCE) {
+                status.drift.0 += flow.dx;
+                status.drift.1 += flow.dy;
+                status.zoom_total += flow.zoom;
+            }
+            let correction = flow.and_then(|(_, flow)| {
+                HoldConfig::default().correct(status.drift.0, status.zoom_total, flow)
+            });
+            status.correction = correction;
+            correction
+        };
+        lock(&self.pilot).set_correction(correction, Instant::now());
+    }
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -120,10 +169,20 @@ impl Link {
                 failsafe_tripped: false,
                 frames_sent: 0,
                 video_frames: 0,
+                video_skipped: 0,
+                video_damaged: 0,
                 send_errors: 0,
+                flow: None,
+                drift: (0.0, 0.0),
+                zoom_total: 0.0,
+                holding: false,
+                correction: None,
             }),
+            latest_frame: Mutex::new(None),
             closing: AtomicBool::new(false),
         });
+        // Room for one frame: the picture should be the newest, not a queue of old ones.
+        let (frames, decoding) = sync_channel(1);
         let worker = Worker {
             control: unbound_socket(endpoint.host)?,
             aux: unbound_socket(endpoint.host)?,
@@ -132,8 +191,13 @@ impl Link {
             timing,
             shared: Arc::clone(&shared),
             video: VideoTracker::default(),
+            frames,
             buffer: vec![0; MAX_DATAGRAM],
         };
+        let vision = Arc::clone(&shared);
+        std::thread::Builder::new()
+            .name("drone-vision".into())
+            .spawn(move || decode_video(&decoding, &vision))?;
         let worker = std::thread::Builder::new()
             .name("drone-link".into())
             .spawn(move || worker.run())?;
@@ -145,6 +209,33 @@ impl Link {
 
     pub fn status(&self) -> LinkStatus {
         *lock(&self.shared.status)
+    }
+
+    /// Makes the current view the point drift is measured from.
+    pub fn reset_drift(&self) {
+        let mut status = lock(&self.shared.status);
+        status.drift = (0.0, 0.0);
+        status.zoom_total = 0.0;
+        status.correction = None;
+    }
+
+    /// Starts holding the current view, or stops. Refused unless armed.
+    pub fn set_hold(&self, enabled: bool) -> Result<(), LinkError> {
+        let mut pilot = lock(&self.shared.pilot);
+        if enabled && !pilot.is_armed() {
+            return Err(PilotError::NotArmed.into());
+        }
+        drop(pilot);
+        if enabled {
+            self.reset_drift();
+        }
+        pilot = lock(&self.shared.pilot);
+        pilot.set_hold(enabled);
+        Ok(())
+    }
+
+    pub fn latest_frame(&self) -> Option<Arc<LiveFrame>> {
+        lock(&self.shared.latest_frame).clone()
     }
 
     /// Allows flight. Refused until the drone is visibly answering us. The caller must then keep calling
@@ -188,6 +279,31 @@ impl Drop for Link {
     }
 }
 
+/// Decodes frames until the link closes. Runs apart from sending, so a slow frame cannot delay a command.
+fn decode_video(frames: &Receiver<VideoFrame>, shared: &Shared) {
+    let mut previous: Option<(u32, Luma)> = None;
+    for frame in frames {
+        let jpeg = to_jpeg(&frame.body);
+        let Some(luma) = Luma::decode(&jpeg) else {
+            let mut status = lock(&shared.status);
+            status.video_damaged += 1;
+            status.flow = None;
+            drop(status);
+            previous = None;
+            continue;
+        };
+        let flow = previous
+            .as_ref()
+            .map(|(_, before)| (frame.number, measure(before, &luma)));
+        shared.add_flow(flow);
+        *lock(&shared.latest_frame) = Some(Arc::new(LiveFrame {
+            number: frame.number,
+            jpeg,
+        }));
+        previous = Some((frame.number, luma));
+    }
+}
+
 fn unbound_socket(host: IpAddr) -> std::io::Result<UdpSocket> {
     let any: IpAddr = match host {
         IpAddr::V4(_) => Ipv4Addr::UNSPECIFIED.into(),
@@ -205,6 +321,7 @@ struct Worker {
     timing: LinkTiming,
     shared: Arc<Shared>,
     video: VideoTracker,
+    frames: SyncSender<VideoFrame>,
     buffer: Vec<u8>,
 }
 
@@ -268,9 +385,18 @@ impl Worker {
     fn fly(&mut self) {
         let mut sequence: u16 = 1;
         let mut next = Instant::now();
+        let mut waiting_for = self.video.completed();
+        let mut waiting_since = next;
         loop {
             let now = Instant::now();
-            let (control, armed, failsafe) = {
+            if self.video.completed() != waiting_for {
+                waiting_for = self.video.completed();
+                waiting_since = now;
+            } else if now.duration_since(waiting_since) >= SKIP_FRAME_AFTER {
+                self.video.skip();
+                lock(&self.shared.status).video_skipped += 1;
+            }
+            let (control, armed, failsafe, holding) = {
                 let mut pilot = lock(&self.shared.pilot);
                 let closing = self.shared.closing.load(Ordering::SeqCst);
                 if closing {
@@ -280,7 +406,12 @@ impl Worker {
                 if closing && !pilot.is_busy() {
                     return;
                 }
-                (control, pilot.is_armed(), pilot.failsafe_tripped())
+                (
+                    control,
+                    pilot.is_armed(),
+                    pilot.failsafe_tripped(),
+                    pilot.is_holding(),
+                )
             };
             self.send(&control_frame(sequence, control, self.video.completed()));
             sequence = sequence.wrapping_add(1);
@@ -289,6 +420,7 @@ impl Worker {
                 status.frames_sent += 1;
                 status.armed = armed;
                 status.failsafe_tripped = failsafe;
+                status.holding = holding;
             }
             next = (next + self.timing.period).max(Instant::now());
             self.pump(next.saturating_duration_since(Instant::now()));
@@ -311,10 +443,13 @@ impl Worker {
             let Ok((length, source)) = self.control.recv_from(&mut self.buffer) else {
                 continue;
             };
-            if source.ip() == self.control_address.ip()
-                && self.video.observe(&self.buffer[..length])
-            {
-                lock(&self.shared.status).video_frames = self.video.completed();
+            if source.ip() != self.control_address.ip() {
+                continue;
+            }
+            if let Some(frame) = self.video.observe(&self.buffer[..length]) {
+                lock(&self.shared.status).video_frames = self.video.received();
+                // Busy decoding the last one: this frame is dropped, not queued.
+                let _ = self.frames.try_send(frame);
             }
         }
     }
