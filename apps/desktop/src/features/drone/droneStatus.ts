@@ -32,6 +32,7 @@ export interface DroneState {
   flightLog: string | null;
   pageAlive: boolean;
   onNetwork: boolean;
+  firmware: string | null;
 }
 
 /** The drone's state, and the video frames arriving each second, or null until a second has passed. */
@@ -91,6 +92,11 @@ export function subscribeDrone(listener: () => void): () => void {
 }
 
 export const getDroneSnapshot = () => snapshot;
+
+/** The version in a firmware name such as `(NOFLOW)FLOW_720P_V1.4.17_20250520`, short enough for a small panel. */
+export function firmwareVersion(firmware: string | null): string | null {
+  return firmware?.match(/V\d+(?:\.\d+)+/)?.[0] ?? firmware;
+}
 
 /** The drone as a device, the way the top and bottom bars show one. */
 export function droneDevice(status: DroneStatus | null): { tone: DroneTone; text: string } {

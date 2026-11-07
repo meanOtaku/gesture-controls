@@ -194,6 +194,7 @@ is known about it are in [WIFI UAV drone](../protocols/wifi-uav-drone.md).
 | The height buttons move only the throttle, within ±40 and the throttle limit. They are sent with each heartbeat and lapse after 300 ms | desktop `drone.rs` `heartbeat`, `DronePage.tsx` |
 | Malformed watch data or a lagging event stream ends steering but keeps the hover | desktop `drone.rs` `release` |
 | Landing or stopping cannot be steered, and Stop cannot be interrupted | `drone-link` `pilot.rs` |
+| Gyro calibration is refused while armed, because it needs the drone still on the ground. The drone never says whether it is flying, so a drone that landed itself after a failsafe could still be in the air: only calibrate one you can see is down | `drone-link` `pilot.rs` `press` |
 | Esc lands, from any page. Closing the app or disconnecting lands first | desktop `App.tsx`, `drone.rs`; `drone-link` `link.rs` `fly` |
 
 Esc presses Down rather than Stop on purpose. Down is the only way of stopping the

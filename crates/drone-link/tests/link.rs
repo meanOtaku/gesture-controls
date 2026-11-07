@@ -65,6 +65,12 @@ impl FakeDrone {
                     if data == [0xEF, 0x00, 0x04, 0x00] {
                         serve(&video, 1, source);
                     }
+                    if data == [0xEF, 0x20, 0x06, 0x00, 0x01, 0x65] {
+                        let mut reply =
+                            vec![0x93, 0x04, 0x20, 0, 0x10, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x65];
+                        reply.extend_from_slice(b"(NOFLOW)TEST_V1");
+                        let _ = video.send_to(&reply, source);
+                    }
                     record(&log, data);
                     if length == 124 {
                         let wanted = u32::from_le_bytes(data[108..112].try_into().unwrap());
@@ -170,6 +176,32 @@ fn sends_idle_frames_at_the_app_rate_and_video_advances() {
     );
     assert_eq!(drone.bad_checksums(), 0);
     assert!(link.status().video_frames > 8);
+}
+
+#[test]
+fn the_firmware_name_is_picked_up() {
+    let drone = FakeDrone::start(true);
+    let link = open(&drone);
+    wait_until("firmware", || link.firmware().is_some());
+    assert_eq!(link.firmware().as_deref(), Some("(NOFLOW)TEST_V1"));
+}
+
+#[test]
+fn gyro_calibration_reaches_the_drone_on_the_ground_only() {
+    let drone = FakeDrone::start(true);
+    let link = open(&drone);
+    link.press(Button::GyroCheck).unwrap();
+    wait_until("calibrate", || {
+        drone.seen().iter().any(|seen| seen.flags == 0xC0)
+    });
+    assert!(drone.seen().iter().all(|seen| seen.sticks == [0x80; 4]));
+    wait_until("release", || !link.status().armed);
+    sleep(Duration::from_millis(200));
+    link.arm().unwrap();
+    assert!(matches!(
+        link.press(Button::GyroCheck),
+        Err(LinkError::Pilot(PilotError::Armed))
+    ));
 }
 
 #[test]

@@ -142,7 +142,8 @@ with the battery switch within reach.
 
 1. Join the drone's Wi-Fi on this computer. The app connects by itself within a second or so, without arming or starting
    the drone. Keep the watch on Bluetooth, because the Wi-Fi is now taken.
-2. Open **Drone** and choose **Arm**. If you chose **Disconnect** earlier, choose **Connect** first.
+2. Open **Drone**. If you chose **Disconnect** earlier, choose **Connect** first. To calibrate the gyro, stand the drone on a flat
+   surface, keep it still and choose **Calibrate gyro**, which only works before arming. Then choose **Arm**.
 3. Choose **Take off**. Hold the watch button and tilt your wrist to steer. Let go to stop steering.
 4. Choose **Land**, or press Esc on any page. **Stop** may cut the motors in the air, so keep it for when landing fails.
 

@@ -176,6 +176,7 @@ pub fn run() {
             calibration::get_calibration_state,
             drone::get_drone_state,
             drone::drone_frame,
+            drone::drone_calibrate_gyro,
             drone::drone_heartbeat,
             drone::drone_set_hold,
             drone::drone_reset_drift,

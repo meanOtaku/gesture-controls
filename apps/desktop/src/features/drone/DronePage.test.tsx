@@ -27,6 +27,7 @@ const idle: DroneState = {
   flightLog: null,
   pageAlive: false,
   onNetwork: false,
+  firmware: null,
 };
 
 async function show(state: Partial<DroneState>) {
@@ -101,6 +102,23 @@ describe("DronePage", () => {
     cleanup();
     await show({ phase: "open" });
     expect(invoke).toHaveBeenCalledWith("drone_heartbeat", { height: 0 });
+  });
+
+  it("calibrates the gyro only when connected and not armed", async () => {
+    await show({});
+    expect(button("Calibrate gyro").disabled).toBe(true);
+    cleanup();
+    await show({ phase: "open" });
+    fireEvent.click(button("Calibrate gyro"));
+    expect(invoke).toHaveBeenCalledWith("drone_calibrate_gyro");
+    cleanup();
+    await show({ phase: "open", armed: true });
+    expect(button("Calibrate gyro").disabled).toBe(true);
+  });
+
+  it("shows the firmware name once the drone gives it", async () => {
+    await show({ phase: "open", firmware: "(NOFLOW)FLOW_720P_V1.4.17_20250520" });
+    expect(screen.getByText(/Firmware \(NOFLOW\)FLOW_720P_V1\.4\.17_20250520\./)).toBeTruthy();
   });
 
   it("offers height control only once armed", async () => {

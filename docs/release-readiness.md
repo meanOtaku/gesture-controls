@@ -195,6 +195,24 @@ to this checklist for each release candidate.
   ARM64 artifacts, and clean-host installation remain release gates beyond a successful
   CI package build.
 
+## Drone control
+
+Experimental, and not required for a release that does not offer it. See [Drone control](architecture/drone.md). Run with the
+props off unless a row says otherwise, with the drone secured and its battery switch within reach. Record the drone's model and
+firmware name.
+
+- [ ] Joining the drone's Wi-Fi connects by itself, without arming, and Disconnect stays disconnected until Connect is chosen or
+  the Wi-Fi is left.
+- [ ] The firmware name and live video appear, and the marker follows when the drone is carried and returns.
+- [ ] Calibrate gyro works on the ground, and is refused while armed.
+- [ ] Arm, Take off and Land start and stop the motors from the app, and a flight recording appears.
+- [ ] Hold position refuses on a drone that is held still, and centres the sticks.
+- [ ] Closing the Drone page while armed tells the drone to land within about a second.
+- [ ] Esc lands from any page while the window is focused.
+- [ ] What the drone does when commands stop has been measured and recorded.
+- [ ] With the props on, in open space: Climb, Descend and Land behave as expected, and Stop has been tried with the drone low.
+- [ ] With the props on: hold starts, reduces drift, and hands back cleanly.
+
 ## Release decision
 
 Do not call the candidate hardware-validated until every applicable checked item has
@@ -213,6 +231,7 @@ man-in-the-middle protection (see the
 Related references: [running the project](development/running-project.md),
 [Watch setup](../apps/watch/README.md), [Watch protocol](protocols/watch-websocket-protocol.md),
 [Watch BLE transport](protocols/watch-ble-transport.md),
+[drone control](architecture/drone.md),
 [components and deployment](architecture/components-and-deployment.md),
 [safety and fail-closed behavior](architecture/safety-and-fail-closed-behavior.md),
 [review remediation](review-remediation.md), and the

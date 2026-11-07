@@ -21,6 +21,11 @@ const SETUP_LENGTH: usize = 108;
 const REQUEST_LENGTH: usize = 124;
 
 const VIDEO_MAGIC: [u8; 2] = [0x93, 0x01];
+const TEXT_MAGIC: [u8; 2] = [0x93, 0x04];
+const FIRMWARE_REPLY: [u8; 2] = [0x01, 0x65];
+const FIRMWARE_MARKER_OFFSET: usize = 12;
+const FIRMWARE_TEXT_OFFSET: usize = 14;
+const MAX_FIRMWARE_CHARS: usize = 120;
 const VIDEO_HEADER_LENGTH: usize = 56;
 const VIDEO_FRAME_OFFSET: usize = 16;
 const VIDEO_PART_OFFSET: usize = 32;
@@ -160,6 +165,23 @@ pub fn control_frame(sequence: u16, control: Control, received: u32) -> [u8; REQ
         base(2, REQUEST_LENGTH as u16, Some((sequence, control))),
         received,
     )
+}
+
+/// The firmware name, if this packet is the reply to [`VERSION_QUERY`].
+pub fn parse_firmware(packet: &[u8]) -> Option<String> {
+    if packet.len() <= FIRMWARE_TEXT_OFFSET
+        || packet[..2] != TEXT_MAGIC
+        || packet[FIRMWARE_MARKER_OFFSET..FIRMWARE_TEXT_OFFSET] != FIRMWARE_REPLY
+    {
+        return None;
+    }
+    let text: String = packet[FIRMWARE_TEXT_OFFSET..]
+        .iter()
+        .take(MAX_FIRMWARE_CHARS)
+        .take_while(|byte| (0x20..0x7F).contains(*byte))
+        .map(|byte| char::from(*byte))
+        .collect();
+    (!text.is_empty()).then_some(text)
 }
 
 /// A whole video frame, still without its JPEG header.
@@ -365,6 +387,42 @@ mod tests {
         assert!(request[12..82].iter().all(|byte| *byte == 0));
         assert_eq!(request[88], 1);
         assert_eq!(request[108], 2);
+    }
+
+    /// A real reply, from the drone in the reversing repo's capture.
+    const FIRMWARE_PACKET: &str = "930441001000000035000501016528464c4f5729464c4f575f373230505f5631\
+                                   2e342e315f32303233303630355f4265746128433232292c493d333635333030\
+                                   30";
+
+    #[test]
+    fn the_firmware_name_is_read_from_its_reply() {
+        let packet = bytes(FIRMWARE_PACKET);
+        assert_eq!(
+            parse_firmware(&packet).as_deref(),
+            Some("(FLOW)FLOW_720P_V1.4.1_20230605_Beta(C22),I=3653000")
+        );
+    }
+
+    #[test]
+    fn other_packets_are_not_a_firmware_name() {
+        assert_eq!(parse_firmware(&part(1, 0, 1)), None);
+        assert_eq!(parse_firmware(&[0x93, 0x04]), None);
+        // The reply to a text command: the same kind of packet with another marker.
+        let mut reply = vec![0x93, 0x04, 0x13, 0, 2, 0, 0, 0, 7, 0, 0, 0, 0x01, 0x67];
+        reply.extend_from_slice(b"<e=0>");
+        assert_eq!(parse_firmware(&reply), None);
+    }
+
+    #[test]
+    fn a_firmware_name_stops_at_anything_unprintable_and_is_bounded() {
+        let mut packet = vec![0; 12];
+        packet[..2].copy_from_slice(&TEXT_MAGIC);
+        packet.extend_from_slice(&FIRMWARE_REPLY);
+        packet.extend_from_slice(b"NAME\xFFjunk");
+        assert_eq!(parse_firmware(&packet).as_deref(), Some("NAME"));
+        packet.truncate(14);
+        packet.extend_from_slice(&[b'A'; 500]);
+        assert_eq!(parse_firmware(&packet).map(|name| name.len()), Some(120));
     }
 
     const PART_BYTES: usize = 8;

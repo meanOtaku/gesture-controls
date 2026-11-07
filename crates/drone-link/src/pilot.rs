@@ -47,6 +47,8 @@ impl Default for PilotConfig {
 pub enum PilotError {
     #[error("the drone is not armed")]
     NotArmed,
+    #[error("calibrating needs the drone on the ground, so land first")]
+    Armed,
     #[error("another button is still being held")]
     Busy,
 }
@@ -148,9 +150,18 @@ impl Pilot {
                     return Err(PilotError::Busy);
                 }
             }
-            Button::Up | Button::GyroCheck => {
+            Button::Up => {
                 if !self.armed {
                     return Err(PilotError::NotArmed);
+                }
+                if self.press.is_some() {
+                    return Err(PilotError::Busy);
+                }
+            }
+            // The drone never says whether it is flying, and armed is the nearest thing to knowing.
+            Button::GyroCheck => {
+                if self.armed {
+                    return Err(PilotError::Armed);
                 }
                 if self.press.is_some() {
                     return Err(PilotError::Busy);
@@ -271,10 +282,6 @@ mod tests {
         let (mut pilot, start) = pilot();
         pilot.set_sticks(pushed(0xFF), start);
         assert_eq!(pilot.press(Button::Up, start), Err(PilotError::NotArmed));
-        assert_eq!(
-            pilot.press(Button::GyroCheck, start),
-            Err(PilotError::NotArmed)
-        );
         assert_eq!(pilot.tick(start + ms(10)), Control::IDLE);
     }
 
@@ -295,7 +302,6 @@ mod tests {
         pilot.arm(start);
         pilot.press(Button::Up, start).unwrap();
         assert_eq!(pilot.press(Button::Up, start), Err(PilotError::Busy));
-        assert_eq!(pilot.press(Button::GyroCheck, start), Err(PilotError::Busy));
     }
 
     #[test]
@@ -385,6 +391,27 @@ mod tests {
         pilot.arm(later);
         assert!(!pilot.failsafe_tripped());
         assert_eq!(pilot.tick(later), Control::IDLE);
+    }
+
+    #[test]
+    fn gyro_calibration_runs_only_on_the_ground() {
+        let (mut pilot, start) = pilot();
+        pilot.press(Button::GyroCheck, start).unwrap();
+        assert_eq!(pilot.tick(start).flags, 0xC0);
+        assert_eq!(pilot.tick(start).sticks, Sticks::CENTRED);
+        assert_eq!(pilot.tick(start + ms(1100)), Control::IDLE);
+        pilot.arm(start + ms(1100));
+        assert_eq!(
+            pilot.press(Button::GyroCheck, start + ms(1100)),
+            Err(PilotError::Armed)
+        );
+    }
+
+    #[test]
+    fn gyro_calibration_cannot_interrupt_a_landing() {
+        let (mut pilot, start) = pilot();
+        pilot.press(Button::Down, start).unwrap();
+        assert_eq!(pilot.press(Button::GyroCheck, start), Err(PilotError::Busy));
     }
 
     fn push() -> Correction {

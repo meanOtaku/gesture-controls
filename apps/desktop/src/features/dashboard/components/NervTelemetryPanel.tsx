@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { HeadTrackerStatus, PpgState, WatchStatus } from "../../../shared/protocol/events";
 import { useThemeIs } from "../../../shared/theme/useThemeIs";
-import { droneDevice, getDroneSnapshot, subscribeDrone, type DroneStatus } from "../../drone/droneStatus";
+import { droneDevice, firmwareVersion, getDroneSnapshot, subscribeDrone, type DroneStatus } from "../../drone/droneStatus";
 
 const COLLAPSED_KEY = "nervTelemetryCollapsed";
 const MAX_LOG = 8;
@@ -85,6 +85,7 @@ function DroneModule({ status }: { status: DroneStatus | null }) {
       <header><span>03 / DRONE</span><StatusTag tone={device.tone} text={device.tone === "offline" ? undefined : `${TAGS[device.tone].slice(0, 1)} ${device.text}`} /></header>
       {live && status ? (
         <>
+          {status.firmware && <Row label="FIRMWARE" value={firmwareVersion(status.firmware) ?? "—"} />}
           <Row label="ARMED" value={status.armed ? "▲ YES" : "○ NO"} />
           <Row label="HOLD" value={status.holding ? "▲ ON" : "○ OFF"} />
           <Row label="VIDEO" value={status.videoRate !== null ? String(status.videoRate) : "—"} unit={status.videoRate !== null ? " /s" : undefined} />

@@ -205,7 +205,7 @@ export function DronePage() {
             : <Button disabled={!state} onClick={() => run("drone_connect")}>Connect</Button>}
           {state && (
             <p className="subtitle">
-              Video {frameRate ?? "–"} frames a second, total {state.videoFrames}, skipped {state.videoSkipped}, damaged {state.videoDamaged}, commands sent {state.framesSent}, send errors {state.sendErrors}, watch {state.watchStreaming ? "streaming" : "not streaming"}
+              {state.firmware && <>Firmware {state.firmware}. </>}Video {frameRate ?? "–"} frames a second, total {state.videoFrames}, skipped {state.videoSkipped}, damaged {state.videoDamaged}, commands sent {state.framesSent}, send errors {state.sendErrors}, watch {state.watchStreaming ? "streaming" : "not streaming"}
             </p>
           )}
         </CardContent>
@@ -259,11 +259,12 @@ export function DronePage() {
                   : state.steering ? "Armed, steering" : "Armed"}
             help={{
               label: "About flying",
-              content: "Arming lasts until you land, and this page must stay open: if it closes, the drone is told to land. Hold Climb or Descend to change height, which works while the position is held. Esc lands from any page while this window is focused. Stop may cut the motors in the air, so use it only if landing fails. If the watch goes quiet for a second the drone is told to land.",
+              content: "Arming lasts until you land, and this page must stay open: if it closes, the drone is told to land. Hold Climb or Descend to change height, which works while the position is held. Calibrate gyro only works before arming: stand the drone on a flat surface and keep it still. Esc lands from any page while this window is focused. Stop may cut the motors in the air, so use it only if landing fails. If the watch goes quiet for a second the drone is told to land.",
             }}
           />
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" disabled={!connected || state?.armed} onClick={() => run("drone_calibrate_gyro")}>Calibrate gyro</Button>
           <Button disabled={!connected || state?.armed || !(state?.watchStreaming || state?.pageAlive)} onClick={() => run("drone_arm")}>Arm</Button>
           <Button disabled={!state?.armed} onClick={() => run("drone_take_off")}>Take off</Button>
           {heightButton("Climb", HEIGHT_RATE)}

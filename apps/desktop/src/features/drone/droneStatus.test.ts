@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { droneDevice, getDroneSnapshot, publishDroneState, type DroneState, type DroneStatus } from "./droneStatus";
+import { droneDevice, firmwareVersion, getDroneSnapshot, publishDroneState, type DroneState, type DroneStatus } from "./droneStatus";
 
 const state: DroneState = {
   phase: "open",
@@ -23,6 +23,7 @@ const state: DroneState = {
   flightLog: null,
   pageAlive: false,
   onNetwork: false,
+  firmware: null,
 };
 
 const status = (over: Partial<DroneStatus>): DroneStatus => ({ ...state, videoRate: null, ...over });
@@ -47,6 +48,17 @@ describe("droneDevice", () => {
     expect(droneDevice(status({ armed: true, holding: true, holdPhase: "calibrating" }))).toEqual({ tone: "caution", text: "CALIBRATING" });
     expect(droneDevice(status({ failsafeTripped: true }))).toEqual({ tone: "caution", text: "FAILSAFE" });
     expect(droneDevice(status({ phase: "failed" }))).toEqual({ tone: "caution", text: "NO ANSWER" });
+  });
+});
+
+describe("firmwareVersion", () => {
+  it("picks the version out of the full name", () => {
+    expect(firmwareVersion("(NOFLOW)FLOW_720P_V1.4.17_20250520")).toBe("V1.4.17");
+  });
+
+  it("falls back to the whole name, and to nothing", () => {
+    expect(firmwareVersion("something else")).toBe("something else");
+    expect(firmwareVersion(null)).toBeNull();
   });
 });
 

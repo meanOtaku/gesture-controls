@@ -85,6 +85,16 @@ the `bridge` argument to stream JSON without opening a second window.
 - Fail-closed safety behavior throughout; see [Safety and fail-closed behavior](docs/architecture/safety-and-fail-closed-behavior.md)
 - React, Rust, UDP integration, launcher, Python trainer, Kotlin watch, and packaging tests
 
+### Drone control (experimental)
+
+The desktop can fly a Wi-Fi toy drone that pairs with the WIFI UAV phone app, such as the DM002HW. It connects by itself when
+the computer joins the drone's Wi-Fi, shows live video, and has a camera-based position hold that measures the drone with test
+pushes, plus height controls and a flight recorder. The watch can steer by wrist tilt.
+
+This is early work. On the real drone, connecting, live video and tracking have been tried, and the motors have been started and
+stopped by test scripts with the props off. It has never flown. Read [Drone control](docs/architecture/drone.md) and
+[its safety rules](docs/architecture/safety-and-fail-closed-behavior.md#7-the-drone) first.
+
 ## Architecture
 
 ```text

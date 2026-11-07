@@ -28,7 +28,7 @@ const drone: DroneState = {
   phase: "open", armed: false, failsafeTripped: false, steering: false, watchStreaming: false, framesSent: 100, videoFrames: 40,
   videoSkipped: 2, videoDamaged: 0, sendErrors: 0, flow: { frame: 40, dx: 0, dy: 0, zoom: 0, confidence: 0.53 },
   driftX: 1.25, driftY: -3, holding: false, holdPhase: "off", holdFault: null, correction: { aileron: 3, elevator: -1 }, heightRate: 0, flightLog: null,
-  pageAlive: true, onNetwork: true,
+  pageAlive: true, onNetwork: true, firmware: "(NOFLOW)FLOW_720P_V1.4.17_20250520",
 };
 
 describe("NervTelemetryPanel's drone module", () => {
@@ -47,6 +47,7 @@ describe("NervTelemetryPanel's drone module", () => {
     expect(module.getByText("● ONLINE")).toBeInTheDocument();
     expect(module.getByRole("meter", { name: "Tracking agreement" })).toHaveAttribute("aria-valuenow", "53");
     expect(module.getByText("+3 / -1")).toBeInTheDocument();
+    expect(module.getByText("V1.4.17")).toBeInTheDocument();
     expect(module.queryByText("BATTERY")).toBeNull();
   });
 

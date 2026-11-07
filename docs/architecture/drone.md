@@ -13,7 +13,7 @@ A DM002HW, a small toy quadcopter with brushed motors that pairs with the WIFI U
 
 | Fact | Value |
 | --- | --- |
-| Firmware | `(NOFLOW)FLOW_720P_V1.4.17_20250520`. `NOFLOW`, against `FLOW` on a related drone, suggests no optical flow |
+| Firmware | `(NOFLOW)FLOW_720P_V1.4.17_20250520`, shown on the Drone page. `NOFLOW`, against `FLOW` on a related drone, suggests no optical flow |
 | Wi-Fi | Open access point, 2.4 GHz, channel 4 when last checked, at `192.168.169.1` |
 | Camera | Front-facing, 640 × 360, about 15 frames a second, JPEG |
 | Reports back | Video and a firmware name. No battery, height, attitude or acknowledgement seen |
@@ -64,6 +64,7 @@ A DM002HW, a small toy quadcopter with brushed motors that pairs with the WIFI U
 | `drone_connect`, `drone_disconnect` | Opens or closes the link. Disconnect also stops auto-connect until the network changes |
 | `drone_arm` | Allows flight, if video is moving and the watch or page is checking in |
 | `drone_take_off`, `drone_land`, `drone_stop` | Presses Up, Down or Stop |
+| `drone_calibrate_gyro` | Presses GyroCheck. Refused while armed |
 | `drone_heartbeat` | The page saying it is still open, with how hard Climb or Descend is held |
 | `drone_set_hold` | Calibrates and starts hold, or stops it |
 | `drone_reset_drift` | Makes the current view the centre |
@@ -174,6 +175,8 @@ a fixed external camera would do better.
 | Arming, Up and Down from the Rust link | **No** | Yes |
 | Auto-connect | **No** | Policy only |
 | Stop (`44`) | **Never sent** | Yes |
+| Gyro calibration (`c0`) | **Never sent** | Yes |
+| Firmware name in the app | **No**: the reply was read by hand earlier | Yes |
 | Stick movement | **Never sent** | Yes |
 | Calibration and hold reaching the sticks | **No** | Yes, in simulated flights |
 | Height buttons | **No** | Yes |
@@ -235,7 +238,7 @@ its fields are set in `ActCtrlN`, and native code in `libuav_lib.so` handles sen
 | Arm is disabled | Video has not reached frame 5, or the page is not open |
 | Drone told to land by itself | Nothing checked in for a second, usually from leaving the Drone page |
 | Hold says "no clear change" | The drone is not flying, or the scene is too plain or far away |
-| Hold says it is drifting too much | The drone is too unsteady to measure. Try again, or recalibrate its gyro in the phone app |
+| Hold says it is drifting too much | The drone is too unsteady to measure. Land, choose **Calibrate gyro** on a flat surface, and try again |
 | Marker is red | The view is too dark or plain to follow. Add light, or face something with detail |
 | Video lags but frames a second is about 15 | The link is fine, and the delay is in the display |
 | Picture is very dark | The camera is dim indoors. The app brightens the display, not the measurement |

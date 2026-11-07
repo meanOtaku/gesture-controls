@@ -44,7 +44,8 @@ Its frame container matches, but its 20-byte control record does not work here.
 
 Tested as a whole. Without step 3 onward the drone resends frame 1 and goes silent until it is power-cycled.
 
-`ef 20 06 00 01 65` asks for the firmware name, which arrives as a `93 04` packet. **Tested**
+`ef 20 06 00 01 65` asks for the firmware name, which arrives as a `93 04` packet. **Tested** Bytes 12 and 13 of the reply are
+`01 65`, and the name follows as text from byte 14.
 
 ## Control frame
 
@@ -91,7 +92,7 @@ The app holds Up and Down for about 1.1 s, and Stop for about 0.3 s. Bit names a
 | `10` | Headless | **App code** |
 | `20` | Back | **App code**: off in the UAV control screen |
 | `40` | Hl | **Captured**: always set in the UAV control screen. It makes throttle self-centring, which suggests altitude hold |
-| `80` | GyroCheck | **App code**: gyro calibration |
+| `80` | GyroCheck | **Captured**, held about 1.2 s. Gyro calibration by its name. Never sent by us, and the desktop refuses it while armed |
 
 ### Sticks
 

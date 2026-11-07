@@ -17,7 +17,7 @@ use thiserror::Error;
 use crate::flight_log::FlightLog;
 use crate::frame::{
     Button, Sticks, VERSION_QUERY, VIDEO_START, VideoFrame, VideoTracker, control_frame,
-    empty_frame, opening_request_frame, setup_frame,
+    empty_frame, opening_request_frame, parse_firmware, setup_frame,
 };
 use crate::hold::{Autopilot, Correction, HoldPhase};
 use crate::pilot::{Pilot, PilotConfig, PilotError};
@@ -31,6 +31,9 @@ const MIN_VIDEO_FRAMES_TO_ARM: u32 = 5;
 const OPENING_GAP: Duration = Duration::from_millis(27);
 /// A frame not finished by now is given up on. The phone app gets about 15 a second, so this is a few frames' time.
 const SKIP_FRAME_AFTER: Duration = Duration::from_millis(200);
+/// The firmware query can be lost like any packet, so it is repeated a few times, this many frames apart.
+const FIRMWARE_RETRY_FRAMES: u16 = 40;
+const FIRMWARE_RETRIES: u16 = 5;
 
 /// Where the drone is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -149,6 +152,7 @@ struct Shared {
     latest_frame: Mutex<Option<Arc<LiveFrame>>>,
     autopilot: Mutex<Autopilot>,
     flight_log: Mutex<Option<FlightLog>>,
+    firmware: Mutex<Option<String>>,
     closing: AtomicBool,
 }
 
@@ -220,6 +224,7 @@ impl Link {
             latest_frame: Mutex::new(None),
             autopilot: Mutex::new(Autopilot::default()),
             flight_log: Mutex::new(None),
+            firmware: Mutex::new(None),
             closing: AtomicBool::new(false),
         });
         // Room for one frame: the picture should be the newest, not a queue of old ones.
@@ -282,6 +287,11 @@ impl Link {
     /// Records every control frame from now on, until the link closes.
     pub fn record_flight(&self, log: FlightLog) {
         *lock(&self.shared.flight_log) = Some(log);
+    }
+
+    /// The name the drone gives for its firmware, once it has answered.
+    pub fn firmware(&self) -> Option<String> {
+        lock(&self.shared.firmware).clone()
     }
 
     pub fn latest_frame(&self) -> Option<Arc<LiveFrame>> {
@@ -462,6 +472,11 @@ impl Worker {
             if let Some(log) = &*lock(&self.shared.flight_log) {
                 log.record(control, &lock(&self.shared.status));
             }
+            let retry = sequence.is_multiple_of(FIRMWARE_RETRY_FRAMES)
+                && sequence <= FIRMWARE_RETRY_FRAMES * FIRMWARE_RETRIES;
+            if retry && lock(&self.shared.firmware).is_none() {
+                self.send(&VERSION_QUERY);
+            }
             sequence = sequence.wrapping_add(1);
             {
                 let mut status = lock(&self.shared.status);
@@ -491,6 +506,10 @@ impl Worker {
                 continue;
             };
             if source.ip() != self.control_address.ip() {
+                continue;
+            }
+            if let Some(name) = parse_firmware(&self.buffer[..length]) {
+                *lock(&self.shared.firmware) = Some(name);
                 continue;
             }
             if let Some(frame) = self.video.observe(&self.buffer[..length]) {

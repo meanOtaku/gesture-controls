@@ -113,6 +113,7 @@ pub struct DroneState {
     pub page_alive: bool,
     /// True when this computer is on the drone's Wi-Fi.
     pub on_network: bool,
+    pub firmware: Option<String>,
 }
 
 fn is_fresh(at: Option<Instant>) -> bool {
@@ -290,6 +291,7 @@ impl DroneRuntime {
                 }),
             page_alive: is_fresh(inner.last_heartbeat),
             on_network: inner.on_network,
+            firmware: inner.link.as_ref().and_then(Link::firmware),
         }
     }
 
@@ -342,6 +344,14 @@ impl DroneRuntime {
             let _ = link.press(Button::Down);
             link.disarm();
         }
+    }
+
+    /// Calibrates the gyro. The pilot refuses while armed, because it must be still on the ground.
+    pub fn calibrate_gyro(&self) -> Result<(), String> {
+        let inner = self.lock();
+        let link = inner.link.as_ref().ok_or(NOT_CONNECTED)?;
+        link.press(Button::GyroCheck)
+            .map_err(|error| error.to_string())
     }
 
     pub fn stop(&self) {
@@ -531,6 +541,12 @@ pub fn drone_take_off(runtime: State<'_, DroneRuntime>) -> Result<DroneState, St
 }
 
 #[tauri::command]
+pub fn drone_calibrate_gyro(runtime: State<'_, DroneRuntime>) -> Result<DroneState, String> {
+    runtime.calibrate_gyro()?;
+    Ok(runtime.state())
+}
+
+#[tauri::command]
 pub fn drone_land(runtime: State<'_, DroneRuntime>) -> DroneState {
     runtime.land();
     runtime.state()
@@ -694,6 +710,12 @@ mod tests {
         ] {
             assert!(!fault_text(fault).is_empty());
         }
+    }
+
+    #[test]
+    fn gyro_calibration_needs_a_link() {
+        let runtime = DroneRuntime::default();
+        assert_eq!(runtime.calibrate_gyro(), Err(NOT_CONNECTED.to_string()));
     }
 
     #[test]
