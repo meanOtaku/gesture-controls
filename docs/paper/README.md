@@ -12,6 +12,7 @@ replace old table values with new manifest percentages without matching cohort a
   [IEEE conference](ieee/IMPROVEMENTS.md), [Springer LNCS](springer/IMPROVEMENTS.md),
   [IEEE journal](ieee-journal/IMPROVEMENTS.md), [Springer Nature journal](springer-journal/IMPROVEMENTS.md)
 - [Reproducible figures, inventory, provenance and verification](revision-assets/README.md)
+- [Journal companion: every claim, term, number, equation, table and figure of the journal version explained](JOURNAL_COMPANION.md)
 
 These additions are documentation and proposed revisions, not a completed new study, a rewritten
 manuscript or a guarantee of journal quartile/acceptance. The shared audit assets are outside the
