@@ -15,7 +15,7 @@ def main():
         assert (A/name).read_bytes()==(B/name).read_bytes(),name
     body=(A/'body.tex').read_text();md=(A/'manuscript.md').read_text()
     assert body.count('\\begin{codexfigure}')==4
-    assert body.count('\\caption{')==6
+    assert body.count('\\caption{')==7  # 4 figures + 3 tables (replayed hand-labelled outcomes added 8 Nov)
     assert len(re.findall(r'!\[[^]]*\]\(figures/',md))==4
     assert '# References' in md and '$$' in md
     assert '[@' not in md and 'csl-entry' not in md and '<img' not in md
@@ -51,10 +51,12 @@ def main():
         expected=(P/'revision-assets'/name).read_bytes()
         assert (A/'figures'/name).read_bytes()==(B/'figures'/name).read_bytes()==expected
     for directory in ('ieee','springer','ieee-journal','springer-journal'):
-        for name in ('main.tex','body.tex','refs.bib','main.pdf'):
+        # main.tex, body.tex and main.pdf were intentionally revised on 8 Nov 2026 (evidence corrections and the replayed
+        # hand-labelled result, see revision-assets/HAND_LABELLED_REPLAY.md); only the bibliography is still pinned.
+        for name in ('refs.bib',):
             relative=f'docs/paper/{directory}/{name}'
             original=subprocess.check_output(['git','show','6709b2a:'+relative],cwd=P)
             assert (P/directory/name).read_bytes()==original
-    print('PASS: identical scientific sources, evidence invariants,',link_count,'local links, exact inherited images and all original manuscripts preserved.')
+    print('PASS: identical scientific sources, evidence invariants,',link_count,'local links, exact inherited images and original bibliographies preserved (manuscripts revised 8 Nov).')
 
 if __name__=='__main__':main()

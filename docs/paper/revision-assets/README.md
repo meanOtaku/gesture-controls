@@ -10,6 +10,7 @@ These assets accompany the [evidence audit](../EVIDENCE_AUDIT.md) and [research 
 - `make_figures.py`: real telemetry/historical-result figures and explicitly labelled audit/proposed-study schematics. It does not train or run inference.
 - `figure-provenance.json`: exact illustrated session, clock origin, interval, display scaling and historical artifact/configuration.
 - `literature-sources.json`: primary/full-text versus metadata-only retrieval scope and claim boundaries; no invented bibliographic records or exhaustive-search claim.
+- `replay_hand_labelled.py`, `hand-labelled-replay.json`, [`HAND_LABELLED_REPLAY.md`](HAND_LABELLED_REPLAY.md): replay of the checked-in hand-labelled pinch-in model over its listed evaluation recordings with the trainer's own code. It reproduces the stored metrics exactly and recovers the event log, exposure, latencies, gap check and a threshold-sensitivity diagnostic. Run with `tools/label-trainer/.venv/bin/python docs/paper/revision-assets/replay_hand_labelled.py`.
 - `verify.py`: small snapshot-specific runnable publication check; local links, paired source equality, file formats/dimensions, model hashes and audited invariants. Update its expected inventory only after a new audit, not to hide a failed check.
 
 ## Available figures

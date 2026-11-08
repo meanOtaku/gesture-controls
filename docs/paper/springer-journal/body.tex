@@ -17,8 +17,8 @@ We designed, built and evaluated such a system between 27 July and 7 November 20
 Our contributions are:
 \begin{itemize}
   \item A cross-platform desktop coordinator that fuses Sony headset orientation with Samsung Galaxy Watch motion and raw PPG and drives system volume through a recipe engine with a fail-closed safety chain (Section~\ref{sec:system}).
-  \item A data pipeline that records watch signals with camera hand landmarks as timing ground truth, aligns three clocks and trains one binary detector per gesture label (Sections~\ref{sec:data} and~\ref{sec:methods}).
-  \item An empirical study showing that wrist PPG alone generalises poorly to new days, that inertial fusion and a peak trigger improve detection substantially, and that a compact 1-D convolutional network (CNN) on nine raw channels outperforms engineered-feature tree ensembles on unseen sessions (Section~\ref{sec:results}).
+  \item A data pipeline that records watch signals with camera hand landmarks as reference timing annotations, keeps hand corrections separate from the original labels, aligns three clocks and trains one binary detector per gesture label (Sections~\ref{sec:data} and~\ref{sec:methods}).
+  \item An empirical study showing that wrist PPG alone generalises poorly to new days, that inertial fusion and a peak trigger improve detection substantially, and that a compact 1-D convolutional network (CNN) on nine raw channels outperforms engineered-feature tree ensembles on new sessions, with large day-to-day variation, and a replayed event log for a later model trained on hand-corrected labels (Section~\ref{sec:results}).
   \item An event-based evaluation standard applied identically in training and at runtime, and an account of the evaluation pitfalls that inflated earlier results (Sections~\ref{sec:protocol} and~\ref{sec:discussion}).
 \end{itemize}
 
@@ -144,7 +144,7 @@ A recipe chains a head stage, a gesture stage and a wrist stage into an action o
 
 The effects are bounded by a fail-closed chain. An ordering watermark, a quality gate, a window-length check, a fusion freshness check (orientation older than 500~ms is rejected) and a gesture policy each force a release when they reject data. A watchdog releases any grab whose model data has been silent for 750~ms. Inference runs \emph{Off}, \emph{Monitor} (scores but never acts) or \emph{Live} (acts only through explicit intent bindings), and a saved Live setting is capped to Monitor at start-up. Model bundles are data-only, and their SHA-256 hash and input contract are re-verified on every load.
 
-\section{Data Collection and Ground Truth}\label{sec:data}
+\section{Data Collection and Reference Annotations}\label{sec:data}
 
 \subsection{Recordings}
 
@@ -164,13 +164,14 @@ All recordings were made by a single participant (the author), with the watch on
     Frozen benchmark & 37 recordings, 1{,}390 events & IMU fusion and trigger studies \\
     October--November 2026 & Camera-timed pinch sessions, everyday noise & CNN versus trees, final models \\
     Leave-one-day-out set & 372 camera-marked pinches & Table~\ref{tab:lodo} \\
+    Hand-labelled collection (Nov 2026) & 37 exports, 28 distinct sensor streams; manual label overrides & Hand-labelled development model (Table~\ref{tab:hand}) \\
     \bottomrule
   \end{tabular}
 \end{table*}
 
-\subsection{Camera Ground Truth and Clock Alignment}
+\subsection{Camera Reference Annotations and Clock Alignment}
 
-Early labels came from on-screen cues, and each recording had its own lag of up to 1.3~s between cue and execution. We therefore recorded camera ground truth. MediaPipe~\cite{mediapipe} finds 21 hand landmarks per frame in the application's web view, without network access. Only landmarks are stored, never images. The watch and the browser keep different clocks. Watch timestamps are paired with browser arrival times every 200~ms, and since delivery delay is never negative, the smallest arrival-minus-watch difference estimates the offset.
+Early labels came from on-screen cues, and each recording had its own lag of up to 1.3~s between cue and execution. We therefore recorded camera reference annotations. MediaPipe~\cite{mediapipe} finds 21 hand landmarks per frame in the application's web view, without network access. Only landmarks are stored, never images. The watch and the browser keep different clocks. Watch timestamps are paired with browser arrival times every 200~ms, and since delivery delay is never negative, the smallest arrival-minus-watch difference estimates the offset.
 
 Pinch contact is marked from the distance between thumb and index tips. A fixed threshold of 0.35 hand sizes missed many real pinches, because apparent distance depends on hand orientation. Those missed pinches were then trained as non-pinches and counted as false activations. Judging each session against its own hand reduced false activations on pinch sessions from 110 to 20 per hour. A later audit found 8 of 163 camera-labelled pinch-in intervals immediately followed by pinch-out with no hold, and queued them for review.
 
@@ -184,12 +185,13 @@ Each PPG sample is z-scored against the preceding 1, 2 and 4~s. Slope, curvature
 
 \subsection{Compact 1-D Convolutional Network}
 
-Nine channels (accelerometer, gyroscope, PPG green, red and infrared) are resampled to a 50~Hz grid. Each channel $x$ is normalised against its last 11~s using the median and the median absolute deviation (MAD), then squashed:
-\begin{equation}
-  \tilde{x}_t = \sigma\!\left(\frac{x_t - \operatorname{med}_{11\,\mathrm{s}}(x)}{\operatorname{MAD}_{11\,\mathrm{s}}(x)}\right).
+Nine channels (accelerometer, gyroscope, PPG green, red and infrared) are resampled to a 50~Hz grid. At each decision, every channel $c$ is centred and scaled over the causal grid $G$ of the last 549 ticks (about 11~s) and the last 50 ticks $W$ (1~s) are kept:
+\begin{gather}
+  m_c = \operatorname{med}_{j\in G} x_{c,j}, \qquad s_c = 1.4826\,\operatorname{med}_{j\in G} \lvert x_{c,j} - m_c \rvert, \\
+  u_{c,t} = \sigma\!\left(\operatorname{clip}\!\left(\frac{x_{c,t} - m_c}{s_c + \epsilon_c}, -500, 500\right)\right), \quad t \in W,
   \label{eq:norm}
-\end{equation}
-The last second (450 values) is the input. Three dilated convolutions (32, 32 and 64 channels, kernel 5, dilation 1, 2 and 4) with batch normalisation feed per-channel max and mean pooling, a 32-unit dense layer with dropout and a single output. Three networks trained with different seeds are averaged. Samples 0.4--0.6~s after a start are positives; samples with no start between 1.2~s before and 0.2~s after are negatives, with at most 40{,}000 negatives per network and positives weighted up to 20 times. Training uses Adam (learning rate 0.001, weight decay 0.0001), 12 epochs and batches of 256.
+\end{gather}
+where the floor $\epsilon_c$ is 0.02 for accelerometer axes, 0.01 for gyroscope axes and $0.001(\lvert m_c\rvert + 1)$ for PPG. The 450 values $u_{c,t}$ are the input. Earlier models instead z-scored each tick against the 10~s before it (Section~\ref{sec:blind}). Three dilated convolutions (32, 32 and 64 channels, kernel 5, dilation 1, 2 and 4) with batch normalisation feed per-channel max and mean pooling, a 32-unit dense layer with dropout and a single output. Three networks trained with different seeds are averaged. Samples 0.4--0.6~s after a start are positives; samples with no start between 1.2~s before and 0.2~s after are negatives, with at most 40{,}000 negatives per network and positives weighted up to 20 times. Training uses Adam (learning rate 0.001, weight decay 0.0001), 12 epochs and batches of 256.
 
 \begin{table}[t]
   \centering
@@ -211,11 +213,11 @@ The last second (450 values) is the input. Three dilated convolutions (32, 32 an
 
 \subsection{Detection Rule and Threshold Selection}
 
-A detection fires at the peak of the score once it exceeds the threshold, ends when the score falls 0.15 below it, and the next detection waits 1.5~s. The threshold is selected on training recordings only. Five models, each trained without one fifth of them, score the held-out parts in replay, and the threshold that catches the most starts within 30 false activations per hour is kept. The exported model is checked against the trained one before release. Shared fixtures keep the Python and Rust implementations of input building and detection identical.
+After the score has reached the activation threshold, a detection is emitted causally at the first strictly decreasing score (the \emph{peak} trigger); its time is that decision, not a backdated maximum. It stays active until the score falls below the release threshold, 0.15 below activation, and the 1.5~s cooldown runs from that fall. The threshold is selected on training recordings only. Five models, each trained without one fifth of them, score the held-out parts in replay, and the threshold that catches the most starts within 30 false activations per hour is kept. The exported model is checked against the trained one before release. Shared fixtures keep the Python and Rust implementations of input building and detection identical.
 
 \section{Evaluation Protocol}\label{sec:protocol}
 
-Detectors are evaluated as continuous event detectors on complete recordings, and training and test recordings are always disjoint. Each emitted event is exactly one of: a \emph{catch} (inside the match window after a labelled start), a \emph{repeat} (another event during a caught gesture), \emph{late}, or a \emph{false activation}. The headline metrics are
+Detectors are evaluated as continuous event detectors on complete recordings, and within each experiment training and test recordings are disjoint, with exported files of identical sensor data grouped as one source before splitting; one historical comparison row that reused training sessions is marked as such. Each emitted event is exactly one of: a \emph{catch} (inside the match window after a labelled start), a \emph{repeat} (another event during a caught gesture), \emph{late}, or a \emph{false activation}. The headline metrics are
 \begin{gather}
   \mathrm{TAR} = \frac{\#\,\text{caught starts}}{\#\,\text{labelled starts}}, \label{eq:tar}\\
   \mathrm{FAR} = \frac{\#\,\text{false activations}}{\text{hours with no gesture under way}}. \label{eq:far}
@@ -266,7 +268,7 @@ On the frozen benchmark (37 recordings, 1{,}390 events, 20 splits), inertial fea
 
 The original trigger fired at the first threshold crossing. At low thresholds this was often before the scoring window, and its 1.5~s lockout then blocked the correct firing. Firing at the peak of the score added 4--12 recall points at the same false-activation budget, at a cost of 35--90~ms of latency. Shifting labels earlier by 200--350~ms converted only about three false activations per minute into catches, so most remaining false activations were genuine responses to other movement.
 
-Table~\ref{tab:lodo} reports leave-one-day-out results for the CNN on 372 camera-marked pinches. On new sessions the CNN caught about two thirds of pinches, against 10--28\% for the tree ensembles, and fired about 0.4~s sooner. A still-hand rule applied during training removed every moving moment, so the model never learned that movement is not a pinch. The best configuration trains without that rule and with everyday noise. The final pinch-in and pinch-out models caught 15 of 20 and 18 of 21 pinches on held-out sessions. The participant reports that both work in the paired volume interaction. \emph{Answer to RQ2: inertial fusion and the peak trigger each improve detection substantially, and the compact CNN on raw channels clearly outperforms engineered-feature trees on unseen sessions.}
+Table~\ref{tab:lodo} reports historical leave-one-day-out results for the CNN on 372 camera-marked pinches. Pooled, the selected configuration caught 161 (43\%), with strong day-to-day variation: 21/171 and 37/52 on the two October days against 67/92 and 36/57 on the two November days. On the newer sessions the CNN caught about two thirds of pinches, against 10--28\% for the tree ensembles, and fired about 0.4~s sooner. A still-hand rule applied during training removed every moving moment, so the model never learned that movement is not a pinch. The best configuration trains without that rule and with everyday noise. The participant reports that pinch in and pinch out both work in the paired volume interaction. \emph{Answer to RQ2: inertial fusion and the peak trigger each improve detection substantially, and the compact CNN on raw channels outperforms engineered-feature trees on new sessions, but transfer across days varies widely.}
 
 \begin{table*}[t]
   \centering
@@ -287,13 +289,36 @@ Table~\ref{tab:lodo} reports leave-one-day-out results for the CNN on 372 camera
   $^\ast$Trained on most October pinches, so not unseen. $^\dagger$Dominated by one day; other days 0--28/h.\par}
 \end{table*}
 
-\subsection{A Normalisation Blind Spot}
+\subsection{Hand-Labelled Development Model}\label{sec:hand}
 
-The first CNN normalised each channel by a rolling 10~s mean and standard deviation. A burst of wrist motion raised the gyroscope deviation from about 0.03 to about 1~rad/s, shrinking a following pinch roughly thirty-fold until the burst left the window. No training pinch had experienced this: the largest 1~s gyroscope RMS before any of 459 pinch starts was 0.62~rad/s, whereas everyday noise reached 14~rad/s. Replays with real bursts spliced in (Table~\ref{tab:hangover}) show that the median/MAD scaling of (\ref{eq:norm}) removes the blind spot for bursts up to about 4~s; motion lasting 6~s or more still causes a 3--6~s blackout.
+Labels were later corrected by hand in the application's labelling view; a non-empty manual label overrides the original row label, and a blank one keeps it. The corrected collection has 37 exports, which reduce to 28 distinct sensor streams once identical exports are grouped. A median-scaled CNN trained on 20 of these recordings, with its 0.99 threshold chosen on training recordings only, was evaluated on eight others. Replaying the stored model (SHA-256 \texttt{ae0a22bf\ldots}) with the trainer's own detection and event-accounting code reproduced its stored metrics exactly (Table~\ref{tab:hand}). It caught 47 of 57 annotated pinch-in starts, 72--94\% by day, with four late detections, no repeats and no false activations over 0.48~h of eligible no-gesture time, and no interior input gaps. Median latency from annotated start to causal detection was 442~ms. The everyday-activity session's highest score was 0.970 against the 0.99 threshold, so the zero false-activation result rests on a narrow margin. These are development results for one participant and one target; the evaluation recordings are not established as untouched by development.
 
 \begin{table}[t]
   \centering
-  \caption{Detection after a spliced motion burst (ends 1~s before the pinch)}
+  \caption{Hand-labelled pinch-in model, replay on its eight evaluation recordings}
+  \label{tab:hand}
+  \small
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    Measure & Value \\
+    \midrule
+    Caught & 47/57 (82.5\%) \\
+    Missed & 10 (4 late, 6 undetected) \\
+    Repeats, false activations & 0, 0 \\
+    No-gesture time & 0.48~h \\
+    95\% upper bound, false act. & 6.2/h \\
+    Latency, median (IQR) & 442 (384--510)~ms \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{A Normalisation Blind Spot}\label{sec:blind}
+
+The first CNN normalised each channel by a rolling 10~s mean and standard deviation. A burst of wrist motion raised the gyroscope deviation from about 0.03 to about 1~rad/s, shrinking a following pinch roughly thirty-fold until the burst left the window. No training pinch had experienced this: the largest 1~s gyroscope RMS before any of 459 pinch starts was 0.62~rad/s, whereas everyday noise reached 14~rad/s. A window-score diagnostic (Table~\ref{tab:hangover}) spliced real bursts into held-out recordings and counted a pinch if the peak score 0.1--1~s after its start reached the threshold. It is not a continuous event replay or a live test, but it shows that the median/MAD scaling of (\ref{eq:norm}) removes the blind spot for bursts up to about 4~s; motion lasting 6~s or more still causes a 3--6~s blackout.
+
+\begin{table}[t]
+  \centering
+  \caption{Window-score diagnostic after a spliced motion burst (ends 1~s before the pinch)}
   \label{tab:hangover}
   \small
   \begin{tabular}{@{}lrrrr@{}}
@@ -353,7 +378,7 @@ For stock smartwatches, inertial sensing should be treated as the primary pinch 
 
 \subsection{Threats to Validity}
 
-\textbf{Internal validity.} Thresholds were chosen on training data only, but most collections were explored during development; only the 14 October test was a true one-shot test. Camera labels depend on landmark accuracy and clock alignment, whose residual error was not independently measured.
+\textbf{Internal validity.} Thresholds were chosen on training data only, but most collections were explored during development; only the 14 October test was a true one-shot test. The hand-labelled model's evaluation recordings were listed separately from its training set, but whether they informed labelling or model selection was not recorded, its training configuration had to be reconstructed for the replay, and its zero false-activation result rests on a 0.02 margin below the threshold. No hand-labelled pinch-out model exists yet. Camera labels depend on landmark accuracy and clock alignment, whose residual error was not independently measured.
 
 \textbf{External validity.} All data come from one participant, one watch and one wrist, mostly at 50~Hz motion; pinches made while moving are rare. Results may not transfer to other people, devices or activities.
 

@@ -33,7 +33,9 @@ def table_tex(ast, block, number):
         cells=[fragment(ast,cell[4]) for cell in row[1]]
         if head:cells=['\\textbf{'+cell+'}' for cell in cells]
         return ' & '.join(cells)+r' \\'
-    caption=('Source-directory audit. Counts concern exported files or exact stream pairs, not independent human sessions.' if number==1 else 'Stored pinch-in manifest fields. Event values are development evidence, not a reconstructed prospective test.')
+    caption={1:'Source-directory audit. Counts concern exported files or exact stream pairs, not independent human sessions.',
+             2:'Stored pinch-in manifest fields. Event values were reproduced by replay; they remain development evidence, not a prospective test.',
+             3:'Replayed event outcomes of the hand-labelled pinch-in model on its eight listed evaluation recordings. Development evidence, not an independent test.'}[number]
     content=['\\begin{table}[t]','\\centering\\small','\\caption{'+caption+'}',r'\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}Xr>{\raggedright\arraybackslash}X@{}}',r'\toprule']
     content += [row_tex(r,True) for r in header]
     content += [r'\midrule']+[row_tex(r) for r in body]+[r'\bottomrule',r'\end{tabularx}',r'\end{table}']
@@ -109,7 +111,7 @@ def main():
         assert 'References' in (folder/'manuscript.md').read_text()
         for file in re.findall(r'\\includegraphics(?:\[[^]]*\])?\{([^}]+)\}',(folder/'body.tex').read_text()):
             assert (folder/file).exists(), file
-    print('Rendered identical scientific body and complete cited Markdown for IEEE and Springer; two source tables converted to column-safe tabularx.')
+    print('Rendered identical scientific body and complete cited Markdown for IEEE and Springer; source tables converted to column-safe tabularx.')
 
 
 if __name__=='__main__':main()

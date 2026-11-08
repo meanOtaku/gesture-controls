@@ -151,7 +151,7 @@ R_e=\frac{N_{\mathrm{caught}}}{N_{\mathrm{eligible\ starts}}},\qquad
 
 where time in the denominator is in seconds. Repeat/late counts, misses and emitted-event latency are companion outcomes. Window ROC AUC and window F1 remain diagnostics and are not renamed event precision or event F1.
 
-The exposure implementation deserves particular scrutiny. The inspected evaluator takes the span from its first to last eligible decision and subtracts gesture/exclusion spans; it does not explicitly subtract every interior interval lacking decisions. If unavailable-input gaps occur inside that span, downtime can inflate the apparent negative exposure. This is a code-path risk, not evidence that a particular saved result contains such a gap. Reconstructing availability masks and reporting coverage is necessary before interpreting a rate as continuous reliability.
+The exposure implementation deserves particular scrutiny. The inspected evaluator takes the span from its first to last eligible decision and subtracts gesture/exclusion spans; it does not explicitly subtract every interior interval lacking decisions. If unavailable-input gaps occur inside that span, downtime can inflate the apparent negative exposure. This is a code-path risk, not evidence that a particular saved result contains such a gap. For the hand-labelled artifact we reconstructed the decision timeline: decisions run at a steady 40 ms in all eight evaluation recordings, with no interior gap over 250 ms, so its exposure is not inflated by downtime. The evaluator should still report coverage explicitly.
 
 \section{Results}\label{results}
 
@@ -163,22 +163,42 @@ The hand-labelled manifest stores ROC AUC 0.981993, balanced accuracy 0.881720 a
 
 \begin{table}[t]
 \centering\small
-\caption{Stored pinch-in manifest fields. Event values are development evidence, not a reconstructed prospective test.}
+\caption{Stored pinch-in manifest fields. Event values were reproduced by replay; they remain development evidence, not a prospective test.}
 \begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}Xr>{\raggedright\arraybackslash}X@{}}
 \toprule
 \textbf{Stored field} & \textbf{Value} & \textbf{Evidence status} \\
 \midrule
 Training IDs & 20 & All resolved \\
 Evaluation IDs & 8 & All resolved \\
-Event recall & 82.46\% & Manifest only \\
-Observed false activations/h & 0 & Exposure log missing \\
+Event recall & 82.46\% (47/57) & Reproduced by replay \\
+False activations & 0 over 0.48 h & Reproduced by replay \\
 Window ROC AUC & 0.981993 & Not event accuracy \\
 Window F1 & 0.865854 & Not event F1 \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-The bundle does not include the accompanying eligible caught/total counts, emitted event log, repeat/late outcomes, negative seconds or latency distribution. We therefore cannot independently reconstruct its event result or give a justified uncertainty interval. Its eight listed recordings have a summed PPG span of 1,922.033 s, but that span is not eligible negative exposure. We do not infer an event denominator from rounded recall or borrow one from a different model.
+The bundle did not include its event log, so we recovered it by replay. The original training specification was not saved; label roles were reconstructed from the project's documented defaults, and all four combinations of the uncertain settings (whether \nolinkurl{left_out} is excluded, and whether the still-hand rule applies) gave identical results. Scoring the checked-in model over the eight evaluation recordings with the trainer's input building, detection rule and event accounting reproduced the stored metrics exactly \cite{repository}.
+
+\begin{table}[t]
+\centering\small
+\caption{Replayed event outcomes of the hand-labelled pinch-in model on its eight listed evaluation recordings. Development evidence, not an independent test.}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}Xr>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Replayed outcome} & \textbf{Value} & \textbf{Basis} \\
+\midrule
+Caught / eligible starts & 47 / 57 (82.5\%) & Matches manifest \\
+By day (3, 4, 6 Nov) & 17/18, 17/21, 13/18 & Replay \\
+Missed & 10 (4 late, 6 undetected) & Replay \\
+Repeats; false activations & 0; 0 & Matches manifest \\
+Eligible no-gesture time & 1,735.4 s (0.48 h) & Replay, no gaps \\
+95\% upper false-activation rate & 6.2 per hour & Poisson, zero events \\
+Latency, median (IQR; p95) & 442 ms (384--510; 649) & Causal emission \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Latency runs from the annotated start to the causal emission time. The everyday-activity recording's highest score was 0.970 against the 0.99 threshold; on the same recordings, a threshold of 0.98 would add one false activation and 0.95 two, so the zero count rests on a narrow margin. This sensitivity check is a diagnostic, not a threshold choice.
 
 No separately named hand-labelled pinch-out bundle is present. A median pinch-out artifact exists, but its unresolved cohort provenance prevents treating it as a matched counterpart. The current stored pinch-in result is therefore development evidence for one target, not demonstrated success of the complete paired interaction under an independent protocol.
 
@@ -220,7 +240,7 @@ Manual review is also a measurement procedure. Its contact/release definitions, 
 
 \subsection{Why zero observed events is not all-day reliability}\label{why-zero-observed-events-is-not-all-day-reliability}
 
-Zero is an observed count, not proof that the underlying false-event rate is zero. Under a constant-rate Poisson model, observing no false events over \(T_h\) eligible hours gives a one-sided 95\% upper rate of \(-\ln(0.05)/T_h\). The model assumptions must be stated: correlated activities and heterogeneous people can violate a constant rate. Since eligible exposure is missing for the hand-labelled artifact, we do not compute that bound from its total recording span.
+Zero is an observed count, not proof that the underlying false-event rate is zero. Under a constant-rate Poisson model, observing no false events over \(T_h\) eligible hours gives a one-sided 95\% upper rate of \(-\ln(0.05)/T_h\). The model assumptions must be stated: correlated activities and heterogeneous people can violate a constant rate. For the hand-labelled artifact, 0.48 eligible hours give an upper rate of 6.2 per hour, far from an all-day reliability claim.
 
 Similarly, repeated windows are not independent participants. A population-level interval requires participant-level sampling; a personalised repeated-session study should reflect session variation. Different seeds describe training variability but do not increase the number of people studied. Both pooled and worst-condition outcomes matter for an interface whose errors can occur at inconvenient moments.
 
@@ -248,7 +268,7 @@ A counterbalanced target-volume task should compare look--pinch--turn with a con
 
 \section{Limitations and Reproducibility}\label{limitations-and-reproducibility}
 
-This is a source-audited single-participant development account, not a completed confirmatory usability or population study. Some reported values are inherited artifact fields rather than independently reconstructed predictions. Missing event exposure and latency constrain the latest model's interpretation, while unresolved UUID mappings constrain older cohort checks. Exact complete-stream hashing misses some partial overlaps, and the audit does not establish the validity or inter-rater reliability of manual boundaries.
+This is a source-audited single-participant development account, not a completed confirmatory usability or population study. The latest model's event result was reproduced by replay, but its training configuration was reconstructed rather than recovered, and its threshold-selection log and annotation hashes are missing. Unresolved UUID mappings still constrain older cohort checks. Exact complete-stream hashing misses some partial overlaps, and the audit does not establish the validity or inter-rater reliability of manual boundaries.
 
 The prototype's input contract can be reproduced from source, but its full current training history has not been recovered. Neither an apparently good manifest score nor a matching model hash establishes live readiness. Activity-limited negatives and synthetic-splice checks cannot establish everyday battery, drift, all-day false-action or safety performance. No new physical deployment claims are made here.
 
@@ -256,7 +276,7 @@ The manuscript and artifact record are available in the project repository \cite
 
 \section{Conclusion}\label{conclusion}
 
-Consumer head orientation and smartwatch optical--inertial sensing can be organised into a desktop spatial-interaction prototype with explicit engagement, release and cancellation. The source audit clarifies what the current record supports: 37 hand-labelled-directory exports correspond to 28 distinct complete stream pairs, the identified pinch-in model has a resolved nonoverlapping exact-stream role split, and its performance remains stored development evidence rather than a reconstructed independent test. Historical camera-label outcomes show substantial day variation that an aggregate optimistic headline obscures. The next scientific step is not automatically a larger model, but matched reference-label and modality comparisons followed by frozen prospective and live-interaction evaluation.
+Consumer head orientation and smartwatch optical--inertial sensing can be organised into a desktop spatial-interaction prototype with explicit engagement, release and cancellation. The source audit clarifies what the current record supports: 37 hand-labelled-directory exports correspond to 28 distinct complete stream pairs, the identified pinch-in model has a resolved nonoverlapping exact-stream role split, and its replayed performance (47/57 starts, no false activations over 0.48 h) is reproducible development evidence rather than an independent test. Historical camera-label outcomes show substantial day variation that an aggregate optimistic headline obscures. The next scientific step is not automatically a larger model, but matched reference-label and modality comparisons followed by frozen prospective and live-interaction evaluation.
 
 \section{Draft Declarations and Author Review}\label{draft-declarations-and-author-review}
 
