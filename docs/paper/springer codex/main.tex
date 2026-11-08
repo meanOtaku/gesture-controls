@@ -1,0 +1,25 @@
+% New evidence-qualified Springer Nature journal manuscript.
+% Official class/style files are copied unmodified from the existing project template.
+% Build in this folder: latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex
+\documentclass[pdflatex,sn-mathphys-num]{sn-jnl}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx,booktabs,tabularx,array}
+\usepackage{url,xurl}
+\newenvironment{codexfigure}{\begin{figure}[t]}{\end{figure}}
+\usepackage{microtype}
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\providecommand{\pandocbounded}[1]{#1}
+\setlength{\emergencystretch}{2em}
+\raggedbottom
+\begin{document}
+\title[Failure-Aware Spatial Interaction]{Failure-Aware Spatial Interaction with Consumer Wearables: A Source-Audited Study of Head Targeting and Smartwatch Pinch Detection}
+\author{\fnm{Vaibhav} \sur{Bisht}}
+\abstract{\input{abstract}}
+\keywords{Smartwatch, Photoplethysmography, Inertial sensing, Spatial interaction, Continuous gesture detection, Annotation provenance, Reproducibility}
+\maketitle
+\noindent\textbf{Working manuscript, 8 November 2026.} Author review and submission approval are pending. Stored development metrics and historical experiments are distinguished from unperformed prospective studies. Author affiliation and submission declarations require confirmation.
+\input{body}
+\bibliography{refs}
+\end{document}

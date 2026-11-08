@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 import struct
+from urllib.parse import unquote
 from audit_evidence import ROOT, OUT, effective
 
 
@@ -19,7 +20,7 @@ def main():
         for destination in re.findall(r'!?\[[^\]]*\]\(([^)]+)\)',text):
             if '://' in destination or destination.startswith('#'):
                 continue
-            target=destination.split('#')[0]
+            target=unquote(destination.split('#')[0])
             assert (doc.parent/target).exists(), (doc,destination)
             checked_links += 1
     for first,second in [('ieee','springer'),('ieee-journal','springer-journal')]:

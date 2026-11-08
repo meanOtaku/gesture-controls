@@ -1,0 +1,30 @@
+% New evidence-qualified IEEE journal manuscript. Original paper variants are unchanged.
+% Build in this folder: latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex
+\documentclass[journal]{IEEEtran}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx,booktabs,tabularx,array}
+\usepackage{cite,url,xurl}
+\newenvironment{codexfigure}{\begin{figure*}[t]}{\end{figure*}}
+\usepackage[hidelinks]{hyperref}
+\usepackage{microtype}
+\newcommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\newcommand{\pandocbounded}[1]{#1}
+\setlength{\emergencystretch}{2em}
+\begin{document}
+\title{Failure-Aware Spatial Interaction with Consumer Wearables: A Source-Audited Study of Head Targeting and Smartwatch Pinch Detection}
+\author{Vaibhav~Bisht}
+\markboth{Working manuscript --- author review pending, 8 November 2026}{Bisht: Failure-Aware Spatial Interaction with Consumer Wearables}
+\maketitle
+\begin{abstract}
+\input{abstract}
+\end{abstract}
+\begin{IEEEkeywords}
+Smartwatch, photoplethysmography, inertial sensing, spatial interaction, continuous gesture detection, annotation provenance, reproducibility.
+\end{IEEEkeywords}
+\noindent\textbf{Draft status:} Author review and submission approval are pending. Stored development metrics and historical experiments are distinguished from unperformed prospective studies.
+\input{body}
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+\end{document}
