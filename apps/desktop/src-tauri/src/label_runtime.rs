@@ -303,6 +303,10 @@ pub struct LabelModelView {
     pub active: bool,
     /// The score a detection starts at.
     pub activation: f64,
+    /// The score a detection ends at.
+    pub release: f64,
+    /// Each change of its thresholds since it was made, oldest first.
+    pub threshold_changes: Vec<model_lab_core::ThresholdChange>,
     /// How it did on its held-out recordings, from its manifest; `None` when the manifest says nothing.
     pub evaluation: Option<ModelEvaluationView>,
 }
@@ -843,6 +847,25 @@ impl LabelRuntimeHost {
         Ok(())
     }
 
+    /// Sets a model's activation threshold and, when given, its release; without one the release keeps its distance
+    /// below the activation (at least 0.01). An active model runs with the new values as soon as the models reload.
+    pub fn set_model_threshold(
+        &self,
+        app: &AppHandle,
+        id: &str,
+        activation: f64,
+        release: Option<f64>,
+    ) -> Result<(), String> {
+        let version = self.version_for(id)?;
+        let release = release.unwrap_or_else(|| default_release(&version.thresholds, activation));
+        let now = Self::now_rfc3339();
+        self.change_registry(app, |r| {
+            r.set_thresholds(&version.id, activation, release, &now)
+        })?;
+        info!(model = %version.id, activation, release, "changed a model's thresholds");
+        Ok(())
+    }
+
     pub fn deactivate_label(&self, app: &AppHandle, label: &str) -> Result<(), String> {
         let label = LabelId::new(label).map_err(|e| e.to_string())?;
         let now = Self::now_rfc3339();
@@ -933,6 +956,8 @@ impl LabelRuntimeHost {
                 created_at: v.created_at.clone(),
                 active: registry.active_by_label.get(&v.label) == Some(&v.id),
                 activation: v.thresholds.activation,
+                release: v.thresholds.release,
+                threshold_changes: v.threshold_changes.clone(),
                 evaluation: model_lab_dir.and_then(|dir| {
                     let bytes =
                         std::fs::read(dir.join(&v.artifact_dir).join("manifest.json")).ok()?;
@@ -1582,6 +1607,25 @@ pub fn rename_label_model(
     host.rename_model(&app, &id, name.as_deref())
 }
 
+/// The release for a new `activation` when none is given: as far below it as the old release was below the old
+/// activation, to the hundredth, and at least 0.01.
+fn default_release(old: &model_lab_core::Thresholds, activation: f64) -> f64 {
+    let gap = (old.activation - old.release).max(0.0);
+    ((activation - gap) * 100.0).round().max(1.0) / 100.0
+}
+
+/// Changes a model's thresholds (`LabelRuntimeHost::set_model_threshold`).
+#[tauri::command]
+pub fn set_label_model_threshold(
+    app: AppHandle,
+    host: State<'_, LabelRuntimeHost>,
+    id: String,
+    activation: f64,
+    release: Option<f64>,
+) -> Result<(), String> {
+    host.set_model_threshold(&app, &id, activation, release)
+}
+
 #[tauri::command]
 pub fn deactivate_label_model(
     app: AppHandle,
@@ -1611,6 +1655,21 @@ pub fn set_label_runtime_mode(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_new_threshold_keeps_the_release_as_far_below_it() {
+        let old = model_lab_core::Thresholds {
+            activation: 0.99,
+            release: 0.84,
+            ..Default::default()
+        };
+        assert_eq!(super::default_release(&old, 0.95), 0.8);
+        assert_eq!(
+            super::default_release(&old, 0.1),
+            0.01,
+            "never at or below zero"
+        );
+    }
+
     #[test]
     fn a_manifests_held_out_results_are_read_when_it_has_them() {
         let manifest = serde_json::json!({"provenance": {"evaluationGestureRecall": 0.83, "evaluationFalseActivationsPerHour": 0.0}});

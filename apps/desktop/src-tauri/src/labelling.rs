@@ -645,7 +645,7 @@ pub struct ModelReplay {
     /// Why some stretches were not scored (a gap in the data, a stream that stopped), if any were; at most a few.
     pub rejections: Vec<String>,
     /// Where detections would start at other thresholds: these scores through the same detection rule, from `SWEEP_FROM`
-    /// to `SWEEP_TO`. Close to a run at that threshold, but not exact where a stretch was not scored.
+    /// to `SWEEP_TO` and then each of `SWEEP_FINE`. Close to a run at that threshold, but not exact where a stretch was not scored.
     pub sweep: Vec<SweepPoint>,
 }
 
@@ -659,6 +659,8 @@ pub struct SweepPoint {
 const SWEEP_FROM: f64 = 0.30;
 const SWEEP_TO: f64 = 0.95;
 const SWEEP_STEP: f64 = 0.05;
+/// Past `SWEEP_TO`, in hundredths: the CNN's thresholds sit up here, where a hundredth changes a lot.
+const SWEEP_FINE: [f64; 4] = [0.96, 0.97, 0.98, 0.99];
 
 /// Where detections start when `scores` (at `times_ms`) go through the detection rule of `thresholds` with the activation
 /// threshold at `activation` (and the release as far below it as before).
@@ -692,6 +694,7 @@ fn sweep_of(
     (0..=steps)
         .map(|i| (SWEEP_FROM + i as f64 * SWEEP_STEP) * 100.0)
         .map(|pct| pct.round() / 100.0)
+        .chain(SWEEP_FINE)
         .map(|threshold| SweepPoint {
             threshold,
             rises_ms: rises_at(times_ms, scores, thresholds, threshold),
@@ -935,8 +938,13 @@ mod tests {
         assert!(rises_at(&times, &scores, &thresholds, 0.95).is_empty());
         let sweep = sweep_of(&times, &scores, &thresholds);
         assert_eq!(sweep.first().map(|p| p.threshold), Some(0.3));
-        assert_eq!(sweep.last().map(|p| p.threshold), Some(0.95));
-        assert_eq!(sweep.len(), 14);
+        assert_eq!(sweep.last().map(|p| p.threshold), Some(0.99));
+        assert_eq!(
+            sweep.len(),
+            18,
+            "0.30 to 0.95 by 0.05, then 0.96 to 0.99 by 0.01"
+        );
+        assert!(sweep.windows(2).all(|w| w[0].threshold < w[1].threshold));
     }
 
     use super::*;

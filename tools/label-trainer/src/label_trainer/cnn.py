@@ -145,17 +145,44 @@ class Model:
 def fit(x: np.ndarray, y: np.ndarray, seed: int, keep: np.ndarray | None = None) -> Model:
     """Trains MEMBERS networks on `x` (decisions x 450 inputs) and `y` (1 or 0), each from its own seed. `keep` marks rows
     every network trains on (the false activations it is learning from), never left out to stay within MAX_NEGATIVES."""
-    return Model([_fit_one(x, y, seed + member, keep) for member in range(MEMBERS)])
+    return fit_stages([(x, y, keep, EPOCHS)], seed)
+
+
+def fit_stages(stages: list[tuple[np.ndarray, np.ndarray, np.ndarray | None, int]], seed: int) -> Model:
+    """Trains MEMBERS networks through `stages` in order, each stage (x, y, keep, epochs) continuing from the weights the
+    one before left: a training plan, such as pinches first and then everyday noise. A stage's rows are all it sees, so
+    to keep what an earlier stage taught, its rows go into the later stage too (`label_train` does that, by rehearsal)."""
+    nets = []
+    for member in range(MEMBERS):
+        member_seed = seed + member
+        net, rng = _new_net(member_seed), np.random.default_rng(member_seed)
+        for x, y, keep, epochs in stages:
+            _train(net, x, y, keep, epochs, rng)
+        net.to("cpu").eval()
+        nets.append(net)
+    return Model(nets)
 
 
 def _fit_one(x: np.ndarray, y: np.ndarray, seed: int, keep: np.ndarray | None = None):
-    """One network, on all positives, every row `keep` marks, and up to MAX_NEGATIVES negatives in all."""
+    """One network trained in a single stage, as each member of `fit` is."""
+    net = _new_net(seed)
+    _train(net, x, y, keep, EPOCHS, np.random.default_rng(seed))
+    return net.eval()
+
+
+def _new_net(seed: int):
     import torch
-    from torch import nn
 
     torch.manual_seed(seed)
     torch.set_num_threads(max(1, torch.get_num_threads()))
-    rng = np.random.default_rng(seed)
+    return _net()
+
+
+def _train(net, x: np.ndarray, y: np.ndarray, keep: np.ndarray | None, epochs: int, rng: np.random.Generator) -> None:
+    """`epochs` passes of `net` over all positives, every row `keep` marks, and up to MAX_NEGATIVES negatives in all."""
+    import torch
+    from torch import nn
+
     y = np.asarray(y)
     kept = np.zeros(len(y), dtype=bool) if keep is None else np.asarray(keep, dtype=bool)
     negatives = np.flatnonzero((y == 0) & ~kept)
@@ -163,14 +190,16 @@ def _fit_one(x: np.ndarray, y: np.ndarray, seed: int, keep: np.ndarray | None = 
     if len(negatives) > room:
         rows = np.sort(np.concatenate([np.flatnonzero((y == 1) | kept), rng.choice(negatives, room, replace=False)]))
         x, y = x[rows], y[rows]
+    if len(y) < 2:
+        return
     where = device()
+    net.to(where)
     windows = torch.from_numpy(np.asarray(x, dtype=np.float32).reshape(-1, CHANNELS, LENGTH)).to(where)
     truth = torch.from_numpy(y.astype(np.float32)).to(where)
-    net = _net().to(where)
     optimiser = torch.optim.Adam(net.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     positives = max(1.0, float(y.sum()))
     loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(min(MAX_POSITIVE_WEIGHT, (len(y) - positives) / positives), device=where))
-    for _ in range(EPOCHS):
+    for _ in range(epochs):
         net.train()
         order = torch.from_numpy(rng.permutation(len(y))).to(where)
         for b in range(0, len(order), BATCH):
@@ -182,8 +211,7 @@ def _fit_one(x: np.ndarray, y: np.ndarray, seed: int, keep: np.ndarray | None = 
             loss.backward()
             optimiser.step()
     # Back to the CPU, where the file is written from and the trainer's numpy code reads it.
-    net.to("cpu").eval()
-    return net
+    net.to("cpu")
 
 
 def to_bytes(model: Model) -> bytes:

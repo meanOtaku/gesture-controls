@@ -18,8 +18,21 @@ export interface LabelModel {
   active: boolean;
   /** The score a detection starts at. */
   activation?: number;
+  /** The score a detection ends at. */
+  release?: number;
+  /** Each change of its thresholds since it was made, oldest first. */
+  thresholdChanges?: ThresholdChange[];
   /** How it did on its held-out recordings, from its manifest; null when the manifest says nothing. */
   evaluation?: ModelEvaluation | null;
+}
+
+/** Mirrors `model_lab_core::ThresholdChange`. */
+export interface ThresholdChange {
+  fromActivation: number;
+  fromRelease: number;
+  toActivation: number;
+  toRelease: number;
+  at: string;
 }
 
 /** Mirrors `ModelEvaluationView` in `label_runtime.rs`. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_LOG_LINES, appendLog, buildRequest, describeEvents, describeMetrics, hasLabel, otherLabels, recordingsWithLabel, thresholdNote } from "./training";
+import { CNN_METHOD, MAX_LOG_LINES, TREES_METHOD, appendLog, buildRequest, defaultStages, describeEvents, describeMetrics, hasLabel, newStage, otherLabels, recordingsWithLabel, stagesForRequest, thresholdNote, unstaged } from "./training";
 import type { DatasetSummary } from "./types";
 
 const dataset = (id: string, labels: string[]): DatasetSummary => ({ id, originalFilename: `${id}.csv`, importedAt: "", label: labels.join(", "), labels, rowCount: 10 });
@@ -98,5 +98,36 @@ describe("thresholdNote", () => {
 
   it("keeps the old caveat for a run from before, which chose it on the test recordings", () => {
     expect(thresholdNote(metrics)).toContain("chosen using those same test recordings");
+  });
+});
+
+describe("training plans", () => {
+  const ds = (id: string, labels: string[]) => ({ id, originalFilename: `${id}.csv`, importedAt: "", label: labels.join(", "), labels, rowCount: 10 });
+  const all = [ds("p1", ["pinch"]), ds("n1", ["everyday_noise"]), ds("p2", ["pinch"])];
+
+  it("starts from the recordings with the label, then everything else", () => {
+    const stages = defaultStages(["p1", "n1", "p2"], all, "pinch");
+    expect(stages.map((s) => [s.name, s.datasetIds, s.rehearse, s.epochs])).toEqual([
+      ["Recordings with pinch", ["p1", "p2"], true, null],
+      ["Everything else", ["n1"], true, null],
+    ]);
+    expect(defaultStages(["n1"], all, "pinch").map((s) => s.name)).toEqual(["Everything else"]);
+  });
+
+  it("sends only chosen recordings, trimmed names and passes that were set", () => {
+    const [first, second] = [newStage(" Pinches ", ["p1", "gone"]), { ...newStage("Noise", ["n1"]), rehearse: false, epochs: 4 }];
+    expect(stagesForRequest([first, second], new Set(["p1", "n1"]))).toEqual([
+      { name: "Pinches", datasetIds: ["p1"], rehearse: true },
+      { name: "Noise", datasetIds: ["n1"], rehearse: false, epochs: 4 },
+    ]);
+    expect(unstaged([first], new Set(["p1", "n1"]))).toEqual(["n1"]);
+  });
+
+  it("puts a plan in the request only for the CNN", () => {
+    const stages = [{ name: "A", datasetIds: ["p1"], rehearse: true }];
+    const base = { label: "pinch", datasetIds: ["p1"], others: [], roles: {}, stages };
+    expect(buildRequest({ ...base, method: CNN_METHOD }).stages).toEqual(stages);
+    expect(buildRequest({ ...base, method: TREES_METHOD }).stages).toBeUndefined();
+    expect(buildRequest({ ...base, method: CNN_METHOD, stages: [] }).stages).toBeUndefined();
   });
 });

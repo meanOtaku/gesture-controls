@@ -225,3 +225,52 @@ describe("TrainPanel", () => {
     expect(await screen.findByText("a model is already being trained")).toBeInTheDocument();
   });
 });
+
+describe("TrainPanel training plan", () => {
+  const stagedPlan: TrainPlan = { ...okPlan, stages: [{ name: "Recordings with snap", train: ["s1"], heldOut: ["s2"] }, { name: "Everything else", train: ["i1"], heldOut: ["i2"] }] };
+
+  it("offers stages only for the CNN, starts from the label's recordings then the rest, and sends the plan", async () => {
+    setup({ plan: stagedPlan });
+    choose("snap");
+    expect(screen.queryByRole("checkbox", { name: "Train in stages" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Train in stages" }));
+    const stages = screen.getByRole("list", { name: "Training stages" });
+    expect(within(stages).getAllByRole("listitem", { name: /^Stage \d$/ })).toHaveLength(2);
+    expect(screen.getByLabelText("Name of stage 1")).toHaveValue("Recordings with snap");
+    await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1]).toMatchObject({
+      request: { method: "ppg-imu-cnn", stages: [
+        { name: "Recordings with snap", datasetIds: ["s1", "s2"], rehearse: true },
+        { name: "Everything else", datasetIds: ["i1", "i2"], rehearse: true },
+      ] },
+    }));
+    expect(await screen.findByText(/Recordings with snap: trains on s1.csv; s2.csv is held out for testing/)).toBeInTheDocument();
+  });
+
+  it("edits a plan: adds a stage, fills it, sets its passes and rehearsal, and reorders", async () => {
+    setup({ plan: stagedPlan });
+    choose("snap");
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Train in stages" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add a stage" }));
+    expect(screen.getByText("This stage has no recordings yet.")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "All with snap" })[2]);
+    fireEvent.change(screen.getByLabelText("Passes in stage 3"), { target: { value: "4" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Rehearse earlier stages in stage 3" }));
+    fireEvent.click(screen.getByRole("button", { name: "Move stage 3 up" }));
+    await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1].request.stages[1]).toEqual(
+      { name: "Stage 3", datasetIds: ["s1", "s2"], rehearse: false, epochs: 4 },
+    ));
+    fireEvent.click(screen.getByRole("button", { name: "Remove stage 2" }));
+    expect(within(screen.getByRole("list", { name: "Training stages" })).getAllByRole("listitem", { name: /^Stage \d$/ })).toHaveLength(2);
+  });
+
+  it("names chosen recordings no stage uses", async () => {
+    setup({ plan: stagedPlan });
+    choose("snap");
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Train in stages" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "i2.csv in stage 2" }));
+    expect(screen.getByRole("note")).toHaveTextContent("Not in any stage: i2.csv");
+  });
+});

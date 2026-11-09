@@ -565,6 +565,19 @@ It fires about 0.9 s after a gesture begins. Tested 20 times on recordings it ne
 1. Choose the **label to teach**. Every recording starts selected; untick any you do not want.
 2. Give every other label in those recordings a role: **Something else** (it teaches the model what is *not* the gesture; their starts are the hardest thing for it to tell apart) or **Leave out**. Nothing is assumed.
 3. Optionally set the **label timing** (below), tick **Learn from its own false alarms**, and tick **Also run research checks**.
+   With the CNN you can also tick **Train in stages** (below).
+
+**Train in stages** (CNN only) sets the order the model learns from the recordings: for example the recordings with the
+gesture, then everyday noise, then the gesture again. It starts with two stages, the recordings with the label and then
+everything else; add, remove, rename and reorder stages (at most 8), and tick which of the chosen recordings each one uses.
+A recording can be in several stages, and every chosen one must be in at least one. Each stage carries on from where the one
+before left the model. **Rehearse earlier stages** (on by default from the second stage) also trains it on every start and
+half the other moments of the stages before, so a later stage does not train away what an earlier one taught; untick it for
+a stage that should see only its own recordings. **Passes** is how many times the stage goes over its data (12 when left
+empty, at most 50). The app still decides which recordings test the model: a stage's recordings held out for testing are
+never trained on, and the plan lists them per stage. A stage left with nothing to train on is refused. Learning from its own
+false alarms adds those moments to the last stage, and the models the threshold is chosen with follow the same plan. The
+plan is kept in the model's manifest (`trainingStages`).
 
 **Learn from its own false alarms** trains the model, runs it over its training recordings as the app runs it live, adds
 every moment it fired with no gesture under way as an example of what is not the gesture, and trains it again (each model
@@ -664,14 +677,20 @@ mistake there usually means a wrong label).
 
 #### Threshold (Model Lab)
 
-**Threshold** shows what a model's threshold trades: at each threshold from 0.30 to 0.95, the share of starts it catches on
+**Threshold** shows what a model's threshold trades, and sets it: at each threshold from 0.30 to 0.95 by 0.05 and then
+0.96 to 0.99, the share of starts it catches on
 its test recordings against its false activations an hour with no gesture under way, as a curve with its own threshold
 ringed. The dashed line is the release budget, 30 an hour: a threshold right of it fires too often to go live. The slider
 shows the numbers at any one, beside those at its own, with its repeats and late detections (counted apart, not as false
 activations) and whether it is within the budget. Detections are counted as on the Mistakes card. With both camera-timed and
 estimated test recordings, the curve is the camera-timed ones' when they hold at least 20 gestures and a minute with none
 under way, and the estimated ones' numbers are given under it. The curve comes from one run of the model's scores through its
-detection rule at each threshold. The threshold is part of a trained model: to use another, train again.
+detection rule at each threshold.
+
+To change it, move the slider to another threshold and click **Use** (a threshold over the budget asks again first). The model
+runs with it from then on, at once if it is active, and a detection ends as far below it as before. The card shows the
+threshold it runs at and its last change; every change is kept in the model's history. An imported model has no known test
+recordings and so no curve: type its new threshold instead, and check the result in Monitor or with **Compare models**.
 
 #### Compare models (Model Lab)
 

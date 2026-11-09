@@ -78,6 +78,110 @@ pub struct TrainRequest {
     /// Train again with the moments the model fired by mistake on its training recordings (everyday noise teaches most).
     #[serde(default)]
     pub hard_negatives: bool,
+    /// A training plan for the CNN: it trains through these in order. Absent or empty trains on everything at once.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stages: Vec<StageRequest>,
+}
+
+/// One step of a training plan: the recordings it trains on, whether it also rehearses the earlier stages' recordings,
+/// and how many passes it makes (the trainer's default when absent).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct StageRequest {
+    pub name: String,
+    pub dataset_ids: Vec<String>,
+    #[serde(default = "rehearse_by_default")]
+    pub rehearse: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epochs: Option<u32>,
+}
+
+fn rehearse_by_default() -> bool {
+    true
+}
+
+/// A training plan's limits (the trainer's `MAX_STAGES`, `MAX_STAGE_EPOCHS`).
+pub const MAX_STAGES: usize = 8;
+pub const MAX_STAGE_EPOCHS: u32 = 50;
+const MAX_STAGE_NAME: usize = 60;
+
+/// Checks a request's training plan: the CNN only, at most [`MAX_STAGES`], each stage named, with recordings the request
+/// chose and a sensible number of passes, and every chosen recording in some stage.
+fn check_stages(request: &TrainRequest, backend: &str) -> Result<Vec<StageRequest>, String> {
+    if request.stages.is_empty() {
+        return Ok(Vec::new());
+    }
+    if backend != CNN_BACKEND {
+        return Err("only the CNN can train in stages; choose the CNN, or remove the plan".into());
+    }
+    if request.stages.len() > MAX_STAGES {
+        return Err(format!("a training plan has at most {MAX_STAGES} stages"));
+    }
+    let chosen: BTreeSet<&String> = request.dataset_ids.iter().collect();
+    let mut staged = BTreeSet::new();
+    let mut stages = Vec::new();
+    for (number, stage) in request.stages.iter().enumerate().map(|(i, s)| (i + 1, s)) {
+        let name = stage.name.trim();
+        let name = if name.is_empty() {
+            format!("Stage {number}")
+        } else {
+            name.chars().take(MAX_STAGE_NAME).collect()
+        };
+        if stage.dataset_ids.is_empty() {
+            return Err(format!(
+                "stage {number} ({name}) has no recordings: add some, or remove the stage"
+            ));
+        }
+        if let Some(outside) = stage.dataset_ids.iter().find(|id| !chosen.contains(id)) {
+            return Err(format!(
+                "stage {number} ({name}) names '{outside}', which is not among the chosen recordings"
+            ));
+        }
+        if let Some(epochs) = stage.epochs
+            && !(1..=MAX_STAGE_EPOCHS).contains(&epochs)
+        {
+            return Err(format!(
+                "stage {number} ({name}) must train for 1 to {MAX_STAGE_EPOCHS} passes"
+            ));
+        }
+        staged.extend(stage.dataset_ids.iter());
+        let mut ids = Vec::new();
+        for id in &stage.dataset_ids {
+            if !ids.contains(id) {
+                ids.push(id.clone());
+            }
+        }
+        stages.push(StageRequest {
+            name,
+            dataset_ids: ids,
+            rehearse: stage.rehearse,
+            epochs: stage.epochs,
+        });
+    }
+    if let Some(missing) = chosen.iter().find(|id| !staged.contains(*id)) {
+        return Err(format!(
+            "'{missing}' is chosen but in no stage: put it in one, or leave it out"
+        ));
+    }
+    Ok(stages)
+}
+
+/// The plan as the trainer reads it: each stage's recordings less those held out for evaluation, and the stages left
+/// with none dropped (the evaluation recordings are never trained on).
+fn spec_stages(stages: &[StageRequest], train: &BTreeSet<String>) -> Vec<serde_json::Value> {
+    stages
+        .iter()
+        .filter_map(|stage| {
+            let recordings: Vec<&String> = stage.dataset_ids.iter().filter(|id| train.contains(*id)).collect();
+            (!recordings.is_empty()).then(|| {
+                let mut value = serde_json::json!({ "name": stage.name, "recordings": recordings, "rehearse": stage.rehearse });
+                if let Some(epochs) = stage.epochs {
+                    value["epochs"] = serde_json::json!(epochs);
+                }
+                value
+            })
+        })
+        .collect()
 }
 
 /// The trainer backend a request asks for, and what its model reads.
@@ -100,6 +204,8 @@ struct Checked {
     recordings: Vec<RecordingInfo>,
     research: bool,
     hard_negatives: bool,
+    /// The training plan, checked (`check_stages`); empty trains on everything at once.
+    stages: Vec<StageRequest>,
     label_offset_ms: i32,
     /// How each recording's labels were timed, for the trainer to judge on the trusted ones (`label_timing_of`).
     label_timing: BTreeMap<String, &'static str>,
@@ -220,6 +326,7 @@ fn check_request(
         ));
     }
     let (backend, input) = method_of(request)?;
+    let stages = check_stages(request, backend)?;
     let label_timing = label_timing_of(&recordings_ids(&recordings), datasets, &target.to_string());
     Ok(Checked {
         target,
@@ -229,6 +336,7 @@ fn check_request(
         recordings,
         research: request.research,
         hard_negatives: request.hard_negatives,
+        stages,
         label_offset_ms,
         label_timing,
     })
@@ -298,6 +406,7 @@ fn build_spec(
         // Train and test only on moments the runtime's steadiness gate would let a gesture start at (`steadiness.py`),
         // when the setting asks for the gate (`steady_starts_only`, set by the caller).
         "steadyStarts": false,
+        "stages": spec_stages(&checked.stages, &ids(&split.train).into_iter().collect()),
     })
 }
 
@@ -317,6 +426,18 @@ pub struct PlanView {
     pub problem: Option<String>,
     /// How many inputs the model reads (always the PPG pinch-start features).
     pub inputs: usize,
+    /// The training plan as it will run: per stage, the recordings it trains on and those held out for evaluation.
+    #[serde(default)]
+    pub stages: Vec<StagePlanView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StagePlanView {
+    pub name: String,
+    pub train: Vec<String>,
+    /// The stage's recordings held out for evaluation, which it will not train on.
+    pub held_out: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -642,22 +763,52 @@ fn plan_label_training_blocking(app: &AppHandle, request: &TrainRequest) -> Plan
         });
     let result = recordings_for(app, request).and_then(|checked| {
         plan_split(&checked.recordings, &checked.mapping, &checked.target)
+            .map(|split| (checked, split))
             .map_err(|e| e.to_string())
     });
     match result {
-        Ok(split) => PlanView {
-            train: split.train.iter().map(ToString::to_string).collect(),
-            evaluation: split.evaluation.iter().map(ToString::to_string).collect(),
-            problem: None,
-            inputs,
-        },
+        Ok((checked, split)) => {
+            let train: Vec<String> = split.train.iter().map(ToString::to_string).collect();
+            let stages = stage_plans(&checked.stages, &train);
+            let problem = stages
+                .iter()
+                .position(|stage| stage.train.is_empty())
+                .map(|i| format!("every recording in stage {} ({}) is held out for evaluation, so it would train on nothing: add more recordings to it", i + 1, stages[i].name));
+            PlanView {
+                evaluation: split.evaluation.iter().map(ToString::to_string).collect(),
+                train,
+                problem,
+                inputs,
+                stages,
+            }
+        }
         Err(problem) => PlanView {
             train: Vec::new(),
             evaluation: Vec::new(),
             problem: Some(problem),
             inputs,
+            stages: Vec::new(),
         },
     }
+}
+
+/// Each stage's recordings split into those it trains on and those held out for evaluation.
+fn stage_plans(stages: &[StageRequest], train: &[String]) -> Vec<StagePlanView> {
+    stages
+        .iter()
+        .map(|stage| {
+            let (train, held_out) = stage
+                .dataset_ids
+                .iter()
+                .cloned()
+                .partition(|id| train.contains(id));
+            StagePlanView {
+                name: stage.name.clone(),
+                train,
+                held_out,
+            }
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -740,7 +891,7 @@ pub async fn start_label_training(
         trainer: TrainerConfig {
             backend: trainer_backend(checked.backend).ok_or("unknown training method")?,
             // What else shaped the run, so the training history can say what changed from one run to the next.
-            params: BTreeMap::from([
+            params: BTreeMap::from_iter([
                 (
                     "method".to_string(),
                     serde_json::Value::String(checked.backend.into()),
@@ -757,7 +908,16 @@ pub async fn start_label_training(
                     "hardNegatives".to_string(),
                     serde_json::Value::Bool(checked.hard_negatives),
                 ),
-            ]),
+            ])
+            // Only a planned run says so, so runs before plans existed do not all read as changed.
+            .into_iter()
+            .chain((!checked.stages.is_empty()).then(|| {
+                (
+                    "stages".to_string(),
+                    serde_json::to_value(&checked.stages).unwrap_or_default(),
+                )
+            }))
+            .collect(),
         },
         recordings: checked.recordings.clone(),
         train_only: Vec::new(),
@@ -1074,7 +1234,86 @@ mod tests {
             label_offset_ms: None,
             method: None,
             hard_negatives: false,
+            stages: vec![],
         }
+    }
+
+    fn stage(name: &str, ids: &[&str]) -> StageRequest {
+        StageRequest {
+            name: name.into(),
+            dataset_ids: ids.iter().map(|id| id.to_string()).collect(),
+            rehearse: true,
+            epochs: None,
+        }
+    }
+
+    #[test]
+    fn a_training_plan_is_checked_for_the_cnn() {
+        let mut r = request();
+        r.method = Some(CNN_BACKEND.into());
+        r.stages = vec![
+            stage(" Pinches ", &["s1", "s2", "s3"]),
+            stage("", &["i1", "i2", "i3", "i1"]),
+        ];
+        let stages = check_stages(&r, CNN_BACKEND).unwrap();
+        assert_eq!(stages[0].name, "Pinches");
+        assert_eq!(stages[1].name, "Stage 2", "an unnamed stage is numbered");
+        assert_eq!(
+            stages[1].dataset_ids,
+            ["i1", "i2", "i3"],
+            "a recording twice in a stage counts once"
+        );
+        assert!(
+            check_stages(&request(), BACKEND).unwrap().is_empty(),
+            "no plan, nothing to check"
+        );
+
+        let refused = |stages: Vec<StageRequest>, backend: &str| {
+            let mut r = request();
+            r.stages = stages;
+            check_stages(&r, backend).unwrap_err()
+        };
+        let all = &["s1", "s2", "s3", "i1", "i2", "i3"];
+        assert!(refused(vec![stage("A", all)], BACKEND).contains("only the CNN"));
+        assert!(
+            refused(vec![stage("A", &["s1", "s2", "s3"])], CNN_BACKEND).contains("in no stage")
+        );
+        assert!(
+            refused(vec![stage("A", &["zz"]), stage("B", all)], CNN_BACKEND)
+                .contains("not among the chosen")
+        );
+        assert!(
+            refused(vec![stage("A", &[]), stage("B", all)], CNN_BACKEND)
+                .contains("has no recordings")
+        );
+        let mut long = stage("A", all);
+        long.epochs = Some(51);
+        assert!(refused(vec![long], CNN_BACKEND).contains("1 to 50 passes"));
+        assert!(refused(vec![stage("A", all); 9], CNN_BACKEND).contains("at most 8"));
+    }
+
+    #[test]
+    fn the_trainer_gets_each_stage_without_its_held_out_recordings() {
+        let mut quick = stage("Noise", &["i1", "i2"]);
+        quick.rehearse = false;
+        quick.epochs = Some(4);
+        let stages = vec![
+            stage("Pinches", &["s1", "s2"]),
+            quick,
+            stage("Held only", &["s3"]),
+        ];
+        let train: BTreeSet<String> = ["s1", "i1", "i2"].map(String::from).into();
+        assert_eq!(
+            serde_json::Value::Array(spec_stages(&stages, &train)),
+            serde_json::json!([
+                {"name": "Pinches", "recordings": ["s1"], "rehearse": true},
+                {"name": "Noise", "recordings": ["i1", "i2"], "rehearse": false, "epochs": 4},
+            ])
+        );
+        let plans = stage_plans(&stages, &["s1".into(), "i1".into(), "i2".into()]);
+        assert_eq!(plans[0].train, ["s1"]);
+        assert_eq!(plans[0].held_out, ["s2"]);
+        assert!(plans[2].train.is_empty());
     }
 
     fn datasets() -> Vec<DatasetSummary> {

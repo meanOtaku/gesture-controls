@@ -97,6 +97,17 @@ The app does this when you press **Train**; the command line does the same from 
 **Learn from its own false alarms** (`hardNegatives`) adds a step after 3: the model is replayed over its training recordings,
 each false activation becomes one more "not the gesture" example, and it is trained again.
 
+**A training plan** (`stages`, CNN only) replaces step 3's single fit: the networks train through the stages in order, each
+continuing from the weights the stage before left (`cnn.fit_stages`). A stage takes its recordings' moments; a rehearsing
+stage also takes every start and half the other moments of the earlier stages' recordings (`label_train.stage_rows`). False
+alarms learnt from go into the last stage, and the out-of-fold models that choose the threshold follow the same plan, each
+without its fold's recordings. The desktop removes the recordings held out for testing from every stage before writing the
+spec. A plan is recorded in the manifest's `provenance.trainingStages`.
+
+**Thresholds after training.** The registry, not the bundle, holds the thresholds a model runs under, so they can be changed
+later (`set_label_model_threshold`, `Registry::set_thresholds`): the release keeps its distance below the activation unless
+given, the runtime picks the change up when it reloads, and each change is kept in the version's `thresholdChanges`.
+
 ## Where they stand (4 Nov 2026)
 
 Full results: [`cnn-all-days-2026-11`](../research/artifacts/cnn-all-days-2026-11/results.md), and for trees against the CNN,

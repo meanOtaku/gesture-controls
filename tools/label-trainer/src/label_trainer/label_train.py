@@ -108,6 +108,23 @@ class TrainingRefused(Exception):
     """Training cannot go ahead, for a reason a person can act on."""
 
 
+# A training plan's limits, and how much of the earlier stages a rehearsing stage mixes back in.
+MAX_STAGES = 8
+MAX_STAGE_EPOCHS = 50
+REHEARSAL_NEGATIVE_SHARE = 0.5     # of the earlier stages' other moments; their starts are always all rehearsed
+MINED_GROUP = "__mined__"          # the group of the false activations `reinforce` adds, which train in the last stage
+
+
+@dataclass(frozen=True)
+class TrainingStage:
+    """One step of a training plan: the CNN trains on these recordings (and, rehearsing, on part of the earlier stages'),
+    for `epochs` passes, starting from where the stage before left it."""
+    name: str
+    recordings: tuple[str, ...]
+    rehearse: bool = True
+    epochs: int | None = None
+
+
 @dataclass(frozen=True)
 class Spec:
     target: str
@@ -129,6 +146,8 @@ class Spec:
     label_timing: dict[str, str] = field(default_factory=dict)
     # Train again with the moments the model fired by mistake on its own training recordings (`reinforce`).
     hard_negatives: bool = False
+    # A training plan: the CNN trains through these in order (`fit`). Empty trains on everything at once.
+    stages: tuple[TrainingStage, ...] = ()
 
     @property
     def cnn(self) -> bool:
@@ -190,6 +209,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
     hard_negatives = raw.get("hardNegatives", False)
     if not isinstance(hard_negatives, bool):
         raise TrainingRefused(f"hardNegatives must be true or false, got {hard_negatives!r}")
+    stages = parse_stages(raw.get("stages") or [], backend, train)
     return Spec(
         target=target,
         negatives=list(raw.get("negatives", [])),
@@ -205,7 +225,42 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         backend=backend,
         label_timing=dict(label_timing),
         hard_negatives=hard_negatives,
+        stages=stages,
     )
+
+
+def parse_stages(raw: list[Any], backend: str, train: list[str]) -> tuple[TrainingStage, ...]:
+    """A spec's training plan, checked: only the CNN trains in stages, every stage names training recordings only, and
+    every training recording is in a stage (the held-out ones never are)."""
+    if not raw:
+        return ()
+    if backend != CNN_BACKEND:
+        raise TrainingRefused("only the CNN can train in stages; the trees learn from everything at once")
+    if not isinstance(raw, list) or len(raw) > MAX_STAGES:
+        raise TrainingRefused(f"a training plan has 1 to {MAX_STAGES} stages")
+    stages, staged = [], set()
+    for number, item in enumerate(raw, 1):
+        if not isinstance(item, dict):
+            raise TrainingRefused(f"stage {number} is not a stage")
+        name = str(item.get("name") or f"Stage {number}")
+        recordings = item.get("recordings")
+        if not isinstance(recordings, list) or not recordings or not all(isinstance(r, str) for r in recordings):
+            raise TrainingRefused(f"stage {number} ({name}) names no recordings")
+        outside = [r for r in recordings if r not in train]
+        if outside:
+            raise TrainingRefused(f"stage {number} ({name}) names recordings that are not training recordings: {', '.join(outside)}")
+        epochs = item.get("epochs")
+        if epochs is not None and (isinstance(epochs, bool) or not isinstance(epochs, int) or not 1 <= epochs <= MAX_STAGE_EPOCHS):
+            raise TrainingRefused(f"stage {number} ({name}) must train for 1 to {MAX_STAGE_EPOCHS} passes, got {epochs!r}")
+        rehearse = item.get("rehearse", True)
+        if not isinstance(rehearse, bool):
+            raise TrainingRefused(f"stage {number} ({name}): rehearse must be true or false")
+        stages.append(TrainingStage(name, tuple(dict.fromkeys(recordings)), rehearse, epochs))
+        staged.update(recordings)
+    missing = [r for r in train if r not in staged]
+    if missing:
+        raise TrainingRefused(f"every training recording must be in a stage; not in any: {', '.join(missing)}")
+    return tuple(stages)
 
 
 def load_spec_recordings(spec: Spec) -> dict[str, Recording]:
@@ -351,17 +406,51 @@ def cnn_device() -> str:
     return cnn.device()
 
 
-def fit(x: np.ndarray, y: np.ndarray, seed: int, n_trees: int = TREES, backend: str = BACKEND, keep: np.ndarray | None = None):
+def fit(x: np.ndarray, y: np.ndarray, seed: int, n_trees: int = TREES, backend: str = BACKEND, keep: np.ndarray | None = None,
+        groups: np.ndarray | None = None, stages: tuple[TrainingStage, ...] = ()):
     """The model trained on `x` and `y`. For the CNN, `keep` marks rows it must train on whatever it leaves out to stay
-    within its number of negatives (the false activations `reinforce` adds); the trees train on every row."""
+    within its number of negatives (the false activations `reinforce` adds); the trees train on every row. With `stages`
+    (and each row's recording in `groups`), the CNN trains through them in order (`stage_rows`)."""
     if backend == CNN_BACKEND:
         from . import cnn
 
+        if stages and groups is not None:
+            plan = stage_rows(stages, y, groups, keep, seed)
+            if plan:
+                return cnn.fit_stages([(x[rows], y[rows], None if keep is None else keep[rows], epochs or cnn.EPOCHS)
+                                       for rows, epochs in plan], seed)
         return cnn.fit(x, y, seed, keep)
     from sklearn.ensemble import ExtraTreesClassifier
 
     return ExtraTreesClassifier(n_estimators=n_trees, min_samples_leaf=MIN_SAMPLES_LEAF, max_features=MAX_FEATURES,
                                 n_jobs=-1, random_state=seed).fit(x, y)
+
+
+def stage_rows(stages: tuple[TrainingStage, ...], y: np.ndarray, groups: np.ndarray, keep: np.ndarray | None,
+               seed: int) -> list[tuple[np.ndarray, int | None]]:
+    """The rows each stage trains on, and its passes. A stage takes its recordings' rows; rehearsing, it also takes every
+    start from the earlier stages' recordings and REHEARSAL_NEGATIVE_SHARE of their other moments, so what they taught is
+    not trained away. The rows `keep` marks (`reinforce`'s false activations, group MINED_GROUP) train in the last stage
+    that has rows. A stage left with no rows (its recordings held out in a fold) is skipped."""
+    rng = np.random.default_rng(seed)
+    groups = np.asarray(groups)
+    plan, earlier = [], np.zeros(len(y), dtype=bool)
+    for stage in stages:
+        own = np.isin(groups, stage.recordings)
+        rows = own.copy()
+        if stage.rehearse and earlier.any():
+            back = earlier & ~own
+            rows |= back & (y == 1)
+            others = np.flatnonzero(back & (y == 0))
+            if len(others):
+                rows[rng.choice(others, int(round(len(others) * REHEARSAL_NEGATIVE_SHARE)), replace=False)] = True
+        earlier |= own
+        if rows.any():
+            plan.append([rows, stage.epochs])
+    mined = groups == MINED_GROUP if keep is None else (np.asarray(keep, dtype=bool) | (groups == MINED_GROUP))
+    if plan and mined.any():
+        plan[-1][0] = plan[-1][0] | mined
+    return [(np.flatnonzero(rows), epochs) for rows, epochs in plan]
 
 
 def _rates(probability: np.ndarray, y: np.ndarray, threshold: float) -> dict[str, Any]:
@@ -418,7 +507,8 @@ def reinforce(spec: Spec, model, train: Examples, recordings: dict[str, Recordin
     x = np.concatenate([train.x, mined])
     y = np.concatenate([train.y, np.zeros(mined.shape[0], dtype=train.y.dtype)])
     keep = np.concatenate([np.zeros(train.y.shape[0], dtype=bool), np.ones(mined.shape[0], dtype=bool)])
-    return fit(x, y, spec.seed, backend=spec.backend, keep=keep), int(mined.shape[0])
+    groups = np.concatenate([np.asarray(train.groups, dtype=object), np.full(mined.shape[0], MINED_GROUP, dtype=object)])
+    return fit(x, y, spec.seed, backend=spec.backend, keep=keep, groups=groups, stages=spec.stages), int(mined.shape[0])
 
 
 def out_of_fold_threshold(spec: Spec, train: Examples, recordings: dict[str, Recording], say=lambda _: None) -> tuple[float, str, float | None, dict[str, Any] | None]:
@@ -444,7 +534,7 @@ def out_of_fold_threshold(spec: Spec, train: Examples, recordings: dict[str, Rec
         test = fold == k
         if int(train.y[~test].sum()) < MIN_POSITIVE_TRAIN or int((train.y[~test] == 0).sum()) < MIN_POSITIVE_TRAIN:
             continue
-        model = fit(train.x[~test], train.y[~test], spec.seed, backend=spec.backend)
+        model = fit(train.x[~test], train.y[~test], spec.seed, backend=spec.backend, groups=train.groups[~test], stages=spec.stages)
         if spec.hard_negatives:
             fold_train = Examples(train.x[~test], train.y[~test], train.groups[~test], [], train.decisions[~test])
             model, _ = reinforce(spec, model, fold_train, recordings, [g for g in groups if fold_of[g] != k])
@@ -812,6 +902,8 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
             **details,
             "trainRecordings": sorted(spec.train),
             "evaluationRecordings": sorted(spec.evaluation),
+            **({"trainingStages": [{"name": st.name, "recordings": list(st.recordings), "rehearse": st.rehearse,
+                                    "epochs": st.epochs} for st in spec.stages]} if spec.stages else {}),
             "seed": spec.seed,
             "evaluationRocAuc": metrics["rocAuc"],
             "evaluationBalancedAccuracy": metrics["balancedAccuracy"],
@@ -868,7 +960,11 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
         check_enough(train, held_out, spec.steady_starts)
         what = f"the CNN on {cnn_device()}" if spec.cnn else f"{TREES} trees"
         say(f"Training {what} on {train.y.shape[0]} moments ({int(train.y.sum())} starts) from {len(spec.train)} recordings")
-        model = fit(train.x, train.y, spec.seed, backend=spec.backend)
+        for number, stage in enumerate(spec.stages, 1):
+            rows = np.isin(train.groups, stage.recordings)
+            say(f"Stage {number} of {len(spec.stages)}, {stage.name}: {int(rows.sum())} moments ({int(train.y[rows].sum())} starts) "
+                f"from {len(stage.recordings)} recordings" + (", rehearsing the stages before" if stage.rehearse and number > 1 else ""))
+        model = fit(train.x, train.y, spec.seed, backend=spec.backend, groups=train.groups, stages=spec.stages)
         model, mined = reinforce(spec, model, train, recordings, spec.train)
         if spec.hard_negatives:
             say(f"Trained again with the {mined} moments it fired by mistake on the training recordings")

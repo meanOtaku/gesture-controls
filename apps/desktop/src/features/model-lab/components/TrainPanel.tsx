@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { Label } from "../../../components/ui/label";
 import { useTrainingRun } from "../hooks/useTrainingRun";
-import { CNN_METHOD, CNN_MODEL, PULSE_MODEL, TREES_METHOD, buildRequest, hasLabel, otherLabels, recordingsWithLabel, type OtherRole, type TrainMethod, type TrainPlan, type TrainerEnvironment } from "../training";
+import { CNN_METHOD, CNN_MODEL, PULSE_MODEL, TREES_METHOD, buildRequest, defaultStages, hasLabel, otherLabels, recordingsWithLabel, stagesForRequest, type OtherRole, type StageDraft, type TrainMethod, type TrainPlan, type TrainerEnvironment } from "../training";
+import { TrainingPlanEditor } from "./TrainingPlanEditor";
 import { datasetLabels, inImportOrder, recordingNumber, type DatasetLabel, type DatasetSummary } from "../types";
 import { LabelTiming } from "./LabelTiming";
 import { LabelSwatch } from "../../labels/labelColor";
@@ -42,6 +43,8 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
   const [hardNegatives, setHardNegatives] = useState(false);
   const [labelOffset, setLabelOffset] = useState(0);
   const [method, setMethod] = useState<TrainMethod>(TREES_METHOD);
+  const [staged, setStaged] = useState(false);
+  const [stages, setStages] = useState<StageDraft[]>([]);
   const [plan, setPlan] = useState<TrainPlan | null>(null);
   const [environment, setEnvironment] = useState<TrainerEnvironment | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +56,9 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
   const candidates = useMemo(() => inImportOrder(datasets.filter((dataset) => datasetLabels(dataset).length > 0 && !dataset.sealed)), [datasets]);
   const sealedCount = useMemo(() => datasets.filter((dataset) => dataset.sealed).length, [datasets]);
   const others = useMemo(() => otherLabels(datasets, selected, target), [datasets, selected, target]);
-  const request = useMemo(() => target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, research, labelOffsetMs: labelOffset, method, hardNegatives }), [target, selected, others, roles, research, labelOffset, method, hardNegatives]);
+  const chosen = useMemo(() => candidates.filter((dataset) => selected.has(dataset.id)), [candidates, selected]);
+  const planStages = useMemo(() => (staged && method === CNN_METHOD ? stagesForRequest(stages, selected) : undefined), [staged, method, stages, selected]);
+  const request = useMemo(() => target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, research, labelOffsetMs: labelOffset, method, hardNegatives, stages: planStages }), [target, selected, others, roles, research, labelOffset, method, hardNegatives, planStages]);
   const requestKey = JSON.stringify(request);
   const coverage = useMemo(() => plan ? splitCoverage(datasets, plan.train, plan.evaluation, target) : [], [datasets, plan, target]);
 
@@ -90,8 +95,15 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
   const chooseTarget = (label: string) => {
     setTarget(label);
     run.clearResult();
+    setStaged(false);
+    setStages([]);
     // Start from every recording, so what to leave out is a decision rather than something to remember.
     setSelected(new Set(candidates.map((dataset) => dataset.id)));
+  };
+
+  const toggleStaged = () => {
+    if (!staged && stages.length === 0) setStages(defaultStages(chosen.map((dataset) => dataset.id), datasets, target));
+    setStaged((value) => !value);
   };
 
   const start = async () => {
@@ -192,6 +204,17 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
               </fieldset>
             )}
 
+            {method === CNN_METHOD && (
+              <fieldset className="flex flex-col gap-2">
+                <legend className="label">Training plan</legend>
+                <div className="flex items-start gap-2 text-sm">
+                  <Checkbox checked={staged} disabled={running !== null} onCheckedChange={toggleStaged} aria-label="Train in stages" />
+                  <span><strong>Train in stages</strong> <small className="text-muted-foreground">Choose the order it learns from the recordings, such as pinches, then everyday noise, then pinches again. Each stage carries on from where the one before left it. Off, it learns from all of them at once.</small></span>
+                </div>
+                {staged && <TrainingPlanEditor stages={stages} onChange={setStages} chosen={chosen} datasets={datasets} target={target} disabled={running !== null} />}
+              </fieldset>
+            )}
+
             <LabelTiming request={request} offset={labelOffset} onOffset={setLabelOffset} disabled={running !== null} />
 
             {plan && (
@@ -203,6 +226,16 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
                     <p className="field-hint">
                       It will train on {plan.train.length} recording{plan.train.length === 1 ? "" : "s"} ({plan.train.map(name).join(", ")}) and test on {plan.evaluation.length} it never trains on ({plan.evaluation.map(name).join(", ")}).
                     </p>
+                    {plan.stages && plan.stages.length > 0 && (
+                      <ol className="field-hint flex list-decimal flex-col gap-1 pl-5" aria-label="Stages as they will run">
+                        {plan.stages.map((stage, index) => (
+                          <li key={index}>
+                            {stage.name}: trains on {stage.train.length ? stage.train.map(name).join(", ") : "nothing"}
+                            {stage.heldOut.length ? `; ${stage.heldOut.map(name).join(", ")} ${stage.heldOut.length === 1 ? "is" : "are"} held out for testing` : ""}.
+                          </li>
+                        ))}
+                      </ol>
+                    )}
                     <SplitCoverageTable rows={coverage} label={target} />
                     {recordingsWithLabel(datasets, plan.train, target) < 2 && (
                       <Alert role="note">

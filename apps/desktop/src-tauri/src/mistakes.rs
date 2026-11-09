@@ -304,7 +304,7 @@ fn sweep_points(rows: &SweepRows) -> Vec<ThresholdPoint> {
 }
 
 /// How many starts model version `version_id` catches, and how many false activations an hour with no gesture under way it
-/// makes, at each threshold from 0.30 to 0.95, on the recordings it was tested on: the trade-off its threshold picks a point
+/// makes, at each threshold from 0.30 to 0.99, on the recordings it was tested on: the trade-off its threshold picks a point
 /// on.
 #[tauri::command]
 pub async fn threshold_sweep(version_id: String, app: AppHandle) -> Result<ThresholdSweep, String> {

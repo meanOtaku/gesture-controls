@@ -173,7 +173,7 @@ def test_hard_negatives_train_it_again_with_the_moments_it_fired_by_mistake(monk
     monkeypatch.setattr(lt, "detections", lambda spec, recording, times, scores, policy: cut_offs.append(policy.activation) or {"falseRisesNs": [7, 9]})
     monkeypatch.setattr(lt, "inputs", lambda spec, recording, rises: np.full((len(rises), 2), 5.0))
     fitted = {}
-    monkeypatch.setattr(lt, "fit", lambda x, y, seed, backend=lt.BACKEND, keep=None: fitted.update(x=x, y=y, keep=keep) or "again")
+    monkeypatch.setattr(lt, "fit", lambda x, y, seed, backend=lt.BACKEND, keep=None, **_: fitted.update(x=x, y=y, keep=keep) or "again")
     first = SimpleNamespace(predict_proba=lambda x: np.zeros((len(x), 2)))
     model, mined = lt.reinforce(spec, first, train, {"r": None}, ["r"])
     assert (model, mined) == ("again", 2)

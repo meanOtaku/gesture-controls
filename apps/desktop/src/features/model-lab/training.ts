@@ -110,6 +110,66 @@ export interface TrainRequest {
   method?: TrainMethod;
   /** Train again with the moments it fired by mistake on its training recordings (`reinforce` in the trainer). */
   hardNegatives?: boolean;
+  /** A training plan for the CNN: it trains through these in order. Absent trains on everything at once. */
+  stages?: StageRequest[];
+}
+
+/** Mirrors `StageRequest` in `label_training.rs`: one step of a training plan. */
+export interface StageRequest {
+  name: string;
+  datasetIds: string[];
+  /** Also train on the starts and half the other moments of the stages before, so they are not forgotten. */
+  rehearse: boolean;
+  /** Passes over the stage; absent uses the trainer's default (CNN_DEFAULT_EPOCHS). */
+  epochs?: number;
+}
+
+/** A stage being edited in the Train panel. */
+export interface StageDraft {
+  key: string;
+  name: string;
+  datasetIds: string[];
+  rehearse: boolean;
+  epochs: number | null;
+}
+
+/** The trainer's passes over the data when a stage does not say (`cnn.EPOCHS`), and the limits (`label_training.rs`). */
+export const CNN_DEFAULT_EPOCHS = 12;
+export const MAX_STAGES = 8;
+export const MAX_STAGE_EPOCHS = 50;
+
+let stageCount = 0;
+/** A new, empty stage. */
+export function newStage(name: string, datasetIds: string[] = []): StageDraft {
+  stageCount += 1;
+  return { key: `stage-${stageCount}`, name, datasetIds, rehearse: true, epochs: null };
+}
+
+/** A starting plan for `chosen` recordings: the ones with the label first, then everything else. */
+export function defaultStages(chosen: string[], datasets: DatasetSummary[], label: string): StageDraft[] {
+  const has = (id: string) => datasets.some((dataset) => dataset.id === id && hasLabel(dataset, label));
+  const withLabel = chosen.filter(has);
+  const rest = chosen.filter((id) => !has(id));
+  return [
+    ...(withLabel.length ? [newStage(`Recordings with ${label}`, withLabel)] : []),
+    ...(rest.length ? [newStage("Everything else", rest)] : []),
+  ];
+}
+
+/** The plan as the request carries it: each stage's chosen recordings only. */
+export function stagesForRequest(drafts: StageDraft[], chosen: Set<string>): StageRequest[] {
+  return drafts.map((draft) => ({
+    name: draft.name.trim(),
+    datasetIds: draft.datasetIds.filter((id) => chosen.has(id)),
+    rehearse: draft.rehearse,
+    ...(draft.epochs != null ? { epochs: draft.epochs } : {}),
+  }));
+}
+
+/** Chosen recordings that no stage trains on (the desktop refuses a plan that leaves one out). */
+export function unstaged(drafts: StageDraft[], chosen: Set<string>): string[] {
+  const staged = new Set(drafts.flatMap((draft) => draft.datasetIds));
+  return [...chosen].filter((id) => !staged.has(id));
 }
 
 /** The most the labels may be moved in time, either way (the desktop's limit). */
@@ -130,6 +190,15 @@ export interface TrainPlan {
   problem: string | null;
   /** How many inputs the model reads. */
   inputs: number;
+  /** With a training plan: per stage, what it trains on and what is held out for testing. */
+  stages?: StagePlan[];
+}
+
+/** Mirrors `StagePlanView`. */
+export interface StagePlan {
+  name: string;
+  train: string[];
+  heldOut: string[];
 }
 
 export interface TrainerEnvironment {
@@ -217,6 +286,8 @@ export function buildRequest(input: {
   labelOffsetMs?: number;
   method?: TrainMethod;
   hardNegatives?: boolean;
+  /** Only for the CNN: the plan to train through. */
+  stages?: StageRequest[];
 }): TrainRequest {
   const role = (label: string): OtherRole => input.roles[label] ?? "negative";
   return {
@@ -228,6 +299,7 @@ export function buildRequest(input: {
     ...(input.labelOffsetMs ? { labelOffsetMs: input.labelOffsetMs } : {}),
     ...(input.method === CNN_METHOD ? { method: CNN_METHOD } : {}),
     ...(input.hardNegatives ? { hardNegatives: true } : {}),
+    ...(input.method === CNN_METHOD && input.stages?.length ? { stages: input.stages } : {}),
   };
 }
 

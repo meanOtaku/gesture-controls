@@ -3,13 +3,15 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::contract::Thresholds;
 use crate::ids::{LabelId, ModelVersionId, ProjectId, RunId, SnapshotId};
 use crate::migrate::QuarantinedModel;
 use crate::project::{LabelProject, ProjectError};
 use crate::run::{ArtifactRef, RunError, RunOutcome, RunStatus, TrainingRun};
 use crate::snapshot::{DatasetSnapshot, SnapshotError};
 use crate::version::{
-    LifecycleState, MAX_MODEL_NAME_CHARS, ModelOrigin, ModelVersion, VersionError, legal_transition,
+    LifecycleState, MAX_MODEL_NAME_CHARS, ModelOrigin, ModelVersion, ThresholdChange, VersionError,
+    legal_transition,
 };
 
 pub const REGISTRY_SCHEMA_VERSION: u32 = 2;
@@ -62,6 +64,8 @@ pub enum RegistryError {
     ActiveIsPinned,
     #[error("a model's name must be one line of at most {MAX_MODEL_NAME_CHARS} characters")]
     BadName,
+    #[error("those thresholds cannot be used: {0}")]
+    BadThresholds(String),
     #[error("a run that did not produce a deployable model cannot register a deployable version")]
     RunNotDeployable,
     #[error("the registry is inconsistent: {0}")]
@@ -352,6 +356,38 @@ impl Registry {
         if to == LifecycleState::Archived && self.previous_by_label.get(&label) == Some(id) {
             self.previous_by_label.remove(&label);
         }
+        Ok(())
+    }
+
+    /// Changes when a model's score becomes a detection: its activation and release thresholds, which must pass
+    /// [`Thresholds::validate`]. Any state, active included (the runtime picks the change up when it reloads); the
+    /// change is kept in the version's `threshold_changes`. Setting the values it already has changes nothing.
+    pub fn set_thresholds(
+        &mut self,
+        id: &ModelVersionId,
+        activation: f64,
+        release: f64,
+        at: &str,
+    ) -> Result<(), RegistryError> {
+        let version = self.version_mut(id)?;
+        let next = Thresholds {
+            activation,
+            release,
+            ..version.thresholds
+        };
+        next.validate()
+            .map_err(|e| RegistryError::BadThresholds(e.to_string()))?;
+        if next == version.thresholds {
+            return Ok(());
+        }
+        version.threshold_changes.push(ThresholdChange {
+            from_activation: version.thresholds.activation,
+            from_release: version.thresholds.release,
+            to_activation: activation,
+            to_release: release,
+            at: at.to_string(),
+        });
+        version.thresholds = next;
         Ok(())
     }
 
@@ -1081,6 +1117,57 @@ pub(crate) mod tests {
             r.update_project(changed),
             Err(RegistryError::WrongProject(_))
         ));
+    }
+
+    #[test]
+    fn a_models_thresholds_can_be_changed_and_the_change_is_kept() {
+        let id = |v: &str| ModelVersionId::new(v).unwrap();
+        let mut r = two_label_registry();
+        r.activate(&id("a1"), "t").unwrap();
+        let old = r.versions[&id("a1")].thresholds;
+        r.set_thresholds(&id("a1"), 0.95, 0.8, "2026-11-10T10:00:00Z")
+            .unwrap();
+        let version = &r.versions[&id("a1")];
+        assert_eq!(
+            (version.thresholds.activation, version.thresholds.release),
+            (0.95, 0.8)
+        );
+        assert_eq!(
+            version.thresholds.cooldown_ms, old.cooldown_ms,
+            "only the two thresholds change"
+        );
+        assert_eq!(
+            version.state,
+            LifecycleState::Active,
+            "an active model stays active"
+        );
+        assert_eq!(
+            version.threshold_changes,
+            [ThresholdChange {
+                from_activation: old.activation,
+                from_release: old.release,
+                to_activation: 0.95,
+                to_release: 0.8,
+                at: "2026-11-10T10:00:00Z".into(),
+            }]
+        );
+        r.validate().unwrap();
+        r.set_thresholds(&id("a1"), 0.95, 0.8, "later").unwrap();
+        assert_eq!(
+            r.versions[&id("a1")].threshold_changes.len(),
+            1,
+            "no change, nothing recorded"
+        );
+        for (activation, release) in [(0.5, 0.6), (0.0, 0.0), (1.2, 0.5), (f64::NAN, 0.5)] {
+            assert!(matches!(
+                r.set_thresholds(&id("a1"), activation, release, "t"),
+                Err(RegistryError::BadThresholds(_))
+            ));
+        }
+        assert_eq!(
+            r.set_thresholds(&id("zz"), 0.9, 0.8, "t"),
+            Err(RegistryError::NoVersion(id("zz")))
+        );
     }
 
     #[test]

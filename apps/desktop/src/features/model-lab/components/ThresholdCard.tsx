@@ -4,8 +4,9 @@ import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
+import { Input } from "../../../components/ui/input";
 import { cohortNote, duringGestures, FALSE_ACTIVATIONS_BUDGET_PER_HOUR, type Judged, perHour, withinBudget } from "../detectorEvents";
-import type { LabelModel } from "../labelModels";
+import { formatTime, modelName, type LabelModel } from "../labelModels";
 
 /** Mirrors `mistakes::ThresholdPoint`: judged on the camera-timed recordings when there are enough of them. */
 export type ThresholdPoint = Judged & { threshold: number };
@@ -91,21 +92,40 @@ export function TradeOff({ sweeps, shown }: { sweeps: ThresholdSweep[]; shown?: 
 export const seriesColor = (index: number) => SERIES[index % SERIES.length];
 
 /**
- * What a model's threshold trades: at each threshold from 0.30 to 0.95, how many starts it catches on the recordings it was
- * tested on, and how many false activations an hour with no gesture under way it makes, against the release gate's budget.
- * Its own threshold is one point on that curve.
+ * What a model's threshold trades, and setting it: at each threshold from 0.30 to 0.99, how many starts it catches on the
+ * recordings it was tested on and how many false activations an hour with no gesture under way it makes, against the
+ * release gate's budget. Pick a point and use it: the model runs with that threshold from then on (live, if it is active),
+ * and the change is kept in its history. An imported model's test recordings are not known, so it has no curve, only the
+ * number.
  */
 export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: boolean; models: LabelModel[] }) {
   const [version, setVersion] = useState("");
   const [sweep, setSweep] = useState<ThresholdSweep | null>(null);
   const [shown, setShown] = useState(0.5);
+  const [typed, setTyped] = useState("");
   const [running, setRunning] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [confirmOver, setConfirmOver] = useState(false);
+  const [applied, setApplied] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const trained = models.filter((model) => !model.imported && model.state !== "archived");
+  const choices = models.filter((model) => model.state !== "archived");
+  const model = choices.find((entry) => entry.id === version) ?? null;
+  const current = model?.activation ?? null;
+  const last = model?.thresholdChanges?.at(-1) ?? null;
+
+  const choose = (id: string) => {
+    setVersion(id);
+    setSweep(null);
+    setError(null);
+    setApplied(null);
+    setConfirmOver(false);
+    setTyped("");
+  };
 
   const run = async () => {
     setRunning(true);
     setError(null);
+    setApplied(null);
     try {
       const result = await invoke<ThresholdSweep>("threshold_sweep", { versionId: version });
       setSweep(result);
@@ -118,27 +138,85 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
     }
   };
 
-  const point = sweep && sweep.points.length > 0 ? pointAt(sweep, shown) : null;
-  const own = sweep && sweep.points.length > 0 ? pointAt(sweep, sweep.threshold) : null;
+  const apply = async (activation: number) => {
+    if (!model) return;
+    setApplying(true);
+    setError(null);
+    try {
+      await invoke("set_label_model_threshold", { id: model.id, activation });
+      setApplied(`${modelName(model)} now runs at ${activation.toFixed(2)}${model.active ? ", from now on" : ""}.`);
+      setSweep((previous) => (previous ? { ...previous, threshold: activation } : previous));
+      setConfirmOver(false);
+      setTyped("");
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const points = sweep?.points ?? [];
+  const index = points.length > 0 ? points.indexOf(pointAt(sweep!, shown)) : 0;
+  const point = sweep && points.length > 0 ? pointAt(sweep, shown) : null;
+  const own = sweep && points.length > 0 ? pointAt(sweep, sweep.threshold) : null;
+  const over = point !== null && sweep !== null && !withinBudget(point, sweep.budgetPerHour);
+  const typedValue = typed.trim() === "" ? null : Number(typed);
+  const typedOk = typedValue !== null && Number.isFinite(typedValue) && typedValue > 0 && typedValue <= 1;
   return (
     <Card id="lab-threshold" role="region" aria-label="Threshold" className="min-w-0">
       <CardHeader>
         <SectionHeader
           title="Threshold"
-          description="What a model's threshold trades: lower catches more starts and fires more often with no gesture under way. Each dot is a threshold, on the recordings the model was tested on; its own is ringed, and the dashed line is the budget a model must stay within to go live."
+          description="What a model's threshold trades, and setting it: lower catches more starts and fires more often with no gesture under way. Each dot is a threshold, on the recordings the model was tested on; its own is ringed, and the dashed line is the budget a model must stay within to go live."
         />
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
         <div className="flex flex-wrap items-center gap-3">
-          <select aria-label="Model for the threshold" className="recipe-select" value={version} onChange={(event) => setVersion(event.target.value)}>
+          <select aria-label="Model for the threshold" className="recipe-select" value={version} onChange={(event) => choose(event.target.value)}>
             <option value="">Choose a model…</option>
-            {trained.map((model) => <option key={model.id} value={model.id}>{model.label}: {model.id} ({model.state})</option>)}
+            {choices.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.label}: {modelName(entry)} ({entry.active ? "active" : entry.state}{entry.activation != null ? `, ${entry.activation.toFixed(2)}` : ""})
+              </option>
+            ))}
           </select>
-          <Button type="button" onClick={() => void run()} disabled={!desktopAvailable || running || version === ""} aria-busy={running}>
-            {running ? "Working it out…" : "Show the trade-off"}
-          </Button>
+          {model && !model.imported && (
+            <Button type="button" onClick={() => void run()} disabled={!desktopAvailable || running} aria-busy={running}>
+              {running ? "Working it out…" : "Show the trade-off"}
+            </Button>
+          )}
         </div>
+        {model && current !== null && (
+          <p aria-label="Current threshold">
+            It runs at <strong className="font-mono">{current.toFixed(2)}</strong>
+            {model.release != null ? <> and a detection ends below <span className="font-mono">{model.release.toFixed(2)}</span></> : null}.
+            {last ? ` Changed from ${last.fromActivation.toFixed(2)} to ${last.toActivation.toFixed(2)} on ${formatTime(last.at)}.` : ""}
+          </p>
+        )}
         {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
+        {applied && <Alert role="status"><AlertDescription>{applied}</AlertDescription></Alert>}
+        {model?.imported && (
+          <div className="flex flex-col gap-2">
+            <p className="hint">This model was imported, so the app does not know which recordings it was tested on and cannot draw its trade-off. You can still set its threshold; check the result in Monitor or with Compare models.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                aria-label="New threshold"
+                className="w-28"
+                type="number"
+                min={0.01}
+                max={1}
+                step={0.01}
+                placeholder={current?.toFixed(2)}
+                value={typed}
+                onChange={(event) => setTyped(event.target.value)}
+              />
+              <Button type="button" disabled={!desktopAvailable || applying || !typedOk || typedValue === current} onClick={() => void apply(Math.round(typedValue! * 100) / 100)}>
+                Use this threshold
+              </Button>
+            </div>
+            {typed.trim() !== "" && !typedOk && <p className="field-hint text-destructive">Enter a number above 0 and at most 1.</p>}
+          </div>
+        )}
         {sweep && point && own && (
           <>
             <TradeOff sweeps={[sweep]} shown={shown} />
@@ -147,13 +225,14 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
               <input
                 type="range"
                 aria-label="Threshold to look at"
-                min={sweep.points[0].threshold}
-                max={sweep.points[sweep.points.length - 1].threshold}
-                step={0.05}
-                value={shown}
-                onChange={(event) => setShown(Math.round(Number(event.target.value) * 100) / 100)}
+                aria-valuetext={point.threshold.toFixed(2)}
+                min={0}
+                max={points.length - 1}
+                step={1}
+                value={index}
+                onChange={(event) => { setShown(points[Number(event.target.value)].threshold); setConfirmOver(false); }}
               />
-              <strong className="font-mono">{shown.toFixed(2)}</strong>
+              <strong className="font-mono">{point.threshold.toFixed(2)}</strong>
             </label>
             <p role="status">
               At {point.threshold.toFixed(2)}: caught {point.caught} of {point.starts} starts ({Math.round(caughtShare(point) * 100)}%), with {perHour(point)} false activations an hour with no gesture under way
@@ -163,9 +242,24 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
                 ? ". This is the model's own threshold."
                 : `, against ${Math.round(caughtShare(own) * 100)}% and ${perHour(own)} at its own ${sweep.threshold.toFixed(2)}.`}
             </p>
+            {point.threshold !== own.threshold && (
+              <div className="flex flex-wrap items-center gap-2">
+                {over && !confirmOver ? (
+                  <Button type="button" variant="outline" disabled={!desktopAvailable || applying} onClick={() => setConfirmOver(true)}>
+                    Use {point.threshold.toFixed(2)}
+                  </Button>
+                ) : (
+                  <Button type="button" variant={over ? "destructive" : "default"} disabled={!desktopAvailable || applying} onClick={() => void apply(point.threshold)}>
+                    {over ? `Use ${point.threshold.toFixed(2)} anyway` : `Use ${point.threshold.toFixed(2)}`}
+                  </Button>
+                )}
+                {over && confirmOver && <small className="text-destructive">It fires more often than the budget allows with no gesture under way.</small>}
+                {model?.active && <small className="text-muted-foreground">This model is active: the change applies at once.</small>}
+              </div>
+            )}
             {cohortNote(point) && <p className="hint" aria-label="Label timing">{cohortNote(point)}</p>}
             <p className="hint">
-              Over {sweep.recordings} test recording{sweep.recordings === 1 ? "" : "s"} ({Math.round(point.negativeSeconds / 60)} minutes with no gesture under way), from one run of the model's scores through its detection rule at each threshold. A repeat fired again during a pinch it had caught; a late one fired during a pinch it missed. Neither is a false activation. The threshold is part of a trained model: to use another, train again.
+              Over {sweep.recordings} test recording{sweep.recordings === 1 ? "" : "s"} ({Math.round(point.negativeSeconds / 60)} minutes with no gesture under way), from one run of the model's scores through its detection rule at each threshold. A repeat fired again during a pinch it had caught; a late one fired during a pinch it missed. Neither is a false activation. A detection ends when the score falls as far below the threshold as it does now.
             </p>
           </>
         )}

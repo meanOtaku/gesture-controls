@@ -65,6 +65,17 @@ pub struct StateTransition {
     pub at: String,
 }
 
+/// A change of a model's thresholds after it was made, kept so its history says what it ran under and when.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThresholdChange {
+    pub from_activation: f64,
+    pub from_release: f64,
+    pub to_activation: f64,
+    pub to_release: f64,
+    pub at: String,
+}
+
 /// The longest name a model may be given, in characters.
 pub const MAX_MODEL_NAME_CHARS: usize = 60;
 
@@ -96,6 +107,9 @@ pub struct ModelVersion {
     pub quality: QualityRules,
     pub created_at: String,
     pub history: Vec<StateTransition>,
+    /// Each change of its thresholds since it was made, oldest first (`Registry::set_thresholds`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub threshold_changes: Vec<ThresholdChange>,
 }
 
 impl ModelVersion {
@@ -137,6 +151,7 @@ impl ModelVersion {
                 to: LifecycleState::Draft,
                 at: at.to_string(),
             }],
+            threshold_changes: Vec::new(),
         })
     }
 
