@@ -10,10 +10,12 @@ For a decision at time T (on the watch clock both streams share):
 2. The channels are the accelerometer's and gyroscope's three axes and the pulse sensor's green, red and infrared
    (`CHANNELS`).
 3. Each of the last `WINDOW_TICKS` ticks (1 s) is centred and scaled, then a sigmoid puts it in (0, 1). `scaling` says how:
-   * `MEDIAN`, which new models use: against the median of the channel's `GRID_TICKS` ticks and 1.4826 x their median
-     absolute deviation (as large as a standard deviation on normal data). A burst of motion filling under half of the
-     history leaves both nearly unmoved, so a pinch just after it still stands out. Research:
-     `docs/research/cnn-motion-hangover-2026-11.md`.
+   * `MEDIAN`, which new models use: against the median of the channel's grid ticks and 1.4826 x their median absolute
+     deviation (as large as a standard deviation on normal data), leaving out the ticks where the wrist was turning fast
+     (`moving_ticks`): the gyroscope's RMS over the `MOVING_RMS_TICKS` ending at a tick above `MOVING_GYRO`, and the
+     `MOVING_MARGIN_TICKS` either side of such a tick. The window's own ticks are always kept. So arm motion before a
+     pinch, however long, does not set its scale, and the pinch stands out as soon as the hand is steady again; on a still
+     hand nothing is left out. Research: `docs/research/cnn-motion-hangover-2026-11.md`.
    * `ROLLING`, which models of the `ppg_imu_cnn` kind were trained on: z-scored against the `HISTORY_TICKS` ticks (10 s)
      ending at each tick, their population mean and standard deviation.
    Either way the spread is floored by `MOTION_FLOOR` (0.02 m/s² for the accelerometer, 0.01 rad/s for the gyroscope) or,
@@ -42,6 +44,9 @@ PULSE_FLOOR_SCALE = 1e-3
 MEDIAN, ROLLING = "median", "rolling"
 MAD_TO_STD = 1.4826                # a median absolute deviation times this is a standard deviation, on normal data
 MAX_Z = 500.0                      # far enough that the sigmoid is flat; keeps its exponential finite
+MOVING_GYRO = 1.0                  # rad/s: a tick whose recent gyroscope RMS is above this is the wrist turning fast...
+MOVING_RMS_TICKS = 15              # ...that RMS taken over the 0.3 s ending at the tick (fewer at the grid's start)...
+MOVING_MARGIN_TICKS = 25           # ...and the 0.5 s either side of such a tick is left out of the median scaling too
 FEATURE_NAMES = tuple(f"cnn_{channel}_t{tick:02d}" for channel in CHANNELS for tick in range(WINDOW_TICKS))
 FEATURE_COUNT = len(FEATURE_NAMES)
 assert FEATURE_COUNT == 450 and GRID_TICKS == 549
@@ -84,11 +89,33 @@ def _scaled(grid: np.ndarray, pulse: bool) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-(shifted[:, last] - mean) / (std + floor)))
 
 
-def _median_scaled(grid: np.ndarray, pulse: bool) -> np.ndarray:
+def moving_ticks(motion_grid: np.ndarray) -> np.ndarray:
+    """(decisions, GRID_TICKS): True on the ticks the median scaling leaves out. A tick is moving when the gyroscope's RMS
+    magnitude over the MOVING_RMS_TICKS ending at it (as many as the grid has, at its start) is above MOVING_GYRO; a tick
+    within MOVING_MARGIN_TICKS of a moving one is left out too. The last WINDOW_TICKS never are."""
+    n, ticks = motion_grid.shape[:2]
+    power = np.sum(motion_grid[:, :, 3:6] ** 2, axis=2)
+    total = np.concatenate([np.zeros((n, 1)), np.cumsum(power, axis=1)], axis=1)
+    end = np.arange(1, ticks + 1)
+    begin = np.maximum(end - MOVING_RMS_TICKS, 0)
+    moving = (total[:, end] - total[:, begin]) / (end - begin) > MOVING_GYRO * MOVING_GYRO
+    count = np.concatenate([np.zeros((n, 1), dtype=np.int64), np.cumsum(moving, axis=1)], axis=1)
+    k = np.arange(ticks)
+    near = count[:, np.minimum(k + MOVING_MARGIN_TICKS + 1, ticks)] - count[:, np.maximum(k - MOVING_MARGIN_TICKS, 0)] > 0
+    near[:, ticks - WINDOW_TICKS:] = False
+    return near
+
+
+def _median_scaled(grid: np.ndarray, pulse: bool, left_out: np.ndarray | None = None) -> np.ndarray:
     """(decisions, WINDOW_TICKS, channels): the last ticks against each channel's median and median absolute deviation over
-    the whole grid, through the sigmoid."""
+    the grid's ticks less those `left_out` (decisions, GRID_TICKS), through the sigmoid."""
     centre = np.median(grid, axis=1, keepdims=True)
     spread = MAD_TO_STD * np.median(np.abs(grid - centre), axis=1, keepdims=True)
+    rows = np.flatnonzero(left_out.any(axis=1)) if left_out is not None else ()
+    if len(rows):  # only where something is left out: the median of what remains, the mean of the middle two if even
+        kept = np.where(left_out[rows][:, :, None], np.nan, grid[rows])
+        centre[rows] = np.nanmedian(kept, axis=1, keepdims=True)
+        spread[rows] = MAD_TO_STD * np.nanmedian(np.abs(kept - centre[rows]), axis=1, keepdims=True)
     floor = PULSE_FLOOR_SCALE * (np.abs(centre) + 1.0) if pulse else MOTION_FLOOR[None, None, :]
     z = (grid[:, -WINDOW_TICKS:, :] - centre) / (spread + floor)
     return 1.0 / (1.0 + np.exp(-np.clip(z, -MAX_Z, MAX_Z)))
@@ -103,19 +130,27 @@ def inputs(motion_ts_ns: np.ndarray, motion: np.ndarray, pulse_ts_ns: np.ndarray
     motion = np.asarray(motion, dtype=np.float64)
     pulse = np.asarray(pulse, dtype=np.float64)
     decisions_ns = np.asarray(decisions_ns, dtype=np.int64)
-    scaled = {MEDIAN: _median_scaled, ROLLING: _scaled}[scaling]
+    if scaling not in (MEDIAN, ROLLING):
+        raise ValueError(f"unknown scaling {scaling!r}")
     out = np.full((len(decisions_ns), FEATURE_COUNT), np.nan)
     if len(motion_ts_ns) == 0 or len(pulse_ts_ns) == 0:
         return out
     ok = _gap_free(motion_ts_ns, decisions_ns) & _gap_free(pulse_ts_ns, decisions_ns)
+    whole = np.zeros(len(decisions_ns), dtype=bool)
     for start in range(0, len(decisions_ns), chunk):
         part = slice(start, start + chunk)
         d = decisions_ns[part]
-        m = scaled(_held(motion_ts_ns, motion, d), pulse=False)
-        p = scaled(_held(pulse_ts_ns, pulse, d), pulse=True)
+        mg, pg = _held(motion_ts_ns, motion, d), _held(pulse_ts_ns, pulse, d)
+        # A tick before either stream's first sample means no inputs (the median of what is left would hide it).
+        whole[part] = np.isfinite(mg).all(axis=(1, 2)) & np.isfinite(pg).all(axis=(1, 2))
+        if scaling == MEDIAN:
+            left_out = moving_ticks(np.nan_to_num(mg))  # a grid with NaN has no inputs anyway
+            m, p = _median_scaled(mg, False, left_out), _median_scaled(pg, True, left_out)
+        else:
+            m, p = _scaled(mg, pulse=False), _scaled(pg, pulse=True)
         # Channel by channel, oldest tick first.
         rows = np.concatenate([m, p], axis=2).transpose(0, 2, 1).reshape(len(d), FEATURE_COUNT)
         out[part] = rows
-    bad = ~ok | ~np.isfinite(out).all(axis=1)
+    bad = ~ok | ~np.isfinite(out).all(axis=1) | ~whole
     out[bad] = np.nan
     return out

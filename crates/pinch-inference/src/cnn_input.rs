@@ -41,9 +41,10 @@ pub const CHANNELS: [&str; 9] = [
 /// How a channel's last ticks are centred and scaled. A model is trained on one and runs on the same one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scaling {
-    /// Against the median of the channel's [`GRID_TICKS`] ticks and [`MAD_TO_STD`] x their median absolute deviation. A
-    /// burst of motion filling under half of the history leaves both nearly unmoved, so a pinch just after it still stands
-    /// out (`docs/research/cnn-motion-hangover-2026-11.md`).
+    /// Against the median of the channel's [`GRID_TICKS`] ticks and [`MAD_TO_STD`] x their median absolute deviation,
+    /// leaving out the ticks where the wrist was turning fast ([`moving_ticks`]). Arm motion before a pinch, however long,
+    /// so does not set its scale, and the pinch stands out as soon as the hand is steady again; on a still hand nothing is
+    /// left out (`docs/research/cnn-motion-hangover-2026-11.md`).
     Median,
     /// Each tick against the population mean and standard deviation of the [`HISTORY_TICKS`] ticks (10 s) ending at it.
     /// One burst of motion inflates that deviation until it leaves the history, about 10 s later. What `ppg_imu_cnn` models
@@ -55,6 +56,12 @@ pub enum Scaling {
 pub const MAD_TO_STD: f64 = 1.4826;
 /// Far enough that the sigmoid is flat; keeps its exponential finite.
 const MAX_Z: f64 = 500.0;
+/// A tick whose recent gyroscope RMS is above this, in rad/s, is the wrist turning fast...
+pub const MOVING_GYRO: f64 = 1.0;
+/// ...that RMS taken over the 0.3 s ending at the tick (fewer at the grid's start)...
+pub const MOVING_RMS_TICKS: usize = 15;
+/// ...and the 0.5 s either side of such a tick is left out of the median scaling too.
+pub const MOVING_MARGIN_TICKS: usize = 25;
 /// The smallest spread each motion channel is scaled by: 0.02 m/s² for the accelerometer, 0.01 rad/s for the gyroscope.
 pub const MOTION_FLOOR: [f64; 6] = [0.02, 0.02, 0.02, 0.01, 0.01, 0.01];
 const PULSE_FLOOR_SCALE: f64 = 1e-3;
@@ -103,12 +110,38 @@ fn held<S, const N: usize>(
         .collect()
 }
 
-/// Puts one channel's scaled last ticks on the output, given the floor for a centre.
-type Scaler = fn(&[f64], &dyn Fn(f64) -> f64, &mut Vec<f64>);
+/// Puts one channel's scaled last ticks on the output, given the floor for a centre and the ticks left out.
+type Scaler = fn(&[f64], &dyn Fn(f64) -> f64, &[bool], &mut Vec<f64>);
+
+/// The ticks [`Scaling::Median`] leaves out of a decision's grid (one row of accelerometer then gyroscope per tick). A tick
+/// is moving when the gyroscope's RMS magnitude over the [`MOVING_RMS_TICKS`] ending at it (as many as the grid has, at
+/// its start) is above [`MOVING_GYRO`]; a tick within [`MOVING_MARGIN_TICKS`] of a moving one is left out too. The last
+/// [`WINDOW_TICKS`] never are.
+pub fn moving_ticks(grid: &[[f64; 6]]) -> Vec<bool> {
+    let ticks = grid.len();
+    let mut total = vec![0.0; ticks + 1];
+    for (k, row) in grid.iter().enumerate() {
+        total[k + 1] = total[k] + row[3] * row[3] + row[4] * row[4] + row[5] * row[5];
+    }
+    let mut count = vec![0usize; ticks + 1];
+    for k in 0..ticks {
+        let begin = (k + 1).saturating_sub(MOVING_RMS_TICKS);
+        let moving =
+            (total[k + 1] - total[begin]) / (k + 1 - begin) as f64 > MOVING_GYRO * MOVING_GYRO;
+        count[k + 1] = count[k] + usize::from(moving);
+    }
+    (0..ticks)
+        .map(|k| {
+            k < ticks.saturating_sub(WINDOW_TICKS)
+                && count[(k + MOVING_MARGIN_TICKS + 1).min(ticks)]
+                    > count[k.saturating_sub(MOVING_MARGIN_TICKS)]
+        })
+        .collect()
+}
 
 /// One channel's last ticks, z-scored against the ticks ending at each and through the sigmoid (as the trainer computes
 /// it: sums of the values less the first tick).
-fn rolling(series: &[f64], floor: &dyn Fn(f64) -> f64, out: &mut Vec<f64>) {
+fn rolling(series: &[f64], floor: &dyn Fn(f64) -> f64, _left_out: &[bool], out: &mut Vec<f64>) {
     let first = series[0];
     let mut total = vec![0.0; GRID_TICKS + 1];
     let mut squares = vec![0.0; GRID_TICKS + 1];
@@ -127,17 +160,39 @@ fn rolling(series: &[f64], floor: &dyn Fn(f64) -> f64, out: &mut Vec<f64>) {
     }
 }
 
-/// The middle value of `values`, an odd number of them (as [`GRID_TICKS`] is), so it is one of them.
+/// The median of `values` (not empty): the middle one, or the mean of the middle two when there is an even number.
 fn middle(values: &mut [f64]) -> f64 {
+    let odd = values.len() % 2 == 1;
     let at = values.len() / 2;
-    *values.select_nth_unstable_by(at, f64::total_cmp).1
+    let (below, upper, _) = values.select_nth_unstable_by(at, f64::total_cmp);
+    let upper = *upper;
+    if odd {
+        return upper;
+    }
+    let lower = below
+        .iter()
+        .copied()
+        .max_by(f64::total_cmp)
+        .expect("an even, non-empty set has a lower half");
+    (lower + upper) / 2.0
 }
 
-/// One channel's last ticks against its median and median absolute deviation over all of `series`, through the sigmoid.
-fn median(series: &[f64], floor: &dyn Fn(f64) -> f64, out: &mut Vec<f64>) {
-    let mut scratch = series.to_vec();
+/// One channel's last ticks against its median and median absolute deviation over the ticks of `series` not `left_out`,
+/// through the sigmoid.
+fn median(series: &[f64], floor: &dyn Fn(f64) -> f64, left_out: &[bool], out: &mut Vec<f64>) {
+    let mut scratch: Vec<f64> = series
+        .iter()
+        .zip(left_out)
+        .filter(|(_, out)| !**out)
+        .map(|(v, _)| *v)
+        .collect();
     let centre = middle(&mut scratch);
-    for (slot, v) in scratch.iter_mut().zip(series) {
+    let kept = series
+        .iter()
+        .zip(left_out)
+        .filter(|(_, out)| !**out)
+        .map(|(v, _)| *v);
+    for (slot, v) in scratch.iter_mut().zip(kept) {
         *slot = (v - centre).abs();
     }
     let spread = MAD_TO_STD * middle(&mut scratch);
@@ -178,16 +233,21 @@ pub fn inputs(
         decision_ns,
     )?;
     let p = held(pulse, |s| s.ts_ns, |s| [s.green, s.red, s.ir], decision_ns)?;
+    let left_out = match scaling {
+        Scaling::Median => moving_ticks(&m),
+        Scaling::Rolling => vec![false; GRID_TICKS],
+    };
     let mut out = Vec::with_capacity(FEATURE_COUNT);
     for (c, floor) in MOTION_FLOOR.iter().enumerate() {
         let series: Vec<f64> = m.iter().map(|row| row[c]).collect();
-        scaled(&series, &|_| *floor, &mut out);
+        scaled(&series, &|_| *floor, &left_out, &mut out);
     }
     for c in 0..3 {
         let series: Vec<f64> = p.iter().map(|row| row[c]).collect();
         scaled(
             &series,
             &|centre| PULSE_FLOOR_SCALE * (centre.abs() + 1.0),
+            &left_out,
             &mut out,
         );
     }

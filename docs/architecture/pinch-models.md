@@ -50,7 +50,9 @@ It works from little data and trains quickly, but it only sees what the summarie
 and `tests/fixtures/cnn_input_cases.json` keeps the two equal.
 
 - **Input:** accelerometer, gyroscope and pulse (9 channels) on a 50-a-second grid. Each channel is centred and scaled by the
-  median and median absolute deviation of its last 11 s and put through a sigmoid, and the last second goes in. Models of the
+  median and median absolute deviation of its last 11 s, leaving out the moments the wrist was turning fast (gyroscope RMS
+  over 0.3 s above 1 rad/s, and 0.5 s either side; never the last second), and put through a sigmoid, and the last second
+  goes in. So a pinch is caught as soon as the hand is steady again, however long the arm moved before. Models of the
   earlier `ppg_imu_cnn` kind used a rolling 10 s mean and deviation, and keep running that way, but a burst of motion leaves
   them nearly blind for 10 s ([why](../research/cnn-motion-hangover-2026-11.md)).
 - **Network:** three dilated convolutions (32, 32 and 64 channels, kernel 5, dilation 1, 2, 4), each with batch normalisation;

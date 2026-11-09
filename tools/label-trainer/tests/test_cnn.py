@@ -55,6 +55,38 @@ def test_a_burst_of_motion_barely_moves_median_scaling_but_squashes_rolling_scal
     assert tap_size(quiet + tap, cnn_input.ROLLING) > 0.45
 
 
+def test_median_scaling_leaves_out_long_fast_turning_so_a_tap_just_after_it_stands_out():
+    ms = 1_000_000
+    rng = np.random.default_rng(4)
+    t = 1_000_000_000_000 + np.arange(1300) * 10 * ms
+    quiet = rng.normal(0, 0.03, (1300, 6))
+    tap = np.zeros((1300, 6))
+    tap[1250:1255] = 0.5                                                       # 0.5 s before the decision
+    turning = np.zeros((1300, 6))
+    turning[300:1150] = rng.normal(0, 3.0, (850, 6))                           # 8.5 s of it, ending 1.5 s before
+    pulse_t = t[::4]
+    pulse = 200_000 + rng.normal(0, 50, (len(pulse_t), 3))
+    x = cnn_input.inputs(t, quiet + tap + turning, pulse_t, pulse, t[-1:]).reshape(9, 50)
+    assert x[3, 25:30].max() - 0.5 > 0.45, "more than half the grid was turning, yet the tap is not squashed"
+    still = cnn_input.inputs(t, quiet + tap, pulse_t, pulse, t[-1:])
+    grid = cnn_input._held(t, quiet + tap, t[-1:])
+    assert not cnn_input.moving_ticks(grid).any(), "a still hand loses no ticks"
+    plain = cnn_input._median_scaled(grid, pulse=False).transpose(0, 2, 1).reshape(1, -1)
+    assert np.array_equal(still[:, :300], plain), "and scales as plain median scaling does"
+
+
+def test_moving_ticks_spare_the_window_and_reach_half_a_second_past_the_turning():
+    grid = np.zeros((1, cnn_input.GRID_TICKS, 6))
+    grid[0, 100:200, 3] = 2.0                                                  # 2 s of turning at 2 rad/s
+    grid[0, -10:, 3] = 2.0                                                     # and turning in the window itself
+    out = cnn_input.moving_ticks(grid)[0]
+    # The 0.3 s RMS passes 1 rad/s once 4 of its 15 ticks turn: moving from tick 103 to tick 210.
+    first, last, margin = 103, 210, cnn_input.MOVING_MARGIN_TICKS
+    assert out[first - margin] and not out[first - margin - 1]
+    assert out[last + margin] and not out[last + margin + 1]
+    assert not out[-cnn_input.WINDOW_TICKS:].any()
+
+
 def test_labels_mark_the_moments_after_a_start_and_leave_out_those_around_it():
     ms = 1_000_000
     d = np.arange(0, 4000, 40, dtype=np.int64) * ms

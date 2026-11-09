@@ -39,7 +39,8 @@ Each model is at its own trained threshold: rolling 0.9 (in) and 0.35 (out), med
 | 2–6 rad/s, 8 s, 1 s after | 0% | 16% | 0% | 4% |
 | 2–6 rad/s, 8 s, 6 s after | 18% | 84% | 25% | 94% |
 
-Past half of the history the median follows the motion, which is the remaining limit.
+Past half of the history the median follows the motion, which is the remaining limit. It is closed by leaving fast turning
+out of the scaling (below).
 
 ## Event replay on held-out recordings
 
@@ -57,3 +58,44 @@ out 84% to 77%) at similar false-activation rates, so watch recall on quiet pinc
 ## Runtime
 
 Building one decision's inputs takes 31 µs with median scaling and 28 µs with rolling scaling (Apple silicon, release build).
+
+## Leaving fast turning out of the scaling, 9 November 2026
+
+**Result:** the median scaling now leaves out the ticks where the wrist was turning fast. That removes the remaining blackout
+after long motion: the live pinch-in model catches 40–46 of 50 pinches from 0.5 s after 6–10 s of heavy motion, against 0–19
+of 50 before. On a still hand nothing is left out, so the inputs are unchanged; the live models need no retraining, and their
+event replays are identical. These are replays with spliced motion, not live measurements.
+
+**Rule** (`cnn_input.moving_ticks`, mirrored in `crates/pinch-inference/src/cnn_input.rs`): a grid tick is moving when the
+gyroscope's RMS magnitude over the 0.3 s (15 ticks) ending at it is above 1.0 rad/s. It and every tick within 0.5 s (25 ticks)
+of a moving tick are left out of the median and the median absolute deviation, for all nine channels. The last second, which
+the model sees, is never left out. The remaining ticks' median is the mean of the middle two when there is an even number.
+
+**Method.** Live pinch-in model `pinch_in-ae0a22bf` at its 0.99 threshold, the 50 pinch-in starts of its three evaluation pinch
+recordings with 25 s before them, and the three most intense non-overlapping segments of the held-out everyday-noise recording
+(11-04T04-27, mean gyroscope 1.7–3.2 rad/s) spliced into both streams (pulse level-matched), ending a gap before each start. A
+pinch counts when the peak score 0.1–1 s after its start reaches the threshold.
+
+| Motion before the pinch | Before (median of all ticks) | After (fast turning left out) |
+|---|---|---|
+| None | 43/50 | 43/50 |
+| 2 or 4 s, any gap 0.5–8 s | 41–44/50 | 41–45/50 |
+| 6 s, 0.5 / 1 / 2 / 3 / 5 s before | 8 / 11 / 14 / 19 / 30 | 40 / 41 / 42 / 45 / 44 |
+| 8 s, 0.5–3 s before; 5 s before | 0; 31 | 40–45; 44 |
+| 10 s, 0.5–3 s before; 5 s before | 0; 27 | 43–46; 46 |
+
+**Event replay** (the trainer's detection and accounting, still-hand rule off as in the app):
+
+| | Before | After |
+|---|---|---|
+| Pinch in, 8 evaluation recordings | 47/57, 0 false, 442 ms | 47/57, 0 false, 442 ms |
+| Pinch out (`pinch_out-4ba930b3`), 8 evaluation recordings | 49/59, 0 false, 425 ms | 49/59, 0 false, 425 ms |
+| Pinch in, training everyday noise (11-03T03-44, 10 min) | 0 false, peak 0.846 | 0 false, peak 0.981 |
+
+**The cost:** during everyday motion the scale now comes from the calmer moments, so movement looks larger. On the training
+noise session the highest score rose to 0.981 against the 0.99 threshold; the held-out noise session's stayed at 0.970. Watch
+false activations in live use.
+
+**Thresholds tried:** 0.5 rad/s, and using only the ticks since the motion last stopped, each caused one or two false
+activations on the training noise session. 2.0 rad/s recovered only 25–31 of 50 just after 10 s of motion. 1.0 rad/s was the
+best of these. Only pinch in was spliced; pinch out was checked by event replay only.
