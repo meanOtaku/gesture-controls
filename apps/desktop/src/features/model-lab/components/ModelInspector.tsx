@@ -127,7 +127,7 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
               </div>
             )}
             {howItWorks}
-            <InspectEvaluation inspection={inspection} other={other} otherName={compare ? nameOf(compare.id) : undefined} />
+            <InspectEvaluation inspection={inspection} other={other} otherName={compare ? nameOf(compare.id) : undefined} model={models.find((entry) => entry.id === id) ?? null} desktopAvailable />
             <InspectResearch inspection={inspection} />
             <InspectInputs inspection={inspection} />
           </>

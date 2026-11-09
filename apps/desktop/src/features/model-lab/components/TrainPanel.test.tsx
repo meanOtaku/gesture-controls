@@ -3,6 +3,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TrainPlan, TrainerEnvironment, TrainingStatus } from "../training";
 import type { DatasetLabel, DatasetSummary } from "../types";
+import { resetSessionState } from "../hooks/useSessionState";
+import { resetTrainingRunStore } from "../hooks/useTrainingRun";
 import { TrainPanel } from "./TrainPanel";
 
 const invokeMock = vi.fn();
@@ -36,7 +38,7 @@ function setup(over: { plan?: TrainPlan; environment?: TrainerEnvironment; statu
 const calls = (command: string) => invokeMock.mock.calls.filter(([name]) => name === command);
 const choose = (id: string) => fireEvent.change(screen.getByLabelText("Label to teach"), { target: { value: id } });
 
-beforeEach(() => { invokeMock.mockReset(); handlers.clear(); });
+beforeEach(() => { invokeMock.mockReset(); handlers.clear(); resetTrainingRunStore(); resetSessionState(); });
 afterEach(cleanup);
 
 describe("TrainPanel", () => {
@@ -306,5 +308,28 @@ describe("TrainPanel training plan", () => {
     fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn" } });
     fireEvent.click(await screen.findByRole("checkbox", { name: "Train in stages" }));
     expect(await screen.findByText(/Everything else: trains on i1.csv, rehearsing s1.csv from earlier stages; i2.csv is held out for testing/)).toBeInTheDocument();
+  });
+
+  it("keeps the choices and the whole log when its tab is left during training and opened again", async () => {
+    setup();
+    choose("snap");
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Use i2.csv" }));
+    await waitFor(() => expect(handlers.has("label-training-event")).toBe(true));
+    act(() => handlers.get("label-training-event")!({ payload: { kind: "started", runId: "run-1", label: "snap", backend: "ppg-imu-cnn" } }));
+    act(() => handlers.get("label-training-event")!({ payload: { kind: "log", runId: "run-1", message: "Stage 1 of 2" } }));
+    cleanup(); // the tab is left: the panel is gone
+    act(() => handlers.get("label-training-event")!({ payload: { kind: "log", runId: "run-1", message: "Stage 2 of 2" } }));
+    render(<TrainPanel desktopAvailable labels={labels} datasets={datasets} />);
+    expect(screen.getByLabelText("Label to teach")).toHaveValue("snap");
+    expect(screen.getByLabelText("Model")).toHaveValue("ppg-imu-cnn");
+    expect(screen.getByRole("checkbox", { name: "Use i2.csv" })).not.toBeChecked();
+    expect(await screen.findByText(/Stage 1 of 2/)).toBeInTheDocument();
+    expect(screen.getByText(/Stage 2 of 2/)).toBeInTheDocument(); // sent while it was away
+  });
+
+  it("names the label being trained when the run is already going and nothing was chosen here", async () => {
+    setup({ status: { running: { runId: "run-9", label: "pinch_out" }, last: null } });
+    expect(await screen.findByRole("status", { name: "Run in progress" })).toHaveTextContent("Training a model for pinch_out.");
   });
 });

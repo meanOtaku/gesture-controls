@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { useMemo, useState } from "react";
 import { BarChart } from "../../../components/charts/BarChart";
 import { LineChart, type ChartSeries } from "../../../components/charts/LineChart";
@@ -6,6 +7,8 @@ import { Button } from "../../../components/ui/button";
 import { exportFile } from "../../../shared/tauri/exportCsv";
 import { area, calibration, confusionAt, counts, curvesCsv, histogram, perRecording, prCurve, recordingsCsv, rocAuc, rocCurve, scoresCsv, thresholdSweep } from "../evaluation";
 import { percent, type Inspection } from "../inspection";
+import { modelName, type LabelModel } from "../labelModels";
+import { CutOffControl, cutOffPercent } from "./CutOffControl";
 
 const MODEL = "#ff6f91";
 const OTHER = "#2a9d8f";
@@ -18,9 +21,30 @@ const fixed = (value: number, digits = 3) => value.toFixed(digits);
  * cut-off would do, where its scores fall, whether they can be taken as probabilities, and how each recording went. With a
  * second model of the same label, the curves are drawn together. Everything can be saved for charting elsewhere.
  */
-export function InspectEvaluation({ inspection, other, otherName }: { inspection: Inspection; other?: Inspection | null; otherName?: string }) {
+export function InspectEvaluation({ inspection, other, otherName, model, desktopAvailable = false }: {
+  inspection: Inspection;
+  other?: Inspection | null;
+  otherName?: string;
+  /** The model as registered: its cut-off now, and the one a new cut-off is set on. */
+  model?: LabelModel | null;
+  desktopAvailable?: boolean;
+}) {
   const { probabilities, labels, recordings, threshold: modelThreshold } = inspection.evaluation;
-  const [threshold, setThreshold] = useState(modelThreshold);
+  const running = model?.activation ?? null;
+  const [threshold, setThreshold] = useState(running ?? modelThreshold);
+  const [applying, setApplying] = useState(false);
+  const apply = async (cutOff: number) => {
+    if (!model) return;
+    setApplying(true);
+    try {
+      await invoke("set_label_model_threshold", { id: model.id, activation: cutOff });
+      OperationFeedback.success("Cut-off", `${modelName(model)} now runs at ${cutOffPercent(cutOff)}.`);
+    } catch (err) {
+      OperationFeedback.error("Cut-off", String(err));
+    } finally {
+      setApplying(false);
+    }
+  };
   const scored = useMemo(() => ({ probabilities, labels, recordings }), [probabilities, labels, recordings]);
   const roc = useMemo(() => rocCurve(probabilities, labels), [probabilities, labels]);
   const pr = useMemo(() => prCurve(probabilities, labels), [probabilities, labels]);
@@ -72,18 +96,19 @@ export function InspectEvaluation({ inspection, other, otherName }: { inspection
           : "The model's own cut-off for “detected” was chosen on these same windows, so the numbers at it are a little optimistic: move the cut-off to see what any other would do."}
       </p>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 text-sm">
-          Cut-off
-          <input type="range" min={0.05} max={0.95} step={0.01} value={threshold} aria-label="Cut-off" onChange={(event) => setThreshold(Number(event.target.value))} />
-          <strong>{percent(threshold)}</strong>
-        </label>
-        <Button type="button" variant="outline" size="sm" disabled={threshold === modelThreshold} onClick={() => setThreshold(modelThreshold)}>Back to the model&apos;s own ({percent(modelThreshold)})</Button>
-      </div>
+      <CutOffControl
+        value={threshold}
+        onChange={setThreshold}
+        trained={modelThreshold}
+        running={running}
+        onApply={model && desktopAvailable ? (cutOff) => void apply(cutOff) : undefined}
+        applying={applying}
+        note="These figures are per moment, not per gesture: check its false activations an hour at this cut-off on the Threshold card before relying on it."
+      />
 
       <div className="grid gap-4 md:grid-cols-2">
         <table className="text-sm" aria-label="Confusion at the cut-off">
-          <caption className="caption-top text-left text-xs text-muted-foreground">What it called, at a cut-off of {percent(threshold)}</caption>
+          <caption className="caption-top text-left text-xs text-muted-foreground">What it called, at a cut-off of {cutOffPercent(threshold)}</caption>
           <thead><tr><th /><th className="px-2 text-left">Called the gesture</th><th className="px-2 text-left">Called something else</th></tr></thead>
           <tbody>
             <tr><th scope="row" className="pr-2 text-left">Really the gesture</th><td className="px-2" style={{ background: "rgba(42,157,143,0.25)" }}>{at.tp} hits</td><td className="px-2" style={{ background: "rgba(215,48,39,0.18)" }}>{at.fn} misses</td></tr>
@@ -119,14 +144,14 @@ export function InspectEvaluation({ inspection, other, otherName }: { inspection
         <LineChart
           title="ROC curve" exportName={`${stem}-roc`} xLabel="False alarm rate" yLabel="Recall" xRange={[0, 1]} yRange={[0, 1]}
           series={rocSeries}
-          markers={[{ x: at.falseAlarmRate, y: at.recall, label: `Cut-off ${percent(threshold)}`, color: MODEL }]}
-          summary={`Area under the curve ${fixed(auc, 3)}. At a cut-off of ${percent(threshold)} it finds ${percent(at.recall)} of the gesture and wrongly flags ${percent(at.falseAlarmRate)} of the rest.`}
+          markers={[{ x: at.falseAlarmRate, y: at.recall, label: `Cut-off ${cutOffPercent(threshold)}`, color: MODEL }]}
+          summary={`Area under the curve ${fixed(auc, 3)}. At a cut-off of ${cutOffPercent(threshold)} it finds ${percent(at.recall)} of the gesture and wrongly flags ${percent(at.falseAlarmRate)} of the rest.`}
         />
         <LineChart
           title="Precision and recall" exportName={`${stem}-precision-recall`} xLabel="Recall" yLabel="Precision" xRange={[0, 1]} yRange={[0, 1]}
           series={prSeries}
-          markers={[{ x: at.recall, y: at.precision, label: `Cut-off ${percent(threshold)}`, color: MODEL }]}
-          summary={`Average precision ${fixed(pr.averagePrecision, 3)}. At a cut-off of ${percent(threshold)}, recall ${percent(at.recall)} and precision ${percent(at.precision)}.`}
+          markers={[{ x: at.recall, y: at.precision, label: `Cut-off ${cutOffPercent(threshold)}`, color: MODEL }]}
+          summary={`Average precision ${fixed(pr.averagePrecision, 3)}. At a cut-off of ${cutOffPercent(threshold)}, recall ${percent(at.recall)} and precision ${percent(at.precision)}.`}
         />
         <LineChart
           title="What each cut-off would do" exportName={`${stem}-cut-off-sweep`} xLabel="Cut-off" yLabel="Rate" xRange={[0, 1]} yRange={[0, 1]}
@@ -136,8 +161,8 @@ export function InspectEvaluation({ inspection, other, otherName }: { inspection
             { name: "F1", color: "#e9a800", points: sweep.map((r) => ({ x: r.threshold, y: r.f1 })) },
             { name: "False alarm rate", color: GREY, dashed: true, points: sweep.map((r) => ({ x: r.threshold, y: r.falseAlarmRate })) },
           ]}
-          verticalLine={{ x: threshold, label: percent(threshold) }}
-          summary={`At ${percent(threshold)}: recall ${percent(at.recall)}, precision ${percent(at.precision)}, F1 ${fixed(at.f1, 2)}, false alarm rate ${percent(at.falseAlarmRate)}.`}
+          verticalLine={{ x: threshold, label: cutOffPercent(threshold) }}
+          summary={`At ${cutOffPercent(threshold)}: recall ${percent(at.recall)}, precision ${percent(at.precision)}, F1 ${fixed(at.f1, 2)}, false alarm rate ${percent(at.falseAlarmRate)}.`}
         />
         <BarChart
           title="Where the scores fall" exportName={`${stem}-score-histogram`} xLabel="Score" yLabel="Windows"
@@ -157,7 +182,7 @@ export function InspectEvaluation({ inspection, other, otherName }: { inspection
 
       <div className="max-w-full overflow-auto">
         <table className="w-full text-sm" aria-label="Each held-out recording">
-          <caption className="caption-top text-left text-xs text-muted-foreground">Recording by recording, at a cut-off of {percent(threshold)}: a model that does well overall can do badly on one of them</caption>
+          <caption className="caption-top text-left text-xs text-muted-foreground">Recording by recording, at a cut-off of {cutOffPercent(threshold)}: a model that does well overall can do badly on one of them</caption>
           <thead><tr className="text-left"><th className="pr-3">Recording</th><th className="pr-3">Windows (gesture / other)</th><th className="pr-3">Average score</th><th className="pr-3">ROC AUC</th><th className="pr-3">Recall</th><th className="pr-3">False alarms</th></tr></thead>
           <tbody>
             {recordingRows.map((row) => (

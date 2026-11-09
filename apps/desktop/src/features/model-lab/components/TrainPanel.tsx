@@ -8,6 +8,7 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { Label } from "../../../components/ui/label";
+import { useSessionState } from "../hooks/useSessionState";
 import { useTrainingRun } from "../hooks/useTrainingRun";
 import { CNN_METHOD, CNN_MODEL, PULSE_MODEL, TREES_METHOD, buildRequest, defaultStages, hasLabel, otherLabels, recordingsWithLabel, stagesForRequest, type OtherRole, type StageDraft, type TrainMethod, type TrainPlan, type TrainerEnvironment } from "../training";
 import { TrainingPlanEditor } from "./TrainingPlanEditor";
@@ -36,15 +37,15 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
   const uid = useId();
   const run = useTrainingRun(desktopAvailable);
   const running = run.running;
-  const [target, setTarget] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [roles, setRoles] = useState<Record<string, OtherRole>>({});
-  const [research, setResearch] = useState(false);
-  const [hardNegatives, setHardNegatives] = useState(false);
-  const [labelOffset, setLabelOffset] = useState(0);
-  const [method, setMethod] = useState<TrainMethod>(TREES_METHOD);
-  const [staged, setStaged] = useState(false);
-  const [stages, setStages] = useState<StageDraft[]>([]);
+  const [target, setTarget] = useSessionState("train.target", "");
+  const [selected, setSelected] = useSessionState<Set<string>>("train.selected", new Set());
+  const [roles, setRoles] = useSessionState<Record<string, OtherRole>>("train.roles", {});
+  const [research, setResearch] = useSessionState("train.research", false);
+  const [hardNegatives, setHardNegatives] = useSessionState("train.hardNegatives", false);
+  const [labelOffset, setLabelOffset] = useSessionState("train.labelOffset", 0);
+  const [method, setMethod] = useSessionState<TrainMethod>("train.method", TREES_METHOD);
+  const [staged, setStaged] = useSessionState("train.staged", false);
+  const [stages, setStages] = useSessionState<StageDraft[]>("train.stages", []);
   const [plan, setPlan] = useState<TrainPlan | null>(null);
   const [environment, setEnvironment] = useState<TrainerEnvironment | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -271,6 +272,11 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
           </>
         )}
 
+        {running !== null && target === "" && run.runningLabel && (
+          <p role="status" aria-label="Run in progress">
+            Training a model for <strong>{run.runningLabel}</strong>. Its progress is below.
+          </p>
+        )}
         <TrainingRunView run={run} />
       </CardContent>
     </Card>

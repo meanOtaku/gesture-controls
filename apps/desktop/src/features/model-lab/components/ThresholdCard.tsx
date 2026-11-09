@@ -222,6 +222,7 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
             <TradeOff sweeps={[sweep]} shown={shown} />
             <label className="flex flex-wrap items-center gap-2">
               Threshold
+              <Button type="button" variant="outline" size="sm" aria-label="Lower the threshold one step" disabled={index <= 0} onClick={() => { setShown(points[index - 1].threshold); setConfirmOver(false); }}>−</Button>
               <input
                 type="range"
                 aria-label="Threshold to look at"
@@ -232,6 +233,7 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
                 value={index}
                 onChange={(event) => { setShown(points[Number(event.target.value)].threshold); setConfirmOver(false); }}
               />
+              <Button type="button" variant="outline" size="sm" aria-label="Raise the threshold one step" disabled={index >= points.length - 1} onClick={() => { setShown(points[index + 1].threshold); setConfirmOver(false); }}>+</Button>
               <strong className="font-mono">{point.threshold.toFixed(2)}</strong>
             </label>
             <p role="status">

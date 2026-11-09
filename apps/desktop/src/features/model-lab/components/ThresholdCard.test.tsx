@@ -88,4 +88,18 @@ describe("the threshold card", () => {
     fireEvent.click(screen.getByRole("button", { name: "Use this threshold" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_label_model_threshold", { id: "imp", activation: 0.9 }));
   });
+
+  it("steps the threshold one point at a time", async () => {
+    invoke.mockResolvedValue(sweep);
+    render(<ThresholdCard desktopAvailable models={[trained]} />);
+    fireEvent.change(screen.getByLabelText("Model for the threshold"), { target: { value: "v1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Show the trade-off" }));
+    const slider = await screen.findByLabelText("Threshold to look at");
+    fireEvent.click(screen.getByRole("button", { name: "Raise the threshold one step" }));
+    expect(slider).toHaveAttribute("aria-valuetext", "0.70");
+    expect(screen.getByRole("button", { name: "Raise the threshold one step" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Lower the threshold one step" }));
+    fireEvent.click(screen.getByRole("button", { name: "Lower the threshold one step" }));
+    expect(slider).toHaveAttribute("aria-valuetext", "0.60");
+  });
 });

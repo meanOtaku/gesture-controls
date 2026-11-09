@@ -4,6 +4,9 @@ import trees from "../fixtures/inspection-trees.json";
 import type { Inspection } from "../inspection";
 import { InspectEvaluation } from "./InspectEvaluation";
 
+const invokeMock = vi.fn();
+vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invokeMock(...args) }));
+
 const exportFile = vi.hoisted(() => vi.fn());
 vi.mock("../../../shared/tauri/exportCsv", () => ({ exportFile: (...args: unknown[]) => exportFile(...args) }));
 
@@ -35,18 +38,51 @@ describe("InspectEvaluation", () => {
     expect(rates).toHaveTextContent("ROC AUC 0.813");
   });
 
-  it("moves the cut-off and everything follows, and goes back to the model's own", () => {
+  it("moves the cut-off and everything follows, and goes back to the one it was trained at", () => {
     render(<InspectEvaluation inspection={middling()} />);
-    const slider = screen.getByLabelText("Cut-off");
-    fireEvent.change(slider, { target: { value: "0.75" } });
+    const box = screen.getByLabelText("Cut-off in percent");
+    fireEvent.change(box, { target: { value: "75" } });
+    fireEvent.keyDown(box, { key: "Enter" });
     const confusion = screen.getByRole("table", { name: "Confusion at the cut-off" });
     expect(confusion).toHaveTextContent("2 hits"); // 0.9 and 0.8
     expect(confusion).toHaveTextContent("0 false alarms");
     expect(screen.getByRole("list", { name: "Rates at the cut-off" })).toHaveTextContent("Found 50% of the gesture");
     expect(screen.getByRole("img", { name: /At a cut-off of 75% it finds 50% of the gesture and wrongly flags 0% of the rest/ })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Back to the model's own \(50%\)/ }));
-    expect(slider).toHaveValue("0.5");
-    expect(screen.getByRole("button", { name: /Back to the model's own/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Trained at 50%" }));
+    expect(screen.getByLabelText("Cut-off")).toHaveAttribute("aria-valuetext", "50%");
+    expect(screen.getByRole("button", { name: "Trained at 50%" })).toBeDisabled();
+  });
+
+  it("reaches the top of the range in fine steps, one step at a time with − and +", () => {
+    render(<InspectEvaluation inspection={middling()} />);
+    const slider = screen.getByLabelText("Cut-off");
+    fireEvent.change(slider, { target: { value: slider.getAttribute("max")! } });
+    expect(slider).toHaveAttribute("aria-valuetext", "99.5%");
+    expect(screen.getByRole("button", { name: "Raise the cut-off one step" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Lower the cut-off one step" }));
+    expect(slider).toHaveAttribute("aria-valuetext", "99%");
+    fireEvent.click(screen.getByRole("button", { name: "Lower the cut-off one step" }));
+    expect(slider).toHaveAttribute("aria-valuetext", "98.5%");
+  });
+
+  it("starts at the cut-off the model runs at, and uses another only after saying what the numbers are", async () => {
+    invokeMock.mockResolvedValue(undefined);
+    const model = { id: "pinch-1", label: "pinch", state: "active" as const, deployable: true, imported: false, modelSha256: null, createdAt: "", active: true, activation: 0.95 };
+    render(<InspectEvaluation inspection={middling()} model={model} desktopAvailable />);
+    const slider = screen.getByLabelText("Cut-off");
+    expect(slider).toHaveAttribute("aria-valuetext", "95%");
+    expect(screen.getByRole("button", { name: "Runs at 95%" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /for this model/ })).toBeNull(); // it already runs here
+    fireEvent.click(screen.getByRole("button", { name: "Raise the cut-off one step" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use 95.5% for this model" }));
+    const confirm = screen.getByRole("group", { name: "Use this cut-off" });
+    expect(confirm).toHaveTextContent("The model will run at 95.5% instead of 95%, from now on. These figures are per moment, not per gesture");
+    expect(invokeMock).not.toHaveBeenCalled();
+    fireEvent.click(within(confirm).getByRole("button", { name: "Keep 95%" }));
+    expect(screen.queryByRole("group", { name: "Use this cut-off" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Use 95.5% for this model" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Use this cut-off" })).getByRole("button", { name: "Use 95.5%" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("set_label_model_threshold", { id: "pinch-1", activation: 0.955 }));
   });
 
   it("draws every chart with a summary in words, and the held-out recordings one by one", () => {
