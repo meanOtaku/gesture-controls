@@ -5,6 +5,12 @@ import { Input } from "../../../components/ui/input";
 import { CNN_DEFAULT_EPOCHS, MAX_STAGES, MAX_STAGE_EPOCHS, earlierRecordings, hasLabel, newStage, unstaged, type StageDraft } from "../training";
 import { recordingNumber, type DatasetSummary } from "../types";
 
+/** How a stage is named elsewhere in the plan: its name and number, or just its number when it has no name of its own. */
+export function stageTitle(stage: Pick<StageDraft, "name">, number: number): string {
+  const name = stage.name.trim();
+  return name === "" || name === `Stage ${number}` ? `stage ${number}` : `“${name}” (stage ${number})`;
+}
+
 /**
  * The order the CNN learns in: a list of stages, each a set of the chosen recordings, trained one after another from where
  * the stage before left the model (for example pinches, then everyday noise, then pinches again). A rehearsing stage also
@@ -43,7 +49,8 @@ export function TrainingPlanEditor({ stages, onChange, chosen, datasets, target,
         {stages.map((stage, index) => {
           const earlier = earlierRecordings(stages, index);
           const stagesOf = new Map(earlier.map((entry) => [entry.id, entry.stages]));
-          const stageList = (numbers: number[]) => `stage${numbers.length === 1 ? "" : "s"} ${numbers.join(", ")}`;
+          // Earlier stages by the name given them (and number, since names may repeat), as they are typed.
+          const stageList = (numbers: number[]) => numbers.map((n) => stageTitle(stages[n - 1], n)).join(", ");
           return (
           <li key={stage.key} className="flex flex-col gap-2 rounded-md border p-3 text-sm" aria-label={`Stage ${index + 1}`}>
             <div className="flex flex-wrap items-center gap-2">
@@ -103,7 +110,7 @@ export function TrainingPlanEditor({ stages, onChange, chosen, datasets, target,
                     <ul className="flex flex-col gap-0.5">
                       {earlier.map((entry) => (
                         <li key={entry.id}>
-                          {name(entry.id)} <small className="text-muted-foreground">({stageList(entry.stages)}{stage.datasetIds.includes(entry.id) ? ", and in full here" : ""})</small>
+                          {name(entry.id)} <small className="text-muted-foreground">in {stageList(entry.stages)} · {stage.datasetIds.includes(entry.id) ? "selected here too" : "not in this stage"}</small>
                         </li>
                       ))}
                     </ul>

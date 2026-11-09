@@ -274,27 +274,30 @@ describe("TrainPanel training plan", () => {
     expect(screen.getByRole("note")).toHaveTextContent("Not in any stage: i2.csv");
   });
 
-  it("shows each stage what the stages before it used, and whether it rehearses them", async () => {
+  it("shows each stage what the stages before it used, by their names, and whether it rehearses them", async () => {
     setup({ plan: stagedPlan });
     choose("snap");
     fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn" } });
     fireEvent.click(await screen.findByRole("checkbox", { name: "Train in stages" }));
     expect(screen.queryByRole("region", { name: "From earlier stages, stage 1" })).toBeNull();
     const second = screen.getByRole("region", { name: "From earlier stages, stage 2" });
-    expect(second).toHaveTextContent("s1.csv (stage 1)");
-    expect(second).toHaveTextContent("s2.csv (stage 1)");
+    expect(second).toHaveTextContent("s1.csv in “Recordings with snap” (stage 1) · not in this stage");
+    expect(second).toHaveTextContent("s2.csv in “Recordings with snap” (stage 1) · not in this stage");
     expect(second).toHaveTextContent("This stage rehearses them");
     fireEvent.click(screen.getByRole("checkbox", { name: "Rehearse earlier stages in stage 2" }));
     expect(second).toHaveTextContent("Not rehearsed: this stage trains only on its own recordings");
-    // A third stage with s1 again: the first two stages' recordings, and s1 marked as used before.
+    // Renaming a stage shows at once in the stages after it.
+    fireEvent.change(screen.getByLabelText("Name of stage 1"), { target: { value: "Pinches" } });
+    expect(second).toHaveTextContent("s1.csv in “Pinches” (stage 1)");
+    // A third stage with s1 again: selected here too; i1 from stage 2 is not; the rows say who used them.
     fireEvent.click(screen.getByRole("button", { name: "Add a stage" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "s1.csv in stage 3" }));
     const third = screen.getByRole("region", { name: "From earlier stages, stage 3" });
-    expect(third).toHaveTextContent("s1.csv (stage 1, and in full here)");
-    expect(third).toHaveTextContent("i1.csv (stage 2)");
-    const third3 = within(screen.getByRole("list", { name: "Recordings in stage 3" }));
-    expect(third3.getAllByText(/used in stage 2/)).toHaveLength(2); // i1 and i2
-    expect(third3.getAllByText(/used in stage 1/)).toHaveLength(2); // s1 and s2
+    expect(third).toHaveTextContent("s1.csv in “Pinches” (stage 1) · selected here too");
+    expect(third).toHaveTextContent("i1.csv in “Everything else” (stage 2) · not in this stage");
+    const rows = within(screen.getByRole("list", { name: "Recordings in stage 3" }));
+    expect(rows.getAllByText(/used in “Everything else” \(stage 2\)/)).toHaveLength(2); // i1 and i2
+    expect(rows.getAllByText(/used in “Pinches” \(stage 1\)/)).toHaveLength(2); // s1 and s2
   });
 
   it("names what a rehearsing stage brings back in the plan preview", async () => {

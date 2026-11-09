@@ -573,7 +573,7 @@ everything else; add, remove, rename and reorder stages (at most 8), and tick wh
 A recording can be in several stages, and every chosen one must be in at least one. Each stage carries on from where the one
 before left the model. **Rehearse earlier stages** (on by default from the second stage) also trains it on every start and
 half the other moments of the stages before, so a later stage does not train away what an earlier one taught; untick it for
-a stage that should see only its own recordings. From the second stage on, each stage lists **From earlier stages**: every recording the stages before it used, with which stages, and whether this one rehearses them; a recording row also says which earlier stages used it, and the plan preview names what each rehearsing stage brings back. **Passes** is how many times the stage goes over its data (12 when left
+a stage that should see only its own recordings. From the second stage on, each stage lists **From earlier stages**: every recording the stages before it used, by the earlier stage's name, whether it is selected in this stage too, and whether this one rehearses them; a recording row also names the earlier stages that used it, and the plan preview names what each rehearsing stage brings back. **Passes** is how many times the stage goes over its data (12 when left
 empty, at most 50). The app still decides which recordings test the model: a stage's recordings held out for testing are
 never trained on, and the plan lists them per stage. A stage left with nothing to train on is refused. Learning from its own
 false alarms adds those moments to the last stage, and the models the threshold is chosen with follow the same plan. The
