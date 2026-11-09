@@ -228,12 +228,18 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
                     </p>
                     {plan.stages && plan.stages.length > 0 && (
                       <ol className="field-hint flex list-decimal flex-col gap-1 pl-5" aria-label="Stages as they will run">
-                        {plan.stages.map((stage, index) => (
-                          <li key={index}>
-                            {stage.name}: trains on {stage.train.length ? stage.train.map(name).join(", ") : "nothing"}
-                            {stage.heldOut.length ? `; ${stage.heldOut.map(name).join(", ")} ${stage.heldOut.length === 1 ? "is" : "are"} held out for testing` : ""}.
-                          </li>
-                        ))}
+                        {plan.stages.map((stage, index) => {
+                          const rehearsed = planStages?.[index]?.rehearse
+                            ? [...new Set(plan.stages!.slice(0, index).flatMap((earlier) => earlier.train))].filter((id) => !stage.train.includes(id))
+                            : [];
+                          return (
+                            <li key={index}>
+                              {stage.name}: trains on {stage.train.length ? stage.train.map(name).join(", ") : "nothing"}
+                              {rehearsed.length ? `, rehearsing ${rehearsed.map(name).join(", ")} from earlier stages` : ""}
+                              {stage.heldOut.length ? `; ${stage.heldOut.map(name).join(", ")} ${stage.heldOut.length === 1 ? "is" : "are"} held out for testing` : ""}.
+                            </li>
+                          );
+                        })}
                       </ol>
                     )}
                     <SplitCoverageTable rows={coverage} label={target} />

@@ -273,4 +273,35 @@ describe("TrainPanel training plan", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "i2.csv in stage 2" }));
     expect(screen.getByRole("note")).toHaveTextContent("Not in any stage: i2.csv");
   });
+
+  it("shows each stage what the stages before it used, and whether it rehearses them", async () => {
+    setup({ plan: stagedPlan });
+    choose("snap");
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Train in stages" }));
+    expect(screen.queryByRole("region", { name: "From earlier stages, stage 1" })).toBeNull();
+    const second = screen.getByRole("region", { name: "From earlier stages, stage 2" });
+    expect(second).toHaveTextContent("s1.csv (stage 1)");
+    expect(second).toHaveTextContent("s2.csv (stage 1)");
+    expect(second).toHaveTextContent("This stage rehearses them");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Rehearse earlier stages in stage 2" }));
+    expect(second).toHaveTextContent("Not rehearsed: this stage trains only on its own recordings");
+    // A third stage with s1 again: the first two stages' recordings, and s1 marked as used before.
+    fireEvent.click(screen.getByRole("button", { name: "Add a stage" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "s1.csv in stage 3" }));
+    const third = screen.getByRole("region", { name: "From earlier stages, stage 3" });
+    expect(third).toHaveTextContent("s1.csv (stage 1, and in full here)");
+    expect(third).toHaveTextContent("i1.csv (stage 2)");
+    const third3 = within(screen.getByRole("list", { name: "Recordings in stage 3" }));
+    expect(third3.getAllByText(/used in stage 2/)).toHaveLength(2); // i1 and i2
+    expect(third3.getAllByText(/used in stage 1/)).toHaveLength(2); // s1 and s2
+  });
+
+  it("names what a rehearsing stage brings back in the plan preview", async () => {
+    setup({ plan: stagedPlan });
+    choose("snap");
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Train in stages" }));
+    expect(await screen.findByText(/Everything else: trains on i1.csv, rehearsing s1.csv from earlier stages; i2.csv is held out for testing/)).toBeInTheDocument();
+  });
 });

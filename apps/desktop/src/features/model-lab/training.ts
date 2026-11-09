@@ -166,6 +166,18 @@ export function stagesForRequest(drafts: StageDraft[], chosen: Set<string>): Sta
   }));
 }
 
+/**
+ * For the stage at `index`: each recording the stages before it used, with the numbers (from 1) of those stages, in the
+ * order they first appear. A rehearsing stage trains on part of these again; one that does not rehearse leaves them.
+ */
+export function earlierRecordings(drafts: Pick<StageDraft, "datasetIds">[], index: number): { id: string; stages: number[] }[] {
+  const seen = new Map<string, number[]>();
+  drafts.slice(0, Math.max(0, index)).forEach((draft, stage) => {
+    for (const id of new Set(draft.datasetIds)) seen.set(id, [...(seen.get(id) ?? []), stage + 1]);
+  });
+  return [...seen.entries()].map(([id, stages]) => ({ id, stages }));
+}
+
 /** Chosen recordings that no stage trains on (the desktop refuses a plan that leaves one out). */
 export function unstaged(drafts: StageDraft[], chosen: Set<string>): string[] {
   const staged = new Set(drafts.flatMap((draft) => draft.datasetIds));

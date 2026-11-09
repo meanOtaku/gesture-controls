@@ -2,7 +2,7 @@ import { recordingTitle } from "../recordingNames";
 import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { Input } from "../../../components/ui/input";
-import { CNN_DEFAULT_EPOCHS, MAX_STAGES, MAX_STAGE_EPOCHS, hasLabel, newStage, unstaged, type StageDraft } from "../training";
+import { CNN_DEFAULT_EPOCHS, MAX_STAGES, MAX_STAGE_EPOCHS, earlierRecordings, hasLabel, newStage, unstaged, type StageDraft } from "../training";
 import { recordingNumber, type DatasetSummary } from "../types";
 
 /**
@@ -40,7 +40,11 @@ export function TrainingPlanEditor({ stages, onChange, chosen, datasets, target,
   return (
     <div className="flex flex-col gap-3">
       <ol className="flex flex-col gap-3" aria-label="Training stages">
-        {stages.map((stage, index) => (
+        {stages.map((stage, index) => {
+          const earlier = earlierRecordings(stages, index);
+          const stagesOf = new Map(earlier.map((entry) => [entry.id, entry.stages]));
+          const stageList = (numbers: number[]) => `stage${numbers.length === 1 ? "" : "s"} ${numbers.join(", ")}`;
+          return (
           <li key={stage.key} className="flex flex-col gap-2 rounded-md border p-3 text-sm" aria-label={`Stage ${index + 1}`}>
             <div className="flex flex-wrap items-center gap-2">
               <strong className="tabular-nums">{index + 1}.</strong>
@@ -89,17 +93,45 @@ export function TrainingPlanEditor({ stages, onChange, chosen, datasets, target,
                 <Button type="button" variant="outline" disabled={disabled} onClick={() => pick(stage, false)}>All without</Button>
               </span>
             </div>
+            {index > 0 && (
+              <section className="flex flex-col gap-1 rounded-md bg-muted/40 p-2" aria-label={`From earlier stages, stage ${index + 1}`}>
+                <span className="text-xs text-muted-foreground">From earlier stages</span>
+                {earlier.length === 0 ? (
+                  <p className="field-hint">The stages before this one have no recordings yet.</p>
+                ) : (
+                  <>
+                    <ul className="flex flex-col gap-0.5">
+                      {earlier.map((entry) => (
+                        <li key={entry.id}>
+                          {name(entry.id)} <small className="text-muted-foreground">({stageList(entry.stages)}{stage.datasetIds.includes(entry.id) ? ", and in full here" : ""})</small>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="field-hint">
+                      {stage.rehearse
+                        ? `This stage rehearses them: their starts and half their other moments train again alongside its own ${stage.datasetIds.length} recording${stage.datasetIds.length === 1 ? "" : "s"}.`
+                        : "Not rehearsed: this stage trains only on its own recordings, so it can wear away what the stages before taught."}
+                    </p>
+                  </>
+                )}
+              </section>
+            )}
             <ul className="flex flex-col gap-1" aria-label={`Recordings in stage ${index + 1}`}>
               {chosen.map((dataset) => (
                 <li key={dataset.id} className="flex items-center gap-2">
                   <Checkbox checked={stage.datasetIds.includes(dataset.id)} disabled={disabled} onCheckedChange={() => toggle(stage, dataset.id)} aria-label={`${name(dataset.id)} in stage ${index + 1}`} />
-                  <span>{name(dataset.id)}{hasLabel(dataset, target) ? <small className="text-muted-foreground"> · has {target}</small> : null}</span>
+                  <span>
+                    {name(dataset.id)}
+                    {hasLabel(dataset, target) ? <small className="text-muted-foreground"> · has {target}</small> : null}
+                    {stagesOf.has(dataset.id) ? <small className="text-muted-foreground"> · used in {stageList(stagesOf.get(dataset.id)!)}</small> : null}
+                  </span>
                 </li>
               ))}
             </ul>
             {stage.datasetIds.length === 0 && <p className="field-hint text-destructive">This stage has no recordings yet.</p>}
           </li>
-        ))}
+          );
+        })}
       </ol>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" disabled={disabled || stages.length >= MAX_STAGES} onClick={() => onChange([...stages, newStage(`Stage ${stages.length + 1}`)])}>

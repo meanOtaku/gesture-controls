@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CNN_METHOD, MAX_LOG_LINES, TREES_METHOD, appendLog, buildRequest, defaultStages, describeEvents, describeMetrics, hasLabel, newStage, otherLabels, recordingsWithLabel, stagesForRequest, thresholdNote, unstaged } from "./training";
+import { CNN_METHOD, MAX_LOG_LINES, TREES_METHOD, appendLog, buildRequest, defaultStages, describeEvents, earlierRecordings, describeMetrics, hasLabel, newStage, otherLabels, recordingsWithLabel, stagesForRequest, thresholdNote, unstaged } from "./training";
 import type { DatasetSummary } from "./types";
 
 const dataset = (id: string, labels: string[]): DatasetSummary => ({ id, originalFilename: `${id}.csv`, importedAt: "", label: labels.join(", "), labels, rowCount: 10 });
@@ -129,5 +129,12 @@ describe("training plans", () => {
     expect(buildRequest({ ...base, method: CNN_METHOD }).stages).toEqual(stages);
     expect(buildRequest({ ...base, method: TREES_METHOD }).stages).toBeUndefined();
     expect(buildRequest({ ...base, method: CNN_METHOD, stages: [] }).stages).toBeUndefined();
+  });
+
+  it("lists the recordings earlier stages used, with which stages", () => {
+    const plan = [{ datasetIds: ["p1", "p2"] }, { datasetIds: ["n1", "n1"] }, { datasetIds: ["p1"] }, { datasetIds: ["x"] }];
+    expect(earlierRecordings(plan, 0)).toEqual([]);
+    expect(earlierRecordings(plan, 1)).toEqual([{ id: "p1", stages: [1] }, { id: "p2", stages: [1] }]);
+    expect(earlierRecordings(plan, 3)).toEqual([{ id: "p1", stages: [1, 3] }, { id: "p2", stages: [1] }, { id: "n1", stages: [2] }]);
   });
 });
