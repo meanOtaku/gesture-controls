@@ -42,15 +42,18 @@ describe("LabelModelsPanel", () => {
   it("offers Inspect for every model, and tells the page which one", async () => {
     const onInspect = vi.fn();
     setup([draft, { ...draft, id: "fist-1", label: "fist" }], {}, onInspect);
-    fireEvent.click(await screen.findByRole("button", { name: "Inspect fist-1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "More actions for fist-1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Inspect fist-1" }));
     expect(onInspect).toHaveBeenCalledWith("fist-1");
+    fireEvent.click(screen.getByRole("button", { name: "More actions for snap-abc" }));
     fireEvent.click(screen.getByRole("button", { name: "Inspect snap-abc" }));
     expect(onInspect).toHaveBeenLastCalledWith("snap-abc");
   });
 
   it("renames a model, shows its name above its id, and clears it when the name is emptied", async () => {
     const { set } = setup([draft]);
-    fireEvent.click(await screen.findByRole("button", { name: "Rename snap-abc" }));
+    fireEvent.click(await screen.findByRole("button", { name: "More actions for snap-abc" }));
+    fireEvent.click(screen.getByRole("button", { name: "Rename snap-abc" }));
     const box = screen.getByRole("textbox", { name: "Name for snap-abc" });
     fireEvent.change(box, { target: { value: "  Snap, CNN  " } });
     set([{ ...draft, name: "Snap, CNN" }]);
@@ -59,6 +62,7 @@ describe("LabelModelsPanel", () => {
     expect(await screen.findByText("Snap, CNN")).toBeInTheDocument();
     expect(screen.getByText("snap-abc")).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "More actions for snap-abc" }));
     fireEvent.click(screen.getByRole("button", { name: "Rename snap-abc" }));
     expect(screen.getByRole("textbox", { name: "Name for snap-abc" })).toHaveValue("Snap, CNN");
     fireEvent.change(screen.getByRole("textbox", { name: "Name for snap-abc" }), { target: { value: " " } });
@@ -68,10 +72,12 @@ describe("LabelModelsPanel", () => {
 
   it("leaves the name alone when renaming is cancelled or nothing changed", async () => {
     setup([{ ...draft, name: "Snap" }]);
-    fireEvent.click(await screen.findByRole("button", { name: "Rename snap-abc" }));
+    fireEvent.click(await screen.findByRole("button", { name: "More actions for snap-abc" }));
+    fireEvent.click(screen.getByRole("button", { name: "Rename snap-abc" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Name for snap-abc" }), { target: { value: "Other" } });
     fireEvent.keyDown(screen.getByRole("textbox", { name: "Name for snap-abc" }), { key: "Escape" });
     expect(screen.queryByRole("textbox")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "More actions for snap-abc" }));
     fireEvent.click(screen.getByRole("button", { name: "Rename snap-abc" }));
     fireEvent.click(screen.getByRole("button", { name: "Save name" }));
     expect(calls("rename_label_model")).toEqual([]);
@@ -160,6 +166,8 @@ describe("LabelModelsPanel", () => {
     fireEvent.click(within(group).getByRole("radio", { name: /Live/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Switch to Live" }));
     await waitFor(() => expect(calls("set_label_runtime_mode")).toEqual([["set_label_runtime_mode", { mode: "live" }]]));
+    // The switch is disabled while the Live change finishes; wait for it before asking for Off.
+    await waitFor(() => expect(within(group).getByRole("radio", { name: /Off/ })).not.toHaveAttribute("aria-disabled", "true"));
     fireEvent.click(within(group).getByRole("radio", { name: /Off/ }));
     await waitFor(() => expect(calls("set_label_runtime_mode")).toContainEqual(["set_label_runtime_mode", { mode: "off" }]));
   });
@@ -174,7 +182,10 @@ describe("LabelModelsPanel", () => {
 
   it("offers delete only for an archived model, and asks before deleting for good", async () => {
     setup([{ ...draft, id: "snap-old", state: "archived" }, { ...draft, id: "snap-new", state: "approved" }]);
-    expect(await screen.findByText("snap-old")).toBeInTheDocument();
+    expect(await screen.findByText("snap-new")).toBeInTheDocument();
+    expect(screen.queryByText("snap-old")).toBeNull(); // archived versions are folded away
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 archived" }));
+    expect(screen.getByText("snap-old")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Delete snap-new" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Delete snap-old" }));
     expect(calls("delete_label_model")).toHaveLength(0);
@@ -187,6 +198,7 @@ describe("LabelModelsPanel", () => {
 
   it("shows why a delete was refused", async () => {
     setup([{ ...draft, id: "snap-old", state: "archived" }]);
+    fireEvent.click(await screen.findByRole("button", { name: "Show 1 archived" }));
     await screen.findByText("snap-old");
     invokeMock.mockImplementation(async (command: string) => {
       if (command === "delete_label_model") throw "The model was removed, but its files could not be deleted";
@@ -195,5 +207,42 @@ describe("LabelModelsPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete snap-old" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete snap-old for good" }));
     expect(await screen.findByText(/files could not be deleted/)).toBeInTheDocument();
+  });
+  it("warns when a label has no active model, and says what to do next", async () => {
+    setup([{ ...draft, state: "approved" }, { ...draft, id: "fist-1", label: "fist", state: "active", active: true }]);
+    expect(await screen.findByText("No active model")).toBeInTheDocument();
+    expect(screen.getByText(/Nothing detects snap, so no recipe that uses it can start or end\. Activate an approved version below\./)).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing detects fist/)).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent("Scoring 1 of 2 labels. Nothing acts on them.");
+  });
+
+  it("says nothing is scored when no label has an active model", async () => {
+    setup([{ ...draft, state: "approved" }]);
+    expect(await screen.findByRole("status")).toHaveTextContent("No label has an active model, so nothing is scored.");
+  });
+
+  it("shows each model's threshold and held-out results", async () => {
+    setup([{ ...draft, state: "active", active: true, activation: 0.99, evaluation: { recall: 0.8246, falseActivationsPerHour: 0 } }]);
+    const list = await screen.findByLabelText("snap-abc figures");
+    expect(within(list).getByText("0.99")).toBeInTheDocument();
+    expect(within(list).getByText("82%")).toBeInTheDocument();
+    expect(within(list).getByText("0.0")).toBeInTheDocument();
+  });
+
+  it("puts the active model first and offers Swap in for another approved version", async () => {
+    setup([{ ...draft, id: "snap-new", state: "approved" }, { ...draft, id: "snap-live", state: "active", active: true }]);
+    const slot = await screen.findByRole("listitem", { name: "Active snap model" });
+    expect(within(slot).getByText("snap-live")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Swap in snap-new" }));
+    await waitFor(() => expect(calls("activate_label_model")).toEqual([["activate_label_model", { id: "snap-new" }]]));
+  });
+
+  it("keeps stepping back and archiving behind More", async () => {
+    setup([{ ...draft, state: "approved" }]);
+    await screen.findByRole("button", { name: "Activate snap-abc" });
+    expect(screen.queryByRole("button", { name: "Archive snap-abc" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "More actions for snap-abc" }));
+    fireEvent.click(screen.getByRole("button", { name: "Archive snap-abc" }));
+    await waitFor(() => expect(calls("set_label_model_state")).toEqual([["set_label_model_state", { id: "snap-abc", state: "archived" }]]));
   });
 });

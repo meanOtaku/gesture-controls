@@ -16,6 +16,17 @@ export interface LabelModel {
   modelSha256: string | null;
   createdAt: string;
   active: boolean;
+  /** The score a detection starts at. */
+  activation?: number;
+  /** How it did on its held-out recordings, from its manifest; null when the manifest says nothing. */
+  evaluation?: ModelEvaluation | null;
+}
+
+/** Mirrors `ModelEvaluationView` in `label_runtime.rs`. */
+export interface ModelEvaluation {
+  /** The share of gesture starts it caught, 0 to 1. */
+  recall: number | null;
+  falseActivationsPerHour: number | null;
 }
 
 /** The longest name a model may be given (the registry's `MAX_MODEL_NAME_CHARS`). */
@@ -78,6 +89,27 @@ export interface ShadowReport {
 }
 
 export const LABEL_MODELS_EVENT = "label-models-changed";
+
+/** The figures shown beside a model: its threshold and, when its manifest has them, its held-out results. */
+export function modelStats(model: Pick<LabelModel, "activation" | "evaluation">): { term: string; value: string }[] {
+  const facts: { term: string; value: string }[] = [];
+  if (model.activation != null) facts.push({ term: "Threshold", value: model.activation.toFixed(2) });
+  if (model.evaluation?.recall != null) facts.push({ term: "Held-out recall", value: `${Math.round(model.evaluation.recall * 100)}%` });
+  const perHour = model.evaluation?.falseActivationsPerHour;
+  if (perHour != null) facts.push({ term: "False / hour", value: perHour.toFixed(perHour < 10 ? 1 : 0) });
+  return facts;
+}
+
+/** One line on what the runtime is doing with the models it has: which labels it scores and whether anything acts. */
+export function runtimeSummary(mode: LabelRuntimeMode, groups: { label: string; models: Pick<LabelModel, "active">[] }[]): string {
+  const total = groups.length;
+  const running = groups.filter((group) => group.models.some((model) => model.active)).length;
+  if (mode === "off") return "No model runs.";
+  if (total === 0) return "No label models yet.";
+  if (running === 0) return `No label has an active model, so nothing is scored${mode === "live" ? " and nothing can act" : ""}.`;
+  const scoring = `Scoring ${running} of ${total} label${total === 1 ? "" : "s"}.`;
+  return mode === "live" ? `${scoring} Their detections can start recipes.` : `${scoring} Nothing acts on them.`;
+}
 
 export const MODE_OPTIONS: ReadonlyArray<{ value: LabelRuntimeMode; label: string; summary: string }> = [
   { value: "off", label: "Off", summary: "No model runs." },

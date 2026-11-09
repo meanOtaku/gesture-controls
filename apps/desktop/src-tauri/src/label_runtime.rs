@@ -301,6 +301,32 @@ pub struct LabelModelView {
     pub created_at: String,
     /// This model is the label's active one.
     pub active: bool,
+    /// The score a detection starts at.
+    pub activation: f64,
+    /// How it did on its held-out recordings, from its manifest; `None` when the manifest says nothing.
+    pub evaluation: Option<ModelEvaluationView>,
+}
+
+/// A model's held-out results as its bundle's manifest records them (`provenance.evaluation*`).
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelEvaluationView {
+    /// The share of gesture starts it caught, 0 to 1.
+    pub recall: Option<f64>,
+    pub false_activations_per_hour: Option<f64>,
+}
+
+impl ModelEvaluationView {
+    /// From a manifest's JSON; `None` when it has neither figure.
+    fn from_manifest(manifest: &serde_json::Value) -> Option<Self> {
+        let provenance = manifest.get("provenance")?;
+        let figure = |key: &str| provenance.get(key).and_then(serde_json::Value::as_f64);
+        let view = Self {
+            recall: figure("evaluationGestureRecall"),
+            false_activations_per_hour: figure("evaluationFalseActivationsPerHour"),
+        };
+        (view.recall.is_some() || view.false_activations_per_hour.is_some()).then_some(view)
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -883,7 +909,8 @@ impl LabelRuntimeHost {
         })
     }
 
-    pub fn list_models(&self) -> Vec<LabelModelView> {
+    /// Every registered model; with `model_lab_dir`, each one's held-out results are read from its manifest.
+    pub fn list_models(&self, model_lab_dir: Option<&std::path::Path>) -> Vec<LabelModelView> {
         let Ok(state) = self.state.lock() else {
             return Vec::new();
         };
@@ -905,6 +932,12 @@ impl LabelRuntimeHost {
                 model_sha256: v.model_sha256.clone(),
                 created_at: v.created_at.clone(),
                 active: registry.active_by_label.get(&v.label) == Some(&v.id),
+                activation: v.thresholds.activation,
+                evaluation: model_lab_dir.and_then(|dir| {
+                    let bytes =
+                        std::fs::read(dir.join(&v.artifact_dir).join("manifest.json")).ok()?;
+                    ModelEvaluationView::from_manifest(&serde_json::from_slice(&bytes).ok()?)
+                }),
             })
             .collect()
     }
@@ -1505,8 +1538,8 @@ pub fn import_label_model(
 }
 
 #[tauri::command]
-pub fn list_label_models(host: State<'_, LabelRuntimeHost>) -> Vec<LabelModelView> {
-    host.list_models()
+pub fn list_label_models(app: AppHandle, host: State<'_, LabelRuntimeHost>) -> Vec<LabelModelView> {
+    host.list_models(LabelRuntimeHost::model_lab_dir(&app).ok().as_deref())
 }
 
 #[tauri::command]
@@ -1578,6 +1611,26 @@ pub fn set_label_runtime_mode(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_manifests_held_out_results_are_read_when_it_has_them() {
+        let manifest = serde_json::json!({"provenance": {"evaluationGestureRecall": 0.83, "evaluationFalseActivationsPerHour": 0.0}});
+        assert_eq!(
+            super::ModelEvaluationView::from_manifest(&manifest),
+            Some(super::ModelEvaluationView {
+                recall: Some(0.83),
+                false_activations_per_hour: Some(0.0)
+            })
+        );
+        assert_eq!(
+            super::ModelEvaluationView::from_manifest(&serde_json::json!({"provenance": {}})),
+            None
+        );
+        assert_eq!(
+            super::ModelEvaluationView::from_manifest(&serde_json::json!({})),
+            None
+        );
+    }
+
     /// A one-off look at what the cleanup does to a real store: point `PURGE_E2E_DIR` at a *copy* of a model-lab folder.
     /// One-off tool: imports model bundles into the app's registry while the app is closed (it keeps the registry in memory
     /// while it runs), exactly as Import model does: each is staged, validated and published as a Draft. `MODEL_LAB_DIR` is

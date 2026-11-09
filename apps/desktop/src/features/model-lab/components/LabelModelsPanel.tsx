@@ -17,6 +17,8 @@ import {
   formatTime,
   groupByLabel,
   modelName,
+  modelStats,
+  runtimeSummary,
   type ImportedLabelModel,
   type LabelModel,
   type LabelModelState,
@@ -38,6 +40,10 @@ const STATE_LABEL: Record<LabelModelState, string> = {
  * One binary model per label: bring a model in, review it, approve it, activate it, and choose whether the
  * models only watch (Monitor) or can drive recipes (Live). Every step is a person's choice; importing never
  * activates anything.
+ *
+ * Each label gets a slot: its active model first, with its threshold and held-out results, then its other versions as
+ * rows with one next step each. Everything else about a model (rename, inspect, stepping back, archiving) is behind its
+ * More button, and archived versions are folded away. A label with no active model says so, since nothing detects it.
  */
 export function LabelModelsPanel({
   desktopAvailable,
@@ -62,6 +68,9 @@ export function LabelModelsPanel({
   const [confirmLive, setConfirmLive] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
+  const [moreOpen, setMoreOpen] = useState<string | null>(null);
+  const [archivedOpen, setArchivedOpen] = useState<Set<string>>(new Set());
+  const [justImported, setJustImported] = useState<string | null>(null);
   const { isPending, run } = usePendingActions();
 
   const attempt = (key: string, title: string, work: () => Promise<unknown>, success?: string) =>
@@ -85,6 +94,7 @@ export function LabelModelsPanel({
       "Import model",
       async () => {
         const imported = await invoke<ImportedLabelModel>("import_label_model", { path: chosen });
+        setJustImported(imported.id);
         OperationFeedback.success("Import model", `Added ${imported.label} as a draft. It is not active.`);
       },
     );
@@ -96,7 +106,7 @@ export function LabelModelsPanel({
       return attempt(key, action.label, () => invoke("set_label_model_state", { id: model.id, state: action.to }));
     }
     if (action.kind === "activate") {
-      return attempt(key, "Activate", () => invoke("activate_label_model", { id: model.id }), `${model.label} is now active.`);
+      return attempt(key, "Activate", () => invoke("activate_label_model", { id: model.id }), `${modelName(model)} is now the active ${model.label} model.`);
     }
     return attempt(key, "Deactivate", () => invoke("deactivate_label_model", { label: model.label }));
   };
@@ -119,13 +129,136 @@ export function LabelModelsPanel({
 
   const mode = status?.mode ?? "off";
   const groups = groupByLabel(models);
+  const anyImported = models.some((model) => model.imported && model.state !== "archived" && !model.active);
+
+  const actionButton = (model: LabelModel, action: ModelAction, emphasis: "outline" | "ghost" = "outline", text = action.label) => (
+    <Button
+      key={action.label}
+      type="button"
+      variant={emphasis}
+      aria-label={`${text} ${model.id}`}
+      disabled={isPending(`${model.id}:${action.kind}`)}
+      onClick={() => { setMoreOpen(null); void perform(model, action); }}
+    >
+      {text}
+    </Button>
+  );
+
+  /** The model's name (or rename box), id, badges and a line about where it came from. */
+  const identity = (model: LabelModel) => (
+    <div className="flex min-w-0 flex-col gap-1">
+      {renaming?.id === model.id ? (
+        <form className="flex flex-wrap items-center gap-2" onSubmit={(event) => { event.preventDefault(); saveName(model, renaming.draft); }}>
+          <Input
+            aria-label={`Name for ${model.id}`}
+            className="max-w-xs"
+            autoFocus
+            maxLength={MAX_MODEL_NAME}
+            placeholder={model.id}
+            value={renaming.draft}
+            onChange={(event) => setRenaming({ id: model.id, draft: event.target.value })}
+            onKeyDown={(event) => { if (event.key === "Escape") setRenaming(null); }}
+          />
+          <Button type="submit" variant="outline">Save name</Button>
+          <Button type="button" variant="ghost" onClick={() => setRenaming(null)}>Cancel</Button>
+        </form>
+      ) : (
+        model.name && <strong className="text-sm">{modelName(model)}</strong>
+      )}
+      <span className="flex flex-wrap items-center gap-2 text-sm">
+        {model.name ? <small className="text-muted-foreground">{model.id}</small> : <span>{model.id}</span>}
+        {!model.active && <Badge variant="secondary">{STATE_LABEL[model.state]}</Badge>}
+        {model.imported && <Badge variant="outline">Imported</Badge>}
+        {model.monitorOnly && <Badge variant="outline">Monitor only</Badge>}
+        {justImported === model.id && <Badge>New</Badge>}
+      </span>
+      <small className="text-xs text-muted-foreground">
+        Added {formatTime(model.createdAt)}
+        {model.monitorOnly ? ". It did not pass the checks for going live: when active it scores and shows what it detects, but never starts a recipe, even in Live." : ""}
+      </small>
+    </div>
+  );
+
+  /** Threshold and held-out results, as a small fact list. */
+  const stats = (model: LabelModel) => {
+    const facts = modelStats(model);
+    return facts.length === 0 ? null : (
+      <dl className="grid grid-flow-col gap-x-4 text-xs" aria-label={`${model.id} figures`}>
+        {facts.map(({ term, value }) => (
+          <div key={term} className="flex flex-col">
+            <dt className="text-muted-foreground">{term}</dt>
+            <dd className="m-0 tabular-nums">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    );
+  };
+
+  /** Everything but the model's next step: rename, inspect, and the lifecycle moves after the first. */
+  const more = (model: LabelModel, secondary: ModelAction[]) => {
+    const opened = moreOpen === model.id;
+    return (
+      <>
+        <Button
+          type="button"
+          variant="ghost"
+          aria-label={`More actions for ${model.id}`}
+          aria-expanded={opened}
+          onClick={() => setMoreOpen(opened ? null : model.id)}
+        >
+          More
+        </Button>
+        {opened && (
+          <div className="flex w-full flex-wrap justify-end gap-2" role="group" aria-label={`More for ${model.id}`}>
+            {onInspect && (
+              <Button type="button" variant="ghost" aria-label={`Inspect ${model.id}`} onClick={() => { setMoreOpen(null); onInspect(model.id); }}>
+                Inspect
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              aria-label={`Rename ${model.id}`}
+              disabled={!desktopAvailable || isPending(`${model.id}:rename`)}
+              onClick={() => { setMoreOpen(null); setRenaming({ id: model.id, draft: model.name ?? "" }); }}
+            >
+              Rename
+            </Button>
+            {secondary.map((action) => actionButton(model, action, "ghost"))}
+          </div>
+        )}
+      </>
+    );
+  };
+
+  const deleteControls = (model: LabelModel) =>
+    confirmingDelete === model.id ? (
+      <>
+        <Button
+          type="button"
+          variant="destructive"
+          disabled={isPending(`${model.id}:delete`)}
+          onClick={() => {
+            setConfirmingDelete(null);
+            void attempt(`${model.id}:delete`, "Delete model", () => invoke("delete_label_model", { id: model.id }), `${modelName(model)} was deleted.`);
+          }}
+        >
+          Delete {model.id} for good
+        </Button>
+        <Button type="button" variant="outline" onClick={() => setConfirmingDelete(null)}>Keep</Button>
+      </>
+    ) : (
+      <Button type="button" variant="ghost" aria-label={`Delete ${model.id}`} onClick={() => setConfirmingDelete(model.id)}>
+        Delete
+      </Button>
+    );
 
   return (
     <Card id="lab-labels" role="region" aria-label="Label models" className="min-w-0">
       <CardHeader>
         <SectionHeader
           title="Label models"
-          description="One model per label. Several labels can be active at once."
+          description="One active model per label. Several labels can be active at once."
           status={
             <Button type="button" variant="outline" disabled={!desktopAvailable || isPending("import")} onClick={() => void importFolder()}>
               Import a model folder
@@ -133,7 +266,7 @@ export function LabelModelsPanel({
           }
           help={{
             label: "About label models",
-            content: "A model bundle is a folder with manifest.json and the PPG pinch-start model's trees (model.trees). Importing adds it as a Draft: you then mark it evaluated, approve it and activate it yourself. Models run inside this app; nothing else needs to be installed.",
+            content: "A model bundle is a folder with manifest.json and the model file. Importing adds it as a Draft: you then mark it evaluated, approve it and activate it yourself. Activating a model replaces the label's active one, and Roll back returns to the one before. Models run inside this app; nothing else needs to be installed.",
           }}
         />
       </CardHeader>
@@ -165,7 +298,9 @@ export function LabelModelsPanel({
             options={MODE_OPTIONS.map(({ value, label }) => ({ value, label }))}
             onValueChange={setMode}
           />
-          <p className="field-hint">{MODE_OPTIONS.find((option) => option.value === mode)?.summary} A restart always comes back in Monitor, never Live.</p>
+          <p className="field-hint" role="status">
+            {runtimeSummary(mode, groups)} A restart always comes back in Monitor, never Live.
+          </p>
         </div>
         {confirmLive && (
           <Alert role="alert">
@@ -189,112 +324,96 @@ export function LabelModelsPanel({
             {groups.map((group) => {
               const score = status?.lastScores[group.label];
               const detected = status?.activeDetections.includes(group.label) ?? false;
+              const active = group.models.find((model) => model.active);
+              const others = group.models.filter((model) => !model.active && model.state !== "archived");
+              const archived = group.models.filter((model) => model.state === "archived");
+              const showArchived = archivedOpen.has(group.label);
               return (
-                <li key={group.label} className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
+                <li key={group.label} className="flex flex-col gap-3 rounded-md border p-3" aria-label={`${group.label} slot`}>
+                  <div className="flex flex-wrap items-center gap-2">
                     <strong>{group.label}</strong>
+                    {active ? <Badge>Active</Badge> : <Badge variant="destructive">No active model</Badge>}
                     {detected && <Badge>Detected</Badge>}
-                    {score !== undefined && <small className="text-muted-foreground">score {(score * 100).toFixed(0)}%</small>}
+                    {score !== undefined && (
+                      <span className="ml-auto flex items-center gap-2">
+                        <small className="text-muted-foreground">score {(score * 100).toFixed(0)}%</small>
+                        <span className="block h-1.5 w-20 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                          <span className="block h-full bg-primary" style={{ width: `${Math.round(Math.min(Math.max(score, 0), 1) * 100)}%` }} />
+                        </span>
+                      </span>
+                    )}
                   </div>
                   {(status?.inputWarnings ?? []).filter((w) => w.label === group.label).map((w) => <InputWarningNote key={w.modelId} warning={w} />)}
+                  {!active && (
+                    <p className="text-sm text-destructive">
+                      Nothing detects {group.label}, so no recipe that uses it can start or end. {others.some((m) => m.state === "approved") ? "Activate an approved version below." : "Approve a version below, then activate it."}
+                    </p>
+                  )}
                   <ul className="flex flex-col gap-2" aria-label={`${group.label} models`}>
-                    {group.models.map((model) => (
-                      <li key={model.id} className="recipe-item">
-                        <div className="flex min-w-0 flex-col gap-1">
-                          {renaming?.id === model.id ? (
-                            <form
-                              className="flex flex-wrap items-center gap-2"
-                              onSubmit={(event) => { event.preventDefault(); saveName(model, renaming.draft); }}
-                            >
-                              <Input
-                                aria-label={`Name for ${model.id}`}
-                                className="max-w-xs"
-                                autoFocus
-                                maxLength={MAX_MODEL_NAME}
-                                placeholder={model.id}
-                                value={renaming.draft}
-                                onChange={(event) => setRenaming({ id: model.id, draft: event.target.value })}
-                                onKeyDown={(event) => { if (event.key === "Escape") setRenaming(null); }}
-                              />
-                              <Button type="submit" variant="outline">Save name</Button>
-                              <Button type="button" variant="ghost" onClick={() => setRenaming(null)}>Cancel</Button>
-                            </form>
-                          ) : model.name && (
-                            <strong className="text-sm">{modelName(model)}</strong>
-                          )}
-                          <span className="text-sm">
-                            {model.name ? <small className="text-muted-foreground">{model.id}</small> : model.id} <Badge variant={model.state === "active" ? "default" : "secondary"}>{STATE_LABEL[model.state]}</Badge>{" "}
-                            {model.imported && <Badge variant="outline">Imported</Badge>}
-                            {model.monitorOnly && <Badge variant="outline">Monitor only</Badge>}
-                          </span>
-                          <small className="text-xs text-muted-foreground">
-                            Added {formatTime(model.createdAt)}
-                            {model.imported ? ". Imported models are not evaluated by this app: review them before approving." : ""}
-                            {model.monitorOnly ? ". It did not pass the checks for going live: when active it scores and shows what it detects, but never starts a recipe, even in Live." : ""}
-                          </small>
-                        </div>
+                    {active && (
+                      <li className="recipe-item rounded-md bg-muted/40 p-2" aria-label={`Active ${group.label} model`}>
+                        {identity(active)}
+                        {stats(active)}
                         <div className="recipe-item-actions">
-                          {actionsFor(model).map((action) => (
-                            <Button
-                              key={action.label}
-                              type="button"
-                              variant="outline"
-                              aria-label={`${action.label} ${model.id}`}
-                              disabled={isPending(`${model.id}:${action.kind}`)}
-                              onClick={() => void perform(model, action)}
-                            >
-                              {action.label}
-                            </Button>
-                          ))}
-                          {model.state === "archived" &&
-                            (confirmingDelete === model.id ? (
-                              <>
-                                <Button
-                                  type="button"
-                                  variant="destructive"
-                                  disabled={isPending(`${model.id}:delete`)}
-                                  onClick={() => {
-                                    setConfirmingDelete(null);
-                                    void attempt(`${model.id}:delete`, "Delete model", () => invoke("delete_label_model", { id: model.id }), `${modelName(model)} was deleted.`);
-                                  }}
-                                >
-                                  Delete {model.id} for good
-                                </Button>
-                                <Button type="button" variant="outline" onClick={() => setConfirmingDelete(null)}>Keep</Button>
-                              </>
-                            ) : (
-                              <Button type="button" variant="ghost" aria-label={`Delete ${model.id}`} onClick={() => setConfirmingDelete(model.id)}>
-                                Delete
-                              </Button>
-                            ))}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            aria-label={`Rename ${model.id}`}
-                            disabled={!desktopAvailable || isPending(`${model.id}:rename`)}
-                            onClick={() => setRenaming({ id: model.id, draft: model.name ?? "" })}
-                          >
-                            Rename
+                          {actionsFor(active).map((action) => actionButton(active, action))}
+                          <Button type="button" variant="ghost" aria-label={`Roll back ${active.label}`} disabled={isPending(`${active.label}:rollback`)}
+                            onClick={() => void attempt(`${active.label}:rollback`, "Roll back", () => invoke("rollback_label_model", { label: active.label }))}>
+                            Roll back
                           </Button>
-                          {onInspect && (
-                            <Button type="button" variant="ghost" aria-label={`Inspect ${model.id}`} onClick={() => onInspect(model.id)}>
-                              Inspect
-                            </Button>
-                          )}
-                          {model.state === "active" && (
-                            <Button type="button" variant="ghost" aria-label={`Roll back ${model.label}`} disabled={isPending(`${model.label}:rollback`)}
-                              onClick={() => void attempt(`${model.label}:rollback`, "Roll back", () => invoke("rollback_label_model", { label: model.label }))}>
-                              Roll back
-                            </Button>
-                          )}
+                          {more(active, [])}
                         </div>
                       </li>
-                    ))}
+                    )}
+                    {others.length > 0 && active && <li className="text-xs text-muted-foreground" aria-hidden="true">Other versions</li>}
+                    {others.map((model) => {
+                      const [next, ...secondary] = actionsFor(model);
+                      const swap = next?.kind === "activate" && active != null;
+                      return (
+                        <li key={model.id} className={`recipe-item${justImported === model.id ? " rounded-md ring-1 ring-primary p-2" : ""}`}>
+                          {identity(model)}
+                          {stats(model)}
+                          <div className="recipe-item-actions">
+                            {next && actionButton(model, next, "outline", swap ? "Swap in" : next.label)}
+                            {more(model, secondary)}
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
+                  {archived.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="self-start"
+                        aria-expanded={showArchived}
+                        onClick={() => setArchivedOpen((open) => { const next = new Set(open); if (next.has(group.label)) next.delete(group.label); else next.add(group.label); return next; })}
+                      >
+                        {showArchived ? "Hide" : "Show"} {archived.length} archived
+                      </Button>
+                      {showArchived && (
+                        <ul className="flex flex-col gap-2" aria-label={`${group.label} archived models`}>
+                          {archived.map((model) => (
+                            <li key={model.id} className="recipe-item">
+                              {identity(model)}
+                              <div className="recipe-item-actions">
+                                {actionsFor(model).map((action) => actionButton(model, action))}
+                                {deleteControls(model)}
+                                {more(model, [])}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
                 </li>
               );
             })}
           </ul>
+        )}
+        {anyImported && (
+          <p className="text-xs text-muted-foreground">Imported models are not evaluated by this app: check them with Inspect or Compare models before approving.</p>
         )}
       </CardContent>
     </Card>
