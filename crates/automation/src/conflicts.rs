@@ -19,9 +19,9 @@ pub fn find_conflicts(recipes: &[Recipe]) -> Vec<Conflict> {
     let mut conflicts = Vec::new();
     for (index, first) in enabled.iter().enumerate() {
         for second in &enabled[index + 1..] {
-            if first.action.resource() == second.action.resource() {
+            if first.resource() == second.resource() {
                 conflicts.push(Conflict {
-                    resource: first.action.resource().to_string(),
+                    resource: first.resource(),
                     first: first.id.clone(),
                     second: second.id.clone(),
                 });

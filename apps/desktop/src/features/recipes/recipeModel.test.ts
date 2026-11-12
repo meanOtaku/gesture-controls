@@ -86,19 +86,20 @@ describe("recipeModel", () => {
     expect(chainProblem(six.slice(0, 3), locations, true)).toBeNull();
   });
 
-  it("allows a shake step only for button actions", () => {
+  it("allows a shake step for a button and, as a switch, for a dial, but not beside a grab/release pair", () => {
     const shake = [{ kind: "hold", hold: "shake" }] as const;
     expect(chainProblem([...shake], locations, true)).toBeNull();
-    expect(chainProblem([...shake], locations, false)).toMatch(/only works for a button action/);
+    expect(chainProblem([...shake], locations, false)).toBeNull();
+    expect(chainProblem([...shake, { kind: "modelPair", startLabel: "pinch_in", endLabel: "pinch_out" }], locations, false)).toMatch(/already says when the dial is on/);
     expect(holdsFor(true).map((hold) => hold.value)).toContain("shake");
-    expect(holdsFor(false).map((hold) => hold.value)).not.toContain("shake");
+    expect(holdsFor(false).map((hold) => hold.value)).toEqual(expect.arrayContaining(["shake", "shakeVertical", "wiggle", "hammer", "doubleTap"]));
     for (const swipe of ["swipeLeft", "swipeRight", "swipeUp", "swipeDown"] as const) {
       expect(isMomentary(swipe)).toBe(true);
-      expect(chainProblem([{ kind: "hold", hold: swipe }], locations, false)).toMatch(/shake, swipe, tap, roll, pitch or one-shot model label or camera gesture only works/);
+      expect(chainProblem([{ kind: "hold", hold: swipe }], locations, false)).toBeNull();
       expect(chainProblem([{ kind: "hold", hold: swipe }], locations, true)).toBeNull();
     }
     expect(isMomentary("stemButton")).toBe(false);
-    expect(holdsFor(false).map((hold) => hold.value)).toEqual(["stemButton"]);
+    expect(holdsFor(false)).toEqual(holdsFor(true));
   });
 
   it("knows which built-in gesture switch each step depends on", () => {
@@ -113,8 +114,8 @@ describe("recipeModel", () => {
       action: "nextTrack",
       stages: [{ kind: "hold", hold: "tap" }, { kind: "hold", hold: "doubleTap" }, { kind: "model", label: "pinch", hold: "held" }],
     };
-    expect(offGesturesUsed(recipe, { shake: true, swipe: true, tap: false, roll: true, pitch: true })).toEqual(["tap"]);
-    expect(offGesturesUsed(recipe, { shake: true, swipe: true, tap: true, roll: true, pitch: true })).toEqual([]);
+    expect(offGesturesUsed(recipe, { shake: true, swipe: true, tap: false, roll: true, pitch: true, wiggle: true, hammer: true })).toEqual(["tap"]);
+    expect(offGesturesUsed(recipe, { shake: true, swipe: true, tap: true, roll: true, pitch: true, wiggle: true, hammer: true })).toEqual([]);
   });
 
   it("validates the name", () => {
@@ -136,8 +137,8 @@ describe("model steps", () => {
     expect(isMomentaryStage({ kind: "hold", hold: "shake" })).toBe(true);
   });
 
-  it("rejects a one-shot model step for a dial and a bad label anywhere", () => {
-    expect(chainProblem([{ kind: "model", label: "snap", hold: "oneShot" }], [], false)).toMatch(/button action/);
+  it("takes a one-shot model step for a dial as a switch, and rejects a bad label anywhere", () => {
+    expect(chainProblem([{ kind: "model", label: "snap", hold: "oneShot" }], [], false)).toBeNull();
     expect(chainProblem([{ kind: "model", label: "snap", hold: "held" }], [], false)).toBeNull();
     expect(chainProblem([{ kind: "model", label: "Bad Label", hold: "held" }], [], true)).toMatch(/needs a label/);
   });
@@ -149,10 +150,32 @@ describe("camera steps", () => {
     const recipe = { ...blankRecipe([], "rotationKnob"), stages: [camera("oneShot"), { kind: "drive" as const, axis: "roll" as const, deadZoneDegrees: 0, invert: false }] };
     expect(describeRecipe(recipe, () => "x", () => "Pinch")).toContain("Camera “Pinch” (once)");
   });
-  it("needs a gesture, and a one-shot camera gesture only works for a button action", () => {
+  it("needs a gesture, and takes a one-shot camera gesture for a button or a dial", () => {
     expect(chainProblem([camera("held", " ")], [], true)).toMatch(/needs a gesture from the Gesture library/);
-    expect(chainProblem([camera("oneShot")], [], false)).toMatch(/camera gesture only works/);
+    expect(chainProblem([camera("oneShot")], [], false)).toBeNull();
     expect(chainProblem([camera("oneShot")], [], true)).toBeNull();
     expect(chainProblem([camera("held")], [], false)).toBeNull();
+  });
+});
+
+describe("keyboard shortcuts", () => {
+  it("accepts what the backend can press and says why not otherwise", async () => {
+    const { shortcutProblem } = await import("./recipeModel");
+    for (const good of ["cmd+shift+4", "Shift + Command + K", "option+ctrl+Left", "f5", "esc", "ctrl+return", "win+d"]) {
+      expect(shortcutProblem(good), good).toBeNull();
+    }
+    expect(shortcutProblem("")).toMatch(/Type the shortcut/);
+    expect(shortcutProblem("k")).toMatch(/Add cmd, ctrl or alt/);
+    expect(shortcutProblem("shift+k")).toMatch(/Add cmd, ctrl or alt/);
+    expect(shortcutProblem("cmd+")).toMatch(/needs a key/);
+    expect(shortcutProblem("cmd+shift")).toMatch(/needs a key/);
+    expect(shortcutProblem("cmd+k+j")).toMatch(/one key/);
+    expect(shortcutProblem("cmd+cmd+k")).toMatch(/twice/);
+    expect(shortcutProblem("cmd+f13")).toMatch(/not a key/);
+  });
+
+  it("describes a shortcut recipe by its keys", () => {
+    const recipe = { ...blankRecipe([], "rotationKnob"), action: "shortcut" as const, keys: "cmd+shift+4", stages: [{ kind: "hold" as const, hold: "hammer" as const }] };
+    expect(describeRecipe(recipe, () => "x")).toBe("Hammer on palm → Press cmd+shift+4");
   });
 });

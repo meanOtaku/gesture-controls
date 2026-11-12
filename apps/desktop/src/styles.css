@@ -369,6 +369,11 @@ html.overlay-document body::before { display:none; }
 .miss-marker-title { display:flex; align-items:center; justify-content:space-between; font-size:.75rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3); }
 .miss-marker-buttons { display:flex; flex-direction:column; gap:.3rem; }
 .miss-marker-buttons > button { justify-content:flex-start; }
+.lab-monitor { display:grid; grid-template-columns:minmax(0, 22rem) minmax(0, 1fr); gap:1rem; align-items:start; }
+.lab-monitor[hidden] { display:none; }
+.lab-monitor-camera { display:flex; flex-direction:column; gap:.6rem; min-width:0; }
+.lab-monitor-log { min-width:0; }
+@media (max-width: 900px) { .lab-monitor { grid-template-columns:minmax(0, 1fr); } }
 .miss-summary { margin:.25rem 0 0; padding-left:1rem; list-style:disc; display:flex; flex-direction:column; gap:.2rem; }
 [data-sidebar="group-label"] { font-family:var(--font-display); text-transform:uppercase; letter-spacing:.16em; font-size:.75rem; color:var(--ink-3); }
 .nav-dot { margin-left:auto; flex:0 0 auto; width:.55rem; height:.55rem; border:1px solid var(--ink-3); background:transparent; }

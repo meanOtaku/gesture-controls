@@ -1,16 +1,18 @@
-//! Controls for the parts of the computer a gesture recipe can drive besides volume: screen brightness and
-//! scrolling. Each is a small trait with one adapter per platform, so the recipe engine never knows which OS it
+//! Controls for the parts of the computer a gesture recipe can drive besides volume: screen brightness,
+//! scrolling, media keys and keyboard shortcuts. Each is a small trait with one adapter per platform, so the recipe engine never knows which OS it
 //! is on, and so the quantizing logic that sits above them can be tested without touching the real machine.
 
 mod accumulator;
 mod brightness;
 mod media;
 mod scroll;
+mod shortcut;
 
 pub use accumulator::Accumulator;
 pub use brightness::{BrightnessController, platform_brightness_controller};
 pub use media::{MediaController, MediaKey, platform_media_controller};
 pub use scroll::{MAX_PIXELS_PER_CALL, ScrollController, platform_scroll_controller};
+pub use shortcut::{Key, KeyCombo, NamedKey, ShortcutController, platform_shortcut_controller};
 
 use thiserror::Error;
 

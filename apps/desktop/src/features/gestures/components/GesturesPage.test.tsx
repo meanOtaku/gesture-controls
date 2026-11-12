@@ -28,7 +28,7 @@ const status = (over = {}) => ({ mode: "monitor", loadedLabels: ["snap"], loadFa
 function setup(over: Partial<React.ComponentProps<typeof GesturesPage>> = {}, runtime = status()) {
   invokeMock.mockImplementation(async (command: string) => (command === "get_label_runtime_status" ? runtime : []));
   const props: React.ComponentProps<typeof GesturesPage> = {
-    heuristics: { shake: true, swipe: true, tap: false, roll: true, pitch: true }, watchConnected: true, stemDown: false, shakeCount: 0,
+    heuristics: { shake: true, swipe: true, tap: false, roll: true, pitch: true, wiggle: true, hammer: true }, watchConnected: true, stemDown: false, shakeCount: 0,
     lastSwipe: null, lastTap: null, lastRoll: null, lastPitch: null, calibration, automation, onOpenModelLab: vi.fn(), onOpenSettings: vi.fn(), ...over,
   };
   const view = render(<GesturesPage {...props} />);

@@ -49,9 +49,9 @@ export interface CalibrationState {
   activeTarget: CalibrationTarget | null;
 }
 
-export type HoldGesture = "stemButton" | "shake" | "swipeLeft" | "swipeRight" | "swipeUp" | "swipeDown" | "tap" | "doubleTap" | "rollClockwise" | "rollCounterClockwise" | "pitchUp" | "pitchDown";
+export type HoldGesture = "stemButton" | "shake" | "shakeAlong" | "shakeVertical" | "shakeSideways" | "wiggle" | "hammer" | "swipeLeft" | "swipeRight" | "swipeUp" | "swipeDown" | "tap" | "doubleTap" | "rollClockwise" | "rollCounterClockwise" | "pitchUp" | "pitchDown";
 /** The built-in, rule-based wrist gestures that can be switched off (for example when a trained model handles one). */
-export type HeuristicGesture = "shake" | "swipe" | "tap" | "roll" | "pitch";
+export type HeuristicGesture = "shake" | "swipe" | "tap" | "roll" | "pitch" | "wiggle" | "hammer";
 export type HeuristicGestures = Record<HeuristicGesture, boolean>;
 
 export type PitchDirection = "up" | "down";
@@ -62,7 +62,7 @@ export type WatchWrist = "left" | "right";
 /** Which side of the watch face the crown is on, as you read it. */
 export type CrownSide = "right" | "left";
 
-export type RecipeAction = "volume" | "brightness" | "scroll" | "playPause" | "nextTrack" | "previousTrack" | "mute";
+export type RecipeAction = "volume" | "brightness" | "scroll" | "playPause" | "nextTrack" | "previousTrack" | "mute" | "shortcut";
 
 /** One step of a recipe's chain. A recipe ends with a `drive` stage, which supplies the continuous value. */
 export type RecipeStage =
@@ -84,6 +84,8 @@ export interface Recipe {
   stages: RecipeStage[];
   device: { kind: "rotationKnob" | "horizontalFader" | "verticalFader" | "stepKnob" } & Record<string, number | string>;
   action: RecipeAction;
+  /** The keyboard shortcut a "shortcut" recipe presses, such as `cmd+shift+4`; absent for every other action. */
+  keys?: string | null;
 }
 
 /** Two enabled recipes driving the same resource; both are held off until one is disabled. */
@@ -215,6 +217,12 @@ export const AUTOMATION_STATE_EVENT = "automation-state";
 /** Sent when brightness or scrolling could not be carried out (a missing permission, an unsupported platform). */
 /** Sent each time a shake is recognised, whether or not a recipe uses it. */
 export const SHAKE_DETECTED_EVENT = "automation-shake";
+/** The direction of a shake, when its strokes agreed on one: the payload of `SHAKE_DETECTED_EVENT` (null for none). */
+export type ShakeAxis = "along" | "vertical" | "sideways";
+/** Sent each time a wrist wiggle is recognised. */
+export const WIGGLE_DETECTED_EVENT = "automation-wiggle";
+/** Sent each time a hammer blow is recognised. */
+export const HAMMER_DETECTED_EVENT = "automation-hammer";
 /** Sent with the direction each time a swipe is recognised. */
 export const SWIPE_DETECTED_EVENT = "automation-swipe";
 /** Sent with `single` or `double` each time a tap is recognised. */

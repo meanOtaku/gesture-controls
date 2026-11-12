@@ -12,6 +12,8 @@ pub struct HeuristicGestures {
     pub tap: bool,
     pub roll: bool,
     pub pitch: bool,
+    pub wiggle: bool,
+    pub hammer: bool,
 }
 
 impl Default for HeuristicGestures {
@@ -22,6 +24,8 @@ impl Default for HeuristicGestures {
             tap: true,
             roll: true,
             pitch: true,
+            wiggle: true,
+            hammer: true,
         }
     }
 }
@@ -32,7 +36,11 @@ impl HeuristicGestures {
     pub fn allows(&self, hold: Hold) -> bool {
         match hold {
             Hold::StemButton => true,
-            Hold::Shake => self.shake,
+            Hold::Shake | Hold::ShakeAlong | Hold::ShakeVertical | Hold::ShakeSideways => {
+                self.shake
+            }
+            Hold::Wiggle => self.wiggle,
+            Hold::Hammer => self.hammer,
             Hold::SwipeLeft | Hold::SwipeRight | Hold::SwipeUp | Hold::SwipeDown => self.swipe,
             Hold::Tap | Hold::DoubleTap => self.tap,
             Hold::RollClockwise | Hold::RollCounterClockwise => self.roll,
@@ -69,11 +77,16 @@ mod tests {
             tap: false,
             roll: false,
             pitch: false,
+            wiggle: false,
+            hammer: false,
         };
         assert!(
             !none.allows(Hold::DoubleTap)
                 && !none.allows(Hold::RollCounterClockwise)
                 && !none.allows(Hold::PitchUp)
+                && !none.allows(Hold::ShakeVertical)
+                && !none.allows(Hold::Wiggle)
+                && !none.allows(Hold::Hammer)
         );
         // A pinch and the STEM button are not wrist heuristics.
         assert!(none.allows(Hold::StemButton));
@@ -83,6 +96,7 @@ mod tests {
     fn a_missing_or_partial_setting_means_on() {
         let partial: HeuristicGestures = serde_json::from_str("{\"tap\": false}").unwrap();
         assert!(!partial.tap && partial.shake && partial.swipe && partial.roll && partial.pitch);
+        assert!(partial.wiggle && partial.hammer);
         let empty: HeuristicGestures = serde_json::from_str("{}").unwrap();
         assert_eq!(empty, HeuristicGestures::default());
     }

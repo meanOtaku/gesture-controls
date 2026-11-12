@@ -6,6 +6,7 @@ use crate::device::Output;
 use crate::pitch::PitchDirection;
 use crate::recipe::{Axis, Hold, ModelHold, Recipe, Stage};
 use crate::roll::RollDirection;
+use crate::shake::ShakeAxis;
 use crate::swipe::SwipeDirection;
 use crate::tap::TapKind;
 
@@ -17,6 +18,15 @@ pub struct Signals<'a> {
     pub stem_button_held: bool,
     /// A shake was recognised a moment ago and is still counted as happening.
     pub shake: bool,
+    /// The direction of that shake, when its strokes agreed on one.
+    pub shake_axis: Option<ShakeAxis>,
+    /// A wrist wiggle was recognised a moment ago and still counts as happening.
+    pub wiggle: bool,
+    /// A hammer blow was recognised a moment ago and still counts as happening.
+    pub hammer: bool,
+    /// The time of this reading on the watch's clock, when there is one. A dial switched on by a momentary step
+    /// switches itself off after [`TOGGLE_IDLE_NS`] without moving.
+    pub now_ns: Option<u64>,
     /// A swipe was recognised a moment ago in this direction and still counts as happening.
     pub swipe: Option<SwipeDirection>,
     /// A tap was recognised a moment ago and still counts as happening.
@@ -39,6 +49,10 @@ pub struct Signals<'a> {
     pub cameras_pulsed: Option<&'a BTreeSet<String>>,
 }
 
+/// A dial that a momentary step switched on switches itself off when it has not moved for this long, so a forgotten
+/// one cannot go on following the wrist.
+pub const TOGGLE_IDLE_NS: u64 = 6_000_000_000;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum RunnerPhase {
@@ -60,6 +74,13 @@ pub struct RecipeRunner {
     /// cancelled (Escape) does not restart while they are still holding the same gesture.
     latched: bool,
     paired_grab: bool,
+    /// A dial recipe with a momentary step (a shake, a double tap) is on: the step switched it on and will switch it
+    /// off.
+    toggled: bool,
+    /// The momentary steps all counted on the previous reading, so only a fresh occurrence toggles.
+    pulse_was: bool,
+    /// When a toggled dial last moved, or was switched on.
+    toggle_moved_ns: Option<u64>,
     /// A trigger recipe's chain completed since [`Self::take_fired`] last looked.
     fired: bool,
     /// The orientation when the chain completed; rotation is measured from here.
@@ -83,6 +104,9 @@ impl RecipeRunner {
             phase: RunnerPhase::Idle,
             latched: false,
             paired_grab: false,
+            toggled: false,
+            pulse_was: false,
+            toggle_moved_ns: None,
             fired: false,
             start: [1.0, 0.0, 0.0, 0.0],
             last_angle: 0.0,
@@ -107,6 +131,7 @@ impl RecipeRunner {
     /// Ends the interaction and keeps it ended until the user lets go of the chain and starts it again.
     pub fn cancel(&mut self) {
         self.paired_grab = false;
+        self.toggled = false;
         self.phase = RunnerPhase::Idle;
         self.latched = true;
     }
@@ -114,6 +139,7 @@ impl RecipeRunner {
     /// Ends any interaction (the recipe was disabled or is blocked by a conflict, or the link dropped).
     pub fn reset(&mut self) {
         self.paired_grab = false;
+        self.toggled = false;
         self.phase = RunnerPhase::Idle;
     }
 
@@ -124,6 +150,17 @@ impl RecipeRunner {
                 hold: Hold::StemButton,
             } => signals.stem_button_held,
             Stage::Hold { hold: Hold::Shake } => signals.shake,
+            Stage::Hold {
+                hold: Hold::ShakeAlong,
+            } => signals.shake && signals.shake_axis == Some(ShakeAxis::Along),
+            Stage::Hold {
+                hold: Hold::ShakeVertical,
+            } => signals.shake && signals.shake_axis == Some(ShakeAxis::Vertical),
+            Stage::Hold {
+                hold: Hold::ShakeSideways,
+            } => signals.shake && signals.shake_axis == Some(ShakeAxis::Sideways),
+            Stage::Hold { hold: Hold::Wiggle } => signals.wiggle,
+            Stage::Hold { hold: Hold::Hammer } => signals.hammer,
             Stage::Hold {
                 hold: Hold::SwipeLeft,
             } => signals.swipe == Some(SwipeDirection::Left),
@@ -246,7 +283,35 @@ impl RecipeRunner {
             }
             chain_holds &= self.paired_grab;
         }
+        if drive.is_some() && self.recipe.stages.iter().any(Stage::is_momentary) {
+            // A momentary step cannot be held, so in a dial recipe it is a switch: the dial comes on the first time
+            // it happens (with everything else holding) and goes off the next time, when anything else lets go, or
+            // when it has not moved for a while.
+            let (mut steady, mut pulse) = (self.recipe.enabled, true);
+            for stage in &self.recipe.stages {
+                let holds = Self::stage_holds(stage, signals);
+                if stage.is_momentary() {
+                    pulse &= holds;
+                } else {
+                    steady &= holds;
+                }
+            }
+            let fresh = pulse && !self.pulse_was;
+            self.pulse_was = pulse;
+            let idle = matches!(
+                (signals.now_ns, self.toggle_moved_ns),
+                (Some(now), Some(moved)) if now.saturating_sub(moved) > TOGGLE_IDLE_NS
+            );
+            if !steady || orientation.is_none() || idle {
+                self.toggled = false;
+            } else if fresh && !self.latched {
+                self.toggled = !self.toggled;
+                self.toggle_moved_ns = signals.now_ns;
+            }
+            chain_holds = steady && self.toggled;
+        }
         if self.latched {
+            self.toggled = false;
             if !chain_holds && !gates_hold {
                 self.latched = false;
             }
@@ -300,6 +365,9 @@ impl RecipeRunner {
         let position = self.recipe.device.position(outside_dead_zone);
         let delta = position - self.last_position;
         self.last_position = position;
+        if delta != 0.0 {
+            self.toggle_moved_ns = signals.now_ns;
+        }
         (delta != 0.0 || self.paired_grab).then_some(Output {
             delta_fraction: delta,
         })

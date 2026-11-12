@@ -12,9 +12,10 @@ use std::time::{Duration, Instant};
 use automation::Action;
 use serde::Serialize;
 use system_control::{
-    Accumulator, BrightnessController, ControlError, MAX_PIXELS_PER_CALL, MediaController,
-    MediaKey, ScrollController, platform_brightness_controller, platform_media_controller,
-    platform_scroll_controller,
+    Accumulator, BrightnessController, ControlError, KeyCombo, MAX_PIXELS_PER_CALL,
+    MediaController, MediaKey, ScrollController, ShortcutController,
+    platform_brightness_controller, platform_media_controller, platform_scroll_controller,
+    platform_shortcut_controller,
 };
 use tauri::{AppHandle, Emitter, Manager};
 use tracing::warn;
@@ -43,6 +44,40 @@ enum Command {
     Reset(Action),
     /// A trigger recipe fired.
     Press(Action),
+    /// A keyboard-shortcut recipe fired: press these keys.
+    Shortcut(String),
+}
+
+/// Presses keyboard shortcuts, each at most once per [`KEY_COOLDOWN`].
+pub struct ShortcutPresser {
+    controller: Box<dyn ShortcutController>,
+    last_pressed: HashMap<KeyCombo, Instant>,
+}
+
+impl ShortcutPresser {
+    pub fn new(controller: Box<dyn ShortcutController>) -> Self {
+        Self {
+            controller,
+            last_pressed: HashMap::new(),
+        }
+    }
+
+    /// Presses `keys` (as a recipe stores them), or `None` when the same shortcut was pressed a moment ago.
+    pub fn press(&mut self, keys: &str, now: Instant) -> Option<Result<(), ControlError>> {
+        let combo: KeyCombo = match keys.parse() {
+            Ok(combo) => combo,
+            Err(error) => return Some(Err(ControlError::Backend(format!("'{keys}': {error}")))),
+        };
+        if self
+            .last_pressed
+            .get(&combo)
+            .is_some_and(|previous| now.saturating_duration_since(*previous) < KEY_COOLDOWN)
+        {
+            return None;
+        }
+        self.last_pressed.insert(combo, now);
+        Some(self.controller.press(&combo))
+    }
 }
 
 /// The part with the logic, independent of threads and of the real machine, so it can be tested.
@@ -170,6 +205,10 @@ impl Actuators {
     pub fn press(&self, app: &AppHandle, action: Action) {
         self.send(app, Command::Press(action));
     }
+
+    pub fn shortcut(&self, app: &AppHandle, keys: String) {
+        self.send(app, Command::Shortcut(keys));
+    }
 }
 
 /// Tells the UI once when an action starts failing, and quietly notes when it recovers.
@@ -207,11 +246,13 @@ fn run_worker(app: AppHandle, rx: std::sync::mpsc::Receiver<Command>) {
         platform_scroll_controller(),
         platform_media_controller(),
     );
+    let mut shortcuts = ShortcutPresser::new(platform_shortcut_controller());
     let mut failing: Option<Action> = None;
     while let Ok(first) = rx.recv() {
         // Everything already waiting is folded into one change per action, so a backlog never replays.
         let mut pending: Vec<(Action, f64)> = Vec::new();
         let mut presses: Vec<Action> = Vec::new();
+        let mut keys: Vec<String> = Vec::new();
         let mut handle =
             |command: Command, core: &mut Core, pending: &mut Vec<(Action, f64)>| match command {
                 Command::Delta(action, fraction) => {
@@ -225,6 +266,7 @@ fn run_worker(app: AppHandle, rx: std::sync::mpsc::Receiver<Command>) {
                     core.reset(action);
                 }
                 Command::Press(action) => presses.push(action),
+                Command::Shortcut(combo) => keys.push(combo),
             };
         handle(first, &mut core, &mut pending);
         while let Ok(next) = rx.try_recv() {
@@ -243,6 +285,11 @@ fn run_worker(app: AppHandle, rx: std::sync::mpsc::Receiver<Command>) {
                     .map_err(ControlError::Backend),
             };
             report(&app, &mut failing, action, result);
+        }
+        for combo in keys {
+            if let Some(result) = shortcuts.press(&combo, Instant::now()) {
+                report(&app, &mut failing, Action::Shortcut, result);
+            }
         }
         for (action, fraction) in pending {
             report(&app, &mut failing, action, core.deliver(action, fraction));
@@ -292,6 +339,45 @@ mod tests {
             self.0.lock().unwrap().scroll.push(pixels);
             Ok(())
         }
+    }
+
+    struct FakeShortcut(Arc<Mutex<Vec<String>>>);
+
+    impl ShortcutController for FakeShortcut {
+        fn press(&self, combo: &KeyCombo) -> Result<(), ControlError> {
+            self.0.lock().unwrap().push(combo.to_string());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_shortcut_is_pressed_once_and_not_again_within_the_cooldown() {
+        let pressed = Arc::new(Mutex::new(Vec::new()));
+        let mut presser = ShortcutPresser::new(Box::new(FakeShortcut(pressed.clone())));
+        let start = Instant::now();
+        assert_eq!(presser.press("Cmd+Shift+4", start), Some(Ok(())));
+        assert_eq!(
+            presser.press("cmd+shift+4", start + Duration::from_millis(200)),
+            None
+        );
+        // Another shortcut is not held back by the first.
+        assert_eq!(
+            presser.press("f5", start + Duration::from_millis(200)),
+            Some(Ok(()))
+        );
+        assert_eq!(
+            presser.press("cmd+shift+4", start + Duration::from_millis(600)),
+            Some(Ok(()))
+        );
+        assert_eq!(
+            *pressed.lock().unwrap(),
+            vec!["cmd+shift+4", "f5", "cmd+shift+4"]
+        );
+        // Keys that cannot be pressed are an error, not a silent nothing.
+        assert!(matches!(
+            presser.press("k", start),
+            Some(Err(ControlError::Backend(_)))
+        ));
     }
 
     fn core(step_percent: f64) -> (Core, Arc<Mutex<Log>>) {

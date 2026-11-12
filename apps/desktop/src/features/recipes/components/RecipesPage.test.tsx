@@ -136,24 +136,23 @@ describe("RecipesPage", () => {
     expect(saved.stages).toEqual([{ kind: "hold", hold: "stemButton" }]);
   });
 
-  it("offers a shake only for button actions and explains why it is refused otherwise", async () => {
+  it("offers a shake for a button action and, as a switch, for a dial", async () => {
     const props = setup();
     fireEvent.click(screen.getByRole("button", { name: /New recipe/ }));
     const editor = within(screen.getByRole("region", { name: "Recipe editor" }));
     fireEvent.change(editor.getByLabelText("Name"), { target: { value: "Shake for next" } });
     fireEvent.click(editor.getByRole("button", { name: /Add a gesture/ }));
-    // A volume dial is turned over time; a shake is a moment, so it is not offered.
-    expect(within(editor.getByLabelText("Step 2 gesture")).queryByRole("option", { name: "Shake wrist" })).not.toBeInTheDocument();
+    // A volume dial is turned over time; a shake is a moment, so there it is a switch.
+    expect(within(editor.getByLabelText("Step 2 gesture")).getByRole("option", { name: "Shake up and down" })).toBeInTheDocument();
 
     fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "nextTrack" } });
     fireEvent.change(editor.getByLabelText("Step 2 gesture"), { target: { value: "shake" } });
     expect(editor.getByText(/needs the watch's acceleration sensor/)).toBeInTheDocument();
 
-    // Switching back to a dial keeps the shake step but refuses to save it, in words.
+    // Switching back to a dial keeps the shake step and says what it does there.
     fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "volume" } });
-    expect(editor.getByRole("alert")).toHaveTextContent("A shake, swipe, tap, roll, pitch or one-shot model label or camera gesture only works for a button action");
-    fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
-    expect(props.onSave).not.toHaveBeenCalled();
+    expect(editor.getByText(/do it once to turn the dial on, turn your wrist, then do it again to turn the dial off/)).toBeInTheDocument();
+    expect(editor.queryByRole("alert")).not.toBeInTheDocument();
 
     fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "nextTrack" } });
     fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
@@ -164,7 +163,7 @@ describe("RecipesPage", () => {
     });
   });
 
-  it("builds a swipe recipe for a media key and refuses a swipe on a dial", async () => {
+  it("builds a swipe recipe for a media key", async () => {
     const props = setup();
     fireEvent.click(screen.getByRole("button", { name: /New recipe/ }));
     const editor = within(screen.getByRole("region", { name: "Recipe editor" }));
@@ -173,16 +172,10 @@ describe("RecipesPage", () => {
     fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "nextTrack" } });
     fireEvent.click(editor.getByRole("button", { name: /Add a gesture/ }));
     const options = within(editor.getByLabelText("Step 1 gesture")).getAllByRole("option").map((o) => o.textContent);
-    expect(options).toEqual(["Hold STEM button", "Shake wrist", "Swipe left", "Swipe right", "Swipe up", "Swipe down", "Tap watch", "Double-tap watch", "Roll wrist clockwise", "Roll wrist counter-clockwise", "Pitch hand up", "Pitch hand down"]);
+    expect(options).toEqual(["Hold STEM button", "Shake wrist (any direction)", "Shake up and down", "Shake side to side", "Shake along the forearm", "Wiggle wrist (twist back and forth)", "Hammer on palm", "Swipe left", "Swipe right", "Swipe up", "Swipe down", "Tap watch", "Double-tap watch", "Roll wrist clockwise", "Roll wrist counter-clockwise", "Pitch hand up", "Pitch hand down"]);
     fireEvent.change(editor.getByLabelText("Step 1 gesture"), { target: { value: "swipeRight" } });
     expect(editor.getByText(/Swipes are read from the watch's acceleration/)).toBeInTheDocument();
 
-    fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "scroll" } });
-    expect(editor.getByRole("alert")).toHaveTextContent("A shake, swipe, tap, roll, pitch or one-shot model label or camera gesture only works for a button action");
-    fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
-    expect(props.onSave).not.toHaveBeenCalled();
-
-    fireEvent.change(editor.getByLabelText("Controls"), { target: { value: "nextTrack" } });
     fireEvent.click(editor.getByRole("button", { name: "Save recipe" }));
     await waitFor(() => expect(props.onSave).toHaveBeenCalled());
     expect(vi.mocked(props.onSave).mock.calls[0][0]).toMatchObject({
@@ -240,7 +233,7 @@ describe("RecipesPage", () => {
     const swipe: Recipe = { ...stem, id: "swipe", name: "Swipe for next", action: "nextTrack", stages: [{ kind: "hold", hold: "swipeRight" }] };
     setup({
       automation: automation([stem, swipe]),
-      builtInGestures: { shake: true, swipe: false, tap: true, roll: true, pitch: true },
+      builtInGestures: { shake: true, swipe: false, tap: true, roll: true, pitch: true, wiggle: true, hammer: true },
     });
     // Only the recipe that uses the off gesture is flagged; the STEM recipe is untouched.
     const flags = screen.getAllByText(/Never fires/);

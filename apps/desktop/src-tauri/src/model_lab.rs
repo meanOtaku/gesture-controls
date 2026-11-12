@@ -1296,6 +1296,54 @@ pub(crate) fn name_dataset(
     write_index_atomic(app, &index)
 }
 
+/// Keeps what the camera saw during a marked miss with its recording: the hand landmarks of those seconds, placed on the
+/// watch's clock by the clock pairs sent with them (`camera_export`), so the Labelling page can show the hand at every
+/// moment of the miss. `files` is `hand_landmarks.csv` (and `hand_landmarks_2.csv` for a second camera) with
+/// `clock_sync.csv`, as the Recorder saves them. Only a recording the miss recorder made takes them, and only once.
+/// Returns how many files were written.
+#[tauri::command]
+pub fn attach_miss_camera(
+    id: String,
+    files: std::collections::BTreeMap<String, String>,
+    app: AppHandle,
+    runtime: State<'_, ModelLabRuntime>,
+) -> Result<usize, String> {
+    validate_dataset_id(&id)?;
+    let _guard = runtime
+        .lock
+        .lock()
+        .map_err(|_| "model lab lock was poisoned".to_string())?;
+    let folder = dataset_csv_path(&datasets_dir(&app)?, &id);
+    attach_camera_files(&folder, files)
+}
+
+fn attach_camera_files(
+    folder: &std::path::Path,
+    files: std::collections::BTreeMap<String, String>,
+) -> Result<usize, String> {
+    if !folder.join(crate::miss_recorder::LOG_FILE).is_file() {
+        return Err("that recording is not a marked miss".into());
+    }
+    if crate::recording_bundle::CAMERA_FILE_NAMES
+        .iter()
+        .any(|name| folder.join(name).exists())
+    {
+        return Err("that miss already has its camera files".into());
+    }
+    if files
+        .values()
+        .any(|content| content.len() > MAX_DATASET_CSV_BYTES)
+    {
+        return Err("the camera files are too large".into());
+    }
+    let export = camera_export(files)?;
+    for (name, content) in &export {
+        fs::write(folder.join(name), content)
+            .map_err(|e| format!("could not write {name}: {e}"))?;
+    }
+    Ok(export.len())
+}
+
 /// Names a recording the miss recorder just added and puts it in `group`, in one change of the index.
 pub(crate) fn file_miss(
     app: &AppHandle,
@@ -2417,5 +2465,55 @@ mod tests {
             remove_converted_files(&dir, &results);
         }
         assert!(results.iter().all(|r| r.outcome == "converted"));
+    }
+    #[test]
+    fn a_marked_miss_takes_its_camera_files_once_and_nothing_else_does() {
+        use crate::recording_bundle::hand_landmarks_header;
+        let dir = tempfile::tempdir().unwrap();
+        let header = hand_landmarks_header();
+        // One frame with no hand in it, taken 2,000 ms on the browser's clock.
+        let row = format!(
+            "0,2000.000,,0{}",
+            ",".repeat(header.matches(',').count() - 3)
+        );
+        let files = || {
+            std::collections::BTreeMap::from([
+                (
+                    "hand_landmarks.csv".to_string(),
+                    format!("{header}\n{row}\n"),
+                ),
+                (
+                    "clock_sync.csv".to_string(),
+                    "watch_timestamp_ns,browser_arrival_ms\n5000000000,1500.000\n".to_string(),
+                ),
+            ])
+        };
+        // Not a miss: no live log beside it.
+        assert!(
+            attach_camera_files(dir.path(), files())
+                .unwrap_err()
+                .contains("not a marked miss")
+        );
+        fs::write(dir.path().join(crate::miss_recorder::LOG_FILE), "{}").unwrap();
+        // Landmarks without the clock pairs cannot be placed.
+        let mut alone = files();
+        alone.remove("clock_sync.csv");
+        assert!(attach_camera_files(dir.path(), alone).is_err());
+        assert_eq!(attach_camera_files(dir.path(), files()), Ok(2));
+        // The watch is 3,500 ms ahead of the browser, so the frame was taken at 5,500 ms on the watch's clock.
+        let stored = fs::read_to_string(dir.path().join("hand_landmarks.csv")).unwrap();
+        assert!(stored.starts_with("watch_timestamp_ns,frame_index,"));
+        assert!(
+            stored
+                .lines()
+                .nth(1)
+                .unwrap()
+                .starts_with("5500000000,0,2000.000,")
+        );
+        assert!(
+            attach_camera_files(dir.path(), files())
+                .unwrap_err()
+                .contains("already has")
+        );
     }
 }

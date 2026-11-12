@@ -6,7 +6,7 @@ export const MAX_STAGES = 6;
 
 export type DeviceKind = "rotationKnob" | "horizontalFader" | "verticalFader" | "stepKnob";
 export type Axis = "roll" | "pitch" | "yaw";
-export type HoldKind = "stemButton" | "shake" | "swipeLeft" | "swipeRight" | "swipeUp" | "swipeDown" | "tap" | "doubleTap" | "rollClockwise" | "rollCounterClockwise" | "pitchUp" | "pitchDown";
+export type HoldKind = "stemButton" | "shake" | "shakeAlong" | "shakeVertical" | "shakeSideways" | "wiggle" | "hammer" | "swipeLeft" | "swipeRight" | "swipeUp" | "swipeDown" | "tap" | "doubleTap" | "rollClockwise" | "rollCounterClockwise" | "pitchUp" | "pitchDown";
 
 export const DEVICE_KINDS: ReadonlyArray<{ kind: DeviceKind; label: string; summary: string }> = [
   { kind: "rotationKnob", label: "Rotation knob", summary: "Endless: every degree you turn changes the value." },
@@ -24,6 +24,7 @@ export const ACTIONS: ReadonlyArray<{ value: RecipeAction; label: string; unit: 
   { value: "nextTrack", label: "Next track", unit: "", scale: 1, trigger: true, summary: "Presses the next-track media key once each time your steps all hold." },
   { value: "previousTrack", label: "Previous track", unit: "", scale: 1, trigger: true, summary: "Presses the previous-track media key once each time your steps all hold." },
   { value: "mute", label: "Mute", unit: "", scale: 1, trigger: true, summary: "Toggles the system mute each time your steps all hold." },
+  { value: "shortcut", label: "Keyboard shortcut", unit: "", scale: 1, trigger: true, summary: "Presses a keyboard shortcut once each time your steps all hold, so a gesture can do anything a key can. A Mac needs Accessibility permission." },
 ];
 
 /** A trigger fires once when its steps all hold, instead of following your wrist. It has no wrist rotation or device. */
@@ -43,7 +44,12 @@ export const AXES: ReadonlyArray<{ value: Axis; label: string }> = [
 
 export const HOLDS: ReadonlyArray<{ value: HoldKind; label: string }> = [
   { value: "stemButton", label: "Hold STEM button" },
-  { value: "shake", label: "Shake wrist" },
+  { value: "shake", label: "Shake wrist (any direction)" },
+  { value: "shakeVertical", label: "Shake up and down" },
+  { value: "shakeSideways", label: "Shake side to side" },
+  { value: "shakeAlong", label: "Shake along the forearm" },
+  { value: "wiggle", label: "Wiggle wrist (twist back and forth)" },
+  { value: "hammer", label: "Hammer on palm" },
   { value: "swipeLeft", label: "Swipe left" },
   { value: "swipeRight", label: "Swipe right" },
   { value: "swipeUp", label: "Swipe up" },
@@ -59,7 +65,9 @@ export const HOLDS: ReadonlyArray<{ value: HoldKind; label: string }> = [
 /** The built-in gesture switch a hold step depends on, or null for the STEM button (which has none). */
 export function heuristicOf(hold: HoldKind): HeuristicGesture | null {
   if (hold === "stemButton") return null;
-  if (hold === "shake") return "shake";
+  if (hold.startsWith("shake")) return "shake";
+  if (hold === "wiggle") return "wiggle";
+  if (hold === "hammer") return "hammer";
   if (hold.startsWith("swipe")) return "swipe";
   if (hold === "tap" || hold === "doubleTap") return "tap";
   if (hold.startsWith("roll")) return "roll";
@@ -81,7 +89,7 @@ export function isMomentary(hold: HoldKind): boolean {
   return hold !== "stemButton";
 }
 
-/** A step that is over in a moment, so it can only start a button action. */
+/** A step that is over in a moment: it presses a button, or switches a dial on and off. */
 export function isMomentaryStage(stage: RecipeStage): boolean {
   return (stage.kind === "hold" && isMomentary(stage.hold)) || ((stage.kind === "model" || stage.kind === "camera") && stage.hold === "oneShot");
 }
@@ -94,9 +102,12 @@ export function isValidLabel(label: string): boolean {
   return label.length <= MAX_LABEL_CHARS && LABEL_PATTERN.test(label);
 }
 
-/** The gestures a recipe can use: a shake, swipe, tap, roll or pitch is over in a moment, so only a button action can use it. */
-export function holdsFor(trigger: boolean) {
-  return trigger ? HOLDS : HOLDS.filter((hold) => !isMomentary(hold.value));
+/**
+ * The gestures a recipe can use: all of them. In a dial recipe a momentary one (a shake, a double tap) is a switch: it
+ * turns the dial on, and the next one turns it off. `trigger` is kept for callers that list them per kind of action.
+ */
+export function holdsFor(_trigger: boolean) {
+  return HOLDS;
 }
 
 export const DEAD_ZONE_SPEC: NumberSpec = {
@@ -213,7 +224,7 @@ export function describeRecipe(recipe: Recipe, locationName: (id: string) => str
   return [
     ...recipe.stages.map((stage) => stageLabel(stage, locationName, gestureName)),
     ...(isTrigger(recipe.action) ? [] : [deviceLabel(recipe.device.kind)]),
-    actionInfo(recipe.action).label,
+    recipe.action === "shortcut" && recipe.keys ? `Press ${recipe.keys}` : actionInfo(recipe.action).label,
   ].join(" → ");
 }
 
@@ -257,8 +268,8 @@ export function chainProblem(leading: RecipeStage[], locations: CalibrationLocat
   if (leading.some((stage) => stage.kind === "camera" && stage.gesture.trim() === "")) {
     return "A camera step needs a gesture from the Gesture library.";
   }
-  if (!trigger && leading.some(isMomentaryStage)) {
-    return "A shake, swipe, tap, roll, pitch or one-shot model label or camera gesture only works for a button action (play/pause, next, previous or mute). Choose one under To control, or remove that step.";
+  if (pairs.length > 0 && leading.some(isMomentaryStage)) {
+    return "A grab/release pair already says when the dial is on, so it cannot be combined with a shake, swipe, tap, roll, pitch, wiggle, hammer or one-shot step. Remove one of them.";
   }
   const limit = trigger ? MAX_STAGES : MAX_STAGES - 1;
   if (leading.length > limit) return `A recipe can have at most ${limit} steps${trigger ? "" : " before the wrist rotation"}.`;
@@ -269,6 +280,41 @@ export function chainProblem(leading: RecipeStage[], locations: CalibrationLocat
     if (stage.kind === "headAt" && !locations.some((location) => location.id === stage.location)) {
       return "A step looks at a location that no longer exists. Pick another.";
     }
+  }
+  return null;
+}
+
+const SHORTCUT_MODIFIERS: Record<string, string> = { cmd: "cmd", command: "cmd", meta: "cmd", super: "cmd", win: "cmd", ctrl: "ctrl", control: "ctrl", alt: "alt", option: "alt", opt: "alt", shift: "shift" };
+const SHORTCUT_NAMED = ["space", "enter", "tab", "escape", "backspace", "delete", "left", "right", "up", "down", "home", "end", "pageup", "pagedown"];
+const TYPING_KEYS = ["space", "enter", "tab", "backspace", "delete"];
+export const MAX_KEYS_CHARS = 40;
+
+/** Why these keys cannot be a recipe's shortcut, or null. The backend checks the same things (`system_control::KeyCombo`). */
+export function shortcutProblem(keys: string): string | null {
+  const parts = keys.split("+").map((part) => part.trim().toLowerCase());
+  if (keys.trim() === "") return "Type the shortcut, such as cmd+shift+4.";
+  if (keys.length > MAX_KEYS_CHARS) return `Too long: the maximum is ${MAX_KEYS_CHARS} characters.`;
+  const modifiers = new Set<string>();
+  let key: string | null = null;
+  for (const part of parts) {
+    const modifier = SHORTCUT_MODIFIERS[part];
+    if (modifier) {
+      if (modifiers.has(modifier)) return `“${part}” is there twice.`;
+      modifiers.add(modifier);
+      continue;
+    }
+    if (key !== null) return "A shortcut has one key after its modifiers, as in cmd+shift+k.";
+    const named = part === "return" ? "enter" : part === "esc" ? "escape" : part;
+    if (part === "") return "A shortcut needs a key, as in cmd+shift+k.";
+    if (!/^[a-z0-9]$/.test(part) && !/^f([1-9]|1[0-2])$/.test(part) && !SHORTCUT_NAMED.includes(named)) {
+      return `“${part}” is not a key this app can press: use a letter, a digit, f1 to f12, or one of ${SHORTCUT_NAMED.join(", ")}.`;
+    }
+    key = named;
+  }
+  if (key === null) return "A shortcut needs a key, as in cmd+shift+k.";
+  const types = /^[a-z0-9]$/.test(key) || TYPING_KEYS.includes(key);
+  if (types && !["cmd", "ctrl", "alt"].some((modifier) => modifiers.has(modifier))) {
+    return "Add cmd, ctrl or alt: that key alone would type into whatever has the keyboard.";
   }
   return null;
 }

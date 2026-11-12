@@ -8,6 +8,7 @@ import { useLabelModels } from "../../model-lab/hooks/useLabelModels";
 import { ModelAgreementSection } from "../../gestureLibrary/ModelAgreementSection";
 import { WRIST_GESTURES, recipesUsingGesture, recipesUsingLabel, recipesUsingStem, type WristGesture } from "../gestureCatalog";
 import { useFlash } from "../useFlash";
+import { useWristExtras } from "../useWristExtras";
 import { useLabelDetections } from "../useLabelDetections";
 import { InputWarningNote } from "../../model-lab/components/InputWarningNote";
 
@@ -100,9 +101,12 @@ export function GesturesPage({ heuristics, watchConnected, stemDown, shakeCount,
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
   const { status } = useLabelModels(desktopAvailable);
   const detections = useLabelDetections(desktopAvailable);
+  const extras = useWristExtras(desktopAvailable);
   const recipes = automation?.recipes ?? [];
   const lasts: Record<string, LastRecognised> = {
-    shake: shakeCount > 0 ? { id: "shake", count: shakeCount } : null,
+    shake: shakeCount > 0 ? { id: extras.shakeAxis ?? "shake", count: shakeCount } : null,
+    wiggle: extras.wiggles > 0 ? { id: "wiggle", count: extras.wiggles } : null,
+    hammer: extras.hammers > 0 ? { id: "hammer", count: extras.hammers } : null,
     swipe: lastSwipe && { id: lastSwipe.direction, count: lastSwipe.count },
     tap: lastTap && { id: lastTap.kind, count: lastTap.count },
     roll: lastRoll && { id: lastRoll.direction, count: lastRoll.count },

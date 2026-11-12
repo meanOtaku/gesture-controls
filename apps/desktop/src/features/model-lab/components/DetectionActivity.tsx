@@ -6,6 +6,9 @@ import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
+import { CameraQuickControl } from "../../camera/components/CameraQuickControl";
+import { useLabelDetections } from "../../gestures/useLabelDetections";
+import { MissButtons } from "../../misses/MissMarker";
 import {
   HAND_STEADINESS_EVENT,
   LABEL_DETECTIONS_EVENT,
@@ -68,6 +71,7 @@ export function DetectionActivity({ desktopAvailable }: { desktopAvailable: bool
   const [open, setOpen] = useState(readOpen);
   const bodyId = useId();
   const nextId = useRef(0);
+  const detections = useLabelDetections(desktopAvailable);
 
   const toggle = () =>
     setOpen((current) => {
@@ -106,7 +110,7 @@ export function DetectionActivity({ desktopAvailable }: { desktopAvailable: bool
       <CardHeader>
         <SectionHeader
           title="Activity"
-          description="Detections and releases from active models, newest first."
+          description="Detections and releases from active models, newest first, with the camera beside them to check against."
           status={
             <div className="flex items-center gap-2">
               <HandSteadinessBadge desktopAvailable={desktopAvailable} />
@@ -126,7 +130,21 @@ export function DetectionActivity({ desktopAvailable }: { desktopAvailable: bool
           }}
         />
       </CardHeader>
-      <CardContent id={bodyId} hidden={!open}>
+      <CardContent id={bodyId} hidden={!open} className="lab-monitor">
+        <div className="lab-monitor-camera" role="group" aria-label="Camera check">
+          <CameraQuickControl compact initiallyShown />
+          <p className="hint">
+            Turn the camera on to watch your hand beside what the models say. When they disagree with what you see, mark it:
+            the last 45 seconds are saved to Datasets under “Misses”, with the camera's view of your hand, so you can check
+            afterwards what really happened.
+          </p>
+          <div className="flex flex-wrap items-center gap-2" aria-live="polite">
+            {[...detections.detected].sort().map((label) => <Badge key={label}>{label}: detected now</Badge>)}
+            {detections.detected.size === 0 && <Badge variant="secondary">Nothing detected right now</Badge>}
+          </div>
+          <MissButtons className="flex flex-wrap gap-2" />
+        </div>
+        <div className="lab-monitor-log">
         {entries.length === 0 ? (
           <p className="hint">Nothing yet. Activate a model, set the runtime to Monitor and perform the gesture.</p>
         ) : (
@@ -141,6 +159,7 @@ export function DetectionActivity({ desktopAvailable }: { desktopAvailable: bool
             ))}
           </ul>
         )}
+        </div>
       </CardContent>
     </Card>
   );

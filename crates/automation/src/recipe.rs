@@ -19,6 +19,8 @@ pub enum Action {
     PreviousTrack,
     /// Toggle the system mute.
     Mute,
+    /// Press the recipe's keyboard shortcut ([`Recipe::keys`]) once. A trigger.
+    Shortcut,
 }
 
 impl Action {
@@ -27,7 +29,11 @@ impl Action {
     pub fn is_trigger(self) -> bool {
         matches!(
             self,
-            Action::PlayPause | Action::NextTrack | Action::PreviousTrack | Action::Mute
+            Action::PlayPause
+                | Action::NextTrack
+                | Action::PreviousTrack
+                | Action::Mute
+                | Action::Shortcut
         )
     }
 
@@ -41,6 +47,7 @@ impl Action {
             Action::NextTrack => "nextTrack",
             Action::PreviousTrack => "previousTrack",
             Action::Mute => "mute",
+            Action::Shortcut => "shortcut",
         }
     }
 }
@@ -61,9 +68,19 @@ pub enum Axis {
 pub enum Hold {
     /// The watch STEM button held down.
     StemButton,
-    /// A quick shake of the wrist. It is a moment, not something held, so it counts as "holding" for a short
-    /// while after it is recognised, and only a button-style action can use it.
+    /// A quick shake of the wrist, in any direction. It is a moment, not something held, so it counts as "holding"
+    /// for a short while after it is recognised: it presses a button, or switches a dial on and off.
     Shake,
+    /// A shake in and out along the forearm, like a pump.
+    ShakeAlong,
+    /// A shake up and down against gravity, like a salt shaker, however the hand is turned.
+    ShakeVertical,
+    /// A shake side to side, level with the ground, like wiping.
+    ShakeSideways,
+    /// A quick twist of the wrist back and forth, like rattling a door knob.
+    Wiggle,
+    /// The fist brought down on the other palm, or a clap: the moving arm stopping dead.
+    Hammer,
     /// A quick swipe of the hand, read from the watch's acceleration. A moment, like a shake.
     SwipeLeft,
     SwipeRight,
@@ -84,8 +101,8 @@ pub enum Hold {
 }
 
 impl Hold {
-    /// A shake or swipe is over in a moment: it counts as "holding" for a short while after it is recognised, and
-    /// so can only start a button action, never keep a dial turning.
+    /// A shake or swipe is over in a moment: it counts as "holding" for a short while after it is recognised. In a
+    /// button recipe it presses the button; in a dial recipe it switches the dial on, and off again the next time.
     pub fn is_momentary(self) -> bool {
         !matches!(self, Hold::StemButton)
     }
@@ -97,7 +114,8 @@ impl Hold {
 pub enum ModelHold {
     /// The label counts while it stays detected, like a pinch. Can keep a dial turning.
     Held,
-    /// The label counts for a short moment after it is first detected, like a shake. Button actions only.
+    /// The label counts for a short moment after it is first detected, like a shake: it presses a button, or
+    /// switches a dial on and off.
     OneShot,
 }
 
@@ -153,6 +171,17 @@ pub enum Stage {
     },
 }
 
+impl Stage {
+    /// A step that is over in a moment: a shake, swipe, tap or flick, or a model label or camera gesture used once.
+    pub fn is_momentary(&self) -> bool {
+        match self {
+            Stage::Hold { hold } => hold.is_momentary(),
+            Stage::Model { hold, .. } | Stage::Camera { hold, .. } => *hold == ModelHold::OneShot,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Recipe {
@@ -162,6 +191,23 @@ pub struct Recipe {
     pub stages: Vec<Stage>,
     pub device: Device,
     pub action: Action,
+    /// The keyboard shortcut a [`Action::Shortcut`] recipe presses, such as `cmd+shift+4`. The host checks it can be
+    /// pressed; here it only has to be there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keys: Option<String>,
+}
+
+pub const MAX_KEYS_CHARS: usize = 40;
+
+impl Recipe {
+    /// The one thing this recipe drives. Two enabled recipes with the same resource conflict. Each keyboard shortcut is
+    /// a resource of its own, so two recipes may press different shortcuts but not the same one.
+    pub fn resource(&self) -> String {
+        match (self.action, &self.keys) {
+            (Action::Shortcut, Some(keys)) => format!("shortcut {}", keys.trim().to_lowercase()),
+            (action, _) => action.resource().to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -180,16 +226,16 @@ pub enum RecipeError {
     RepeatedStage,
     #[error("an action that fires once cannot have a wrist rotation: remove it")]
     TriggerHasDrive,
-    #[error(
-        "a shake, swipe, tap, flick or one-shot model or camera gesture can only start a button action (play/pause, next, previous or mute)"
-    )]
-    MomentaryNeedsButtonAction,
     #[error("a model step needs a label made of lowercase letters, digits and underscores")]
     InvalidLabel,
-    #[error("use one paired model step with two different labels and a continuous action")]
+    #[error(
+        "use one paired model step with two different labels and a continuous action, and no shake, swipe, tap, flick or one-shot step beside it"
+    )]
     InvalidModelPair,
     #[error("a camera gesture step needs a Gesture library gesture")]
     InvalidCameraGesture,
+    #[error("a keyboard shortcut recipe needs its shortcut, such as cmd+shift+4")]
+    MissingKeys,
     #[error("the dead zone must be from 0 to under 90 degrees")]
     InvalidDeadZone,
     #[error("the device settings are out of range")]
@@ -241,6 +287,16 @@ pub fn validate_recipe(recipe: &Recipe) -> Result<(), RecipeError> {
     if recipe.stages.len() > MAX_STAGES {
         return Err(RecipeError::TooManyStages);
     }
+    if recipe.action == Action::Shortcut
+        && !recipe.keys.as_deref().is_some_and(|keys| {
+            let keys = keys.trim();
+            !keys.is_empty()
+                && keys.chars().count() <= MAX_KEYS_CHARS
+                && !keys.chars().any(char::is_control)
+        })
+    {
+        return Err(RecipeError::MissingKeys);
+    }
     if recipe.action.is_trigger() {
         if recipe
             .stages
@@ -263,13 +319,10 @@ pub fn validate_recipe(recipe: &Recipe) -> Result<(), RecipeError> {
     if !matches!(last, Stage::Drive { .. }) {
         return Err(RecipeError::MustEndWithDrive);
     }
-    // A shake is over in a moment, so it could not keep a dial turning.
-    if recipe.stages.iter().any(|stage| match stage {
-        Stage::Hold { hold } => hold.is_momentary(),
-        Stage::Model { hold, .. } | Stage::Camera { hold, .. } => *hold == ModelHold::OneShot,
-        _ => false,
-    }) {
-        return Err(RecipeError::MomentaryNeedsButtonAction);
+    // A momentary step switches the dial on and off. A grab/release pair already says when the dial is on, so the two
+    // cannot be mixed.
+    if !pairs.is_empty() && recipe.stages.iter().any(Stage::is_momentary) {
+        return Err(RecipeError::InvalidModelPair);
     }
     if rest
         .iter()

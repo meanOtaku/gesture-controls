@@ -20,7 +20,7 @@ pub(crate) struct FlickConfig {
 }
 
 /// One step's rotation: its part about `axis` and the rest, in degrees.
-fn step(previous: [f64; 4], current: [f64; 4], axis: Axis) -> (f64, f64) {
+pub(crate) fn step(previous: [f64; 4], current: [f64; 4], axis: Axis) -> (f64, f64) {
     // relative = conjugate(previous) * current
     let [pw, pi, pj, pk] = previous;
     let [cw, ci, cj, ck] = current;

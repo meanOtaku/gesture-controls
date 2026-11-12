@@ -9,6 +9,7 @@
 mod conflicts;
 mod device;
 mod flick;
+mod hammer;
 mod heuristics;
 mod pitch;
 mod recipe;
@@ -17,17 +18,20 @@ mod runner;
 mod shake;
 mod swipe;
 mod tap;
+mod wiggle;
 
 pub use conflicts::{Conflict, blocked_recipes, find_conflicts};
 pub use device::{Device, DeviceKind, Output};
+pub use hammer::{HammerConfig, HammerDetector};
 pub use heuristics::HeuristicGestures;
 pub use pitch::{PitchConfig, PitchDetector, PitchDirection};
 pub use recipe::{
-    Action, Axis, Hold, MAX_STAGES, ModelHold, Recipe, RecipeError, Stage, is_valid_gesture_id,
-    is_valid_label, validate_recipe,
+    Action, Axis, Hold, MAX_KEYS_CHARS, MAX_STAGES, ModelHold, Recipe, RecipeError, Stage,
+    is_valid_gesture_id, is_valid_label, validate_recipe,
 };
 pub use roll::{RollConfig, RollDetector, RollDirection};
-pub use runner::{RecipeRunner, RunnerPhase, Signals};
-pub use shake::{ShakeConfig, ShakeDetector};
+pub use runner::{RecipeRunner, RunnerPhase, Signals, TOGGLE_IDLE_NS};
+pub use shake::{Shake, ShakeAxis, ShakeConfig, ShakeDetector};
 pub use swipe::{CrownSide, SwipeConfig, SwipeDetector, SwipeDirection, Wrist};
 pub use tap::{TapConfig, TapDetector, TapKind};
+pub use wiggle::{WiggleConfig, WiggleDetector};

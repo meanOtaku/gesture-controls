@@ -24,7 +24,9 @@ import {
   deviceSpecs,
   driveStage,
   holdsFor,
+  isMomentaryStage,
   isTrigger,
+  shortcutProblem,
   leadingStages,
   nameProblem,
   type Axis,
@@ -63,6 +65,8 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
   const [kind, setKind] = useState<DeviceKind>(initialKind);
   const initialAction = recipe.action;
   const [action, setAction] = useState<RecipeAction>(initialAction);
+  const [keys, setKeys] = useState(recipe.keys ?? "");
+  const [keysTouched, setKeysTouched] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -83,6 +87,7 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
   const nameError = nameTouched ? nameProblem(name) : null;
   const trigger = isTrigger(action);
   const problem = chainProblem(steps, locations, trigger);
+  const keysError = action === "shortcut" ? shortcutProblem(keys) : null;
   const nameId = `${uid}-name`;
   const axisLabelId = `${uid}-axis`;
   const kindId = `${uid}-device`;
@@ -113,6 +118,11 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
       return;
     }
     if (problem !== null) return;
+    if (keysError !== null) {
+      setKeysTouched(true);
+      document.getElementById(`${uid}-keys`)?.focus();
+      return;
+    }
     // A trigger has no wrist rotation or device, so there is nothing numeric to check.
     const result = trigger ? null : drafts.submit();
     if (result && result.values === null) {
@@ -127,6 +137,7 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
       name: name.trim(),
       stages: trigger ? steps : [...steps, { kind: "drive", axis, deadZoneDegrees: deadZone, invert }],
       action,
+      keys: action === "shortcut" ? keys.trim() : undefined,
       device: trigger ? buildDevice("rotationKnob", defaultNumbers("rotationKnob")) : buildDevice(kind, { a, b }, action),
     });
     setSaving(false);
@@ -320,14 +331,23 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
         {steps.some((step) => step.kind === "hold" && (step.hold === "tap" || step.hold === "doubleTap")) && (
           <p className="field-hint">A tap is a knock of a finger on the watch, felt as one sharp jolt while your arm is still. A single tap fires about 0.4 seconds after the knock, once it is clear no second one is coming. Tune it in Settings.</p>
         )}
-        {steps.some((step) => step.kind === "hold" && step.hold === "shake") && (
-          <p className="field-hint">A shake needs the watch's acceleration sensor switched on. It counts as happening for about half a second after it is recognised.</p>
+        {steps.some((step) => step.kind === "hold" && step.hold.startsWith("shake")) && (
+          <p className="field-hint">A shake needs the watch's acceleration sensor switched on. It counts as happening for about half a second after it is recognised. Up and down is judged against gravity, so it is the same shake however your hand is turned; side to side is level with the ground; along the forearm is in and out, like a pump. A shake between those directions only counts as “any direction”.</p>
+        )}
+        {steps.some((step) => step.kind === "hold" && step.hold === "wiggle") && (
+          <p className="field-hint">A wiggle is a quick twist of the wrist back and forth, like rattling a door knob: four twists in about a second. One twist is a roll, not a wiggle.</p>
+        )}
+        {steps.some((step) => step.kind === "hold" && step.hold === "hammer") && (
+          <p className="field-hint">A hammer is your fist brought down on your other palm (a clap works too): the moving arm stopping dead, then resting. It fires about a quarter of a second after the blow.</p>
+        )}
+        {!trigger && steps.some(isMomentaryStage) && (
+          <p className="field-hint">In a dial recipe a momentary step is a switch: do it once to turn the dial on, turn your wrist, then do it again to turn the dial off. The dial also turns itself off after six seconds without moving, or when another step lets go. A tap or double tap disturbs the wrist least.</p>
         )}
         {steps.some((step) => step.kind === "model" || step.kind === "modelPair") && (
           <p className="field-hint">
             A model label is detected by a model you trained and activated.
             {modelLabels.length === 0 ? " None is loaded yet, so a recipe using one will not run until you load one." : ` Loaded now: ${modelLabels.join(", ")}.`}{" "}
-            “While detected” works like a pinch and can keep a dial turning; “Once, when detected” is a moment, like a shake, and only starts a button action. Detections only act when the model runtime is in Live mode.
+            “While detected” works like a pinch and can keep a dial turning; “Once, when detected” is a moment, like a shake: it presses a button, or switches a dial on and off. Detections only act when the model runtime is in Live mode.
           </p>
         )}
         {steps.some((step) => step.kind === "camera") && (
@@ -355,6 +375,26 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
         </select>
         <p className="field-hint">{ACTIONS.find((candidate) => candidate.value === action)?.summary}</p>
         </div>
+        {action === "shortcut" && (
+          <div className="field">
+            <div className="field-head"><Label htmlFor={`${uid}-keys`}>Shortcut</Label></div>
+            <Input
+              id={`${uid}-keys`}
+              value={keys}
+              placeholder="cmd+shift+4"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              aria-invalid={keysTouched && keysError !== null}
+              aria-describedby={`${uid}-keys-hint`}
+              onChange={(event) => setKeys(event.target.value)}
+              onBlur={() => setKeysTouched(true)}
+            />
+            {keysTouched && keysError !== null
+              ? <p className="field-error" role="alert" id={`${uid}-keys-hint`}>{keysError}</p>
+              : <p className="field-hint" id={`${uid}-keys-hint`}>Modifiers (cmd, ctrl, alt, shift) joined with + and then one key: a letter, a digit, f1 to f12, or space, enter, tab, escape, backspace, delete, an arrow (left, right, up, down), home, end, pageup or pagedown. On Windows and Linux, cmd is the Windows or Super key.</p>}
+          </div>
+        )}
       </fieldset>
 
       {!trigger && (

@@ -4,9 +4,40 @@
 //! run of strong peaks that keep pointing in opposite directions, close together in time. One strong jolt, a steady
 //! swing or a run of same-direction knocks (walking, typing) is not a shake.
 
+//!
+//! A shake also has a direction (`ShakeAxis`), read from its strokes: along the forearm, up and down in the world, or
+//! side to side. Up and down is measured against gravity with the watch's orientation, so it is the same shake however
+//! the hand is turned; a shake between those directions has no axis and is only a plain shake.
+
 use std::collections::VecDeque;
 
+use serde::{Deserialize, Serialize};
+
 const NS_PER_SECOND: f64 = 1e9;
+/// A shake is along the forearm when its strokes are this much stronger along it than across it.
+const ALONG_DOMINANCE: f64 = 1.5;
+/// A shake is up and down when at least this share of its strokes is vertical, and side to side when at most
+/// `SIDEWAYS_SHARE` is.
+const VERTICAL_SHARE: f64 = 0.7;
+const SIDEWAYS_SHARE: f64 = 0.4;
+
+/// The direction a shake's strokes go in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShakeAxis {
+    /// In and out along the forearm (the watch's 9-3 axis), like a pump.
+    Along,
+    /// Up and down against gravity, like a salt shaker, however the hand is turned.
+    Vertical,
+    /// Side to side, level with the ground, like wiping or waving.
+    Sideways,
+}
+
+/// A recognised shake, and its direction when its strokes agree on one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Shake {
+    pub axis: Option<ShakeAxis>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ShakeConfig {
@@ -40,7 +71,53 @@ impl Default for ShakeConfig {
 #[derive(Debug, Clone, Copy)]
 struct Peak {
     direction: [f64; 3],
+    /// How much of it is along world up, when the orientation was known.
+    vertical: Option<f64>,
     at_ns: u64,
+}
+
+/// What the strokes of the run being counted add up to, for its direction.
+#[derive(Debug, Clone, Copy, Default)]
+struct Run {
+    along: f64,
+    across: f64,
+    vertical: f64,
+    strength: f64,
+    /// Every stroke so far came with an orientation.
+    oriented: bool,
+    strokes: usize,
+}
+
+impl Run {
+    fn add(&mut self, peak: &Peak) {
+        let [x, y, z] = peak.direction;
+        self.along += x.abs();
+        self.across += (y * y + z * z).sqrt();
+        self.strength += norm(peak.direction);
+        self.oriented = (self.strokes == 0 || self.oriented) && peak.vertical.is_some();
+        self.vertical += peak.vertical.map_or(0.0, f64::abs);
+        self.strokes += 1;
+    }
+
+    fn axis(&self) -> Option<ShakeAxis> {
+        if self.strength <= 0.0 {
+            return None;
+        }
+        if self.along >= ALONG_DOMINANCE * self.across {
+            return Some(ShakeAxis::Along);
+        }
+        if !self.oriented {
+            return None;
+        }
+        let share = self.vertical / self.strength;
+        if share >= VERTICAL_SHARE {
+            Some(ShakeAxis::Vertical)
+        } else if share <= SIDEWAYS_SHARE {
+            Some(ShakeAxis::Sideways)
+        } else {
+            None
+        }
+    }
 }
 
 fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
@@ -61,6 +138,7 @@ pub struct ShakeDetector {
     excursion: Option<(Peak, f64)>,
     last_peak: Option<Peak>,
     reversals: VecDeque<u64>,
+    run: Run,
     locked_until_ns: u64,
 }
 
@@ -79,6 +157,7 @@ impl ShakeDetector {
             excursion: None,
             last_peak: None,
             reversals: VecDeque::new(),
+            run: Run::default(),
             locked_until_ns: 0,
         }
     }
@@ -90,6 +169,29 @@ impl ShakeDetector {
 
     /// Feeds one acceleration sample (m/s², any consistent frame). Returns true once, as a shake is recognised.
     pub fn observe(&mut self, at_ns: u64, acceleration: [f64; 3]) -> bool {
+        self.observe_oriented(at_ns, acceleration, None).is_some()
+    }
+
+    /// Feeds one acceleration sample in the watch's frame (m/s², x along the forearm) with the watch's orientation
+    /// `[w, x, y, z]`, when there is one. Returns the shake once, as it is recognised, with its direction.
+    pub fn observe_oriented(
+        &mut self,
+        at_ns: u64,
+        acceleration: [f64; 3],
+        orientation: Option<[f64; 4]>,
+    ) -> Option<Shake> {
+        let recognised = self.step(at_ns, acceleration, orientation);
+        recognised.then(|| Shake {
+            axis: std::mem::take(&mut self.run).axis(),
+        })
+    }
+
+    fn step(&mut self, at_ns: u64, acceleration: [f64; 3], orientation: Option<[f64; 4]>) -> bool {
+        let orientation = orientation.and_then(|q| {
+            let size = q.iter().map(|c| c * c).sum::<f64>().sqrt();
+            (q.iter().all(|c| c.is_finite()) && size > 1e-9).then(|| q.map(|c| c / size))
+        });
+        let vertical = |moving: [f64; 3]| orientation.map(|q| crate::swipe::to_world(q, moving)[2]);
         if !acceleration.iter().all(|c| c.is_finite())
             || (self.baseline.is_some() && at_ns <= self.last_ns)
         {
@@ -121,6 +223,7 @@ impl ShakeDetector {
                         self.excursion = Some((
                             Peak {
                                 direction: moving,
+                                vertical: vertical(moving),
                                 at_ns,
                             },
                             strength,
@@ -135,6 +238,7 @@ impl ShakeDetector {
                 self.excursion = Some((
                     Peak {
                         direction: moving,
+                        vertical: vertical(moving),
                         at_ns,
                     },
                     strength,
@@ -150,6 +254,8 @@ impl ShakeDetector {
             return false;
         }
         let Some(previous) = self.last_peak else {
+            self.run = Run::default();
+            self.run.add(&peak);
             self.last_peak = Some(peak);
             return false;
         };
@@ -160,9 +266,11 @@ impl ShakeDetector {
         if gap > self.config.max_peak_gap_ns || dot(previous.direction, peak.direction) >= 0.0 {
             // A pause, or another knock the same way: not a back-and-forth, so start counting afresh.
             self.reversals.clear();
+            self.run = Run::default();
         } else {
             self.reversals.push_back(peak.at_ns);
         }
+        self.run.add(&peak);
         self.last_peak = Some(peak);
         while self
             .reversals
@@ -275,5 +383,117 @@ mod tests {
         assert!(!detector.observe(4000 * MS, [f64::NAN, 0.0, 0.0]));
         // An out-of-order sample is dropped rather than corrupting the baseline.
         assert!(!detector.observe(100 * MS, [50.0, 0.0, 0.0]));
+    }
+    /// Like `run`, but each stroke is a vector in the watch's frame and the watch has an orientation. Returns the shakes.
+    fn run_oriented(
+        strokes: &[(u64, [f64; 3])],
+        orientation: Option<[f64; 4]>,
+        total_ms: u64,
+    ) -> Vec<Shake> {
+        let mut detector = ShakeDetector::default();
+        let mut shakes = Vec::new();
+        for ms in (0..=total_ms).step_by(10) {
+            let mut a = [0.0; 3];
+            for &(start, stroke) in strokes {
+                if ms >= start && ms < start + 60 {
+                    for axis in 0..3 {
+                        a[axis] += stroke[axis];
+                    }
+                }
+            }
+            shakes.extend(detector.observe_oriented(ms * MS, a, orientation));
+        }
+        shakes
+    }
+
+    fn back_and_forth(stroke: [f64; 3]) -> Vec<(u64, [f64; 3])> {
+        (0..4)
+            .map(|i| {
+                let sign = if i % 2 == 0 { 1.0 } else { -1.0 };
+                (1000 + i * 160, stroke.map(|c| c * sign))
+            })
+            .collect()
+    }
+
+    const FLAT: [f64; 4] = [1.0, 0.0, 0.0, 0.0];
+    /// The watch rolled a quarter turn about the forearm: its 12-6 axis now points up.
+    const ON_EDGE: [f64; 4] = [
+        std::f64::consts::FRAC_1_SQRT_2,
+        std::f64::consts::FRAC_1_SQRT_2,
+        0.0,
+        0.0,
+    ];
+
+    #[test]
+    fn a_shake_along_the_forearm_is_along_whatever_the_orientation() {
+        for orientation in [Some(FLAT), Some(ON_EDGE), None] {
+            let shakes = run_oriented(&back_and_forth([14.0, 2.0, 1.0]), orientation, 3000);
+            assert_eq!(
+                shakes,
+                vec![Shake {
+                    axis: Some(ShakeAxis::Along)
+                }],
+                "{orientation:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn up_and_down_is_judged_against_gravity_not_against_the_watch() {
+        // Out of the screen is up with the watch flat, and level with the ground with the watch on its edge.
+        let out_of_screen = back_and_forth([1.0, 0.0, 14.0]);
+        assert_eq!(
+            run_oriented(&out_of_screen, Some(FLAT), 3000),
+            vec![Shake {
+                axis: Some(ShakeAxis::Vertical)
+            }]
+        );
+        assert_eq!(
+            run_oriented(&out_of_screen, Some(ON_EDGE), 3000),
+            vec![Shake {
+                axis: Some(ShakeAxis::Sideways)
+            }]
+        );
+        // Across the wrist is the other way round.
+        let across = back_and_forth([1.0, 14.0, 0.0]);
+        assert_eq!(
+            run_oriented(&across, Some(FLAT), 3000),
+            vec![Shake {
+                axis: Some(ShakeAxis::Sideways)
+            }]
+        );
+        assert_eq!(
+            run_oriented(&across, Some(ON_EDGE), 3000),
+            vec![Shake {
+                axis: Some(ShakeAxis::Vertical)
+            }]
+        );
+    }
+
+    #[test]
+    fn a_shake_between_directions_or_with_no_orientation_is_a_plain_shake() {
+        let diagonal = back_and_forth([0.0, 12.0, 8.0]);
+        assert_eq!(
+            run_oriented(&diagonal, Some(FLAT), 3000),
+            vec![Shake { axis: None }]
+        );
+        let across = back_and_forth([1.0, 14.0, 0.0]);
+        assert_eq!(
+            run_oriented(&across, None, 3000),
+            vec![Shake { axis: None }]
+        );
+    }
+
+    #[test]
+    fn strokes_before_a_pause_do_not_count_towards_the_direction() {
+        // Two strokes along the forearm, a pause, then a full shake up and down.
+        let mut strokes = vec![(200, [14.0, 0.0, 0.0]), (360, [-14.0, 0.0, 0.0])];
+        strokes.extend(back_and_forth([0.0, 0.0, 14.0]));
+        assert_eq!(
+            run_oriented(&strokes, Some(FLAT), 3000),
+            vec![Shake {
+                axis: Some(ShakeAxis::Vertical)
+            }]
+        );
     }
 }

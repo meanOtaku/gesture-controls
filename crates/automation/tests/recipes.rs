@@ -8,6 +8,7 @@ fn recipe(id: &str, stages: Vec<Stage>, device: Device) -> Recipe {
         stages,
         device,
         action: Action::Volume,
+        keys: None,
     }
 }
 
@@ -535,7 +536,7 @@ fn media_actions_are_triggers_with_their_own_resources() {
 }
 
 #[test]
-fn a_shake_starts_a_button_action_and_cannot_drive_a_dial() {
+fn a_shake_starts_a_button_action_and_is_allowed_in_a_dial_recipe() {
     let shake = || {
         vec![
             Stage::HeadAt {
@@ -574,18 +575,16 @@ fn a_shake_starts_a_button_action_and_cannot_drive_a_dial() {
     );
     assert_eq!(
         validate_recipe(&dial),
-        Err(RecipeError::MomentaryNeedsButtonAction)
+        Ok(()),
+        "in a dial recipe a shake switches the dial on and off"
     );
     dial.action = Action::Scroll;
-    assert_eq!(
-        validate_recipe(&dial),
-        Err(RecipeError::MomentaryNeedsButtonAction)
-    );
+    assert_eq!(validate_recipe(&dial), Ok(()));
     assert_eq!(serde_json::to_string(&Hold::Shake).unwrap(), "\"shake\"");
 }
 
 #[test]
-fn a_swipe_step_fires_only_for_its_own_direction_and_only_button_actions_may_use_it() {
+fn a_swipe_step_fires_only_for_its_own_direction_and_is_momentary() {
     let mut runner = RecipeRunner::new(trigger(vec![Stage::Hold {
         hold: Hold::SwipeRight,
     }]));
@@ -621,10 +620,7 @@ fn a_swipe_step_fires_only_for_its_own_direction_and_only_button_actions_may_use
             ],
             Device::default_for(DeviceKind::RotationKnob),
         );
-        assert_eq!(
-            validate_recipe(&dial),
-            Err(RecipeError::MomentaryNeedsButtonAction)
-        );
+        assert_eq!(validate_recipe(&dial), Ok(()));
     }
     assert!(!Hold::StemButton.is_momentary() && !Hold::StemButton.is_momentary());
     assert_eq!(
@@ -724,6 +720,7 @@ fn model_recipe(action: Action, label: &str, hold: ModelHold, stages: Vec<Stage>
     );
     Recipe {
         action,
+        keys: None,
         ..recipe("m", stages, Device::default_for(DeviceKind::RotationKnob))
     }
 }
@@ -764,7 +761,7 @@ fn model_steps_validate_their_label_and_only_one_shots_are_limited_to_buttons() 
             ModelHold::OneShot,
             drive
         )),
-        Err(RecipeError::MomentaryNeedsButtonAction)
+        Ok(())
     );
     let twice = vec![Stage::Model {
         label: "snap".into(),
@@ -822,6 +819,7 @@ fn a_model_step_reads_the_held_or_pulsed_sets_the_host_supplies() {
 fn camera_recipe(action: Action, gesture: &str, hold: ModelHold) -> Recipe {
     Recipe {
         action,
+        keys: None,
         ..recipe(
             "c",
             vec![Stage::Camera {
@@ -861,10 +859,7 @@ fn camera_steps_validate_their_gesture_id_and_only_one_shots_are_limited_to_butt
         r
     };
     assert_eq!(validate_recipe(&with_drive(ModelHold::Held)), Ok(()));
-    assert_eq!(
-        validate_recipe(&with_drive(ModelHold::OneShot)),
-        Err(RecipeError::MomentaryNeedsButtonAction)
-    );
+    assert_eq!(validate_recipe(&with_drive(ModelHold::OneShot)), Ok(()));
 }
 
 #[test]
@@ -1018,4 +1013,230 @@ fn paired_recipe_validation_and_serialization() {
     bad = recipe;
     bad.action = Action::PlayPause;
     assert!(validate_recipe(&bad).is_err());
+}
+
+fn toggle_dial(hold: Hold) -> RecipeRunner {
+    RecipeRunner::new(recipe(
+        "toggle",
+        vec![
+            Stage::Hold { hold },
+            Stage::Drive {
+                axis: Axis::Roll,
+                dead_zone_degrees: 0.0,
+                invert: false,
+            },
+        ],
+        Device::RotationKnob {
+            fraction_per_degree: 0.01,
+        },
+    ))
+}
+
+/// A reading at `ms` with the wrist rolled `roll` degrees, and whether a double tap still counts as happening.
+fn tapped(ms: u64, double_tap: bool, roll: f64) -> Signals<'static> {
+    Signals {
+        tap: double_tap.then_some(TapKind::Double),
+        orientation: Some(about_x(roll)),
+        now_ns: Some(ms * 1_000_000),
+        ..Signals::default()
+    }
+}
+
+#[test]
+fn a_momentary_step_switches_a_dial_on_and_the_next_one_switches_it_off() {
+    let mut runner = toggle_dial(Hold::DoubleTap);
+    // Rolling without the double tap does nothing.
+    assert_eq!(runner.update(&tapped(0, false, 20.0)), None);
+    assert_eq!(runner.phase(), RunnerPhase::Idle);
+    // The double tap switches it on; the angle then is where the dial starts from.
+    assert_eq!(runner.update(&tapped(100, true, 20.0)), None);
+    assert_eq!(runner.phase(), RunnerPhase::Driving);
+    // It stays on while the tap still counts and after it has passed.
+    let moved = runner.update(&tapped(300, true, 30.0)).unwrap();
+    assert!((moved.delta_fraction - 0.10).abs() < 1e-9);
+    let moved = runner.update(&tapped(900, false, 35.0)).unwrap();
+    assert!((moved.delta_fraction - 0.05).abs() < 1e-9);
+    // A second double tap switches it off, and the wrist is free again.
+    assert_eq!(runner.update(&tapped(2000, true, 35.0)), None);
+    assert_eq!(runner.phase(), RunnerPhase::Idle);
+    assert_eq!(runner.update(&tapped(2100, true, 60.0)), None);
+    assert_eq!(runner.update(&tapped(2700, false, 80.0)), None);
+    // A third switches it on again, starting from where the wrist is now.
+    assert_eq!(runner.update(&tapped(4000, true, 80.0)), None);
+    let moved = runner.update(&tapped(4100, true, 81.0)).unwrap();
+    assert!((moved.delta_fraction - 0.01).abs() < 1e-9);
+}
+
+#[test]
+fn a_switched_on_dial_goes_off_by_itself_when_left_alone_or_when_another_step_lets_go() {
+    let mut runner = toggle_dial(Hold::Shake);
+    let shaken = |ms: u64, shake: bool, roll: f64| Signals {
+        shake,
+        orientation: Some(about_x(roll)),
+        now_ns: Some(ms * 1_000_000),
+        ..Signals::default()
+    };
+    runner.update(&shaken(0, true, 0.0));
+    assert_eq!(runner.phase(), RunnerPhase::Driving);
+    assert!(runner.update(&shaken(1000, false, 5.0)).is_some());
+    // Still on six seconds after it last moved, off just after.
+    runner.update(&shaken(7000, false, 5.0));
+    assert_eq!(runner.phase(), RunnerPhase::Driving);
+    runner.update(&shaken(7100, false, 5.0));
+    assert_eq!(runner.phase(), RunnerPhase::Idle);
+    assert_eq!(runner.update(&shaken(7200, false, 40.0)), None);
+
+    // With a head location in the chain, looking away switches it off, and looking back does not switch it on.
+    let mut gated = RecipeRunner::new(recipe(
+        "gated",
+        vec![
+            Stage::HeadAt {
+                location: "topRight".into(),
+            },
+            Stage::Hold { hold: Hold::Hammer },
+            Stage::Drive {
+                axis: Axis::Roll,
+                dead_zone_degrees: 0.0,
+                invert: false,
+            },
+        ],
+        Device::RotationKnob {
+            fraction_per_degree: 0.01,
+        },
+    ));
+    let at = |head: Option<&'static str>, hammer: bool, roll: f64| Signals {
+        head_location: head,
+        hammer,
+        orientation: Some(about_x(roll)),
+        ..Signals::default()
+    };
+    gated.update(&at(None, true, 0.0));
+    assert_eq!(
+        gated.phase(),
+        RunnerPhase::Idle,
+        "a blow while looking elsewhere"
+    );
+    gated.update(&at(None, false, 0.0));
+    gated.update(&at(Some("topRight"), true, 0.0));
+    assert_eq!(gated.phase(), RunnerPhase::Driving);
+    gated.update(&at(None, false, 10.0));
+    assert_eq!(gated.phase(), RunnerPhase::Idle);
+    gated.update(&at(Some("topRight"), false, 10.0));
+    assert_eq!(gated.phase(), RunnerPhase::Armed);
+}
+
+#[test]
+fn cancelling_a_switched_on_dial_keeps_it_off_and_a_pair_cannot_be_mixed_with_a_momentary_step() {
+    let mut runner = toggle_dial(Hold::DoubleTap);
+    runner.update(&tapped(0, true, 0.0));
+    assert_eq!(runner.phase(), RunnerPhase::Driving);
+    runner.cancel();
+    assert_eq!(runner.update(&tapped(100, true, 30.0)), None);
+    assert_eq!(runner.phase(), RunnerPhase::Idle);
+
+    let mixed = recipe(
+        "mixed",
+        vec![
+            Stage::ModelPair {
+                start_label: "pinch_in".into(),
+                end_label: "pinch_out".into(),
+            },
+            Stage::Hold { hold: Hold::Shake },
+            Stage::Drive {
+                axis: Axis::Roll,
+                dead_zone_degrees: 0.0,
+                invert: false,
+            },
+        ],
+        Device::default_for(DeviceKind::RotationKnob),
+    );
+    assert_eq!(validate_recipe(&mixed), Err(RecipeError::InvalidModelPair));
+}
+
+#[test]
+fn a_directional_shake_a_wiggle_and_a_hammer_each_fire_only_their_own_step() {
+    let fires = |hold: Hold, signals: Signals<'static>| {
+        let mut runner = RecipeRunner::new(trigger(vec![Stage::Hold { hold }]));
+        runner.update(&signals);
+        runner.take_fired()
+    };
+    let shake = |axis| Signals {
+        shake: true,
+        shake_axis: axis,
+        ..Signals::default()
+    };
+    assert!(fires(Hold::ShakeVertical, shake(Some(ShakeAxis::Vertical))));
+    assert!(!fires(
+        Hold::ShakeVertical,
+        shake(Some(ShakeAxis::Sideways))
+    ));
+    assert!(!fires(Hold::ShakeAlong, shake(None)));
+    assert!(
+        fires(Hold::Shake, shake(Some(ShakeAxis::Along))),
+        "any shake is a shake"
+    );
+    assert!(fires(Hold::ShakeSideways, shake(Some(ShakeAxis::Sideways))));
+    let wiggle = Signals {
+        wiggle: true,
+        ..Signals::default()
+    };
+    let hammer = Signals {
+        hammer: true,
+        ..Signals::default()
+    };
+    assert!(fires(Hold::Wiggle, wiggle) && !fires(Hold::Hammer, wiggle));
+    assert!(fires(Hold::Hammer, hammer) && !fires(Hold::Shake, hammer));
+    assert_eq!(
+        serde_json::to_string(&Hold::ShakeVertical).unwrap(),
+        "\"shakeVertical\""
+    );
+    assert_eq!(serde_json::to_string(&Hold::Hammer).unwrap(), "\"hammer\"");
+}
+
+#[test]
+fn a_shortcut_recipe_needs_its_keys_and_only_the_same_shortcut_conflicts() {
+    let shortcut = |id: &str, keys: Option<&str>| Recipe {
+        id: id.into(),
+        action: Action::Shortcut,
+        keys: keys.map(Into::into),
+        ..trigger(vec![Stage::Hold { hold: Hold::Hammer }])
+    };
+    assert_eq!(validate_recipe(&shortcut("a", Some("cmd+shift+4"))), Ok(()));
+    assert_eq!(
+        validate_recipe(&shortcut("a", None)),
+        Err(RecipeError::MissingKeys)
+    );
+    assert_eq!(
+        validate_recipe(&shortcut("a", Some("  "))),
+        Err(RecipeError::MissingKeys)
+    );
+    assert!(Action::Shortcut.is_trigger());
+    let with_drive = Recipe {
+        stages: chain(),
+        ..shortcut("a", Some("f5"))
+    };
+    assert_eq!(
+        validate_recipe(&with_drive),
+        Err(RecipeError::TriggerHasDrive)
+    );
+
+    let (a, b, same) = (
+        shortcut("a", Some("cmd+shift+4")),
+        shortcut("b", Some("f5")),
+        shortcut("c", Some("Cmd+Shift+4 ")),
+    );
+    assert!(find_conflicts(&[a.clone(), b.clone()]).is_empty());
+    let clash = find_conflicts(&[a, b, same]);
+    assert_eq!(clash.len(), 1);
+    assert_eq!(
+        (clash[0].first.as_str(), clash[0].second.as_str()),
+        ("a", "c")
+    );
+    // An old recipe file has no keys at all.
+    let old: Recipe = serde_json::from_str(
+        r#"{"id":"x","name":"x","enabled":true,"stages":[],"device":{"kind":"rotationKnob","fractionPerDegree":0.01},"action":"volume"}"#,
+    )
+    .unwrap();
+    assert_eq!(old.keys, None);
+    assert!(!serde_json::to_string(&old).unwrap().contains("keys"));
 }

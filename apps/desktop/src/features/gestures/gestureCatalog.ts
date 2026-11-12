@@ -12,7 +12,12 @@ export interface WristGesture {
 }
 
 export const WRIST_GESTURES: readonly WristGesture[] = [
-  { id: "shake", name: "Shake", how: "Shake your wrist back and forth a few times.", needs: "the watch's acceleration sensor", options: [{ id: "shake", label: "Shake" }] },
+  {
+    id: "shake", name: "Shake", how: "Shake your wrist back and forth a few times. Up and down follows gravity, side to side is level with the ground, and along the forearm is in and out.", needs: "the watch's acceleration and orientation",
+    options: [{ id: "shake", label: "Any direction" }, { id: "vertical", label: "Up and down" }, { id: "sideways", label: "Side to side" }, { id: "along", label: "Along the forearm" }],
+  },
+  { id: "wiggle", name: "Wiggle", how: "Twist your wrist quickly back and forth, like rattling a door knob.", needs: "the watch's orientation sensor", options: [{ id: "wiggle", label: "Wiggle" }] },
+  { id: "hammer", name: "Hammer", how: "Bring your fist down on your other palm, or clap, and let the hand rest there a moment.", needs: "the watch's acceleration sensor", options: [{ id: "hammer", label: "Hammer" }] },
   {
     id: "swipe", name: "Swipe", how: "Flick your hand sharply in a direction. Left and right run along your forearm; up and down follow gravity.", needs: "the watch's acceleration and orientation",
     options: [{ id: "left", label: "Left" }, { id: "right", label: "Right" }, { id: "up", label: "Up" }, { id: "down", label: "Down" }],

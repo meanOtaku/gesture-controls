@@ -183,6 +183,13 @@ as the Recorder writes them (the pulse placed on the watch's clock the same way)
 stream (gaps over 250 ms). The summary's sentences are shown when the miss is saved. It is 45 s, not 30, because the CNN
 scores nothing in its first 11 s, so a replay covers about the last half minute.
 
+**The camera's view.** While the camera is on, the app window keeps the hand landmarks of the last 45 s as well
+(`features/misses/missCamera.ts`; landmarks only, never the picture). When a miss is saved they are written into its
+recording as `hand_landmarks.csv` and `clock_sync.csv` (`attach_miss_camera`), placed on the watch's clock as an exported
+session's are, so the Labelling page shows the hand at every moment of the miss. With the camera off the miss is saved
+without them and the notification says so. Model Lab's Activity card has the camera's live picture, what is detected
+right now, and the two miss buttons side by side, so what the models say can be checked against the hand as it happens.
+
 ## Importing a bundle
 
 `import_label_model(path)` takes a folder holding `manifest.json` and the one model file it names, and adds the model as a **Draft**. It never approves or activates anything.

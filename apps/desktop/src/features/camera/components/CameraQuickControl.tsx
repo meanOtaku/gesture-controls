@@ -11,12 +11,12 @@ import { CameraPreview } from "./CameraPreview";
  * The camera belongs to the app, so this is the same switch as on the Recorder and Gesture library pages. It cannot be
  * turned off while a recording is being made, because the recording would lose its hand landmarks.
  */
-export function CameraQuickControl({ preview = true, compact = false }: { /** Offer a small preview of the picture. */ preview?: boolean; compact?: boolean }) {
+export function CameraQuickControl({ preview = true, compact = false, initiallyShown = false }: { /** Offer a small preview of the picture. */ preview?: boolean; compact?: boolean; /** Show the preview as soon as the camera is on, without asking. */ initiallyShown?: boolean }) {
   const camera = getCameraController();
   const state = useSyncExternalStore(camera.subscribe, camera.getSnapshot, camera.getSnapshot);
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
   const recording = telemetryStore.getDatasetRecording();
-  const [showing, setShowing] = useState(false);
+  const [showing, setShowing] = useState(initiallyShown);
   const on = state.status === "on";
   const starting = state.status === "starting";
 

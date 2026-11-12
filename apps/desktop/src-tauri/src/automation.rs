@@ -12,11 +12,11 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use automation::{
-    Action, Axis, Conflict, CrownSide, Device, DeviceKind, HeuristicGestures, Hold, ModelHold,
-    PitchConfig, PitchDetector, PitchDirection, Recipe, RecipeRunner, RollConfig, RollDetector,
-    RollDirection, RunnerPhase, ShakeConfig, ShakeDetector, Signals, Stage, SwipeConfig,
-    SwipeDetector, SwipeDirection, TapConfig, TapDetector, TapKind, Wrist, blocked_recipes,
-    find_conflicts, validate_recipe,
+    Action, Axis, Conflict, CrownSide, Device, DeviceKind, HammerDetector, HeuristicGestures, Hold,
+    ModelHold, PitchConfig, PitchDetector, PitchDirection, Recipe, RecipeRunner, RollConfig,
+    RollDetector, RollDirection, RunnerPhase, ShakeAxis, ShakeConfig, ShakeDetector, Signals,
+    Stage, SwipeConfig, SwipeDetector, SwipeDirection, TapConfig, TapDetector, TapKind,
+    WiggleDetector, Wrist, blocked_recipes, find_conflicts, validate_recipe,
 };
 use interaction_engine::quaternion_angular_distance;
 use serde::Serialize;
@@ -35,6 +35,10 @@ pub const SHAKE_DETECTED_EVENT: &str = "automation-shake";
 pub const SWIPE_DETECTED_EVENT: &str = "automation-swipe";
 /// Sent with `single` or `double` each time a tap is recognised.
 pub const TAP_DETECTED_EVENT: &str = "automation-tap";
+/// Sent each time a wrist wiggle is recognised.
+pub const WIGGLE_DETECTED_EVENT: &str = "automation-wiggle";
+/// Sent each time a hammer blow is recognised.
+pub const HAMMER_DETECTED_EVENT: &str = "automation-hammer";
 /// Sent with `clockwise` or `counterClockwise` each time a quick wrist twist is recognised.
 pub const ROLL_DETECTED_EVENT: &str = "automation-roll";
 /// Sent with `up` or `down` each time a quick tilt of the hand is recognised.
@@ -111,6 +115,12 @@ pub struct Effects {
     pub deltas: Vec<(Action, f64)>,
     /// A shake was recognised on this sample (whether or not any recipe uses it), for the Settings tuning aid.
     pub shook: bool,
+    /// The direction of that shake, when its strokes agreed on one.
+    pub shake_axis: Option<ShakeAxis>,
+    /// A wrist wiggle was recognised on this sample.
+    pub wiggled: bool,
+    /// A hammer blow was recognised on this sample.
+    pub hammered: bool,
     /// A swipe was recognised on this sample, for the Settings tuning aid.
     pub swiped: Option<SwipeDirection>,
     /// A quick tilt of the hand was recognised on this sample, for the Settings tuning aid.
@@ -121,6 +131,8 @@ pub struct Effects {
     pub tapped: Option<TapKind>,
     /// Trigger recipes that fired: each a one-off press.
     pub fired: Vec<Action>,
+    /// Keyboard-shortcut recipes that fired: the keys of each.
+    pub shortcuts: Vec<String>,
     /// Actions whose interaction just ended, so anything still carried for them is dropped.
     pub ended: Vec<Action>,
 }
@@ -245,6 +257,7 @@ pub fn default_recipes() -> Vec<Recipe> {
         stages,
         device: knob,
         action: Action::Volume,
+        keys: None,
     };
     vec![
         recipe(
@@ -300,6 +313,12 @@ pub struct Engine {
     shake: ShakeDetector,
     /// A recognised shake counts as happening until this watch-clock time, so a recipe's chain can see it.
     shake_until_ns: u64,
+    /// The direction of the shake that still counts, if it had one.
+    shake_axis: Option<ShakeAxis>,
+    wiggle: WiggleDetector,
+    wiggle_until_ns: u64,
+    hammer: HammerDetector,
+    hammer_until_ns: u64,
     swipe: SwipeDetector,
     swipe_direction: Option<SwipeDirection>,
     swipe_until_ns: u64,
@@ -350,6 +369,11 @@ impl Engine {
             orientation: None,
             shake: ShakeDetector::new(tuning.shake_config()),
             shake_until_ns: 0,
+            shake_axis: None,
+            wiggle: WiggleDetector::default(),
+            wiggle_until_ns: 0,
+            hammer: HammerDetector::default(),
+            hammer_until_ns: 0,
             swipe: SwipeDetector::new(tuning.swipe_config()),
             swipe_direction: None,
             swipe_until_ns: 0,
@@ -625,6 +649,10 @@ impl Engine {
         self.last_accepted = None;
         self.shake.reset();
         self.shake_until_ns = 0;
+        self.wiggle.reset();
+        self.wiggle_until_ns = 0;
+        self.hammer.reset();
+        self.hammer_until_ns = 0;
         self.swipe.reset();
         self.swipe_until_ns = 0;
         self.tap.reset();
@@ -661,11 +689,24 @@ impl Engine {
         // of fast movement that filter exists for.
         // A gesture switched off in Settings is not fed at all, so it can never be recognised or reported.
         let on = self.tuning.heuristics;
-        let shook = on.shake
-            && acceleration
-                .is_some_and(|acceleration| self.shake.observe(timestamp_ns, acceleration));
-        if shook {
+        let shake = acceleration.filter(|_| on.shake).and_then(|acceleration| {
+            self.shake
+                .observe_oriented(timestamp_ns, acceleration, Some(quaternion))
+        });
+        let shook = shake.is_some();
+        if let Some(shake) = shake {
+            self.shake_axis = shake.axis;
             self.shake_until_ns = timestamp_ns + SHAKE_HOLD_NS;
+        }
+        let wiggled = on.wiggle && self.wiggle.observe(timestamp_ns, quaternion);
+        if wiggled {
+            self.wiggle_until_ns = timestamp_ns + SHAKE_HOLD_NS;
+        }
+        let hammered = on.hammer
+            && acceleration
+                .is_some_and(|acceleration| self.hammer.observe(timestamp_ns, acceleration));
+        if hammered {
+            self.hammer_until_ns = timestamp_ns + SHAKE_HOLD_NS;
         }
         let swiped = acceleration
             .filter(|_| on.swipe)
@@ -702,6 +743,9 @@ impl Engine {
             // A glitch freezes the knob rather than jumping it; the last good orientation stays current.
             return Effects {
                 shook,
+                shake_axis: shake.and_then(|shake| shake.axis),
+                wiggled,
+                hammered,
                 swiped,
                 tapped,
                 rolled,
@@ -720,6 +764,9 @@ impl Engine {
         self.orientation = Some(sample);
         let mut effects = self.step();
         effects.shook = shook;
+        effects.shake_axis = shake.and_then(|shake| shake.axis);
+        effects.wiggled = wiggled;
+        effects.hammered = hammered;
         effects.swiped = swiped;
         effects.tapped = tapped;
         effects.rolled = rolled;
@@ -786,6 +833,16 @@ impl Engine {
                 .orientation
                 .as_ref()
                 .is_some_and(|latest| latest.timestamp_ns < self.shake_until_ns),
+            shake_axis: self.shake_axis,
+            wiggle: self
+                .orientation
+                .as_ref()
+                .is_some_and(|latest| latest.timestamp_ns < self.wiggle_until_ns),
+            hammer: self
+                .orientation
+                .as_ref()
+                .is_some_and(|latest| latest.timestamp_ns < self.hammer_until_ns),
+            now_ns: self.orientation.as_ref().map(|latest| latest.timestamp_ns),
             orientation: self.orientation.as_ref().map(|o| o.quaternion),
         };
         let mut wanted = OverlayWanted::Hidden;
@@ -805,7 +862,11 @@ impl Engine {
                 effects.deltas.push((Action::Volume, 0.0));
             }
             if runner.take_fired() {
-                effects.fired.push(recipe.action);
+                match (recipe.action, &recipe.keys) {
+                    (Action::Shortcut, Some(keys)) => effects.shortcuts.push(keys.clone()),
+                    (Action::Shortcut, None) => {}
+                    (action, _) => effects.fired.push(action),
+                }
             }
             let phase = runner.phase();
             // A trigger is "driving" only while its chain is held; it moves nothing, so it must not engage the
@@ -988,7 +1049,13 @@ impl AutomationRuntime {
         };
         apply_effects(app, &effects, max_points);
         if effects.shook {
-            let _ = app.emit(SHAKE_DETECTED_EVENT, ());
+            let _ = app.emit(SHAKE_DETECTED_EVENT, effects.shake_axis);
+        }
+        if effects.wiggled {
+            let _ = app.emit(WIGGLE_DETECTED_EVENT, ());
+        }
+        if effects.hammered {
+            let _ = app.emit(HAMMER_DETECTED_EVENT, ());
         }
         if let Some(direction) = effects.pitched {
             let _ = app.emit(PITCH_DETECTED_EVENT, direction);
@@ -1179,6 +1246,15 @@ impl AutomationRuntime {
     ) -> Result<AutomationState, String> {
         validate_recipe(&recipe).map_err(|error| error.to_string())?;
         check_locations(&recipe, known_locations)?;
+        // The keys are stored the one way they are written, and only for a recipe that presses them.
+        recipe.keys = match (recipe.action, recipe.keys.take()) {
+            (Action::Shortcut, Some(keys)) => Some(
+                keys.parse::<system_control::KeyCombo>()
+                    .map_err(|error| format!("the keyboard shortcut cannot be pressed: {error}"))?
+                    .to_string(),
+            ),
+            _ => None,
+        };
         let mut recipes = self.current_recipes()?;
         if recipe.id.is_empty() {
             recipe.id = new_recipe_id();
@@ -1252,7 +1328,19 @@ fn apply_effects(app: &AppHandle, effects: &Effects, max_points_per_second: f64)
         }
     }
     if effects.shook {
-        crate::miss_recorder::note(app, "gesture", "shake");
+        crate::miss_recorder::note(
+            app,
+            "gesture",
+            effects
+                .shake_axis
+                .map_or("shake".to_string(), |axis| format!("shake {axis:?}")),
+        );
+    }
+    if effects.wiggled {
+        crate::miss_recorder::note(app, "gesture", "wiggle");
+    }
+    if effects.hammered {
+        crate::miss_recorder::note(app, "gesture", "hammer");
     }
     for (name, seen) in [
         ("swipe", effects.swiped.map(|d| format!("{d:?}"))),
@@ -1267,6 +1355,10 @@ fn apply_effects(app: &AppHandle, effects: &Effects, max_points_per_second: f64)
     for action in &effects.fired {
         crate::miss_recorder::note(app, "recipe", format!("fired {action:?}"));
         actuators.press(app, *action);
+    }
+    for keys in &effects.shortcuts {
+        crate::miss_recorder::note(app, "recipe", format!("pressed {keys}"));
+        actuators.shortcut(app, keys.clone());
     }
     for action in &effects.ended {
         if *action != Action::Volume {
@@ -1549,6 +1641,7 @@ mod tests {
             name: format!("{action:?}"),
             enabled: true,
             action,
+            keys: None,
             stages: vec![
                 Stage::Hold {
                     hold: Hold::StemButton,
@@ -1618,6 +1711,7 @@ mod tests {
             name: format!("{action:?}"),
             enabled: true,
             action,
+            keys: None,
             stages: vec![Stage::Hold { hold }],
             device: Device::default_for(DeviceKind::RotationKnob),
         }
@@ -1709,6 +1803,7 @@ mod tests {
                 name: "Shake for next".into(),
                 enabled: true,
                 action: Action::NextTrack,
+                keys: None,
                 stages: vec![Stage::Hold { hold: Hold::Shake }],
                 device: Device::default_for(DeviceKind::RotationKnob),
             }],
@@ -1729,6 +1824,7 @@ mod tests {
             name: "Look and shake".into(),
             enabled: true,
             action: Action::PlayPause,
+            keys: None,
             stages: vec![
                 Stage::HeadAt {
                     location: "topRight".into(),
@@ -1755,6 +1851,7 @@ mod tests {
             name: "Shake for next".into(),
             enabled: true,
             action: Action::NextTrack,
+            keys: None,
             stages: vec![Stage::Hold { hold: Hold::Shake }],
             device: Device::default_for(DeviceKind::RotationKnob),
         };
@@ -1830,6 +1927,7 @@ mod tests {
             name: format!("{hold:?}"),
             enabled: true,
             action,
+            keys: None,
             stages: vec![Stage::Hold { hold }],
             device: Device::default_for(DeviceKind::RotationKnob),
         }
