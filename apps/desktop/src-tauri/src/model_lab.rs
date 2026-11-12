@@ -1296,6 +1296,29 @@ pub(crate) fn name_dataset(
     write_index_atomic(app, &index)
 }
 
+/// Names a recording the miss recorder just added and puts it in `group`, in one change of the index.
+pub(crate) fn file_miss(
+    app: &AppHandle,
+    runtime: &ModelLabRuntime,
+    id: &str,
+    name: &str,
+    group: &str,
+) -> Result<(), String> {
+    let _guard = runtime
+        .lock
+        .lock()
+        .map_err(|_| "model lab lock was poisoned".to_string())?;
+    let mut index = load_index(app);
+    let dataset = index
+        .datasets
+        .iter_mut()
+        .find(|dataset| dataset.id == id)
+        .ok_or_else(|| format!("no dataset with id '{id}'"))?;
+    dataset.name = clean_dataset_name(Some(name))?;
+    dataset.group = clean_group_name(Some(group))?;
+    write_index_atomic(app, &index)
+}
+
 /// Puts recordings in a group, or takes them out of their group (`group` None or blank). Every id must exist, or nothing changes.
 #[tauri::command]
 pub fn set_datasets_group(

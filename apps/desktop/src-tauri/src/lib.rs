@@ -21,6 +21,7 @@ mod label_runtime;
 mod label_training;
 mod labelling;
 mod latest_write;
+mod miss_recorder;
 mod mistakes;
 mod model_lab;
 mod overlay;
@@ -168,6 +169,7 @@ pub fn run() {
         .manage(watch::WatchRuntime::default())
         .manage(watch_power::WatchPower::default())
         .manage(model_lab::ModelLabRuntime::default())
+        .manage(miss_recorder::MissRecorder::default())
         .manage(label_registry::LabelRegistryRuntime::default())
         .manage(gesture_library::GestureLibraryRuntime::default())
         .manage(gesture_samples::GestureSamplesRuntime::default())
@@ -189,6 +191,7 @@ pub fn run() {
             drone::drone_land,
             drone::drone_stop,
             label_runtime::get_label_runtime_status,
+            miss_recorder::mark_miss,
             label_runtime::get_hand_steadiness,
             label_runtime::get_label_registry_usage,
             label_runtime::list_training_history,
@@ -315,6 +318,7 @@ pub fn run() {
             }
             label_registry::prune_legacy_builtins(&handle);
             label_runtime::spawn_timer(handle.clone());
+            miss_recorder::register_shortcut(&handle);
             overlay::prepare_window(&handle).map_err(std::io::Error::other)?;
             head_pose::spawn(handle.clone());
             drone::spawn_auto_connect(handle.clone());
@@ -379,6 +383,7 @@ pub fn run() {
                         Ok(event) => {
                             match &event {
                                 WatchEvent::Connected => {
+                                    miss_recorder::note(&watch_handle, "watch", "connected");
                                     if let (Ok(settings), Some(server)) = (
                                         watch_handle.state::<settings::SettingsRuntime>().get(),
                                         watch_handle.try_state::<Arc<WatchBridgeServer>>(),
@@ -387,6 +392,11 @@ pub fn run() {
                                     }
                                 }
                                 WatchEvent::Button(sample) if sample.button == STEM_PRIMARY_BUTTON_ID => {
+                                    miss_recorder::note(
+                                        &watch_handle,
+                                        "button",
+                                        if sample.state == BUTTON_STATE_DOWN { "down" } else { "up" },
+                                    );
                                     watch_handle
                                         .state::<automation::AutomationRuntime>()
                                         .set_stem(&watch_handle, sample.state == BUTTON_STATE_DOWN);
@@ -395,6 +405,7 @@ pub fn run() {
                                         .set_button(sample.state == BUTTON_STATE_DOWN);
                                 }
                                 WatchEvent::Disconnected => {
+                                    miss_recorder::note(&watch_handle, "watch", "disconnected");
                                     watch_handle.state::<drone::DroneRuntime>().watch_lost();
                                     watch_handle
                                         .state::<automation::AutomationRuntime>()
@@ -404,6 +415,9 @@ pub fn run() {
                                         .watch_lost(&watch_handle);
                                 }
                                 WatchEvent::Orientation(sample) => {
+                                    watch_handle
+                                        .state::<miss_recorder::MissRecorder>()
+                                        .observe_orientation(sample);
                                     watch_handle
                                         .state::<drone::DroneRuntime>()
                                         .observe_orientation(sample);
@@ -416,11 +430,15 @@ pub fn run() {
                                 }
                                 WatchEvent::Ppg(sample) => {
                                     watch_handle
+                                        .state::<miss_recorder::MissRecorder>()
+                                        .observe_ppg(sample);
+                                    watch_handle
                                         .state::<label_runtime::LabelRuntimeHost>()
                                         .observe_ppg(&watch_handle, sample);
                                 }
                                 WatchEvent::InvalidMessage { reason } => {
                                     warn!(reason = %reason, "rejecting malformed or out-of-order watch message");
+                                    miss_recorder::note(&watch_handle, "watch", format!("bad message: {reason}"));
                                     watch_handle
                                         .state::<label_runtime::LabelRuntimeHost>()
                                         .fail(&watch_handle, "a malformed or out-of-order watch message");
@@ -429,6 +447,7 @@ pub fn run() {
                                 }
                                 WatchEvent::WearStateUpdated(sample) if sample.worn => {
                                     debug!("watch wear state: worn");
+                                    miss_recorder::note(&watch_handle, "watch", "worn");
                                     watch_handle
                                         .state::<label_runtime::LabelRuntimeHost>()
                                         .set_worn(&watch_handle, true);
@@ -438,6 +457,7 @@ pub fn run() {
                                     // grab must not outlive the data that was driving it, and the
                                     // gesture models must not score a watch lying on a table.
                                     info!("watch taken off the wrist; releasing any interaction");
+                                    miss_recorder::note(&watch_handle, "watch", "off the wrist");
                                     watch_handle
                                         .state::<label_runtime::LabelRuntimeHost>()
                                         .set_worn(&watch_handle, false);

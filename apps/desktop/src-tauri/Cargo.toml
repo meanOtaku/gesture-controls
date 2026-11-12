@@ -34,6 +34,7 @@ uuid.workspace = true
 sha2 = { version = "0.11.0", default-features = false }
 tauri-plugin-dialog = "2.7.3"
 tauri-plugin-fs = "2.5.2"
+tauri-plugin-global-shortcut = "~2.3"
 
 [dev-dependencies]
 tempfile = "3.27.0"

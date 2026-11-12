@@ -16,7 +16,7 @@ const WINDOW_NS: i128 = 30_000_000_000;
 const JUMP_NS: i128 = 1_000_000_000;
 
 #[derive(Debug, Default)]
-pub(crate) struct ClockMap {
+pub struct ClockMap {
     /// The recent `(received, received - taken)` pairs whose difference could still be the smallest, oldest first, with
     /// differences increasing.
     candidates: VecDeque<(i128, i128)>,
@@ -24,7 +24,7 @@ pub(crate) struct ClockMap {
 
 impl ClockMap {
     /// `taken_ns` is a sample's own timestamp; `received_ns` is when it reached the desktop.
-    pub(crate) fn observe(&mut self, taken_ns: u64, received_ns: u64) {
+    pub fn observe(&mut self, taken_ns: u64, received_ns: u64) {
         let (taken, received) = (i128::from(taken_ns), i128::from(received_ns));
         let delta = received - taken;
         if self
@@ -52,12 +52,12 @@ impl ClockMap {
 
     /// `taken_ns` on the receive clock, or `None` before anything was observed. Never later than the arrival of any
     /// sample observed in the last 30 seconds, since the offset is the smallest of their differences.
-    pub(crate) fn map(&self, taken_ns: u64) -> Option<u64> {
+    pub fn map(&self, taken_ns: u64) -> Option<u64> {
         let at = i128::from(taken_ns) + self.offset()?;
         Some(u64::try_from(at.max(0)).unwrap_or(u64::MAX))
     }
 
-    pub(crate) fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.candidates.clear();
     }
 }

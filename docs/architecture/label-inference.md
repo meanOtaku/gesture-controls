@@ -169,6 +169,20 @@ The trainer's replay uses a copy of this rule (`events.detect`). `tests/fixtures
 
 `label_runtime.rs` opens the per-label registry (migrating the old one once, see [the domain model](model-lab-domain.md)), loads the active models, feeds watch orientation and PPG events in, runs a 100 ms timer so a stream that stops is noticed, emits `label-detections` events (rising, active, falling, conflicts, rejections) and answers `get_label_runtime_status`. It emits `hand-steadiness` when the hand goes from still to moving or back (`HandSteadinessView`, from the last second of motion) and answers `get_hand_steadiness`, for the Activity card's badge. On every runtime update and every tick it hands the recipe engine the loaded labels, the detections cleared to act, the labels that just started and those cut short (see below). It **performs no action itself**; actions come only from recipes.
 
+## The miss recorder
+
+`apps/desktop/src-tauri/src/miss_recorder.rs` keeps the last 45 s of the watch's motion and pulse in memory, with every
+score, detection, rejection, conflict, recipe change, head location, button press and link change of those seconds. Nothing
+is written until a miss is marked: the sidebar's **It didn't fire** and **It fired by itself** buttons (`mark_miss`), or
+Ctrl+Alt+M from any app (Control-Option-M on a Mac).
+
+A marked miss becomes an ordinary recording in Datasets, in the group **Misses**, with no labels: `ppg.csv` and `imu.csv`
+as the Recorder writes them (the pulse placed on the watch's clock the same way), so it can be labelled and trained on.
+`live_log.json` is kept in its folder: the runtime's mode, each active model's thresholds, the entries (each with
+`msBeforeMark`), and a summary per label (highest score and when, detections, those acted on, rejections by kind) and per
+stream (gaps over 250 ms). The summary's sentences are shown when the miss is saved. It is 45 s, not 30, because the CNN
+scores nothing in its first 11 s, so a replay covers about the last half minute.
+
 ## Importing a bundle
 
 `import_label_model(path)` takes a folder holding `manifest.json` and the one model file it names, and adds the model as a **Draft**. It never approves or activates anything.

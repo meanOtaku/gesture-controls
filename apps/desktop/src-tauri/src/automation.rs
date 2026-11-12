@@ -1028,6 +1028,13 @@ impl AutomationRuntime {
     }
 
     pub fn set_head(&self, app: &AppHandle, location: Option<String>) {
+        crate::miss_recorder::note(
+            app,
+            "head",
+            location
+                .as_deref()
+                .map_or("left every location".to_string(), |l| format!("at {l}")),
+        );
         self.with_engine(app, |engine| engine.set_head(location));
     }
 
@@ -1222,6 +1229,7 @@ fn apply_effects(app: &AppHandle, effects: &Effects, max_points_per_second: f64)
     let overlay = app.state::<OverlayRuntime>();
     let volume = app.state::<VolumeRuntime>();
     if let Some(wanted) = effects.overlay {
+        crate::miss_recorder::note(app, "recipe", format!("{wanted:?}"));
         let result = match wanted {
             OverlayWanted::Hidden => overlay.release(app),
             OverlayWanted::Armed => overlay.show_armed(app, &volume),
@@ -1243,7 +1251,21 @@ fn apply_effects(app: &AppHandle, effects: &Effects, max_points_per_second: f64)
             _ => {}
         }
     }
+    if effects.shook {
+        crate::miss_recorder::note(app, "gesture", "shake");
+    }
+    for (name, seen) in [
+        ("swipe", effects.swiped.map(|d| format!("{d:?}"))),
+        ("pitch", effects.pitched.map(|d| format!("{d:?}"))),
+        ("roll", effects.rolled.map(|d| format!("{d:?}"))),
+        ("tap", effects.tapped.map(|k| format!("{k:?}"))),
+    ] {
+        if let Some(which) = seen {
+            crate::miss_recorder::note(app, "gesture", format!("{name} {which}"));
+        }
+    }
     for action in &effects.fired {
+        crate::miss_recorder::note(app, "recipe", format!("fired {action:?}"));
         actuators.press(app, *action);
     }
     for action in &effects.ended {

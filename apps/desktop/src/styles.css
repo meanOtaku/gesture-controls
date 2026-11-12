@@ -365,6 +365,11 @@ html.overlay-document body::before { display:none; }
 .nav-brand { display:flex; align-items:center; gap:.65rem; padding:.35rem .5rem; color:var(--ink); }
 .nav-brand-name { display:flex; flex-direction:column; line-height:1; font-family:var(--font-display); text-transform:uppercase; letter-spacing:.1em; font-size:1.2rem; font-weight:500; }
 .nav-brand-name small { margin-top:.2rem; font-size:.75rem; letter-spacing:.3em; color:var(--ink-3); }
+.miss-marker { display:flex; flex-direction:column; gap:.35rem; padding:.35rem .5rem .5rem; border-top:1px solid var(--line, currentColor); }
+.miss-marker-title { display:flex; align-items:center; justify-content:space-between; font-size:.75rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3); }
+.miss-marker-buttons { display:flex; flex-direction:column; gap:.3rem; }
+.miss-marker-buttons > button { justify-content:flex-start; }
+.miss-summary { margin:.25rem 0 0; padding-left:1rem; list-style:disc; display:flex; flex-direction:column; gap:.2rem; }
 [data-sidebar="group-label"] { font-family:var(--font-display); text-transform:uppercase; letter-spacing:.16em; font-size:.75rem; color:var(--ink-3); }
 .nav-dot { margin-left:auto; flex:0 0 auto; width:.55rem; height:.55rem; border:1px solid var(--ink-3); background:transparent; }
 .nav-dot[data-tone="ok"] { background:var(--green); border-color:var(--green); }

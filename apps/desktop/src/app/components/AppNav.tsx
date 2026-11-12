@@ -13,6 +13,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "../../components/ui/sidebar";
+import { MissMarker } from "../../features/misses/MissMarker";
 
 export type AppTab = "main" | "headphone" | "watch" | "recipes" | "devices" | "drone" | "gestures" | "signals" | "recorder" | "recordings" | "datasets" | "labelling" | "labels" | "gestureLibrary" | "modelLab" | "networkLab" | "settings";
 
@@ -179,6 +180,7 @@ export function AppNav({ activeTab, onSelect, statuses = {} }: AppNavProps) {
         ))}
       </SidebarContent>
       <SidebarFooter>
+        <MissMarker />
         <SidebarMenu>{entry(SETTINGS)}</SidebarMenu>
       </SidebarFooter>
       <SidebarRail />

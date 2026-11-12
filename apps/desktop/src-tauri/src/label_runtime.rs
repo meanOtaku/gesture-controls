@@ -894,7 +894,7 @@ impl LabelRuntimeHost {
         Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
     }
 
-    fn model_lab_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    pub(crate) fn model_lab_dir(app: &AppHandle) -> Result<PathBuf, String> {
         app.path()
             .app_data_dir()
             .map(|base| base.join(MODEL_LAB_DIR_NAME))
@@ -1130,6 +1130,9 @@ impl LabelRuntimeHost {
 
     /// Records an output and tells the UI. Releases always get through; a start only does in Live.
     fn dispatch(&self, app: &AppHandle, output: RuntimeOutput) {
+        if let Some(recorder) = app.try_state::<crate::miss_recorder::MissRecorder>() {
+            recorder.observe_output(&output);
+        }
         let changed = !output.events.is_empty()
             || !output.conflicts.is_empty()
             || !output.rejections.is_empty();

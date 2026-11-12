@@ -14,6 +14,7 @@ export function shortcutGroups(mac: boolean): { title: string; keys: [string, st
         [`${cmd},`, "Settings"],
         ["?", "This list"],
         ["Esc", "Land the drone, if one is connected"],
+        [mac ? "⌃⌥M" : "Ctrl+Alt+M", "Mark a miss: save the last 45 seconds (works from any app)"],
       ],
     },
     {

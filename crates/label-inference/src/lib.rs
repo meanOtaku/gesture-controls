@@ -30,6 +30,7 @@ pub use bundle::{
     BundleError, CNN_MODEL_FORMAT, MODEL_FORMAT, Manifest, STRIDE_MS, TrainingRange,
     ValidatedBundle, WINDOW_MS, validate_bundle,
 };
+pub use clock::ClockMap;
 pub use detection::{
     ClearReason, Conflict, DetectionEvent, DetectionHub, ExclusivityGroup, TemporalDetector,
 };
